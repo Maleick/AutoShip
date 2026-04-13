@@ -669,4 +669,130 @@ mod tests {
         chain.set_adaptive(true);
         assert!(chain.damage_samples.is_empty());
     }
+
+    // --- cast_progress tests ---
+
+    #[test]
+    fn cast_progress_none_before_first_fire() {
+        let chain = ChChain::new(vec![1, 2], 3.0, 1, 1);
+        assert!(chain.cast_progress().is_none());
+    }
+
+    #[test]
+    fn cast_progress_returns_progress_after_fire() {
+        let mut chain = ChChain::new(vec![1, 2], 3.0, 1, 1);
+        chain.start();
+        assert_eq!(chain.tick(), Some(1)); // fires on frame 0
+
+        // Advance a few frames and check progress
+        chain.tick(); // frame 1
+        chain.tick(); // frame 2
+        let (index, progress) = chain.cast_progress().expect("should have progress");
+        assert_eq!(index, 0, "should be index 0 (first member)");
+        // frames_per_interval = 3 * 20 = 60; frame_delta = 2
+        assert!(progress > 0.0 && progress < 1.0);
+    }
+
+    #[test]
+    fn cast_progress_tracks_most_recent_fire_after_interval_elapses() {
+        let mut chain = ChChain::new(vec![1, 2], 1.0, 1, 1);
+        chain.start();
+        assert_eq!(chain.tick(), Some(1)); // fires on frame 0
+
+        // Advance one full interval so the second member fires.
+        for _ in 0..20 {
+            chain.tick();
+        }
+
+        // While the chain remains active, progress should track the most
+        // recently fired member rather than becoming None.
+        let (index, progress) = chain.cast_progress().expect("should have progress");
+        assert_eq!(index, 1, "should be index 1 (second member)");
+        assert!(progress >= 0.0 && progress < 1.0);
+    }
+
+    // --- target/spell getter/setter tests ---
+
+    #[test]
+    fn target_id_default_and_setter() {
+        let mut chain = ChChain::new(vec![1], 3.0, 42, 5);
+        assert_eq!(chain.target_id(), 42);
+        assert_eq!(chain.spell_slot(), 5);
+
+        chain.set_target(99);
+        assert_eq!(chain.target_id(), 99);
+    }
+
+    // --- set_members edge cases ---
+
+    #[test]
+    fn set_members_filters_zero_pids() {
+        let mut chain = ChChain::new(vec![1, 2, 3], 1.0, 1, 1);
+        chain.set_members(vec![0, 4, 0, 5]);
+        assert_eq!(chain.members(), &[4, 5]);
+    }
+
+    #[test]
+    fn set_members_filters_duplicates() {
+        let mut chain = ChChain::new(vec![1, 2], 1.0, 1, 1);
+        chain.set_members(vec![3, 3, 4, 3]);
+        assert_eq!(chain.members(), &[3, 4]);
+    }
+
+    #[test]
+    fn set_members_empty_list_clears() {
+        let mut chain = ChChain::new(vec![1, 2, 3], 1.0, 1, 1);
+        chain.start();
+        chain.tick(); // fire first member
+
+        chain.set_members(vec![]);
+        assert!(chain.members().is_empty());
+        assert_eq!(chain.tick(), None, "empty chain should not fire");
+    }
+
+    #[test]
+    fn set_members_all_zeros_clears() {
+        let mut chain = ChChain::new(vec![1, 2], 1.0, 1, 1);
+        chain.set_members(vec![0, 0, 0]);
+        assert!(chain.members().is_empty());
+    }
+
+    // --- remove_member edge cases ---
+
+    #[test]
+    fn remove_nonexistent_member_is_noop() {
+        let mut chain = ChChain::new(vec![1, 2, 3], 1.0, 1, 1);
+        chain.remove_member(99);
+        assert_eq!(chain.members(), &[1, 2, 3]);
+    }
+
+    // --- interval edge cases ---
+
+    #[test]
+    fn very_small_interval_produces_zero_frames_per_interval() {
+        let mut chain = ChChain::new(vec![1, 2], 0.01, 1, 1);
+        // 0.01 * 20 = 0.2 → truncated to 0 frames per interval
+        chain.start();
+        // frames_per_interval == 0 → tick returns None
+        assert_eq!(chain.tick(), None);
+    }
+
+    #[test]
+    fn interval_secs_getter() {
+        let chain = ChChain::new(vec![1], 5.5, 1, 1);
+        assert!((chain.interval_secs() - 5.5).abs() < f32::EPSILON);
+    }
+
+    // --- adaptive with empty members ---
+
+    #[test]
+    fn adaptive_update_with_empty_members_is_noop() {
+        let mut chain = ChChain::new(vec![], 3.0, 1, 1);
+        chain.set_adaptive(true);
+        // Should not panic or change interval
+        for _ in 0..100 {
+            chain.update_tank_hp(50.0);
+        }
+        assert!((chain.interval_secs() - 3.0).abs() < f32::EPSILON);
+    }
 }

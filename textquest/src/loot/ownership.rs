@@ -362,4 +362,120 @@ mod tests {
         let last = entries.last().unwrap();
         assert_eq!(last.to, OwnershipState::Vendor);
     }
+
+    // --- Additional ownership tests ---
+
+    #[test]
+    fn ownership_state_display() {
+        assert_eq!(format!("{}", OwnershipState::Available), "Available");
+        assert_eq!(format!("{}", OwnershipState::Reserved), "Reserved");
+        assert_eq!(format!("{}", OwnershipState::Assigned), "Assigned");
+        assert_eq!(format!("{}", OwnershipState::Collected), "Collected");
+        assert_eq!(format!("{}", OwnershipState::Distributed), "Distributed");
+        assert_eq!(format!("{}", OwnershipState::Vendor), "Vendor");
+    }
+
+    #[test]
+    fn loot_candidate_wants_item() {
+        let candidate = LootCandidate::new("Ranger", 10, vec![100, 200, 300]);
+        assert!(candidate.wants(100));
+        assert!(candidate.wants(200));
+        assert!(!candidate.wants(999));
+    }
+
+    #[test]
+    fn loot_candidate_empty_wishlist_wants_nothing() {
+        let candidate = LootCandidate::new("Empty", 10, vec![]);
+        assert!(!candidate.wants(100));
+    }
+
+    #[test]
+    fn empty_model_vendor_all_items() {
+        let mut q = LootQueue::new();
+        let drop = q.push(100, 1, 1001);
+        let mut m = OwnershipModel::new();
+        let record = m.intake(drop);
+        assert_eq!(record.state, OwnershipState::Vendor);
+    }
+
+    #[test]
+    fn multiple_items_same_candidate() {
+        let mut q = LootQueue::new();
+        let drop1 = q.push(100, 1, 1001);
+        let drop2 = q.push(100, 1, 1001);
+        let mut m = make_model();
+        let r1 = m.intake(drop1);
+        assert_eq!(r1.owner.as_deref(), Some("Warrior"));
+        let r2 = m.intake(drop2);
+        assert_eq!(r2.owner.as_deref(), Some("Warrior"));
+    }
+
+    #[test]
+    fn records_iterator() {
+        let mut q = LootQueue::new();
+        let d1 = q.push(100, 1, 1001);
+        let d2 = q.push(999, 1, 1001);
+        let mut m = make_model();
+        m.intake(d1);
+        m.intake(d2);
+        let count = m.records().count();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn get_unknown_drop_returns_none() {
+        let m = OwnershipModel::new();
+        assert!(m.get(999).is_none());
+    }
+
+    #[test]
+    fn audit_log_for_unknown_drop_is_empty() {
+        let log = AuditLog::new();
+        assert!(log.for_drop(999).is_empty());
+    }
+
+    #[test]
+    fn audit_log_entries_order() {
+        let mut log = AuditLog::new();
+        log.record(1, OwnershipState::Available, OwnershipState::Reserved, Some("Alice".into()));
+        log.record(1, OwnershipState::Reserved, OwnershipState::Assigned, Some("Alice".into()));
+        log.record(2, OwnershipState::Available, OwnershipState::Vendor, None);
+
+        assert_eq!(log.entries().len(), 3);
+        assert_eq!(log.for_drop(1).len(), 2);
+        assert_eq!(log.for_drop(2).len(), 1);
+    }
+
+    #[test]
+    fn full_lifecycle_available_to_distributed() {
+        let mut q = LootQueue::new();
+        let drop = q.push(100, 1, 1001);
+        let drop_id = drop.drop_id;
+        let mut m = make_model();
+        m.intake(drop);
+        m.transition(drop_id, OwnershipState::Collected, Some("Warrior".into()));
+        m.transition(drop_id, OwnershipState::Distributed, Some("Warrior".into()));
+
+        let entries = m.audit.for_drop(drop_id);
+        // Available→Available, Available→Assigned, Assigned→Collected, Collected→Distributed
+        assert_eq!(entries.len(), 4);
+        assert_eq!(entries.last().unwrap().to, OwnershipState::Distributed);
+    }
+
+    #[test]
+    fn ownership_state_hash_and_eq() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(OwnershipState::Available);
+        set.insert(OwnershipState::Available);
+        assert_eq!(set.len(), 1, "same state should deduplicate");
+        set.insert(OwnershipState::Vendor);
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn in_state_empty_model() {
+        let m = OwnershipModel::new();
+        assert!(m.in_state(&OwnershipState::Available).is_empty());
+    }
 }

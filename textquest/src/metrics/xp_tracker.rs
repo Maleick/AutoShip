@@ -320,4 +320,129 @@ mod tests {
         let result = tracker.recent_samples("Druid", 100);
         assert_eq!(result.len(), 1);
     }
+
+    // --- additional edge-case tests ---
+
+    #[test]
+    fn test_cap_at_max_samples() {
+        let mut tracker = XpTracker::new();
+        let base = Instant::now();
+
+        // Record more than MAX_SAMPLES (1000)
+        for i in 0..1050_u64 {
+            tracker.record(
+                "Warrior",
+                (i % 100) as f32,
+                0.0,
+                50,
+                make_instant_offset(base, i),
+            );
+        }
+
+        assert_eq!(tracker.samples.len(), 1000, "should cap at MAX_SAMPLES");
+    }
+
+    #[test]
+    fn test_xp_per_hour_zero_elapsed_time() {
+        let mut tracker = XpTracker::new();
+        let base = Instant::now();
+
+        // Two samples at exact same time → elapsed = 0 → rate = 0
+        tracker.record("Wizard", 10.0, 0.0, 50, base);
+        tracker.record("Wizard", 20.0, 0.0, 50, base);
+
+        let rate = tracker.xp_per_hour("Wizard", base);
+        assert_eq!(rate, 0.0, "zero elapsed should return 0");
+    }
+
+    #[test]
+    fn test_xp_per_hour_unknown_character() {
+        let mut tracker = XpTracker::new();
+        let base = Instant::now();
+        tracker.record("Warrior", 50.0, 0.0, 50, base);
+        let rate = tracker.xp_per_hour("Unknown", base);
+        assert_eq!(rate, 0.0);
+    }
+
+    #[test]
+    fn test_time_to_level_at_99_pct() {
+        let mut tracker = XpTracker::new();
+        let base = Instant::now();
+
+        // 98% → 99% over 30 minutes = 2%/hour rate
+        // Remaining = 1% at 2%/hour = 30 minutes = 1800 seconds
+        tracker.record("Ranger", 98.0, 0.0, 50, make_instant_offset(base, 0));
+        tracker.record("Ranger", 99.0, 0.0, 50, make_instant_offset(base, 30 * 60));
+
+        let now = make_instant_offset(base, 30 * 60);
+        let ttl = tracker.time_to_level_secs("Ranger", now).expect("should have TTL");
+        let expected = 1800.0_f64;
+        let diff = (ttl - expected).abs();
+        assert!(diff < 1.0, "expected ~1800 s, got {ttl}");
+    }
+
+    #[test]
+    fn test_time_to_level_at_100_pct() {
+        let mut tracker = XpTracker::new();
+        let base = Instant::now();
+
+        // 90% → 100% over 30 minutes → remaining = 0
+        tracker.record("Monk", 90.0, 0.0, 50, make_instant_offset(base, 0));
+        tracker.record("Monk", 100.0, 0.0, 50, make_instant_offset(base, 30 * 60));
+
+        let now = make_instant_offset(base, 30 * 60);
+        let ttl = tracker.time_to_level_secs("Monk", now).expect("should be Some");
+        assert!(ttl < 1.0, "at 100% XP, TTL should be near zero, got {ttl}");
+    }
+
+    #[test]
+    fn test_level_history_multiple_level_ups() {
+        let mut tracker = XpTracker::new();
+        let base = Instant::now();
+
+        tracker.record("Paladin", 90.0, 0.0, 49, base);
+        tracker.record("Paladin", 5.0, 0.0, 50, make_instant_offset(base, 60));
+        tracker.record("Paladin", 95.0, 0.0, 50, make_instant_offset(base, 3600));
+        tracker.record("Paladin", 5.0, 0.0, 51, make_instant_offset(base, 7200));
+
+        assert_eq!(tracker.level_history.len(), 2);
+        assert_eq!(tracker.level_history[0].0, 50);
+        assert_eq!(tracker.level_history[1].0, 51);
+    }
+
+    #[test]
+    fn test_level_history_not_triggered_on_delevel() {
+        let mut tracker = XpTracker::new();
+        let base = Instant::now();
+
+        tracker.record("Warrior", 10.0, 0.0, 50, base);
+        // Level goes down — no level_history entry
+        tracker.record("Warrior", 99.0, 0.0, 49, make_instant_offset(base, 60));
+
+        assert!(tracker.level_history.is_empty());
+    }
+
+    #[test]
+    fn test_recent_samples_empty_tracker() {
+        let tracker = XpTracker::new();
+        let result = tracker.recent_samples("Anyone", 10);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_default_trait() {
+        let tracker = XpTracker::default();
+        assert!(tracker.samples.is_empty());
+        assert!(tracker.level_history.is_empty());
+    }
+
+    #[test]
+    fn test_aa_xp_tracked() {
+        let mut tracker = XpTracker::new();
+        let base = Instant::now();
+        tracker.record("Cleric", 50.0, 25.0, 60, base);
+        let samples = tracker.recent_samples("Cleric", 1);
+        assert_eq!(samples.len(), 1);
+        assert!((samples[0].aa_xp_pct - 25.0).abs() < f32::EPSILON);
+    }
 }

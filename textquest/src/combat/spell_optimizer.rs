@@ -341,4 +341,110 @@ mod tests {
         let p = CastingPredictor::new(1000, 50.0);
         assert_eq!(p.predicted_cast_ms(), 500);
     }
+
+    // --- additional CastingPredictor edge cases ---
+
+    #[test]
+    fn test_predicted_cast_ms_negative_haste_clamped() {
+        // Negative haste is clamped to 0 → no effect
+        let p = CastingPredictor::new(2000, -50.0);
+        assert_eq!(p.predicted_cast_ms(), 2000);
+    }
+
+    #[test]
+    fn test_predicted_cast_ms_over_100_haste_clamped() {
+        // >100% haste clamped to 100% → 0 → MIN_CAST_MS
+        let p = CastingPredictor::new(2000, 150.0);
+        assert_eq!(p.predicted_cast_ms(), CastingPredictor::MIN_CAST_MS);
+    }
+
+    #[test]
+    fn test_predicted_cast_ms_nan_haste_fallback() {
+        let p = CastingPredictor::new(2000, f32::NAN);
+        assert_eq!(p.predicted_cast_ms(), 2000, "NaN haste should fall back to base");
+    }
+
+    #[test]
+    fn test_predicted_cast_ms_infinity_haste_fallback() {
+        let p = CastingPredictor::new(2000, f32::INFINITY);
+        assert_eq!(p.predicted_cast_ms(), 2000, "Infinity haste should fall back to base");
+    }
+
+    #[test]
+    fn test_predicted_cast_ms_neg_infinity_haste_fallback() {
+        let p = CastingPredictor::new(2000, f32::NEG_INFINITY);
+        assert_eq!(p.predicted_cast_ms(), 2000, "-Infinity haste should fall back to base");
+    }
+
+    #[test]
+    fn test_predicted_cast_ms_zero_base() {
+        let p = CastingPredictor::new(0, 25.0);
+        assert_eq!(p.predicted_cast_ms(), CastingPredictor::MIN_CAST_MS);
+    }
+
+    // --- additional SpellOptimizer edge cases ---
+
+    #[test]
+    fn test_best_efficiency_with_zero_mana_spells() {
+        let mut opt = SpellOptimizer::new();
+        // Zero mana spells have 0.0 efficiency
+        opt.add_candidate(make_spell(1, "Free", 0, 1000, 500));
+        opt.add_candidate(make_spell(2, "Paid", 100, 1000, 200));
+        let best = opt.best_efficiency().expect("should have a best");
+        assert_eq!(best.spell_id, 2, "Paid spell with 2.0 eff beats free with 0.0");
+    }
+
+    #[test]
+    fn test_ranked_by_efficiency_includes_all_ties() {
+        let mut opt = SpellOptimizer::new();
+        // Two spells with same efficiency (1.0)
+        opt.add_candidate(make_spell(1, "Alpha", 100, 1000, 100));
+        opt.add_candidate(make_spell(2, "Beta", 200, 2000, 200));
+        let ranked = opt.ranked_by_efficiency();
+        assert_eq!(ranked.len(), 2);
+        assert!(ranked.iter().any(|spell| spell.spell_id == 1));
+        assert!(ranked.iter().any(|spell| spell.spell_id == 2));
+    }
+
+    #[test]
+    fn test_filter_by_cast_time_zero() {
+        let mut opt = SpellOptimizer::new();
+        opt.add_candidate(make_spell(1, "Instant", 50, 0, 100));
+        opt.add_candidate(make_spell(2, "Slow", 100, 5000, 300));
+        let result = opt.filter_by_cast_time(0);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].spell_id, 1);
+    }
+
+    #[test]
+    fn test_filter_by_mana_zero() {
+        let mut opt = SpellOptimizer::new();
+        opt.add_candidate(make_spell(1, "Free", 0, 1000, 100));
+        opt.add_candidate(make_spell(2, "Costly", 100, 1000, 200));
+        let result = opt.filter_by_mana(0);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].spell_id, 1);
+    }
+
+    #[test]
+    fn test_spell_candidate_fields() {
+        let spell = SpellCandidate {
+            spell_id: 42,
+            name: "Greater Heal".to_string(),
+            mana_cost: 200,
+            cast_time_ms: 4000,
+            duration_secs: 0,
+            damage: 0,
+            resist_mod: -10,
+        };
+        assert_eq!(spell.resist_mod, -10);
+        assert_eq!(spell.duration_secs, 0);
+    }
+
+    #[test]
+    fn test_predictor_clone_and_eq() {
+        let p1 = CastingPredictor::new(2000, 25.0);
+        let p2 = p1.clone();
+        assert_eq!(p1, p2);
+    }
 }

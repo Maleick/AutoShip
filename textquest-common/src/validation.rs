@@ -207,4 +207,50 @@ mod tests {
         check_fields("Zero", 0, [("any", 0, 1)], &mut violations);
         assert_eq!(violations.len(), 1);
     }
+
+    #[test]
+    fn check_fields_zero_size_field_always_ok() {
+        let mut violations = Vec::new();
+        check_fields(
+            "TestStruct",
+            10,
+            [("zero_field", 10, 0)], // 10 + 0 = 10 <= 10 → OK
+            &mut violations,
+        );
+        assert!(violations.is_empty());
+    }
+
+    #[test]
+    fn check_fields_at_offset_zero() {
+        let mut violations = Vec::new();
+        check_fields(
+            "TestStruct",
+            8,
+            [("first_field", 0, 8)], // 0 + 8 = 8 <= 8 → OK
+            &mut violations,
+        );
+        assert!(violations.is_empty());
+    }
+
+    #[test]
+    fn check_fields_empty_fields_no_violations() {
+        let mut violations = Vec::new();
+        check_fields("TestStruct", 100, std::iter::empty(), &mut violations);
+        assert!(violations.is_empty());
+    }
+
+    #[test]
+    fn check_fields_violation_message_format() {
+        let mut violations = Vec::new();
+        check_fields(
+            "PlayerClient",
+            0x100,
+            [("NAME", 0x00fe, 4)], // 0xfe + 4 = 0x102 > 0x100
+            &mut violations,
+        );
+        assert_eq!(violations.len(), 1);
+        assert!(violations[0].contains("PlayerClient::NAME"));
+        assert!(violations[0].contains("0x00fe"));
+        assert!(violations[0].contains("0x0100"));
+    }
 }

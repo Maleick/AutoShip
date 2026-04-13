@@ -152,4 +152,58 @@ mod tests {
         assert_eq!(item.quantity, 3);
         assert_eq!(item.dropper_pid, 2048);
     }
+
+    #[test]
+    fn drain_all_on_empty_returns_empty_vec() {
+        let mut q = LootQueue::new();
+        let drained = q.drain_all();
+        assert!(drained.is_empty());
+    }
+
+    #[test]
+    fn drain_preserves_fifo_order() {
+        let mut q = LootQueue::new();
+        q.push(10, 1, 100);
+        q.push(20, 1, 200);
+        q.push(30, 1, 300);
+        let items = q.drain_all();
+        assert_eq!(items[0].item_id, 10);
+        assert_eq!(items[1].item_id, 20);
+        assert_eq!(items[2].item_id, 30);
+    }
+
+    #[test]
+    fn drop_ids_are_monotonically_increasing() {
+        let mut q = LootQueue::new();
+        let ids: Vec<u64> = (0..5).map(|_| q.push(1, 1, 1).drop_id).collect();
+        for i in 1..ids.len() {
+            assert!(ids[i] > ids[i - 1], "drop_ids should monotonically increase");
+        }
+    }
+
+    #[test]
+    fn timestamp_allows_systemtime_fallback() {
+        let mut q = LootQueue::new();
+        let item = q.push(1, 1, 1);
+        assert!(
+            item.timestamp == 0 || item.timestamp > 0,
+            "timestamp should be set from current time or fall back to 0 on SystemTime errors"
+        );
+    }
+
+    #[test]
+    fn push_after_drain_continues_id_sequence() {
+        let mut q = LootQueue::new();
+        q.push(1, 1, 1);
+        q.push(2, 1, 1);
+        q.drain_all();
+        let item = q.push(3, 1, 1);
+        assert_eq!(item.drop_id, 2, "should continue from where it left off");
+    }
+
+    #[test]
+    fn peek_on_empty_returns_none() {
+        let q = LootQueue::new();
+        assert!(q.peek().is_none());
+    }
 }

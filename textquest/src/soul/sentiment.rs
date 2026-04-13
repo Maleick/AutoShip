@@ -144,4 +144,72 @@ mod tests {
             "expected -0.6, got {score}"
         );
     }
+
+    // --- Additional sentiment tests ---
+
+    #[test]
+    fn test_empty_string() {
+        let score = score_sentiment("");
+        assert_eq!(score, 0.0);
+    }
+
+    #[test]
+    fn test_whitespace_only() {
+        let score = score_sentiment("   \t\n  ");
+        assert_eq!(score, 0.0);
+    }
+
+    #[test]
+    fn test_positive_keywords_cancel_negative() {
+        // "nice" (+0.3) + "bad" (-0.3) + "great" (+0.3) + "hate" (-0.3) = 0.0
+        let score = score_sentiment("nice bad great hate");
+        assert_eq!(score, 0.0);
+    }
+
+    #[test]
+    fn test_keyword_embedded_in_word() {
+        // "goodness" contains "good" → should still match
+        let score = score_sentiment("goodness gracious");
+        assert!(
+            (score - 0.3).abs() < f32::EPSILON,
+            "'goodness' contains 'good', expected 0.3, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_ty_shorthand() {
+        let score = score_sentiment("ty for the heal");
+        assert!(
+            (score - 0.3).abs() < f32::EPSILON,
+            "expected 0.3, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_kk_acknowledgement() {
+        let score = score_sentiment("kk pulling now");
+        assert!(
+            (score - 0.3).abs() < f32::EPSILON,
+            "expected 0.3, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_mixed_case_negative() {
+        let score = score_sentiment("You are TRASH");
+        assert!(
+            (score - (-0.3)).abs() < f32::EPSILON,
+            "expected -0.3, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_repeated_same_keyword_counted_once() {
+        // "contains" check matches once per keyword, regardless of repetition
+        let score = score_sentiment("good good good");
+        assert!(
+            (score - 0.3).abs() < f32::EPSILON,
+            "each keyword only counted once, got {score}"
+        );
+    }
 }

@@ -241,4 +241,94 @@ mod tests {
 
         assert_eq!(limiter.character_windows["Alice"].len(), 1);
     }
+
+    // --- Additional rate limiter tests ---
+
+    #[test]
+    fn default_config_values() {
+        let cfg = RateLimitConfig::default();
+        assert_eq!(cfg.requests_per_minute, 10);
+        assert_eq!(cfg.per_character_limit, 3);
+    }
+
+    #[test]
+    fn from_config_uses_config_values() {
+        let cfg = RateLimitConfig {
+            requests_per_minute: 20,
+            per_character_limit: 5,
+        };
+        let limiter = LlmRateLimiter::new(&cfg);
+        assert_eq!(limiter.requests_per_minute, 20);
+        assert_eq!(limiter.per_character_limit, 5);
+    }
+
+    #[test]
+    fn one_request_per_minute_allows_one() {
+        let mut limiter = LlmRateLimiter::with_limits(1, 1);
+        let t0 = Instant::now();
+        assert!(limiter.check_and_record("Alice", t0));
+        assert!(!limiter.check_and_record("Alice", t0));
+        assert!(!limiter.check_and_record("Bob", t0)); // global also full
+    }
+
+    #[test]
+    fn requests_allowed_after_full_window_expiry() {
+        let mut limiter = LlmRateLimiter::with_limits(2, 2);
+        let t0 = Instant::now();
+
+        limiter.check_and_record("Alice", t0);
+        limiter.check_and_record("Alice", t0);
+        assert!(!limiter.check_and_record("Alice", t0)); // full
+
+        // 61 seconds later — entire window expired
+        let t1 = advance(t0, 61);
+        assert!(limiter.check_and_record("Alice", t1));
+        assert!(limiter.check_and_record("Alice", t1));
+    }
+
+    #[test]
+    fn global_limit_blocks_new_characters() {
+        let mut limiter = LlmRateLimiter::with_limits(2, 10);
+        let t0 = Instant::now();
+
+        limiter.check_and_record("Alice", t0);
+        limiter.check_and_record("Bob", t0);
+        // Global limit 2 reached
+        assert!(!limiter.check_and_record("Carol", t0));
+    }
+
+    #[test]
+    fn per_char_limit_independent_of_others() {
+        let mut limiter = LlmRateLimiter::with_limits(100, 1);
+        let t0 = Instant::now();
+
+        assert!(limiter.check_and_record("Alice", t0));
+        assert!(!limiter.check_and_record("Alice", t0)); // per-char limit
+
+        // Bob is independent
+        assert!(limiter.check_and_record("Bob", t0));
+        assert!(!limiter.check_and_record("Bob", t0));
+    }
+
+    #[test]
+    fn sliding_window_boundary_entry_exactly_at_60s() {
+        let mut limiter = LlmRateLimiter::with_limits(2, 2);
+        let t0 = Instant::now();
+
+        limiter.check_and_record("Alice", t0);
+
+        // At exactly 60 seconds, the entry expires (>= WINDOW_SECS)
+        let t1 = advance(t0, 60);
+        limiter.drain_expired(t1);
+
+        assert_eq!(limiter.global_window.len(), 0);
+    }
+
+    #[test]
+    fn drain_expired_on_empty_limiter_is_safe() {
+        let mut limiter = LlmRateLimiter::with_limits(10, 10);
+        let t0 = Instant::now();
+        limiter.drain_expired(t0);
+        assert!(limiter.global_window.is_empty());
+    }
 }

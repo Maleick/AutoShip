@@ -383,7 +383,7 @@ mod tests {
     use crate::pattern_db::{OffsetCategory, ResolveMode, ScanEntry, ScanModule};
 
     /// Helper: build a scan entry with a specific pattern.
-    fn entry(name: &'static str, pattern: &'static str, resolve: ResolveMode) -> ScanEntry {
+    fn entry(name: &str, pattern: &str, resolve: ResolveMode) -> ScanEntry {
         ScanEntry {
             name: name.to_string(),
             category: if matches!(resolve, ResolveMode::Direct) {

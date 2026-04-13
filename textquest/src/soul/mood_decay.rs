@@ -242,4 +242,89 @@ mod tests {
         let lo = MoodIntensity::new(-1.0);
         assert_eq!(lo.value, 0.0);
     }
+
+    // --- Additional mood_decay tests ---
+
+    #[test]
+    fn mood_intensity_in_range() {
+        let mid = MoodIntensity::new(0.5);
+        assert!((mid.value - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn mood_intensity_boundary_values() {
+        let zero = MoodIntensity::new(0.0);
+        assert_eq!(zero.value, 0.0);
+        let one = MoodIntensity::new(1.0);
+        assert!((one.value - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn mood_intensity_ordering() {
+        let low = MoodIntensity::new(0.2);
+        let high = MoodIntensity::new(0.8);
+        assert!(low < high);
+        assert!(high > low);
+    }
+
+    #[test]
+    fn reset_clears_last_tick() {
+        let mut m = manager_at(0.5);
+        assert!(m.last_tick.is_some());
+        m.reset(0.8);
+        assert!((m.current_intensity - 0.8).abs() < f32::EPSILON);
+        assert!(m.last_tick.is_none(), "reset should clear last_tick");
+    }
+
+    #[test]
+    fn multiple_decay_ticks_reduce_intensity() {
+        let mut m = MoodDecayManager::new(MoodDecayConfig {
+            decay_rate_per_hour: 0.5,
+            min_decay_interval_secs: 0,
+            enabled: true,
+        });
+        m.current_intensity = 1.0;
+        let t0 = Instant::now();
+        m.last_tick = Some(t0);
+
+        // First tick: 1 hour
+        let t1 = t0 + Duration::from_secs(3600);
+        let r1 = m.tick(t1);
+        assert!((r1 - 0.5).abs() < 0.01, "expected ~0.5, got {r1}");
+
+        // Second tick: 1 more hour
+        let t2 = t1 + Duration::from_secs(3600);
+        let r2 = m.tick(t2);
+        assert!((r2 - 0.25).abs() < 0.01, "expected ~0.25, got {r2}");
+    }
+
+    #[test]
+    fn config_clone() {
+        let cfg = MoodDecayConfig {
+            decay_rate_per_hour: 0.3,
+            min_decay_interval_secs: 10,
+            enabled: false,
+        };
+        let cfg2 = cfg.clone();
+        assert!((cfg2.decay_rate_per_hour - 0.3).abs() < f32::EPSILON);
+        assert_eq!(cfg2.min_decay_interval_secs, 10);
+        assert!(!cfg2.enabled);
+    }
+
+    #[test]
+    fn tick_with_high_min_interval_defers_decay() {
+        let mut m = MoodDecayManager::new(MoodDecayConfig {
+            decay_rate_per_hour: 1.0,
+            min_decay_interval_secs: 7200, // 2 hours
+            enabled: true,
+        });
+        m.current_intensity = 0.9;
+        let t0 = Instant::now();
+        m.last_tick = Some(t0);
+
+        // 1 hour later — still below min_decay_interval
+        let t1 = t0 + Duration::from_secs(3600);
+        let result = m.tick(t1);
+        assert!((result - 0.9).abs() < f32::EPSILON, "should not decay yet");
+    }
 }

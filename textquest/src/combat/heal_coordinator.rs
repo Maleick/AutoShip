@@ -763,4 +763,132 @@ mod tests {
         // Only one healer should cure the single afflicted target
         assert_eq!(cmds.len(), 1);
     }
+
+    // --- Additional HealCoordinator edge cases ---
+
+    #[test]
+    fn disable_clears_active_claims() {
+        let mut coord = HealCoordinator::new();
+        coord.set_enabled(true);
+        coord.claim_target(1, 10, 100);
+        coord.claim_target(2, 20, 100);
+        assert_eq!(coord.active_claim_count(), 2);
+
+        coord.set_enabled(false);
+        assert_eq!(coord.active_claim_count(), 0, "disabling should clear claims");
+    }
+
+    #[test]
+    fn empty_healers_returns_empty() {
+        let mut coord = HealCoordinator::new();
+        coord.set_enabled(true);
+        let targets = vec![make_target(10, 30.0, 0, CombatRole::DpsMelee)];
+        let cmds = coord.tick(&[], &targets);
+        assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn empty_targets_returns_empty() {
+        let mut coord = HealCoordinator::new();
+        coord.set_enabled(true);
+        let healers = vec![make_healer(1, 0, 100.0)];
+        let cmds = coord.tick(&healers, &[]);
+        assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn claim_target_same_owner_not_expired() {
+        let mut coord = HealCoordinator::new();
+        coord.claim_target(1, 10, 100);
+        // Same owner should not be "claimed by other"
+        assert!(!coord.is_claimed_by_other(10, 1));
+        // Different owner should see it as claimed
+        assert!(coord.is_claimed_by_other(10, 2));
+    }
+
+    #[test]
+    fn unclaimed_target_not_claimed_by_other() {
+        let coord = HealCoordinator::new();
+        assert!(!coord.is_claimed_by_other(999, 1));
+    }
+
+    #[test]
+    fn cross_group_mana_threshold_setter() {
+        let mut coord = HealCoordinator::new();
+        coord.set_cross_group_mana_threshold(80.0);
+        coord.set_enabled(true);
+
+        // Healer at 75% mana should skip cross-group at 80% threshold
+        let healers = vec![make_healer(1, 0, 75.0)];
+        let targets = vec![make_target(10, 50.0, 1, CombatRole::DpsMelee)]; // different group
+        let cmds = coord.tick(&healers, &targets);
+        assert!(cmds.is_empty(), "75% mana < 80% threshold should skip cross-group");
+    }
+
+    #[test]
+    fn zero_hp_target_skipped() {
+        let mut coord = HealCoordinator::new();
+        coord.set_enabled(true);
+        let healers = vec![make_healer(1, 0, 100.0)];
+        let targets = vec![make_target(10, 0.0, 0, CombatRole::DpsMelee)];
+        let cmds = coord.tick(&healers, &targets);
+        assert!(cmds.is_empty(), "0% HP target should be skipped (likely dead)");
+    }
+
+    // --- CureCoordinator edge cases ---
+
+    #[test]
+    fn cure_skips_non_afflicted_targets() {
+        let mut cure = CureCoordinator::new();
+        let healers = vec![make_healer(1, 0, 100.0)];
+        // Target without detrimentals
+        let targets = vec![make_target(10, 70.0, 0, CombatRole::DpsMelee)];
+        let cmds = cure.tick(&healers, &targets);
+        assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn cure_skips_dead_targets() {
+        let mut cure = CureCoordinator::new();
+        let healers = vec![make_healer(1, 0, 100.0)];
+        let mut target = make_target(10, 0.0, 0, CombatRole::DpsMelee);
+        target.has_detrimental = true;
+        target.is_dead = true;
+        let targets = vec![target];
+        let cmds = cure.tick(&healers, &targets);
+        assert!(cmds.is_empty());
+    }
+
+    #[test]
+    fn cure_prefers_own_group() {
+        let mut cure = CureCoordinator::new();
+        let healers = vec![make_healer(1, 0, 100.0)]; // group 0
+
+        let mut t1 = make_target(10, 70.0, 1, CombatRole::DpsMelee); // group 1
+        t1.has_detrimental = true;
+        let mut t2 = make_target(11, 70.0, 0, CombatRole::DpsMelee); // group 0 (same as healer)
+        t2.has_detrimental = true;
+
+        let cmds = cure.tick(&healers, &[t1, t2]);
+        assert_eq!(cmds.len(), 1);
+        match &cmds[0].1 {
+            Command::SetTarget { spawn_id } => {
+                assert_eq!(*spawn_id, 11, "Should cure own group first");
+            }
+            _ => panic!("Expected SetTarget"),
+        }
+    }
+
+    #[test]
+    fn active_claims_returns_correct_pairs() {
+        let mut coord = HealCoordinator::new();
+        coord.claim_target(5, 50, 100);
+        coord.claim_target(10, 100, 100);
+
+        let claims = coord.active_claims();
+        assert_eq!(claims.len(), 2);
+        // Check that both healer/target pairs are present
+        assert!(claims.iter().any(|(h, t)| *h == 5 && *t == 50));
+        assert!(claims.iter().any(|(h, t)| *h == 10 && *t == 100));
+    }
 }
