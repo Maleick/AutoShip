@@ -41,7 +41,7 @@ jobs:
         uses: ./.github/actions/prepare-linux-runner-workspace
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request && format('refs/pull/{0}/head', github.event.issue.number) || github.event_name == 'pull_request_review_comment' && format('refs/pull/{0}/head', github.event.pull_request.number) || '' }}

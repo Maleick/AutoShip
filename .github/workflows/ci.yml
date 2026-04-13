@@ -188,7 +188,15 @@ jobs:
     runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - name: Prepare Linux self-hosted workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE"
+          cd /
+          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
