@@ -185,6 +185,12 @@ ACTION="$1"
 ISSUE_ID="$2"
 shift 2
 
+# Validate ISSUE_ID format: reject malformed values before they reach jq keys or GitHub API calls
+if [[ ! "$ISSUE_ID" =~ ^[0-9]+(-[a-z0-9-]+)?$ ]]; then
+  echo "Error: invalid ISSUE_ID: $ISSUE_ID" >&2
+  exit 1
+fi
+
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Cleanup temp files on exit
