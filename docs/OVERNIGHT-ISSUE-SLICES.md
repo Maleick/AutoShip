@@ -65,7 +65,7 @@
 
 **Dependencies**: #861 (logout mechanism)  
 **Blocks**: #863, #864  
-**Labels**: `M7`, `testing`, `enhancement`, `phase-1`, `phase-2`
+**Labels**: `M7`, `M7.harness`, `testing`, `enhancement`, `phase-2`
 
 #### Sub-Issues
 
@@ -130,13 +130,13 @@
 
 ---
 
-## PHASE 2: Output Capture (Weeks 3)
+## PHASE 3: Output Capture (Weeks 3)
 
 ### #863: Structured Logging & Output Capture [PARENT]
 
 **Dependencies**: #862 (test harness)  
 **Blocks**: #864  
-**Labels**: `M7`, `testing`, `enhancement`, `phase-2`
+**Labels**: `M7`, `testing`, `enhancement`, `phase-3`
 
 #### Sub-Issues
 
@@ -197,7 +197,7 @@
 
 ---
 
-## PHASE 3: CLI Integration (Week 3-4)
+## PHASE 3 (continued): CLI Integration (Week 3-4)
 
 ### #864: Overnight Test Runner CLI [PARENT]
 
@@ -264,7 +264,7 @@
 
 ---
 
-## PHASE 4: Validation & Polish (Week 4+)
+## PHASE 4: Reliability & Safety (Week 4+)
 
 ### #865: Error Handling & Recovery [PARENT]
 

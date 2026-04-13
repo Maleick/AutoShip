@@ -1,14 +1,14 @@
 # Overnight Testing - Quick Start Guide
 
-**Status**: ✅ Ready to implement | **Branch**: `claude/refine-automated-testing-q1h46` | **Issues**: 118+
+**Status**: ✅ Ready to implement | **Branch**: `claude/refine-automated-testing-q1h46` | **Issues**: 101
 
 ---
 
 ## TL;DR
 
-1. **118+ GitHub issues** created across 4 phases
-2. **70 core issues** (login, scenarios, output, CLI)
-3. **48 infrastructure issues** (testing, quality, automation)
+1. **101 GitHub issues** created across 4 phases + infrastructure
+2. **43 core issues** (login, scenarios, output, CLI, error handling)
+3. **48 infrastructure + operations issues** (testing, quality, automation, setup)
 4. **6-8 week timeline** with clear delivery gates
 5. **Production-grade** with 80%+ unit test coverage requirement
 
@@ -23,7 +23,7 @@
 
 ### 🔍 Find Information
 - **Phase 1-4 breakdown**: See `OVERNIGHT-COMPLETE-SYSTEM.md`
-- **All 118+ issues**: See GitHub issues (#861-#948)
+- **All 101 issues**: See GitHub issues (#861-#948)
 - **Issue slices**: See `OVERNIGHT-ISSUE-SLICES.md`
 - **Gaps identified**: See `OVERNIGHT-ADDITIONAL-GAPS.md`
 
@@ -47,15 +47,15 @@
 - `OVERNIGHT-QUICK-START.md` — This file
 - `.github/workflows/branch-cleanup.yml` — Automation ✅
 
-### ✅ GitHub Issues (118+ Created)
+### ✅ GitHub Issues (101 Created)
 
-**Core System (70)**
-- Phase 1: #861 (logout) + #870 (testing infrastructure)
-- Phase 2: #862 (test scenarios)
-- Phase 3: #863 (output) + #864 (CLI)
-- Phase 4: #865 (error handling) + #866 (safety)
+**Core System (43)**
+- Phase 1: #861 (logout) + #870 (testing infrastructure) = 9
+- Phase 2: #862 (test scenarios) = 9
+- Phase 3: #863 (output) + #864 (CLI) = 16
+- Phase 4: #865 (error handling) + #866 (safety) = 9
 
-**Infrastructure & Quality (48)**
+**Infrastructure, Operations & Quality (58)**
 - Branch cleanup: #900-902 (✅ workflow implemented)
 - Testing standards: #903-906
 - Code quality: #907-910 + #911-914 (clippy -D + autofix)
@@ -76,7 +76,7 @@
 
 ---
 
-## Key Standards (Required for ALL 118+ Issues)
+## Key Standards (Required for ALL 101 Issues)
 
 ### Unit Testing (>80% Coverage)
 ```
@@ -122,7 +122,7 @@
 | **4: Reliability** | 5-7 days | 9 | Completes system |
 | **Infrastructure** | 2-3 weeks | 48 | Quality gates |
 | **Polish** | 1-2 weeks | — | Manual testing |
-| **TOTAL** | **6-8 weeks** | **118+** | — |
+| **TOTAL** | **6-8 weeks** | **101** | — |
 
 ---
 
@@ -172,7 +172,7 @@ Every issue has:
 
 ## Key Files
 
-**Documentation** (all in `/home/user/TextQuest/docs/`)
+**Documentation** (all in `docs/` directory)
 - `OVERNIGHT-TESTING-PLAN.md` — Start here (architecture)
 - `OVERNIGHT-COMPLETE-SYSTEM.md` — Master specification
 - `OVERNIGHT-ISSUE-SLICES.md` — Issue details
@@ -201,10 +201,10 @@ Every issue has:
 - **#907**: Clippy enforcement (4 issues) — Quality gate
 - **#911**: Clippy autofix (4 issues) — Automation
 
-### Branch & Tracking
-- **Branch**: `claude/refine-automated-testing-q1h46`
-- **Milestone**: M7 (for M7 component tagging)
-- **Issues**: 118+ across #861-#948
+### Tracking & Organization
+- **Milestone**: M7 (organizes all 101 issues by component)
+- **Issues**: 101 across #861-#956 + #1286-#1291 (sorted by phase/component)
+- **Labels**: Use `phase-1`, `phase-2`, `phase-3`, `phase-4` for phase filtering
 
 ---
 
@@ -223,7 +223,7 @@ A: No. Clippy -D warnings is enforced in CI. Use #911 autofix to help.
 A: Workflow automatically deletes merged branches (claude/*, codex/*, feature/*). Already implemented.
 
 **Q: When are unit tests required?**
-A: For ALL 118+ issues. Minimum >80% coverage, 0 flaky tests.
+A: For ALL 101 issues. Minimum >80% coverage, 0 flaky tests.
 
 **Q: How long will implementation take?**
 A: 6-8 weeks: 4 weeks core (phases 1-4), 2-4 weeks polish/infrastructure.
@@ -232,7 +232,7 @@ A: 6-8 weeks: 4 weeks core (phases 1-4), 2-4 weeks polish/infrastructure.
 
 ## Success Metrics
 
-- ✅ 118+ issues created with detailed acceptance criteria
+- ✅ 101 issues created with detailed acceptance criteria
 - ✅ 8 comprehensive documentation files (2,100+ lines)
 - ✅ Branch cleanup automation implemented
 - ✅ Phase gates defined with clear deliverables
@@ -253,6 +253,5 @@ A: 6-8 weeks: 4 weeks core (phases 1-4), 2-4 weeks polish/infrastructure.
 
 ---
 
-**Branch**: `claude/refine-automated-testing-q1h46`  
 **Status**: ✅ Ready to implement  
-**Session**: https://claude.ai/code/session_01BXjhDtTw3cp2rneLUvSGT9
+**Tracking**: Start with GitHub issues #861.x series, manage via M7 milestone

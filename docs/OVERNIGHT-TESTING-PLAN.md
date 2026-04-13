@@ -235,4 +235,5 @@ textquest overnight-test [OPTIONS]
 
 ## Related Issues
 
-- See GitHub issues #<overnight-logout>, #<overnight-harness>, #<overnight-output>, #<overnight-cli> for detailed task breakdowns.
+- See GitHub issues #861 (logout), #862 (test harness), #863 (output capture), #864 (CLI integration) for detailed task breakdowns and sub-issues.
+- Phase 1-4 implementation tracked via M7 milestone with 101 total issues across all phases.
