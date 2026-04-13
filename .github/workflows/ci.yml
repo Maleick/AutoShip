@@ -34,7 +34,7 @@ jobs:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Setup verified Python
         uses: ./.github/actions/setup-verified-python
@@ -59,7 +59,7 @@ jobs:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Configure Git safe directories
         uses: ./.github/actions/configure-safe-directory
@@ -172,7 +172,7 @@ jobs:
     runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -191,7 +191,7 @@ jobs:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Configure Git safe directories
         uses: ./.github/actions/configure-safe-directory
