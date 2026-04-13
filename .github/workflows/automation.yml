@@ -198,6 +198,46 @@ jobs:
               }
             }
 
+  branch-cleanup:
+    name: Delete merged feature branches
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      (startsWith(github.head_ref, 'feature/') ||
+       startsWith(github.head_ref, 'fix/') ||
+       startsWith(github.head_ref, 'claude/') ||
+       startsWith(github.head_ref, 'codex/'))
+    runs-on: [self-hosted, Linux, X64, textquest]
+    permissions:
+      contents: write
+    steps:
+      - name: Delete merged branch
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const branchName = pr.head.ref;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Verify branch belongs to this repo (guards against fork branch deletion)
+            if (pr.head.repo?.full_name !== `${owner}/${repo}`) {
+              core.info(`Skipping deletion: branch "${branchName}" is from fork, not this repository`);
+              return;
+            }
+
+            try {
+              await github.rest.git.deleteRef({
+                owner: owner,
+                repo: repo,
+                ref: `heads/${branchName}`
+              });
+              core.info(`Deleted branch: ${branchName}`);
+            } catch (error) {
+              core.warning(`Failed to delete branch ${branchName}: ${error.message}`);
+            }
+
   sync-wiki:
     name: Trigger wiki publish after merge
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
