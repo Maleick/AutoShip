@@ -2,6 +2,8 @@
 
 The canonical roadmap source is `docs/implementation-roadmap.md`.
 
+Latest repo audit snapshot: `docs/wiki/Repo-Audit-2026-04-13.md`.
+
 This page summarizes the active milestone order, the evidence model, and the main validation gaps that still matter operationally.
 
 README is intentionally the usage surface for TextQuest. Treat this page and `docs/implementation-roadmap.md` as the places for roadmap status and validation guidance.

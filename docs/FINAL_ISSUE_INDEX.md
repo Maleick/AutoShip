@@ -206,7 +206,7 @@
 |---|----------|-------|--------|
 | #1098 | Design drag system | 3h | 📋 |
 | #1101 | Corpse dragging | 12h | 📋 |
-| #1105 | Tests & documentation | 4h | 📋 |
+| #1103 | Tests & documentation | 4h | 📋 |
 
 **Test Requirements**: Unit (80%+), integration, scenario  
 **Success**: Corpses drag to location, stuck detection works

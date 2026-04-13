@@ -157,7 +157,7 @@
 |-------|------|-----------|-----------|-----------|
 | #1098 | Design drag/object movement system | - | **Trivial** | ~3h |
 | #1101 | Implement corpse dragging | #1098 | **Medium** | ~12h |
-| #1105 | Drag system testing and documentation | #1101 | **Small** | ~4h |
+| #1100 | Drag system testing and documentation | #1101 | **Small** | ~4h |
 
 **Subtotal**: 3 tasks | ~19 hours
 
@@ -314,7 +314,7 @@ Can work in parallel after Phase 1 foundation is stable:
 Can work in parallel after Phase 1 foundation is stable:
 - **#1079-#1087** (Travel)
 - **#1089-#1097** (Smart Loot)
-- **#1098-#1105** (Drag)
+- **#1098-#1102** (Drag)
 
 ### Phase 4 (QoL) - Optional, can work in parallel
 Can work in parallel but lower priority:
@@ -349,7 +349,7 @@ Can work in parallel but lower priority:
 | #1069-#1074 | 2 | Named (#796) |
 | #1079-#1087 | 3 | Travel (#795) |
 | #1089-#1097 | 3 | Loot (#798) |
-| #1098-#1105 | 3 | Drag (#797) |
+| #1098-#1101, #1103 | 3 | Drag (#797) |
 | #1104-#1109 | 4 | GUI (#801) |
 | #1111-#1114 | 4 | Monitoring (#802) |
 | #1115-#1118 | 4 | Debug (#803) |
