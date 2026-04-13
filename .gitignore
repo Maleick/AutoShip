@@ -23,3 +23,7 @@ Thumbs.db
 
 # Backup files
 *.bak
+
+# AutoShip runtime artifacts (generated per-run, not source)
+BEACON_RESULT.md
+BEACON_PROMPT.md

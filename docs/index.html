@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoShip — ship GitHub issues on autopilot</title>
+  <meta name="description" content="AutoShip is a Claude Code plugin that autonomously routes GitHub issues to AI agents, verifies results, opens PRs, and merges them. One command starts the loop." />
+  <meta property="og:title" content="AutoShip — ship GitHub issues on autopilot" />
+  <meta property="og:description" content="Autonomous multi-agent orchestration for Claude Code. Routes GitHub issues to Codex, Gemini, Copilot, or Claude — verifies results, opens PRs, merges." />
+  <meta property="og:image" content="https://raw.githubusercontent.com/Maleick/AutoShip/main/assets/autoship-banner.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #21262d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --amber: #f59e0b;
+      --amber-dim: #d97706;
+      --blue: #58a6ff;
+      --green: #3fb950;
+      --radius: 10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 32px;
+      background: rgba(13,17,23,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { font-weight: 800; font-size: 1.1rem; color: var(--amber); letter-spacing: -0.5px; text-decoration: none; }
+    .nav-links { display: flex; gap: 24px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      background: var(--amber); color: #000; font-weight: 700; font-size: 0.85rem;
+      padding: 7px 16px; border-radius: 6px; text-decoration: none; transition: background .2s;
+    }
+    .nav-cta:hover { background: var(--amber-dim); }
+
+    /* ── Hero ── */
+    .hero {
+      max-width: 900px; margin: 0 auto;
+      padding: 80px 24px 64px;
+      text-align: center;
+    }
+    .hero img { width: 100%; max-width: 760px; border-radius: 12px; border: 1px solid var(--border); }
+    .hero-badges { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 28px; }
+    .hero-badges img { height: 22px; }
+    .hero-desc {
+      font-size: 1.15rem; color: var(--muted); max-width: 620px;
+      margin: 32px auto 0; line-height: 1.7;
+    }
+    .hero-desc strong { color: var(--text); }
+    .hero-actions { display: flex; gap: 14px; justify-content: center; margin-top: 36px; flex-wrap: wrap; }
+    .btn-primary {
+      background: var(--amber); color: #000; font-weight: 700; font-size: 1rem;
+      padding: 13px 28px; border-radius: var(--radius); text-decoration: none; transition: background .2s;
+    }
+    .btn-primary:hover { background: var(--amber-dim); }
+    .btn-secondary {
+      background: var(--surface); color: var(--text); font-weight: 600; font-size: 1rem;
+      padding: 13px 28px; border-radius: var(--radius); text-decoration: none;
+      border: 1px solid var(--border); transition: border-color .2s;
+    }
+    .btn-secondary:hover { border-color: var(--muted); }
+
+    /* ── Install box ── */
+    .install-box {
+      max-width: 680px; margin: 56px auto 0;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    .install-header {
+      padding: 10px 18px; background: #1c2128;
+      font-size: 0.78rem; color: var(--muted); font-family: monospace;
+      border-bottom: 1px solid var(--border);
+    }
+    .install-cmd {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; gap: 12px;
+    }
+    .install-cmd code {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.9rem; color: var(--amber); flex: 1;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .copy-btn {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      font-size: 0.8rem; padding: 5px 12px; border-radius: 5px; cursor: pointer;
+      transition: all .2s; white-space: nowrap;
+    }
+    .copy-btn:hover { border-color: var(--amber); color: var(--amber); }
+
+    /* ── Stats strip ── */
+    .stats {
+      display: flex; justify-content: center; gap: 0;
+      max-width: 700px; margin: 56px auto 0;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .stat { flex: 1; padding: 24px 20px; text-align: center; border-right: 1px solid var(--border); }
+    .stat:last-child { border-right: none; }
+    .stat-num { font-size: 2rem; font-weight: 900; color: var(--amber); display: block; }
+    .stat-label { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+
+    /* ── Section ── */
+    section { max-width: 960px; margin: 0 auto; padding: 72px 24px; }
+    section h2 { font-size: 1.7rem; font-weight: 800; margin-bottom: 14px; }
+    section h2 span { color: var(--amber); }
+    .section-sub { color: var(--muted); font-size: 1.05rem; margin-bottom: 36px; max-width: 600px; }
+    hr.divider { border: none; border-top: 1px solid var(--border); max-width: 960px; margin: 0 auto; }
+
+    /* ── Feature cards ── */
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px; transition: border-color .2s;
+    }
+    .card:hover { border-color: var(--amber); }
+    .card-icon { font-size: 1.6rem; margin-bottom: 12px; }
+    .card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
+    .card p { font-size: 0.88rem; color: var(--muted); line-height: 1.6; }
+
+    /* ── Before/After ── */
+    .ba-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 600px) { .ba-grid { grid-template-columns: 1fr; } }
+    .ba-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px;
+    }
+    .ba-card.after { border-color: #238636; }
+    .ba-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 14px; }
+    .ba-card ol, .ba-card ul { padding-left: 20px; }
+    .ba-card li { font-size: 0.88rem; color: var(--muted); margin-bottom: 6px; line-height: 1.5; }
+    .ba-card li strong { color: var(--text); }
+    .ba-time { margin-top: 16px; font-size: 0.85rem; font-weight: 700; }
+    .ba-time.bad { color: #f85149; }
+    .ba-time.good { color: var(--green); }
+    pre.hero-code {
+      background: var(--surface); border: 1px solid #238636;
+      border-radius: 8px; padding: 20px 24px; font-family: monospace;
+      font-size: 1.1rem; color: var(--green); text-align: center; margin: 12px 0 16px;
+    }
+
+    /* ── Pipeline steps ── */
+    .pipeline { display: flex; flex-direction: column; gap: 0; }
+    .pipeline-step {
+      display: flex; gap: 16px; align-items: flex-start;
+      padding: 16px 0; border-bottom: 1px solid var(--border);
+    }
+    .pipeline-step:last-child { border-bottom: none; }
+    .step-num {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--amber); color: #000; font-weight: 900; font-size: 0.85rem;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .step-content h4 { font-size: 0.95rem; font-weight: 700; }
+    .step-content p { font-size: 0.85rem; color: var(--muted); margin-top: 3px; }
+
+    /* ── Agent matrix table ── */
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th { text-align: left; padding: 10px 14px; background: var(--surface); color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+    td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--muted); }
+    td:first-child { color: var(--text); font-family: monospace; font-size: 0.85rem; }
+    td strong { color: var(--amber); }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 24px; text-align: center;
+      color: var(--muted); font-size: 0.85rem;
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 640px) {
+      nav { padding: 12px 16px; }
+      .nav-links { display: none; }
+      .stats { flex-direction: column; }
+      .stat { border-right: none; border-bottom: 1px solid var(--border); }
+      .stat:last-child { border-bottom: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <a class="nav-logo" href="#">🚀 AutoShip</a>
+  <div class="nav-links">
+    <a href="#how-it-works">How It Works</a>
+    <a href="#features">Features</a>
+    <a href="#agents">Agents</a>
+    <a href="https://github.com/Maleick/AutoShip">GitHub</a>
+  </div>
+  <a class="nav-cta" href="https://github.com/Maleick/AutoShip#install">Install</a>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <img src="https://raw.githubusercontent.com/Maleick/AutoShip/main/assets/autoship-banner.svg"
+       alt="AutoShip — ship GitHub issues on autopilot" />
+
+  <div class="hero-badges">
+    <img src="https://img.shields.io/github/stars/Maleick/AutoShip?style=flat&color=f59e0b" alt="Stars" />
+    <img src="https://img.shields.io/github/v/release/Maleick/AutoShip?style=flat" alt="Version" />
+    <img src="https://img.shields.io/github/license/Maleick/AutoShip?style=flat" alt="License" />
+    <img src="https://img.shields.io/badge/Claude_Code-plugin-blue?style=flat" alt="Claude Code Plugin" />
+  </div>
+
+  <p class="hero-desc">
+    A <strong>Claude Code plugin</strong> that autonomously routes GitHub issues to AI agents,
+    verifies their work, opens pull requests, and merges them.
+    <strong>One command starts the loop.</strong>
+  </p>
+
+  <div class="hero-actions">
+    <a class="btn-primary" href="https://github.com/Maleick/AutoShip#install">Get Started</a>
+    <a class="btn-secondary" href="https://github.com/Maleick/AutoShip">View on GitHub</a>
+  </div>
+
+  <div class="install-box">
+    <div class="install-header">bash — one-time install</div>
+    <div class="install-cmd">
+      <code>claude plugin marketplace add Maleick/AutoShip &amp;&amp; claude plugin install autoship@autoship</code>
+      <button class="copy-btn" onclick="navigator.clipboard.writeText('claude plugin marketplace add Maleick/AutoShip && claude plugin install autoship@autoship').then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)})">Copy</button>
+    </div>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats" style="margin: 0 auto 0; max-width: 700px; display:flex;">
+  <div class="stat">
+    <span class="stat-num">~9 min</span>
+    <div class="stat-label">avg issue → merged PR</div>
+  </div>
+  <div class="stat">
+    <span class="stat-num">6</span>
+    <div class="stat-label">parallel agents</div>
+  </div>
+  <div class="stat">
+    <span class="stat-num">7</span>
+    <div class="stat-label">task types classified</div>
+  </div>
+  <div class="stat">
+    <span class="stat-num">~5%</span>
+    <div class="stat-label">your effort</div>
+  </div>
+</div>
+
+<hr class="divider" style="margin-top: 72px;" />
+
+<!-- Before / After -->
+<section id="before-after">
+  <h2>Before / <span>After</span></h2>
+  <p class="section-sub">Same 20 issues. Very different afternoon.</p>
+  <div class="ba-grid">
+    <div class="ba-card">
+      <h3>📋 Without AutoShip</h3>
+      <ol>
+        <li>Open GitHub issues backlog</li>
+        <li>Read each issue, estimate complexity</li>
+        <li>Pick an issue manually</li>
+        <li>Open a worktree or branch</li>
+        <li>Write a dispatch prompt</li>
+        <li>Paste into Codex / Claude / Gemini</li>
+        <li>Babysit the agent</li>
+        <li>Review output yourself</li>
+        <li>Open a PR manually</li>
+        <li>Watch CI, merge manually</li>
+        <li>Close the issue</li>
+        <li><strong>Repeat × 19 more issues</strong></li>
+      </ol>
+      <p class="ba-time bad">Time: 3–8 hrs. You did most of it.</p>
+    </div>
+    <div class="ba-card after">
+      <h3>🚀 With AutoShip</h3>
+      <pre class="hero-code">/autoship:start</pre>
+      <p style="font-size:.88rem;color:var(--muted);line-height:1.6;">
+        AutoShip reads your issues, classifies each one, picks the best agent,
+        creates an isolated worktree, dispatches with a focused prompt,
+        verifies the result, opens a PR, waits for CI, merges, closes the issue,
+        and immediately starts the next one.
+      </p>
+      <p style="margin-top:12px;font-size:.88rem;color:var(--muted);">You come back to merged PRs.</p>
+      <p class="ba-time good">Time: you typed one command.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- How It Works -->
+<section id="how-it-works">
+  <h2>How It <span>Works</span></h2>
+  <p class="section-sub">Six steps, fully automated, runs in a loop.</p>
+  <div class="pipeline">
+    <div class="pipeline-step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <h4>Classify</h4>
+        <p>Each open issue is classified into one of 7 task types: research, docs, simple_code, medium_code, mechanical, ci_fix, or complex. Labels are applied to GitHub for visibility.</p>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <h4>Route</h4>
+        <p>Task type + available quota determines the agent. Codex and Gemini are used first to save Claude tokens. Routing is configured in <code>BEACON.md</code> and hot-reloads on change.</p>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <h4>Dispatch</h4>
+        <p>A git worktree is created for isolation. The agent gets a focused prompt with the issue body, acceptance criteria, and test command. Codex runs via JSON-RPC app-server — no tmux needed.</p>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <h4>Verify</h4>
+        <p>When the agent reports COMPLETE, a Sonnet reviewer checks <code>BEACON_RESULT.md</code> against the actual diff and acceptance criteria. On FAIL: re-dispatches. After 3 failures: Opus advisor re-slices the issue.</p>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">5</div>
+      <div class="step-content">
+        <h4>PR + CI</h4>
+        <p>Reviewer PASS triggers automatic PR creation. <code>monitor-prs.sh</code> watches CI status every 30 seconds. On green: auto-merge with squash. Branch and worktree are cleaned up.</p>
+      </div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-num">6</div>
+      <div class="step-content">
+        <h4>Loop</h4>
+        <p>Issue is closed, result archived to <code>.beacon/results/</code>, token spend recorded in the ledger. AutoShip immediately picks the next issue from the queue.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- Features -->
+<section id="features">
+  <h2>What You <span>Get</span></h2>
+  <p class="section-sub">Built for real backlogs, not toy demos.</p>
+  <div class="cards">
+    <div class="card">
+      <div class="card-icon">🤖</div>
+      <h3>Multi-agent dispatch</h3>
+      <p>Codex, Gemini, Copilot, Claude Haiku, and Claude Sonnet — AutoShip picks the right tool for each task type and falls back gracefully on quota exhaustion.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">⚡</div>
+      <h3>Parallel execution</h3>
+      <p>Up to 6 issues in flight simultaneously. Bash monitors watch every agent every 5 seconds without blocking the orchestrator.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔍</div>
+      <h3>Verification pipeline</h3>
+      <p>Every result is reviewed against acceptance criteria before a PR opens. Partial implementations fail automatically and trigger re-dispatch.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🗺️</div>
+      <h3>Live routing config</h3>
+      <p>Edit the YAML front matter in <code>BEACON.md</code> to change which agent handles which task type. Takes effect on the next dispatch — no restart needed.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">💾</div>
+      <h3>Durable state</h3>
+      <p>State in <code>.beacon/state.json</code> and GitHub labels. Kill the session, restart, and AutoShip picks up exactly where it left off.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📊</div>
+      <h3>Token ledger</h3>
+      <p>Per-issue and per-session token spend tracked in <code>.beacon/token-ledger.json</code>. <code>/autoship:status</code> shows per-model cost breakdown.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- Agent matrix -->
+<section id="agents">
+  <h2>Dispatch <span>Matrix</span></h2>
+  <p class="section-sub">AutoShip picks the best agent per task type, with quota-aware fallback.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Task Type</th>
+        <th>Primary</th>
+        <th>Fallback</th>
+        <th>Last Resort</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>research</td><td>Gemini</td><td>Claude Haiku</td><td>—</td></tr>
+      <tr><td>docs</td><td>Gemini</td><td>Claude Haiku</td><td>—</td></tr>
+      <tr><td>simple_code</td><td><strong>Codex Spark</strong></td><td>Gemini · Copilot</td><td>Claude Haiku</td></tr>
+      <tr><td>medium_code</td><td><strong>Codex GPT</strong></td><td>Claude Sonnet</td><td>—</td></tr>
+      <tr><td>mechanical</td><td>Claude Haiku</td><td>Gemini</td><td>Codex Spark</td></tr>
+      <tr><td>ci_fix</td><td>Claude Haiku</td><td>Gemini</td><td>—</td></tr>
+      <tr><td>complex</td><td><strong>Sonnet + Opus advisor</strong></td><td>Sonnet retry</td><td>Opus re-slice</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<hr class="divider" />
+
+<!-- CTA -->
+<section style="text-align:center; padding: 72px 24px;">
+  <h2 style="font-size:2rem;">Ready to <span style="color:var(--amber);">stop babysitting issues?</span></h2>
+  <p style="color:var(--muted);max-width:480px;margin:16px auto 36px;font-size:1.05rem;">One install. One command. Your backlog ships itself.</p>
+  <a class="btn-primary" href="https://github.com/Maleick/AutoShip#install" style="font-size:1.1rem;padding:15px 36px;">
+    Install AutoShip →
+  </a>
+  <p style="margin-top:20px;color:var(--muted);font-size:0.85rem;">
+    Requires Claude Code · <a href="https://github.com/Maleick/AutoShip">View on GitHub</a>
+  </p>
+</section>
+
+<footer>
+  <p>AutoShip — MIT License · <a href="https://github.com/Maleick/AutoShip">github.com/Maleick/AutoShip</a></p>
+  <p style="margin-top:6px;">Built with <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a></p>
+</footer>
+
+</body>
+</html>

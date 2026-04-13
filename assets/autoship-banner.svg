@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" width="800" height="300">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="60%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="boxTop" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fcd34d"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="boxFront" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="boxSide" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#b45309"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="300" fill="url(#bg)" rx="12"/>
+
+  <!-- Subtle dot grid -->
+  <g opacity="0.06" fill="#94a3b8">
+    <circle cx="480" cy="60" r="1.5"/><circle cx="530" cy="60" r="1.5"/><circle cx="580" cy="60" r="1.5"/><circle cx="630" cy="60" r="1.5"/><circle cx="680" cy="60" r="1.5"/><circle cx="730" cy="60" r="1.5"/>
+    <circle cx="480" cy="90" r="1.5"/><circle cx="530" cy="90" r="1.5"/><circle cx="580" cy="90" r="1.5"/><circle cx="630" cy="90" r="1.5"/><circle cx="680" cy="90" r="1.5"/><circle cx="730" cy="90" r="1.5"/>
+    <circle cx="480" cy="120" r="1.5"/><circle cx="530" cy="120" r="1.5"/><circle cx="580" cy="120" r="1.5"/><circle cx="630" cy="120" r="1.5"/><circle cx="680" cy="120" r="1.5"/><circle cx="730" cy="120" r="1.5"/>
+    <circle cx="480" cy="150" r="1.5"/><circle cx="530" cy="150" r="1.5"/><circle cx="580" cy="150" r="1.5"/><circle cx="630" cy="150" r="1.5"/><circle cx="680" cy="150" r="1.5"/><circle cx="730" cy="150" r="1.5"/>
+    <circle cx="480" cy="180" r="1.5"/><circle cx="530" cy="180" r="1.5"/><circle cx="580" cy="180" r="1.5"/><circle cx="630" cy="180" r="1.5"/><circle cx="680" cy="180" r="1.5"/><circle cx="730" cy="180" r="1.5"/>
+    <circle cx="480" cy="210" r="1.5"/><circle cx="530" cy="210" r="1.5"/><circle cx="580" cy="210" r="1.5"/><circle cx="630" cy="210" r="1.5"/><circle cx="680" cy="210" r="1.5"/><circle cx="730" cy="210" r="1.5"/>
+    <circle cx="480" cy="240" r="1.5"/><circle cx="530" cy="240" r="1.5"/><circle cx="580" cy="240" r="1.5"/><circle cx="630" cy="240" r="1.5"/><circle cx="680" cy="240" r="1.5"/><circle cx="730" cy="240" r="1.5"/>
+  </g>
+
+  <!-- ── LEFT: Branding ── -->
+  <text x="48" y="148" font-family="Arial Black, Arial, sans-serif" font-size="76"
+    fill="url(#textGrad)" font-weight="900" letter-spacing="-3">AutoShip</text>
+  <text x="51" y="185" font-family="Arial, sans-serif" font-size="17" fill="#6b7280" letter-spacing="0.3">
+    ship GitHub issues on autopilot
+  </text>
+  <rect x="50" y="197" width="270" height="2.5" fill="#f59e0b" rx="2" opacity="0.7"/>
+  <g font-family="Arial, sans-serif" font-size="12.5" fill="#4b5563">
+    <text x="52" y="222">▸ routes issues to Codex · Gemini · Claude</text>
+    <text x="52" y="243">▸ verifies · opens PR · waits CI · merges</text>
+    <text x="52" y="264">▸ /autoship:start  —  one command, full loop</text>
+  </g>
+
+  <!-- ── MIDDLE: Flying box (isometric 3D style) ── -->
+  <g transform="translate(390, 100) rotate(-12)">
+    <!-- Box side (right face) -->
+    <polygon points="65,8 80,18 80,78 65,68" fill="url(#boxSide)"/>
+    <!-- Box front face -->
+    <rect x="0" y="8" width="65" height="60" fill="url(#boxFront)"/>
+    <!-- Box top face -->
+    <polygon points="0,8 65,8 80,18 15,18" fill="url(#boxTop)"/>
+    <!-- Tape: vertical -->
+    <rect x="29" y="8" width="7" height="60" fill="#92400e" opacity="0.5"/>
+    <!-- Tape: horizontal -->
+    <rect x="0" y="34" width="65" height="7" fill="#92400e" opacity="0.5"/>
+    <!-- "AS" stamp -->
+    <text x="8" y="30" font-family="Arial Black, Arial, sans-serif" font-size="10"
+      fill="#7c2d12" font-weight="900" opacity="0.75">AUTO</text>
+    <text x="8" y="53" font-family="Arial Black, Arial, sans-serif" font-size="10"
+      fill="#7c2d12" font-weight="900" opacity="0.75">SHIP</text>
+  </g>
+
+  <!-- Motion lines (behind box, going right) -->
+  <g stroke="#f59e0b" stroke-linecap="round" opacity="0.4">
+    <line x1="490" y1="118" x2="536" y2="112" stroke-width="2.5"/>
+    <line x1="493" y1="132" x2="542" y2="130" stroke-width="2.5"/>
+    <line x1="491" y1="148" x2="535" y2="150" stroke-width="2"/>
+    <line x1="488" y1="106" x2="528" y2="97" stroke-width="2"/>
+  </g>
+
+  <!-- ── RIGHT: Delivery person (facing left, throwing) ── -->
+  <!-- Back leg -->
+  <rect x="648" y="208" width="22" height="70" rx="8" fill="#1e293b" transform="rotate(14, 659, 208)"/>
+  <!-- Front leg -->
+  <rect x="615" y="210" width="22" height="70" rx="8" fill="#1e293b" transform="rotate(-10, 626, 210)"/>
+  <!-- Shoes -->
+  <ellipse cx="636" cy="277" rx="22" ry="9" fill="#0f172a"/>
+  <ellipse cx="666" cy="271" rx="21" ry="8" fill="#0f172a"/>
+
+  <!-- Torso -->
+  <rect x="607" y="142" width="76" height="80" rx="9" fill="#92400e"/>
+  <!-- Uniform collar V -->
+  <polygon points="640,142 648,160 656,142" fill="#7c2d12"/>
+  <!-- ID badge -->
+  <rect x="613" y="162" width="26" height="15" rx="3" fill="#fbbf24" opacity="0.85"/>
+  <text x="616" y="173" font-family="Arial, sans-serif" font-size="7" fill="#7c2d12" font-weight="bold">DRIVER</text>
+  <!-- Belt line -->
+  <rect x="607" y="214" width="76" height="8" rx="3" fill="#7c2d12"/>
+
+  <!-- Back arm (right, relaxed back) -->
+  <path d="M678,162 Q700,178 693,212" stroke="#92400e" stroke-width="18" stroke-linecap="round" fill="none"/>
+  <circle cx="690" cy="214" r="10" fill="#fbbf24"/>
+
+  <!-- Throwing arm (left, fully extended toward box) -->
+  <path d="M610,160 Q560,142 500,128" stroke="#92400e" stroke-width="18" stroke-linecap="round" fill="none"/>
+  <circle cx="498" cy="127" r="11" fill="#fbbf24"/>
+  <!-- Thumb suggestion -->
+  <circle cx="488" cy="118" r="7" fill="#fbbf24"/>
+
+  <!-- Head -->
+  <circle cx="648" cy="107" r="34" fill="#fbbf24"/>
+
+  <!-- Eyes: focused/determined -->
+  <ellipse cx="636" cy="101" rx="5" ry="4" fill="#1e293b"/>
+  <ellipse cx="659" cy="101" rx="5" ry="4" fill="#1e293b"/>
+  <!-- Eye shine -->
+  <circle cx="638" cy="99" r="2" fill="white" opacity="0.7"/>
+  <circle cx="661" cy="99" r="2" fill="white" opacity="0.7"/>
+  <!-- Determined smirk -->
+  <path d="M634,120 Q645,130 662,124" stroke="#92400e" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <!-- Brows: angled for effort -->
+  <path d="M629,90 Q637,84 645,88" stroke="#7c2d12" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M651,87 Q659,82 666,86" stroke="#7c2d12" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+  <!-- Cap -->
+  <path d="M617,103 Q648,64 680,103 Z" fill="#1e40af"/>
+  <rect x="614" y="100" width="70" height="12" rx="4" fill="#1e40af"/>
+  <!-- Brim -->
+  <rect x="606" y="109" width="30" height="7" rx="3" fill="#1e40af"/>
+  <!-- Cap pin -->
+  <circle cx="648" cy="82" r="7" fill="#f59e0b"/>
+  <text x="644" y="86" font-family="Arial, sans-serif" font-size="7" fill="#1e40af" font-weight="bold">AS</text>
+
+  <!-- Sweat drop (effort) -->
+  <path d="M682,78 Q686,70 690,78 Q686,85 682,78 Z" fill="#60a5fa" opacity="0.8"/>
+
+  <!-- Border -->
+  <rect width="800" height="300" fill="none" stroke="#30363d" stroke-width="1.5" rx="12"/>
+</svg>
