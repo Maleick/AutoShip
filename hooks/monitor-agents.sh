@@ -42,7 +42,10 @@ check_dead_panes() {
             if [[ ! -f "$EVENT_QUEUE" ]]; then
               echo '[]' > "$EVENT_QUEUE"
             fi
-            CRASH_EVENT="{\"type\": \"agent_crashed\", \"issue\": $issue_num, \"pane\": \"$pane_id\", \"priority\": 1}"
+            CRASH_EVENT=$(jq -n \
+              --argjson num "$issue_num" \
+              --arg pane "$pane_id" \
+              '{"type":"agent_crashed","issue":$num,"pane":$pane,"priority":1}')
             flock "${EVENT_QUEUE}.lock" \
               jq --argjson evt "$CRASH_EVENT" '. + [$evt]' "$EVENT_QUEUE" > "${EVENT_QUEUE}.tmp" \
               && mv "${EVENT_QUEUE}.tmp" "$EVENT_QUEUE" 2>/dev/null || true

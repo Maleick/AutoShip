@@ -166,14 +166,15 @@ append_ledger_record() {
     local record_tmp
     record_tmp=$(mktemp)
     printf '%s' "$record" > "$record_tmp"
-    lockf -k "$lock" bash -c "
-      ledger='$ledger'
-      record=\$(cat '$record_tmp')
-      tmp=\$(mktemp)
-      jq --argjson r \"\$record\" \
-        'if (.sessions | length) > 0 then .sessions[-1].issues += [\$r] else . end' \
-        \"\$ledger\" > \"\$tmp\" && mv \"\$tmp\" \"\$ledger\"
-    "
+    # Pass paths as positional args ($1, $2) to avoid shell injection from special chars in paths
+    lockf -k "$lock" bash -c '
+      ledger="$1" record_tmp="$2"
+      record=$(cat "$record_tmp")
+      tmp=$(mktemp)
+      jq --argjson r "$record" \
+        '"'"'if (.sessions | length) > 0 then .sessions[-1].issues += [$r] else . end'"'"' \
+        "$ledger" > "$tmp" && mv "$tmp" "$ledger"
+    ' _ "$ledger" "$record_tmp"
     rm -f "$record_tmp"
   else
     _write_ledger_record
