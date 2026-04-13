@@ -1,5 +1,3 @@
-//! Testing utilities for TextQuest — scenario harness and supporting types.
+//! Testing utilities and observability helpers for TextQuest.
 
-pub mod scenario;
-
-pub use scenario::{MetricValue, ScenarioResult, TestScenario};
+pub mod metrics;
