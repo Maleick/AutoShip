@@ -564,27 +564,11 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             if !visible_region.contains_line(ml.x1, ml.y1, ml.x2, ml.y2) {
                 continue;
             }
-            let (lx1, ly1, lx2, ly2) = if let Some(pz) = player_z {
-                match clip_line_z(ml.x1, ml.y1, ml.z1, ml.x2, ml.y2, ml.z2, pz, z_range) {
-                    Some(coords) => coords,
-                    None => continue,
-                }
-            } else {
-                (ml.x1, ml.y1, ml.x2, ml.y2)
-            };
-            let (c1, r1) = to_grid(lx1, ly1);
-            let (c2, r2) = to_grid(lx2, ly2);
             let color = map_rgb_to_color(ml.r, ml.g, ml.b, t);
-            bresenham_line(
-                c1,
-                r1,
-                c2,
-                r2,
-                w,
-                h,
-                &mut grid,
-                color,
-                LinePaintMode::BlankOnly,
+            clip_project_draw_line(
+                ml.x1, ml.y1, ml.z1, ml.x2, ml.y2, ml.z2,
+                player_z, z_range, &to_grid, w, h, &mut grid,
+                color, LinePaintMode::BlankOnly,
             );
         }
     }
@@ -602,7 +586,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                 continue;
             }
             let (col, row) = to_grid(mp.x, mp.y);
-            if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
+            if grid_in_bounds(col, row, w, h) {
                 let marker = if mp.label.is_empty() {
                     '*'
                 } else {
@@ -646,29 +630,10 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             if !visible_region.contains_line(segment.x1, segment.y1, segment.x2, segment.y2) {
                 continue;
             }
-            let (lx1, ly1, lx2, ly2) = if let Some(pz) = player_z {
-                match clip_line_z(
-                    segment.x1, segment.y1, segment.z1, segment.x2, segment.y2, segment.z2, pz,
-                    z_range,
-                ) {
-                    Some(coords) => coords,
-                    None => continue,
-                }
-            } else {
-                (segment.x1, segment.y1, segment.x2, segment.y2)
-            };
-            let (c1, r1) = to_grid(lx1, ly1);
-            let (c2, r2) = to_grid(lx2, ly2);
-            bresenham_line(
-                c1,
-                r1,
-                c2,
-                r2,
-                w,
-                h,
-                &mut grid,
-                t.text_secondary,
-                LinePaintMode::OverwriteLinework,
+            clip_project_draw_line(
+                segment.x1, segment.y1, segment.z1, segment.x2, segment.y2, segment.z2,
+                player_z, z_range, &to_grid, w, h, &mut grid,
+                t.text_secondary, LinePaintMode::OverwriteLinework,
             );
         }
 
@@ -677,29 +642,10 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                 if !visible_region.contains_line(segment.x1, segment.y1, segment.x2, segment.y2) {
                     continue;
                 }
-                let (lx1, ly1, lx2, ly2) = if let Some(pz) = player_z {
-                    match clip_line_z(
-                        segment.x1, segment.y1, segment.z1, segment.x2, segment.y2, segment.z2, pz,
-                        z_range,
-                    ) {
-                        Some(coords) => coords,
-                        None => continue,
-                    }
-                } else {
-                    (segment.x1, segment.y1, segment.x2, segment.y2)
-                };
-                let (c1, r1) = to_grid(lx1, ly1);
-                let (c2, r2) = to_grid(lx2, ly2);
-                bresenham_line(
-                    c1,
-                    r1,
-                    c2,
-                    r2,
-                    w,
-                    h,
-                    &mut grid,
-                    t.text_muted,
-                    LinePaintMode::OverwriteLinework,
+                clip_project_draw_line(
+                    segment.x1, segment.y1, segment.z1, segment.x2, segment.y2, segment.z2,
+                    player_z, z_range, &to_grid, w, h, &mut grid,
+                    t.text_muted, LinePaintMode::OverwriteLinework,
                 );
             }
         }
@@ -724,7 +670,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
     for status in app.named_tracker.tracked_spawns() {
         if !status.is_alive {
             let (col, row) = to_grid(-status.last_y, -status.last_x);
-            if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
+            if grid_in_bounds(col, row, w, h) {
                 grid[row as usize][col as usize] = ('✕', t.map_dead_named);
             }
         }
@@ -738,7 +684,8 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
         && nav.waypoints.len() >= 2
     {
         let nav_color = t.text_accent;
-        for pair in nav.waypoints.windows(2) {
+        // Draw path lines with directional arrows at segment midpoints.
+        for (seg_idx, pair) in nav.waypoints.windows(2).enumerate() {
             let (c1, r1) = to_grid(-pair[0].y, -pair[0].x);
             let (c2, r2) = to_grid(-pair[1].y, -pair[1].x);
             bresenham_line(
@@ -752,11 +699,28 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                 nav_color,
                 LinePaintMode::OverwriteLinework,
             );
+            // Draw directional arrow at midpoint of each segment.
+            let mid_c = (c1 + c2) / 2;
+            let mid_r = (r1 + r2) / 2;
+            if grid_in_bounds(mid_c, mid_r, w, h) {
+                let arrow = direction_arrow(c2 - c1, r2 - r1);
+                grid[mid_r as usize][mid_c as usize] = (arrow, nav_color);
+            }
+            // Draw numbered marker at the start of each segment (intermediate waypoints).
+            // Skip marking the very first waypoint (it's the player's current location).
+            if seg_idx > 0 && grid_in_bounds(c1, r1, w, h) {
+                let label = if seg_idx <= 9 {
+                    char::from_digit(seg_idx as u32, 10).unwrap_or('+')
+                } else {
+                    '+'
+                };
+                grid[r1 as usize][c1 as usize] = (label, nav_color);
+            }
         }
         // Mark the final destination with a special symbol.
         if let Some(dest) = nav.waypoints.last() {
             let (dc, dr) = to_grid(-dest.y, -dest.x);
-            if dc >= 0 && dc < w as i32 && dr >= 0 && dr < h as i32 {
+            if grid_in_bounds(dc, dr, w, h) {
                 grid[dr as usize][dc as usize] = ('★', nav_color);
             }
         }
@@ -779,7 +743,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             t.text_highlight,
             LinePaintMode::OverwriteLinework,
         );
-        if tc >= 0 && tc < w as i32 && tr >= 0 && tr < h as i32 {
+        if grid_in_bounds(tc, tr, w, h) {
             grid[tr as usize][tc as usize] = ('✚', t.text_highlight);
         }
     }
@@ -842,7 +806,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             );
         }
 
-        if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
+        if grid_in_bounds(col, row, w, h) {
             grid[row as usize][col as usize] = ('◆', t.map_you);
         }
 
@@ -865,7 +829,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
     // ─── Loc marker overlay ──────────────────────────────────────────────
     if let Some(loc) = &app.map_state.loc_marker {
         let (lc, lr) = to_grid(-loc.y, -loc.x);
-        if lc >= 0 && lc < w as i32 && lr >= 0 && lr < h as i32 {
+        if grid_in_bounds(lc, lr, w, h) {
             grid[lr as usize][lc as usize] = ('⊗', Color::Yellow);
             for (i, ch) in loc.label.chars().take(12).enumerate() {
                 let col = lc + 2 + i as i32;
@@ -886,7 +850,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             for hl in &app.map_state.highlights {
                 if lower_name.contains(&hl.pattern_lower) {
                     let (sc, sr) = to_grid(-spawn.y, -spawn.x);
-                    if sc >= 0 && sc < w as i32 && sr >= 0 && sr < h as i32 {
+                    if grid_in_bounds(sc, sr, w, h) {
                         let color = hl.color.unwrap_or(Color::Magenta);
                         if hl.pulse && (app.tick_count / 5).is_multiple_of(2) {
                             continue;
@@ -901,7 +865,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                             for &(dx, dy) in &[(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
                                 let nc = sc + dx;
                                 let nr = sr + dy;
-                                if nc >= 0 && nc < w as i32 && nr >= 0 && nr < h as i32 {
+                                if grid_in_bounds(nc, nr, w, h) {
                                     grid[nr as usize][nc as usize] = ('·', color);
                                 }
                             }
@@ -961,8 +925,8 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                 if show_nav_destination {
                     spans.extend([
                         Span::raw(" │ "),
-                        Span::styled("★ ", Style::default().fg(t.text_accent)),
-                        Span::styled("Path", Style::default().fg(t.text_muted)),
+                        Span::styled("1→★ ", Style::default().fg(t.text_accent)),
+                        Span::styled("Wpts", Style::default().fg(t.text_muted)),
                     ]);
                 }
 
@@ -1482,15 +1446,10 @@ fn draw_minimap_widget(
 }
 
 fn active_view_label(mode: MapViewportMode, using_local_view: bool) -> String {
-    match mode {
-        MapViewportMode::Auto => {
-            if using_local_view {
-                String::from("auto/local")
-            } else {
-                String::from("auto/global")
-            }
-        }
-        _ => mode.label().to_string(),
+    if mode == MapViewportMode::Auto {
+        if using_local_view { "auto/local" } else { "auto/global" }.into()
+    } else {
+        mode.label().to_string()
     }
 }
 
@@ -1584,6 +1543,37 @@ fn clip_line_z(
     Some((cx1, cy1, cx2, cy2))
 }
 
+/// Returns true if `(col, row)` is within a `w × h` grid (both non-negative and in-bounds).
+fn grid_in_bounds(col: i32, row: i32, w: usize, h: usize) -> bool {
+    col >= 0 && (col as usize) < w && row >= 0 && (row as usize) < h
+}
+
+/// Z-clip a line segment, project both endpoints via `to_grid`, and draw with Bresenham.
+#[allow(clippy::too_many_arguments)]
+fn clip_project_draw_line(
+    x1: f32, y1: f32, z1: f32,
+    x2: f32, y2: f32, z2: f32,
+    player_z: Option<f32>,
+    z_range: f32,
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    w: usize, h: usize,
+    grid: &mut [Vec<(char, Color)>],
+    color: Color,
+    paint_mode: LinePaintMode,
+) {
+    let (lx1, ly1, lx2, ly2) = if let Some(pz) = player_z {
+        match clip_line_z(x1, y1, z1, x2, y2, z2, pz, z_range) {
+            Some(coords) => coords,
+            None => return,
+        }
+    } else {
+        (x1, y1, x2, y2)
+    };
+    let (c1, r1) = to_grid(lx1, ly1);
+    let (c2, r2) = to_grid(lx2, ly2);
+    bresenham_line(c1, r1, c2, r2, w, h, grid, color, paint_mode);
+}
+
 fn map_rgb_to_color(r: u8, g: u8, b: u8, t: &Theme) -> ratatui::style::Color {
     if r == 0 && g == 0 && b == 0 {
         t.map_geometry
@@ -1620,7 +1610,7 @@ fn bresenham_line(
     let max_steps = (dx.unsigned_abs() + dy.unsigned_abs() + 1).min(10_000) as usize;
 
     for _ in 0..max_steps {
-        if cx >= 0 && cx < w as i32 && cy >= 0 && cy < h as i32 {
+        if grid_in_bounds(cx, cy, w, h) {
             let (ux, uy) = (cx as usize, cy as usize);
             if can_paint_line_cell(grid[uy][ux].0, paint_mode) {
                 grid[uy][ux] = (line_char(x0, y0, x1, y1), color);
@@ -1942,33 +1932,18 @@ fn draw_navigation_summary(
     let title = tactical_section_title("Navigation", collapsed);
 
     let visible = app.visible_clients();
-    let navigating = visible
-        .iter()
-        .filter(|client| {
-            app.nav_state
-                .nav_statuses
-                .get(&client.pid)
-                .is_some_and(|nav| nav.status.is_moving())
-        })
-        .count();
-    let arrived = visible
-        .iter()
-        .filter(|client| {
-            app.nav_state
-                .nav_statuses
-                .get(&client.pid)
-                .is_some_and(|nav| nav.status.is_arrived())
-        })
-        .count();
-    let stuck = visible
-        .iter()
-        .filter(|client| {
-            app.nav_state
-                .nav_statuses
-                .get(&client.pid)
-                .is_some_and(|nav| nav.status.is_stuck())
-        })
-        .count();
+    let (mut navigating, mut arrived, mut stuck) = (0usize, 0usize, 0usize);
+    for client in &visible {
+        if let Some(nav) = app.nav_state.nav_statuses.get(&client.pid) {
+            if nav.status.is_moving() {
+                navigating += 1;
+            } else if nav.status.is_arrived() {
+                arrived += 1;
+            } else if nav.status.is_stuck() {
+                stuck += 1;
+            }
+        }
+    }
     let idle = visible.len().saturating_sub(navigating + arrived + stuck);
 
     if collapsed {
@@ -2090,7 +2065,7 @@ fn draw_radius_circle(
         let wx = center_x + radius * angle.cos();
         let wy = center_y + radius * angle.sin();
         let (c, r) = to_grid(-wy, -wx);
-        if c >= 0 && c < w as i32 && r >= 0 && r < h as i32 {
+        if grid_in_bounds(c, r, w as usize, h as usize) {
             grid[r as usize][c as usize] = ('·', color);
         }
     }
