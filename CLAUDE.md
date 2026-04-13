@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**TextQuest** is a Rust-based EverQuest multibox controller (targeting a 36-box setup on a TLP server). Four workspace crates: an external orchestrator (`textquest`) that reads game state via `ReadProcessMemory` and displays a TUI dashboard, an injected DLL (`textquest-dll`, cdylib) that hooks internal EQ functions for direct control, shared types (`textquest-common`), and a web dashboard (`textquest-web`, axum + React SPA).
+**TextQuest** is a Rust-based EverQuest multibox controller (targeting large-scale multibox on a TLP server). Four workspace crates: an external orchestrator (`textquest`) that reads game state via `ReadProcessMemory` and displays a TUI dashboard, an injected DLL (`textquest-dll`, cdylib) that hooks internal EQ functions for direct control, shared types (`textquest-common`), and a web dashboard (`textquest-web`, axum + React SPA).
 
 ## Documentation Surfaces
 

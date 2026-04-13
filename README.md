@@ -12,8 +12,8 @@
   <a href="https://textquest.teamoperator.red"><img src="https://img.shields.io/badge/docs-textquest.teamoperator.red-blue?style=flat" alt="Docs"></a>
   <a href="https://github.com/Maleick/TextQuest/commits/master"><img src="https://img.shields.io/github/last-commit/Maleick/TextQuest?style=flat" alt="Last Commit"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust-edition%202024-orange?style=flat" alt="Rust"></a>
-  <a href="#testing"><img src="https://img.shields.io/badge/Rust%20LOC-168%2C158-blue?style=flat" alt="Rust LOC"></a>
-  <a href="#testing"><img src="https://img.shields.io/badge/Tests-~4%2C132-brightgreen?style=flat" alt="Tests"></a>
+  [![Rust LOC](https://img.shields.io/badge/Rust%20LOC-168%2C158-blue?style=flat-square)](#testing)
+  [![Tests](https://img.shields.io/badge/Tests-~4%2C132-brightgreen?style=flat-square)](#testing)
   <a href="https://github.com/sponsors/Maleick"><img src="https://img.shields.io/github/sponsors/Maleick?label=Sponsor&logo=GitHub&color=EA4AAA&style=flat" alt="Sponsor"></a>
 </p>
 
@@ -27,7 +27,7 @@
   <a href="https://textquest.teamoperator.red">Docs</a>
 </p>
 
-<p align="center"><strong>36-box EverQuest multibox controller. One TUI. Full autonomy.</strong></p>
+<p align="center"><strong>EverQuest multibox controller. One TUI. Full autonomy.</strong></p>
 
 ---
 
