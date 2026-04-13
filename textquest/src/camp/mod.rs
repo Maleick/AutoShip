@@ -4,6 +4,8 @@
 pub mod banking;
 /// Buff tracking and rebuffing logic.
 pub mod buffs;
+/// Collectible and tribute management — collection quest progress, tribute automation.
+pub mod collectibles;
 /// Crowd control assignment and tracking.
 pub mod cc;
 /// Per-class ability configuration for the camp loop.
