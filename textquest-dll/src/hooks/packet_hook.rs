@@ -505,7 +505,10 @@ mod inner {
             // SAFETY: lp_buffers non-null + dw_buffer_count >= 1 (checked above).
             let buf = unsafe { &*lp_buffers };
             // SAFETY: lp_number_of_bytes_recvd is non-null (checked above).
-            let received = unsafe { *lp_number_of_bytes_recvd } as usize;
+            let received_total = unsafe { *lp_number_of_bytes_recvd } as usize;
+            // `lp_number_of_bytes_recvd` is the total across all WSABUF entries.
+            // We only read WSABUF[0], so cap to its declared length.
+            let received = received_total.min(buf.len as usize);
             on_packet(buf.buf as *const u8, received, PacketDirection::Inbound);
         }
 
