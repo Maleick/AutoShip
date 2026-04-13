@@ -309,6 +309,9 @@ impl OffsetDatabase {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pattern_db::{OffsetCategory, ScanModule};
+    use crate::scan_engine::{ScanReport, ScanResult};
+    use tempfile::tempdir;
 
     #[test]
     fn from_compiled_offsets_has_expected_globals() {
@@ -428,6 +431,33 @@ mod tests {
     }
 
     #[test]
+    fn load_from_legacy_json_defaults_optional_maps() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("legacy-offsets.json");
+        std::fs::write(
+            &path,
+            r#"{
+                "client_date": "20260310",
+                "eq_preferred_base": 5368709120,
+                "globals": {"pinstLocalPlayer": 1234},
+                "player_base": {"x": 120},
+                "player_zone": {"level": 420},
+                "spawn_manager": {"playerList": 16}
+            }"#,
+        )
+        .unwrap();
+
+        let loaded = OffsetDatabase::load_from_file(&path).unwrap();
+
+        assert!(loaded.context_menu_manager.is_empty());
+        assert!(loaded.context_menu.is_empty());
+        assert!(loaded.functions.is_empty());
+        assert_eq!(loaded.get_global("pinstLocalPlayer"), Some(1234));
+        assert_eq!(loaded.get_player_base_offset("x"), Some(120));
+        assert_eq!(loaded.get_player_zone_offset("level"), Some(420));
+    }
+
+    #[test]
     fn get_global_returns_none_for_missing_key() {
         let db = OffsetDatabase::from_compiled_offsets();
         assert!(db.get_global("does_not_exist").is_none());
@@ -454,6 +484,58 @@ mod tests {
         let actual_base: u64 = 0x7FF600000000;
         let result = db.rebase(db.eq_preferred_base, actual_base);
         assert_eq!(result, Some(actual_base as usize));
+    }
+
+    #[test]
+    fn merge_scan_results_updates_only_non_zero_results() {
+        let mut db = OffsetDatabase::from_compiled_offsets();
+        let original_global = db.get_global("pinstLocalPlayer").unwrap();
+        let original_function = db.get_function("castSpell").unwrap();
+        let original_other_function = db.get_function("useSkill").unwrap();
+        let original_player_base = db.get_player_base_offset("x").unwrap();
+
+        let report = ScanReport {
+            module: ScanModule::EqGame,
+            entries_scanned: 3,
+            entries_found: 3,
+            entries_validated: 0,
+            entries_failed: vec![],
+            entries_skipped: vec![],
+            entries_moved: vec![],
+            results: vec![
+                ScanResult {
+                    name: "pinstLocalPlayer".to_string(),
+                    category: OffsetCategory::Global,
+                    resolved_preferred: original_global + 0x20,
+                    matched_at_offset: 0,
+                    validated: false,
+                },
+                ScanResult {
+                    name: "castSpell".to_string(),
+                    category: OffsetCategory::Function,
+                    resolved_preferred: original_function + 0x40,
+                    matched_at_offset: 0,
+                    validated: false,
+                },
+                ScanResult {
+                    name: "useSkill".to_string(),
+                    category: OffsetCategory::Function,
+                    resolved_preferred: 0,
+                    matched_at_offset: 0,
+                    validated: false,
+                },
+            ],
+        };
+
+        db.merge_scan_results(&report);
+
+        assert_eq!(
+            db.get_global("pinstLocalPlayer"),
+            Some(original_global + 0x20)
+        );
+        assert_eq!(db.get_function("castSpell"), Some(original_function + 0x40));
+        assert_eq!(db.get_function("useSkill"), Some(original_other_function));
+        assert_eq!(db.get_player_base_offset("x"), Some(original_player_base));
     }
 
     #[test]

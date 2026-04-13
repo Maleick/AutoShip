@@ -5,6 +5,7 @@ import sys
 import unittest
 from io import StringIO
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 # Ensure scripts/ is importable
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -174,6 +175,60 @@ class TestBuildSummary(unittest.TestCase):
         self.assertIsNone(s["earliest"])
         self.assertIsNone(s["latest"])
 
+    def test_ignores_blank_timestamps_and_empty_callers(self):
+        events = [
+            EtwEvent("ProcessCreate", "eqgame.exe", 100, "", "", {}),
+            EtwEvent(
+                "ThreadCreate",
+                "eqgame.exe",
+                100,
+                "2026-01-01T00:02:00Z",
+                "",
+                {},
+            ),
+            EtwEvent(
+                "ThreadCreate",
+                "eqgame.exe",
+                101,
+                "2026-01-01T00:01:00Z",
+                "kernel32!CreateThread",
+                {},
+            ),
+        ]
+
+        summary = build_summary(events, top_n=10)
+
+        self.assertEqual(summary["earliest"], "2026-01-01T00:01:00Z")
+        self.assertEqual(summary["latest"], "2026-01-01T00:02:00Z")
+        self.assertEqual(summary["top_callers"], [("kernel32!CreateThread", 1)])
+        self.assertEqual(summary["pids"], [100, 101])
+
+    def test_top_callers_allows_large_top_n_and_special_characters(self):
+        events = [
+            EtwEvent(
+                "ImageLoad",
+                "eqgame.exe",
+                100,
+                "2026-01-01T00:00:00Z",
+                'kernel32!"Quote"\\Path',
+                {},
+            ),
+            EtwEvent(
+                "ImageLoad",
+                "eqgame.exe",
+                100,
+                "2026-01-01T00:01:00Z",
+                "user32!ΔCall",
+                {},
+            ),
+        ]
+
+        summary = build_summary(events, top_n=1000)
+
+        self.assertEqual(len(summary["top_callers"]), 2)
+        self.assertIn(('kernel32!"Quote"\\Path', 1), summary["top_callers"])
+        self.assertIn(("user32!ΔCall", 1), summary["top_callers"])
+
 
 class TestFormatTextReport(unittest.TestCase):
     def _summary(self):
@@ -209,6 +264,26 @@ class TestFormatTextReport(unittest.TestCase):
         self.assertIn("ntdll!foo", report)
         self.assertIn("ntdll!bar", report)
 
+    def test_handles_empty_processes_pids_and_counts(self):
+        report = format_text_report(
+            {
+                "total_events": 0,
+                "event_type_counts": {},
+                "top_callers": [],
+                "process_names": [],
+                "pids": [],
+                "earliest": None,
+                "latest": None,
+            }
+        )
+
+        self.assertIn("Earliest:       N/A", report)
+        self.assertIn("Latest:         N/A", report)
+        self.assertIn("Processes:", report)
+        self.assertIn("PIDs:", report)
+        self.assertIn("Event Type Counts:", report)
+        self.assertIn("Top Callers:", report)
+
 
 class TestMainCLI(unittest.TestCase):
     def _make_jsonl(self, events: list[dict]) -> str:
@@ -228,6 +303,24 @@ class TestMainCLI(unittest.TestCase):
             sys.stdout = old_stdout
             sys.stdin = old_stdin
         return code, output
+
+    def _run_main_with_stderr(self, argv, stdin_text=None):
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        old_stdin = sys.stdin
+        sys.stdout = StringIO()
+        sys.stderr = StringIO()
+        if stdin_text is not None:
+            sys.stdin = StringIO(stdin_text)
+        try:
+            code = main(argv)
+            output = sys.stdout.getvalue()
+            err = sys.stderr.getvalue()
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            sys.stdin = old_stdin
+        return code, output, err
 
     def test_text_output_no_filter(self):
         import tempfile
@@ -285,27 +378,78 @@ class TestMainCLI(unittest.TestCase):
             os.unlink(fname)
 
     def test_json_output_format(self):
-        import tempfile
-        import os
-
         events = [
             {"EventType": "ProcessCreate", "ProcessName": "eqgame.exe", "PID": 100, "Timestamp": "T", "Caller": "ntdll!foo"},
         ]
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
-            f.write(self._make_jsonl(events))
-            fname = f.name
-        try:
-            code, out = self._run_main(["--output-format", "json", fname])
-            self.assertEqual(code, 0)
-            data = json.loads(out)
-            self.assertEqual(data["total_events"], 1)
-            self.assertIn("top_callers", data)
-        finally:
-            os.unlink(fname)
+        with TemporaryDirectory() as tmpdir:
+            fname = Path(tmpdir) / "events.jsonl"
+            fname.write_text(self._make_jsonl(events), encoding="utf-8")
+
+            code, out = self._run_main(["--output-format", "json", str(fname)])
+
+        self.assertEqual(code, 0)
+        data = json.loads(out)
+        self.assertEqual(data["total_events"], 1)
+        self.assertIn("top_callers", data)
+
+    def test_reads_from_stdin_when_input_omitted(self):
+        code, out = self._run_main(
+            ["--process-name", "eqgame"],
+            stdin_text=self._make_jsonl(
+                [
+                    {
+                        "EventType": "ProcessCreate",
+                        "ProcessName": "eqgame.exe",
+                        "PID": 100,
+                        "Timestamp": "T",
+                        "Caller": "ntdll!foo",
+                    },
+                    {
+                        "EventType": "ThreadCreate",
+                        "ProcessName": "notepad.exe",
+                        "PID": 200,
+                        "Timestamp": "T",
+                        "Caller": "ntdll!bar",
+                    },
+                ]
+            ),
+        )
+
+        self.assertEqual(code, 0)
+        self.assertIn("Total events:   1", out)
+        self.assertIn("eqgame.exe", out)
+
+    def test_json_output_escapes_special_callers(self):
+        with TemporaryDirectory() as tmpdir:
+            fname = Path(tmpdir) / "events.jsonl"
+            fname.write_text(
+                self._make_jsonl(
+                    [
+                        {
+                            "EventType": "ProcessCreate",
+                            "ProcessName": "eqgame.exe",
+                            "PID": 100,
+                            "Timestamp": "2026-04-13T10:00:00Z",
+                            "Caller": 'kernel32!"Quote"\\Path',
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            code, out = self._run_main(["--output-format", "json", str(fname)])
+
+        self.assertEqual(code, 0)
+        data = json.loads(out)
+        self.assertEqual(
+            data["top_callers"],
+            [{"caller": 'kernel32!"Quote"\\Path', "count": 1}],
+        )
 
     def test_missing_file_returns_error(self):
-        code, _ = self._run_main(["/nonexistent/path/file.jsonl"])
+        code, _, err = self._run_main_with_stderr(["/nonexistent/path/file.jsonl"])
         self.assertNotEqual(code, 0)
+        self.assertIn("Error opening /nonexistent/path/file.jsonl", err)
 
 
 if __name__ == "__main__":
