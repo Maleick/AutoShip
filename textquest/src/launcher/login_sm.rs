@@ -204,10 +204,13 @@ impl LoginStateMachine {
         }
     }
 
-    /// Returns `true` if the login is in a terminal state (Ready or Failed).
+    /// Returns `true` if the login is in a terminal state (Ready, Failed, or ProcessExiting).
     #[must_use]
     pub fn is_terminal(&self) -> bool {
-        matches!(self.phase, LoginPhase::Ready | LoginPhase::Failed { .. })
+        matches!(
+            self.phase,
+            LoginPhase::Ready | LoginPhase::Failed { .. } | LoginPhase::ProcessExiting
+        )
     }
 
     fn transition_to(&mut self, phase: LoginPhase) {
