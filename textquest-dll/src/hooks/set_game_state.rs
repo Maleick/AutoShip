@@ -121,4 +121,24 @@ mod tests {
         #[cfg(not(windows))]
         assert!(set_game_state_callback(std::ptr::null_mut()));
     }
+
+    #[test]
+    fn rotate_hooks_does_not_panic_for_ingame() {
+        rotate_hooks_for_state(textquest_common::ipc::GameState::InGame);
+    }
+
+    #[test]
+    fn rotate_hooks_does_not_panic_for_char_select() {
+        rotate_hooks_for_state(textquest_common::ipc::GameState::CharacterSelect);
+    }
+
+    #[test]
+    fn rotate_hooks_does_not_panic_for_loading() {
+        rotate_hooks_for_state(textquest_common::ipc::GameState::Loading);
+    }
+
+    #[test]
+    fn rotate_hooks_does_not_panic_for_unknown() {
+        rotate_hooks_for_state(textquest_common::ipc::GameState::Unknown(99));
+    }
 }

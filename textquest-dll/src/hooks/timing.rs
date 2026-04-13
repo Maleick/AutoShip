@@ -214,4 +214,58 @@ mod tests {
         let adjusted = adjust_qpc(5_000);
         assert_eq!(adjusted, 0);
     }
+
+    #[test]
+    fn adjust_qpc_zero_or_negative_returns_zero() {
+        reset_test_state();
+        set_enabled(true);
+        GAME_LOOP_OVERHEAD_NS.store(1_000_000, Ordering::Release);
+        assert_eq!(adjust_qpc(0), 0);
+        assert_eq!(adjust_qpc(-1), 0);
+        assert_eq!(adjust_qpc(-100), 0);
+    }
+
+    #[test]
+    fn record_game_loop_hook_overhead_affects_adjustment() {
+        reset_test_state();
+        set_enabled(true);
+
+        // Record 10ms = 10_000_000 ns overhead
+        record_game_loop_hook_overhead(std::time::Duration::from_millis(10));
+
+        let raw: u32 = 1000;
+        let adjusted = adjust_tick_count(raw);
+        // overhead_ms = 10_000_000 / 1_000_000 = 10 ms
+        assert_eq!(adjusted, 990);
+    }
+
+    #[test]
+    fn record_game_loop_hook_overhead_zero_duration() {
+        reset_test_state();
+        set_enabled(true);
+        record_game_loop_hook_overhead(std::time::Duration::ZERO);
+        // Zero overhead → no adjustment
+        assert_eq!(adjust_tick_count(500), 500);
+    }
+
+    #[test]
+    fn adjust_tick_count_saturates_at_zero() {
+        reset_test_state();
+        set_enabled(true);
+        // Large overhead → should saturate at 0
+        GAME_LOOP_OVERHEAD_NS.store(u64::MAX, Ordering::Release);
+        let adjusted = adjust_tick_count(100);
+        assert_eq!(adjusted, 0);
+    }
+
+    #[test]
+    fn overhead_as_qpc_ticks_uses_frequency() {
+        reset_test_state();
+        set_enabled(true);
+        // freq = 1 Hz, overhead = 1_000_000_000 ns → 1 tick
+        QPC_FREQUENCY_HZ.store(1, Ordering::Release);
+        GAME_LOOP_OVERHEAD_NS.store(1_000_000_000, Ordering::Release);
+        let adjusted = adjust_qpc(10);
+        assert_eq!(adjusted, 9);
+    }
 }

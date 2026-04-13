@@ -315,4 +315,140 @@ mod tests {
         assert!(groups[0].full_rotation);
         assert_eq!(groups[0].entries[0].name, "Taunt");
     }
+
+    #[test]
+    fn sanitize_toon_name_strips_path_separators() {
+        let sanitized = sanitize_toon_name("../../etc/passwd");
+        assert!(!sanitized.contains('/'));
+        assert!(!sanitized.contains('\\'));
+        // '.' is allowed; letters remain; separators are stripped
+        assert_eq!(sanitized, "....etcpasswd");
+    }
+
+    #[test]
+    fn sanitize_toon_name_removes_filesystem_special_chars() {
+        let chars_to_strip = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
+        for ch in chars_to_strip {
+            let name = format!("toon{ch}name");
+            let sanitized = sanitize_toon_name(&name);
+            assert!(
+                !sanitized.contains(ch),
+                "sanitized name should not contain '{ch}'"
+            );
+        }
+    }
+
+    #[test]
+    fn sanitize_toon_name_removes_control_characters() {
+        let name = "toon\x00name\x1f";
+        let sanitized = sanitize_toon_name(name);
+        assert!(!sanitized.contains('\x00'));
+        assert!(!sanitized.contains('\x1f'));
+        assert_eq!(sanitized, "toonname");
+    }
+
+    #[test]
+    fn sanitize_toon_name_trims_whitespace() {
+        let sanitized = sanitize_toon_name("  Warrior  ");
+        assert_eq!(sanitized, "Warrior");
+    }
+
+    #[test]
+    fn sanitize_toon_name_empty_input_returns_empty() {
+        assert_eq!(sanitize_toon_name(""), "");
+        assert_eq!(sanitize_toon_name("   "), "");
+    }
+
+    #[test]
+    fn sanitize_toon_name_preserves_normal_chars() {
+        let name = "Lyralei1";
+        assert_eq!(sanitize_toon_name(name), name);
+    }
+
+    #[test]
+    fn candidate_paths_empty_after_sanitization() {
+        let base = std::path::Path::new("/tmp");
+        // All chars stripped → sanitized is empty → no candidates
+        let paths = candidate_paths(base, "///");
+        assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn candidate_paths_returns_exact_and_lowercase() {
+        let base = std::path::Path::new("/tmp/toons");
+        let paths = candidate_paths(base, "Warrior");
+        // "Warrior" != "warrior", so both should be present
+        assert_eq!(paths.len(), 2);
+        let names: Vec<String> = paths
+            .iter()
+            .map(|p| p.file_name().unwrap().to_str().unwrap().to_string())
+            .collect();
+        assert!(
+            names.contains(&"Warrior.toml".to_string()),
+            "should contain original-case filename"
+        );
+        assert!(
+            names.contains(&"warrior.toml".to_string()),
+            "should contain lowercase filename"
+        );
+    }
+
+    #[test]
+    fn candidate_paths_already_lowercase_returns_one() {
+        let base = std::path::Path::new("/tmp/toons");
+        let paths = candidate_paths(base, "warrior");
+        // If already lowercase, no duplicate needed
+        assert_eq!(paths.len(), 1);
+        assert!(paths[0].ends_with("warrior.toml"));
+    }
+
+    #[test]
+    fn load_from_dir_returns_none_for_missing_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let result = load_from_dir(temp_dir.path(), "NonExistent").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn load_from_dir_returns_none_for_empty_toon_name() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let result = load_from_dir(temp_dir.path(), "///").unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn apply_to_empty_config_leaves_defaults() {
+        let override_config = ToonCombatConfig::default();
+        let mut combat_config = CombatConfig::default();
+        let mut rotation_groups: Option<Vec<super::super::rotation::RotationGroup>> = None;
+        override_config.apply_to(&mut combat_config, &mut rotation_groups);
+        // Nothing should change when override is empty
+        assert!(combat_config.spells.is_empty());
+        assert!(rotation_groups.is_none());
+    }
+
+    #[test]
+    fn toon_rotation_entry_defaults_enabled_true() {
+        let entry: ToonRotationEntry = toml::from_str(
+            r#"
+            name = "Kick"
+            action_type = { Ability = "Kick" }
+        "#,
+        )
+        .unwrap();
+        assert!(entry.enabled);
+    }
+
+    #[test]
+    fn toon_rotation_group_defaults_steps_per_frame_one() {
+        let group: ToonRotationGroup = toml::from_str(
+            r#"
+            name = "Combat"
+            target_selector = "AutoTarget"
+            combat_state_req = "Combat"
+        "#,
+        )
+        .unwrap();
+        assert_eq!(group.steps_per_frame, 1);
+    }
 }

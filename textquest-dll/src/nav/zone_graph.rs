@@ -258,4 +258,141 @@ mod tests {
     fn read_zone_graph_returns_none_on_non_windows() {
         assert!(unsafe { read_zone_graph(0) }.is_none());
     }
+
+    #[test]
+    fn zone_graph_to_ipc_empty_graph_returns_empty() {
+        let graph = ZoneGraph::default();
+        let ipc = zone_graph_to_ipc(&graph);
+        assert!(ipc.is_empty());
+    }
+
+    #[test]
+    fn zone_graph_to_ipc_preserves_disabled_connections() {
+        let mut graph = ZoneGraph::default();
+        graph.zones.insert(
+            10,
+            ZoneNode {
+                zone_id: 10,
+                name: "ZoneA".into(),
+                min_level: 5,
+                max_level: 15,
+                connections: vec![
+                    ZoneConnection {
+                        dest_zone_id: 20,
+                        transfer_type: 1,
+                        disabled: true,
+                    },
+                    ZoneConnection {
+                        dest_zone_id: 30,
+                        transfer_type: 2,
+                        disabled: false,
+                    },
+                ],
+            },
+        );
+
+        let ipc = zone_graph_to_ipc(&graph);
+        assert_eq!(ipc.len(), 1);
+        let conns = &ipc[0].4;
+        assert_eq!(conns.len(), 2);
+        assert_eq!(conns[0], (20, 1, true));
+        assert_eq!(conns[1], (30, 2, false));
+    }
+
+    #[test]
+    fn zone_graph_to_ipc_preserves_level_range() {
+        let mut graph = ZoneGraph::default();
+        graph.zones.insert(
+            5,
+            ZoneNode {
+                zone_id: 5,
+                name: "LeveledZone".into(),
+                min_level: 30,
+                max_level: 45,
+                connections: vec![],
+            },
+        );
+
+        let ipc = zone_graph_to_ipc(&graph);
+        assert_eq!(ipc.len(), 1);
+        assert_eq!(ipc[0].0, 5);
+        assert_eq!(ipc[0].1, "LeveledZone");
+        assert_eq!(ipc[0].2, 30); // min_level
+        assert_eq!(ipc[0].3, 45); // max_level
+        assert!(ipc[0].4.is_empty());
+    }
+
+    #[test]
+    fn zone_graph_to_ipc_single_zone_no_connections() {
+        let mut graph = ZoneGraph::default();
+        graph.zones.insert(
+            7,
+            ZoneNode {
+                zone_id: 7,
+                name: "Isolated".into(),
+                min_level: 1,
+                max_level: 60,
+                connections: vec![],
+            },
+        );
+
+        let ipc = zone_graph_to_ipc(&graph);
+        assert_eq!(ipc.len(), 1);
+        assert_eq!(ipc[0].0, 7);
+        assert_eq!(ipc[0].4.len(), 0);
+    }
+
+    #[test]
+    fn zone_graph_to_ipc_many_zones_sorted() {
+        let mut graph = ZoneGraph::default();
+        for id in [50u16, 10, 30, 20, 40] {
+            graph.zones.insert(
+                id,
+                ZoneNode {
+                    zone_id: id,
+                    name: format!("Zone{id}"),
+                    min_level: 1,
+                    max_level: 60,
+                    connections: vec![],
+                },
+            );
+        }
+
+        let ipc = zone_graph_to_ipc(&graph);
+        assert_eq!(ipc.len(), 5);
+        let ids: Vec<u16> = ipc.iter().map(|e| e.0).collect();
+        assert_eq!(ids, vec![10, 20, 30, 40, 50]);
+    }
+
+    #[test]
+    fn zone_graph_to_ipc_multiple_connections_per_zone() {
+        let mut graph = ZoneGraph::default();
+        let connections: Vec<ZoneConnection> = (1u16..=5)
+            .map(|dest| ZoneConnection {
+                dest_zone_id: dest,
+                transfer_type: dest as u8,
+                disabled: dest % 2 == 0,
+            })
+            .collect();
+        graph.zones.insert(
+            100,
+            ZoneNode {
+                zone_id: 100,
+                name: "Hub".into(),
+                min_level: 1,
+                max_level: 60,
+                connections,
+            },
+        );
+
+        let ipc = zone_graph_to_ipc(&graph);
+        assert_eq!(ipc.len(), 1);
+        assert_eq!(ipc[0].4.len(), 5);
+        for (i, (dest, ttype, disabled)) in ipc[0].4.iter().enumerate() {
+            let expected_dest = (i + 1) as u16;
+            assert_eq!(*dest, expected_dest);
+            assert_eq!(*ttype, expected_dest as u8);
+            assert_eq!(*disabled, expected_dest % 2 == 0);
+        }
+    }
 }
