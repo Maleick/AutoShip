@@ -336,6 +336,17 @@ def main() -> int:
                 "Run `rustup component add clippy`.",
             )
 
+    # Map format validation
+    map_validation = run_command(
+        sys.executable,
+        "scripts/validate-maps.py",
+    )
+    if map_validation.returncode == 0:
+        record(results, "PASS", "Map validation", first_line(map_validation.stdout or map_validation.stderr))
+    else:
+        detail = first_line(map_validation.stderr or map_validation.stdout)
+        record(results, "WARN", "Map validation", detail)
+
     check_command(
         results,
         "CMake",

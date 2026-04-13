@@ -220,3 +220,15 @@ jobs:
       - run: cargo build --release
         env:
           LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
+
+  cleanup_merged_branch:
+    name: Cleanup merged branch
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: dawidd6/action-delete-branch@v3.1.0
+        with:
+          github_token: ${{ github.token }}
+          branches: ${{ github.head_ref }}
