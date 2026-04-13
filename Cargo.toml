@@ -1,5 +1,5 @@
 [workspace]
-members = ["textquest", "textquest-dll", "textquest-common", "textquest-web", "tools/eqdiff"]
+members = ["textquest", "textquest-dll", "textquest-common", "textquest-web", "tools/llm-client"]
 resolver = "2"
 
 # Shared dependencies — versions and base features declared once here.
