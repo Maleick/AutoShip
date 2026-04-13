@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::Result;
 use textquest_common::ipc::Command;
@@ -208,6 +208,57 @@ impl SoulCoordinator {
 
         self.souls.insert(client_id, soul);
         self.anomaly_detector.register_character(client_id);
+    }
+
+    /// Check whether an LLM request is allowed for the given character right now.
+    ///
+    /// Prunes stale entries (>60s old) on each check.
+    /// Returns `true` if both the per-character limit and the global limit have not been reached.
+    pub fn can_request(&mut self, client_id: ClientId) -> bool {
+        let window = std::time::Duration::from_secs(60);
+        let now = Instant::now();
+
+        // Prune global stale entries
+        while let Some(&front) = self.global_request_counts.front() {
+            if now.duration_since(front) >= window {
+                self.global_request_counts.pop_front();
+        if self.global_request_counts.len() >= self.config.max_global_requests as usize {
+            return false;
+        }
+
+        // Prune per-character stale entries without creating a new entry for unknown clients.
+        let mut remove_character_entry = false;
+        if let Some(char_counts) = self.character_request_counts.get_mut(&client_id) {
+            while let Some(&front) = char_counts.front() {
+                if now.duration_since(front) >= window {
+                    char_counts.pop_front();
+                } else {
+                    break;
+                }
+            }
+            remove_character_entry = char_counts.is_empty();
+        }
+        if remove_character_entry {
+            self.character_request_counts.remove(&client_id);
+        }
+
+        let char_len = self
+            .character_request_counts
+            .get(&client_id)
+            .map_or(0, VecDeque::len);
+        let char_ok = char_len < self.config.max_requests_per_character as usize;
+
+        if char_ok {
+            // Record this request
+            self.character_request_counts
+                .entry(client_id)
+                .or_default()
+                .push_back(now);
+            self.global_request_counts.push_back(now);
+            true
+        } else {
+            false
+        }
     }
 
     /// Main tick — called every 5000ms by the orchestrator.

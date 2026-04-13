@@ -211,31 +211,20 @@ pub struct SoulConfig {
     /// Discord bot personality for fleet commentary
     #[serde(default)]
     pub bot_personality: BotPersonalityConfig,
-    /// Max LLM requests per character per minute (1–60)
+    /// Maximum LLM requests per character per minute (rate limiting)
     #[serde(default = "default_max_requests_per_character")]
     pub max_requests_per_character: u32,
-    /// Max total LLM requests across all characters per minute (1–200)
+    /// Maximum total LLM requests across all characters per minute (rate limiting)
     #[serde(default = "default_max_global_requests")]
     pub max_global_requests: u32,
-    /// Days before memory entries decay and are pruned (must be > 0)
-    #[serde(default = "default_memory_decay_days")]
-    pub memory_decay_days: u32,
-    /// Rate at which mood decays toward neutral per tick (0.0–1.0)
-    #[serde(default = "default_mood_decay_rate")]
-    pub mood_decay_rate: f32,
 }
 
 const fn default_max_requests_per_character() -> u32 {
-    10
+    5
 }
+
 const fn default_max_global_requests() -> u32 {
-    60
-}
-const fn default_memory_decay_days() -> u32 {
-    30
-}
-const fn default_mood_decay_rate() -> f32 {
-    0.05
+    20
 }
 
 impl Default for SoulConfig {
@@ -254,8 +243,6 @@ impl Default for SoulConfig {
             bot_personality: BotPersonalityConfig::default(),
             max_requests_per_character: default_max_requests_per_character(),
             max_global_requests: default_max_global_requests(),
-            memory_decay_days: default_memory_decay_days(),
-            mood_decay_rate: default_mood_decay_rate(),
         }
     }
 }
