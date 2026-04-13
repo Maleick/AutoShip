@@ -11,6 +11,8 @@ pub use paste;
 pub mod chat;
 /// Combat-related shared types (class roles, spell metadata, assist targets).
 pub mod combat;
+/// ETW-TI event parser and LoadLibrary injection detector.
+pub mod etw_ti_detect;
 /// SQLite-backed database for Ghidra binary analysis data.
 pub mod ghidra_db;
 /// IPC command and response enums for orchestrator-to-DLL communication.
