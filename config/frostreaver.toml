@@ -5,6 +5,10 @@ process_name = "eqgame.exe"
 # Maximum spawns to read from the linked list (safety limit)
 max_spawns = 2048
 
+# Enable timing API correction hooks for anti-debug timing checks.
+# Set to true to normalize `GetTickCount` and `QueryPerformanceCounter` deltas.
+timing_correction = false
+
 # ─── Launch Configuration ───
 # Controls how EQ clients are started and staggered.
 [launch]

@@ -755,7 +755,7 @@ impl Orchestrator {
 
     /// Send a structured IPC command to a client via named pipe.
     /// Creates a fresh connection per command (connect → token → command → drop).
-    fn send_ipc_command(&mut self, pid: u32, cmd: Command) {
+    pub(crate) fn send_ipc_command(&mut self, pid: u32, cmd: Command) {
         let name = self
             .client_names
             .get(&pid)

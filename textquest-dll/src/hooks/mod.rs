@@ -17,6 +17,7 @@ pub mod integrity;
 pub mod movement;
 pub mod slot_manager;
 pub mod packet_hook;
+pub mod timing;
 pub mod render;
 pub mod rotation;
 pub mod targeting;
@@ -61,5 +62,6 @@ pub fn remove_all() {
     fingerprint::remove();
     chat::remove();
     set_game_state::remove();
+    timing::remove();
     tracing::info!("All hooks removed");
 }

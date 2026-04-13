@@ -203,6 +203,13 @@ pub struct AppConfig {
     /// Optional decentralized UDP multicast peer discovery.
     #[serde(default)]
     pub discovery: PeerDiscoveryConfig,
+
+    /// Enable timing-based anti-debug evasion correction.
+    ///
+    /// When enabled, hooks correct timing APIs (`GetTickCount` and
+    /// `QueryPerformanceCounter`) by subtracting hook overhead from observed values.
+    #[serde(default)]
+    pub timing_correction: bool,
 }
 
 /// Discord webhook and bot configuration.
@@ -480,6 +487,7 @@ impl AppConfig {
             hook_rotation_enabled: false,
             hook_rotation_interval_ms: default_hook_rotation_interval_ms(),
             discovery: PeerDiscoveryConfig::default(),
+            timing_correction: false,
         }
     }
 }
@@ -623,6 +631,24 @@ character = "Foo"
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
         assert!(cfg.hook_rotation_enabled);
         assert_eq!(cfg.hook_rotation_interval_ms, 7500);
+    }
+
+    #[test]
+    fn app_config_timing_correction_defaults() {
+        let cfg = AppConfig::default_config();
+        assert!(!cfg.timing_correction);
+    }
+
+    #[test]
+    fn app_config_timing_correction_can_be_deserialized() {
+        let cfg: AppConfig = toml::from_str(
+            r#"
+timing_correction = true
+"#,
+        )
+        .unwrap();
+
+        assert!(cfg.timing_correction);
     }
 
     #[test]

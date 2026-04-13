@@ -44,6 +44,39 @@ fn load_pid_session(pid: u32) -> Result<(textquest_common::ipc::SessionToken, u6
     Ok((token, session_id))
 }
 
+fn send_timing_correction_command(pid: u32, enabled: bool) -> Result<()> {
+    use textquest_common::ipc::Command;
+
+    let deadline = Instant::now() + Duration::from_secs(8);
+    let mut last_error = None;
+
+    while Instant::now() < deadline {
+        match connect_authenticated_pipe(pid) {
+            Ok(pipe) => {
+                if let Err(e) = pipe.send(&Command::SetTimingCorrection { enabled }) {
+                    last_error = Some(e);
+                } else {
+                    return Ok(());
+                }
+            }
+            Err(e) => {
+                last_error = Some(e);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+
+    if let Some(err) = last_error {
+        Err(err).with_context(|| {
+            format!("Failed to send timing correction command to PID {pid} after 8 seconds")
+        })
+    } else {
+        Err(anyhow::anyhow!(
+            "Failed to send timing correction command to PID {pid}: unknown error"
+        ))
+    }
+}
+
 fn connect_authenticated_pipe(pid: u32) -> Result<ipc::pipe::CommandPipe> {
     let (token, session_id) = load_pid_session(pid)?;
     let pipe = ipc::pipe::CommandPipe::connect(pid, session_id)
@@ -328,6 +361,12 @@ pub fn run_inject_mode() -> Result<()> {
             Ok(()) => {
                 println!("OK");
                 info!(pid, "Injection succeeded");
+                if config.timing_correction {
+                    if let Err(e) = send_timing_correction_command(pid, true) {
+                        println!("  FAILED to send timing correction setting: {e:#}");
+                        error!(pid, error = %e, "Failed to send timing correction command");
+                    }
+                }
                 success += 1;
             }
             Err(e) => {
@@ -939,6 +978,10 @@ pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     println!("Injecting into PID {pid}...");
 
     inject::loader::inject_dll(pid, staged_dll.path())?;
+    let config = load_config()?;
+    if config.timing_correction {
+        send_timing_correction_command(pid, true)?;
+    }
     println!("OK — DLL injected into PID {pid}");
     Ok(())
 }

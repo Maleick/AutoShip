@@ -1298,6 +1298,7 @@ fn process_pending_commands(current_tick: u64) {
 /// Called every frame (~20/sec) after the original `MainLoop` runs.
 /// This is our main entry point for per-frame logic.
 fn on_game_tick() {
+    let tick_start = std::time::Instant::now();
     let tick = TICK_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     // Check foreground status every 30 frames (~1.5 seconds) to minimize overhead.
@@ -1560,6 +1561,16 @@ fn on_game_tick() {
 
     // Read game state and publish to shared memory for the orchestrator.
     read_and_publish_state(tick);
+
+    let overhead = tick_start.elapsed();
+    let overhead_nanos = overhead.as_nanos();
+    crate::hooks::timing::record_game_loop_hook_overhead(overhead);
+    #[cfg(debug_assertions)]
+    tracing::debug!(
+        elapsed_ns = overhead_nanos,
+        tick = tick,
+        "ProcessGameEvents hook overhead recorded"
+    );
 }
 
 /// Send Enter key to this EQ process's window via `PostMessage`.
@@ -2890,6 +2901,17 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         Command::Eject => {
             tracing::info!("Eject command received — shutting down");
             crate::graceful_shutdown();
+        }
+        Command::SetTimingCorrection { enabled } => {
+            if enabled {
+                if let Err(e) = crate::hooks::timing::install() {
+                    tracing::warn!("Timing hook install failed: {e}");
+                }
+            } else {
+                crate::hooks::timing::remove();
+            }
+            crate::hooks::timing::set_enabled(enabled);
+            tracing::info!(enabled, "SetTimingCorrection received");
         }
         Command::CastSpell {
             spell_slot,
