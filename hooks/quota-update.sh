@@ -56,14 +56,17 @@ ensure_init() {
 {
   "codex-spark": {"quota_pct": 100, "dispatches": 0, "reset_date": ""},
   "codex-gpt":   {"quota_pct": 100, "dispatches": 0, "reset_date": ""},
-  "gemini":      {"quota_pct": 100, "dispatches": 0, "reset_date": ""}
+  "gemini":      {"quota_pct": 100, "dispatches": 0, "reset_date": ""},
+  "advisor_calls_today": 0,
+  "last_advisor_reset": ""
 }
 EOF
     # Stamp today's date on all entries
     TODAY=$(date -u +"%Y-%m-%d")
     TMP=$(mktemp)
     jq --arg d "$TODAY" '
-      to_entries | map(.value.reset_date = $d) | from_entries
+      to_entries | map(if .value | type == "object" then .value.reset_date = $d else . end) | from_entries |
+      .last_advisor_reset = $d
     ' "$QUOTA_FILE" > "$TMP" && mv "$TMP" "$QUOTA_FILE"
   fi
 }
@@ -76,6 +79,18 @@ cmd_init() {
   rm -f "$QUOTA_FILE"
   ensure_init
   echo "Quota initialized: all tools at 100%"
+}
+
+cmd_advisor_call() {
+  ensure_init
+  if [[ $DRY_RUN -eq 1 ]]; then
+    local cur; cur=$(jq -r '.advisor_calls_today' "$QUOTA_FILE")
+    echo "[dry-run] Would increment advisor_calls_today: $cur → $((cur + 1))"
+    return 0
+  fi
+  TMP=$(mktemp)
+  jq '.advisor_calls_today += 1' "$QUOTA_FILE" > "$TMP" && mv "$TMP" "$QUOTA_FILE"
+  echo "Incremented advisor_calls_today"
 }
 
 cmd_decrement() {
@@ -145,8 +160,8 @@ cmd_reset() {
       local cur; cur=$(jq -r --arg t "$tool" '.[$t].quota_pct' "$QUOTA_FILE" 2>/dev/null || echo "?")
       echo "[dry-run] Would reset $tool: ${cur}% → 100% (dispatches → 0)"
     else
-      echo "[dry-run] Would reset all tools to 100% (dispatches → 0):"
-      jq -r 'to_entries[] | "  \(.key): \(.value.quota_pct)% → 100%"' "$QUOTA_FILE" 2>/dev/null || true
+      echo "[dry-run] Would reset all tools to 100% and advisor_calls_today to 0:"
+      jq -r 'to_entries[] | select(.value | type == "object") | "  \(.key): \(.value.quota_pct)% → 100%"' "$QUOTA_FILE" 2>/dev/null || true
     fi
     return 0
   fi
@@ -159,10 +174,13 @@ cmd_reset() {
   else
     jq --arg d "$TODAY" '
       to_entries | map(
-        .value.quota_pct = 100 | .value.dispatches = 0 | .value.reset_date = $d
-      ) | from_entries
+        if .value | type == "object" then
+          .value.quota_pct = 100 | .value.dispatches = 0 | .value.reset_date = $d
+        else . end
+      ) | from_entries |
+      .advisor_calls_today = 0 | .last_advisor_reset = $d
     ' "$QUOTA_FILE" > "$TMP" && mv "$TMP" "$QUOTA_FILE"
-    echo "Reset all tool quotas to 100%"
+    echo "Reset all tool quotas to 100% and advisor counter to 0"
   fi
 }
 
@@ -182,15 +200,24 @@ cmd_refresh() {
   # Check each tool and reset if stale
   while IFS= read -r tool; do
     local reset_date
-    reset_date=$(jq -r --arg t "$tool" '.[$t].reset_date // ""' "$QUOTA_FILE")
-    if [[ "$reset_date" < "$TODAY" ]]; then
+    reset_date=$(jq -r --arg t "$tool" '.[$t].reset_date // ""' "$QUOTA_FILE" 2>/dev/null || echo "")
+    if [[ -n "$reset_date" && "$reset_date" < "$TODAY" ]]; then
       jq --arg t "$tool" --arg d "$TODAY" '
         .[$t].quota_pct = 100 | .[$t].dispatches = 0 | .[$t].reset_date = $d
       ' "$QUOTA_FILE" > "$TMP" && mv "$TMP" "$QUOTA_FILE" && cp "$QUOTA_FILE" "$TMP"
       echo "Auto-reset $tool (was $reset_date → $TODAY)"
       (( reset_count++ )) || true
     fi
-  done < <(jq -r 'keys[]' "$QUOTA_FILE")
+  done < <(jq -r 'to_entries[] | select(.value | type == "object") | .key' "$QUOTA_FILE")
+
+  # Reset advisor counter if date changed
+  local last_reset
+  last_reset=$(jq -r '.last_advisor_reset // ""' "$QUOTA_FILE")
+  if [[ -n "$last_reset" && "$last_reset" < "$TODAY" ]]; then
+    jq --arg d "$TODAY" '.advisor_calls_today = 0 | .last_advisor_reset = $d' "$QUOTA_FILE" > "$TMP" && mv "$TMP" "$QUOTA_FILE"
+    echo "Auto-reset advisor_calls_today counter (was $last_reset → $TODAY)"
+    (( reset_count++ )) || true
+  fi
 
   if (( reset_count == 0 )); then
     echo "No tools needed refresh (all current as of $TODAY)"
@@ -202,7 +229,7 @@ cmd_refresh() {
 # ---------------------------------------------------------------------------
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 <init|decrement|set|reset|check|refresh> [args...] [--dry-run]" >&2
+  echo "Usage: $0 <init|decrement|set|reset|check|refresh|advisor-call> [args...] [--dry-run]" >&2
   echo "  --dry-run  Print what would happen without modifying quota.json" >&2
   exit 1
 fi
@@ -214,9 +241,10 @@ case "$1" in
   reset)      shift; cmd_reset "$@" ;;
   check)      cmd_check ;;
   refresh)    cmd_refresh ;;
+  advisor-call) cmd_advisor_call ;;
   *)
     echo "Error: unknown command '$1'" >&2
-    echo "Valid: init, decrement, set, reset, check, refresh" >&2
+    echo "Valid: init, decrement, set, reset, check, refresh, advisor-call" >&2
     exit 1
     ;;
 esac
