@@ -9,7 +9,6 @@
 
 pub mod ledger;
 mod store;
-pub mod wishlist;
 
 pub use ledger::{DaySummary, EconomyLedger, EntrySource, LedgerEntry, TrendReport};
 pub use store::{
