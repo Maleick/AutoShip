@@ -69,9 +69,6 @@ pub mod testing;
 #[allow(dead_code)]
 pub mod economy;
 
-/// Testing utilities and observability helpers.
-pub mod testing;
-
 #[cfg(windows)]
 use anyhow::Context;
 use anyhow::Result;
