@@ -20,7 +20,7 @@ jobs:
     runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
           # Default GITHUB_TOKEN — has contents:write for same-repo branches.
