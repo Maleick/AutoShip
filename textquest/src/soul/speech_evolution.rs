@@ -3,6 +3,8 @@
 use std::collections::VecDeque;
 use std::time::Instant;
 
+const MAX_OBSERVATION_HISTORY: usize = 1_000;
+
 /// A recorded observation of another character using a phrase.
 #[derive(Debug, Clone)]
 pub struct CatchphraseEvent {
@@ -65,6 +67,9 @@ impl SpeechEvolution {
             phrase: phrase.to_string(),
             timestamp: Instant::now(),
         });
+        if self.history.len() > MAX_OBSERVATION_HISTORY {
+            self.history.pop_front();
+        }
 
         // Don't adopt duplicates
         if self.catchphrases.iter().any(|p| p == phrase) {
@@ -221,6 +226,17 @@ mod tests {
         assert_eq!(evo.history().len(), 2);
         assert_eq!(evo.history()[0].source_character, "A");
         assert_eq!(evo.history()[1].phrase, "world");
+    }
+
+    #[test]
+    fn test_history_is_bounded_to_max_size() {
+        let mut evo = default_evolution();
+        for idx in 0..(MAX_OBSERVATION_HISTORY + 5) {
+            evo.observe_phrase("A", &format!("phrase{idx}"), 0.5, 0.99);
+        }
+
+        assert_eq!(evo.history().len(), MAX_OBSERVATION_HISTORY);
+        assert_eq!(evo.history().front().unwrap().phrase, "phrase5");
     }
 
     #[test]
