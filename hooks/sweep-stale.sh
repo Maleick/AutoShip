@@ -60,14 +60,14 @@ is_pane_active() {
 
 LOG_FILE=".autoship/poll.log"
 
-mark_issue_swept() {
+write_swept_state() {
   local issue_key="$1"
   local tmp_state state_mode state_uid state_gid
 
-  tmp_state=$(mktemp "${STATE_FILE}.tmp.XXXXXX" 2>/dev/null) || return 0
   state_mode=$(stat -c '%a' "$STATE_FILE" 2>/dev/null || stat -f '%Lp' "$STATE_FILE" 2>/dev/null || true)
   state_uid=$(stat -c '%u' "$STATE_FILE" 2>/dev/null || stat -f '%u' "$STATE_FILE" 2>/dev/null || true)
   state_gid=$(stat -c '%g' "$STATE_FILE" 2>/dev/null || stat -f '%g' "$STATE_FILE" 2>/dev/null || true)
+  tmp_state=$(mktemp "${STATE_FILE}.tmp.XXXXXX" 2>/dev/null) || return 0
   if [[ -n "$state_mode" ]]; then
     chmod "$state_mode" "$tmp_state" 2>/dev/null || true
   fi
@@ -77,6 +77,36 @@ mark_issue_swept() {
   jq --arg key "$issue_key" '.issues[$key].swept = true' "$STATE_FILE" > "$tmp_state" &&
     mv "$tmp_state" "$STATE_FILE" 2>/dev/null || true
   rm -f "$tmp_state" 2>/dev/null || true
+}
+
+mark_issue_swept() {
+  local issue_key="$1"
+
+  if command -v flock >/dev/null 2>&1; then
+    exec 9<"$STATE_FILE"
+    flock -x 9
+    write_swept_state "$issue_key"
+    exec 9>&-
+  elif command -v lockf >/dev/null 2>&1; then
+    lockf -k "$STATE_FILE" bash -c '
+      state_file="$1" issue_key="$2"
+      state_mode=$(stat -c '"'"'%a'"'"' "$state_file" 2>/dev/null || stat -f '"'"'%Lp'"'"' "$state_file" 2>/dev/null || true)
+      state_uid=$(stat -c '"'"'%u'"'"' "$state_file" 2>/dev/null || stat -f '"'"'%u'"'"' "$state_file" 2>/dev/null || true)
+      state_gid=$(stat -c '"'"'%g'"'"' "$state_file" 2>/dev/null || stat -f '"'"'%g'"'"' "$state_file" 2>/dev/null || true)
+      tmp_state=$(mktemp "${state_file}.tmp.XXXXXX" 2>/dev/null) || exit 0
+      if [[ -n "$state_mode" ]]; then
+        chmod "$state_mode" "$tmp_state" 2>/dev/null || true
+      fi
+      if [[ -n "$state_uid" && -n "$state_gid" ]]; then
+        chown "${state_uid}:${state_gid}" "$tmp_state" 2>/dev/null || true
+      fi
+      jq --arg key "$issue_key" '"'"'.issues[$key].swept = true'"'"' "$state_file" > "$tmp_state" &&
+        mv "$tmp_state" "$state_file" 2>/dev/null || true
+      rm -f "$tmp_state" 2>/dev/null || true
+    ' _ "$STATE_FILE" "$issue_key"
+  else
+    write_swept_state "$issue_key"
+  fi
 }
 
 # Iterate over worktree directories
