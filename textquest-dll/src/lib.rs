@@ -430,6 +430,12 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+    // Install all additional hooks that were split out from this function.
+    install_remaining_hooks(eq_base)?;
+
+    Ok(())
+}
+
 fn install_remaining_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     // Install render strobe hook -- background clients skip 3D rendering.
     if let Err(e) = hooks::render::install(eq_base) {
