@@ -7,6 +7,7 @@ routing:
   complex: [claude-sonnet, codex-gpt]
   mechanical: [claude-haiku, gemini]
   ci_fix: [claude-haiku, gemini]
+  rust_unsafe: [claude-haiku, claude-sonnet]
 quota_thresholds:
   low: 10
   exhausted: 0

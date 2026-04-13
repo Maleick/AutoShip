@@ -20,6 +20,24 @@ Third-party tools (Codex/Gemini/Copilot) are dispatched first for simple and med
 
 > Agent routing is configured via `AUTOSHIP.md` front matter. On dispatch, read `.autoship/routing.json` (populated by `init.sh`) to get the priority list for the issue's `task_type`. Fall back to the hardcoded matrix if routing.json is absent.
 
+---
+
+## Routing Overrides
+
+Specific task types or project profiles override the default complexity-based routing to ensure reliable outcomes for sensitive domains.
+
+**1. Task Type: `rust_unsafe`**
+Always routes to `claude-haiku` (primary) or `claude-sonnet` (fallback). This type is reserved for Rust issues involving memory safety or low-level systems work.
+
+**2. Keyword-based Promotion**
+If the issue title or body contains any of the following keywords, the dispatcher should promote the task to Claude regardless of estimated complexity:
+- `unsafe`, `#[cfg(windows)]`, `retour`, `DLL`, `cdylib`, `winapi`
+
+**3. Project Profile: `rust_windows`**
+Detected by `hooks/init.sh` when `Cargo.toml` exists and `#[cfg(windows)]` is present in `src/`. When this profile is active, `routing.json` is automatically overridden to prefer Claude for ALL task types.
+
+---
+
 ```bash
 # Read priority list for this task type from routing config
 TASK_TYPE=$(jq -r --arg id "$ISSUE_ID" '.issues[$id].task_type // "simple_code"' .autoship/state.json)
