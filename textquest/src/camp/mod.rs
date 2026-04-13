@@ -1,5 +1,7 @@
 //! Camp loop state machine — pulls, fights, loots, meds, buffs.
 
+/// Banking cycle controller — deposit plat, consolidate currency to a mule.
+pub mod banking;
 /// Buff tracking and rebuffing logic.
 pub mod buffs;
 /// Crowd control assignment and tracking.
