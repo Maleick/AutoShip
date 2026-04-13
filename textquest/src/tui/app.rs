@@ -519,6 +519,8 @@ pub struct App {
 
     /// Navigation screen state (waypoint list, route display).
     pub nav_state: NavigationScreenState,
+    /// Zone transition FSM state — per-client zoning progress.
+    pub zone_status_state: crate::tui::ui::zone_status_panel::ZoneStatusState,
     /// Packet/opcode monitor state.
     pub packet_monitor_state: PacketMonitorState,
 
@@ -766,6 +768,7 @@ impl App {
             chat_events: VecDeque::with_capacity(200),
 
             nav_state: NavigationScreenState::new(),
+            zone_status_state: crate::tui::ui::zone_status_panel::ZoneStatusState::new(),
             packet_monitor_state: PacketMonitorState::new(),
 
             launch_eq_path: String::from(r"C:\EverQuest"),
