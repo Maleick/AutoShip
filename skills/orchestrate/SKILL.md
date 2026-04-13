@@ -71,6 +71,9 @@ gh issue list --state open --json number,title,body,labels,milestone,createdAt,u
 
 Spawn Opus as the strategic advisor for the initial plan. This is the first and most important advisor call.
 
+**Pre-dispatch Health Check:**
+Before calling the Opus advisor, run a fast-fail health check for each tool in the priority lists (e.g., `timeout 10s codex --version`). If a tool fails, run `bash hooks/quota-update.sh stuck <tool>` to increment its stuck count. Tools with `exhausted: true` or `quota_pct < 10` must be marked as exhausted in the prompt context provided to Opus.
+
 ```
 Agent({
   model: "opus",
@@ -249,7 +252,7 @@ Process the printed event. Do NOT read the queue and then write it in two separa
 | Event type     | Sonnet action                                                        |
 | -------------- | -------------------------------------------------------------------- |
 | `verify`       | Run post-completion pipeline (verify → simplify → PR)                |
-| `stuck`        | Check attempt count → re-dispatch or spawn Opus advisor              |
+| `stuck`        | Increment stuck count via `quota-update.sh stuck <tool>`, then check attempt count → re-dispatch or spawn Opus advisor |
 | `blocked`      | Mark blocked in state, add `autoship:blocked` label, notify operator |
 | `new_issue`    | Spawn Opus advisor for classification → insert into plan             |
 | `closed_issue` | Cancel running agent, clean up worktree                              |

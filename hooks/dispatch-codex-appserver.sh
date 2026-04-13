@@ -32,9 +32,32 @@ mark_exhausted() {
   jq --arg t "$tool" '.[$t].exhausted = true' "$quota_file" > "$tmp" && mv "$tmp" "$quota_file"
 }
 
-if ! command -v codex >/dev/null 2>&1; then
+# Fast-fail health check
+HEALTH_CHECK_FAILED=0
+if command -v timeout >/dev/null 2>&1; then
+  timeout 10s codex --version >/dev/null 2>&1 || HEALTH_CHECK_FAILED=1
+elif command -v gtimeout >/dev/null 2>&1; then
+  gtimeout 10s codex --version >/dev/null 2>&1 || HEALTH_CHECK_FAILED=1
+else
+  codex --version >/dev/null 2>&1 || HEALTH_CHECK_FAILED=1
+fi
+
+if [[ "$HEALTH_CHECK_FAILED" -eq 1 ]]; then
   echo "STUCK" >> "$PANE_LOG"
-  exit 1
+  TOOL=$(jq -r --arg id "$ISSUE_KEY" '.issues[$id].agent // "codex-spark"' "${REPO_ROOT}/.autoship/state.json")
+  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL"
+
+  # Emit event and exit
+  ISSUE_NUMBER="${ISSUE_KEY#issue-}"
+  EVENT=$(jq -n \
+    --arg type    "agent_stuck" \
+    --arg issue   "$ISSUE_KEY" \
+    --arg issueN  "$ISSUE_NUMBER" \
+    --argjson tok 0 \
+    --arg ts      "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    '{type: $type, issue: $issue, issue_number: ($issueN | tonumber), tokens_used: $tok, timestamp: $ts}')
+  bash "${REPO_ROOT}/hooks/emit-event.sh" "$EVENT"
+  exit 0
 fi
 
 if [[ ! -f "$PROMPT_FILE" ]]; then
@@ -158,6 +181,12 @@ STATUS="${STATUS:-STUCK}"
 
 # Write status to pane.log (monitor-agents.sh picks this up)
 echo "$STATUS" >> "$PANE_LOG"
+
+# Increment tool_stuck_count if STUCK
+if [[ "$STATUS" == "STUCK" ]]; then
+  TOOL=$(jq -r --arg id "$ISSUE_KEY" '.issues[$id].agent // "codex-spark"' "${REPO_ROOT}/.autoship/state.json")
+  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL"
+fi
 
 # Emit event to event queue (atomic flock write)
 ISSUE_NUMBER="${ISSUE_KEY#issue-}"

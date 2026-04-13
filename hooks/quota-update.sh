@@ -14,11 +14,10 @@ set -euo pipefail
 #   quota-update.sh reset [tool]                  # Reset one tool or all to 100
 #   quota-update.sh check                         # Print JSON of current quotas
 #   quota-update.sh refresh                       # Auto-reset tools that crossed midnight
+#   quota-update.sh stuck <tool>                  # Increment tool_stuck_count, mark exhausted if >= 3
+#   quota-update.sh advisor-call                  # Increment advisor_calls_today counter
 
-REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
-  echo "Error: not inside a git repository" >&2
-  exit 1
-}
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
 
 QUOTA_FILE="$REPO_ROOT/.autoship/quota.json"
 
@@ -54,9 +53,9 @@ ensure_init() {
     mkdir -p "$(dirname "$QUOTA_FILE")"
     cat > "$QUOTA_FILE" << 'EOF'
 {
-  "codex-spark": {"quota_pct": 100, "dispatches": 0, "reset_date": ""},
-  "codex-gpt":   {"quota_pct": 100, "dispatches": 0, "reset_date": ""},
-  "gemini":      {"quota_pct": 100, "dispatches": 0, "reset_date": ""},
+  "codex-spark": {"quota_pct": 100, "dispatches": 0, "reset_date": "", "tool_stuck_count": 0, "exhausted": false},
+  "codex-gpt":   {"quota_pct": 100, "dispatches": 0, "reset_date": "", "tool_stuck_count": 0, "exhausted": false},
+  "gemini":      {"quota_pct": 100, "dispatches": 0, "reset_date": "", "tool_stuck_count": 0, "exhausted": false},
   "advisor_calls_today": 0,
   "last_advisor_reset": ""
 }
@@ -69,6 +68,18 @@ EOF
       .last_advisor_reset = $d
     ' "$QUOTA_FILE" > "$TMP" && mv "$TMP" "$QUOTA_FILE"
   fi
+  # Upgrade existing file with missing fields
+  local TMP; TMP=$(mktemp)
+  jq '
+    to_entries | map(
+      if .value | type == "object" then
+        .value.tool_stuck_count |= (. // 0) |
+        .value.exhausted |= (. // false)
+      else . end
+    ) | from_entries |
+    if .advisor_calls_today == null then .advisor_calls_today = 0 else . end |
+    if .last_advisor_reset == null then .last_advisor_reset = "" else . end
+  ' "$QUOTA_FILE" > "$TMP" && mv "$TMP" "$QUOTA_FILE"
 }
 
 # ---------------------------------------------------------------------------
@@ -136,6 +147,42 @@ cmd_decrement() {
   fi
 }
 
+cmd_stuck() {
+  local tool="${1:-}"
+  if [[ -z "$tool" ]]; then
+    echo "Usage: $0 stuck <tool>" >&2
+    exit 1
+  fi
+  ensure_init
+
+  # Check tool exists in quota file
+  if ! jq -e --arg t "$tool" '.[$t]' "$QUOTA_FILE" >/dev/null 2>&1; then
+    echo "Warning: unknown tool '$tool', skipping stuck update" >&2
+    return 0
+  fi
+
+  TMP=$(mktemp)
+  jq --arg tool "$tool" '
+    .[$tool].tool_stuck_count += 1 |
+    if .[$tool].tool_stuck_count >= 3 then .[$tool].exhausted = true else . end
+  ' "$QUOTA_FILE" > "$TMP" && mv "$TMP" "$QUOTA_FILE"
+
+  local count exhausted
+  count=$(jq -r --arg t "$tool" '.[$t].tool_stuck_count' "$QUOTA_FILE")
+  exhausted=$(jq -r --arg t "$tool" '.[$t].exhausted' "$QUOTA_FILE")
+
+  echo "Tool $tool stuck count: $count (exhausted: $exhausted)"
+
+  if [[ "$exhausted" == "true" ]]; then
+    echo "TOOL_DEGRADED $tool" >&2
+    # Emit event to event-queue
+    local event
+    event=$(jq -n --arg tool "$tool" --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+      '{type: "TOOL_DEGRADED", tool: $tool, timestamp: $ts}')
+    bash "$REPO_ROOT/hooks/emit-event.sh" "$event"
+  fi
+}
+
 cmd_set() {
   local tool="${1:-}"
   local value="${2:-}"
@@ -158,7 +205,7 @@ cmd_reset() {
   if [[ $DRY_RUN -eq 1 ]]; then
     if [[ -n "$tool" ]]; then
       local cur; cur=$(jq -r --arg t "$tool" '.[$t].quota_pct' "$QUOTA_FILE" 2>/dev/null || echo "?")
-      echo "[dry-run] Would reset $tool: ${cur}% → 100% (dispatches → 0)"
+      echo "[dry-run] Would reset $tool: ${cur}% → 100% (dispatches → 0, stuck → 0)"
     else
       echo "[dry-run] Would reset all tools to 100% and advisor_calls_today to 0:"
       jq -r 'to_entries[] | select(.value | type == "object") | "  \(.key): \(.value.quota_pct)% → 100%"' "$QUOTA_FILE" 2>/dev/null || true
@@ -168,14 +215,14 @@ cmd_reset() {
   TMP=$(mktemp)
   if [[ -n "$tool" ]]; then
     jq --arg t "$tool" --arg d "$TODAY" '
-      .[$t].quota_pct = 100 | .[$t].dispatches = 0 | .[$t].reset_date = $d
+      .[$t].quota_pct = 100 | .[$t].dispatches = 0 | .[$t].reset_date = $d | .[$t].tool_stuck_count = 0 | .[$t].exhausted = false
     ' "$QUOTA_FILE" > "$TMP" && mv "$TMP" "$QUOTA_FILE"
     echo "Reset $tool quota to 100%"
   else
     jq --arg d "$TODAY" '
       to_entries | map(
         if .value | type == "object" then
-          .value.quota_pct = 100 | .value.dispatches = 0 | .value.reset_date = $d
+          .value.quota_pct = 100 | .value.dispatches = 0 | .value.reset_date = $d | .value.tool_stuck_count = 0 | .value.exhausted = false
         else . end
       ) | from_entries |
       .advisor_calls_today = 0 | .last_advisor_reset = $d
@@ -203,7 +250,7 @@ cmd_refresh() {
     reset_date=$(jq -r --arg t "$tool" '.[$t].reset_date // ""' "$QUOTA_FILE" 2>/dev/null || echo "")
     if [[ -n "$reset_date" && "$reset_date" < "$TODAY" ]]; then
       jq --arg t "$tool" --arg d "$TODAY" '
-        .[$t].quota_pct = 100 | .[$t].dispatches = 0 | .[$t].reset_date = $d
+        .[$t].quota_pct = 100 | .[$t].dispatches = 0 | .[$t].reset_date = $d | .[$t].tool_stuck_count = 0 | .[$t].exhausted = false
       ' "$QUOTA_FILE" > "$TMP" && mv "$TMP" "$QUOTA_FILE" && cp "$QUOTA_FILE" "$TMP"
       echo "Auto-reset $tool (was $reset_date → $TODAY)"
       (( reset_count++ )) || true
@@ -229,22 +276,23 @@ cmd_refresh() {
 # ---------------------------------------------------------------------------
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 <init|decrement|set|reset|check|refresh|advisor-call> [args...] [--dry-run]" >&2
+  echo "Usage: $0 <init|decrement|set|reset|check|refresh|stuck|advisor-call> [args...] [--dry-run]" >&2
   echo "  --dry-run  Print what would happen without modifying quota.json" >&2
   exit 1
 fi
 
 case "$1" in
-  init)       cmd_init ;;
-  decrement)  shift; cmd_decrement "$@" ;;
-  set)        shift; cmd_set "$@" ;;
-  reset)      shift; cmd_reset "$@" ;;
-  check)      cmd_check ;;
-  refresh)    cmd_refresh ;;
+  init)         cmd_init ;;
+  decrement)    shift; cmd_decrement "$@" ;;
+  set)          shift; cmd_set "$@" ;;
+  reset)        shift; cmd_reset "$@" ;;
+  check)        cmd_check ;;
+  refresh)      cmd_refresh ;;
+  stuck)        shift; cmd_stuck "$@" ;;
   advisor-call) cmd_advisor_call ;;
   *)
     echo "Error: unknown command '$1'" >&2
-    echo "Valid: init, decrement, set, reset, check, refresh, advisor-call" >&2
+    echo "Valid: init, decrement, set, reset, check, refresh, stuck, advisor-call" >&2
     exit 1
     ;;
 esac
