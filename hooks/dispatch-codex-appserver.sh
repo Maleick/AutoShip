@@ -21,6 +21,9 @@ PANE_LOG="${WORKSPACE}/pane.log"
 
 STALL_SECS=$(( ${STALL_TIMEOUT_MS:-300000} / 1000 ))
 
+# Resolve which tool this dispatch is for — used in all stuck/exhausted paths
+TOOL=$(jq -r --arg id "$ISSUE_KEY" '.issues[$id].agent // "codex-spark"' "${REPO_ROOT}/.autoship/state.json" 2>/dev/null || echo "codex-spark")
+
 # Fast-fail health check
 HEALTH_CHECK_FAILED=0
 if command -v timeout >/dev/null 2>&1; then
@@ -33,8 +36,7 @@ fi
 
 if [[ "$HEALTH_CHECK_FAILED" -eq 1 ]]; then
   echo "STUCK" >> "$PANE_LOG"
-  TOOL=$(jq -r --arg id "$ISSUE_KEY" '.issues[$id].agent // "codex-spark"' "${REPO_ROOT}/.autoship/state.json")
-  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL"
+  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL" || true
 
   # Emit event and exit
   ISSUE_NUMBER="${ISSUE_KEY#issue-}"
@@ -78,7 +80,7 @@ APP_SERVER_PID=$!
 sleep 1
 if ! kill -0 "$APP_SERVER_PID" 2>/dev/null; then
   echo "ERROR: codex app-server failed to start" >&2
-  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "codex-spark" || true
+  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL" || true
   echo "STUCK" >> "$PANE_LOG"
   exit 1
 fi
@@ -107,14 +109,14 @@ send_rpc '{"jsonrpc":"2.0","method":"initialize","params":{"clientInfo":{"name":
 # Wait for initialization response (timeout 5s)
 if ! IFS= read -r -t 5 line <"$FIFO_OUT"; then
   echo "ERROR: codex app-server initialization timed out" >&2
-  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "codex-spark" || true
+  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL" || true
   echo "STUCK" >> "$PANE_LOG"
   exit 1
 fi
 
 if ! echo "$line" | jq -e '.result' >/dev/null 2>&1; then
   echo "ERROR: codex app-server initialization failed: $line" >&2
-  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "codex-spark" || true
+  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL" || true
   echo "STUCK" >> "$PANE_LOG"
   exit 1
 fi
@@ -171,10 +173,8 @@ STATUS="${STATUS:-STUCK}"
 # Write status to pane.log (monitor-agents.sh picks this up)
 echo "$STATUS" >> "$PANE_LOG"
 
-# Increment tool_stuck_count if STUCK
 if [[ "$STATUS" == "STUCK" ]]; then
-  TOOL=$(jq -r --arg id "$ISSUE_KEY" '.issues[$id].agent // "codex-spark"' "${REPO_ROOT}/.autoship/state.json")
-  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL"
+  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL" || true
 fi
 
 # Emit event to event queue (atomic flock write)

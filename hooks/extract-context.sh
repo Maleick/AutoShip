@@ -24,11 +24,10 @@ trap 'rm -f "$TEMP_FILE"' EXIT
   # 2. Extract from CLAUDE.md
   if [[ -f "CLAUDE.md" ]]; then
     echo "### Project Conventions (from CLAUDE.md)"
-    # Look for headers matching Patterns, Conventions, Gotchas (case-insensitive)
-    # Extract up to 40 lines after each match, deduplicate sections.
+    # Extract sections whose heading topic is Patterns, Conventions, or Gotchas.
     awk '
       BEGIN { printing = 0; count = 0; }
-      tolower($0) ~ /^#+[[:space:]]*.*(patterns|conventions|gotchas)/ {
+      tolower($0) ~ /^#+[[:space:]]*(patterns|conventions|gotchas)/ {
         printing = 1;
         count = 0;
         print $0;
@@ -59,6 +58,5 @@ trap 'rm -f "$TEMP_FILE"' EXIT
 
 # Capping at 3000 chars (~500 tokens proxy)
 head -c 3000 "$TEMP_FILE" > "$CONTEXT_FILE"
-rm -f "$TEMP_FILE"
 
 echo "Project context extracted to $CONTEXT_FILE ($(wc -c < "$CONTEXT_FILE") chars)"
