@@ -76,7 +76,14 @@ pub fn resolve_function_address(preferred_addr: u64, eq_base: u64, function_key:
             fallback
         }
         (Some(preferred), None) => preferred,
-        (None, None) => 0,
+        (None, None) => {
+            tracing::error!(
+                function = function_key,
+                preferred = format!("{:#x}", preferred_addr),
+                "eq_fn could not resolve function address from preferred offset or fallback DB"
+            );
+            panic!("eq_fn unresolved address for {function_key}");
+        }
     }
 }
 
@@ -150,6 +157,7 @@ macro_rules! eq_fn {
                     $( $arg: $arg_ty ),*
                 ) -> $ret {
                     let addr = self.addr(eq_base);
+                    debug_assert_ne!(addr, 0, "eq_fn unresolved address for {}", stringify!($fn_name));
 
                     #[cfg(debug_assertions)]
                     {
