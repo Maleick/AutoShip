@@ -44,6 +44,16 @@ pub fn start(client_id: ClientId, token: SessionToken) -> Result<(), Box<dyn std
         tracing::warn!(client_id, "IPC already running, ignoring duplicate start");
         return Ok(());
     }
+    if crate::hooks::integrity::is_safe_mode() {
+        tracing::warn!(
+            client_id,
+            "IPC start skipped: DLL is in safe mode after hook integrity failure"
+        );
+        return Err(std::io::Error::other(
+            "IPC start skipped: DLL is in safe mode after hook integrity failure",
+        )
+        .into());
+    }
 
     // --- Shared memory writer ---
     let session_id = textquest_common::ipc::session_id_from_token(&token);
