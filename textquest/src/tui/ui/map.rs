@@ -367,6 +367,59 @@ fn heading_arrow_char(heading: f32) -> char {
         _ => '↑', // fallback
     }
 }
+
+/// Convert a grid delta vector into an 8-direction Unicode arrow.
+fn direction_arrow(dx: i32, dy: i32) -> char {
+    match (dx.signum(), dy.signum()) {
+        (1, 0) => '→',
+        (-1, 0) => '←',
+        (0, 1) => '↓',
+        (0, -1) => '↑',
+        (1, -1) => '↗',
+        (-1, -1) => '↖',
+        (1, 1) => '↘',
+        (-1, 1) => '↙',
+        _ => '·',
+    }
+}
+
+#[cfg(test)]
+mod direction_arrow_tests {
+    use super::*;
+
+    #[test]
+    fn direction_arrow_cardinals_follow_screen_coordinates() {
+        assert_eq!(direction_arrow(1, 0), '→');
+        assert_eq!(direction_arrow(-1, 0), '←');
+        assert_eq!(direction_arrow(0, 1), '↓');
+        assert_eq!(direction_arrow(0, -1), '↑');
+    }
+
+    #[test]
+    fn direction_arrow_diagonals_follow_screen_coordinates() {
+        assert_eq!(direction_arrow(1, -1), '↗');
+        assert_eq!(direction_arrow(-1, -1), '↖');
+        assert_eq!(direction_arrow(1, 1), '↘');
+        assert_eq!(direction_arrow(-1, 1), '↙');
+    }
+
+    #[test]
+    fn direction_arrow_normalizes_non_unit_deltas_with_signum() {
+        assert_eq!(direction_arrow(5, 0), '→');
+        assert_eq!(direction_arrow(-7, 0), '←');
+        assert_eq!(direction_arrow(0, 3), '↓');
+        assert_eq!(direction_arrow(0, -9), '↑');
+        assert_eq!(direction_arrow(8, -2), '↗');
+        assert_eq!(direction_arrow(-4, -6), '↖');
+        assert_eq!(direction_arrow(2, 11), '↘');
+        assert_eq!(direction_arrow(-10, 12), '↙');
+    }
+
+    #[test]
+    fn direction_arrow_zero_delta_uses_fallback() {
+        assert_eq!(direction_arrow(0, 0), '·');
+    }
+}
 /// Place a directional heading arrow in the grid cell adjacent to position (`col`, `row`)
 /// in the direction the player is facing. No-op if the target cell is out of bounds.
 fn place_heading_arrow(
