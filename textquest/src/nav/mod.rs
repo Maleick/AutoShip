@@ -10,6 +10,7 @@ pub mod camp;
 pub mod mesh;
 pub mod recorder;
 pub mod router;
+pub mod zone_transition;
 
 const NAV_RELOAD_SHARED_STATE_TIMEOUT: Duration = Duration::from_millis(1200);
 
