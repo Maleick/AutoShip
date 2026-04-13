@@ -5,7 +5,7 @@
 //! evidence, manifests, and snapshot history live in the sibling
 //! `Maleick/TextQuest-Ghidra` repository.
 
-use std::path::Path;
+use std::{fs::File, io::Read, path::Path};
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
@@ -75,6 +75,8 @@ CREATE INDEX IF NOT EXISTS idx_globals_name ON globals(name);
 CREATE INDEX IF NOT EXISTS idx_strings_value ON strings(value);
 CREATE INDEX IF NOT EXISTS idx_imports_func ON imports(func_name);
 ";
+
+const MAX_OPCODE_FILE_BYTES: u64 = 8 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // Data types
@@ -452,9 +454,40 @@ impl GhidraDatabase {
         if !path.exists() {
             return Ok(0);
         }
-        let raw = std::fs::read_to_string(path)
+
+        let metadata = std::fs::metadata(path)
+            .with_context(|| format!("failed to stat opcodes file {}", path.display()))?;
+        if !metadata.is_file() {
+            anyhow::bail!(
+                "failed to read opcodes file {}: path is not a regular file",
+                path.display()
+            );
+        }
+        if metadata.len() > MAX_OPCODE_FILE_BYTES {
+            anyhow::bail!(
+                "failed to read opcodes file {}: file size {} exceeds {} byte limit",
+                path.display(),
+                metadata.len(),
+                MAX_OPCODE_FILE_BYTES
+            );
+        }
+
+        let mut file = File::open(path)
+            .with_context(|| format!("failed to open opcodes file {}", path.display()))?;
+        let mut raw = Vec::with_capacity(metadata.len() as usize);
+        file.by_ref()
+            .take(MAX_OPCODE_FILE_BYTES + 1)
+            .read_to_end(&mut raw)
             .with_context(|| format!("failed to read opcodes file {}", path.display()))?;
-        let entries: Vec<OpcodeEntry> = serde_json::from_str(&raw)
+        if raw.len() as u64 > MAX_OPCODE_FILE_BYTES {
+            anyhow::bail!(
+                "failed to read opcodes file {}: file exceeds {} byte limit",
+                path.display(),
+                MAX_OPCODE_FILE_BYTES
+            );
+        }
+
+        let entries: Vec<OpcodeEntry> = serde_json::from_slice(&raw)
             .with_context(|| format!("failed to parse opcodes JSON at {}", path.display()))?;
         self.import_opcodes(&entries)
     }
@@ -771,5 +804,17 @@ mod tests {
         // INSERT OR REPLACE — should still be 1 row, not 2
         let stats = db.stats().unwrap();
         assert_eq!(stats.opcodes, 1);
+    }
+
+    #[test]
+    fn import_opcodes_from_file_rejects_oversized_file() {
+        let (db, _dir) = temp_db();
+        let json_dir = tempfile::tempdir().unwrap();
+        let path = json_dir.path().join("opcodes.json");
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(MAX_OPCODE_FILE_BYTES + 1).unwrap();
+
+        let result = db.import_opcodes_from_file(&path);
+        assert!(result.is_err(), "expected error for oversized file");
     }
 }
