@@ -37,6 +37,8 @@ mod stealth;
 #[allow(dead_code)]
 mod syscall;
 
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 #[cfg(windows)]
 use std::sync::OnceLock;
@@ -44,6 +46,11 @@ use std::sync::OnceLock;
 /// Base address of eqgame.exe in memory. Set during initialization.
 /// All EQ offsets are added to this value to compute runtime addresses.
 pub static EQ_BASE: AtomicU64 = AtomicU64::new(0);
+
+/// Runtime offset overrides loaded from scan/config data.
+/// When populated, resolved offsets use this map before falling back to
+/// compile-time rebase logic.
+pub static OFFSET_DB: OnceLock<HashMap<String, u64>> = OnceLock::new();
 
 /// Global flag indicating the DLL is shutting down.
 /// Checked by long-running loops (IPC listener, nav ticks) to exit gracefully.
@@ -489,6 +496,7 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
         };
     hooks::game_loop::install(install_addr)?;
 
+fn install_remaining_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     // Install render strobe hook -- background clients skip 3D rendering.
     if let Err(e) = hooks::render::install(eq_base) {
         tracing::warn!(
@@ -498,10 +506,12 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Install chat message hook — intercepts dsp_chat to capture all in-game text.
-    if let Some(chat_addr) =
-        textquest_common::offsets::rebase(textquest_common::offsets::DSP_CHAT, eq_base)
-    {
-        if let Err(e) = hooks::chat::install(chat_addr) {
+    if let Some(chat_addr) = resolve_offset(
+        "dspChat",
+        textquest_common::offsets::DSP_CHAT,
+        eq_base,
+    ) {
+        if let Err(e) = hooks::chat::install(chat_addr as usize) {
             tracing::warn!("Chat hook failed (continuing without chat capture): {}", e);
         }
     } else {
@@ -541,6 +551,94 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+fn is_scan_active() -> bool {
+    std::env::var("TEXTQUEST_SCAN_OFFSETS").is_ok_and(|v| v == "1")
+        && std::env::var("TEXTQUEST_SCAN_ACTIVE").is_ok_and(|v| v == "1")
+}
+
+fn has_scanned_offsets() -> bool {
+    OFFSET_DB.get().is_some_and(|db| !db.is_empty())
+}
+
+fn scan_offsets(eq_base: u64) {
+    if !is_scan_active() {
+        return;
+    }
+
+    let mut paths = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(root) = exe.parent() {
+            paths.push(root.join("config").join("offsets.json"));
+        }
+    }
+    paths.push(PathBuf::from("config/offsets.json"));
+    paths.push(PathBuf::from(r"C:\textquest\config\offsets.json"));
+    paths.push(std::env::temp_dir().join("textquest").join("offsets.json"));
+
+    let db = paths.into_iter().find_map(|path| {
+        if !path.exists() {
+            return None;
+        }
+        match textquest_common::offset_db::OffsetDatabase::load_from_file(&path) {
+            Ok(db) => Some((path, db)),
+            Err(e) => {
+                tracing::warn!(path = path.display().to_string(), error = %e, "Failed to parse scan offsets file");
+                None
+            }
+        }
+    });
+
+    let Some((resolved_path, db)) = db else {
+        tracing::warn!("Scan offsets enabled but no readable offsets source found");
+        return;
+    };
+
+    let mut resolved = HashMap::new();
+
+    for (name, compiled_addr) in db.functions.iter().chain(db.globals.iter()) {
+        if let Some(addr) = db.rebase(*compiled_addr, eq_base) {
+            resolved.insert(name.clone(), addr as u64);
+        }
+    }
+
+    let count = resolved.len();
+    match OFFSET_DB.set(resolved) {
+        Ok(()) => {
+            tracing::info!(
+                path = resolved_path.display().to_string(),
+                count,
+                "Loaded scan-resolved offsets into OFFSET_DB"
+            );
+        }
+        Err(_) => {
+            tracing::warn!(
+                path = resolved_path.display().to_string(),
+                count,
+                "OFFSET_DB was already initialized; skipping newly resolved scan offsets"
+            );
+        }
+    }
+}
+
+/// Resolve a compile-time offset using scan-updated data first, then fallback to
+/// static rebase logic from the common offsets table.
+fn resolve_offset(name: &str, compiled_addr: u64, base: u64) -> Option<u64> {
+    resolve_offset_with_map(name, compiled_addr, base, OFFSET_DB.get())
+}
+
+fn resolve_offset_with_map(
+    name: &str,
+    compiled_addr: u64,
+    base: u64,
+    db: Option<&HashMap<String, u64>>,
+) -> Option<u64> {
+    if let Some(addr) = db.and_then(|cache| cache.get(name)) {
+        return Some(*addr);
+    }
+
+    textquest_common::offsets::rebase(compiled_addr, base).map(|addr| addr as u64)
 }
 
 /// Read the session token injected by the orchestrator.
