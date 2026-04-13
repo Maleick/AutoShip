@@ -64,15 +64,30 @@ const REQUIRED_INDEXES: &[&str] = &[
 const REQUIRED_COLUMNS: &[(&str, &str)] = &[
     ("memories", "id"),
     ("memories", "character_id"),
+    ("memories", "event_type"),
+    ("memories", "event_json"),
     ("memories", "zone"),
-    ("memories", "content"),
+    ("memories", "mood_at_time"),
     ("memories", "importance"),
+    ("memories", "decayed"),
+    ("memories", "created_at"),
     ("conversations", "id"),
     ("conversations", "character_id"),
     ("conversations", "speaker"),
+    ("conversations", "is_player"),
+    ("conversations", "channel"),
     ("conversations", "message"),
+    ("conversations", "sentiment"),
+    ("conversations", "created_at"),
     ("memory_summaries", "id"),
     ("memory_summaries", "character_id"),
+    ("memory_summaries", "period_start"),
+    ("memory_summaries", "period_end"),
+    ("memory_summaries", "summary"),
+    ("memory_summaries", "mood_trend"),
+    ("memory_summaries", "created_at"),
+    ("shared_references", "memory_id"),
+    ("shared_references", "description"),
     ("speech_patterns", "character_id"),
 ];
 
@@ -168,42 +183,66 @@ pub fn run_migrations(conn: &Connection) -> Result<u32, MigrationError> {
             "CREATE TABLE IF NOT EXISTS memories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 character_id INTEGER NOT NULL,
-                zone TEXT NOT NULL DEFAULT '',
-                content TEXT NOT NULL,
-                importance REAL NOT NULL DEFAULT 0.5,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                event_type TEXT NOT NULL,
+                event_json TEXT NOT NULL,
+                zone TEXT,
+                mood_at_time TEXT NOT NULL,
+                importance REAL NOT NULL DEFAULT 1.0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                decayed INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS conversations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 character_id INTEGER NOT NULL,
                 speaker TEXT NOT NULL,
+                is_player INTEGER NOT NULL DEFAULT 0,
+                channel TEXT NOT NULL DEFAULT 'say',
                 message TEXT NOT NULL,
-                timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
             CREATE TABLE IF NOT EXISTS memory_summaries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 character_id INTEGER NOT NULL,
+                period_start TEXT NOT NULL DEFAULT (datetime('now')),
+                period_end TEXT NOT NULL DEFAULT (datetime('now')),
                 summary TEXT NOT NULL,
-                period_start TEXT,
-                period_end TEXT,
+                mood_trend TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
             CREATE TABLE IF NOT EXISTS shared_references (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                char_a INTEGER NOT NULL,
-                char_b INTEGER NOT NULL,
-                reference_text TEXT NOT NULL
+                character_a INTEGER NOT NULL,
+                character_b INTEGER NOT NULL,
+                memory_id INTEGER NOT NULL REFERENCES memories(id),
+                description TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS soul_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                character_id INTEGER NOT NULL,
+                action_type TEXT NOT NULL,
+                action_json TEXT NOT NULL,
+                reason TEXT,
+                operator_id TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
             CREATE TABLE IF NOT EXISTS speech_patterns (
                 character_id INTEGER PRIMARY KEY,
-                style_json TEXT NOT NULL DEFAULT '{}'
+                vocabulary_level REAL NOT NULL DEFAULT 0.5,
+                emote_frequency REAL NOT NULL DEFAULT 0.5,
+                typing_speed REAL NOT NULL DEFAULT 1.0,
+                catchphrases TEXT NOT NULL DEFAULT '[]',
+                adopted_slang TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
-            CREATE INDEX IF NOT EXISTS idx_memories_character ON memories(character_id);
-            CREATE INDEX IF NOT EXISTS idx_memories_zone ON memories(zone);
-            CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(character_id);
-            CREATE INDEX IF NOT EXISTS idx_conversations_speaker ON conversations(speaker);
-            CREATE INDEX IF NOT EXISTS idx_summaries_character ON memory_summaries(character_id);
-            CREATE INDEX IF NOT EXISTS idx_shared_refs ON shared_references(char_a, char_b);",
+            CREATE INDEX IF NOT EXISTS idx_memories_character ON memories(character_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_memories_zone ON memories(character_id, zone);
+            CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(character_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_conversations_speaker ON conversations(character_id, speaker);
+            CREATE INDEX IF NOT EXISTS idx_summaries_character ON memory_summaries(character_id, period_start DESC);
+            CREATE INDEX IF NOT EXISTS idx_shared_refs ON shared_references(character_a, character_b);
+            CREATE INDEX IF NOT EXISTS idx_audit_character ON soul_audit_log(character_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_action_type ON soul_audit_log(action_type, created_at DESC);",
         ),
     ];
 
@@ -255,12 +294,42 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         // Create tables without indexes
         conn.execute_batch(
-            "CREATE TABLE memories (id INTEGER PRIMARY KEY, character_id INTEGER, zone TEXT, content TEXT, importance REAL);
-             CREATE TABLE conversations (id INTEGER PRIMARY KEY, character_id INTEGER, speaker TEXT, message TEXT);
-             CREATE TABLE memory_summaries (id INTEGER PRIMARY KEY, character_id INTEGER, summary TEXT);
-             CREATE TABLE shared_references (id INTEGER PRIMARY KEY, char_a INTEGER, char_b INTEGER, reference_text TEXT);
+            "CREATE TABLE memories (
+                id INTEGER PRIMARY KEY,
+                character_id INTEGER,
+                event_type TEXT,
+                event_json TEXT,
+                zone TEXT,
+                mood_at_time TEXT,
+                importance REAL,
+                decayed INTEGER
+             );
+             CREATE TABLE conversations (
+                id INTEGER PRIMARY KEY,
+                character_id INTEGER,
+                speaker TEXT,
+                is_player INTEGER,
+                channel TEXT,
+                message TEXT,
+                created_at TEXT
+             );
+             CREATE TABLE memory_summaries (
+                id INTEGER PRIMARY KEY,
+                character_id INTEGER,
+                period_start TEXT,
+                period_end TEXT,
+                summary TEXT
+             );
+             CREATE TABLE shared_references (
+                id INTEGER PRIMARY KEY,
+                character_a INTEGER,
+                character_b INTEGER,
+                memory_id INTEGER,
+                description TEXT
+             );
              CREATE TABLE speech_patterns (character_id INTEGER PRIMARY KEY);",
-        ).unwrap();
+        )
+        .unwrap();
         let err = validate_schema(&conn).unwrap_err();
         assert!(matches!(err, SchemaError::MissingIndex(_)));
     }
