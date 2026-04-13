@@ -7,6 +7,7 @@ set -euo pipefail
 
 BEACON_DIR=".beacon"
 STATE_FILE="$BEACON_DIR/state.json"
+LEDGER_FILE="$BEACON_DIR/token-ledger.json"
 
 # Locate repo root
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
@@ -14,6 +15,7 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
   exit 1
 }
 STATE_FILE="$REPO_ROOT/$STATE_FILE"
+LEDGER_FILE="$REPO_ROOT/$LEDGER_FILE"
 
 # Acquire exclusive lock for entire script duration.
 # Prevents concurrent read-modify-write races between parallel update-state.sh invocations.
@@ -81,6 +83,98 @@ manage_labels() {
     if gh label list --repo "$repo_slug" --json name --jq ".[].name" 2>/dev/null | grep -q "^${add_label}$"; then
       gh issue edit "$issue_id" --repo "$repo_slug" --add-label "$add_label" 2>/dev/null || true
     fi
+  fi
+}
+
+# append_ledger_record — append an issue record to the current session in token-ledger.json.
+# Usage: append_ledger_record <issue_id> <verdict>
+# Reads complexity, agent, pr_number, attempt, task_type, started_at from state.json.
+append_ledger_record() {
+  local issue_id="$1"
+  local verdict="$2"
+  local ledger="$LEDGER_FILE"
+  local lock="${ledger%.json}.lock"
+
+  if [[ ! -f "$ledger" ]]; then
+    # Ledger not created yet (beacon-init hasn't run with ledger support) — skip
+    return 0
+  fi
+
+  # Read fields from state.json
+  local issue_number complexity agent pr_number attempt task_type started_at duration_ms
+  issue_number=$(echo "$issue_id" | grep -o '[0-9]*' | head -1)
+  complexity=$(jq -r --arg k "$issue_id" '.issues[$k].complexity // "medium"' "$STATE_FILE" 2>/dev/null) || complexity="medium"
+  agent=$(jq -r --arg k "$issue_id" '.issues[$k].agent // ""' "$STATE_FILE" 2>/dev/null) || agent=""
+  pr_number=$(jq -r --arg k "$issue_id" '.issues[$k].pr_number // 0' "$STATE_FILE" 2>/dev/null) || pr_number=0
+  attempt=$(jq -r --arg k "$issue_id" '.issues[$k].attempt // 1' "$STATE_FILE" 2>/dev/null) || attempt=1
+  task_type=$(jq -r --arg k "$issue_id" '.issues[$k].task_type // "medium_code"' "$STATE_FILE" 2>/dev/null) || task_type="medium_code"
+  started_at=$(jq -r --arg k "$issue_id" '.issues[$k].started_at // ""' "$STATE_FILE" 2>/dev/null) || started_at=""
+
+  # Compute duration_ms from started_at to now
+  duration_ms=0
+  if [[ -n "$started_at" ]]; then
+    local start_epoch now_epoch
+    start_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$started_at" +%s 2>/dev/null \
+      || date -d "$started_at" +%s 2>/dev/null \
+      || echo 0)
+    now_epoch=$(date -u +%s)
+    if [[ "$start_epoch" -gt 0 && "$now_epoch" -ge "$start_epoch" ]]; then
+      duration_ms=$(( (now_epoch - start_epoch) * 1000 ))
+    fi
+  fi
+
+  # Coerce pr_number and attempt to integers
+  pr_number=$(( ${pr_number:-0} )) || pr_number=0
+  attempt=$(( ${attempt:-1} )) || attempt=1
+
+  # Build the record JSON
+  local record
+  record=$(jq -n \
+    --argjson num "$issue_number" \
+    --arg type "$task_type" \
+    --arg complexity "$complexity" \
+    --arg agent "$agent" \
+    --argjson tokens 0 \
+    --argjson dur "$duration_ms" \
+    --arg verdict "$verdict" \
+    --argjson pr "$pr_number" \
+    --argjson att "$attempt" \
+    '{number: $num, type: $type, complexity: $complexity, agent: $agent,
+      tokens_used: $tokens, duration_ms: $dur, verdict: $verdict,
+      pr_number: $pr, attempt: $att}')
+
+  # Write record into last session using lock
+  _write_ledger_record() {
+    local tmp
+    tmp=$(mktemp)
+    jq --argjson r "$record" \
+      'if (.sessions | length) > 0
+       then .sessions[-1].issues += [$r]
+       else .
+       end' \
+      "$ledger" > "$tmp" && mv "$tmp" "$ledger"
+  }
+
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"$lock"
+    flock -x 9
+    _write_ledger_record
+    exec 9>&-
+  elif command -v lockf >/dev/null 2>&1; then
+    local record_tmp
+    record_tmp=$(mktemp)
+    printf '%s' "$record" > "$record_tmp"
+    lockf -k "$lock" bash -c "
+      ledger='$ledger'
+      record=\$(cat '$record_tmp')
+      tmp=\$(mktemp)
+      jq --argjson r \"\$record\" \
+        'if (.sessions | length) > 0 then .sessions[-1].issues += [\$r] else . end' \
+        \"\$ledger\" > \"\$tmp\" && mv \"\$tmp\" \"\$ledger\"
+    "
+    rm -f "$record_tmp"
+  else
+    _write_ledger_record
   fi
 }
 
@@ -238,6 +332,11 @@ if [[ -n "$STAT_KEY" ]]; then
         "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
       ;;
   esac
+fi
+
+# Append issue record to token ledger for completion events
+if [[ "$ACTION" == "set-completed" || "$ACTION" == "set-merged" ]]; then
+  append_ledger_record "$ISSUE_ID" "pass" || true
 fi
 
 # Manage GitHub labels for lifecycle transitions

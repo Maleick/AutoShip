@@ -9,6 +9,7 @@ BEACON_VERSION="0.1.0"
 BEACON_DIR=".beacon"
 STATE_FILE="$BEACON_DIR/state.json"
 WORKSPACES_DIR="$BEACON_DIR/workspaces"
+LEDGER_FILE="$BEACON_DIR/token-ledger.json"
 
 # Resolve the directory this script lives in so we can call sibling scripts.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -159,6 +160,72 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   echo '{}' > "$CONFIG_FILE"
   echo "Initialized $CONFIG_FILE (add test_command, etc. for overrides)"
 fi
+
+# --- Token Ledger: create + append new session entry ---
+init_token_ledger() {
+  local ledger="$BEACON_DIR/token-ledger.json"
+  local lock="${ledger%.json}.lock"
+  local now
+  now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  # Generate a session ID from epoch seconds + PID for uniqueness
+  local session_id
+  session_id="session-$(date -u +%s)-$$"
+
+  # Build new session object
+  local new_session
+  new_session=$(jq -n \
+    --arg sid "$session_id" \
+    --arg now "$now" \
+    --arg repo "$REPO_SLUG" \
+    '{session_id: $sid, started_at: $now, repo: $repo, issues: []}')
+
+  # Write new session into the ledger (caller must hold lock)
+  _ledger_write() {
+    local tmp
+    tmp=$(mktemp)
+    if [[ -f "$ledger" ]] && jq '.' "$ledger" >/dev/null 2>&1; then
+      jq --argjson s "$new_session" '.sessions += [$s]' "$ledger" > "$tmp" \
+        && mv "$tmp" "$ledger"
+    else
+      jq -n --argjson s "$new_session" \
+        '{schema_version: 1, sessions: [$s]}' > "$tmp" \
+        && mv "$tmp" "$ledger"
+    fi
+  }
+
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"$lock"
+    flock -x 9
+    _ledger_write
+    exec 9>&-
+  elif command -v lockf >/dev/null 2>&1; then
+    # lockf -k holds the lock for the duration of the child process.
+    # We write the session object to a temp file so the child can read it
+    # without quoting/escaping issues.
+    local session_tmp
+    session_tmp=$(mktemp)
+    printf '%s' "$new_session" > "$session_tmp"
+    lockf -k "$lock" bash -c "
+      ledger='$ledger'
+      new_session=\$(cat '$session_tmp')
+      tmp=\$(mktemp)
+      if [[ -f \"\$ledger\" ]] && jq '.' \"\$ledger\" >/dev/null 2>&1; then
+        jq --argjson s \"\$new_session\" '.sessions += [\$s]' \"\$ledger\" > \"\$tmp\" && mv \"\$tmp\" \"\$ledger\"
+      else
+        jq -n --argjson s \"\$new_session\" '{schema_version: 1, sessions: [\$s]}' > \"\$tmp\" && mv \"\$tmp\" \"\$ledger\"
+      fi
+    "
+    rm -f "$session_tmp"
+  else
+    # No lock mechanism available — write directly
+    _ledger_write
+  fi
+
+  echo "Token ledger updated: $ledger (session $session_id)"
+}
+
+init_token_ledger || true
 
 # Create GitHub labels if the repo is on GitHub and gh CLI is available
 create_github_labels() {
