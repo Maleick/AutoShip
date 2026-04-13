@@ -7,6 +7,7 @@ use textquest_common::ipc::Command;
 use textquest_common::soul::{MoodState, PersonalityTraits, SoulAction, SoulEvent, SpeechStyle};
 use textquest_common::types::{ClientId, GameState};
 
+use super::alerts::{Alert, AnomalyDetector};
 use super::config::{CharacterSoulConfig, EdginessLevel, SoulConfig};
 use super::idle::{IdleScheduler, IdleTransition};
 use super::llm::fallback::TraitDrivenResponder;
@@ -217,13 +218,17 @@ impl SoulCoordinator {
         };
 
         self.souls.insert(client_id, soul);
+        self.anomaly_detector.register_character(client_id);
     }
 
     /// Main tick — called every 5000ms by the orchestrator.
-    /// Returns commands to send to specific clients.
-    pub fn tick(&mut self, states: &HashMap<ClientId, GameState>) -> Vec<(ClientId, Command)> {
+    /// Returns `(commands, alerts)` so the caller can dispatch commands and act on anomalies.
+    pub fn tick(
+        &mut self,
+        states: &HashMap<ClientId, GameState>,
+    ) -> (Vec<(ClientId, Command)>, Vec<Alert>) {
         if !self.config.enabled {
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         }
 
         self.tick_count += 1;
@@ -476,6 +481,9 @@ impl SoulCoordinator {
 
     /// Handle a game event (kill, death, loot, zone change, etc.).
     pub fn on_game_event(&mut self, client_id: ClientId, event: SoulEvent) {
+        // Notify the anomaly detector that a soul event was received.
+        self.anomaly_detector.record_soul_event(client_id);
+
         let Some(soul) = self.souls.get_mut(&client_id) else {
             return;
         };
@@ -926,7 +934,7 @@ mod tests {
         coord.register_character(1, &make_char_config("Test"));
         let mut states = HashMap::new();
         states.insert(1, make_game_state(1));
-        let cmds = coord.tick(&states);
+        let (cmds, _alerts) = coord.tick(&states);
         assert!(cmds.is_empty());
     }
 
@@ -1068,7 +1076,7 @@ mod tests {
         coord.register_character(1, &make_char_config("Test"));
         // Empty states map — no game state for client 1
         let states = HashMap::new();
-        let cmds = coord.tick(&states);
+        let (cmds, _alerts) = coord.tick(&states);
         // Should not panic, just skip
         assert!(cmds.is_empty());
     }
