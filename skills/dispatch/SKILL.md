@@ -57,6 +57,34 @@ fi
 
 ---
 
+## Concurrency Cap — 20 Agents Dynamic
+
+Before dispatching each issue, enforce the 20-agent hard cap:
+
+```bash
+# Count currently running agents across all tools
+RUNNING=$(jq '[.issues | to_entries[] | select(.value.state == "running")] | length' .autoship/state.json)
+if (( RUNNING >= 20 )); then
+  echo "CAP_REACHED: $RUNNING agents running — queuing for next poll cycle"
+  # Do not dispatch — return and let the event loop retry
+  exit 0
+fi
+```
+
+**Per-tool limits (within the 20-agent cap):**
+
+| Tool             | Mode                                            | Max concurrent                       |
+| ---------------- | ----------------------------------------------- | ------------------------------------ |
+| Claude Haiku     | Agent tool (`run_in_background: true`)          | Up to 20 total                       |
+| Claude Sonnet    | Agent tool (`run_in_background: true`)          | Up to 20 total                       |
+| Gemini           | tmux pane                                       | 20+ panes via `even-vertical` layout |
+| Codex app-server | `[experimental]` — **currently non-functional** | N/A — use Claude fallback            |
+
+**Codex app-server failure protocol:**
+If `dispatch-codex-appserver.sh` returns STUCK on attempt 1, treat as tool exhaustion and immediately try the next agent in the priority list — do not retry codex. Log `CODEX_APPSERVER_STUCK` to poll.log.
+
+---
+
 ## Step 1: Create Worktree
 
 ```bash
