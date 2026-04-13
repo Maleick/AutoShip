@@ -382,7 +382,8 @@ DEFAULT_ROUTING='{
     "medium_code":  ["codex-gpt", "claude-sonnet"],
     "complex":      ["claude-sonnet", "codex-gpt"],
     "mechanical":   ["claude-haiku", "gemini"],
-    "ci_fix":       ["claude-haiku", "gemini"]
+    "ci_fix":       ["claude-haiku", "gemini"],
+    "rust_unsafe":  ["claude-haiku", "claude-sonnet"]
   },
   "quota_thresholds": {"low": 10, "exhausted": 0},
   "stall_timeout_ms": 300000,
@@ -490,14 +491,25 @@ PYEOF
     return 0
   fi
 
+  # Detect project profile: rust_windows prefers Claude.
+  local project_profile="standard"
+  if [[ -f "Cargo.toml" ]] && grep -qr "\[cfg(windows)\]" src/ 2>/dev/null; then
+    project_profile="rust_windows"
+    echo "Project profile: rust_windows detected (routing overrides applied)"
+  fi
+
   # Merge parsed values over defaults so missing fields fall back gracefully.
   local merged
   merged=$(jq -n \
     --argjson defaults "$DEFAULT_ROUTING" \
     --argjson parsed "$parsed" \
+    --arg profile "$project_profile" \
     '
       $defaults
       | if ($parsed.routing | length) > 0 then .routing = $parsed.routing else . end
+      | if ($profile == "rust_windows") then
+          .routing |= map_values(["claude-haiku", "claude-sonnet"])
+        else . end
       | if ($parsed.quota_thresholds | length) > 0 then .quota_thresholds = $parsed.quota_thresholds else . end
       | if $parsed.stall_timeout_ms != null then .stall_timeout_ms = $parsed.stall_timeout_ms else . end
       | if $parsed.max_concurrent_agents != null then .max_concurrent_agents = $parsed.max_concurrent_agents else . end
