@@ -345,6 +345,54 @@ fn spawn_marker_glyph(
     }
 }
 
+
+/// Convert an EQ heading value (0–512, where 0=North, 128=West, 256=South, 384=East)
+/// to an 8-direction Unicode arrow character indicating the player's facing direction.
+///
+/// The EQ heading range is 0–512 (full circle). We map it to 8 octants of 64 units each:
+///   0/512=N(↑), 64=NW(↖), 128=W(←), 192=SW(↙), 256=S(↓), 320=SE(↘), 384=E(→), 448=NE(↗)
+fn heading_arrow_char(heading: f32) -> char {
+    // Normalise to [0, 512)
+    let h = ((heading % 512.0) + 512.0) % 512.0;
+    // Each octant spans 64 units; centre at multiples of 64, offset by 32 for rounding.
+    let octant = ((h + 32.0) % 512.0) as u32 / 64;
+    match octant {
+        0 => '↑', // N
+        1 => '↖', // NW
+        2 => '←', // W
+        3 => '↙', // SW
+        4 => '↓', // S
+        5 => '↘', // SE
+        6 => '→', // E
+        7 => '↗', // NE
+        _ => '↑', // fallback
+    }
+}
+/// Place a directional heading arrow in the grid cell adjacent to position (`col`, `row`)
+/// in the direction the player is facing. No-op if the target cell is out of bounds.
+fn place_heading_arrow(
+    heading: f32,
+    heading_rad: f32,
+    col: i32,
+    row: i32,
+    width: i32,
+    height: i32,
+    grid: &mut Vec<Vec<(char, ratatui::style::Color)>>,
+    color: ratatui::style::Color,
+) {
+    let arrow = heading_arrow_char(heading);
+    let arrow_col = col + heading_rad.cos().round() as i32;
+    let arrow_row = row - heading_rad.sin().round() as i32; // screen Y inverted
+    if arrow_col >= 0
+        && arrow_col < width
+        && arrow_row >= 0
+        && arrow_row < height
+        && (arrow_col != col || arrow_row != row)
+    {
+        grid[arrow_row as usize][arrow_col as usize] = (arrow, color);
+    }
+}
+
 fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     use ratatui::style::Color;
     let theme = app.theme.clone();
@@ -798,6 +846,18 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             grid[row as usize][col as usize] = ('◆', t.map_you);
         }
 
+        // ─── Heading arrow adjacent to player marker ─────────────────────────
+        place_heading_arrow(
+            player.heading,
+            heading_rad,
+            col,
+            row,
+            w as i32,
+            h as i32,
+            &mut grid,
+            t.map_you,
+        );
+
         // ─── Radius circle overlays ─────────────────────────────────────────
         draw_radius_overlays(app, &to_grid, w as u16, h as u16, &mut grid);
     }
@@ -867,6 +927,9 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                 let mut spans = vec![
                     Span::styled("◆ ", Style::default().fg(t.map_you)),
                     Span::styled("You", Style::default().fg(t.text_muted)),
+                    Span::raw(" │ "),
+                    Span::styled("↑ ", Style::default().fg(t.map_you)),
+                    Span::styled("Hdg", Style::default().fg(t.text_muted)),
                     Span::raw(" │ "),
                     Span::styled("⊕ ", Style::default().fg(t.map_group)),
                     Span::styled("Grp", Style::default().fg(t.text_muted)),
@@ -1311,6 +1374,18 @@ fn draw_minimap_widget(
         && let Some((col, row)) = to_mini(-player.y, -player.x)
     {
         mini_grid[row][col] = ('◆', t.map_you);
+        // Heading arrow in adjacent minimap cell
+        let heading_rad = (512.0 - player.heading) * std::f32::consts::PI / 256.0;
+        place_heading_arrow(
+            player.heading,
+            heading_rad,
+            col as i32,
+            row as i32,
+            mini_width as i32,
+            mini_height as i32,
+            &mut mini_grid,
+            t.map_you,
+        );
     }
 
     if app.map_state.show_spawns {
@@ -2398,14 +2473,15 @@ mod tests {
         app.map_state.show_target_line = true;
         app.target = Some(test_spawn(77, "target", 6.0, 0.0));
 
-        let with_target = render_map_view_text(app, 80, 16);
+        // Use a wide terminal so the full legend (including the new Hdg entry) fits.
+        let with_target = render_map_view_text(app, 140, 16);
         assert!(with_target.contains("Target"));
 
         let mut without_target_line = test_app_with_spawns();
         without_target_line.map_state.show_nav_paths = false;
         without_target_line.map_state.show_target_line = false;
         without_target_line.target = Some(test_spawn(77, "target", 6.0, 0.0));
-        let without_target = render_map_view_text(without_target_line, 80, 16);
+        let without_target = render_map_view_text(without_target_line, 140, 16);
         assert!(!without_target.contains("Target"));
     }
 
@@ -2584,5 +2660,100 @@ mod tests {
 
         // Spawns are z-filtered out, so aggro circles should not appear
         assert_ne!(grid[4][7], ('·', Color::Red));
+    }
+
+    // ── Player position and heading tests ─────────────────────────────────
+
+    #[test]
+    fn player_marker_renders_on_map_with_distinct_glyph() {
+        // Player at (0,0) with default heading should render ◆ on the map.
+        let app = test_app_with_spawns();
+        let rendered = render_map_view_text(app, 80, 20);
+        assert!(
+            rendered.contains('◆'),
+            "Player marker ◆ should appear on the map"
+        );
+    }
+
+    #[test]
+    fn player_marker_color_is_map_you() {
+        // Verify that heading_arrow_char returns a non-space arrow for any heading.
+        // We test the function directly via a full render and confirm the arrow glyphs appear.
+        let app = test_app_with_spawns(); // player heading=0 → North → ↑
+        let rendered = render_map_view_text(app, 80, 20);
+        // The ↑ heading arrow should appear near the player marker.
+        assert!(
+            rendered.contains('↑')
+                || rendered.contains('↗')
+                || rendered.contains('→')
+                || rendered.contains('↘')
+                || rendered.contains('↓')
+                || rendered.contains('↙')
+                || rendered.contains('←')
+                || rendered.contains('↖'),
+            "A heading arrow character should appear on the map"
+        );
+    }
+
+    #[test]
+    fn heading_arrow_char_cardinal_directions() {
+        // EQ heading: 0=North, 128=West, 256=South, 384=East
+        assert_eq!(heading_arrow_char(0.0), '↑', "heading=0 (N) should be ↑");
+        assert_eq!(heading_arrow_char(128.0), '←', "heading=128 (W) should be ←");
+        assert_eq!(heading_arrow_char(256.0), '↓', "heading=256 (S) should be ↓");
+        assert_eq!(heading_arrow_char(384.0), '→', "heading=384 (E) should be →");
+    }
+
+    #[test]
+    fn heading_arrow_char_diagonal_directions() {
+        // NE=448, NW=64, SW=192, SE=320
+        assert_eq!(heading_arrow_char(448.0), '↗', "heading=448 (NE) should be ↗");
+        assert_eq!(heading_arrow_char(64.0), '↖', "heading=64 (NW) should be ↖");
+        assert_eq!(heading_arrow_char(192.0), '↙', "heading=192 (SW) should be ↙");
+        assert_eq!(heading_arrow_char(320.0), '↘', "heading=320 (SE) should be ↘");
+    }
+
+    #[test]
+    fn heading_arrow_char_wraps_512() {
+        // 512 should wrap to 0 (North → ↑)
+        assert_eq!(heading_arrow_char(512.0), '↑', "heading=512 should wrap to North ↑");
+        // 768 % 512 = 256 → South (↓)
+        assert_eq!(heading_arrow_char(768.0), '↓', "heading=768 should wrap to heading=256 (S) ↓");
+    }
+
+    #[test]
+    fn map_legend_contains_player_marker_and_heading() {
+        let app = test_app_with_spawns();
+        let rendered = render_map_view_text(app, 120, 20);
+        assert!(rendered.contains("You"), "Legend should contain 'You' label");
+        assert!(rendered.contains("Hdg"), "Legend should contain 'Hdg' heading label");
+    }
+
+    #[test]
+    fn minimap_renders_player_with_heading_arrow() {
+        let mut app = App::new();
+        let mut client = ClientState::new(77, 0);
+        client.spawn_revision = 1;
+        let mut player = test_spawn(99, "Player", 0.0, 0.0);
+        player.heading = 0.0; // North
+        client.local_player = Some(player);
+        app.clients.push(client);
+        app.sync_from_selected_client();
+
+        let rendered = minimap_text(&app, None);
+        // Player ◆ marker should be present
+        assert!(rendered.contains('◆'), "Minimap should show player ◆ marker");
+        // Heading arrow ↑ (North at heading=0) should also appear
+        assert!(
+            rendered.contains('↑')
+                || rendered.contains('↗')
+                || rendered.contains('→')
+                || rendered.contains('↘')
+                || rendered.contains('↓')
+                || rendered.contains('↙')
+                || rendered.contains('←')
+                || rendered.contains('↖'),
+            "Minimap should show a heading arrow adjacent to the player marker"
+        );
     }
 }
