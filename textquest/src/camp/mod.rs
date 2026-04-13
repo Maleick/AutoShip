@@ -30,6 +30,8 @@ pub mod puller;
 pub mod recovery;
 /// Camp loop state machine — idle, pulling, fighting, looting, recovering.
 pub mod state;
+/// Tell relaying and chat forwarding — OpenVanilla MQ2RelayTells parity.
+pub mod tell_relay;
 /// Vendor automation — sell junk, buy supplies, inventory management.
 pub mod vendor;
 /// Skill leveling and training automation — tracks skill levels, mastery, and tradeskill sessions.
