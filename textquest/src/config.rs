@@ -228,6 +228,21 @@ pub struct DiscordConfig {
     /// Empty list disables remote command execution.
     #[serde(default)]
     pub command_allowed_senders: Vec<String>,
+    /// Per-chat-channel webhook routing for in-game chat relay.
+    ///
+    /// Keys match [`crate::discord::relay::ChatChannel::config_key`] values:
+    /// `"group"`, `"raid"`, `"guild"`, `"ooc"`, `"shout"`, `"say"`, `"tell"`.
+    ///
+    /// # TOML example
+    ///
+    /// ```toml
+    /// [discord.chat_channels]
+    /// group = "https://discord.com/api/webhooks/.../group-chat"
+    /// raid  = "https://discord.com/api/webhooks/.../raid-chat"
+    /// guild = "https://discord.com/api/webhooks/.../guild-chat"
+    /// ```
+    #[serde(default)]
+    pub chat_channels: std::collections::HashMap<String, String>,
 }
 
 impl Default for DiscordConfig {
@@ -242,6 +257,7 @@ impl Default for DiscordConfig {
             alert_mass_failures: true,
             alert_status: false,
             command_allowed_senders: Vec::new(),
+            chat_channels: std::collections::HashMap::new(),
         }
     }
 }
@@ -423,11 +439,6 @@ fn default_process_name() -> String {
 
 fn default_max_spawns() -> usize {
     2048
-}
-
-#[allow(dead_code)]
-fn default_enable_unsafe_hacks() -> bool {
-    false
 }
 
 impl AppConfig {
@@ -669,6 +680,30 @@ character = "Foo"
         assert!(cfg.alert_mass_failures);
         assert!(!cfg.alert_status);
         assert!(cfg.command_allowed_senders.is_empty());
+        assert!(cfg.chat_channels.is_empty());
+    }
+
+    #[test]
+    fn discord_config_chat_channels_parsed() {
+        let toml_str = r#"
+            [discord]
+            webhook_url = "https://example.com/webhook"
+
+            [discord.chat_channels]
+            group = "https://example.com/group"
+            raid  = "https://example.com/raid"
+        "#;
+        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.discord.chat_channels.len(), 2);
+        assert_eq!(
+            cfg.discord.chat_channels.get("group").unwrap(),
+            "https://example.com/group"
+        );
+        assert_eq!(
+            cfg.discord.chat_channels.get("raid").unwrap(),
+            "https://example.com/raid"
+        );
+        assert!(!cfg.discord.chat_channels.contains_key("guild"));
     }
 
     #[test]
