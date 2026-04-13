@@ -495,6 +495,93 @@ impl MemoryStore {
 
         serde_json::to_string_pretty(&export).context("Failed to serialize character export")
     }
+
+    // -- Memory decay by age (Issue #1018) --
+
+    /// Mark memories older than `days_threshold` days as decayed.
+    /// Returns the count of memories newly marked as decayed.
+    ///
+    /// This is a time-based decay distinct from `decay_tick` (which reduces importance
+    /// scores gradually). `decay_old_memories` is a hard cutoff for truly stale memories
+    /// that have not been rehearsed recently enough to survive.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the SQLite operation fails.
+    pub fn decay_old_memories(&self, days_threshold: u32) -> Result<usize> {
+        let rows = self
+            .conn
+            .execute(
+                "UPDATE memories
+                 SET decayed = 1
+                 WHERE decayed = 0
+                   AND created_at < datetime('now', ?1)",
+                params![format!("-{days_threshold} days")],
+            )
+            .context("Failed to decay old memories")?;
+
+        Ok(rows)
+    }
+
+    /// Build a context string for the LLM from recent memories.
+    ///
+    /// Memories that have been decayed receive a 0.5× weight multiplier on their
+    /// importance score for ranking purposes. All memories (decayed or not) are
+    /// eligible for inclusion so the LLM still has access to distant memories when
+    /// they are the only ones available — but fresh memories are weighted higher.
+    ///
+    /// Returns up to `limit` memory lines sorted by effective importance descending.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the recall or serialization fails.
+    pub fn get_context_for_llm(&self, character_id: ClientId, limit: usize) -> Result<String> {
+        // Pull all memories including decayed ones so we can apply the weight multiplier.
+        let mut stmt = self.conn.prepare(
+            "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, decayed
+             FROM memories
+             WHERE character_id = ?1
+             ORDER BY created_at DESC
+             LIMIT 10000",
+        )?;
+
+        let rows: Vec<MemoryRow> = stmt
+            .query_map(params![character_id], MemoryRow::from_row)?
+            .collect::<rusqlite::Result<_>>()
+            .context("Failed to query memories for LLM context")?;
+
+        // Apply 0.5× weight to decayed memories, then sort descending by effective importance.
+        let mut weighted: Vec<(f32, &MemoryRow)> = rows
+            .iter()
+            .map(|m| {
+                let effective = if m.decayed {
+                    m.importance * 0.5
+                } else {
+                    m.importance
+                };
+                (effective, m)
+            })
+            .collect();
+
+        weighted.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        weighted.truncate(limit);
+
+        let lines: Vec<String> = weighted
+            .into_iter()
+            .map(|(eff_importance, m)| {
+                format!(
+                    "[{}] ({}) {} importance={:.2}{}",
+                    m.created_at,
+                    m.zone.as_deref().unwrap_or("unknown"),
+                    m.event_type,
+                    eff_importance,
+                    if m.decayed { " [faded]" } else { "" },
+                )
+            })
+            .collect();
+
+        Ok(lines.join("\n"))
+    }
 }
 
 /// A row from the memories table.
@@ -1266,5 +1353,167 @@ mod tests {
         let loaded = store.get_speech_patterns(1).unwrap();
         assert!((loaded.vocabulary_level - 0.9).abs() < 0.01);
         assert_eq!(loaded.catchphrases, vec!["Indeed!"]);
+    }
+
+    // -- Tests for Issue #1018: decay_old_memories and get_context_for_llm --
+
+    /// Helper: insert a memory with a custom created_at timestamp (past).
+    fn record_aged_memory(
+        store: &MemoryStore,
+        character_id: ClientId,
+        days_old: i64,
+        importance: f32,
+    ) -> i64 {
+        let conn = store.connection();
+        let event_json = r#"{"Kill":{"target":"gnoll","zone":"bb"}}"#;
+        let offset = format!("-{days_old} days");
+        let sql = [
+            "INSERT INTO memories (character_id, event_type, event_json, mood_at_time, importance, created_at)",
+            " VALUES (?1, 'kill', ?3, 'Neutral', ?2, datetime('now', ?4))",
+        ]
+        .concat();
+        conn.execute(&sql, params![character_id, importance, event_json, offset])
+            .unwrap();
+        conn.last_insert_rowid()
+    }
+
+    #[test]
+    fn decay_old_memories_marks_old_as_decayed() {
+        let store = open_memory_store();
+        // Insert a 40-day-old memory
+        record_aged_memory(&store, 1, 40, 1.0);
+        // Insert a fresh memory
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
+            .unwrap();
+
+        let count = store.decay_old_memories(30).unwrap();
+        assert_eq!(count, 1, "Only the old memory should be decayed");
+
+        // Fresh memory should still be active
+        let active = store.recall_recent(1, 10).unwrap();
+        assert_eq!(active.len(), 1);
+        assert!(!active[0].decayed);
+    }
+
+    #[test]
+    fn decay_old_memories_returns_zero_when_none_qualify() {
+        let store = open_memory_store();
+        // Insert only fresh memories
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
+            .unwrap();
+        store
+            .record(1, &loot_event("sword", "bb"), MoodState::Excited, 1.0)
+            .unwrap();
+
+        let count = store.decay_old_memories(30).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn decay_old_memories_skips_already_decayed() {
+        let store = open_memory_store();
+        // Insert a 40-day-old memory
+        record_aged_memory(&store, 1, 40, 0.01);
+        // Manually decay it first via prune_low_importance
+        store.prune_low_importance(1, 0.1).unwrap();
+
+        // decay_old_memories should not double-count already decayed rows
+        let count = store.decay_old_memories(30).unwrap();
+        assert_eq!(
+            count, 0,
+            "Already-decayed memories should not be re-decayed"
+        );
+    }
+
+    #[test]
+    fn decay_old_memories_multiple_characters_isolated() {
+        let store = open_memory_store();
+        // Character 1: 40-day-old memory
+        record_aged_memory(&store, 1, 40, 1.0);
+        // Character 2: fresh memory only
+        store
+            .record(2, &kill_event("orc", "gfay"), MoodState::Neutral, 1.0)
+            .unwrap();
+
+        let count = store.decay_old_memories(30).unwrap();
+        // Only character 1's old memory should be decayed
+        assert_eq!(count, 1);
+        // Character 2's memory still accessible
+        let c2_memories = store.recall_recent(2, 10).unwrap();
+        assert_eq!(c2_memories.len(), 1);
+    }
+
+    #[test]
+    fn get_context_for_llm_returns_sorted_by_importance() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 5.0)
+            .unwrap();
+        store
+            .record(1, &loot_event("sword", "bb"), MoodState::Excited, 2.0)
+            .unwrap();
+        store
+            .record(1, &kill_event("orc", "gfay"), MoodState::Neutral, 8.0)
+            .unwrap();
+
+        let ctx = store.get_context_for_llm(1, 10).unwrap();
+        // Highest importance (8.0) should appear before lower ones
+        let pos_8 = ctx.find("importance=8.00").unwrap();
+        let pos_5 = ctx.find("importance=5.00").unwrap();
+        let pos_2 = ctx.find("importance=2.00").unwrap();
+        assert!(pos_8 < pos_5);
+        assert!(pos_5 < pos_2);
+    }
+
+    #[test]
+    fn get_context_for_llm_decayed_memories_weighted_half() {
+        let store = open_memory_store();
+        // Fresh memory with importance 3.0
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 3.0)
+            .unwrap();
+        // Old memory with importance 10.0 (but will be decayed)
+        record_aged_memory(&store, 1, 60, 10.0);
+
+        // Decay old memories
+        store.decay_old_memories(30).unwrap();
+
+        let ctx = store.get_context_for_llm(1, 10).unwrap();
+        // The decayed memory has effective importance 10.0 * 0.5 = 5.0 > 3.0
+        // So decayed memory should appear first (importance=5.00 [faded])
+        assert!(
+            ctx.contains("[faded]"),
+            "Decayed memories should be marked [faded]"
+        );
+        let pos_faded = ctx.find("[faded]").unwrap();
+        let pos_fresh = ctx.find("importance=3.00").unwrap();
+        // faded entry (effective 5.0) should come before fresh (3.0) since 5.0 > 3.0
+        assert!(
+            pos_faded < pos_fresh,
+            "Decayed memory with higher effective importance should rank first"
+        );
+    }
+
+    #[test]
+    fn get_context_for_llm_respects_limit() {
+        let store = open_memory_store();
+        for _ in 0..10 {
+            store
+                .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
+                .unwrap();
+        }
+
+        let ctx = store.get_context_for_llm(1, 3).unwrap();
+        let line_count = ctx.lines().count();
+        assert_eq!(line_count, 3, "Context should contain exactly limit lines");
+    }
+
+    #[test]
+    fn get_context_for_llm_empty_returns_empty_string() {
+        let store = open_memory_store();
+        let ctx = store.get_context_for_llm(99, 10).unwrap();
+        assert!(ctx.is_empty(), "Empty store should produce empty context");
     }
 }

@@ -36,6 +36,10 @@ fn default_trust() -> f32 {
     0.5
 }
 
+const fn default_memory_decay_days() -> u32 {
+    30
+}
+
 /// Per-character soul configuration.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CharacterSoulConfig {
@@ -207,6 +211,10 @@ pub struct SoulConfig {
     /// Discord bot personality for fleet commentary
     #[serde(default)]
     pub bot_personality: BotPersonalityConfig,
+    /// Number of days after which memories are considered stale and subject to time-based decay.
+    /// Memories older than this threshold are marked `decayed = 1` by `MemoryStore::decay_old_memories`.
+    #[serde(default = "default_memory_decay_days")]
+    pub memory_decay_days: u32,
 }
 
 impl Default for SoulConfig {
@@ -223,6 +231,7 @@ impl Default for SoulConfig {
             relationship: Vec::new(),
             llm: LlmConfig::default(),
             bot_personality: BotPersonalityConfig::default(),
+            memory_decay_days: default_memory_decay_days(),
         }
     }
 }
