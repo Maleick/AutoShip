@@ -15,11 +15,11 @@ def validate_l_line(line: str) -> str | None:
 
     for i, part in enumerate(parts):
         try:
-            if i < 6:  # coordinates
+            if i < 6:
                 v = float(part.strip())
                 if not (-1e6 < v < 1e6):
                     return f"L line: coordinate out of bounds: {v}"
-            else:  # color channels
+            else:
                 v = int(part.strip())
                 if not (0 <= v <= 255):
                     return f"L line: color {i - 6} out of range: {v}"
@@ -30,19 +30,19 @@ def validate_l_line(line: str) -> str | None:
 
 def validate_p_line(line: str) -> str | None:
     """Validate P (point) format: P x, y, z, r, g, b, size, label"""
-    parts = line[1:].strip().split(",", 7)  # max 8 parts (label can contain commas)
+    parts = line[1:].strip().split(",", 7)
     if len(parts) < 8:
         return f"P line: expected >=8 fields, got {len(parts)}"
 
     for i, part in enumerate(parts[:7]):
         try:
-            if i < 3:  # coordinates
+            if i < 3:
                 float(part.strip())
-            elif i < 6:  # color
+            elif i < 6:
                 v = int(part.strip())
                 if not (0 <= v <= 255):
                     return f"P line: color field out of range: {v}"
-            else:  # size
+            else:
                 v = int(part.strip())
                 if not (0 < v < 256):
                     return f"P line: size out of range: {v}"
@@ -94,7 +94,7 @@ def main() -> int:
         print("Map validation FAILED")
         for fname, errors in all_errors.items():
             print(f"\n{fname}:")
-            for err in errors[:10]:  # show first 10 errors per file
+            for err in errors[:10]:
                 print(f"  {err}")
             if len(errors) > 10:
                 print(f"  ... and {len(errors) - 10} more errors")
