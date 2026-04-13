@@ -2,6 +2,8 @@
 
 /// Soul audit logging — append-only JSONL log of key state changes.
 pub mod audit;
+/// Soul operator alerts and anomaly detection.
+pub mod alerts;
 /// Soul Engine configuration — API keys, model settings, personality tuning.
 pub mod config;
 /// Soul Engine configuration validation — validates SoulConfig fields and returns structured errors.

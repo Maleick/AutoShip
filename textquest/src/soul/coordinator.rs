@@ -152,6 +152,8 @@ pub struct SoulCoordinator {
     ipc_queue: IpcCommandQueue,
     /// Whether the named pipe is currently considered available.
     ipc_available: bool,
+    /// Detects runtime anomalies and generates operator alerts.
+    anomaly_detector: AnomalyDetector,
 }
 
 const MAX_PLAYER_CHAT_MESSAGE_BYTES: usize = 512;
@@ -181,6 +183,7 @@ impl SoulCoordinator {
             tick_count: 0,
             ipc_queue: IpcCommandQueue::new(),
             ipc_available: true,
+            anomaly_detector: AnomalyDetector::new(),
         })
     }
 
@@ -446,10 +449,11 @@ impl SoulCoordinator {
                 let priority = ipc_command_priority(&cmd);
                 self.ipc_queue.push(client_id, cmd, priority);
             }
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         }
 
-        commands
+        let alerts = self.anomaly_detector.check();
+        (commands, alerts)
     }
 
     /// Periodically generate and persist per-character memory summaries.
