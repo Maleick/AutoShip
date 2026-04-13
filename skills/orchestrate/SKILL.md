@@ -41,12 +41,8 @@ If any check fails, report and stop.
 ### Step 2: Detect Available Tools + Quota
 
 ```bash
-if [[ -f ".autoship/hooks_dir" ]]; then
-  bash "$(cat .autoship/hooks_dir)/detect-tools.sh"
-else
-  _DETECT=$(find "$HOME/.claude/plugins/cache/autoship" -maxdepth 4 -name "detect-tools.sh" 2>/dev/null | head -1)
-  if [[ -n "$_DETECT" ]]; then bash "$_DETECT"; else echo '{}'; fi
-fi
+_DETECT=$(find "$HOME/.claude/plugins/cache/autoship" -maxdepth 4 -name "detect-tools.sh" 2>/dev/null | head -1)
+if [[ -n "$_DETECT" ]]; then bash "$_DETECT"; else echo '{}'; fi
 ```
 
 Parse the JSON output. Record quota_pct for each tool. Tools with quota_pct < 10 are considered exhausted and skipped during dispatch.
