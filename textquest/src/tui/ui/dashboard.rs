@@ -1466,3 +1466,214 @@ fn draw_slot_profile(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) 
         area,
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── is_healer_class ──────────────────────────────────────────────
+
+    #[test]
+    fn healer_classes_are_recognized() {
+        assert!(is_healer_class(Some(EqClass::Cleric)));
+        assert!(is_healer_class(Some(EqClass::Druid)));
+        assert!(is_healer_class(Some(EqClass::Shaman)));
+        assert!(is_healer_class(Some(EqClass::Paladin)));
+    }
+
+    #[test]
+    fn non_healer_classes_rejected() {
+        assert!(!is_healer_class(Some(EqClass::Warrior)));
+        assert!(!is_healer_class(Some(EqClass::Wizard)));
+        assert!(!is_healer_class(Some(EqClass::Rogue)));
+        assert!(!is_healer_class(Some(EqClass::Enchanter)));
+        assert!(!is_healer_class(Some(EqClass::Necromancer)));
+        assert!(!is_healer_class(Some(EqClass::Bard)));
+        assert!(!is_healer_class(Some(EqClass::Ranger)));
+        assert!(!is_healer_class(Some(EqClass::Monk)));
+        assert!(!is_healer_class(Some(EqClass::Magician)));
+        assert!(!is_healer_class(Some(EqClass::ShadowKnight)));
+    }
+
+    #[test]
+    fn healer_class_none() {
+        assert!(!is_healer_class(None));
+    }
+
+    // ── is_debuffer_class ────────────────────────────────────────────
+
+    #[test]
+    fn debuffer_classes_are_recognized() {
+        assert!(is_debuffer_class(Some(EqClass::Enchanter)));
+        assert!(is_debuffer_class(Some(EqClass::Shaman)));
+        assert!(is_debuffer_class(Some(EqClass::Necromancer)));
+        assert!(is_debuffer_class(Some(EqClass::Bard)));
+    }
+
+    #[test]
+    fn non_debuffer_classes_rejected() {
+        assert!(!is_debuffer_class(Some(EqClass::Warrior)));
+        assert!(!is_debuffer_class(Some(EqClass::Cleric)));
+        assert!(!is_debuffer_class(Some(EqClass::Wizard)));
+        assert!(!is_debuffer_class(Some(EqClass::Rogue)));
+        assert!(!is_debuffer_class(Some(EqClass::Druid)));
+        assert!(!is_debuffer_class(Some(EqClass::Paladin)));
+        assert!(!is_debuffer_class(Some(EqClass::Ranger)));
+        assert!(!is_debuffer_class(Some(EqClass::Monk)));
+        assert!(!is_debuffer_class(Some(EqClass::Magician)));
+        assert!(!is_debuffer_class(Some(EqClass::ShadowKnight)));
+    }
+
+    #[test]
+    fn debuffer_class_none() {
+        assert!(!is_debuffer_class(None));
+    }
+
+    // ── group_focus_strip_height ─────────────────────────────────────
+
+    #[test]
+    fn strip_height_tall_terminal() {
+        let area = Rect::new(0, 0, 120, 40);
+        assert_eq!(group_focus_strip_height(area), 3);
+    }
+
+    #[test]
+    fn strip_height_at_threshold() {
+        let area = Rect::new(0, 0, 120, MIN_HEIGHT_FOR_FOCUS_STRIP);
+        assert_eq!(group_focus_strip_height(area), 3);
+    }
+
+    #[test]
+    fn strip_height_below_threshold() {
+        let area = Rect::new(0, 0, 120, MIN_HEIGHT_FOR_FOCUS_STRIP - 1);
+        assert_eq!(group_focus_strip_height(area), 0);
+    }
+
+    #[test]
+    fn strip_height_zero_height() {
+        let area = Rect::new(0, 0, 120, 0);
+        assert_eq!(group_focus_strip_height(area), 0);
+    }
+
+    // ── stacked_roster_min_height ────────────────────────────────────
+
+    #[test]
+    fn roster_min_height_tall() {
+        assert_eq!(
+            stacked_roster_min_height(STACKED_ROSTER_TALL_HEIGHT_THRESHOLD),
+            STACKED_ROSTER_MIN_TALL
+        );
+        assert_eq!(stacked_roster_min_height(50), STACKED_ROSTER_MIN_TALL);
+    }
+
+    #[test]
+    fn roster_min_height_medium() {
+        assert_eq!(
+            stacked_roster_min_height(STACKED_ROSTER_MEDIUM_HEIGHT_THRESHOLD),
+            STACKED_ROSTER_MIN_MEDIUM
+        );
+        assert_eq!(
+            stacked_roster_min_height(STACKED_ROSTER_TALL_HEIGHT_THRESHOLD - 1),
+            STACKED_ROSTER_MIN_MEDIUM
+        );
+    }
+
+    #[test]
+    fn roster_min_height_compact() {
+        assert_eq!(
+            stacked_roster_min_height(STACKED_ROSTER_COMPACT_HEIGHT_THRESHOLD),
+            STACKED_ROSTER_MIN_COMPACT
+        );
+        assert_eq!(
+            stacked_roster_min_height(STACKED_ROSTER_MEDIUM_HEIGHT_THRESHOLD - 1),
+            STACKED_ROSTER_MIN_COMPACT
+        );
+    }
+
+    #[test]
+    fn roster_min_height_tiny() {
+        assert_eq!(
+            stacked_roster_min_height(STACKED_ROSTER_COMPACT_HEIGHT_THRESHOLD - 1),
+            STACKED_ROSTER_MIN_TINY
+        );
+        assert_eq!(stacked_roster_min_height(0), STACKED_ROSTER_MIN_TINY);
+    }
+
+    // ── section_title ────────────────────────────────────────────────
+
+    #[test]
+    fn section_title_collapsed_with_key() {
+        let t = section_title("Character", Some("1"), true);
+        assert!(t.contains("Character"));
+        assert!(t.contains("[1]"));
+        assert!(t.contains('▶'));
+        assert!(!t.contains('▼'));
+    }
+
+    #[test]
+    fn section_title_expanded_with_key() {
+        let t = section_title("Groups", Some("2"), false);
+        assert!(t.contains("Groups"));
+        assert!(t.contains("[2]"));
+        assert!(t.contains('▼'));
+        assert!(!t.contains('▶'));
+    }
+
+    #[test]
+    fn section_title_no_key_hint() {
+        let t = section_title("Combat", None, true);
+        assert!(t.contains("Combat"));
+        assert!(t.contains('▶'));
+        assert!(!t.contains('['));
+    }
+
+    // ── natural_section_order ────────────────────────────────────────
+
+    #[test]
+    fn section_order_is_deterministic() {
+        assert!(
+            natural_section_order(OverviewSectionKind::Character)
+                < natural_section_order(OverviewSectionKind::SlotProfile)
+        );
+        assert!(
+            natural_section_order(OverviewSectionKind::SlotProfile)
+                < natural_section_order(OverviewSectionKind::Groups)
+        );
+        assert!(
+            natural_section_order(OverviewSectionKind::Groups)
+                < natural_section_order(OverviewSectionKind::Filters)
+        );
+        assert!(
+            natural_section_order(OverviewSectionKind::Filters)
+                < natural_section_order(OverviewSectionKind::Combat)
+        );
+        assert!(
+            natural_section_order(OverviewSectionKind::Combat)
+                < natural_section_order(OverviewSectionKind::Session)
+        );
+    }
+
+    #[test]
+    fn section_order_unique_per_kind() {
+        let orders: Vec<u8> = [
+            OverviewSectionKind::Character,
+            OverviewSectionKind::SlotProfile,
+            OverviewSectionKind::Groups,
+            OverviewSectionKind::Filters,
+            OverviewSectionKind::Combat,
+            OverviewSectionKind::Session,
+        ]
+        .iter()
+        .map(|k| natural_section_order(*k))
+        .collect();
+
+        let mut unique = orders.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(
+            orders.len(),
+            unique.len(),
+            "each section kind should map to a unique order"
+        );
+    }
+}

@@ -624,15 +624,9 @@ mod tests {
     #[test]
     fn fleet_plat_earned_since_aggregates_all_characters() {
         let store = MetricsStore::open_memory().unwrap();
-        store
-            .insert_plat("Char_A", 400, 400, None, None)
-            .unwrap();
-        store
-            .insert_plat("Char_B", 600, 600, None, None)
-            .unwrap();
-        store
-            .insert_plat("Char_A", -100, 300, None, None)
-            .unwrap(); // negative — not counted
+        store.insert_plat("Char_A", 400, 400, None, None).unwrap();
+        store.insert_plat("Char_B", 600, 600, None, None).unwrap();
+        store.insert_plat("Char_A", -100, 300, None, None).unwrap(); // negative — not counted
 
         let fleet = store
             .fleet_plat_earned_since("2000-01-01 00:00:00")

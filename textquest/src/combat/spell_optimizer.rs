@@ -60,13 +60,11 @@ impl SpellOptimizer {
     /// candidate pool is empty.
     #[must_use]
     pub fn best_efficiency(&self) -> Option<&SpellCandidate> {
-        self.candidates
-            .iter()
-            .max_by(|a, b| {
-                self.mana_efficiency(a)
-                    .partial_cmp(&self.mana_efficiency(b))
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+        self.candidates.iter().max_by(|a, b| {
+            self.mana_efficiency(a)
+                .partial_cmp(&self.mana_efficiency(b))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     }
 
     /// Return all spells whose cast time is at or below `max_ms`.
@@ -147,7 +145,13 @@ impl CastingPredictor {
 mod tests {
     use super::*;
 
-    fn make_spell(spell_id: u32, name: &str, mana_cost: u32, cast_time_ms: u32, damage: u32) -> SpellCandidate {
+    fn make_spell(
+        spell_id: u32,
+        name: &str,
+        mana_cost: u32,
+        cast_time_ms: u32,
+        damage: u32,
+    ) -> SpellCandidate {
         SpellCandidate {
             spell_id,
             name: name.to_string(),
@@ -166,7 +170,10 @@ mod tests {
         let opt = SpellOptimizer::new();
         let spell = make_spell(1, "Fireball", 100, 2500, 300);
         let eff = opt.mana_efficiency(&spell);
-        assert!((eff - 3.0_f32).abs() < f32::EPSILON, "expected 3.0, got {eff}");
+        assert!(
+            (eff - 3.0_f32).abs() < f32::EPSILON,
+            "expected 3.0, got {eff}"
+        );
     }
 
     #[test]
@@ -291,9 +298,9 @@ mod tests {
     #[test]
     fn test_ranked_by_efficiency_order() {
         let mut opt = SpellOptimizer::new();
-        opt.add_candidate(make_spell(1, "Low", 100, 2000, 100));   // eff 1.0
-        opt.add_candidate(make_spell(2, "High", 100, 2000, 500));  // eff 5.0
-        opt.add_candidate(make_spell(3, "Mid", 100, 2000, 300));   // eff 3.0
+        opt.add_candidate(make_spell(1, "Low", 100, 2000, 100)); // eff 1.0
+        opt.add_candidate(make_spell(2, "High", 100, 2000, 500)); // eff 5.0
+        opt.add_candidate(make_spell(3, "Mid", 100, 2000, 300)); // eff 3.0
         let ranked = opt.ranked_by_efficiency();
         assert_eq!(ranked[0].spell_id, 2, "highest first");
         assert_eq!(ranked[1].spell_id, 3);

@@ -1,9 +1,9 @@
 //! Soul Engine — LLM-driven character personalities, persistent memory, social dynamics.
 
-/// Soul audit logging — append-only JSONL log of key state changes.
-pub mod audit;
 /// Soul operator alerts and anomaly detection.
 pub mod alerts;
+/// Soul audit logging — append-only JSONL log of key state changes.
+pub mod audit;
 /// Soul Engine configuration — API keys, model settings, personality tuning.
 pub mod config;
 /// Soul Engine configuration validation — validates SoulConfig fields and returns structured errors.
@@ -26,7 +26,7 @@ pub mod personality;
 pub mod recovery;
 /// Social dynamics — inter-character relationships, group cohesion, banter triggers.
 pub mod social;
-/// Game-state suppression rules — prevent soul actions from interfering with orchestrator loops.
-pub mod suppression;
 /// Speech style evolution — catchphrase learning and adoption mechanics.
 pub mod speech_evolution;
+/// Game-state suppression rules — prevent soul actions from interfering with orchestrator loops.
+pub mod suppression;

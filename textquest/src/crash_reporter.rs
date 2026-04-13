@@ -187,10 +187,19 @@ mod tests {
         reporter.record_context(make_ctx("Kira"));
 
         let report = reporter.format_report("Kira").expect("report should exist");
-        assert!(report.contains("Kira"), "report should include character name");
+        assert!(
+            report.contains("Kira"),
+            "report should include character name"
+        );
         assert!(report.contains("1234"), "report should include pid");
-        assert!(report.contains("East Commonlands"), "report should include zone");
-        assert!(report.contains("combat"), "report should include last_state");
+        assert!(
+            report.contains("East Commonlands"),
+            "report should include zone"
+        );
+        assert!(
+            report.contains("combat"),
+            "report should include last_state"
+        );
         assert!(report.contains("line1"), "report should include log tail");
     }
 

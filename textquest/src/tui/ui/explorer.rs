@@ -137,3 +137,87 @@ pub fn draw_explorer_panel(frame: &mut Frame, area: Rect, app: &mut App) {
     ]);
     frame.render_widget(Paragraph::new(footer).wrap(Wrap { trim: true }), chunks[1]);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── usability_color ─────────────────────────────────────────────
+
+    #[test]
+    fn usability_color_client_authoritative() {
+        assert_eq!(usability_color(Some("client_authoritative")), Color::Green);
+    }
+
+    #[test]
+    fn usability_color_hybrid() {
+        assert_eq!(usability_color(Some("hybrid")), Color::Yellow);
+    }
+
+    #[test]
+    fn usability_color_untested() {
+        assert_eq!(usability_color(Some("untested")), Color::DarkGray);
+    }
+
+    #[test]
+    fn usability_color_server_validated() {
+        assert_eq!(usability_color(Some("server_validated")), Color::Red);
+    }
+
+    #[test]
+    fn usability_color_not_applicable() {
+        assert_eq!(usability_color(Some("not_applicable")), Color::DarkGray);
+    }
+
+    #[test]
+    fn usability_color_none() {
+        assert_eq!(usability_color(None), Color::DarkGray);
+    }
+
+    #[test]
+    fn usability_color_unknown_string() {
+        assert_eq!(usability_color(Some("something_else")), Color::DarkGray);
+    }
+
+    // ── usability_label ─────────────────────────────────────────────
+
+    #[test]
+    fn usability_label_client_authoritative() {
+        assert_eq!(usability_label(Some("client_authoritative")), "client");
+    }
+
+    #[test]
+    fn usability_label_hybrid() {
+        assert_eq!(usability_label(Some("hybrid")), "hybrid");
+    }
+
+    #[test]
+    fn usability_label_untested() {
+        assert_eq!(usability_label(Some("untested")), "untested");
+    }
+
+    #[test]
+    fn usability_label_server_validated() {
+        assert_eq!(usability_label(Some("server_validated")), "server");
+    }
+
+    #[test]
+    fn usability_label_not_applicable() {
+        assert_eq!(usability_label(Some("not_applicable")), "n/a");
+    }
+
+    #[test]
+    fn usability_label_none() {
+        assert_eq!(usability_label(None), "?");
+    }
+
+    #[test]
+    fn usability_label_unknown_string() {
+        assert_eq!(usability_label(Some("random")), "?");
+    }
+
+    #[test]
+    fn usability_label_empty_string() {
+        assert_eq!(usability_label(Some("")), "?");
+    }
+}

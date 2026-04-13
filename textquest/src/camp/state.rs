@@ -393,8 +393,7 @@ impl CampLoop {
         }
 
         // Transition to Recovery state when deaths are detected (if not already there).
-        if self.recovery.recovery_in_progress()
-            && !matches!(self.state, CampState::Recovery { .. })
+        if self.recovery.recovery_in_progress() && !matches!(self.state, CampState::Recovery { .. })
         {
             self.transition_to_recovery(&mut commands, snapshot);
             return commands;
@@ -520,7 +519,10 @@ impl CampLoop {
                     self.transition_to_idle(&mut commands, snapshot);
                 }
             }
-            CampState::Recovery { started_tick, safe_to_rez } => {
+            CampState::Recovery {
+                started_tick,
+                safe_to_rez,
+            } => {
                 // Safety validation: only rez when out of combat.
                 let currently_safe = !Self::any_in_combat(snapshot);
 
@@ -1569,7 +1571,13 @@ mod tests {
         };
         camp.tick(Some(&snap));
         assert!(
-            matches!(camp.state, CampState::Recovery { safe_to_rez: true, .. }),
+            matches!(
+                camp.state,
+                CampState::Recovery {
+                    safe_to_rez: true,
+                    ..
+                }
+            ),
             "Should be safe_to_rez when no one is in combat"
         );
     }
@@ -1591,7 +1599,13 @@ mod tests {
         };
         camp.tick(Some(&snap));
         assert!(
-            matches!(camp.state, CampState::Recovery { safe_to_rez: false, .. }),
+            matches!(
+                camp.state,
+                CampState::Recovery {
+                    safe_to_rez: false,
+                    ..
+                }
+            ),
             "Should not be safe_to_rez when someone is in combat"
         );
     }
@@ -1677,7 +1691,9 @@ mod tests {
         let cmds = camp.tick(Some(&snap));
         // No rez commands when unsafe
         assert!(
-            !cmds.iter().any(|(pid, cmd)| *pid == 101 && cmd.contains("/cast")),
+            !cmds
+                .iter()
+                .any(|(pid, cmd)| *pid == 101 && cmd.contains("/cast")),
             "Should not cast rez when in combat"
         );
     }

@@ -242,8 +242,10 @@ fn build_app(state: Arc<AppState>) -> Router {
         // The middleware is a no-op when TEXTQUEST_API_TOKEN is unset (backward compatible).
         .nest(
             "/api",
-            build_api_router()
-                .layer(middleware::from_fn_with_state(state.clone(), api_token_auth)),
+            build_api_router().layer(middleware::from_fn_with_state(
+                state.clone(),
+                api_token_auth,
+            )),
         )
         .route("/ws", get(ws::ws_handler))
         .fallback_service(serve_spa)

@@ -12,6 +12,8 @@ pub mod class_config;
 pub mod collectibles;
 /// Camp loop configuration — timers, thresholds, zone settings.
 pub mod config;
+/// Event trigger system — configurable condition → action rules for game events (OpenVanilla parity).
+pub mod event_triggers;
 /// Auto-forage automation — periodic `/forage` command dispatch.
 pub mod forage;
 /// Hunt mode — patrol-based pulling with waypoint routes.
@@ -36,7 +38,3 @@ pub mod state;
 pub mod tell_relay;
 /// Vendor automation — sell junk, buy supplies, inventory management.
 pub mod vendor;
-/// Event trigger system — configurable condition → action rules for game events (OpenVanilla parity).
-pub mod event_triggers;
-/// Skill leveling and training automation — tracks skill levels, mastery, and tradeskill sessions.
-pub mod skill_tracker;

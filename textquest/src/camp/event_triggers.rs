@@ -62,9 +62,10 @@ impl TriggerCondition {
             (TriggerCondition::SpawnDeath { name_contains }, GameEvent::SpawnDied { name }) => {
                 Self::ascii_icontains(name, name_contains)
             }
-            (TriggerCondition::PlayerDeath { character }, GameEvent::PlayerDied { character: c }) => {
-                Self::ascii_ieq(c, character)
-            }
+            (
+                TriggerCondition::PlayerDeath { character },
+                GameEvent::PlayerDied { character: c },
+            ) => Self::ascii_ieq(c, character),
             (TriggerCondition::ChatMessage { pattern }, GameEvent::ChatReceived { message }) => {
                 Self::ascii_icontains(message, pattern)
             }
@@ -106,7 +107,11 @@ pub struct EventTrigger {
 
 impl EventTrigger {
     /// Create a new enabled trigger with zero fire count.
-    pub fn new(name: impl Into<String>, condition: TriggerCondition, action: TriggerAction) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        condition: TriggerCondition,
+        action: TriggerAction,
+    ) -> Self {
         Self {
             name: name.into(),
             condition,
@@ -162,72 +167,126 @@ mod tests {
 
     #[test]
     fn spawn_death_matches_substring_case_insensitive() {
-        let cond = TriggerCondition::SpawnDeath { name_contains: "lord".into() };
-        assert!(cond.matches(&GameEvent::SpawnDied { name: "a Gnoll Lord".into() }));
-        assert!(cond.matches(&GameEvent::SpawnDied { name: "LORD COMMANDER".into() }));
-        assert!(!cond.matches(&GameEvent::SpawnDied { name: "a skeleton".into() }));
+        let cond = TriggerCondition::SpawnDeath {
+            name_contains: "lord".into(),
+        };
+        assert!(cond.matches(&GameEvent::SpawnDied {
+            name: "a Gnoll Lord".into()
+        }));
+        assert!(cond.matches(&GameEvent::SpawnDied {
+            name: "LORD COMMANDER".into()
+        }));
+        assert!(!cond.matches(&GameEvent::SpawnDied {
+            name: "a skeleton".into()
+        }));
     }
 
     #[test]
     fn spawn_death_does_not_match_other_events() {
-        let cond = TriggerCondition::SpawnDeath { name_contains: "gnoll".into() };
-        assert!(!cond.matches(&GameEvent::PlayerDied { character: "gnoll".into() }));
-        assert!(!cond.matches(&GameEvent::ChatReceived { message: "a gnoll died".into() }));
+        let cond = TriggerCondition::SpawnDeath {
+            name_contains: "gnoll".into(),
+        };
+        assert!(!cond.matches(&GameEvent::PlayerDied {
+            character: "gnoll".into()
+        }));
+        assert!(!cond.matches(&GameEvent::ChatReceived {
+            message: "a gnoll died".into()
+        }));
     }
 
     #[test]
     fn player_death_matches_case_insensitive() {
-        let cond = TriggerCondition::PlayerDeath { character: "Kira".into() };
-        assert!(cond.matches(&GameEvent::PlayerDied { character: "kira".into() }));
-        assert!(cond.matches(&GameEvent::PlayerDied { character: "KIRA".into() }));
-        assert!(!cond.matches(&GameEvent::PlayerDied { character: "Kara".into() }));
+        let cond = TriggerCondition::PlayerDeath {
+            character: "Kira".into(),
+        };
+        assert!(cond.matches(&GameEvent::PlayerDied {
+            character: "kira".into()
+        }));
+        assert!(cond.matches(&GameEvent::PlayerDied {
+            character: "KIRA".into()
+        }));
+        assert!(!cond.matches(&GameEvent::PlayerDied {
+            character: "Kara".into()
+        }));
     }
 
     #[test]
     fn player_death_does_not_match_spawn_death() {
-        let cond = TriggerCondition::PlayerDeath { character: "Kira".into() };
-        assert!(!cond.matches(&GameEvent::SpawnDied { name: "Kira".into() }));
+        let cond = TriggerCondition::PlayerDeath {
+            character: "Kira".into(),
+        };
+        assert!(!cond.matches(&GameEvent::SpawnDied {
+            name: "Kira".into()
+        }));
     }
 
     #[test]
     fn chat_message_matches_substring_case_insensitive() {
-        let cond = TriggerCondition::ChatMessage { pattern: "tell me".into() };
-        assert!(cond.matches(&GameEvent::ChatReceived { message: "Kira tells you, 'Tell me more'".into() }));
-        assert!(cond.matches(&GameEvent::ChatReceived { message: "TELL ME NOW".into() }));
-        assert!(!cond.matches(&GameEvent::ChatReceived { message: "silence".into() }));
+        let cond = TriggerCondition::ChatMessage {
+            pattern: "tell me".into(),
+        };
+        assert!(cond.matches(&GameEvent::ChatReceived {
+            message: "Kira tells you, 'Tell me more'".into()
+        }));
+        assert!(cond.matches(&GameEvent::ChatReceived {
+            message: "TELL ME NOW".into()
+        }));
+        assert!(!cond.matches(&GameEvent::ChatReceived {
+            message: "silence".into()
+        }));
     }
 
     #[test]
     fn chat_message_does_not_match_other_events() {
-        let cond = TriggerCondition::ChatMessage { pattern: "death".into() };
-        assert!(!cond.matches(&GameEvent::SpawnDied { name: "death knight".into() }));
+        let cond = TriggerCondition::ChatMessage {
+            pattern: "death".into(),
+        };
+        assert!(!cond.matches(&GameEvent::SpawnDied {
+            name: "death knight".into()
+        }));
     }
 
     #[test]
     fn level_up_matches_exact_character_case_insensitive() {
-        let cond = TriggerCondition::LevelUp { character: "Warrior".into() };
-        assert!(cond.matches(&GameEvent::LeveledUp { character: "warrior".into() }));
-        assert!(cond.matches(&GameEvent::LeveledUp { character: "WARRIOR".into() }));
-        assert!(!cond.matches(&GameEvent::LeveledUp { character: "Rogue".into() }));
+        let cond = TriggerCondition::LevelUp {
+            character: "Warrior".into(),
+        };
+        assert!(cond.matches(&GameEvent::LeveledUp {
+            character: "warrior".into()
+        }));
+        assert!(cond.matches(&GameEvent::LeveledUp {
+            character: "WARRIOR".into()
+        }));
+        assert!(!cond.matches(&GameEvent::LeveledUp {
+            character: "Rogue".into()
+        }));
     }
 
     #[test]
     fn any_death_matches_spawn_died() {
         let cond = TriggerCondition::AnyDeath;
-        assert!(cond.matches(&GameEvent::SpawnDied { name: "a goblin".into() }));
+        assert!(cond.matches(&GameEvent::SpawnDied {
+            name: "a goblin".into()
+        }));
     }
 
     #[test]
     fn any_death_matches_player_died() {
         let cond = TriggerCondition::AnyDeath;
-        assert!(cond.matches(&GameEvent::PlayerDied { character: "Kira".into() }));
+        assert!(cond.matches(&GameEvent::PlayerDied {
+            character: "Kira".into()
+        }));
     }
 
     #[test]
     fn any_death_does_not_match_chat_or_levelup() {
         let cond = TriggerCondition::AnyDeath;
-        assert!(!cond.matches(&GameEvent::ChatReceived { message: "someone died".into() }));
-        assert!(!cond.matches(&GameEvent::LeveledUp { character: "Kira".into() }));
+        assert!(!cond.matches(&GameEvent::ChatReceived {
+            message: "someone died".into()
+        }));
+        assert!(!cond.matches(&GameEvent::LeveledUp {
+            character: "Kira".into()
+        }));
     }
 
     // ── fire_count ────────────────────────────────────────────────────────────
@@ -237,11 +296,15 @@ mod tests {
         let mut engine = TriggerEngine::new();
         engine.add_trigger(EventTrigger::new(
             "on gnoll death",
-            TriggerCondition::SpawnDeath { name_contains: "gnoll".into() },
+            TriggerCondition::SpawnDeath {
+                name_contains: "gnoll".into(),
+            },
             TriggerAction::LogMessage("gnoll died".into()),
         ));
 
-        let event = GameEvent::SpawnDied { name: "a gnoll warrior".into() };
+        let event = GameEvent::SpawnDied {
+            name: "a gnoll warrior".into(),
+        };
         engine.evaluate(&event);
         engine.evaluate(&event);
         assert_eq!(engine.triggers[0].fire_count, 2);
@@ -252,11 +315,15 @@ mod tests {
         let mut engine = TriggerEngine::new();
         engine.add_trigger(EventTrigger::new(
             "on gnoll death",
-            TriggerCondition::SpawnDeath { name_contains: "gnoll".into() },
+            TriggerCondition::SpawnDeath {
+                name_contains: "gnoll".into(),
+            },
             TriggerAction::LogMessage("gnoll died".into()),
         ));
 
-        engine.evaluate(&GameEvent::SpawnDied { name: "a skeleton".into() });
+        engine.evaluate(&GameEvent::SpawnDied {
+            name: "a skeleton".into(),
+        });
         assert_eq!(engine.triggers[0].fire_count, 0);
     }
 
@@ -273,7 +340,9 @@ mod tests {
         trigger.enabled = false;
         engine.add_trigger(trigger);
 
-        let actions = engine.evaluate(&GameEvent::SpawnDied { name: "a gnoll".into() });
+        let actions = engine.evaluate(&GameEvent::SpawnDied {
+            name: "a gnoll".into(),
+        });
         assert!(actions.is_empty());
         assert_eq!(engine.triggers[0].fire_count, 0);
     }
@@ -295,11 +364,15 @@ mod tests {
         ));
         engine.add_trigger(EventTrigger::new(
             "gnoll death cmd",
-            TriggerCondition::SpawnDeath { name_contains: "gnoll".into() },
+            TriggerCondition::SpawnDeath {
+                name_contains: "gnoll".into(),
+            },
             TriggerAction::SendIpcCommand("/say gnoll down".into()),
         ));
 
-        let actions = engine.evaluate(&GameEvent::SpawnDied { name: "a gnoll shaman".into() });
+        let actions = engine.evaluate(&GameEvent::SpawnDied {
+            name: "a gnoll shaman".into(),
+        });
         assert_eq!(actions.len(), 3);
         assert!(actions.contains(&TriggerAction::LogMessage("something died".into())));
         assert!(actions.contains(&TriggerAction::DiscordAlert("mob down".into())));
@@ -320,11 +393,15 @@ mod tests {
         ));
         engine.add_trigger(EventTrigger::new(
             "chat watcher",
-            TriggerCondition::ChatMessage { pattern: "tell".into() },
+            TriggerCondition::ChatMessage {
+                pattern: "tell".into(),
+            },
             TriggerAction::DiscordAlert("chat alert".into()),
         ));
 
-        let actions = engine.evaluate(&GameEvent::SpawnDied { name: "a goblin".into() });
+        let actions = engine.evaluate(&GameEvent::SpawnDied {
+            name: "a goblin".into(),
+        });
         assert_eq!(actions.len(), 1);
         assert_eq!(engine.triggers[0].fire_count, 1);
         assert_eq!(engine.triggers[1].fire_count, 0);
@@ -337,11 +414,18 @@ mod tests {
         let mut engine = TriggerEngine::new();
         engine.add_trigger(EventTrigger::new(
             "cmd trigger",
-            TriggerCondition::PlayerDeath { character: "Kira".into() },
+            TriggerCondition::PlayerDeath {
+                character: "Kira".into(),
+            },
             TriggerAction::SendIpcCommand("/corpse".into()),
         ));
-        let actions = engine.evaluate(&GameEvent::PlayerDied { character: "Kira".into() });
-        assert_eq!(actions, vec![TriggerAction::SendIpcCommand("/corpse".into())]);
+        let actions = engine.evaluate(&GameEvent::PlayerDied {
+            character: "Kira".into(),
+        });
+        assert_eq!(
+            actions,
+            vec![TriggerAction::SendIpcCommand("/corpse".into())]
+        );
     }
 
     #[test]
@@ -349,10 +433,17 @@ mod tests {
         let mut engine = TriggerEngine::new();
         engine.add_trigger(EventTrigger::new(
             "discord trigger",
-            TriggerCondition::LevelUp { character: "Kira".into() },
+            TriggerCondition::LevelUp {
+                character: "Kira".into(),
+            },
             TriggerAction::DiscordAlert("Kira dinged!".into()),
         ));
-        let actions = engine.evaluate(&GameEvent::LeveledUp { character: "Kira".into() });
-        assert_eq!(actions, vec![TriggerAction::DiscordAlert("Kira dinged!".into())]);
+        let actions = engine.evaluate(&GameEvent::LeveledUp {
+            character: "Kira".into(),
+        });
+        assert_eq!(
+            actions,
+            vec![TriggerAction::DiscordAlert("Kira dinged!".into())]
+        );
     }
 }

@@ -248,11 +248,7 @@ fn run_loop(
             && app.hex_state.hex_address != 0
         {
             // Use the first live (non-demo) client PID.
-            let pid = app
-                .clients
-                .iter()
-                .find(|c| !c.is_demo)
-                .map(|c| c.pid);
+            let pid = app.clients.iter().find(|c| !c.is_demo).map(|c| c.pid);
             if let Some(pid) = pid {
                 if let Some((address, bytes)) =
                     orchestrator.read_memory(pid, app.hex_state.hex_address, 0x200)

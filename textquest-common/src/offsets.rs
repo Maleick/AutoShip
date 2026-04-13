@@ -248,6 +248,26 @@ pub const EVERQUEST_SET_GAME_STATE: u64 = 0x0000_0000_0000_0000;
 /// `CDisplay::RealRender_World` — render loop (alternative hook point)
 pub const REAL_RENDER_WORLD: u64 = 0x0001_401A_4320;
 
+/// `EQGraphicsDLL::RealRender_World` — render entry point in eqgraphicsdx9.dll.
+/// Source: eqgraphicsdx9.h (placeholder pending Ghidra verification)
+pub const EQGRAPHICS_REALRENDER_WORLD: u64 = 0x0001_40A0_0100;
+
+/// `EQGraphicsDLL::DeviceReset` — D3D device reset hook point.
+/// Source: eqgraphicsdx9.h (placeholder pending Ghidra verification)
+pub const EQGRAPHICS_DEVICE_RESET: u64 = 0x0001_40A0_0200;
+
+/// `EQGraphicsDLL::InitRender` — one-time render system initialization.
+/// Source: eqgraphicsdx9.h (placeholder pending Ghidra verification)
+pub const EQGRAPHICS_INIT_RENDER: u64 = 0x0001_40A0_0300;
+
+/// `EQGraphicsDLL::RenderFrame` — per-frame render call in graphics DLL.
+/// Source: eqgraphicsdx9.h (placeholder pending Ghidra verification)
+pub const EQGRAPHICS_RENDER_FRAME: u64 = 0x0001_40A0_0400;
+
+/// `EQGraphicsDLL::DXPresent` — IDXGISwapChain::Present wrapper.
+/// Source: eqgraphicsdx9.h (placeholder pending Ghidra verification)
+pub const EQGRAPHICS_DX_PRESENT: u64 = 0x0001_40A0_0500;
+
 /// `pinstSGraphicsEngine` — pointer to SGraphicsEngine struct.
 /// SGraphicsEngine+0x18 = CRender*. CRender+0x0F00 = DeviceImpl* (DX9 wrapper over DX11).
 /// DeviceImpl+0x28 = Device*. Device+0x18 = SwapChain (inline). SwapChain+0x00 = ID3D11Device*.
@@ -499,6 +519,19 @@ pub mod eqmain {
 
     /// CharacterSelectWnd::CharacterList::set_focus helper
     pub const CHAR_SELECT_SET_FOCUS: u64 = 0x0001_8001_0240;
+
+    // ─── Prefixed aliases (test / scan_engine compatibility) ───
+
+    /// Alias for [`CHAR_SELECT_ENTER_WORLD`].
+    pub const EQMAIN_CHAR_SELECT_ENTER_WORLD: u64 = CHAR_SELECT_ENTER_WORLD;
+    /// Alias for [`SERVER_SELECT`].
+    pub const EQMAIN_SERVER_SELECT: u64 = SERVER_SELECT;
+    /// Alias for [`HANDLE_SPLASH`].
+    pub const EQMAIN_HANDLE_SPLASH: u64 = HANDLE_SPLASH;
+    /// Alias for [`CHAR_SELECT_SELECT_CHARACTER`].
+    pub const EQMAIN_CHAR_SELECT_SELECT_CHARACTER: u64 = CHAR_SELECT_SELECT_CHARACTER;
+    /// Alias for [`CHAR_SELECT_SET_FOCUS`].
+    pub const EQMAIN_CHAR_SELECT_SET_FOCUS: u64 = CHAR_SELECT_SET_FOCUS;
 
     // ─── Login pointer addresses (preferred base) ───
 

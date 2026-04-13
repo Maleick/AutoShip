@@ -251,8 +251,12 @@ impl OrchestratorLoop {
                         }
 
                         if self.timing_correction_enabled {
-                            self.orchestrator
-                                .send_ipc_command(pid, textquest_common::ipc::Command::SetTimingCorrection { enabled: true });
+                            self.orchestrator.send_ipc_command(
+                                pid,
+                                textquest_common::ipc::Command::SetTimingCorrection {
+                                    enabled: true,
+                                },
+                            );
                         }
 
                         tracing::info!(

@@ -740,16 +740,15 @@ pub fn draw_hook_rotation_panel(frame: &mut Frame, area: ratatui::layout::Rect, 
                 )),
                 Cell::from(Span::styled(
                     state_label,
-                    Style::default().fg(state_color).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(state_color)
+                        .add_modifier(Modifier::BOLD),
                 )),
                 Cell::from(Span::styled(
                     last_rotated,
                     Style::default().fg(text_secondary),
                 )),
-                Cell::from(Span::styled(
-                    next_rotation,
-                    Style::default().fg(text_muted),
-                )),
+                Cell::from(Span::styled(next_rotation, Style::default().fg(text_muted))),
             ])
         })
         .collect();

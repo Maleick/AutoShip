@@ -496,3 +496,71 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         cols[1],
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use textquest_common::nav::{NavStatus, PauseReason};
+
+    fn test_theme() -> crate::tui::theme::Theme {
+        crate::tui::theme::dark_modern()
+    }
+
+    #[test]
+    fn nav_color_moving() {
+        let t = test_theme();
+        let status = NavStatus::Moving {
+            waypoint_index: 1,
+            waypoint_count: 5,
+            distance_remaining: 100.0,
+        };
+        assert_eq!(nav_status_color(&status, &t), t.text_highlight);
+    }
+
+    #[test]
+    fn nav_color_paused() {
+        let t = test_theme();
+        let status = NavStatus::Paused {
+            reason: PauseReason::LowHp,
+            waypoint_index: 0,
+            waypoint_count: 3,
+            distance_remaining: 50.0,
+        };
+        assert_eq!(nav_status_color(&status, &t), t.text_secondary);
+    }
+
+    #[test]
+    fn nav_color_arrived() {
+        let t = test_theme();
+        let status = NavStatus::Arrived;
+        assert_eq!(nav_status_color(&status, &t), t.hp_high);
+    }
+
+    #[test]
+    fn nav_color_stuck() {
+        let t = test_theme();
+        let status = NavStatus::Stuck {
+            recovery_attempt: 1,
+        };
+        assert_eq!(nav_status_color(&status, &t), t.hp_low);
+    }
+
+    #[test]
+    fn nav_color_idle_falls_through() {
+        let t = test_theme();
+        let status = NavStatus::Idle;
+        assert_eq!(nav_status_color(&status, &t), t.text_muted);
+    }
+
+    #[test]
+    fn nav_color_following_falls_through() {
+        let t = test_theme();
+        let status = NavStatus::Following {
+            leader_name: "Testchar".to_string(),
+            distance_to_anchor: 10.0,
+            returning: false,
+        };
+        // Following is not moving/paused/arrived/stuck, so falls to text_muted
+        assert_eq!(nav_status_color(&status, &t), t.text_muted);
+    }
+}

@@ -144,7 +144,13 @@ impl PlatTracker {
     /// Record a platinum event, updating internal state.
     ///
     /// Returns the computed `PlatEvent` with delta filled in.
-    pub fn record(&mut self, pid: u32, character: &str, new_balance: i64, timestamp: i64) -> PlatEvent {
+    pub fn record(
+        &mut self,
+        pid: u32,
+        character: &str,
+        new_balance: i64,
+        timestamp: i64,
+    ) -> PlatEvent {
         self.record_with_source(pid, character, new_balance, None, timestamp)
     }
 
@@ -159,7 +165,11 @@ impl PlatTracker {
         source: Option<String>,
         timestamp: i64,
     ) -> PlatEvent {
-        let prev = self.last_balance.get(character).copied().unwrap_or(new_balance);
+        let prev = self
+            .last_balance
+            .get(character)
+            .copied()
+            .unwrap_or(new_balance);
         let delta = new_balance - prev;
         self.last_balance.insert(character.to_owned(), new_balance);
         if delta > 0 {
@@ -441,7 +451,7 @@ mod tests {
         let mut tracker = PlatTracker::new(0);
         tracker.record(1, "Char_A", 1000, 100);
         tracker.record(1, "Char_A", 1500, 200); // +500 earned
-        tracker.record(1, "Char_A", 800, 300);  // -700 spent — should NOT reduce earned
+        tracker.record(1, "Char_A", 800, 300); // -700 spent — should NOT reduce earned
         assert_eq!(tracker.session_earned("Char_A"), 500);
     }
 
@@ -474,7 +484,7 @@ mod tests {
         // Here, earned = 3600 and with session_start = 0 and now = 3600,
         // elapsed = 3600, so (3600 / 3600) * 3600 = 3600 plat/hr.
         let mut tracker = PlatTracker::new(0);
-        tracker.record(1, "Char_A", 0, 0);   // baseline
+        tracker.record(1, "Char_A", 0, 0); // baseline
         tracker.record(1, "Char_A", 3600, 1); // sets total earned to 3600; rate is checked at now = 3600
         let pph = tracker.plat_per_hour("Char_A", 3600);
         assert!((pph - 3600.0).abs() < 0.01, "expected ~3600, got {pph}");

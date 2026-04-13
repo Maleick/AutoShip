@@ -341,7 +341,8 @@ impl SoulCoordinator {
                         // Don't start this idle behavior; clear the scheduler's active state
                         // so it can retry once suppression lifts.
                         soul.idle.interrupt();
-                    } else if self.suppression
+                    } else if self
+                        .suppression
                         .should_suppress_behavior_for_casting(&active.behavior, suppress_ctx)
                     {
                         // Don't start this movement-heavy behavior during casting; clear the
@@ -1118,7 +1119,11 @@ mod tests {
     fn ipc_queue_overflow_with_only_high_priority_is_capped() {
         let mut queue = IpcCommandQueue::new();
         for i in 0..IPC_QUEUE_MAX {
-            queue.push(i as ClientId, Command::StopMovement, IpcCommandPriority::High);
+            queue.push(
+                i as ClientId,
+                Command::StopMovement,
+                IpcCommandPriority::High,
+            );
         }
         assert_eq!(queue.len(), IPC_QUEUE_MAX);
 

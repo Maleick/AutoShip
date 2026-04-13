@@ -2198,7 +2198,10 @@ mod tests {
 
         // ms_until_next_rotation should be close to 2000ms.
         let remaining = entry.ms_until_next_rotation().unwrap();
-        assert!(remaining <= 2_000, "remaining {remaining}ms > interval 2000ms");
+        assert!(
+            remaining <= 2_000,
+            "remaining {remaining}ms > interval 2000ms"
+        );
     }
 
     #[test]
@@ -2255,5 +2258,133 @@ mod tests {
             state.entries.iter().find(|e| e.name == name).unwrap().state,
             HookSlotState::Active
         );
+    }
+
+    // ── OffsetCategory ────────────────────────────────────────────────
+
+    #[test]
+    fn offset_category_labels() {
+        assert_eq!(OffsetCategory::All.label(), "All");
+        assert_eq!(OffsetCategory::Globals.label(), "Globals");
+        assert_eq!(OffsetCategory::PlayerBase.label(), "PlayerBase");
+        assert_eq!(OffsetCategory::PlayerZone.label(), "PlayerZone");
+        assert_eq!(OffsetCategory::SpawnManager.label(), "SpawnMgr");
+        assert_eq!(OffsetCategory::Functions.label(), "Functions");
+    }
+
+    #[test]
+    fn offset_category_next_cycles_through_all() {
+        let start = OffsetCategory::All;
+        let mut current = start;
+        let mut visited = vec![current];
+        loop {
+            current = current.next();
+            if current == start {
+                break;
+            }
+            visited.push(current);
+        }
+        assert_eq!(visited.len(), 6, "should cycle through all 6 variants");
+    }
+
+    #[test]
+    fn offset_category_next_order() {
+        assert_eq!(OffsetCategory::All.next(), OffsetCategory::Globals);
+        assert_eq!(OffsetCategory::Globals.next(), OffsetCategory::PlayerBase);
+        assert_eq!(
+            OffsetCategory::PlayerBase.next(),
+            OffsetCategory::PlayerZone
+        );
+        assert_eq!(
+            OffsetCategory::PlayerZone.next(),
+            OffsetCategory::SpawnManager
+        );
+        assert_eq!(
+            OffsetCategory::SpawnManager.next(),
+            OffsetCategory::Functions
+        );
+        assert_eq!(OffsetCategory::Functions.next(), OffsetCategory::All);
+    }
+
+    #[test]
+    fn offset_category_default_is_all() {
+        let cat: OffsetCategory = Default::default();
+        assert_eq!(cat, OffsetCategory::All);
+    }
+
+    // ── MapViewportMode ────────────────────────────────────────────────
+
+    #[test]
+    fn map_viewport_mode_labels() {
+        assert_eq!(MapViewportMode::Auto.label(), "auto");
+        assert_eq!(MapViewportMode::Local.label(), "local");
+        assert_eq!(MapViewportMode::Global.label(), "global");
+    }
+
+    #[test]
+    fn map_viewport_mode_next_cycles() {
+        assert_eq!(MapViewportMode::Auto.next(), MapViewportMode::Local);
+        assert_eq!(MapViewportMode::Local.next(), MapViewportMode::Global);
+        assert_eq!(MapViewportMode::Global.next(), MapViewportMode::Auto);
+    }
+
+    // ── MapFilterKind ────────────────────────────────────────────────
+
+    #[test]
+    fn map_filter_kind_parse_valid() {
+        assert_eq!(MapFilterKind::parse_kind("npc"), Some(MapFilterKind::Npc));
+        assert_eq!(MapFilterKind::parse_kind("PC"), Some(MapFilterKind::Pc));
+        assert_eq!(
+            MapFilterKind::parse_kind("corpse"),
+            Some(MapFilterKind::Corpse)
+        );
+        assert_eq!(
+            MapFilterKind::parse_kind("corpses"),
+            Some(MapFilterKind::Corpse)
+        );
+        assert_eq!(
+            MapFilterKind::parse_kind("ground"),
+            Some(MapFilterKind::Ground)
+        );
+        assert_eq!(MapFilterKind::parse_kind("pet"), Some(MapFilterKind::Pet));
+        assert_eq!(MapFilterKind::parse_kind("pets"), Some(MapFilterKind::Pet));
+        assert_eq!(
+            MapFilterKind::parse_kind("named"),
+            Some(MapFilterKind::Named)
+        );
+        assert_eq!(
+            MapFilterKind::parse_kind("nameds"),
+            Some(MapFilterKind::Named)
+        );
+        assert_eq!(
+            MapFilterKind::parse_kind("untargetable"),
+            Some(MapFilterKind::Untargetable)
+        );
+        assert_eq!(
+            MapFilterKind::parse_kind("untargetables"),
+            Some(MapFilterKind::Untargetable)
+        );
+        assert_eq!(
+            MapFilterKind::parse_kind("untarget"),
+            Some(MapFilterKind::Untargetable)
+        );
+    }
+
+    #[test]
+    fn map_filter_kind_parse_invalid() {
+        assert_eq!(MapFilterKind::parse_kind(""), None);
+        assert_eq!(MapFilterKind::parse_kind("unknown"), None);
+        assert_eq!(MapFilterKind::parse_kind("NPCS"), None);
+    }
+
+    #[test]
+    fn map_filter_kind_labels() {
+        assert_eq!(MapFilterKind::Npc.label(), "NPC");
+        assert_eq!(MapFilterKind::Pc.label(), "PC");
+        assert_eq!(MapFilterKind::Corpse.label(), "Corpse");
+        assert_eq!(MapFilterKind::Ground.label(), "Ground");
+        assert_eq!(MapFilterKind::Pet.label(), "Pet");
+        assert_eq!(MapFilterKind::Named.label(), "Named");
+        assert_eq!(MapFilterKind::Untargetable.label(), "Untargetable");
     }
 }
