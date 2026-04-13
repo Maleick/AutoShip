@@ -21,6 +21,8 @@ pub enum TargetError {
     RebaseFailed,
     #[error("targeting not available on this platform")]
     PlatformStub,
+    #[error("assist target pointer is not a live spawn")]
+    InvalidAssistTarget,
 }
 
 /// Holds the resolved runtime address of pinstTarget and the EQ module base.
@@ -269,9 +271,9 @@ impl TargetingController {
                 return self.clear_target();
             }
 
-            // 3. Validate: read spawn ID from the target-of-target for logging.
-            let tot_id =
-                std::ptr::read((their_target_ptr + offsets::player_base::SPAWN_ID) as *const u32);
+            // 3. Validate that the target-of-target is still present in the
+            // spawn list before reading any fields or writing pinstTarget.
+            let tot_id = self.find_spawn_id_by_addr(their_target_ptr)?;
             tracing::debug!(
                 assist_spawn_id,
                 target_of_target_id = tot_id,
@@ -338,6 +340,76 @@ impl TargetingController {
         #[cfg(not(windows))]
         {
             tracing::warn!(spawn_id, "find_spawn_addr (stub -- non-Windows)");
+            Err(TargetError::PlatformStub)
+        }
+    }
+
+    /// Walk the spawn list to verify a spawn address is still live and get its ID.
+    fn find_spawn_id_by_addr(&self, spawn_addr: usize) -> Result<u32, TargetError> {
+        if self.eq_base == 0 {
+            return Err(TargetError::NoBaseAddress);
+        }
+
+        #[cfg(windows)]
+        unsafe {
+            let is_aligned = |addr: usize, align: usize| -> bool {
+                addr != 0 && addr % align == 0
+            };
+
+            let read_usize_checked = |addr: usize| -> Result<usize, TargetError> {
+                if !is_aligned(addr, std::mem::align_of::<usize>())
+                    || !crate::hooks::game_loop::is_readable(
+                        addr as *const u8,
+                        std::mem::size_of::<usize>(),
+                    )
+                {
+                    return Err(TargetError::InvalidAssistTarget);
+                }
+
+                Ok(std::ptr::read(addr as *const usize))
+            };
+
+            let read_u32_checked = |addr: usize| -> Result<u32, TargetError> {
+                if !is_aligned(addr, std::mem::align_of::<u32>())
+                    || !crate::hooks::game_loop::is_readable(
+                        addr as *const u8,
+                        std::mem::size_of::<u32>(),
+                    )
+                {
+                    return Err(TargetError::InvalidAssistTarget);
+                }
+
+                Ok(std::ptr::read(addr as *const u32))
+            };
+
+            let mgr_pinst = offsets::rebase(offsets::PINST_SPAWN_MANAGER, self.eq_base)
+                .ok_or(TargetError::RebaseFailed)?;
+            let mgr_ptr = read_usize_checked(mgr_pinst as usize)?;
+            if mgr_ptr == 0 {
+                return Err(TargetError::InvalidAssistTarget);
+            }
+
+            let list_head_ptr = mgr_ptr + offsets::spawn_manager::PLAYER_LIST;
+            let mut current = read_usize_checked(list_head_ptr)?;
+
+            const MAX_SPAWNS: u32 = 5000;
+            let mut count = 0u32;
+
+            while current != 0 && count < MAX_SPAWNS {
+                if current == spawn_addr {
+                    let sid = read_u32_checked(current + offsets::player_base::SPAWN_ID)?;
+                    return Ok(sid);
+                }
+                current = read_usize_checked(current + offsets::player_base::NEXT)?;
+                count += 1;
+            }
+
+            Err(TargetError::InvalidAssistTarget)
+        }
+
+        #[cfg(not(windows))]
+        {
+            let _ = spawn_addr;
             Err(TargetError::PlatformStub)
         }
     }
@@ -468,6 +540,12 @@ mod tests {
     fn target_error_display_platform_stub() {
         let msg = TargetError::PlatformStub.to_string();
         assert!(!msg.is_empty());
+    }
+
+    #[test]
+    fn target_error_display_invalid_assist_target() {
+        let msg = TargetError::InvalidAssistTarget.to_string();
+        assert!(msg.contains("assist"));
     }
 
     // NOTE: Windows-only spawn-list integration tests (e.g., walking a real
