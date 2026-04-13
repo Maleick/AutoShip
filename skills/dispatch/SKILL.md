@@ -88,7 +88,8 @@ If `dispatch-codex-appserver.sh` returns STUCK on attempt 1, treat as tool exhau
 ## Step 1: Create Worktree
 
 ```bash
-ISSUE_KEY="issue-<number>"
+# Valid ISSUE_KEY formats: issue-<N>, issue-<N>a, issue-<N>-1, issue-<N>-phase1
+ISSUE_KEY="issue-<number>[suffix]"
 git worktree add .autoship/workspaces/$ISSUE_KEY -b autoship/$ISSUE_KEY main
 ```
 

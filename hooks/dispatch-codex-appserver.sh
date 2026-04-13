@@ -10,7 +10,7 @@ ISSUE_KEY="${1:?usage: dispatch-codex-appserver.sh <issue-key> <prompt-file>}"
 PROMPT_FILE="${2:?usage: dispatch-codex-appserver.sh <issue-key> <prompt-file>}"
 
 # Validate ISSUE_KEY to prevent path traversal
-if [[ ! "$ISSUE_KEY" =~ ^issue-[0-9]+$ ]]; then
+if [[ ! "$ISSUE_KEY" =~ ^issue-[0-9]+[a-z0-9-]*$ ]]; then
   echo "Error: invalid ISSUE_KEY: $ISSUE_KEY" >&2
   exit 1
 fi
@@ -133,7 +133,7 @@ EVENT=$(jq -n \
   --arg issueN  "$ISSUE_NUMBER" \
   --argjson tok "$TOKENS_USED" \
   --arg ts      "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
-  '{type: $type, issue: $issue, issue_number: ($issueN | tonumber), tokens_used: $tok, timestamp: $ts}')
+  '{type: $type, issue: $issue, issue_number: ($issueN | sub("[^0-9].*"; "") | tonumber), tokens_used: $tok, timestamp: $ts}')
 
 bash "${REPO_ROOT}/hooks/emit-event.sh" "$EVENT"
 
