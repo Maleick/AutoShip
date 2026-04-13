@@ -88,11 +88,14 @@ enum Commands {
         /// Login only accounts in this group number.
         #[arg(long)]
         group: Option<u32>,
-        /// EQ password (same for all accounts). Also reads TEXTQUEST_PASSWORD env var.
-        #[arg(long)]
+        /// EQ password (same for all accounts). Prefer the `TEXTQUEST_PASSWORD` env var —
+        /// CLI flags are visible in process listings (ps/Task Manager) and shell history.
+        #[arg(long, hide = true)]
         password: Option<String>,
-        /// Master password for encrypted credential store (or TEXTQUEST_MASTER_PASSWORD env var).
-        #[arg(long)]
+        /// Master password for encrypted credential store. Prefer the
+        /// `TEXTQUEST_MASTER_PASSWORD` env var — CLI flags are visible in process
+        /// listings (ps/Task Manager) and shell history.
+        #[arg(long, hide = true)]
         master_password: Option<String>,
         /// Spawn new EQ processes (default: use existing eqgame.exe processes)
         #[arg(long)]
@@ -234,11 +237,14 @@ enum CredentialAction {
     Add {
         /// Account name (e.g., "Frostreaver01")
         account: String,
-        /// Account password (non-interactive mode; omit to be prompted)
-        #[arg(long)]
+        /// Account password (non-interactive mode; omit to be prompted).
+        /// WARNING: CLI flags are visible in process listings — prefer interactive prompt.
+        #[arg(long, hide = true)]
         password: Option<String>,
-        /// Master password (non-interactive mode; omit to be prompted)
-        #[arg(long)]
+        /// Master password (non-interactive mode; omit to be prompted).
+        /// WARNING: CLI flags are visible in process listings — prefer
+        /// `TEXTQUEST_MASTER_PASSWORD` env var or interactive prompt.
+        #[arg(long, hide = true)]
         master_password: Option<String>,
     },
     /// List all stored account names

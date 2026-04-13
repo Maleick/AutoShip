@@ -584,6 +584,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            api_token: None,
         });
         let Json(configs) = list_character_configs(State(state)).await;
         assert!(!configs.is_empty());
@@ -599,6 +600,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            api_token: None,
         });
         let input = CharacterConfig {
             character_name: "IgnoredName".into(),

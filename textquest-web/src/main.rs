@@ -15,7 +15,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use axum::Router;
-use axum::http::{HeaderValue, Method};
+use axum::extract::Request;
+use axum::http::{HeaderValue, Method, StatusCode};
+use axum::middleware::{self, Next};
+use axum::response::Response;
 use axum::routing::{get, put};
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
@@ -39,6 +42,52 @@ pub struct AppState {
     pub loot_state: Arc<api::loot::LootState>,
     /// In-memory soul audit log.
     pub soul_audit: Arc<api::soul::SoulAuditState>,
+    /// Optional static API token for protecting all `/api` endpoints.
+    /// Set via `TEXTQUEST_API_TOKEN` environment variable.
+    /// When `None`, API endpoints are unauthenticated (localhost-only deployment).
+    pub api_token: Option<String>,
+}
+
+/// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is set.
+///
+/// If the env var is unset, all requests pass through (backward-compatible default).
+/// When set, requests without a matching token receive `401 Unauthorized`.
+async fn api_token_auth(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    req: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    if let Some(ref expected_token) = state.api_token {
+        let provided = req
+            .headers()
+            .get("x-api-token")
+            .and_then(|v| v.to_str().ok());
+
+        match provided {
+            Some(token) if constant_time_eq_str(token, expected_token) => {}
+            _ => {
+                tracing::warn!(
+                    path = req.uri().path(),
+                    "API request rejected: missing or invalid X-API-Token"
+                );
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+        }
+    }
+    Ok(next.run(req).await)
+}
+
+/// Constant-time string comparison to prevent timing oracle attacks on the API token.
+fn constant_time_eq_str(a: &str, b: &str) -> bool {
+    let ab = a.as_bytes();
+    let bb = b.as_bytes();
+    if ab.len() != bb.len() {
+        return false;
+    }
+    ab.iter()
+        .zip(bb.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 fn credentials_db_path() -> PathBuf {
@@ -73,7 +122,8 @@ fn build_state() -> Arc<AppState> {
 
     if api_token.is_none() {
         tracing::warn!(
-            "TEXTQUEST_API_TOKEN is not set — API endpoints are unauthenticated.              Set this env var to enable token-based authentication."
+            "TEXTQUEST_API_TOKEN is not set — API endpoints are unauthenticated. \
+             Set this env var to enable token-based authentication."
         );
     }
 
@@ -84,6 +134,7 @@ fn build_state() -> Arc<AppState> {
         character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
         loot_state: api::loot::LootState::new_demo(),
         soul_audit: api::soul::SoulAuditState::new_demo(),
+        api_token,
     })
 }
 
@@ -185,7 +236,13 @@ fn build_app(state: Arc<AppState>) -> Router {
         .allow_headers([axum::http::header::CONTENT_TYPE]);
 
     Router::new()
-        .nest("/api", build_api_router())
+        // Apply API token authentication to all /api routes before routing.
+        // The middleware is a no-op when TEXTQUEST_API_TOKEN is unset (backward compatible).
+        .nest(
+            "/api",
+            build_api_router()
+                .layer(middleware::from_fn_with_state(state.clone(), api_token_auth)),
+        )
         .route("/ws", get(ws::ws_handler))
         .fallback_service(serve_spa)
         .layer(cors)
@@ -241,6 +298,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
             loot_state: api::loot::LootState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
+            api_token: None, // No auth in tests — auth middleware is a no-op when None
         })
     }
 

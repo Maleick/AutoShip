@@ -270,10 +270,9 @@ async fn handle_lockouts(state: &BotState, cmd: &CommandInteraction) -> String {
 
 async fn handle_status() -> String {
     // Basic fleet status — will be enriched when wired to the orchestrator.
-    format!(
-        "**TextQuest Fleet Status**\n- PID: {}\n- Uptime: running\n- Use `/lockouts` for DZ timers, `/spawns` for contested mobs",
-        std::process::id()
-    )
+    // NOTE: Process ID is intentionally omitted — it would aid anti-cheat fingerprinting
+    // and external process enumeration attacks.
+    "**TextQuest Fleet Status**\n- Status: running\n- Use `/lockouts` for DZ timers, `/spawns` for contested mobs".to_string()
 }
 
 async fn handle_spawns(state: &BotState) -> String {

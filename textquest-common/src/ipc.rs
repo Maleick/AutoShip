@@ -1132,6 +1132,13 @@ fn verify_not_symlink_path(path: &std::path::Path) -> std::io::Result<()> {
 fn write_session_token_path(path: &std::path::Path, token: SessionToken) -> std::io::Result<()> {
     verify_not_symlink_path(path)?;
     std::fs::write(path, token)?;
+    // Restrict token file to owner-only access (mode 0o600 on Unix).
+    // On Windows, %TEMP% is already user-specific, but we tighten further where possible.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
     Ok(())
 }
 

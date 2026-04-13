@@ -22,10 +22,30 @@
 - Milestones are release and initiative grouping buckets.
 - PRs are the implementation and review unit.
 - GitHub Projects are retired and historical-only.
-- Sub-issues are only for true epics or release buckets.
 - Parent epic issues stay open as coordination shells until all child issues are complete.
 - Mark an issue `agent:ready` only when the body is concrete enough to execute and includes an explicit `Verify` section.
 - Use `agent:blocked` or `human:required` when required evidence, access, or policy decisions are missing.
+
+## Issue Decomposition Standard
+
+Every identified gap, bug, or feature must be filed as a parent GitHub issue and decomposed into sub-issues. Sub-issues must be sized for a single agent pass — one file, one function, one test, or one config change per sub-issue.
+
+**Agent tier assignment:**
+
+| Label                | Agent         | Use for                                                                      |
+| -------------------- | ------------- | ---------------------------------------------------------------------------- |
+| `agent:haiku`        | Claude Haiku  | Single-file edits, config changes, boilerplate, simple test additions        |
+| `agent:gemini-flash` | Gemini Flash  | Multi-file changes within a single module, straightforward feature additions |
+| `agent:gpt-mini`     | GPT-4o Mini   | Documentation, README updates, minor refactors                               |
+| `agent:ready`        | Any available | No tier preference — first available agent picks it up                       |
+| `worker:claude`      | Claude Sonnet | Architecture decisions, cross-cutting changes, security-sensitive work       |
+
+**Rules:**
+
+- Never assign a sub-issue that spans more than one logical concern.
+- If a sub-issue requires reading more than 3 files to understand, split it further.
+- Expensive agents (Sonnet/Opus) only for architecture, security, or cross-cutting changes.
+- Parent issues must list all sub-issues as a checklist in the body before being marked `agent:ready`.
 
 ## Evidence And Docs
 

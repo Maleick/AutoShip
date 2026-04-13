@@ -78,3 +78,4 @@ config/accounts.csv
 
 # Local runtime state and operator-managed caches. Canonical immutable Ghidra evidence lives in TextQuest-Ghidra.
 data/
+autoresearch-security/
