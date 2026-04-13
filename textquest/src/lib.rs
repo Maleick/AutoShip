@@ -128,3 +128,16 @@ pub fn get_module_base(_proc: &process::memory::ProcessHandle) -> Result<u64> {
     tracing::warn!("Using preferred base address (non-Windows stub)");
     Ok(textquest_common::offsets::EQ_PREFERRED_BASE)
 }
+
+#[cfg(all(test, not(windows)))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn non_windows_module_base_uses_preferred_base() {
+        let handle = process::memory::ProcessHandle::open(42).expect("stub process open");
+        let base = get_module_base(&handle).expect("stub module base");
+
+        assert_eq!(base, textquest_common::offsets::EQ_PREFERRED_BASE);
+    }
+}
