@@ -78,3 +78,15 @@ ACCEPTANCE_CRITERIA_MET:
 - If confidence is LOW, say so — Opus will escalate to deeper review.
 - Never modify code. You only evaluate.
 - If tests fail but the failures are pre-existing (not related to the diff), note this and do not auto-FAIL.
+
+## After Writing BEACON_RESULT.md
+
+After writing `BEACON_RESULT.md`, write your verdict to `.beacon/event-queue.json` as a verify event using the atomic flock pattern:
+
+```bash
+VERDICT="PASS"  # or FAIL
+EVENT="{\"type\":\"verify\",\"issue\":\"<issue-key>\",\"priority\":2,\"data\":{\"verdict\":\"$VERDICT\"}}"
+flock .beacon/event-queue.lock \
+  jq --argjson evt "$EVENT" '. + [$evt]' .beacon/event-queue.json \
+  > .beacon/event-queue.tmp && mv .beacon/event-queue.tmp .beacon/event-queue.json
+```

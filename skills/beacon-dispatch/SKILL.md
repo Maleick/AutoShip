@@ -307,6 +307,8 @@ This check runs after every `split-window` call in Step 3A.
 
 ## Step 3B: Dispatch Claude Haiku Agent (Simple)
 
+> **Note:** Claude agents do NOT use pane.log or pipe-pane. `monitor-prs.sh` handles their completion detection. `completed_at` is written by `monitor-prs.sh` on PR merge (implemented in #59).
+
 Use TeamCreate for visibility:
 
 ```
@@ -383,15 +385,26 @@ Agent({
 })
 ```
 
+After dispatching, write a dispatch record to the event queue:
+
+```bash
+EVENT='{"type":"verify","issue":"<issue-key>","priority":2,"data":{"agent":"claude-haiku","worktree_free":true}}'
+flock .beacon/event-queue.lock \
+  jq --argjson evt "$EVENT" '. + [$evt]' .beacon/event-queue.json \
+  > .beacon/event-queue.tmp && mv .beacon/event-queue.tmp .beacon/event-queue.json
+```
+
 Update state:
 
 ```bash
-bash hooks/update-state.sh set-running <issue-id> agent=claude-haiku
+bash hooks/update-state.sh set-running <issue-id> agent=claude-haiku worktree_free=true
 ```
 
 ---
 
 ## Step 3C: Dispatch Claude Sonnet Agent (Medium/Complex)
+
+> **Note:** Claude agents do NOT use pane.log or pipe-pane. `monitor-prs.sh` handles their completion detection. `completed_at` is written by `monitor-prs.sh` on PR merge (implemented in #59).
 
 Same structure as Haiku, but with autoresearch and more context:
 
@@ -462,10 +475,19 @@ Agent({
 })
 ```
 
+After dispatching, write a dispatch record to the event queue:
+
+```bash
+EVENT='{"type":"verify","issue":"<issue-key>","priority":2,"data":{"agent":"claude-sonnet","worktree_free":true}}'
+flock .beacon/event-queue.lock \
+  jq --argjson evt "$EVENT" '. + [$evt]' .beacon/event-queue.json \
+  > .beacon/event-queue.tmp && mv .beacon/event-queue.tmp .beacon/event-queue.json
+```
+
 Update state:
 
 ```bash
-bash hooks/update-state.sh set-running <issue-id> agent=claude-sonnet
+bash hooks/update-state.sh set-running <issue-id> agent=claude-sonnet worktree_free=true
 ```
 
 ---
