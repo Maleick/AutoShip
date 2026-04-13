@@ -158,6 +158,8 @@ Emits: `[ISSUE_NEW]`, `[ISSUE_CLOSED]`
 
 ### Step 7: Dispatch Phase 1
 
+For each issue in Phase 1, invoke the `dispatch` skill. Dispatch all ready Phase 1 issues concurrently up to the 20-agent cap (not throttled to 6). The dispatch skill will automatically queue any issues beyond the cap for the next poll cycle.
+
 Before dispatching each issue, classify its task type:
 
 ```bash
@@ -180,7 +182,7 @@ Task types and their model/tool preferences:
 
 Pass `task_type` to `dispatch` via the issue record in state.json. The dispatch skill reads `.issues[issue-N].task_type` to select model and tool.
 
-For each issue in Phase 1, invoke `dispatch` skill. Third-party tools take priority for simple and medium issues.
+Third-party tools take priority for simple and medium issues.
 
 ### Step 8: Enter Reactive Mode
 

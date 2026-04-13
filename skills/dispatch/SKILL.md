@@ -78,7 +78,7 @@ fi
 | Claude Haiku     | Agent tool (`run_in_background: true`)          | Up to 20 total                       |
 | Claude Sonnet    | Agent tool (`run_in_background: true`)          | Up to 20 total                       |
 | Gemini           | tmux pane                                       | 20+ panes via `even-vertical` layout |
-| Codex app-server | `[experimental]` — **currently non-functional** | N/A — use Claude fallback            |
+| Codex app-server | `[experimental]` — **currently non-functional** | unlimited (when working) — use Claude fallback |
 
 **Codex app-server failure protocol:**
 If `dispatch-codex-appserver.sh` returns STUCK on attempt 1, treat as tool exhaustion and immediately try the next agent in the priority list — do not retry codex. Log `CODEX_APPSERVER_STUCK` to poll.log.

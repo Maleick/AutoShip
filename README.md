@@ -89,7 +89,7 @@ You come back to merged PRs.
 **Same issues. One command. Brain free.**
 
 - **Third-party first** — burns Codex, Gemini, and Copilot quota before touching Claude tokens
-- **Parallel workers** — up to 6 issues in flight simultaneously
+- **Parallel workers** — up to 20 issues in flight simultaneously
 - **Task-type routing** — classifies issues into 7 categories, routes each to the best agent
 - **Live routing config** — edit `AUTOSHIP.md` front matter to change agent priorities, takes effect immediately
 - **Verification pipeline** — every result reviewed against acceptance criteria before a PR opens
