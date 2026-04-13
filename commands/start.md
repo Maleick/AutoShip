@@ -53,6 +53,6 @@ Log any unavailable tools. Reassign their tasks to Claude.
 
 ## Step 3: Invoke Orchestration Protocol
 
-Invoke the `autoship:orchestrate` skill via the Skill tool and follow its startup sequence exactly.
+Output exactly: "Invoking AutoShip." — then invoke the `autoship:beacon` skill via the Skill tool and follow its startup sequence exactly.
 
 </autoship-start>
