@@ -528,6 +528,8 @@ pub struct App {
     pub zone_status_state: crate::tui::ui::zone_status_panel::ZoneStatusState,
     /// Packet/opcode monitor state.
     pub packet_monitor_state: PacketMonitorState,
+    /// Hook rotation status for Debug panel and runtime interval updates.
+    pub hook_rotation_state: HookRotationState,
 
     /// EQ install path for launch operations (from config or default).
     pub launch_eq_path: String,
@@ -775,6 +777,7 @@ impl App {
             nav_state: NavigationScreenState::new(),
             zone_status_state: crate::tui::ui::zone_status_panel::ZoneStatusState::new(),
             packet_monitor_state: PacketMonitorState::new(),
+            hook_rotation_state: HookRotationState::new(),
 
             launch_eq_path: String::from(r"C:\EverQuest"),
 
