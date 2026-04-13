@@ -322,7 +322,7 @@
       <div class="step-num">2</div>
       <div class="step-content">
         <h4>Route</h4>
-        <p>Task type + available quota determines the agent. Codex and Gemini are used first to save Claude tokens. Routing is configured in <code>BEACON.md</code> and hot-reloads on change.</p>
+        <p>Task type + available quota determines the agent. Codex and Gemini are used first to save Claude tokens. Routing is configured in <code>AUTOSHIP.md</code> and hot-reloads on change.</p>
       </div>
     </div>
     <div class="pipeline-step">
@@ -350,7 +350,7 @@
       <div class="step-num">6</div>
       <div class="step-content">
         <h4>Loop</h4>
-        <p>Issue is closed, result archived to <code>.beacon/results/</code>, token spend recorded in the ledger. AutoShip immediately picks the next issue from the queue.</p>
+        <p>Issue is closed, result archived to <code>.autoship/results/</code>, token spend recorded in the ledger. AutoShip immediately picks the next issue from the queue.</p>
       </div>
     </div>
   </div>
@@ -371,7 +371,7 @@
     <div class="card">
       <div class="card-icon">⚡</div>
       <h3>Parallel execution</h3>
-      <p>Up to 6 issues in flight simultaneously. Bash monitors watch every agent every 5 seconds without blocking the orchestrator.</p>
+      <p>Up to 20 issues in flight simultaneously. Bash monitors watch every agent every 5 seconds without blocking the orchestrator.</p>
     </div>
     <div class="card">
       <div class="card-icon">🔍</div>
@@ -381,17 +381,17 @@
     <div class="card">
       <div class="card-icon">🗺️</div>
       <h3>Live routing config</h3>
-      <p>Edit the YAML front matter in <code>BEACON.md</code> to change which agent handles which task type. Takes effect on the next dispatch — no restart needed.</p>
+      <p>Edit the YAML front matter in <code>AUTOSHIP.md</code> to change which agent handles which task type. Takes effect on the next dispatch — no restart needed.</p>
     </div>
     <div class="card">
       <div class="card-icon">💾</div>
       <h3>Durable state</h3>
-      <p>State in <code>.beacon/state.json</code> and GitHub labels. Kill the session, restart, and AutoShip picks up exactly where it left off.</p>
+      <p>State in <code>.autoship/state.json</code> and GitHub labels. Kill the session, restart, and AutoShip picks up exactly where it left off.</p>
     </div>
     <div class="card">
       <div class="card-icon">📊</div>
       <h3>Token ledger</h3>
-      <p>Per-issue and per-session token spend tracked in <code>.beacon/token-ledger.json</code>. <code>/autoship:status</code> shows per-model cost breakdown.</p>
+      <p>Per-issue and per-session token spend tracked in <code>.autoship/token-ledger.json</code>. <code>/autoship:status</code> shows per-model cost breakdown.</p>
     </div>
   </div>
 </section>
