@@ -47,6 +47,14 @@ impl CrashReporter {
         self.contexts.get(character)
     }
 
+    /// Looks up crash context for `character`.
+    ///
+    /// This is an alias for [`Self::last_context`] retained for API compatibility.
+    #[must_use]
+    pub fn on_crash(&self, character: &str) -> Option<&CrashContext> {
+        self.last_context(character)
+    }
+
     /// Returns the default recovery command sequence for `character`.
     ///
     /// If a context exists the sequence is `["/camp desktop"]`; otherwise empty.
