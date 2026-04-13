@@ -55,7 +55,7 @@ describe("useWebSocket", () => {
   });
 
   it("tracks connection state, receives messages, and reconnects after close", async () => {
-    const { result, unmount } = renderHook(() => useWebSocket("ws://example.test/ws"));
+    const { result, unmount } = renderHook(() => useWebSocket("wss://example.test/ws"));
     expect(MockWebSocket.instances).toHaveLength(1);
 
     await act(async () => {
