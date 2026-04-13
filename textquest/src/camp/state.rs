@@ -168,6 +168,14 @@ pub enum CampState {
         /// Tick when buff phase started.
         started_tick: u64,
     },
+    /// One or more group members have died; awaiting resurrection and repositioning.
+    /// The camp loop is paused during this phase.
+    Recovery {
+        /// Tick when recovery phase started.
+        started_tick: u64,
+        /// Whether the group is currently safe to cast rez (not in active combat).
+        safe_to_rez: bool,
+    },
 }
 
 /// Role a group member fills in the camp loop.
@@ -230,6 +238,8 @@ const FIGHT_DURATION: u64 = 15;
 const LOOT_DURATION: u64 = 3;
 const MED_DURATION: u64 = 10;
 const BUFF_DURATION: u64 = 8;
+/// Ticks to wait in Recovery after all members are alive, for repositioning.
+const RECOVERY_REPOSITION_TICKS: u64 = 3;
 
 /// Ticks before CC expiry to start re-casting.
 const CC_REMEZ_BUFFER: u64 = 3;
@@ -375,41 +385,18 @@ impl CampLoop {
             }
         }
 
-        // --- Recovery check: detect deaths and issue rez commands ---
+        // --- Recovery check: detect deaths and transition to Recovery state ---
         if let Some(snap) = snapshot
             && !snap.member_hp.is_empty()
         {
             self.recovery.update_hp(&snap.member_hp, self.tick);
         }
 
-        if self.recovery.recovery_in_progress() {
-            // Build role map for rez prioritization
-            let role_map: Vec<(u32, &str)> = self
-                .members
-                .iter()
-                .map(|m| {
-                    let role_str = match m.role {
-                        Role::Healer => "Healer",
-                        Role::Tank => "Tank",
-                        Role::CC => "CC",
-                        Role::Puller => "Puller",
-                        Role::Dps => "DPS",
-                        Role::Bard => "Bard",
-                    };
-                    (m.pid, role_str)
-                })
-                .collect();
-
-            let cleric_pid = self.find_by_role(&Role::Healer).map(|m| m.pid);
-            let rez_cmds = death_commands_with_roles(
-                &mut self.recovery.members,
-                cleric_pid,
-                self.rez_gem,
-                &role_map,
-            );
-            commands.extend(CampAction::from_slash_vec(rez_cmds));
-
-            // Don't pull or advance the main loop while recovering
+        // Transition to Recovery state when deaths are detected (if not already there).
+        if self.recovery.recovery_in_progress()
+            && !matches!(self.state, CampState::Recovery { .. })
+        {
+            self.transition_to_recovery(&mut commands, snapshot);
             return commands;
         }
 
@@ -427,15 +414,8 @@ impl CampLoop {
         match self.state.clone() {
             CampState::Idle => {
                 // Only pull if healer has enough mana (when we know).
-                // Apply healer's personality jitter to the threshold.
-                let pull_threshold = self.find_by_role(&Role::Healer).map_or(
-                    f32::from(self.config.pull_mana_pct),
-                    |h| {
-                        h.personality
-                            .adjust_mana_threshold(f32::from(self.config.pull_mana_pct))
-                    },
-                );
-                let healer_ready = snapshot.is_none_or(|s| s.healer_mana_pct >= pull_threshold);
+                let healer_ready =
+                    snapshot.is_none_or(|s| s.healer_mana_pct >= self.healer_mana_threshold());
                 if healer_ready {
                     self.transition_to_pulling(&mut commands);
                 }
@@ -508,15 +488,8 @@ impl CampLoop {
             }
             CampState::Medding { started_tick } => {
                 // Transition when healer mana is above pull threshold (real data) or timer (fallback).
-                // Apply healer's personality jitter to the threshold.
-                let med_threshold = self.find_by_role(&Role::Healer).map_or(
-                    f32::from(self.config.pull_mana_pct),
-                    |h| {
-                        h.personality
-                            .adjust_mana_threshold(f32::from(self.config.pull_mana_pct))
-                    },
-                );
-                let mana_ready = snapshot.is_some_and(|s| s.healer_mana_pct >= med_threshold);
+                let mana_ready =
+                    snapshot.is_some_and(|s| s.healer_mana_pct >= self.healer_mana_threshold());
                 let timer_expired = self.tick - started_tick >= MED_DURATION;
                 if mana_ready || timer_expired {
                     // Check if any buffs need refreshing before going idle
@@ -547,6 +520,64 @@ impl CampLoop {
                     self.transition_to_idle(&mut commands, snapshot);
                 }
             }
+            CampState::Recovery { started_tick, safe_to_rez } => {
+                // Safety validation: only rez when out of combat.
+                let currently_safe = !Self::any_in_combat(snapshot);
+
+                // Update safe_to_rez flag if combat state changed.
+                if currently_safe != safe_to_rez {
+                    self.state = CampState::Recovery {
+                        started_tick,
+                        safe_to_rez: currently_safe,
+                    };
+                }
+
+                if currently_safe {
+                    // Rez commands with role-based prioritization.
+                    let role_map: Vec<(u32, &str)> = self
+                        .members
+                        .iter()
+                        .map(|m| {
+                            let role_str = match m.role {
+                                Role::Healer => "Healer",
+                                Role::Tank => "Tank",
+                                Role::CC => "CC",
+                                Role::Puller => "Puller",
+                                Role::Dps => "DPS",
+                                Role::Bard => "Bard",
+                            };
+                            (m.pid, role_str)
+                        })
+                        .collect();
+
+                    let cleric_pid = self.find_by_role(&Role::Healer).map(|m| m.pid);
+                    let rez_cmds = death_commands_with_roles(
+                        &mut self.recovery.members,
+                        cleric_pid,
+                        self.rez_gem,
+                        &role_map,
+                    );
+                    commands.extend(CampAction::from_slash_vec(rez_cmds));
+                }
+
+                // Once all members are alive, reposition to camp and resume.
+                if self.recovery.all_alive() {
+                    let elapsed = self.tick - started_tick;
+                    if elapsed >= RECOVERY_REPOSITION_TICKS {
+                        // Post-recovery: move everyone back to camp center.
+                        let [cx, cy, _cz] = self.config.camp_center;
+                        for member in &self.members {
+                            commands.push((
+                                member.pid,
+                                CampAction::Slash(format!("/moveto loc {cy:.0} {cx:.0}")),
+                            ));
+                        }
+                        self.state = CampState::Medding {
+                            started_tick: self.tick,
+                        };
+                    }
+                }
+            }
         }
 
         commands
@@ -557,6 +588,13 @@ impl CampLoop {
         self.members.iter().find(|m| &m.role == role)
     }
 
+    /// Healer-adjusted mana threshold for pull/med transitions.
+    fn healer_mana_threshold(&self) -> f32 {
+        let base = f32::from(self.config.pull_mana_pct);
+        self.find_by_role(&Role::Healer)
+            .map_or(base, |h| h.personality.adjust_mana_threshold(base))
+    }
+
     /// Find all members with a given role.
     fn find_all_by_role(&self, role: &Role) -> Vec<&CampMember> {
         self.members.iter().filter(|m| &m.role == role).collect()
@@ -564,11 +602,11 @@ impl CampLoop {
 
     /// Pick a pull target name. Uses configured mob names or a generic target.
     fn pick_pull_target(&self) -> String {
-        if let Some(name) = self.config.pull_mob_names.first() {
-            name.clone()
-        } else {
-            "a_mob".into()
-        }
+        self.config
+            .pull_mob_names
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "a_mob".into())
     }
 
     // -- State transitions --
@@ -710,6 +748,24 @@ impl CampLoop {
         };
     }
 
+    fn transition_to_recovery(
+        &mut self,
+        commands: &mut Vec<(u32, CampAction)>,
+        snapshot: Option<&CampSnapshot>,
+    ) {
+        // Stop all attacks when transitioning to recovery
+        for member in &self.members {
+            commands.push((member.pid, CampAction::Slash("/attack off".into())));
+            commands.push((member.pid, CampAction::CombatDisengage));
+        }
+
+        // Safety: only immediately safe if not in combat
+        self.state = CampState::Recovery {
+            started_tick: self.tick,
+            safe_to_rez: !Self::any_in_combat(snapshot),
+        };
+    }
+
     fn transition_to_idle(
         &mut self,
         commands: &mut Vec<(u32, CampAction)>,
@@ -726,7 +782,18 @@ impl CampLoop {
         self.state = CampState::Idle;
     }
 
-    /// Check if a member is currently in combat according to the snapshot.
+    /// Check if any member is currently in combat according to the snapshot.
+    ///
+    /// Missing snapshot data is treated as unsafe, so this returns `true` when
+    /// combat state cannot be determined.
+    fn any_in_combat(snapshot: Option<&CampSnapshot>) -> bool {
+        match snapshot {
+            Some(snap) => snap.member_in_combat.iter().any(|(_, c)| *c),
+            None => true,
+        }
+    }
+
+    /// Check if a specific member is currently in combat according to the snapshot.
     fn member_has_aggro(pid: u32, snapshot: Option<&CampSnapshot>) -> bool {
         snapshot.is_some_and(|snap| {
             snap.member_in_combat
@@ -1458,5 +1525,233 @@ mod tests {
     #[test]
     fn member_has_aggro_returns_false_for_none_snapshot() {
         assert!(!CampLoop::member_has_aggro(100, None));
+    }
+
+    // -- Recovery state tests --
+
+    #[test]
+    fn test_death_triggers_recovery_state() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        camp.state = CampState::Idle;
+
+        // Tank (pid 100) dies
+        let snap = CampSnapshot {
+            healer_mana_pct: 80.0,
+            tank_hp_pct: 0.0,
+            target_hp_pct: None,
+            target_is_dead: false,
+            target_spawn_id: None,
+            member_hp: vec![(100, 0)],
+            member_in_combat: vec![],
+        };
+        camp.tick(Some(&snap));
+        assert!(
+            matches!(camp.state, CampState::Recovery { .. }),
+            "Should enter Recovery when a member dies, got {:?}",
+            camp.state
+        );
+    }
+
+    #[test]
+    fn test_recovery_state_safe_when_out_of_combat() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        camp.state = CampState::Idle;
+
+        // Member dies, no one in combat
+        let snap = CampSnapshot {
+            healer_mana_pct: 80.0,
+            tank_hp_pct: 0.0,
+            target_hp_pct: None,
+            target_is_dead: false,
+            target_spawn_id: None,
+            member_hp: vec![(100, 0)],
+            member_in_combat: vec![(100, false), (101, false)],
+        };
+        camp.tick(Some(&snap));
+        assert!(
+            matches!(camp.state, CampState::Recovery { safe_to_rez: true, .. }),
+            "Should be safe_to_rez when no one is in combat"
+        );
+    }
+
+    #[test]
+    fn test_recovery_state_unsafe_when_in_combat() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        camp.state = CampState::Idle;
+
+        // Member dies, group still in combat
+        let snap = CampSnapshot {
+            healer_mana_pct: 80.0,
+            tank_hp_pct: 0.0,
+            target_hp_pct: None,
+            target_is_dead: false,
+            target_spawn_id: None,
+            member_hp: vec![(100, 0)],
+            member_in_combat: vec![(100, false), (101, true)],
+        };
+        camp.tick(Some(&snap));
+        assert!(
+            matches!(camp.state, CampState::Recovery { safe_to_rez: false, .. }),
+            "Should not be safe_to_rez when someone is in combat"
+        );
+    }
+
+    #[test]
+    fn test_recovery_transition_stops_attacks() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        camp.state = CampState::Fighting { started_tick: 1 };
+        camp.tick = 1;
+
+        // Tank dies mid-fight
+        let snap = CampSnapshot {
+            healer_mana_pct: 80.0,
+            tank_hp_pct: 0.0,
+            target_hp_pct: Some(50.0),
+            target_is_dead: false,
+            target_spawn_id: None,
+            member_hp: vec![(100, 0)],
+            member_in_combat: vec![],
+        };
+        let cmds = camp.tick(Some(&snap));
+        assert!(
+            matches!(camp.state, CampState::Recovery { .. }),
+            "Should enter Recovery on death during fight"
+        );
+        // All members should get /attack off
+        for member in test_members() {
+            assert!(
+                cmds.iter()
+                    .any(|(pid, cmd)| *pid == member.pid && cmd == "/attack off"),
+                "pid {} should get /attack off on recovery transition",
+                member.pid
+            );
+        }
+    }
+
+    #[test]
+    fn test_recovery_issues_rez_commands_when_safe() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        // Set up: tank is dead, in Recovery, safe to rez
+        camp.recovery.members[0].2 = crate::camp::recovery::DeathState::Dead { died_at_tick: 1 };
+        camp.state = CampState::Recovery {
+            started_tick: 1,
+            safe_to_rez: true,
+        };
+        camp.tick = 1;
+
+        let cmds = camp.tick(None);
+        // Healer (pid 101) should get /target and /cast
+        assert!(
+            cmds.iter()
+                .any(|(pid, cmd)| *pid == 101 && cmd.contains("/target")),
+            "Healer should target dead member for rez"
+        );
+        assert!(
+            cmds.iter()
+                .any(|(pid, cmd)| *pid == 101 && cmd.contains("/cast")),
+            "Healer should cast rez"
+        );
+    }
+
+    #[test]
+    fn test_recovery_no_rez_when_unsafe() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        // Tank dead, unsafe (in combat)
+        camp.recovery.members[0].2 = crate::camp::recovery::DeathState::Dead { died_at_tick: 1 };
+        camp.state = CampState::Recovery {
+            started_tick: 1,
+            safe_to_rez: false,
+        };
+        camp.tick = 1;
+
+        // Snapshot says still in combat
+        let snap = CampSnapshot {
+            healer_mana_pct: 80.0,
+            tank_hp_pct: 0.0,
+            target_hp_pct: None,
+            target_is_dead: false,
+            target_spawn_id: None,
+            member_hp: vec![],
+            member_in_combat: vec![(101, true)],
+        };
+        let cmds = camp.tick(Some(&snap));
+        // No rez commands when unsafe
+        assert!(
+            !cmds.iter().any(|(pid, cmd)| *pid == 101 && cmd.contains("/cast")),
+            "Should not cast rez when in combat"
+        );
+    }
+
+    #[test]
+    fn test_recovery_repositions_after_all_alive() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        // All members alive, but we are in Recovery state — waiting for reposition timer.
+        // Set started_tick = current tick so elapsed starts at 0.
+        let start = 10;
+        camp.tick = start;
+        camp.state = CampState::Recovery {
+            started_tick: start,
+            safe_to_rez: true,
+        };
+
+        // Tick RECOVERY_REPOSITION_TICKS - 1 times: each tick increments self.tick,
+        // making elapsed = (start + N) - start = N. While N < RECOVERY_REPOSITION_TICKS
+        // we stay in Recovery.
+        for _ in 0..RECOVERY_REPOSITION_TICKS - 1 {
+            camp.tick(None);
+            assert!(
+                matches!(camp.state, CampState::Recovery { .. }),
+                "Should still be in Recovery before reposition timer"
+            );
+        }
+
+        // Final tick: elapsed reaches RECOVERY_REPOSITION_TICKS => reposition and go to Medding
+        let cmds = camp.tick(None);
+        assert!(
+            matches!(camp.state, CampState::Medding { .. }),
+            "Should transition to Medding after recovery reposition, got {:?}",
+            camp.state
+        );
+        // All members should get /moveto commands
+        for member in test_members() {
+            assert!(
+                cmds.iter()
+                    .any(|(pid, cmd)| *pid == member.pid && cmd.contains("/moveto loc")),
+                "pid {} should get /moveto camp center command",
+                member.pid
+            );
+        }
+    }
+
+    #[test]
+    fn test_recovery_rez_priority_healer_before_tank() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        // Both tank (pid 100) and a second cleric (replace cc with healer role) are dead
+        // Use existing members: tank=100 Dead, healer=101 Alive (rezzer), cc=102 Dead
+        // Setup: manually mark members dead
+        camp.recovery.members[0].2 = crate::camp::recovery::DeathState::Dead { died_at_tick: 1 }; // Tank
+        camp.recovery.members[2].2 = crate::camp::recovery::DeathState::Dead { died_at_tick: 1 }; // CC (Enchanter)
+
+        // Add a second member with Healer role so they compete: use pid 102 as dead Healer
+        // Override role on member index 2 to Healer to test priority
+        camp.members[2].role = Role::Healer;
+
+        camp.state = CampState::Recovery {
+            started_tick: 1,
+            safe_to_rez: true,
+        };
+        camp.tick = 1;
+
+        let cmds = camp.tick(None);
+        // Find the /target command from the rezzing healer (pid 101)
+        let target_cmd = cmds
+            .iter()
+            .find(|(pid, cmd)| *pid == 101 && cmd.contains("/target"))
+            .map(|(_, cmd)| cmd.as_slash().unwrap_or(""));
+        // Healer role (Enchanter01, now tagged Healer) should be rezzed before Tank
+        assert!(
+            target_cmd.is_some_and(|cmd| cmd.contains("Enchanter01")),
+            "Should rez the Healer-role member (Enchanter01) before Tank (Warrior01)"
+        );
     }
 }

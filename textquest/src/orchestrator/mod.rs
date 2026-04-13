@@ -445,22 +445,13 @@ impl Orchestrator {
         let avg_level = level_sum / level_count as f32;
 
         match check_progression(&camp.config, avg_level, db) {
-            Some(CampProgressionEvent::AdvanceToNext { to_camp, .. }) => {
+            Some(CampProgressionEvent::AdvanceToNext { to_camp, .. })
+            | Some(CampProgressionEvent::FallbackToPrev { to_camp, .. }) => {
                 if self.suggested_camp.as_deref() != Some(&to_camp) {
                     tracing::info!(
                         avg_level,
                         to_camp = %to_camp,
-                        "Camp progression: suggesting advance"
-                    );
-                    self.suggested_camp = Some(to_camp);
-                }
-            }
-            Some(CampProgressionEvent::FallbackToPrev { to_camp, .. }) => {
-                if self.suggested_camp.as_deref() != Some(&to_camp) {
-                    tracing::info!(
-                        avg_level,
-                        to_camp = %to_camp,
-                        "Camp progression: suggesting fallback"
+                        "Camp progression: suggesting move"
                     );
                     self.suggested_camp = Some(to_camp);
                 }
@@ -657,6 +648,7 @@ impl Orchestrator {
                         CampState::Looting { .. } => "Looting",
                         CampState::Medding { .. } => "Medding",
                         CampState::Buffing { .. } => "Buffing",
+                        CampState::Recovery { .. } => "Recovery",
                     };
                     let mut status = format!(
                         "Camp '{}' — {} — tick {} — {} members",
