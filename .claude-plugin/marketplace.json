@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "autoship",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "Autonomous multi-agent orchestration plugin for Claude Code. Routes GitHub issues to AI agents, verifies results, and merges PRs.",
   "owner": {
     "name": "Maleick",
