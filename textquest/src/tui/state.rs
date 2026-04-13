@@ -1756,6 +1756,75 @@ impl EqInternalsState {
     }
 }
 
+// ─── Economy State ────────────────────────────────────────────────────────────
+
+/// State for the Economy Controls screen.
+///
+/// Uses stub/demo data — live economy logic is wired in M10.
+pub struct EconomyState {
+    /// Current vendor cycle operational status.
+    pub vendor_status: crate::tui::ui::economy_controls::VendorCycleStatus,
+    /// Seconds until next vendor cycle starts (0 = running now).
+    pub vendor_next_cycle_secs: u64,
+    /// Number of completed vendor cycles this session.
+    pub vendor_cycles_completed: u32,
+    /// Zone name of the last vendor visit.
+    pub vendor_last_zone: Option<String>,
+    /// Total items sold this session.
+    pub vendor_items_sold: u32,
+    /// Total plat earned from vendor sales this session.
+    pub vendor_plat_earned: u64,
+
+    /// Current banking consolidation status.
+    pub banking_status: crate::tui::ui::economy_controls::BankingStatus,
+    /// Total consolidated plat held in bank.
+    pub banking_consolidated_plat: u64,
+    /// Number of characters whose bank has been visited this run.
+    pub banking_chars_done: u32,
+    /// Total characters to bank this run.
+    pub banking_chars_total: u32,
+    /// Timestamp or label for the last bank run.
+    pub banking_last_run: Option<String>,
+
+    /// Number of items in the loot processing queue.
+    pub loot_queue_size: u32,
+    /// Total items looted this session.
+    pub loot_items_total: u32,
+    /// Items pending distribution (waiting on loot rules).
+    pub loot_pending_distribute: u32,
+    /// Short list of recently looted item names for display.
+    pub loot_recent_items: Vec<String>,
+
+    /// Whether economy automation is currently paused.
+    pub automation_paused: bool,
+}
+
+impl Default for EconomyState {
+    fn default() -> Self {
+        Self {
+            vendor_status: crate::tui::ui::economy_controls::VendorCycleStatus::Idle,
+            vendor_next_cycle_secs: 1800,
+            vendor_cycles_completed: 0,
+            vendor_last_zone: None,
+            vendor_items_sold: 0,
+            vendor_plat_earned: 0,
+
+            banking_status: crate::tui::ui::economy_controls::BankingStatus::Idle,
+            banking_consolidated_plat: 0,
+            banking_chars_done: 0,
+            banking_chars_total: 0,
+            banking_last_run: None,
+
+            loot_queue_size: 0,
+            loot_items_total: 0,
+            loot_pending_distribute: 0,
+            loot_recent_items: Vec::new(),
+
+            automation_paused: false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

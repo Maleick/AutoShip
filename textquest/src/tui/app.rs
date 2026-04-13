@@ -52,8 +52,8 @@ pub enum ActiveScreen {
     Debug,
     /// Packet/opcode monitor — live network sniffer.
     PacketMonitor,
-    /// Orchestrator session visibility — fleet status, relay stats, command history.
-    Orchestrator,
+    /// Economy operator controls — vendor cycle, banking, loot queue.
+    Economy,
 }
 
 impl ActiveScreen {
@@ -66,7 +66,7 @@ impl ActiveScreen {
             Self::Navigation => "Navigation",
             Self::Debug => "Debug",
             Self::PacketMonitor => "Packets",
-            Self::Orchestrator => "Orchestrator",
+            Self::Economy => "Economy",
         }
     }
 
@@ -77,7 +77,7 @@ impl ActiveScreen {
         Self::Navigation,
         Self::Debug,
         Self::PacketMonitor,
-        Self::Orchestrator,
+        Self::Economy,
     ];
 }
 
@@ -116,8 +116,8 @@ pub enum ActivePanel {
     PacketMonitorLog,
     /// EQ Internals offset browser panel (debug).
     DebugInternals,
-    /// Orchestrator session list panel.
-    OrchestratorSessions,
+    /// Economy controls panel (vendor cycle, banking, loot queue).
+    EconomyControls,
 }
 
 /// Layout preset for panel arrangement within a screen.
@@ -559,8 +559,8 @@ pub struct App {
     /// Live priority queue snapshots per character (updated each tick).
     pub priority_snapshots: Vec<super::priorities::PrioritySnapshot>,
 
-    /// Orchestrator panel state (session list, relay stats, command history).
-    pub orchestrator_panel_state: super::ui::orchestrator_panel::OrchestratorPanelState,
+    /// Economy Controls screen state (vendor cycle, banking, loot queue).
+    pub economy_state: super::state::EconomyState,
 }
 
 /// Navigation status for a single client.
@@ -789,8 +789,7 @@ impl App {
             toast: None,
             automation_paused: false,
             priority_snapshots: Vec::new(),
-
-            orchestrator_panel_state: super::ui::orchestrator_panel::OrchestratorPanelState::new(),
+            economy_state: super::state::EconomyState::default(),
         };
         app.cmd_state.load_history_from_disk();
         app
@@ -940,7 +939,7 @@ impl App {
             ActiveScreen::Navigation => ActivePanel::TacticalNavigation,
             ActiveScreen::Debug => ActivePanel::DebugSpawns,
             ActiveScreen::PacketMonitor => ActivePanel::PacketMonitorLog,
-            ActiveScreen::Orchestrator => ActivePanel::OrchestratorSessions,
+            ActiveScreen::Economy => ActivePanel::EconomyControls,
         }
     }
 
@@ -981,7 +980,7 @@ impl App {
                 ]
             }
             ActiveScreen::PacketMonitor => vec![ActivePanel::PacketMonitorLog],
-            ActiveScreen::Orchestrator => vec![ActivePanel::OrchestratorSessions],
+            ActiveScreen::Economy => vec![ActivePanel::EconomyControls],
         }
     }
 
@@ -1041,7 +1040,7 @@ impl App {
             ActiveScreen::Navigation => 2,
             ActiveScreen::Debug => 3,
             ActiveScreen::PacketMonitor => 4,
-            ActiveScreen::Orchestrator => 5,
+            ActiveScreen::Economy => 5,
         }
     }
 
