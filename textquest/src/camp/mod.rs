@@ -12,6 +12,8 @@ pub mod cc;
 pub mod class_config;
 /// Camp loop configuration — timers, thresholds, zone settings.
 pub mod config;
+/// Auto-forage automation — periodic `/forage` command dispatch.
+pub mod forage;
 /// Hunt mode — patrol-based pulling with waypoint routes.
 pub mod hunt;
 /// Loot rules — need/greed/pass, item filters, distribution.
