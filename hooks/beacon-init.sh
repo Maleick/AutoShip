@@ -206,16 +206,17 @@ init_token_ledger() {
     local session_tmp
     session_tmp=$(mktemp)
     printf '%s' "$new_session" > "$session_tmp"
-    lockf -k "$lock" bash -c "
-      ledger='$ledger'
-      new_session=\$(cat '$session_tmp')
-      tmp=\$(mktemp)
-      if [[ -f \"\$ledger\" ]] && jq '.' \"\$ledger\" >/dev/null 2>&1; then
-        jq --argjson s \"\$new_session\" '.sessions += [\$s]' \"\$ledger\" > \"\$tmp\" && mv \"\$tmp\" \"\$ledger\"
+    # Pass paths as positional args ($1, $2) to avoid injection from special chars in paths
+    lockf -k "$lock" bash -c '
+      ledger="$1" session_tmp="$2"
+      new_session=$(cat "$session_tmp")
+      tmp=$(mktemp)
+      if [[ -f "$ledger" ]] && jq '"'"'.'"'"' "$ledger" >/dev/null 2>&1; then
+        jq --argjson s "$new_session" '"'"'.sessions += [$s]'"'"' "$ledger" > "$tmp" && mv "$tmp" "$ledger"
       else
-        jq -n --argjson s \"\$new_session\" '{schema_version: 1, sessions: [\$s]}' > \"\$tmp\" && mv \"\$tmp\" \"\$ledger\"
+        jq -n --argjson s "$new_session" '"'"'{schema_version: 1, sessions: [$s]}'"'"' > "$tmp" && mv "$tmp" "$ledger"
       fi
-    "
+    ' _ "$ledger" "$session_tmp"
     rm -f "$session_tmp"
   else
     # No lock mechanism available — write directly
