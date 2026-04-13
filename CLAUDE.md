@@ -73,6 +73,8 @@ All workflows run on self-hosted runners except the fork PR path in `ci.yml`, wh
 - Nightly release has a 3am CT time gate via PowerShell timezone check
 - `readme-metrics.yml` requires both `contents: write` and `pull-requests: write`
 - Release workflow triggers on `v*` tags (e.g., `git tag v0.1.0 -m "..." && git push origin v0.1.0`)
+- Wiki sync: `python3 scripts/sync_wiki.py --push` — run after any `docs/wiki/` edits to publish to GitHub wiki
+- `fmt-autofix.yml` must run on `[self-hosted, Windows, X64, textquest]` — `rustup`/`cargo fmt` are not on Linux DO runners
 
 ## Autonomous Agent Pipeline
 
@@ -108,7 +110,8 @@ See `docs/implementation-roadmap.md` for current milestone status and sequencing
 
 | File                        | Purpose                                                              |
 | --------------------------- | -------------------------------------------------------------------- |
-| `config/frostreaver.toml`   | Main config — process, launch, polling, group settings               |
+| `config/textquest.toml`     | Main config — process, launch, polling, group settings               |
+| `config/frostreaver.toml`   | Legacy alias (still present, superseded by textquest.toml)           |
 | `config/accounts.toml`      | Per-account name, server, character, class, group                    |
 | `config/camps/*.toml`       | Camp definitions — zone, pull point/radius, mana thresholds          |
 | `config/classes/*.toml`     | 16 class ability configs with cooldowns, priorities, level overrides |
@@ -143,3 +146,6 @@ See `docs/implementation-roadmap.md` for current milestone status and sequencing
 - **Self-hosted runner workspaces persist**: Files from previous runs may exist at test import time but vanish after `actions/checkout`. Use `self.skipTest()` inside test bodies instead of `@unittest.skipUnless` for file-existence guards.
 - **Agent artifact files are gitignored**: `AUTOSHIP_RESULT.md`, `AUTOSHIP_PROMPT.md`, `BEACON_RESULT.md`, `BEACON_PROMPT.md`, `.autoship/` — never commit these. They are runtime outputs from the agent pipeline.
 - **const fn misuse**: Drop `const` from functions that allocate (`Vec`, `String`, `Box`), take `&mut self`, or call non-const functions — none of these are const-evaluable. `#[cfg]`-gated blocks inside `const fn` are a separate but related rejection trigger.
+- **README metrics badge format**: `update_readme_metrics.py` finds `[![Rust LOC]` and `[![Tests]` string markers for in-place replacement. HTML `<img>` badge format breaks it — keep these two badges as markdown even if other badges are HTML.
+- **Stale remote branch refs**: `git branch -r` can show 100+ phantom branches that no longer exist on GitHub. Run `git remote prune origin` to clear stale local tracking refs before any branch audit or bulk-delete operation.
+- **Pre-checkout bootstrap paradox**: The workspace prep bash block in `ci.yml`/`claude-agent.yml` must run before `actions/checkout`, so it cannot source a script from the repo. Keep it inlined in both workflows; `tests/test_ci_runner_workspace_prep.py` validates both blocks stay identical.
