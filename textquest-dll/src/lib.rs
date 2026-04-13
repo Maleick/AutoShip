@@ -151,14 +151,13 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
     //    until the window appears and the HWBP can be set on the main thread.
     if let Err(e) = install_hooks(eq_base) {
         tracing::warn!("Hook installation deferred (window not ready): {}", e);
-        let eq_base_copy = eq_base;
         std::thread::spawn(move || {
             for attempt in 1..=60 {
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 if crate::SHUTTING_DOWN.load(std::sync::atomic::Ordering::SeqCst) {
                     return;
                 }
-                match install_hooks(eq_base_copy) {
+                match install_hooks(eq_base) {
                     Ok(()) => {
                         tracing::info!(attempt, "Deferred hook installation succeeded");
                         return;
@@ -251,12 +250,11 @@ fn init_tracing() {
         .max_log_files(7) // Keep 1 week of logs
         .build(&log_dir)
         .unwrap_or_else(|_| rolling::daily(&log_dir, "textquest-dll.log"));
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-    // Intentionally leak the guard so it lives for the DLL's lifetime — there is
-    // no clean drop point for a cdylib that outlives its init thread.
-    // Box::leak is preferred over mem::forget as it makes the intent explicit.
-    Box::leak(Box::new(_guard));
+    // Leak the guard so it lives for the DLL's lifetime — there is no clean
+    // drop point for a cdylib that outlives its init thread.
+    Box::leak(Box::new(guard));
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
@@ -418,6 +416,10 @@ fn get_module_size(base_addr: u64) -> usize {
 /// Install all function hooks using the resolved EQ base address.
 #[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
+    if let Err(e) = hooks::detours::install_all(eq_base) {
+        tracing::warn!("Inline detour install failed (continuing): {}", e);
+    }
+
     // Primary: use the offset constant derived from PROCESS_GAME_EVENTS.
     let main_loop_offset = eq::MAIN_LOOP_OFFSET;
     if main_loop_offset == 0 {
@@ -428,22 +430,22 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     let main_loop_addr = eq_base as usize + main_loop_offset;
 
     // Cross-check against textquest_common offsets via rebase.
-    if let Some(expected) =
-        textquest_common::offsets::rebase(textquest_common::offsets::PROCESS_GAME_EVENTS, eq_base)
-    {
-        if main_loop_addr != expected {
-            tracing::warn!(
-                computed = format!("{:#x}", main_loop_addr),
-                expected = format!("{:#x}", expected),
-                "MAIN_LOOP_OFFSET disagrees with offsets::PROCESS_GAME_EVENTS — using offsets rebase"
-            );
-            hooks::game_loop::install(expected)?;
+    let install_addr =
+        if let Some(expected) = textquest_common::offsets::rebase(textquest_common::offsets::PROCESS_GAME_EVENTS, eq_base) {
+            if main_loop_addr != expected {
+                tracing::warn!(
+                    computed = format!("{:#x}", main_loop_addr),
+                    expected = format!("{:#x}", expected),
+                    "MAIN_LOOP_OFFSET disagrees with offsets::PROCESS_GAME_EVENTS — using offsets rebase"
+                );
+                expected
+            } else {
+                main_loop_addr
+            }
         } else {
-            hooks::game_loop::install(main_loop_addr)?;
-        }
-    } else {
-        hooks::game_loop::install(main_loop_addr)?;
-    }
+            main_loop_addr
+        };
+    hooks::game_loop::install(install_addr)?;
 
     // Install render strobe hook -- background clients skip 3D rendering.
     if let Some(render_addr) =

@@ -44,13 +44,12 @@ pub fn set_game_state(game_state: HookGameState) {
 }
 
 pub fn install_all() -> Result<(), Box<dyn std::error::Error>> {
-    tracing::info!("Installing additional hooks...");
-    tracing::info!("Additional hook setup complete");
     Ok(())
 }
 
 pub fn remove_all() {
     tracing::info!("Removing all hooks...");
+    detours::remove_all();
     hwbp::remove_all();
     fingerprint::remove();
     chat::remove();

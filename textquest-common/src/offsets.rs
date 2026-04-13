@@ -238,6 +238,24 @@ pub const CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT: u64 = 0x0001_403B_B240;
 /// Signature: CChatWindow* CreateChatWindow(CTabWnd* pTabs, int, int, CXStr name, int, int, int, int, int)
 pub const CCHAT_MGR_CREATE_CHAT_WINDOW: u64 = 0x0001_403B_1780;
 
+/// `CSidlScreenWnd::Init` — UI window initialization hook candidate
+pub const SIDL_SCREEN_WND_INIT: u64 = 0x0;
+
+/// `CXWndManager::RemoveWnd` — UI window teardown hook candidate
+pub const CXWND_MANAGER_REMOVE_WND: u64 = 0x0;
+
+/// `CMerchantWnd::PurchasePageHandler::UpdateList` — merchant event callback
+pub const CMERCHANTWND_PURCHASEPAGEHANDLER_UPDATELIST: u64 = 0x0;
+
+/// `ProcessMouseEvents` — input event processing hook candidate
+pub const PROCESS_MOUSE_EVENTS: u64 = 0x0;
+
+/// `ProcessKeyboardEvents` — input event processing hook candidate
+pub const PROCESS_KEYBOARD_EVENTS: u64 = 0x0;
+
+/// `CRender::ResetDevice` — graphics device-recovery hook candidate
+pub const CRENDER_RESET_DEVICE: u64 = 0x0;
+
 // ─── Anti-Cheat / Network Internals (Ghidra-verified) ───
 // Source: Ghidra analysis of eqgame.exe, 2026-04-03
 // These addresses were discovered via binary analysis, not eqlib headers.
