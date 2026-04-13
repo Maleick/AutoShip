@@ -17,7 +17,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 WORKSPACES_DIR=".autoship/workspaces"
 STATE_FILE=".autoship/state.json"
-STATE_LOCK="${STATE_FILE%.json}.lock"
 
 # Check if workspaces directory exists
 if [[ ! -d "$WORKSPACES_DIR" ]]; then
@@ -84,12 +83,12 @@ mark_issue_swept() {
   local issue_key="$1"
 
   if command -v flock >/dev/null 2>&1; then
-    exec 9>"$STATE_LOCK"
+    exec 9<"$STATE_FILE"
     flock -x 9
     write_swept_state "$issue_key"
     exec 9>&-
   elif command -v lockf >/dev/null 2>&1; then
-    lockf -k "$STATE_LOCK" bash -c '
+    lockf -k "$STATE_FILE" bash -c '
       state_file="$1" issue_key="$2"
       state_mode=$(stat -c '"'"'%a'"'"' "$state_file" 2>/dev/null || stat -f '"'"'%Lp'"'"' "$state_file" 2>/dev/null || true)
       state_uid=$(stat -c '"'"'%u'"'"' "$state_file" 2>/dev/null || stat -f '"'"'%u'"'"' "$state_file" 2>/dev/null || true)
