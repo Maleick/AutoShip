@@ -165,9 +165,12 @@ Continue to Step 4 with the pre-simplification code. Log that simplification was
 cd .autoship/workspaces/<issue-key>
 # Stage only files changed from the base branch — avoids staging AUTOSHIP_PROMPT.md,
 # .watcher.pid, debug files, and other unintended artifacts
-CHANGED_FILES=$(git diff --name-only main...HEAD)
-if [ -n "$CHANGED_FILES" ]; then
-  git add $CHANGED_FILES
+CHANGED_FILES=()
+while IFS= read -r -d '' file; do
+  CHANGED_FILES+=("$file")
+done < <(git diff --name-only -z main...HEAD)
+if [ "${#CHANGED_FILES[@]}" -gt 0 ]; then
+  git add -- "${CHANGED_FILES[@]}"
 fi
 # If CHANGED_FILES is empty, the agent already committed everything — skip the add step
 ISSUE_KEY="<issue-key>"
