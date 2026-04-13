@@ -181,21 +181,6 @@ impl OffsetDatabase {
         pz.insert("enduranceMax".to_string(), player_zone::ENDURANCE_MAX);
         pz.insert("standState".to_string(), player_zone::STANDSTATE);
 
-        let globals = [
-            ("pinstLocalPlayer", PINST_LOCAL_PLAYER),
-            ("pinstControlledPlayer", PINST_CONTROLLED_PLAYER),
-            ("pinstTarget", PINST_TARGET),
-            ("pinstSpawnManager", PINST_SPAWN_MANAGER),
-            ("pinstLocalPC", PINST_LOCAL_PC),
-            ("pinstSpellManager", PINST_SPELL_MANAGER),
-            ("pinstCDisplay", PINST_CDISPLAY),
-            ("pinstCEverQuest", PINST_CEVERQUEST),
-            ("pinstCContextMenuManager", PINST_CONTEXT_MENU_MANAGER),
-        ]
-        .into_iter()
-        .map(|(k, v)| (k.to_string(), v))
-        .collect();
-
         let player_base = [
             ("next", player_base::NEXT),
             ("prev", player_base::PREV),
@@ -330,6 +315,8 @@ mod tests {
         let db = OffsetDatabase::from_compiled_offsets();
         assert!(db.get_global("pinstLocalPlayer").is_some());
         assert!(db.get_global("pinstTarget").is_some());
+        assert!(db.get_global("pinstCChatWindowManager").is_some());
+        assert!(db.get_global("instEQZoneInfo").is_some());
         assert!(db.get_global("nonexistent").is_none());
     }
 
