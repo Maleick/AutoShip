@@ -67,6 +67,90 @@ def check_command(results: list[CheckResult], name: str, command: str, *args: st
     return True
 
 
+def check_map_files(results: list[CheckResult]) -> None:
+    """Validate all map files in config/maps/*.txt."""
+    import re
+
+    maps_dir = REPO_ROOT / "config" / "maps"
+    if not maps_dir.exists():
+        record(results, "WARN", "Map files", "config/maps/ directory not found — skipping map validation.")
+        return
+
+    map_files = sorted(maps_dir.glob("*.txt"))
+    if not map_files:
+        record(results, "WARN", "Map files", "No *.txt files found in config/maps/.")
+        return
+
+    # Valid line patterns:
+    #   L x1, y1, z1, x2, y2, z2, r, g, b   (line segment)
+    #   P x, y, z, r, g, b, size, label       (point/label)
+    #   * comment
+    #   (blank lines are allowed)
+    float_re = r"[-+]?\d+(?:\.\d+)?"
+    int_re = r"\d+"
+    line_pattern = re.compile(
+        r"^L\s+"
+        + r",\s*".join([float_re] * 6)
+        + r",\s*"
+        + r",\s*".join([int_re] * 3)
+        + r"\s*$"
+    )
+    point_pattern = re.compile(
+        r"^P\s+"
+        + r",\s*".join([float_re] * 3)
+        + r",\s*"
+        + r",\s*".join([int_re] * 3)
+        + r",\s*"
+        + int_re
+        + r",\s*\S.*$"
+    )
+
+    errors: list[str] = []
+    empty_files: list[str] = []
+    checked = 0
+
+    for map_file in map_files:
+        try:
+            content = map_file.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            errors.append(f"{map_file.name}: read error — {exc}")
+            continue
+
+        lines = content.splitlines()
+        non_blank = [ln for ln in lines if ln.strip()]
+        if not non_blank:
+            empty_files.append(map_file.name)
+            continue
+
+        checked += 1
+        for lineno, raw in enumerate(lines, start=1):
+            stripped = raw.strip()
+            if not stripped or stripped.startswith("*"):
+                continue
+            if line_pattern.match(stripped) or point_pattern.match(stripped):
+                continue
+            errors.append(f"{map_file.name}:{lineno}: unexpected format — {stripped[:60]!r}")
+
+    total = len(map_files)
+    if errors or empty_files:
+        detail_parts: list[str] = []
+        if empty_files:
+            detail_parts.append(f"empty files: {', '.join(empty_files)}")
+        if errors:
+            detail_parts.append("; ".join(errors[:5]))
+            if len(errors) > 5:
+                detail_parts.append(f"…and {len(errors) - 5} more error(s)")
+        record(
+            results,
+            "FAIL",
+            "Map files",
+            f"Checked {total} map file(s) — issues found: {'; '.join(detail_parts)}",
+            "Ensure each map line starts with L or P (with correct field counts) or * for comments.",
+        )
+    else:
+        record(results, "PASS", "Map files", f"{checked}/{total} map file(s) passed validation.")
+
+
 def detect_windows_toolchain(results: list[CheckResult]) -> None:
     if os.name != "nt":
         return
@@ -335,6 +419,8 @@ def main() -> int:
                 "The clippy component is not available.",
                 "Run `rustup component add clippy`.",
             )
+
+    check_map_files(results)
 
     check_command(
         results,
