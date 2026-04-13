@@ -51,28 +51,6 @@ fi
 
 ---
 
-## Step 0: Verify Tmux Layout
-
-The Beacon session uses a fixed two-column layout:
-
-- **Pane 0 (left, 30% width)**: Sonnet executor (main orchestrator) — created at startup, not managed here
-- **Pane 1+ (right, 70% width)**: Agent panes, tiled vertically
-
-On first agent spawn, initialize the layout if it hasn't been set:
-
-```bash
-# Check if layout already set (only 1 pane means orchestrator hasn't split yet)
-pane_count=$(tmux list-panes -t beacon | wc -l)
-if (( pane_count == 1 )); then
-  # Split main pane into left (orchestrator) and right (agents) regions
-  tmux split-window -t beacon:0.0 -h -p 70
-fi
-```
-
-This only runs once — subsequent agents spawn into the right column via `split-window -t beacon`.
-
----
-
 ## Step 1: Create Worktree
 
 ```bash
@@ -92,9 +70,11 @@ git worktree add .beacon/workspaces/$ISSUE_KEY -b beacon/$ISSUE_KEY main
 
 ---
 
-## Step 2: Set Up Pane Log (for real-time completion detection)
+## Step 2: Set Up Pane Log (Gemini only)
 
-Before spawning any tmux-based agent, create the pane log file:
+> **Note:** Codex uses `dispatch-codex-appserver.sh` which writes `COMPLETE`/`STUCK` to `pane.log` directly — no tmux pane required. This step only applies to Gemini dispatch.
+
+Before spawning a Gemini tmux pane, create the pane log file:
 
 ```bash
 mkdir -p .beacon/workspaces/$ISSUE_KEY
@@ -208,22 +188,25 @@ EOF
 
 ````
 
-Spawn tmux pane:
+**Codex — app-server dispatch (no tmux):**
 
 ```bash
-PANE_ID=$(tmux split-window -t beacon -c .beacon/workspaces/$ISSUE_KEY -P -F '#{pane_id}')
-tmux select-layout -t beacon tiled
-tmux select-pane -t $PANE_ID -T "<TOOL>: $ISSUE_KEY"
-tmux pipe-pane -t $PANE_ID "cat >> .beacon/workspaces/$ISSUE_KEY/pane.log"
-````
+# Run in background; writes COMPLETE/STUCK to pane.log and emits event to event-queue.json
+bash hooks/dispatch-codex-appserver.sh "$ISSUE_KEY" ".beacon/workspaces/$ISSUE_KEY/BEACON_PROMPT.md" &
+```
 
-Send command:
+Update state (no pane_id for Codex):
 
 ```bash
-# Codex — use --prompt-file to avoid shell injection from issue body content
-tmux send-keys -t $PANE_ID "codex --prompt-file BEACON_PROMPT.md --auto-edit; for i in \$(seq 1 5); do [[ -f BEACON_RESULT.md ]] && break; sleep 1; done; [[ -f BEACON_RESULT.md ]] && echo COMPLETE || echo STUCK" Enter
+bash hooks/update-state.sh set-running <issue-id> agent=codex-spark
+bash hooks/quota-update.sh decrement codex-spark <complexity>   # simple | medium | complex
+```
 
-# Gemini — no native file flag; write a wrapper script and execute it instead
+**Gemini — tmux pane dispatch:**
+
+Write wrapper script:
+
+```bash
 cat > .beacon/workspaces/$ISSUE_KEY/run-agent.sh << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -235,25 +218,31 @@ done
 [[ -f BEACON_RESULT.md ]] && echo COMPLETE || echo STUCK
 WRAPPER
 chmod +x .beacon/workspaces/$ISSUE_KEY/run-agent.sh
+```
+
+Spawn tmux pane:
+
+```bash
+PANE_ID=$(tmux split-window -t beacon -c .beacon/workspaces/$ISSUE_KEY -P -F '#{pane_id}')
+tmux select-layout -t beacon tiled
+tmux select-pane -t $PANE_ID -T "gemini: $ISSUE_KEY"
+tmux pipe-pane -t $PANE_ID "cat >> .beacon/workspaces/$ISSUE_KEY/pane.log"
 tmux send-keys -t $PANE_ID "bash run-agent.sh" Enter
+```
+
+Update state:
+
+```bash
+bash hooks/update-state.sh set-running <issue-id> agent=gemini pane_id=$PANE_ID
+bash hooks/quota-update.sh decrement gemini <complexity>
 ```
 
 Never inline file contents into shell strings. Always use a file flag or wrapper script to avoid shell metacharacter injection from issue bodies.
 
-Update state and decrement quota:
+**Completion detection:**
 
-```bash
-bash hooks/update-state.sh set-running <issue-id> agent=codex-spark pane_id=$PANE_ID
-# Decrement estimated quota for the tool actually dispatched (use actual tool name)
-bash hooks/quota-update.sh decrement codex-spark <complexity>   # simple | medium | complex
-# bash hooks/quota-update.sh decrement codex-gpt <complexity>   # if GPT model used
-# bash hooks/quota-update.sh decrement gemini <complexity>      # if Gemini dispatched
-```
-
-**Completion detection for third-party agents:**
-
-- Monitor 1 tails `pane.log` for `COMPLETE`, `BLOCKED`, or `STUCK`
-- As backup: if `pane_dead=1` and `BEACON_RESULT.md` exists → treat as COMPLETE
+- Codex: `dispatch-codex-appserver.sh` writes `COMPLETE`/`STUCK` to `pane.log` and emits event to event-queue.json
+- Gemini: Monitor 1 tails `pane.log`; `pane_dead=1` + `BEACON_RESULT.md` exists → COMPLETE fallback
 - If `pane_dead=1` and no `BEACON_RESULT.md` → crash, re-dispatch
 
 ---
@@ -287,12 +276,14 @@ Call this snippet from the Monitor 1 handler after processing a checkin event, n
 
 ---
 
-## 20+ Pane Handling
+## 20+ Pane Handling (Gemini only)
+
+> **Note:** Codex dispatches via app-server (no tmux pane). This section applies only to Gemini dispatch in Step 3A.
 
 `select-layout tiled` handles up to ~30 panes on a typical screen. Beyond 20 agent panes the tiles become too small to read. Switch the agent column to `even-vertical` at that threshold:
 
 ```bash
-# For > 20 agent panes, switch to even-vertical within the agent column
+# For > 20 Gemini panes, switch to even-vertical within the agent column
 agent_count=$(tmux list-panes -t beacon | wc -l)
 if (( agent_count > 20 )); then
   tmux select-layout -t beacon even-vertical
@@ -301,7 +292,7 @@ else
 fi
 ```
 
-This check runs after every `split-window` call in Step 3A.
+This check runs after every Gemini `split-window` call.
 
 ---
 
