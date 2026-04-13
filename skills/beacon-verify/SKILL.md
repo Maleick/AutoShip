@@ -29,9 +29,14 @@ Before spawning the reviewer, run these assertions. Any failure → immediate FA
 **1. Path canonicalization** — assert `BEACON_RESULT_PATH` is inside `WORKTREE_PATH`:
 
 ```bash
+# Check existence first — missing file is a distinct failure from symlink escape
+if [[ ! -e "$BEACON_RESULT_PATH" ]]; then
+  echo "VERDICT: FAIL — BEACON_RESULT.md missing (agent did not write result file)"
+  # Mark issue blocked, skip to escalation
+fi
 REAL_RESULT=$(realpath "$BEACON_RESULT_PATH" 2>/dev/null)
 REAL_WORKTREE=$(realpath "$WORKTREE_PATH" 2>/dev/null)
-if [[ -z "$REAL_RESULT" || "$REAL_RESULT" != "$REAL_WORKTREE"/* ]]; then
+if [[ -z "$REAL_RESULT" || -z "$REAL_WORKTREE" || "$REAL_RESULT" != "$REAL_WORKTREE"/* ]]; then
   echo "VERDICT: FAIL — BEACON_RESULT_PATH is outside worktree (possible symlink escape)"
   # Mark issue blocked, skip to escalation
 fi

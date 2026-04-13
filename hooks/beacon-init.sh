@@ -312,11 +312,13 @@ reconcile_stale_running() {
     local worktree_exists=0
     [[ -d "$worktree_path" ]] && worktree_exists=1
 
+    local state_tmp
+    state_tmp=$(mktemp)
     if [[ $has_inprogress_label -eq 1 ]]; then
       # Agent may be running in a different session — preserve state but clear dead pane ref
       echo "  $key: beacon:in-progress label present — preserving running state, clearing pane_id"
-      jq --arg k "$key" '.issues[$k].pane_id = null' "$STATE_FILE" > "${STATE_FILE}.tmp" \
-        && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+      jq --arg k "$key" '.issues[$k].pane_id = null' "$STATE_FILE" > "$state_tmp" \
+        && mv "$state_tmp" "$STATE_FILE"
     else
       # No label, no pane → reset to unclaimed
       echo "  $key: no active pane or in-progress label — resetting to unclaimed"
@@ -324,12 +326,12 @@ reconcile_stale_running() {
         # Keep worktree/assignment, just reset state
         jq --arg k "$key" \
           '.issues[$k].state = "unclaimed" | .issues[$k].pane_id = null' \
-          "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+          "$STATE_FILE" > "$state_tmp" && mv "$state_tmp" "$STATE_FILE"
       else
         # Clear everything
         jq --arg k "$key" \
           '.issues[$k].state = "unclaimed" | .issues[$k].pane_id = null | .issues[$k].worktree = null | .issues[$k].agent = null' \
-          "$STATE_FILE" > "${STATE_FILE}.tmp" && mv "${STATE_FILE}.tmp" "$STATE_FILE"
+          "$STATE_FILE" > "$state_tmp" && mv "$state_tmp" "$STATE_FILE"
       fi
     fi
   done <<< "$stale_keys"

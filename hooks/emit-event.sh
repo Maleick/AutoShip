@@ -26,6 +26,21 @@ if [[ ! -f "$QUEUE" ]] || ! jq -e 'type == "array"' "$QUEUE" >/dev/null 2>&1; th
 fi
 touch "$LOCK"
 
-flock "$LOCK" \
+# flock (Linux) / lockf (macOS BSD) fallback
+if command -v flock >/dev/null 2>&1; then
+  (
+    flock -x 9
+    jq --argjson evt "$EVENT" '. + [$evt]' "$QUEUE" > "${QUEUE}.tmp" \
+      && mv "${QUEUE}.tmp" "$QUEUE"
+  ) 9>"$LOCK"
+elif command -v lockf >/dev/null 2>&1; then
+  # Pass paths/event as positional args ($1,$2,$3) to avoid shell injection from special chars
+  lockf -k "$LOCK" bash -c '
+    evt="$1" queue="$2" qtmp="$3"
+    jq --argjson evt "$evt" '"'"'. + [$evt]'"'"' "$queue" > "$qtmp" && mv "$qtmp" "$queue"
+  ' _ "$EVENT" "$QUEUE" "${QUEUE}.tmp"
+else
+  # No locking available — best-effort append
   jq --argjson evt "$EVENT" '. + [$evt]' "$QUEUE" > "${QUEUE}.tmp" \
-  && mv "${QUEUE}.tmp" "$QUEUE"
+    && mv "${QUEUE}.tmp" "$QUEUE"
+fi

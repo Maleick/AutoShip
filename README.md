@@ -129,7 +129,7 @@ AutoShip detects available tools at startup and routes work accordingly.
 
 ```mermaid
 flowchart TD
-    A([GitHub Issues]) --> B[/autoship:start]
+    A([GitHub Issues]) --> B["/autoship:start"]
     B --> C[Classify Issues\ntask-type classifier]
 
     C -->|research / docs| D[Gemini · Haiku]
