@@ -67,6 +67,10 @@ for worktree_dir in "$WORKSPACES_DIR"/*/; do
   # Extract issue key from directory name (e.g., ".beacon/workspaces/issue-16" → "issue-16")
   ISSUE_KEY=$(basename "$worktree_dir")
 
+  # Check if this issue was already swept in this cycle; skip if so
+  swept=$(jq -r --arg key "$ISSUE_KEY" '.issues[$key].swept // false' "$STATE_FILE" 2>/dev/null) || swept="false"
+  [[ "$swept" == "true" ]] && continue
+
   # Look up the issue state in state.json
   ISSUE_STATE=$(jq -r --arg id "$ISSUE_KEY" '.issues[$id].state // "unknown"' "$STATE_FILE" 2>/dev/null) || ISSUE_STATE="unknown"
 
@@ -87,6 +91,9 @@ for worktree_dir in "$WORKSPACES_DIR"/*/; do
     bash "$SCRIPT_DIR/cleanup-worktree.sh" "$ISSUE_KEY" 2>/dev/null || {
       echo "Warning: failed to clean up $ISSUE_KEY"
     }
+
+    # Write swept sentinel to prevent re-processing
+    jq --arg key "$ISSUE_KEY" '.issues[$key].swept = true' "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE" 2>/dev/null || true
 
     CLEANED_COUNT=$((CLEANED_COUNT + 1))
     continue
@@ -111,6 +118,10 @@ for worktree_dir in "$WORKSPACES_DIR"/*/; do
       bash "$SCRIPT_DIR/cleanup-worktree.sh" "$ISSUE_KEY" 2>/dev/null || {
         echo "Warning: failed to clean up orphaned worktree $ISSUE_KEY"
       }
+
+      # Write swept sentinel to prevent re-processing
+      jq --arg key "$ISSUE_KEY" '.issues[$key].swept = true' "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE" 2>/dev/null || true
+
       CLEANED_COUNT=$((CLEANED_COUNT + 1))
     fi
   fi
