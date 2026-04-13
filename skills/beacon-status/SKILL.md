@@ -94,7 +94,36 @@ uptime = "{h}h {m}m"
 
 If `started_at` is missing, display `Uptime: unknown`.
 
-### Step 5: Render Output
+### Step 5: Gather Token Usage
+
+Read token spend from `.beacon/token-ledger.json`. If the file is missing, display zeros for all models.
+
+**Get the current session ID:**
+
+```bash
+SESSION_ID=$(jq -r '.sessions[-1].session_id' .beacon/token-ledger.json 2>/dev/null || echo "")
+```
+
+**Per-model session totals** — aggregate `tokens_used` for each agent in the current session:
+
+```bash
+jq -r --arg sid "$SESSION_ID" '
+  .sessions[] | select(.session_id == $sid) |
+  .issues[] | [.agent, (.tokens_used // 0)] | @tsv
+' .beacon/token-ledger.json 2>/dev/null \
+  | awk '{sum[$1]+=$2} END {for(a in sum) print a, sum[a]}'
+```
+
+**All-time total** — sum all `tokens_used` across every session:
+
+```bash
+jq '[.sessions[].issues[].tokens_used // 0] | add // 0' .beacon/token-ledger.json 2>/dev/null || echo 0
+```
+
+Store per-model counts keyed by agent name. Known models to always display (show `0` if no data):
+`codex-spark`, `codex-gpt`, `claude-haiku`, `gemini`, `copilot`.
+
+### Step 6: Render Output
 
 **PROGRESS fields** — read from `state.json` → `stats`:
 
@@ -133,6 +162,16 @@ PROGRESS
   Session:   Dispatched: 4   Completed: 3   Failed: 1  Blocked: 0
   All-time:  Dispatched: 45  Completed: 40
   PRs open: 3  PRs merged: 5
+
+═══ Token Usage ══════════════════════════
+  codex-spark    12,400  tokens  (session)
+  codex-gpt       8,200  tokens  (session)
+  claude-haiku    3,100  tokens  (session)
+  gemini              0  tokens  (session)
+  copilot             0  tokens  (session)
+
+  Session total:  23,700 tokens
+  All-time total: 187,400 tokens
 ```
 
 ### Quota Bar Rendering
@@ -152,6 +191,26 @@ Color hints (for terminal output):
 - `0%`: show as "EXHAUSTED"
 
 Append `(N dispatches, est.)` from `quota.json` after the percentage label for each third-party tool. Use `est.` always for Codex and Gemini — neither CLI exposes a subscription quota API, so the value is a decay estimate. Claude has no dispatch count or "est." shown (Max subscription, always available). If `quota.json` is missing or a tool has no entry, omit the dispatch count for that tool.
+
+### Token Usage Rendering
+
+Always display all five known models in this order: `codex-spark`, `codex-gpt`, `claude-haiku`, `gemini`, `copilot`. Show `0` for models with no recorded usage in the current session. Format token counts with comma thousands separators, right-aligned in an 8-character field. Label each row with `(session)` to distinguish from all-time.
+
+The `Session total` line sums all per-model session values. The `All-time total` line comes from the all-time aggregation query and includes all past sessions.
+
+If `.beacon/token-ledger.json` is missing, show all zeros:
+
+```
+═══ Token Usage ══════════════════════════
+  codex-spark         0  tokens  (session)
+  codex-gpt           0  tokens  (session)
+  claude-haiku        0  tokens  (session)
+  gemini              0  tokens  (session)
+  copilot             0  tokens  (session)
+
+  Session total:      0 tokens
+  All-time total:     0 tokens
+```
 
 ### When No Agents Are Running
 
@@ -174,4 +233,14 @@ PROGRESS
   All-time:  Dispatched: 68  Completed: 68
   PRs open: 0  PRs merged: 12
   All issues in current phase complete. Run checkpoint to continue.
+
+═══ Token Usage ══════════════════════════
+  codex-spark    45,200  tokens  (session)
+  codex-gpt      31,800  tokens  (session)
+  claude-haiku    9,400  tokens  (session)
+  gemini          2,100  tokens  (session)
+  copilot             0  tokens  (session)
+
+  Session total:  88,500 tokens
+  All-time total: 312,900 tokens
 ```
