@@ -139,14 +139,13 @@ jobs:
                   head: name
                 });
 
-                // Check if merged via any strategy: regular merge, squash, or rebase
-                // - Regular: status 'identical' or ahead_by === 0
-                // - Squash/rebase: ahead_by > 0 but behind_by === 0 (code already in default branch)
-                const isMerged = compare.data.status === 'identical' ||
-                                 compare.data.ahead_by === 0 ||
-                                 (compare.data.status === 'ahead' && compare.data.behind_by === 0);
-
-                if (isMerged) {
+                // Check if branch is merged
+                // Only delete if:
+                // - Branches are identical, OR
+                // - Feature branch has no commits ahead (no unmerged work)
+                // Note: Squash/rebase merged branches won't be detected here (ahead_by > 0)
+                // but will be caught by GitHub's "auto delete head branch" PR setting
+                if (compare.data.status === 'identical' || compare.data.ahead_by === 0) {
                   if (dryRun) {
                     core.info(`[DRY-RUN] Would delete merged branch: ${name}`);
                     deleteLog.push(`${name} (merged)`);
