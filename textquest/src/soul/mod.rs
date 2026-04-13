@@ -24,3 +24,5 @@ pub mod personality;
 pub mod recovery;
 /// Social dynamics — inter-character relationships, group cohesion, banter triggers.
 pub mod social;
+/// Speech style evolution — catchphrase learning and adoption mechanics.
+pub mod speech_evolution;
