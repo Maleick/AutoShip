@@ -7,14 +7,11 @@
 //! The [`distributor`] module provides a pure FSM for routing looted items
 //! through Reserve → Assign → Execute phases with automatic retry.
 
-pub mod distributor;
+pub mod ledger;
 mod store;
 pub mod wishlist;
 
-pub use distributor::{
-    AssignFn, AssignmentTarget, DistributionJob, DistributionPhase, ExecuteFn, ExecuteResult,
-    LootDistributor, LootItem, MAX_RETRIES,
-};
+pub use ledger::{DaySummary, EconomyLedger, EntrySource, LedgerEntry, TrendReport};
 pub use store::{
     DropRateRow, ImportItem, ItemRow, ItemSearchFilter, LootHistoryRow, LootStore, LootTableRow,
     WishlistRow,
