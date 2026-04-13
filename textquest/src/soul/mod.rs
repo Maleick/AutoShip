@@ -4,6 +4,8 @@
 pub mod audit;
 /// Soul Engine configuration — API keys, model settings, personality tuning.
 pub mod config;
+/// Soul Engine configuration validation — validates SoulConfig fields and returns structured errors.
+pub mod config_validator;
 /// Soul coordinator — orchestrates personality, memory, idle, and social systems.
 pub mod coordinator;
 /// SQLite schema validation and migration framework for Soul Engine.
