@@ -15,6 +15,23 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
 }
 STATE_FILE="$REPO_ROOT/$STATE_FILE"
 
+# Acquire exclusive lock for entire script duration.
+# Prevents concurrent read-modify-write races between parallel update-state.sh invocations.
+LOCK_FILE="${STATE_FILE%.json}.lock"
+if [[ -z "${BEACON_STATE_LOCKED:-}" ]]; then
+  export BEACON_STATE_LOCKED=1
+  if command -v flock >/dev/null 2>&1; then
+    # Linux: hold FD lock for script duration
+    exec 9>"$LOCK_FILE"
+    flock -x 9
+  elif command -v lockf >/dev/null 2>&1; then
+    # macOS (BSD): re-exec under lockf; BEACON_STATE_LOCKED prevents infinite loop
+    exec lockf -k "$LOCK_FILE" "$0" "$@"
+  fi
+  # No lock mechanism available -- proceed without locking
+fi
+
+
 if [[ ! -f "$STATE_FILE" ]]; then
   echo "Error: $STATE_FILE not found. Run beacon-init.sh first." >&2
   exit 1
