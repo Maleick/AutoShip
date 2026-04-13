@@ -70,6 +70,19 @@ manage_labels() {
     return 0
   fi
 
+  # Resolve current repository slug from git remote and ensure state.json matches it.
+  # This prevents a stale/tampered state file from causing cross-repo label edits.
+  local current_repo_slug remote_url
+  remote_url=$(git config --get remote.origin.url 2>/dev/null || true)
+  if [[ -z "$remote_url" ]]; then
+    return 0
+  fi
+  current_repo_slug=$(printf '%s\n' "$remote_url" \
+    | sed -E 's#^git@github\.com:##; s#^https?://github\.com/##; s#\.git$##')
+  if [[ -z "$current_repo_slug" ]] || [[ "$repo_slug" != "$current_repo_slug" ]]; then
+    return 0
+  fi
+
   # Remove old labels first
   for old_label in "${remove_labels[@]}"; do
     # Verify the label exists before trying to remove it
