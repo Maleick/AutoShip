@@ -175,23 +175,26 @@ ISSUE_TITLE="<issue-title>"      # untrusted: keep as data only
 ISSUE_NUMBER="<issue-number>"
 TOOL_NAME="<tool-name>"
 ATTEMPT="<N>"
+COMMIT_MSG_FILE=$(mktemp)
+PR_BODY_FILE=$(mktemp)
+trap 'rm -f "$COMMIT_MSG_FILE" "$PR_BODY_FILE"' EXIT
 
 # Build commit/PR text in files (no shell eval of untrusted issue title/body)
 printf '%s\n\nCloses #%s\n\nDispatched by AutoShip. Agent: %s. Attempt: %s.\nVerified by Sonnet reviewer. Tests: passing.\n' \
   "$ISSUE_KEY: $ISSUE_TITLE" \
   "$ISSUE_NUMBER" \
   "$TOOL_NAME" \
-  "$ATTEMPT" > .autoship_commit_msg.txt
+  "$ATTEMPT" > "$COMMIT_MSG_FILE"
 
 printf '## Summary\n%s\n\n## Verification\n- Tests: passing\n- Reviewer: PASS\n- Simplified: yes/no\n\nCloses #%s\n\nDispatched by [AutoShip](https://github.com/Maleick/AutoShip)\n' \
   "<from AUTOSHIP_RESULT.md>" \
-  "$ISSUE_NUMBER" > .autoship_pr_body.md
+  "$ISSUE_NUMBER" > "$PR_BODY_FILE"
 
-git commit -F .autoship_commit_msg.txt
+git commit -F "$COMMIT_MSG_FILE"
 
 gh pr create \
   --title "$ISSUE_KEY: $ISSUE_TITLE" \
-  --body-file .autoship_pr_body.md \
+  --body-file "$PR_BODY_FILE" \
   --label autoship
 ```
 
