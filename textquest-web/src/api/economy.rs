@@ -55,6 +55,7 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::State;
+use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -123,6 +124,10 @@ pub struct EconomyQueuesResponse {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
+fn is_trusted_origin(headers: &HeaderMap) -> bool {
+    crate::api::loot::is_trusted_origin(headers)
+}
+
 /// GET /api/economy/status — current active cycles and pause state.
 pub async fn get_status(State(state): State<Arc<AppState>>) -> Json<EconomyStatusResponse> {
     let is_paused = *state.economy_state.is_paused.read().await;
@@ -146,14 +151,20 @@ pub async fn get_queues(State(state): State<Arc<AppState>>) -> Json<EconomyQueue
 }
 
 /// POST /api/economy/pause — pause all economy cycles.
-pub async fn pause_economy(State(state): State<Arc<AppState>>) -> StatusCode {
+pub async fn pause_economy(State(state): State<Arc<AppState>>, headers: HeaderMap) -> StatusCode {
+    if !is_trusted_origin(&headers) {
+        return StatusCode::FORBIDDEN;
+    }
     let mut paused = state.economy_state.is_paused.write().await;
     *paused = true;
     StatusCode::NO_CONTENT
 }
 
 /// POST /api/economy/resume — resume all economy cycles.
-pub async fn resume_economy(State(state): State<Arc<AppState>>) -> StatusCode {
+pub async fn resume_economy(State(state): State<Arc<AppState>>, headers: HeaderMap) -> StatusCode {
+    if !is_trusted_origin(&headers) {
+        return StatusCode::FORBIDDEN;
+    }
     let mut paused = state.economy_state.is_paused.write().await;
     *paused = false;
     StatusCode::NO_CONTENT
@@ -209,7 +220,7 @@ mod tests {
     #[tokio::test]
     async fn pause_sets_is_paused_true() {
         let state = demo_state();
-        let status = pause_economy(State(state.clone())).await;
+        let status = pause_economy(State(state.clone()), HeaderMap::new()).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
         let Json(economy_status) = get_status(State(state)).await;
         assert!(economy_status.is_paused);
@@ -219,10 +230,25 @@ mod tests {
     async fn resume_clears_is_paused() {
         let state = demo_state();
         // First pause
-        pause_economy(State(state.clone())).await;
+        pause_economy(State(state.clone()), HeaderMap::new()).await;
         // Then resume
-        let status = resume_economy(State(state.clone())).await;
+        let status = resume_economy(State(state.clone()), HeaderMap::new()).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
+        let Json(economy_status) = get_status(State(state)).await;
+        assert!(!economy_status.is_paused);
+    }
+
+    #[tokio::test]
+    async fn pause_rejects_untrusted_origin() {
+        let state = demo_state();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::ORIGIN,
+            "https://evil.example".parse().unwrap(),
+        );
+
+        let status = pause_economy(State(state.clone()), headers).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
         let Json(economy_status) = get_status(State(state)).await;
         assert!(!economy_status.is_paused);
     }
