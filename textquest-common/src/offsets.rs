@@ -180,6 +180,11 @@ pub const PROCESS_GAME_EVENTS: u64 = 0x0001_4028_E0F0;
 /// Source: eqgame.h `CEverQuest__dsp_chat_x` (ChatManagerClient__DisplayChatText)
 pub const DSP_CHAT: u64 = 0x0001_4010_CFC0;
 
+/// `CEverQuest::SetGameState` — hook point for game lifecycle transitions.
+/// Signature: `void SetGameState(int state)`
+/// Current value pending 20260310 rebase verification.
+pub const EVERQUEST_SET_GAME_STATE: u64 = 0x0000_0000_0000_0000;
+
 /// `CDisplay::RealRender_World` — render loop (alternative hook point)
 pub const REAL_RENDER_WORLD: u64 = 0x0001_401A_4320;
 

@@ -6,6 +6,7 @@ pub mod dx11_null;
 pub mod eqmain_hook;
 pub mod fingerprint;
 pub mod game_loop;
+pub mod set_game_state;
 pub mod hwbp;
 pub mod integrity;
 pub mod movement;
@@ -53,5 +54,6 @@ pub fn remove_all() {
     hwbp::remove_all();
     fingerprint::remove();
     chat::remove();
+    set_game_state::remove();
     tracing::info!("All hooks removed");
 }

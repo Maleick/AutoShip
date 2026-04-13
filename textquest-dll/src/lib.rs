@@ -492,6 +492,21 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("Could not rebase DSP_CHAT -- chat capture disabled");
     }
 
+    // Install CEverQuest state transition hook — keep orchestrator in sync with
+    // world/login/loading transitions and allow future hook set rotation.
+    if let Some(set_game_state_addr) =
+        textquest_common::offsets::rebase(textquest_common::offsets::EVERQUEST_SET_GAME_STATE, eq_base)
+    {
+        if let Err(e) = hooks::set_game_state::install(set_game_state_addr) {
+            tracing::warn!(
+                "SetGameState hook failed (continuing without state notifications): {}",
+                e
+            );
+        }
+    } else {
+        tracing::warn!("Could not rebase EVERQUEST_SET_GAME_STATE -- SetGameState hook disabled");
+    }
+
     // Install DX11 null device hooks — vtable-hook CreateTexture2D + CreateBuffer
     // so NullRender mode can create 1×1 textures instead of full-size, saving ~500 MB.
     if let Err(e) = hooks::dx11_null::install(eq_base) {

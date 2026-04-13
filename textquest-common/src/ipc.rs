@@ -825,6 +825,45 @@ pub struct ChatMessageInfo {
     pub timestamp_ms: u64,
 }
 
+/// Discrete lifecycle states for the EQ client process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum GameState {
+    /// Character select / account-level screen.
+    CharacterSelect,
+    /// Player is in the game world.
+    InGame,
+    /// Zone load / zone transition in progress.
+    Loading,
+    /// Login sequence in progress.
+    LoggingIn,
+    /// Unknown / unmapped state value.
+    Unknown(u32),
+}
+
+impl From<u32> for GameState {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => Self::CharacterSelect,
+            1 => Self::InGame,
+            2 => Self::Loading,
+            3 => Self::LoggingIn,
+            value => Self::Unknown(value),
+        }
+    }
+}
+
+impl From<GameState> for u32 {
+    fn from(value: GameState) -> Self {
+        match value {
+            GameState::CharacterSelect => 0,
+            GameState::InGame => 1,
+            GameState::Loading => 2,
+            GameState::LoggingIn => 3,
+            GameState::Unknown(value) => value,
+        }
+    }
+}
+
 /// Responses sent from the DLL back to the manager
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Response {
@@ -977,6 +1016,11 @@ pub enum Response {
     ChatBatch {
         /// Accumulated chat messages since the last poll.
         messages: Vec<ChatMessageInfo>,
+    },
+    /// Notification that `CEverQuest::SetGameState` transitioned.
+    GameStateChanged {
+        /// New game state value parsed from `SetGameState`.
+        state: GameState,
     },
     /// Snapshot of all menus visible in `CContextMenuManager`.
     ///
@@ -1522,6 +1566,30 @@ mod tests {
             let encoded = encode(resp).expect("encode failed");
             let (decoded, _): (Response, usize) = decode(&encoded).expect("decode failed");
             let _ = format!("{:?}", decoded);
+        }
+    }
+
+    #[test]
+    fn game_state_from_unknown_u32_roundtrips() {
+        let unknown: u32 = 0xA2A3A4A5;
+        let state = GameState::from(unknown);
+        assert!(matches!(state, GameState::Unknown(v) if v == unknown));
+        assert_eq!(u32::from(state), unknown);
+    }
+
+    #[test]
+    fn game_state_changed_response_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let resp = Response::GameStateChanged {
+            state: GameState::LoggingIn,
+        };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode");
+        if let Response::GameStateChanged { state } = decoded {
+            assert!(matches!(state, GameState::LoggingIn));
+        } else {
+            panic!("expected GameStateChanged");
         }
     }
 
