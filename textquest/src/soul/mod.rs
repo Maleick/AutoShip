@@ -4,6 +4,8 @@
 pub mod config;
 /// Soul coordinator — orchestrates personality, memory, idle, and social systems.
 pub mod coordinator;
+/// SQLite schema validation and migration framework for Soul Engine.
+pub mod db_validation;
 /// Idle behavior system — generates ambient actions when characters are not busy.
 pub mod idle;
 /// LLM integration — provider trait, request/response types, fallback generation.
