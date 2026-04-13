@@ -83,6 +83,10 @@ impl IpcCommandQueue {
                     .position(|q| q.priority == IpcCommandPriority::Normal)
                 {
                     self.queue.remove(pos);
+                } else {
+                    // Queue is full of high-priority entries; preserve existing
+                    // commands and discard the new one to maintain the hard cap.
+                    return;
                 }
             }
         }
@@ -1064,6 +1068,36 @@ mod tests {
                 },
             );
             assert!(result.is_ok(), "emit_soul_event failed for {mob}");
+        }
+    }
+
+    #[test]
+    fn ipc_queue_overflow_with_only_high_priority_is_capped() {
+        let mut queue = IpcCommandQueue::new();
+        for i in 0..IPC_QUEUE_MAX {
+            queue.push(i as ClientId, Command::StopMovement, IpcCommandPriority::High);
+        }
+        assert_eq!(queue.len(), IPC_QUEUE_MAX);
+
+        queue.push(9_999, Command::StopMovement, IpcCommandPriority::High);
+        assert_eq!(queue.len(), IPC_QUEUE_MAX);
+
+        let mut drained_client_ids = Vec::new();
+        while let Some((client_id, _command)) = queue.pop() {
+            drained_client_ids.push(client_id);
+        }
+
+        assert_eq!(drained_client_ids.len(), IPC_QUEUE_MAX);
+        assert!(
+            !drained_client_ids.contains(&9_999),
+            "overflowing high-priority command should be discarded"
+        );
+        for expected_client_id in 0..IPC_QUEUE_MAX {
+            assert!(
+                drained_client_ids.contains(&(expected_client_id as ClientId)),
+                "existing queued command for client_id={} should be preserved",
+                expected_client_id
+            );
         }
     }
 }
