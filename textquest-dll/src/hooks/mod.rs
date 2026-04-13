@@ -1,4 +1,9 @@
 //! Hook management -- hardware breakpoint hooks via VEH (DR0-DR3).
+//!
+//! Hook catalog: [docs/research/hook-detection-surface.md](../docs/research/hook-detection-surface.md).
+
+/// Runtime hook catalog reference for detector-tuning work.
+pub const HOOK_CATALOG: &str = "docs/research/hook-detection-surface.md";
 
 pub mod casting;
 pub mod chat;
