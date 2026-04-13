@@ -641,6 +641,11 @@ pub mod player_base {
     pub const SPAWN_ID: usize = 0x168;
     /// char\[32\] — last name
     pub const LASTNAME: usize = 0x048;
+    /// `PlayerClient`* — the spawn's current target (ManagedTarget pointer).
+    /// Source: eqlib PlayerBase, ManagedTarget field at 0x268.
+    /// Used by the assist system to read "target's target" for focus-fire logic.
+    /// TODO: verify against a live build hex dump — layout may shift on patch day.
+    pub const MANAGED_TARGET: usize = 0x268;
 }
 
 /// Buff slot constants and `EQ_Affect` field offsets.

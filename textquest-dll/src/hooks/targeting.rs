@@ -148,38 +148,146 @@ impl TargetingController {
     /// `max_range` game units, and sets it as the current target.
     /// Returns the spawn ID of the new target, or `None` if none found.
     pub fn target_nearest_npc(&self, max_range: f32) -> Result<Option<u32>, TargetError> {
-        // TODO: Once spawn-list walking is implemented:
-        // 1. Read local player position from PINST_LOCAL_PLAYER
-        // 2. Walk spawn list from PINST_SPAWN_MANAGER -> PLAYER_LIST
-        // 3. Filter to TYPE == NPC (1)
-        // 4. Find nearest by distance, within max_range
-        // 5. Call set_target_by_addr with the winner
-        tracing::debug!(
-            max_range,
-            "target_nearest_npc -- not yet implemented (needs spawn list walker)"
-        );
-        Ok(None)
+        if self.eq_base == 0 {
+            return Err(TargetError::NoBaseAddress);
+        }
+
+        #[cfg(windows)]
+        // SAFETY: All pointer dereferences follow EQ's known struct layout.
+        // We read the local player position from PINST_LOCAL_PLAYER, then walk
+        // the TList<PlayerClient*> via SpawnManager::PLAYER_LIST. Each node's
+        // TYPE, Y, X, Z, SPAWN_ID, and NEXT fields are at offsets from MQ2
+        // headers. The MAX_SPAWNS cap prevents infinite loops on list corruption.
+        // Null checks guard every pointer dereference.
+        unsafe {
+            // 1. Read local player position.
+            let local_player_pinst = offsets::rebase(offsets::PINST_LOCAL_PLAYER, self.eq_base)
+                .ok_or(TargetError::RebaseFailed)?;
+            let local_player_ptr = std::ptr::read(local_player_pinst as *const usize);
+            if local_player_ptr == 0 {
+                tracing::debug!("target_nearest_npc: local player ptr is null");
+                return Ok(None);
+            }
+            let player_y =
+                std::ptr::read((local_player_ptr + offsets::player_base::Y) as *const f32);
+            let player_x =
+                std::ptr::read((local_player_ptr + offsets::player_base::X) as *const f32);
+            let player_z =
+                std::ptr::read((local_player_ptr + offsets::player_base::Z) as *const f32);
+
+            // 2. Walk spawn list from SpawnManager.
+            let mgr_pinst = offsets::rebase(offsets::PINST_SPAWN_MANAGER, self.eq_base)
+                .ok_or(TargetError::RebaseFailed)?;
+            let mgr_ptr = std::ptr::read(mgr_pinst as *const usize);
+            if mgr_ptr == 0 {
+                tracing::debug!("target_nearest_npc: spawn manager ptr is null");
+                return Ok(None);
+            }
+            let list_head_ptr = mgr_ptr + offsets::spawn_manager::PLAYER_LIST;
+            let mut current = std::ptr::read(list_head_ptr as *const usize);
+
+            const MAX_SPAWNS: u32 = 5000;
+            let mut count = 0u32;
+            let mut best_addr: Option<usize> = None;
+            let mut best_dist_sq = max_range * max_range;
+            let mut best_id: u32 = 0;
+
+            while current != 0 && count < MAX_SPAWNS {
+                // 3. Filter to TYPE == 1 (NPC).
+                let spawn_type =
+                    std::ptr::read((current + offsets::player_base::TYPE) as *const u8);
+                if spawn_type == 1 {
+                    // 4. Compute distance, keep track of nearest within range.
+                    let sy = std::ptr::read((current + offsets::player_base::Y) as *const f32);
+                    let sx = std::ptr::read((current + offsets::player_base::X) as *const f32);
+                    let sz = std::ptr::read((current + offsets::player_base::Z) as *const f32);
+                    let dy = sy - player_y;
+                    let dx = sx - player_x;
+                    let dz = sz - player_z;
+                    let dist_sq = dy * dy + dx * dx + dz * dz;
+                    if dist_sq < best_dist_sq {
+                        best_dist_sq = dist_sq;
+                        best_addr = Some(current);
+                        best_id = std::ptr::read(
+                            (current + offsets::player_base::SPAWN_ID) as *const u32,
+                        );
+                    }
+                }
+                current = std::ptr::read((current + offsets::player_base::NEXT) as *const usize);
+                count += 1;
+            }
+
+            if let Some(addr) = best_addr {
+                // 5. Set as current target.
+                tracing::debug!(
+                    spawn_id = best_id,
+                    dist = (best_dist_sq.sqrt()),
+                    "target_nearest_npc: found target"
+                );
+                self.set_target_by_addr(addr)?;
+                Ok(Some(best_id))
+            } else {
+                tracing::debug!(max_range, "target_nearest_npc: no NPC in range");
+                Ok(None)
+            }
+        }
+
+        #[cfg(not(windows))]
+        {
+            tracing::warn!(max_range, "target_nearest_npc (stub -- non-Windows)");
+            Ok(None)
+        }
     }
 
     /// Assist another character -- target their target.
     ///
-    /// Reads the target pointer of the specified spawn (the "assist target"),
-    /// then sets our target to whatever they are targeting.
+    /// Finds the `PlayerClient` for `assist_spawn_id`, reads its `ManagedTarget`
+    /// pointer (the spawn they are currently targeting), then writes that pointer
+    /// to our own `pinstTarget`. If the assist target has no target, clears ours.
     pub fn assist(&self, assist_spawn_id: u32) -> Result<(), TargetError> {
-        // TODO: Full assist implementation requires:
-        // 1. Find the assist target's PlayerClient by spawn ID
-        // 2. Read the assist target's target pointer (the PlayerClient has a
-        //    field pointing to the spawn they are targeting -- this offset
-        //    needs to be added to offsets.rs once identified from MQ2 headers)
-        // 3. If non-null, write that pointer to our pinstTarget
-        //
-        // For now, we log and return an error since we need the target-of-target
-        // offset which hasn't been extracted from MQ2 headers yet.
-        tracing::debug!(
-            assist_spawn_id,
-            "assist -- not yet implemented (needs target-of-target offset from MQ2 headers)"
-        );
-        Err(TargetError::SpawnNotFound(assist_spawn_id))
+        #[cfg(windows)]
+        // SAFETY: assist_addr is a valid PlayerClient* returned by find_spawn_addr,
+        // which already validated the pointer via the spawn list walk. Reading
+        // MANAGED_TARGET at a known offset yields the spawn's current target
+        // pointer (PlayerClient*) or 0 if they have no target. Writing this
+        // value to pinstTarget mirrors EQ's own targeting write path.
+        unsafe {
+            // 1. Find the assist target's PlayerClient by spawn ID.
+            let assist_addr = self.find_spawn_addr(assist_spawn_id)?;
+
+            // 2. Read the assist target's ManagedTarget pointer.
+            let their_target_ptr = std::ptr::read(
+                (assist_addr + offsets::player_base::MANAGED_TARGET) as *const usize,
+            );
+
+            if their_target_ptr == 0 {
+                // Assist target has no target — clear ours.
+                tracing::debug!(
+                    assist_spawn_id,
+                    "assist: assist target has no target, clearing"
+                );
+                return self.clear_target();
+            }
+
+            // 3. Validate: read spawn ID from the target-of-target for logging.
+            let tot_id =
+                std::ptr::read((their_target_ptr + offsets::player_base::SPAWN_ID) as *const u32);
+            tracing::debug!(
+                assist_spawn_id,
+                target_of_target_id = tot_id,
+                target_addr = format!("{:#x}", their_target_ptr),
+                "assist: setting target to assist target's target"
+            );
+
+            // Write the target-of-target address to our pinstTarget.
+            self.set_target_by_addr(their_target_ptr)
+        }
+
+        #[cfg(not(windows))]
+        {
+            tracing::warn!(assist_spawn_id, "assist (stub -- non-Windows)");
+            Err(TargetError::PlatformStub)
+        }
     }
 
     /// Walk the spawn linked list to find a spawn by ID. Returns its address.
@@ -233,4 +341,142 @@ impl TargetingController {
             Err(TargetError::PlatformStub)
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── TargetingController construction ────────────────────────────────────
+
+    #[test]
+    fn new_sets_eq_base() {
+        let ctrl = TargetingController::new(0x1_4000_0000);
+        assert_eq!(ctrl.eq_base, 0x1_4000_0000);
+    }
+
+    #[test]
+    fn set_eq_base_updates_value() {
+        let mut ctrl = TargetingController::new(0x1_4000_0000);
+        ctrl.set_eq_base(0x2_0000_0000);
+        assert_eq!(ctrl.eq_base, 0x2_0000_0000);
+    }
+
+    // ── target_ptr_addr: no base address ────────────────────────────────────
+
+    #[test]
+    fn target_ptr_addr_errors_on_zero_base() {
+        let ctrl = TargetingController::new(0);
+        match ctrl.target_ptr_addr() {
+            Err(TargetError::NoBaseAddress) => {}
+            other => panic!("expected NoBaseAddress, got {other:?}"),
+        }
+    }
+
+    // ── find_spawn_addr: no base address ────────────────────────────────────
+
+    #[test]
+    fn find_spawn_addr_errors_on_zero_base() {
+        let ctrl = TargetingController::new(0);
+        match ctrl.find_spawn_addr(1) {
+            Err(TargetError::NoBaseAddress) => {}
+            other => panic!("expected NoBaseAddress, got {other:?}"),
+        }
+    }
+
+    // ── target_nearest_npc: no base address ─────────────────────────────────
+
+    #[test]
+    fn target_nearest_npc_errors_on_zero_base() {
+        let ctrl = TargetingController::new(0);
+        match ctrl.target_nearest_npc(100.0) {
+            Err(TargetError::NoBaseAddress) => {}
+            other => panic!("expected NoBaseAddress, got {other:?}"),
+        }
+    }
+
+    // ── assist: no base address ──────────────────────────────────────────────
+
+    #[test]
+    #[cfg(windows)]
+    fn assist_errors_on_zero_base_windows() {
+        let ctrl = TargetingController::new(0);
+        // find_spawn_addr is called first inside the cfg(windows) block and
+        // will return NoBaseAddress because eq_base == 0.
+        match ctrl.assist(42) {
+            Err(TargetError::NoBaseAddress) => {}
+            other => panic!("expected NoBaseAddress, got {other:?}"),
+        }
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn assist_errors_platform_stub_on_non_windows_any_base() {
+        // On non-Windows, assist returns PlatformStub regardless of eq_base
+        // because find_spawn_addr is only called inside #[cfg(windows)].
+        let ctrl = TargetingController::new(0);
+        match ctrl.assist(42) {
+            Err(TargetError::PlatformStub) => {}
+            other => panic!("expected PlatformStub, got {other:?}"),
+        }
+    }
+
+    // ── spawn-list walking: stub returns PlatformStub on non-Windows ─────────
+
+    #[test]
+    #[cfg(not(windows))]
+    fn find_spawn_addr_returns_platform_stub_on_non_windows() {
+        let ctrl = TargetingController::new(0x1_4000_0000);
+        match ctrl.find_spawn_addr(99) {
+            Err(TargetError::PlatformStub) => {}
+            other => panic!("expected PlatformStub, got {other:?}"),
+        }
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn target_nearest_npc_returns_none_on_non_windows() {
+        let ctrl = TargetingController::new(0x1_4000_0000);
+        assert_eq!(ctrl.target_nearest_npc(200.0).unwrap(), None);
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn assist_returns_platform_stub_on_non_windows() {
+        let ctrl = TargetingController::new(0x1_4000_0000);
+        match ctrl.assist(1) {
+            Err(TargetError::PlatformStub) => {}
+            other => panic!("expected PlatformStub, got {other:?}"),
+        }
+    }
+
+    // ── TargetError Display ──────────────────────────────────────────────────
+
+    #[test]
+    fn target_error_display_no_base() {
+        let msg = TargetError::NoBaseAddress.to_string();
+        assert!(msg.contains("base address"));
+    }
+
+    #[test]
+    fn target_error_display_spawn_not_found() {
+        let msg = TargetError::SpawnNotFound(42).to_string();
+        assert!(msg.contains("42"));
+    }
+
+    #[test]
+    fn target_error_display_platform_stub() {
+        let msg = TargetError::PlatformStub.to_string();
+        assert!(!msg.is_empty());
+    }
+
+    // NOTE: Windows-only spawn-list integration tests (e.g., walking a real
+    // TList in-process with fake spawn nodes) require access to the live EQ
+    // process memory layout and belong in integration tests on Frostreaver.
+    // The unit tests above cover all pure-logic paths:
+    //   - zero-base address guards (NoBaseAddress)
+    //   - non-Windows platform stubs (PlatformStub / None returns)
+    //   - error Display formatting
+    // Spawn-list walking correctness is validated by the integration test
+    // suite on the Windows CI runner against a live EQ build.
 }
