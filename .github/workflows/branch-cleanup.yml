@@ -34,6 +34,14 @@ jobs:
             const ref = context.payload.pull_request.head.ref;
             const prNumber = context.payload.pull_request.number;
 
+            // Guard against fork PR deletion of same-named local branches
+            const headRepoFullName = context.payload.pull_request.head.repo?.full_name;
+            const baseRepoFullName = `${owner}/${repo}`;
+            if (headRepoFullName !== baseRepoFullName) {
+              core.info(`⊘ Skipped fork PR branch: ${ref} (from ${headRepoFullName})`);
+              return;
+            }
+
             // Skip protected branches and default branch
             const skipBranches = ['master', 'main', 'develop', 'development'];
             if (skipBranches.includes(ref)) {
@@ -106,12 +114,13 @@ jobs:
                 continue;
               }
 
-              // Check if branch is merged into master
+              // Check if branch is merged into default branch
               try {
+                const defaultBranch = context.payload.repository.default_branch;
                 const compare = await github.rest.repos.compareCommits({
                   owner,
                   repo,
-                  base: 'master',
+                  base: defaultBranch,
                   head: name
                 });
 
