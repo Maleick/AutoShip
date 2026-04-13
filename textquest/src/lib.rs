@@ -16,6 +16,8 @@ pub mod client;
 pub mod combat;
 /// TOML configuration loading.
 pub mod config;
+/// Crash reporting and session recovery — per-character context snapshots and recovery commands.
+pub mod crash_reporter;
 /// Encrypted credential store (Argon2id + AES-256-GCM).
 #[allow(dead_code)]
 pub mod credentials;
