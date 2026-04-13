@@ -394,7 +394,7 @@ pub fn draw_debug_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &m
     }
 }
 
-/// Original debug layout: spawns + player/target/hex.
+/// Original debug layout: spawns + player/target/hex + hook rotation.
 fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     if area.width < 110 {
         let rows = Layout::default()
@@ -402,6 +402,7 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
             .constraints([
                 Constraint::Length(18),
                 Constraint::Min(10),
+                Constraint::Length(8),
                 Constraint::Min(10),
             ])
             .split(area);
@@ -414,7 +415,8 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
         draw_player_detail(frame, top[0], app);
         draw_target_panel(frame, top[1], app);
         draw_hex_panel(frame, rows[1], app);
-        draw_spawn_list(frame, rows[2], app);
+        draw_hook_rotation_panel(frame, rows[2], app);
+        draw_spawn_list(frame, rows[3], app);
         return;
     }
 
@@ -428,13 +430,15 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
         .constraints([
             Constraint::Length(10),
             Constraint::Length(8),
+            Constraint::Length(8),
             Constraint::Min(10),
         ])
         .split(cols[0]);
 
     draw_player_detail(frame, left[0], app);
     draw_target_panel(frame, left[1], app);
-    draw_hex_panel(frame, left[2], app);
+    draw_hook_rotation_panel(frame, left[2], app);
+    draw_hex_panel(frame, left[3], app);
     draw_spawn_list(frame, cols[1], app);
 }
 
@@ -466,14 +470,19 @@ fn draw_debug_with_explorer(frame: &mut Frame, area: ratatui::layout::Rect, app:
     draw_hex_panel(frame, left[2], app);
     draw_spawn_list(frame, cols[1], app);
 
-    // Right column: EQ Internals on top, Ghidra explorer below.
+    // Right column: EQ Internals on top, hook rotation in middle, explorer below.
     let right = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .constraints([
+            Constraint::Percentage(40),
+            Constraint::Length(8),
+            Constraint::Min(5),
+        ])
         .split(cols[2]);
 
     draw_eq_internals_panel(frame, right[0], app);
-    draw_explorer_panel(frame, right[1], app);
+    draw_hook_rotation_panel(frame, right[1], app);
+    draw_explorer_panel(frame, right[2], app);
 }
 
 /// EQ Internals-focused layout: internals + hex, minimal spawns.
@@ -660,6 +669,104 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     }
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+// ─── Hook Rotation Status Panel ──────────────────────────────────────────────
+
+/// Draw the hook rotation status panel in the Debug screen.
+///
+/// Shows a table with one row per hook slot: name, state (ACTIVE / UNHOOKED),
+/// time since last rotation, and countdown to next rotation.
+pub fn draw_hook_rotation_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    use crate::tui::app::HookSlotState;
+    use crate::tui::ui::widgets::themed_header_row;
+
+    let t = &app.theme;
+    let state = &app.hook_rotation_state;
+
+    let interval_label = if state.interval_ms >= 1_000 {
+        format!("{:.1}s", state.interval_ms as f64 / 1_000.0)
+    } else {
+        format!("{}ms", state.interval_ms)
+    };
+
+    let title = format!(" Hook Rotation  interval: {interval_label} ");
+    let blk = panel(title.as_str(), t.border_dim, t);
+
+    let header = themed_header_row(&["Hook", "State", "Last Rotated", "Next In"], t);
+
+    let text_bright = t.text_bright;
+    let text_secondary = t.text_secondary;
+    let text_muted = t.text_muted;
+
+    let rows: Vec<Row> = state
+        .entries
+        .iter()
+        .map(|entry| {
+            let state_label = entry.state.label();
+            let state_color = match entry.state {
+                HookSlotState::Active => Color::Green,
+                HookSlotState::Unhooked => Color::Yellow,
+            };
+
+            let last_rotated = entry
+                .ms_since_last_rotation()
+                .map(|ms| {
+                    if ms >= 1_000 {
+                        format!("{:.1}s ago", ms as f64 / 1_000.0)
+                    } else {
+                        format!("{ms}ms ago")
+                    }
+                })
+                .unwrap_or_else(|| String::from("—"));
+
+            let next_rotation = entry
+                .ms_until_next_rotation()
+                .map(|ms| {
+                    if ms == 0 {
+                        String::from("now")
+                    } else if ms >= 1_000 {
+                        format!("{:.1}s", ms as f64 / 1_000.0)
+                    } else {
+                        format!("{ms}ms")
+                    }
+                })
+                .unwrap_or_else(|| String::from("—"));
+
+            Row::new(vec![
+                Cell::from(Span::styled(
+                    entry.name.as_str(),
+                    Style::default().fg(text_bright),
+                )),
+                Cell::from(Span::styled(
+                    state_label,
+                    Style::default().fg(state_color).add_modifier(Modifier::BOLD),
+                )),
+                Cell::from(Span::styled(
+                    last_rotated,
+                    Style::default().fg(text_secondary),
+                )),
+                Cell::from(Span::styled(
+                    next_rotation,
+                    Style::default().fg(text_muted),
+                )),
+            ])
+        })
+        .collect();
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Min(20),
+            Constraint::Length(10),
+            Constraint::Length(12),
+            Constraint::Length(10),
+        ],
+    )
+    .header(header)
+    .block(blk);
+
+    frame.render_widget(table, area);
 }
 
 #[cfg(test)]

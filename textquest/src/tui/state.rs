@@ -2156,4 +2156,104 @@ mod tests {
         let err = save_named_markers(&marker_path, &[]).unwrap_err();
         assert!(err.to_string().contains("not a regular file"), "{}", err);
     }
+
+    // ─── HookRotationState tests ─────────────────────────────────────────────
+
+    #[test]
+    fn hook_rotation_state_default_has_four_entries() {
+        let state = HookRotationState::new();
+        assert_eq!(state.entries.len(), 4);
+        assert_eq!(state.interval_ms, 5_000);
+        for entry in &state.entries {
+            assert_eq!(entry.state, HookSlotState::Active);
+            assert!(entry.last_rotated_at.is_none());
+            assert!(entry.next_rotation_at.is_none());
+        }
+    }
+
+    #[test]
+    fn hook_slot_state_label() {
+        assert_eq!(HookSlotState::Active.label(), "ACTIVE");
+        assert_eq!(HookSlotState::Unhooked.label(), "UNHOOKED");
+    }
+
+    #[test]
+    fn record_rotation_updates_existing_entry() {
+        let mut state = HookRotationState::new();
+        state.record_rotation("ProcessGameEvents", HookSlotState::Unhooked, 2_000);
+
+        let entry = state
+            .entries
+            .iter()
+            .find(|e| e.name == "ProcessGameEvents")
+            .expect("entry must exist");
+
+        assert_eq!(entry.state, HookSlotState::Unhooked);
+        assert!(entry.last_rotated_at.is_some());
+        assert!(entry.next_rotation_at.is_some());
+
+        // ms_since_last_rotation should be very small (just ran).
+        let ms = entry.ms_since_last_rotation().unwrap();
+        assert!(ms < 500, "expected <500ms elapsed, got {ms}ms");
+
+        // ms_until_next_rotation should be close to 2000ms.
+        let remaining = entry.ms_until_next_rotation().unwrap();
+        assert!(remaining <= 2_000, "remaining {remaining}ms > interval 2000ms");
+    }
+
+    #[test]
+    fn record_rotation_inserts_unknown_hook() {
+        let mut state = HookRotationState::new();
+        let initial_count = state.entries.len();
+        state.record_rotation("NewHook", HookSlotState::Active, 1_000);
+        assert_eq!(state.entries.len(), initial_count + 1);
+        let entry = state.entries.iter().find(|e| e.name == "NewHook").unwrap();
+        assert_eq!(entry.state, HookSlotState::Active);
+    }
+
+    #[test]
+    fn set_interval_reschedules_all_entries() {
+        let mut state = HookRotationState::new();
+        // Seed one entry with a rotation timestamp.
+        state.record_rotation("SetGameState", HookSlotState::Unhooked, 5_000);
+
+        state.set_interval_ms(10_000);
+        assert_eq!(state.interval_ms, 10_000);
+
+        // All entries (that have a scheduled time) should now have ~10s remaining.
+        for entry in &state.entries {
+            if let Some(remaining) = entry.ms_until_next_rotation() {
+                assert!(
+                    remaining <= 10_000,
+                    "remaining {remaining}ms > new interval 10000ms"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn state_transitions_active_to_unhooked_and_back() {
+        let mut state = HookRotationState::new();
+        let name = "CastHook";
+
+        // Start active.
+        assert_eq!(
+            state.entries.iter().find(|e| e.name == name).unwrap().state,
+            HookSlotState::Active
+        );
+
+        // Rotate to unhooked.
+        state.record_rotation(name, HookSlotState::Unhooked, 1_000);
+        assert_eq!(
+            state.entries.iter().find(|e| e.name == name).unwrap().state,
+            HookSlotState::Unhooked
+        );
+
+        // Rotate back to active.
+        state.record_rotation(name, HookSlotState::Active, 1_000);
+        assert_eq!(
+            state.entries.iter().find(|e| e.name == name).unwrap().state,
+            HookSlotState::Active
+        );
+    }
 }

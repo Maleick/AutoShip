@@ -29,8 +29,9 @@ use ratatui::style::Color;
 // Re-export extracted types so existing `use tui::app::*` paths still work.
 pub use super::client::ClientState;
 pub use super::state::{
-    CommandBarState, HexDumpState, MapScreenState, MapViewportMode, NavigationScreenState,
-    OverviewScreenState, PacketMonitorState, SpawnsScreenState, TacticalScreenState,
+    CommandBarState, HexDumpState, HookRotationState, HookSlotState, MapScreenState,
+    MapViewportMode, NavigationScreenState, OverviewScreenState, PacketMonitorState,
+    SpawnsScreenState, TacticalScreenState,
 };
 use super::state::{
     CampOverlay, FilteredSpawnCache, FilteredSpawnCacheKey, MapClickAction, MapFilterKind,
@@ -3775,6 +3776,60 @@ impl App {
             );
         } else {
             self.set_feedback(ToastLevel::Warning, reason, true);
+        }
+    }
+
+    /// Handle `:set <key> <value>` commands for runtime configuration.
+    fn handle_set_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            Some("hook_rotation_interval") => {
+                let Some(value_str) = args.get(1) else {
+                    self.usage_feedback(
+                        "set hook_rotation_interval",
+                        "Usage: set hook_rotation_interval <ms>",
+                    );
+                    return;
+                };
+                match value_str.parse::<u64>() {
+                    Ok(ms) if ms > 0 => {
+                        self.hook_rotation_state.set_interval_ms(ms);
+                        self.set_feedback(
+                            ToastLevel::Success,
+                            format!("Hook rotation interval set to {ms}ms"),
+                            true,
+                        );
+                    }
+                    Ok(_) => {
+                        self.set_feedback(
+                            ToastLevel::Warning,
+                            String::from("Hook rotation interval must be > 0ms"),
+                            true,
+                        );
+                    }
+                    Err(_) => {
+                        self.usage_feedback(
+                            "set hook_rotation_interval",
+                            "Usage: set hook_rotation_interval <ms>  (positive integer)",
+                        );
+                    }
+                }
+            }
+            Some(key) => {
+                self.set_feedback(
+                    ToastLevel::Warning,
+                    format!("Unknown setting: '{key}'. Known settings: hook_rotation_interval"),
+                    true,
+                );
+            }
+            None => {
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from(
+                        "Usage: set <key> <value>. Known settings: hook_rotation_interval",
+                    ),
+                    false,
+                );
+            }
         }
     }
 
