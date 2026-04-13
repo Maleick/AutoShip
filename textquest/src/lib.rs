@@ -60,6 +60,10 @@ pub mod tui;
 /// CLI subcommands (dump, inject, navigate, login, etc.).
 pub mod cli;
 
+/// Economy system — failure routing and recovery for Krono farm / vendor loops.
+#[allow(dead_code)]
+pub mod economy;
+
 #[cfg(windows)]
 use anyhow::Context;
 use anyhow::Result;
