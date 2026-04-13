@@ -77,6 +77,12 @@ use anyhow::Result;
 /// Default path for the soul memory database.
 pub const SOUL_DB_PATH: &str = "data/soul_memory.db";
 
+/// Default path for the Ghidra analysis SQLite cache.
+pub const GHIDRA_DB_PATH: &str = "data/ghidra.db";
+
+/// Path to the opcodes config file imported into the Ghidra DB at startup.
+pub const OPCODES_CONFIG_PATH: &str = "config/opcodes.json";
+
 /// Get the base address of eqgame.exe module in the target process.
 ///
 /// # Errors

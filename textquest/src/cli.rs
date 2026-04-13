@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
+use textquest_common::ghidra_db::GhidraDatabase;
 use zeroize::Zeroizing;
 
 use crate::config;
@@ -15,7 +16,7 @@ use crate::process;
 use crate::soul;
 use crate::tui;
 
-use crate::{SOUL_DB_PATH, get_module_base};
+use crate::{GHIDRA_DB_PATH, OPCODES_CONFIG_PATH, SOUL_DB_PATH, get_module_base};
 
 fn read_shared_state_with_retry(
     reader: &mut ipc::shared::SharedStateReader,
@@ -245,6 +246,34 @@ pub fn run_tui_mode() -> Result<()> {
         }
     } else {
         app.spawn_watch_named = false;
+    }
+
+    // Initialize Ghidra DB and import opcodes from config/opcodes.json if present.
+    {
+        let db_path = Path::new(GHIDRA_DB_PATH);
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        match GhidraDatabase::open(db_path) {
+            Ok(db) => {
+                let opcodes_path = Path::new(OPCODES_CONFIG_PATH);
+                match db.import_opcodes_from_file(opcodes_path) {
+                    Ok(0) => {
+                        info!("Ghidra DB opened (no opcodes config found at {})", OPCODES_CONFIG_PATH);
+                    }
+                    Ok(n) => {
+                        info!(count = n, "Ghidra DB: imported {} opcodes from {}", n, OPCODES_CONFIG_PATH);
+                    }
+                    Err(e) => {
+                        warn!("Ghidra DB: failed to import opcodes from {}: {}", OPCODES_CONFIG_PATH, e);
+                    }
+                }
+                app.ghidra_db = Some(db);
+            }
+            Err(e) => {
+                warn!("Ghidra DB: failed to open {}: {}", GHIDRA_DB_PATH, e);
+            }
+        }
     }
 
     let orchestrator = orchestrator::Orchestrator::new();
