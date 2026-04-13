@@ -54,6 +54,9 @@ const LOG_POLL_INTERVAL: Duration = Duration::from_secs(2);
 /// How often to poll DLL clients for captured packet events (500ms).
 const PACKET_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
+/// How often to poll live memory for the Debug hex dump (500ms).
+const MEMORY_POLL_INTERVAL: Duration = Duration::from_millis(500);
+
 /// Camp loop tick interval (1 second).
 const CAMP_TICK_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -126,6 +129,7 @@ fn run_loop(
     let mut last_camp_tick = Instant::now();
     let mut last_log_poll = Instant::now();
     let mut last_packet_poll = Instant::now();
+    let mut last_memory_poll = Instant::now();
     let mut process_handles: HashMap<u32, crate::process::memory::ProcessHandle> = HashMap::new();
     #[cfg(windows)]
     let mut shared_state_readers: HashMap<u32, SharedStateReader> = HashMap::new();
@@ -236,6 +240,29 @@ fn run_loop(
                 app.apply_spawn_events(spawn_events);
             }
             last_packet_poll = Instant::now();
+        }
+
+        // Poll live memory for the Debug hex dump.
+        if last_memory_poll.elapsed() >= MEMORY_POLL_INTERVAL
+            && app.active_screen == super::app::ActiveScreen::Debug
+            && app.hex_state.hex_address != 0
+        {
+            // Use the first live (non-demo) client PID.
+            let pid = app
+                .clients
+                .iter()
+                .find(|c| !c.is_demo)
+                .map(|c| c.pid);
+            if let Some(pid) = pid {
+                if let Some((address, bytes)) =
+                    orchestrator.read_memory(pid, app.hex_state.hex_address, 0x200)
+                {
+                    if app.hex_state.hex_address == address {
+                        app.hex_state.hex_data = bytes;
+                    }
+                }
+            }
+            last_memory_poll = Instant::now();
         }
 
         // Poll Discord bridge for inbound commands.

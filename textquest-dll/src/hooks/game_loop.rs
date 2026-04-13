@@ -3017,6 +3017,36 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             tracing::info!(character = %character_name, "SwitchCharacter received");
             crate::login::switch_character(character_name);
         }
+        Command::ReadMemory { address, size } => {
+            let size = size.min(4096);
+            let mut buf = vec![0u8; size];
+            let mut bytes_read = 0usize;
+            #[cfg(windows)]
+            {
+                use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
+                use windows::Win32::System::Threading::GetCurrentProcess;
+                let _ = unsafe {
+                    ReadProcessMemory(
+                        GetCurrentProcess(),
+                        address as *const core::ffi::c_void,
+                        buf.as_mut_ptr() as *mut core::ffi::c_void,
+                        size,
+                        Some(&mut bytes_read),
+                    )
+                };
+            }
+            #[cfg(not(windows))]
+            {
+                // Non-Windows stub — return zeros
+                bytes_read = size;
+            }
+            buf.truncate(bytes_read);
+            tracing::debug!(address = format!("{:#x}", address), bytes_read, "ReadMemory");
+            crate::ipc::send_response(textquest_common::ipc::Response::MemoryData {
+                address,
+                bytes: buf,
+            });
+        }
         other => {
             tracing::debug!(?other, "Unhandled command");
         }

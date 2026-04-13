@@ -784,18 +784,22 @@ impl Orchestrator {
         }
     }
 
-    /// Poll a client for accumulated spawn add/remove events.
-    /// Sends `PollSpawnEvents` and returns any `SpawnEvent` entries.
-    pub fn poll_spawn_events(&mut self, pid: u32) -> Vec<textquest_common::ipc::SpawnEvent> {
-        let Some(pipe) = self.get_pipe(pid) else {
-            return Vec::new();
-        };
-        match pipe.send(&Command::PollSpawnEvents) {
-            Ok(Response::SpawnEventBatch { events }) => events,
-            Ok(_) => Vec::new(),
+    /// Read raw bytes from the EQ process address space via IPC.
+    /// Sends `ReadMemory` and returns `(address, bytes)` on success, or `None`
+    /// if the pipe is unavailable or the DLL returns an unexpected response.
+    pub fn read_memory(
+        &mut self,
+        pid: u32,
+        address: usize,
+        size: usize,
+    ) -> Option<(usize, Vec<u8>)> {
+        let pipe = self.get_pipe(pid)?;
+        match pipe.send(&Command::ReadMemory { address, size }) {
+            Ok(Response::MemoryData { address, bytes }) => Some((address, bytes)),
+            Ok(_) => None,
             Err(e) => {
-                tracing::debug!(pid, error = %e, "Failed to poll spawn events");
-                Vec::new()
+                tracing::debug!(pid, address, error = %e, "Failed to read memory");
+                None
             }
         }
     }
