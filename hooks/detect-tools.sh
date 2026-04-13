@@ -145,13 +145,19 @@ detect_gemini() {
   fi
 }
 
-detect_grok() {
-  if command -v grok >/dev/null 2>&1; then
-    ver=$(grok --version 2>/dev/null | head -1) || ver="unknown"
-    qpct=$(_read_quota "grok")
-    printf '"grok": {"available": true, "version": "%s", "quota_pct": %s}' "$ver" "$qpct"
+detect_copilot() {
+  if command -v gh >/dev/null 2>&1 && gh copilot --version >/dev/null 2>&1; then
+    local ver
+    ver=$(gh copilot --version 2>/dev/null | head -1) || ver="unknown"
+    ver=$(printf '%s' "$ver" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n')
+    printf '"copilot": {"available": true, "version": "%s", "quota_pct": -1, "exhausted": false}' "$ver"
+  elif command -v copilot >/dev/null 2>&1; then
+    local ver
+    ver=$(copilot --version 2>/dev/null | head -1) || ver="unknown"
+    ver=$(printf '%s' "$ver" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n')
+    printf '"copilot": {"available": true, "version": "%s", "quota_pct": -1, "exhausted": false}' "$ver"
   else
-    printf '"grok": {"available": false, "quota_pct": -1}'
+    printf '"copilot": {"available": false, "quota_pct": -1}'
   fi
 }
 
@@ -166,7 +172,7 @@ detect_codex
 echo -n ", "
 detect_gemini
 echo -n ", "
-detect_grok
+detect_copilot
 echo "}"
 
 exit 0

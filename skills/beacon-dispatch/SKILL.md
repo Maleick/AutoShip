@@ -6,19 +6,17 @@ tools: ["Bash", "Agent", "Write", "Read", "TeamCreate"]
 
 # Beacon Dispatch Protocol — v3
 
-Third-party tools (Codex/Gemini) are dispatched first for simple and medium issues to maximize external quota usage. Claude agents are reserved for complex work and fallback.
+Third-party tools (Codex/Gemini/Copilot) are dispatched first for simple and medium issues to maximize external quota usage. Claude agents are reserved for complex work and fallback.
 
 ---
 
 ## Dispatch Priority Matrix
 
-| Complexity | Primary                       | Fallback                      | Last Resort              |
-| ---------- | ----------------------------- | ----------------------------- | ------------------------ |
-| Simple     | Codex-Spark/GPT (quota > 10%) | Gemini (quota > 10%) → Haiku  | Claude Haiku (rate-lim)  |
-| Medium     | Codex-Spark/GPT (quota > 10%) | Gemini (quota > 10%) → Sonnet | Claude Sonnet (rate-lim) |
-| Complex    | Claude Sonnet + autoresearch  | Claude Sonnet (retry)         | Opus advisor: re-slice   |
-
-# TODO: Grok support pending CLI detection
+| Complexity | Primary                       | Fallback                                      | Last Resort              |
+| ---------- | ----------------------------- | --------------------------------------------- | ------------------------ |
+| Simple     | Codex-Spark/GPT (quota > 10%) | Gemini/Copilot (quota > 10%) → Haiku          | Claude Haiku (rate-lim)  |
+| Medium     | Codex-Spark/GPT (quota > 10%) | Gemini/Copilot (quota > 10%) → Sonnet         | Claude Sonnet (rate-lim) |
+| Complex    | Claude Sonnet + autoresearch  | Claude Sonnet (retry)                         | Opus advisor: re-slice   |
 
 Check quota before dispatch:
 

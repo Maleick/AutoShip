@@ -8,7 +8,7 @@ Four-tier model: Bash watches → Haiku thinks → Sonnet orchestrates → Opus 
 
 - **Executor**: Sonnet — event-driven orchestration, dispatch, verification pipeline
 - **Advisor**: Opus — spawned at strategic decision points (UltraPlan, phase checkpoints, escalations)
-- **Workers**: Third-party first (Codex/Gemini/Grok) for simple/medium; Claude Haiku/Sonnet as fallback
+- **Workers**: Third-party first (Codex/Gemini/Copilot) for simple/medium; Claude Haiku/Sonnet as fallback
 - **Triage**: Haiku — interprets Monitor events, categorizes PR comments, queues actions
 - **Reviewer**: Sonnet — verifies work against acceptance criteria
 - **Monitors**: 3 bash scripts (agent 5s, PR 30s, issues 60s) via Monitor tool

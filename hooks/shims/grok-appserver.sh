@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# DEPRECATED: Grok CLI removed — does not support OAuth authentication.
+# This shim is no longer used. Kept for git history only.
+echo "ERROR: grok-appserver.sh is deprecated. Use copilot or gemini instead." >&2
+exit 1
+
 # grok-appserver.sh — Thin Symphony shim for the Grok CLI.
 #
 # Usage:
