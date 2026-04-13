@@ -72,7 +72,7 @@ gh pr list --state open --json number --jq 'length'
 gh pr list --state merged --json number --jq 'length'
 ```
 
-Store results as `pr_open` and `pr_merged` for use in the PROGRESS section.
+Store results as `pr-open` and `pr_merged` for use in the PROGRESS section.
 
 ### Step 3: Reconcile
 

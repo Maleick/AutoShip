@@ -137,6 +137,9 @@ case "$ACTION" in
     ;;
 esac
 
+# Normalize state key: convert underscores to hyphens
+NEW_STATE=$(echo "$NEW_STATE" | tr '_' '-')
+
 # Ensure the issue entry exists (initialize if new)
 CURRENT=$(jq -r --arg id "$ISSUE_ID" '.issues[$id] // empty' "$STATE_FILE")
 if [[ -z "$CURRENT" ]]; then
@@ -147,11 +150,32 @@ if [[ -z "$CURRENT" ]]; then
     "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
 fi
 
-# Update state and timestamp
-TMP=$(make_tmp)
-jq --arg id "$ISSUE_ID" --arg state "$NEW_STATE" --arg now "$NOW" \
-  '.issues[$id].state = $state | .updated_at = $now' \
-  "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
+# For set-merged: assert title and agent are present (enrich from GitHub if absent)
+if [[ "$ACTION" == "set-merged" ]]; then
+  ISSUE_NUMBER=$(echo "$ISSUE_ID" | grep -o '[0-9]*')
+  
+  TITLE=$(jq -r --arg k "$ISSUE_ID" '.issues[$k].title // ""' "$STATE_FILE")
+  AGENT=$(jq -r --arg k "$ISSUE_ID" '.issues[$k].agent // ""' "$STATE_FILE")
+  
+  if [[ -z "$TITLE" ]]; then
+    TITLE=$(gh issue view "$ISSUE_NUMBER" --json title --jq '.title' 2>/dev/null || echo '(unknown)')
+  fi
+  if [[ -z "$AGENT" ]]; then
+    AGENT="direct"
+  fi
+  
+  # Update state with title and agent
+  TMP=$(make_tmp)
+  jq --arg id "$ISSUE_ID" --arg state "$NEW_STATE" --arg now "$NOW" --arg title "$TITLE" --arg agent "$AGENT" \
+    '.issues[$id].state = $state | .updated_at = $now | .issues[$id].title = $title | .issues[$id].agent = $agent' \
+    "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
+else
+  # Standard state update
+  TMP=$(make_tmp)
+  jq --arg id "$ISSUE_ID" --arg state "$NEW_STATE" --arg now "$NOW" \
+    '.issues[$id].state = $state | .updated_at = $now' \
+    "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
+fi
 
 # Increment stat counter if applicable
 if [[ -n "$STAT_KEY" ]]; then
