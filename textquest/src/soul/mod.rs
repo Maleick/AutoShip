@@ -19,5 +19,7 @@ pub mod memory;
 mod perf_tests;
 /// Personality system — trait-based character archetypes and mood modeling.
 pub mod personality;
+/// Resource leak detection and cleanup verification for `SoulCoordinator` shutdown.
+pub mod resource_checks;
 /// Social dynamics — inter-character relationships, group cohesion, banter triggers.
 pub mod social;
