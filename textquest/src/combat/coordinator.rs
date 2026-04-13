@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use textquest_common::combat::CombatStatus;
 use textquest_common::ipc::Command;
+use textquest_common::soul::SoulEvent;
 use textquest_common::types::{ClientId, GameState};
 
 use super::camp_loop::{CampEvent, CampLoop, CampState};
@@ -23,6 +24,10 @@ pub struct CombatCoordinator {
     pub heal_coordinator: HealCoordinator,
     /// Cross-group cure coordination — prevents duplicate curing.
     pub cure_coordinator: CureCoordinator,
+    /// Pending soul events to be consumed by the orchestrator each tick.
+    pending_soul_events: Vec<(ClientId, SoulEvent)>,
+    /// Name of the current assist target mob (for kill event attribution).
+    assist_target_name: Option<String>,
 }
 
 impl CombatCoordinator {
@@ -39,7 +44,17 @@ impl CombatCoordinator {
             ch_chain: None,
             heal_coordinator: HealCoordinator::new(),
             cure_coordinator: CureCoordinator::new(),
+            pending_soul_events: Vec::new(),
+            assist_target_name: None,
         }
+    }
+
+    /// Drain and return all pending soul events accumulated since the last call.
+    ///
+    /// The orchestrator should call this after `tick()` and forward events to
+    /// `SoulCoordinator::emit_soul_event`.
+    pub fn drain_soul_events(&mut self) -> Vec<(ClientId, SoulEvent)> {
+        std::mem::take(&mut self.pending_soul_events)
     }
 
     /// Designate a client as the main tank for assist targeting.
@@ -78,6 +93,13 @@ impl CombatCoordinator {
             && self.assist_target != Some(new_assist)
         {
             self.assist_target = Some(new_assist);
+            // Track the target name for kill event attribution
+            if let Some(tank_id) = self.main_tank_id
+                && let Some(tank_state) = states.get(&tank_id)
+                && let Some(ref target) = tank_state.target
+            {
+                self.assist_target_name = Some(target.name.clone());
+            }
             // Broadcast assist target to all DPS
             for &cid in states.keys() {
                 if Some(cid) != self.main_tank_id {
@@ -173,6 +195,28 @@ impl CombatCoordinator {
         // Detect combat end (edge: was in combat, now nobody is)
         if !any_in_combat && self.prev_in_combat {
             events.push(CampEvent::CombatEnded);
+
+            // Emit a Kill soul event for each living client — we won the fight.
+            let kill_target = self
+                .assist_target_name
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string());
+            let zone = states
+                .values()
+                .next()
+                .map(|gs| gs.zone_short_name.clone())
+                .unwrap_or_default();
+            for (&client_id, gs) in states {
+                if !matches!(gs.combat_status, CombatStatus::Dead) {
+                    self.pending_soul_events.push((
+                        client_id,
+                        SoulEvent::Kill {
+                            target: kill_target.clone(),
+                            zone: zone.clone(),
+                        },
+                    ));
+                }
+            }
         }
 
         // Detect deaths (edge: client was alive, now dead)
@@ -181,6 +225,12 @@ impl CombatCoordinator {
             let was_dead = self.prev_dead.get(&client_id).copied().unwrap_or(false);
             if is_dead && !was_dead {
                 events.push(CampEvent::MemberDied { client_id });
+
+                // Emit a Death soul event — record killer as the last assist target.
+                let killer = self.assist_target_name.clone();
+                let zone = gs.zone_short_name.clone();
+                self.pending_soul_events
+                    .push((client_id, SoulEvent::Death { killer, zone }));
             }
         }
 
@@ -542,5 +592,117 @@ mod tests {
         // First tick fires first remaining member (20)
         let cmds = coord.tick(&states);
         assert_eq!(cmds[0].0, 20);
+    }
+
+    // --- Soul event tests ---
+
+    #[test]
+    fn drain_soul_events_initially_empty() {
+        let mut coord = CombatCoordinator::new();
+        let events = coord.drain_soul_events();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn death_emits_soul_event_death() {
+        let mut coord = CombatCoordinator::new();
+        coord.set_main_tank(1);
+        coord.start_camp();
+
+        // Tick 1: alive, in combat
+        let mut states = HashMap::new();
+        let mut gs1 = make_game_state(1, None);
+        gs1.combat_status = CombatStatus::Engaging { target_id: 42 };
+        states.insert(1, gs1);
+
+        coord.tick(&states);
+        coord.drain_soul_events(); // clear tick-1 events
+
+        // Tick 2: client 1 is now dead
+        let mut states2 = HashMap::new();
+        let mut gs2 = make_game_state(1, None);
+        gs2.combat_status = CombatStatus::Dead;
+        states2.insert(1, gs2);
+
+        coord.tick(&states2);
+        let soul_events = coord.drain_soul_events();
+
+        assert!(
+            soul_events
+                .iter()
+                .any(|(cid, ev)| { *cid == 1 && matches!(ev, SoulEvent::Death { .. }) }),
+            "Expected Death soul event for client 1, got: {soul_events:?}"
+        );
+    }
+
+    #[test]
+    fn combat_end_emits_kill_soul_event_for_survivors() {
+        let mut coord = CombatCoordinator::new();
+        coord.set_main_tank(1);
+        coord.start_camp();
+
+        // Tick 1: in combat
+        let mut states = HashMap::new();
+        let mut gs1 = make_game_state(1, None);
+        gs1.combat_status = CombatStatus::Engaging { target_id: 42 };
+        gs1.zone_short_name = "crushbone".to_string();
+        states.insert(1, gs1);
+        let mut gs2 = make_game_state(2, None);
+        gs2.combat_status = CombatStatus::Engaging { target_id: 42 };
+        gs2.zone_short_name = "crushbone".to_string();
+        states.insert(2, gs2);
+
+        coord.tick(&states);
+        coord.drain_soul_events();
+
+        // Tick 2: combat ends — everyone back to Idle
+        let mut states2 = HashMap::new();
+        let mut gs1b = make_game_state(1, None);
+        gs1b.zone_short_name = "crushbone".to_string();
+        states2.insert(1, gs1b);
+        let mut gs2b = make_game_state(2, None);
+        gs2b.zone_short_name = "crushbone".to_string();
+        states2.insert(2, gs2b);
+
+        coord.tick(&states2);
+        let soul_events = coord.drain_soul_events();
+
+        // Both survivors should get a Kill event
+        let kill_count = soul_events
+            .iter()
+            .filter(|(_, ev)| matches!(ev, SoulEvent::Kill { .. }))
+            .count();
+        assert_eq!(kill_count, 2, "Expected Kill event for each survivor");
+    }
+
+    #[test]
+    fn drain_soul_events_clears_after_drain() {
+        let mut coord = CombatCoordinator::new();
+        coord.set_main_tank(1);
+        coord.start_camp();
+
+        // Force a death event
+        let mut states = HashMap::new();
+        let mut gs1 = make_game_state(1, None);
+        gs1.combat_status = CombatStatus::Engaging { target_id: 1 };
+        states.insert(1, gs1);
+        coord.tick(&states);
+
+        let mut states2 = HashMap::new();
+        let mut gs2 = make_game_state(1, None);
+        gs2.combat_status = CombatStatus::Dead;
+        states2.insert(1, gs2);
+        coord.tick(&states2);
+
+        // First drain returns events
+        let first = coord.drain_soul_events();
+        assert!(!first.is_empty(), "First drain should have events");
+
+        // Second drain returns nothing
+        let second = coord.drain_soul_events();
+        assert!(
+            second.is_empty(),
+            "Second drain should be empty after first drain"
+        );
     }
 }

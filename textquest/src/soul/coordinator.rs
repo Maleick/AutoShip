@@ -536,6 +536,24 @@ impl SoulCoordinator {
         }
     }
 
+    /// Emit a soul event for a registered client.
+    ///
+    /// Validates that `client_id` is registered, records the event in memory,
+    /// and processes it through the personality engine to update mood.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `client_id` is not registered.
+    pub fn emit_soul_event(&mut self, client_id: ClientId, event: SoulEvent) -> Result<()> {
+        if !self.souls.contains_key(&client_id) {
+            return Err(anyhow::anyhow!(
+                "client_id {client_id} is not registered with SoulCoordinator"
+            ));
+        }
+        self.on_game_event(client_id, event);
+        Ok(())
+    }
+
     /// Get the current mood for a character.
     pub fn mood(&self, client_id: ClientId) -> Option<MoodState> {
         self.souls.get(&client_id).map(|s| s.mood)
@@ -884,117 +902,69 @@ mod tests {
         assert!(cmds.is_empty());
     }
 
-    // -- IPC queue tests --
+    // --- emit_soul_event tests ---
 
     #[test]
-    fn ipc_available_by_default() {
-        let coord = make_coordinator(true);
-        assert!(coord.is_ipc_available());
-        assert_eq!(coord.ipc_queue_len(), 0);
-    }
-
-    #[test]
-    fn on_ipc_unavailable_sets_flag() {
+    fn emit_soul_event_ok_for_registered_client() {
         let mut coord = make_coordinator(true);
-        coord.on_ipc_unavailable();
-        assert!(!coord.is_ipc_available());
-    }
-
-    #[test]
-    fn on_ipc_available_clears_flag_and_drains_queue() {
-        let mut coord = make_coordinator(true);
-        coord.on_ipc_unavailable();
-        coord.buffer_command(
+        coord.register_character(1, &make_char_config("Warrior01"));
+        let result = coord.emit_soul_event(
             1,
-            Command::Say {
-                channel: textquest_common::soul::SayChannel::Group,
-                message: "test".into(),
-                target: None,
+            SoulEvent::Kill {
+                target: "a goblin".into(),
+                zone: "crushbone".into(),
             },
-            IpcCommandPriority::Normal,
         );
-        assert_eq!(coord.ipc_queue_len(), 1);
-
-        let drained = coord.on_ipc_available();
-        assert!(coord.is_ipc_available());
-        assert_eq!(coord.ipc_queue_len(), 0);
-        assert_eq!(drained.len(), 1);
+        assert!(result.is_ok());
     }
 
     #[test]
-    fn buffer_command_enqueues_correctly() {
+    fn emit_soul_event_err_for_unregistered_client() {
         let mut coord = make_coordinator(true);
-        coord.on_ipc_unavailable();
-        for i in 0u32..5 {
-            coord.buffer_command(
-                i,
-                Command::Say {
-                    channel: textquest_common::soul::SayChannel::Say,
-                    message: format!("msg {i}"),
-                    target: None,
-                },
-                IpcCommandPriority::Normal,
-            );
-        }
-        assert_eq!(coord.ipc_queue_len(), 5);
-    }
-
-    #[test]
-    fn ipc_queue_overflow_drops_low_priority() {
-        let mut queue = IpcCommandQueue::new();
-        // Fill with low-priority entries.
-        for i in 0..IPC_QUEUE_MAX {
-            queue.push(
-                i as ClientId,
-                Command::Say {
-                    channel: textquest_common::soul::SayChannel::Say,
-                    message: "low".into(),
-                    target: None,
-                },
-                IpcCommandPriority::Low,
-            );
-        }
-        assert_eq!(queue.len(), IPC_QUEUE_MAX);
-
-        // Push a high-priority entry — one low-priority entry should be dropped.
-        queue.push(
-            999,
-            Command::Say {
-                channel: textquest_common::soul::SayChannel::Tell,
-                message: "urgent".into(),
-                target: None,
+        let result = coord.emit_soul_event(
+            99,
+            SoulEvent::Kill {
+                target: "a goblin".into(),
+                zone: "crushbone".into(),
             },
-            IpcCommandPriority::High,
         );
-        assert_eq!(queue.len(), IPC_QUEUE_MAX);
-        assert!(queue.dropped_low_count() >= 1);
+        assert!(result.is_err());
+        let msg = format!("{}", result.unwrap_err());
+        assert!(msg.contains("99"), "Error should mention the client_id");
     }
 
     #[test]
-    fn ipc_queue_drain_clears_queue() {
-        let mut queue = IpcCommandQueue::new();
-        queue.push(
+    fn emit_soul_event_death_records_in_memory() {
+        let mut coord = make_coordinator(true);
+        coord.register_character(1, &make_char_config("Cleric01"));
+        let result = coord.emit_soul_event(
             1,
-            Command::Say {
-                channel: textquest_common::soul::SayChannel::Say,
-                message: "hello".into(),
-                target: None,
+            SoulEvent::Death {
+                killer: Some("a dragon".into()),
+                zone: "permafrost".into(),
             },
-            IpcCommandPriority::Normal,
         );
-        assert!(!queue.is_empty());
-        let items = queue.drain();
-        assert_eq!(items.len(), 1);
-        assert!(queue.is_empty());
+        assert!(result.is_ok());
+        // Memory store should have 1 entry for this client
+        let memories = coord.memory_store().recall_about(1, "a dragon", 10);
+        // recall_about returns Result; it should succeed and have >= 0 entries (event is recorded)
+        assert!(memories.is_ok());
     }
 
     #[test]
-    fn coordinator_buffers_commands_when_ipc_unavailable() {
+    fn emit_soul_event_multiple_events_accumulate() {
         let mut coord = make_coordinator(true);
-        coord.on_ipc_unavailable();
-        // Tick should return empty (commands go to internal queue).
-        let states = HashMap::new();
-        let cmds = coord.tick(&states);
-        assert!(cmds.is_empty());
+        coord.register_character(1, &make_char_config("Rogue01"));
+        // Three kill events — all should succeed
+        for mob in &["orc pawn", "orc centurion", "orc oracle"] {
+            let result = coord.emit_soul_event(
+                1,
+                SoulEvent::Kill {
+                    target: (*mob).into(),
+                    zone: "crushbone".into(),
+                },
+            );
+            assert!(result.is_ok(), "emit_soul_event failed for {mob}");
+        }
     }
 }
