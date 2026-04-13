@@ -32,3 +32,5 @@ pub mod recovery;
 pub mod state;
 /// Vendor automation — sell junk, buy supplies, inventory management.
 pub mod vendor;
+/// Skill leveling and training automation — tracks skill levels, mastery, and tradeskill sessions.
+pub mod skill_tracker;
