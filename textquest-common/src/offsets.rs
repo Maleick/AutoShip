@@ -312,6 +312,62 @@ pub const INV_SLOT_GET_ITEM_BASE: u64 = 0x0001_4041_9520;
 /// Signature: void MemorizeSet(int*, int)
 pub const SPELL_BOOK_WND_MEMORIZE_SET: u64 = 0x0001_4050_EFE0;
 
+/// `EQBeginZone` — begin zone transition handler.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_BEGIN_ZONE: u64 = 0x0;
+
+/// `EQEndZone` — end zone transition handler.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_END_ZONE: u64 = 0x0;
+
+/// `EQFinishZone` — zone transition completion handler.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_FINISH_ZONE: u64 = 0x0;
+
+/// `EQZoneChange` — zone change event function.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_ZONE_CHANGE: u64 = 0x0;
+
+/// `EQInvitePlayer` — invite player into a group/raid.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_INVITE_PLAYER: u64 = 0x0;
+
+/// `EQDisband` — disband from group/raid.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_DISBAND: u64 = 0x0;
+
+/// `EQFollowPlayer` — issue follow command for a player.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_FOLLOW_PLAYER: u64 = 0x0;
+
+/// `EQMakeLeader` — promote a player to group/raid leader.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_MAKE_LEADER: u64 = 0x0;
+
+/// `EQBuyItem` — merchant buy item function.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_BUY_ITEM: u64 = 0x0;
+
+/// `EQSellItem` — merchant sell item function.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_SELL_ITEM: u64 = 0x0;
+
+/// `EQOpenTrade` — open trade request window.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_OPEN_TRADE: u64 = 0x0;
+
+/// `EQCompleteTrade` — finalize a trade session.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_COMPLETE_TRADE: u64 = 0x0;
+
+/// `EQBuffPlayer` — apply/remove player buff routines.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_BUFF_PLAYER: u64 = 0x0;
+
+/// `EQRemoveBuff` — remove player buff routine.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_REMOVE_BUFF: u64 = 0x0;
+
 // ─── CContextMenuManager global pointer and function addresses ───
 // Source: eqgame.h `pinstCContextMenuManager_x` and `CContextMenuManager__HandleMenu_x`,
 // client date 20260310

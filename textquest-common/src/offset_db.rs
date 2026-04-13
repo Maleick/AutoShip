@@ -42,11 +42,11 @@ impl OffsetDatabase {
         let db: Self = serde_json::from_str(&content)?;
         Ok(db)
     }
+    /// Serialize and write this database to a JSON file.
     ///
     /// # Errors
     ///
     /// Returns an error if the operation fails.
-    /// Serialize and write this database to a JSON file.
     pub fn save_to_file(&self, path: &Path) -> anyhow::Result<()> {
         let content = serde_json::to_string_pretty(self)?;
         std::fs::write(path, content)?;
@@ -181,14 +181,70 @@ impl OffsetDatabase {
         pz.insert("enduranceMax".to_string(), player_zone::ENDURANCE_MAX);
         pz.insert("standState".to_string(), player_zone::STANDSTATE);
 
-        let mut sm = HashMap::new();
-        sm.insert("playerList".to_string(), spawn_manager::PLAYER_LIST);
+        let globals = [
+            ("pinstLocalPlayer", PINST_LOCAL_PLAYER),
+            ("pinstControlledPlayer", PINST_CONTROLLED_PLAYER),
+            ("pinstTarget", PINST_TARGET),
+            ("pinstSpawnManager", PINST_SPAWN_MANAGER),
+            ("pinstLocalPC", PINST_LOCAL_PC),
+            ("pinstSpellManager", PINST_SPELL_MANAGER),
+            ("pinstCDisplay", PINST_CDISPLAY),
+            ("pinstCEverQuest", PINST_CEVERQUEST),
+            ("pinstCContextMenuManager", PINST_CONTEXT_MENU_MANAGER),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
 
-        let mut cmm = HashMap::new();
-        cmm.insert("menusArray".to_string(), context_menu_mgr::MENUS_DATA);
-        cmm.insert("numMenus".to_string(), context_menu_mgr::MENUS_COUNT);
-        cmm.insert("currMenu".to_string(), context_menu_mgr::CUR_MENU);
-        cmm.insert("curItem".to_string(), context_menu_mgr::CUR_ITEM);
+        let player_base = [
+            ("next", player_base::NEXT),
+            ("prev", player_base::PREV),
+            ("y", player_base::Y),
+            ("x", player_base::X),
+            ("z", player_base::Z),
+            ("heading", player_base::HEADING),
+            ("speedCurrent", player_base::SPEED_CURRENT),
+            ("speedRun", player_base::SPEED_RUN),
+            ("speedHeading", player_base::SPEED_HEADING),
+            ("name", player_base::NAME),
+            ("displayedName", player_base::DISPLAYED_NAME),
+            ("type", player_base::TYPE),
+            ("spawnId", player_base::SPAWN_ID),
+            ("lastName", player_base::LASTNAME),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+
+        let player_zone = [
+            ("hpMax", player_zone::HP_MAX),
+            ("hpCurrent", player_zone::HP_CURRENT),
+            ("manaMax", player_zone::MANA_MAX),
+            ("manaCurrent", player_zone::MANA_CURRENT),
+            ("level", player_zone::LEVEL),
+            ("charClass", player_zone::CHAR_CLASS),
+            ("enduranceCurrent", player_zone::ENDURANCE_CURRENT),
+            ("enduranceMax", player_zone::ENDURANCE_MAX),
+            ("standState", player_zone::STANDSTATE),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+
+        let spawn_manager = [("playerList", spawn_manager::PLAYER_LIST)]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
+
+        let context_menu_manager = [
+            ("menusArray", context_menu_mgr::MENUS_DATA),
+            ("numMenus", context_menu_mgr::MENUS_COUNT),
+            ("currMenu", context_menu_mgr::CUR_MENU),
+            ("curItem", context_menu_mgr::CUR_ITEM),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
 
         // No compile-time `offsets::context_menu` fallback is currently defined.
         // Leave the map empty here; JSON-loaded offsets can still populate it.
@@ -255,12 +311,12 @@ impl OffsetDatabase {
             client_date: crate::offsets::CLIENT_DATE.to_string(),
             eq_preferred_base: EQ_PREFERRED_BASE,
             globals,
-            player_base: pb,
-            player_zone: pz,
-            spawn_manager: sm,
-            context_menu_manager: cmm,
-            context_menu: cm,
-            functions: funcs,
+            player_base,
+            player_zone,
+            spawn_manager,
+            context_menu_manager,
+            context_menu,
+            functions,
         }
     }
 }
@@ -538,11 +594,67 @@ mod tests {
             "systemFingerprint",
             "memcheck4ProcessEnum",
             "contextMenuMgrHandleMenu",
+            "eqBeginZone",
+            "eqEndZone",
+            "eqFinishZone",
+            "eqZoneChange",
+            "eqInvitePlayer",
+            "eqDisband",
+            "eqFollowPlayer",
+            "eqMakeLeader",
+            "eqBuyItem",
+            "eqSellItem",
+            "eqOpenTrade",
+            "eqCompleteTrade",
+            "eqBuffPlayer",
+            "eqRemoveBuff",
         ];
         for key in &expected_functions {
             assert!(db.get_function(key).is_some(), "missing function: {}", key);
         }
         assert_eq!(db.functions.len(), expected_functions.len());
+    }
+
+    #[test]
+    fn from_compiled_offsets_new_functions_do_not_duplicate_existing_non_zero_addresses() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let mut existing_without_new = db.functions.clone();
+
+        let new_constants = [
+            ("eqBeginZone", crate::offsets::EQ_BEGIN_ZONE),
+            ("eqEndZone", crate::offsets::EQ_END_ZONE),
+            ("eqFinishZone", crate::offsets::EQ_FINISH_ZONE),
+            ("eqZoneChange", crate::offsets::EQ_ZONE_CHANGE),
+            ("eqInvitePlayer", crate::offsets::EQ_INVITE_PLAYER),
+            ("eqDisband", crate::offsets::EQ_DISBAND),
+            ("eqFollowPlayer", crate::offsets::EQ_FOLLOW_PLAYER),
+            ("eqMakeLeader", crate::offsets::EQ_MAKE_LEADER),
+            ("eqBuyItem", crate::offsets::EQ_BUY_ITEM),
+            ("eqSellItem", crate::offsets::EQ_SELL_ITEM),
+            ("eqOpenTrade", crate::offsets::EQ_OPEN_TRADE),
+            ("eqCompleteTrade", crate::offsets::EQ_COMPLETE_TRADE),
+            ("eqBuffPlayer", crate::offsets::EQ_BUFF_PLAYER),
+            ("eqRemoveBuff", crate::offsets::EQ_REMOVE_BUFF),
+        ];
+
+        for (name, _) in new_constants {
+            existing_without_new.remove(name);
+        }
+
+        let non_zero_existing: Vec<u64> = existing_without_new
+            .values()
+            .copied()
+            .filter(|addr| *addr != 0)
+            .collect();
+
+        for (name, addr) in &new_constants {
+            if *addr != 0 {
+                assert!(
+                    !non_zero_existing.contains(addr),
+                    "new function {name} duplicates an existing non-zero address"
+                );
+            }
+        }
     }
 
     #[test]
