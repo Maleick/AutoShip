@@ -521,7 +521,7 @@ mod tests {
     fn nav_color_paused() {
         let t = test_theme();
         let status = NavStatus::Paused {
-            reason: PauseReason::LowHp,
+            reason: PauseReason::UserPause,
             waypoint_index: 0,
             waypoint_count: 3,
             distance_remaining: 50.0,

@@ -124,10 +124,6 @@ pub struct EconomyQueuesResponse {
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-fn is_trusted_origin(headers: &HeaderMap) -> bool {
-    crate::api::loot::is_trusted_origin(headers)
-}
-
 /// GET /api/economy/status — current active cycles and pause state.
 pub async fn get_status(State(state): State<Arc<AppState>>) -> Json<EconomyStatusResponse> {
     let is_paused = *state.economy_state.is_paused.read().await;
@@ -152,7 +148,7 @@ pub async fn get_queues(State(state): State<Arc<AppState>>) -> Json<EconomyQueue
 
 /// POST /api/economy/pause — pause all economy cycles.
 pub async fn pause_economy(State(state): State<Arc<AppState>>, headers: HeaderMap) -> StatusCode {
-    if !is_trusted_origin(&headers) {
+    if !crate::api::loot::is_trusted_origin(&headers) {
         return StatusCode::FORBIDDEN;
     }
     let mut paused = state.economy_state.is_paused.write().await;
@@ -162,7 +158,7 @@ pub async fn pause_economy(State(state): State<Arc<AppState>>, headers: HeaderMa
 
 /// POST /api/economy/resume — resume all economy cycles.
 pub async fn resume_economy(State(state): State<Arc<AppState>>, headers: HeaderMap) -> StatusCode {
-    if !is_trusted_origin(&headers) {
+    if !crate::api::loot::is_trusted_origin(&headers) {
         return StatusCode::FORBIDDEN;
     }
     let mut paused = state.economy_state.is_paused.write().await;
@@ -185,6 +181,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: EconomyState::new_demo(),
+            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         })
     }

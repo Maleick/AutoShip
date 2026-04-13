@@ -8,6 +8,7 @@ use textquest_common::soul::{MoodState, PersonalityTraits, SoulAction, SoulEvent
 use textquest_common::types::{ClientId, GameState};
 
 use super::alerts::{Alert, AnomalyDetector};
+use super::audit::{AuditActionType, SoulAuditLogger};
 use super::config::{CharacterSoulConfig, EdginessLevel, SoulConfig};
 use super::idle::{IdleScheduler, IdleTransition};
 use super::llm::fallback::TraitDrivenResponder;
@@ -97,6 +98,11 @@ impl IpcCommandQueue {
         });
     }
 
+    /// Pop the front command from the queue.
+    pub fn pop(&mut self) -> Option<(ClientId, Command)> {
+        self.queue.pop_front().map(|q| (q.client_id, q.command))
+    }
+
     /// Drain all queued commands, returning them for dispatch.
     pub fn drain(&mut self) -> Vec<(ClientId, Command)> {
         self.queue
@@ -119,6 +125,15 @@ impl IpcCommandQueue {
     pub fn dropped_low_count(&self) -> u64 {
         self.dropped_low
     }
+}
+
+/// Per-character alert tracking state used by `check_alerts_for`.
+#[derive(Debug)]
+struct AlertState {
+    mood_since: Instant,
+    last_mood: MoodState,
+    recent_chat_times: Vec<Instant>,
+    last_fired: HashMap<String, Instant>,
 }
 
 /// Per-character soul state.
@@ -158,6 +173,8 @@ pub struct SoulCoordinator {
     ipc_available: bool,
     /// Detects runtime anomalies and generates operator alerts.
     anomaly_detector: AnomalyDetector,
+    /// Optional audit logger; records key state changes as JSONL.
+    audit: Option<SoulAuditLogger>,
 }
 
 const MAX_PLAYER_CHAT_MESSAGE_BYTES: usize = 512;
@@ -190,6 +207,7 @@ impl SoulCoordinator {
             ipc_queue: IpcCommandQueue::new(),
             ipc_available: true,
             anomaly_detector: AnomalyDetector::new(),
+            audit: None,
         })
     }
 
@@ -466,6 +484,18 @@ impl SoulCoordinator {
     /// Periodically generate and persist per-character memory summaries.
     ///
     /// Runs every [`SUMMARY_INTERVAL_TICKS`] and summarizes the previous hour.
+    /// Run lightweight alert checks for one character.
+    fn check_alerts_for(&mut self, _client_id: ClientId) {
+        for alert in self.anomaly_detector.check() {
+            tracing::warn!(
+                character_id = alert.character_id,
+                alert_type = ?alert.alert_type,
+                "soul alert: {}",
+                alert.message
+            );
+        }
+    }
+
     fn check_and_generate_summaries(&mut self) {
         if !self.tick_count.is_multiple_of(SUMMARY_INTERVAL_TICKS) {
             return;

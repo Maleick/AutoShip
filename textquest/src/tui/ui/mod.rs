@@ -33,7 +33,6 @@ use ratatui::{
 
 use crate::tui::app::{ActivePanel, ActiveScreen, App, HelpFocus, ToastLevel};
 use crate::tui::command::HelpSection;
-use crate::tui::ui::orchestrator_panel::draw_orchestrator_screen;
 use crate::tui::ui::widgets::{
     WidthClass, centered_popup, classify_width, line_width, spans_width, truncate_inline,
 };
@@ -66,6 +65,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         ActiveScreen::Debug => spawns::draw_debug_screen(frame, outer[1], app),
         ActiveScreen::PacketMonitor => packets::draw_packet_monitor(frame, outer[1], app),
         ActiveScreen::Economy => economy_controls::draw_economy_screen(frame, outer[1], app),
+        ActiveScreen::Orchestrator => {
+            orchestrator_panel::draw_orchestrator_screen(frame, outer[1], app)
+        }
     }
 
     draw_status_bar(frame, outer[2], app);
@@ -201,6 +203,7 @@ fn header_tab_label(screen: ActiveScreen, width_class: WidthClass) -> &'static s
             ActiveScreen::Debug => "Dbg",
             ActiveScreen::PacketMonitor => "Pkt",
             ActiveScreen::Economy => "Eco",
+            ActiveScreen::Orchestrator => "Orc",
         },
         WidthClass::Narrow => match screen {
             ActiveScreen::Overview => "1",
@@ -209,6 +212,7 @@ fn header_tab_label(screen: ActiveScreen, width_class: WidthClass) -> &'static s
             ActiveScreen::Debug => "4",
             ActiveScreen::PacketMonitor => "5",
             ActiveScreen::Economy => "6",
+            ActiveScreen::Orchestrator => "7",
         },
     }
 }
@@ -887,6 +891,9 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
             push_kv(&mut rows, None, "R", "Resume vendor/bank cycle");
             push_kv(&mut rows, None, "A", "Abort current cycle");
             push_kv(&mut rows, None, "S", "Skip current cycle");
+        }
+        ActiveScreen::Orchestrator => {
+            push_heading(&mut rows, None, "Orchestrator Controls");
         }
     }
     rows.push(help_row(None, HelpCell::Text(String::new())));

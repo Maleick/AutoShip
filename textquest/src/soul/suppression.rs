@@ -141,6 +141,7 @@ mod tests {
             combat_status: CombatStatus::Idle,
             zone_short_name: "test".into(),
             zone_long_name: "Test Zone".into(),
+            actual_version: None,
         }
     }
 

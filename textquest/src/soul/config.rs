@@ -222,6 +222,16 @@ pub struct SoulConfig {
     /// Maximum total LLM requests across all characters per minute (rate limiting)
     #[serde(default = "default_max_global_requests")]
     pub max_global_requests: u32,
+    /// Rate at which mood decays toward Neutral per tick (0.0–1.0).
+    #[serde(default = "default_mood_decay_rate")]
+    pub mood_decay_rate: f64,
+    /// Number of days before a memory record is considered stale for decay.
+    #[serde(default = "default_memory_decay_days")]
+    pub memory_decay_days: u32,
+}
+
+const fn default_mood_decay_rate() -> f64 {
+    0.05
 }
 
 const fn default_max_requests_per_character() -> u32 {
@@ -249,6 +259,8 @@ impl Default for SoulConfig {
             suppression: SuppressionRules::default(),
             max_requests_per_character: default_max_requests_per_character(),
             max_global_requests: default_max_global_requests(),
+            mood_decay_rate: default_mood_decay_rate(),
+            memory_decay_days: default_memory_decay_days(),
         }
     }
 }

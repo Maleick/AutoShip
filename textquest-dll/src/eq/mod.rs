@@ -38,7 +38,10 @@ fn parse_version_string(bytes: &[u8]) -> Option<String> {
 pub fn check_eq_version(base: u64) -> Option<String> {
     use textquest_common::offsets::{ACTUAL_VERSION_DATE, rebase};
 
-    let addr = rebase(ACTUAL_VERSION_DATE, base)?;
+    let addr: usize = match rebase(ACTUAL_VERSION_DATE, base)?.try_into() {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
 
     // ACTUAL_VERSION_DATE is a pointer to a string, not the string itself.
     // First dereference the pointer, then read the string bytes.
@@ -46,7 +49,7 @@ pub fn check_eq_version(base: u64) -> Option<String> {
         return None;
     }
 
-    let string_addr = unsafe { *(addr as *const usize) } as u64;
+    let string_addr = unsafe { *(addr as *const usize) };
     if string_addr == 0 {
         return None;
     }

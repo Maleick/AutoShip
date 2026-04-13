@@ -293,7 +293,7 @@ pub const TRUSTED_ORIGINS: &[&str] = &[
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
 
-fn is_trusted_origin(headers: &HeaderMap) -> bool {
+pub(crate) fn is_trusted_origin(headers: &HeaderMap) -> bool {
     let Some(origin) = headers.get(axum::http::header::ORIGIN) else {
         // Non-browser clients can omit Origin entirely; in production builds we
         // treat that as untrusted.  In test builds we allow it so unit tests
@@ -443,6 +443,7 @@ mod tests {
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             loot_state: LootState::new_demo(),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         })

@@ -38,10 +38,6 @@ pub use super::state::{
     MapViewportMode, NavigationScreenState, OverviewScreenState, PacketMonitorState,
     SpawnsScreenState, TacticalScreenState,
 };
-pub use super::state::{
-    CommandBarState, HexDumpState, MapScreenState, MapViewportMode, NavigationScreenState,
-    OverviewScreenState, PacketMonitorState, SpawnsScreenState, TacticalScreenState,
-};
 use super::state::{load_named_markers_pub, save_named_markers};
 
 /// Which screen is currently displayed.
@@ -59,6 +55,8 @@ pub enum ActiveScreen {
     PacketMonitor,
     /// Economy operator controls — vendor cycle, banking, loot queue.
     Economy,
+    /// Orchestrator control surface — camp loop, group coordination.
+    Orchestrator,
 }
 
 impl ActiveScreen {
@@ -72,17 +70,19 @@ impl ActiveScreen {
             Self::Debug => "Debug",
             Self::PacketMonitor => "Packets",
             Self::Economy => "Economy",
+            Self::Orchestrator => "Orchestrator",
         }
     }
 
     /// All screen variants for iteration.
-    pub const ALL: [ActiveScreen; 6] = [
+    pub const ALL: [ActiveScreen; 7] = [
         Self::Overview,
         Self::Tactical,
         Self::Navigation,
         Self::Debug,
         Self::PacketMonitor,
         Self::Economy,
+        Self::Orchestrator,
     ];
 }
 
@@ -399,7 +399,7 @@ pub struct App {
     /// Currently focused panel for keyboard input.
     pub active_panel: ActivePanel,
     /// Per-screen layout presets (cycled with Ctrl+E).
-    pub layout_presets: [LayoutPreset; 6],
+    pub layout_presets: [LayoutPreset; 7],
 
     /// Connected EQ client states.
     pub clients: Vec<ClientState>,
@@ -701,7 +701,7 @@ impl App {
             running: true,
             active_screen: ActiveScreen::Overview,
             active_panel: ActivePanel::OverviewRoster,
-            layout_presets: [LayoutPreset::Default; 6],
+            layout_presets: [LayoutPreset::Default; 7],
 
             clients: Vec::new(),
             selected_client: 0,
@@ -948,6 +948,7 @@ impl App {
             ActiveScreen::Debug => ActivePanel::DebugSpawns,
             ActiveScreen::PacketMonitor => ActivePanel::PacketMonitorLog,
             ActiveScreen::Economy => ActivePanel::EconomyControls,
+            ActiveScreen::Orchestrator => ActivePanel::EconomyControls,
         }
     }
 
@@ -989,6 +990,7 @@ impl App {
             }
             ActiveScreen::PacketMonitor => vec![ActivePanel::PacketMonitorLog],
             ActiveScreen::Economy => vec![ActivePanel::EconomyControls],
+            ActiveScreen::Orchestrator => vec![ActivePanel::EconomyControls],
         }
     }
 
@@ -1049,6 +1051,7 @@ impl App {
             ActiveScreen::Debug => 3,
             ActiveScreen::PacketMonitor => 4,
             ActiveScreen::Economy => 5,
+            ActiveScreen::Orchestrator => 6,
         }
     }
 

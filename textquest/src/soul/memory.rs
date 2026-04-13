@@ -205,6 +205,13 @@ where
     Err(last_err.expect("retry loop must set last_err"))
 }
 
+/// Compute a combined relevance score for a memory row used for LLM context ranking.
+///
+/// Higher score → preferred for inclusion in context.
+fn memory_combined_score(row: &MemoryRow) -> f32 {
+    row.importance
+}
+
 impl MemoryStore {
     /// Open (or create) the memory database at the given path.
     ///

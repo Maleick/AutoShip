@@ -41,6 +41,8 @@ pub struct AppState {
     pub character_configs: tokio::sync::RwLock<HashMap<String, api::CharacterConfig>>,
     /// In-memory loot configuration state.
     pub loot_state: Arc<api::loot::LootState>,
+    /// In-memory economy cycle state.
+    pub economy_state: Arc<api::economy::EconomyState>,
     /// In-memory soul audit log.
     pub soul_audit: Arc<api::soul::SoulAuditState>,
     /// Optional static API token for protecting all `/api` endpoints.
@@ -135,6 +137,7 @@ fn build_state() -> Arc<AppState> {
         credential_store,
         character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
         loot_state: api::loot::LootState::new_demo(),
+        economy_state: api::economy::EconomyState::new_demo(),
         soul_audit: api::soul::SoulAuditState::new_demo(),
         api_token,
     })
@@ -301,6 +304,7 @@ mod tests {
             ),
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
             loot_state: api::loot::LootState::new_demo(),
+            economy_state: api::economy::EconomyState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
             api_token: None, // No auth in tests — auth middleware is a no-op when None
         })

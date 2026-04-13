@@ -527,6 +527,7 @@ mod tests {
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         });
@@ -543,6 +544,7 @@ mod tests {
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         });
