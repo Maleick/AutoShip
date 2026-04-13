@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TextQuest — EverQuest multibox controller</title>
+  <meta name="description" content="TextQuest is a Rust-based orchestration tool for managing large box crews on EverQuest TLP servers. TUI dashboard, camp automation, and group management." />
+  <meta property="og:title" content="TextQuest — EverQuest multibox controller" />
+  <meta property="og:description" content="Terminal dashboard, automated camp loop, group coordination, and DLL-based automation for EverQuest Time-Locked Progression servers." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #1c2128;
+      --border: #21262d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --cyan: #22d3ee;
+      --cyan-dim: #06b6d4;
+      --gold: #c9a14a;
+      --green: #3fb950;
+      --red: #f85149;
+      --purple: #a855f7;
+      --radius: 10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 32px;
+      background: rgba(13,17,23,0.9);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { font-weight: 800; font-size: 1.1rem; color: var(--cyan); letter-spacing: -0.5px; text-decoration: none; font-family: 'Courier New', monospace; }
+    .nav-links { display: flex; gap: 24px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      background: var(--cyan); color: #000; font-weight: 700; font-size: 0.85rem;
+      padding: 7px 16px; border-radius: 6px; text-decoration: none; transition: background .2s;
+    }
+    .nav-cta:hover { background: var(--cyan-dim); }
+
+    /* ── Hero ── */
+    .hero {
+      max-width: 900px; margin: 0 auto;
+      padding: 80px 24px 64px;
+      text-align: center;
+    }
+    .hero-logo {
+      font-family: 'Courier New', monospace;
+      font-size: 3.5rem; font-weight: 900;
+      color: var(--cyan);
+      letter-spacing: -2px;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+    .hero-sub { font-size: 1rem; color: var(--gold); font-family: monospace; margin-bottom: 32px; letter-spacing: 2px; text-transform: uppercase; }
+    .hero-badges { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 32px; }
+    .hero-badges img { height: 20px; width: auto; }
+    .hero-desc {
+      font-size: 1.15rem; color: var(--muted); max-width: 640px;
+      margin: 0 auto 40px; line-height: 1.75;
+    }
+    .hero-desc strong { color: var(--text); }
+    .hero-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      background: var(--cyan); color: #000; font-weight: 700; font-size: 1rem;
+      padding: 13px 28px; border-radius: var(--radius); text-decoration: none; transition: background .2s;
+    }
+    .btn-primary:hover { background: var(--cyan-dim); }
+    .btn-secondary {
+      background: var(--surface); color: var(--text); font-weight: 600; font-size: 1rem;
+      padding: 13px 28px; border-radius: var(--radius); text-decoration: none;
+      border: 1px solid var(--border); transition: border-color .2s;
+    }
+    .btn-secondary:hover { border-color: var(--muted); }
+
+    /* ── Terminal demo ── */
+    .terminal-wrap { max-width: 820px; margin: 60px auto 0; padding: 0 24px; }
+    .terminal {
+      background: #010409; border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+      font-family: 'Courier New', monospace; font-size: 0.82rem;
+    }
+    .terminal-bar {
+      background: var(--surface); padding: 10px 16px;
+      display: flex; align-items: center; gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-red { background: #ff5f57; }
+    .dot-yellow { background: #febc2e; }
+    .dot-green { background: #28c840; }
+    .terminal-title { color: var(--muted); font-size: 0.75rem; margin-left: 8px; }
+    .terminal-body { padding: 20px; line-height: 1.8; }
+    .t-prompt { color: var(--cyan); }
+    .t-cmd { color: var(--text); }
+    .t-out { color: var(--muted); }
+    .t-green { color: var(--green); }
+    .t-gold { color: var(--gold); }
+    .t-cyan { color: var(--cyan); }
+    .t-purple { color: var(--purple); }
+
+    /* ── Sections ── */
+    .section { max-width: 900px; margin: 0 auto; padding: 64px 24px; }
+    .section-title {
+      font-size: 1.6rem; font-weight: 800; color: var(--text);
+      margin-bottom: 8px; letter-spacing: -0.5px;
+    }
+    .section-sub { color: var(--muted); margin-bottom: 40px; font-size: 1rem; }
+
+    /* ── Feature grid ── */
+    .feature-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .feature-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px;
+      transition: border-color .2s;
+    }
+    .feature-card:hover { border-color: var(--cyan); }
+    .feature-icon { font-size: 1.5rem; margin-bottom: 12px; }
+    .feature-name { font-weight: 700; color: var(--text); margin-bottom: 6px; }
+    .feature-desc { color: var(--muted); font-size: 0.88rem; line-height: 1.6; }
+
+    /* ── Screen table ── */
+    .screen-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .screen-table th { text-align: left; padding: 10px 16px; color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+    .screen-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+    .screen-table td:first-child { color: var(--cyan); font-family: monospace; font-weight: 700; white-space: nowrap; }
+    .screen-table tr:last-child td { border-bottom: none; }
+    .screen-table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+
+    /* ── Arch ── */
+    .arch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 600px) { .arch-grid { grid-template-columns: 1fr; } }
+    .arch-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px;
+    }
+    .arch-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
+    .arch-name { font-weight: 800; font-size: 1.05rem; color: var(--cyan); margin-bottom: 8px; }
+    .arch-desc { color: var(--muted); font-size: 0.875rem; line-height: 1.6; }
+
+    /* ── Quickstart ── */
+    .code-block {
+      background: #010409; border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px 24px;
+      font-family: 'Courier New', monospace; font-size: 0.85rem;
+      color: var(--text); overflow-x: auto;
+    }
+    .code-block .comment { color: var(--muted); }
+    .code-block .cmd { color: var(--green); }
+
+    /* ── Milestone strip ── */
+    .milestone-strip { display: flex; gap: 10px; flex-wrap: wrap; }
+    .milestone-badge {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; padding: 5px 14px;
+      font-size: 0.8rem; color: var(--muted);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .milestone-badge.done { border-color: var(--green); color: var(--green); }
+    .milestone-badge.active { border-color: var(--cyan); color: var(--cyan); }
+    .milestone-badge .dot-sm { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+    /* ── Divider ── */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center; padding: 40px 24px;
+      color: var(--muted); font-size: 0.85rem;
+    }
+    footer a { color: var(--cyan); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <a href="/" class="nav-logo">TextQuest</a>
+  <div class="nav-links">
+    <a href="https://github.com/Maleick/TextQuest/wiki">Wiki</a>
+    <a href="https://github.com/Maleick/TextQuest/releases">Releases</a>
+    <a href="https://github.com/Maleick/TextQuest">GitHub</a>
+  </div>
+  <a href="https://github.com/Maleick/TextQuest" class="nav-cta">View on GitHub</a>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-logo">TextQuest</div>
+  <div class="hero-sub">EverQuest multibox controller · TLP servers</div>
+
+  <div class="hero-badges">
+    <img src="https://img.shields.io/github/v/release/Maleick/TextQuest?style=flat-square&color=22d3ee&labelColor=161b22&label=release" alt="release" />
+    <img src="https://img.shields.io/github/last-commit/Maleick/TextQuest?style=flat-square&color=3fb950&labelColor=161b22" alt="last commit" />
+    <img src="https://img.shields.io/badge/language-Rust-f97316?style=flat-square&labelColor=161b22" alt="Rust" />
+    <img src="https://img.shields.io/badge/platform-Windows-0078d4?style=flat-square&labelColor=161b22" alt="Windows" />
+    <img src="https://img.shields.io/github/license/Maleick/TextQuest?style=flat-square&color=8b949e&labelColor=161b22" alt="license" />
+  </div>
+
+  <p class="hero-desc">
+    A <strong>Rust-based orchestration engine</strong> for managing large box crews on EverQuest
+    Time-Locked Progression servers. Combines a live terminal dashboard, automated camp management,
+    and a group coordination engine into a <strong>single operator-facing control plane</strong>.
+  </p>
+
+  <div class="hero-actions">
+    <a href="https://github.com/Maleick/TextQuest#readme" class="btn-primary">Get Started</a>
+    <a href="https://github.com/Maleick/TextQuest/wiki" class="btn-secondary">Documentation →</a>
+  </div>
+</section>
+
+<!-- Terminal demo -->
+<div class="terminal-wrap">
+  <div class="terminal">
+    <div class="terminal-bar">
+      <div class="dot dot-red"></div>
+      <div class="dot dot-yellow"></div>
+      <div class="dot dot-green"></div>
+      <span class="terminal-title">textquest — demo mode</span>
+    </div>
+    <div class="terminal-body">
+      <div><span class="t-prompt">$</span> <span class="t-cmd">cargo run</span></div>
+      <div class="t-out">   Compiling textquest v0.1.0</div>
+      <div class="t-green">    Finished release [optimized] in 4.2s</div>
+      <div class="t-out">     Running `target/release/textquest`</div>
+      <div>&nbsp;</div>
+      <div><span class="t-cyan">TextQuest</span> <span class="t-gold">v0.1.0</span> — <span class="t-out">demo mode (macOS/Linux) — live mode on Windows with EQ running</span></div>
+      <div>&nbsp;</div>
+      <div><span class="t-green">✓</span> <span class="t-out">Loaded 36 character configs</span></div>
+      <div><span class="t-green">✓</span> <span class="t-out">Camp: crushbone_throne.toml — pull radius 80u, MA: Warrior</span></div>
+      <div><span class="t-green">✓</span> <span class="t-out">Groups: 6 × 6-box | Theme: Neriak Dark</span></div>
+      <div><span class="t-cyan">→</span> <span class="t-out">TUI launched — press <span class="t-gold">?</span> for help, <span class="t-gold">q</span> to quit</span></div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider" style="margin-top: 60px;" />
+
+<!-- TUI Screens -->
+<section class="section">
+  <div class="section-title">Terminal Dashboard</div>
+  <div class="section-sub">5 screens · 16 panels · 4 visual themes (Neriak Dark, Sunrise, Forest, Arctic)</div>
+
+  <div class="screen-table-wrap">
+    <table class="screen-table">
+      <thead>
+        <tr>
+          <th>Screen</th>
+          <th>What it shows</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Dashboard</td>
+          <td>Character roster, HP/mana bars, group assignments, cast strips, and live DPS tracker</td>
+        </tr>
+        <tr>
+          <td>Spawns</td>
+          <td>Live spawn list with filtering, search, and hex memory viewer</td>
+        </tr>
+        <tr>
+          <td>Groups</td>
+          <td>Per-group HP/mana grid for all box slots with role indicators</td>
+        </tr>
+        <tr>
+          <td>Map</td>
+          <td>Zone map renderer with spawn positions, named mob tracker, and waypoint overlays</td>
+        </tr>
+        <tr>
+          <td>Navigation</td>
+          <td>Per-character pathfinding status, waypoint controls, and movement commands</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- Feature grid -->
+<section class="section">
+  <div class="section-title">Key Features</div>
+  <div class="section-sub">Everything you need to run a large crew on a TLP server</div>
+
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="feature-icon">⚔️</div>
+      <div class="feature-name">Camp Automation</div>
+      <div class="feature-desc">Pull, fight, loot, and med cycle with configurable thresholds. Handles named spawns, CC assignments, and CH chains automatically.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🗺️</div>
+      <div class="feature-name">Navigation</div>
+      <div class="feature-desc">Waypoint-based movement with navmesh pathfinding. Stick-to-target, camp radius enforcement, and zone-aware routing.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">👥</div>
+      <div class="feature-name">Group Management</div>
+      <div class="feature-desc">Dynamic group builder with role-based slot assignment. Track HP, mana, and cast state across all box slots simultaneously.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔮</div>
+      <div class="feature-name">Multi-Client Control</div>
+      <div class="feature-desc">Discovers and manages all EQ client processes. Staggered launch and login coordination for large box counts.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🌐</div>
+      <div class="feature-name">Web Dashboard</div>
+      <div class="feature-desc">Axum + React SPA for remote monitoring. Session overview, loot tracking, DPS meters, and economy panels.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🧠</div>
+      <div class="feature-name">Soul Engine</div>
+      <div class="feature-desc">Character personalities powered by configurable trait profiles. Persistent autobiographical memory, social graph tracking, and idle behavior generation.</div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- Architecture -->
+<section class="section">
+  <div class="section-title">Architecture</div>
+  <div class="section-sub">Four workspace crates, designed for live Windows deployments with macOS dev support</div>
+
+  <div class="arch-grid">
+    <div class="arch-card">
+      <div class="arch-label">Crate</div>
+      <div class="arch-name">textquest</div>
+      <div class="arch-desc">External orchestrator. Reads game state, renders the TUI, manages clients, runs the camp loop, and coordinates group actions.</div>
+    </div>
+    <div class="arch-card">
+      <div class="arch-label">Crate</div>
+      <div class="arch-name">textquest-dll</div>
+      <div class="arch-desc">Injected payload (cdylib). Hooks internal EQ functions for direct control — movement, targeting, casting, and chat.</div>
+    </div>
+    <div class="arch-card">
+      <div class="arch-label">Crate</div>
+      <div class="arch-name">textquest-common</div>
+      <div class="arch-desc">Shared types, IPC protocol, offset database, navigation primitives, and combat data structures used by all crates.</div>
+    </div>
+    <div class="arch-card">
+      <div class="arch-label">Crate</div>
+      <div class="arch-name">textquest-web</div>
+      <div class="arch-desc">Axum backend serving a React SPA. REST API + WebSocket for real-time session monitoring and configuration.</div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- Quick Start -->
+<section class="section">
+  <div class="section-title">Quick Start</div>
+  <div class="section-sub">Runs in demo mode on macOS and Linux — live mode requires Windows with EQ running</div>
+
+  <div class="code-block">
+    <div><span class="comment"># Clone and build</span></div>
+    <div><span class="cmd">git clone https://github.com/Maleick/TextQuest.git && cd TextQuest</span></div>
+    <div><span class="cmd">cargo build</span></div>
+    <div>&nbsp;</div>
+    <div><span class="comment"># Run TUI (demo mode on macOS, live on Windows)</span></div>
+    <div><span class="cmd">cargo run</span></div>
+    <div>&nbsp;</div>
+    <div><span class="comment"># Run tests</span></div>
+    <div><span class="cmd">cargo test</span></div>
+    <div>&nbsp;</div>
+    <div><span class="comment"># Dev preflight (same as CI)</span></div>
+    <div><span class="cmd">python3 scripts/dev-preflight.py</span></div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- Roadmap -->
+<section class="section">
+  <div class="section-title">Roadmap</div>
+  <div class="section-sub">M1–M6 complete · M7 and M8 in active development</div>
+
+  <div class="milestone-strip">
+    <div class="milestone-badge done"><span class="dot-sm"></span> M1: Process Reader</div>
+    <div class="milestone-badge done"><span class="dot-sm"></span> M2: Input Dispatch</div>
+    <div class="milestone-badge done"><span class="dot-sm"></span> M3: Navigation</div>
+    <div class="milestone-badge done"><span class="dot-sm"></span> M4: Login Chain</div>
+    <div class="milestone-badge done"><span class="dot-sm"></span> M5: Anti-Detection</div>
+    <div class="milestone-badge done"><span class="dot-sm"></span> M6: TUI Dashboard</div>
+    <div class="milestone-badge active"><span class="dot-sm"></span> M7: Zoning</div>
+    <div class="milestone-badge active"><span class="dot-sm"></span> M8: Orchestrator</div>
+    <div class="milestone-badge"><span class="dot-sm"></span> M9: Learning / RL</div>
+    <div class="milestone-badge"><span class="dot-sm"></span> M10: Economy</div>
+    <div class="milestone-badge"><span class="dot-sm"></span> M11: Soul Engine</div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p>
+    <a href="https://github.com/Maleick/TextQuest">GitHub</a> ·
+    <a href="https://github.com/Maleick/TextQuest/wiki">Wiki</a> ·
+    <a href="https://github.com/Maleick/TextQuest/releases">Releases</a> ·
+    <a href="https://github.com/Maleick/TextQuest/blob/master/LICENSE">MIT License</a>
+  </p>
+  <p style="margin-top: 8px; font-size: 0.78rem;">TextQuest is not affiliated with Daybreak Game Company.</p>
+</footer>
+
+</body>
+</html>
