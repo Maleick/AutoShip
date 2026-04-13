@@ -29,13 +29,14 @@ use ratatui::style::Color;
 // Re-export extracted types so existing `use tui::app::*` paths still work.
 pub use super::client::ClientState;
 pub use super::state::{
-    CommandBarState, HexDumpState, MapScreenState, MapViewportMode, NavigationScreenState,
-    OverviewScreenState, PacketMonitorState, SpawnsScreenState, TacticalScreenState,
+    CommandBarState, HexDumpState, HookRotationState, HookSlotState, MapScreenState,
+    MapViewportMode, NavigationScreenState, OverviewScreenState, PacketMonitorState,
+    SpawnsScreenState, TacticalScreenState,
 };
 use super::state::{
-    FilteredSpawnCache, FilteredSpawnCacheKey, MapClickAction, MapFilterKind, MapHighlight,
-    MapLocMarker, MapNameStyle, MapRadiusOverlay, MapSpawnPresentationCache, MapVisibilityPreset,
-    NamedMapMarker,
+    CampOverlay, FilteredSpawnCache, FilteredSpawnCacheKey, MapClickAction, MapFilterKind,
+    MapHighlight, MapLocMarker, MapNameStyle, MapRadiusOverlay, MapSpawnPresentationCache,
+    MapVisibilityPreset, NamedMapMarker,
 };
 use super::state::{load_named_markers_pub, save_named_markers};
 
@@ -52,6 +53,8 @@ pub enum ActiveScreen {
     Debug,
     /// Packet/opcode monitor — live network sniffer.
     PacketMonitor,
+    /// Economy operator controls — vendor cycle, banking, loot queue.
+    Economy,
 }
 
 impl ActiveScreen {
@@ -64,16 +67,18 @@ impl ActiveScreen {
             Self::Navigation => "Navigation",
             Self::Debug => "Debug",
             Self::PacketMonitor => "Packets",
+            Self::Economy => "Economy",
         }
     }
 
     /// All screen variants for iteration.
-    pub const ALL: [ActiveScreen; 5] = [
+    pub const ALL: [ActiveScreen; 6] = [
         Self::Overview,
         Self::Tactical,
         Self::Navigation,
         Self::Debug,
         Self::PacketMonitor,
+        Self::Economy,
     ];
 }
 
@@ -112,6 +117,8 @@ pub enum ActivePanel {
     PacketMonitorLog,
     /// EQ Internals offset browser panel (debug).
     DebugInternals,
+    /// Economy controls panel (vendor cycle, banking, loot queue).
+    EconomyControls,
 }
 
 /// Layout preset for panel arrangement within a screen.
@@ -388,7 +395,7 @@ pub struct App {
     /// Currently focused panel for keyboard input.
     pub active_panel: ActivePanel,
     /// Per-screen layout presets (cycled with Ctrl+E).
-    pub layout_presets: [LayoutPreset; 5],
+    pub layout_presets: [LayoutPreset; 6],
 
     /// Connected EQ client states.
     pub clients: Vec<ClientState>,
@@ -513,6 +520,8 @@ pub struct App {
 
     /// Navigation screen state (waypoint list, route display).
     pub nav_state: NavigationScreenState,
+    /// Zone transition FSM state — per-client zoning progress.
+    pub zone_status_state: crate::tui::ui::zone_status_panel::ZoneStatusState,
     /// Packet/opcode monitor state.
     pub packet_monitor_state: PacketMonitorState,
 
@@ -550,6 +559,9 @@ pub struct App {
 
     /// Live priority queue snapshots per character (updated each tick).
     pub priority_snapshots: Vec<super::priorities::PrioritySnapshot>,
+
+    /// Economy Controls screen state (vendor cycle, banking, loot queue).
+    pub economy_state: super::state::EconomyState,
 }
 
 /// Navigation status for a single client.
@@ -683,7 +695,7 @@ impl App {
             running: true,
             active_screen: ActiveScreen::Overview,
             active_panel: ActivePanel::OverviewRoster,
-            layout_presets: [LayoutPreset::Default; 5],
+            layout_presets: [LayoutPreset::Default; 6],
 
             clients: Vec::new(),
             selected_client: 0,
@@ -757,6 +769,7 @@ impl App {
             chat_events: VecDeque::with_capacity(200),
 
             nav_state: NavigationScreenState::new(),
+            zone_status_state: crate::tui::ui::zone_status_panel::ZoneStatusState::new(),
             packet_monitor_state: PacketMonitorState::new(),
 
             launch_eq_path: String::from(r"C:\EverQuest"),
@@ -777,6 +790,7 @@ impl App {
             toast: None,
             automation_paused: false,
             priority_snapshots: Vec::new(),
+            economy_state: super::state::EconomyState::default(),
         };
         app.cmd_state.load_history_from_disk();
         app
@@ -926,6 +940,7 @@ impl App {
             ActiveScreen::Navigation => ActivePanel::TacticalNavigation,
             ActiveScreen::Debug => ActivePanel::DebugSpawns,
             ActiveScreen::PacketMonitor => ActivePanel::PacketMonitorLog,
+            ActiveScreen::Economy => ActivePanel::EconomyControls,
         }
     }
 
@@ -966,6 +981,7 @@ impl App {
                 ]
             }
             ActiveScreen::PacketMonitor => vec![ActivePanel::PacketMonitorLog],
+            ActiveScreen::Economy => vec![ActivePanel::EconomyControls],
         }
     }
 
@@ -1025,6 +1041,7 @@ impl App {
             ActiveScreen::Navigation => 2,
             ActiveScreen::Debug => 3,
             ActiveScreen::PacketMonitor => 4,
+            ActiveScreen::Economy => 5,
         }
     }
 
@@ -2562,6 +2579,19 @@ impl App {
             return;
         }
 
+        // :addr <Tab> → cycle known EQ offset hex addresses from EQ internals
+        if let Some(rest) = prefix.strip_prefix("addr ") {
+            let offset_candidates: Vec<String> = self
+                .eq_internals_state
+                .all_entries
+                .iter()
+                .filter(|e| e.value > 0)
+                .map(|e| format!("0x{:X}", e.value))
+                .collect();
+            self.complete_with_candidates("addr ", rest, &offset_candidates);
+            return;
+        }
+
         // Common slash commands shared by :all and :G1-G6 completions
         let slash_cmds: Vec<String> = ["/sit", "/stand", "/camp", "/follow", "/assist", "/disband"]
             .iter()
@@ -3016,6 +3046,34 @@ impl App {
             self.set_feedback(
                 ToastLevel::Info,
                 format!("[Watch] {name} spotted in {z}"),
+                false,
+            );
+        }
+    }
+
+    pub fn apply_spawn_events(&mut self, events: Vec<textquest_common::ipc::SpawnEvent>) {
+        let tick = self.tick_count;
+
+        for event in events {
+            let is_up = matches!(event.kind, textquest_common::ipc::SpawnEventKind::Created);
+            let label = if is_up { "UP" } else { "DOWN" };
+            let level = if is_up {
+                ToastLevel::Success
+            } else {
+                ToastLevel::Warning
+            };
+
+            self.spawn_alert_feed.push(SpawnAlertEvent {
+                spawn_name: event.spawn_name.clone(),
+                zone: event.zone.clone(),
+                is_up,
+                timestamp: std::time::SystemTime::now(),
+                tick,
+                match_source: MatchSource::WatchPattern("spawn-delta".to_string()),
+            });
+            self.set_feedback(
+                level,
+                format!("[Spawn] {} {} in {}", event.spawn_name, label, event.zone),
                 false,
             );
         }
@@ -3718,6 +3776,60 @@ impl App {
             );
         } else {
             self.set_feedback(ToastLevel::Warning, reason, true);
+        }
+    }
+
+    /// Handle `:set <key> <value>` commands for runtime configuration.
+    fn handle_set_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            Some("hook_rotation_interval") => {
+                let Some(value_str) = args.get(1) else {
+                    self.usage_feedback(
+                        "set hook_rotation_interval",
+                        "Usage: set hook_rotation_interval <ms>",
+                    );
+                    return;
+                };
+                match value_str.parse::<u64>() {
+                    Ok(ms) if ms > 0 => {
+                        self.hook_rotation_state.set_interval_ms(ms);
+                        self.set_feedback(
+                            ToastLevel::Success,
+                            format!("Hook rotation interval set to {ms}ms"),
+                            true,
+                        );
+                    }
+                    Ok(_) => {
+                        self.set_feedback(
+                            ToastLevel::Warning,
+                            String::from("Hook rotation interval must be > 0ms"),
+                            true,
+                        );
+                    }
+                    Err(_) => {
+                        self.usage_feedback(
+                            "set hook_rotation_interval",
+                            "Usage: set hook_rotation_interval <ms>  (positive integer)",
+                        );
+                    }
+                }
+            }
+            Some(key) => {
+                self.set_feedback(
+                    ToastLevel::Warning,
+                    format!("Unknown setting: '{key}'. Known settings: hook_rotation_interval"),
+                    true,
+                );
+            }
+            None => {
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from(
+                        "Usage: set <key> <value>. Known settings: hook_rotation_interval",
+                    ),
+                    false,
+                );
+            }
         }
     }
 
@@ -4514,6 +4626,33 @@ impl App {
                 let state = if self.privacy_mode { "ON" } else { "OFF" };
                 self.set_feedback(ToastLevel::Success, format!("Privacy mode: {state}"), true);
             }
+            "addr" => {
+                if rest.is_empty() {
+                    self.usage_feedback("addr", "Usage: addr <hex_address>  (e.g. addr 0x00A3B210)");
+                } else {
+                    let hex_str = rest.trim().trim_start_matches("0x").trim_start_matches("0X");
+                    match usize::from_str_radix(hex_str, 16) {
+                        Ok(addr) => {
+                            self.hex_state.hex_address = addr;
+                            self.hex_state.hex_label = format!("Manual: 0x{addr:X}");
+                            self.hex_state.pending_memory_poll = true;
+                            self.set_feedback(
+                                ToastLevel::Info,
+                                format!("Debug address set to 0x{addr:X}"),
+                                false,
+                            );
+                            self.set_active_screen(ActiveScreen::Debug);
+                        }
+                        Err(_) => {
+                            self.set_feedback(
+                                ToastLevel::Error,
+                                format!("Invalid hex address: '{rest}' — expected e.g. 0x00A3B210"),
+                                true,
+                            );
+                        }
+                    }
+                }
+            }
             _ => {
                 // Try to parse first token as PID
                 if let Ok(pid) = command_name.parse::<u32>() {
@@ -4564,27 +4703,11 @@ impl App {
                         String::from("Usage: camp start <name>  (loads config/camps/<name>.toml)");
                     return;
                 };
-
-                match CampConfig::load(camp_name) {
-                    Ok(config) => {
-                        let members = self.build_camp_members();
-                        if members.is_empty() {
-                            self.status_message =
-                                String::from("No clients connected — cannot start camp");
-                            return;
-                        }
-                        let count = members.len();
-                        orchestrator.start_camp(config, members);
-                        self.status_message =
-                            format!("Camp '{camp_name}' started with {count} members");
-                    }
-                    Err(e) => {
-                        self.status_message = format!("Failed to load camp '{camp_name}': {e}");
-                    }
-                }
+                self.start_camp_by_name(camp_name, orchestrator);
             }
             Some("stop") => {
                 orchestrator.stop_camp();
+                self.map_state.camp_overlay = None;
                 self.status_message = String::from("Camp stopped");
             }
             Some("status") => {
@@ -4672,97 +4795,80 @@ impl App {
                     self.status_message = format!("Camp '{camp_name}' not found");
                 }
             }
-            Some("next") => match &orchestrator.active_camp {
-                None => {
-                    self.status_message = String::from("No active camp — start one first");
-                }
-                Some(camp) => {
-                    let current = camp.config.name.clone();
-                    match &camp.config.next_camp {
-                        Some(next_name) => match CampConfig::load(next_name) {
-                            Ok(config) => {
-                                let members = self.build_camp_members();
-                                if members.is_empty() {
-                                    self.status_message =
-                                        String::from("No clients connected — cannot advance camp");
-                                    return;
-                                }
-                                let count = members.len();
-                                let to = config.name.clone();
-                                orchestrator.start_camp(config, members);
-                                self.status_message =
-                                    format!("Advanced: {current} → {to} ({count} members)");
-                            }
-                            Err(e) => {
-                                self.status_message =
-                                    format!("Failed to load next camp '{next_name}': {e}");
-                            }
-                        },
-                        None => {
-                            self.status_message =
-                                format!("Camp '{current}' has no next camp configured");
-                        }
-                    }
-                }
-            },
-            Some("prev") => match &orchestrator.active_camp {
-                None => {
-                    self.status_message = String::from("No active camp — start one first");
-                }
-                Some(camp) => {
-                    let current = camp.config.name.clone();
-                    match &camp.config.prev_camp {
-                        Some(prev_name) => match CampConfig::load(prev_name) {
-                            Ok(config) => {
-                                let members = self.build_camp_members();
-                                if members.is_empty() {
-                                    self.status_message =
-                                        String::from("No clients connected — cannot fall back");
-                                    return;
-                                }
-                                let count = members.len();
-                                let to = config.name.clone();
-                                orchestrator.start_camp(config, members);
-                                self.status_message =
-                                    format!("Fell back: {current} → {to} ({count} members)");
-                            }
-                            Err(e) => {
-                                self.status_message =
-                                    format!("Failed to load prev camp '{prev_name}': {e}");
-                            }
-                        },
-                        None => {
-                            self.status_message =
-                                format!("Camp '{current}' has no previous camp configured");
-                        }
-                    }
-                }
-            },
+            Some("next") => {
+                self.advance_camp("next", |c| c.next_camp.clone(), orchestrator);
+            }
+            Some("prev") => {
+                self.advance_camp("previous", |c| c.prev_camp.clone(), orchestrator);
+            }
             // Bare camp name — shortcut for camp start <name>
-            Some(name) => match CampConfig::load(name) {
-                Ok(config) => {
-                    let members = self.build_camp_members();
-                    if members.is_empty() {
-                        self.status_message =
-                            String::from("No clients connected — cannot start camp");
-                        return;
-                    }
-                    let count = members.len();
-                    orchestrator.start_camp(config, members);
-                    self.status_message = format!("Camp '{name}' started with {count} members");
-                }
-                Err(_) => {
+            Some(name) => {
+                self.start_camp_by_name(name, orchestrator);
+                // If start_camp_by_name set a load-error message, clarify that
+                // bare names are also checked as subcommands.
+                if self.status_message.starts_with("Failed to load camp") {
                     self.status_message = format!(
                         "Unknown camp subcommand or config: '{name}'. Try: start|stop|status|list|add|remove|next|prev"
                     );
                 }
-            },
+            }
         }
     }
 
-    /// Handle `ch <subcommand>` — CH chain management from the command bar.
+    /// Load a camp configuration by name and start it through the orchestrator.
     ///
-    /// Subcommands:
+    /// This builds the current camp members, updates the map overlay from the
+    /// loaded configuration, and starts the camp when at least one member is
+    /// available.
+    fn start_camp_by_name(&mut self, name: &str, orchestrator: &mut Orchestrator) -> bool {
+        match CampConfig::load(name) {
+            Ok(config) => {
+                let members = self.build_camp_members();
+                if members.is_empty() {
+                    self.status_message =
+                        String::from("No clients connected — cannot start camp");
+                    return;
+                }
+                let count = members.len();
+                self.map_state.camp_overlay = Some(CampOverlay {
+                    camp_center: [config.camp_center[0], config.camp_center[1]],
+                    pull_point: [config.pull_point[0], config.pull_point[1]],
+                    camp_radius: config.camp_radius,
+                    pull_radius: config.pull_radius,
+                    name: config.name.clone(),
+                });
+                orchestrator.start_camp(config, members);
+                self.status_message = format!("Camp '{name}' started with {count} members");
+            }
+            Err(e) => {
+                self.status_message = format!("Failed to load camp '{name}': {e}");
+            }
+        }
+    }
+
+    /// Advance to the next or previous camp in the chain.
+    fn advance_camp(
+        &mut self,
+        direction: &str,
+        get_linked: impl FnOnce(&CampConfig) -> Option<String>,
+        orchestrator: &mut Orchestrator,
+    ) {
+        let Some(camp) = &orchestrator.active_camp else {
+            self.status_message = String::from("No active camp — start one first");
+            return;
+        };
+        let current = camp.config.name.clone();
+        let Some(linked_name) = get_linked(&camp.config) else {
+            self.status_message = format!("Camp '{current}' has no {direction} camp configured");
+            return;
+        };
+        self.start_camp_by_name(&linked_name, orchestrator);
+        // Upgrade the status message to show the transition on success.
+        if self.start_camp_by_name(&linked_name, orchestrator) {
+            self.status_message = format!("{current} → {linked_name}");
+        }
+    }
+
     ///   ch start <pid1,pid2,...> <interval> <`target_id`> [`spell_slot`]
     ///   ch stop                  — Stop the running CH chain
     ///   ch add <pid>             — Add a cleric to the chain
@@ -7494,5 +7600,67 @@ mod tests {
         // Go back to overview — preserved
         app.set_active_screen(ActiveScreen::Overview);
         assert_eq!(app.current_layout(), LayoutPreset::Alternate);
+    }
+
+    // ── :addr command ─────────────────────────────────────────────────────
+
+    #[test]
+    fn addr_command_sets_hex_address_and_pending_poll() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.cmd_state.command_buffer = String::from("addr 0x00A3B210");
+        app.execute_command(&mut orchestrator);
+        assert_eq!(app.hex_state.hex_address, 0x00A3B210);
+        assert!(app.hex_state.pending_memory_poll);
+        assert!(app.status_message.contains("A3B210"));
+    }
+
+    #[test]
+    fn addr_command_without_0x_prefix_sets_hex_address() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.cmd_state.command_buffer = String::from("addr 00A3B210");
+        app.execute_command(&mut orchestrator);
+        assert_eq!(app.hex_state.hex_address, 0x00A3B210);
+        assert!(app.hex_state.pending_memory_poll);
+    }
+
+    #[test]
+    fn addr_command_invalid_hex_shows_error() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.cmd_state.command_buffer = String::from("addr notahex");
+        app.execute_command(&mut orchestrator);
+        assert_eq!(app.hex_state.hex_address, 0);
+        assert!(!app.hex_state.pending_memory_poll);
+        assert!(
+            app.status_message.contains("Invalid")
+                || app.status_message.contains("invalid")
+                || app.toast.is_some()
+        );
+    }
+
+    #[test]
+    fn addr_command_no_args_shows_usage() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.cmd_state.command_buffer = String::from("addr");
+        app.execute_command(&mut orchestrator);
+        assert!(!app.status_message.is_empty());
+    }
+
+    #[test]
+    fn addr_command_navigates_to_debug_screen() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.cmd_state.command_buffer = String::from("addr 0x140000000");
+        app.execute_command(&mut orchestrator);
+        assert_eq!(app.active_screen, ActiveScreen::Debug);
+    }
+
+    #[test]
+    fn hex_dump_state_pending_memory_poll_starts_false() {
+        let state = crate::tui::state::HexDumpState::new();
+        assert!(!state.pending_memory_poll);
     }
 }

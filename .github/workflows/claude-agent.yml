@@ -37,8 +37,11 @@ jobs:
     runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 60
     steps:
+      - name: Prepare Linux self-hosted workspace
+        uses: ./.github/actions/prepare-linux-runner-workspace
+
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request && format('refs/pull/{0}/head', github.event.issue.number) || github.event_name == 'pull_request_review_comment' && format('refs/pull/{0}/head', github.event.pull_request.number) || '' }}

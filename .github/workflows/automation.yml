@@ -7,8 +7,6 @@ on:
     types: [labeled, synchronize, closed]
   pull_request_target:
     types: [labeled, reopened, synchronize, ready_for_review]
-  check_suite:
-    types: [completed]
   workflow_run:
     workflows: ["CI"]
     types: [completed]
@@ -23,6 +21,7 @@ jobs:
   agent-ready:
     name: Auto-label agent:ready
     if: github.event_name == 'issues' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       issues: write
@@ -101,6 +100,7 @@ jobs:
   agent-close:
     name: Auto-close agent PRs
     if: github.event_name == 'pull_request_target' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       issues: write
@@ -137,10 +137,10 @@ jobs:
   auto-merge:
     name: Enable auto-merge
     if: >
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'merge:auto') && !contains(github.event.pull_request.labels.*.name, 'merge:block')) ||
-      (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.state == 'open' && contains(github.event.pull_request.labels.*.name, 'merge:auto') && !contains(github.event.pull_request.labels.*.name, 'merge:block')) ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       github.event_name == 'workflow_dispatch'
+    timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       pull-requests: write
@@ -171,6 +171,7 @@ jobs:
   post-merge:
     name: Post-merge sync
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
+    timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       issues: write
@@ -197,38 +198,81 @@ jobs:
               }
             }
 
-  sync-wiki:
-    name: Sync wiki after merge
-    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
-    runs-on: [self-hosted, Windows, X64, textquest]
+  branch-cleanup:
+    name: Delete merged feature branches
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      (startsWith(github.head_ref, 'feature/') ||
+       startsWith(github.head_ref, 'fix/') ||
+       startsWith(github.head_ref, 'claude/') ||
+       startsWith(github.head_ref, 'codex/'))
+    runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       contents: write
-    defaults:
-      run:
-        shell: cmd
     steps:
-      - uses: actions/checkout@v5
+      - name: Delete merged branch
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const branchName = pr.head.ref;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Verify branch belongs to this repo (guards against fork branch deletion)
+            if (pr.head.repo?.full_name !== `${owner}/${repo}`) {
+              core.info(`Skipping deletion: branch "${branchName}" is from fork, not this repository`);
+              return;
+            }
+
+            try {
+              await github.rest.git.deleteRef({
+                owner: owner,
+                repo: repo,
+                ref: `heads/${branchName}`
+              });
+              core.info(`Deleted branch: ${branchName}`);
+            } catch (error) {
+              core.warning(`Failed to delete branch ${branchName}: ${error.message}`);
+            }
+
+  sync-wiki:
+    name: Trigger wiki publish after merge
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
+    timeout-minutes: 5
+    runs-on: [self-hosted, Windows, X64, textquest]
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 2
       - name: Check for docs changes
         id: docs-check
+        shell: bash
         run: |
-          @echo off
-          setlocal EnableDelayedExpansion
-          set "DOCS_CHANGED=false"
-          for /f "usebackq delims=" %%F in (`git diff --name-only HEAD~1`) do (
-            set "FILE=%%F"
-            if /I "!FILE:~0,5!"=="docs/" set "DOCS_CHANGED=true"
-          )
-          echo [info] DOCS_CHANGED=!DOCS_CHANGED!
-          echo docs_changed=!DOCS_CHANGED!>>"%GITHUB_OUTPUT%"
-          exit /b 0
-      - name: Setup verified Python
-        if: steps.docs-check.outputs.docs_changed == 'true'
-        uses: ./.github/actions/setup-verified-python
-      - name: Sync wiki after merge
+          DOCS_CHANGED=false
+          while IFS= read -r FILE; do
+            if [[ "$FILE" == docs/* ]]; then
+              DOCS_CHANGED=true
+              break
+            fi
+          done < <(git diff --name-only HEAD~1)
+          echo "[info] DOCS_CHANGED=$DOCS_CHANGED"
+          echo "docs_changed=$DOCS_CHANGED" >> "$GITHUB_OUTPUT"
+      - name: Dispatch wiki-nightly publish
         if: steps.docs-check.outputs.docs_changed == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          "%PYTHON_CMD%" scripts/sync_wiki.py --push
+          curl -fS -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            -d "{\"ref\":\"master\",\"inputs\":{\"publish\":\"true\",\"source_sha\":\"${{ github.event.pull_request.merge_commit_sha }}\"}}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/wiki-nightly.yml/dispatches"

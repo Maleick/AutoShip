@@ -25,15 +25,15 @@ pub enum EventCategory {
 impl EventCategory {
     fn as_str(&self) -> &'static str {
         match self {
-            EventCategory::Kills => "kills",
-            EventCategory::Loot => "loot",
-            EventCategory::Timers => "timers",
-            EventCategory::Feats => "feats",
-            EventCategory::Status => "status",
+            Self::Kills => "kills",
+            Self::Loot => "loot",
+            Self::Timers => "timers",
+            Self::Feats => "feats",
+            Self::Status => "status",
         }
     }
 
-    fn emoji(&self) -> &'static str {
+    pub fn emoji(&self) -> &'static str {
         match self {
             EventCategory::Kills => "\u{2694}\u{FE0F}", // ⚔️
             EventCategory::Loot => "\u{1F4E6}",         // 📦

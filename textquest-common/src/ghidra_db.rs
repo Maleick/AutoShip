@@ -438,6 +438,26 @@ impl GhidraDatabase {
             imports: count("imports")?,
         })
     }
+
+    /// Load opcode entries from a JSON file and bulk-insert them into the database.
+    ///
+    /// The file must contain a JSON array of objects with fields matching
+    /// [`OpcodeEntry`]: `code`, `handler_addr` (optional), `direction`
+    /// (optional), `description` (optional).  `code` may be specified as an
+    /// integer or a `"0x…"` hex string.
+    ///
+    /// Returns the number of rows inserted (via [`Self::import_opcodes`]).
+    /// If the file does not exist the method returns `Ok(0)` without error.
+    pub fn import_opcodes_from_file(&self, path: &Path) -> Result<usize> {
+        if !path.exists() {
+            return Ok(0);
+        }
+        let raw = std::fs::read_to_string(path)
+            .with_context(|| format!("failed to read opcodes file {}", path.display()))?;
+        let entries: Vec<OpcodeEntry> = serde_json::from_str(&raw)
+            .with_context(|| format!("failed to parse opcodes JSON at {}", path.display()))?;
+        self.import_opcodes(&entries)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -694,5 +714,62 @@ mod tests {
         let stats = db.stats().unwrap();
         assert_eq!(stats.opcodes, 1);
         assert_eq!(stats.imports, 1);
+    }
+
+    #[test]
+    fn import_opcodes_from_file_basic() {
+        let (db, _dir) = temp_db();
+        let json_dir = tempfile::tempdir().unwrap();
+        let path = json_dir.path().join("opcodes.json");
+        let json = r#"[
+            {"code": 66, "direction": "inbound", "description": "OP_ZoneEntry"},
+            {"code": 128, "direction": "outbound", "description": "OP_ClientUpdate"}
+        ]"#;
+        std::fs::write(&path, json).unwrap();
+
+        let count = db.import_opcodes_from_file(&path).unwrap();
+        assert_eq!(count, 2);
+
+        let stats = db.stats().unwrap();
+        assert_eq!(stats.opcodes, 2);
+    }
+
+    #[test]
+    fn import_opcodes_from_file_missing_returns_zero() {
+        let (db, _dir) = temp_db();
+        let nonexistent = std::path::PathBuf::from("/tmp/does_not_exist_opcodes.json");
+        let count = db.import_opcodes_from_file(&nonexistent).unwrap();
+        assert_eq!(count, 0);
+        let stats = db.stats().unwrap();
+        assert_eq!(stats.opcodes, 0);
+    }
+
+    #[test]
+    fn import_opcodes_from_file_invalid_json_returns_error() {
+        let (db, _dir) = temp_db();
+        let json_dir = tempfile::tempdir().unwrap();
+        let path = json_dir.path().join("opcodes.json");
+        std::fs::write(&path, b"not valid json at all!!").unwrap();
+
+        let result = db.import_opcodes_from_file(&path);
+        assert!(result.is_err(), "expected parse error for invalid JSON");
+    }
+
+    #[test]
+    fn import_opcodes_from_file_idempotent() {
+        let (db, _dir) = temp_db();
+        let json_dir = tempfile::tempdir().unwrap();
+        let path = json_dir.path().join("opcodes.json");
+        let json = r#"[{"code": 255, "direction": "inbound", "description": "OP_Test"}]"#;
+        std::fs::write(&path, json).unwrap();
+
+        let first = db.import_opcodes_from_file(&path).unwrap();
+        let second = db.import_opcodes_from_file(&path).unwrap();
+        assert_eq!(first, 1);
+        assert_eq!(second, 1);
+
+        // INSERT OR REPLACE — should still be 1 row, not 2
+        let stats = db.stats().unwrap();
+        assert_eq!(stats.opcodes, 1);
     }
 }

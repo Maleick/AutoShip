@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
+use textquest_common::ghidra_db::GhidraDatabase;
 use zeroize::Zeroizing;
 
 use crate::config;
@@ -15,7 +16,7 @@ use crate::process;
 use crate::soul;
 use crate::tui;
 
-use crate::{SOUL_DB_PATH, get_module_base};
+use crate::{GHIDRA_DB_PATH, OPCODES_CONFIG_PATH, SOUL_DB_PATH, get_module_base};
 
 fn read_shared_state_with_retry(
     reader: &mut ipc::shared::SharedStateReader,
@@ -41,6 +42,39 @@ fn load_pid_session(pid: u32) -> Result<(textquest_common::ipc::SessionToken, u6
     })?;
     let session_id = textquest_common::ipc::session_id_from_token(&token);
     Ok((token, session_id))
+}
+
+fn send_timing_correction_command(pid: u32, enabled: bool) -> Result<()> {
+    use textquest_common::ipc::Command;
+
+    let deadline = Instant::now() + Duration::from_secs(8);
+    let mut last_error = None;
+
+    while Instant::now() < deadline {
+        match connect_authenticated_pipe(pid) {
+            Ok(pipe) => {
+                if let Err(e) = pipe.send(&Command::SetTimingCorrection { enabled }) {
+                    last_error = Some(e);
+                } else {
+                    return Ok(());
+                }
+            }
+            Err(e) => {
+                last_error = Some(e);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+
+    if let Some(err) = last_error {
+        Err(err).with_context(|| {
+            format!("Failed to send timing correction command to PID {pid} after 8 seconds")
+        })
+    } else {
+        Err(anyhow::anyhow!(
+            "Failed to send timing correction command to PID {pid}: unknown error"
+        ))
+    }
 }
 
 fn connect_authenticated_pipe(pid: u32) -> Result<ipc::pipe::CommandPipe> {
@@ -247,6 +281,34 @@ pub fn run_tui_mode() -> Result<()> {
         app.spawn_watch_named = false;
     }
 
+    // Initialize Ghidra DB and import opcodes from config/opcodes.json if present.
+    {
+        let db_path = Path::new(GHIDRA_DB_PATH);
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        match GhidraDatabase::open(db_path) {
+            Ok(db) => {
+                let opcodes_path = Path::new(OPCODES_CONFIG_PATH);
+                match db.import_opcodes_from_file(opcodes_path) {
+                    Ok(0) => {
+                        info!("Ghidra DB opened (no opcodes config found at {})", OPCODES_CONFIG_PATH);
+                    }
+                    Ok(n) => {
+                        info!(count = n, "Ghidra DB: imported {} opcodes from {}", n, OPCODES_CONFIG_PATH);
+                    }
+                    Err(e) => {
+                        warn!("Ghidra DB: failed to import opcodes from {}: {}", OPCODES_CONFIG_PATH, e);
+                    }
+                }
+                app.ghidra_db = Some(db);
+            }
+            Err(e) => {
+                warn!("Ghidra DB: failed to open {}: {}", GHIDRA_DB_PATH, e);
+            }
+        }
+    }
+
     let orchestrator = orchestrator::Orchestrator::new();
     tui::run::run_tui(app, orchestrator)
 }
@@ -299,6 +361,12 @@ pub fn run_inject_mode() -> Result<()> {
             Ok(()) => {
                 println!("OK");
                 info!(pid, "Injection succeeded");
+                if config.timing_correction {
+                    if let Err(e) = send_timing_correction_command(pid, true) {
+                        println!("  FAILED to send timing correction setting: {e:#}");
+                        error!(pid, error = %e, "Failed to send timing correction command");
+                    }
+                }
                 success += 1;
             }
             Err(e) => {
@@ -910,6 +978,10 @@ pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     println!("Injecting into PID {pid}...");
 
     inject::loader::inject_dll(pid, staged_dll.path())?;
+    let config = load_config()?;
+    if config.timing_correction {
+        send_timing_correction_command(pid, true)?;
+    }
     println!("OK — DLL injected into PID {pid}");
     Ok(())
 }

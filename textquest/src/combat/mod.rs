@@ -12,3 +12,6 @@ pub mod events;
 pub mod heal_coordinator;
 /// Spell database — spell IDs, casting times, resist types, levels.
 pub mod spell_db;
+/// Advanced spell optimizer and casting predictor — mana efficiency ranking,
+/// cast-time filtering, and haste-adjusted cast time prediction.
+pub mod spell_optimizer;

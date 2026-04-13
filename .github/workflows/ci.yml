@@ -34,7 +34,7 @@ jobs:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Setup verified Python
         uses: ./.github/actions/setup-verified-python
@@ -52,14 +52,14 @@ jobs:
 
   pr_gate_trusted:
     name: PR gate (trusted path)
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, Windows, X64, textquest]
     timeout-minutes: 45
     defaults:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Configure Git safe directories
         uses: ./.github/actions/configure-safe-directory
@@ -80,6 +80,7 @@ jobs:
 
   pr_gate:
     name: PR gate (fmt + clippy + test + python)
+    if: github.event_name != 'push'
     runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 60
     permissions:
@@ -166,12 +167,28 @@ jobs:
 
             core.setFailed(`Timed out waiting for ${targetJobName} to finish.`);
 
-  secrets_scan:
-    name: Secret scan (TruffleHog)
-    runs-on: [self-hosted, Linux, X64, textquest]
+  secrets_scan_untrusted:
+    name: Secret scan (TruffleHog) — fork PR
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@6bd2d14f7a4bc1e569fa3550efa7ec632a4fa67b # v3.94.2
+        with:
+          extra_args: --only-verified
+
+  secrets_scan:
+    name: Secret scan (TruffleHog)
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, Linux, X64, textquest]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -190,7 +207,7 @@ jobs:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Configure Git safe directories
         uses: ./.github/actions/configure-safe-directory

@@ -213,35 +213,10 @@ fn validate_store_path(path: &Path) -> Result<(), String> {
         return Err(String::from("Waypoint store path cannot be empty"));
     }
 
-    // Canonicalize the deepest existing ancestor so OS-level symlinks (e.g.
-    // macOS /var → /private/var) are resolved before we walk the path.  Only
-    // the segment *below* the canonical prefix is checked for user-created
-    // symlinks, which is the actual attack surface.
-    let resolved = {
-        let mut base = path.to_path_buf();
-        loop {
-            match base.canonicalize() {
-                Ok(canonical) => break canonical,
-                Err(_) => {
-                    if !base.pop() {
-                        // Nothing left to resolve — fall through to raw walk.
-                        break path.to_path_buf();
-                    }
-                }
-            }
-        }
-    };
-
-    // Walk the *original* path; only flag components that sit below the
-    // canonical root (i.e. the ones the OS didn't already resolve).
-    let canonical_depth = resolved.components().count();
-    for (i, ancestor) in path.ancestors().enumerate() {
-        // Skip ancestors that are part of the already-canonicalized prefix.
-        let depth = path.components().count().saturating_sub(i);
-        if depth <= canonical_depth {
-            break;
-        }
-
+    // Walk every existing ancestor in the user-supplied path and reject any
+    // symlink encountered. This must inspect the original path to avoid
+    // symlink-bypass tricks where canonicalization changes path depth.
+    for ancestor in path.ancestors() {
         let metadata = match fs::symlink_metadata(ancestor) {
             Ok(metadata) => metadata,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
@@ -402,6 +377,35 @@ mod tests {
         assert!(
             load_result.is_err(),
             "loading from a symlinked store path should be rejected"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn validate_store_path_rejects_symlinked_ancestor() {
+        use std::os::unix::fs::symlink;
+
+        let base = std::env::temp_dir().join("textquest-waypoints-test-symlink-ancestor");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).expect("create base dir");
+
+        let target = base.join("target/deep/path");
+        fs::create_dir_all(&target).expect("create target dir");
+
+        let link = base.join("link");
+        symlink(&target, &link).expect("create symlinked ancestor");
+        assert!(
+            fs::symlink_metadata(&link)
+                .expect("symlink metadata")
+                .file_type()
+                .is_symlink()
+        );
+
+        let store_path = link.join("waypoints.json");
+        let result = validate_store_path(&store_path);
+        assert!(
+            result.is_err(),
+            "symlinked ancestor should be rejected, got: {result:?}"
         );
     }
 }

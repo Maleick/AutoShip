@@ -4,6 +4,10 @@
 
 use textquest_common::nav::Waypoint;
 
+use textquest_common::eq_fn;
+
+eq_fn!(execute_cmd_fn(command: u32, key_down: i32, data: usize, target: usize) -> () = textquest_common::offsets::EXECUTE_CMD);
+
 /// Arrival threshold in game units (close enough to "be there").
 pub const ARRIVAL_DISTANCE: f32 = 15.0;
 
@@ -182,20 +186,12 @@ impl MovementController {
             if eq_base == 0 {
                 return;
             }
-            if let Some(addr) =
-                textquest_common::offsets::rebase(textquest_common::offsets::EXECUTE_CMD, eq_base)
-            {
-                type ExecuteCmdFn =
-                    unsafe extern "C" fn(command: u32, key_down: i32, data: usize, target: usize);
-                // SAFETY: addr was rebased from EXECUTE_CMD — a known function
-                // address in eqgame.exe. The transmute converts it to match
-                // __ExecuteCmd's calling convention. If the offset is wrong,
-                // this will crash EQ. data=0 and target=0 are valid (no item,
-                // no specific target).
-                unsafe {
-                    let func: ExecuteCmdFn = std::mem::transmute(addr);
-                    func(command, i32::from(key_down), 0, 0);
-                }
+            // SAFETY: addr resolution and transmute are performed in the shared
+            // binding layer. If EXECUTE_CMD is stale or wrong, behavior is still
+            // best-effort via offset_db fallback; if both paths resolve invalid,
+            // this call is expected to be guarded by EQ process correctness checks.
+            unsafe {
+                execute_cmd_fn.call(eq_base, command, i32::from(key_down), 0, 0);
             }
         }
         #[cfg(not(windows))]

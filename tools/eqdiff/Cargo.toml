@@ -1,0 +1,11 @@
+[package]
+name = "eqdiff"
+version = "0.1.0"
+edition = "2024"
+description = "PE binary diff tooling — PE parser + string extraction for EQ binary analysis"
+
+[dependencies]
+goblin = "0.9"
+anyhow = { workspace = true }
+
+[dev-dependencies]

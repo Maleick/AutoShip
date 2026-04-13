@@ -65,3 +65,17 @@ pub fn find_windows_by_title(substring: &str) -> Result<Vec<WindowHandle>> {
     );
     Ok(Vec::new())
 }
+
+#[cfg(all(test, not(windows)))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn find_windows_by_title_stub_returns_empty_results() {
+        let windows = find_windows_by_title("eqgame").expect("stub search should succeed");
+        assert!(
+            windows.is_empty(),
+            "non-Windows stub should not report windows"
+        );
+    }
+}

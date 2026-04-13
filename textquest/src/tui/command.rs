@@ -653,6 +653,14 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         summary: "Exit the TextQuest TUI immediately.",
         example: "quit",
     },
+    CommandEntry {
+        phrase: "addr",
+        aliases: &[],
+        section: HelpSection::Troubleshooting,
+        usage: "addr <hex_address>",
+        summary: "Set the Debug panel hex dump address and trigger an immediate ReadMemory poll.",
+        example: "addr 0x00A3B210",
+    },
 ];
 
 /// Return the full shared command metadata.

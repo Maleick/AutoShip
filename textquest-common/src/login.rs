@@ -146,6 +146,16 @@ pub enum LoginPhase {
         /// The error that caused login to fail.
         reason: LoginError,
     },
+    /// Operator-initiated logout sequence has begun.
+    Logout,
+    /// Waiting for the character to finish combat before logging out.
+    DisengagingFromCombat,
+    /// Waiting for the character to leave their group before logging out.
+    LeavingGroup,
+    /// Issuing /quit to the game client.
+    QuittingGame,
+    /// EQ process is shutting down; waiting for the OS process to exit.
+    ProcessExiting,
 }
 
 /// Errors that can occur during the automated login process.
@@ -474,8 +484,13 @@ mod tests {
             LoginPhase::Failed {
                 reason: LoginError::WrongPassword,
             },
+            LoginPhase::Logout,
+            LoginPhase::DisengagingFromCombat,
+            LoginPhase::LeavingGroup,
+            LoginPhase::QuittingGame,
+            LoginPhase::ProcessExiting,
         ];
-        assert_eq!(phases.len(), 14);
+        assert_eq!(phases.len(), 19);
     }
 
     #[test]

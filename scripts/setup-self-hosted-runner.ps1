@@ -55,6 +55,19 @@ function Add-SafeGitDirectory {
     Write-Host "Marked Git safe.directory: $Path" -ForegroundColor Green
 }
 
+function Get-RunnerSafeDirectoryPaths {
+    param(
+        [string]$RunnerRoot,
+        [string]$RepositoryName
+    )
+
+    $workRoot = Join-Path $RunnerRoot "_work"
+    return @(
+        (Join-Path $workRoot $RepositoryName),
+        (Join-Path $workRoot "$RepositoryName\$RepositoryName")
+    )
+}
+
 function Ensure-NightlyRustToolchain {
     param(
         [string]$Toolchain = "nightly-x86_64-pc-windows-msvc"
@@ -169,11 +182,9 @@ if ([string]::IsNullOrWhiteSpace($repoName)) {
     $repoName = "TextQuest"
 }
 
-$workRoot = Join-Path $RunnerRoot "_work"
-Add-SafeGitDirectory -Path (Join-Path $workRoot "$repoName\$repoName")
-Add-SafeGitDirectory -Path (Join-Path $workRoot $repoName)
-Add-SafeGitDirectory -Path "C:\actions-runner\_work\$repoName\$repoName"
-Add-SafeGitDirectory -Path "C:\actions-runner\_work\$repoName"
+foreach ($safePath in (Get-RunnerSafeDirectoryPaths -RunnerRoot $RunnerRoot -RepositoryName $repoName)) {
+    Add-SafeGitDirectory -Path $safePath
+}
 Write-Host "Completed git safe.directory seeding." -ForegroundColor Green
 Write-Host ""
 Write-Host "Ensuring nightly Rust toolchain for release workflows..." -ForegroundColor Yellow

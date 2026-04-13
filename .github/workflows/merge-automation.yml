@@ -1,0 +1,26 @@
+name: Merge Automation
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  log-merge:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Post merge summary comment
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          AUTHOR="${{ github.event.pull_request.user.login }}"
+          PR="${{ github.event.pull_request.number }}"
+          TIMESTAMP="${{ github.event.pull_request.merged_at }}"
+
+          gh pr comment $PR \
+            --body "✅ **Merged** | Branch: \`$BRANCH\` | Author: @$AUTHOR | Time: $TIMESTAMP" \
+            --repo "${{ github.repository }}" 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

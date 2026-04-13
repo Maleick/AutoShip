@@ -10,4 +10,5 @@
 
 pub mod bot;
 pub mod bridge;
+pub mod relay;
 pub mod webhook;

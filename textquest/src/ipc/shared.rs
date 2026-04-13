@@ -277,6 +277,7 @@ mod tests {
             zone_short_name: "qeynos".into(),
             zone_long_name: "South Qeynos".into(),
             spawn_epoch: epoch,
+            actual_version: None,
         }
     }
 

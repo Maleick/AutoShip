@@ -35,7 +35,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.event_name == 'workflow_dispatch' && inputs.source_sha || github.ref }}
@@ -47,4 +47,5 @@ jobs:
         run: "%PYTHON_CMD% scripts/sync_wiki.py --check"
 
       - name: Publish wiki
+        if: github.event_name == 'workflow_run' || inputs.publish == true
         run: "%PYTHON_CMD% scripts/sync_wiki.py --push"

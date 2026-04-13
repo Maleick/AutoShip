@@ -27,7 +27,19 @@
 use std::mem::size_of;
 use textquest_common::ipc::ContextMenuInfo;
 #[cfg(windows)]
+use textquest_common::eq_fn;
+#[cfg(windows)]
 use textquest_common::ipc::ContextMenuItem;
+
+#[cfg(windows)]
+#[repr(C)]
+struct CXPoint {
+    x: i32,
+    y: i32,
+}
+
+#[cfg(windows)]
+eq_fn!(context_menu_handle_menu(this: usize, menu_id: i32, item_id: i32, pt: *const CXPoint) -> () = textquest_common::offsets::CONTEXT_MENU_MGR_HANDLE_MENU);
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -264,14 +276,6 @@ unsafe fn activate_context_menu_item_windows(
         ));
     }
 
-    // ── Resolve and validate HandleMenu function pointer ─────────────────────
-    let handle_menu_addr = textquest_common::offsets::rebase(CONTEXT_MENU_MGR_HANDLE_MENU, eq_base)
-        .ok_or("rebase failed for CONTEXT_MENU_MGR_HANDLE_MENU")?;
-
-    if !crate::eq::validate_fn_ptr(handle_menu_addr, "CContextMenuManager::HandleMenu") {
-        return Err("HandleMenu function pointer failed validation".into());
-    }
-
     // ── Call HandleMenu(this, menu_index, item_index, x=0, y=0) ──────────────
     // Signature (x64 MSVC):
     //   void HandleMenu(int menuId, int itemId, const CXPoint& pt)
@@ -279,23 +283,17 @@ unsafe fn activate_context_menu_item_windows(
     //
     // CXPoint is two ints {x, y}.  We pass a local zero-initialised CXPoint on
     // the stack; EQ ignores the coordinates for programmatic activation.
-    #[repr(C)]
-    struct CXPoint {
-        x: i32,
-        y: i32,
-    }
     let pt = CXPoint { x: 0, y: 0 };
 
-    type HandleMenuFn =
-        unsafe extern "C" fn(this: usize, menu_id: i32, item_id: i32, pt: *const CXPoint);
-    let handle_menu: HandleMenuFn = core::mem::transmute(handle_menu_addr);
-
-    handle_menu(
-        mgr_ptr,
-        menu_index as i32,
-        item_index as i32,
-        &pt as *const CXPoint,
-    );
+    unsafe {
+        context_menu_handle_menu.call(
+            eq_base,
+            mgr_ptr,
+            menu_index as i32,
+            item_index as i32,
+            &pt as *const CXPoint,
+        );
+    }
 
     tracing::info!(
         menu_index,

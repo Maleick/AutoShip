@@ -37,6 +37,7 @@ pub struct OrchestratorLoop {
     pub launch_coordinator: LaunchCoordinator,
     pub orchestrator: Orchestrator,
     config: OrchestratorConfig,
+    timing_correction_enabled: bool,
     shutdown_rx: watch::Receiver<bool>,
 }
 
@@ -49,6 +50,7 @@ impl OrchestratorLoop {
         launch_coordinator: LaunchCoordinator,
         orchestrator: Orchestrator,
         config: OrchestratorConfig,
+        timing_correction_enabled: bool,
         shutdown_rx: watch::Receiver<bool>,
     ) -> Self {
         Self {
@@ -56,6 +58,7 @@ impl OrchestratorLoop {
             launch_coordinator,
             orchestrator,
             config,
+            timing_correction_enabled,
             shutdown_rx,
         }
     }
@@ -76,6 +79,7 @@ impl OrchestratorLoop {
             launch_coordinator,
             orchestrator,
             app_config.orchestrator.clone(),
+            app_config.timing_correction,
             shutdown_rx,
         )
     }
@@ -244,6 +248,11 @@ impl OrchestratorLoop {
                         // Store the session token for the DLL
                         if let Some(name) = &session.character_name {
                             self.orchestrator.client_names.insert(pid, name.clone());
+                        }
+
+                        if self.timing_correction_enabled {
+                            self.orchestrator
+                                .send_ipc_command(pid, textquest_common::ipc::Command::SetTimingCorrection { enabled: true });
                         }
 
                         tracing::info!(

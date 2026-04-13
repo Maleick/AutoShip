@@ -192,9 +192,24 @@ pub struct AppConfig {
     #[serde(default)]
     pub spawn_watch: SpawnWatchConfig,
 
+    /// Enable periodic hook unhook/rehook rotation to evade point-in-time scans.
+    #[serde(default)]
+    pub hook_rotation_enabled: bool,
+
+    /// Interval (ms) between hook rotation cycles.
+    #[serde(default = "default_hook_rotation_interval_ms")]
+    pub hook_rotation_interval_ms: u64,
+
     /// Optional decentralized UDP multicast peer discovery.
     #[serde(default)]
     pub discovery: PeerDiscoveryConfig,
+
+    /// Enable timing-based anti-debug evasion correction.
+    ///
+    /// When enabled, hooks correct timing APIs (`GetTickCount` and
+    /// `QueryPerformanceCounter`) by subtracting hook overhead from observed values.
+    #[serde(default)]
+    pub timing_correction: bool,
 }
 
 /// Discord webhook and bot configuration.
@@ -228,6 +243,21 @@ pub struct DiscordConfig {
     /// Empty list disables remote command execution.
     #[serde(default)]
     pub command_allowed_senders: Vec<String>,
+    /// Per-chat-channel webhook routing for in-game chat relay.
+    ///
+    /// Keys match [`crate::discord::relay::ChatChannel::config_key`] values:
+    /// `"group"`, `"raid"`, `"guild"`, `"ooc"`, `"shout"`, `"say"`, `"tell"`.
+    ///
+    /// # TOML example
+    ///
+    /// ```toml
+    /// [discord.chat_channels]
+    /// group = "https://discord.com/api/webhooks/.../group-chat"
+    /// raid  = "https://discord.com/api/webhooks/.../raid-chat"
+    /// guild = "https://discord.com/api/webhooks/.../guild-chat"
+    /// ```
+    #[serde(default)]
+    pub chat_channels: std::collections::HashMap<String, String>,
 }
 
 impl Default for DiscordConfig {
@@ -242,6 +272,7 @@ impl Default for DiscordConfig {
             alert_mass_failures: true,
             alert_status: false,
             command_allowed_senders: Vec::new(),
+            chat_channels: std::collections::HashMap::new(),
         }
     }
 }
@@ -425,11 +456,6 @@ fn default_max_spawns() -> usize {
     2048
 }
 
-#[allow(dead_code)]
-fn default_enable_unsafe_hacks() -> bool {
-    false
-}
-
 impl AppConfig {
     /// Load application configuration from a TOML file.
     ///
@@ -458,7 +484,10 @@ impl AppConfig {
             discord: DiscordConfig::default(),
             orchestrator: OrchestratorConfig::default(),
             spawn_watch: SpawnWatchConfig::default(),
+            hook_rotation_enabled: false,
+            hook_rotation_interval_ms: default_hook_rotation_interval_ms(),
             discovery: PeerDiscoveryConfig::default(),
+            timing_correction: false,
         }
     }
 }
@@ -589,6 +618,50 @@ character = "Foo"
         assert_eq!(cfg.max_spawns, 2048);
         assert!(cfg.group.is_empty());
         assert!(!cfg.discovery.multicast_enabled);
+        assert!(!cfg.timing_correction);
+        assert!(!cfg.hook_rotation_enabled);
+        assert_eq!(cfg.hook_rotation_interval_ms, 30_000);
+    }
+
+    #[test]
+    fn app_config_timing_correction_can_be_deserialized() {
+        let cfg: AppConfig = toml::from_str(
+            r#"
+timing_correction = true
+"#,
+        )
+        .unwrap();
+
+        assert!(cfg.timing_correction);
+    }
+
+    #[test]
+    fn app_config_hook_rotation_fields_parse() {
+        let toml_str = r#"
+            hook_rotation_enabled = true
+            hook_rotation_interval_ms = 7500
+        "#;
+        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
+        assert!(cfg.hook_rotation_enabled);
+        assert_eq!(cfg.hook_rotation_interval_ms, 7500);
+    }
+
+    #[test]
+    fn app_config_timing_correction_defaults() {
+        let cfg = AppConfig::default_config();
+        assert!(!cfg.timing_correction);
+    }
+
+    #[test]
+    fn app_config_timing_correction_can_be_deserialized() {
+        let cfg: AppConfig = toml::from_str(
+            r#"
+timing_correction = true
+"#,
+        )
+        .unwrap();
+
+        assert!(cfg.timing_correction);
     }
 
     #[test]
@@ -669,6 +742,30 @@ character = "Foo"
         assert!(cfg.alert_mass_failures);
         assert!(!cfg.alert_status);
         assert!(cfg.command_allowed_senders.is_empty());
+        assert!(cfg.chat_channels.is_empty());
+    }
+
+    #[test]
+    fn discord_config_chat_channels_parsed() {
+        let toml_str = r#"
+            [discord]
+            webhook_url = "https://example.com/webhook"
+
+            [discord.chat_channels]
+            group = "https://example.com/group"
+            raid  = "https://example.com/raid"
+        "#;
+        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.discord.chat_channels.len(), 2);
+        assert_eq!(
+            cfg.discord.chat_channels.get("group").unwrap(),
+            "https://example.com/group"
+        );
+        assert_eq!(
+            cfg.discord.chat_channels.get("raid").unwrap(),
+            "https://example.com/raid"
+        );
+        assert!(!cfg.discord.chat_channels.contains_key("guild"));
     }
 
     #[test]

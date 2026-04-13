@@ -298,6 +298,62 @@ impl MetricsStore {
         .optional()
         .context("Failed to query balance")
     }
+
+    /// Total plat earned (sum of positive `amount` entries) by `character`
+    /// since `since_timestamp` (ISO datetime string, e.g. "2026-04-12 00:00:00").
+    pub fn plat_earned_since(&self, character: &str, since_timestamp: &str) -> Result<i64> {
+        let conn = self.conn.lock().expect("metrics lock poisoned");
+        let total: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(amount), 0) FROM plat_ledger \
+                 WHERE character = ?1 AND amount > 0 AND timestamp >= ?2",
+                params![character, since_timestamp],
+                |row| row.get(0),
+            )
+            .context("Failed to query plat earned since")?;
+        Ok(total)
+    }
+
+    /// Fleet-wide total plat earned (all characters, all positive entries)
+    /// since `since_timestamp`.
+    pub fn fleet_plat_earned_since(&self, since_timestamp: &str) -> Result<i64> {
+        let conn = self.conn.lock().expect("metrics lock poisoned");
+        let total: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(amount), 0) FROM plat_ledger \
+                 WHERE amount > 0 AND timestamp >= ?1",
+                params![since_timestamp],
+                |row| row.get(0),
+            )
+            .context("Failed to query fleet plat earned since")?;
+        Ok(total)
+    }
+
+    /// Recent platinum ledger entries for a character, newest first.
+    pub fn recent_plat(&self, character: &str, limit: u32) -> Result<Vec<PlatRow>> {
+        let conn = self.conn.lock().expect("metrics lock poisoned");
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, timestamp, character, amount, balance, source, note \
+                 FROM plat_ledger WHERE character = ?1 ORDER BY id DESC LIMIT ?2",
+            )
+            .context("Failed to prepare plat query")?;
+        let rows = stmt
+            .query_map(params![character, limit], |row| {
+                Ok(PlatRow {
+                    id: row.get(0)?,
+                    timestamp: row.get(1)?,
+                    character: row.get(2)?,
+                    amount: row.get(3)?,
+                    balance: row.get(4)?,
+                    source: row.get(5)?,
+                    note: row.get(6)?,
+                })
+            })
+            .context("Failed to query plat ledger")?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .context("Failed to collect plat rows")
+    }
 }
 
 // ── Row types ───────────────────────────────────────────────────────────────
@@ -335,6 +391,18 @@ pub struct LockoutRow {
     pub instance: String,
     pub expires_at: String,
     pub created_at: String,
+}
+
+/// A row from the `plat_ledger` table.
+#[derive(Debug)]
+pub struct PlatRow {
+    pub id: i64,
+    pub timestamp: String,
+    pub character: String,
+    pub amount: i64,
+    pub balance: i64,
+    pub source: Option<String>,
+    pub note: Option<String>,
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
@@ -504,5 +572,113 @@ mod tests {
 
         assert_eq!(store.current_balance("Char_A").unwrap(), Some(500));
         assert_eq!(store.current_balance("Char_B").unwrap(), Some(100));
+    }
+
+    // ── Plat economy query tests ─────────────────────────────────────────
+
+    #[test]
+    fn plat_earned_since_sums_positive_only() {
+        let store = MetricsStore::open_memory().unwrap();
+        // Insert some transactions — the timestamp column defaults to datetime('now')
+        // which is within the "since" window we'll use.
+        store
+            .insert_plat("Trader01", 1000, 1000, Some("vendor_sale"), None)
+            .unwrap();
+        store
+            .insert_plat("Trader01", 500, 1500, Some("vendor_sale"), None)
+            .unwrap();
+        store
+            .insert_plat("Trader01", -200, 1300, Some("spell_purchase"), None)
+            .unwrap();
+
+        // Use a timestamp well in the past so all rows qualify.
+        let earned = store
+            .plat_earned_since("Trader01", "2000-01-01 00:00:00")
+            .unwrap();
+        // Only positive amounts: 1000 + 500 = 1500
+        assert_eq!(earned, 1500);
+    }
+
+    #[test]
+    fn plat_earned_since_unknown_character() {
+        let store = MetricsStore::open_memory().unwrap();
+        let earned = store
+            .plat_earned_since("Nobody", "2000-01-01 00:00:00")
+            .unwrap();
+        assert_eq!(earned, 0);
+    }
+
+    #[test]
+    fn plat_earned_since_future_timestamp_returns_zero() {
+        let store = MetricsStore::open_memory().unwrap();
+        store
+            .insert_plat("Trader01", 1000, 1000, None, None)
+            .unwrap();
+        // A timestamp far in the future excludes all rows.
+        let earned = store
+            .plat_earned_since("Trader01", "9999-12-31 23:59:59")
+            .unwrap();
+        assert_eq!(earned, 0);
+    }
+
+    #[test]
+    fn fleet_plat_earned_since_aggregates_all_characters() {
+        let store = MetricsStore::open_memory().unwrap();
+        store
+            .insert_plat("Char_A", 400, 400, None, None)
+            .unwrap();
+        store
+            .insert_plat("Char_B", 600, 600, None, None)
+            .unwrap();
+        store
+            .insert_plat("Char_A", -100, 300, None, None)
+            .unwrap(); // negative — not counted
+
+        let fleet = store
+            .fleet_plat_earned_since("2000-01-01 00:00:00")
+            .unwrap();
+        assert_eq!(fleet, 1000); // 400 + 600 = 1000 positive
+    }
+
+    #[test]
+    fn recent_plat_newest_first() {
+        let store = MetricsStore::open_memory().unwrap();
+        store
+            .insert_plat("Char_A", 100, 100, Some("a"), None)
+            .unwrap();
+        store
+            .insert_plat("Char_A", 200, 300, Some("b"), None)
+            .unwrap();
+        store
+            .insert_plat("Char_A", -50, 250, Some("c"), None)
+            .unwrap();
+
+        let rows = store.recent_plat("Char_A", 10).unwrap();
+        assert_eq!(rows.len(), 3);
+        // Newest (id=3) first
+        assert_eq!(rows[0].source.as_deref(), Some("c"));
+        assert_eq!(rows[0].amount, -50);
+        assert_eq!(rows[0].balance, 250);
+        assert_eq!(rows[1].source.as_deref(), Some("b"));
+        assert_eq!(rows[2].source.as_deref(), Some("a"));
+    }
+
+    #[test]
+    fn recent_plat_limit_respected() {
+        let store = MetricsStore::open_memory().unwrap();
+        for i in 0..5 {
+            store
+                .insert_plat("Char_A", i * 10, i * 10, None, None)
+                .unwrap();
+        }
+        let rows = store.recent_plat("Char_A", 3).unwrap();
+        assert_eq!(rows.len(), 3);
+    }
+
+    #[test]
+    fn recent_plat_empty_for_unknown_character() {
+        let store = MetricsStore::open_memory().unwrap();
+        let rows = store.recent_plat("Ghost", 10).unwrap();
+        assert!(rows.is_empty());
     }
 }

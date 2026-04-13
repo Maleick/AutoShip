@@ -231,6 +231,9 @@ fn run_loop(
                             payload_size: evt.payload_size,
                         });
                 }
+
+                let spawn_events = orchestrator.poll_spawn_events(pid);
+                app.apply_spawn_events(spawn_events);
             }
             last_packet_poll = Instant::now();
         }
@@ -284,6 +287,16 @@ fn run_loop(
         if last_soul_tick.elapsed() >= SOUL_TICK_INTERVAL {
             tick_soul_engine(app);
             last_soul_tick = Instant::now();
+        }
+
+        // Consume the pending_memory_poll flag set by :addr command.
+        // When ReadMemory IPC is available, this is where the live poll is triggered.
+        if app.hex_state.pending_memory_poll {
+            app.hex_state.pending_memory_poll = false;
+            tracing::debug!(
+                address = app.hex_state.hex_address,
+                "pending_memory_poll consumed — ReadMemory poll would fire here"
+            );
         }
     }
 
@@ -1525,12 +1538,22 @@ fn tick_soul_engine(app: &mut App) {
     let states: HashMap<textquest_common::types::ClientId, textquest_common::types::GameState> =
         HashMap::new();
 
-    let commands = coordinator.tick(&states);
+    let (commands, alerts) = coordinator.tick(&states);
 
     if !commands.is_empty() {
         tracing::debug!(count = commands.len(), "Soul Engine generated commands");
         // Soul commands are logged but not dispatched in TUI demo mode.
         // The Orchestrator handles IPC delivery when live clients are connected.
+    }
+
+    for alert in &alerts {
+        tracing::warn!(
+            character_id = alert.character_id,
+            alert_type = ?alert.alert_type,
+            severity = ?alert.severity,
+            message = %alert.message,
+            "Soul Engine anomaly detected"
+        );
     }
 
     app.soul_tick_counter += 1;

@@ -138,6 +138,8 @@ pub struct HexDumpState {
     pub show_annotations: bool,
     /// Known field annotations for the current hex data context.
     pub annotations: Vec<FieldAnnotation>,
+    /// When set, triggers an immediate ReadMemory poll in the run loop.
+    pub pending_memory_poll: bool,
 }
 
 impl HexDumpState {
@@ -150,6 +152,7 @@ impl HexDumpState {
             hex_label: String::from("No address selected"),
             show_annotations: false,
             annotations: Vec::new(),
+            pending_memory_poll: false,
         }
     }
 
@@ -680,6 +683,24 @@ pub struct MapRadiusOverlay {
     pub label: String,
 }
 
+/// Camp location overlay drawn on the zone map.
+///
+/// Renders the camp center marker (`⊕`), pull point marker (`⊗`),
+/// camp radius circle (green), and pull radius circle (red).
+#[derive(Debug, Clone)]
+pub struct CampOverlay {
+    /// XY world coordinates of the camp anchor point.
+    pub camp_center: [f32; 2],
+    /// XY world coordinates of the pull point.
+    pub pull_point: [f32; 2],
+    /// Radius around camp center (green circle).
+    pub camp_radius: f32,
+    /// Radius around pull point (red circle).
+    pub pull_radius: f32,
+    /// Display name for the camp overlay.
+    pub name: String,
+}
+
 /// A saved set of map filter settings.
 #[derive(Debug, Clone)]
 pub struct MapFilterPreset {
@@ -768,6 +789,8 @@ pub struct MapScreenState {
     pub named_markers: Vec<NamedMapMarker>,
     /// Path to the marker persistence file.
     pub marker_file: PathBuf,
+    /// Active camp location overlay (set when a camp is started).
+    pub camp_overlay: Option<CampOverlay>,
 }
 
 impl MapScreenState {
@@ -806,6 +829,7 @@ impl MapScreenState {
             click_action: MapClickAction::None,
             named_markers,
             marker_file,
+            camp_overlay: None,
         }
     }
 
@@ -1753,6 +1777,75 @@ impl EqInternalsState {
     }
 }
 
+// ─── Economy State ────────────────────────────────────────────────────────────
+
+/// State for the Economy Controls screen.
+///
+/// Uses stub/demo data — live economy logic is wired in M10.
+pub struct EconomyState {
+    /// Current vendor cycle operational status.
+    pub vendor_status: crate::tui::ui::economy_controls::VendorCycleStatus,
+    /// Seconds until next vendor cycle starts (0 = running now).
+    pub vendor_next_cycle_secs: u64,
+    /// Number of completed vendor cycles this session.
+    pub vendor_cycles_completed: u32,
+    /// Zone name of the last vendor visit.
+    pub vendor_last_zone: Option<String>,
+    /// Total items sold this session.
+    pub vendor_items_sold: u32,
+    /// Total plat earned from vendor sales this session.
+    pub vendor_plat_earned: u64,
+
+    /// Current banking consolidation status.
+    pub banking_status: crate::tui::ui::economy_controls::BankingStatus,
+    /// Total consolidated plat held in bank.
+    pub banking_consolidated_plat: u64,
+    /// Number of characters whose bank has been visited this run.
+    pub banking_chars_done: u32,
+    /// Total characters to bank this run.
+    pub banking_chars_total: u32,
+    /// Timestamp or label for the last bank run.
+    pub banking_last_run: Option<String>,
+
+    /// Number of items in the loot processing queue.
+    pub loot_queue_size: u32,
+    /// Total items looted this session.
+    pub loot_items_total: u32,
+    /// Items pending distribution (waiting on loot rules).
+    pub loot_pending_distribute: u32,
+    /// Short list of recently looted item names for display.
+    pub loot_recent_items: Vec<String>,
+
+    /// Whether economy automation is currently paused.
+    pub automation_paused: bool,
+}
+
+impl Default for EconomyState {
+    fn default() -> Self {
+        Self {
+            vendor_status: crate::tui::ui::economy_controls::VendorCycleStatus::Idle,
+            vendor_next_cycle_secs: 1800,
+            vendor_cycles_completed: 0,
+            vendor_last_zone: None,
+            vendor_items_sold: 0,
+            vendor_plat_earned: 0,
+
+            banking_status: crate::tui::ui::economy_controls::BankingStatus::Idle,
+            banking_consolidated_plat: 0,
+            banking_chars_done: 0,
+            banking_chars_total: 0,
+            banking_last_run: None,
+
+            loot_queue_size: 0,
+            loot_items_total: 0,
+            loot_pending_distribute: 0,
+            loot_recent_items: Vec::new(),
+
+            automation_paused: false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2062,5 +2155,105 @@ mod tests {
 
         let err = save_named_markers(&marker_path, &[]).unwrap_err();
         assert!(err.to_string().contains("not a regular file"), "{}", err);
+    }
+
+    // ─── HookRotationState tests ─────────────────────────────────────────────
+
+    #[test]
+    fn hook_rotation_state_default_has_four_entries() {
+        let state = HookRotationState::new();
+        assert_eq!(state.entries.len(), 4);
+        assert_eq!(state.interval_ms, 5_000);
+        for entry in &state.entries {
+            assert_eq!(entry.state, HookSlotState::Active);
+            assert!(entry.last_rotated_at.is_none());
+            assert!(entry.next_rotation_at.is_none());
+        }
+    }
+
+    #[test]
+    fn hook_slot_state_label() {
+        assert_eq!(HookSlotState::Active.label(), "ACTIVE");
+        assert_eq!(HookSlotState::Unhooked.label(), "UNHOOKED");
+    }
+
+    #[test]
+    fn record_rotation_updates_existing_entry() {
+        let mut state = HookRotationState::new();
+        state.record_rotation("ProcessGameEvents", HookSlotState::Unhooked, 2_000);
+
+        let entry = state
+            .entries
+            .iter()
+            .find(|e| e.name == "ProcessGameEvents")
+            .expect("entry must exist");
+
+        assert_eq!(entry.state, HookSlotState::Unhooked);
+        assert!(entry.last_rotated_at.is_some());
+        assert!(entry.next_rotation_at.is_some());
+
+        // ms_since_last_rotation should be very small (just ran).
+        let ms = entry.ms_since_last_rotation().unwrap();
+        assert!(ms < 500, "expected <500ms elapsed, got {ms}ms");
+
+        // ms_until_next_rotation should be close to 2000ms.
+        let remaining = entry.ms_until_next_rotation().unwrap();
+        assert!(remaining <= 2_000, "remaining {remaining}ms > interval 2000ms");
+    }
+
+    #[test]
+    fn record_rotation_inserts_unknown_hook() {
+        let mut state = HookRotationState::new();
+        let initial_count = state.entries.len();
+        state.record_rotation("NewHook", HookSlotState::Active, 1_000);
+        assert_eq!(state.entries.len(), initial_count + 1);
+        let entry = state.entries.iter().find(|e| e.name == "NewHook").unwrap();
+        assert_eq!(entry.state, HookSlotState::Active);
+    }
+
+    #[test]
+    fn set_interval_reschedules_all_entries() {
+        let mut state = HookRotationState::new();
+        // Seed one entry with a rotation timestamp.
+        state.record_rotation("SetGameState", HookSlotState::Unhooked, 5_000);
+
+        state.set_interval_ms(10_000);
+        assert_eq!(state.interval_ms, 10_000);
+
+        // All entries (that have a scheduled time) should now have ~10s remaining.
+        for entry in &state.entries {
+            if let Some(remaining) = entry.ms_until_next_rotation() {
+                assert!(
+                    remaining <= 10_000,
+                    "remaining {remaining}ms > new interval 10000ms"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn state_transitions_active_to_unhooked_and_back() {
+        let mut state = HookRotationState::new();
+        let name = "CastHook";
+
+        // Start active.
+        assert_eq!(
+            state.entries.iter().find(|e| e.name == name).unwrap().state,
+            HookSlotState::Active
+        );
+
+        // Rotate to unhooked.
+        state.record_rotation(name, HookSlotState::Unhooked, 1_000);
+        assert_eq!(
+            state.entries.iter().find(|e| e.name == name).unwrap().state,
+            HookSlotState::Unhooked
+        );
+
+        // Rotate back to active.
+        state.record_rotation(name, HookSlotState::Active, 1_000);
+        assert_eq!(
+            state.entries.iter().find(|e| e.name == name).unwrap().state,
+            HookSlotState::Active
+        );
     }
 }

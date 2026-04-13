@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use textquest_common::soul::{PersonalityTraits, SocialTag, SpeechStyle};
 
+use super::suppression::SuppressionRules;
+
 /// How "edgy" a character's personality and speech can be.
 #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -34,6 +36,10 @@ pub struct RelationshipSeed {
 
 fn default_trust() -> f32 {
     0.5
+}
+
+const fn default_memory_decay_days() -> u32 {
+    30
 }
 
 /// Per-character soul configuration.
@@ -207,6 +213,20 @@ pub struct SoulConfig {
     /// Discord bot personality for fleet commentary
     #[serde(default)]
     pub bot_personality: BotPersonalityConfig,
+    /// Maximum LLM requests per character per minute (rate limiting)
+    #[serde(default = "default_max_requests_per_character")]
+    pub max_requests_per_character: u32,
+    /// Maximum total LLM requests across all characters per minute (rate limiting)
+    #[serde(default = "default_max_global_requests")]
+    pub max_global_requests: u32,
+}
+
+const fn default_max_requests_per_character() -> u32 {
+    5
+}
+
+const fn default_max_global_requests() -> u32 {
+    20
 }
 
 impl Default for SoulConfig {
@@ -223,7 +243,17 @@ impl Default for SoulConfig {
             relationship: Vec::new(),
             llm: LlmConfig::default(),
             bot_personality: BotPersonalityConfig::default(),
+            max_requests_per_character: default_max_requests_per_character(),
+            max_global_requests: default_max_global_requests(),
         }
+    }
+}
+
+impl SoulConfig {
+    /// Validate this configuration. Returns a list of errors; empty means valid.
+    #[must_use]
+    pub fn validate(&self) -> Vec<crate::soul::config_validator::ConfigError> {
+        crate::soul::config_validator::SoulConfigValidator::validate(self)
     }
 }
 

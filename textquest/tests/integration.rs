@@ -45,6 +45,7 @@ fn make_game_state() -> GameState {
         combat_status: textquest_common::combat::CombatStatus::Idle,
         zone_short_name: String::new(),
         zone_long_name: String::new(),
+        actual_version: None,
     }
 }
 

@@ -1,184 +1,158 @@
 name: Branch Cleanup
 
 on:
-  pull_request:
-    types: [closed]
+  schedule:
+    # Run weekly on Sundays at 3:00 AM UTC
+    - cron: "0 3 * * 0"
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Run cleanup in dry-run mode (no deletions)'
+        description: "Dry-run mode — list branches that would be deleted without deleting them"
         required: false
-        default: 'false'
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
-permissions:
-  contents: write
-  pull-requests: write
+env:
+  # Set BRANCH_CLEANUP_DRY_RUN=true to enable dry-run mode via env var
+  # workflow_dispatch input overrides this when set to 'true'
+  BRANCH_CLEANUP_DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
 
 jobs:
-  delete-merged-branches:
-    name: Delete merged feature branches
-    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
+  cleanup:
+    name: Delete merged branches
     runs-on: [self-hosted, Linux, X64, textquest]
-    outputs:
-      deleted_count: ${{ steps.cleanup.outputs.deleted_count }}
-      skipped_count: ${{ steps.cleanup.outputs.skipped_count }}
+    permissions:
+      contents: write
+
     steps:
-      - name: Delete merged branch
-        id: cleanup
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v8
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const ref = context.payload.pull_request.head.ref;
-            const prNumber = context.payload.pull_request.number;
-            let deleted = 0;
-            let skipped = 0;
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-            // Guard against fork PR deletion of same-named local branches
-            const headRepoFullName = context.payload.pull_request.head.repo?.full_name;
-            const baseRepoFullName = `${owner}/${repo}`;
-            if (headRepoFullName !== baseRepoFullName) {
-              core.info(`⊘ Skipped fork PR branch: ${ref} (from ${headRepoFullName})`);
-              skipped++;
-              core.setOutput('deleted_count', deleted.toString());
-              core.setOutput('skipped_count', skipped.toString());
-              return;
-            }
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-            // Skip protected branches and default branch
-            const skipBranches = ['master', 'main', 'develop', 'development'];
-            if (skipBranches.includes(ref)) {
-              core.info(`⊘ Skipped protected branch: ${ref}`);
-              skipped++;
-              core.setOutput('deleted_count', deleted.toString());
-              core.setOutput('skipped_count', skipped.toString());
-              return;
-            }
+      - name: Cleanup merged branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
 
-            // Skip non-feature branches (releases, hotfixes, etc.)
-            if (!ref.startsWith('claude/') && !ref.startsWith('codex/') && !ref.startsWith('feature/')) {
-              core.info(`⊘ Skipped non-feature branch: ${ref}`);
-              skipped++;
-              core.setOutput('deleted_count', deleted.toString());
-              core.setOutput('skipped_count', skipped.toString());
-              return;
-            }
+          DRY_RUN="${BRANCH_CLEANUP_DRY_RUN}"
+          REPO="${{ github.repository }}"
+          TIMESTAMP="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-            try {
-              await github.rest.git.deleteRef({
-                owner,
-                repo,
-                ref: `heads/${ref}`
-              });
-              deleted++;
-              core.info(`✓ Deleted branch: ${ref}`);
+          echo "=== Branch Cleanup Audit Log ==="
+          echo "Timestamp: ${TIMESTAMP}"
+          echo "Repository: ${REPO}"
+          echo "Dry-run mode: ${DRY_RUN}"
+          echo "================================"
 
-              // Add comment to PR
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: prNumber,
-                body: `🧹 Branch cleanup: Deleted \`${ref}\` after merge.`
-              });
-            } catch (error) {
-              if (error.status === 404) {
-                core.info(`⊘ Branch already deleted: ${ref}`);
-              } else {
-                core.error(`✗ Failed to delete ${ref}: ${error.message}`);
-                throw error;
-              }
-            }
+          # Protected branch patterns — never delete these
+          PROTECTED_PATTERNS="^(master|main|develop)$|^feature/"
 
-            core.setOutput('deleted_count', deleted.toString());
-            core.setOutput('skipped_count', skipped.toString());
+          # Fetch all remote branches
+          git fetch --prune origin
 
-      - name: Cleanup all stale merged branches
-        id: stale-cleanup
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const dryRun = "${{ github.event.inputs.dry_run }}" === 'true';
+          DELETED=0
+          SKIPPED=0
+          FAILED=0
+          NOT_FOUND=0
 
-            // Get all branches
-            const branches = await github.paginate(github.rest.repos.listBranches, {
-              owner,
-              repo,
-              per_page: 100
-            });
+          # Get list of merged branches from GitHub API (merged PRs only)
+          MERGED_BRANCHES=$(gh api \
+            "repos/${REPO}/pulls?state=closed&per_page=100" \
+            --jq '.[] | select(.merged_at != null) | .head.ref' \
+            2>/dev/null || true)
 
-            const skipBranches = ['master', 'main', 'develop', 'development'];
-            let deleted = 0;
-            let skipped = 0;
-            let failed = 0;
-            const deleteLog = [];
+          if [ -z "${MERGED_BRANCHES}" ]; then
+            echo "[${TIMESTAMP}] INFO: No merged pull request branches found."
+          fi
 
-            for (const branch of branches) {
-              const name = branch.name;
+          while IFS= read -r branch; do
+            [ -z "${branch}" ] && continue
 
-              // Skip protected and non-feature branches
-              if (skipBranches.includes(name) ||
-                  (!name.startsWith('claude/') &&
-                   !name.startsWith('codex/') &&
-                   !name.startsWith('feature/'))) {
-                skipped++;
-                continue;
-              }
+            TS="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
-              // Check if branch is merged into default branch
-              try {
-                const defaultBranch = context.payload.repository.default_branch;
-                const compare = await github.rest.repos.compareCommits({
-                  owner,
-                  repo,
-                  base: defaultBranch,
-                  head: name
-                });
+            # Skip protected branches
+            if echo "${branch}" | grep -qE "${PROTECTED_PATTERNS}"; then
+              echo "[${TS}] SKIP protected: ${branch}"
+              SKIPPED=$((SKIPPED + 1))
+              continue
+            fi
 
-                // Check if branch is merged
-                // Only delete if:
-                // - Branches are identical, OR
-                // - Feature branch has no commits ahead (no unmerged work)
-                // Note: Squash/rebase merged branches won't be detected here (ahead_by > 0)
-                // but will be caught by GitHub's "auto delete head branch" PR setting
-                if (compare.data.status === 'identical' || compare.data.ahead_by === 0) {
-                  if (dryRun) {
-                    core.info(`[DRY-RUN] Would delete merged branch: ${name}`);
-                    deleteLog.push(`${name} (merged)`);
-                  } else {
-                    try {
-                      await github.rest.git.deleteRef({
-                        owner,
-                        repo,
-                        ref: `heads/${name}`
-                      });
-                      deleted++;
-                      core.info(`✓ Deleted merged branch: ${name}`);
-                      deleteLog.push(`${name} (deleted)`);
-                    } catch (deleteError) {
-                      if (deleteError.status === 404) {
-                        core.debug(`Branch already deleted: ${name}`);
-                      } else {
-                        core.warning(`Failed to delete ${name}: ${deleteError.message}`);
-                        failed++;
-                        deleteLog.push(`${name} (failed: ${deleteError.message})`);
-                      }
-                    }
-                  }
-                } else {
-                  skipped++;
+            # Check if branch still exists on remote
+            if ! git ls-remote --exit-code --heads origin "${branch}" > /dev/null 2>&1; then
+              echo "[${TS}] NOT_FOUND (already deleted): ${branch}"
+              NOT_FOUND=$((NOT_FOUND + 1))
+              continue
+            fi
+
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "[${TS}] DRY-RUN would delete: ${branch}"
+              DELETED=$((DELETED + 1))
+            else
+              # Attempt deletion; handle 404 / already-gone gracefully
+              HTTP_STATUS=$(gh api \
+                --method DELETE \
+                --silent \
+                -H "Accept: application/vnd.github+json" \
+                "repos/${REPO}/git/refs/heads/${branch}" \
+                --include 2>&1 | grep -m1 "^HTTP/" | awk '{print $2}' || echo "0")
+
+              if [ "${HTTP_STATUS}" = "204" ] || [ "${HTTP_STATUS}" = "0" ]; then
+                # 0 means gh swallowed the header; try a simpler push delete as fallback
+                git push origin --delete "${branch}" 2>/dev/null && {
+                  echo "[${TS}] DELETED: ${branch}"
+                  DELETED=$((DELETED + 1))
+                } || {
+                  echo "[${TS}] NOT_FOUND (deleted between check and delete): ${branch}"
+                  NOT_FOUND=$((NOT_FOUND + 1))
                 }
-              } catch (compareError) {
-                core.debug(`Could not check ${name}: ${compareError.message}`);
-                failed++;
-              }
-            }
+              elif [ "${HTTP_STATUS}" = "404" ] || [ "${HTTP_STATUS}" = "422" ]; then
+                echo "[${TS}] NOT_FOUND (404/422 — already deleted): ${branch}"
+                NOT_FOUND=$((NOT_FOUND + 1))
+              else
+                echo "[${TS}] FAILED (HTTP ${HTTP_STATUS}): ${branch}"
+                FAILED=$((FAILED + 1))
+              fi
+            fi
+          done <<< "${MERGED_BRANCHES}"
 
-            const summary = `Cleanup ${dryRun ? '(DRY-RUN)' : ''}: ${deleted} deleted, ${skipped} skipped, ${failed} failed`;
-            core.notice(summary);
-            core.setOutput('deleted_count', deleted.toString());
-            core.setOutput('skipped_count', skipped.toString());
+          echo ""
+          echo "=== Summary ==="
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "Mode: DRY-RUN (no branches were actually deleted)"
+            echo "Would delete: ${DELETED}"
+          else
+            echo "Mode: LIVE"
+            echo "Deleted:      ${DELETED}"
+          fi
+          echo "Skipped (protected): ${SKIPPED}"
+          echo "Not found (already gone): ${NOT_FOUND}"
+          echo "Failed:       ${FAILED}"
+          echo "==============="
+
+          if [ "${FAILED}" -gt 0 ]; then
+            echo "::warning::${FAILED} branch deletion(s) failed. Check logs above."
+            exit 1
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TIMESTAMP="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          echo "[${TIMESTAMP}] ERROR: Branch cleanup workflow failed."
+          echo "::error::Branch cleanup encountered failures. Review the audit log above."
+          # Create a GitHub issue comment or annotation — the ::error:: annotation
+          # is surfaced in the Actions UI and will trigger any configured
+          # workflow failure notifications (email, Slack, etc.).
