@@ -37,8 +37,11 @@ REQUIRED_FILES = [
     "Security-and-Anti-Detection-Notes.md",
     "Roadmap-and-Known-Gaps.md",
     "Maintaining-the-Wiki.md",
+    "Project-Metrics.md",
     "_Sidebar.md",
 ]
+
+STATIC_DIRS = ["assets"]
 
 BANNED_LITERALS = {
     "mq2-reference": "stale pre-submodule reference",
@@ -295,6 +298,45 @@ def sync_files(source_files: dict[str, Path], wiki_dir: Path) -> list[str]:
     return actions
 
 
+def sync_static_dirs(wiki_dir: Path) -> list[str]:
+    actions: list[str] = []
+    for directory_name in STATIC_DIRS:
+        source_dir = SOURCE_DIR / directory_name
+        if not source_dir.is_dir():
+            continue
+
+        target_dir = wiki_dir / directory_name
+        source_files = {
+            path.relative_to(source_dir): path
+            for path in source_dir.rglob("*")
+            if path.is_file()
+        }
+        target_files = {
+            path.relative_to(target_dir): path
+            for path in target_dir.rglob("*")
+            if path.is_file()
+        } if target_dir.exists() else {}
+
+        for relative_path, source in sorted(source_files.items()):
+            target = target_dir / relative_path
+            ensure_dir(target.parent)
+            source_bytes = source.read_bytes()
+            if not target.exists():
+                target.write_bytes(source_bytes)
+                actions.append(f"ADD    {directory_name}/{relative_path.as_posix()}")
+                continue
+            if target.read_bytes() != source_bytes:
+                target.write_bytes(source_bytes)
+                actions.append(f"UPDATE {directory_name}/{relative_path.as_posix()}")
+
+        for relative_path, target in sorted(target_files.items()):
+            if relative_path not in source_files:
+                target.unlink()
+                actions.append(f"DELETE {directory_name}/{relative_path.as_posix()}")
+
+    return actions
+
+
 def has_git_changes(wiki_dir: Path) -> bool:
     status = run(["git", "status", "--short"], cwd=wiki_dir)
     return bool(status.stdout.strip())
@@ -379,6 +421,7 @@ def main() -> int:
 
     prepare_wiki_checkout(wiki_dir, display_url, remote_exists, token)
     actions = sync_files(source_files, wiki_dir)
+    actions.extend(sync_static_dirs(wiki_dir))
 
     if args.dry_run:
         title = f"Dry run for {display_url} (remote {'exists' if remote_exists else 'missing'})"

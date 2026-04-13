@@ -65,6 +65,18 @@ Shared login phases are defined in `textquest-common/src/login.rs`:
 - `Ready`
 - `Failed { reason }`
 
+```mermaid
+flowchart LR
+    A[ProcessLaunching] --> B[AtLoginScreen]
+    B --> C[EnteringCredentials]
+    C --> D[ServerSelecting]
+    D --> E[CharacterSelecting]
+    E --> F[Zoning]
+    F --> G[InWorld]
+    G --> H[PostLoginSetup]
+    H --> I[Ready]
+```
+
 ## Current Implementation Split
 
 ### Orchestrator side

@@ -24,11 +24,13 @@ Rules:
 - call out live-validation gaps explicitly
 - keep governance and runbook policy in `docs/wiki/`
 - link out to canonical `TextQuest-Ghidra` snapshots or manifests instead of duplicating immutable evidence payloads here
+- keep static assets under `docs/wiki/assets/` so the Pages build and wiki mirror can sync the same files
 
 ### 2. Validate locally
 
 ```bash
 python scripts/sync_wiki.py --check
+mkdocs build --strict
 ```
 
 This validates:
@@ -36,15 +38,18 @@ This validates:
 - required page presence
 - flat layout rules
 - required special files such as `Home.md` and `_Sidebar.md`
+- public Pages build correctness
 - banned stale references such as deleted local vendor paths
 
 ### 3. Preview the publish result
 
 ```bash
 python scripts/sync_wiki.py --dry-run
+mkdocs build --strict
 ```
 
 This materializes a wiki checkout in a temp directory, reports adds, updates, and deletes, and leaves your main repo worktree clean.
+The MkDocs build should also pass before you publish so the GitHub Pages site and the wiki mirror stay in sync.
 
 ### 4. Publish to the GitHub wiki
 
@@ -75,8 +80,10 @@ Fix:
 ## CI and PR Expectations
 
 - CI runs `python scripts/sync_wiki.py --check` on PRs
+- CI also builds the public site with `mkdocs build --strict`
 - wiki updates should ship in the same PR as the behavior change whenever possible
 - README should continue to point contributors at `docs/wiki/` and the sync script commands
+- the metrics page is generated from the same source as the README badges
 
 ## Content Rules
 
@@ -95,3 +102,4 @@ Fix:
 ### Future options
 
 - if the team later wants automatic publication on merge, keep `docs/wiki/` as canonical and add automation around the same script rather than editing the wiki repo by hand
+- if a future docs asset is needed, add it under `docs/wiki/assets/` and reference it with a relative path from the markdown page

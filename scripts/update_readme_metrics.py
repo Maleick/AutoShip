@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 README_PATH = REPO_ROOT / "README.md"
+METRICS_PAGE_PATH = REPO_ROOT / "docs" / "wiki" / "Project-Metrics.md"
 TEST_LIST_SUMMARY_RE = re.compile(r"^(\d+) tests?, \d+ benchmarks$", re.MULTILINE)
 TEST_ANNOTATION_RE = re.compile(r"^\s*#\[\s*(?:tokio::)?test(?:\s*\([^]]*\))?\s*\]")
 
@@ -64,11 +65,20 @@ def test_count() -> tuple[int, bool]:
             env={**os.environ, "CARGO_TERM_COLOR": "never"},
         )
     except FileNotFoundError:
+        print(
+            "warning: cargo is unavailable; falling back to source-scan test counting",
+            file=sys.stderr,
+        )
         return test_count_from_source(), False
     output = f"{result.stdout}\n{result.stderr}"
     if result.returncode != 0:
-        print(f"cargo test failed (exit {result.returncode}):\n{output}", file=sys.stderr)
-        sys.exit(1)
+        print(
+            f"warning: cargo test failed (exit {result.returncode}); falling back to source-scan test counting",
+            file=sys.stderr,
+        )
+        if output.strip():
+            print(output, file=sys.stderr)
+        return test_count_from_source(), False
     listed = sum(int(match.group(1)) for match in TEST_LIST_SUMMARY_RE.finditer(output))
     if listed > 0:
         return listed, True
@@ -98,6 +108,13 @@ def replace_line(text: str, prefix: str, replacement: str) -> str:
     if not replaced:
         raise RuntimeError(f"Could not find README line starting with {prefix!r}")
     return "\n".join(lines) + "\n"
+
+
+def update_summary_line(path: pathlib.Path, summary_line: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    updated = replace_line(text, "Current workspace totals:", summary_line)
+    if updated != text:
+        path.write_text(updated, encoding="utf-8")
 
 
 def main() -> int:
@@ -145,9 +162,21 @@ def main() -> int:
     )
 
     if updated == readme:
+        summary_line = (
+            f"Current workspace totals: {loc:,} Rust lines and {test_label} tests. "
+            "This page and the README badges are auto-refreshed by "
+            "`scripts/update_readme_metrics.py`."
+        )
+        update_summary_line(METRICS_PAGE_PATH, summary_line)
         return 0
 
     README_PATH.write_text(updated, encoding="utf-8")
+    summary_line = (
+        f"Current workspace totals: {loc:,} Rust lines and {test_label} tests. "
+        "This page and the README badges are auto-refreshed by "
+        "`scripts/update_readme_metrics.py`."
+    )
+    update_summary_line(METRICS_PAGE_PATH, summary_line)
     return 0
 
 

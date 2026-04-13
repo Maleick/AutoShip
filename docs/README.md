@@ -16,9 +16,11 @@ This directory stores project documentation and is split into distinct buckets.
   - Usage-first build/run/operator entry point from the repo root.
   - Keep it focused on how to use TextQuest rather than roadmap, project, or governance detail.
 - `docs/wiki/`
-  - Canonical published operator/developer documentation.
-  - Managed by `scripts/sync_wiki.py` and published by the `wiki-nightly` workflow.
+  - Canonical markdown authoring tree for the public docs site and the repo wiki mirror.
+  - Managed by `scripts/sync_wiki.py` and published through the GitHub Pages build.
   - Keep this directory flat (no nested markdown folders), matching the wiki sync contract.
+- `mkdocs.yml`
+  - Public docs site navigation, theme, and draft filtering for the GitHub Pages build.
 - `docs/implementation-roadmap.md`
   - Canonical milestone order, evidence-state rules, and GitHub tracking guidance.
 - `docs/research-*`, `docs/external-research/`, `docs/research-imports/`
@@ -47,4 +49,5 @@ Keep this optional, and only publish snapshots intentionally.
 ## Tooling references
 
 - Wiki source sync: `scripts/sync_wiki.py`
-- CI + release workflow for publishing nightly docs: `.github/workflows/wiki-nightly.yml`
+- Public docs site workflow: `.github/workflows/docs-pages.yml`
+- Legacy wiki mirror sync: `.github/workflows/wiki-nightly.yml`

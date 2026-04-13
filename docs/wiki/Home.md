@@ -1,4 +1,4 @@
-# TextQuest Wiki
+# TextQuest Docs
 
 TextQuest is a Rust workspace for operating and automating EverQuest clients in two layers:
 
@@ -7,19 +7,23 @@ TextQuest is a Rust workspace for operating and automating EverQuest clients in 
 - `textquest-common`: shared IPC, offsets, nav, combat, login, and soul types
 - `textquest-web`: the web/dashboard surface for configuration and monitoring work
 
-This wiki is the long-lived operator and developer reference for the current repository state. Use it for build/run guidance, operator workflow, troubleshooting, and codebase orientation.
+This site is the published public docs surface. The repo-side `docs/wiki/` tree remains the authoring source for both the public Pages build and the lightweight wiki mirror.
 
-The canonical source for this documentation lives in `docs/wiki/` inside the main `TextQuest` repo. The GitHub wiki is a lightweight published landing page, not a second source of truth.
+![TextQuest Docs banner](assets/textquest-banner.png)
+
+[Open the docs site](https://maleick.github.io/TextQuest/){ .md-button .md-button--primary }
+[Sponsor TextQuest](https://github.com/sponsors/Maleick){ .md-button }
 
 ## Start Here
 
 ### Operators
 
-- [Quick Start](Quick-Start)
-- [Installation and Build](Installation-and-Build)
-- [Operating the TUI](Operating-the-TUI)
-- [Command Reference](Command-Reference)
-- [Troubleshooting](Troubleshooting)
+- [Quick Start](Quick-Start.md)
+- [Installation and Build](Installation-and-Build.md)
+- [Operating the TUI](Operating-the-TUI.md)
+- [Command Reference](Command-Reference.md)
+- [Troubleshooting](Troubleshooting.md)
+- [Project Metrics](Project-Metrics.md)
 
 ### Developers
 

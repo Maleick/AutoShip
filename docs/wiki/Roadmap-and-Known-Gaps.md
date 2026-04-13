@@ -34,6 +34,16 @@ The active roadmap now resumes at `M5`:
 
 External research may add slices and validation tasks, but it may not reorder milestones on its own.
 
+```mermaid
+flowchart LR
+    M5[M5 Anti-Cheat] --> M6[M6 Web Dashboard]
+    M6 --> M7[M7 Zoning / Movement]
+    M7 --> M8[M8 Orchestrator]
+    M8 --> M9[M9 Learning / RL]
+    M9 --> M10[M10 Economy]
+    M10 --> M11[M11 Soul Engine + LLM]
+```
+
 ## Current Validated State
 
 - TUI with five main screens and command bar
@@ -48,7 +58,7 @@ External research may add slices and validation tasks, but it may not reorder mi
 ## Main Gaps Still Requiring Live Validation
 
 - packet-level control paths inferred from research rather than live validation
-- the current packet inventory keeps combat, utility, and chat packet seams separate from the existing IPC plus in-process DLL control boundary; see `docs/external-research/packet-engine-send-receive-pipeline.md` for the full send/receive layer inventory and capability boundary summary
+- the current packet inventory keeps combat, utility, and chat packet seams separate from the existing IPC plus in-process DLL control boundary
 - the send pipeline requires opcode scrambling and anti-cheat counter synchronization before any packet-first path can be treated as safe
 - zoning state-machine details and recovery behavior after client changes
 - offset stability after upstream EQ updates
@@ -76,7 +86,7 @@ Rules:
 
 ## Current Research Lane
 
-External research is docs-first and checkpoint-based.
+External research is docs-first and checkpoint-based, but the public site only publishes the validated subset and the issue tracker captures unresolved work.
 
 Current deep-dive order:
 
@@ -85,16 +95,7 @@ Current deep-dive order:
 3. MacroQuest Lua and broader runtime pass
 4. ongoing Daybreak detection digest updates
 
-Use:
-
-- `docs/external-research/automation-source-ledger.md`
-- `docs/external-research/packet-engine-send-receive-pipeline.md`
-- `docs/external-research/packet-zoning-send-path-and-state-ledger.md`
-- `docs/external-research/ability-packet-coverage-and-targetability-validation.md`
-- `docs/wiki/Research-KissAssist-Gap-Analysis.md`
-- `docs/external-research/jmb-session-and-relay-comparison.md`
-- `docs/external-research/daybreak-detection-digest.md`
-- `docs/external-research/zoning-queue-and-safe-coord-validation.md`
+Use the issue tracker and private research notes to keep the raw findings organized before promoting them into public docs.
 
 ## Current `M8` orchestration guidance
 

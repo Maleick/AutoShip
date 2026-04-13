@@ -30,6 +30,16 @@ The current orchestrator-side camp loop in `textquest/src/camp/state.rs` uses th
 
 That matters because older docs may still summarize the system as a simpler five-phase loop. The current code explicitly includes `Buffing`.
 
+```mermaid
+flowchart LR
+    A[Idle] --> B[Pulling]
+    B --> C[Fighting]
+    C --> D[Looting]
+    D --> E[Medding]
+    E --> F[Buffing]
+    F --> A
+```
+
 ## Responsibility Split
 
 ### Orchestrator-side responsibilities

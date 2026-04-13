@@ -90,10 +90,10 @@ Common starting commands:
 
 ## Next Pages
 
-- Build and platform setup: [Installation and Build](Installation-and-Build)
-- TUI usage details: [Operating the TUI](Operating-the-TUI)
-- Full command list: [Command Reference](Command-Reference)
-- Troubleshooting: [Troubleshooting](Troubleshooting)
+- Build and platform setup: [Installation and Build](Installation-and-Build.md)
+- TUI usage details: [Operating the TUI](Operating-the-TUI.md)
+- Full command list: [Command Reference](Command-Reference.md)
+- Troubleshooting: [Troubleshooting](Troubleshooting.md)
 
 ## Current Behavior vs Roadmap
 

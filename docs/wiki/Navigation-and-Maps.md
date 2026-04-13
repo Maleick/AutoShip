@@ -21,6 +21,21 @@ When you issue `:nav`, TextQuest tries to resolve the destination as:
 
 Per-client results are then sent through `textquest_common::ipc::Command::NavigateTo`.
 
+```mermaid
+flowchart TD
+    A[:nav request] --> B{camp?}
+    B -->|yes| C[resolved camp]
+    B -->|no| D{coordinates?}
+    D -->|yes| E[explicit x y z]
+    D -->|no| F[zone short name]
+    C --> G[route planner]
+    E --> G
+    F --> G
+    G --> H{mesh available?}
+    H -->|yes| I[navmesh-backed route]
+    H -->|no| J[straight-line fallback]
+```
+
 Possible route sources in current code:
 
 - navmesh-backed route

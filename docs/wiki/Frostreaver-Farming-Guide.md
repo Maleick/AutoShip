@@ -369,7 +369,7 @@ For raids, combine all 6 groups into a single raid:
 
 ## Detailed P99 Wiki Zone Data
 
-See [p99-zone-guide-detailed.md](p99-zone-guide-detailed.md) for the full P99 wiki-sourced zone reference with exact ZEM values, mob names, camp coordinates, quest turn-ins, and multi-group capacity ratings for every level range.
+See [P99 Wiki Zone Guide](P99-Zone-Guide.md) for the full P99 wiki-sourced zone reference with exact ZEM values, mob names, camp coordinates, quest turn-ins, and multi-group capacity ratings for every level range.
 
 ---
 

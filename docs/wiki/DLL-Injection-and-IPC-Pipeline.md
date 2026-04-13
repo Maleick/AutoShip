@@ -12,6 +12,25 @@ The live-control path is:
 6. Derive a session ID from the token
 7. Create authenticated IPC surfaces for that client
 
+```mermaid
+sequenceDiagram
+    participant Operator
+    participant TextQuest as textquest
+    participant DLL as textquest-dll
+    participant Pipe as named pipe
+    participant Memory as shared memory
+
+    Operator->>TextQuest: launch / inject
+    TextQuest->>TextQuest: stage DLL + token
+    TextQuest->>DLL: CreateRemoteThread + LoadLibraryW
+    DLL->>DLL: derive session ID
+    DLL->>Memory: publish GameState snapshots
+    TextQuest->>Pipe: send session token
+    Pipe-->>DLL: authenticate connection
+    TextQuest->>Pipe: send Command messages
+    DLL-->>TextQuest: CommandResult / status responses
+```
+
 ## Injection Path
 
 The orchestrator-side injection code lives under `textquest/src/inject/`.

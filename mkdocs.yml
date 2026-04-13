@@ -1,0 +1,102 @@
+site_name: TextQuest Docs
+site_description: Public operator and architecture documentation for TextQuest.
+site_url: https://maleick.github.io/TextQuest/
+docs_dir: docs/wiki
+repo_url: https://github.com/Maleick/TextQuest
+repo_name: Maleick/TextQuest
+edit_uri: edit/master/docs/wiki/
+
+theme:
+  name: material
+  logo: assets/textquest-logo.png
+  favicon: assets/textquest-logo.png
+  palette:
+    - scheme: slate
+      primary: amber
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - scheme: default
+      primary: amber
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - navigation.footer
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - search.highlight
+    - search.share
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Maleick/TextQuest
+      name: TextQuest on GitHub
+    - icon: fontawesome/solid/heart
+      link: https://github.com/sponsors/Maleick
+      name: Sponsor TextQuest
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search
+  - exclude:
+      glob: |
+        _Sidebar.md
+        Research-*.md
+        Security-and-Anti-Detection-Notes.md
+        Offsets-EQ-Internals-and-MacroQuest-References.md
+nav:
+  - Home: Home.md
+  - Getting Started:
+      - Quick Start: Quick-Start.md
+      - Installation and Build: Installation-and-Build.md
+  - Operator Workflow:
+      - Operating the TUI: Operating-the-TUI.md
+      - Command Reference: Command-Reference.md
+      - Configuration: Configuration.md
+      - Login Automation: Login-Automation.md
+      - Combat and Camp Loop: Combat-and-Camp-Loop.md
+      - Navigation and Maps: Navigation-and-Maps.md
+      - Soul Engine: Soul-Engine.md
+  - Architecture:
+      - Architecture Overview: Architecture-Overview.md
+      - DLL Injection and IPC Pipeline: DLL-Injection-and-IPC-Pipeline.md
+      - Development Workflow: Development-Workflow.md
+      - Roadmap and Known Gaps: Roadmap-and-Known-Gaps.md
+      - Maintaining the Wiki: Maintaining-the-Wiki.md
+  - Reporting:
+      - Project Metrics: Project-Metrics.md
+      - Troubleshooting: Troubleshooting.md
+  - Reference:
+      - Soul Engine Definition: Soul-Engine-Definition.md
+      - Soul Engine M11 Roadmap: Soul-Engine-M11-Roadmap.md
+      - Soul Engine Test Strategy: Soul-Engine-Test-Strategy.md
+      - Test Map Verification Runbook: Test-Map-Verification-Runbook.md

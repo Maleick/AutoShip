@@ -49,27 +49,25 @@ When behavior or roadmap guidance changes:
 1. update the code or source docs
 2. update the matching page in `docs/wiki/`
 3. run `python scripts/sync_wiki.py --check`
-4. run `python scripts/sync_wiki.py --dry-run` before a manual publish
-5. include the wiki source changes in the same PR when possible
+4. run `mkdocs build --strict` to confirm the public docs site still builds
+5. run `python scripts/sync_wiki.py --dry-run` before a manual wiki publish
+6. include the wiki source changes in the same PR when possible
 
 ## Roadmap and Tracking Workflow
 
 Live is the primary product target going forward. Test is historical and reference-only.
 
-Supporting research surfaces live in:
-
-- `docs/external-research/`
-- `docs/research-imports/`
+Supporting research surfaces live in private notes and repository issues. The public site only publishes the validated, public-safe subset of that work.
 
 Raw local harvests, cloned reference repos, and scratch analysis caches do not belong in the tracked repo surface:
 
 - keep repo-root `research/` as ignored local scratch only
-- promote durable conclusions into `docs/wiki/` or `docs/external-research/` before relying on them in roadmap or operator workflow
+- promote durable conclusions into `docs/wiki/` or the issue tracker before relying on them in roadmap or operator workflow
 - link to canonical `TextQuest-Ghidra` evidence when the conclusion depends on immutable snapshots or manifests
 
 Current packet/zoning intake rule:
 
-- curate send-path, state, and validation conclusions into `docs/external-research/packet-zoning-send-path-and-state-ledger.md` before treating raw imports as roadmap-ready
+- curate send-path, state, and validation conclusions into the issue tracker and the private research notes before treating raw imports as roadmap-ready
 
 Rules:
 
@@ -97,6 +95,15 @@ Default roadmap verifier:
 - `scripts/reconcile-agent-queue.sh` and `scripts/sync_project.py` remain legacy transition tools while GitHub Projects retire; they are not part of the normal build-run loop.
 - Link to canonical `TextQuest-Ghidra` snapshot or manifest paths instead of copying immutable evidence payloads into this repo.
 - Do not commit transient automation state such as `autoresearch-launch.json`, `autoresearch-state.json`, or `research-results.tsv`.
+
+```mermaid
+flowchart LR
+    A[Code or doc change] --> B[Update docs/wiki]
+    B --> C[mkdocs build --strict]
+    B --> D[python scripts/sync_wiki.py --check]
+    C --> E[GitHub Pages site]
+    D --> F[Wiki mirror sync]
+```
 
 ## Logging and Debugging
 

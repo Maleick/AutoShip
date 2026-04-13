@@ -10,9 +10,11 @@
 
 [![CI](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml)
 [![Release](https://github.com/Maleick/TextQuest/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/release.yml)
+[![Docs](https://img.shields.io/badge/docs-TextQuest%20Pages-blue?style=flat-square)](https://maleick.github.io/TextQuest/)
+[![Sponsor](https://img.shields.io/github/sponsors/Maleick?label=Sponsor&logo=GitHub&color=EA4AAA&style=flat-square)](https://github.com/sponsors/Maleick)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-137%2C380-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-3%2C031%20exact-brightgreen?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-159%2C454-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-~3%2C708-brightgreen?style=flat-square)](#testing)
 [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](#roadmap)
 [![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
@@ -84,7 +86,7 @@ target\release\textquest.exe navmesh diagnostics --pid 12345
 
 ## TUI Basics
 
-Current workspace totals: 137,380 Rust lines and 3,031 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`.
+Current workspace totals: 159,454 Rust lines and ~3,708 tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`.
 
 | Trigger                | Jobs                                                                   |
 | ---------------------- | ---------------------------------------------------------------------- |
@@ -132,6 +134,8 @@ The detailed configuration guide lives in [`docs/wiki/Configuration.md`](docs/wi
 
 ## Documentation
 
+- Public docs site: [TextQuest Pages](https://maleick.github.io/TextQuest/)
+- Authoring source: [`docs/wiki/Home.md`](docs/wiki/Home.md)
 - Start here: [`docs/wiki/Quick-Start.md`](docs/wiki/Quick-Start.md)
 - Build and platform setup: [`docs/wiki/Installation-and-Build.md`](docs/wiki/Installation-and-Build.md)
 - TUI operator guide: [`docs/wiki/Operating-the-TUI.md`](docs/wiki/Operating-the-TUI.md)

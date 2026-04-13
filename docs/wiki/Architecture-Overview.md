@@ -33,6 +33,16 @@ TextQuest is a three-crate Rust workspace:
 6. `textquest` reads those snapshots, renders the TUI, and makes orchestration decisions.
 7. Operator commands or orchestrator decisions are serialized as IPC commands and sent back to the DLL over authenticated named pipes.
 
+```mermaid
+flowchart LR
+    A[textquest] --> B["stage DLL + token"]
+    B --> C[textquest-dll]
+    C --> D["shared memory GameState"]
+    D --> A
+    A --> E["authenticated named pipe commands"]
+    E --> C
+```
+
 ## Key Module Boundaries
 
 ### In `textquest`
@@ -77,6 +87,6 @@ TextQuest is a three-crate Rust workspace:
 
 ### Roadmap and validation notes
 
-- The current command/control boundary is still authenticated IPC into in-process DLL execution. Packet send-path seams remain research-backed candidates in `docs/external-research/packet-zoning-send-path-and-state-ledger.md`, not live repo capabilities.
+- The current command/control boundary is still authenticated IPC into in-process DLL execution. Packet send-path seams remain research-backed candidates and are tracked in roadmap issues, not live repo capabilities.
 - Provider-backed Soul and LLM behavior now belongs to `M11` in the canonical roadmap, after packet, zoning, anti-cheat, orchestration, learning, and economy work.
 - Some higher-level flows such as fully automated post-login group formation are present as structure and IPC types, but still need live validation and continued wiring.

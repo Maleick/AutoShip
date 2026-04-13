@@ -25,6 +25,11 @@
 - [Roadmap and Known Gaps](Roadmap-and-Known-Gaps)
 - [Maintaining the Wiki](Maintaining-the-Wiki)
 
+## Reporting
+
+- [Project Metrics](Project-Metrics)
+- [Troubleshooting](Troubleshooting)
+
 ## Research
 
 - [Ability Packets](Research-Ability-Packets)
