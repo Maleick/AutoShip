@@ -3021,6 +3021,34 @@ impl App {
         }
     }
 
+    pub fn apply_spawn_events(&mut self, events: Vec<textquest_common::ipc::SpawnEvent>) {
+        let tick = self.tick_count;
+
+        for event in events {
+            let is_up = matches!(event.kind, textquest_common::ipc::SpawnEventKind::Created);
+            let label = if is_up { "UP" } else { "DOWN" };
+            let level = if is_up {
+                ToastLevel::Success
+            } else {
+                ToastLevel::Warning
+            };
+
+            self.spawn_alert_feed.push(SpawnAlertEvent {
+                spawn_name: event.spawn_name.clone(),
+                zone: event.zone.clone(),
+                is_up,
+                timestamp: std::time::SystemTime::now(),
+                tick,
+                match_source: MatchSource::WatchPattern("spawn-delta".to_string()),
+            });
+            self.set_feedback(
+                level,
+                format!("[Spawn] {} {} in {}", event.spawn_name, label, event.zone),
+                false,
+            );
+        }
+    }
+
     fn execute_watch_command(&mut self, args: &[&str]) {
         match args.first().copied() {
             None => {

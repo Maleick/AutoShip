@@ -231,6 +231,9 @@ fn run_loop(
                             payload_size: evt.payload_size,
                         });
                 }
+
+                let spawn_events = orchestrator.poll_spawn_events(pid);
+                app.apply_spawn_events(spawn_events);
             }
             last_packet_poll = Instant::now();
         }

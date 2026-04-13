@@ -789,6 +789,22 @@ impl Orchestrator {
         }
     }
 
+    /// Poll a client for accumulated spawn add/remove events.
+    /// Sends `PollSpawnEvents` and returns any `SpawnEvent` entries.
+    pub fn poll_spawn_events(&mut self, pid: u32) -> Vec<textquest_common::ipc::SpawnEvent> {
+        let Some(pipe) = self.get_pipe(pid) else {
+            return Vec::new();
+        };
+        match pipe.send(&Command::PollSpawnEvents) {
+            Ok(Response::SpawnEventBatch { events }) => events,
+            Ok(_) => Vec::new(),
+            Err(e) => {
+                tracing::debug!(pid, error = %e, "Failed to poll spawn events");
+                Vec::new()
+            }
+        }
+    }
+
     /// Eject the DLL from a client and clean up its tracked state.
     /// Sends an Eject IPC command, then removes the client from all maps.
     pub fn eject_client(&mut self, pid: u32) {

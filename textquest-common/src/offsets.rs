@@ -1006,6 +1006,16 @@ pub mod spawn_manager {
     /// `TList`<`PlayerClient`*> — start of the player linked list
     /// The `TList` itself contains `m_pFirstNode` at offset 0x00
     pub const PLAYER_LIST: usize = 0x0010;
+
+    /// TODO: reverse engineer
+    /// Offset of `PlayerManagerClient::CreatePlayer`.
+    /// Placeholder for IPC event-driven spawn add notifications.
+    pub const PLAYER_MANAGER_CREATE_PLAYER: usize = 0x0;
+
+    /// TODO: reverse engineer
+    /// Offset of `PlayerManagerBase::PrepForDestroyPlayer`.
+    /// Placeholder for IPC event-driven spawn destroy notifications.
+    pub const PLAYER_MANAGER_PREP_DESTROY_PLAYER: usize = 0x0;
 }
 
 /// `ZoneGuideManagerClient` / `ZoneGuideZone` struct layout offsets.

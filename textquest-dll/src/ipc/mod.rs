@@ -175,6 +175,32 @@ pub fn drain_responses() -> Vec<Response> {
     std::mem::take(&mut *queue)
 }
 
+/// Drain only `SpawnEventBatch`-relevant responses from `PENDING_RESPONSES`,
+/// leaving all other variants in the queue.
+///
+/// This prevents `PollSpawnEvents` from consuming unrelated responses
+/// while preserving future non-spawn payloads.
+pub fn drain_spawn_responses() -> Vec<textquest_common::ipc::SpawnEvent> {
+    let Some(pending) = PENDING_RESPONSES.get() else {
+        return Vec::new();
+    };
+    let Ok(mut queue) = pending.lock() else {
+        return Vec::new();
+    };
+    let mut spawn_events = Vec::new();
+    let mut remaining = Vec::new();
+    for response in std::mem::take(&mut *queue) {
+        match response {
+            Response::SpawnEventBatch { events } => {
+                spawn_events.extend(events);
+            }
+            _ => remaining.push(response),
+        }
+    }
+    *queue = remaining;
+    spawn_events
+}
+
 /// Drain only `PacketEvent` responses from `PENDING_RESPONSES`, leaving all other
 /// response variants (e.g. `NavSignals`, `ContainerSlots`) intact in the queue.
 ///
@@ -369,6 +395,17 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                     let events = drain_packet_responses();
                     let _ = listener.respond(&IpcResponse::echo(
                         Response::PacketBatch { events },
+                        correlation_id,
+                    ));
+                    listener.disconnect();
+                    continue;
+                }
+
+                // Respond to PollSpawnEvents inline — drain only spawn event responses.
+                if matches!(&cmd, Command::PollSpawnEvents) {
+                    let events = drain_spawn_responses();
+                    let _ = listener.respond(&IpcResponse::echo(
+                        Response::SpawnEventBatch { events },
                         correlation_id,
                     ));
                     listener.disconnect();

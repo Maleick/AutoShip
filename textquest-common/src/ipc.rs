@@ -674,6 +674,11 @@ pub enum Command {
         /// Zero-based index of the item within that menu.
         item_index: u32,
     },
+    /// Poll for accumulated spawn list delta events.
+    ///
+    /// The DLL drains its pending spawn-event buffer and returns one
+    /// `SpawnEventBatch` response.
+    PollSpawnEvents,
 }
 
 impl std::fmt::Debug for Command {
@@ -748,6 +753,39 @@ pub struct PacketEventInfo {
     pub timestamp_ms: u64,
     /// Size of the packet payload in bytes.
     pub payload_size: u32,
+}
+
+/// Spawn lifecycle event for near-by spawn list deltas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SpawnEventKind {
+    /// A spawn became visible in the local spawn list.
+    Created,
+    /// A spawn was removed from the local spawn list.
+    Destroyed,
+}
+
+impl std::fmt::Display for SpawnEventKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Created => write!(f, "created"),
+            Self::Destroyed => write!(f, "destroyed"),
+        }
+    }
+}
+
+/// Wire-format for a single spawn event in a `SpawnEventBatch` response.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SpawnEvent {
+    /// PID of the client that detected the event.
+    pub client_id: ClientId,
+    /// Zone short name where the event was observed.
+    pub zone: String,
+    /// Name of the spawn.
+    pub spawn_name: String,
+    /// Spawn lifecycle kind.
+    pub kind: SpawnEventKind,
+    /// Epoch milliseconds when the event was detected.
+    pub timestamp_ms: u64,
 }
 
 /// Wire-format for a single chat message in a `ChatBatch` response.
@@ -934,6 +972,13 @@ pub enum Response {
         success: bool,
         /// Human-readable status message.
         message: String,
+    },
+    /// Batched spawn list delta events from `game_loop`.
+    ///
+    /// Returned in `Response::SpawnEventBatch` after calling `Command::PollSpawnEvents`.
+    SpawnEventBatch {
+        /// Accumulated spawn events since last poll.
+        events: Vec<SpawnEvent>,
     },
 }
 
@@ -1351,6 +1396,7 @@ mod tests {
             Command::ClickObject,
             Command::QueryZoneGraph,
             Command::PollPackets,
+            Command::PollSpawnEvents,
             Command::PollChat,
             Command::SetRenderMode {
                 mode: RenderMode::NullRender,
@@ -1398,6 +1444,24 @@ mod tests {
             Response::PostLoginComplete { client_id: 42 },
             Response::CombatUpdate {
                 status: crate::combat::CombatStatus::Idle,
+            },
+            Response::SpawnEventBatch {
+                events: vec![
+                    SpawnEvent {
+                        client_id: 42,
+                        zone: "freportw".into(),
+                        spawn_name: "a beetle".into(),
+                        kind: SpawnEventKind::Created,
+                        timestamp_ms: 1,
+                    },
+                    SpawnEvent {
+                        client_id: 42,
+                        zone: "freportw".into(),
+                        spawn_name: "a spider".into(),
+                        kind: SpawnEventKind::Destroyed,
+                        timestamp_ms: 2,
+                    },
+                ],
             },
             Response::ZoneGraph { zones: vec![] },
             Response::RenderModeChanged {
