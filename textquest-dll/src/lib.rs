@@ -3,6 +3,13 @@
 //! runs on the OS thread pool (PoolParty) — no `CreateThread` / `CreateRemoteThread`.
 //! It hooks internal EQ functions and communicates with the TextQuest orchestrator via IPC.
 
+//! Export-table exposure audit:
+//! - `Cargo.toml` declares `crate-type = ["cdylib", "rlib"]`, which allows a
+//!   native export surface if symbols are emitted by the Rust/LLVM toolchain.
+//! - Runtime hardening is applied by unlinking from PEB module lists and erasing
+//!   PE headers after startup so scanners that walk in-process exports do not
+//!   recover a valid exported symbol table from the loaded image.
+
 // Deeply nested unsafe FFI code with many conditional pointer checks — collapsing
 // these ifs reduces readability in practice. Also suppress needless_return for
 // early-return patterns in long unsafe blocks.
@@ -61,14 +68,15 @@ mod dll_main {
     /// normal application thread pool activity across 36 clients.
     unsafe extern "system" fn init_pool_callback(
         _instance: PTP_CALLBACK_INSTANCE,
-        _context: *mut core::ffi::c_void,
+        context: *mut core::ffi::c_void,
         _work: PTP_WORK,
     ) {
         // Prevent double initialization if injected twice into the same process.
         if super::ALREADY_INITIALIZED.swap(true, std::sync::atomic::Ordering::SeqCst) {
             return;
         }
-        if let Err(e) = super::initialize() {
+        let dll_base = context as *mut u8;
+        if let Err(e) = super::initialize(dll_base) {
             tracing::error!("TextQuest DLL initialization failed: {}", e);
         }
     }
@@ -97,9 +105,11 @@ mod dll_main {
                     // PoolParty: submit init to the process-default thread pool.
                     // Our callback runs on an existing OS worker thread — no
                     // CreateThread/CreateRemoteThread events across 36 clients.
-                    if let Err(e) =
-                        super::stealth::thread_pool::submit_to_thread_pool(init_pool_callback, None)
-                    {
+                    let context = Some(module.0 as *mut core::ffi::c_void);
+                    if let Err(e) = super::stealth::thread_pool::submit_to_thread_pool(
+                        init_pool_callback,
+                        context,
+                    ) {
                         // Thread pool submission failed — this should be extremely rare.
                         // Log will only appear if tracing is somehow already initialized.
                         tracing::error!("PoolParty thread pool submission failed: {}", e);
@@ -119,7 +129,8 @@ mod dll_main {
 /// Initialize the TextQuest DLL after injection.
 /// Called from a spawned thread (NOT under loader lock).
 #[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
-fn initialize() -> Result<(), Box<dyn std::error::Error>> {
+fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
+    let _dll_base = dll_base;
     // 1. Set up tracing — write logs to a file since we have no console.
     init_tracing();
     tracing::info!("TextQuest DLL initializing (pid={})", std::process::id());
@@ -228,6 +239,21 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(e) => {
             tracing::warn!("IPC startup failed (continuing without IPC): {}", e);
+        }
+    }
+
+    #[cfg(windows)]
+    if !_dll_base.is_null() {
+        // PEB unlinking + PE header erasure removes module/envelope visibility
+        // from conventional in-process enumeration paths (PEB lists / PE exports).
+        if let Err(e) = stealth::peb_unlink::unlink_module(_dll_base) {
+            tracing::warn!("PEB unlink failed (non-fatal): {}", e);
+        }
+        if let Err(e) = stealth::pe_erase::erase_pe_headers(_dll_base) {
+            tracing::warn!(
+                "PE header erasure failed (non-fatal; export parsing may remain possible): {}",
+                e
+            );
         }
     }
 
@@ -556,4 +582,99 @@ fn graceful_shutdown() {
     hooks::remove_all();
     ipc::stop();
     tracing::info!("TextQuest DLL graceful shutdown complete");
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+    use toml::Value;
+
+    #[test]
+    fn manifest_declares_cdylib() {
+        let manifest = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
+            .expect("cargo manifest should be readable");
+        let manifest: Value = manifest
+            .parse()
+            .expect("cargo manifest should be valid TOML");
+        let crate_types = manifest
+            .get("lib")
+            .and_then(Value::as_table)
+            .and_then(|lib| lib.get("crate-type"))
+            .and_then(Value::as_array)
+            .expect("[lib].crate-type should be an array in Cargo.toml");
+
+        assert!(
+            crate_types.iter().any(|value| value.as_str() == Some("cdylib"))
+                && crate_types.iter().any(|value| value.as_str() == Some("rlib")),
+            "dll crate should be built as both cdylib and rlib"
+        );
+    }
+
+    #[test]
+    fn no_public_export_symbols_in_textquest_dll_src() {
+        let src_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut stack = vec![src_root];
+        let mut no_mangle_attrs = 0usize;
+        let mut other_no_mangle_exports = Vec::new();
+        let mut public_extern_fns = Vec::new();
+
+        while let Some(path) = stack.pop() {
+            let entry = std::fs::read_dir(path)
+                .expect("source directories must be readable")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("source entries must be readable");
+
+            for item in entry {
+                let ty = item.file_type().expect("entry type should be readable");
+                if ty.is_dir() {
+                    stack.push(item.path());
+                    continue;
+                }
+                if item.path().extension().and_then(|ext| ext.to_str()) != Some("rs") {
+                    continue;
+                }
+
+                let contents = std::fs::read_to_string(item.path())
+                    .expect("rust source should be readable");
+                let mut saw_no_mangle = false;
+
+                for line in contents.lines() {
+                    let line = line.trim();
+                    if line.starts_with("#[") && line.contains("no_mangle") {
+                        saw_no_mangle = true;
+                        no_mangle_attrs += 1;
+                        continue;
+                    }
+
+                    if saw_no_mangle && line.contains("fn ") {
+                        if !line.contains("DllMain") {
+                            other_no_mangle_exports.push(format!(
+                                "{}: {}",
+                                item.path().display(),
+                                line
+                            ));
+                        }
+                        saw_no_mangle = false;
+                    }
+
+                    if line.contains("pub extern") && line.contains("fn") && !line.contains("DllMain")
+                    {
+                        public_extern_fns.push(format!("{}: {}", item.path().display(), line));
+                    }
+                }
+            }
+        }
+
+        assert!(
+            other_no_mangle_exports.is_empty(),
+            "unexpected #[no_mangle] export found: {:?}",
+            other_no_mangle_exports
+        );
+        assert_eq!(no_mangle_attrs, 1, "expected only one #[no_mangle] export (DllMain)");
+        assert!(
+            public_extern_fns.is_empty(),
+            "unexpected pub extern function in Rust source: {:?}",
+            public_extern_fns
+        );
+    }
 }

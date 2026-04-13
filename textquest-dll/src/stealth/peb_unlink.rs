@@ -1,5 +1,9 @@
 //! PEB module unlinking — removes our DLL from the three module lists in the
 //! Process Environment Block (PEB).
+//!
+//! This hides the module from loader-backed enumeration paths (for example,
+//! "list modules" workflows that first resolve candidates via `PEB_LDR_DATA`)
+//! before any export-table inspection occurs.
 
 use std::ffi::c_void;
 
@@ -76,6 +80,7 @@ mod tests {
         e.flink = &mut e; e.blink = &mut e;
         unsafe { unlink_entry(&mut e); }
         assert_eq!(e.flink, &mut e as *mut ListEntry);
+        assert_eq!(e.blink, &mut e as *mut ListEntry);
     }
     #[test]
     fn unlink_entry_removes_from_chain() {
@@ -86,7 +91,9 @@ mod tests {
         b.flink = &mut c; b.blink = &mut a;
         c.flink = &mut a; c.blink = &mut b;
         unsafe { unlink_entry(&mut b); }
-        assert_eq!(a.flink, &mut c as *mut ListEntry);
-        assert_eq!(c.blink, &mut a as *mut ListEntry);
+        let a_ptr = &mut a as *mut ListEntry;
+        let c_ptr = &mut c as *mut ListEntry;
+        assert_eq!(a.flink, c_ptr);
+        assert_eq!(c.blink, a_ptr);
     }
 }
