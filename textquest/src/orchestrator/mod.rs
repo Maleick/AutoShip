@@ -784,6 +784,22 @@ impl Orchestrator {
         }
     }
 
+    /// Poll a client for accumulated spawn list delta events.
+    /// Sends `PollSpawnEvents` and returns any `SpawnEvent` delta entries.
+    pub fn poll_spawn_events(&mut self, pid: u32) -> Vec<textquest_common::ipc::SpawnEvent> {
+        let Some(pipe) = self.get_pipe(pid) else {
+            return Vec::new();
+        };
+        match pipe.send(&Command::PollSpawnEvents) {
+            Ok(Response::SpawnEventBatch { events }) => events,
+            Ok(_) => Vec::new(),
+            Err(e) => {
+                tracing::debug!(pid, error = %e, "Failed to poll spawn events");
+                Vec::new()
+            }
+        }
+    }
+
     /// Read raw bytes from the EQ process address space via IPC.
     /// Sends `ReadMemory` and returns `(address, bytes)` on success, or `None`
     /// if the pipe is unavailable or the DLL returns an unexpected response.
