@@ -137,16 +137,10 @@ static PENDING_CHAT: OnceLock<Mutex<Vec<textquest_common::ipc::ChatMessageInfo>>
 /// entries are dropped. Prevents unbounded growth when the orchestrator is not
 /// polling `Command::PollChat`.
 const MAX_PENDING_CHAT: usize = 2048;
-/// Maximum number of responses retained in `PENDING_RESPONSES`.
-///
-/// Prevents unbounded memory growth when producers (especially packet hooks)
-/// outpace orchestrator polling.
-const MAX_PENDING_RESPONSES: usize = 4096;
-
 /// Maximum number of IPC responses retained in `PENDING_RESPONSES` before
 /// oldest entries are dropped. Prevents unbounded growth when the orchestrator
 /// falls behind polling.
-const MAX_PENDING_RESPONSES: usize = 2048;
+const MAX_PENDING_RESPONSES: usize = 4096;
 
 /// Enqueue a response to be sent to the orchestrator.
 /// Called from the game loop thread (e.g., login FSM phase updates).

@@ -39,7 +39,6 @@ mod syscall;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-#[cfg(windows)]
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -430,12 +429,6 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-    // Install all additional hooks that were split out from this function.
-    install_remaining_hooks(eq_base)?;
-
-    Ok(())
-}
-
 fn install_remaining_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     // Install render strobe hook -- background clients skip 3D rendering.
     if let Err(e) = hooks::render::install(eq_base) {
@@ -492,16 +485,17 @@ fn install_remaining_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error
 }
 
 pub(crate) fn eq_actual_version() -> Option<String> {
-    EQ_ACTUAL_VERSION.get().and_then(|value| value.clone())
+    EQ_ACTUAL_VERSION.get().and_then(|value: &Option<String>| value.clone())
 }
 
 fn is_scan_active() -> bool {
-    std::env::var("TEXTQUEST_SCAN_OFFSETS").is_ok_and(|v| v == "1")
-        && std::env::var("TEXTQUEST_SCAN_ACTIVE").is_ok_and(|v| v == "1")
+    std::env::var("TEXTQUEST_SCAN_OFFSETS").is_ok_and(|v: String| v == "1")
+        && std::env::var("TEXTQUEST_SCAN_ACTIVE").is_ok_and(|v: String| v == "1")
 }
 
+#[allow(dead_code)]
 fn has_scanned_offsets() -> bool {
-    OFFSET_DB.get().is_some_and(|db| !db.is_empty())
+    OFFSET_DB.get().is_some_and(|db: &HashMap<String, u64>| !db.is_empty())
 }
 
 fn scan_offsets(eq_base: u64) {

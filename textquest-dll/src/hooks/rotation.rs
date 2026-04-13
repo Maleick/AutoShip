@@ -244,4 +244,40 @@ mod tests {
         assert!(!called.load(Ordering::Acquire));
         assert_eq!(manager.rotation_count(), 0);
     }
+
+    #[test]
+    fn default_creates_new_manager() {
+        let manager = HookRotationManager::default();
+        assert_eq!(manager.rotation_count(), 0);
+    }
+
+    #[test]
+    fn register_multiple_hooks() {
+        let manager = HookRotationManager::new();
+        manager.register("a", || {}, || {});
+        manager.register("b", || {}, || {});
+        manager.register_with_addr("c", || {}, || {}, 0x1000);
+
+        let hooks = manager.hooks.lock().unwrap();
+        assert_eq!(hooks.len(), 3);
+        assert_eq!(hooks[0].name, "a");
+        assert_eq!(hooks[1].name, "b");
+        assert_eq!(hooks[2].name, "c");
+        assert_eq!(hooks[2].target_addr, 0x1000);
+    }
+
+    #[test]
+    fn stop_without_start_is_noop() {
+        let manager = HookRotationManager::new();
+        manager.stop(); // Should not panic
+        assert_eq!(manager.rotation_count(), 0);
+    }
+
+    #[test]
+    fn rotatable_hook_clone() {
+        let hook = super::RotatableHook::new("test".to_string(), || {}, || {}, 0x1234);
+        let cloned = hook.clone();
+        assert_eq!(cloned.name, "test");
+        assert_eq!(cloned.target_addr, 0x1234);
+    }
 }

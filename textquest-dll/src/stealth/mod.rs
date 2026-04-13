@@ -140,4 +140,54 @@ mod tests {
         disable();
         assert!(!is_enabled());
     }
+
+    #[test]
+    fn is_encrypted_reflects_code_encrypted_flag() {
+        CODE_ENCRYPTED.store(false, Ordering::Release);
+        assert!(!is_encrypted());
+        CODE_ENCRYPTED.store(true, Ordering::Release);
+        assert!(is_encrypted());
+        CODE_ENCRYPTED.store(false, Ordering::Release);
+    }
+
+    #[test]
+    fn is_enabled_reflects_sleep_enabled_flag() {
+        let prev = SLEEP_ENABLED.load(Ordering::Acquire);
+        SLEEP_ENABLED.store(false, Ordering::Release);
+        assert!(!is_enabled());
+        SLEEP_ENABLED.store(true, Ordering::Release);
+        assert!(is_enabled());
+        SLEEP_ENABLED.store(prev, Ordering::Release);
+    }
+
+    #[test]
+    fn wake_noop_when_not_enabled() {
+        SLEEP_ENABLED.store(false, Ordering::Release);
+        CODE_ENCRYPTED.store(false, Ordering::Release);
+        wake(); // should not panic
+        assert!(!is_encrypted());
+    }
+
+    #[test]
+    fn sleep_noop_when_not_enabled() {
+        SLEEP_ENABLED.store(false, Ordering::Release);
+        CODE_ENCRYPTED.store(false, Ordering::Release);
+        sleep(); // should not panic
+        assert!(!is_encrypted());
+    }
+
+    #[test]
+    fn stealth_error_display() {
+        let err = StealthError::TextSectionNotFound;
+        assert!(format!("{err}").contains(".text"));
+
+        let err = StealthError::VirtualProtect("access denied".to_string());
+        assert!(format!("{err}").contains("access denied"));
+
+        let err = StealthError::KeyGeneration;
+        assert!(format!("{err}").contains("key"));
+
+        let err = StealthError::IncompatibleWithIpc;
+        assert!(format!("{err}").contains("IPC"));
+    }
 }

@@ -464,4 +464,61 @@ mod tests {
         let result = PatternDb::from_json(json);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn from_json_skips_custom_entries() {
+        let json = r#"{"custom_entry":{"ida":"(custom)"},"real_entry":{"ida":"48 8B"}}"#;
+        let db = PatternDb::from_json(json).expect("deserialization failed");
+        assert_eq!(db.len(), 1);
+        assert!(db.get("real_entry").is_some());
+        assert!(db.get("custom_entry").is_none());
+    }
+
+    #[test]
+    fn scan_matched_empty_data() {
+        let mut db = PatternDb::new();
+        db.insert_ida("pat", "48 8B");
+        let matched = db.scan_matched(&[]);
+        assert!(matched.is_empty());
+    }
+
+    #[test]
+    fn scan_all_single_byte_pattern() {
+        let mut db = PatternDb::new();
+        db.insert_ida("nop", "90");
+        let data = [0xCC, 0x90, 0xCC];
+        let results = db.scan_all(&data);
+        assert_eq!(results["nop"], Some(1));
+    }
+
+    #[test]
+    fn default_creates_empty_db() {
+        let db = PatternDb::default();
+        assert!(db.is_empty());
+        assert_eq!(db.len(), 0);
+    }
+
+    #[test]
+    fn insert_custom_pattern_stores_custom_ida() {
+        let mut db = PatternDb::new();
+        db.insert("custom".to_string(), Pattern::from_ida("90 90"));
+        let json = db.to_json().expect("serialization failed");
+        // Deserializing should skip the "(custom)" entry
+        let db2 = PatternDb::from_json(&json).expect("deserialization failed");
+        assert!(db2.is_empty(), "custom entries should be skipped on deserialization");
+    }
+
+    #[test]
+    fn from_json_rejects_invalid_hex_token() {
+        let json = r#"{"bad":{"ida":"ZZ GG"}}"#;
+        let result = PatternDb::from_json(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn scan_matched_empty_db() {
+        let db = PatternDb::new();
+        let matched = db.scan_matched(&[0x48, 0x8B]);
+        assert!(matched.is_empty());
+    }
 }

@@ -218,3 +218,150 @@ impl MovementController {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use textquest_common::nav::Waypoint;
+
+    fn wp(x: f32, y: f32) -> Waypoint {
+        Waypoint { x, y, z: 0.0 }
+    }
+
+    // --- calc_heading ---
+    // EQ headings wrap: 0 and 512 represent the same direction (north).
+    // Tests accept both ~0 and ~512 for north-facing headings.
+
+    #[test]
+    fn heading_north() {
+        // Target directly north (+Y) from origin → heading 0 (or 512, equivalent)
+        let heading = calc_heading(&wp(0.0, 0.0), &wp(0.0, 100.0));
+        assert!(heading.abs() < 1.0 || (heading - 512.0).abs() < 1.0,
+            "expected ~0 (north), got {heading}");
+    }
+
+    #[test]
+    fn heading_south() {
+        // Target directly south (-Y) → heading 256 (half circle)
+        let heading = calc_heading(&wp(0.0, 0.0), &wp(0.0, -100.0));
+        assert!((heading - 256.0).abs() < 1.0,
+            "expected ~256 (south), got {heading}");
+    }
+
+    #[test]
+    fn heading_east() {
+        // Target directly east (+X) → heading 128 (quarter turn CW)
+        let heading = calc_heading(&wp(0.0, 0.0), &wp(100.0, 0.0));
+        assert!((heading - 128.0).abs() < 1.0,
+            "expected ~128 (east), got {heading}");
+    }
+
+    #[test]
+    fn heading_west() {
+        // Target directly west (-X) → heading 384 (three-quarter turn CW)
+        let heading = calc_heading(&wp(0.0, 0.0), &wp(-100.0, 0.0));
+        assert!((heading - 384.0).abs() < 1.0,
+            "expected ~384 (west), got {heading}");
+    }
+
+    #[test]
+    fn heading_northeast() {
+        // 45 degrees NE → heading ~64 (128/2)
+        let heading = calc_heading(&wp(0.0, 0.0), &wp(100.0, 100.0));
+        assert!((heading - 64.0).abs() < 1.0,
+            "expected ~64 (NE), got {heading}");
+    }
+
+    #[test]
+    fn heading_same_position_returns_zero() {
+        // Same position → atan2(0,0) = 0 → heading 0
+        let heading = calc_heading(&wp(5.0, 5.0), &wp(5.0, 5.0));
+        // atan2(0,0) is 0 in Rust, so (0*256/PI + 512) % 512 = 0
+        assert!(heading.abs() < 1.0 || (heading - 512.0).abs() < 1.0,
+            "expected ~0 for same position, got {heading}");
+    }
+
+    #[test]
+    fn heading_always_in_range() {
+        // Verify heading is always in [0, 512) for various directions
+        let directions = [
+            (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0),
+            (1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0),
+            (0.001, 1000.0), (1000.0, 0.001),
+        ];
+        for (dx, dy) in &directions {
+            let heading = calc_heading(&wp(0.0, 0.0), &wp(*dx, *dy));
+            assert!((0.0..512.0).contains(&heading),
+                "heading {heading} out of range for dx={dx}, dy={dy}");
+        }
+    }
+
+    #[test]
+    fn heading_offset_origin() {
+        // Same relative direction from a non-zero origin should give same heading
+        let h1 = calc_heading(&wp(0.0, 0.0), &wp(100.0, 0.0));
+        let h2 = calc_heading(&wp(500.0, 500.0), &wp(600.0, 500.0));
+        assert!((h1 - h2).abs() < 0.01,
+            "heading should be the same regardless of origin: {h1} vs {h2}");
+    }
+
+    #[test]
+    fn heading_opposite_directions_differ_by_256() {
+        let h_east = calc_heading(&wp(0.0, 0.0), &wp(100.0, 0.0));
+        let h_west = calc_heading(&wp(0.0, 0.0), &wp(-100.0, 0.0));
+        let diff = (h_west - h_east).abs();
+        assert!((diff - 256.0).abs() < 1.0,
+            "opposite headings should differ by ~256, got {diff}");
+    }
+
+    // --- MovementController ---
+
+    #[test]
+    fn controller_new_and_valid() {
+        let ctrl = MovementController::new(0x1000);
+        assert!(ctrl.is_valid());
+
+        let ctrl_null = MovementController::new(0);
+        assert!(!ctrl_null.is_valid());
+    }
+
+    #[test]
+    fn controller_set_player_base() {
+        let mut ctrl = MovementController::new(0);
+        assert!(!ctrl.is_valid());
+        ctrl.set_player_base(0xDEAD);
+        assert!(ctrl.is_valid());
+    }
+
+    #[test]
+    fn controller_face_toward_does_not_panic() {
+        // On non-Windows this is a no-op stub, just ensure it doesn't crash
+        let ctrl = MovementController::new(0x1000);
+        let target = wp(100.0, 200.0);
+        let current = wp(50.0, 50.0);
+        ctrl.face_toward(&target, &current);
+    }
+
+    #[test]
+    fn controller_read_position_stub() {
+        // On non-Windows the stub returns (0, 0, 0)
+        let ctrl = MovementController::new(0x1000);
+        let pos = ctrl.read_position();
+        #[cfg(not(windows))]
+        {
+            assert_eq!(pos.x, 0.0);
+            assert_eq!(pos.y, 0.0);
+            assert_eq!(pos.z, 0.0);
+        }
+        let _ = pos; // suppress unused on Windows
+    }
+
+    #[test]
+    fn controller_read_heading_stub() {
+        let ctrl = MovementController::new(0x1000);
+        let heading = ctrl.read_heading();
+        #[cfg(not(windows))]
+        assert_eq!(heading, 0.0);
+        let _ = heading;
+    }
+}

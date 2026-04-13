@@ -232,6 +232,73 @@ mod tests {
         assert!(!manager.is_installed("ui_init"));
     }
 
+    #[test]
+    fn uninstall_nonexistent_returns_error() {
+        let manager = DetourManager::new();
+        let result = manager.uninstall("does_not_exist");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn remove_all_clears_everything() {
+        let manager = DetourManager::new();
+        manager
+            .install("a", 0x1000, hook_sidl_screen_wnd_init as *const ())
+            .unwrap();
+        manager
+            .install("b", 0x2000, hook_crender_reset_device as *const ())
+            .unwrap();
+        assert!(manager.is_installed("a"));
+        assert!(manager.is_installed("b"));
+
+        manager.remove_all();
+        assert!(!manager.is_installed("a"));
+        assert!(!manager.is_installed("b"));
+    }
+
+    #[test]
+    fn remove_all_on_empty_is_noop() {
+        let manager = DetourManager::new();
+        manager.remove_all();
+        // Should not panic
+    }
+
+    #[test]
+    fn install_after_uninstall_succeeds() {
+        let manager = DetourManager::new();
+        manager
+            .install("hook", 0x1000, hook_sidl_screen_wnd_init as *const ())
+            .unwrap();
+        manager.uninstall("hook").unwrap();
+
+        // Re-install at same name should succeed
+        let result = manager.install("hook", 0x2000, hook_crender_reset_device as *const ());
+        assert!(result.is_ok());
+        assert!(manager.is_installed("hook"));
+    }
+
+    #[test]
+    fn multiple_detours_independent() {
+        let manager = DetourManager::new();
+        manager
+            .install("first", 0x1000, hook_sidl_screen_wnd_init as *const ())
+            .unwrap();
+        manager
+            .install("second", 0x2000, hook_crender_reset_device as *const ())
+            .unwrap();
+
+        // Uninstalling one doesn't affect the other
+        manager.uninstall("first").unwrap();
+        assert!(!manager.is_installed("first"));
+        assert!(manager.is_installed("second"));
+    }
+
+    #[test]
+    fn default_creates_new_manager() {
+        let manager = DetourManager::default();
+        assert!(!manager.is_installed("anything"));
+    }
+
     #[cfg(windows)]
     #[test]
     fn detour_install_noop_when_offsets_are_placeholder() {

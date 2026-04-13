@@ -817,4 +817,96 @@ mod tests {
         let result = db.import_opcodes_from_file(&path);
         assert!(result.is_err(), "expected error for oversized file");
     }
+
+    #[test]
+    fn import_functions_empty_vec() {
+        let (db, _dir) = temp_db();
+        let count = db.import_functions(&[]).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn import_globals_and_stats() {
+        let (db, _dir) = temp_db();
+        let globals = vec![
+            GlobalEntry {
+                address: 0xA000,
+                name: "g_player".into(),
+                size: Some(8),
+                data_type: Some("ptr".into()),
+                description: None,
+            },
+            GlobalEntry {
+                address: 0xB000,
+                name: "g_target".into(),
+                size: None,
+                data_type: None,
+                description: Some("target pointer".into()),
+            },
+        ];
+        let count = db.import_globals(&globals).unwrap();
+        assert_eq!(count, 2);
+        let stats = db.stats().unwrap();
+        assert_eq!(stats.globals, 2);
+    }
+
+    #[test]
+    fn import_imports_and_stats() {
+        let (db, _dir) = temp_db();
+        let imports = vec![
+            ImportEntry {
+                address: 0x1000,
+                dll_name: "kernel32.dll".into(),
+                func_name: "VirtualAlloc".into(),
+            },
+            ImportEntry {
+                address: 0x2000,
+                dll_name: "user32.dll".into(),
+                func_name: "FindWindowW".into(),
+            },
+        ];
+        let count = db.import_imports(&imports).unwrap();
+        assert_eq!(count, 2);
+        let stats = db.stats().unwrap();
+        assert_eq!(stats.imports, 2);
+    }
+
+    #[test]
+    fn search_functions_no_match() {
+        let (db, _dir) = temp_db();
+        db.import_functions(&[FunctionEntry {
+            address: 0x1000,
+            name: "foo".into(),
+            size: None,
+            category: None,
+            source: None,
+            description: None,
+            usability: None,
+            notes: None,
+        }])
+        .unwrap();
+        let results = db.search_functions("zzz_nonexistent").unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn search_strings_no_match() {
+        let (db, _dir) = temp_db();
+        let results = db.search_strings("nonexistent").unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn get_callers_unknown_address() {
+        let (db, _dir) = temp_db();
+        let callers = db.get_callers(0xDEAD).unwrap();
+        assert!(callers.is_empty());
+    }
+
+    #[test]
+    fn get_callees_unknown_address() {
+        let (db, _dir) = temp_db();
+        let callees = db.get_callees(0xDEAD).unwrap();
+        assert!(callees.is_empty());
+    }
 }
