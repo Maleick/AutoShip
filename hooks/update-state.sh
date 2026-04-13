@@ -363,7 +363,13 @@ for pair in "$@"; do
   if [[ "$KEY" == "pr_number" ]]; then
     ISSUE_NUMBER=$(echo "$ISSUE_ID" | grep -o '[0-9]*')
     if command -v gh >/dev/null 2>&1; then
-      PR_ISSUE=$(gh pr view "$VALUE" --json body --jq '.body' 2>/dev/null | grep -o '#[0-9]*' | head -1 | tr -d '#')
+      PR_ISSUE=$(
+        gh pr view "$VALUE" --json body --jq '.body' 2>/dev/null \
+          | grep -o '#[0-9]*' \
+          | head -1 \
+          | tr -d '#' \
+          || true
+      )
       if [[ -n "$PR_ISSUE" && "$PR_ISSUE" != "$ISSUE_NUMBER" ]]; then
         echo "WARN: PR #$VALUE body references #$PR_ISSUE but expected #$ISSUE_NUMBER — possible transposition" >> "$REPO_ROOT/.autoship/poll.log"
       fi
