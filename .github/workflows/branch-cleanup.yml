@@ -33,12 +33,17 @@ jobs:
             const repo = context.repo.repo;
             const ref = context.payload.pull_request.head.ref;
             const prNumber = context.payload.pull_request.number;
+            let deleted = 0;
+            let skipped = 0;
 
             // Guard against fork PR deletion of same-named local branches
             const headRepoFullName = context.payload.pull_request.head.repo?.full_name;
             const baseRepoFullName = `${owner}/${repo}`;
             if (headRepoFullName !== baseRepoFullName) {
               core.info(`⊘ Skipped fork PR branch: ${ref} (from ${headRepoFullName})`);
+              skipped++;
+              core.setOutput('deleted_count', deleted.toString());
+              core.setOutput('skipped_count', skipped.toString());
               return;
             }
 
@@ -46,12 +51,18 @@ jobs:
             const skipBranches = ['master', 'main', 'develop', 'development'];
             if (skipBranches.includes(ref)) {
               core.info(`⊘ Skipped protected branch: ${ref}`);
+              skipped++;
+              core.setOutput('deleted_count', deleted.toString());
+              core.setOutput('skipped_count', skipped.toString());
               return;
             }
 
             // Skip non-feature branches (releases, hotfixes, etc.)
             if (!ref.startsWith('claude/') && !ref.startsWith('codex/') && !ref.startsWith('feature/')) {
               core.info(`⊘ Skipped non-feature branch: ${ref}`);
+              skipped++;
+              core.setOutput('deleted_count', deleted.toString());
+              core.setOutput('skipped_count', skipped.toString());
               return;
             }
 
@@ -61,6 +72,7 @@ jobs:
                 repo,
                 ref: `heads/${ref}`
               });
+              deleted++;
               core.info(`✓ Deleted branch: ${ref}`);
 
               // Add comment to PR
@@ -78,6 +90,9 @@ jobs:
                 throw error;
               }
             }
+
+            core.setOutput('deleted_count', deleted.toString());
+            core.setOutput('skipped_count', skipped.toString());
 
       - name: Cleanup all stale merged branches
         id: stale-cleanup
@@ -124,8 +139,14 @@ jobs:
                   head: name
                 });
 
-                // If status is identical or no commits ahead (merged), delete it
-                if (compare.data.status === 'identical' || compare.data.ahead_by === 0) {
+                // Check if merged via any strategy: regular merge, squash, or rebase
+                // - Regular: status 'identical' or ahead_by === 0
+                // - Squash/rebase: ahead_by > 0 but behind_by === 0 (code already in default branch)
+                const isMerged = compare.data.status === 'identical' ||
+                                 compare.data.ahead_by === 0 ||
+                                 (compare.data.status === 'ahead' && compare.data.behind_by === 0);
+
+                if (isMerged) {
                   if (dryRun) {
                     core.info(`[DRY-RUN] Would delete merged branch: ${name}`);
                     deleteLog.push(`${name} (merged)`);
