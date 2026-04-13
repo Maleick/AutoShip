@@ -443,6 +443,8 @@ mod tests {
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             loot_state: LootState::new_demo(),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
+            api_token: None,
         })
     }
 

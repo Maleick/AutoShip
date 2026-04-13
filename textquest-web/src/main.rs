@@ -37,6 +37,12 @@ pub struct AppState {
     pub character_configs: tokio::sync::RwLock<HashMap<String, api::CharacterConfig>>,
     /// In-memory loot configuration state.
     pub loot_state: Arc<api::loot::LootState>,
+    /// In-memory economy cycle state.
+    pub economy_state: Arc<api::economy::EconomyState>,
+    /// Optional static API token for protecting all `/api` endpoints.
+    /// Set via `TEXTQUEST_API_TOKEN` environment variable.
+    /// When `None`, API endpoints are unauthenticated (localhost-only deployment).
+    pub api_token: Option<String>,
 }
 
 fn credentials_db_path() -> PathBuf {
@@ -65,12 +71,24 @@ fn build_state() -> Arc<AppState> {
             },
         );
 
+    let api_token = std::env::var("TEXTQUEST_API_TOKEN")
+        .ok()
+        .filter(|t| !t.trim().is_empty());
+
+    if api_token.is_none() {
+        tracing::warn!(
+            "TEXTQUEST_API_TOKEN is not set — API endpoints are unauthenticated.              Set this env var to enable token-based authentication."
+        );
+    }
+
     Arc::new(AppState {
         event_tx,
         account_store: Mutex::new(accounts::AccountStore::default()),
         credential_store,
         character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
         loot_state: api::loot::LootState::new_demo(),
+        economy_state: api::economy::EconomyState::new_demo(),
+        api_token,
     })
 }
 
@@ -115,6 +133,17 @@ fn build_api_router() -> Router<Arc<AppState>> {
             put(api::update_vendor_route).delete(api::delete_vendor_route),
         )
         .route("/economy/wealth", get(api::get_wealth))
+        .route("/economy/status", get(api::economy::get_status))
+        .route("/economy/ledger", get(api::economy::get_ledger))
+        .route("/economy/queues", get(api::economy::get_queues))
+        .route(
+            "/economy/pause",
+            axum::routing::post(api::economy::pause_economy),
+        )
+        .route(
+            "/economy/resume",
+            axum::routing::post(api::economy::resume_economy),
+        )
         .route(
             "/raid/config",
             get(api::raid_config_unavailable).put(api::raid_config_unavailable),
@@ -212,6 +241,8 @@ mod tests {
             ),
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
             loot_state: api::loot::LootState::new_demo(),
+            economy_state: api::economy::EconomyState::new_demo(),
+            api_token: None, // No auth in tests — auth middleware is a no-op when None
         })
     }
 
