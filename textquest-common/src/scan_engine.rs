@@ -116,12 +116,12 @@ pub fn scan_module(
         // Skip placeholder patterns (all-CC stubs). These would match the first
         // 0xCC run in the module and produce identical, misleading results for
         // every entry. Real patterns from Ghidra export will replace them.
-        if is_placeholder_pattern(entry.pattern) {
+        if is_placeholder_pattern(entry.pattern.as_str()) {
             report.entries_skipped.push(entry.name.to_string());
             continue;
         }
 
-        let pattern = Pattern::from_ida(entry.pattern);
+        let pattern = Pattern::from_ida(entry.pattern.as_str());
         let match_offset = crate::scanner::scan_region(data, &pattern);
 
         let Some(offset) = match_offset else {

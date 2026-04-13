@@ -28,6 +28,55 @@ use serde::{Deserialize, Serialize};
 
 use crate::scanner::{self, Pattern};
 
+// ── Scan module classification ────────────────────────────────────────────────
+
+/// Module identifier for offset resolution (e.g., eqgame.dll).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ScanModule {
+    EqGame,
+    EqMain,
+    EqGraphics,
+}
+
+// ── Offset category ──────────────────────────────────────────────────────────
+
+/// Categorizes an offset as a function pointer or global data address.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OffsetCategory {
+    Function,
+    Global,
+}
+
+// ── Offset resolution mode ───────────────────────────────────────────────────
+
+/// Mode for resolving a matched pattern to a preferred-base address.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResolveMode {
+    /// Direct offset at match location.
+    Direct,
+    /// RIP-relative (e.g., LEA instruction); disp_offset is the byte offset from match start to the displacement field.
+    RipRelative { disp_offset: usize },
+}
+
+// ── Scan entry ───────────────────────────────────────────────────────────────
+
+/// Single scannable offset entry with pattern, category, and resolution mode.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanEntry {
+    /// Symbolic name (e.g., "ProcessGameEvents").
+    pub name: String,
+    /// Module identifier.
+    pub module: ScanModule,
+    /// Byte pattern (IDA format).
+    pub pattern: String,
+    /// Function or global data.
+    pub category: OffsetCategory,
+    /// How to resolve the matched offset to a preferred-base address.
+    pub resolve: ResolveMode,
+    /// Expected compiled-time offset (for validation against scanned results).
+    pub expected_preferred: Option<u64>,
+}
+
 // ── Internal entry ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]

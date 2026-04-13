@@ -763,6 +763,16 @@ pub const SELECT_CHARACTER: u64 = 0x0001_400D_5D20;
 /// `CCharacterListWnd::EnterWorld` function address (preferred base, eqgame.exe)
 pub const ENTER_WORLD: u64 = 0x0001_400D_4B20;
 
+// ─── Struct size constants ───
+/// Total size of `PlayerClient` struct in bytes (estimated from field layout).
+pub const PLAYER_CLIENT_SIZE: usize = 0x4000; // Placeholder; verify with sizeof or padding analysis
+/// Maximum offset within `SPAWNINFO` (PlayerClient's spawn data).
+pub const SPAWN_INFO_MAX_OFFSET: usize = 0x1000;
+/// Size of spell struct in spell book or spell array.
+pub const EQ_SPELL_SIZE: usize = 0x100; // Placeholder
+/// Size of zone zone array (spawn manager internal array).
+pub const SPAWN_MANAGER_ZONE_ZONE_SIZE: usize = 0x8;
+
 // ─── PlayerClient (SPAWNINFO) field offsets ───
 // These are byte offsets within the PlayerClient struct.
 // Source: eqlib PlayerClient.h

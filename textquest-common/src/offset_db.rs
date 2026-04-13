@@ -248,61 +248,61 @@ impl OffsetDatabase {
 
         // No compile-time `offsets::context_menu` fallback is currently defined.
         // Leave the map empty here; JSON-loaded offsets can still populate it.
-        let cm = HashMap::new();
+        let context_menu = HashMap::new();
 
-        let mut funcs = HashMap::new();
-        funcs.insert("castSpell".into(), CAST_SPELL);
-        funcs.insert("doCombatAbility".into(), DO_COMBAT_ABILITY);
-        funcs.insert("useSkill".into(), USE_SKILL);
-        funcs.insert("canUseItem".into(), CAN_USE_ITEM);
-        funcs.insert("doAttack".into(), DO_ATTACK);
-        funcs.insert("executeCmd".into(), EXECUTE_CMD);
-        funcs.insert("interpretCmd".into(), INTERPRET_CMD);
-        funcs.insert("rightClickedOnPlayer".into(), RIGHT_CLICKED_ON_PLAYER);
-        funcs.insert("clickedPlayer".into(), CLICKED_PLAYER);
-        funcs.insert("issuePetCommand".into(), ISSUE_PET_COMMAND);
-        funcs.insert("getConLevel".into(), GET_CON_LEVEL);
-        funcs.insert("getPcClient".into(), GET_PC_CLIENT);
-        funcs.insert("doLoot".into(), DO_LOOT);
-        funcs.insert("processGameEvents".into(), PROCESS_GAME_EVENTS);
-        funcs.insert("dspChat".into(), DSP_CHAT);
-        funcs.insert("realRenderWorld".into(), REAL_RENDER_WORLD);
-        funcs.insert("fixHeading".into(), FIX_HEADING);
-        funcs.insert("getBearing".into(), GET_BEARING);
-        funcs.insert("freeTargetCastSpell".into(), FREE_TARGET_CAST_SPELL);
-        funcs.insert("changeHeight".into(), CHANGE_HEIGHT);
-        funcs.insert("zoneGuideManager".into(), ZONE_GUIDE_MANAGER);
-        funcs.insert("charListEnterWorld".into(), CHAR_LIST_ENTER_WORLD);
-        funcs.insert("charListSelectChar".into(), CHAR_LIST_SELECT_CHAR);
-        funcs.insert("cchatMgrGetRgba".into(), CCHAT_MGR_GET_RGBA);
-        funcs.insert(
+        let mut functions = HashMap::new();
+        functions.insert("castSpell".into(), CAST_SPELL);
+        functions.insert("doCombatAbility".into(), DO_COMBAT_ABILITY);
+        functions.insert("useSkill".into(), USE_SKILL);
+        functions.insert("canUseItem".into(), CAN_USE_ITEM);
+        functions.insert("doAttack".into(), DO_ATTACK);
+        functions.insert("executeCmd".into(), EXECUTE_CMD);
+        functions.insert("interpretCmd".into(), INTERPRET_CMD);
+        functions.insert("rightClickedOnPlayer".into(), RIGHT_CLICKED_ON_PLAYER);
+        functions.insert("clickedPlayer".into(), CLICKED_PLAYER);
+        functions.insert("issuePetCommand".into(), ISSUE_PET_COMMAND);
+        functions.insert("getConLevel".into(), GET_CON_LEVEL);
+        functions.insert("getPcClient".into(), GET_PC_CLIENT);
+        functions.insert("doLoot".into(), DO_LOOT);
+        functions.insert("processGameEvents".into(), PROCESS_GAME_EVENTS);
+        functions.insert("dspChat".into(), DSP_CHAT);
+        functions.insert("realRenderWorld".into(), REAL_RENDER_WORLD);
+        functions.insert("fixHeading".into(), FIX_HEADING);
+        functions.insert("getBearing".into(), GET_BEARING);
+        functions.insert("freeTargetCastSpell".into(), FREE_TARGET_CAST_SPELL);
+        functions.insert("changeHeight".into(), CHANGE_HEIGHT);
+        functions.insert("zoneGuideManager".into(), ZONE_GUIDE_MANAGER);
+        functions.insert("charListEnterWorld".into(), CHAR_LIST_ENTER_WORLD);
+        functions.insert("charListSelectChar".into(), CHAR_LIST_SELECT_CHAR);
+        functions.insert("cchatMgrGetRgba".into(), CCHAT_MGR_GET_RGBA);
+        functions.insert(
             "cchatMgrInitContextMenu".into(),
             CCHAT_MGR_INIT_CONTEXT_MENU,
         );
-        funcs.insert("cchatMgrFreeChatWindow".into(), CCHAT_MGR_FREE_CHAT_WINDOW);
-        funcs.insert(
+        functions.insert("cchatMgrFreeChatWindow".into(), CCHAT_MGR_FREE_CHAT_WINDOW);
+        functions.insert(
             "cchatMgrSetLockedActiveChat".into(),
             CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT,
         );
-        funcs.insert(
+        functions.insert(
             "cchatMgrCreateChatWindow".into(),
             CCHAT_MGR_CREATE_CHAT_WINDOW,
         );
-        funcs.insert("invSlotMgrFindSlot".into(), INV_SLOT_MGR_FIND_SLOT);
-        funcs.insert("invSlotMgrMoveItem".into(), INV_SLOT_MGR_MOVE_ITEM);
-        funcs.insert("invSlotMgrSelectSlot".into(), INV_SLOT_MGR_SELECT_SLOT);
-        funcs.insert("invSlotGetItemBase".into(), INV_SLOT_GET_ITEM_BASE);
-        funcs.insert(
+        functions.insert("invSlotMgrFindSlot".into(), INV_SLOT_MGR_FIND_SLOT);
+        functions.insert("invSlotMgrMoveItem".into(), INV_SLOT_MGR_MOVE_ITEM);
+        functions.insert("invSlotMgrSelectSlot".into(), INV_SLOT_MGR_SELECT_SLOT);
+        functions.insert("invSlotGetItemBase".into(), INV_SLOT_GET_ITEM_BASE);
+        functions.insert(
             "spellBookWndMemorizeSet".into(),
             SPELL_BOOK_WND_MEMORIZE_SET,
         );
-        funcs.insert("netSend".into(), NET_SEND);
-        funcs.insert("fileIntegrityDispatcher".into(), FILE_INTEGRITY_DISPATCHER);
-        funcs.insert("serverMemcheckHandler".into(), SERVER_MEMCHECK_HANDLER);
-        funcs.insert("worldAuthenticate".into(), WORLD_AUTHENTICATE);
-        funcs.insert("systemFingerprint".into(), SYSTEM_FINGERPRINT);
-        funcs.insert("memcheck4ProcessEnum".into(), MEMCHECK4_PROCESS_ENUM);
-        funcs.insert(
+        functions.insert("netSend".into(), NET_SEND);
+        functions.insert("fileIntegrityDispatcher".into(), FILE_INTEGRITY_DISPATCHER);
+        functions.insert("serverMemcheckHandler".into(), SERVER_MEMCHECK_HANDLER);
+        functions.insert("worldAuthenticate".into(), WORLD_AUTHENTICATE);
+        functions.insert("systemFingerprint".into(), SYSTEM_FINGERPRINT);
+        functions.insert("memcheck4ProcessEnum".into(), MEMCHECK4_PROCESS_ENUM);
+        functions.insert(
             "contextMenuMgrHandleMenu".into(),
             CONTEXT_MENU_MGR_HANDLE_MENU,
         );
