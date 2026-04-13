@@ -179,6 +179,9 @@ impl SoulCoordinator {
                 IdleTransition::Stop | IdleTransition::Continue => {}
             }
 
+            // Mood decay — natural drift toward Neutral each tick (5 s).
+            soul.mood = soul.personality.tick_decay(soul.mood, &soul.traits, 5000);
+
             // Periodic memory decay (every ~60 ticks = 5 minutes at 5s tick)
             if self.tick_count.is_multiple_of(60) {
                 let _ = self.memory.decay_tick(client_id, 0.995);
