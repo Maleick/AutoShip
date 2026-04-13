@@ -18,8 +18,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 cargo build          # Debug build (macOS OK — stubs Windows APIs)
 cargo run            # TUI with demo data (macOS) or live data (Windows)
-cargo test           # Full workspace test suite (~3,100+ tests)
-python3 scripts/dev-preflight.py  # Same checks as CI
+cargo test           # Full workspace test suite
+python3 scripts/dev-preflight.py  # Same checks as CI — ALWAYS run before pushing
 ```
 
 ## Build Commands
@@ -56,7 +56,7 @@ cargo test -p textquest test_name_here
 cargo test -p textquest --test integration test_name
 ```
 
-~3,100 tests across 4 workspace crates. Platform-independent tests run on macOS; Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024. Nightly toolchain required on Windows because the hook stack depends on `retour`.
+Platform-independent tests run on macOS; Windows-only tests are behind `#[cfg(windows)]`. Rust edition 2024. Nightly toolchain required on Windows because the hook stack depends on `retour`.
 
 **CI gate**: Required check is `PR gate (fmt + clippy + test + python)`. All jobs run on self-hosted runners — Windows builds on Frostreaver (2 runners), Linux jobs on DigitalOcean (2 runners). Branch protection requires conversation resolution. Dev preflight: `python3 scripts/dev-preflight.py`.
 
@@ -95,91 +95,14 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 
 ### Module map
 
-**`textquest/` — Orchestrator (external process)**
-
-| Module          | Purpose                                                                                                                                                                                                                                         |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `process/`      | OS-level process interaction — open, read memory, find processes/windows                                                                                                                                                                        |
-| `eq/`           | EverQuest data layer — spawn structs, spawn linked list traversal                                                                                                                                                                               |
-| tui/            | Terminal UI — app state, event handling, theme, sprites; ui/ subdir has per-panel renderers (dashboard, groups, hex dump, map, navigation, spawns, widgets)                                                                                     |
-| `config.rs`     | TOML config loading (`config/frostreaver.toml`)                                                                                                                                                                                                 |
-| `inject/`       | DLL injection and staging                                                                                                                                                                                                                       |
-| `ipc/`          | Named pipe server + shared memory setup                                                                                                                                                                                                         |
-| `client/`       | Multi-client management — sessions, self-healing monitor, CPU affinity                                                                                                                                                                          |
-| `nav/`          | Waypoint recording (RDP simplification), camp management, zone routing                                                                                                                                                                          |
-| `combat/`       | Assist target broadcasting, CC assignment, spell database                                                                                                                                                                                       |
-| `camp/`         | Camp loop state machine — buffs, CC, class config, hunt mode, loot, positioning, progression, puller, recovery, vendor                                                                                                                          |
-| `orchestrator/` | Wires camp loop state machine to IPC command delivery; `session_control.rs` manages session lifecycle                                                                                                                                           |
-| `paths.rs`      | Runtime path resolution — writable log dir selection, dump/orchestrator log paths, dump command label                                                                                                                                           |
-| `launcher/`     | Login automation — per-client login FSM, staggered launch, process spawner, post-login sequencer                                                                                                                                                |
-| `credentials/`  | Encrypted credential store — Argon2id + AES-256-GCM, SQLite backend                                                                                                                                                                             |
-| `soul/`         | Soul Engine — LLM-driven personalities, persistent memory, idle/social behavior; 12 submodules: `coordinator`, `personality`, `memory`, `idle`, `social`, `llm`, `audit`, `alerts`, `observer`, `recovery`, `config_validator`, `db_validation` |
-| `discord/`      | Discord integration — webhook alerts, command bridge, embedded serenity bot (DZ lockouts, contested mob alerts, slash commands)                                                                                                                 |
-| `loot/`         | EQ item database (SQLite), TLP loot tables, per-character wishlists, loot history                                                                                                                                                               |
-| `metrics/`      | Fleet metrics — SQLite-backed events, DPS, loot, lockout, and plat tracking for session monitor                                                                                                                                                 |
-| `economy/`      | Krono farm automation — failure handling, retry logic, vendor routines                                                                                                                                                                          |
-| `testing/`      | Test scenario builders and fleet metrics harness for integration tests                                                                                                                                                                          |
-
-**`textquest-dll/` — Injected DLL (cdylib)**
-
-| Module      | Purpose                                                                                                                                                                                                    |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hooks/`    | Game loop hooks — ProcessGameEvents, movement, casting, targeting                                                                                                                                          |
-| `eq/`       | EQ function bindings — UI widget primitives (CXWndManager, CXStr, button click via vtable)                                                                                                                 |
-| `ipc/`      | Shared memory + named pipe client                                                                                                                                                                          |
-| `nav/`      | Navigator FSM, stuck detection, movement humanization, waypoint queue                                                                                                                                      |
-| `combat/`   | Combatant FSM, ClassStrategy trait, class strategy implementations (including a generic DPS strategy), HolyShit conditions, GCD tracker, mana governor, puller FSM, aggro detection, loot, skill cooldowns |
-| `login/`    | Login state machine — eqmain.dll pointer resolution, credential entry, splash dismiss                                                                                                                      |
-| `dialog.rs` | Auto-accept dialog handling (group invite, trade, task, resurrect)                                                                                                                                         |
-| `stealth/`  | Memory stealth — Gargoyle-style sleep obfuscation, page encryption, keeps DLL code encrypted ~97% of the time                                                                                              |
-| `syscall/`  | Indirect syscalls (RecycledGate pattern) — NT API calls through ntdll gadgets to pass anti-cheat call stack inspection                                                                                     |
-
-**`textquest-common/` — Shared types**
-
-| Module                                       | Purpose                                                                                                                                         |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `offsets.rs`                                 | EQ memory addresses + struct field offsets + internal function addresses. All preferred-base (`0x140000000`), rebased at runtime via `rebase()` |
-| `offset_db.rs`                               | Hot-updatable offset database (JSON)                                                                                                            |
-| `ipc.rs`                                     | Command/Response enums for all IPC channels                                                                                                     |
-| `nav.rs`, `combat.rs`, `login.rs`, `soul.rs` | Domain-specific shared types                                                                                                                    |
-| `protocol.rs`, `types.rs`                    | Wire protocol and common type definitions                                                                                                       |
-| `ghidra_db.rs`                               | Schema/helpers for a local SQLite Ghidra query DB populated from imported analysis artifacts                                                    |
-| `packet.rs`                                  | EQ packet capture types — opcode filtering, direction-aware capture sessions                                                                    |
-| `routing.rs`                                 | Routing scope types for cross-client command dispatch (single toon, named group, all sessions)                                                  |
-| `scanner.rs`                                 | Byte-pattern signature scanner for resolving EQ function addresses (IDA-style patterns with wildcards)                                          |
-| `scan_engine.rs`                             | Advanced multi-pattern scanner with caching and confidence scoring                                                                              |
-| `pattern_db.rs`                              | Persistent pattern database — stores/retrieves known-good scanner patterns across sessions                                                      |
-| `bindings.rs`                                | Low-level EQ struct bindings — C-compatible layout types for direct memory interpretation                                                       |
-| `peer_discovery.rs`                          | LAN/Tailscale peer discovery for multi-machine orchestration                                                                                    |
-
-**`textquest-web/` — Web dashboard (axum backend + React SPA)**
-
-| Module | Purpose                                                                                                    |
-| ------ | ---------------------------------------------------------------------------------------------------------- |
-| `api/` | REST API — credentials, group config, loot tables, soul engine (`api/soul.rs`), economy (`api/economy.rs`) |
-| `ws/`  | WebSocket endpoint for live session monitoring                                                             |
-
-**`tools/` — Developer utilities**
-
-| Tool         | Purpose                                                              |
-| ------------ | -------------------------------------------------------------------- |
-| `eqdiff`     | Diff EQ memory layouts across game versions — offset drift detection |
-| `llm-client` | Standalone LLM client library for Soul Engine integration testing    |
+- `textquest`: external orchestrator binary; reads EQ state, manages the TUI, CLI modes, and process-facing control flow.
+- `textquest-dll`: injected `cdylib`; hooks internal EverQuest functions and exposes direct in-process control/state capture.
+- `textquest-common`: shared types and protocol surface used by the orchestrator, DLL, and other consumers.
+- `textquest-web`: axum + React web dashboard for browser-based status and control surfaces.
 
 ### Milestones
 
-- **M1** (complete): External memory reading + TUI dashboard
-- **M2** (complete): DLL injection, internal function hooking, IPC, self-healing monitor
-- **M2.5** (complete): Login automation — credential store, process spawner, login FSM, launch coordinator
-- **M3** (complete): Navigation — waypoint pathfinding, Navigator FSM, humanization, stuck detection, zone router
-- **M4** (complete): Combat automation — ClassStrategy trait, 17 classes, HolyShit system, puller FSM, combat coordinator
-- **M5** (complete): Anti-Cheat — reflective injection, HWBP hooks, sleep obfuscation, indirect syscalls, ETW blinding, page encryption, stack spoofing, fingerprint spoofing
-- **M6** (complete): Web Dashboard — axum + React/Vite/Tailwind SPA for credentials, group/camp config, session monitoring; TUI enhancements (EQ Internals, packet sniffer, map rework, Neriak theme)
-- **M7** (in progress): Zoning/Movement — zone transitions, movement validation, travel recovery
-- **M8** (in progress): Orchestrator — multibox coordination, group/session control, relay surfaces
-- **M9**: Learning/RL — behavioral cloning, RL fine-tuning
-- **M10**: Economy — Krono farm, vendor automation, loot distribution, banking
-- **M11**: Soul Engine + LLM — local AI (Gemma 4/ollama), personalities, in-game chat (no external API)
+See `docs/implementation-roadmap.md` for current milestone status and sequencing.
 
 ## Configuration Files
 
@@ -206,6 +129,7 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **Platform gates**: All OS APIs behind `#[cfg(windows)]` with macOS/Linux stubs. Never use `#[cfg(target_os)]` directly — use `#[cfg(windows)]` / `#[cfg(not(windows))]`.
 - **DLL injection approach**: Custom Rust DLL (like MacroQuest) rather than PostMessage — enables direct EQ function calls, navmesh access, and game memory writes.
 - **Tests**: Unit tests in-file (#[cfg(test)]); core logic tests are platform-independent and run on macOS, while Windows-specific tests are gated behind #[cfg(windows)].
+- **IPC dual-channel**: Named pipe and shared memory names are derived via `textquest_common::ipc::pipe_name(session_id, client_id)` / `shared_memory_name(session_id, client_id)`. In practice this is `\\.\pipe\{session_id:x}_cmd_{client_id}` for commands (bidirectional, request/response) and `{session_id:x}_state_{client_id}` for state frames (broadcast, write-once per frame). `session_id` is required; do not assume the old predictable `textquest_cmd_` / `textquest_state_` prefixes.
 
 ## Gotchas
 
@@ -215,6 +139,7 @@ All Windows process APIs are behind `#[cfg(windows)]` with macOS/Linux stubs. Th
 - **MacroQuest/eqlib references are optional local checkouts**: keep them outside the repo if you use them for offset or struct-reference work. Routine `cargo build` / `cargo test` work does not require them. Derived offsets still live in `textquest-common/src/offsets.rs`.
 - **Field reads, not struct casts**: If you see individual field reads where a struct read seems obvious, that's by design. MQ2 struct layouts have gaps.
 - **Nightly MSVC toolchain**: Windows builds require nightly Rust because `retour` (function hooking) uses unstable features. macOS builds work on stable.
+- **Edit tool + post-write automation**: Some local agent/editor setups run post-write automation that touches additional files and updates mtimes after an edit. This can trip Claude Code's "file modified since read" guard on subsequent edits in the same session. Fix: make all edits to a file in one `Edit` call, or use `Bash` for multi-edit `.rs` changes.
 - **Self-hosted runner workspaces persist**: Files from previous runs may exist at test import time but vanish after `actions/checkout`. Use `self.skipTest()` inside test bodies instead of `@unittest.skipUnless` for file-existence guards.
 - **Agent artifact files are gitignored**: `AUTOSHIP_RESULT.md`, `AUTOSHIP_PROMPT.md`, `BEACON_RESULT.md`, `BEACON_PROMPT.md`, `.autoship/` — never commit these. They are runtime outputs from the agent pipeline.
 - **const fn misuse**: Drop `const` from functions that allocate (`Vec`, `String`, `Box`), take `&mut self`, or call non-const functions — none of these are const-evaluable. `#[cfg]`-gated blocks inside `const fn` are a separate but related rejection trigger.
