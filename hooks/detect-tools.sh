@@ -40,9 +40,11 @@ quota_codex_openai_api() {
   local today
   today=$(date -u +"%Y-%m-%d")
   local response
-  response=$(curl -sf --max-time 5 \
-    "https://api.openai.com/v1/usage?date=${today}" \
-    -H "Authorization: Bearer $OPENAI_API_KEY" 2>/dev/null) || return 1
+  response=$(curl -sf --max-time 5 --config - 2>/dev/null <<EOF
+url = "https://api.openai.com/v1/usage?date=${today}"
+header = "Authorization: Bearer ${OPENAI_API_KEY}"
+EOF
+) || return 1
   # Parse total_usage (in cents); assume ~$20 daily budget → 2000 cents
   local used_cents
   used_cents=$(echo "$response" | jq -r '[.data[].total_usage // 0] | add // 0' 2>/dev/null) || return 1
@@ -80,8 +82,11 @@ quota_gemini_api() {
   [[ -z "$api_key" ]] && return 1
   # Check quota via generativelanguage API — returns 429 when rate-limited
   local status
-  status=$(curl -sf --max-time 5 -o /dev/null -w "%{http_code}" \
-    "https://generativelanguage.googleapis.com/v1beta/models?key=${api_key}" 2>/dev/null) || return 1
+  status=$(curl -sf --max-time 5 -o /dev/null -w "%{http_code}" --config - 2>/dev/null <<EOF
+url = "https://generativelanguage.googleapis.com/v1beta/models"
+header = "x-goog-api-key: ${api_key}"
+EOF
+) || return 1
   case "$status" in
     200) echo "100"; GEMINI_QUOTA_SOURCE="api" ;;  # reachable → assume full
     429) echo "0";   GEMINI_QUOTA_SOURCE="api" ;;  # rate limited → exhausted
