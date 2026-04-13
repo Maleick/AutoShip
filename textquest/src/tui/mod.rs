@@ -33,6 +33,8 @@ pub mod priorities;
 pub mod run;
 /// Session monitor — fleet overview and per-client drill-down tracking.
 pub mod session_monitor;
+/// Sound alert system — configurable audio event triggers for fleet notifications.
+pub mod sound;
 /// ASCII sprite definitions for the map overlay.
 pub mod sprites;
 /// Per-screen UI state — scroll positions, selections, input buffers.
