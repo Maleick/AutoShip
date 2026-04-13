@@ -59,6 +59,9 @@ pub mod tui;
 
 /// CLI subcommands (dump, inject, navigate, login, etc.).
 pub mod cli;
+/// Testing utilities — scenario harness, metric types, and result types.
+#[allow(dead_code)]
+pub mod testing;
 
 /// Economy system — failure routing and recovery for Krono farm / vendor loops.
 #[allow(dead_code)]
