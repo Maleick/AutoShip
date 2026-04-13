@@ -20,7 +20,7 @@ jobs:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Configure Git safe directories
         uses: ./.github/actions/configure-safe-directory

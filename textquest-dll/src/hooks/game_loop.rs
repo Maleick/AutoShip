@@ -78,6 +78,11 @@ static PENDING_CHAR_NAME: std::sync::OnceLock<std::sync::Mutex<String>> =
 static CACHED_NEARBY_FOR_STICK: std::sync::Mutex<Vec<textquest_common::types::SpawnData>> =
     std::sync::Mutex::new(Vec::new());
 
+/// Previous nearby-spawn snapshot used for delta detection and spawn event emission.
+static PREV_NEARBY_SPAWNS: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<u32, String>>,
+> = std::sync::OnceLock::new();
+
 /// Set a button widget address to be clicked on the next game loop tick.
 /// Called from the IPC thread after writing credentials.
 pub fn queue_button_click(button_wnd: usize) {
@@ -1293,6 +1298,7 @@ fn process_pending_commands(current_tick: u64) {
 /// Called every frame (~20/sec) after the original `MainLoop` runs.
 /// This is our main entry point for per-frame logic.
 fn on_game_tick() {
+    let tick_start = std::time::Instant::now();
     let tick = TICK_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
     // Check foreground status every 30 frames (~1.5 seconds) to minimize overhead.
@@ -1555,6 +1561,16 @@ fn on_game_tick() {
 
     // Read game state and publish to shared memory for the orchestrator.
     read_and_publish_state(tick);
+
+    let overhead = tick_start.elapsed();
+    let overhead_nanos = overhead.as_nanos();
+    crate::hooks::timing::record_game_loop_hook_overhead(overhead);
+    #[cfg(debug_assertions)]
+    tracing::debug!(
+        elapsed_ns = overhead_nanos,
+        tick = tick,
+        "ProcessGameEvents hook overhead recorded"
+    );
 }
 
 /// Send Enter key to this EQ process's window via `PostMessage`.
@@ -1656,6 +1672,23 @@ fn read_and_publish_state(tick: u64) {
         let spawns = read_nearby_spawns(eq_base, player.x, player.y, player.z);
         let (zone_short, zone_long) = read_zone_names(eq_base);
 
+        let prev_cache = PREV_NEARBY_SPAWNS
+            .get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+        if let Ok(mut previous) = prev_cache.lock() {
+            let (next_previous, spawn_events) = compute_spawn_delta_events(
+                &previous,
+                &spawns,
+                zone_short.clone(),
+                current_time_ms(),
+            );
+            *previous = next_previous;
+            if !spawn_events.is_empty() {
+                crate::ipc::send_response(textquest_common::ipc::Response::SpawnEventBatch {
+                    events: spawn_events,
+                });
+            }
+        }
+
         // Update cached nearby spawns for the stick engine (accessed by nav::tick each frame).
         if let Ok(mut cached_nearby) = CACHED_NEARBY_FOR_STICK.lock() {
             cached_nearby.clone_from(&spawns);
@@ -1671,6 +1704,7 @@ fn read_and_publish_state(tick: u64) {
             combat_status: crate::combat::status(),
             zone_short_name: zone_short,
             zone_long_name: zone_long,
+            actual_version: crate::eq_actual_version(),
         });
     } else if let Some(ref mut state) = *cached {
         state.local_player = local_player;
@@ -1691,6 +1725,55 @@ fn read_and_publish_state(tick: u64) {
         let frame = state.to_shared_frame(spawn_epoch, refresh_spawns);
         crate::ipc::publish_state(&frame);
     }
+}
+
+fn compute_spawn_delta_events(
+    previous: &std::collections::HashMap<u32, String>,
+    current: &[textquest_common::types::SpawnData],
+    zone: String,
+    timestamp_ms: u64,
+) -> (
+    std::collections::HashMap<u32, String>,
+    Vec<textquest_common::ipc::SpawnEvent>,
+) {
+    let mut next = std::collections::HashMap::new();
+    let mut events = Vec::new();
+    for spawn in current {
+        if spawn.spawn_id == 0 {
+            continue;
+        }
+        next.insert(spawn.spawn_id, spawn.displayed_name.clone());
+    }
+
+    if previous.is_empty() {
+        return (next, events);
+    }
+
+    for (spawn_id, name) in &next {
+        if !previous.contains_key(spawn_id) {
+            events.push(textquest_common::ipc::SpawnEvent {
+                client_id: std::process::id(),
+                zone: zone.clone(),
+                spawn_name: name.clone(),
+                kind: textquest_common::ipc::SpawnEventKind::Created,
+                timestamp_ms,
+            });
+        }
+    }
+
+    for (spawn_id, name) in previous {
+        if !next.contains_key(spawn_id) {
+            events.push(textquest_common::ipc::SpawnEvent {
+                client_id: std::process::id(),
+                zone: zone.clone(),
+                spawn_name: name.clone(),
+                kind: textquest_common::ipc::SpawnEventKind::Destroyed,
+                timestamp_ms,
+            });
+        }
+    }
+
+    (next, events)
 }
 
 /// Check whether `addr` points to at least `len` bytes of readable committed memory.
@@ -2820,6 +2903,17 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             tracing::info!("Eject command received — shutting down");
             crate::graceful_shutdown();
         }
+        Command::SetTimingCorrection { enabled } => {
+            if enabled {
+                if let Err(e) = crate::hooks::timing::install() {
+                    tracing::warn!("Timing hook install failed: {e}");
+                }
+            } else {
+                crate::hooks::timing::remove();
+            }
+            crate::hooks::timing::set_enabled(enabled);
+            tracing::info!(enabled, "SetTimingCorrection received");
+        }
         Command::CastSpell {
             spell_slot,
             target_id,
@@ -3555,6 +3649,61 @@ fn execute_slash_command(command: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+
+    fn fake_spawn(id: u32, display: &str) -> textquest_common::types::SpawnData {
+        textquest_common::types::SpawnData {
+            spawn_id: id,
+            displayed_name: display.to_string(),
+            name: display.to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn spawn_delta_events_report_created_and_destroyed() {
+        let previous: HashMap<u32, String> = [(1u32, "a_wolf".into()), (2, "a_bear".into())]
+            .into_iter()
+            .collect();
+
+        let current = vec![fake_spawn(2, "a_bear"), fake_spawn(3, "a_ox")];
+        let (next, events) =
+            compute_spawn_delta_events(&previous, &current, "freportw".into(), 12345);
+
+        assert_eq!(
+            next,
+            [(2u32, "a_bear".to_string()), (3u32, "a_ox".to_string())]
+                .into_iter()
+                .collect()
+        );
+        assert_eq!(events.len(), 2);
+        assert_eq!(
+            events.first().unwrap().kind,
+            textquest_common::ipc::SpawnEventKind::Created
+        );
+        assert_eq!(events.first().unwrap().spawn_name, "a_ox");
+        assert_eq!(
+            events.get(1).unwrap().kind,
+            textquest_common::ipc::SpawnEventKind::Destroyed
+        );
+        assert_eq!(events.get(1).unwrap().spawn_name, "a_wolf");
+    }
+
+    #[test]
+    fn spawn_delta_events_with_empty_previous_emits_none() {
+        let previous: HashMap<u32, String> = HashMap::new();
+        let current = vec![fake_spawn(10, "a_goblin")];
+        let (next, events) = compute_spawn_delta_events(&previous, &current, "freportw".into(), 1);
+
+        assert_eq!(
+            next,
+            [(10u32, "a_goblin".to_string())].into_iter().collect()
+        );
+        assert!(
+            events.is_empty(),
+            "initial snapshots should be used as baseline without emission"
+        );
+    }
 
     #[test]
     fn spell_set_command_parser_supports_shortcuts() {

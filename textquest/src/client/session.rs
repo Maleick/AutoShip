@@ -263,6 +263,7 @@ mod tests {
             combat_status: textquest_common::combat::CombatStatus::Idle,
             zone_short_name: "test".into(),
             zone_long_name: "Test Zone".into(),
+            actual_version: None,
         }
     }
 
@@ -330,6 +331,7 @@ mod tests {
             combat_status: textquest_common::combat::CombatStatus::Idle,
             zone_short_name: String::new(),
             zone_long_name: String::new(),
+            actual_version: None,
         };
         s.update_state(state);
         assert!(s.character_name.is_none());
@@ -362,6 +364,7 @@ mod tests {
             combat_status: textquest_common::combat::CombatStatus::Idle,
             zone_short_name: "zone1".into(),
             zone_long_name: "Zone One".into(),
+            actual_version: None,
         };
         let state2 = GameState {
             client_id: 1,
@@ -373,6 +376,7 @@ mod tests {
             combat_status: textquest_common::combat::CombatStatus::Idle,
             zone_short_name: "zone2".into(),
             zone_long_name: "Zone Two".into(),
+            actual_version: None,
         };
         s.update_state(state1);
         assert_eq!(s.last_state.as_ref().unwrap().timestamp_ms, 100);

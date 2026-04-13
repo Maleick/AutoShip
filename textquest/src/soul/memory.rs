@@ -1,14 +1,83 @@
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
 use textquest_common::soul::{MoodState, SoulEvent, SpeechStyle};
 use textquest_common::types::ClientId;
 
+/// Exponential backoff delays for database retry logic (milliseconds).
+const RETRY_DELAYS_MS: [u64; 5] = [100, 500, 1_000, 5_000, 30_000];
+
+/// Maximum consecutive failures before the circuit breaker opens.
+const CIRCUIT_BREAKER_THRESHOLD: u32 = 5;
+
+/// Maximum number of entries held in the in-memory fallback cache.
+const FALLBACK_CACHE_MAX: usize = 256;
+
+/// Health state shared across retried operations.
+#[derive(Debug, Default)]
+struct DbHealth {
+    /// Count of consecutive write failures.
+    consecutive_failures: AtomicU32,
+    /// Circuit breaker: true means DB writes are disabled.
+    circuit_open: AtomicBool,
+}
+
+impl DbHealth {
+    fn record_success(&self) {
+        self.consecutive_failures.store(0, Ordering::Relaxed);
+        if self.circuit_open.swap(false, Ordering::Relaxed) {
+            tracing::info!("memory_store: circuit breaker closed — DB writes re-enabled");
+        }
+    }
+
+    fn record_failure(&self, op: &str, err: &anyhow::Error) {
+        let prev = self.consecutive_failures.fetch_add(1, Ordering::Relaxed);
+        let count = prev + 1;
+        tracing::warn!(op, consecutive_failures = count, error = %err, "memory_store: DB write failed");
+        if count >= CIRCUIT_BREAKER_THRESHOLD && !self.circuit_open.load(Ordering::Relaxed) {
+            self.circuit_open.store(true, Ordering::Relaxed);
+            tracing::error!(
+                "memory_store: circuit breaker OPEN after {} consecutive failures — DB writes disabled",
+                count
+            );
+        }
+    }
+
+    fn is_open(&self) -> bool {
+        self.circuit_open.load(Ordering::Relaxed)
+    }
+}
+
+/// A cached record held in the fallback in-memory store.
+#[derive(Debug, Clone)]
+struct CachedMemory {
+    character_id: ClientId,
+    event_type: String,
+    event_json: String,
+    zone: Option<String>,
+    mood_at_time: String,
+    importance: f32,
+}
+
 /// Autobiographical memory store backed by `SQLite`.
 /// One database per deployment, partitioned by `character_id`.
+///
+/// Includes:
+/// - Exponential backoff retry (up to 5 attempts) on transient DB errors
+/// - Circuit breaker that disables writes after 5 consecutive failures
+/// - In-memory fallback cache (up to 256 entries) when the circuit is open
 pub struct MemoryStore {
     conn: Connection,
+    health: Arc<DbHealth>,
+    /// In-memory fallback cache used when the circuit breaker is open.
+    /// Uses `RefCell` for interior mutability so write methods retain `&self`.
+    fallback_cache: RefCell<VecDeque<CachedMemory>>,
 }
 
 const SCHEMA: &str = "
@@ -75,6 +144,22 @@ CREATE TABLE IF NOT EXISTS shared_references (
 CREATE INDEX IF NOT EXISTS idx_shared_refs
     ON shared_references(character_a, character_b);
 
+CREATE TABLE IF NOT EXISTS soul_audit_log (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL,
+    action_type  TEXT NOT NULL,
+    action_json  TEXT NOT NULL,
+    reason       TEXT,
+    operator_id  TEXT,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_character
+    ON soul_audit_log(character_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_audit_action_type
+    ON soul_audit_log(action_type, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS speech_patterns (
     character_id     INTEGER PRIMARY KEY,
     vocabulary_level REAL NOT NULL DEFAULT 0.5,
@@ -86,27 +171,93 @@ CREATE TABLE IF NOT EXISTS speech_patterns (
 );
 ";
 
+/// Retry a fallible DB operation with exponential backoff.
+///
+/// Attempts the operation up to `RETRY_DELAYS_MS.len() + 1` times (6 total).
+/// Sleeps between attempts using the delays in `RETRY_DELAYS_MS`.
+/// Returns the last error if all attempts fail.
+fn retry_db_op<T, F>(op_name: &'static str, mut f: F) -> Result<T>
+where
+    F: FnMut() -> Result<T>,
+{
+    let mut last_err = None;
+    for (attempt, &delay_ms) in std::iter::once(&0u64)
+        .chain(RETRY_DELAYS_MS.iter())
+        .enumerate()
+    {
+        if delay_ms > 0 {
+            tracing::debug!(
+                op = op_name,
+                attempt,
+                delay_ms,
+                "memory_store: retrying DB op"
+            );
+            std::thread::sleep(Duration::from_millis(delay_ms));
+        }
+        match f() {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                tracing::warn!(op = op_name, attempt, error = %e, "memory_store: DB op failed");
+                last_err = Some(e);
+            }
+        }
+    }
+    Err(last_err.expect("retry loop must set last_err"))
+}
+
 impl MemoryStore {
     /// Open (or create) the memory database at the given path.
     ///
+    /// On transient failures, retries with exponential backoff (up to 5 attempts).
+    ///
     /// # Errors
     ///
-    /// Returns an error if the operation fails.
+    /// Returns an error if the operation fails after all retries.
     pub fn open(path: &Path) -> Result<Self> {
-        let conn = Connection::open(path)
-            .with_context(|| format!("Failed to open memory store at {}", path.display()))?;
+        let conn = retry_db_op("open", || {
+            Connection::open(path)
+                .with_context(|| format!("Failed to open memory store at {}", path.display()))
+        })?;
 
+        retry_db_op("schema_init", || {
+            conn.execute_batch(SCHEMA)
+                .context("Failed to initialize memory store schema")
+        })?;
+
+        Ok(Self {
+            conn,
+            health: Arc::new(DbHealth::default()),
+            fallback_cache: RefCell::new(VecDeque::new()),
+        })
+    }
+
+    /// Open an in-memory database — available in `#[cfg(test)]` only so that
+    /// tests outside this module (e.g. `soul::perf_tests`) can construct a
+    /// `MemoryStore` without touching the filesystem.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the in-memory connection cannot be opened or the schema fails
+    /// to apply — both are programmer errors in a test context.
+    #[cfg(test)]
+    pub fn open_in_memory() -> Self {
+        let conn = Connection::open_in_memory().expect("Failed to open in-memory SQLite");
         conn.execute_batch(SCHEMA)
-            .context("Failed to initialize memory store schema")?;
-
-        Ok(Self { conn })
+            .expect("Failed to apply schema to in-memory store");
+        Self { conn }
     }
 
     /// Record a soul event as a memory for a character.
     ///
+    /// Uses exponential backoff retry on transient failures. If the circuit
+    /// breaker is open, the memory is written to an in-memory fallback cache
+    /// instead of the database so no data is permanently lost for recent events.
+    ///
     /// # Errors
     ///
-    /// Returns an error if the operation fails.
+    /// Returns an error if serialization fails. DB errors are handled internally
+    /// (logged + fallback cache) and do not propagate unless the caller needs
+    /// the inserted row ID for further operations.
     pub fn record(
         &self,
         character_id: ClientId,
@@ -119,13 +270,78 @@ impl MemoryStore {
         let zone = event_zone(event);
         let mood_str = format!("{mood:?}");
 
-        self.conn.execute(
-            "INSERT INTO memories (character_id, event_type, event_json, zone, mood_at_time, importance)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![character_id, event_type, event_json, zone, mood_str, importance],
-        ).context("Failed to record memory")?;
+        // If the circuit is open, write to fallback cache and return a synthetic ID.
+        if self.health.is_open() {
+            tracing::warn!(
+                character_id,
+                event_type,
+                "memory_store: circuit open — buffering memory in fallback cache"
+            );
+            self.push_fallback(CachedMemory {
+                character_id,
+                event_type: event_type.to_string(),
+                event_json,
+                zone,
+                mood_at_time: mood_str,
+                importance,
+            });
+            return Ok(-1);
+        }
 
-        Ok(self.conn.last_insert_rowid())
+        let result = retry_db_op("record_memory", || {
+            self.conn
+                .execute(
+                    "INSERT INTO memories (character_id, event_type, event_json, zone, mood_at_time, importance)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![character_id, event_type, &event_json, &zone, &mood_str, importance],
+                )
+                .context("Failed to record memory")
+        });
+
+        match result {
+            Ok(_) => {
+                self.health.record_success();
+                Ok(self.conn.last_insert_rowid())
+            }
+            Err(e) => {
+                self.health.record_failure("record_memory", &e);
+                tracing::warn!(
+                    character_id,
+                    event_type,
+                    error = %e,
+                    "memory_store: falling back to in-memory cache after retry exhaustion"
+                );
+                self.push_fallback(CachedMemory {
+                    character_id,
+                    event_type: event_type.to_string(),
+                    event_json,
+                    zone,
+                    mood_at_time: mood_str,
+                    importance,
+                });
+                Ok(-1)
+            }
+        }
+    }
+
+    /// Push a memory entry into the in-memory fallback cache, evicting the
+    /// oldest entry when the cache is full.
+    fn push_fallback(&self, entry: CachedMemory) {
+        let mut cache = self.fallback_cache.borrow_mut();
+        if cache.len() >= FALLBACK_CACHE_MAX {
+            cache.pop_front();
+        }
+        cache.push_back(entry);
+    }
+
+    /// Returns the number of memories currently held in the fallback cache.
+    pub fn fallback_cache_len(&self) -> usize {
+        self.fallback_cache.borrow().len()
+    }
+
+    /// Returns true if the circuit breaker is open (DB writes disabled).
+    pub fn is_circuit_open(&self) -> bool {
+        self.health.is_open()
     }
 
     /// Recall the N most recent memories for a character.
@@ -202,7 +418,7 @@ impl MemoryStore {
         is_player: bool,
         channel: &str,
         message: &str,
-        sentiment: Option<f32>,
+        sentiment: f32,
     ) -> Result<()> {
         self.conn.execute(
             "INSERT INTO conversations (character_id, speaker, is_player, channel, message, sentiment)
@@ -386,6 +602,47 @@ impl MemoryStore {
         &self.conn
     }
 
+    /// Return the top `max_memories` memories ranked by combined importance × recency score.
+    ///
+    /// Recency is computed as `max(0.0, 1.0 - (days_ago / 30.0))` so memories
+    /// created today score 1.0 and memories older than 30 days score 0.0.
+    /// Combined score is `importance * recency`.
+    ///
+    /// No DB writes are performed — this is a pure read + ordering operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn get_llm_context(
+        &self,
+        character_id: ClientId,
+        max_memories: usize,
+    ) -> Result<Vec<MemoryRow>> {
+        // Pull all non-decayed memories for the character.
+        let mut stmt = self.conn.prepare(
+            "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, decayed
+             FROM memories
+             WHERE character_id = ?1 AND decayed = 0",
+        )?;
+
+        let mut rows: Vec<MemoryRow> = stmt
+            .query_map(params![character_id], MemoryRow::from_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("Failed to read memories for LLM context")?;
+
+        // Score each memory and sort descending.
+        rows.sort_by(|a, b| {
+            let score_a = memory_combined_score(a);
+            let score_b = memory_combined_score(b);
+            score_b
+                .partial_cmp(&score_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        rows.truncate(max_memories);
+        Ok(rows)
+    }
+
     // -- Decay & pruning (Task 8) --
 
     /// Apply exponential decay to all non-decayed memories for a character.
@@ -450,6 +707,103 @@ impl MemoryStore {
         Ok(())
     }
 
+    /// Generate a compact text summary of memories in a unix-timestamp time window.
+    ///
+    /// Queries all non-decayed memories for `character_id` with `created_at`
+    /// between `period_start` and `period_end` (inclusive, unix seconds).
+    /// Formats each event as "[zone] event_type: description" (one line per event).
+    /// Appends the most common mood in the window at the end as "Mood trend: X".
+    /// The returned string is capped at 500 bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub fn generate_summary(
+        &self,
+        character_id: ClientId,
+        period_start: i64,
+        period_end: i64,
+    ) -> Result<String> {
+        // Query memories in the time window by converting unix timestamp parameters
+        // to SQLite datetimes, so the created_at index remains usable.
+        let mut stmt = self.conn.prepare(
+            "SELECT event_type, event_json, zone, mood_at_time
+             FROM memories
+             WHERE character_id = ?1
+               AND decayed = 0
+               AND created_at >= datetime(?2, 'unixepoch')
+               AND created_at <= datetime(?3, 'unixepoch')
+             ORDER BY created_at ASC",
+        )?;
+
+        struct MemSummaryRow {
+            event_type: String,
+            event_json: String,
+            zone: Option<String>,
+            mood: String,
+        }
+
+        let rows = stmt
+            .query_map(params![character_id, period_start, period_end], |row| {
+                Ok(MemSummaryRow {
+                    event_type: row.get(0)?,
+                    event_json: row.get(1)?,
+                    zone: row.get(2)?,
+                    mood: row.get(3)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("Failed to query memories for summary")?;
+
+        if rows.is_empty() {
+            return Ok(String::new());
+        }
+
+        // Count moods to find the trend (most common).
+        let mut mood_counts: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for row in &rows {
+            *mood_counts.entry(row.mood.clone()).or_insert(0) += 1;
+        }
+        let mood_trend = mood_counts
+            .into_iter()
+            .max_by(|(mood_a, count_a), (mood_b, count_b)| {
+                count_a.cmp(count_b).then_with(|| mood_a.cmp(mood_b))
+            })
+            .map(|(mood, _)| mood)
+            .unwrap_or_else(|| "Neutral".to_string());
+
+        // Build compact lines.
+        let mut lines: Vec<String> = Vec::with_capacity(rows.len() + 1);
+        for row in &rows {
+            let zone_prefix = row
+                .zone
+                .as_deref()
+                .map(|z| format!("[{z}] "))
+                .unwrap_or_default();
+
+            // Extract a short human-readable description from the event JSON.
+            let description = describe_event(&row.event_type, &row.event_json);
+            lines.push(format!("{zone_prefix}{}: {description}", row.event_type));
+        }
+
+        // Append mood trend line.
+        lines.push(format!("Mood trend: {mood_trend}"));
+
+        // Join and cap at 500 chars.
+        let full = lines.join("\n");
+        if full.len() <= 500 {
+            Ok(full)
+        } else {
+            // Truncate at a UTF-8 boundary.
+            let mut end = 500;
+            while !full.is_char_boundary(end) {
+                end -= 1;
+            }
+            Ok(full[..end].to_string())
+        }
+    }
+
     /// Export all memories and conversations for a character as JSON.
     /// Used for per-character portability and LLM context building.
     ///
@@ -495,6 +849,215 @@ impl MemoryStore {
 
         serde_json::to_string_pretty(&export).context("Failed to serialize character export")
     }
+
+    // ── Audit log ────────────────────────────────────────────────────────────
+
+    /// Append an entry to the immutable audit log.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the insert fails.
+    pub fn audit_log(
+        &self,
+        character_id: ClientId,
+        action_type: &str,
+        action_json: &str,
+        reason: Option<&str>,
+        operator_id: Option<&str>,
+    ) -> Result<i64> {
+        self.conn
+            .execute(
+                "INSERT INTO soul_audit_log \
+                 (character_id, action_type, action_json, reason, operator_id) \
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![character_id, action_type, action_json, reason, operator_id],
+            )
+            .context("Failed to append audit log entry")?;
+
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Retrieve audit log entries for a character within an optional date range.
+    ///
+    /// `start_date` and `end_date` are ISO-8601 strings (`"YYYY-MM-DD"` or
+    /// `"YYYY-MM-DD HH:MM:SS"`).  Pass `None` to omit the respective bound.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_audit_log(
+        &self,
+        character_id: ClientId,
+        start_date: Option<&str>,
+        end_date: Option<&str>,
+    ) -> Result<Vec<AuditEntry>> {
+        let mut sql = String::from(
+            "SELECT id, character_id, action_type, action_json, reason, operator_id, created_at \
+             FROM soul_audit_log \
+             WHERE character_id = ?1",
+        );
+        if start_date.is_some() {
+            sql.push_str(" AND created_at >= ?2");
+        }
+        if end_date.is_some() {
+            sql.push_str(if start_date.is_some() {
+                " AND created_at <= ?3"
+            } else {
+                " AND created_at <= ?2"
+            });
+        }
+        sql.push_str(" ORDER BY created_at DESC");
+
+        let mut stmt = self.conn.prepare(&sql)?;
+
+        let rows = match (start_date, end_date) {
+            (Some(s), Some(e)) => stmt
+                .query_map(params![character_id, s, e], AuditEntry::from_row)?
+                .collect::<std::result::Result<Vec<_>, _>>(),
+            (Some(s), None) => stmt
+                .query_map(params![character_id, s], AuditEntry::from_row)?
+                .collect::<std::result::Result<Vec<_>, _>>(),
+            (None, Some(e)) => stmt
+                .query_map(params![character_id, e], AuditEntry::from_row)?
+                .collect::<std::result::Result<Vec<_>, _>>(),
+            (None, None) => stmt
+                .query_map(params![character_id], AuditEntry::from_row)?
+                .collect::<std::result::Result<Vec<_>, _>>(),
+        }
+        .context("Failed to query audit log")?;
+
+        Ok(rows)
+    }
+
+    /// Retrieve all audit log entries for a given action type (across all characters).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_audit_log_by_action(&self, action_type: &str) -> Result<Vec<AuditEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, character_id, action_type, action_json, reason, operator_id, created_at \
+             FROM soul_audit_log \
+             WHERE action_type = ?1 \
+             ORDER BY created_at DESC",
+        )?;
+
+        let rows = stmt
+            .query_map(params![action_type], AuditEntry::from_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("Failed to query audit log by action")?;
+
+        Ok(rows)
+    }
+
+    /// Return per-day action counts for a character (oldest day first).
+    ///
+    /// Each element is `(date_str, count)` where `date_str` is `"YYYY-MM-DD"`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_audit_summary(&self, character_id: ClientId) -> Result<Vec<AuditDaySummary>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT date(created_at) AS day, COUNT(*) AS cnt \
+             FROM soul_audit_log \
+             WHERE character_id = ?1 \
+             GROUP BY day \
+             ORDER BY day ASC",
+        )?;
+
+        let rows = stmt
+            .query_map(params![character_id], |row| {
+                Ok(AuditDaySummary {
+                    date: row.get(0)?,
+                    count: row.get(1)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("Failed to query audit summary")?;
+
+        Ok(rows)
+    }
+
+    /// Export the full audit log for a character as a CSV string.
+    ///
+    /// Columns: `id,character_id,action_type,action_json,reason,operator_id,created_at`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query or serialisation fails.
+    pub fn export_audit_csv(&self, character_id: ClientId) -> Result<String> {
+        let entries = self.get_audit_log(character_id, None, None)?;
+
+        let mut out =
+            String::from("id,character_id,action_type,action_json,reason,operator_id,created_at\n");
+        for e in &entries {
+            // Minimal CSV escaping: wrap fields containing commas or quotes in
+            // double-quotes and double any internal quotes.
+            let csv_field = |s: &str| -> String {
+                if s.contains(',') || s.contains('"') || s.contains('\n') {
+                    format!("\"{}\"", s.replace('"', "\"\""))
+                } else {
+                    s.to_owned()
+                }
+            };
+            let reason = e.reason.as_deref().unwrap_or("");
+            let operator = e.operator_id.as_deref().unwrap_or("");
+            out.push_str(&format!(
+                "{},{},{},{},{},{},{}\n",
+                e.id,
+                e.character_id,
+                csv_field(&e.action_type),
+                csv_field(&e.action_json),
+                csv_field(reason),
+                csv_field(operator),
+                csv_field(&e.created_at),
+            ));
+        }
+        Ok(out)
+    }
+}
+
+/// A row from the `soul_audit_log` table.
+#[derive(Debug, Clone)]
+pub struct AuditEntry {
+    /// Database row ID.
+    pub id: i64,
+    /// Character this action belongs to.
+    pub character_id: i64,
+    /// Short label for the action (e.g., `"say"`, `"mood_change"`).
+    pub action_type: String,
+    /// Full action payload as a JSON string.
+    pub action_json: String,
+    /// Human-readable reason for the action, if provided.
+    pub reason: Option<String>,
+    /// Operator or system component that triggered the action.
+    pub operator_id: Option<String>,
+    /// ISO timestamp when the entry was created.
+    pub created_at: String,
+}
+
+impl AuditEntry {
+    fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            character_id: row.get(1)?,
+            action_type: row.get(2)?,
+            action_json: row.get(3)?,
+            reason: row.get(4)?,
+            operator_id: row.get(5)?,
+            created_at: row.get(6)?,
+        })
+    }
+}
+
+/// Per-day action count returned by [`MemoryStore::get_audit_summary`].
+#[derive(Debug, Clone)]
+pub struct AuditDaySummary {
+    /// Calendar date (`"YYYY-MM-DD"`).
+    pub date: String,
+    /// Number of audit entries on that day.
+    pub count: i64,
 }
 
 /// A row from the memories table.
@@ -604,16 +1167,47 @@ fn event_zone(event: &SoulEvent) -> Option<String> {
     }
 }
 
+/// Extract a short human-readable description from stored event JSON.
+/// Falls back to the raw event type label if parsing fails.
+fn describe_event(event_type: &str, event_json: &str) -> String {
+    let Ok(event) = serde_json::from_str::<SoulEvent>(event_json) else {
+        return event_type.to_string();
+    };
+    match event {
+        SoulEvent::Death { killer, .. } => killer
+            .map(|k| format!("killed by {k}"))
+            .unwrap_or_else(|| "died".to_string()),
+        SoulEvent::Kill { target, .. } => format!("killed {target}"),
+        SoulEvent::Loot { item, .. } => format!("looted {item}"),
+        SoulEvent::PlayerChat { player_name, .. } => format!("chat with {player_name}"),
+        SoulEvent::BotChat { character_name } => format!("chat with {character_name}"),
+        SoulEvent::Witnessed { description } => description,
+        SoulEvent::MoodShift { from, to, .. } => format!("mood: {from:?} -> {to:?}"),
+        SoulEvent::ZoneEnter { zone } => format!("entered {zone}"),
+        SoulEvent::LevelUp { new_level } => format!("reached level {new_level}"),
+        SoulEvent::GroupWipe { .. } => "group wipe".to_string(),
+        SoulEvent::RelationshipChange { character, delta } => {
+            format!("relationship with {character}: {delta:+.1}")
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
+    use chrono;
     use rusqlite::Connection;
     use textquest_common::soul::{MoodState, SoulEvent};
 
     fn open_memory_store() -> MemoryStore {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(SCHEMA).unwrap();
-        MemoryStore { conn }
+        MemoryStore {
+            conn,
+            health: Arc::new(DbHealth::default()),
+            fallback_cache: RefCell::new(VecDeque::new()),
+        }
     }
 
     fn kill_event(target: &str, zone: &str) -> SoulEvent {
@@ -840,10 +1434,10 @@ mod tests {
     fn record_and_recall_conversations() {
         let store = open_memory_store();
         store
-            .record_conversation(1, "Dave", true, "say", "Hey there!", Some(0.8))
+            .record_conversation(1, "Dave", true, "say", "Hey there!", 0.8)
             .unwrap();
         store
-            .record_conversation(1, "TestBot", false, "group", "On my way.", None)
+            .record_conversation(1, "TestBot", false, "group", "On my way.", 0.0)
             .unwrap();
 
         let convos = store.recall_conversations(1, 10).unwrap();
@@ -968,7 +1562,7 @@ mod tests {
             .record(1, &loot_event("sword", "bb"), MoodState::Happy, 3.0)
             .unwrap();
         store
-            .record_conversation(1, "Dave", true, "say", "Hello!", Some(0.8))
+            .record_conversation(1, "Dave", true, "say", "Hello!", 0.8)
             .unwrap();
 
         let json = store.export_character_json(1).unwrap();
@@ -1052,10 +1646,10 @@ mod tests {
     fn recall_conversations_filters_by_character() {
         let store = open_memory_store();
         store
-            .record_conversation(1, "Alice", true, "say", "Hi", Some(0.5))
+            .record_conversation(1, "Alice", true, "say", "Hi", 0.5)
             .unwrap();
         store
-            .record_conversation(2, "Bob", true, "tell", "Hey", Some(0.6))
+            .record_conversation(2, "Bob", true, "tell", "Hey", 0.6)
             .unwrap();
 
         let c1 = store.recall_conversations(1, 10).unwrap();
@@ -1071,7 +1665,7 @@ mod tests {
         let store = open_memory_store();
         for i in 0..10 {
             store
-                .record_conversation(1, &format!("Player{}", i), true, "say", "msg", Some(0.5))
+                .record_conversation(1, &format!("Player{}", i), true, "say", "msg", 0.5)
                 .unwrap();
         }
         let convos = store.recall_conversations(1, 3).unwrap();
@@ -1083,7 +1677,7 @@ mod tests {
         let store = open_memory_store();
         for i in 0..5 {
             store
-                .record_conversation(1, "Alice", true, "say", &format!("msg-{i}"), Some(0.5))
+                .record_conversation(1, "Alice", true, "say", &format!("msg-{i}"), 0.5)
                 .unwrap();
         }
 
@@ -1222,7 +1816,7 @@ mod tests {
     fn conversation_row_clone_and_debug() {
         let store = open_memory_store();
         store
-            .record_conversation(1, "Dave", true, "say", "Hello", Some(0.9))
+            .record_conversation(1, "Dave", true, "say", "Hello", 0.9)
             .unwrap();
         let convos = store.recall_conversations(1, 1).unwrap();
         let c = convos[0].clone();
@@ -1247,6 +1841,169 @@ mod tests {
         let _ = format!("{:?}", m);
     }
 
+    // --- LLM context tests ---
+
+    #[test]
+    fn get_llm_context_returns_top_n_by_score() {
+        let store = open_memory_store();
+        // Insert memories with differing importance — all recent so recency ~1.0
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
+            .unwrap();
+        store
+            .record(1, &kill_event("orc", "cb"), MoodState::Angry, 5.0)
+            .unwrap();
+        store
+            .record(1, &loot_event("sword", "bb"), MoodState::Happy, 3.0)
+            .unwrap();
+
+        let top2 = store.get_llm_context(1, 2).unwrap();
+        assert_eq!(top2.len(), 2);
+        // Highest importance should come first
+        assert!(
+            top2[0].importance >= top2[1].importance,
+            "Expected memories ordered by score desc: got {} then {}",
+            top2[0].importance,
+            top2[1].importance
+        );
+    }
+
+    #[test]
+    fn get_llm_context_respects_max_memories() {
+        let store = open_memory_store();
+        for i in 0..8 {
+            store
+                .record(
+                    1,
+                    &kill_event(&format!("mob_{i}"), "zone"),
+                    MoodState::Neutral,
+                    i as f32 + 1.0,
+                )
+                .unwrap();
+        }
+        let context = store.get_llm_context(1, 3).unwrap();
+        assert_eq!(context.len(), 3);
+    }
+
+    #[test]
+    fn get_llm_context_filters_by_character() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 2.0)
+            .unwrap();
+        store
+            .record(2, &kill_event("orc", "cb"), MoodState::Angry, 9.0)
+            .unwrap();
+
+        let ctx1 = store.get_llm_context(1, 10).unwrap();
+        let ctx2 = store.get_llm_context(2, 10).unwrap();
+        assert_eq!(ctx1.len(), 1);
+        assert_eq!(ctx2.len(), 1);
+        assert_eq!(ctx1[0].event_type, "kill");
+        assert_eq!(ctx2[0].event_type, "kill");
+    }
+
+    #[test]
+    fn get_llm_context_excludes_decayed_memories() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 0.01)
+            .unwrap();
+        store
+            .record(1, &kill_event("orc", "cb"), MoodState::Angry, 5.0)
+            .unwrap();
+
+        store.prune_low_importance(1, 0.1).unwrap();
+
+        let context = store.get_llm_context(1, 10).unwrap();
+        assert_eq!(context.len(), 1, "Decayed memory should be excluded");
+        assert_eq!(context[0].event_type, "kill");
+    }
+
+    #[test]
+    fn get_llm_context_empty_when_no_memories() {
+        let store = open_memory_store();
+        let context = store.get_llm_context(99, 10).unwrap();
+        assert!(context.is_empty());
+    }
+
+    #[test]
+    fn format_context_for_llm_empty_slice() {
+        let text = format_context_for_llm(&[]);
+        assert!(text.is_empty());
+    }
+
+    #[test]
+    fn format_context_for_llm_includes_expected_fields() {
+        let store = open_memory_store();
+        store
+            .record(
+                1,
+                &kill_event("gnoll", "blackburrow"),
+                MoodState::Excited,
+                2.5,
+            )
+            .unwrap();
+
+        let memories = store.get_llm_context(1, 10).unwrap();
+        let text = format_context_for_llm(&memories);
+
+        assert!(text.contains("[kill]"), "Should contain event type");
+        assert!(text.contains("blackburrow"), "Should contain zone");
+        assert!(text.contains("Excited"), "Should contain mood");
+        assert!(text.contains("2.50"), "Should contain formatted importance");
+    }
+
+    #[test]
+    fn format_context_for_llm_multi_memory_separated_by_newline() {
+        let store = open_memory_store();
+        store
+            .record(1, &kill_event("gnoll", "bb"), MoodState::Neutral, 1.0)
+            .unwrap();
+        store
+            .record(1, &loot_event("sword", "bb"), MoodState::Happy, 2.0)
+            .unwrap();
+
+        let memories = store.get_llm_context(1, 10).unwrap();
+        let text = format_context_for_llm(&memories);
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 2, "Two memories should produce two lines");
+    }
+
+    #[test]
+    fn memory_recency_recent_scores_near_one() {
+        // A memory created just now should score close to 1.0
+        let now_str = chrono::Utc::now()
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        let recency = memory_recency(&now_str);
+        assert!(
+            recency > 0.99,
+            "Expected recency near 1.0 for a fresh memory, got {recency}"
+        );
+    }
+
+    #[test]
+    fn memory_recency_old_memory_scores_zero() {
+        // A memory 60 days ago should score 0.0
+        let old = (chrono::Utc::now() - chrono::TimeDelta::days(60))
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        let recency = memory_recency(&old);
+        assert!(
+            recency == 0.0,
+            "Expected recency 0.0 for a 60-day-old memory, got {recency}"
+        );
+    }
+
+    #[test]
+    fn memory_recency_invalid_timestamp_scores_zero() {
+        let recency = memory_recency("not-a-date");
+        assert_eq!(recency, 0.0);
+    }
+
     #[test]
     fn update_speech_patterns_overwrites() {
         let store = open_memory_store();
@@ -1266,5 +2023,114 @@ mod tests {
         let loaded = store.get_speech_patterns(1).unwrap();
         assert!((loaded.vocabulary_level - 0.9).abs() < 0.01);
         assert_eq!(loaded.catchphrases, vec!["Indeed!"]);
+    }
+
+    // -- Retry / circuit-breaker / fallback cache tests --
+
+    #[test]
+    fn fallback_cache_starts_empty() {
+        let store = open_memory_store();
+        assert_eq!(store.fallback_cache_len(), 0);
+        assert!(!store.is_circuit_open());
+    }
+
+    #[test]
+    fn circuit_breaker_opens_after_threshold_failures() {
+        let health = Arc::new(DbHealth::default());
+        let dummy_err = anyhow::anyhow!("simulated DB error");
+        for _ in 0..CIRCUIT_BREAKER_THRESHOLD {
+            assert!(!health.is_open(), "circuit should still be closed");
+            health.record_failure("test_op", &dummy_err);
+        }
+        assert!(
+            health.is_open(),
+            "circuit should be open after {} failures",
+            CIRCUIT_BREAKER_THRESHOLD
+        );
+    }
+
+    #[test]
+    fn circuit_breaker_closes_on_success() {
+        let health = Arc::new(DbHealth::default());
+        let dummy_err = anyhow::anyhow!("simulated DB error");
+        for _ in 0..CIRCUIT_BREAKER_THRESHOLD {
+            health.record_failure("test_op", &dummy_err);
+        }
+        assert!(health.is_open());
+        health.record_success();
+        assert!(!health.is_open());
+    }
+
+    #[test]
+    fn record_uses_fallback_cache_when_circuit_open() {
+        let store = open_memory_store();
+        // Force the circuit open.
+        let dummy_err = anyhow::anyhow!("simulated DB error");
+        for _ in 0..CIRCUIT_BREAKER_THRESHOLD {
+            store.health.record_failure("test", &dummy_err);
+        }
+        assert!(store.is_circuit_open());
+
+        let event = kill_event("a gnoll", "blackburrow");
+        let id = store.record(1, &event, MoodState::Neutral, 1.0).unwrap();
+        // Returns synthetic ID (-1) rather than a real row ID.
+        assert_eq!(id, -1);
+        // Entry goes into the fallback cache, not the DB.
+        assert_eq!(store.fallback_cache_len(), 1);
+        let db_count: i64 = store
+            .connection()
+            .query_row("SELECT COUNT(*) FROM memories", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(db_count, 0);
+    }
+
+    #[test]
+    fn fallback_cache_evicts_oldest_when_full() {
+        let store = open_memory_store();
+        // Force circuit open so all records go to the cache.
+        let dummy_err = anyhow::anyhow!("simulated DB error");
+        for _ in 0..CIRCUIT_BREAKER_THRESHOLD {
+            store.health.record_failure("test", &dummy_err);
+        }
+
+        let event = kill_event("mob", "zone");
+        for _ in 0..FALLBACK_CACHE_MAX + 10 {
+            store.record(1, &event, MoodState::Neutral, 1.0).unwrap();
+        }
+        // Cache should be capped at FALLBACK_CACHE_MAX.
+        assert_eq!(store.fallback_cache_len(), FALLBACK_CACHE_MAX);
+    }
+
+    #[test]
+    fn retry_db_op_succeeds_on_first_attempt() {
+        let result: Result<i32> = retry_db_op("noop", || Ok(42));
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[test]
+    fn retry_db_op_returns_last_error_after_exhaustion() {
+        let mut call_count = 0usize;
+        let result: Result<i32> = retry_db_op("always_fail", || {
+            call_count += 1;
+            Err(anyhow::anyhow!("permanent failure"))
+        });
+        assert!(result.is_err());
+        // 1 initial + 5 retries = 6 total attempts.
+        assert_eq!(call_count, 6);
+    }
+
+    #[test]
+    fn retry_db_op_succeeds_on_second_attempt() {
+        let mut call_count = 0usize;
+        let result: Result<i32> = retry_db_op("fail_once", || {
+            call_count += 1;
+            if call_count == 1 {
+                Err(anyhow::anyhow!("transient"))
+            } else {
+                Ok(99)
+            }
+        });
+        assert_eq!(result.unwrap(), 99);
+        assert_eq!(call_count, 2);
     }
 }

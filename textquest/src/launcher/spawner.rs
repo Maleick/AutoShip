@@ -95,3 +95,24 @@ pub fn spawn_eq_client(
     );
     anyhow::bail!("EQ client launching is only available on Windows")
 }
+
+#[cfg(all(test, not(windows)))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn spawn_eq_client_stub_returns_platform_error() {
+        let result = spawn_eq_client(
+            Path::new("/tmp/eq"),
+            "Frostreaver",
+            "Teek",
+            &[String::from("/nomusic")],
+        );
+        let error = result.err().expect("stub should return an error");
+
+        assert!(
+            format!("{error:#}").contains("only available on Windows"),
+            "stub error should explain the platform restriction"
+        );
+    }
+}

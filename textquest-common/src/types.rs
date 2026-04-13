@@ -22,6 +22,9 @@ pub struct GameState {
     pub zone_short_name: String,
     /// Zone long name (e.g. "Queynos Hills").
     pub zone_long_name: String,
+    /// Detected EQ patch date from `__ActualVersionDate` if available.
+    #[serde(default)]
+    pub actual_version: Option<String>,
 }
 
 impl GameState {
@@ -39,6 +42,7 @@ impl GameState {
             zone_short_name: self.zone_short_name.clone(),
             zone_long_name: self.zone_long_name.clone(),
             spawn_epoch,
+            actual_version: self.actual_version.clone(),
         }
     }
 }
@@ -69,6 +73,9 @@ pub struct SharedStateFrame {
     pub zone_long_name: String,
     /// Monotonic spawn snapshot version. Increments only when `nearby_spawns` is present.
     pub spawn_epoch: u64,
+    /// Detected EQ patch date from `__ActualVersionDate` if available.
+    #[serde(default)]
+    pub actual_version: Option<String>,
 }
 
 impl SharedStateFrame {
@@ -85,6 +92,7 @@ impl SharedStateFrame {
             combat_status: self.combat_status,
             zone_short_name: self.zone_short_name,
             zone_long_name: self.zone_long_name,
+            actual_version: self.actual_version,
         }
     }
 }
@@ -439,6 +447,7 @@ mod tests {
             combat_status: crate::combat::CombatStatus::Idle,
             zone_short_name: "qey2hh1".into(),
             zone_long_name: "Queynos Hills".into(),
+            actual_version: None,
         };
         let json = serde_json::to_string(&gs).expect("serialize");
         let restored: GameState = serde_json::from_str(&json).expect("deserialize");
@@ -457,6 +466,7 @@ mod tests {
             combat_status: crate::combat::CombatStatus::Idle,
             zone_short_name: "soldunga".into(),
             zone_long_name: "Solusek's Eye".into(),
+            actual_version: None,
         };
 
         let frame = gs.to_shared_frame(3, true);
@@ -477,6 +487,7 @@ mod tests {
             combat_status: crate::combat::CombatStatus::Idle,
             zone_short_name: "soldunga".into(),
             zone_long_name: "Solusek's Eye".into(),
+            actual_version: None,
         };
 
         let frame = gs.to_shared_frame(4, false);
@@ -499,6 +510,7 @@ mod tests {
             zone_short_name: "qcat".into(),
             zone_long_name: "Qeynos Catacombs".into(),
             spawn_epoch: 9,
+            actual_version: None,
         };
 
         let state = frame.into_game_state(cached_spawns.clone());
@@ -645,6 +657,7 @@ mod tests {
             combat_status: crate::combat::CombatStatus::Idle,
             zone_short_name: String::new(),
             zone_long_name: String::new(),
+            actual_version: None,
         };
         assert_eq!(gs.nearby_spawns.len(), 2);
         assert_eq!(gs.nearby_spawns[0].hp_current, 100);

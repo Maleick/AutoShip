@@ -586,6 +586,10 @@ pub fn handle_events(
                 app.set_active_screen(ActiveScreen::Debug);
                 return Ok(true);
             }
+            (KeyCode::Char('6'), _) => {
+                app.set_active_screen(ActiveScreen::Orchestrator);
+                return Ok(true);
+            }
             (KeyCode::Tab, _) => {
                 app.toggle_panel();
                 return Ok(true);
@@ -892,6 +896,36 @@ pub fn handle_events(
                     }
                 }
             }
+            ActivePanel::EconomyControls => match key.code {
+                KeyCode::Char('p' | 'P') => {
+                    app.economy_state.vendor_status =
+                        crate::tui::ui::economy_controls::VendorCycleStatus::Paused;
+                    app.economy_state.automation_paused = true;
+                    app.status_message = String::from("Economy: cycle PAUSED");
+                    return Ok(true);
+                }
+                KeyCode::Char('r' | 'R') => {
+                    app.economy_state.vendor_status =
+                        crate::tui::ui::economy_controls::VendorCycleStatus::Idle;
+                    app.economy_state.automation_paused = false;
+                    app.status_message = String::from("Economy: cycle RESUMED");
+                    return Ok(true);
+                }
+                KeyCode::Char('a' | 'A') => {
+                    app.economy_state.vendor_status =
+                        crate::tui::ui::economy_controls::VendorCycleStatus::Aborted;
+                    app.economy_state.automation_paused = true;
+                    app.status_message = String::from("Economy: cycle ABORTED");
+                    return Ok(true);
+                }
+                KeyCode::Char('s' | 'S') => {
+                    app.economy_state.vendor_next_cycle_secs = 0;
+                    app.status_message =
+                        String::from("Economy: cycle SKIPPED — will trigger next tick");
+                    return Ok(true);
+                }
+                _ => {}
+            },
             _ => match key.code {
                 KeyCode::Home if !app.automation_paused => {
                     app.automation_paused = true;

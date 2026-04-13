@@ -227,6 +227,29 @@ pub struct ContextMenuInfo {
     pub items: Vec<ContextMenuItem>,
 }
 
+/// Commands for controlling a managed EQ session from the orchestrator.
+///
+/// These commands are processed by `SessionControl::apply_command` and control
+/// per-session state transitions, group membership, and routing scope.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SessionControlCommand {
+    /// Pause this session — suspend command dispatch until `Resume` is received.
+    Pause,
+    /// Resume a paused session — return to active command dispatch.
+    Resume,
+    /// Assign this session to a group (1-based group ID).
+    ///
+    /// A `group_id` of `0` removes the session from any group and resets its
+    /// routing scope to `AllSession`.
+    SetGroup {
+        /// Target group ID (1-based; 0 = ungrouped / AllSession).
+        group_id: u8,
+    },
+    /// Set this session's routing scope to `AllSession` so it receives every
+    /// broadcast command rather than only group-scoped ones.
+    BroadcastAll,
+}
+
 /// Commands sent from the manager to an injected DLL
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Command {
@@ -593,6 +616,11 @@ pub enum Command {
     // System
     /// Heartbeat ping — expects a Pong response.
     Ping,
+    /// Enable/disable timing normalization for GetTickCount / QPC hooks.
+    SetTimingCorrection {
+        /// Whether timing correction should be active.
+        enabled: bool,
+    },
     /// Eject the DLL from the game process.
     Eject,
     /// Enable or disable the game loop hook.
@@ -674,6 +702,16 @@ pub enum Command {
         /// Zero-based index of the item within that menu.
         item_index: u32,
     },
+    /// Poll for accumulated spawn list delta events.
+    ///
+    /// The DLL drains its pending spawn-event buffer and returns one
+    /// `SpawnEventBatch` response.
+    PollSpawnEvents,
+    /// Enable/disable timing normalization for GetTickCount / QPC hooks.
+    SetTimingCorrection {
+        /// Whether timing correction should be active.
+        enabled: bool,
+    },
 }
 
 impl std::fmt::Debug for Command {
@@ -750,6 +788,39 @@ pub struct PacketEventInfo {
     pub payload_size: u32,
 }
 
+/// Spawn lifecycle event for near-by spawn list deltas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SpawnEventKind {
+    /// A spawn became visible in the local spawn list.
+    Created,
+    /// A spawn was removed from the local spawn list.
+    Destroyed,
+}
+
+impl std::fmt::Display for SpawnEventKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Created => write!(f, "created"),
+            Self::Destroyed => write!(f, "destroyed"),
+        }
+    }
+}
+
+/// Wire-format for a single spawn event in a `SpawnEventBatch` response.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SpawnEvent {
+    /// PID of the client that detected the event.
+    pub client_id: ClientId,
+    /// Zone short name where the event was observed.
+    pub zone: String,
+    /// Name of the spawn.
+    pub spawn_name: String,
+    /// Spawn lifecycle kind.
+    pub kind: SpawnEventKind,
+    /// Epoch milliseconds when the event was detected.
+    pub timestamp_ms: u64,
+}
+
 /// Wire-format for a single chat message in a `ChatBatch` response.
 ///
 /// Carries the same fields as `Response::ChatMessage` but is designed for
@@ -762,6 +833,45 @@ pub struct ChatMessageInfo {
     pub color: i32,
     /// Timestamp in milliseconds when the message was captured.
     pub timestamp_ms: u64,
+}
+
+/// Discrete lifecycle states for the EQ client process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum GameState {
+    /// Character select / account-level screen.
+    CharacterSelect,
+    /// Player is in the game world.
+    InGame,
+    /// Zone load / zone transition in progress.
+    Loading,
+    /// Login sequence in progress.
+    LoggingIn,
+    /// Unknown / unmapped state value.
+    Unknown(u32),
+}
+
+impl From<u32> for GameState {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => Self::CharacterSelect,
+            1 => Self::InGame,
+            2 => Self::Loading,
+            3 => Self::LoggingIn,
+            value => Self::Unknown(value),
+        }
+    }
+}
+
+impl From<GameState> for u32 {
+    fn from(value: GameState) -> Self {
+        match value {
+            GameState::CharacterSelect => 0,
+            GameState::InGame => 1,
+            GameState::Loading => 2,
+            GameState::LoggingIn => 3,
+            GameState::Unknown(value) => value,
+        }
+    }
 }
 
 /// Responses sent from the DLL back to the manager
@@ -917,6 +1027,11 @@ pub enum Response {
         /// Accumulated chat messages since the last poll.
         messages: Vec<ChatMessageInfo>,
     },
+    /// Notification that `CEverQuest::SetGameState` transitioned.
+    GameStateChanged {
+        /// New game state value parsed from `SetGameState`.
+        state: GameState,
+    },
     /// Snapshot of all menus visible in `CContextMenuManager`.
     ///
     /// Returned in response to `Command::QueryContextMenu`.
@@ -934,6 +1049,13 @@ pub enum Response {
         success: bool,
         /// Human-readable status message.
         message: String,
+    },
+    /// Batched spawn list delta events from `game_loop`.
+    ///
+    /// Returned in `Response::SpawnEventBatch` after calling `Command::PollSpawnEvents`.
+    SpawnEventBatch {
+        /// Accumulated spawn events since last poll.
+        events: Vec<SpawnEvent>,
     },
 }
 
@@ -1351,6 +1473,7 @@ mod tests {
             Command::ClickObject,
             Command::QueryZoneGraph,
             Command::PollPackets,
+            Command::PollSpawnEvents,
             Command::PollChat,
             Command::SetRenderMode {
                 mode: RenderMode::NullRender,
@@ -1399,6 +1522,24 @@ mod tests {
             Response::CombatUpdate {
                 status: crate::combat::CombatStatus::Idle,
             },
+            Response::SpawnEventBatch {
+                events: vec![
+                    SpawnEvent {
+                        client_id: 42,
+                        zone: "freportw".into(),
+                        spawn_name: "a beetle".into(),
+                        kind: SpawnEventKind::Created,
+                        timestamp_ms: 1,
+                    },
+                    SpawnEvent {
+                        client_id: 42,
+                        zone: "freportw".into(),
+                        spawn_name: "a spider".into(),
+                        kind: SpawnEventKind::Destroyed,
+                        timestamp_ms: 2,
+                    },
+                ],
+            },
             Response::ZoneGraph { zones: vec![] },
             Response::RenderModeChanged {
                 mode: RenderMode::NullRender,
@@ -1435,6 +1576,30 @@ mod tests {
             let encoded = encode(resp).expect("encode failed");
             let (decoded, _): (Response, usize) = decode(&encoded).expect("decode failed");
             let _ = format!("{:?}", decoded);
+        }
+    }
+
+    #[test]
+    fn game_state_from_unknown_u32_roundtrips() {
+        let unknown: u32 = 0xA2A3A4A5;
+        let state = GameState::from(unknown);
+        assert!(matches!(state, GameState::Unknown(v) if v == unknown));
+        assert_eq!(u32::from(state), unknown);
+    }
+
+    #[test]
+    fn game_state_changed_response_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let resp = Response::GameStateChanged {
+            state: GameState::LoggingIn,
+        };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode");
+        if let Response::GameStateChanged { state } = decoded {
+            assert!(matches!(state, GameState::LoggingIn));
+        } else {
+            panic!("expected GameStateChanged");
         }
     }
 

@@ -1,105 +1,107 @@
 #!/usr/bin/env python3
-
 """Validate all zone map files in config/maps/ directory."""
+
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 
 
-def validate_l_line(line_num, line):
+def validate_l_line(line: str) -> str | None:
     """Validate L (line) format: L x1, y1, z1, x2, y2, z2, r, g, b"""
-    parts = line[1:].strip().split(',')
+    parts = line[1:].strip().split(",")
     if len(parts) != 9:
         return f"L line: expected 9 fields, got {len(parts)}"
 
     for i, part in enumerate(parts):
         try:
-            if i < 6:  # coordinates
+            if i < 6:
                 v = float(part.strip())
-                if not (-1e6 < v < 1e6):  # sanity check
+                if not (-1e6 < v < 1e6):
                     return f"L line: coordinate out of bounds: {v}"
-            else:  # color channels
+            else:
                 v = int(part.strip())
                 if not (0 <= v <= 255):
-                    return f"L line: color {i-6} out of range: {v}"
+                    return f"L line: color {i - 6} out of range: {v}"
         except ValueError:
-            return f"L line: field {i} not numeric: {part}"
+            return f"L line: field {i} not numeric: {part!r}"
     return None
 
 
-def validate_p_line(line_num, line):
+def validate_p_line(line: str) -> str | None:
     """Validate P (point) format: P x, y, z, r, g, b, size, label"""
-    parts = line[1:].strip().split(',', 7)  # max 8 parts (label can have commas)
+    parts = line[1:].strip().split(",", 7)
     if len(parts) < 8:
         return f"P line: expected >=8 fields, got {len(parts)}"
 
     for i, part in enumerate(parts[:7]):
         try:
-            if i < 3:  # coordinates
-                v = float(part.strip())
-            elif i < 6:  # color
+            if i < 3:
+                float(part.strip())
+            elif i < 6:
                 v = int(part.strip())
                 if not (0 <= v <= 255):
                     return f"P line: color field out of range: {v}"
-            else:  # size
+            else:
                 v = int(part.strip())
                 if not (0 < v < 256):
                     return f"P line: size out of range: {v}"
         except ValueError:
-            return f"P line: field {i} not numeric: {part}"
+            return f"P line: field {i} not numeric: {part!r}"
     return None
 
 
-def validate_map_file(filepath):
-    """Validate single map file."""
-    errors = []
-    try:
-        with open(filepath) as f:
-            for num, line in enumerate(f, 1):
-                line = line.rstrip()
-                if not line or line.startswith('#'):
-                    continue
+def validate_map_file(filepath: Path) -> list[str]:
+    """Validate a single map file. Returns list of error strings."""
+    errors: list[str] = []
+    with open(filepath) as f:
+        for num, raw_line in enumerate(f, 1):
+            line = raw_line.rstrip()
+            if not line or line.startswith("#"):
+                continue
 
-                if line.startswith('L '):
-                    err = validate_l_line(num, line)
-                elif line.startswith('P '):
-                    err = validate_p_line(num, line)
-                else:
-                    err = f"Unknown line type: {line[0]}"
+            if line.startswith("L "):
+                err = validate_l_line(line)
+            elif line.startswith("P "):
+                err = validate_p_line(line)
+            else:
+                err = f"Unknown line type: {line[0]!r}"
 
-                if err:
-                    errors.append(f"Line {num}: {err}")
-    except IOError as e:
-        return [f"File error: {e}"]
+            if err:
+                errors.append(f"Line {num}: {err}")
 
     return errors
 
 
-def main():
-    """Validate all map files in config/maps/."""
+def main() -> int:
     map_dir = Path("config/maps")
-
     if not map_dir.exists():
-        print("❌ Map validation FAILED: config/maps/ directory not found")
+        print(f"Map directory not found: {map_dir}")
         return 1
 
-    all_errors = {}
+    map_files = sorted(map_dir.glob("*.txt"))
+    if not map_files:
+        print(f"No .txt map files found in {map_dir}")
+        return 0
 
-    for map_file in sorted(map_dir.glob("*.txt")):
+    all_errors: dict[str, list[str]] = {}
+    for map_file in map_files:
         errors = validate_map_file(map_file)
         if errors:
             all_errors[map_file.name] = errors
 
     if all_errors:
-        print("❌ Map validation FAILED")
+        print("Map validation FAILED")
         for fname, errors in all_errors.items():
             print(f"\n{fname}:")
-            for err in errors[:10]:  # show first 10 errors per file
+            for err in errors[:10]:
                 print(f"  {err}")
+            if len(errors) > 10:
+                print(f"  ... and {len(errors) - 10} more errors")
         return 1
-    else:
-        map_count = len(list(map_dir.glob('*.txt')))
-        print(f"✅ All {map_count} map files validated")
-        return 0
+
+    print(f"All {len(map_files)} map files validated OK")
+    return 0
 
 
 if __name__ == "__main__":

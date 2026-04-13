@@ -243,7 +243,7 @@ git commit -m "chore: update script references from dmft to textquest"
 
 ## Task 6: Update Documentation
 
-**Files:** 50+ markdown files in `docs/`, `README.md`, `CLAUDE.md`, `AGENTS.md`, `HANDOFF.md`, `REVIEW.md`, `.wolf/` files
+**Files:** 50+ tracked markdown files in `docs/`, `README.md`, `CLAUDE.md`, `AGENTS.md`, `HANDOFF.md`, `REVIEW.md` (local-only tooling files excluded)
 
 - [ ] **Step 1: Bulk replace in all markdown files (project root + docs/)**
 
@@ -276,44 +276,29 @@ find docs -name '*.md' -exec sed -i '' \
   {} +
 ```
 
-- [ ] **Step 2: Update .wolf/ files**
-
-```bash
-find .wolf -name '*.md' -o -name '*.json' | xargs sed -i '' \
-  -e 's/textquest_dll/textquest_dll/g' \
-  -e 's/textquest-dll/textquest-dll/g' \
-  -e 's/textquest-common/textquest-common/g' \
-  -e 's/textquest_common/textquest_common/g' \
-  -e 's/textquest-web/textquest-web/g' \
-  -e 's/TextQuest/TextQuest/g' \
-  -e 's|textquest/src|textquest/src|g' \
-  -e 's|textquest/tests|textquest/tests|g' \
-  {} +
-```
-
-- [ ] **Step 3: Update GitHub issue template**
+- [ ] **Step 2: Update GitHub issue template**
 
 ```bash
 sed -i '' 's/TextQuest/TextQuest/g' .github/ISSUE_TEMPLATE/agent-task.yml
 ```
 
-- [ ] **Step 4: Update feature-list.json**
+- [ ] **Step 3: Update feature-list.json**
 
 ```bash
 sed -i '' -e 's/TextQuest/TextQuest/g' -e 's/dmft/textquest/g' feature-list.json
 ```
 
-- [ ] **Step 5: Spot-check key files for correctness**
+- [ ] **Step 4: Spot-check key files for correctness**
 
 Read `CLAUDE.md`, `README.md`, and `AGENTS.md` to verify the replacements didn't produce nonsensical text (e.g., "Dave Mike Fun Times" should become "TextQuest" in the description, not be left behind).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add -A
 git commit -m "docs: rename all TextQuest references to TextQuest
 
-Updates README, CLAUDE.md, AGENTS.md, docs/, .wolf/, issue templates,
+Updates README, CLAUDE.md, AGENTS.md, docs/, issue templates,
 and feature-list.json."
 ```
 

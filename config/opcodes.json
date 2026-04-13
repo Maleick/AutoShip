@@ -1,0 +1,32 @@
+[
+  {
+    "code": 20479,
+    "handler_addr": null,
+    "direction": "inbound",
+    "description": "OP_ZoneEntry — server sends zone data when client enters a zone"
+  },
+  {
+    "code": 20480,
+    "handler_addr": null,
+    "direction": "outbound",
+    "description": "OP_ZoneEntryRequest — client requests zone entry"
+  },
+  {
+    "code": 4096,
+    "handler_addr": null,
+    "direction": "inbound",
+    "description": "OP_PlayerProfile — server sends full player profile on login"
+  },
+  {
+    "code": 4097,
+    "handler_addr": null,
+    "direction": "bidirectional",
+    "description": "OP_ChatMessage — in-game chat (say, shout, tells, group)"
+  },
+  {
+    "code": 8192,
+    "handler_addr": null,
+    "direction": "inbound",
+    "description": "OP_SpawnAppearance — spawn model/anim state change"
+  }
+]

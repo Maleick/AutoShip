@@ -11,8 +11,8 @@
 [![CI](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/ci.yml)
 [![Release](https://github.com/Maleick/TextQuest/actions/workflows/release.yml/badge.svg)](https://github.com/Maleick/TextQuest/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/rust-edition%202024-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-136%2C845-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-3%2C017%20exact-brightgreen?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-137%2C380-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-3%2C031%20exact-brightgreen?style=flat-square)](#testing)
 [![Status](https://img.shields.io/badge/status-Active-green?style=flat-square)](#roadmap)
 [![License](https://img.shields.io/badge/license-Private-red?style=flat-square)](#license)
 
@@ -84,7 +84,7 @@ target\release\textquest.exe navmesh diagnostics --pid 12345
 
 ## TUI Basics
 
-Current workspace totals: 136,845 Rust lines and 3,017 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`.
+Current workspace totals: 137,380 Rust lines and 3,031 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`.
 
 | Trigger                | Jobs                                                                   |
 | ---------------------- | ---------------------------------------------------------------------- |

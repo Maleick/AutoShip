@@ -22,6 +22,98 @@ pub const CAST_SPELL_OFFSET: usize = 0x0; // placeholder
 /// Set target function offset.
 pub const SET_TARGET_OFFSET: usize = 0x0; // placeholder
 
+const VERSION_STRING_MAX_LEN: usize = 64;
+
+fn parse_version_string(bytes: &[u8]) -> Option<String> {
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+    let s = String::from_utf8_lossy(&bytes[..end]);
+    let trimmed = s.trim();
+    if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+}
+
+/// Read `__ActualVersionDate` from the given EQ base address.
+///
+/// Returns `None` when the string cannot be read or is empty.
+#[cfg(windows)]
+pub fn check_eq_version(base: u64) -> Option<String> {
+    use textquest_common::offsets::{ACTUAL_VERSION_DATE, rebase};
+
+    let addr = rebase(ACTUAL_VERSION_DATE, base)?;
+
+    // ACTUAL_VERSION_DATE is a pointer to a string, not the string itself.
+    // First dereference the pointer, then read the string bytes.
+    if !is_readable(addr, std::mem::size_of::<usize>()) {
+        return None;
+    }
+
+    let string_addr = unsafe { *(addr as *const usize) } as u64;
+    if string_addr == 0 {
+        return None;
+    }
+
+    if !is_readable(string_addr, VERSION_STRING_MAX_LEN) {
+        return None;
+    }
+
+    let mut buffer = [0u8; VERSION_STRING_MAX_LEN];
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            string_addr as *const u8,
+            buffer.as_mut_ptr(),
+            VERSION_STRING_MAX_LEN,
+        );
+    }
+
+    parse_version_string(&buffer)
+}
+
+/// Non-Windows stub — always returns `None`.
+#[cfg(not(windows))]
+pub fn check_eq_version(_base: u64) -> Option<String> {
+    None
+}
+
+/// Whether the detected version string matches the expected patch marker.
+#[must_use]
+pub fn version_matches_expected(version: &str) -> bool {
+    version == textquest_common::offsets::EXPECTED_VERSION_DATE
+}
+
+#[cfg(not(windows))]
+fn is_readable(_address: usize, _len: usize) -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn is_readable(address: usize, len: usize) -> bool {
+    use windows::Win32::System::Memory::{
+        MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_GUARD, PAGE_NOACCESS, VirtualQuery,
+    };
+
+    if address == 0 || len == 0 {
+        return false;
+    }
+
+    let mut mbi = MEMORY_BASIC_INFORMATION::default();
+    let result = unsafe {
+        VirtualQuery(
+            Some(address as *const core::ffi::c_void),
+            &mut mbi,
+            size_of::<MEMORY_BASIC_INFORMATION>(),
+        )
+    };
+    if result == 0 || mbi.State != MEM_COMMIT {
+        return false;
+    }
+
+    // Use bitflag containment checks, not equality, to handle combined flags.
+    if (mbi.Protect.0 & PAGE_NOACCESS.0) != 0 || (mbi.Protect.0 & PAGE_GUARD.0) != 0 {
+        return false;
+    }
+
+    address.saturating_add(len) <= (mbi.BaseAddress as usize + mbi.RegionSize)
+}
+
 // ─── Combat Function Bindings ───
 // These call EQ internal functions via transmuted function pointers.
 // Pattern: rebase preferred address → transmute to fn pointer → call.

@@ -1,6 +1,8 @@
 //! REST API handlers for the web dashboard.
 
+pub mod economy;
 pub mod loot;
+pub mod soul;
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -581,6 +583,7 @@ mod tests {
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
+            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
         });
         let Json(configs) = list_character_configs(State(state)).await;
         assert!(!configs.is_empty());
@@ -595,6 +598,7 @@ mod tests {
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
+            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
         });
         let input = CharacterConfig {
             character_name: "IgnoredName".into(),

@@ -11,14 +11,17 @@
 pub mod ch_chain;
 pub mod dashboard;
 pub mod dps_bars;
+pub mod economy_controls;
 pub mod eq_internals;
 pub mod explorer;
 pub mod groups;
 pub mod map;
 pub mod navigation;
+pub mod orchestrator_panel;
 pub mod packets;
 pub mod spawns;
 pub mod widgets;
+pub mod zone_status_panel;
 
 use ratatui::{
     Frame,
@@ -30,6 +33,7 @@ use ratatui::{
 
 use crate::tui::app::{ActivePanel, ActiveScreen, App, HelpFocus, ToastLevel};
 use crate::tui::command::HelpSection;
+use crate::tui::ui::orchestrator_panel::draw_orchestrator_screen;
 use crate::tui::ui::widgets::{
     WidthClass, centered_popup, classify_width, line_width, spans_width, truncate_inline,
 };
@@ -61,6 +65,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         ActiveScreen::Navigation => navigation::draw_navigation_screen(frame, outer[1], app),
         ActiveScreen::Debug => spawns::draw_debug_screen(frame, outer[1], app),
         ActiveScreen::PacketMonitor => packets::draw_packet_monitor(frame, outer[1], app),
+        ActiveScreen::Economy => economy_controls::draw_economy_screen(frame, outer[1], app),
     }
 
     draw_status_bar(frame, outer[2], app);
@@ -195,6 +200,7 @@ fn header_tab_label(screen: ActiveScreen, width_class: WidthClass) -> &'static s
             ActiveScreen::Navigation => "Nav",
             ActiveScreen::Debug => "Dbg",
             ActiveScreen::PacketMonitor => "Pkt",
+            ActiveScreen::Economy => "Eco",
         },
         WidthClass::Narrow => match screen {
             ActiveScreen::Overview => "1",
@@ -202,6 +208,7 @@ fn header_tab_label(screen: ActiveScreen, width_class: WidthClass) -> &'static s
             ActiveScreen::Navigation => "3",
             ActiveScreen::Debug => "4",
             ActiveScreen::PacketMonitor => "5",
+            ActiveScreen::Economy => "6",
         },
     }
 }
@@ -873,6 +880,13 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
             push_kv(&mut rows, None, "Space", "Pause / resume packet capture");
             push_kv(&mut rows, None, "↑/↓", "Scroll packet log");
             push_kv(&mut rows, None, "c", "Clear captured packets");
+        }
+        ActiveScreen::Economy => {
+            push_heading(&mut rows, None, "Economy Controls");
+            push_kv(&mut rows, None, "P", "Pause vendor/bank cycle");
+            push_kv(&mut rows, None, "R", "Resume vendor/bank cycle");
+            push_kv(&mut rows, None, "A", "Abort current cycle");
+            push_kv(&mut rows, None, "S", "Skip current cycle");
         }
     }
     rows.push(help_row(None, HelpCell::Text(String::new())));

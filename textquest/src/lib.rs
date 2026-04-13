@@ -16,6 +16,8 @@ pub mod client;
 pub mod combat;
 /// TOML configuration loading.
 pub mod config;
+/// Crash reporting and session recovery — per-character context snapshots and recovery commands.
+pub mod crash_reporter;
 /// Encrypted credential store (Argon2id + AES-256-GCM).
 #[allow(dead_code)]
 pub mod credentials;
@@ -59,6 +61,16 @@ pub mod tui;
 
 /// CLI subcommands (dump, inject, navigate, login, etc.).
 pub mod cli;
+/// Testing utilities — scenario harness, metric types, and result types.
+#[allow(dead_code)]
+pub mod testing;
+
+/// Economy system — failure routing and recovery for Krono farm / vendor loops.
+#[allow(dead_code)]
+pub mod economy;
+
+/// Testing utilities and observability helpers.
+pub mod testing;
 
 #[cfg(windows)]
 use anyhow::Context;
@@ -66,6 +78,12 @@ use anyhow::Result;
 
 /// Default path for the soul memory database.
 pub const SOUL_DB_PATH: &str = "data/soul_memory.db";
+
+/// Default path for the Ghidra analysis SQLite cache.
+pub const GHIDRA_DB_PATH: &str = "data/ghidra.db";
+
+/// Path to the opcodes config file imported into the Ghidra DB at startup.
+pub const OPCODES_CONFIG_PATH: &str = "config/opcodes.json";
 
 /// Get the base address of eqgame.exe module in the target process.
 ///
@@ -117,4 +135,17 @@ pub fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
 pub fn get_module_base(_proc: &process::memory::ProcessHandle) -> Result<u64> {
     tracing::warn!("Using preferred base address (non-Windows stub)");
     Ok(textquest_common::offsets::EQ_PREFERRED_BASE)
+}
+
+#[cfg(all(test, not(windows)))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn non_windows_module_base_uses_preferred_base() {
+        let handle = process::memory::ProcessHandle::open(42).expect("stub process open");
+        let base = get_module_base(&handle).expect("stub module base");
+
+        assert_eq!(base, textquest_common::offsets::EQ_PREFERRED_BASE);
+    }
 }

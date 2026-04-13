@@ -31,8 +31,17 @@ research-results.tsv
 __pycache__/
 *.pyc
 
+# AutoShip / Beacon agent artifacts — never commit these into feature branches
+AUTOSHIP_RESULT.md
+AUTOSHIP_PROMPT.md
+BEACON_RESULT.md
+BEACON_PROMPT.md
+*.master
+.autoship/
+autoresearch-security/
+pane.log
+
 # AI/tooling runtime state (keep out of repo)
-.wolf/
 .claude/
 .aidesigner/
 .serena/

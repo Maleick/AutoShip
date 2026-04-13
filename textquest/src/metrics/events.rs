@@ -4,6 +4,7 @@
 //! into the metrics SQLite store. Each variant captures the minimum
 //! data needed for fleet intelligence queries.
 
+use std::collections::HashMap;
 use std::collections::VecDeque;
 
 use serde::{Deserialize, Serialize};
@@ -76,6 +77,136 @@ impl FleetEvent {
             | Self::LevelUp { timestamp, .. }
             | Self::CombatRound { timestamp, .. } => *timestamp,
         }
+    }
+}
+
+/// A platinum change event recorded when a character's balance changes.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlatEvent {
+    /// Process ID of the game client.
+    pub pid: u32,
+    /// Character whose balance changed.
+    pub character: String,
+    /// Signed delta (positive = earned, negative = spent).
+    pub delta: i64,
+    /// New absolute balance after the change.
+    pub balance: i64,
+    /// Optional source label (e.g. "vendor_sale", "spell_purchase").
+    pub source: Option<String>,
+    /// Unix epoch timestamp of the observation.
+    pub timestamp: i64,
+}
+
+impl PlatEvent {
+    /// Constructs a new `PlatEvent`.
+    pub fn new(
+        pid: u32,
+        character: impl Into<String>,
+        delta: i64,
+        balance: i64,
+        source: Option<String>,
+        timestamp: i64,
+    ) -> Self {
+        Self {
+            pid,
+            character: character.into(),
+            delta,
+            balance,
+            source,
+            timestamp,
+        }
+    }
+}
+
+/// Per-session platinum tracker.
+///
+/// Tracks the running balance per character, accumulates session earnings,
+/// and computes plat-per-hour based on session elapsed time.
+pub struct PlatTracker {
+    /// Session start time as a Unix epoch timestamp.
+    session_start: i64,
+    /// Last known balance per character (from the most recent `PlatEvent`).
+    last_balance: HashMap<String, i64>,
+    /// Cumulative plat earned (sum of positive deltas) per character since session start.
+    session_earned: HashMap<String, i64>,
+}
+
+impl PlatTracker {
+    /// Create a new tracker anchored to `session_start` (Unix epoch seconds).
+    pub fn new(session_start: i64) -> Self {
+        Self {
+            session_start,
+            last_balance: HashMap::new(),
+            session_earned: HashMap::new(),
+        }
+    }
+
+    /// Record a platinum event, updating internal state.
+    ///
+    /// Returns the computed `PlatEvent` with delta filled in.
+    pub fn record(&mut self, pid: u32, character: &str, new_balance: i64, timestamp: i64) -> PlatEvent {
+        self.record_with_source(pid, character, new_balance, None, timestamp)
+    }
+
+    /// Record a platinum event with an optional source label, updating internal state.
+    ///
+    /// Returns the computed `PlatEvent` with delta filled in.
+    pub fn record_with_source(
+        &mut self,
+        pid: u32,
+        character: &str,
+        new_balance: i64,
+        source: Option<String>,
+        timestamp: i64,
+    ) -> PlatEvent {
+        let prev = self.last_balance.get(character).copied().unwrap_or(new_balance);
+        let delta = new_balance - prev;
+        self.last_balance.insert(character.to_owned(), new_balance);
+        if delta > 0 {
+            *self.session_earned.entry(character.to_owned()).or_insert(0) += delta;
+        }
+        PlatEvent::new(pid, character, delta, new_balance, source, timestamp)
+    }
+
+    /// Cumulative plat earned by `character` since session start.
+    pub fn session_earned(&self, character: &str) -> i64 {
+        self.session_earned.get(character).copied().unwrap_or(0)
+    }
+
+    /// Total plat earned across all characters since session start.
+    pub fn total_session_earned(&self) -> i64 {
+        self.session_earned.values().sum()
+    }
+
+    /// Last known balance for `character`, or `None` if never seen.
+    pub fn last_balance(&self, character: &str) -> Option<i64> {
+        self.last_balance.get(character).copied()
+    }
+
+    /// Plat per hour for `character` based on session duration ending at `now`.
+    ///
+    /// Returns `0.0` if the session has just started (< 1 second elapsed).
+    pub fn plat_per_hour(&self, character: &str, now: i64) -> f64 {
+        self.to_per_hour(self.session_earned(character), now)
+    }
+
+    /// Fleet-wide plat per hour based on total session earnings and duration.
+    pub fn fleet_plat_per_hour(&self, now: i64) -> f64 {
+        self.to_per_hour(self.total_session_earned(), now)
+    }
+
+    /// Convert a raw earned amount to a per-hour rate given `now`.
+    fn to_per_hour(&self, earned: i64, now: i64) -> f64 {
+        let elapsed_secs = (now - self.session_start).max(0) as f64;
+        if elapsed_secs < 1.0 {
+            return 0.0;
+        }
+        earned as f64 / elapsed_secs * 3600.0
+    }
+
+    /// Session start timestamp (Unix epoch seconds).
+    pub fn session_start(&self) -> i64 {
+        self.session_start
     }
 }
 
@@ -260,5 +391,119 @@ mod tests {
         let json = serde_json::to_string(&event).unwrap();
         let back: FleetEvent = serde_json::from_str(&json).unwrap();
         assert_eq!(event, back);
+    }
+
+    // ── PlatEvent tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn plat_event_fields() {
+        let ev = PlatEvent::new(42, "Warrior01", 500, 1500, Some("vendor_sale".into()), 1000);
+        assert_eq!(ev.pid, 42);
+        assert_eq!(ev.character, "Warrior01");
+        assert_eq!(ev.delta, 500);
+        assert_eq!(ev.balance, 1500);
+        assert_eq!(ev.source.as_deref(), Some("vendor_sale"));
+        assert_eq!(ev.timestamp, 1000);
+    }
+
+    #[test]
+    fn plat_event_serde_roundtrip() {
+        let ev = PlatEvent::new(1, "Cleric01", -200, 800, None, 9999);
+        let json = serde_json::to_string(&ev).unwrap();
+        let back: PlatEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(ev, back);
+    }
+
+    // ── PlatTracker tests ────────────────────────────────────────────────
+
+    #[test]
+    fn tracker_initial_record_zero_delta() {
+        // First observation establishes the baseline — delta should be 0.
+        let mut tracker = PlatTracker::new(1000);
+        let ev = tracker.record(1, "Char_A", 5000, 1010);
+        assert_eq!(ev.delta, 0);
+        assert_eq!(ev.balance, 5000);
+        assert_eq!(tracker.session_earned("Char_A"), 0);
+    }
+
+    #[test]
+    fn tracker_positive_delta_accumulates() {
+        let mut tracker = PlatTracker::new(0);
+        tracker.record(1, "Char_A", 1000, 100);
+        tracker.record(1, "Char_A", 1500, 200);
+        let ev = tracker.record(1, "Char_A", 2000, 300);
+        assert_eq!(ev.delta, 500);
+        assert_eq!(tracker.session_earned("Char_A"), 1000); // +500 +500
+    }
+
+    #[test]
+    fn tracker_negative_delta_not_counted_in_earned() {
+        let mut tracker = PlatTracker::new(0);
+        tracker.record(1, "Char_A", 1000, 100);
+        tracker.record(1, "Char_A", 1500, 200); // +500 earned
+        tracker.record(1, "Char_A", 800, 300);  // -700 spent — should NOT reduce earned
+        assert_eq!(tracker.session_earned("Char_A"), 500);
+    }
+
+    #[test]
+    fn tracker_last_balance() {
+        let mut tracker = PlatTracker::new(0);
+        assert_eq!(tracker.last_balance("Char_A"), None);
+        tracker.record(1, "Char_A", 1234, 0);
+        assert_eq!(tracker.last_balance("Char_A"), Some(1234));
+        tracker.record(1, "Char_A", 4321, 10);
+        assert_eq!(tracker.last_balance("Char_A"), Some(4321));
+    }
+
+    #[test]
+    fn tracker_multiple_characters_isolated() {
+        let mut tracker = PlatTracker::new(0);
+        tracker.record(1, "Char_A", 1000, 100);
+        tracker.record(2, "Char_B", 2000, 100);
+        tracker.record(1, "Char_A", 1500, 200); // Char_A earned 500
+        tracker.record(2, "Char_B", 2300, 200); // Char_B earned 300
+
+        assert_eq!(tracker.session_earned("Char_A"), 500);
+        assert_eq!(tracker.session_earned("Char_B"), 300);
+        assert_eq!(tracker.total_session_earned(), 800);
+    }
+
+    #[test]
+    fn tracker_plat_per_hour() {
+        // Verify plat/hour uses earned / elapsed * 3600.
+        // Here, earned = 3600 and with session_start = 0 and now = 3600,
+        // elapsed = 3600, so (3600 / 3600) * 3600 = 3600 plat/hr.
+        let mut tracker = PlatTracker::new(0);
+        tracker.record(1, "Char_A", 0, 0);   // baseline
+        tracker.record(1, "Char_A", 3600, 1); // sets total earned to 3600; rate is checked at now = 3600
+        let pph = tracker.plat_per_hour("Char_A", 3600);
+        assert!((pph - 3600.0).abs() < 0.01, "expected ~3600, got {pph}");
+    }
+
+    #[test]
+    fn tracker_plat_per_hour_zero_elapsed() {
+        let mut tracker = PlatTracker::new(1000);
+        tracker.record(1, "Char_A", 0, 1000);
+        tracker.record(1, "Char_A", 500, 1000);
+        // now == session_start → 0 elapsed
+        assert_eq!(tracker.plat_per_hour("Char_A", 1000), 0.0);
+    }
+
+    #[test]
+    fn tracker_fleet_plat_per_hour() {
+        let mut tracker = PlatTracker::new(0);
+        tracker.record(1, "Char_A", 0, 0);
+        tracker.record(2, "Char_B", 0, 0);
+        tracker.record(1, "Char_A", 1800, 1); // +1800
+        tracker.record(2, "Char_B", 1800, 1); // +1800, total earned = 3600
+        // at now=3600s: 3600/3600*3600 = 3600 plat/hr fleet
+        let fpph = tracker.fleet_plat_per_hour(3600);
+        assert!((fpph - 3600.0).abs() < 0.01, "expected ~3600, got {fpph}");
+    }
+
+    #[test]
+    fn tracker_session_start() {
+        let tracker = PlatTracker::new(12345);
+        assert_eq!(tracker.session_start(), 12345);
     }
 }

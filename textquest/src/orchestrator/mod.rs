@@ -1,5 +1,8 @@
 //! Orchestrator — wires the camp loop state machine to IPC command delivery.
 
+/// Session and group control model for the orchestrator.
+pub mod session_control;
+
 use crate::camp::cc::CcType;
 use crate::camp::config::CampConfig;
 use crate::camp::hunt::{HuntLoop, HuntSnapshot, OperatingMode, Pos2D};
@@ -752,7 +755,7 @@ impl Orchestrator {
 
     /// Send a structured IPC command to a client via named pipe.
     /// Creates a fresh connection per command (connect → token → command → drop).
-    fn send_ipc_command(&mut self, pid: u32, cmd: Command) {
+    pub(crate) fn send_ipc_command(&mut self, pid: u32, cmd: Command) {
         let name = self
             .client_names
             .get(&pid)
@@ -784,6 +787,22 @@ impl Orchestrator {
             Ok(_) => Vec::new(),
             Err(e) => {
                 tracing::debug!(pid, error = %e, "Failed to poll packets");
+                Vec::new()
+            }
+        }
+    }
+
+    /// Poll a client for accumulated spawn add/remove events.
+    /// Sends `PollSpawnEvents` and returns any `SpawnEvent` entries.
+    pub fn poll_spawn_events(&mut self, pid: u32) -> Vec<textquest_common::ipc::SpawnEvent> {
+        let Some(pipe) = self.get_pipe(pid) else {
+            return Vec::new();
+        };
+        match pipe.send(&Command::PollSpawnEvents) {
+            Ok(Response::SpawnEventBatch { events }) => events,
+            Ok(_) => Vec::new(),
+            Err(e) => {
+                tracing::debug!(pid, error = %e, "Failed to poll spawn events");
                 Vec::new()
             }
         }
@@ -1011,6 +1030,7 @@ mod tests {
                 combat_status: CombatStatus::Idle,
                 zone_short_name: String::new(),
                 zone_long_name: String::new(),
+                actual_version: None,
             },
         );
 
@@ -1027,6 +1047,7 @@ mod tests {
                 combat_status: CombatStatus::Idle,
                 zone_short_name: String::new(),
                 zone_long_name: String::new(),
+                actual_version: None,
             },
         );
 
@@ -1097,6 +1118,7 @@ mod tests {
                 combat_status: CombatStatus::Idle,
                 zone_short_name: String::new(),
                 zone_long_name: String::new(),
+                actual_version: None,
             },
         );
         orch.game_states.insert(
@@ -1111,6 +1133,7 @@ mod tests {
                 combat_status: CombatStatus::Idle,
                 zone_short_name: String::new(),
                 zone_long_name: String::new(),
+                actual_version: None,
             },
         );
 
@@ -1400,6 +1423,7 @@ mod tests {
                 combat_status: CombatStatus::Idle,
                 zone_short_name: String::new(),
                 zone_long_name: String::new(),
+                actual_version: None,
             },
         );
 

@@ -6,6 +6,7 @@ import argparse
 import os
 import pathlib
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -65,6 +66,90 @@ def check_command(results: list[CheckResult], name: str, command: str, *args: st
     detail = first_line(completed.stdout or completed.stderr)
     record(results, "PASS", name, f"{detail} ({path})")
     return True
+
+
+def check_map_files(results: list[CheckResult]) -> None:
+    """Validate all map files in config/maps/*.txt."""
+    import re
+
+    maps_dir = REPO_ROOT / "config" / "maps"
+    if not maps_dir.exists():
+        record(results, "WARN", "Map files", "config/maps/ directory not found — skipping map validation.")
+        return
+
+    map_files = sorted(maps_dir.glob("*.txt"))
+    if not map_files:
+        record(results, "WARN", "Map files", "No *.txt files found in config/maps/.")
+        return
+
+    # Valid line patterns:
+    #   L x1, y1, z1, x2, y2, z2, r, g, b   (line segment)
+    #   P x, y, z, r, g, b, size, label       (point/label)
+    #   * comment
+    #   (blank lines are allowed)
+    float_re = r"[-+]?\d+(?:\.\d+)?"
+    int_re = r"\d+"
+    line_pattern = re.compile(
+        r"^L\s+"
+        + r",\s*".join([float_re] * 6)
+        + r",\s*"
+        + r",\s*".join([int_re] * 3)
+        + r"\s*$"
+    )
+    point_pattern = re.compile(
+        r"^P\s+"
+        + r",\s*".join([float_re] * 3)
+        + r",\s*"
+        + r",\s*".join([int_re] * 3)
+        + r",\s*"
+        + int_re
+        + r",\s*\S.*$"
+    )
+
+    errors: list[str] = []
+    empty_files: list[str] = []
+    checked = 0
+
+    for map_file in map_files:
+        try:
+            content = map_file.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            errors.append(f"{map_file.name}: read error — {exc}")
+            continue
+
+        lines = content.splitlines()
+        non_blank = [ln for ln in lines if ln.strip()]
+        if not non_blank:
+            empty_files.append(map_file.name)
+            continue
+
+        checked += 1
+        for lineno, raw in enumerate(lines, start=1):
+            stripped = raw.strip()
+            if not stripped or stripped.startswith("*"):
+                continue
+            if line_pattern.match(stripped) or point_pattern.match(stripped):
+                continue
+            errors.append(f"{map_file.name}:{lineno}: unexpected format — {stripped[:60]!r}")
+
+    total = len(map_files)
+    if errors or empty_files:
+        detail_parts: list[str] = []
+        if empty_files:
+            detail_parts.append(f"empty files: {', '.join(empty_files)}")
+        if errors:
+            detail_parts.append("; ".join(errors[:5]))
+            if len(errors) > 5:
+                detail_parts.append(f"…and {len(errors) - 5} more error(s)")
+        record(
+            results,
+            "FAIL",
+            "Map files",
+            f"Checked {total} map file(s) — issues found: {'; '.join(detail_parts)}",
+            "Ensure each map line starts with L or P (with correct field counts) or * for comments.",
+        )
+    else:
+        record(results, "PASS", "Map files", f"{checked}/{total} map file(s) passed validation.")
 
 
 def detect_windows_toolchain(results: list[CheckResult]) -> None:
@@ -264,6 +349,114 @@ def print_results(results: list[CheckResult], require_reference_trees: bool) -> 
     return 1
 
 
+def run_ci_step(name: str, results: list[CheckResult], args: list[str], fix: str | None = None) -> bool:
+    """Run a CI-equivalent command with live output, recording pass/fail."""
+    print(f"\n{'=' * 60}")
+    print(f"  {name}")
+    print(f"{'=' * 60}")
+    completed = subprocess.run(
+        args,
+        cwd=REPO_ROOT,
+        check=False,
+    )
+    if completed.returncode == 0:
+        record(results, "PASS", name, "OK")
+        return True
+    record(results, "FAIL", name, f"Exit code {completed.returncode}", fix)
+    return False
+
+
+def run_ci_checks(results: list[CheckResult], *, fix: bool, skip_tests: bool, has_fmt: bool, has_clippy: bool) -> None:
+    """Run the checks from the PR gate locally (fmt, clippy, test, python).
+
+    The order is optimised for fast local feedback (fmt first, then clippy,
+    then tests) and may differ from the CI workflow in ci.yml.
+    """
+    print("\n")
+    print("=" * 60)
+    print("  Running CI checks (covers the same checks as the PR gate)")
+    print("=" * 60)
+
+    # 0. Wiki sync check (CI runs this before cargo steps)
+    sync_wiki = REPO_ROOT / "scripts" / "sync_wiki.py"
+    if sync_wiki.exists():
+        run_ci_step("wiki sync check", results, [_python_cmd(), str(sync_wiki), "--check"])
+
+    # 1. cargo fmt
+    if has_fmt:
+        if fix:
+            run_ci_step("cargo fmt --all (autofix)", results, ["cargo", "fmt", "--all"])
+        run_ci_step(
+            "cargo fmt --all --check",
+            results,
+            ["cargo", "fmt", "--all", "--check"],
+            fix="Run `cargo fmt --all` or rerun with `--fix`.",
+        )
+    else:
+        record(results, "FAIL", "cargo fmt --all --check", "Skipped — rustfmt not available.",
+               "Run `rustup component add rustfmt`.")
+
+    # 2. cargo clippy
+    if has_clippy:
+        run_ci_step(
+            "cargo clippy",
+            results,
+            ["cargo", "clippy", "--all-targets", "--all-features", "--", "-D", "warnings"],
+        )
+    else:
+        record(results, "FAIL", "cargo clippy", "Skipped — clippy not available.",
+               "Run `rustup component add clippy`.")
+
+    if skip_tests:
+        record(results, "PASS", "cargo test", "Skipped (--skip-tests)")
+        record(results, "PASS", "Python tests", "Skipped (--skip-tests)")
+        return
+
+    # 3. cargo test
+    run_ci_step("cargo test", results, ["cargo", "test"])
+
+    # 4. Python tests
+    run_ci_step(
+        "Python tests",
+        results,
+        [_python_cmd(), "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py", "-v"],
+    )
+
+
+def _python_cmd() -> str:
+    # Prefer the interpreter running this script so subprocesses share
+    # the same virtualenv / environment as the preflight command itself.
+    if sys.executable:
+        return sys.executable
+    for candidate in ("python3", "python"):
+        if command_path(candidate):
+            return candidate
+    return "python3"
+
+
+def update_test_count() -> None:
+    """Count workspace tests and patch the ~N tests figure in CLAUDE.md."""
+    result = subprocess.run(
+        ["cargo", "test", "--all", "--", "--list"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    count = result.stdout.count(": test")
+    if count == 0:
+        print("update-docs: could not count tests (build may be needed)")
+        return
+
+    claude_md = REPO_ROOT / "CLAUDE.md"
+    text = claude_md.read_text()
+    updated = re.sub(r"~[\d,]+\+ tests", f"~{count:,}+ tests", text)
+    if updated == text:
+        print(f"update-docs: test count already current ({count:,})")
+        return
+    claude_md.write_text(updated)
+    print(f"update-docs: CLAUDE.md test count updated to ~{count:,}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="TextQuest developer bootstrap/preflight helper.")
     parser.add_argument(
@@ -280,6 +473,26 @@ def main() -> int:
         "--macroquest-root",
         default=os.environ.get("TEXTQUEST_MACROQUEST_ROOT"),
         help="Path to a local MacroQuest checkout. Defaults to TEXTQUEST_MACROQUEST_ROOT if set.",
+    )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Auto-fix formatting issues (runs `cargo fmt --all` before checking).",
+    )
+    parser.add_argument(
+        "--skip-tests",
+        action="store_true",
+        help="Skip cargo test and Python tests (only run fmt + clippy).",
+    )
+    parser.add_argument(
+        "--env-only",
+        action="store_true",
+        help="Only check the development environment, skip CI checks.",
+    )
+    parser.add_argument(
+        "--update-docs",
+        action="store_true",
+        help="Count workspace tests and patch the test count in CLAUDE.md.",
     )
     args = parser.parse_args()
 
@@ -311,10 +524,13 @@ def main() -> int:
         fix="Install Rust from https://rustup.rs or run `scripts\\setup-windows.ps1` on Windows.",
     )
 
+    has_fmt = False
+    has_clippy = False
     if cargo_ok:
         fmt = run_command("cargo", "fmt", "--version")
         if fmt.returncode == 0:
             record(results, "PASS", "rustfmt", first_line(fmt.stdout or fmt.stderr))
+            has_fmt = True
         else:
             record(
                 results,
@@ -327,6 +543,7 @@ def main() -> int:
         clippy = run_command("cargo", "clippy", "--version")
         if clippy.returncode == 0:
             record(results, "PASS", "clippy", first_line(clippy.stdout or clippy.stderr))
+            has_clippy = True
         else:
             record(
                 results,
@@ -336,16 +553,7 @@ def main() -> int:
                 "Run `rustup component add clippy`.",
             )
 
-    # Map format validation
-    map_validation = run_command(
-        sys.executable,
-        "scripts/validate-maps.py",
-    )
-    if map_validation.returncode == 0:
-        record(results, "PASS", "Map validation", first_line(map_validation.stdout or map_validation.stderr))
-    else:
-        detail = first_line(map_validation.stderr or map_validation.stdout)
-        record(results, "WARN", "Map validation", detail)
+    check_map_files(results)
 
     check_command(
         results,
@@ -365,6 +573,32 @@ def main() -> int:
             eqlib_root=args.eqlib_root,
             macroquest_root=args.macroquest_root,
         )
+
+    # Validate map files if config/maps/ exists
+    map_dir = REPO_ROOT / "config" / "maps"
+    if map_dir.exists():
+        validate_maps_script = REPO_ROOT / "scripts" / "validate-maps.py"
+        if validate_maps_script.exists():
+            completed = run_command(sys.executable, str(validate_maps_script))
+            if completed.returncode == 0:
+                detail = first_line(completed.stdout or completed.stderr)
+                record(results, "PASS", "Map validation", detail)
+            else:
+                detail = first_line(completed.stderr or completed.stdout)
+                record(
+                    results,
+                    "FAIL",
+                    "Map validation",
+                    detail,
+                    "Fix map format errors reported by scripts/validate-maps.py.",
+                )
+        else:
+            record(results, "WARN", "Map validation", "scripts/validate-maps.py not found; skipping.")
+    else:
+        record(results, "PASS", "Map validation", "No config/maps/ directory; skipping.")
+
+    if args.update_docs and cargo_ok:
+        update_test_count()
 
     return print_results(results, require_reference_trees=args.require_reference_trees)
 

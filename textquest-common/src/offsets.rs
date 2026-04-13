@@ -9,6 +9,21 @@
 /// Preferred base address of eqgame.exe (64-bit)
 pub const EQ_PREFERRED_BASE: u64 = 0x0001_4000_0000;
 
+/// EQ client build date these offsets target, in `YYYYMMDD` format.
+///
+/// Single source of truth for runtime version checks — referenced by
+/// `scan_engine::EXPECTED_CLIENT_DATE` and `OffsetDatabase::from_compiled_offsets()`.
+/// Update this value when importing new offsets on patch day.
+pub const CLIENT_DATE: &str = "20260310";
+
+/// Address in EQ memory holding the current runtime date/version string.
+///
+/// MQ uses a global string pointer for `__ActualVersionDate` in `eqgame.exe`.
+pub const ACTUAL_VERSION_DATE: u64 = 0x140B38830;
+
+/// Expected string to validate compatibility with the current EQ patch.
+pub const EXPECTED_VERSION_DATE: &str = "Mar 10 2026";
+
 /// Pointer to local player (`PlayerClient`*)
 pub const PINST_LOCAL_PLAYER: u64 = 0x0001_40E8_E380;
 
@@ -40,6 +55,58 @@ pub const PINST_CCHAT_WINDOW_MANAGER: u64 = 0x0001_40F2_2B20;
 /// Pointer to `CInvSlotMgr` (inventory slot manager)
 /// Source: eqgame.h `pinstCInvSlotMgr_x`
 pub const PINST_CINV_SLOT_MGR: u64 = 0x0001_40DD_D5F0;
+
+/// PINST_CHAR_DATA — character profile/data pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_CHAR_DATA: u64 = 0x0;
+
+/// PINST_PC_DATA — PC data pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_PC_DATA: u64 = 0x0;
+
+/// PINST_GROUP — group direct access pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_GROUP: u64 = 0x0;
+
+/// PINST_RAID — raid direct access pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_RAID: u64 = 0x0;
+
+/// PINST_ALT_ADV_MANAGER — AA tracking pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_ALT_ADV_MANAGER: u64 = 0x0;
+
+/// PINST_MERC_MANAGER — mercenary control pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_MERC_MANAGER: u64 = 0x0;
+
+/// PINST_ACTIVE_BANKER — active banker pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_ACTIVE_BANKER: u64 = 0x0;
+
+/// PINST_ACTIVE_MERCHANT — active merchant pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_ACTIVE_MERCHANT: u64 = 0x0;
+
+/// PINST_ACTIVE_TRADE — active trade window pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_ACTIVE_TRADE: u64 = 0x0;
+
+/// PINST_TASK_MANAGER — task/quest tracking pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_TASK_MANAGER: u64 = 0x0;
+
+/// PINST_FELLOWSHIP — fellowship management pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_FELLOWSHIP: u64 = 0x0;
+
+/// PINST_ADVANCED_LOOT_WND — advanced loot window pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_ADVANCED_LOOT_WND: u64 = 0x0;
+
+/// PINST_REAL_ESTATE_ITEMS — housing/guild hall pointer.
+/// Placeholder address, scan signature still needs RE work.
+pub const PINST_REAL_ESTATE_ITEMS: u64 = 0x0;
 
 // ─── Active Hacks Offsets (Pending verification for 20260310) ───
 // These are offsets from the eqgame.exe base address, currently reflecting January 2025.
@@ -173,6 +240,11 @@ pub const PROCESS_GAME_EVENTS: u64 = 0x0001_4028_E0F0;
 /// Source: eqgame.h `CEverQuest__dsp_chat_x` (ChatManagerClient__DisplayChatText)
 pub const DSP_CHAT: u64 = 0x0001_4010_CFC0;
 
+/// `CEverQuest::SetGameState` — hook point for game lifecycle transitions.
+/// Signature: `void SetGameState(int state)`
+/// Current value pending 20260310 rebase verification.
+pub const EVERQUEST_SET_GAME_STATE: u64 = 0x0000_0000_0000_0000;
+
 /// `CDisplay::RealRender_World` — render loop (alternative hook point)
 pub const REAL_RENDER_WORLD: u64 = 0x0001_401A_4320;
 
@@ -231,6 +303,24 @@ pub const CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT: u64 = 0x0001_403B_B240;
 /// Signature: CChatWindow* CreateChatWindow(CTabWnd* pTabs, int, int, CXStr name, int, int, int, int, int)
 pub const CCHAT_MGR_CREATE_CHAT_WINDOW: u64 = 0x0001_403B_1780;
 
+/// `CSidlScreenWnd::Init` — UI window initialization hook candidate
+pub const SIDL_SCREEN_WND_INIT: u64 = 0x0;
+
+/// `CXWndManager::RemoveWnd` — UI window teardown hook candidate
+pub const CXWND_MANAGER_REMOVE_WND: u64 = 0x0;
+
+/// `CMerchantWnd::PurchasePageHandler::UpdateList` — merchant event callback
+pub const CMERCHANTWND_PURCHASEPAGEHANDLER_UPDATELIST: u64 = 0x0;
+
+/// `ProcessMouseEvents` — input event processing hook candidate
+pub const PROCESS_MOUSE_EVENTS: u64 = 0x0;
+
+/// `ProcessKeyboardEvents` — input event processing hook candidate
+pub const PROCESS_KEYBOARD_EVENTS: u64 = 0x0;
+
+/// `CRender::ResetDevice` — graphics device-recovery hook candidate
+pub const CRENDER_RESET_DEVICE: u64 = 0x0;
+
 // ─── Anti-Cheat / Network Internals (Ghidra-verified) ───
 // Source: Ghidra analysis of eqgame.exe, 2026-04-03
 // These addresses were discovered via binary analysis, not eqlib headers.
@@ -255,6 +345,12 @@ pub const WORLD_AUTHENTICATE: u64 = 0x0001_402C_9C80;
 
 /// SystemFingerprint: sends VideoCardId, NetworkCardId, HardriveId, ComputerName
 pub const SYSTEM_FINGERPRINT: u64 = 0x0001_4059_4840;
+
+/// `CheaterLdFlag` format string used by anti-cheat detection logs (`CheaterLdFlag=%d\n`).
+pub const CHEATER_LD_FLAG_STRING: u64 = 0x0001_40AF_EBC8;
+
+/// `CheaterLdFlag` global flag variable storing the current anti-cheat state.
+pub const CHEATER_LD_FLAG_VAR: u64 = 0x0001_40AF_ED90;
 
 // ─── CInvSlotMgr function addresses ───
 // Source: eqgame.h, client date 20260310
@@ -281,6 +377,62 @@ pub const INV_SLOT_GET_ITEM_BASE: u64 = 0x0001_4041_9520;
 /// `CSpellBookWnd::MemorizeSet` — memorize a set of spells into gem slots
 /// Signature: void MemorizeSet(int*, int)
 pub const SPELL_BOOK_WND_MEMORIZE_SET: u64 = 0x0001_4050_EFE0;
+
+/// `EQBeginZone` — begin zone transition handler.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_BEGIN_ZONE: u64 = 0x0;
+
+/// `EQEndZone` — end zone transition handler.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_END_ZONE: u64 = 0x0;
+
+/// `EQFinishZone` — zone transition completion handler.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_FINISH_ZONE: u64 = 0x0;
+
+/// `EQZoneChange` — zone change event function.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_ZONE_CHANGE: u64 = 0x0;
+
+/// `EQInvitePlayer` — invite player into a group/raid.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_INVITE_PLAYER: u64 = 0x0;
+
+/// `EQDisband` — disband from group/raid.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_DISBAND: u64 = 0x0;
+
+/// `EQFollowPlayer` — issue follow command for a player.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_FOLLOW_PLAYER: u64 = 0x0;
+
+/// `EQMakeLeader` — promote a player to group/raid leader.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_MAKE_LEADER: u64 = 0x0;
+
+/// `EQBuyItem` — merchant buy item function.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_BUY_ITEM: u64 = 0x0;
+
+/// `EQSellItem` — merchant sell item function.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_SELL_ITEM: u64 = 0x0;
+
+/// `EQOpenTrade` — open trade request window.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_OPEN_TRADE: u64 = 0x0;
+
+/// `EQCompleteTrade` — finalize a trade session.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_COMPLETE_TRADE: u64 = 0x0;
+
+/// `EQBuffPlayer` — apply/remove player buff routines.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_BUFF_PLAYER: u64 = 0x0;
+
+/// `EQRemoveBuff` — remove player buff routine.
+/// Placeholder until scan/probe resolves the live address.
+pub const EQ_REMOVE_BUFF: u64 = 0x0;
 
 // ─── CContextMenuManager global pointer and function addresses ───
 // Source: eqgame.h `pinstCContextMenuManager_x` and `CContextMenuManager__HandleMenu_x`,
@@ -329,8 +481,24 @@ pub mod eqmain {
     /// `LoginServerAPI::JoinServer` function address
     pub const JOIN_SERVER: u64 = 0x0001_8001_8050;
 
-    /// `LoginViewManager` function address
+    /// Pointer to `CLoginViewManager` instance
+    /// Source: eqmain.h `EQMain__pinstCLoginViewManager_x`
     pub const LOGIN_VIEW_MANAGER: u64 = 0x0001_8001_B0E0;
+
+    /// CharacterSelectWnd::EnterWorld helper (login-phase wrapper)
+    pub const CHAR_SELECT_ENTER_WORLD: u64 = 0x0001_8001_0200;
+
+    /// ServerSelectWnd::OnServerSelected (login server selection handler)
+    pub const SERVER_SELECT: u64 = 0x0001_8001_0210;
+
+    /// SplashScreen::Handle — close/hide splash overlay
+    pub const HANDLE_SPLASH: u64 = 0x0001_8001_0220;
+
+    /// CharacterListWnd::SelectCharacter login-phase helper
+    pub const CHAR_SELECT_SELECT_CHARACTER: u64 = 0x0001_8001_0230;
+
+    /// CharacterSelectWnd::CharacterList::set_focus helper
+    pub const CHAR_SELECT_SET_FOCUS: u64 = 0x0001_8001_0240;
 
     // ─── Login pointer addresses (preferred base) ───
 
@@ -595,6 +763,16 @@ pub const SELECT_CHARACTER: u64 = 0x0001_400D_5D20;
 /// `CCharacterListWnd::EnterWorld` function address (preferred base, eqgame.exe)
 pub const ENTER_WORLD: u64 = 0x0001_400D_4B20;
 
+// ─── Struct size constants ───
+/// Total size of `PlayerClient` struct in bytes (estimated from field layout).
+pub const PLAYER_CLIENT_SIZE: usize = 0x4000; // Placeholder; verify with sizeof or padding analysis
+/// Maximum offset within `SPAWNINFO` (PlayerClient's spawn data).
+pub const SPAWN_INFO_MAX_OFFSET: usize = 0x1000;
+/// Size of spell struct in spell book or spell array.
+pub const EQ_SPELL_SIZE: usize = 0x100; // Placeholder
+/// Size of zone zone array (spawn manager internal array).
+pub const SPAWN_MANAGER_ZONE_ZONE_SIZE: usize = 0x8;
+
 // ─── PlayerClient (SPAWNINFO) field offsets ───
 // These are byte offsets within the PlayerClient struct.
 // Source: eqlib PlayerClient.h
@@ -633,6 +811,11 @@ pub mod player_base {
     pub const SPAWN_ID: usize = 0x168;
     /// char\[32\] — last name
     pub const LASTNAME: usize = 0x048;
+    /// `PlayerClient`* — the spawn's current target (ManagedTarget pointer).
+    /// Source: eqlib PlayerBase, ManagedTarget field at 0x268.
+    /// Used by the assist system to read "target's target" for focus-fire logic.
+    /// TODO: verify against a live build hex dump — layout may shift on patch day.
+    pub const MANAGED_TARGET: usize = 0x268;
 }
 
 /// Buff slot constants and `EQ_Affect` field offsets.
@@ -679,21 +862,6 @@ pub mod buff_slots {
     /// EQ tick duration in seconds.
     pub const SECONDS_PER_TICK: f32 = 6.0;
 
-    // ── Convenience aliases for external buff reads ──
-
-    /// Maximum buff slots to iterate (alias for `MAX_TOTAL_BUFFS`).
-    pub const MAX_BUFF_SLOTS: usize = MAX_TOTAL_BUFFS;
-
-    /// Offset from PcProfile to the buff array data (`BaseProfile::Buffs`).
-    /// This is `profile::BUFFS_ARRAY` — callers must first dereference the
-    /// profile pointer chain to reach the PcProfile base.
-    pub const BUFF_ARRAY_OFFSET: usize = super::profile::BUFFS_ARRAY;
-
-    /// Size of each buff entry (alias for `EQ_AFFECT_SIZE`).
-    pub const BUFF_ENTRY_SIZE: usize = EQ_AFFECT_SIZE;
-
-    /// Remaining duration in ticks (alias for `DURATION`).
-    pub const DURATION_TICKS: usize = DURATION;
 }
 
 /// Pointer chain from `PINST_LOCAL_PC` → profile → buff array.
@@ -717,12 +885,10 @@ pub mod profile {
     pub const MEMORIZED_SPELLS: usize = 0x14b0;
     /// Number of spellbook slots between `SpellBook` and `MemorizedSpells`.
     pub const SPELL_BOOK_SLOT_COUNT: usize = (MEMORIZED_SPELLS - SPELL_BOOK) / 4;
-    /// Alias for `SPELL_BOOK_SLOT_COUNT` — total slots in `BaseProfile::SpellBook`.
-    pub const SPELL_BOOK_SLOTS: usize = 1280;
     /// Visible spell-gem slots used by the live client UI.
     pub const MEMORIZED_SPELL_GEM_COUNT: usize = 15;
-    /// Total visible memorized spell gem slots in `BaseProfile::MemorizedSpells` (alias for `MEMORIZED_SPELL_GEM_COUNT`).
-    pub const MEMORIZED_SPELL_GEMS: usize = 15;
+    /// Alias for `MEMORIZED_SPELL_GEM_COUNT` — used by external callers in `textquest-dll`.
+    pub const MEMORIZED_SPELL_GEMS: usize = MEMORIZED_SPELL_GEM_COUNT;
 
     /// `SoeUtil::Array::m_array` (data pointer) at +0x08 within the array.
     pub const ARRAY_DATA_PTR: usize = 0x08;
@@ -998,6 +1164,16 @@ pub mod spawn_manager {
     /// `TList`<`PlayerClient`*> — start of the player linked list
     /// The `TList` itself contains `m_pFirstNode` at offset 0x00
     pub const PLAYER_LIST: usize = 0x0010;
+
+    /// TODO: reverse engineer
+    /// Offset of `PlayerManagerClient::CreatePlayer`.
+    /// Placeholder for IPC event-driven spawn add notifications.
+    pub const PLAYER_MANAGER_CREATE_PLAYER: usize = 0x0;
+
+    /// TODO: reverse engineer
+    /// Offset of `PlayerManagerBase::PrepForDestroyPlayer`.
+    /// Placeholder for IPC event-driven spawn destroy notifications.
+    pub const PLAYER_MANAGER_PREP_DESTROY_PLAYER: usize = 0x0;
 }
 
 /// `ZoneGuideManagerClient` / `ZoneGuideZone` struct layout offsets.
@@ -1281,6 +1457,11 @@ mod tests {
             eqmain::LOGIN_VIEW_MANAGER,
             eqmain::PINST_LOGIN_CLIENT,
             eqmain::PINST_LOGIN_CONTROLLER,
+            eqmain::EQMAIN_CHAR_SELECT_ENTER_WORLD,
+            eqmain::EQMAIN_SERVER_SELECT,
+            eqmain::EQMAIN_HANDLE_SPLASH,
+            eqmain::EQMAIN_CHAR_SELECT_SELECT_CHARACTER,
+            eqmain::EQMAIN_CHAR_SELECT_SET_FOCUS,
         ];
         for addr in &addrs {
             assert!(
@@ -1429,6 +1610,53 @@ mod tests {
     }
 
     #[test]
+    fn eqgraphics_and_eqmain_offsets_are_unique() {
+        let new_offsets = [
+            EQGRAPHICS_REALRENDER_WORLD,
+            EQGRAPHICS_DEVICE_RESET,
+            EQGRAPHICS_INIT_RENDER,
+            EQGRAPHICS_RENDER_FRAME,
+            EQGRAPHICS_DX_PRESENT,
+            eqmain::EQMAIN_CHAR_SELECT_ENTER_WORLD,
+            eqmain::EQMAIN_SERVER_SELECT,
+            eqmain::EQMAIN_HANDLE_SPLASH,
+            eqmain::EQMAIN_CHAR_SELECT_SELECT_CHARACTER,
+            eqmain::EQMAIN_CHAR_SELECT_SET_FOCUS,
+        ];
+
+        let existing_offsets = [
+            CAST_SPELL,
+            DO_COMBAT_ABILITY,
+            USE_SKILL,
+            CAN_USE_ITEM,
+            DO_ATTACK,
+            EXECUTE_CMD,
+            INTERPRET_CMD,
+            RIGHT_CLICKED_ON_PLAYER,
+            REAL_RENDER_WORLD,
+            CLICKED_PLAYER,
+            ISSUE_PET_COMMAND,
+            CHAR_LIST_ENTER_WORLD,
+            CHAR_LIST_SELECT_CHAR,
+            eqmain::SIDL_MANAGER,
+            eqmain::LOGIN_SERVER_API,
+            eqmain::JOIN_SERVER,
+        ];
+
+        let mut seen = std::collections::HashSet::new();
+        for addr in new_offsets.iter().chain(existing_offsets.iter()).copied() {
+            if addr == 0 {
+                continue;
+            }
+            assert!(
+                seen.insert(addr),
+                "duplicate offset detected for 0x{:X}",
+                addr
+            );
+        }
+    }
+
+    #[test]
     fn cchat_window_manager_pointer_above_preferred_base() {
         const _: () = assert!(PINST_CCHAT_WINDOW_MANAGER > EQ_PREFERRED_BASE);
     }
@@ -1500,6 +1728,71 @@ mod tests {
             assert!(context_menu_mgr::MENUS_DATA < context_menu_mgr::CUR_MENU);
             assert!(context_menu_mgr::CUR_MENU < context_menu_mgr::CUR_ITEM);
         };
+    }
+
+    #[test]
+    fn cheater_ld_flag_offsets_do_not_overlap() {
+        use std::collections::HashSet;
+
+        // Include the new constants alongside existing ones to verify no address collisions.
+        let all_offsets: &[u64] = &[
+            CHEATER_LD_FLAG_STRING,
+            CHEATER_LD_FLAG_VAR,
+            PINST_LOCAL_PLAYER,
+            PINST_CONTROLLED_PLAYER,
+            PINST_TARGET,
+            PINST_SPAWN_MANAGER,
+            PINST_LOCAL_PC,
+            PINST_SPELL_MANAGER,
+            PINST_CDISPLAY,
+            PINST_CEVERQUEST,
+            PINST_CXWND_MANAGER,
+            PINST_ACTIVE_CORPSE,
+            PINST_CCHAT_WINDOW_MANAGER,
+            PINST_CINV_SLOT_MGR,
+            PINST_CONTEXT_MENU_MANAGER,
+            PINST_SGRAPHICSENGINE,
+            MEMCHECK4_PROCESS_ENUM,
+            FILE_INTEGRITY_DISPATCHER,
+            SERVER_MEMCHECK_HANDLER,
+            PROCESS_GAME_EVENTS,
+            FIX_HEADING,
+            GET_BEARING,
+            WORLD_AUTHENTICATE,
+            SYSTEM_FINGERPRINT,
+            NET_SEND,
+            OUTBOUND_MSG_COUNTER,
+            INBOUND_MSG_COUNTER,
+            CCHAT_MGR_GET_RGBA,
+            CCHAT_MGR_INIT_CONTEXT_MENU,
+            CCHAT_MGR_FREE_CHAT_WINDOW,
+            CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT,
+            CCHAT_MGR_CREATE_CHAT_WINDOW,
+            INV_SLOT_MGR_FIND_SLOT,
+            INV_SLOT_MGR_MOVE_ITEM,
+            INV_SLOT_MGR_SELECT_SLOT,
+            SPELL_BOOK_WND_MEMORIZE_SET,
+            INV_SLOT_GET_ITEM_BASE,
+            CONTEXT_MENU_MGR_HANDLE_MENU,
+            CAST_SPELL,
+            DO_COMBAT_ABILITY,
+            USE_SKILL,
+            CAN_USE_ITEM,
+            DO_ATTACK,
+            EXECUTE_CMD,
+            INTERPRET_CMD,
+            RIGHT_CLICKED_ON_PLAYER,
+            CLICKED_PLAYER,
+            ISSUE_PET_COMMAND,
+            DO_LOOT,
+            DSP_CHAT,
+            REAL_RENDER_WORLD,
+        ];
+
+        let mut seen = HashSet::new();
+        for &value in all_offsets {
+            assert!(seen.insert(value), "Duplicate offset: {value:#x}");
+        }
     }
 
     #[test]

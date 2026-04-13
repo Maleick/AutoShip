@@ -1,0 +1,29 @@
+# Soul Engine — Cleric Personality Example
+# Character: Luminara the Cleric (devout, caring, patient)
+
+[soul]
+enabled = true
+edginess = "Mild"
+idle_tick_secs = 45
+min_chat_interval_secs = 90
+max_chat_interval_secs = 600
+inter_character_chat = true
+player_chat_enabled = true   # Clerics engage with the community
+
+[[soul.character]]
+character_id = 1002
+name = "Luminara"
+personality = "Cleric"
+
+  [soul.character.traits]
+  conscientiousness = 0.8   # Highly organized, remembers duties
+  agreeableness = 0.7       # Warm, empathetic, helps others
+  openness = 0.4            # Curious about the world and lore
+  neuroticism = 0.0         # Calm under pressure (healer mentality)
+  extraversion = 0.3        # Speaks when needed, not chatty
+
+  battle_hunger = -0.5      # Dislikes fighting, prefers peace
+  loyalty = 0.9             # Extremely devoted to her charge
+  piety = 0.95              # Central to her identity
+  mischief = -0.1           # Rarely jokes, takes duties seriously
+  wanderlust = 0.2          # Cautious about dangerous zones

@@ -4,6 +4,7 @@ import CenterContent from "./components/CenterContent";
 import RightSidebar from "./components/RightSidebar";
 import GroupBuilder from "./components/GroupBuilder";
 import LootConfig from "./components/LootConfig";
+import SoulPanel from "./components/SoulPanel";
 
 function App() {
   const [activeView, setActiveView] = useState<ActiveView>("engagements");
@@ -21,6 +22,8 @@ function App() {
           <GroupBuilder />
         ) : activeView === "loot" ? (
           <LootConfig />
+        ) : activeView === "soul" ? (
+          <SoulPanel />
         ) : (
           <>
             <CenterContent />

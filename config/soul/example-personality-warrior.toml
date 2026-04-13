@@ -1,0 +1,36 @@
+# Soul Engine — Warrior Personality Example
+# Character: Grimjaw the Warrior (aggressive, battle-hungry, fiercely loyal)
+
+[soul]
+enabled = true
+edginess = "Edgy"           # Options: Tame, Mild, Edgy, Wild
+idle_tick_secs = 30         # How often idle scheduler fires (seconds)
+min_chat_interval_secs = 60 # Minimum gap between emotes/chat
+max_chat_interval_secs = 300
+inter_character_chat = true
+player_chat_enabled = false  # Don't respond to real player tells
+
+[[soul.character]]
+character_id = 1001
+name = "Grimjaw"
+personality = "Warrior"
+
+  [soul.character.traits]
+  # Trait values: -1.0 (minimum) to 1.0 (maximum)
+  conscientiousness = 0.3   # Somewhat disciplined; follows orders
+  agreeableness = -0.2      # Blunt, not particularly friendly
+  openness = -0.4           # Prefers proven tactics, not experiments
+  neuroticism = 0.1         # Mostly stable, gets riled up in combat
+  extraversion = 0.6        # Loud, vocal in group situations
+
+  # EQ-specific traits
+  battle_hunger = 0.9       # Actively seeks combat
+  loyalty = 0.8             # Fiercely loyal to group members
+  piety = 0.1               # No patience for religion
+  mischief = 0.2            # Occasional dark humor
+  wanderlust = 0.3          # Willing to explore dangerous zones
+
+[[soul.relationship]]
+char_a = 1001
+char_b = 1002
+affinity = 0.7              # Trusts the healer, relies on them

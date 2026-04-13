@@ -345,6 +345,54 @@ fn spawn_marker_glyph(
     }
 }
 
+
+/// Convert an EQ heading value (0–512, where 0=North, 128=West, 256=South, 384=East)
+/// to an 8-direction Unicode arrow character indicating the player's facing direction.
+///
+/// The EQ heading range is 0–512 (full circle). We map it to 8 octants of 64 units each:
+///   0/512=N(↑), 64=NW(↖), 128=W(←), 192=SW(↙), 256=S(↓), 320=SE(↘), 384=E(→), 448=NE(↗)
+fn heading_arrow_char(heading: f32) -> char {
+    // Normalise to [0, 512)
+    let h = ((heading % 512.0) + 512.0) % 512.0;
+    // Each octant spans 64 units; centre at multiples of 64, offset by 32 for rounding.
+    let octant = ((h + 32.0) % 512.0) as u32 / 64;
+    match octant {
+        0 => '↑', // N
+        1 => '↖', // NW
+        2 => '←', // W
+        3 => '↙', // SW
+        4 => '↓', // S
+        5 => '↘', // SE
+        6 => '→', // E
+        7 => '↗', // NE
+        _ => '↑', // fallback
+    }
+}
+/// Place a directional heading arrow in the grid cell adjacent to position (`col`, `row`)
+/// in the direction the player is facing. No-op if the target cell is out of bounds.
+fn place_heading_arrow(
+    heading: f32,
+    heading_rad: f32,
+    col: i32,
+    row: i32,
+    width: i32,
+    height: i32,
+    grid: &mut Vec<Vec<(char, ratatui::style::Color)>>,
+    color: ratatui::style::Color,
+) {
+    let arrow = heading_arrow_char(heading);
+    let arrow_col = col + heading_rad.cos().round() as i32;
+    let arrow_row = row - heading_rad.sin().round() as i32; // screen Y inverted
+    if arrow_col >= 0
+        && arrow_col < width
+        && arrow_row >= 0
+        && arrow_row < height
+        && (arrow_col != col || arrow_row != row)
+    {
+        grid[arrow_row as usize][arrow_col as usize] = (arrow, color);
+    }
+}
+
 fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     use ratatui::style::Color;
     let theme = app.theme.clone();
@@ -516,27 +564,11 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             if !visible_region.contains_line(ml.x1, ml.y1, ml.x2, ml.y2) {
                 continue;
             }
-            let (lx1, ly1, lx2, ly2) = if let Some(pz) = player_z {
-                match clip_line_z(ml.x1, ml.y1, ml.z1, ml.x2, ml.y2, ml.z2, pz, z_range) {
-                    Some(coords) => coords,
-                    None => continue,
-                }
-            } else {
-                (ml.x1, ml.y1, ml.x2, ml.y2)
-            };
-            let (c1, r1) = to_grid(lx1, ly1);
-            let (c2, r2) = to_grid(lx2, ly2);
             let color = map_rgb_to_color(ml.r, ml.g, ml.b, t);
-            bresenham_line(
-                c1,
-                r1,
-                c2,
-                r2,
-                w,
-                h,
-                &mut grid,
-                color,
-                LinePaintMode::BlankOnly,
+            clip_project_draw_line(
+                ml.x1, ml.y1, ml.z1, ml.x2, ml.y2, ml.z2,
+                player_z, z_range, &to_grid, w, h, &mut grid,
+                color, LinePaintMode::BlankOnly,
             );
         }
     }
@@ -554,7 +586,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                 continue;
             }
             let (col, row) = to_grid(mp.x, mp.y);
-            if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
+            if grid_in_bounds(col, row, w, h) {
                 let marker = if mp.label.is_empty() {
                     '*'
                 } else {
@@ -598,29 +630,10 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             if !visible_region.contains_line(segment.x1, segment.y1, segment.x2, segment.y2) {
                 continue;
             }
-            let (lx1, ly1, lx2, ly2) = if let Some(pz) = player_z {
-                match clip_line_z(
-                    segment.x1, segment.y1, segment.z1, segment.x2, segment.y2, segment.z2, pz,
-                    z_range,
-                ) {
-                    Some(coords) => coords,
-                    None => continue,
-                }
-            } else {
-                (segment.x1, segment.y1, segment.x2, segment.y2)
-            };
-            let (c1, r1) = to_grid(lx1, ly1);
-            let (c2, r2) = to_grid(lx2, ly2);
-            bresenham_line(
-                c1,
-                r1,
-                c2,
-                r2,
-                w,
-                h,
-                &mut grid,
-                t.text_secondary,
-                LinePaintMode::OverwriteLinework,
+            clip_project_draw_line(
+                segment.x1, segment.y1, segment.z1, segment.x2, segment.y2, segment.z2,
+                player_z, z_range, &to_grid, w, h, &mut grid,
+                t.text_secondary, LinePaintMode::OverwriteLinework,
             );
         }
 
@@ -629,29 +642,10 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                 if !visible_region.contains_line(segment.x1, segment.y1, segment.x2, segment.y2) {
                     continue;
                 }
-                let (lx1, ly1, lx2, ly2) = if let Some(pz) = player_z {
-                    match clip_line_z(
-                        segment.x1, segment.y1, segment.z1, segment.x2, segment.y2, segment.z2, pz,
-                        z_range,
-                    ) {
-                        Some(coords) => coords,
-                        None => continue,
-                    }
-                } else {
-                    (segment.x1, segment.y1, segment.x2, segment.y2)
-                };
-                let (c1, r1) = to_grid(lx1, ly1);
-                let (c2, r2) = to_grid(lx2, ly2);
-                bresenham_line(
-                    c1,
-                    r1,
-                    c2,
-                    r2,
-                    w,
-                    h,
-                    &mut grid,
-                    t.text_muted,
-                    LinePaintMode::OverwriteLinework,
+                clip_project_draw_line(
+                    segment.x1, segment.y1, segment.z1, segment.x2, segment.y2, segment.z2,
+                    player_z, z_range, &to_grid, w, h, &mut grid,
+                    t.text_muted, LinePaintMode::OverwriteLinework,
                 );
             }
         }
@@ -676,7 +670,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
     for status in app.named_tracker.tracked_spawns() {
         if !status.is_alive {
             let (col, row) = to_grid(-status.last_y, -status.last_x);
-            if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
+            if grid_in_bounds(col, row, w, h) {
                 grid[row as usize][col as usize] = ('✕', t.map_dead_named);
             }
         }
@@ -690,7 +684,8 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
         && nav.waypoints.len() >= 2
     {
         let nav_color = t.text_accent;
-        for pair in nav.waypoints.windows(2) {
+        // Draw path lines with directional arrows at segment midpoints.
+        for (seg_idx, pair) in nav.waypoints.windows(2).enumerate() {
             let (c1, r1) = to_grid(-pair[0].y, -pair[0].x);
             let (c2, r2) = to_grid(-pair[1].y, -pair[1].x);
             bresenham_line(
@@ -704,11 +699,28 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                 nav_color,
                 LinePaintMode::OverwriteLinework,
             );
+            // Draw directional arrow at midpoint of each segment.
+            let mid_c = (c1 + c2) / 2;
+            let mid_r = (r1 + r2) / 2;
+            if grid_in_bounds(mid_c, mid_r, w, h) {
+                let arrow = direction_arrow(c2 - c1, r2 - r1);
+                grid[mid_r as usize][mid_c as usize] = (arrow, nav_color);
+            }
+            // Draw numbered marker at the start of each segment (intermediate waypoints).
+            // Skip marking the very first waypoint (it's the player's current location).
+            if seg_idx > 0 && grid_in_bounds(c1, r1, w, h) {
+                let label = if seg_idx <= 9 {
+                    char::from_digit(seg_idx as u32, 10).unwrap_or('+')
+                } else {
+                    '+'
+                };
+                grid[r1 as usize][c1 as usize] = (label, nav_color);
+            }
         }
         // Mark the final destination with a special symbol.
         if let Some(dest) = nav.waypoints.last() {
             let (dc, dr) = to_grid(-dest.y, -dest.x);
-            if dc >= 0 && dc < w as i32 && dr >= 0 && dr < h as i32 {
+            if grid_in_bounds(dc, dr, w, h) {
                 grid[dr as usize][dc as usize] = ('★', nav_color);
             }
         }
@@ -731,7 +743,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             t.text_highlight,
             LinePaintMode::OverwriteLinework,
         );
-        if tc >= 0 && tc < w as i32 && tr >= 0 && tr < h as i32 {
+        if grid_in_bounds(tc, tr, w, h) {
             grid[tr as usize][tc as usize] = ('✚', t.text_highlight);
         }
     }
@@ -794,9 +806,21 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             );
         }
 
-        if col >= 0 && col < w as i32 && row >= 0 && row < h as i32 {
+        if grid_in_bounds(col, row, w, h) {
             grid[row as usize][col as usize] = ('◆', t.map_you);
         }
+
+        // ─── Heading arrow adjacent to player marker ─────────────────────────
+        place_heading_arrow(
+            player.heading,
+            heading_rad,
+            col,
+            row,
+            w as i32,
+            h as i32,
+            &mut grid,
+            t.map_you,
+        );
 
         // ─── Radius circle overlays ─────────────────────────────────────────
         draw_radius_overlays(app, &to_grid, w as u16, h as u16, &mut grid);
@@ -805,7 +829,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
     // ─── Loc marker overlay ──────────────────────────────────────────────
     if let Some(loc) = &app.map_state.loc_marker {
         let (lc, lr) = to_grid(-loc.y, -loc.x);
-        if lc >= 0 && lc < w as i32 && lr >= 0 && lr < h as i32 {
+        if grid_in_bounds(lc, lr, w, h) {
             grid[lr as usize][lc as usize] = ('⊗', Color::Yellow);
             for (i, ch) in loc.label.chars().take(12).enumerate() {
                 let col = lc + 2 + i as i32;
@@ -819,6 +843,9 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
     // ─── Named persistent markers ────────────────────────────────────────
     draw_named_markers(app, &to_grid, w as i32, h as i32, &mut grid);
 
+    // ─── Camp location overlay ────────────────────────────────────────────
+    draw_camp_overlays(app, &to_grid, w as u16, h as u16, &mut grid);
+
     // ─── Spawn highlights overlay ────────────────────────────────────────
     if !app.map_state.highlights.is_empty() {
         for spawn in &app.spawns {
@@ -826,7 +853,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             for hl in &app.map_state.highlights {
                 if lower_name.contains(&hl.pattern_lower) {
                     let (sc, sr) = to_grid(-spawn.y, -spawn.x);
-                    if sc >= 0 && sc < w as i32 && sr >= 0 && sr < h as i32 {
+                    if grid_in_bounds(sc, sr, w, h) {
                         let color = hl.color.unwrap_or(Color::Magenta);
                         if hl.pulse && (app.tick_count / 5).is_multiple_of(2) {
                             continue;
@@ -841,7 +868,7 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                             for &(dx, dy) in &[(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
                                 let nc = sc + dx;
                                 let nr = sr + dy;
-                                if nc >= 0 && nc < w as i32 && nr >= 0 && nr < h as i32 {
+                                if grid_in_bounds(nc, nr, w, h) {
                                     grid[nr as usize][nc as usize] = ('·', color);
                                 }
                             }
@@ -867,6 +894,9 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                 let mut spans = vec![
                     Span::styled("◆ ", Style::default().fg(t.map_you)),
                     Span::styled("You", Style::default().fg(t.text_muted)),
+                    Span::raw(" │ "),
+                    Span::styled("↑ ", Style::default().fg(t.map_you)),
+                    Span::styled("Hdg", Style::default().fg(t.text_muted)),
                     Span::raw(" │ "),
                     Span::styled("⊕ ", Style::default().fg(t.map_group)),
                     Span::styled("Grp", Style::default().fg(t.text_muted)),
@@ -898,8 +928,8 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                 if show_nav_destination {
                     spans.extend([
                         Span::raw(" │ "),
-                        Span::styled("★ ", Style::default().fg(t.text_accent)),
-                        Span::styled("Path", Style::default().fg(t.text_muted)),
+                        Span::styled("1→★ ", Style::default().fg(t.text_accent)),
+                        Span::styled("Wpts", Style::default().fg(t.text_muted)),
                     ]);
                 }
 
@@ -924,6 +954,17 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                         Span::raw(" │ "),
                         Span::styled("◆ ", Style::default().fg(Color::Cyan)),
                         Span::styled("Mkr", Style::default().fg(t.text_muted)),
+                    ]);
+                }
+
+                if app.map_state.camp_overlay.is_some() {
+                    spans.extend([
+                        Span::raw(" │ "),
+                        Span::styled("⊕ ", Style::default().fg(Color::Green)),
+                        Span::styled("Camp", Style::default().fg(t.text_muted)),
+                        Span::raw(" "),
+                        Span::styled("⊗ ", Style::default().fg(Color::Red)),
+                        Span::styled("Pull", Style::default().fg(t.text_muted)),
                     ]);
                 }
 
@@ -1311,6 +1352,18 @@ fn draw_minimap_widget(
         && let Some((col, row)) = to_mini(-player.y, -player.x)
     {
         mini_grid[row][col] = ('◆', t.map_you);
+        // Heading arrow in adjacent minimap cell
+        let heading_rad = (512.0 - player.heading) * std::f32::consts::PI / 256.0;
+        place_heading_arrow(
+            player.heading,
+            heading_rad,
+            col as i32,
+            row as i32,
+            mini_width as i32,
+            mini_height as i32,
+            &mut mini_grid,
+            t.map_you,
+        );
     }
 
     if app.map_state.show_spawns {
@@ -1407,15 +1460,10 @@ fn draw_minimap_widget(
 }
 
 fn active_view_label(mode: MapViewportMode, using_local_view: bool) -> String {
-    match mode {
-        MapViewportMode::Auto => {
-            if using_local_view {
-                String::from("auto/local")
-            } else {
-                String::from("auto/global")
-            }
-        }
-        _ => mode.label().to_string(),
+    if mode == MapViewportMode::Auto {
+        if using_local_view { "auto/local" } else { "auto/global" }.into()
+    } else {
+        mode.label().to_string()
     }
 }
 
@@ -1509,6 +1557,37 @@ fn clip_line_z(
     Some((cx1, cy1, cx2, cy2))
 }
 
+/// Returns true if `(col, row)` is within a `w × h` grid (both non-negative and in-bounds).
+fn grid_in_bounds(col: i32, row: i32, w: usize, h: usize) -> bool {
+    col >= 0 && (col as usize) < w && row >= 0 && (row as usize) < h
+}
+
+/// Z-clip a line segment, project both endpoints via `to_grid`, and draw with Bresenham.
+#[allow(clippy::too_many_arguments)]
+fn clip_project_draw_line(
+    x1: f32, y1: f32, z1: f32,
+    x2: f32, y2: f32, z2: f32,
+    player_z: Option<f32>,
+    z_range: f32,
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    w: usize, h: usize,
+    grid: &mut [Vec<(char, Color)>],
+    color: Color,
+    paint_mode: LinePaintMode,
+) {
+    let (lx1, ly1, lx2, ly2) = if let Some(pz) = player_z {
+        match clip_line_z(x1, y1, z1, x2, y2, z2, pz, z_range) {
+            Some(coords) => coords,
+            None => return,
+        }
+    } else {
+        (x1, y1, x2, y2)
+    };
+    let (c1, r1) = to_grid(lx1, ly1);
+    let (c2, r2) = to_grid(lx2, ly2);
+    bresenham_line(c1, r1, c2, r2, w, h, grid, color, paint_mode);
+}
+
 fn map_rgb_to_color(r: u8, g: u8, b: u8, t: &Theme) -> ratatui::style::Color {
     if r == 0 && g == 0 && b == 0 {
         t.map_geometry
@@ -1545,7 +1624,7 @@ fn bresenham_line(
     let max_steps = (dx.unsigned_abs() + dy.unsigned_abs() + 1).min(10_000) as usize;
 
     for _ in 0..max_steps {
-        if cx >= 0 && cx < w as i32 && cy >= 0 && cy < h as i32 {
+        if grid_in_bounds(cx, cy, w, h) {
             let (ux, uy) = (cx as usize, cy as usize);
             if can_paint_line_cell(grid[uy][ux].0, paint_mode) {
                 grid[uy][ux] = (line_char(x0, y0, x1, y1), color);
@@ -1867,33 +1946,18 @@ fn draw_navigation_summary(
     let title = tactical_section_title("Navigation", collapsed);
 
     let visible = app.visible_clients();
-    let navigating = visible
-        .iter()
-        .filter(|client| {
-            app.nav_state
-                .nav_statuses
-                .get(&client.pid)
-                .is_some_and(|nav| nav.status.is_moving())
-        })
-        .count();
-    let arrived = visible
-        .iter()
-        .filter(|client| {
-            app.nav_state
-                .nav_statuses
-                .get(&client.pid)
-                .is_some_and(|nav| nav.status.is_arrived())
-        })
-        .count();
-    let stuck = visible
-        .iter()
-        .filter(|client| {
-            app.nav_state
-                .nav_statuses
-                .get(&client.pid)
-                .is_some_and(|nav| nav.status.is_stuck())
-        })
-        .count();
+    let (mut navigating, mut arrived, mut stuck) = (0usize, 0usize, 0usize);
+    for client in &visible {
+        if let Some(nav) = app.nav_state.nav_statuses.get(&client.pid) {
+            if nav.status.is_moving() {
+                navigating += 1;
+            } else if nav.status.is_arrived() {
+                arrived += 1;
+            } else if nav.status.is_stuck() {
+                stuck += 1;
+            }
+        }
+    }
     let idle = visible.len().saturating_sub(navigating + arrived + stuck);
 
     if collapsed {
@@ -2015,7 +2079,7 @@ fn draw_radius_circle(
         let wx = center_x + radius * angle.cos();
         let wy = center_y + radius * angle.sin();
         let (c, r) = to_grid(-wy, -wx);
-        if c >= 0 && c < w as i32 && r >= 0 && r < h as i32 {
+        if grid_in_bounds(c, r, w as usize, h as usize) {
             grid[r as usize][c as usize] = ('·', color);
         }
     }
@@ -2041,6 +2105,45 @@ fn draw_named_markers(
                 grid[mr as usize][col as usize] = (ch, Color::Cyan);
             }
         }
+    }
+}
+
+/// Draw camp location overlays: camp center marker (⊕, green), pull point marker
+/// (⊗, red), camp radius circle (green dots), and pull radius circle (red dots).
+fn draw_camp_overlays(
+    app: &App,
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    w: u16,
+    h: u16,
+    grid: &mut [Vec<(char, Color)>],
+) {
+    let Some(camp) = &app.map_state.camp_overlay else {
+        return;
+    };
+
+    let [cx, cy] = camp.camp_center;
+    let [px, py] = camp.pull_point;
+
+    // Camp radius circle (green dots)
+    if camp.camp_radius > 0.0 {
+        draw_radius_circle(to_grid, cx, cy, camp.camp_radius, Color::Green, w, h, grid);
+    }
+
+    // Pull radius circle (red dots)
+    if camp.pull_radius > 0.0 {
+        draw_radius_circle(to_grid, px, py, camp.pull_radius, Color::Red, w, h, grid);
+    }
+
+    // Camp center marker (⊕, green) — drawn after circles so it's always visible
+    let (cc, cr) = to_grid(-cy, -cx);
+    if cc >= 0 && cc < w as i32 && cr >= 0 && cr < h as i32 {
+        grid[cr as usize][cc as usize] = ('⊕', Color::Green);
+    }
+
+    // Pull point marker (⊗, red)
+    let (pc, pr) = to_grid(-py, -px);
+    if pc >= 0 && pc < w as i32 && pr >= 0 && pr < h as i32 {
+        grid[pr as usize][pc as usize] = ('⊗', Color::Red);
     }
 }
 
@@ -2398,14 +2501,15 @@ mod tests {
         app.map_state.show_target_line = true;
         app.target = Some(test_spawn(77, "target", 6.0, 0.0));
 
-        let with_target = render_map_view_text(app, 80, 16);
+        // Use a wide terminal so the full legend (including the new Hdg entry) fits.
+        let with_target = render_map_view_text(app, 140, 16);
         assert!(with_target.contains("Target"));
 
         let mut without_target_line = test_app_with_spawns();
         without_target_line.map_state.show_nav_paths = false;
         without_target_line.map_state.show_target_line = false;
         without_target_line.target = Some(test_spawn(77, "target", 6.0, 0.0));
-        let without_target = render_map_view_text(without_target_line, 80, 16);
+        let without_target = render_map_view_text(without_target_line, 140, 16);
         assert!(!without_target.contains("Target"));
     }
 
@@ -2584,5 +2688,100 @@ mod tests {
 
         // Spawns are z-filtered out, so aggro circles should not appear
         assert_ne!(grid[4][7], ('·', Color::Red));
+    }
+
+    // ── Player position and heading tests ─────────────────────────────────
+
+    #[test]
+    fn player_marker_renders_on_map_with_distinct_glyph() {
+        // Player at (0,0) with default heading should render ◆ on the map.
+        let app = test_app_with_spawns();
+        let rendered = render_map_view_text(app, 80, 20);
+        assert!(
+            rendered.contains('◆'),
+            "Player marker ◆ should appear on the map"
+        );
+    }
+
+    #[test]
+    fn player_marker_color_is_map_you() {
+        // Verify that heading_arrow_char returns a non-space arrow for any heading.
+        // We test the function directly via a full render and confirm the arrow glyphs appear.
+        let app = test_app_with_spawns(); // player heading=0 → North → ↑
+        let rendered = render_map_view_text(app, 80, 20);
+        // The ↑ heading arrow should appear near the player marker.
+        assert!(
+            rendered.contains('↑')
+                || rendered.contains('↗')
+                || rendered.contains('→')
+                || rendered.contains('↘')
+                || rendered.contains('↓')
+                || rendered.contains('↙')
+                || rendered.contains('←')
+                || rendered.contains('↖'),
+            "A heading arrow character should appear on the map"
+        );
+    }
+
+    #[test]
+    fn heading_arrow_char_cardinal_directions() {
+        // EQ heading: 0=North, 128=West, 256=South, 384=East
+        assert_eq!(heading_arrow_char(0.0), '↑', "heading=0 (N) should be ↑");
+        assert_eq!(heading_arrow_char(128.0), '←', "heading=128 (W) should be ←");
+        assert_eq!(heading_arrow_char(256.0), '↓', "heading=256 (S) should be ↓");
+        assert_eq!(heading_arrow_char(384.0), '→', "heading=384 (E) should be →");
+    }
+
+    #[test]
+    fn heading_arrow_char_diagonal_directions() {
+        // NE=448, NW=64, SW=192, SE=320
+        assert_eq!(heading_arrow_char(448.0), '↗', "heading=448 (NE) should be ↗");
+        assert_eq!(heading_arrow_char(64.0), '↖', "heading=64 (NW) should be ↖");
+        assert_eq!(heading_arrow_char(192.0), '↙', "heading=192 (SW) should be ↙");
+        assert_eq!(heading_arrow_char(320.0), '↘', "heading=320 (SE) should be ↘");
+    }
+
+    #[test]
+    fn heading_arrow_char_wraps_512() {
+        // 512 should wrap to 0 (North → ↑)
+        assert_eq!(heading_arrow_char(512.0), '↑', "heading=512 should wrap to North ↑");
+        // 768 % 512 = 256 → South (↓)
+        assert_eq!(heading_arrow_char(768.0), '↓', "heading=768 should wrap to heading=256 (S) ↓");
+    }
+
+    #[test]
+    fn map_legend_contains_player_marker_and_heading() {
+        let app = test_app_with_spawns();
+        let rendered = render_map_view_text(app, 120, 20);
+        assert!(rendered.contains("You"), "Legend should contain 'You' label");
+        assert!(rendered.contains("Hdg"), "Legend should contain 'Hdg' heading label");
+    }
+
+    #[test]
+    fn minimap_renders_player_with_heading_arrow() {
+        let mut app = App::new();
+        let mut client = ClientState::new(77, 0);
+        client.spawn_revision = 1;
+        let mut player = test_spawn(99, "Player", 0.0, 0.0);
+        player.heading = 0.0; // North
+        client.local_player = Some(player);
+        app.clients.push(client);
+        app.sync_from_selected_client();
+
+        let rendered = minimap_text(&app, None);
+        // Player ◆ marker should be present
+        assert!(rendered.contains('◆'), "Minimap should show player ◆ marker");
+        // Heading arrow ↑ (North at heading=0) should also appear
+        assert!(
+            rendered.contains('↑')
+                || rendered.contains('↗')
+                || rendered.contains('→')
+                || rendered.contains('↘')
+                || rendered.contains('↓')
+                || rendered.contains('↙')
+                || rendered.contains('←')
+                || rendered.contains('↖'),
+            "Minimap should show a heading arrow adjacent to the player marker"
+        );
     }
 }

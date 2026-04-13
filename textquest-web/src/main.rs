@@ -37,6 +37,8 @@ pub struct AppState {
     pub character_configs: tokio::sync::RwLock<HashMap<String, api::CharacterConfig>>,
     /// In-memory loot configuration state.
     pub loot_state: Arc<api::loot::LootState>,
+    /// In-memory soul audit log.
+    pub soul_audit: Arc<api::soul::SoulAuditState>,
 }
 
 fn credentials_db_path() -> PathBuf {
@@ -65,13 +67,36 @@ fn build_state() -> Arc<AppState> {
             },
         );
 
+    let api_token = std::env::var("TEXTQUEST_API_TOKEN")
+        .ok()
+        .filter(|t| !t.trim().is_empty());
+
+    if api_token.is_none() {
+        tracing::warn!(
+            "TEXTQUEST_API_TOKEN is not set — API endpoints are unauthenticated.              Set this env var to enable token-based authentication."
+        );
+    }
+
     Arc::new(AppState {
         event_tx,
         account_store: Mutex::new(accounts::AccountStore::default()),
         credential_store,
         character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
         loot_state: api::loot::LootState::new_demo(),
+        soul_audit: api::soul::SoulAuditState::new_demo(),
     })
+}
+
+/// Build the soul audit sub-router.
+fn build_soul_router() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/audit", get(api::soul::get_all_audit))
+        .route("/audit/export.csv", get(api::soul::export_all_audit_csv))
+        .route("/audit/{character_id}", get(api::soul::get_character_audit))
+        .route(
+            "/audit/{character_id}/export.csv",
+            get(api::soul::export_character_audit_csv),
+        )
 }
 
 /// Build the loot sub-router.  Loot handlers extract `State<Arc<AppState>>`
@@ -115,6 +140,8 @@ fn build_api_router() -> Router<Arc<AppState>> {
             put(api::update_vendor_route).delete(api::delete_vendor_route),
         )
         .route("/economy/wealth", get(api::get_wealth))
+        .route("/soul", get(api::soul::list_soul_states))
+        .route("/soul/{character_id}", get(api::soul::get_soul_state))
         .route(
             "/raid/config",
             get(api::raid_config_unavailable).put(api::raid_config_unavailable),
@@ -128,6 +155,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
             put(api::character_config_unavailable),
         )
         .nest("/loot", build_loot_router())
+        .nest("/soul", build_soul_router())
         .fallback(api::api_not_found)
 }
 
@@ -212,6 +240,7 @@ mod tests {
             ),
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
             loot_state: api::loot::LootState::new_demo(),
+            soul_audit: api::soul::SoulAuditState::new_demo(),
         })
     }
 

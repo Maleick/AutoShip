@@ -271,6 +271,7 @@ mod tests {
             combat_status: textquest_common::combat::CombatStatus::Idle,
             zone_short_name: "poknowledge".to_string(),
             zone_long_name: "Plane of Knowledge".to_string(),
+            actual_version: None,
         });
         session
     }

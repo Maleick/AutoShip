@@ -361,6 +361,24 @@ export interface MasterLooter {
   character: string | null;
 }
 
+// ── Soul Engine types ─────────────────────────────────────────────────────────
+
+export type SoulMood =
+  | "content"
+  | "anxious"
+  | "focused"
+  | "bored"
+  | "excited"
+  | "melancholic";
+
+export interface SoulState {
+  character_id: string;
+  mood: SoulMood;
+  personality_traits: string[];
+  memory_count: number;
+  last_event: string | null;
+}
+
 export interface LootHistoryEntry {
   id: number;
   timestamp: string;
