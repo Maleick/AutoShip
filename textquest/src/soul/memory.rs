@@ -102,6 +102,22 @@ impl MemoryStore {
         Ok(Self { conn })
     }
 
+    /// Open an in-memory database — available in `#[cfg(test)]` only so that
+    /// tests outside this module (e.g. `soul::perf_tests`) can construct a
+    /// `MemoryStore` without touching the filesystem.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the in-memory connection cannot be opened or the schema fails
+    /// to apply — both are programmer errors in a test context.
+    #[cfg(test)]
+    pub fn open_in_memory() -> Self {
+        let conn = Connection::open_in_memory().expect("Failed to open in-memory SQLite");
+        conn.execute_batch(SCHEMA)
+            .expect("Failed to apply schema to in-memory store");
+        Self { conn }
+    }
+
     /// Record a soul event as a memory for a character.
     ///
     /// # Errors
