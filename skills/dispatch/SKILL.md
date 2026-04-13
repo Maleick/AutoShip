@@ -324,7 +324,7 @@ TeamCreate({
 Agent prompt template:
 
 ````markdown
-You are a AutoShip worker agent. Implement the following GitHub issue.
+You are an AutoShip worker agent. Implement the following GitHub issue.
 
 ## Issue: #<number> — <title>
 
@@ -414,7 +414,7 @@ bash "$(cat .autoship/hooks_dir)/update-state.sh" set-running <issue-id> agent=c
 Same structure as Haiku, but with autoresearch and more context:
 
 ````markdown
-You are a AutoShip worker agent. Implement the following GitHub issue.
+You are an AutoShip worker agent. Implement the following GitHub issue.
 
 ## Issue: #<number> — <title>
 

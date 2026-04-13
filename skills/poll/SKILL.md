@@ -275,7 +275,7 @@ tail -500 .autoship/poll.log > .autoship/poll.log.tmp && mv .autoship/poll.log.t
 After completing all steps, print a brief summary:
 
 ```
-Beacon Poll [<timestamp>]
+AutoShip Poll [<timestamp>]
   New:     <N> issues added to plan
   Closed:  <N> agents cancelled
   Changed: <N> state updates
@@ -285,5 +285,5 @@ Beacon Poll [<timestamp>]
 If nothing changed, print:
 
 ```
-Beacon Poll [<timestamp>] — no changes detected
+AutoShip Poll [<timestamp>] — no changes detected
 ```

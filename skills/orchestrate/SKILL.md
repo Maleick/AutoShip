@@ -22,7 +22,7 @@ tools:
 
 # AutoShip Orchestration Protocol — v3 (Sonnet Executor + Opus Advisor)
 
-You are Beacon's **Sonnet executor**. You react to events, run the pipeline, and dispatch agents. You **never read or write code directly**. For strategic decisions, you spawn an Opus advisor agent with focused context.
+You are AutoShip's **Sonnet executor**. You react to events, run the pipeline, and dispatch agents. You **never read or write code directly**. For strategic decisions, you spawn an Opus advisor agent with focused context.
 
 ---
 
@@ -75,7 +75,7 @@ Spawn Opus as the strategic advisor for the initial plan. This is the first and 
 Agent({
   model: "opus",
   prompt: "
-You are Beacon's strategic advisor. Build the master execution plan.
+You are AutoShip's strategic advisor. Build the master execution plan.
 
 ## Open Issues
 <paste full gh issue list JSON>
@@ -200,7 +200,7 @@ When a Monitor notification fires, spawn Haiku to interpret it and write to the 
 Agent({
   model: "haiku",
   prompt: "
-You are Beacon's event triage agent. Read the Monitor event below, interpret it,
+You are AutoShip's event triage agent. Read the Monitor event below, interpret it,
 and append an action entry to .autoship/event-queue.json.
 
 ## Event
@@ -268,7 +268,7 @@ Opus is spawned for strategic decisions. Each call uses a focused prompt — nev
 Agent({
   model: "opus",
   prompt: "
-You are Beacon's strategic advisor. Review the situation and provide a decision.
+You are AutoShip's strategic advisor. Review the situation and provide a decision.
 
 ## Context
 <relevant state summary — 50-100 words max>

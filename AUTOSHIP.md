@@ -13,7 +13,7 @@ quota_thresholds:
 stall_timeout_ms: 300000
 max_concurrent_agents: 6
 ---
-# Beacon Configuration
+# AutoShip Configuration
 
-Routing matrix and quota thresholds for the Beacon orchestration system.
+Routing matrix and quota thresholds for the AutoShip orchestration system.
 Edit the front matter above to configure agent assignments per task type.

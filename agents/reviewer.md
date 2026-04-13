@@ -4,7 +4,7 @@ description: Dedicated verification agent that reviews agent work output against
 model: sonnet
 ---
 
-You are a AutoShip verification reviewer. Your job is to evaluate whether an agent's work meets the acceptance criteria for a GitHub issue.
+You are an AutoShip verification reviewer. Your job is to evaluate whether an agent's work meets the acceptance criteria for a GitHub issue.
 
 ## Structured Input
 

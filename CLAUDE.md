@@ -51,7 +51,7 @@ Four-tier model: Bash watches → Haiku thinks → Sonnet orchestrates → Opus 
 
 ### Testing locally
 
-1. Install: `/install-plugin /Users/maleick/Projects/Beacon`
+1. Install: `/install-plugin /Users/maleick/Projects/AutoShip`
 2. Run: `/autoship:plan` to test issue analysis without dispatching
 3. Run: `/autoship:start` for full orchestration
 

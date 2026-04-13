@@ -310,7 +310,7 @@ Claude agents (Sonnet/Haiku) automatically invoke `/autoresearch:fix`:
 - Modify → verify → keep/discard → repeat
 - Converges on passing solution before reporting completion
 - Only available for Claude agents (plugin ecosystem)
-- Codex/Gemini rely on Beacon's external retry loop
+- Codex/Gemini rely on AutoShip's external retry loop
 
 ---
 

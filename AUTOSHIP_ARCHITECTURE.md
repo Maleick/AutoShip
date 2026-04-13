@@ -103,7 +103,7 @@ Additionally, Sonnet can escalate to Opus at any time for:
 Each Opus advisor call gets a focused prompt:
 
 ```
-You are Beacon's strategic advisor. Review the current state and provide a decision.
+You are AutoShip's strategic advisor. Review the current state and provide a decision.
 
 ## Context
 <current state summary from .autoship/state.json>

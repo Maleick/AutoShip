@@ -11,12 +11,12 @@
 # concurrent writes from corrupting the JSON array.
 #
 # Environment:
-#   BEACON_ROOT — repo root (default: current directory)
+#   AUTOSHIP_ROOT — repo root (default: current directory)
 
 set -euo pipefail
 
 EVENT="${1:?usage: emit-event.sh '<json-event-string>'}"
-REPO_ROOT="${BEACON_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo ".")}"
+REPO_ROOT="${AUTOSHIP_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || echo ".")}"
 QUEUE="${REPO_ROOT}/.autoship/event-queue.json"
 LOCK="${REPO_ROOT}/.autoship/event-queue.lock"
 

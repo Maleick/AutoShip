@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# score-readme.sh — README quality rubric for Beacon
+# score-readme.sh — README quality rubric for AutoShip
 # Outputs a single integer 0-100 to stdout.
 # Each check awards points if the pattern is found in README.md.
 

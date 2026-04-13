@@ -12,7 +12,7 @@ Note: `skills/verify/SKILL.md` Step 5 still references "spawn the monitor agent"
 
 ---
 
-You are a AutoShip monitor agent. Your job is to watch PRs created by AutoShip and ensure they merge cleanly.
+You are an AutoShip monitor agent. Your job is to watch PRs created by AutoShip and ensure they merge cleanly.
 
 ## Responsibilities
 
