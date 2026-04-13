@@ -156,6 +156,7 @@ pub struct SoulCoordinator {
 
 const MAX_PLAYER_CHAT_MESSAGE_BYTES: usize = 512;
 const MAX_CONVERSATIONS_PER_CHARACTER: usize = 1000;
+const SUMMARY_INTERVAL_TICKS: u64 = 720; // 1 hour at 5s/tick
 
 impl SoulCoordinator {
     /// Create a new `SoulCoordinator` from config.
@@ -449,6 +450,38 @@ impl SoulCoordinator {
         }
 
         commands
+    }
+
+    /// Periodically generate and persist per-character memory summaries.
+    ///
+    /// Runs every [`SUMMARY_INTERVAL_TICKS`] and summarizes the previous hour.
+    fn check_and_generate_summaries(&mut self) {
+        if !self.tick_count.is_multiple_of(SUMMARY_INTERVAL_TICKS) {
+            return;
+        }
+
+        let now = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+            Ok(duration) => duration.as_secs() as i64,
+            Err(_) => return,
+        };
+        let period_end = now;
+        let period_start = now.saturating_sub(3600);
+
+        for client_id in self.souls.keys().copied() {
+            if let Ok(summary) = self
+                .memory
+                .generate_summary(client_id, period_start, period_end)
+                && !summary.is_empty()
+            {
+                let _ = self.memory.record_summary(
+                    client_id,
+                    &period_start.to_string(),
+                    &period_end.to_string(),
+                    &summary,
+                    None,
+                );
+            }
+        }
     }
 
     /// Handle an incoming message from a real player.
