@@ -23,6 +23,7 @@ jobs:
   agent-ready:
     name: Auto-label agent:ready
     if: github.event_name == 'issues' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       issues: write
@@ -101,6 +102,7 @@ jobs:
   agent-close:
     name: Auto-close agent PRs
     if: github.event_name == 'pull_request_target' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       issues: write
@@ -141,6 +143,7 @@ jobs:
       (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success') ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       github.event_name == 'workflow_dispatch'
+    timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       pull-requests: write
@@ -171,6 +174,7 @@ jobs:
   post-merge:
     name: Post-merge sync
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
+    timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       issues: write
@@ -200,6 +204,7 @@ jobs:
   sync-wiki:
     name: Sync wiki after merge
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
+    timeout-minutes: 5
     runs-on: [self-hosted, Windows, X64, textquest]
     permissions:
       contents: write

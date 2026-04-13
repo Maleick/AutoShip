@@ -13,6 +13,7 @@ permissions:
 jobs:
   dispatch-blocked-copilot-prs:
     name: Dispatch CI for blocked Copilot PRs
+    timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
     steps:
       - name: Dispatch CI on same-repo Copilot PR heads
