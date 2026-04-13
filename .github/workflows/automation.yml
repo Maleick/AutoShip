@@ -7,9 +7,6 @@ on:
     types: [labeled, synchronize, closed]
   pull_request_target:
     types: [labeled, reopened, synchronize, ready_for_review]
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
   schedule:
     - cron: "0 11 * * *" # Daily 6am CT: agent-ready + agent-close sweep
   workflow_dispatch:
@@ -138,7 +135,6 @@ jobs:
     name: Enable auto-merge
     if: >
       (github.event_name == 'pull_request' && github.event.pull_request.state == 'open' && contains(github.event.pull_request.labels.*.name, 'merge:auto') && !contains(github.event.pull_request.labels.*.name, 'merge:block')) ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
       github.event_name == 'workflow_dispatch'
     timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
@@ -242,37 +238,29 @@ jobs:
     name: Trigger wiki publish after merge
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
     timeout-minutes: 5
-    runs-on: [self-hosted, Windows, X64, textquest]
+    runs-on: ubuntu-latest
     permissions:
       actions: write
-      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - name: Dispatch wiki-nightly if docs changed
+        uses: actions/github-script@v8
         with:
-          fetch-depth: 2
-      - name: Check for docs changes
-        id: docs-check
-        shell: bash
-        run: |
-          DOCS_CHANGED=false
-          while IFS= read -r FILE; do
-            if [[ "$FILE" == docs/* ]]; then
-              DOCS_CHANGED=true
-              break
-            fi
-          done < <(git diff --name-only HEAD~1)
-          echo "[info] DOCS_CHANGED=$DOCS_CHANGED"
-          echo "docs_changed=$DOCS_CHANGED" >> "$GITHUB_OUTPUT"
-      - name: Dispatch wiki-nightly publish
-        if: steps.docs-check.outputs.docs_changed == 'true'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          curl -fS -X POST \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            -H "Content-Type: application/json" \
-            -d "{\"ref\":\"master\",\"inputs\":{\"publish\":\"true\",\"source_sha\":\"${{ github.event.pull_request.merge_commit_sha }}\"}}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/wiki-nightly.yml/dispatches"
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.payload.pull_request.number;
+            const sourceSha = context.payload.pull_request.merge_commit_sha;
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: prNumber, per_page: 100,
+            });
+            const docsChanged = files.some(f => f.filename.startsWith("docs/"));
+            if (!docsChanged) { core.info("No docs/ changes — skipping wiki dispatch."); return; }
+
+            await github.rest.actions.createWorkflowDispatch({
+              owner, repo,
+              workflow_id: "wiki-nightly.yml",
+              ref: "master",
+              inputs: { publish: "true", source_sha: sourceSha },
+            });
+            core.info(`Dispatched wiki-nightly for ${sourceSha}`);

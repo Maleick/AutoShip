@@ -189,12 +189,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Prepare Linux self-hosted workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE"
-          cd /
-          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+        uses: ./.github/actions/prepare-linux-runner-workspace
 
       - uses: actions/checkout@v5
         with:
@@ -245,6 +240,8 @@ jobs:
       - run: cargo build --release
         env:
           LIBCLANG_PATH: "C:/Program Files/LLVM/lib"
+<<<<<<< fix/ci-workflow-audit
+=======
 
   cleanup_merged_branch:
     name: Cleanup merged branch
@@ -257,3 +254,4 @@ jobs:
         with:
           github_token: ${{ github.token }}
           branches: ${{ github.head_ref }}
+>>>>>>> master
