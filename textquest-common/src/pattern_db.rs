@@ -24,7 +24,7 @@
 
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
+use serde::{de::Error as _, Deserialize, Serialize};
 
 use crate::scanner::{self, Pattern};
 
@@ -230,32 +230,53 @@ impl PatternDb {
     ///
     /// Entries whose `"ida"` value is `"(custom)"` are skipped because they
     /// cannot be reconstructed without the original byte data.
+    fn parse_ida_pattern(ida: &str) -> Result<Pattern, serde_json::Error> {
+        if ida.trim().is_empty() {
+            return Err(serde_json::Error::custom("IDA pattern must not be empty"));
+        }
+
+        for token in ida.split_whitespace() {
+            let is_wildcard = token == "?" || token == "??";
+            let is_hex_byte =
+                token.len() == 2 && token.as_bytes().iter().all(|b| b.is_ascii_hexdigit());
+
+            if !is_wildcard && !is_hex_byte {
+                return Err(serde_json::Error::custom(format!(
+                    "invalid IDA token '{token}'"
+                )));
+            }
+        }
+
+        Ok(Pattern::from_ida(ida))
+    }
+
     ///
     /// # Errors
     ///
-    /// Returns a [`serde_json::Error`] if the JSON is malformed.
-    ///
-    /// # Panics
-    ///
-    /// Panics if a stored IDA string is invalid (propagated from
-    /// [`Pattern::from_ida`]).  Well-formed databases serialized by
-    /// [`to_json`](Self::to_json) will never trigger this.
+    /// Returns a [`serde_json::Error`] if the JSON is malformed or if an
+    /// entry contains an invalid IDA pattern string.
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
         let map: HashMap<String, EntryProxy> = serde_json::from_str(json)?;
-        let entries = map
-            .into_iter()
-            .filter(|(_, proxy)| proxy.ida != "(custom)")
-            .map(|(name, proxy)| {
-                let pattern = Pattern::from_ida(&proxy.ida);
-                (
-                    name,
-                    Entry {
-                        pattern,
-                        ida: proxy.ida,
-                    },
-                )
-            })
-            .collect();
+
+        let mut entries = HashMap::with_capacity(map.len());
+        for (name, proxy) in map {
+            if proxy.ida == "(custom)" {
+                continue;
+            }
+
+            let pattern = Self::parse_ida_pattern(&proxy.ida).map_err(|_| {
+                serde_json::Error::custom(format!("invalid IDA pattern for entry '{name}'"))
+            })?;
+
+            entries.insert(
+                name,
+                Entry {
+                    pattern,
+                    ida: proxy.ida,
+                },
+            );
+        }
+
         Ok(Self { entries })
     }
 }
@@ -434,6 +455,13 @@ mod tests {
     #[test]
     fn from_json_invalid_input() {
         let result = PatternDb::from_json("not json at all");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn from_json_invalid_ida_returns_error() {
+        let json = r#"{"bad":{"ida":""}}"#;
+        let result = PatternDb::from_json(json);
         assert!(result.is_err());
     }
 }
