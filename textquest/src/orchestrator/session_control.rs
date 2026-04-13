@@ -94,16 +94,17 @@ impl SessionControl {
                 }
             }
             SessionControlCommand::SetGroup { group_id } => {
-                let changed = self.group_id != *group_id;
-                self.group_id = *group_id;
-                if *group_id == 0 {
-                    self.routing_scope = RoutingScope::AllSession;
+                let new_scope = if *group_id == 0 {
+                    RoutingScope::AllSession
                 } else {
-                    self.routing_scope = RoutingScope::Group {
+                    RoutingScope::Group {
                         group_id: *group_id,
                         label: format!("G{group_id}"),
-                    };
-                }
+                    }
+                };
+                let changed = self.group_id != *group_id || self.routing_scope != new_scope;
+                self.group_id = *group_id;
+                self.routing_scope = new_scope;
                 changed
             }
             SessionControlCommand::BroadcastAll => {
@@ -228,6 +229,18 @@ mod tests {
         let mut sc = SessionControl::with_group(1, 2);
         let changed = sc.apply_command(&SessionControlCommand::SetGroup { group_id: 2 });
         assert!(!changed);
+    }
+
+    #[test]
+    fn set_group_reports_change_when_scope_changes() {
+        let mut sc = SessionControl::with_group(1, 2);
+        sc.apply_command(&SessionControlCommand::BroadcastAll);
+        let changed = sc.apply_command(&SessionControlCommand::SetGroup { group_id: 2 });
+        assert!(changed);
+        assert!(matches!(
+            sc.routing_scope,
+            RoutingScope::Group { group_id: 2, .. }
+        ));
     }
 
     #[test]
