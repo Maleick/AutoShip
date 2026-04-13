@@ -23,3 +23,5 @@ pub mod personality;
 pub mod resource_checks;
 /// Social dynamics — inter-character relationships, group cohesion, banter triggers.
 pub mod social;
+/// LLM request rate limiting — global and per-character sliding-window throttles.
+pub mod rate_limiter;
