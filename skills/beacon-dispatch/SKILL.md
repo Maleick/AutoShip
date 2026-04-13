@@ -208,8 +208,9 @@ bash "$(cat .beacon/hooks_dir)/dispatch-codex-appserver.sh" "$ISSUE_KEY" ".beaco
 Update state (no pane_id for Codex):
 
 ```bash
-bash "$(cat .beacon/hooks_dir)/update-state.sh" set-running <issue-id> agent=codex-spark
-bash "$(cat .beacon/hooks_dir)/quota-update.sh" decrement codex-spark <complexity>   # simple | medium | complex
+HOOKS=$(cat .beacon/hooks_dir)
+bash "$HOOKS/update-state.sh" set-running <issue-id> agent=codex-spark
+bash "$HOOKS/quota-update.sh" decrement codex-spark <complexity>   # simple | medium | complex
 ```
 
 **Gemini — tmux pane dispatch:**
@@ -243,8 +244,9 @@ tmux send-keys -t $PANE_ID "bash run-agent.sh" Enter
 Update state:
 
 ```bash
-bash "$(cat .beacon/hooks_dir)/update-state.sh" set-running <issue-id> agent=gemini pane_id=$PANE_ID
-bash "$(cat .beacon/hooks_dir)/quota-update.sh" decrement gemini <complexity>
+HOOKS=$(cat .beacon/hooks_dir)
+bash "$HOOKS/update-state.sh" set-running <issue-id> agent=gemini pane_id=$PANE_ID
+bash "$HOOKS/quota-update.sh" decrement gemini <complexity>
 ```
 
 Never inline file contents into shell strings. Always use a file flag or wrapper script to avoid shell metacharacter injection from issue bodies.

@@ -41,9 +41,12 @@ If any check fails, report and stop.
 ### Step 2: Detect Available Tools + Quota
 
 ```bash
-_DETECT=$(find "$HOME/.claude/plugins/cache/autoship" -maxdepth 5 -name "detect-tools.sh" 2>/dev/null | head -1)
-[[ -z "$_DETECT" ]] && _DETECT="/Users/maleick/Projects/AutoShip/hooks/detect-tools.sh"
-if [[ -f "$_DETECT" ]]; then bash "$_DETECT"; else echo '{}'; fi
+if [[ -f ".beacon/hooks_dir" ]]; then
+  bash "$(cat .beacon/hooks_dir)/detect-tools.sh"
+else
+  _DETECT=$(find "$HOME/.claude/plugins/cache/autoship" -maxdepth 4 -name "detect-tools.sh" 2>/dev/null | head -1)
+  if [[ -n "$_DETECT" ]]; then bash "$_DETECT"; else echo '{}'; fi
+fi
 ```
 
 Parse the JSON output. Record quota_pct for each tool. Tools with quota_pct < 10 are considered exhausted and skipped during dispatch.
@@ -51,9 +54,8 @@ Parse the JSON output. Record quota_pct for each tool. Tools with quota_pct < 10
 ### Step 3: Load or Initialize State
 
 ```bash
-_INIT=$(find "$HOME/.claude/plugins/cache/autoship" -maxdepth 5 -name "beacon-init.sh" 2>/dev/null | head -1)
-[[ -z "$_INIT" ]] && _INIT="/Users/maleick/Projects/AutoShip/hooks/beacon-init.sh"
-bash "$_INIT"
+_INIT=$(find "$HOME/.claude/plugins/cache/autoship" -maxdepth 4 -name "beacon-init.sh" 2>/dev/null | head -1)
+if [[ -n "$_INIT" ]]; then bash "$_INIT"; else echo "Error: beacon-init.sh not found." && exit 1; fi
 cat .beacon/state.json
 ```
 
