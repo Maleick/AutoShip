@@ -52,7 +52,7 @@ jobs:
 
   pr_gate_trusted:
     name: PR gate (trusted path)
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, Windows, X64, textquest]
     timeout-minutes: 45
     defaults:
@@ -80,6 +80,7 @@ jobs:
 
   pr_gate:
     name: PR gate (fmt + clippy + test + python)
+    if: github.event_name != 'push'
     runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 60
     permissions:
