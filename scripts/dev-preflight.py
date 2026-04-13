@@ -6,6 +6,7 @@ import argparse
 import os
 import pathlib
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -433,6 +434,29 @@ def _python_cmd() -> str:
     return "python3"
 
 
+def update_test_count() -> None:
+    """Count workspace tests and patch the ~N tests figure in CLAUDE.md."""
+    result = subprocess.run(
+        ["cargo", "test", "--all", "--", "--list"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    count = result.stdout.count(": test")
+    if count == 0:
+        print("update-docs: could not count tests (build may be needed)")
+        return
+
+    claude_md = REPO_ROOT / "CLAUDE.md"
+    text = claude_md.read_text()
+    updated = re.sub(r"~[\d,]+\+ tests", f"~{count:,}+ tests", text)
+    if updated == text:
+        print(f"update-docs: test count already current ({count:,})")
+        return
+    claude_md.write_text(updated)
+    print(f"update-docs: CLAUDE.md test count updated to ~{count:,}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="TextQuest developer bootstrap/preflight helper.")
     parser.add_argument(
@@ -464,6 +488,11 @@ def main() -> int:
         "--env-only",
         action="store_true",
         help="Only check the development environment, skip CI checks.",
+    )
+    parser.add_argument(
+        "--update-docs",
+        action="store_true",
+        help="Count workspace tests and patch the test count in CLAUDE.md.",
     )
     args = parser.parse_args()
 
@@ -567,6 +596,9 @@ def main() -> int:
             record(results, "WARN", "Map validation", "scripts/validate-maps.py not found; skipping.")
     else:
         record(results, "PASS", "Map validation", "No config/maps/ directory; skipping.")
+
+    if args.update_docs and cargo_ok:
+        update_test_count()
 
     return print_results(results, require_reference_trees=args.require_reference_trees)
 
