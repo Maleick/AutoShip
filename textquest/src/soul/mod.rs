@@ -16,9 +16,8 @@ pub mod idle;
 pub mod llm;
 /// Persistent memory — stores character experiences and relationships across sessions.
 pub mod memory;
-/// Performance regression tests for Soul Engine latency budgets.
-#[cfg(test)]
-mod perf_tests;
+/// Game state observer — serializes TUI app state to compact JSON for the Gemma 4 LLM observer.
+pub mod observer;
 /// Personality system — trait-based character archetypes and mood modeling.
 pub mod personality;
 /// Error handling and recovery — retry, fallback, reload, and restart strategies.
