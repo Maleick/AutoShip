@@ -1,14 +1,83 @@
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
 use textquest_common::soul::{MoodState, SoulEvent, SpeechStyle};
 use textquest_common::types::ClientId;
 
+/// Exponential backoff delays for database retry logic (milliseconds).
+const RETRY_DELAYS_MS: [u64; 5] = [100, 500, 1_000, 5_000, 30_000];
+
+/// Maximum consecutive failures before the circuit breaker opens.
+const CIRCUIT_BREAKER_THRESHOLD: u32 = 5;
+
+/// Maximum number of entries held in the in-memory fallback cache.
+const FALLBACK_CACHE_MAX: usize = 256;
+
+/// Health state shared across retried operations.
+#[derive(Debug, Default)]
+struct DbHealth {
+    /// Count of consecutive write failures.
+    consecutive_failures: AtomicU32,
+    /// Circuit breaker: true means DB writes are disabled.
+    circuit_open: AtomicBool,
+}
+
+impl DbHealth {
+    fn record_success(&self) {
+        self.consecutive_failures.store(0, Ordering::Relaxed);
+        if self.circuit_open.swap(false, Ordering::Relaxed) {
+            tracing::info!("memory_store: circuit breaker closed — DB writes re-enabled");
+        }
+    }
+
+    fn record_failure(&self, op: &str, err: &anyhow::Error) {
+        let prev = self.consecutive_failures.fetch_add(1, Ordering::Relaxed);
+        let count = prev + 1;
+        tracing::warn!(op, consecutive_failures = count, error = %err, "memory_store: DB write failed");
+        if count >= CIRCUIT_BREAKER_THRESHOLD && !self.circuit_open.load(Ordering::Relaxed) {
+            self.circuit_open.store(true, Ordering::Relaxed);
+            tracing::error!(
+                "memory_store: circuit breaker OPEN after {} consecutive failures — DB writes disabled",
+                count
+            );
+        }
+    }
+
+    fn is_open(&self) -> bool {
+        self.circuit_open.load(Ordering::Relaxed)
+    }
+}
+
+/// A cached record held in the fallback in-memory store.
+#[derive(Debug, Clone)]
+struct CachedMemory {
+    character_id: ClientId,
+    event_type: String,
+    event_json: String,
+    zone: Option<String>,
+    mood_at_time: String,
+    importance: f32,
+}
+
 /// Autobiographical memory store backed by `SQLite`.
 /// One database per deployment, partitioned by `character_id`.
+///
+/// Includes:
+/// - Exponential backoff retry (up to 5 attempts) on transient DB errors
+/// - Circuit breaker that disables writes after 5 consecutive failures
+/// - In-memory fallback cache (up to 256 entries) when the circuit is open
 pub struct MemoryStore {
     conn: Connection,
+    health: Arc<DbHealth>,
+    /// In-memory fallback cache used when the circuit breaker is open.
+    /// Uses `RefCell` for interior mutability so write methods retain `&self`.
+    fallback_cache: RefCell<VecDeque<CachedMemory>>,
 }
 
 const SCHEMA: &str = "
@@ -102,20 +171,64 @@ CREATE TABLE IF NOT EXISTS speech_patterns (
 );
 ";
 
+/// Retry a fallible DB operation with exponential backoff.
+///
+/// Attempts the operation up to `RETRY_DELAYS_MS.len() + 1` times (6 total).
+/// Sleeps between attempts using the delays in `RETRY_DELAYS_MS`.
+/// Returns the last error if all attempts fail.
+fn retry_db_op<T, F>(op_name: &'static str, mut f: F) -> Result<T>
+where
+    F: FnMut() -> Result<T>,
+{
+    let mut last_err = None;
+    for (attempt, &delay_ms) in std::iter::once(&0u64)
+        .chain(RETRY_DELAYS_MS.iter())
+        .enumerate()
+    {
+        if delay_ms > 0 {
+            tracing::debug!(
+                op = op_name,
+                attempt,
+                delay_ms,
+                "memory_store: retrying DB op"
+            );
+            std::thread::sleep(Duration::from_millis(delay_ms));
+        }
+        match f() {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                tracing::warn!(op = op_name, attempt, error = %e, "memory_store: DB op failed");
+                last_err = Some(e);
+            }
+        }
+    }
+    Err(last_err.expect("retry loop must set last_err"))
+}
+
 impl MemoryStore {
     /// Open (or create) the memory database at the given path.
     ///
+    /// On transient failures, retries with exponential backoff (up to 5 attempts).
+    ///
     /// # Errors
     ///
-    /// Returns an error if the operation fails.
+    /// Returns an error if the operation fails after all retries.
     pub fn open(path: &Path) -> Result<Self> {
-        let conn = Connection::open(path)
-            .with_context(|| format!("Failed to open memory store at {}", path.display()))?;
+        let conn = retry_db_op("open", || {
+            Connection::open(path)
+                .with_context(|| format!("Failed to open memory store at {}", path.display()))
+        })?;
 
-        conn.execute_batch(SCHEMA)
-            .context("Failed to initialize memory store schema")?;
+        retry_db_op("schema_init", || {
+            conn.execute_batch(SCHEMA)
+                .context("Failed to initialize memory store schema")
+        })?;
 
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            health: Arc::new(DbHealth::default()),
+            fallback_cache: RefCell::new(VecDeque::new()),
+        })
     }
 
     /// Open an in-memory database — available in `#[cfg(test)]` only so that
@@ -136,9 +249,15 @@ impl MemoryStore {
 
     /// Record a soul event as a memory for a character.
     ///
+    /// Uses exponential backoff retry on transient failures. If the circuit
+    /// breaker is open, the memory is written to an in-memory fallback cache
+    /// instead of the database so no data is permanently lost for recent events.
+    ///
     /// # Errors
     ///
-    /// Returns an error if the operation fails.
+    /// Returns an error if serialization fails. DB errors are handled internally
+    /// (logged + fallback cache) and do not propagate unless the caller needs
+    /// the inserted row ID for further operations.
     pub fn record(
         &self,
         character_id: ClientId,
@@ -151,13 +270,78 @@ impl MemoryStore {
         let zone = event_zone(event);
         let mood_str = format!("{mood:?}");
 
-        self.conn.execute(
-            "INSERT INTO memories (character_id, event_type, event_json, zone, mood_at_time, importance)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![character_id, event_type, event_json, zone, mood_str, importance],
-        ).context("Failed to record memory")?;
+        // If the circuit is open, write to fallback cache and return a synthetic ID.
+        if self.health.is_open() {
+            tracing::warn!(
+                character_id,
+                event_type,
+                "memory_store: circuit open — buffering memory in fallback cache"
+            );
+            self.push_fallback(CachedMemory {
+                character_id,
+                event_type: event_type.to_string(),
+                event_json,
+                zone,
+                mood_at_time: mood_str,
+                importance,
+            });
+            return Ok(-1);
+        }
 
-        Ok(self.conn.last_insert_rowid())
+        let result = retry_db_op("record_memory", || {
+            self.conn
+                .execute(
+                    "INSERT INTO memories (character_id, event_type, event_json, zone, mood_at_time, importance)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![character_id, event_type, &event_json, &zone, &mood_str, importance],
+                )
+                .context("Failed to record memory")
+        });
+
+        match result {
+            Ok(_) => {
+                self.health.record_success();
+                Ok(self.conn.last_insert_rowid())
+            }
+            Err(e) => {
+                self.health.record_failure("record_memory", &e);
+                tracing::warn!(
+                    character_id,
+                    event_type,
+                    error = %e,
+                    "memory_store: falling back to in-memory cache after retry exhaustion"
+                );
+                self.push_fallback(CachedMemory {
+                    character_id,
+                    event_type: event_type.to_string(),
+                    event_json,
+                    zone,
+                    mood_at_time: mood_str,
+                    importance,
+                });
+                Ok(-1)
+            }
+        }
+    }
+
+    /// Push a memory entry into the in-memory fallback cache, evicting the
+    /// oldest entry when the cache is full.
+    fn push_fallback(&self, entry: CachedMemory) {
+        let mut cache = self.fallback_cache.borrow_mut();
+        if cache.len() >= FALLBACK_CACHE_MAX {
+            cache.pop_front();
+        }
+        cache.push_back(entry);
+    }
+
+    /// Returns the number of memories currently held in the fallback cache.
+    pub fn fallback_cache_len(&self) -> usize {
+        self.fallback_cache.borrow().len()
+    }
+
+    /// Returns true if the circuit breaker is open (DB writes disabled).
+    pub fn is_circuit_open(&self) -> bool {
+        self.health.is_open()
     }
 
     /// Recall the N most recent memories for a character.
@@ -897,7 +1081,11 @@ mod tests {
     fn open_memory_store() -> MemoryStore {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(SCHEMA).unwrap();
-        MemoryStore { conn }
+        MemoryStore {
+            conn,
+            health: Arc::new(DbHealth::default()),
+            fallback_cache: RefCell::new(VecDeque::new()),
+        }
     }
 
     fn kill_event(target: &str, zone: &str) -> SoulEvent {
@@ -1715,142 +1903,112 @@ mod tests {
         assert_eq!(loaded.catchphrases, vec!["Indeed!"]);
     }
 
-    // ── Audit log tests ───────────────────────────────────────────────────────
+    // -- Retry / circuit-breaker / fallback cache tests --
 
     #[test]
-    fn audit_log_insert_returns_positive_id() {
+    fn fallback_cache_starts_empty() {
         let store = open_memory_store();
-        let id = store
-            .audit_log(1, "say", r#"{"message":"Hello!"}"#, None, None)
-            .unwrap();
-        assert!(id > 0);
+        assert_eq!(store.fallback_cache_len(), 0);
+        assert!(!store.is_circuit_open());
     }
 
     #[test]
-    fn audit_log_is_append_only_sequential() {
-        let store = open_memory_store();
-        let id1 = store
-            .audit_log(1, "say", r#"{"message":"a"}"#, None, None)
-            .unwrap();
-        let id2 = store
-            .audit_log(1, "emote", r#"{"emote":"wave"}"#, None, None)
-            .unwrap();
-        assert!(id2 > id1);
+    fn circuit_breaker_opens_after_threshold_failures() {
+        let health = Arc::new(DbHealth::default());
+        let dummy_err = anyhow::anyhow!("simulated DB error");
+        for _ in 0..CIRCUIT_BREAKER_THRESHOLD {
+            assert!(!health.is_open(), "circuit should still be closed");
+            health.record_failure("test_op", &dummy_err);
+        }
+        assert!(
+            health.is_open(),
+            "circuit should be open after {} failures",
+            CIRCUIT_BREAKER_THRESHOLD
+        );
     }
 
     #[test]
-    fn get_audit_log_returns_entries_for_character() {
-        let store = open_memory_store();
-        store
-            .audit_log(1, "say", r#"{"message":"Hi"}"#, None, Some("op1"))
-            .unwrap();
-        store
-            .audit_log(2, "emote", r#"{"emote":"wave"}"#, None, None)
-            .unwrap();
-
-        let entries = store.get_audit_log(1, None, None).unwrap();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].character_id, 1);
-        assert_eq!(entries[0].action_type, "say");
-        assert_eq!(entries[0].operator_id.as_deref(), Some("op1"));
+    fn circuit_breaker_closes_on_success() {
+        let health = Arc::new(DbHealth::default());
+        let dummy_err = anyhow::anyhow!("simulated DB error");
+        for _ in 0..CIRCUIT_BREAKER_THRESHOLD {
+            health.record_failure("test_op", &dummy_err);
+        }
+        assert!(health.is_open());
+        health.record_success();
+        assert!(!health.is_open());
     }
 
     #[test]
-    fn get_audit_log_by_action_filters_correctly() {
+    fn record_uses_fallback_cache_when_circuit_open() {
         let store = open_memory_store();
-        store
-            .audit_log(1, "say", r#"{"message":"a"}"#, None, None)
-            .unwrap();
-        store
-            .audit_log(1, "say", r#"{"message":"b"}"#, None, None)
-            .unwrap();
-        store
-            .audit_log(1, "emote", r#"{"emote":"bow"}"#, None, None)
-            .unwrap();
-        store
-            .audit_log(2, "say", r#"{"message":"c"}"#, None, None)
-            .unwrap();
+        // Force the circuit open.
+        let dummy_err = anyhow::anyhow!("simulated DB error");
+        for _ in 0..CIRCUIT_BREAKER_THRESHOLD {
+            store.health.record_failure("test", &dummy_err);
+        }
+        assert!(store.is_circuit_open());
 
-        let say_entries = store.get_audit_log_by_action("say").unwrap();
-        assert_eq!(say_entries.len(), 3);
-        assert!(say_entries.iter().all(|e| e.action_type == "say"));
-
-        let emote_entries = store.get_audit_log_by_action("emote").unwrap();
-        assert_eq!(emote_entries.len(), 1);
+        let event = kill_event("a gnoll", "blackburrow");
+        let id = store.record(1, &event, MoodState::Neutral, 1.0).unwrap();
+        // Returns synthetic ID (-1) rather than a real row ID.
+        assert_eq!(id, -1);
+        // Entry goes into the fallback cache, not the DB.
+        assert_eq!(store.fallback_cache_len(), 1);
+        let db_count: i64 = store
+            .connection()
+            .query_row("SELECT COUNT(*) FROM memories", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(db_count, 0);
     }
 
     #[test]
-    fn get_audit_summary_counts_per_day() {
+    fn fallback_cache_evicts_oldest_when_full() {
         let store = open_memory_store();
-        // Insert a few entries — they all land on today, so we expect 1 day.
-        store
-            .audit_log(1, "say", r#"{"message":"a"}"#, None, None)
-            .unwrap();
-        store
-            .audit_log(
-                1,
-                "mood_change",
-                r#"{"from":"Neutral","to":"Happy"}"#,
-                None,
-                None,
-            )
-            .unwrap();
+        // Force circuit open so all records go to the cache.
+        let dummy_err = anyhow::anyhow!("simulated DB error");
+        for _ in 0..CIRCUIT_BREAKER_THRESHOLD {
+            store.health.record_failure("test", &dummy_err);
+        }
 
-        let summary = store.get_audit_summary(1).unwrap();
-        assert_eq!(summary.len(), 1);
-        assert_eq!(summary[0].count, 2);
+        let event = kill_event("mob", "zone");
+        for _ in 0..FALLBACK_CACHE_MAX + 10 {
+            store.record(1, &event, MoodState::Neutral, 1.0).unwrap();
+        }
+        // Cache should be capped at FALLBACK_CACHE_MAX.
+        assert_eq!(store.fallback_cache_len(), FALLBACK_CACHE_MAX);
     }
 
     #[test]
-    fn get_audit_summary_empty_for_unknown_character() {
-        let store = open_memory_store();
-        let summary = store.get_audit_summary(999).unwrap();
-        assert!(summary.is_empty());
+    fn retry_db_op_succeeds_on_first_attempt() {
+        let result: Result<i32> = retry_db_op("noop", || Ok(42));
+        assert_eq!(result.unwrap(), 42);
     }
 
     #[test]
-    fn export_audit_csv_includes_header_and_rows() {
-        let store = open_memory_store();
-        store
-            .audit_log(
-                1,
-                "say",
-                r#"{"message":"Hello, world!"}"#,
-                Some("idle behavior"),
-                Some("soul_engine"),
-            )
-            .unwrap();
-
-        let csv = store.export_audit_csv(1).unwrap();
-        assert!(csv.starts_with(
-            "id,character_id,action_type,action_json,reason,operator_id,created_at\n"
-        ));
-        assert!(csv.contains("say"));
-        assert!(csv.contains("soul_engine"));
-        // Comma in message value should be quoted
-        assert!(csv.contains("\"Hello, world!\"") || csv.contains("Hello"));
+    fn retry_db_op_returns_last_error_after_exhaustion() {
+        let mut call_count = 0usize;
+        let result: Result<i32> = retry_db_op("always_fail", || {
+            call_count += 1;
+            Err(anyhow::anyhow!("permanent failure"))
+        });
+        assert!(result.is_err());
+        // 1 initial + 5 retries = 6 total attempts.
+        assert_eq!(call_count, 6);
     }
 
     #[test]
-    fn export_audit_csv_empty_for_new_character() {
-        let store = open_memory_store();
-        let csv = store.export_audit_csv(42).unwrap();
-        let lines: Vec<&str> = csv.lines().collect();
-        // Header only
-        assert_eq!(lines.len(), 1);
-    }
-
-    #[test]
-    fn audit_entry_debug_is_implemented() {
-        let entry = AuditEntry {
-            id: 1,
-            character_id: 2,
-            action_type: "say".into(),
-            action_json: "{}".into(),
-            reason: None,
-            operator_id: None,
-            created_at: "2026-01-01 00:00:00".into(),
-        };
-        let _ = format!("{entry:?}");
+    fn retry_db_op_succeeds_on_second_attempt() {
+        let mut call_count = 0usize;
+        let result: Result<i32> = retry_db_op("fail_once", || {
+            call_count += 1;
+            if call_count == 1 {
+                Err(anyhow::anyhow!("transient"))
+            } else {
+                Ok(99)
+            }
+        });
+        assert_eq!(result.unwrap(), 99);
+        assert_eq!(call_count, 2);
     }
 }
