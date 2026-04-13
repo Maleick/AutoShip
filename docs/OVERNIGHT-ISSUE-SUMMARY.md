@@ -33,7 +33,7 @@
 **Dependencies**: #861 (logout)  
 **Blocks**: #863, #864  
 **Effort**: 10-14 days  
-**Labels**: `M7`, `M7.harness`, `phase-1`, `phase-2`, `testing`
+**Labels**: `M7`, `M7.harness`, `phase-2`, `testing`
 
 | Issue | Type | Effort | Status |
 |-------|------|--------|--------|
