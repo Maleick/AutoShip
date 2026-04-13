@@ -4,11 +4,11 @@
 
 TextQuest is a three-crate Rust workspace:
 
-| Crate | Role |
-| --- | --- |
-| `textquest` | External orchestrator, TUI, config, process reading, injection, launcher, camp loop, Soul coordinator |
-| `textquest-dll` | Injected DLL for in-process EQ control, hooks, IPC server, login/nav/combat FSMs |
-| `textquest-common` | Shared types for IPC, offsets, nav, combat, login, soul, and wire formats |
+| Crate              | Role                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
+| `textquest`        | External orchestrator, TUI, config, process reading, injection, launcher, camp loop, Soul coordinator |
+| `textquest-dll`    | Injected DLL for in-process EQ control, hooks, IPC server, login/nav/combat FSMs                      |
+| `textquest-common` | Shared types for IPC, offsets, nav, combat, login, soul, and wire formats                             |
 
 ## Runtime Modes
 
@@ -34,13 +34,52 @@ TextQuest is a three-crate Rust workspace:
 7. Operator commands or orchestrator decisions are serialized as IPC commands and sent back to the DLL over authenticated named pipes.
 
 ```mermaid
-flowchart LR
-    A[textquest] --> B["stage DLL + token"]
-    B --> C[textquest-dll]
-    C --> D["shared memory GameState"]
-    D --> A
-    A --> E["authenticated named pipe commands"]
-    E --> C
+flowchart TD
+    subgraph Operator["🖥️ Operator Machine"]
+        TUI["TUI Dashboard\n(Characters / Map / Nav / Debug / Packets)"]
+        Orchestrator["textquest\norchestrator"]
+        CampLoop["Camp Loop FSM\npull→fight→loot→med→buff"]
+        LoginSM["Login Coordinator\nstaggered launch + FSM"]
+        NavRouter["Nav Router\nnavmesh + route planning"]
+        Web["textquest-web\nAxum REST + React SPA"]
+    end
+
+    subgraph Common["📦 textquest-common"]
+        IpcTypes["IPC Command/Response types"]
+        Offsets["EQ Offsets (rebased)"]
+        NavTypes["NavMesh / Spawn types"]
+    end
+
+    subgraph EQProcess["🎮 EverQuest Process (per client)"]
+        DLL["textquest-dll\n(injected cdylib)"]
+        GameLoop["GameLoop Hook\nCEverQuest::MainLoop"]
+        CombatFSM["Combat FSM\n16 class strategies"]
+        NavFSM["Nav FSM\nmovement + stuck recovery"]
+        LoginDLL["Login FSM\nwidget manipulation"]
+        SharedMem["Shared Memory\nGameState snapshots"]
+        Pipe["Named Pipe\nauthenticated IPC"]
+    end
+
+    TUI <--> Orchestrator
+    Orchestrator --> CampLoop
+    Orchestrator --> LoginSM
+    Orchestrator --> NavRouter
+    Orchestrator <--> Web
+
+    Orchestrator -->|"ReadProcessMemory"| EQProcess
+    Orchestrator -->|"inject DLL + token"| DLL
+    Orchestrator <-->|"Commands / Results"| Pipe
+    Orchestrator <--|"GameState snapshots"| SharedMem
+
+    DLL --> GameLoop
+    GameLoop --> CombatFSM
+    GameLoop --> NavFSM
+    GameLoop --> LoginDLL
+    DLL --> SharedMem
+    DLL --> Pipe
+
+    Orchestrator --- Common
+    DLL --- Common
 ```
 
 ## Key Module Boundaries

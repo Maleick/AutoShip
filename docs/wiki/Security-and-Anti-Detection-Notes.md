@@ -24,6 +24,37 @@ From the current codebase:
 - login passwords are zeroized after use inside the DLL
 - staged DLL filenames are randomized before injection
 
+## Anti-Detection Layers
+
+```mermaid
+flowchart TD
+    subgraph Stealth["🛡️ Stealth Layer"]
+        PEB["PEB Unlink\nremove from module lists"]
+        PageEncrypt["Page Encryption\nXOR .text section"]
+        StackSpoof["Stack Spoofing\nper-API call"]
+        ETW["ETW Blinding\nhw breakpoint on ETW write"]
+        PEErase["PE Header Erase\nzero DOS + NT headers"]
+    end
+
+    subgraph Syscall["⚙️ Syscall Layer"]
+        RecycledGate["RecycledGate\nindirect syscall invocation"]
+        TartarusGate["TartarusGate\nsyscall table via pattern scan"]
+    end
+
+    subgraph Behavior["👤 Behavior Humanization"]
+        MovHuman["Movement Humanization\nspeed jitter, heading wobble"]
+        CombatJitter["Combat Timing Jitter\nper-character personality"]
+        RenderStrobe["Render Strobing\nbackground client pacing"]
+    end
+
+    subgraph IPC["🔐 IPC Security"]
+        SessionToken["Session Token\n32 random bytes per injection"]
+        DACL["Current-user DACL\nshared mem + pipes"]
+        ConstantTime["Constant-time token compare"]
+        ZeroizePwd["Password zeroize after entry"]
+    end
+```
+
 ## Current Operator Implications
 
 - authenticated IPC is per injected session, not just per PID
@@ -45,15 +76,15 @@ Current practical measures include:
 
 Use these categories when anti-cheat work needs a bounded review instead of vague “stealth” language:
 
-| Category                      | Current repo surface                                                                                                                                                                 | Confidence | Why it matters                                                                                               |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------ |
+| Category                      | Current repo surface                                                                                                                                                                                | Confidence | Why it matters                                                                                               |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------ |
 | Module presence               | `textquest/src/inject/loader.rs` injects `textquest-dll` with `CreateRemoteThread` + `LoadLibraryW`, and `textquest-dll` then remains loaded in `eqgame.exe`                                        | High       | A loaded third-party module is a concrete exposure surface even before any gameplay behavior is considered.  |
-| Detour hooks                  | `textquest-dll/src/lib.rs` installs the game-loop and render hooks                                                                                                                        | High       | Hooked code paths create an exposure surface that should be reviewed separately from operator behavior.      |
-| In-process function calls     | `textquest-common/src/ipc.rs`, `textquest-dll/src/hooks/game_loop.rs`, and the login/widget helpers execute `InterpretCmd`, UI clicks, and related internal calls inside the client process    | High       | Internal control paths can look different from external input simulation and need their own risk labeling.   |
+| Detour hooks                  | `textquest-dll/src/lib.rs` installs the game-loop and render hooks                                                                                                                                  | High       | Hooked code paths create an exposure surface that should be reviewed separately from operator behavior.      |
+| In-process function calls     | `textquest-common/src/ipc.rs`, `textquest-dll/src/hooks/game_loop.rs`, and the login/widget helpers execute `InterpretCmd`, UI clicks, and related internal calls inside the client process         | High       | Internal control paths can look different from external input simulation and need their own risk labeling.   |
 | IPC naming and authentication | `textquest-common/src/ipc.rs`, `textquest-dll/src/ipc/pipe.rs`, and `textquest-dll/src/ipc/shared.rs` implement session-derived names, per-session raw token authentication, and current-user DACLs | High       | These reduce casual local exposure, but they do not remove host-level forensic or anti-cheat risk.           |
 | Timing variation              | `textquest-dll/src/hooks/game_loop.rs`, `textquest-dll/src/nav/humanize.rs`, and `textquest-dll/src/combat/humanize.rs` apply command jitter, movement humanization, and behavior timing variation  | Medium     | These are practical hardening measures, not evidence of safety against any specific Daybreak detection path. |
-| Operator environment          | Live machine cleanliness, runner hygiene, artifact handling, and avoiding unrelated cheat tooling                                                                                    | High       | Official Daybreak policy applies account-wide and is not limited to a single game session.                   |
-| Community detection claims    | Forum and community reporting                                                                                                                                                        | Low        | Good for validation hypotheses only, not safety guarantees.                                                  |
+| Operator environment          | Live machine cleanliness, runner hygiene, artifact handling, and avoiding unrelated cheat tooling                                                                                                   | High       | Official Daybreak policy applies account-wide and is not limited to a single game session.                   |
+| Community detection claims    | Forum and community reporting                                                                                                                                                                       | Low        | Good for validation hypotheses only, not safety guarantees.                                                  |
 
 ### Confidence rules
 

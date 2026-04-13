@@ -128,6 +128,31 @@ Shared IPC commands already exist for:
 
 The TUI `:login` and `:profile launch` flows are stubbed on non-Windows. In that environment they log what would have launched instead of controlling live EQ.
 
+## eqmain vs Game Loop Boundary
+
+The login process crosses a critical architectural boundary — before and after `ProcessGameEvents` is hooked:
+
+```mermaid
+flowchart TD
+    subgraph eqmain["Phase 1–2: eqmain.dll (NO ProcessGameEvents hook)"]
+        P1["Credential Entry\nDirect vtable call\nCXWnd::WndNotification index 32"]
+        P2["Server Select\nDirect vtable call\nSIDL guard for screen detection"]
+    end
+
+    subgraph gameloop["Phase 3+: eqgame.exe (ProcessGameEvents hooked)"]
+        P3["Character Select\nqueue_button_click (drained per frame)"]
+        P4["Enter World\nqueue_button_click"]
+        P5["Post-Login\ngroup join → buff → nav to camp"]
+    end
+
+    P1 -->|"PLAY EVERQUEST"| P2
+    P2 -->|"character select screen"| P3
+    P3 -->|"ENTER WORLD"| P4
+    P4 -->|"InWorld"| P5
+```
+
+> **Key lesson**: Queued clicks are silently dropped during `eqmain` phases because `ProcessGameEvents` is not yet hooked. Use direct vtable calls for Phases 1–2.
+
 ## Login Chain Fixes (April 2026)
 
 Three targeted fixes hardened the login chain after live testing revealed that the

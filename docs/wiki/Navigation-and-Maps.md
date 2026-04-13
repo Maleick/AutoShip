@@ -81,6 +81,23 @@ Demo mode still exercises:
 
 That makes it useful for UI validation, but it does not prove live movement correctness.
 
+## Nav State Machine (DLL side)
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Moving : NavigateTo command
+    Moving --> Arrived : within arrival radius
+    Moving --> Stuck : no progress timeout
+    Stuck --> Moving : recovery move applied
+    Stuck --> Stuck : retry (escalating)
+    Stuck --> Idle : max retries exhausted\n(report blocked)
+    Arrived --> Idle : command complete
+    Idle --> [*]
+```
+
+Movement humanization applies during `Moving`: per-character speed jitter, heading wobble, and random micro-detours break up bot-like straight-line pathing.
+
 ## Internals
 
 ### Orchestrator side

@@ -32,12 +32,46 @@ That matters because older docs may still summarize the system as a simpler five
 
 ```mermaid
 flowchart LR
-    A[Idle] --> B[Pulling]
-    B --> C[Fighting]
-    C --> D[Looting]
-    D --> E[Medding]
-    E --> F[Buffing]
-    F --> A
+    Idle -->|"mob in range"| Pulling
+    Pulling -->|"mob engaged"| Fighting
+    Fighting -->|"mob dead"| Looting
+    Looting -->|"corpses cleared"| Medding
+    Medding -->|"mana full"| Buffing
+    Buffing -->|"buffs applied"| Idle
+    Fighting -->|"wipe / death"| Idle
+    Pulling -->|"no mobs"| Idle
+```
+
+### Orchestrator vs DLL responsibility split
+
+```mermaid
+flowchart TD
+    subgraph Orchestrator["textquest — orchestrator side"]
+        CampPhase["Camp phase decision\n(Idle/Pull/Fight/Loot/Med/Buff)"]
+        AssistTarget["Assist target broadcast"]
+        CHChain["CH chain coordination"]
+        BroadcastCmd["Broadcast IPC commands\nto all clients"]
+        DeathRecovery["Death recovery FSM"]
+    end
+
+    subgraph DLL["textquest-dll — per character"]
+        CombatFSM["Combat FSM\nper-character state"]
+        ClassStrategy["Class strategy\n(16 classes + generic)"]
+        HolyShit["HolyShit rules\nemergency overrides"]
+        Rotation["Rotation engine\ncooldowns + conditions"]
+        Aggro["Aggro / XT reader"]
+    end
+
+    CampPhase --> AssistTarget
+    AssistTarget -->|"Command::AssistTarget"| CombatFSM
+    CHChain -->|"Command::CastSpell"| CombatFSM
+    BroadcastCmd --> CombatFSM
+
+    CombatFSM --> HolyShit
+    HolyShit -->|"emergency action"| Rotation
+    CombatFSM --> ClassStrategy
+    ClassStrategy --> Rotation
+    Aggro --> CombatFSM
 ```
 
 ## Responsibility Split
