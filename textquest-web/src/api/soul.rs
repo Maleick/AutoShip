@@ -10,6 +10,43 @@ use tokio::sync::RwLock;
 
 use crate::AppState;
 
+// ── Soul state (panel) types ────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SoulState {
+    pub character_id: String,
+    pub mood: String,
+    pub personality_traits: Vec<String>,
+    pub memory_count: u32,
+    pub last_event: Option<String>,
+}
+
+fn demo_soul_states() -> Vec<SoulState> {
+    vec![
+        SoulState {
+            character_id: "Frostreaver".into(),
+            mood: "focused".into(),
+            personality_traits: vec!["cautious".into(), "loyal".into(), "stoic".into()],
+            memory_count: 142,
+            last_event: Some("Recalled Lower Guk speed clear.".into()),
+        },
+        SoulState {
+            character_id: "Shadowdancer".into(),
+            mood: "excited".into(),
+            personality_traits: vec!["bold".into(), "mischievous".into(), "curious".into()],
+            memory_count: 87,
+            last_event: Some("Flagged rare spawn: Maestro of Rancor.".into()),
+        },
+        SoulState {
+            character_id: "Ironclad".into(),
+            mood: "content".into(),
+            personality_traits: vec!["disciplined".into(), "protective".into()],
+            memory_count: 201,
+            last_event: Some("Completed stable CH chain rotation.".into()),
+        },
+    ]
+}
+
 // ── In-memory audit store ────────────────────────────────────────────────────
 
 /// A single entry in the in-memory audit log.
@@ -122,6 +159,22 @@ struct AuditPage {
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
+
+/// `GET /api/soul` — list current soul states for all characters.
+pub async fn list_soul_states() -> impl IntoResponse {
+    Json(demo_soul_states())
+}
+
+/// `GET /api/soul/:character_id` — fetch soul state for one character.
+pub async fn get_soul_state(Path(character_id): Path<String>) -> impl IntoResponse {
+    let soul = demo_soul_states()
+        .into_iter()
+        .find(|s| s.character_id.eq_ignore_ascii_case(&character_id));
+    match soul {
+        Some(s) => Ok(Json(s)),
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
 
 /// `GET /api/soul/audit/:character_id` — audit log for a single character.
 pub async fn get_character_audit(
