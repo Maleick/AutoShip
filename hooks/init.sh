@@ -4,7 +4,7 @@ set -euo pipefail
 # init.sh — Initialize .autoship/ directory structure and state file.
 # Idempotent: safe to re-run without losing existing state.
 
-AUTOSHIP_VERSION="0.1.0"
+AUTOSHIP_VERSION="1.3.0"
 
 AUTOSHIP_DIR=".autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
