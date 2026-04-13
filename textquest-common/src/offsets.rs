@@ -338,6 +338,12 @@ pub const WORLD_AUTHENTICATE: u64 = 0x0001_402C_9C80;
 /// SystemFingerprint: sends VideoCardId, NetworkCardId, HardriveId, ComputerName
 pub const SYSTEM_FINGERPRINT: u64 = 0x0001_4059_4840;
 
+/// `CheaterLdFlag` format string used by anti-cheat detection logs (`CheaterLdFlag=%d\n`).
+pub const CHEATER_LD_FLAG_STRING: u64 = 0x0001_40AF_EBC8;
+
+/// `CheaterLdFlag` global flag variable storing the current anti-cheat state.
+pub const CHEATER_LD_FLAG_VAR: u64 = 0x0001_40AF_ED90;
+
 // ─── CInvSlotMgr function addresses ───
 // Source: eqgame.h, client date 20260310
 
@@ -1704,6 +1710,71 @@ mod tests {
             assert!(context_menu_mgr::MENUS_DATA < context_menu_mgr::CUR_MENU);
             assert!(context_menu_mgr::CUR_MENU < context_menu_mgr::CUR_ITEM);
         };
+    }
+
+    #[test]
+    fn cheater_ld_flag_offsets_do_not_overlap() {
+        use std::collections::HashSet;
+
+        // Include the new constants alongside existing ones to verify no address collisions.
+        let all_offsets: &[u64] = &[
+            CHEATER_LD_FLAG_STRING,
+            CHEATER_LD_FLAG_VAR,
+            PINST_LOCAL_PLAYER,
+            PINST_CONTROLLED_PLAYER,
+            PINST_TARGET,
+            PINST_SPAWN_MANAGER,
+            PINST_LOCAL_PC,
+            PINST_SPELL_MANAGER,
+            PINST_CDISPLAY,
+            PINST_CEVERQUEST,
+            PINST_CXWND_MANAGER,
+            PINST_ACTIVE_CORPSE,
+            PINST_CCHAT_WINDOW_MANAGER,
+            PINST_CINV_SLOT_MGR,
+            PINST_CONTEXT_MENU_MANAGER,
+            PINST_SGRAPHICSENGINE,
+            MEMCHECK4_PROCESS_ENUM,
+            FILE_INTEGRITY_DISPATCHER,
+            SERVER_MEMCHECK_HANDLER,
+            PROCESS_GAME_EVENTS,
+            FIX_HEADING,
+            GET_BEARING,
+            WORLD_AUTHENTICATE,
+            SYSTEM_FINGERPRINT,
+            NET_SEND,
+            OUTBOUND_MSG_COUNTER,
+            INBOUND_MSG_COUNTER,
+            CCHAT_MGR_GET_RGBA,
+            CCHAT_MGR_INIT_CONTEXT_MENU,
+            CCHAT_MGR_FREE_CHAT_WINDOW,
+            CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT,
+            CCHAT_MGR_CREATE_CHAT_WINDOW,
+            INV_SLOT_MGR_FIND_SLOT,
+            INV_SLOT_MGR_MOVE_ITEM,
+            INV_SLOT_MGR_SELECT_SLOT,
+            SPELL_BOOK_WND_MEMORIZE_SET,
+            INV_SLOT_GET_ITEM_BASE,
+            CONTEXT_MENU_MGR_HANDLE_MENU,
+            CAST_SPELL,
+            DO_COMBAT_ABILITY,
+            USE_SKILL,
+            CAN_USE_ITEM,
+            DO_ATTACK,
+            EXECUTE_CMD,
+            INTERPRET_CMD,
+            RIGHT_CLICKED_ON_PLAYER,
+            CLICKED_PLAYER,
+            ISSUE_PET_COMMAND,
+            DO_LOOT,
+            DSP_CHAT,
+            REAL_RENDER_WORLD,
+        ];
+
+        let mut seen = HashSet::new();
+        for &value in all_offsets {
+            assert!(seen.insert(value), "Duplicate offset: {value:#x}");
+        }
     }
 
     #[test]
