@@ -4,7 +4,7 @@
 
 | Path | Purpose |
 | --- | --- |
-| `config/frostreaver.toml` | Main TextQuest app config |
+| `config/textquest.toml` | Main TextQuest app config |
 | `config/accounts.toml` | Account and group-launch metadata |
 | `data/credentials.db` | Encrypted account password store used by `textquest autologin` |
 | `config/camps/*.toml` | Saved camp locations and thresholds |
@@ -19,7 +19,9 @@
 
 ## Main App Config
 
-The current main app file is still named `config/frostreaver.toml`. That filename is historical, but it is the active TextQuest config path today.
+The main operator config path is `config/textquest.toml`.
+
+`config/frostreaver.toml` is a legacy filename that still appears in older setups and in one compatibility path inside `config check`, but docs should point operators at `config/textquest.toml`.
 
 Current sections include:
 
@@ -131,7 +133,8 @@ These files are optional. When no per-toon file exists, TextQuest keeps using th
 ### Current behavior
 
 - The current configuration surface is already large enough that docs should point to specific files, not only describe it abstractly.
-- The legacy filename `frostreaver.toml` is still current and should not be silently renamed in docs unless the code changes too.
+- `config/textquest.toml` is the active config path for operators.
+- `config/frostreaver.toml` should only be treated as legacy fallback/history unless a command explicitly calls it out.
 
 ### Validation notes
 

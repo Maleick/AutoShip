@@ -7,10 +7,8 @@ use crate::process::memory::ProcessHandle;
 /// Returns `Some(value)` on Windows when the value can be read, and `None` otherwise.
 #[cfg(windows)]
 pub fn read_cheater_ld_flag(proc: &ProcessHandle, eq_base: u64) -> Option<i32> {
-    let flag_addr = textquest_common::offsets::rebase(
-        textquest_common::offsets::CHEATER_LD_FLAG_VAR,
-        eq_base,
-    )?;
+    let flag_addr =
+        textquest_common::offsets::rebase(textquest_common::offsets::CHEATER_LD_FLAG_VAR, eq_base)?;
     proc.read::<i32>(flag_addr).ok()
 }
 

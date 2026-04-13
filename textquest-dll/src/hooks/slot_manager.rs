@@ -86,10 +86,7 @@ fn build_plan(state: HookGameState) -> [Option<HookKind>; MAX_SLOTS] {
             HookKind::RealRenderWorld,
             HookKind::DspChat,
         ],
-        HookGameState::ZoneLoading => &[
-            HookKind::ProcessGameEvents,
-            HookKind::SetGameState,
-        ],
+        HookGameState::ZoneLoading => &[HookKind::ProcessGameEvents, HookKind::SetGameState],
     };
 
     let mut assignments = [None; MAX_SLOTS];

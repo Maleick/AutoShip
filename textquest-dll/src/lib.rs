@@ -39,9 +39,9 @@ mod syscall;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 #[cfg(windows)]
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 /// Base address of eqgame.exe in memory. Set during initialization.
 /// All EQ offsets are added to this value to compute runtime addresses.
@@ -156,7 +156,10 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
         if violations.is_empty() {
             tracing::info!("Struct size validation passed");
         } else {
-            tracing::warn!("Struct size validation failures:\n{}", violations.join("\n"));
+            tracing::warn!(
+                "Struct size validation failures:\n{}",
+                violations.join("\n")
+            );
         }
     }
 
@@ -500,22 +503,26 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     let main_loop_addr = eq_base as usize + main_loop_offset;
 
     // Cross-check against textquest_common offsets via rebase.
-    let install_addr =
-        if let Some(expected) = textquest_common::offsets::rebase(textquest_common::offsets::PROCESS_GAME_EVENTS, eq_base) {
-            if main_loop_addr != expected {
-                tracing::warn!(
-                    computed = format!("{:#x}", main_loop_addr),
-                    expected = format!("{:#x}", expected),
-                    "MAIN_LOOP_OFFSET disagrees with offsets::PROCESS_GAME_EVENTS — using offsets rebase"
-                );
-                expected
-            } else {
-                main_loop_addr
-            }
+    let install_addr = if let Some(expected) =
+        textquest_common::offsets::rebase(textquest_common::offsets::PROCESS_GAME_EVENTS, eq_base)
+    {
+        if main_loop_addr != expected {
+            tracing::warn!(
+                computed = format!("{:#x}", main_loop_addr),
+                expected = format!("{:#x}", expected),
+                "MAIN_LOOP_OFFSET disagrees with offsets::PROCESS_GAME_EVENTS — using offsets rebase"
+            );
+            expected
         } else {
             main_loop_addr
-        };
+        }
+    } else {
+        main_loop_addr
+    };
     hooks::game_loop::install(install_addr)?;
+    install_remaining_hooks(eq_base)?;
+    Ok(())
+}
 
 fn install_remaining_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
     // Install render strobe hook -- background clients skip 3D rendering.
@@ -527,11 +534,8 @@ fn install_remaining_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error
     }
 
     // Install chat message hook — intercepts dsp_chat to capture all in-game text.
-    if let Some(chat_addr) = resolve_offset(
-        "dspChat",
-        textquest_common::offsets::DSP_CHAT,
-        eq_base,
-    ) {
+    if let Some(chat_addr) = resolve_offset("dspChat", textquest_common::offsets::DSP_CHAT, eq_base)
+    {
         if let Err(e) = hooks::chat::install(chat_addr as usize) {
             tracing::warn!("Chat hook failed (continuing without chat capture): {}", e);
         }
@@ -541,9 +545,10 @@ fn install_remaining_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error
 
     // Install CEverQuest state transition hook — keep orchestrator in sync with
     // world/login/loading transitions and allow future hook set rotation.
-    if let Some(set_game_state_addr) =
-        textquest_common::offsets::rebase(textquest_common::offsets::EVERQUEST_SET_GAME_STATE, eq_base)
-    {
+    if let Some(set_game_state_addr) = textquest_common::offsets::rebase(
+        textquest_common::offsets::EVERQUEST_SET_GAME_STATE,
+        eq_base,
+    ) {
         if let Err(e) = hooks::set_game_state::install(set_game_state_addr) {
             tracing::warn!(
                 "SetGameState hook failed (continuing without state notifications): {}",
@@ -603,13 +608,14 @@ fn scan_offsets(eq_base: u64) {
     paths.push(std::env::temp_dir().join("textquest").join("offsets.json"));
 
     let db = paths.into_iter().find_map(|path| {
-        if !path.exists() {
-            return None;
-        }
         match textquest_common::offset_db::OffsetDatabase::load_from_file(&path) {
             Ok(db) => Some((path, db)),
-            Err(e) => {
-                tracing::warn!(path = path.display().to_string(), error = %e, "Failed to parse scan offsets file");
+            Err(err) => {
+                tracing::debug!(
+                    path = path.display().to_string(),
+                    error = %err,
+                    "Failed to load scan offsets candidate"
+                );
                 None
             }
         }
@@ -748,8 +754,9 @@ mod tests {
 
     #[test]
     fn manifest_declares_cdylib() {
-        let manifest = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
-            .expect("cargo manifest should be readable");
+        let manifest =
+            std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
+                .expect("cargo manifest should be readable");
         let manifest: Value = manifest
             .parse()
             .expect("cargo manifest should be valid TOML");
@@ -761,8 +768,12 @@ mod tests {
             .expect("[lib].crate-type should be an array in Cargo.toml");
 
         assert!(
-            crate_types.iter().any(|value| value.as_str() == Some("cdylib"))
-                && crate_types.iter().any(|value| value.as_str() == Some("rlib")),
+            crate_types
+                .iter()
+                .any(|value| value.as_str() == Some("cdylib"))
+                && crate_types
+                    .iter()
+                    .any(|value| value.as_str() == Some("rlib")),
             "dll crate should be built as both cdylib and rlib"
         );
     }
@@ -791,8 +802,8 @@ mod tests {
                     continue;
                 }
 
-                let contents = std::fs::read_to_string(item.path())
-                    .expect("rust source should be readable");
+                let contents =
+                    std::fs::read_to_string(item.path()).expect("rust source should be readable");
                 let mut saw_no_mangle = false;
 
                 for line in contents.lines() {
@@ -814,7 +825,9 @@ mod tests {
                         saw_no_mangle = false;
                     }
 
-                    if line.contains("pub extern") && line.contains("fn") && !line.contains("DllMain")
+                    if line.contains("pub extern")
+                        && line.contains("fn")
+                        && !line.contains("DllMain")
                     {
                         public_extern_fns.push(format!("{}: {}", item.path().display(), line));
                     }
@@ -827,7 +840,10 @@ mod tests {
             "unexpected #[no_mangle] export found: {:?}",
             other_no_mangle_exports
         );
-        assert_eq!(no_mangle_attrs, 1, "expected only one #[no_mangle] export (DllMain)");
+        assert_eq!(
+            no_mangle_attrs, 1,
+            "expected only one #[no_mangle] export (DllMain)"
+        );
         assert!(
             public_extern_fns.is_empty(),
             "unexpected pub extern function in Rust source: {:?}",

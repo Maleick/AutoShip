@@ -27,6 +27,10 @@ fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Js
     )
 }
 
+fn live_state_unavailable(message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
+    json_error(StatusCode::NOT_IMPLEMENTED, message)
+}
+
 /// Catch-all for unknown API routes so they do not fall through to the SPA.
 pub async fn api_not_found() -> impl IntoResponse {
     json_error(StatusCode::NOT_FOUND, "API route not found")
@@ -85,18 +89,9 @@ pub struct SessionInfo {
     pub status: String,
 }
 
-/// List active sessions (placeholder — will connect to IPC).
-pub async fn list_sessions() -> Json<Vec<SessionInfo>> {
-    // TODO: Read real session data from IPC / shared memory
-    Json(vec![SessionInfo {
-        client_id: 1,
-        character_name: "Frostreaver".into(),
-        zone: "East Commonlands".into(),
-        level: 50,
-        hp_pct: 100.0,
-        mana_pct: 85.0,
-        status: "idle".into(),
-    }])
+/// List active sessions.
+pub async fn list_sessions() -> impl IntoResponse {
+    live_state_unavailable("Session monitoring API is not backed by live state in this build")
 }
 
 // ─── Strategy tuning ─────────────────────────────────────────────────────────
@@ -342,169 +337,61 @@ pub struct EconomySettings {
 // ── Economy handlers ──────────────────────────────────────────────────────────
 
 /// GET /api/economy/settings — return full economy configuration.
-pub async fn get_economy_settings() -> Json<EconomySettings> {
-    // TODO: Load from persistent config (TOML / SQLite)
-    Json(EconomySettings {
-        krono: KronoSettings {
-            target_rate_per_day: 3,
-            min_sell_price: 800,
-            max_buy_price: 750,
-            restock_threshold: 5,
-            enabled: true,
-        },
-        banking_rules: vec![
-            BankingRule {
-                id: "br-1".into(),
-                item_category: "Plat".into(),
-                deposit_threshold: 5000,
-                keep_on_hand: 500,
-                auto_deposit: true,
-            },
-            BankingRule {
-                id: "br-2".into(),
-                item_category: "Krono".into(),
-                deposit_threshold: 10,
-                keep_on_hand: 2,
-                auto_deposit: true,
-            },
-            BankingRule {
-                id: "br-3".into(),
-                item_category: "Tradeskill Mats".into(),
-                deposit_threshold: 200,
-                keep_on_hand: 20,
-                auto_deposit: false,
-            },
-        ],
-        tradeskill_supplies: vec![
-            TradeskillSupply {
-                id: "ts-1".into(),
-                skill: "Tailoring".into(),
-                materials: vec![
-                    "Silk Threads".into(),
-                    "Animal Pelts".into(),
-                    "Spiderling Silk".into(),
-                ],
-                restock_quantity: 100,
-                source_zone: "Lower Guk".into(),
-                enabled: true,
-            },
-            TradeskillSupply {
-                id: "ts-2".into(),
-                skill: "Smithing".into(),
-                materials: vec!["Iron Ore".into(), "Coal".into(), "High Quality Ore".into()],
-                restock_quantity: 50,
-                source_zone: "Kaladim".into(),
-                enabled: true,
-            },
-        ],
-    })
+pub async fn get_economy_settings() -> impl IntoResponse {
+    live_state_unavailable("Economy settings API is not backed by live state in this build")
 }
 
 /// PUT /api/economy/settings — update full economy configuration.
-pub async fn put_economy_settings(Json(settings): Json<EconomySettings>) -> Json<EconomySettings> {
-    // TODO: Persist to config file / SQLite
-    Json(settings)
+pub async fn put_economy_settings(Json(_settings): Json<EconomySettings>) -> impl IntoResponse {
+    live_state_unavailable("Economy settings API does not persist changes in this build")
 }
 
 /// GET /api/economy/vendor-routes — list all vendor routes.
-pub async fn list_vendor_routes() -> Json<Vec<VendorRoute>> {
-    // TODO: Load from persistent storage
-    Json(vec![
-        VendorRoute {
-            id: "vr-1".into(),
-            zone: "East Commonlands".into(),
-            npc_name: "Merchant Ooldi".into(),
-            path_notes: "Near zone-in from West Commonlands, sells food/drink.".into(),
-            item_categories: vec!["Food".into(), "Drink".into(), "Reagents".into()],
-            enabled: true,
-        },
-        VendorRoute {
-            id: "vr-2".into(),
-            zone: "Neriak Commons".into(),
-            npc_name: "Vira S`Lex".into(),
-            path_notes: "Inside the Neriak armory building, sells weapons.".into(),
-            item_categories: vec!["Weapons".into(), "Armor".into()],
-            enabled: true,
-        },
-    ])
+pub async fn list_vendor_routes() -> impl IntoResponse {
+    live_state_unavailable("Vendor route API is not backed by live state in this build")
 }
 
 /// POST /api/economy/vendor-routes — create a vendor route.
-pub async fn create_vendor_route(Json(route): Json<VendorRoute>) -> Json<VendorRoute> {
-    // TODO: Persist to storage
-    Json(route)
+pub async fn create_vendor_route(Json(_route): Json<VendorRoute>) -> impl IntoResponse {
+    live_state_unavailable("Vendor route API does not persist changes in this build")
 }
 
 /// PUT /api/economy/vendor-routes/:id — update a vendor route.
 pub async fn update_vendor_route(
-    Path(id): Path<String>,
-    Json(mut route): Json<VendorRoute>,
-) -> Json<VendorRoute> {
-    // TODO: Persist to storage
-    route.id = id;
-    Json(route)
+    Path(_id): Path<String>,
+    Json(_route): Json<VendorRoute>,
+) -> impl IntoResponse {
+    live_state_unavailable("Vendor route API does not persist changes in this build")
 }
 
 /// DELETE /api/economy/vendor-routes/:id — delete a vendor route.
-pub async fn delete_vendor_route(Path(_id): Path<String>) -> axum::http::StatusCode {
-    // TODO: Remove from storage
-    axum::http::StatusCode::NO_CONTENT
+pub async fn delete_vendor_route(Path(_id): Path<String>) -> impl IntoResponse {
+    live_state_unavailable("Vendor route API does not persist changes in this build")
 }
 
 /// GET /api/economy/wealth — wealth history and current snapshot.
-pub async fn get_wealth() -> Json<WealthHistory> {
-    // TODO: Load from metrics SQLite DB
-    let snapshots = vec![
-        WealthSnapshot {
-            timestamp: "2026-04-01T00:00:00Z".into(),
-            plat: 120_000,
-            krono: 28,
-            item_value_estimate: 210_000,
-        },
-        WealthSnapshot {
-            timestamp: "2026-04-02T00:00:00Z".into(),
-            plat: 134_500,
-            krono: 30,
-            item_value_estimate: 230_000,
-        },
-        WealthSnapshot {
-            timestamp: "2026-04-03T00:00:00Z".into(),
-            plat: 148_200,
-            krono: 33,
-            item_value_estimate: 255_000,
-        },
-        WealthSnapshot {
-            timestamp: "2026-04-04T00:00:00Z".into(),
-            plat: 155_900,
-            krono: 35,
-            item_value_estimate: 270_000,
-        },
-        WealthSnapshot {
-            timestamp: "2026-04-05T00:00:00Z".into(),
-            plat: 164_100,
-            krono: 38,
-            item_value_estimate: 285_000,
-        },
-        WealthSnapshot {
-            timestamp: "2026-04-06T00:00:00Z".into(),
-            plat: 172_800,
-            krono: 40,
-            item_value_estimate: 298_000,
-        },
-        WealthSnapshot {
-            timestamp: "2026-04-07T00:00:00Z".into(),
-            plat: 187_430,
-            krono: 42,
-            item_value_estimate: 312_000,
-        },
-    ];
-    let current = snapshots.last().unwrap().clone();
-    Json(WealthHistory { current, snapshots })
+pub async fn get_wealth() -> impl IntoResponse {
+    live_state_unavailable("Wealth API is not backed by live state in this build")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::response::IntoResponse;
+    use http_body_util::BodyExt;
+    use serde_json::Value;
+
+    async fn error_response_json(response: axum::response::Response) -> (StatusCode, Value) {
+        let status = response.status();
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body should collect")
+            .to_bytes();
+        let value = serde_json::from_slice(&body).expect("body should be valid json");
+        (status, value)
+    }
 
     #[tokio::test]
     async fn health_returns_ok() {
@@ -513,37 +400,48 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sessions_returns_placeholder() {
-        let Json(sessions) = list_sessions().await;
-        assert!(!sessions.is_empty());
-        assert_eq!(sessions[0].character_name, "Frostreaver");
+    async fn sessions_returns_not_implemented() {
+        let (status, body) = error_response_json(list_sessions().await.into_response()).await;
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(
+            body["error"],
+            "Session monitoring API is not backed by live state in this build"
+        );
     }
 
     #[tokio::test]
-    async fn economy_settings_returns_krono_config() {
-        let Json(settings) = get_economy_settings().await;
-        assert!(settings.krono.enabled);
-        assert_eq!(settings.krono.target_rate_per_day, 3);
-        assert!(!settings.banking_rules.is_empty());
-        assert!(!settings.tradeskill_supplies.is_empty());
+    async fn economy_settings_returns_not_implemented() {
+        let (status, body) =
+            error_response_json(get_economy_settings().await.into_response()).await;
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(
+            body["error"],
+            "Economy settings API is not backed by live state in this build"
+        );
     }
 
     #[tokio::test]
-    async fn vendor_routes_returns_list() {
-        let Json(routes) = list_vendor_routes().await;
-        assert!(!routes.is_empty());
-        assert!(routes.iter().all(|r| !r.zone.is_empty()));
+    async fn vendor_routes_returns_not_implemented() {
+        let (status, body) = error_response_json(list_vendor_routes().await.into_response()).await;
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(
+            body["error"],
+            "Vendor route API is not backed by live state in this build"
+        );
     }
 
     #[tokio::test]
-    async fn wealth_history_has_snapshots() {
-        let Json(history) = get_wealth().await;
-        assert!(!history.snapshots.is_empty());
-        assert_eq!(history.current.plat, history.snapshots.last().unwrap().plat);
+    async fn wealth_history_returns_not_implemented() {
+        let (status, body) = error_response_json(get_wealth().await.into_response()).await;
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(
+            body["error"],
+            "Wealth API is not backed by live state in this build"
+        );
     }
 
     #[tokio::test]
-    async fn put_economy_settings_roundtrips() {
+    async fn put_economy_settings_returns_not_implemented() {
         let settings = EconomySettings {
             krono: KronoSettings {
                 target_rate_per_day: 5,
@@ -555,13 +453,17 @@ mod tests {
             banking_rules: vec![],
             tradeskill_supplies: vec![],
         };
-        let Json(returned) = put_economy_settings(Json(settings)).await;
-        assert_eq!(returned.krono.target_rate_per_day, 5);
-        assert!(!returned.krono.enabled);
+        let (status, body) =
+            error_response_json(put_economy_settings(Json(settings)).await.into_response()).await;
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(
+            body["error"],
+            "Economy settings API does not persist changes in this build"
+        );
     }
 
     #[tokio::test]
-    async fn create_vendor_route_roundtrips() {
+    async fn create_vendor_route_returns_not_implemented() {
         let route = VendorRoute {
             id: "vr-test".into(),
             zone: "Test Zone".into(),
@@ -570,9 +472,51 @@ mod tests {
             item_categories: vec!["Test".into()],
             enabled: true,
         };
-        let Json(returned) = create_vendor_route(Json(route)).await;
-        assert_eq!(returned.id, "vr-test");
-        assert_eq!(returned.zone, "Test Zone");
+        let (status, body) =
+            error_response_json(create_vendor_route(Json(route)).await.into_response()).await;
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(
+            body["error"],
+            "Vendor route API does not persist changes in this build"
+        );
+    }
+
+    #[tokio::test]
+    async fn update_vendor_route_returns_not_implemented() {
+        let route = VendorRoute {
+            id: "ignored".into(),
+            zone: "Test Zone".into(),
+            npc_name: "Test NPC".into(),
+            path_notes: "Test notes".into(),
+            item_categories: vec!["Test".into()],
+            enabled: true,
+        };
+        let (status, body) = error_response_json(
+            update_vendor_route(Path("vr-test".into()), Json(route))
+                .await
+                .into_response(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(
+            body["error"],
+            "Vendor route API does not persist changes in this build"
+        );
+    }
+
+    #[tokio::test]
+    async fn delete_vendor_route_returns_not_implemented() {
+        let (status, body) = error_response_json(
+            delete_vendor_route(Path("vr-test".into()))
+                .await
+                .into_response(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(
+            body["error"],
+            "Vendor route API does not persist changes in this build"
+        );
     }
 
     #[tokio::test]

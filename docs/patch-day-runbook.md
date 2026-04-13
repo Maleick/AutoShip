@@ -55,7 +55,9 @@ Most EQ patches shift all code by a constant delta (e.g., +0x1000).
 
 # 2. If delta is consistent across 3+ functions, apply it globally:
 #    For each constant in offsets.rs: new_value = old_value + delta
-#    (Script for this is TODO — see #763)
+#    Bulk-delta automation is tracked by issue #763
+#    ("Pattern Scanning & Patch-Day Workflow Parity"):
+#    https://github.com/Maleick/TextQuest/issues/763
 
 # 3. Validate a few key offsets manually before trusting the bulk delta
 ```

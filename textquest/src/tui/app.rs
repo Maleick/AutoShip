@@ -38,6 +38,10 @@ use super::state::{
     MapHighlight, MapLocMarker, MapNameStyle, MapRadiusOverlay, MapSpawnPresentationCache,
     MapVisibilityPreset, NamedMapMarker,
 };
+pub use super::state::{
+    CommandBarState, HexDumpState, MapScreenState, MapViewportMode, NavigationScreenState,
+    OverviewScreenState, PacketMonitorState, SpawnsScreenState, TacticalScreenState,
+};
 use super::state::{load_named_markers_pub, save_named_markers};
 
 /// Which screen is currently displayed.
@@ -4628,9 +4632,15 @@ impl App {
             }
             "addr" => {
                 if rest.is_empty() {
-                    self.usage_feedback("addr", "Usage: addr <hex_address>  (e.g. addr 0x00A3B210)");
+                    self.usage_feedback(
+                        "addr",
+                        "Usage: addr <hex_address>  (e.g. addr 0x00A3B210)",
+                    );
                 } else {
-                    let hex_str = rest.trim().trim_start_matches("0x").trim_start_matches("0X");
+                    let hex_str = rest
+                        .trim()
+                        .trim_start_matches("0x")
+                        .trim_start_matches("0X");
                     match usize::from_str_radix(hex_str, 16) {
                         Ok(addr) => {
                             self.hex_state.hex_address = addr;
@@ -4819,15 +4829,14 @@ impl App {
     ///
     /// This builds the current camp members, updates the map overlay from the
     /// loaded configuration, and starts the camp when at least one member is
-    /// available.
+    /// available. Returns true on successful load and start, false otherwise.
     fn start_camp_by_name(&mut self, name: &str, orchestrator: &mut Orchestrator) -> bool {
         match CampConfig::load(name) {
             Ok(config) => {
                 let members = self.build_camp_members();
                 if members.is_empty() {
-                    self.status_message =
-                        String::from("No clients connected — cannot start camp");
-                    return;
+                    self.status_message = String::from("No clients connected — cannot start camp");
+                    return false;
                 }
                 let count = members.len();
                 self.map_state.camp_overlay = Some(CampOverlay {
@@ -4839,9 +4848,11 @@ impl App {
                 });
                 orchestrator.start_camp(config, members);
                 self.status_message = format!("Camp '{name}' started with {count} members");
+                true
             }
             Err(e) => {
                 self.status_message = format!("Failed to load camp '{name}': {e}");
+                false
             }
         }
     }
@@ -4862,8 +4873,6 @@ impl App {
             self.status_message = format!("Camp '{current}' has no {direction} camp configured");
             return;
         };
-        self.start_camp_by_name(&linked_name, orchestrator);
-        // Upgrade the status message to show the transition on success.
         if self.start_camp_by_name(&linked_name, orchestrator) {
             self.status_message = format!("{current} → {linked_name}");
         }
@@ -6736,7 +6745,7 @@ fn spawn_matches_filter(spawn: &SpawnInfo, spawn_filter: SpawnFilter, text_filte
     }
 
     ascii_icontains(&spawn.displayed_name, text_filter)
-        || ascii_icontains(&spawn.class_str(), text_filter)
+        || ascii_icontains(spawn.class_label().as_ref(), text_filter)
         || ascii_icontains(spawn.spawn_type.as_str(), text_filter)
 }
 
@@ -6802,6 +6811,15 @@ mod tests {
             members: members.iter().map(|member| (*member).to_string()).collect(),
             member_count: members.len() as u8,
         }
+    }
+
+    #[test]
+    fn spawn_matches_filter_checks_class_text() {
+        let mut spawn = test_spawn("Frostreaver");
+        spawn.class = Some(crate::eq::structs::EqClass::Warrior);
+
+        assert!(spawn_matches_filter(&spawn, SpawnFilter::All, "war"));
+        assert!(spawn_matches_filter(&spawn, SpawnFilter::All, "WAR"));
     }
 
     #[test]

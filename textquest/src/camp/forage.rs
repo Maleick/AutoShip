@@ -7,11 +7,11 @@
 #![allow(
     clippy::missing_errors_doc,
     clippy::missing_panics_doc,
-    clippy::too_long_first_doc_paragraph,
+    clippy::too_long_first_doc_paragraph
 )]
 
-use std::time::Instant;
 use std::sync::mpsc;
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use textquest_common::ipc::{Command, IpcCommand};
@@ -106,20 +106,14 @@ impl ForageManager {
     /// The `ipc_tx` channel carries `IpcCommand` values to the IPC dispatch
     /// layer. A send failure is silently ignored (the caller can observe it via
     /// the absent log message on the next tick).
-    pub fn tick(
-        &mut self,
-        now: Instant,
-        ipc_tx: &mpsc::Sender<IpcCommand>,
-    ) -> Option<String> {
+    pub fn tick(&mut self, now: Instant, ipc_tx: &mpsc::Sender<IpcCommand>) -> Option<String> {
         if !self.enabled {
             return None;
         }
 
         let should_fire = match self.last_forage_tick {
             None => true,
-            Some(last) => {
-                now.duration_since(last).as_millis() >= u128::from(self.interval_ms)
-            }
+            Some(last) => now.duration_since(last).as_millis() >= u128::from(self.interval_ms),
         };
 
         if !should_fire {
@@ -177,7 +171,10 @@ mod tests {
 
         let result = mgr.tick(now, &tx);
         assert!(result.is_none(), "disabled manager should return None");
-        assert!(rx.try_recv().is_err(), "disabled manager should not send IPC");
+        assert!(
+            rx.try_recv().is_err(),
+            "disabled manager should not send IPC"
+        );
         assert_eq!(mgr.skill_uses, 0);
     }
 
@@ -208,7 +205,10 @@ mod tests {
         // Immediately after — must NOT fire.
         let t1 = t0 + Duration::from_millis(500);
         let result = mgr.tick(t1, &tx);
-        assert!(result.is_none(), "tick before interval elapsed should be skipped");
+        assert!(
+            result.is_none(),
+            "tick before interval elapsed should be skipped"
+        );
         assert!(rx.try_recv().is_err(), "no IPC command within interval");
         assert_eq!(mgr.skill_uses, 1);
     }
@@ -249,7 +249,10 @@ mod tests {
         // One millisecond after firing again — should NOT fire.
         let t_just_after = t_boundary + Duration::from_millis(1);
         let result2 = mgr.tick(t_just_after, &tx);
-        assert!(result2.is_none(), "no double-fire right after boundary tick");
+        assert!(
+            result2.is_none(),
+            "no double-fire right after boundary tick"
+        );
         assert!(rx.try_recv().is_err());
     }
 

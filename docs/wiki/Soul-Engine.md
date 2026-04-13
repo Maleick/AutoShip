@@ -4,7 +4,7 @@
 
 The Soul Engine is TextQuest's personality and idle-behavior layer.
 
-It is configured through the `[soul]` section of `config/frostreaver.toml` and can influence:
+It is configured through the `[soul]` section of `config/textquest.toml` and can influence:
 
 - idle behavior
 - chat flavor

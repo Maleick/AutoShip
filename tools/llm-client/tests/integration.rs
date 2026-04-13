@@ -25,8 +25,7 @@ async fn generate_returns_response_text() {
         .mount(&server)
         .await;
 
-    let client =
-        OllamaClient::with_options(server.uri(), "gemma3:27b".into());
+    let client = OllamaClient::with_options(server.uri(), "gemma3:27b".into());
 
     let result = client
         .generate("Say hello.", "You are helpful.")
@@ -83,7 +82,10 @@ async fn generate_errors_on_http_500() {
     let client = OllamaClient::with_options(server.uri(), "gemma3:27b".into());
     let err = client.generate("prompt", "").await.unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("500") || msg.contains("internal"), "unexpected: {msg}");
+    assert!(
+        msg.contains("500") || msg.contains("internal"),
+        "unexpected: {msg}"
+    );
 }
 
 #[tokio::test]
@@ -102,7 +104,10 @@ async fn generate_errors_on_ollama_error_field() {
 
     let client = OllamaClient::with_options(server.uri(), "bad-model".into());
     let err = client.generate("prompt", "").await.unwrap_err();
-    assert!(err.to_string().contains("model 'bad-model' not found"), "unexpected: {err}");
+    assert!(
+        err.to_string().contains("model 'bad-model' not found"),
+        "unexpected: {err}"
+    );
 }
 
 #[tokio::test]
@@ -129,8 +134,8 @@ async fn generate_errors_on_done_false() {
 
 #[tokio::test]
 async fn generate_works_with_custom_rate_limiter() {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct CountingLimiter(Arc<AtomicUsize>);
 
@@ -151,9 +156,13 @@ async fn generate_works_with_custom_rate_limiter() {
     let counter = Arc::new(AtomicUsize::new(0));
     let limiter = CountingLimiter(Arc::clone(&counter));
 
-    let client = OllamaClient::with_options(server.uri(), "gemma3:27b".into())
-        .with_rate_limiter(limiter);
+    let client =
+        OllamaClient::with_options(server.uri(), "gemma3:27b".into()).with_rate_limiter(limiter);
 
     client.generate("hi", "").await.unwrap();
-    assert_eq!(counter.load(Ordering::SeqCst), 1, "rate limiter should have been called once");
+    assert_eq!(
+        counter.load(Ordering::SeqCst),
+        1,
+        "rate limiter should have been called once"
+    );
 }

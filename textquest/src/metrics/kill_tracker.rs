@@ -386,13 +386,7 @@ mod tests {
         let mut tracker = KillTracker::new(0);
         // Simulate 1 hour of kills: 60 kills, 30s each, 0 deaths
         for i in 0..60 {
-            tracker.record_kill(make_record(
-                "orc_pawn",
-                5,
-                30_000,
-                15_000,
-                (i * 60) + 30,
-            ));
+            tracker.record_kill(make_record("orc_pawn", 5, 30_000, 15_000, (i * 60) + 30));
         }
         let eff = tracker.efficiency(3600);
         assert!((eff.kills_per_hour - 60.0).abs() < 0.1);

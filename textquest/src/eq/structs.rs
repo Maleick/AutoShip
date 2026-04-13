@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 
 use textquest_common::offsets::launch_spell_data;
@@ -501,11 +502,16 @@ impl SpawnInfo {
     /// Returns the short class name string (e.g., "WAR"), or "?cN?" if unknown.
     #[must_use]
     pub fn class_str(&self) -> String {
-        self.class
-            .as_ref()
-            .map_or(format!("?c{}?", self.class_id), |c| {
-                c.short_name().to_string()
-            })
+        self.class_label().into_owned()
+    }
+
+    /// Returns the short class label, borrowing known class names to avoid allocation.
+    #[must_use]
+    pub fn class_label(&self) -> Cow<'static, str> {
+        self.class.as_ref().map_or_else(
+            || Cow::Owned(format!("?c{}?", self.class_id)),
+            |class| Cow::Borrowed(class.short_name()),
+        )
     }
 
     /// Human-readable race name from the numeric race ID.
@@ -960,6 +966,18 @@ mod tests {
     fn spawn_info_class_str_unknown() {
         let s = make_spawn_info(99);
         assert_eq!(s.class_str(), "?c99?");
+    }
+
+    #[test]
+    fn spawn_info_class_label_known_is_borrowed() {
+        let s = make_spawn_info(1);
+        assert!(matches!(s.class_label(), Cow::Borrowed("WAR")));
+    }
+
+    #[test]
+    fn spawn_info_class_label_unknown_is_owned() {
+        let s = make_spawn_info(99);
+        assert!(matches!(s.class_label(), Cow::Owned(label) if label == "?c99?"));
     }
 
     #[test]

@@ -38,17 +38,49 @@ pub fn validate_struct_sizes() -> Vec<String> {
         "PlayerClient::player_zone",
         offsets::PLAYER_CLIENT_SIZE,
         [
-            ("CASTING_DATA", offsets::player_zone::CASTING_DATA, size_of::<u32>()),
+            (
+                "CASTING_DATA",
+                offsets::player_zone::CASTING_DATA,
+                size_of::<u32>(),
+            ),
             ("HP_MAX", offsets::player_zone::HP_MAX, size_of::<u64>()),
-            ("HP_CURRENT", offsets::player_zone::HP_CURRENT, size_of::<u64>()),
-            ("MANA_CURRENT", offsets::player_zone::MANA_CURRENT, size_of::<u32>()),
+            (
+                "HP_CURRENT",
+                offsets::player_zone::HP_CURRENT,
+                size_of::<u64>(),
+            ),
+            (
+                "MANA_CURRENT",
+                offsets::player_zone::MANA_CURRENT,
+                size_of::<u32>(),
+            ),
             ("MANA_MAX", offsets::player_zone::MANA_MAX, size_of::<u32>()),
             ("LEVEL", offsets::player_zone::LEVEL, size_of::<u8>()),
-            ("MELEE_RADIUS", offsets::player_zone::MELEE_RADIUS, size_of::<f32>()),
-            ("SPELL_GEM_ETA", offsets::player_zone::SPELL_GEM_ETA, size_of::<u32>() * 15),
-            ("CHAR_CLASS", offsets::player_zone::CHAR_CLASS, size_of::<u8>()),
-            ("ENDURANCE_CURRENT", offsets::player_zone::ENDURANCE_CURRENT, size_of::<i32>()),
-            ("ENDURANCE_MAX", offsets::player_zone::ENDURANCE_MAX, size_of::<u32>()),
+            (
+                "MELEE_RADIUS",
+                offsets::player_zone::MELEE_RADIUS,
+                size_of::<f32>(),
+            ),
+            (
+                "SPELL_GEM_ETA",
+                offsets::player_zone::SPELL_GEM_ETA,
+                size_of::<u32>() * 15,
+            ),
+            (
+                "CHAR_CLASS",
+                offsets::player_zone::CHAR_CLASS,
+                size_of::<u8>(),
+            ),
+            (
+                "ENDURANCE_CURRENT",
+                offsets::player_zone::ENDURANCE_CURRENT,
+                size_of::<i32>(),
+            ),
+            (
+                "ENDURANCE_MAX",
+                offsets::player_zone::ENDURANCE_MAX,
+                size_of::<u32>(),
+            ),
         ],
         &mut violations,
     );
@@ -68,8 +100,16 @@ pub fn validate_struct_sizes() -> Vec<String> {
         "ZoneGuideZone",
         offsets::SPAWN_MANAGER_ZONE_ZONE_SIZE,
         [
-            ("ZONE_CONNECTIONS_ARRAY", offsets::zone_guide::ZONE_CONNECTIONS_ARRAY, size_of::<usize>()),
-            ("ZONE_CONNECTIONS_COUNT", offsets::zone_guide::ZONE_CONNECTIONS_COUNT, size_of::<u32>()),
+            (
+                "ZONE_CONNECTIONS_ARRAY",
+                offsets::zone_guide::ZONE_CONNECTIONS_ARRAY,
+                size_of::<usize>(),
+            ),
+            (
+                "ZONE_CONNECTIONS_COUNT",
+                offsets::zone_guide::ZONE_CONNECTIONS_COUNT,
+                size_of::<u32>(),
+            ),
         ],
         &mut violations,
     );

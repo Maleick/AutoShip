@@ -1,271 +1,273 @@
-# Account Configuration for TextQuest
-# Each account maps to a Daybreak login, target server, and character.
+# Account configuration template for TextQuest.
+# Replace every __SET_*__ marker before using this file in a live environment.
 # Passwords are stored separately in the encrypted credential store.
 #
 # Usage from TUI:
 #   :login all        — launch all accounts below
 #   :login G1         — launch only accounts in group 1
-#   :login frostreaver01 — launch a single account
+#   :login account01  — launch a single account
 #   :profile launch MainRaid  — launch all accounts in the "MainRaid" profile group
 #   F1 (hotkey)       — launch the profile group assigned to F1
 
 [[accounts]]
-name = "frostreaver01"
-server = "Firiona Vie"
-character = "Camrene"
+name = "account01"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "PAL"
 group = 1
 
 [[accounts]]
-name = "frostreaver02"
-server = "Firiona Vie"
-character = "TBD"
+name = "account02"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "SHM"
 group = 1
 
 [[accounts]]
-name = "frostreaver03"
-server = "Firiona Vie"
-character = "TBD"
+name = "account03"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "CLR"
 group = 1
 
 [[accounts]]
-name = "frostreaver04"
-server = "Firiona Vie"
-character = "TBD"
+name = "account04"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "CLR"
 group = 1
 
 [[accounts]]
-name = "frostreaver05"
-server = "Firiona Vie"
-character = "TBD"
+name = "account05"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "WIZ"
 group = 1
 
 [[accounts]]
-name = "frostreaver06"
-server = "Firiona Vie"
-character = "TBD"
+name = "account06"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "BRD"
 group = 1
 
+# ─── Group 2: Offtank ─────────────────────────────────────────────────────
+
 [[accounts]]
-name = "frostreaver07"
-server = "Firiona Vie"
-character = "TBD"
+name = "account07"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "PAL"
 group = 2
 
 [[accounts]]
-name = "frostreaver08"
-server = "Firiona Vie"
-character = "TBD"
+name = "account08"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "ENC"
 group = 2
 
 [[accounts]]
-name = "frostreaver09"
-server = "Firiona Vie"
-character = "TBD"
+name = "account09"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "CLR"
 group = 2
 
 [[accounts]]
-name = "frostreaver10"
-server = "Firiona Vie"
-character = "TBD"
+name = "account10"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "CLR"
 group = 2
 
 [[accounts]]
-name = "frostreaver11"
-server = "Firiona Vie"
-character = "TBD"
+name = "account11"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "WIZ"
 group = 2
 
 [[accounts]]
-name = "frostreaver12"
-server = "Firiona Vie"
-character = "TBD"
+name = "account12"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "BRD"
 group = 2
 
 # ─── Group 3: Offtank DPS ─────────────────────────────────────────────────
 
 [[accounts]]
-name = "frostreaver13"
-server = "Firiona Vie"
-character = "TBD"
+name = "account13"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "SK"
 group = 3
 
 [[accounts]]
-name = "frostreaver14"
-server = "Firiona Vie"
-character = "TBD"
+name = "account14"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "WIZ"
 group = 3
 
 [[accounts]]
-name = "frostreaver15"
-server = "Firiona Vie"
-character = "TBD"
+name = "account15"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "CLR"
 group = 3
 
 [[accounts]]
-name = "frostreaver16"
-server = "Firiona Vie"
-character = "TBD"
+name = "account16"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "CLR"
 group = 3
 
 [[accounts]]
-name = "frostreaver17"
-server = "Firiona Vie"
-character = "TBD"
+name = "account17"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "WIZ"
 group = 3
 
 [[accounts]]
-name = "frostreaver18"
-server = "Firiona Vie"
-character = "TBD"
+name = "account18"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "BRD"
 group = 3
 
 # ─── Group 4: Caster DPS ─────────────────────────────────────────────────
 
 [[accounts]]
-name = "frostreaver19"
-server = "Firiona Vie"
-character = "TBD"
+name = "account19"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "MAG"
 group = 4
 
 [[accounts]]
-name = "frostreaver20"
-server = "Firiona Vie"
-character = "TBD"
+name = "account20"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "WIZ"
 group = 4
 
 [[accounts]]
-name = "frostreaver21"
-server = "Firiona Vie"
-character = "TBD"
+name = "account21"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "CLR"
 group = 4
 
 [[accounts]]
-name = "frostreaver22"
-server = "Firiona Vie"
-character = "TBD"
+name = "account22"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "CLR"
 group = 4
 
 [[accounts]]
-name = "frostreaver23"
-server = "Firiona Vie"
-character = "TBD"
+name = "account23"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "WIZ"
 group = 4
 
 [[accounts]]
-name = "frostreaver24"
-server = "Firiona Vie"
-character = "TBD"
+name = "account24"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "BRD"
 group = 4
 
 # ─── Group 5: DPS Ranged ─────────────────────────────────────────────────
 
 [[accounts]]
-name = "frostreaver25"
-server = "Firiona Vie"
-character = "TBD"
+name = "account25"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "RNG"
 group = 5
 
 [[accounts]]
-name = "frostreaver26"
-server = "Firiona Vie"
-character = "TBD"
+name = "account26"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "BST"
 group = 5
 
 [[accounts]]
-name = "frostreaver27"
-server = "Firiona Vie"
-character = "TBD"
+name = "account27"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "CLR"
 group = 5
 
 [[accounts]]
-name = "frostreaver28"
-server = "Firiona Vie"
-character = "TBD"
+name = "account28"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "CLR"
 group = 5
 
 [[accounts]]
-name = "frostreaver29"
-server = "Firiona Vie"
-character = "TBD"
+name = "account29"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "WIZ"
 group = 5
 
 [[accounts]]
-name = "frostreaver30"
-server = "Firiona Vie"
-character = "TBD"
+name = "account30"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "BRD"
 group = 5
 
 # ─── Group 6: Caster ─────────────────────────────────────────────────────
 
 [[accounts]]
-name = "frostreaver31"
-server = "Firiona Vie"
-character = "TBD"
+name = "account31"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "DRU"
 group = 6
 
 [[accounts]]
-name = "frostreaver32"
-server = "Firiona Vie"
-character = "TBD"
+name = "account32"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "NEC"
 group = 6
 
 [[accounts]]
-name = "frostreaver33"
-server = "Firiona Vie"
-character = "TBD"
+name = "account33"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "CLR"
 group = 6
 
 [[accounts]]
-name = "frostreaver34"
-server = "Firiona Vie"
-character = "TBD"
+name = "account34"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "CLR"
 group = 6
 
 [[accounts]]
-name = "frostreaver35"
-server = "Firiona Vie"
-character = "TBD"
+name = "account35"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "WIZ"
 group = 6
 
 [[accounts]]
-name = "frostreaver36"
-server = "Firiona Vie"
-character = "TBD"
+name = "account36"
+server = "__SET_SERVER__"
+character = "__SET_CHARACTER__"
 class = "BRD"
 group = 6
 

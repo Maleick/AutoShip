@@ -131,11 +131,7 @@ impl SoundAlertManager {
     /// Returns all enabled triggers.
     #[must_use]
     pub fn enabled_triggers(&self) -> Vec<&SoundTrigger> {
-        self.config
-            .triggers
-            .iter()
-            .filter(|t| t.enabled)
-            .collect()
+        self.config.triggers.iter().filter(|t| t.enabled).collect()
     }
 
     /// Checks an event string against all triggers. Returns matching triggers
@@ -147,8 +143,12 @@ impl SoundAlertManager {
         if !self.config.enabled {
             return Vec::new();
         }
-        let mut matches: Vec<&SoundTrigger> =
-            self.config.triggers.iter().filter(|t| t.matches(event)).collect();
+        let mut matches: Vec<&SoundTrigger> = self
+            .config
+            .triggers
+            .iter()
+            .filter(|t| t.matches(event))
+            .collect();
         matches.sort_by(|a, b| b.priority.cmp(&a.priority));
         matches
     }

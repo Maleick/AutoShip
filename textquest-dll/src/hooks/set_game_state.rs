@@ -62,8 +62,15 @@ fn set_game_state_callback(_exception_info: *mut ()) -> bool {
 
 /// Install the SetGameState hook.
 pub fn install(set_game_state_addr: usize) -> Result<(), Box<dyn std::error::Error>> {
-    hwbp::register(SET_GAME_STATE_SLOT, set_game_state_addr, set_game_state_callback)?;
-    tracing::info!(addr = set_game_state_addr, "SetGameState hook installed (DR2)");
+    hwbp::register(
+        SET_GAME_STATE_SLOT,
+        set_game_state_addr,
+        set_game_state_callback,
+    )?;
+    tracing::info!(
+        addr = set_game_state_addr,
+        "SetGameState hook installed (DR2)"
+    );
     Ok(())
 }
 

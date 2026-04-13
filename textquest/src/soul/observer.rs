@@ -131,35 +131,30 @@ impl GameStateSnapshot {
             .iter()
             .enumerate()
             .map(|(i, c)| {
-                let (class, level, hp, mp, target) =
-                    if let Some(ref player) = c.local_player {
-                        let hp = if player.hp_max > 0 {
-                            ((player.hp_current as f64 / player.hp_max as f64) * 100.0)
-                                .clamp(0.0, 100.0) as u8
-                        } else {
-                            0
-                        };
-                        let mp = if player.mana_max > 0 {
-                            ((f64::from(player.mana_current) / f64::from(player.mana_max))
-                                * 100.0)
-                                .clamp(0.0, 100.0) as u8
-                        } else {
-                            0
-                        };
-                        let class = player
-                            .class
-                            .map(|cls| cls.to_string())
-                            .unwrap_or_default();
-                        let level = player.level;
-                        let target_name = c
-                            .target
-                            .as_ref()
-                            .map(|t| t.displayed_name.clone())
-                            .unwrap_or_default();
-                        (class, level, hp, mp, target_name)
+                let (class, level, hp, mp, target) = if let Some(ref player) = c.local_player {
+                    let hp = if player.hp_max > 0 {
+                        ((player.hp_current as f64 / player.hp_max as f64) * 100.0)
+                            .clamp(0.0, 100.0) as u8
                     } else {
-                        (String::new(), 0u8, 0u8, 0u8, String::new())
+                        0
                     };
+                    let mp = if player.mana_max > 0 {
+                        ((f64::from(player.mana_current) / f64::from(player.mana_max)) * 100.0)
+                            .clamp(0.0, 100.0) as u8
+                    } else {
+                        0
+                    };
+                    let class = player.class.map(|cls| cls.to_string()).unwrap_or_default();
+                    let level = player.level;
+                    let target_name = c
+                        .target
+                        .as_ref()
+                        .map(|t| t.displayed_name.clone())
+                        .unwrap_or_default();
+                    (class, level, hp, mp, target_name)
+                } else {
+                    (String::new(), 0u8, 0u8, 0u8, String::new())
+                };
 
                 ClientSnapshot {
                     id: i + 1,
@@ -238,10 +233,23 @@ mod tests {
         clients: Vec<ClientSnapshot>,
         camp: Option<CampSnapshot>,
     ) -> GameStateSnapshot {
-        GameStateSnapshot { tick, clients, camp }
+        GameStateSnapshot {
+            tick,
+            clients,
+            camp,
+        }
     }
 
-    fn client(id: usize, name: &str, class: &str, level: u8, hp: u8, mp: u8, target: &str, zone: &str) -> ClientSnapshot {
+    fn client(
+        id: usize,
+        name: &str,
+        class: &str,
+        level: u8,
+        hp: u8,
+        mp: u8,
+        target: &str,
+        zone: &str,
+    ) -> ClientSnapshot {
         ClientSnapshot {
             id,
             name: name.into(),
@@ -301,15 +309,24 @@ mod tests {
     #[test]
     fn rate_limiter_blocks_before_interval() {
         let mut limiter = LlmRateLimiter::new(500);
-        assert!(limiter.is_ready(0), "should be ready with no prior snapshot");
+        assert!(
+            limiter.is_ready(0),
+            "should be ready with no prior snapshot"
+        );
         limiter.record(0);
         assert!(
             !limiter.is_ready(100),
             "should not be ready after 100ms with 500ms interval"
         );
         assert!(!limiter.is_ready(499), "should not be ready at 499ms");
-        assert!(limiter.is_ready(500), "should be ready at exactly the interval");
-        assert!(limiter.is_ready(1000), "should be ready well after the interval");
+        assert!(
+            limiter.is_ready(500),
+            "should be ready at exactly the interval"
+        );
+        assert!(
+            limiter.is_ready(1000),
+            "should be ready well after the interval"
+        );
     }
 
     #[test]

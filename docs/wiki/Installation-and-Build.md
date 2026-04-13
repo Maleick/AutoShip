@@ -78,7 +78,7 @@ cargo run -- --dump
 
 ## Important Files and Paths
 
-- Main config: `config/frostreaver.toml`
+- Main config: `config/textquest.toml`
 - Accounts config: `config/accounts.toml`
 - Camp configs: `config/camps/*.toml`
 - Class configs: `config/classes/*.toml`

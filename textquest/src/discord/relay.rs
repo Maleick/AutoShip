@@ -120,7 +120,9 @@ impl ChatRelay {
     /// Return the webhook URL configured for the given chat channel, if any.
     #[must_use]
     pub fn url_for(&self, channel: ChatChannel) -> Option<&str> {
-        self.channel_urls.get(channel.config_key()).map(String::as_str)
+        self.channel_urls
+            .get(channel.config_key())
+            .map(String::as_str)
     }
 
     /// Format a chat message into a Discord webhook payload body (JSON string).
@@ -153,7 +155,12 @@ impl ChatRelay {
             return;
         };
 
-        match client.post(url).body(body).header("Content-Type", "application/json").send() {
+        match client
+            .post(url)
+            .body(body)
+            .header("Content-Type", "application/json")
+            .send()
+        {
             Ok(resp) if resp.status().is_success() => {
                 tracing::debug!(
                     channel = msg.channel.config_key(),
@@ -446,7 +453,10 @@ mod tests {
     #[test]
     fn chat_relay_url_for_configured_channel() {
         let mut urls = HashMap::new();
-        urls.insert("group".to_string(), "https://hook.example.com/group".to_string());
+        urls.insert(
+            "group".to_string(),
+            "https://hook.example.com/group".to_string(),
+        );
         let relay = ChatRelay::new(urls);
         assert_eq!(
             relay.url_for(ChatChannel::Group),
@@ -511,8 +521,14 @@ mod tests {
     #[test]
     fn chat_relay_multiple_channels_independent() {
         let mut urls = HashMap::new();
-        urls.insert("group".to_string(), "https://hook.example.com/group".to_string());
-        urls.insert("raid".to_string(), "https://hook.example.com/raid".to_string());
+        urls.insert(
+            "group".to_string(),
+            "https://hook.example.com/group".to_string(),
+        );
+        urls.insert(
+            "raid".to_string(),
+            "https://hook.example.com/raid".to_string(),
+        );
         let relay = ChatRelay::new(urls);
         assert!(relay.url_for(ChatChannel::Group).is_some());
         assert!(relay.url_for(ChatChannel::Raid).is_some());

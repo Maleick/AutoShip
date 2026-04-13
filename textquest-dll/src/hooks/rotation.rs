@@ -219,8 +219,8 @@ mod tests {
 mod tests {
     use super::HookRotationManager;
 
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[test]
     fn start_register_stop_stubbed() {

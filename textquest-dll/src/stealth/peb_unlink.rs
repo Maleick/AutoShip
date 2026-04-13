@@ -8,7 +8,10 @@
 use std::ffi::c_void;
 
 #[repr(C)]
-struct ListEntry { flink: *mut ListEntry, blink: *mut ListEntry }
+struct ListEntry {
+    flink: *mut ListEntry,
+    blink: *mut ListEntry,
+}
 
 #[repr(C)]
 struct LdrDataTableEntry {
@@ -22,21 +25,30 @@ struct LdrDataTableEntry {
 
 #[repr(C)]
 struct PebLdrData {
-    _length: u32, _initialized: u32, _ss_handle: *mut c_void,
+    _length: u32,
+    _initialized: u32,
+    _ss_handle: *mut c_void,
     in_load_order_module_list: ListEntry,
     in_memory_order_module_list: ListEntry,
     in_initialization_order_module_list: ListEntry,
 }
 
 #[repr(C)]
-struct Peb { _reserved1: [u8; 0x18], ldr: *mut PebLdrData }
+struct Peb {
+    _reserved1: [u8; 0x18],
+    ldr: *mut PebLdrData,
+}
 
 pub fn unlink_module(dll_base: *mut u8) -> Result<(), String> {
     unsafe {
         let peb = read_peb();
-        if peb.is_null() { return Err("Failed to read PEB address from TEB".into()); }
+        if peb.is_null() {
+            return Err("Failed to read PEB address from TEB".into());
+        }
         let ldr = (*peb).ldr;
-        if ldr.is_null() { return Err("PEB.Ldr is null".into()); }
+        if ldr.is_null() {
+            return Err("PEB.Ldr is null".into());
+        }
         let head = &mut (*ldr).in_load_order_module_list as *mut ListEntry;
         let mut current = (*head).flink;
         let mut count = 0u32;
@@ -51,14 +63,19 @@ pub fn unlink_module(dll_base: *mut u8) -> Result<(), String> {
             current = (*current).flink;
             count += 1;
         }
-        Err(format!("Module at base {:#x} not found in PEB module lists", dll_base as usize))
+        Err(format!(
+            "Module at base {:#x} not found in PEB module lists",
+            dll_base as usize
+        ))
     }
 }
 
 unsafe fn unlink_entry(entry: *mut ListEntry) {
     let flink = (*entry).flink;
     let blink = (*entry).blink;
-    if flink == entry && blink == entry { return; }
+    if flink == entry && blink == entry {
+        return;
+    }
     (*blink).flink = flink;
     (*flink).blink = blink;
     (*entry).flink = entry;
@@ -76,21 +93,41 @@ mod tests {
     use super::*;
     #[test]
     fn unlink_entry_self_referential_is_noop() {
-        let mut e = ListEntry { flink: std::ptr::null_mut(), blink: std::ptr::null_mut() };
-        e.flink = &mut e; e.blink = &mut e;
-        unsafe { unlink_entry(&mut e); }
+        let mut e = ListEntry {
+            flink: std::ptr::null_mut(),
+            blink: std::ptr::null_mut(),
+        };
+        e.flink = &mut e;
+        e.blink = &mut e;
+        unsafe {
+            unlink_entry(&mut e);
+        }
         assert_eq!(e.flink, &mut e as *mut ListEntry);
         assert_eq!(e.blink, &mut e as *mut ListEntry);
     }
     #[test]
     fn unlink_entry_removes_from_chain() {
-        let mut a = ListEntry { flink: std::ptr::null_mut(), blink: std::ptr::null_mut() };
-        let mut b = ListEntry { flink: std::ptr::null_mut(), blink: std::ptr::null_mut() };
-        let mut c = ListEntry { flink: std::ptr::null_mut(), blink: std::ptr::null_mut() };
-        a.flink = &mut b; a.blink = &mut c;
-        b.flink = &mut c; b.blink = &mut a;
-        c.flink = &mut a; c.blink = &mut b;
-        unsafe { unlink_entry(&mut b); }
+        let mut a = ListEntry {
+            flink: std::ptr::null_mut(),
+            blink: std::ptr::null_mut(),
+        };
+        let mut b = ListEntry {
+            flink: std::ptr::null_mut(),
+            blink: std::ptr::null_mut(),
+        };
+        let mut c = ListEntry {
+            flink: std::ptr::null_mut(),
+            blink: std::ptr::null_mut(),
+        };
+        a.flink = &mut b;
+        a.blink = &mut c;
+        b.flink = &mut c;
+        b.blink = &mut a;
+        c.flink = &mut a;
+        c.blink = &mut b;
+        unsafe {
+            unlink_entry(&mut b);
+        }
         let a_ptr = &mut a as *mut ListEntry;
         let c_ptr = &mut c as *mut ListEntry;
         assert_eq!(a.flink, c_ptr);

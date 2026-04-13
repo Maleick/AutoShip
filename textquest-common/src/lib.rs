@@ -7,6 +7,8 @@
 #[doc(hidden)]
 pub use paste;
 
+/// Typed, runtime-rebased function bindings.
+pub mod bindings;
 /// Chat channel types, STML stripping, and structured chat event parsing.
 pub mod chat;
 /// Combat-related shared types (class roles, spell metadata, assist targets).
@@ -23,12 +25,8 @@ pub mod login;
 pub mod nav;
 /// Hot-updatable offset database backed by JSON.
 pub mod offset_db;
-/// Typed, runtime-rebased function bindings.
-pub mod bindings;
 /// EQ memory addresses and struct field offsets (preferred-base, rebased at runtime).
 pub mod offsets;
-/// Function signature patterns for module-aware offset discovery.
-pub mod pattern_db;
 /// Packet capture types — opcode filtering, capture sessions, and disk persistence.
 pub mod packet;
 /// UDP multicast peer-discovery announcement types.
@@ -41,9 +39,9 @@ pub mod routing;
 pub mod scan_engine;
 /// Byte-pattern signature scanner for offset resolution across EQ patches.
 pub mod scanner;
-/// Struct size/range validation helpers.
-pub mod validation;
 /// Soul Engine shared types (LLM personalities, memory, social dynamics).
 pub mod soul;
 /// Common type aliases and utility structures.
 pub mod types;
+/// Struct size/range validation helpers.
+pub mod validation;

@@ -1,8 +1,9 @@
 //! TextQuest Web Dashboard — Axum backend for the monitoring UI.
 //!
 //! The backend serves:
-//! - live health and placeholder session monitoring endpoints
-//! - economy and loot APIs
+//! - live health plus explicit `501` responses for unsupported session and
+//!   economy endpoints
+//! - loot APIs
 //! - account-management APIs backed by an in-memory registry plus optional
 //!   credential storage
 //! - explicit `501` placeholders for not-yet-implemented raid and character
@@ -99,8 +100,9 @@ fn credentials_db_path() -> PathBuf {
 /// - `event_tx` and `account_store` are always initialised empty.
 /// - `credential_store` is populated only when `TEXTQUEST_MASTER_PASSWORD` is
 ///   set in the environment; otherwise password routes return `501`.
-/// - `character_configs` and `loot_state` are seeded with in-memory demo data
-///   until persistent backends are wired up.
+/// - `character_configs`, `loot_state`, and `soul_audit` are seeded with
+///   in-memory state; character-config routes still return `501` until a
+///   supported backing store is wired.
 fn build_state() -> Arc<AppState> {
     let (event_tx, _) = broadcast::channel::<String>(256);
     let credential_store = std::env::var("TEXTQUEST_MASTER_PASSWORD")

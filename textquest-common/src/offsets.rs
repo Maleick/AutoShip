@@ -861,7 +861,6 @@ pub mod buff_slots {
 
     /// EQ tick duration in seconds.
     pub const SECONDS_PER_TICK: f32 = 6.0;
-
 }
 
 /// Pointer chain from `PINST_LOCAL_PC` → profile → buff array.

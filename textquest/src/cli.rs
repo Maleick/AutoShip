@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
-use tracing::{error, info, warn};
 use textquest_common::ghidra_db::GhidraDatabase;
+use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
 use crate::config;
@@ -292,13 +292,22 @@ pub fn run_tui_mode() -> Result<()> {
                 let opcodes_path = Path::new(OPCODES_CONFIG_PATH);
                 match db.import_opcodes_from_file(opcodes_path) {
                     Ok(0) => {
-                        info!("Ghidra DB opened (no opcodes config found at {})", OPCODES_CONFIG_PATH);
+                        info!(
+                            "Ghidra DB opened (no opcodes config found at {})",
+                            OPCODES_CONFIG_PATH
+                        );
                     }
                     Ok(n) => {
-                        info!(count = n, "Ghidra DB: imported {} opcodes from {}", n, OPCODES_CONFIG_PATH);
+                        info!(
+                            count = n,
+                            "Ghidra DB: imported {} opcodes from {}", n, OPCODES_CONFIG_PATH
+                        );
                     }
                     Err(e) => {
-                        warn!("Ghidra DB: failed to import opcodes from {}: {}", OPCODES_CONFIG_PATH, e);
+                        warn!(
+                            "Ghidra DB: failed to import opcodes from {}: {}",
+                            OPCODES_CONFIG_PATH, e
+                        );
                     }
                 }
                 app.ghidra_db = Some(db);

@@ -25,9 +25,9 @@
 
 #[cfg(windows)]
 use std::mem::size_of;
-use textquest_common::ipc::ContextMenuInfo;
 #[cfg(windows)]
 use textquest_common::eq_fn;
+use textquest_common::ipc::ContextMenuInfo;
 #[cfg(windows)]
 use textquest_common::ipc::ContextMenuItem;
 

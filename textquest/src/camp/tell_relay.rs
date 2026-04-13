@@ -8,7 +8,7 @@
     clippy::missing_panics_doc,
     clippy::needless_pass_by_value,
     clippy::too_long_first_doc_paragraph,
-    clippy::return_self_not_must_use,
+    clippy::return_self_not_must_use
 )]
 
 use std::collections::VecDeque;
@@ -143,7 +143,9 @@ impl TellRelay {
             return false;
         }
         let lower = message.to_lowercase();
-        self.mention_keywords.iter().any(|kw| lower.contains(kw.as_str()))
+        self.mention_keywords
+            .iter()
+            .any(|kw| lower.contains(kw.as_str()))
     }
 }
 
@@ -326,7 +328,12 @@ mod tests {
             ..TellRelayConfig::default()
         };
         let relay = TellRelay::from_config(&cfg);
-        assert!(relay.mention_keywords.iter().all(|k| k == k.to_lowercase().as_str()));
+        assert!(
+            relay
+                .mention_keywords
+                .iter()
+                .all(|k| k == k.to_lowercase().as_str())
+        );
     }
 
     // ── serialization ─────────────────────────────────────────────────────────

@@ -345,7 +345,6 @@ fn spawn_marker_glyph(
     }
 }
 
-
 /// Convert an EQ heading value (0–512, where 0=North, 128=West, 256=South, 384=East)
 /// to an 8-direction Unicode arrow character indicating the player's facing direction.
 ///
@@ -566,9 +565,20 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
             }
             let color = map_rgb_to_color(ml.r, ml.g, ml.b, t);
             clip_project_draw_line(
-                ml.x1, ml.y1, ml.z1, ml.x2, ml.y2, ml.z2,
-                player_z, z_range, &to_grid, w, h, &mut grid,
-                color, LinePaintMode::BlankOnly,
+                ml.x1,
+                ml.y1,
+                ml.z1,
+                ml.x2,
+                ml.y2,
+                ml.z2,
+                player_z,
+                z_range,
+                &to_grid,
+                w,
+                h,
+                &mut grid,
+                color,
+                LinePaintMode::BlankOnly,
             );
         }
     }
@@ -631,9 +641,20 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                 continue;
             }
             clip_project_draw_line(
-                segment.x1, segment.y1, segment.z1, segment.x2, segment.y2, segment.z2,
-                player_z, z_range, &to_grid, w, h, &mut grid,
-                t.text_secondary, LinePaintMode::OverwriteLinework,
+                segment.x1,
+                segment.y1,
+                segment.z1,
+                segment.x2,
+                segment.y2,
+                segment.z2,
+                player_z,
+                z_range,
+                &to_grid,
+                w,
+                h,
+                &mut grid,
+                t.text_secondary,
+                LinePaintMode::OverwriteLinework,
             );
         }
 
@@ -643,9 +664,20 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                     continue;
                 }
                 clip_project_draw_line(
-                    segment.x1, segment.y1, segment.z1, segment.x2, segment.y2, segment.z2,
-                    player_z, z_range, &to_grid, w, h, &mut grid,
-                    t.text_muted, LinePaintMode::OverwriteLinework,
+                    segment.x1,
+                    segment.y1,
+                    segment.z1,
+                    segment.x2,
+                    segment.y2,
+                    segment.z2,
+                    player_z,
+                    z_range,
+                    &to_grid,
+                    w,
+                    h,
+                    &mut grid,
+                    t.text_muted,
+                    LinePaintMode::OverwriteLinework,
                 );
             }
         }
@@ -1461,7 +1493,12 @@ fn draw_minimap_widget(
 
 fn active_view_label(mode: MapViewportMode, using_local_view: bool) -> String {
     if mode == MapViewportMode::Auto {
-        if using_local_view { "auto/local" } else { "auto/global" }.into()
+        if using_local_view {
+            "auto/local"
+        } else {
+            "auto/global"
+        }
+        .into()
     } else {
         mode.label().to_string()
     }
@@ -1565,12 +1602,17 @@ fn grid_in_bounds(col: i32, row: i32, w: usize, h: usize) -> bool {
 /// Z-clip a line segment, project both endpoints via `to_grid`, and draw with Bresenham.
 #[allow(clippy::too_many_arguments)]
 fn clip_project_draw_line(
-    x1: f32, y1: f32, z1: f32,
-    x2: f32, y2: f32, z2: f32,
+    x1: f32,
+    y1: f32,
+    z1: f32,
+    x2: f32,
+    y2: f32,
+    z2: f32,
     player_z: Option<f32>,
     z_range: f32,
     to_grid: &impl Fn(f32, f32) -> (i32, i32),
-    w: usize, h: usize,
+    w: usize,
+    h: usize,
     grid: &mut [Vec<(char, Color)>],
     color: Color,
     paint_mode: LinePaintMode,
@@ -2727,34 +2769,72 @@ mod tests {
     fn heading_arrow_char_cardinal_directions() {
         // EQ heading: 0=North, 128=West, 256=South, 384=East
         assert_eq!(heading_arrow_char(0.0), '↑', "heading=0 (N) should be ↑");
-        assert_eq!(heading_arrow_char(128.0), '←', "heading=128 (W) should be ←");
-        assert_eq!(heading_arrow_char(256.0), '↓', "heading=256 (S) should be ↓");
-        assert_eq!(heading_arrow_char(384.0), '→', "heading=384 (E) should be →");
+        assert_eq!(
+            heading_arrow_char(128.0),
+            '←',
+            "heading=128 (W) should be ←"
+        );
+        assert_eq!(
+            heading_arrow_char(256.0),
+            '↓',
+            "heading=256 (S) should be ↓"
+        );
+        assert_eq!(
+            heading_arrow_char(384.0),
+            '→',
+            "heading=384 (E) should be →"
+        );
     }
 
     #[test]
     fn heading_arrow_char_diagonal_directions() {
         // NE=448, NW=64, SW=192, SE=320
-        assert_eq!(heading_arrow_char(448.0), '↗', "heading=448 (NE) should be ↗");
+        assert_eq!(
+            heading_arrow_char(448.0),
+            '↗',
+            "heading=448 (NE) should be ↗"
+        );
         assert_eq!(heading_arrow_char(64.0), '↖', "heading=64 (NW) should be ↖");
-        assert_eq!(heading_arrow_char(192.0), '↙', "heading=192 (SW) should be ↙");
-        assert_eq!(heading_arrow_char(320.0), '↘', "heading=320 (SE) should be ↘");
+        assert_eq!(
+            heading_arrow_char(192.0),
+            '↙',
+            "heading=192 (SW) should be ↙"
+        );
+        assert_eq!(
+            heading_arrow_char(320.0),
+            '↘',
+            "heading=320 (SE) should be ↘"
+        );
     }
 
     #[test]
     fn heading_arrow_char_wraps_512() {
         // 512 should wrap to 0 (North → ↑)
-        assert_eq!(heading_arrow_char(512.0), '↑', "heading=512 should wrap to North ↑");
+        assert_eq!(
+            heading_arrow_char(512.0),
+            '↑',
+            "heading=512 should wrap to North ↑"
+        );
         // 768 % 512 = 256 → South (↓)
-        assert_eq!(heading_arrow_char(768.0), '↓', "heading=768 should wrap to heading=256 (S) ↓");
+        assert_eq!(
+            heading_arrow_char(768.0),
+            '↓',
+            "heading=768 should wrap to heading=256 (S) ↓"
+        );
     }
 
     #[test]
     fn map_legend_contains_player_marker_and_heading() {
         let app = test_app_with_spawns();
         let rendered = render_map_view_text(app, 120, 20);
-        assert!(rendered.contains("You"), "Legend should contain 'You' label");
-        assert!(rendered.contains("Hdg"), "Legend should contain 'Hdg' heading label");
+        assert!(
+            rendered.contains("You"),
+            "Legend should contain 'You' label"
+        );
+        assert!(
+            rendered.contains("Hdg"),
+            "Legend should contain 'Hdg' heading label"
+        );
     }
 
     #[test]
@@ -2770,7 +2850,10 @@ mod tests {
 
         let rendered = minimap_text(&app, None);
         // Player ◆ marker should be present
-        assert!(rendered.contains('◆'), "Minimap should show player ◆ marker");
+        assert!(
+            rendered.contains('◆'),
+            "Minimap should show player ◆ marker"
+        );
         // Heading arrow ↑ (North at heading=0) should also appear
         assert!(
             rendered.contains('↑')

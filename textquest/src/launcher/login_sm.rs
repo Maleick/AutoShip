@@ -144,9 +144,9 @@ impl LoginStateMachine {
             }
 
             LoginEvent::PlayerDataConfirmed { name, class_name } => {
-                if name == self.account_info.character_name
-                    && class_name == self.account_info.class_name
-                {
+                let class_matches =
+                    self.account_class_is_unset() || class_name == self.account_info.class_name;
+                if name == self.account_info.character_name && class_matches {
                     self.transition_to(LoginPhase::Ready);
                     LoginAction::None
                 } else {
@@ -216,6 +216,10 @@ impl LoginStateMachine {
     fn transition_to(&mut self, phase: LoginPhase) {
         self.phase = phase;
         self.last_transition = Instant::now();
+    }
+
+    fn account_class_is_unset(&self) -> bool {
+        self.account_info.class_name.eq_ignore_ascii_case("UNK")
     }
 
     fn handle_error(&mut self, error: LoginError) -> LoginAction {
@@ -573,6 +577,23 @@ mod tests {
             class_name: "Cleric".to_string(), // Wrong class
         });
         assert!(matches!(action, LoginAction::Abort { .. }));
+    }
+
+    #[test]
+    fn unset_account_class_accepts_confirmed_player_data() {
+        let mut account = test_account();
+        account.class_name = "UNK".to_string();
+
+        let mut sm = LoginStateMachine::new(1, account);
+        sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
+        sm.advance(LoginEvent::ZoneInComplete);
+        let action = sm.advance(LoginEvent::PlayerDataConfirmed {
+            name: "Frostreaver".to_string(),
+            class_name: "Cleric".to_string(),
+        });
+
+        assert!(matches!(action, LoginAction::None));
+        assert!(matches!(sm.phase, LoginPhase::Ready));
     }
 
     #[test]

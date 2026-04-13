@@ -11,7 +11,7 @@ Checks:
 
 - confirm you are on Windows for live mode
 - confirm `eqgame.exe` is actually running
-- confirm `process_name` in `config/frostreaver.toml` matches your client
+- confirm `process_name` in `config/textquest.toml` matches your client
 
 ## TUI says demo mode unexpectedly
 

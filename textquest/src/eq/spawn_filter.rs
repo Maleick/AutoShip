@@ -223,9 +223,7 @@ impl NamedSpawnTracker {
 
     /// Register a name to watch. The name comparison is case-insensitive.
     pub fn track(&mut self, name: &str) {
-        self.tracked
-            .entry(name.to_lowercase())
-            .or_insert(None);
+        self.tracked.entry(name.to_lowercase()).or_insert(None);
     }
 
     /// Unregister a name.
@@ -396,10 +394,7 @@ mod tests {
 
     #[test]
     fn filter_spawn_type_npc() {
-        let spawns = vec![
-            make_npc("a rat", 1, 1),
-            make_pc("Maleick", 60, 2),
-        ];
+        let spawns = vec![make_npc("a rat", 1, 1), make_pc("Maleick", 60, 2)];
         let filter = SpawnFilter {
             spawn_type: Some(SpawnTypeFilter::Npc),
             ..Default::default()
@@ -411,10 +406,7 @@ mod tests {
 
     #[test]
     fn filter_spawn_type_pc() {
-        let spawns = vec![
-            make_npc("a rat", 1, 1),
-            make_pc("Maleick", 60, 2),
-        ];
+        let spawns = vec![make_npc("a rat", 1, 1), make_pc("Maleick", 60, 2)];
         let filter = SpawnFilter {
             spawn_type: Some(SpawnTypeFilter::Pc),
             ..Default::default()
@@ -497,7 +489,11 @@ mod tests {
 
     #[test]
     fn sort_by_id() {
-        let mut spawns = vec![make_npc("C", 1, 300), make_npc("A", 1, 100), make_npc("B", 1, 200)];
+        let mut spawns = vec![
+            make_npc("C", 1, 300),
+            make_npc("A", 1, 100),
+            make_npc("B", 1, 200),
+        ];
         let sorter = SpawnSorter::new(SpawnSortKey::Id);
         sorter.sort(&mut spawns);
         assert_eq!(spawns[0].spawn_id, 100);
@@ -618,10 +614,7 @@ mod tests {
         tracker.track("Lord Nagafen");
         tracker.track("Lady Vox");
 
-        let spawns = vec![
-            make_named_npc("Emperor Crush"),
-            make_named_npc("Lady Vox"),
-        ];
+        let spawns = vec![make_named_npc("Emperor Crush"), make_named_npc("Lady Vox")];
         tracker.update(&spawns);
 
         assert!(tracker.is_up("Emperor Crush"));

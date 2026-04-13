@@ -223,7 +223,7 @@ enum NavMeshAction {
 enum ConfigAction {
     /// Validate the TOML configuration file
     Check {
-        /// Path to config file (default: config/frostreaver.toml)
+        /// Path to config file (default: config/textquest.toml)
         #[arg(long)]
         path: Option<String>,
     },

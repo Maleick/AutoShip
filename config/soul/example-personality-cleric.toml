@@ -3,27 +3,35 @@
 
 [soul]
 enabled = true
-edginess = "Mild"
+edginess = "mild"
 idle_tick_secs = 45
 min_chat_interval_secs = 90
 max_chat_interval_secs = 600
 inter_character_chat = true
-player_chat_enabled = true   # Clerics engage with the community
+player_chat_enabled = true
 
 [[soul.character]]
-character_id = 1002
 name = "Luminara"
-personality = "Cleric"
+edginess = "mild"
+backstory = "A devout cleric who treats every camp like a congregation and every group wipe like a call to steady the line."
+quirks = ["offers a quick blessing before pulls", "counts rez reagents out loud"]
 
-  [soul.character.traits]
-  conscientiousness = 0.8   # Highly organized, remembers duties
-  agreeableness = 0.7       # Warm, empathetic, helps others
-  openness = 0.4            # Curious about the world and lore
-  neuroticism = 0.0         # Calm under pressure (healer mentality)
-  extraversion = 0.3        # Speaks when needed, not chatty
+[soul.character.traits]
+openness = 0.40
+conscientiousness = 0.85
+extraversion = 0.35
+agreeableness = 0.90
+neuroticism = 0.10
+battle_hunger = 0.20
+piety = 0.95
+greed = 0.25
+wanderlust = 0.30
+loyalty = 0.95
+mischief = 0.15
 
-  battle_hunger = -0.5      # Dislikes fighting, prefers peace
-  loyalty = 0.9             # Extremely devoted to her charge
-  piety = 0.95              # Central to her identity
-  mischief = -0.1           # Rarely jokes, takes duties seriously
-  wanderlust = 0.2          # Cautious about dangerous zones
+[soul.character.speech]
+vocabulary_level = 0.75
+emote_frequency = 0.30
+typing_speed = 0.95
+catchphrases = ["steady now", "the light holds"]
+adopted_slang = ["camp locked down"]

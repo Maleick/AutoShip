@@ -120,7 +120,7 @@ The TUI `:inject` command is still a placeholder; use the CLI `inject` command f
 
 ## Configuration
 
-- Main app config: `config/frostreaver.toml`
+- Main app config: `config/textquest.toml`
 - Accounts and group-launch metadata: `config/accounts.toml`
 - Camps: `config/camps/*.toml`
 - Class configs: `config/classes/*.toml`

@@ -180,11 +180,20 @@ mod tests {
         tracker.add_set(make_set("Set A", &[("Item 1", 100), ("Item 2", 101)]));
 
         let changed = tracker.mark_collected(100);
-        assert!(changed, "mark_collected should return true when item is updated");
+        assert!(
+            changed,
+            "mark_collected should return true when item is updated"
+        );
 
         let set = &tracker.sets()[0];
-        assert!(set.items[0].collected, "item_id 100 should be marked collected");
-        assert!(!set.items[1].collected, "item_id 101 should not be collected yet");
+        assert!(
+            set.items[0].collected,
+            "item_id 100 should be marked collected"
+        );
+        assert!(
+            !set.items[1].collected,
+            "item_id 101 should not be collected yet"
+        );
     }
 
     #[test]
@@ -194,7 +203,10 @@ mod tests {
 
         tracker.mark_collected(100);
         let changed = tracker.mark_collected(100);
-        assert!(!changed, "mark_collected on already-collected item should return false");
+        assert!(
+            !changed,
+            "mark_collected on already-collected item should return false"
+        );
     }
 
     #[test]
@@ -203,7 +215,10 @@ mod tests {
         tracker.add_set(make_set("Set A", &[("Item 1", 100)]));
 
         let changed = tracker.mark_collected(999);
-        assert!(!changed, "mark_collected with unknown item_id should return false");
+        assert!(
+            !changed,
+            "mark_collected with unknown item_id should return false"
+        );
     }
 
     #[test]
@@ -222,7 +237,15 @@ mod tests {
     #[test]
     fn test_completion_pct_partial() {
         let mut tracker = CollectibleTracker::new();
-        tracker.add_set(make_set("Set A", &[("Item 1", 100), ("Item 2", 101), ("Item 3", 102), ("Item 4", 103)]));
+        tracker.add_set(make_set(
+            "Set A",
+            &[
+                ("Item 1", 100),
+                ("Item 2", 101),
+                ("Item 3", 102),
+                ("Item 4", 103),
+            ],
+        ));
 
         tracker.mark_collected(100);
         tracker.mark_collected(101);
@@ -252,7 +275,10 @@ mod tests {
         tracker.mark_collected(100);
 
         let pct = tracker.completion_pct();
-        assert!((pct - 0.25).abs() < f32::EPSILON, "expected 0.25, got {pct}");
+        assert!(
+            (pct - 0.25).abs() < f32::EPSILON,
+            "expected 0.25, got {pct}"
+        );
     }
 
     #[test]
@@ -263,10 +289,16 @@ mod tests {
         assert!(!tracker.sets()[0].completed);
 
         tracker.mark_collected(100);
-        assert!(!tracker.sets()[0].completed, "not complete yet — only 1 of 2");
+        assert!(
+            !tracker.sets()[0].completed,
+            "not complete yet — only 1 of 2"
+        );
 
         tracker.mark_collected(101);
-        assert!(tracker.sets()[0].completed, "should be complete after both items collected");
+        assert!(
+            tracker.sets()[0].completed,
+            "should be complete after both items collected"
+        );
     }
 
     #[test]
@@ -370,7 +402,19 @@ mod tests {
 
         let entries = tracker.entries();
         assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0], TributeEntry { item_id: 1001, points: 100 });
-        assert_eq!(entries[1], TributeEntry { item_id: 1002, points: 250 });
+        assert_eq!(
+            entries[0],
+            TributeEntry {
+                item_id: 1001,
+                points: 100
+            }
+        );
+        assert_eq!(
+            entries[1],
+            TributeEntry {
+                item_id: 1002,
+                points: 250
+            }
+        );
     }
 }

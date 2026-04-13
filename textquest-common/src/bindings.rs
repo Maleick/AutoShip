@@ -9,7 +9,7 @@
 //! use textquest_common::eq_fn;
 //! use textquest_common::offsets;
 //! use core::ffi::c_void;
-//! 
+//!
 //! eq_fn!(interpret_cmd(this: *mut c_void, cmd: *const u8) -> i32 = offsets::INTERPRET_CMD);
 //! let _ = unsafe { interpret_cmd.call(eq_base, cmd_ptr) };
 //! ```
@@ -58,7 +58,8 @@ pub fn resolve_function_address(preferred_addr: u64, eq_base: u64, function_key:
     let function_key = to_camel_case(function_key);
     let preferred_addr = offsets::rebase(preferred_addr, eq_base);
     let fallback_addr = with_fallback_database(|db| {
-        db.get_function(&function_key).and_then(|v| db.rebase(v, eq_base))
+        db.get_function(&function_key)
+            .and_then(|v| db.rebase(v, eq_base))
     })
     .flatten();
 

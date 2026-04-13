@@ -140,7 +140,7 @@ mod tests {
     fn mastered_skills_returns_only_maxed_skills() {
         let mut tracker = SkillTracker::new();
         tracker.update_skill("Aradune", "1H Slashing", 300, 300); // mastered
-        tracker.update_skill("Aradune", "Tailoring", 150, 300);   // not mastered
+        tracker.update_skill("Aradune", "Tailoring", 150, 300); // not mastered
         tracker.update_skill("Aradune", "Sense Heading", 200, 200); // mastered
 
         let mastered = tracker.mastered_skills("Aradune");
@@ -162,9 +162,9 @@ mod tests {
     #[test]
     fn skills_below_pct_threshold() {
         let mut tracker = SkillTracker::new();
-        tracker.update_skill("Aradune", "Tailoring", 50, 300);  // ~16.7 %
-        tracker.update_skill("Aradune", "Baking", 150, 300);    // 50 %
-        tracker.update_skill("Aradune", "Brewing", 250, 300);   // ~83.3 %
+        tracker.update_skill("Aradune", "Tailoring", 50, 300); // ~16.7 %
+        tracker.update_skill("Aradune", "Baking", 150, 300); // 50 %
+        tracker.update_skill("Aradune", "Brewing", 250, 300); // ~83.3 %
 
         let below_50 = tracker.skills_below_pct("Aradune", 0.5);
         assert_eq!(below_50.len(), 1);
@@ -223,7 +223,10 @@ mod tests {
             successes: 7,
         };
         let rate = session.success_rate();
-        assert!((rate - 0.7).abs() < f32::EPSILON, "expected 0.7, got {rate}");
+        assert!(
+            (rate - 0.7).abs() < f32::EPSILON,
+            "expected 0.7, got {rate}"
+        );
     }
 
     #[test]

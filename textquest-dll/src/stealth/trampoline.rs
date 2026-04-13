@@ -52,7 +52,11 @@ impl TrampolineHardener {
         if addr.is_null() {
             return None;
         }
-        registry().lock().ok()?.get(&(addr as usize)).map(|(_, concealed)| *concealed)
+        registry()
+            .lock()
+            .ok()?
+            .get(&(addr as usize))
+            .map(|(_, concealed)| *concealed)
     }
 
     /// Mark trampoline bytes as RX-protected memory.
@@ -68,7 +72,9 @@ impl TrampolineHardener {
 
         let mut old = PAGE_PROTECTION_FLAGS(0);
         // SAFETY: caller-owned pointer+size pair refers to writable trampoline memory.
-        if let Err(e) = unsafe { VirtualProtect(addr as *const _, size, PAGE_EXECUTE_READ, &mut old) } {
+        if let Err(e) =
+            unsafe { VirtualProtect(addr as *const _, size, PAGE_EXECUTE_READ, &mut old) }
+        {
             tracing::warn!("VirtualProtect(trampoline RX) failed: {}", e);
         }
     }

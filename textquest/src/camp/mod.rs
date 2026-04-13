@@ -4,12 +4,12 @@
 pub mod banking;
 /// Buff tracking and rebuffing logic.
 pub mod buffs;
-/// Collectible and tribute management — collection quest progress, tribute automation.
-pub mod collectibles;
 /// Crowd control assignment and tracking.
 pub mod cc;
 /// Per-class ability configuration for the camp loop.
 pub mod class_config;
+/// Collectible and tribute management — collection quest progress, tribute automation.
+pub mod collectibles;
 /// Camp loop configuration — timers, thresholds, zone settings.
 pub mod config;
 /// Auto-forage automation — periodic `/forage` command dispatch.
@@ -28,6 +28,8 @@ pub mod progression;
 pub mod puller;
 /// Recovery phase — med, heal, rebuff between pulls.
 pub mod recovery;
+/// Skill leveling and training automation — tracks skill levels, mastery, and tradeskill sessions.
+pub mod skill_tracker;
 /// Camp loop state machine — idle, pulling, fighting, looting, recovering.
 pub mod state;
 /// Tell relaying and chat forwarding — OpenVanilla MQ2RelayTells parity.

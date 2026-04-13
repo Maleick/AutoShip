@@ -11,15 +11,15 @@ pub mod dx11_null;
 pub mod eqmain_hook;
 pub mod fingerprint;
 pub mod game_loop;
-pub mod set_game_state;
 pub mod hwbp;
 pub mod integrity;
 pub mod movement;
-pub mod slot_manager;
 pub mod packet_hook;
 pub mod timing;
 pub mod render;
 pub mod rotation;
+pub mod set_game_state;
+pub mod slot_manager;
 pub mod targeting;
 
 use std::sync::{Mutex, OnceLock};
@@ -39,7 +39,9 @@ fn manager() -> &'static Mutex<slot_manager::HookSlotManager> {
 /// wired separately in the platform-specific hook installation path.
 pub fn set_game_state(game_state: HookGameState) {
     let rotation = {
-        let mut guard = manager().lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut guard = manager()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         guard.rotate_hooks(game_state)
     };
 

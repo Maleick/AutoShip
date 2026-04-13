@@ -180,13 +180,7 @@ mod tests {
 
         // Record 10 % XP gain over 30 minutes → 20 %/hour expected.
         tracker.record("Warrior", 50.0, 0.0, 50, make_instant_offset(base, 0));
-        tracker.record(
-            "Warrior",
-            60.0,
-            0.0,
-            50,
-            make_instant_offset(base, 30 * 60),
-        );
+        tracker.record("Warrior", 60.0, 0.0, 50, make_instant_offset(base, 30 * 60));
 
         let now = make_instant_offset(base, 30 * 60);
         let rate = tracker.xp_per_hour("Warrior", now);
@@ -212,13 +206,7 @@ mod tests {
         // Old sample (90 minutes ago) — should be excluded.
         tracker.record("Rogue", 10.0, 0.0, 40, make_instant_offset(base, 0));
         // Recent sample (10 minutes ago).
-        tracker.record(
-            "Rogue",
-            50.0,
-            0.0,
-            40,
-            make_instant_offset(base, 50 * 60),
-        );
+        tracker.record("Rogue", 50.0, 0.0, 40, make_instant_offset(base, 50 * 60));
         // "now" is 90 minutes after base — first sample falls outside window.
         let now = make_instant_offset(base, 90 * 60);
         let rate = tracker.xp_per_hour("Rogue", now);
@@ -238,16 +226,12 @@ mod tests {
         // 50 % → 60 % over 30 minutes. Rate = 20 %/hour.
         // Remaining at second sample = 40 %. At 20 %/hour that is 2 hours = 7200 s.
         tracker.record("Wizard", 50.0, 0.0, 55, make_instant_offset(base, 0));
-        tracker.record(
-            "Wizard",
-            60.0,
-            0.0,
-            55,
-            make_instant_offset(base, 30 * 60),
-        );
+        tracker.record("Wizard", 60.0, 0.0, 55, make_instant_offset(base, 30 * 60));
 
         let now = make_instant_offset(base, 30 * 60);
-        let ttl = tracker.time_to_level_secs("Wizard", now).expect("should be Some");
+        let ttl = tracker
+            .time_to_level_secs("Wizard", now)
+            .expect("should be Some");
         let expected = 7200.0_f64;
         let diff = (ttl - expected).abs();
         assert!(diff < 1.0, "expected ~7200 s, got {ttl}");
@@ -273,13 +257,7 @@ mod tests {
         let base = Instant::now();
 
         tracker.record("Paladin", 90.0, 0.0, 49, base);
-        tracker.record(
-            "Paladin",
-            5.0,
-            0.0,
-            50,
-            make_instant_offset(base, 60),
-        );
+        tracker.record("Paladin", 5.0, 0.0, 50, make_instant_offset(base, 60));
 
         assert_eq!(tracker.level_history.len(), 1);
         assert_eq!(tracker.level_history[0].0, 50);
@@ -327,13 +305,7 @@ mod tests {
         let base = Instant::now();
 
         tracker.record("Enchanter", 10.0, 0.0, 50, base);
-        tracker.record(
-            "Necromancer",
-            20.0,
-            0.0,
-            50,
-            make_instant_offset(base, 10),
-        );
+        tracker.record("Necromancer", 20.0, 0.0, 50, make_instant_offset(base, 10));
 
         let result = tracker.recent_samples("Enchanter", 10);
         assert_eq!(result.len(), 1);
