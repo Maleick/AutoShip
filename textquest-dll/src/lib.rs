@@ -204,6 +204,18 @@ fn initialize() -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("Sleep obfuscation init failed (non-fatal): {}", e);
     }
 
+    // 5.5. Hook integrity self-check — verify HWBP slot state before accepting IPC commands.
+    // If any slot is inconsistent (active without address/callback, or stale metadata after
+    // removal), enter safe mode: the IPC listener will reject all commands until the DLL
+    // is reinjected. This is non-fatal — we log the error and continue so the process can
+    // still run without crash; operators see "safe mode" in log and re-inject to recover.
+    if let Err(e) = hooks::integrity::verify_hooks_or_safe_mode() {
+        tracing::error!(
+            error = %e,
+            "Hook integrity check failed — DLL entering safe mode (IPC commands will be rejected)"
+        );
+    }
+
     // 6. Start IPC listener.
     let client_id = std::process::id();
     let session_token = generate_session_token(client_id);

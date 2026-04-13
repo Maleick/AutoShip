@@ -37,9 +37,9 @@ impl HwbpSlot {
 
 pub type HwbpCallback = fn(*mut ()) -> bool;
 
-struct SlotEntry {
-    address: AtomicUsize,
-    active: AtomicBool,
+pub(crate) struct SlotEntry {
+    pub(crate) address: AtomicUsize,
+    pub(crate) active: AtomicBool,
 }
 
 impl SlotEntry {
@@ -51,14 +51,14 @@ impl SlotEntry {
     }
 }
 
-static SLOTS: [SlotEntry; MAX_SLOTS] = [
+pub(crate) static SLOTS: [SlotEntry; MAX_SLOTS] = [
     SlotEntry::new(),
     SlotEntry::new(),
     SlotEntry::new(),
     SlotEntry::new(),
 ];
 
-static CALLBACKS: [AtomicUsize; MAX_SLOTS] = [
+pub(crate) static CALLBACKS: [AtomicUsize; MAX_SLOTS] = [
     AtomicUsize::new(0),
     AtomicUsize::new(0),
     AtomicUsize::new(0),
@@ -390,6 +390,16 @@ pub fn active_count() -> usize {
     (0..MAX_SLOTS)
         .filter(|i| SLOTS[*i].active.load(Ordering::Acquire))
         .count()
+}
+
+/// Returns `true` if the callback for `slot` is non-null.
+pub fn has_callback(slot: HwbpSlot) -> bool {
+    CALLBACKS[slot as usize].load(Ordering::Acquire) != 0
+}
+
+/// Returns `true` if the VEH handler is currently installed.
+pub fn is_veh_installed() -> bool {
+    VEH_INSTALLED.load(Ordering::Acquire)
 }
 
 fn clear_slot_state(slot: HwbpSlot) {

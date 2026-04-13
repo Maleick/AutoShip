@@ -7,6 +7,7 @@ pub mod eqmain_hook;
 pub mod fingerprint;
 pub mod game_loop;
 pub mod hwbp;
+pub mod integrity;
 pub mod movement;
 pub mod slot_manager;
 pub mod packet_hook;
