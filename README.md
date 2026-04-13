@@ -89,13 +89,17 @@ You come back to merged PRs.
 **Same issues. One command. Brain free.**
 
 - **Third-party first** — burns Codex, Gemini, and Copilot quota before touching Claude tokens
-- **Parallel workers** — up to 6 issues in flight simultaneously
-- **Task-type routing** — classifies issues into 7 categories, routes each to the best agent
+- **Parallel workers** — up to 20 issues in flight simultaneously
+- **Task-type routing** — classifies issues into 8 categories (incl. `rust_unsafe`), routes each to the best agent
 - **Live routing config** — edit `AUTOSHIP.md` front matter to change agent priorities, takes effect immediately
 - **Verification pipeline** — every result reviewed against acceptance criteria before a PR opens
 - **Token ledger** — per-issue and per-session token spend tracked in `.autoship/token-ledger.json`
 - **Event-driven** — bash monitors watch agent output, PR CI, and GitHub issues in real time
 - **Durable state** — survives restarts via `.autoship/state.json` and GitHub labels
+- **Project context injection** — CLAUDE.md/AGENTS.md conventions extracted at startup and injected into every dispatch prompt
+- **Opus pre-dispatch advisor** — complex/unsafe issues get a 200-word architectural brief before worker dispatch
+- **Codex health-check & stuck tracking** — fast-fail probe + per-tool `stuck_count`; exhausted at 3 consecutive STUCKs
+- **Rust/Windows routing** — `rust_unsafe` task type + `rust_windows` profile detection route unsafe Rust to Claude
 
 ## Install
 
@@ -129,7 +133,7 @@ AutoShip detects available tools at startup and routes work accordingly.
 | ------------------ | ------------------------------------------------------------------------ |
 | `/autoship:start`  | Launch orchestration — classify issues, dispatch agents, loop until done |
 | `/autoship:plan`   | Dry run — analyze issues and show dispatch plan without executing        |
-| `/autoship:stop`   | Gracefully stop all agents, save state, add `autoship:paused` labels       |
+| `/autoship:stop`   | Gracefully stop all agents, save state, add `autoship:paused` labels     |
 | `/autoship:status` | Live dashboard — active agents, quota bars, per-model token spend        |
 
 ## How It Works
@@ -307,7 +311,7 @@ hooks/
   update-state.sh            ← write issue state + token counts
   cleanup-worktree.sh        ← archive result, remove worktree, close issue
   quota-update.sh            ← decay-based API quota estimation
-  classify-issue.sh          ← label issues by task type (7 categories)
+  classify-issue.sh          ← label issues by task type (8 categories)
   dispatch-codex-appserver.sh← drive Codex via JSON-RPC (no tmux)
   emit-event.sh              ← atomic flock write to event-queue.json
 skills/
@@ -332,13 +336,13 @@ Real dispatch results from AutoShip running on its own codebase:
 | ------------------- | ---------------- | ----------------- | --------------------------------- |
 | Simple bug fix      | Codex Spark      | ~4 min            | JSON-RPC dispatch, no interaction |
 | Hook refactor       | Claude Haiku     | ~7 min            | 2 files changed, tests pass       |
-| Routing matrix feat | Claude Sonnet    | ~18 min           | AUTOSHIP.md + 3 hooks updated       |
+| Routing matrix feat | Claude Sonnet    | ~18 min           | AUTOSHIP.md + 3 hooks updated     |
 | Token ledger schema | Claude Sonnet    | ~12 min           | New JSON schema + recording logic |
 | Emit-event refactor | Claude Haiku     | ~5 min            | 4 files deduplicated              |
 | Archival bug fix    | Claude Sonnet    | ~9 min            | Content validation added          |
 | **Average**         | —                | **~9 min**        | **issue open → PR merged**        |
 
-> AutoShip shipped all 7 v1.1.0 issues — open to merged PR — in a single session. Zero manual PRs. Zero manual merges.
+> AutoShip shipped all 9 v1.4.0 self-improvement issues — open to merged PR — in a single session. Zero manual PRs. Zero manual merges.
 
 ## Star This Repo
 

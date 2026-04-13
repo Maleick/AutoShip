@@ -41,12 +41,8 @@ If any check fails, report and stop.
 ### Step 2: Detect Available Tools + Quota
 
 ```bash
-if [[ -f ".autoship/hooks_dir" ]]; then
-  bash "$(cat .autoship/hooks_dir)/detect-tools.sh"
-else
-  _DETECT=$(find "$HOME/.claude/plugins/cache/autoship" -maxdepth 4 -name "detect-tools.sh" 2>/dev/null | head -1)
-  if [[ -n "$_DETECT" ]]; then bash "$_DETECT"; else echo '{}'; fi
-fi
+_DETECT=$(find "$HOME/.claude/plugins/cache/autoship" -maxdepth 4 -type f -name "detect-tools.sh" 2>/dev/null | sort | head -1)
+if [[ -n "$_DETECT" ]]; then bash "$_DETECT"; else echo '{}'; fi
 ```
 
 Parse the JSON output. Record quota_pct for each tool. Tools with quota_pct < 10 are considered exhausted and skipped during dispatch.
@@ -70,6 +66,9 @@ gh issue list --state open --json number,title,body,labels,milestone,createdAt,u
 ### Step 5: UltraPlan — Opus Advisor Call
 
 Spawn Opus as the strategic advisor for the initial plan. This is the first and most important advisor call.
+
+**Pre-dispatch Health Check:**
+Before calling the Opus advisor, run a fast-fail health check for each tool in the priority lists (e.g., `timeout 10s codex --version`). If a tool fails, run `bash hooks/quota-update.sh stuck <tool>` to increment its stuck count. Tools with `exhausted: true` or `quota_pct < 10` must be marked as exhausted in the prompt context provided to Opus.
 
 ```
 Agent({
@@ -158,6 +157,8 @@ Emits: `[ISSUE_NEW]`, `[ISSUE_CLOSED]`
 
 ### Step 7: Dispatch Phase 1
 
+For each issue in Phase 1, invoke the `dispatch` skill. Dispatch all ready Phase 1 issues concurrently up to the 20-agent cap (not throttled to 6). The dispatch skill will automatically queue any issues beyond the cap for the next poll cycle.
+
 Before dispatching each issue, classify its task type:
 
 ```bash
@@ -180,7 +181,7 @@ Task types and their model/tool preferences:
 
 Pass `task_type` to `dispatch` via the issue record in state.json. The dispatch skill reads `.issues[issue-N].task_type` to select model and tool.
 
-For each issue in Phase 1, invoke `dispatch` skill. Third-party tools take priority for simple and medium issues.
+Third-party tools take priority for simple and medium issues.
 
 ### Step 8: Enter Reactive Mode
 
@@ -247,7 +248,7 @@ Process the printed event. Do NOT read the queue and then write it in two separa
 | Event type     | Sonnet action                                                        |
 | -------------- | -------------------------------------------------------------------- |
 | `verify`       | Run post-completion pipeline (verify → simplify → PR)                |
-| `stuck`        | Check attempt count → re-dispatch or spawn Opus advisor              |
+| `stuck`        | Increment stuck count via `quota-update.sh stuck <tool>`, then check attempt count → re-dispatch or spawn Opus advisor |
 | `blocked`      | Mark blocked in state, add `autoship:blocked` label, notify operator |
 | `new_issue`    | Spawn Opus advisor for classification → insert into plan             |
 | `closed_issue` | Cancel running agent, clean up worktree                              |

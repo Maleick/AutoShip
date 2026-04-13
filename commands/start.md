@@ -45,12 +45,8 @@ Fail messages:
 ## Step 2: Probe Available Tools
 
 ```bash
-if [[ -f ".autoship/hooks_dir" ]]; then
-  bash "$(cat .autoship/hooks_dir)/detect-tools.sh"
-else
-  _DETECT=$(find "$HOME/.claude/plugins/cache/autoship" -maxdepth 4 -name "detect-tools.sh" 2>/dev/null | head -1)
-  if [[ -n "$_DETECT" ]]; then bash "$_DETECT"; else echo "detect-tools.sh not found — all tasks routed to Claude."; fi
-fi
+_DETECT=$(find "$HOME/.claude/plugins/cache/autoship" -maxdepth 4 -type f -name "detect-tools.sh" 2>/dev/null | sort | head -1)
+if [[ -n "$_DETECT" ]]; then bash "$_DETECT"; else echo "detect-tools.sh not found — all tasks routed to Claude."; fi
 ```
 
 Log any unavailable tools. Reassign their tasks to Claude.

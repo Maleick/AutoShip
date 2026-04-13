@@ -24,7 +24,11 @@ if [[ -z "${AUTOSHIP_STATE_LOCKED:-}" ]]; then
   export AUTOSHIP_STATE_LOCKED=1
   if command -v flock >/dev/null 2>&1; then
     # Linux: hold FD lock for script duration
-    exec 9>"$LOCK_FILE"
+    if [[ -L "$LOCK_FILE" ]]; then
+      echo "Error: refusing symlink lock file: $LOCK_FILE" >&2
+      exit 1
+    fi
+    exec 9>>"$LOCK_FILE"
     flock -x 9
   elif command -v lockf >/dev/null 2>&1; then
     # macOS (BSD): re-exec under lockf; AUTOSHIP_STATE_LOCKED prevents infinite loop
@@ -67,6 +71,21 @@ manage_labels() {
   local repo_slug
   repo_slug=$(jq -r '.repo // empty' "$STATE_FILE") || return 0
   if [[ -z "$repo_slug" ]]; then
+    return 0
+  fi
+  repo_slug=$(printf '%s\n' "$repo_slug" | sed -E 's#/$##; s#\.git$##')
+
+  # Resolve current repository slug from git remote and ensure state.json matches it.
+  # This prevents a stale/tampered state file from causing cross-repo label edits.
+  local current_repo_slug remote_url
+  remote_url=$(git remote get-url origin 2>/dev/null || true)
+  if [[ -z "$remote_url" ]]; then
+    return 0
+  fi
+  current_repo_slug=$(printf '%s\n' "$remote_url" \
+    | sed -E 's#^.+[:/]([^/]+/[^/]+)(\.git)?$#\1#' \
+    | sed -E 's#/$##; s#\.git$##')
+  if [[ -z "$current_repo_slug" ]] || [[ "$repo_slug" != "$current_repo_slug" ]]; then
     return 0
   fi
 
@@ -158,10 +177,14 @@ append_ledger_record() {
   }
 
   if command -v flock >/dev/null 2>&1; then
-    exec 9>"$lock"
-    flock -x 9
+    if [[ -L "$lock" ]]; then
+      echo "Error: refusing symlink lock file: $lock" >&2
+      return 1
+    fi
+    exec 8>>"$lock"
+    flock -x 8
     _write_ledger_record
-    exec 9>&-
+    exec 8>&-
   elif command -v lockf >/dev/null 2>&1; then
     local record_tmp
     record_tmp=$(mktemp)
@@ -187,7 +210,7 @@ ISSUE_ID="$2"
 shift 2
 
 # Validate ISSUE_ID format: reject malformed values before they reach jq keys or GitHub API calls
-if [[ ! "$ISSUE_ID" =~ ^(issue-)?[0-9]+$ ]]; then
+if [[ ! "$ISSUE_ID" =~ ^(issue-)?[0-9]+[a-z0-9-]*$ ]]; then
   echo "Error: invalid ISSUE_ID: $ISSUE_ID" >&2
   exit 1
 fi
@@ -363,7 +386,13 @@ for pair in "$@"; do
   if [[ "$KEY" == "pr_number" ]]; then
     ISSUE_NUMBER=$(echo "$ISSUE_ID" | grep -o '[0-9]*')
     if command -v gh >/dev/null 2>&1; then
-      PR_ISSUE=$(gh pr view "$VALUE" --json body --jq '.body' 2>/dev/null | grep -o '#[0-9]*' | head -1 | tr -d '#')
+      PR_ISSUE=$(
+        gh pr view "$VALUE" --json body --jq '.body' 2>/dev/null \
+          | grep -o '#[0-9]*' \
+          | head -1 \
+          | tr -d '#' \
+          || true
+      )
       if [[ -n "$PR_ISSUE" && "$PR_ISSUE" != "$ISSUE_NUMBER" ]]; then
         echo "WARN: PR #$VALUE body references #$PR_ISSUE but expected #$ISSUE_NUMBER — possible transposition" >> "$REPO_ROOT/.autoship/poll.log"
       fi

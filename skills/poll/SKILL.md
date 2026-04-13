@@ -33,22 +33,25 @@ Fetch open issues:
 POLL_ERROR_TMP=$(mktemp .autoship/poll-error.XXXXXX.tmp)
 if live_issues=$(gh issue list --state open --json number,title,body,labels,updatedAt --limit 200 2>"$POLL_ERROR_TMP"); then
   # Reset failure counter on success
-  jq '.consecutive_api_failures = 0' .autoship/state.json > .autoship/state.tmp && mv .autoship/state.tmp .autoship/state.json
+  STATE_TMP=$(mktemp .autoship/state.XXXXXX.tmp)
+  jq '.consecutive_api_failures = 0' .autoship/state.json > "$STATE_TMP" && mv "$STATE_TMP" .autoship/state.json
 else
   api_failures=$((api_failures + 1))
   echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] GitHub API error (attempt $api_failures): $(cat "$POLL_ERROR_TMP")" >> .autoship/poll.log
   echo "GitHub API error, will retry on next poll" >&2
 
   # Update consecutive failure counter in state
+  STATE_TMP=$(mktemp .autoship/state.XXXXXX.tmp)
   jq --argjson n "$api_failures" '.consecutive_api_failures = $n' .autoship/state.json \
-    > .autoship/state.tmp && mv .autoship/state.tmp .autoship/state.json
+    > "$STATE_TMP" && mv "$STATE_TMP" .autoship/state.json
 
   # After 3 consecutive failures, write urgent event to queue
   if [[ "$api_failures" -ge 3 ]]; then
     EVENT_QUEUE=".autoship/event-queue.json"
     [[ ! -f "$EVENT_QUEUE" ]] && echo '[]' > "$EVENT_QUEUE"
+    EVENT_TMP=$(mktemp .autoship/event-queue.XXXXXX.tmp)
     jq '. + [{"type": "github_api_down", "consecutive_failures": '"$api_failures"', "priority": 1}]' \
-      "$EVENT_QUEUE" > "${EVENT_QUEUE}.tmp" && mv "${EVENT_QUEUE}.tmp" "$EVENT_QUEUE"
+      "$EVENT_QUEUE" > "$EVENT_TMP" && mv "$EVENT_TMP" "$EVENT_QUEUE"
     echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] github_api_down event queued after $api_failures consecutive failures" >> .autoship/poll.log
   fi
 
@@ -133,6 +136,7 @@ Scan the issue body for:
 Append the new issue to `.autoship/state.json`:
 
 ```bash
+STATE_TMP=$(mktemp .autoship/state.XXXXXX.tmp)
 jq --arg num "<number>" \
    --arg title "<title>" \
    --arg complexity "<simple|medium|complex>" \
@@ -147,7 +151,7 @@ jq --arg num "<number>" \
      discovered_by: "poll",
      started_at: null,
      attempts_history: []
-   }' .autoship/state.json > .autoship/state.tmp && mv .autoship/state.tmp .autoship/state.json
+   }' .autoship/state.json > "$STATE_TMP" && mv "$STATE_TMP" .autoship/state.json
 ```
 
 Determine which phase the issue belongs to (Phase 1 if no unresolved dependencies, otherwise after its blockers). Append to the appropriate phase in `plan.phases`.
@@ -190,10 +194,11 @@ fi
 ### 5d. Update Local State
 
 ```bash
+STATE_TMP=$(mktemp .autoship/state.XXXXXX.tmp)
 jq --arg num "<number>" \
    '.issues[$num].state = "cancelled" |
     .issues[$num].cancelled_reason = "closed-externally"' \
-  .autoship/state.json > .autoship/state.tmp && mv .autoship/state.tmp .autoship/state.json
+  .autoship/state.json > "$STATE_TMP" && mv "$STATE_TMP" .autoship/state.json
 ```
 
 Remove the `autoship:in-progress` label from the issue if present:
@@ -222,13 +227,14 @@ If a `autoship:*` label was **removed** externally:
 Update title, body, and labels in `.autoship/state.json`:
 
 ```bash
+STATE_TMP=$(mktemp .autoship/state.XXXXXX.tmp)
 jq --arg num "<number>" \
    --arg title "<new_title>" \
    --argjson labels '<labels_array>' \
    '.issues[$num].title = $title |
     .issues[$num].labels = $labels |
     .issues[$num].last_synced = now | todate' \
-  .autoship/state.json > .autoship/state.tmp && mv .autoship/state.tmp .autoship/state.json
+  .autoship/state.json > "$STATE_TMP" && mv "$STATE_TMP" .autoship/state.json
 ```
 
 ## Step 7: Refresh Quota Estimates
@@ -246,9 +252,10 @@ This is a no-op if all tools were already reset today. No API calls made.
 Update `updated_at` and `last_poll` in state:
 
 ```bash
+STATE_TMP=$(mktemp .autoship/state.XXXXXX.tmp)
 jq --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
    '.updated_at = $ts | .last_poll = $ts' \
-  .autoship/state.json > .autoship/state.tmp && mv .autoship/state.tmp .autoship/state.json
+  .autoship/state.json > "$STATE_TMP" && mv "$STATE_TMP" .autoship/state.json
 ```
 
 Write a summary to `.autoship/poll.log`:
@@ -267,7 +274,8 @@ EOF
 Keep the log bounded — trim to the last 500 lines:
 
 ```bash
-tail -500 .autoship/poll.log > .autoship/poll.log.tmp && mv .autoship/poll.log.tmp .autoship/poll.log
+POLL_LOG_TMP=$(mktemp .autoship/poll.log.XXXXXX.tmp)
+tail -500 .autoship/poll.log > "$POLL_LOG_TMP" && mv "$POLL_LOG_TMP" .autoship/poll.log
 ```
 
 ## Output

@@ -13,7 +13,7 @@ if [[ -z "$ISSUE_KEY" ]]; then
 fi
 
 # Validate ISSUE_KEY to prevent path traversal
-if [[ ! "$ISSUE_KEY" =~ ^issue-[0-9]+$ ]]; then
+if [[ ! "$ISSUE_KEY" =~ ^issue-[0-9]+[a-z0-9-]*$ ]]; then
   echo "Error: invalid ISSUE_KEY: $ISSUE_KEY" >&2
   exit 1
 fi
@@ -31,7 +31,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Paths
 WORKTREE_PATH=".autoship/workspaces/$ISSUE_KEY"
 AUTOSHIP_BRANCH="autoship/$ISSUE_KEY"
-ISSUE_NUM="${ISSUE_KEY#issue-}"
+ISSUE_NUM=$(echo "${ISSUE_KEY#issue-}" | sed 's/[^0-9].*//')
 
 # Resolve repo slug from state.json or git remote (needed for archive and GitHub cleanup)
 REPO_SLUG=""

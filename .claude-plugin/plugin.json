@@ -1,5 +1,6 @@
 {
   "name": "autoship",
+  "version": "1.4.2",
   "description": "Autonomous multi-agent orchestration for Claude Code. Routes GitHub issues to AI agents, verifies results, and merges PRs.",
   "author": {
     "name": "Maleick",

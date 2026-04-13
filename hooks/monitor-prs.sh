@@ -35,8 +35,11 @@ if [[ -z "$REPO_SLUG" ]]; then
   REPO_SLUG=$(git remote get-url origin 2>/dev/null | sed -E 's#^.+[:/]([^/]+/[^/]+)(\.git)?$#\1#' | sed 's/\.git$//')
 fi
 
-# Initialize seen state (track last known CI state per PR to avoid duplicate events)
-[[ -f "$SEEN_FILE" ]] || echo '{}' > "$SEEN_FILE"
+# Verify seen state file exists
+if [[ ! -f "$SEEN_FILE" ]]; then
+  echo "Error: $SEEN_FILE not found. Run init.sh first." >&2
+  exit 1
+fi
 
 emit_if_changed() {
   local pr_number="$1"

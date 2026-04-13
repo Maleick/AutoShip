@@ -4,7 +4,7 @@ set -euo pipefail
 # init.sh — Initialize .autoship/ directory structure and state file.
 # Idempotent: safe to re-run without losing existing state.
 
-AUTOSHIP_VERSION="0.1.0"
+AUTOSHIP_VERSION="1.4.0"
 
 AUTOSHIP_DIR=".autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
@@ -24,7 +24,9 @@ cd "$REPO_ROOT"
 echo "AutoShip v${AUTOSHIP_VERSION} initializing..."
 
 # Check for jq dependency and minimum version (>= 1.6 required for --argjson)
+HAS_JQ=1
 if ! command -v jq >/dev/null 2>&1; then
+  HAS_JQ=0
   echo "Warning: jq not found. Install with: brew install jq" >&2
 else
   jq_version=$(jq --version 2>/dev/null | sed 's/jq-//' | cut -d. -f1-2) || jq_version="0.0"
@@ -57,6 +59,20 @@ fi
 # Create directory structure
 mkdir -p "$WORKSPACES_DIR"
 
+# Initialize .pr-monitor-seen.json (used by monitor-prs.sh)
+PR_SEEN_FILE="$AUTOSHIP_DIR/.pr-monitor-seen.json"
+if [[ ! -f "$PR_SEEN_FILE" ]]; then
+  echo '{}' > "$PR_SEEN_FILE"
+  echo "Initialized $PR_SEEN_FILE"
+fi
+
+# Initialize event-queue.json (used by emit-event.sh)
+EVENT_QUEUE_FILE="$AUTOSHIP_DIR/event-queue.json"
+if [[ ! -f "$EVENT_QUEUE_FILE" ]]; then
+  echo '[]' > "$EVENT_QUEUE_FILE"
+  echo "Initialized $EVENT_QUEUE_FILE"
+fi
+
 # Detect tools and parse quotas.
 # detect-tools.sh outputs: {"claude": {"available": bool, "quota_pct": N}, ...}
 # Transform to state.json format:  {"claude": {"status": "available"|"unavailable", "quota_pct": N}, ...}
@@ -85,7 +101,7 @@ fi
 
 # --- Error Recovery #6: Invalid/corrupted state file ---
 # If state.json exists but is not valid JSON, back it up and reinitialize.
-if [[ -f "$STATE_FILE" ]]; then
+if [[ "$HAS_JQ" -eq 1 && -f "$STATE_FILE" ]]; then
   if ! jq '.' "$STATE_FILE" > /dev/null 2>&1; then
     BACKUP="${STATE_FILE}.corrupted.$(date +%s)"
     mv "$STATE_FILE" "$BACKUP"
@@ -96,62 +112,97 @@ fi
 # Initialize state.json only if it doesn't exist
 if [[ ! -f "$STATE_FILE" ]]; then
   NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  # Use jq to produce well-formed JSON, embedding the detected tools.
-  jq -n \
-    --arg repo "$REPO_SLUG" \
-    --arg now "$NOW" \
-    --arg ver "$AUTOSHIP_VERSION" \
-    --argjson tools "$TOOLS_JSON" \
-    '{
-      version: 1,
-      autoship_version: $ver,
-      repo: $repo,
-      started_at: $now,
-      updated_at: $now,
-      plan: {
-        phases: [],
-        current_phase: 0,
-        checkpoint_pending: false
-      },
-      issues: {},
-      tools: $tools,
-      stats: {
-        session_dispatched: 0,
-        session_completed: 0,
-        total_dispatched_all_time: 0,
-        total_completed_all_time: 0,
-        failed: 0,
-        blocked: 0
-      }
-    }' > "$STATE_FILE"
+  if [[ "$HAS_JQ" -eq 1 ]]; then
+    # Use jq to produce well-formed JSON, embedding the detected tools.
+    jq -n \
+      --arg repo "$REPO_SLUG" \
+      --arg now "$NOW" \
+      --arg ver "$AUTOSHIP_VERSION" \
+      --argjson tools "$TOOLS_JSON" \
+      '{
+        version: 1,
+        autoship_version: $ver,
+        repo: $repo,
+        started_at: $now,
+        updated_at: $now,
+        plan: {
+          phases: [],
+          current_phase: 0,
+          checkpoint_pending: false
+        },
+        issues: {},
+        tools: $tools,
+        stats: {
+          session_dispatched: 0,
+          session_completed: 0,
+          total_dispatched_all_time: 0,
+          total_completed_all_time: 0,
+          failed: 0,
+          blocked: 0
+        }
+      }' > "$STATE_FILE"
+  else
+    REPO_SLUG="$REPO_SLUG" AUTOSHIP_VERSION="$AUTOSHIP_VERSION" NOW="$NOW" TOOLS_JSON="$TOOLS_JSON" \
+      python3 - <<'PY' > "$STATE_FILE"
+import json
+import os
+import sys
+
+state = {
+    "version": 1,
+    "autoship_version": os.environ["AUTOSHIP_VERSION"],
+    "repo": os.environ["REPO_SLUG"],
+    "started_at": os.environ["NOW"],
+    "updated_at": os.environ["NOW"],
+    "plan": {"phases": [], "current_phase": 0, "checkpoint_pending": False},
+    "issues": {},
+    "tools": json.loads(os.environ["TOOLS_JSON"]),
+    "stats": {
+        "session_dispatched": 0,
+        "session_completed": 0,
+        "total_dispatched_all_time": 0,
+        "total_completed_all_time": 0,
+        "failed": 0,
+        "blocked": 0,
+    },
+}
+
+json.dump(state, sys.stdout, indent=2)
+sys.stdout.write("\n")
+PY
+  fi
   echo "Initialized $STATE_FILE"
 else
-  # Check for version mismatch and warn (migration notice, non-fatal)
-  existing_ver=$(jq -r '.autoship_version // "unknown"' "$STATE_FILE" 2>/dev/null) || existing_ver="unknown"
-  if [[ "$existing_ver" != "$AUTOSHIP_VERSION" ]]; then
-    echo "Notice: state.json has autoship_version=${existing_ver}, current is ${AUTOSHIP_VERSION} (migration may be needed)" >&2
-  fi
+  if [[ "$HAS_JQ" -eq 1 ]]; then
+    # Check for version mismatch and warn (migration notice, non-fatal)
+    existing_ver=$(jq -r '.autoship_version // "unknown"' "$STATE_FILE" 2>/dev/null) || existing_ver="unknown"
+    if [[ "$existing_ver" != "$AUTOSHIP_VERSION" ]]; then
+      echo "Notice: state.json has autoship_version=${existing_ver}, current is ${AUTOSHIP_VERSION} (migration may be needed)" >&2
+    fi
 
-  # Refresh tools section with current quota data without touching other state.
-  # Also reset session-scoped counters on each startup, and migrate old key names if present.
-  NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  UPDATED=$(jq --argjson tools "$TOOLS_JSON" --arg now "$NOW" '
-    .tools = $tools |
-    .updated_at = $now |
-    # Migrate old "dispatched"/"completed" keys to new schema (keep totals, reset session)
-    if (.stats | has("dispatched")) then
-      .stats.total_dispatched_all_time = (.stats.total_dispatched_all_time // .stats.dispatched) |
-      .stats.total_completed_all_time  = (.stats.total_completed_all_time  // .stats.completed) |
-      del(.stats.dispatched) | del(.stats.completed)
-    else . end |
-    # Ensure all four keys exist
-    .stats.session_dispatched        = 0 |
-    .stats.session_completed         = 0 |
-    .stats.total_dispatched_all_time = (.stats.total_dispatched_all_time // 0) |
-    .stats.total_completed_all_time  = (.stats.total_completed_all_time  // 0)
-  ' "$STATE_FILE") && \
-    printf '%s\n' "$UPDATED" > "$STATE_FILE"
-  echo "Refreshed tools quota and reset session counters in $STATE_FILE"
+    # Refresh tools section with current quota data without touching other state.
+    # Also reset session-scoped counters on each startup, and migrate old key names if present.
+    NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    UPDATED=$(jq --argjson tools "$TOOLS_JSON" --arg now "$NOW" '
+      .tools = $tools |
+      .updated_at = $now |
+      # Migrate old "dispatched"/"completed" keys to new schema (keep totals, reset session)
+      if (.stats | has("dispatched")) then
+        .stats.total_dispatched_all_time = (.stats.total_dispatched_all_time // .stats.dispatched) |
+        .stats.total_completed_all_time  = (.stats.total_completed_all_time  // .stats.completed) |
+        del(.stats.dispatched) | del(.stats.completed)
+      else . end |
+      # Ensure all four keys exist
+      .stats.session_dispatched        = 0 |
+      .stats.session_completed         = 0 |
+      .stats.total_dispatched_all_time = (.stats.total_dispatched_all_time // 0) |
+      .stats.total_completed_all_time  = (.stats.total_completed_all_time  // 0)
+    ' "$STATE_FILE") && \
+      printf '%s\n' "$UPDATED" > "$STATE_FILE"
+    echo "Refreshed tools quota and reset session counters in $STATE_FILE"
+  else
+    echo "Warning: jq not found; skipping state refresh for existing $STATE_FILE" >&2
+  fi
 fi
 
 # Create config.json for operator overrides (if not present)
@@ -161,8 +212,48 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   echo "Initialized $CONFIG_FILE (add test_command, etc. for overrides)"
 fi
 
+# Auto-populate test_command/verify_command if not present (idempotent)
+if ! jq -e 'has("test_command")' "$CONFIG_FILE" >/dev/null 2>&1; then
+  DETECTED_TEST=""
+  # Scan CLAUDE.md and AGENTS.md for patterns
+  for f in "CLAUDE.md" "AGENTS.md"; do
+    if [[ -f "$f" ]]; then
+      for p in "python3 scripts/dev-preflight.py" "cargo test" "pytest" "npm test" "make test" "./gradlew test"; do
+        if grep -qF "$p" "$f"; then
+          DETECTED_TEST="$p"
+          break 2
+        fi
+      done
+    fi
+  done
+
+  if [[ -n "$DETECTED_TEST" ]]; then
+    UPDATED=$(jq --arg tc "$DETECTED_TEST" '.test_command = $tc | .verify_command = (.verify_command // $tc)' "$CONFIG_FILE")
+    printf '%s\n' "$UPDATED" > "$CONFIG_FILE"
+    echo "Auto-detected test_command: $DETECTED_TEST"
+  else
+    UPDATED=$(jq '.test_command = "" | .verify_command = (.verify_command // "")' "$CONFIG_FILE")
+    printf '%s\n' "$UPDATED" > "$CONFIG_FILE"
+    echo "Warning: no test_command detected — set it in .autoship/config.json"
+  fi
+elif ! jq -e 'has("verify_command")' "$CONFIG_FILE" >/dev/null 2>&1; then
+  # Migration: test_command exists but verify_command does not.
+  TC=$(jq -r '.test_command // ""' "$CONFIG_FILE")
+  UPDATED=$(jq --arg tc "$TC" '.verify_command = $tc' "$CONFIG_FILE")
+  printf '%s\n' "$UPDATED" > "$CONFIG_FILE"
+fi
+
+# Populate project-context.md from CLAUDE.md/AGENTS.md/config.json
+bash "$SCRIPT_DIR/extract-context.sh" || true
+
 # --- Token Ledger: create + append new session entry ---
 init_token_ledger() {
+  # The token ledger uses jq for both read and write paths, so skip it entirely
+  # when jq is unavailable rather than logging a misleading success.
+  if ! command -v jq >/dev/null 2>&1; then
+    return 0
+  fi
+
   local ledger="$AUTOSHIP_DIR/token-ledger.json"
   local lock="${ledger%.json}.lock"
   local now
@@ -382,11 +473,12 @@ DEFAULT_ROUTING='{
     "medium_code":  ["codex-gpt", "claude-sonnet"],
     "complex":      ["claude-sonnet", "codex-gpt"],
     "mechanical":   ["claude-haiku", "gemini"],
-    "ci_fix":       ["claude-haiku", "gemini"]
+    "ci_fix":       ["claude-haiku", "gemini"],
+    "rust_unsafe":  ["claude-haiku", "claude-sonnet"]
   },
   "quota_thresholds": {"low": 10, "exhausted": 0},
   "stall_timeout_ms": 300000,
-  "max_concurrent_agents": 6
+  "max_concurrent_agents": 20
 }'
 
 load_routing_config() {
@@ -490,14 +582,29 @@ PYEOF
     return 0
   fi
 
+  # Detect project profile: rust_windows prefers Claude.
+  local project_profile="standard"
+  if [[ -f "Cargo.toml" ]] && grep -qr "\[cfg(windows)\]" src/ 2>/dev/null; then
+    project_profile="rust_windows"
+    echo "Project profile: rust_windows detected (routing overrides applied)"
+  fi
+
   # Merge parsed values over defaults so missing fields fall back gracefully.
   local merged
   merged=$(jq -n \
     --argjson defaults "$DEFAULT_ROUTING" \
     --argjson parsed "$parsed" \
+    --arg profile "$project_profile" \
     '
       $defaults
       | if ($parsed.routing | length) > 0 then .routing = $parsed.routing else . end
+      | if ($profile == "rust_windows") then
+          .routing |= with_entries(
+            if .key == "rust_unsafe" then .
+            else .value = ["claude-haiku", "claude-sonnet"]
+            end
+          )
+        else . end
       | if ($parsed.quota_thresholds | length) > 0 then .quota_thresholds = $parsed.quota_thresholds else . end
       | if $parsed.stall_timeout_ms != null then .stall_timeout_ms = $parsed.stall_timeout_ms else . end
       | if $parsed.max_concurrent_agents != null then .max_concurrent_agents = $parsed.max_concurrent_agents else . end

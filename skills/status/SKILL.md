@@ -51,7 +51,7 @@ where N comes from `state.json` → `stats.session_dispatched` (or `0` if not se
 **If file is corrupted** (invalid JSON): Display error and suggest recovery:
 
 ```
-BEACON STATUS: ERROR
+AUTOSHIP STATUS: ERROR
 State file corrupted. Recovery options:
   1. Run `/autoship:start` to rebuild state from GitHub labels
   2. Delete .autoship/state.json and restart
@@ -141,7 +141,7 @@ Store per-model counts keyed by agent name. Known models to always display (show
 ## Output Format
 
 ```
-BEACON STATUS
+AUTOSHIP STATUS
 ─────────────
 Repo: owner/repo
 Uptime: Xh Ym
@@ -215,7 +215,7 @@ If `.autoship/token-ledger.json` is missing, show all zeros:
 ### When No Agents Are Running
 
 ```
-BEACON STATUS
+AUTOSHIP STATUS
 ─────────────
 Repo: owner/repo
 Uptime: Xh Ym
