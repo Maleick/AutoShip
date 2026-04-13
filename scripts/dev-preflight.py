@@ -348,6 +348,91 @@ def print_results(results: list[CheckResult], require_reference_trees: bool) -> 
     return 1
 
 
+def run_ci_step(name: str, results: list[CheckResult], args: list[str], fix: str | None = None) -> bool:
+    """Run a CI-equivalent command with live output, recording pass/fail."""
+    print(f"\n{'=' * 60}")
+    print(f"  {name}")
+    print(f"{'=' * 60}")
+    completed = subprocess.run(
+        args,
+        cwd=REPO_ROOT,
+        check=False,
+    )
+    if completed.returncode == 0:
+        record(results, "PASS", name, "OK")
+        return True
+    record(results, "FAIL", name, f"Exit code {completed.returncode}", fix)
+    return False
+
+
+def run_ci_checks(results: list[CheckResult], *, fix: bool, skip_tests: bool, has_fmt: bool, has_clippy: bool) -> None:
+    """Run the checks from the PR gate locally (fmt, clippy, test, python).
+
+    The order is optimised for fast local feedback (fmt first, then clippy,
+    then tests) and may differ from the CI workflow in ci.yml.
+    """
+    print("\n")
+    print("=" * 60)
+    print("  Running CI checks (covers the same checks as the PR gate)")
+    print("=" * 60)
+
+    # 0. Wiki sync check (CI runs this before cargo steps)
+    sync_wiki = REPO_ROOT / "scripts" / "sync_wiki.py"
+    if sync_wiki.exists():
+        run_ci_step("wiki sync check", results, [_python_cmd(), str(sync_wiki), "--check"])
+
+    # 1. cargo fmt
+    if has_fmt:
+        if fix:
+            run_ci_step("cargo fmt --all (autofix)", results, ["cargo", "fmt", "--all"])
+        run_ci_step(
+            "cargo fmt --all --check",
+            results,
+            ["cargo", "fmt", "--all", "--check"],
+            fix="Run `cargo fmt --all` or rerun with `--fix`.",
+        )
+    else:
+        record(results, "FAIL", "cargo fmt --all --check", "Skipped — rustfmt not available.",
+               "Run `rustup component add rustfmt`.")
+
+    # 2. cargo clippy
+    if has_clippy:
+        run_ci_step(
+            "cargo clippy",
+            results,
+            ["cargo", "clippy", "--all-targets", "--all-features", "--", "-D", "warnings"],
+        )
+    else:
+        record(results, "FAIL", "cargo clippy", "Skipped — clippy not available.",
+               "Run `rustup component add clippy`.")
+
+    if skip_tests:
+        record(results, "PASS", "cargo test", "Skipped (--skip-tests)")
+        record(results, "PASS", "Python tests", "Skipped (--skip-tests)")
+        return
+
+    # 3. cargo test
+    run_ci_step("cargo test", results, ["cargo", "test"])
+
+    # 4. Python tests
+    run_ci_step(
+        "Python tests",
+        results,
+        [_python_cmd(), "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py", "-v"],
+    )
+
+
+def _python_cmd() -> str:
+    # Prefer the interpreter running this script so subprocesses share
+    # the same virtualenv / environment as the preflight command itself.
+    if sys.executable:
+        return sys.executable
+    for candidate in ("python3", "python"):
+        if command_path(candidate):
+            return candidate
+    return "python3"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="TextQuest developer bootstrap/preflight helper.")
     parser.add_argument(
@@ -364,6 +449,21 @@ def main() -> int:
         "--macroquest-root",
         default=os.environ.get("TEXTQUEST_MACROQUEST_ROOT"),
         help="Path to a local MacroQuest checkout. Defaults to TEXTQUEST_MACROQUEST_ROOT if set.",
+    )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Auto-fix formatting issues (runs `cargo fmt --all` before checking).",
+    )
+    parser.add_argument(
+        "--skip-tests",
+        action="store_true",
+        help="Skip cargo test and Python tests (only run fmt + clippy).",
+    )
+    parser.add_argument(
+        "--env-only",
+        action="store_true",
+        help="Only check the development environment, skip CI checks.",
     )
     args = parser.parse_args()
 
@@ -395,10 +495,13 @@ def main() -> int:
         fix="Install Rust from https://rustup.rs or run `scripts\\setup-windows.ps1` on Windows.",
     )
 
+    has_fmt = False
+    has_clippy = False
     if cargo_ok:
         fmt = run_command("cargo", "fmt", "--version")
         if fmt.returncode == 0:
             record(results, "PASS", "rustfmt", first_line(fmt.stdout or fmt.stderr))
+            has_fmt = True
         else:
             record(
                 results,
@@ -411,6 +514,7 @@ def main() -> int:
         clippy = run_command("cargo", "clippy", "--version")
         if clippy.returncode == 0:
             record(results, "PASS", "clippy", first_line(clippy.stdout or clippy.stderr))
+            has_clippy = True
         else:
             record(
                 results,

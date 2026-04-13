@@ -1,0 +1,3 @@
+# Pin the edition so stable and nightly rustfmt produce identical output.
+# All workspace crates use edition 2024.
+edition = "2024"
