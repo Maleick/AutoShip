@@ -52,6 +52,8 @@ pub enum ActiveScreen {
     Debug,
     /// Packet/opcode monitor — live network sniffer.
     PacketMonitor,
+    /// Orchestrator session visibility — fleet status, relay stats, command history.
+    Orchestrator,
 }
 
 impl ActiveScreen {
@@ -64,16 +66,18 @@ impl ActiveScreen {
             Self::Navigation => "Navigation",
             Self::Debug => "Debug",
             Self::PacketMonitor => "Packets",
+            Self::Orchestrator => "Orchestrator",
         }
     }
 
     /// All screen variants for iteration.
-    pub const ALL: [ActiveScreen; 5] = [
+    pub const ALL: [ActiveScreen; 6] = [
         Self::Overview,
         Self::Tactical,
         Self::Navigation,
         Self::Debug,
         Self::PacketMonitor,
+        Self::Orchestrator,
     ];
 }
 
@@ -112,6 +116,8 @@ pub enum ActivePanel {
     PacketMonitorLog,
     /// EQ Internals offset browser panel (debug).
     DebugInternals,
+    /// Orchestrator session list panel.
+    OrchestratorSessions,
 }
 
 /// Layout preset for panel arrangement within a screen.
@@ -388,7 +394,7 @@ pub struct App {
     /// Currently focused panel for keyboard input.
     pub active_panel: ActivePanel,
     /// Per-screen layout presets (cycled with Ctrl+E).
-    pub layout_presets: [LayoutPreset; 5],
+    pub layout_presets: [LayoutPreset; 6],
 
     /// Connected EQ client states.
     pub clients: Vec<ClientState>,
@@ -550,6 +556,9 @@ pub struct App {
 
     /// Live priority queue snapshots per character (updated each tick).
     pub priority_snapshots: Vec<super::priorities::PrioritySnapshot>,
+
+    /// Orchestrator panel state (session list, relay stats, command history).
+    pub orchestrator_panel_state: super::ui::orchestrator_panel::OrchestratorPanelState,
 }
 
 /// Navigation status for a single client.
@@ -683,7 +692,7 @@ impl App {
             running: true,
             active_screen: ActiveScreen::Overview,
             active_panel: ActivePanel::OverviewRoster,
-            layout_presets: [LayoutPreset::Default; 5],
+            layout_presets: [LayoutPreset::Default; 6],
 
             clients: Vec::new(),
             selected_client: 0,
@@ -777,6 +786,8 @@ impl App {
             toast: None,
             automation_paused: false,
             priority_snapshots: Vec::new(),
+
+            orchestrator_panel_state: super::ui::orchestrator_panel::OrchestratorPanelState::new(),
         };
         app.cmd_state.load_history_from_disk();
         app
@@ -926,6 +937,7 @@ impl App {
             ActiveScreen::Navigation => ActivePanel::TacticalNavigation,
             ActiveScreen::Debug => ActivePanel::DebugSpawns,
             ActiveScreen::PacketMonitor => ActivePanel::PacketMonitorLog,
+            ActiveScreen::Orchestrator => ActivePanel::OrchestratorSessions,
         }
     }
 
@@ -966,6 +978,7 @@ impl App {
                 ]
             }
             ActiveScreen::PacketMonitor => vec![ActivePanel::PacketMonitorLog],
+            ActiveScreen::Orchestrator => vec![ActivePanel::OrchestratorSessions],
         }
     }
 
@@ -1025,6 +1038,7 @@ impl App {
             ActiveScreen::Navigation => 2,
             ActiveScreen::Debug => 3,
             ActiveScreen::PacketMonitor => 4,
+            ActiveScreen::Orchestrator => 5,
         }
     }
 

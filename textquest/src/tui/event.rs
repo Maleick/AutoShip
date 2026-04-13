@@ -586,6 +586,10 @@ pub fn handle_events(
                 app.set_active_screen(ActiveScreen::Debug);
                 return Ok(true);
             }
+            (KeyCode::Char('6'), _) => {
+                app.set_active_screen(ActiveScreen::Orchestrator);
+                return Ok(true);
+            }
             (KeyCode::Tab, _) => {
                 app.toggle_panel();
                 return Ok(true);
@@ -892,6 +896,26 @@ pub fn handle_events(
                     }
                 }
             }
+            ActivePanel::OrchestratorSessions => match key.code {
+                KeyCode::Down | KeyCode::Char('j') => {
+                    app.orchestrator_panel_state.select_next();
+                    return Ok(true);
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    app.orchestrator_panel_state.select_prev();
+                    return Ok(true);
+                }
+                KeyCode::Tab => {
+                    let group_count = app.orchestrator_panel_state.group_names().len();
+                    app.orchestrator_panel_state.next_group_tab(group_count);
+                    return Ok(true);
+                }
+                KeyCode::Char('G') => {
+                    app.orchestrator_panel_state.toggle_group_membership();
+                    return Ok(true);
+                }
+                _ => {}
+            },
             _ => match key.code {
                 KeyCode::Home if !app.automation_paused => {
                     app.automation_paused = true;
