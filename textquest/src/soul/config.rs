@@ -213,6 +213,9 @@ pub struct SoulConfig {
     /// Discord bot personality for fleet commentary
     #[serde(default)]
     pub bot_personality: BotPersonalityConfig,
+    /// Game-state suppression rules for gating soul actions during orchestrator-critical work.
+    #[serde(default)]
+    pub suppression: SuppressionRules,
     /// Maximum LLM requests per character per minute (rate limiting)
     #[serde(default = "default_max_requests_per_character")]
     pub max_requests_per_character: u32,
@@ -243,6 +246,7 @@ impl Default for SoulConfig {
             relationship: Vec::new(),
             llm: LlmConfig::default(),
             bot_personality: BotPersonalityConfig::default(),
+            suppression: SuppressionRules::default(),
             max_requests_per_character: default_max_requests_per_character(),
             max_global_requests: default_max_global_requests(),
         }

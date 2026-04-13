@@ -24,5 +24,7 @@ pub mod personality;
 pub mod recovery;
 /// Social dynamics — inter-character relationships, group cohesion, banter triggers.
 pub mod social;
+/// Game-state suppression rules — prevent soul actions from interfering with orchestrator loops.
+pub mod suppression;
 /// Speech style evolution — catchphrase learning and adoption mechanics.
 pub mod speech_evolution;
