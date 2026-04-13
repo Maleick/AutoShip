@@ -456,6 +456,10 @@ fn default_max_spawns() -> usize {
     2048
 }
 
+fn default_hook_rotation_interval_ms() -> u64 {
+    30_000
+}
+
 impl AppConfig {
     /// Load application configuration from a TOML file.
     ///
