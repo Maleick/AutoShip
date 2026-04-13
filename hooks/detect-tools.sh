@@ -145,6 +145,16 @@ detect_gemini() {
   fi
 }
 
+detect_grok() {
+  if command -v grok >/dev/null 2>&1; then
+    ver=$(grok --version 2>/dev/null | head -1) || ver="unknown"
+    qpct=$(_read_quota "grok")
+    printf '"grok": {"available": true, "version": "%s", "quota_pct": %s}' "$ver" "$qpct"
+  else
+    printf '"grok": {"available": false, "quota_pct": -1}'
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Build JSON output
 # ---------------------------------------------------------------------------
@@ -155,6 +165,8 @@ echo -n ", "
 detect_codex
 echo -n ", "
 detect_gemini
+echo -n ", "
+detect_grok
 echo "}"
 
 exit 0
