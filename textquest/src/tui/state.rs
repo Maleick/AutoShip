@@ -683,6 +683,24 @@ pub struct MapRadiusOverlay {
     pub label: String,
 }
 
+/// Camp location overlay drawn on the zone map.
+///
+/// Renders the camp center marker (`⊕`), pull point marker (`⊗`),
+/// camp radius circle (green), and pull radius circle (red).
+#[derive(Debug, Clone)]
+pub struct CampOverlay {
+    /// XY world coordinates of the camp anchor point.
+    pub camp_center: [f32; 2],
+    /// XY world coordinates of the pull point.
+    pub pull_point: [f32; 2],
+    /// Radius around camp center (green circle).
+    pub camp_radius: f32,
+    /// Radius around pull point (red circle).
+    pub pull_radius: f32,
+    /// Display name for the camp overlay.
+    pub name: String,
+}
+
 /// A saved set of map filter settings.
 #[derive(Debug, Clone)]
 pub struct MapFilterPreset {
@@ -771,6 +789,8 @@ pub struct MapScreenState {
     pub named_markers: Vec<NamedMapMarker>,
     /// Path to the marker persistence file.
     pub marker_file: PathBuf,
+    /// Active camp location overlay (set when a camp is started).
+    pub camp_overlay: Option<CampOverlay>,
 }
 
 impl MapScreenState {
@@ -809,6 +829,7 @@ impl MapScreenState {
             click_action: MapClickAction::None,
             named_markers,
             marker_file,
+            camp_overlay: None,
         }
     }
 

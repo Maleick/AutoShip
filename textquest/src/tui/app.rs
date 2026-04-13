@@ -33,9 +33,9 @@ pub use super::state::{
     OverviewScreenState, PacketMonitorState, SpawnsScreenState, TacticalScreenState,
 };
 use super::state::{
-    FilteredSpawnCache, FilteredSpawnCacheKey, MapClickAction, MapFilterKind, MapHighlight,
-    MapLocMarker, MapNameStyle, MapRadiusOverlay, MapSpawnPresentationCache, MapVisibilityPreset,
-    NamedMapMarker,
+    CampOverlay, FilteredSpawnCache, FilteredSpawnCacheKey, MapClickAction, MapFilterKind,
+    MapHighlight, MapLocMarker, MapNameStyle, MapRadiusOverlay, MapSpawnPresentationCache,
+    MapVisibilityPreset, NamedMapMarker,
 };
 use super::state::{load_named_markers_pub, save_named_markers};
 
@@ -4648,27 +4648,11 @@ impl App {
                         String::from("Usage: camp start <name>  (loads config/camps/<name>.toml)");
                     return;
                 };
-
-                match CampConfig::load(camp_name) {
-                    Ok(config) => {
-                        let members = self.build_camp_members();
-                        if members.is_empty() {
-                            self.status_message =
-                                String::from("No clients connected — cannot start camp");
-                            return;
-                        }
-                        let count = members.len();
-                        orchestrator.start_camp(config, members);
-                        self.status_message =
-                            format!("Camp '{camp_name}' started with {count} members");
-                    }
-                    Err(e) => {
-                        self.status_message = format!("Failed to load camp '{camp_name}': {e}");
-                    }
-                }
+                self.start_camp_by_name(camp_name, orchestrator);
             }
             Some("stop") => {
                 orchestrator.stop_camp();
+                self.map_state.camp_overlay = None;
                 self.status_message = String::from("Camp stopped");
             }
             Some("status") => {
@@ -4756,97 +4740,80 @@ impl App {
                     self.status_message = format!("Camp '{camp_name}' not found");
                 }
             }
-            Some("next") => match &orchestrator.active_camp {
-                None => {
-                    self.status_message = String::from("No active camp — start one first");
-                }
-                Some(camp) => {
-                    let current = camp.config.name.clone();
-                    match &camp.config.next_camp {
-                        Some(next_name) => match CampConfig::load(next_name) {
-                            Ok(config) => {
-                                let members = self.build_camp_members();
-                                if members.is_empty() {
-                                    self.status_message =
-                                        String::from("No clients connected — cannot advance camp");
-                                    return;
-                                }
-                                let count = members.len();
-                                let to = config.name.clone();
-                                orchestrator.start_camp(config, members);
-                                self.status_message =
-                                    format!("Advanced: {current} → {to} ({count} members)");
-                            }
-                            Err(e) => {
-                                self.status_message =
-                                    format!("Failed to load next camp '{next_name}': {e}");
-                            }
-                        },
-                        None => {
-                            self.status_message =
-                                format!("Camp '{current}' has no next camp configured");
-                        }
-                    }
-                }
-            },
-            Some("prev") => match &orchestrator.active_camp {
-                None => {
-                    self.status_message = String::from("No active camp — start one first");
-                }
-                Some(camp) => {
-                    let current = camp.config.name.clone();
-                    match &camp.config.prev_camp {
-                        Some(prev_name) => match CampConfig::load(prev_name) {
-                            Ok(config) => {
-                                let members = self.build_camp_members();
-                                if members.is_empty() {
-                                    self.status_message =
-                                        String::from("No clients connected — cannot fall back");
-                                    return;
-                                }
-                                let count = members.len();
-                                let to = config.name.clone();
-                                orchestrator.start_camp(config, members);
-                                self.status_message =
-                                    format!("Fell back: {current} → {to} ({count} members)");
-                            }
-                            Err(e) => {
-                                self.status_message =
-                                    format!("Failed to load prev camp '{prev_name}': {e}");
-                            }
-                        },
-                        None => {
-                            self.status_message =
-                                format!("Camp '{current}' has no previous camp configured");
-                        }
-                    }
-                }
-            },
+            Some("next") => {
+                self.advance_camp("next", |c| c.next_camp.clone(), orchestrator);
+            }
+            Some("prev") => {
+                self.advance_camp("previous", |c| c.prev_camp.clone(), orchestrator);
+            }
             // Bare camp name — shortcut for camp start <name>
-            Some(name) => match CampConfig::load(name) {
-                Ok(config) => {
-                    let members = self.build_camp_members();
-                    if members.is_empty() {
-                        self.status_message =
-                            String::from("No clients connected — cannot start camp");
-                        return;
-                    }
-                    let count = members.len();
-                    orchestrator.start_camp(config, members);
-                    self.status_message = format!("Camp '{name}' started with {count} members");
-                }
-                Err(_) => {
+            Some(name) => {
+                self.start_camp_by_name(name, orchestrator);
+                // If start_camp_by_name set a load-error message, clarify that
+                // bare names are also checked as subcommands.
+                if self.status_message.starts_with("Failed to load camp") {
                     self.status_message = format!(
                         "Unknown camp subcommand or config: '{name}'. Try: start|stop|status|list|add|remove|next|prev"
                     );
                 }
-            },
+            }
         }
     }
 
-    /// Handle `ch <subcommand>` — CH chain management from the command bar.
+    /// Load a camp configuration by name and start it through the orchestrator.
     ///
-    /// Subcommands:
+    /// This builds the current camp members, updates the map overlay from the
+    /// loaded configuration, and starts the camp when at least one member is
+    /// available.
+    fn start_camp_by_name(&mut self, name: &str, orchestrator: &mut Orchestrator) -> bool {
+        match CampConfig::load(name) {
+            Ok(config) => {
+                let members = self.build_camp_members();
+                if members.is_empty() {
+                    self.status_message =
+                        String::from("No clients connected — cannot start camp");
+                    return;
+                }
+                let count = members.len();
+                self.map_state.camp_overlay = Some(CampOverlay {
+                    camp_center: [config.camp_center[0], config.camp_center[1]],
+                    pull_point: [config.pull_point[0], config.pull_point[1]],
+                    camp_radius: config.camp_radius,
+                    pull_radius: config.pull_radius,
+                    name: config.name.clone(),
+                });
+                orchestrator.start_camp(config, members);
+                self.status_message = format!("Camp '{name}' started with {count} members");
+            }
+            Err(e) => {
+                self.status_message = format!("Failed to load camp '{name}': {e}");
+            }
+        }
+    }
+
+    /// Advance to the next or previous camp in the chain.
+    fn advance_camp(
+        &mut self,
+        direction: &str,
+        get_linked: impl FnOnce(&CampConfig) -> Option<String>,
+        orchestrator: &mut Orchestrator,
+    ) {
+        let Some(camp) = &orchestrator.active_camp else {
+            self.status_message = String::from("No active camp — start one first");
+            return;
+        };
+        let current = camp.config.name.clone();
+        let Some(linked_name) = get_linked(&camp.config) else {
+            self.status_message = format!("Camp '{current}' has no {direction} camp configured");
+            return;
+        };
+        self.start_camp_by_name(&linked_name, orchestrator);
+        // Upgrade the status message to show the transition on success.
+        if self.start_camp_by_name(&linked_name, orchestrator) {
+            self.status_message = format!("{current} → {linked_name}");
+        }
+    }
+
     ///   ch start <pid1,pid2,...> <interval> <`target_id`> [`spell_slot`]
     ///   ch stop                  — Stop the running CH chain
     ///   ch add <pid>             — Add a cleric to the chain

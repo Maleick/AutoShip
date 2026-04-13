@@ -843,6 +843,9 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
     // ─── Named persistent markers ────────────────────────────────────────
     draw_named_markers(app, &to_grid, w as i32, h as i32, &mut grid);
 
+    // ─── Camp location overlay ────────────────────────────────────────────
+    draw_camp_overlays(app, &to_grid, w as u16, h as u16, &mut grid);
+
     // ─── Spawn highlights overlay ────────────────────────────────────────
     if !app.map_state.highlights.is_empty() {
         for spawn in &app.spawns {
@@ -951,6 +954,17 @@ fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) 
                         Span::raw(" │ "),
                         Span::styled("◆ ", Style::default().fg(Color::Cyan)),
                         Span::styled("Mkr", Style::default().fg(t.text_muted)),
+                    ]);
+                }
+
+                if app.map_state.camp_overlay.is_some() {
+                    spans.extend([
+                        Span::raw(" │ "),
+                        Span::styled("⊕ ", Style::default().fg(Color::Green)),
+                        Span::styled("Camp", Style::default().fg(t.text_muted)),
+                        Span::raw(" "),
+                        Span::styled("⊗ ", Style::default().fg(Color::Red)),
+                        Span::styled("Pull", Style::default().fg(t.text_muted)),
                     ]);
                 }
 
@@ -2091,6 +2105,45 @@ fn draw_named_markers(
                 grid[mr as usize][col as usize] = (ch, Color::Cyan);
             }
         }
+    }
+}
+
+/// Draw camp location overlays: camp center marker (⊕, green), pull point marker
+/// (⊗, red), camp radius circle (green dots), and pull radius circle (red dots).
+fn draw_camp_overlays(
+    app: &App,
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    w: u16,
+    h: u16,
+    grid: &mut [Vec<(char, Color)>],
+) {
+    let Some(camp) = &app.map_state.camp_overlay else {
+        return;
+    };
+
+    let [cx, cy] = camp.camp_center;
+    let [px, py] = camp.pull_point;
+
+    // Camp radius circle (green dots)
+    if camp.camp_radius > 0.0 {
+        draw_radius_circle(to_grid, cx, cy, camp.camp_radius, Color::Green, w, h, grid);
+    }
+
+    // Pull radius circle (red dots)
+    if camp.pull_radius > 0.0 {
+        draw_radius_circle(to_grid, px, py, camp.pull_radius, Color::Red, w, h, grid);
+    }
+
+    // Camp center marker (⊕, green) — drawn after circles so it's always visible
+    let (cc, cr) = to_grid(-cy, -cx);
+    if cc >= 0 && cc < w as i32 && cr >= 0 && cr < h as i32 {
+        grid[cr as usize][cc as usize] = ('⊕', Color::Green);
+    }
+
+    // Pull point marker (⊗, red)
+    let (pc, pr) = to_grid(-py, -px);
+    if pc >= 0 && pc < w as i32 && pr >= 0 && pr < h as i32 {
+        grid[pr as usize][pc as usize] = ('⊗', Color::Red);
     }
 }
 
