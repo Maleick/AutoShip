@@ -31,7 +31,22 @@ ISSUE_NUM_EARLY="${ISSUE_KEY#issue-}"
 
 # Archive BEACON_RESULT.md before removing worktree
 RESULT_FILE="$WORKTREE_PATH/BEACON_RESULT.md"
+# Fallback: if not in worktree, check parent repo root (Phase-1 / no-worktree agents write here)
+if [[ ! -f "$RESULT_FILE" ]] && [[ -f "BEACON_RESULT.md" ]]; then
+  echo "Warning: BEACON_RESULT.md not found in worktree, falling back to repo root" >> .beacon/poll.log
+  RESULT_FILE="BEACON_RESULT.md"
+fi
+# Content validation — must start with "# Result: #<N>" to be a valid BEACON_RESULT
+_VALID_RESULT=false
 if [[ -f "$RESULT_FILE" ]]; then
+  if head -1 "$RESULT_FILE" | grep -qE '^# Result: #[0-9]+'; then
+    _VALID_RESULT=true
+  else
+    echo "Warning: $RESULT_FILE failed content validation (first line: $(head -1 "$RESULT_FILE"))" >> .beacon/poll.log
+    echo "Warning: skipping archival for $ISSUE_KEY — BEACON_RESULT.md content invalid" >&2
+  fi
+fi
+if [[ "$_VALID_RESULT" == "true" ]]; then
   mkdir -p .beacon/results
   # Fetch issue title for the slug (best-effort)
   ISSUE_TITLE=""

@@ -1,21 +1,14 @@
-# Result: #79 — Replace Grok CLI with Copilot CLI in detect-tools.sh and dispatch routing
+# Result: #80 — Fix BEACON_RESULT.md archival bug
 
 ## Status: DONE
 
 ## Changes Made
-
-- `hooks/detect-tools.sh`: Removed `detect_grok()` function and its call in the JSON output section. Added `detect_copilot()` function that detects `gh copilot` (extension) or standalone `copilot` binary, outputs quota_pct: -1 (unknown/unlimited) and exhausted: false.
-- `hooks/shims/grok-appserver.sh`: Added deprecation notice at top of file (early exit with error message). File preserved for git history.
-- `skills/beacon-dispatch/SKILL.md`: Updated intro line and Dispatch Priority Matrix table to reference Copilot instead of Grok. Removed TODO comment about Grok support.
-- `CLAUDE.md`: Updated Workers line to reference Codex/Gemini/Copilot instead of Codex/Gemini/Grok.
+- hooks/cleanup-worktree.sh: Added fallback check for parent repo root BEACON_RESULT.md (warns to poll.log); added content validation that first line must match `^# Result: #[0-9]+`; skips archival with stderr warning if validation fails
 
 ## Tests
-
-- Command: N/A (no automated tests in this repo)
-- Result: N/A
-- New tests added: no
+- Command: bash -n hooks/cleanup-worktree.sh
+- Result: PASS
 
 ## Notes
-
-- `detect_copilot()` supports two variants: `gh copilot` (GitHub CLI extension) and standalone `copilot` binary. Both report `quota_pct: -1` since Copilot quota is not queryable via CLI.
-- The grok-appserver.sh shim exits 1 immediately with an error to stderr, preventing accidental use.
+- Root cause: Phase-1 agents without worktrees wrote to parent repo root; archival would fail to find worktree file. Fallback now handles this path.
+- Content validation guards against stale/wrong-issue files being archived.
