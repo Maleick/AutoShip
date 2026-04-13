@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use textquest_common::soul::{PersonalityTraits, SocialTag, SpeechStyle};
 
+use super::suppression::SuppressionRules;
+
 /// How "edgy" a character's personality and speech can be.
 #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

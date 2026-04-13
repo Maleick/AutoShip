@@ -16,6 +16,7 @@ use super::llm::{LlmPriority, LlmProvider, LlmRequest, Situation};
 use super::memory::MemoryStore;
 use super::personality::{PersonalityEngine, SoulContext};
 use super::social::SocialGraph;
+use super::suppression::{GameStateContext, SuppressionRules};
 
 /// Maximum number of entries in the IPC command queue before overflow drops occur.
 const IPC_QUEUE_MAX: usize = 512;
@@ -140,6 +141,7 @@ pub struct SoulCoordinator {
     social: SocialGraph,
     llm_queue: LlmRequestQueue,
     config: SoulConfig,
+    suppression: SuppressionRules,
     /// Tick counter for timing.
     tick_count: u64,
     /// Buffered IPC commands waiting for pipe availability.
@@ -160,6 +162,7 @@ impl SoulCoordinator {
     pub fn new(config: SoulConfig, db_path: &Path) -> Result<Self> {
         let memory = MemoryStore::open(db_path)?;
         let social = SocialGraph::from_seeds(&config.relationship);
+        let suppression = config.suppression.clone();
         // Phase 1: 0 token budget (fallback only, no real LLM calls)
         let llm_queue = LlmRequestQueue::new(0);
 
@@ -169,6 +172,7 @@ impl SoulCoordinator {
             social,
             llm_queue,
             config,
+            suppression,
             tick_count: 0,
             ipc_queue: IpcCommandQueue::new(),
             ipc_available: true,
@@ -308,28 +312,47 @@ impl SoulCoordinator {
                 group_members: &group_members,
             };
 
+            // Extract suppression context from game state
+            let suppress_ctx = GameStateContext::from_game_state(state);
+
             // Tick idle scheduler
             match soul.idle.tick(&ctx, &mut soul.responder) {
                 IdleTransition::Start(active) => {
-                    // Convert idle behavior to a Command
-                    let action = SoulAction::StartIdle {
-                        behavior: active.behavior.clone(),
-                    };
-                    commands.push((client_id, Command::SoulAction { action }));
+                    // Check if idle should be suppressed by game state
+                    if self.suppression.should_suppress_idle(suppress_ctx) {
+                        // Don't start this idle behavior; clear the scheduler's active state
+                        // so it can retry once suppression lifts.
+                        soul.idle.interrupt();
+                    } else if self.suppression
+                        .should_suppress_behavior_for_casting(&active.behavior, suppress_ctx)
+                    {
+                        // Don't start this movement-heavy behavior during casting; clear the
+                        // scheduler's active state so it can retry once casting suppression lifts.
+                        soul.idle.interrupt();
+                    } else {
+                        // Convert idle behavior to a Command
+                        let action = SoulAction::StartIdle {
+                            behavior: active.behavior.clone(),
+                        };
+                        commands.push((client_id, Command::SoulAction { action }));
 
-                    // If there's flavor text, emit it as chat
-                    if let Some(text) = active.flavor_text {
-                        commands.push((
-                            client_id,
-                            Command::Say {
-                                channel: textquest_common::soul::SayChannel::Group,
-                                message: text,
-                                target: None,
-                            },
-                        ));
+                        // If there's flavor text, emit it as chat (also subject to suppression)
+                        if let Some(text) = active.flavor_text {
+                            if !self.suppression.should_suppress_chat(suppress_ctx) {
+                                commands.push((
+                                    client_id,
+                                    Command::Say {
+                                        channel: textquest_common::soul::SayChannel::Group,
+                                        message: text,
+                                        target: None,
+                                    },
+                                ));
+                            }
+                        }
                     }
                 }
                 IdleTransition::LogOff { return_after_secs } => {
+                    // LogOff is a special case — not suppressed, always allowed
                     tracing::info!(
                         client_id,
                         name = soul.name,
@@ -379,14 +402,31 @@ impl SoulCoordinator {
                 .find(|(_, s)| s.name == request.character_name)
                 && let Ok(response) = soul.responder.generate(&request)
             {
-                commands.push((
-                    cid,
-                    Command::Say {
-                        channel: textquest_common::soul::SayChannel::Say,
-                        message: response.text,
-                        target: None,
-                    },
-                ));
+                // Check if chat should be suppressed based on current game state
+                if let Some(state) = states.get(&cid) {
+                    let suppress_ctx = GameStateContext::from_game_state(state);
+                    if !self.suppression.should_suppress_chat(suppress_ctx) {
+                        commands.push((
+                            cid,
+                            Command::Say {
+                                channel: textquest_common::soul::SayChannel::Say,
+                                message: response.text,
+                                target: None,
+                            },
+                        ));
+                    }
+                    // If chat is suppressed, we discard the response (don't queue it)
+                } else {
+                    // No game state available — emit the response anyway
+                    commands.push((
+                        cid,
+                        Command::Say {
+                            channel: textquest_common::soul::SayChannel::Say,
+                            message: response.text,
+                            target: None,
+                        },
+                    ));
+                }
             }
         }
 
