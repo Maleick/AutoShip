@@ -5,16 +5,29 @@ import {
   Globe,
   ShieldWarning,
   Bag,
+  Brain,
 } from "@phosphor-icons/react";
 
-export type ActiveView = "engagements" | "formations" | "map" | "security" | "loot";
+export type ActiveView =
+  | "engagements"
+  | "formations"
+  | "map"
+  | "security"
+  | "loot"
+  | "soul";
 
-const navItems: { icon: typeof Sword; label: string; id: ActiveView; pulse?: boolean }[] = [
-  { icon: Sword,         label: "Active Engagements", id: "engagements", pulse: true },
-  { icon: UsersThree,    label: "Fleet Formations",   id: "formations" },
-  { icon: Globe,         label: "Realm Map (Norrath)", id: "map" },
-  { icon: ShieldWarning, label: "Security Wards",      id: "security" },
-  { icon: Bag,           label: "Loot Configuration",  id: "loot" },
+const navItems: {
+  icon: typeof Sword;
+  label: string;
+  id: ActiveView;
+  pulse?: boolean;
+}[] = [
+  { icon: Sword, label: "Active Engagements", id: "engagements", pulse: true },
+  { icon: UsersThree, label: "Fleet Formations", id: "formations" },
+  { icon: Globe, label: "Realm Map (Norrath)", id: "map" },
+  { icon: ShieldWarning, label: "Security Wards", id: "security" },
+  { icon: Bag, label: "Loot Configuration", id: "loot" },
+  { icon: Brain, label: "Soul Engine", id: "soul" },
 ];
 
 interface LeftSidebarProps {
@@ -22,7 +35,10 @@ interface LeftSidebarProps {
   onNavigate: (view: ActiveView) => void;
 }
 
-export default function LeftSidebar({ activeView, onNavigate }: LeftSidebarProps) {
+export default function LeftSidebar({
+  activeView,
+  onNavigate,
+}: LeftSidebarProps) {
   return (
     <aside className="stone-pillar w-[320px] h-full flex flex-col pt-6 pb-2 px-1 relative z-20">
       {/* Eye icon crown */}
@@ -92,7 +108,9 @@ export default function LeftSidebar({ activeView, onNavigate }: LeftSidebarProps
                     : "group-hover:text-spectral"
                 }`}
               />
-              <span className={`font-medium tracking-wide transition-colors ${isActive ? "text-white" : "text-white/70 group-hover:text-white"}`}>
+              <span
+                className={`font-medium tracking-wide transition-colors ${isActive ? "text-white" : "text-white/70 group-hover:text-white"}`}
+              >
                 {item.label}
               </span>
               {item.pulse && (

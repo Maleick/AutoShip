@@ -140,17 +140,8 @@ fn build_api_router() -> Router<Arc<AppState>> {
             put(api::update_vendor_route).delete(api::delete_vendor_route),
         )
         .route("/economy/wealth", get(api::get_wealth))
-        .route("/economy/status", get(api::economy::get_status))
-        .route("/economy/ledger", get(api::economy::get_ledger))
-        .route("/economy/queues", get(api::economy::get_queues))
-        .route(
-            "/economy/pause",
-            axum::routing::post(api::economy::pause_economy),
-        )
-        .route(
-            "/economy/resume",
-            axum::routing::post(api::economy::resume_economy),
-        )
+        .route("/soul", get(api::soul::list_soul_states))
+        .route("/soul/{character_id}", get(api::soul::get_soul_state))
         .route(
             "/raid/config",
             get(api::raid_config_unavailable).put(api::raid_config_unavailable),
