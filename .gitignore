@@ -42,7 +42,6 @@ autoresearch-security/
 pane.log
 
 # AI/tooling runtime state (keep out of repo)
-.wolf/
 .claude/
 .aidesigner/
 .serena/
