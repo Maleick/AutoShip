@@ -50,7 +50,7 @@ impl SpellOptimizer {
     #[must_use]
     pub fn mana_efficiency(&self, spell: &SpellCandidate) -> f32 {
         if spell.mana_cost == 0 {
-            if spell.damage > 0 { f32::INFINITY } else { 0.0 }
+            0.0
         } else {
             spell.damage as f32 / spell.mana_cost as f32
         }
