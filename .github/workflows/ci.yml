@@ -188,7 +188,25 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Prepare Linux self-hosted workspace
-        uses: ./.github/actions/prepare-linux-runner-workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${GITHUB_WORKSPACE:-$PWD}"
+          repo_parent="$(dirname "$workspace")"
+          echo "Preparing self-hosted workspace at $workspace"
+          mkdir -p "$repo_parent" "$workspace"
+          if command -v sudo >/dev/null 2>&1; then
+            sudo chown -R "$(id -u):$(id -g)" "$repo_parent"
+            sudo chmod -R u+rwX "$repo_parent" || true
+          else
+            chown -R "$(id -u):$(id -g)" "$repo_parent" 2>/dev/null || true
+            chmod -R u+rwX "$repo_parent" 2>/dev/null || true
+          fi
+          find "$workspace" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+          if find "$workspace" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+            echo "::error::Self-hosted workspace cleanup left stale files under $workspace. Fix runner ownership or install passwordless sudo."
+            exit 1
+          fi
 
       - uses: actions/checkout@v5
         with:

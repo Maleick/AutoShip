@@ -19,6 +19,8 @@ class CiRunnerWorkspacePrepTests(unittest.TestCase):
         self.assertIn("Fix runner ownership or install passwordless sudo", text)
 
     def test_linux_checkout_workflows_prepare_workspace_before_checkout(self) -> None:
+        # Local composite actions can't run before actions/checkout (chicken-and-egg).
+        # The workspace prep is inlined as a bash step instead.
         checks = {
             "ci.yml": (
                 REPO_ROOT / ".github" / "workflows" / "ci.yml",
@@ -28,10 +30,6 @@ class CiRunnerWorkspacePrepTests(unittest.TestCase):
                 REPO_ROOT / ".github" / "workflows" / "claude-agent.yml",
                 "  claude:\n",
             ),
-            "super-linter.yml": (
-                REPO_ROOT / ".github" / "workflows" / "super-linter.yml",
-                "  super-linter:\n",
-            ),
         }
 
         for workflow_name, (path, section_marker) in checks.items():
@@ -39,11 +37,15 @@ class CiRunnerWorkspacePrepTests(unittest.TestCase):
                 text = path.read_text(encoding="utf-8")
                 start = text.index(section_marker)
                 section = text[start:]
-                prep = "uses: ./.github/actions/prepare-linux-runner-workspace"
-                checkout = "uses: actions/checkout@v5"
-                self.assertIn(prep, section)
+                # Inlined prep: shell bash + workspace cleanup script
+                self.assertIn("shell: bash", section)
+                self.assertIn('find "$workspace" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +', section)
+                checkout = "uses: actions/checkout@"
                 self.assertIn(checkout, section)
-                self.assertLess(section.index(prep), section.index(checkout))
+                self.assertLess(
+                    section.index("shell: bash"),
+                    section.index(checkout),
+                )
 
 
 if __name__ == "__main__":
