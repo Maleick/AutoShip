@@ -145,6 +145,10 @@ pub struct SoulCoordinator {
     social: SocialGraph,
     llm_queue: LlmRequestQueue,
     config: SoulConfig,
+    /// Sliding-window request timestamps per character for LLM rate limiting.
+    character_request_counts: HashMap<ClientId, VecDeque<Instant>>,
+    /// Sliding-window request timestamps across all characters for LLM rate limiting.
+    global_request_counts: VecDeque<Instant>,
     suppression: SuppressionRules,
     /// Tick counter for timing.
     tick_count: u64,
@@ -179,6 +183,8 @@ impl SoulCoordinator {
             social,
             llm_queue,
             config,
+            character_request_counts: HashMap::new(),
+            global_request_counts: VecDeque::new(),
             suppression,
             tick_count: 0,
             ipc_queue: IpcCommandQueue::new(),
