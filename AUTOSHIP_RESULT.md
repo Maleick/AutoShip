@@ -1,25 +1,33 @@
-# AutoShip Result — Issue #919
+# AUTOSHIP_RESULT — Issue #1346
 
 ## Status: COMPLETE
 
-## What was implemented
+## Deliverable
 
-**Python script:** `scripts/etw_parser.py`
+Created `docs/m10-economy-gap-analysis.md` and committed to `autoship/issue-1346`.
 
-- Parses EtwTiViewer JSONL output line-by-line
-- Filters events by EQ process name (case-insensitive substring match) and/or PID
-- Produces summary report: total events, event type counts, top callers, process names, PIDs, earliest/latest timestamps
-- Supports `--output-format text` (default) or `json`
-- Configurable `--top-callers N` (default 10)
-- Reads from file argument or stdin
+## What Was Done
 
-**Test file:** `tests/test_etw_parser.py`
+Read `docs/implementation-roadmap.md` and the following source files to determine actual M10 state:
 
-- 31 unit tests across 6 test classes
-- Covers: parse_event, filter_event, iter_events, build_summary, format_text_report, main CLI
-- All tests pass: `python3 -m pytest tests/test_etw_parser.py` — 31 passed
-- Doctests also pass: `python3 -m doctest scripts/etw_parser.py`
+- `textquest/src/camp/loot.rs` — LootCycle FSM, LootRules, classify_item
+- `textquest/src/camp/vendor.rs` — SellCycle FSM, VendorConfig, SellState
+- `textquest/src/loot/store.rs` — LootStore SQLite API (1,472 lines, 0 tests)
+- `textquest/src/eq/log_parser.rs` — LootDatabase (runtime log-parsed state)
+- `textquest/src/metrics/store.rs` — plat_ledger and loot_history tables
+- `textquest-web/src/api/loot.rs` — REST endpoints for loot rules/distribution/history
+- `textquest/src/tui/ui/dashboard.rs` — partial economy summary in TUI
 
-## Commit
+## Document Covers
 
-`8e9f58c2f` on branch `autoship/issue-919`
+1. **Status summary table** — 13 subsystems with Implemented / In Progress / Not Implemented state and file paths
+2. **What is implemented** — evidence-backed descriptions with test counts for each subsystem
+3. **What is in progress** — vendor wiring gap, partial TUI panel
+4. **What is planned** — banking cycle controller, wishlist rules engine, failure routing, web API endpoints
+5. **QA coverage targets** — per-file current/target test counts with priority ratings
+6. **Recommended implementation order** — P1 (LootStore tests, vendor wiring, banking FSM), P2 (wishlist, failure routing, TUI expansion), P3 (web API endpoints, trend reports)
+7. **Entry gate and exit gate checklists** — operator-facing completion criteria
+
+## Key Finding
+
+The highest-risk gap is `textquest/src/loot/store.rs`: 1,472 lines of SQLite CRUD code with 0 automated tests. This is P1 before any economy loop wiring begins.
