@@ -77,6 +77,8 @@ config/tui-prefs.toml
 accounts.csv
 config/accounts.toml
 config/.credentials
+scripts/accounts_*.txt
+!scripts/accounts_*.txt.example
 
 # Large map text files (200MB+ each, use config/maps/*.zip instead)
 config/maps/*.txt

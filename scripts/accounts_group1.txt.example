@@ -1,3 +1,7 @@
+# SECURITY WARNING: This file contains plaintext EverQuest account credentials.
+# DO NOT COMMIT accounts_group1.txt to git — it is listed in .gitignore.
+# NEVER share or expose this file outside your secure environment.
+#
 # Copy this file to accounts_group1.txt and replace with real credentials.
 # Format: <account_name> <password>
 example_account_01 example_password_01
