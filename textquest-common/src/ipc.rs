@@ -2444,4 +2444,64 @@ mod tests {
             panic!("expected ContextMenuActivated");
         }
     }
+
+    // ─── CorrelationIdGenerator: additional coverage ───────────────────────────
+
+    #[test]
+    fn correlation_id_generator_increments_sequentially() {
+        let generator = CorrelationIdGenerator::new();
+        let a = generator.next_id();
+        let b = generator.next_id();
+        let c = generator.next_id();
+        assert_eq!(b, a + 1);
+        assert_eq!(c, a + 2);
+    }
+
+    #[test]
+    fn correlation_id_generator_default_starts_at_one() {
+        let generator = CorrelationIdGenerator::default();
+        assert_eq!(generator.next_id(), 1);
+    }
+
+    #[test]
+    fn correlation_id_generator_produces_unique_ids() {
+        let generator = CorrelationIdGenerator::new();
+        let ids: Vec<u64> = (0..100).map(|_| generator.next_id()).collect();
+        let mut sorted = ids.clone();
+        sorted.dedup();
+        assert_eq!(
+            ids.len(),
+            sorted.len(),
+            "all generated IDs should be unique"
+        );
+    }
+
+    // ─── IpcCommand: additional coverage ──────────────────────────────────────
+
+    #[test]
+    fn ipc_command_clone_and_equality() {
+        let cmd = IpcCommand::new(Command::Sit);
+        let clone = cmd.clone();
+        assert_eq!(cmd, clone);
+    }
+
+    #[test]
+    fn ipc_command_with_correlation_max_id() {
+        let cmd = IpcCommand::with_correlation(Command::Ping, u64::MAX);
+        assert_eq!(cmd.correlation_id, Some(u64::MAX));
+    }
+
+    // ─── IpcResponse: additional coverage ─────────────────────────────────────
+
+    #[test]
+    fn ipc_response_clone_preserves_fields() {
+        let resp = IpcResponse::echo(
+            Response::Error {
+                message: "test error".into(),
+            },
+            Some(55),
+        );
+        let clone = resp.clone();
+        assert_eq!(clone.correlation_id, Some(55));
+    }
 }

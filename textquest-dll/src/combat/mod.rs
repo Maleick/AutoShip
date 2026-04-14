@@ -97,3 +97,176 @@ pub fn handle_command(cmd: CombatCommand) {
         CombatCommand::SetAssistTarget { spawn_id } => combatant.set_assist_target(spawn_id),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use textquest_common::combat::CombatStatus;
+
+    use super::*;
+
+    // ─── CombatCommand enum ────────────────────────────────────────────────────
+
+    #[test]
+    fn combat_command_engage_stores_target_id() {
+        let cmd = CombatCommand::Engage { target_id: 42 };
+        if let CombatCommand::Engage { target_id } = cmd {
+            assert_eq!(target_id, 42);
+        } else {
+            panic!("expected Engage");
+        }
+    }
+
+    #[test]
+    fn combat_command_disengage_is_constructible() {
+        let cmd = CombatCommand::Disengage;
+        assert!(matches!(cmd, CombatCommand::Disengage));
+    }
+
+    #[test]
+    fn combat_command_set_assist_target_stores_spawn_id() {
+        let cmd = CombatCommand::SetAssistTarget { spawn_id: 999 };
+        if let CombatCommand::SetAssistTarget { spawn_id } = cmd {
+            assert_eq!(spawn_id, 999);
+        } else {
+            panic!("expected SetAssistTarget");
+        }
+    }
+
+    #[test]
+    fn combat_command_engage_accepts_zero_target() {
+        let cmd = CombatCommand::Engage { target_id: 0 };
+        if let CombatCommand::Engage { target_id } = cmd {
+            assert_eq!(target_id, 0);
+        } else {
+            panic!("expected Engage");
+        }
+    }
+
+    #[test]
+    fn combat_command_engage_accepts_max_target() {
+        let cmd = CombatCommand::Engage {
+            target_id: u32::MAX,
+        };
+        if let CombatCommand::Engage { target_id } = cmd {
+            assert_eq!(target_id, u32::MAX);
+        } else {
+            panic!("expected Engage");
+        }
+    }
+
+    // ─── Module-level functions: pre-init behavior ─────────────────────────────
+    //
+    // The COMBATANT global starts as None. Tests here validate that each public
+    // function is safe to call before `init()` is invoked.
+
+    #[test]
+    fn status_returns_idle_when_no_combatant() {
+        // Override the global to None for this check. Because other tests in the
+        // binary may have already called init(), we lock the mutex and temporarily
+        // clear the state, then restore it.
+        let mut guard = COMBATANT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let previous = guard.take();
+        drop(guard);
+
+        let s = status();
+        assert!(
+            matches!(s, CombatStatus::Idle),
+            "expected Idle before init, got {s:?}"
+        );
+
+        // Restore whatever was there before (important in a shared test binary).
+        let mut guard = COMBATANT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *guard = previous;
+    }
+
+    #[test]
+    fn tick_is_safe_with_no_combatant() {
+        let player = textquest_common::types::SpawnData::default();
+        let mut guard = COMBATANT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let previous = guard.take();
+        drop(guard);
+
+        // Should not panic.
+        tick(&player, None, &[]);
+
+        let mut guard = COMBATANT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *guard = previous;
+    }
+
+    #[test]
+    fn observe_chat_message_returns_none_with_no_combatant() {
+        let mut guard = COMBATANT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let previous = guard.take();
+        drop(guard);
+
+        let result = observe_chat_message("Your spell is interrupted.");
+        assert!(
+            result.is_none(),
+            "expected None before init, got {result:?}"
+        );
+
+        let mut guard = COMBATANT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *guard = previous;
+    }
+
+    #[test]
+    fn handle_command_is_safe_with_no_combatant() {
+        let mut guard = COMBATANT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let previous = guard.take();
+        drop(guard);
+
+        // Should not panic — just logs a warning.
+        handle_command(CombatCommand::Disengage);
+
+        let mut guard = COMBATANT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *guard = previous;
+    }
+
+    #[test]
+    fn handle_engage_command_is_safe_with_no_combatant() {
+        let mut guard = COMBATANT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let previous = guard.take();
+        drop(guard);
+
+        handle_command(CombatCommand::Engage { target_id: 1 });
+
+        let mut guard = COMBATANT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *guard = previous;
+    }
+
+    #[test]
+    fn handle_set_assist_command_is_safe_with_no_combatant() {
+        let mut guard = COMBATANT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let previous = guard.take();
+        drop(guard);
+
+        handle_command(CombatCommand::SetAssistTarget { spawn_id: 7 });
+
+        let mut guard = COMBATANT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *guard = previous;
+    }
+}

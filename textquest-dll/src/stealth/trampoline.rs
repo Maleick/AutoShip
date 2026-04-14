@@ -139,10 +139,26 @@ impl TrampolineHardener {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Mutex, OnceLock};
+
     use super::*;
+
+    /// Serialize all tests in this module: they share a global `TRAMPOLINE_REGISTRY`
+    /// and each test starts by calling `clear_registry()`, which races when tests
+    /// run in parallel. Holding `TEST_GUARD` for the duration of each test prevents
+    /// concurrent access to the shared registry.
+    static TEST_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn lock_tests() -> std::sync::MutexGuard<'static, ()> {
+        TEST_GUARD
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 
     #[test]
     fn conceal_roundtrip() {
+        let _guard = lock_tests();
         let hardener = TrampolineHardener::new();
         hardener.clear_registry();
 
@@ -158,6 +174,7 @@ mod tests {
 
     #[test]
     fn protect_does_not_panic_on_stub_platform() {
+        let _guard = lock_tests();
         let hardener = TrampolineHardener::new();
         hardener.clear_registry();
 
@@ -168,6 +185,7 @@ mod tests {
 
     #[test]
     fn registry_tracks_entries() {
+        let _guard = lock_tests();
         let hardener = TrampolineHardener::new();
         hardener.clear_registry();
 

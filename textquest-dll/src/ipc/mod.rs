@@ -513,3 +513,81 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
 
     tracing::info!(client_id, "IPC listener thread exiting");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ─── is_running() ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn is_running_reflects_atomic_state() {
+        // We cannot safely toggle IPC_RUNNING without risking interaction with
+        // other tests or threads, but we can verify that `is_running()` reads
+        // the same value that the AtomicBool currently holds.
+        let expected = IPC_RUNNING.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(is_running(), expected);
+    }
+
+    // ─── Module-level functions before IPC start ──────────────────────────────
+
+    #[test]
+    fn poll_commands_returns_empty_vec_before_start() {
+        // PENDING_COMMANDS is only set after start() is called.
+        // Before any start(), get() returns None and poll_commands() returns vec![].
+        if PENDING_COMMANDS.get().is_none() {
+            let cmds = poll_commands();
+            assert!(cmds.is_empty(), "expected empty vec before IPC start");
+        }
+        // If PENDING_COMMANDS is already set (another test started IPC),
+        // we just skip — the test is vacuously satisfied.
+    }
+
+    // ─── send_response() before IPC start ─────────────────────────────────────
+
+    #[test]
+    fn send_response_is_safe_when_ipc_not_running() {
+        // Temporarily ensure IPC is marked as not running to check the early-return
+        // path in send_response().  We restore the value afterward.
+        let was_running = IPC_RUNNING.swap(false, std::sync::atomic::Ordering::SeqCst);
+        send_response(textquest_common::ipc::Response::Pong {
+            client_id: 0,
+            timestamp_ms: 0,
+        });
+        IPC_RUNNING.store(was_running, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    // ─── publish_state() before IPC start ─────────────────────────────────────
+
+    #[test]
+    fn publish_state_is_safe_before_start() {
+        // SHARED_WRITER is None before start() — publish_state should be a no-op.
+        if SHARED_WRITER.get().is_none() {
+            let frame = textquest_common::types::SharedStateFrame {
+                client_id: 0,
+                local_player: None,
+                target: None,
+                nearby_spawns: None,
+                timestamp_ms: 0,
+                nav_status: textquest_common::nav::NavStatus::Idle,
+                combat_status: textquest_common::combat::CombatStatus::Idle,
+                zone_short_name: String::new(),
+                zone_long_name: String::new(),
+                spawn_epoch: 0,
+                actual_version: None,
+            };
+            publish_state(&frame); // must not panic
+        }
+    }
+
+    // ─── stop() is idempotent ─────────────────────────────────────────────────
+
+    #[test]
+    fn stop_is_idempotent() {
+        // Calling stop() multiple times must not panic.
+        stop();
+        stop();
+        // Restore invariant: ensure is_running stays consistent with the stored flag.
+        assert!(!is_running());
+    }
+}

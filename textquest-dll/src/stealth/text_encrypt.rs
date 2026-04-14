@@ -250,7 +250,21 @@ fn find_own_dll_base() -> Result<*const u8, super::StealthError> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Mutex, OnceLock};
+
     use super::*;
+
+    /// Serialize all tests that write to `XOR_KEY` or call `xor_region`.
+    /// `XOR_KEY` is a shared global mutable static; concurrent writes from
+    /// multiple tests racing on the key produce non-deterministic results.
+    static XOR_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn lock_xor() -> std::sync::MutexGuard<'static, ()> {
+        XOR_GUARD
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 
     #[test]
     fn bounds_before_init() {
@@ -267,6 +281,7 @@ mod tests {
 
     #[test]
     fn xor_is_self_inverse() {
+        let _guard = lock_xor();
         let original: Vec<u8> = (0..35).collect();
         let mut buffer = original.clone();
 
@@ -287,6 +302,7 @@ mod tests {
 
     #[test]
     fn generate_key_nonzero() {
+        let _guard = lock_xor();
         generate_key();
         let key = unsafe { (&raw const XOR_KEY).read() };
         assert!(key.iter().any(|&b| b != 0));
@@ -301,6 +317,7 @@ mod tests {
 
     #[test]
     fn xor_single_byte() {
+        let _guard = lock_xor();
         let mut buf = [0x42u8];
         unsafe {
             (&raw mut XOR_KEY).write([0xFF; 16]);
@@ -315,6 +332,7 @@ mod tests {
 
     #[test]
     fn xor_exact_simd_boundary() {
+        let _guard = lock_xor();
         let original: Vec<u8> = (0..16).collect();
         let mut buffer = original.clone();
 
