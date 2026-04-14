@@ -188,7 +188,7 @@ impl StagingNamePool {
             );
         }
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let available: Vec<usize> = (0..LEGITIMATE_DLL_NAMES.len())
             .filter(|i| !used.contains(i))
             .collect();

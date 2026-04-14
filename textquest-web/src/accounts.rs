@@ -23,7 +23,7 @@ use axum::{
     http::StatusCode,
     routing::{get, post, put},
 };
-use rand::RngCore;
+use aes_gcm::aead::rand_core::RngCore;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

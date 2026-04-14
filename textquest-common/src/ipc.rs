@@ -1165,7 +1165,7 @@ pub fn session_id_from_token(token: &SessionToken) -> u64 {
 pub fn generate_random_token() -> SessionToken {
     use rand::RngCore;
     let mut token = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut token);
+    rand::rng().fill_bytes(&mut token);
     token
 }
 

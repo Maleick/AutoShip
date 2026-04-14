@@ -319,7 +319,7 @@ pub(crate) fn compute_stagger_between(min_secs: u64, max_secs: u64) -> Duration 
     if min_secs >= max_secs {
         return Duration::from_secs(min_secs);
     }
-    let secs = rand::thread_rng().gen_range(min_secs..=max_secs);
+    let secs = rand::rng().gen_range(min_secs..=max_secs);
     Duration::from_secs(secs)
 }
 
