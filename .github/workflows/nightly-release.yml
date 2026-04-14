@@ -2,8 +2,14 @@ name: Nightly Release
 
 on:
   schedule:
-    - cron: "0 8 * * *"
+    - cron: "0 8 * * 1"
   workflow_dispatch:
+    inputs:
+      publish_wiki:
+        description: "Push wiki changes after a successful manual validation run"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: nightly-release
@@ -15,49 +21,17 @@ env:
 
 permissions:
   contents: write
-  actions: write
 
 jobs:
-  gate:
-    name: Nightly/manual full-validation gate
-    runs-on: [self-hosted, Windows, X64, textquest]
-    outputs:
-      should_run: ${{ steps.gate.outputs.should_run }}
-    defaults:
-      run:
-        shell: cmd
-    steps:
-      - id: gate
-        shell: cmd
-        run: |
-          setlocal
-          set "EVENT_NAME=${{ github.event_name }}"
-
-          if "%EVENT_NAME%"=="workflow_dispatch" (
-            echo should_run=true>>%GITHUB_OUTPUT%
-            exit /b 0
-          )
-
-          set "should_run=false"
-          for /f "delims=" %%T in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "$tz = [System.TimeZoneInfo]::FindSystemTimeZoneById(\"Central Standard Time\"); $local = [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz); if ($local.Hour -eq 3) { \"true\" } else { \"false\" }"') do set "should_run=%%T"
-
-          if errorlevel 1 (
-            echo Local-time gate failed; defaulting should_run=false.
-            echo should_run=false>>%GITHUB_OUTPUT%
-            exit /b 0
-          )
-
-          echo should_run=%should_run%>>%GITHUB_OUTPUT%
-
   build-nightly:
-    name: Build rolling nightly prerelease
-    needs: gate
-    if: needs.gate.outputs.should_run == 'true'
+    name: Weekly/manual Windows validation
     runs-on: [self-hosted, Windows, X64, textquest]
     timeout-minutes: 45
     defaults:
       run:
         shell: cmd
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -129,3 +103,13 @@ jobs:
           removeArtifacts: true
           replacesArtifacts: true
           tag: nightly
+
+      - name: Setup verified Python
+        uses: ./.github/actions/setup-verified-python
+
+      - name: Validate wiki sources
+        run: "%PYTHON_CMD% scripts/sync_wiki.py --check"
+
+      - name: Publish wiki
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_wiki == true
+        run: "%PYTHON_CMD% scripts/sync_wiki.py --push"
