@@ -372,6 +372,10 @@ mod inner {
     /// Minimum packet length to contain the EQ opcode at bytes [2..4].
     const MIN_OPCODE_PACKET_LEN: usize = 4;
 
+    /// Maximum allowable packet size (64 KiB). Larger packets are discarded as invalid.
+    /// This prevents unbounded reads from adversarial or corrupted WSABUF structures.
+    const MAX_PACKET_SIZE: usize = 65536;
+
     // ── Install / remove ─────────────────────────────────────────────────────
 
     pub fn install(client_id: ClientId) -> Result<(), Box<dyn std::error::Error>> {
@@ -439,6 +443,77 @@ mod inner {
         tracing::info!("WSASend/WSARecv packet hooks removed");
     }
 
+    // ── Bounds validation ────────────────────────────────────────────────────
+
+    /// Check whether a memory range is safe to read.
+    ///
+    /// Returns true if:
+    /// - The address is non-null
+    /// - The length is reasonable (non-zero and <= MAX_PACKET_SIZE)
+    /// - `VirtualQuery` confirms the range is within a committed, readable page
+    fn is_safe_packet_buffer(addr: usize, len: usize) -> bool {
+        use windows::Win32::System::Memory::{
+            MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ,
+            PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS,
+            PAGE_PROTECTION_FLAGS, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY,
+            VirtualQuery,
+        };
+
+        // Null pointer or invalid size check
+        if addr == 0 || len == 0 || len > MAX_PACKET_SIZE {
+            return false;
+        }
+
+        let mut mbi = MEMORY_BASIC_INFORMATION::default();
+        let ret = unsafe {
+            VirtualQuery(
+                Some(addr as *const core::ffi::c_void),
+                &mut mbi,
+                std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+            )
+        };
+
+        if ret == 0 {
+            // VirtualQuery failed — not a valid allocated address
+            return false;
+        }
+
+        // Must be committed (not reserved or free)
+        if mbi.State != MEM_COMMIT {
+            return false;
+        }
+
+        let protect = mbi.Protect;
+
+        // Reject guard pages and no-access pages outright.
+        if protect.contains(PAGE_NOACCESS) || protect.contains(PAGE_GUARD) {
+            return false;
+        }
+
+        // `Protect` may include modifier flags (for example PAGE_NOCACHE), so
+        // compare only the base protection value when deciding whether the
+        // region is readable.
+        let base_protect = PAGE_PROTECTION_FLAGS(protect.0 & 0xff);
+        let is_readable = matches!(
+            base_protect,
+            PAGE_READONLY
+                | PAGE_READWRITE
+                | PAGE_WRITECOPY
+                | PAGE_EXECUTE_READ
+                | PAGE_EXECUTE_READWRITE
+                | PAGE_EXECUTE_WRITECOPY
+        );
+
+        if !is_readable {
+            return false;
+        }
+
+        // Verify the entire range [addr, addr + len) falls within this region
+        let region_end = (mbi.BaseAddress as usize).saturating_add(mbi.RegionSize);
+        let range_end = addr.saturating_add(len);
+        range_end <= region_end
+    }
+
     // ── Detour functions ─────────────────────────────────────────────────────
 
     /// WSASend detour — capture outbound EQ packets.
@@ -457,12 +532,40 @@ mod inner {
         if dw_buffer_count > 0 && !lp_buffers.is_null() {
             // SAFETY: Winsock contract — dw_buffer_count >= 1 and lp_buffers is
             // valid for that many WSABUF entries. We read only the first entry.
-            let buf = unsafe { &*lp_buffers };
-            on_packet(
-                buf.buf as *const u8,
-                buf.len as usize,
-                PacketDirection::Outbound,
-            );
+            // We validate the buffer pointer and length before dereferencing.
+            let buf_addr = lp_buffers as usize;
+            let wsabuf_size = std::mem::size_of::<WSABUF>();
+            if is_safe_packet_buffer(buf_addr, wsabuf_size) {
+                let buf = unsafe { &*lp_buffers };
+                let buf_ptr = buf.buf as usize;
+                let buf_len = buf.len as usize;
+                let validated_len = buf_len.min(MAX_PACKET_SCAN);
+
+                // Validate only the byte range that on_packet() may actually
+                // read. The full declared length is still forwarded for
+                // reporting/logging semantics.
+                if is_safe_packet_buffer(buf_ptr, validated_len) {
+                    on_packet(
+                        buf.buf as *const u8,
+                        buf_len,
+                        PacketDirection::Outbound,
+                    );
+                } else {
+                    // Buffer bounds validation failed — log and skip
+                    tracing::debug!(
+                        buf_ptr = format!("{:#x}", buf_ptr),
+                        buf_len,
+                        validated_len,
+                        "WSASend: packet buffer bounds validation failed"
+                    );
+                }
+            } else {
+                // WSABUF structure validation failed — log and skip
+                tracing::debug!(
+                    wsabuf_ptr = format!("{:#x}", buf_addr),
+                    "WSASend: WSABUF bounds validation failed"
+                );
+            }
         }
 
         // SAFETY: All arguments forwarded unchanged to the original WSASend.
@@ -512,14 +615,45 @@ mod inner {
             && !lp_buffers.is_null()
             && !lp_number_of_bytes_recvd.is_null()
         {
-            // SAFETY: lp_buffers non-null + dw_buffer_count >= 1 (checked above).
-            let buf = unsafe { &*lp_buffers };
-            // SAFETY: lp_number_of_bytes_recvd is non-null (checked above).
-            let received_total = unsafe { *lp_number_of_bytes_recvd } as usize;
-            // `lp_number_of_bytes_recvd` is the total across all WSABUF entries.
-            // We only read WSABUF[0], so cap to its declared length.
-            let received = received_total.min(buf.len as usize);
-            on_packet(buf.buf as *const u8, received, PacketDirection::Inbound);
+            // Validate the WSABUF structure before dereferencing
+            let buf_addr = lp_buffers as usize;
+            let wsabuf_size = std::mem::size_of::<WSABUF>();
+            if is_safe_packet_buffer(buf_addr, wsabuf_size) {
+                // SAFETY: lp_buffers was validated as readable for wsabuf_size bytes.
+                let buf = unsafe { &*lp_buffers };
+                // SAFETY: lp_number_of_bytes_recvd is non-null (checked above).
+                let received_total = unsafe { *lp_number_of_bytes_recvd } as usize;
+                let buf_ptr = buf.buf as usize;
+                let buf_len = buf.len as usize;
+
+                // Cap received amount to the WSABUF declared length
+                let received = received_total.min(buf_len);
+
+                // Only validate the prefix that on_packet() may inspect, and only
+                // invoke it when the packet is long enough to contain an opcode.
+                if received >= MIN_OPCODE_PACKET_LEN {
+                    let scan_len = received.min(MAX_PACKET_SCAN);
+
+                    // Validate the actual packet buffer before dereferencing
+                    if is_safe_packet_buffer(buf_ptr, scan_len) {
+                        on_packet(buf.buf as *const u8, received, PacketDirection::Inbound);
+                    } else {
+                        // Buffer bounds validation failed — log and skip
+                        tracing::debug!(
+                            buf_ptr = format!("{:#x}", buf_ptr),
+                            received,
+                            scan_len,
+                            "WSARecv: packet buffer bounds validation failed"
+                        );
+                    }
+                }
+            } else {
+                // WSABUF structure validation failed — log and skip
+                tracing::debug!(
+                    wsabuf_ptr = format!("{:#x}", buf_addr),
+                    "WSARecv: WSABUF bounds validation failed"
+                );
+            }
         }
 
         ret
