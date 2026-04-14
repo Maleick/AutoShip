@@ -16,8 +16,8 @@
 </p>
 
 <p align="center">
-  <a href="#testing"><img src="https://img.shields.io/badge/Rust%20LOC-168%2C158-blue?style=flat-square" alt="Rust LOC"></a>
-  <a href="#testing"><img src="https://img.shields.io/badge/Tests-~4%2C132-brightgreen?style=flat-square" alt="Tests"></a>
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-168%2C158-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-~4%2C132-brightgreen?style=flat-square)](#testing)
 </p>
 
 <p align="center">
