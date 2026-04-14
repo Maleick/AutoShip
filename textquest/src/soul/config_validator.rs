@@ -72,6 +72,11 @@ impl SoulConfigValidator {
             errors.push(ConfigError::new("mood_decay_rate", "must be <= 1.0"));
         }
 
+        // llm.base_url: must be localhost/127.0.0.1 if set (SSRF prevention)
+        if let Some(err_msg) = config.llm.validate_base_url() {
+            errors.push(ConfigError::new("llm.base_url", err_msg));
+        }
+
         errors
     }
 }
@@ -202,5 +207,95 @@ mod tests {
         assert!(c.validate().is_empty(), "0.0 should be valid");
         c.mood_decay_rate = 1.0;
         assert!(c.validate().is_empty(), "1.0 should be valid");
+    }
+
+    // 11. llm.base_url empty is valid
+    #[test]
+    fn llm_base_url_empty_is_valid() {
+        let c = valid_config();
+        assert!(c.llm.validate_base_url().is_none());
+    }
+
+    // 12. llm.base_url with localhost is valid
+    #[test]
+    fn llm_base_url_localhost_is_valid() {
+        let mut c = valid_config();
+        c.llm.base_url = "http://localhost:11434".to_string();
+        assert!(c.llm.validate_base_url().is_none());
+    }
+
+    // 13. llm.base_url with 127.0.0.1 is valid
+    #[test]
+    fn llm_base_url_127_0_0_1_is_valid() {
+        let mut c = valid_config();
+        c.llm.base_url = "http://127.0.0.1:11434".to_string();
+        assert!(c.llm.validate_base_url().is_none());
+    }
+
+    // 14. llm.base_url with IPv6 localhost (::1) is valid
+    #[test]
+    fn llm_base_url_ipv6_localhost_is_valid() {
+        let mut c = valid_config();
+        c.llm.base_url = "http://[::1]:11434".to_string();
+        assert!(c.llm.validate_base_url().is_none());
+    }
+
+    // 15. llm.base_url with remote host is rejected
+    #[test]
+    fn llm_base_url_remote_host_is_invalid() {
+        let mut c = valid_config();
+        c.llm.base_url = "http://169.254.169.254:11434".to_string();
+        let err = c.llm.validate_base_url();
+        assert!(err.is_some());
+        assert!(err.unwrap().contains("must use localhost"));
+    }
+
+    // 16. llm.base_url with attacker IP is rejected
+    #[test]
+    fn llm_base_url_attacker_ip_is_invalid() {
+        let mut c = valid_config();
+        c.llm.base_url = "http://192.168.1.1:8080".to_string();
+        let err = c.llm.validate_base_url();
+        assert!(err.is_some());
+        assert!(err.unwrap().contains("must use localhost"));
+    }
+
+    // 17. llm.base_url without scheme is rejected
+    #[test]
+    fn llm_base_url_without_scheme_is_invalid() {
+        let mut c = valid_config();
+        c.llm.base_url = "localhost:11434".to_string();
+        let err = c.llm.validate_base_url();
+        assert!(err.is_some());
+        assert!(err.unwrap().contains("must start with"));
+    }
+
+    // 18. llm.base_url with https is valid for localhost
+    #[test]
+    fn llm_base_url_https_localhost_is_valid() {
+        let mut c = valid_config();
+        c.llm.base_url = "https://localhost:11434".to_string();
+        assert!(c.llm.validate_base_url().is_none());
+    }
+
+    // 19. llm.base_url is validated in full config validation
+    #[test]
+    fn full_config_rejects_invalid_base_url() {
+        let mut c = valid_config();
+        c.llm.base_url = "http://attacker.com:11434".to_string();
+        let errors = c.validate();
+        assert!(
+            errors.iter().any(|e| e.field_name == "llm.base_url"),
+            "expected error for invalid llm.base_url"
+        );
+    }
+
+    // 20. llm.base_url with external IP is rejected in full validation
+    #[test]
+    fn full_config_rejects_external_ip() {
+        let mut c = valid_config();
+        c.llm.base_url = "http://8.8.8.8:11434".to_string();
+        let errors = c.validate();
+        assert!(errors.iter().any(|e| e.field_name == "llm.base_url"));
     }
 }

@@ -120,6 +120,74 @@ impl Default for LlmConfig {
     }
 }
 
+impl LlmConfig {
+    /// Validate that base_url only points to localhost, 127.0.0.1, or ::1 (if set).
+    /// Returns an error message if the URL is invalid or points to a remote host.
+    ///
+    /// Since Ollama runs locally, only localhost, 127.0.0.1, and ::1 addresses are allowed.
+    #[must_use]
+    pub fn validate_base_url(&self) -> Option<String> {
+        if self.base_url.is_empty() {
+            // Empty is OK — defaults to localhost:11434
+            return None;
+        }
+
+        let url = self.base_url.trim();
+        if self.base_url != url {
+            return Some(
+                "base_url must not contain leading or trailing whitespace"
+                    .to_string(),
+            );
+        }
+
+        // Check if it starts with http:// or https://
+        if !url.starts_with("http://") && !url.starts_with("https://") {
+            return Some(
+                "base_url must start with 'http://' or 'https://'"
+                    .to_string(),
+            );
+        }
+
+        // Extract the host portion (between :// and the next /)
+        let after_scheme = if let Some(pos) = url.find("://") {
+            &url[pos + 3..]
+        } else {
+            return Some("base_url could not be parsed".to_string());
+        };
+
+        // Get just the host:port part (before any /)
+        let host_port = if let Some(pos) = after_scheme.find('/') {
+            &after_scheme[..pos]
+        } else {
+            after_scheme
+        };
+
+        // Extract just the host (before any : for port).
+        // IPv6 addresses use bracket notation per RFC 3986: [::1]:port
+        let host = if host_port.starts_with('[') {
+            // Bracketed IPv6: extract content between [ and ]
+            if let Some(end) = host_port.find(']') {
+                &host_port[1..end]
+            } else {
+                host_port // malformed — will fail validation below
+            }
+        } else if let Some(pos) = host_port.find(':') {
+            &host_port[..pos]
+        } else {
+            host_port
+        };
+
+        // Validate that host is only localhost, 127.0.0.1, or ::1 (IPv6 localhost)
+        match host {
+            "localhost" | "127.0.0.1" | "::1" => None,
+            _ => Some(format!(
+                "base_url must use localhost, 127.0.0.1, or ::1; got: {}",
+                host
+            )),
+        }
+    }
+}
+
 /// Bot personality preset for Discord fleet commentary.
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -567,5 +635,134 @@ mod tests {
         "#;
         let config: SoulConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(config.relationship.len(), 3);
+    }
+
+    // LlmConfig::validate_base_url tests (SSRF prevention)
+
+    #[test]
+    fn llm_config_validate_base_url_empty_is_valid() {
+        let config = LlmConfig {
+            base_url: String::new(),
+            ..LlmConfig::default()
+        };
+        assert!(config.validate_base_url().is_none());
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_localhost_http_is_valid() {
+        let config = LlmConfig {
+            base_url: "http://localhost:11434".to_string(),
+            ..LlmConfig::default()
+        };
+        assert!(config.validate_base_url().is_none());
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_localhost_https_is_valid() {
+        let config = LlmConfig {
+            base_url: "https://localhost:8443".to_string(),
+            ..LlmConfig::default()
+        };
+        assert!(config.validate_base_url().is_none());
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_127_0_0_1_is_valid() {
+        let config = LlmConfig {
+            base_url: "http://127.0.0.1:11434".to_string(),
+            ..LlmConfig::default()
+        };
+        assert!(config.validate_base_url().is_none());
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_ipv6_localhost_is_valid() {
+        let config = LlmConfig {
+            base_url: "http://[::1]:11434".to_string(),
+            ..LlmConfig::default()
+        };
+        assert!(config.validate_base_url().is_none());
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_aws_metadata_endpoint_is_invalid() {
+        let config = LlmConfig {
+            base_url: "http://169.254.169.254".to_string(),
+            ..LlmConfig::default()
+        };
+        let err = config.validate_base_url();
+        assert!(err.is_some());
+        assert!(err.unwrap().contains("must use localhost"));
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_internal_ip_is_invalid() {
+        let config = LlmConfig {
+            base_url: "http://192.168.1.1:8080".to_string(),
+            ..LlmConfig::default()
+        };
+        let err = config.validate_base_url();
+        assert!(err.is_some());
+        assert!(err.unwrap().contains("192.168.1.1"));
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_external_domain_is_invalid() {
+        let config = LlmConfig {
+            base_url: "http://attacker.com:11434".to_string(),
+            ..LlmConfig::default()
+        };
+        let err = config.validate_base_url();
+        assert!(err.is_some());
+        assert!(err.unwrap().contains("must use localhost"));
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_without_scheme_is_invalid() {
+        let config = LlmConfig {
+            base_url: "localhost:11434".to_string(),
+            ..LlmConfig::default()
+        };
+        let err = config.validate_base_url();
+        assert!(err.is_some());
+        assert!(err.unwrap().contains("must start with"));
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_invalid_scheme_is_invalid() {
+        let config = LlmConfig {
+            base_url: "ftp://localhost:11434".to_string(),
+            ..LlmConfig::default()
+        };
+        let err = config.validate_base_url();
+        assert!(err.is_some());
+        assert!(err.unwrap().contains("must start with"));
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_localhost_without_port_is_valid() {
+        let config = LlmConfig {
+            base_url: "http://localhost".to_string(),
+            ..LlmConfig::default()
+        };
+        assert!(config.validate_base_url().is_none());
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_localhost_with_path_is_valid() {
+        let config = LlmConfig {
+            base_url: "http://localhost:11434/api".to_string(),
+            ..LlmConfig::default()
+        };
+        assert!(config.validate_base_url().is_none());
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_trimmed() {
+        let config = LlmConfig {
+            base_url: "  http://localhost:11434  ".to_string(),
+            ..LlmConfig::default()
+        };
+        assert!(config.validate_base_url().is_none());
     }
 }
