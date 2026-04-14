@@ -66,6 +66,41 @@ mkdir -p "$WORKSPACE"
 > "$PANE_LOG"
 
 # ---------------------------------------------------------------------------
+# Worktree → standalone repo conversion (fixes Codex sandbox issue #133)
+# Codex exec -C scopes its sandbox to WORKSPACE. Git worktrees store
+# metadata in <parent>/.git/worktrees/<name>/ which is outside the sandbox,
+# so git commit fails with "Operation not permitted" on index.lock.
+# Fix: absorb the worktree .git pointer into a real .git/ directory.
+# ---------------------------------------------------------------------------
+if [[ -f "${WORKSPACE}/.git" ]]; then
+  WORKTREE_GITDIR=$(sed -n 's/^gitdir: //p' "${WORKSPACE}/.git")
+  # Resolve relative gitdir paths (relative to WORKSPACE)
+  if [[ "$WORKTREE_GITDIR" != /* ]]; then
+    WORKTREE_GITDIR="$(cd "${WORKSPACE}" && cd "${WORKTREE_GITDIR}" && pwd)"
+  fi
+  if [[ -n "$WORKTREE_GITDIR" && -d "$WORKTREE_GITDIR" ]]; then
+    # Resolve parent .git dir (absolute) — commondir is relative from worktree gitdir
+    PARENT_GITDIR=$(cd "$WORKTREE_GITDIR" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" && pwd)
+    if [[ -n "$PARENT_GITDIR" && -d "$PARENT_GITDIR" ]]; then
+      rm "${WORKSPACE}/.git"
+      mkdir -p "${WORKSPACE}/.git"
+      # Copy worktree-specific metadata (these are per-worktree, not shared)
+      for f in HEAD ORIG_HEAD MERGE_HEAD FETCH_HEAD index COMMIT_EDITMSG; do
+        [[ -f "${WORKTREE_GITDIR}/${f}" ]] && cp "${WORKTREE_GITDIR}/${f}" "${WORKSPACE}/.git/"
+      done
+      # Symlink shared resources from the parent repo (absolute paths for Codex sandbox)
+      ln -sf "${PARENT_GITDIR}/objects"     "${WORKSPACE}/.git/objects"
+      ln -sf "${PARENT_GITDIR}/refs"        "${WORKSPACE}/.git/refs"
+      ln -sf "${PARENT_GITDIR}/packed-refs" "${WORKSPACE}/.git/packed-refs" 2>/dev/null || true
+      ln -sf "${PARENT_GITDIR}/config"      "${WORKSPACE}/.git/config"
+      ln -sf "${PARENT_GITDIR}/hooks"       "${WORKSPACE}/.git/hooks"  2>/dev/null || true
+      ln -sf "${PARENT_GITDIR}/info"        "${WORKSPACE}/.git/info"   2>/dev/null || true
+      echo "Converted worktree to standalone .git (sandbox fix)" >> "$PANE_LOG"
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # Run codex exec with stdin pipe and stall watchdog
 # ---------------------------------------------------------------------------
 EXIT_CODE=0
