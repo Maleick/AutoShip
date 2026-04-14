@@ -52,14 +52,20 @@ if [[ ! -f "$RESULT_FILE" ]] && [[ -f "AUTOSHIP_RESULT.md" ]]; then
   echo "Warning: AUTOSHIP_RESULT.md not found in worktree, falling back to repo root" >> .autoship/poll.log
   RESULT_FILE="AUTOSHIP_RESULT.md"
 fi
-# Validate — must start with "# Result: #<N>"
+# Validate — must start with "# Result: #<N> —"
 _VALID_RESULT=false
 if [[ -f "$RESULT_FILE" ]]; then
-  if head -1 "$RESULT_FILE" | grep -qE '^# Result: #[0-9]+'; then
+  _FIRST_LINE=$(head -1 "$RESULT_FILE")
+  if echo "$_FIRST_LINE" | grep -qE '^# Result: #[0-9]+ —'; then
     _VALID_RESULT=true
   else
-    echo "Warning: $RESULT_FILE failed content validation (first line: $(head -1 "$RESULT_FILE"))" >> .autoship/poll.log
-    echo "Warning: skipping archival for $ISSUE_KEY — AUTOSHIP_RESULT.md content invalid" >&2
+    # Log detailed error for debugging
+    echo "ERROR: $RESULT_FILE validation failed" >> .autoship/poll.log
+    echo "  Expected first line format: # Result: #<issue-number> — <title>" >> .autoship/poll.log
+    echo "  Actual first line: $_FIRST_LINE" >> .autoship/poll.log
+    echo "  Full file content:" >> .autoship/poll.log
+    head -5 "$RESULT_FILE" | sed 's/^/    /' >> .autoship/poll.log
+    echo "Warning: skipping archival for $ISSUE_KEY — AUTOSHIP_RESULT.md format invalid. Check format: first line must be '# Result: #<number> —'" >&2
   fi
 fi
 if [[ "$_VALID_RESULT" == "true" ]]; then

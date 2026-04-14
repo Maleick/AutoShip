@@ -31,6 +31,7 @@ Always routes to `claude-haiku` (primary) or `claude-sonnet` (fallback). This ty
 
 **2. Keyword-based Promotion**
 If the issue title or body contains any of the following keywords, the dispatcher should promote the task to Claude regardless of estimated complexity:
+
 - `unsafe`, `#[cfg(windows)]`, `retour`, `DLL`, `cdylib`, `winapi`
 
 **3. Project Profile: `rust_windows`**
@@ -406,35 +407,41 @@ $(cat .autoship/project-context.md 2>/dev/null || echo "No project context avail
 - Run tests after making changes
 - Commit your work to `autoship/<issue-key>`
 - Do NOT push, merge, or close the issue
-- When finished, write `AUTOSHIP_RESULT.md` to the current working directory (the worktree root). Do not write to the parent repository.
+- **MANDATORY:** When finished, write `AUTOSHIP_RESULT.md` to `.autoship/workspaces/<issue-key>/` (NOT repo root)
+- **VERIFY:** Before printing your final status, confirm the file exists and is readable: `ls -la .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md`
+- **ONLY THEN:** Print your completion status (COMPLETE/BLOCKED/STUCK)
 
 ## AUTOSHIP_RESULT.md Template
 
+**CRITICAL:** First line MUST be `# Result: #<issue-number> — <title>`. Validation requires this exact format.
+
 ```markdown
-# Result: #<number> — <title>
+# Result: #123 — Brief issue title
 
 ## Status: DONE | PARTIAL | STUCK
 
 ## Changes Made
 
-- <file>: <what changed and why>
+- src/file.rs: What changed and why
+- tests/test.rs: New test added
 
 ## Tests
 
-- Command: `<test-command>`
+- Command: `cargo test`
 - Result: PASS | FAIL
 - New tests added: yes/no
 
 ## Notes
 
-<anything the reviewer should know>
+Additional context the reviewer needs.
 ```
+
+**Validation:** First line must match regex `^# Result: #[0-9]+ —`. File must exist at `.autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md` BEFORE printing completion status.
 
 When you are completely finished, print exactly one of these words on its own line as your final output:
 COMPLETE
 BLOCKED
 STUCK
-`````
 
 Dispatch:
 
@@ -564,35 +571,41 @@ $(cat .autoship/project-context.md 2>/dev/null || echo "No project context avail
 - Run tests after making changes
 - Commit your work to `autoship/<issue-key>`
 - Do NOT push, merge, or close the issue
-- When finished, write `AUTOSHIP_RESULT.md` to the current working directory (the worktree root). Do not write to the parent repository.
+- **MANDATORY:** When finished, write `AUTOSHIP_RESULT.md` to `.autoship/workspaces/<issue-key>/` (NOT repo root)
+- **VERIFY:** Before printing your final status, confirm the file exists and is readable: `ls -la .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md`
+- **ONLY THEN:** Print your completion status (COMPLETE/BLOCKED/STUCK)
 
 ## AUTOSHIP_RESULT.md Template
 
+**CRITICAL:** First line MUST be `# Result: #<issue-number> — <title>`. Validation requires this exact format.
+
 ```markdown
-# Result: #<number> — <title>
+# Result: #456 — Brief issue title
 
 ## Status: DONE | PARTIAL | STUCK
 
 ## Changes Made
 
-- <file>: <what changed and why>
+- src/file.rs: What changed and why
+- tests/test.rs: New test added
 
 ## Tests
 
-- Command: `<test-command>`
+- Command: `cargo test`
 - Result: PASS | FAIL
 - New tests added: yes/no
 
 ## Notes
 
-<anything the reviewer should know>
+Additional context the reviewer needs.
 ```
+
+**Validation:** First line must match regex `^# Result: #[0-9]+ —`. File must exist at `.autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md` BEFORE printing completion status.
 
 When completely finished, print exactly one of these words on its own line:
 COMPLETE
 BLOCKED
 STUCK
-````
 
 Dispatch:
 
@@ -639,3 +652,4 @@ Update attempt count in state:
 ```bash
 bash "$(cat .autoship/hooks_dir)/update-state.sh" set-running <issue-id> attempt=<N>
 ```
+`````
