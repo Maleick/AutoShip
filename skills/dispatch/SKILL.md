@@ -273,7 +273,7 @@ Write wrapper script:
 cat > .autoship/workspaces/$ISSUE_KEY/run-agent.sh << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
-gemini --prompt-file AUTOSHIP_PROMPT.md
+gemini -p "$(cat AUTOSHIP_PROMPT.md)" --yolo
 for i in $(seq 1 5); do
   [[ -f AUTOSHIP_RESULT.md ]] && break
   sleep 1

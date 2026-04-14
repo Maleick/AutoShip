@@ -6,7 +6,7 @@
 #   gemini-appserver.sh /path/to/prompt-file.json
 #
 # Reads a turn/start JSON from stdin or a prompt file path passed as $1.
-# Extracts the prompt text, runs `gemini --prompt-file`, streams output,
+# Extracts the prompt text, runs `gemini -p` (headless mode), streams output,
 # and emits synthetic Symphony JSON-RPC events on completion.
 #
 # Stall timeout: 300 seconds of no output kills the subprocess.
@@ -82,7 +82,9 @@ GEMINI_OUTPUT=""
 OUTFILE=$(mktemp /tmp/gemini-output-XXXXXX.txt)
 trap 'rm -f "$TMPFILE" "$OUTFILE"' EXIT
 
-gemini --prompt-file "$TMPFILE" >"$OUTFILE" 2>&1 &
+# Use -p (headless prompt mode) + --yolo (auto-approve all tool calls).
+# --prompt-file does not exist in Gemini CLI; -p reads the prompt as a string.
+gemini -p "$(cat "$TMPFILE")" --yolo >"$OUTFILE" 2>&1 &
 GEMINI_PID=$!
 
 # Stream output with stall watchdog

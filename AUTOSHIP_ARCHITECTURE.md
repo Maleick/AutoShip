@@ -163,11 +163,11 @@ tail -f .autoship/workspaces/$KEY/pane.log | grep --line-buffered -E "^(COMPLETE
 
 **Status vocabulary** (three words):
 
-| Status     | Meaning                                   | Next Action                   |
-| ---------- | ----------------------------------------- | ----------------------------- |
-| `COMPLETE` | Agent finished, AUTOSHIP_RESULT.md written  | Run verify pipeline           |
-| `BLOCKED`  | External dependency or permission issue   | Mark blocked, notify operator |
-| `STUCK`    | Agent attempted but cannot solve the task | Re-dispatch or escalate       |
+| Status     | Meaning                                    | Next Action                   |
+| ---------- | ------------------------------------------ | ----------------------------- |
+| `COMPLETE` | Agent finished, AUTOSHIP_RESULT.md written | Run verify pipeline           |
+| `BLOCKED`  | External dependency or permission issue    | Mark blocked, notify operator |
+| `STUCK`    | Agent attempted but cannot solve the task  | Re-dispatch or escalate       |
 
 The reviewer handles pass/fail granularity — agents only signal their own outcome assessment.
 
@@ -341,7 +341,7 @@ Sonnet handles all dispatch. Third-party tools dispatched first when available.
 
 ```
 # If Codex/Gemini available with quota:
-tmux send-keys -t autoship:<pane> "codex --prompt-file .autoship/workspaces/$KEY/prompt.md" Enter
+bash hooks/dispatch-codex-appserver.sh $KEY .autoship/workspaces/$KEY/prompt.md &
 
 # Fallback to Haiku:
 Agent({
@@ -355,7 +355,7 @@ Agent({
 
 ```
 # If Codex/Gemini available with quota:
-tmux send-keys -t autoship:<pane> "codex --prompt-file .autoship/workspaces/$KEY/prompt.md" Enter
+bash hooks/dispatch-codex-appserver.sh $KEY .autoship/workspaces/$KEY/prompt.md &
 
 # Fallback to Sonnet:
 Agent({
@@ -408,7 +408,7 @@ Summary of all finalized architecture decisions:
 | 3   | Monitor architecture        | 3 separate monitors (5s/30s/60s intervals)               |
 | 4   | Dispatch priority           | Third-party first for simple/medium, Claude for complex  |
 | 5   | Agent completion detection  | Real-time status words (COMPLETE/BLOCKED/STUCK)          |
-| 6   | Third-party completion      | pane_dead + AUTOSHIP_RESULT.md existence check             |
+| 6   | Third-party completion      | pane_dead + AUTOSHIP_RESULT.md existence check           |
 | 7   | Haiku + Monitor integration | Bash watches, Haiku interprets, Sonnet orchestrates      |
 | 8   | PR comment triage           | Haiku categorizes → nits/bugs/design → tiered resolution |
 | 9   | Event queue pattern         | Haiku queues events, Sonnet pulls after pipeline step    |

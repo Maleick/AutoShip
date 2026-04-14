@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# dispatch-codex-appserver.sh — Drive codex app-server via JSON-RPC (no tmux)
+# dispatch-codex-appserver.sh — Dispatch Codex CLI via `codex exec` (headless)
 # Usage: bash hooks/dispatch-codex-appserver.sh <issue-key> <prompt-file>
 # Emits COMPLETE or STUCK to .autoship/workspaces/<issue-key>/pane.log
 # Emits verify or agent_stuck event to .autoship/event-queue.json
+#
+# Uses `codex exec` (non-interactive mode) with stdin pipe.
+# Sandbox: --dangerously-bypass-approvals-and-sandbox for full file write access.
+# Previous JSON-RPC `codex app-server` approach removed (non-functional in codex-cli 0.120+).
 
 set -euo pipefail
 
@@ -18,27 +22,27 @@ fi
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 WORKSPACE="${REPO_ROOT}/.autoship/workspaces/${ISSUE_KEY}"
 PANE_LOG="${WORKSPACE}/pane.log"
+HOOKS_DIR="$(cat "${REPO_ROOT}/.autoship/hooks_dir" 2>/dev/null || echo "${REPO_ROOT}/hooks")"
 
 STALL_SECS=$(( ${STALL_TIMEOUT_MS:-300000} / 1000 ))
 
 # Resolve which tool this dispatch is for — used in all stuck/exhausted paths
 TOOL=$(jq -r --arg id "$ISSUE_KEY" '.issues[$id].agent // "codex-spark"' "${REPO_ROOT}/.autoship/state.json" 2>/dev/null || echo "codex-spark")
 
-# Fast-fail health check
+# Fast-fail health check (cross-platform timeout)
 HEALTH_CHECK_FAILED=0
-if command -v timeout >/dev/null 2>&1; then
-  timeout 10s codex --version >/dev/null 2>&1 || HEALTH_CHECK_FAILED=1
-elif command -v gtimeout >/dev/null 2>&1; then
+if command -v gtimeout >/dev/null 2>&1; then
   gtimeout 10s codex --version >/dev/null 2>&1 || HEALTH_CHECK_FAILED=1
+elif command -v timeout >/dev/null 2>&1; then
+  timeout 10s codex --version >/dev/null 2>&1 || HEALTH_CHECK_FAILED=1
 else
   codex --version >/dev/null 2>&1 || HEALTH_CHECK_FAILED=1
 fi
 
 if [[ "$HEALTH_CHECK_FAILED" -eq 1 ]]; then
   echo "STUCK" >> "$PANE_LOG"
-  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL" || true
+  bash "$HOOKS_DIR/quota-update.sh" stuck "$TOOL" || true
 
-  # Emit event and exit
   ISSUE_NUMBER="${ISSUE_KEY#issue-}"
   EVENT=$(jq -n \
     --arg type    "agent_stuck" \
@@ -47,7 +51,7 @@ if [[ "$HEALTH_CHECK_FAILED" -eq 1 ]]; then
     --argjson tok 0 \
     --arg ts      "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
     '{type: $type, issue: $issue, issue_number: ($issueN | tonumber), tokens_used: $tok, timestamp: $ts}')
-  bash "${REPO_ROOT}/hooks/emit-event.sh" "$EVENT"
+  bash "$HOOKS_DIR/emit-event.sh" "$EVENT" 2>/dev/null || true
   exit 0
 fi
 
@@ -58,126 +62,83 @@ if [[ ! -f "$PROMPT_FILE" ]]; then
 fi
 
 mkdir -p "$WORKSPACE"
-touch "$PANE_LOG"
+# Truncate pane.log to avoid stale markers from previous attempts
+> "$PANE_LOG"
 
-FIFO_IN="${WORKSPACE}/.codex-stdin"
-FIFO_OUT="${WORKSPACE}/.codex-stdout"
-rm -f "$FIFO_IN" "$FIFO_OUT"
-mkfifo -m 600 "$FIFO_IN" "$FIFO_OUT"
+# ---------------------------------------------------------------------------
+# Run codex exec with stdin pipe and stall watchdog
+# ---------------------------------------------------------------------------
+EXIT_CODE=0
+CODEX_PID=""
 
 cleanup() {
-  rm -f "$FIFO_IN" "$FIFO_OUT"
-  [[ -n "${APP_SERVER_PID:-}" ]] && kill "$APP_SERVER_PID" 2>/dev/null || true
-  [[ -n "${WATCHDOG_PID:-}" ]]   && kill "$WATCHDOG_PID"   2>/dev/null || true
+  [[ -n "${CODEX_PID:-}" ]] && kill "$CODEX_PID" 2>/dev/null || true
+  [[ -n "${WATCHDOG_PID:-}" ]] && kill "$WATCHDOG_PID" 2>/dev/null || true
 }
 trap cleanup EXIT
 
-# Spawn codex app-server reading from fifo, writing to fifo
-codex app-server < "$FIFO_IN" > "$FIFO_OUT" 2>/dev/null &
-APP_SERVER_PID=$!
+# Determine sandbox mode from environment or default to full bypass
+SANDBOX_FLAG="${CODEX_SANDBOX_FLAG:---dangerously-bypass-approvals-and-sandbox}"
 
-# Quick check if it crashed immediately
-sleep 1
-if ! kill -0 "$APP_SERVER_PID" 2>/dev/null; then
-  echo "ERROR: codex app-server failed to start" >&2
-  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL" || true
-  echo "STUCK" >> "$PANE_LOG"
-  exit 1
-fi
+# Pipe prompt via stdin to codex exec (avoids shell argument length limits)
+cat "$PROMPT_FILE" | codex exec $SANDBOX_FLAG -C "$WORKSPACE" >> "$PANE_LOG" 2>&1 &
+CODEX_PID=$!
 
-# Open write end of stdin fifo (keeps fifo open so app-server doesn't get EOF)
-exec 3>"$FIFO_IN"
-
-# Stall watchdog — kills app-server and emits stuck if deadline exceeded
+# Stall watchdog — kills codex if deadline exceeded
 (
   sleep "$STALL_SECS"
-  kill "$APP_SERVER_PID" 2>/dev/null || true
+  kill "$CODEX_PID" 2>/dev/null || true
   echo "STUCK" >> "$PANE_LOG"
 ) &
 WATCHDOG_PID=$!
 
-THREAD_ID="autoship-${ISSUE_KEY}-$$"
-TOKENS_USED=0
+# Wait for codex to finish
+wait "$CODEX_PID" 2>/dev/null || EXIT_CODE=$?
+CODEX_PID=""
 
-send_rpc() {
-  printf '%s\n' "$1" >&3
-}
-
-# Initialize
-send_rpc '{"jsonrpc":"2.0","method":"initialize","params":{"clientInfo":{"name":"autoship","version":"1.0.0"}},"id":1}'
-
-# Wait for initialization response (timeout 5s)
-if ! IFS= read -r -t 5 line <"$FIFO_OUT"; then
-  echo "ERROR: codex app-server initialization timed out" >&2
-  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL" || true
-  echo "STUCK" >> "$PANE_LOG"
-  exit 1
-fi
-
-if ! echo "$line" | jq -e '.result' >/dev/null 2>&1; then
-  echo "ERROR: codex app-server initialization failed: $line" >&2
-  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL" || true
-  echo "STUCK" >> "$PANE_LOG"
-  exit 1
-fi
-
-# thread/start
-START_MSG=$(jq -n --arg tid "$THREAD_ID" \
-  '{"jsonrpc":"2.0","method":"thread/start","params":{"threadId":$tid},"id":2}')
-send_rpc "$START_MSG"
-
-# turn/start with prompt content
-PROMPT_TEXT=$(cat "$PROMPT_FILE")
-PROMPT_JSON=$(jq -n --arg text "$PROMPT_TEXT" --arg threadId "$THREAD_ID" \
-  '{"jsonrpc":"2.0","method":"turn/start","params":{"threadId":$threadId,"input":[{"type":"text","text":$text}]},"id":3}')
-send_rpc "$PROMPT_JSON"
-
-# Read responses
-STATUS=""
-while IFS= read -r line <"$FIFO_OUT"; do
-  [[ -z "$line" ]] && continue
-
-  METHOD=$(echo "$line" | jq -r '.method // empty' 2>/dev/null)
-
-  case "$METHOD" in
-    "thread/tokenUsage/updated")
-      TOKENS_USED=$(echo "$line" | jq -r '.params.totalTokens // 0' 2>/dev/null || echo 0)
-      ;;
-    "turn/completed")
-      STATUS="COMPLETE"
-      break
-      ;;
-    "turn/failed")
-      STATUS="STUCK"
-      break
-      ;;
-  esac
-
-  # Also handle JSON-RPC result responses (id-based)
-  ID=$(echo "$line" | jq -r '.id // empty' 2>/dev/null)
-  if [[ -n "$ID" ]] && echo "$line" | jq -e '.error' >/dev/null 2>&1; then
-    STATUS="STUCK"
-    break
-  fi
-done
-
-# Cancel watchdog — we got a response
+# Cancel watchdog
 kill "$WATCHDOG_PID" 2>/dev/null || true
+WATCHDOG_PID=""
 
-# Close stdin fifo
-exec 3>&-
+# ---------------------------------------------------------------------------
+# Determine status
+# ---------------------------------------------------------------------------
+STATUS=""
+if [[ -f "${WORKSPACE}/AUTOSHIP_RESULT.md" ]]; then
+  STATUS="COMPLETE"
+elif [[ $EXIT_CODE -eq 0 ]]; then
+  # Codex exited cleanly but didn't produce a result file.
+  # Check if it made any git changes (uncommitted or committed).
+  CHANGES=$(git -C "$WORKSPACE" diff --name-only HEAD -- ':!pane.log' ':!.watcher.pid' ':!.codex*' ':!run-agent.sh' 2>/dev/null | wc -l | tr -d ' ')
+  COMMITS=$(git -C "$WORKSPACE" log "$(git -C "$WORKSPACE" merge-base HEAD master 2>/dev/null || echo HEAD)"..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')
+  if [[ "$CHANGES" -gt 0 ]] || [[ "$COMMITS" -gt 0 ]]; then
+    STATUS="COMPLETE"
+  else
+    STATUS="STUCK"
+  fi
+else
+  STATUS="STUCK"
+fi
 
-# Default to STUCK if no status word received
-STATUS="${STATUS:-STUCK}"
-
-# Write status to pane.log (monitor-agents.sh picks this up)
 echo "$STATUS" >> "$PANE_LOG"
 
 if [[ "$STATUS" == "STUCK" ]]; then
-  bash "${REPO_ROOT}/hooks/quota-update.sh" stuck "$TOOL" || true
+  bash "$HOOKS_DIR/quota-update.sh" stuck "$TOOL" || true
 fi
 
-# Emit event to event queue (atomic flock write)
+# ---------------------------------------------------------------------------
+# Parse token usage from codex output if present
+# ---------------------------------------------------------------------------
+TOKENS_USED=0
+if [[ -f "$PANE_LOG" ]]; then
+  PARSED=$(grep -oiE '(total tokens|tokens used|token_count)[[:space:]]*[:=][[:space:]]*[0-9]+' "$PANE_LOG" \
+    | grep -oE '[0-9]+$' | tail -1 || true)
+  [[ -n "$PARSED" ]] && TOKENS_USED="$PARSED"
+fi
+
+# ---------------------------------------------------------------------------
+# Emit event to queue
+# ---------------------------------------------------------------------------
 ISSUE_NUMBER="${ISSUE_KEY#issue-}"
 EVENT_TYPE="$( [[ "$STATUS" == "COMPLETE" ]] && echo "verify" || echo "agent_stuck" )"
 EVENT=$(jq -n \
@@ -188,9 +149,9 @@ EVENT=$(jq -n \
   --arg ts      "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
   '{type: $type, issue: $issue, issue_number: ($issueN | sub("[^0-9].*"; "") | tonumber), tokens_used: $tok, timestamp: $ts}')
 
-bash "${REPO_ROOT}/hooks/emit-event.sh" "$EVENT"
+bash "$HOOKS_DIR/emit-event.sh" "$EVENT" 2>/dev/null || true
 
-# Update token count in state.json
-bash "${REPO_ROOT}/hooks/update-state.sh" set-running "$ISSUE_KEY" "tokens_used=${TOKENS_USED}" 2>/dev/null || true
+# Update token count in state
+bash "$HOOKS_DIR/update-state.sh" set-running "$ISSUE_KEY" "tokens_used=${TOKENS_USED}" 2>/dev/null || true
 
 exit 0
