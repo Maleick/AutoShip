@@ -1,0 +1,60 @@
+CODEX_APPSERVER_STUCK issue-94 2026-04-13T16:36:50Z
+CODEX_APPSERVER_STUCK issue-95 2026-04-13T16:37:39Z
+WARN: claude available but never dispatched (12 total dispatches) — check CLI
+WARN: codex-spark available but never dispatched (12 total dispatches) — check CLI
+WARN: codex-gpt available but never dispatched (12 total dispatches) — check CLI
+WARN: copilot available but never dispatched (12 total dispatches) — check CLI
+AUTOSHIP.md changed — routing config reloaded
+WARN: claude available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-spark available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-gpt available but never dispatched (17 total dispatches) — check CLI
+WARN: copilot available but never dispatched (17 total dispatches) — check CLI
+[2026-04-13T17:24:59Z] sweep-stale: removing orphaned worktree issue-101 (state=unknown, pane_id=none)
+[2026-04-13T17:25:06Z] sweep-stale: removing orphaned worktree issue-102 (state=unknown, pane_id=none)
+WARN: claude available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-spark available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-gpt available but never dispatched (17 total dispatches) — check CLI
+WARN: copilot available but never dispatched (17 total dispatches) — check CLI
+[2026-04-13T17:31:52Z] sweep-stale: removing terminal worktree issue-102 (state=merged)
+[2026-04-13T17:31:59Z] sweep-stale: removing orphaned worktree issue-103 (state=unknown, pane_id=none)
+[2026-04-13T17:32:05Z] sweep-stale: removing orphaned worktree issue-104 (state=unknown, pane_id=none)
+[2026-04-13T17:32:13Z] sweep-stale: removing orphaned worktree issue-105 (state=unknown, pane_id=none)
+AUTOSHIP.md changed — routing config reloaded
+WARN: claude available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-spark available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-gpt available but never dispatched (17 total dispatches) — check CLI
+WARN: copilot available but never dispatched (17 total dispatches) — check CLI
+AUTOSHIP.md changed — routing config reloaded
+WARN: claude available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-spark available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-gpt available but never dispatched (17 total dispatches) — check CLI
+WARN: copilot available but never dispatched (17 total dispatches) — check CLI
+AUTOSHIP.md changed — routing config reloaded
+WARN: claude available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-spark available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-gpt available but never dispatched (17 total dispatches) — check CLI
+WARN: copilot available but never dispatched (17 total dispatches) — check CLI
+AUTOSHIP.md changed — routing config reloaded
+AUTOSHIP.md changed — routing config reloaded
+WARN: claude available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-spark available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-gpt available but never dispatched (17 total dispatches) — check CLI
+WARN: copilot available but never dispatched (17 total dispatches) — check CLI
+[2026-04-13T17:42:05Z] sweep-stale: removing orphaned worktree issue-93 (state=unclaimed, pane_id=none)
+[2026-04-13T17:42:11Z] sweep-stale: removing orphaned worktree issue-94 (state=unclaimed, pane_id=none)
+WARN: claude available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-spark available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-gpt available but never dispatched (17 total dispatches) — check CLI
+WARN: copilot available but never dispatched (17 total dispatches) — check CLI
+[2026-04-13T17:46:53Z] sweep-stale: removing orphaned worktree issue-95 (state=unclaimed, pane_id=none)
+[2026-04-13T17:46:58Z] sweep-stale: removing orphaned worktree issue-96 (state=unclaimed, pane_id=none)
+WARN: claude available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-spark available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-gpt available but never dispatched (17 total dispatches) — check CLI
+WARN: gemini available but never dispatched (17 total dispatches) — check CLI
+WARN: copilot available but never dispatched (17 total dispatches) — check CLI
+WARN: claude available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-spark available but never dispatched (17 total dispatches) — check CLI
+WARN: codex-gpt available but never dispatched (17 total dispatches) — check CLI
+WARN: gemini available but never dispatched (17 total dispatches) — check CLI
+WARN: copilot available but never dispatched (17 total dispatches) — check CLI

@@ -1,0 +1,19 @@
+{
+  "codex-spark": {
+    "quota_pct": 100,
+    "dispatches": 0,
+    "reset_date": "2026-04-13",
+    "exhausted": true
+  },
+  "codex-gpt": {
+    "quota_pct": 94,
+    "dispatches": 2,
+    "reset_date": "2026-04-13",
+    "exhausted": true
+  },
+  "gemini": {
+    "quota_pct": 38,
+    "dispatches": 9,
+    "reset_date": "2026-04-13"
+  }
+}
