@@ -22,6 +22,13 @@ cargo test           # Full workspace test suite
 python3 scripts/dev-preflight.py  # Same checks as CI — ALWAYS run before pushing
 ```
 
+## Effort & Thinking Budget
+
+- **Default (`/effort high`)**: 16k thinking tokens. Sufficient for M7/M8 architectural decisions, complex refactors, and multi-step debugging. Use for most work.
+- **Low effort (`/effort low`)**: 8k tokens. Use only for: trivial edits, single-line fixes, obvious typo corrections.
+- **Ultra effort (`/effort ultra`)**: 32k tokens (override cap). Use rarely — only when truly stuck on unfamiliar domain (e.g., first-time EQ offset RE, novel race condition debugging).
+- **Note**: Thinking tokens cost ~3x regular tokens in context accounting. Thinking is compressed as context fills; prepare handoffs early if approaching 80% capacity.
+
 ## Build Commands
 
 ```bash
@@ -80,6 +87,12 @@ All workflows run on self-hosted runners except the fork PR path in `ci.yml`, wh
 
 Claude is an optional issue worker. Full protocol is in [`AGENTS.md`](AGENTS.md) — follow it for any GitHub-routed work. Key rule: agents never merge PRs; the AutoShip orchestrator manages PR lifecycle and merge decisions.
 
+### Subagent Model Strategy
+
+- **Haiku** (default, fast dispatch): TaskList polling, quick searches, issue triage, status checks.
+- **Codex** (medium/complex, override per-task): M7/M8 feature dev, multi-file refactors, complex bug investigation. Use `Agent(subagent_type: "...", model: "codex", ...)` when a task requires sustained reasoning.
+- **Opus** (strategic design, rare escalations): Cross-crate architecture reviews, novel design decisions. Use only for T.O.P. launch decisions, not execution.
+
 ## Architecture
 
 ### Runtime modes
@@ -137,16 +150,22 @@ See `docs/implementation-roadmap.md` for current milestone status and sequencing
 
 ## Gotchas
 
+### Critical for M7/M8 Feature Work (Read These First)
+
+- **Offset rebasing**: All pointers in `offsets.rs` need `offsets::rebase(preferred_base, actual_base)` before use. Values in offsets.rs are preferred-base hex addresses, not ready-to-use pointers. Skipped rebasing → crash or silent data corruption (hard to debug).
+- **Field reads, not struct casts**: `SpawnInfo` populated field-by-field via `proc.read::<T>(addr + OFFSET)`, not wholesale struct cast. MQ2 struct layouts have gaps. Whole-struct reads → offset misalignment → broken AI decisions.
+- **IPC dual-channel naming**: Pipe/shared-mem names derived via `pipe_name(session_id, client_id)` → `\\.\pipe\{session_id:x}_cmd_{client_id}` and `{session_id:x}_state_{client_id}`. Never hardcode `textquest_cmd_` / `textquest_state_` prefixes. Hardcoded names → multi-session collisions, lost state frames.
+- **Platform gates**: All Windows APIs behind `#[cfg(windows)]` with macOS/Linux stubs. Never use `#[cfg(target_os)]` directly. Stubs return dummy data; code paths unreachable on macOS. Don't chase bugs in stub implementations.
+- **const fn constraints**: Drop `const` from functions that allocate (`Vec`, `String`, `Box`), take `&mut self`, or call non-const functions. `#[cfg]`-gated blocks inside `const fn` are also const-incompatible. Compiler errors on innocent-looking allocations.
+
+### Other Gotchas (Less Frequent)
+
 - **CMAKE env var**: `CMAKE_POLICY_VERSION_MINIMUM=3.5` is already set via `.cargo/config.toml`. Only export it manually if you are troubleshooting outside the normal Cargo flow.
-- **macOS stubs**: `#[cfg(not(windows))]` stubs return dummy data. Some code paths are unreachable on macOS — don't chase bugs in stub implementations.
-- **Offset addresses are not pointers**: Values in `offsets.rs` are preferred-base hex addresses, not ready-to-use pointers. Always `rebase()` before use.
 - **MacroQuest/eqlib references are optional local checkouts**: keep them outside the repo if you use them for offset or struct-reference work. Routine `cargo build` / `cargo test` work does not require them. Derived offsets still live in `textquest-common/src/offsets.rs`.
-- **Field reads, not struct casts**: If you see individual field reads where a struct read seems obvious, that's by design. MQ2 struct layouts have gaps.
 - **Nightly MSVC toolchain**: Windows builds require nightly Rust because `retour` (function hooking) uses unstable features. macOS builds work on stable.
 - **Edit tool + post-write automation**: Some local agent/editor setups run post-write automation that touches additional files and updates mtimes after an edit. This can trip Claude Code's "file modified since read" guard on subsequent edits in the same session. Fix: make all edits to a file in one `Edit` call, or use `Bash` for multi-edit `.rs` changes.
 - **Self-hosted runner workspaces persist**: Files from previous runs may exist at test import time but vanish after `actions/checkout`. Use `self.skipTest()` inside test bodies instead of `@unittest.skipUnless` for file-existence guards.
 - **Agent artifact files are gitignored**: `AUTOSHIP_RESULT.md`, `AUTOSHIP_PROMPT.md`, `BEACON_RESULT.md`, `BEACON_PROMPT.md`, `.autoship/` — never commit these. They are runtime outputs from the agent pipeline.
-- **const fn misuse**: Drop `const` from functions that allocate (`Vec`, `String`, `Box`), take `&mut self`, or call non-const functions — none of these are const-evaluable. `#[cfg]`-gated blocks inside `const fn` are a separate but related rejection trigger.
 - **README metrics badge format**: `update_readme_metrics.py` finds `[![Rust LOC]` and `[![Tests]` string markers for in-place replacement. HTML `<img>` badge format breaks it — keep these two badges as markdown even if other badges are HTML.
 - **Stale remote branch refs**: `git branch -r` can show 100+ phantom branches that no longer exist on GitHub. Run `git remote prune origin` to clear stale local tracking refs before any branch audit or bulk-delete operation.
 - **Pre-checkout bootstrap paradox**: The workspace prep bash block in `ci.yml`/`claude-agent.yml` must run before `actions/checkout`, so it cannot source a script from the repo. Keep it inlined in both workflows; `tests/test_ci_runner_workspace_prep.py` validates both blocks stay identical.
