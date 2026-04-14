@@ -1134,7 +1134,10 @@ mod tests {
         let lines: Vec<&str> = rendered.split('\n').collect();
 
         // Toast should be visible
-        assert!(rendered.contains("INFO"), "Toast message not found in rendered output");
+        assert!(
+            rendered.contains("INFO"),
+            "Toast message not found in rendered output"
+        );
 
         // Check that toast appears in the bottom area (around row 11-13)
         // Terminal is 15 rows: header (rows 0-2), body (rows 3-10), status bar (rows 11-13)
@@ -1144,7 +1147,10 @@ mod tests {
             .skip(8) // Start checking from row 8 onwards
             .any(|line| line.contains("INFO"));
 
-        assert!(has_toast_in_lower_area, "Toast should appear in lower area, not at top");
+        assert!(
+            has_toast_in_lower_area,
+            "Toast should appear in lower area, not at top"
+        );
     }
 
     fn render_app(mut app: App, width: u16, height: u16) -> String {
