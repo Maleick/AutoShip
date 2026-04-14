@@ -52,8 +52,22 @@ if [[ ! -f "$PROMPT_FILE" ]]; then
 fi
 
 mkdir -p "$WORKSPACE"
+
+# Kill any existing watcher process from previous dispatch attempt
+WATCHER_PID_FILE="${WORKSPACE}/.watcher.pid"
+if [[ -f "$WATCHER_PID_FILE" ]]; then
+  OLD_PID=$(cat "$WATCHER_PID_FILE" 2>/dev/null || echo "")
+  if [[ -n "$OLD_PID" ]]; then
+    kill "$OLD_PID" 2>/dev/null || true
+    rm -f "$WATCHER_PID_FILE"
+  fi
+fi
+
 # Truncate pane.log to avoid stale markers from previous attempts
+# Add watermark with dispatch attempt number to prevent re-processing old entries
+ATTEMPT_NUM=$(( $(grep -c "^===" "$PANE_LOG" 2>/dev/null || echo 0) + 1 ))
 > "$PANE_LOG"
+echo "=== Dispatch attempt #$ATTEMPT_NUM ===" >> "$PANE_LOG"
 
 # ---------------------------------------------------------------------------
 # Run gemini -p with stall watchdog

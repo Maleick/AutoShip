@@ -124,10 +124,19 @@ watch_logs() {
       fi
 
       # Start a tail watcher for this log; exits after the first status word.
+      # Uses watermark detection to ignore stale entries from previous dispatch attempts.
       (
         trap 'rm -f "$pid_file"' EXIT
-        tail -f "$logfile" 2>/dev/null | grep --line-buffered -E "^(COMPLETE|BLOCKED|STUCK)$" | \
-          while read -r status; do
+        LAST_WATERMARK=""
+        tail -f "$logfile" 2>/dev/null | while IFS= read -r line; do
+          # Detect dispatch attempt watermark (indicates log was truncated)
+          if [[ "$line" =~ ^===\ Dispatch\ attempt\ \#[0-9]+\ ===$ ]]; then
+            LAST_WATERMARK="$line"
+            continue  # Skip watermark line itself
+          fi
+          # Only process status words from current dispatch attempt
+          if [[ "$line" =~ ^(COMPLETE|BLOCKED|STUCK)$ ]]; then
+            status="$line"
             # CRITICAL: Validate .result_verified sentinel exists for COMPLETE status
             if [[ "$status" == "COMPLETE" ]]; then
               if [[ ! -f "$WORKSPACE_DIR/$key/.result_verified" ]]; then
@@ -136,9 +145,10 @@ watch_logs() {
                 continue  # Skip this status, keep watching
               fi
             fi
-            echo "[AGENT_STATUS] key=$key status=$status"
+            echo "[AGENT_STATUS] key=$key status=$status watermark=$LAST_WATERMARK"
             break
-          done
+          fi
+        done
       ) &
       echo $! > "$pid_file"
     done
