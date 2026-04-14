@@ -140,7 +140,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         );
     }
 
-    // Toast notification
+    // Toast notification (bottom-right floating overlay, above status bar)
     if let Some(toast) = app.toast.as_ref() {
         let (label, style) = match toast.level {
             ToastLevel::Info => (
@@ -166,7 +166,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         let toast_text = truncate_inline(&full_text, area.width.saturating_sub(4) as usize);
         let toast_width = (toast_text.chars().count() + 2).min(area.width as usize) as u16;
         let toast_x = area.x + area.width.saturating_sub(toast_width).saturating_sub(1);
-        let toast_y = area.y + 1;
+        // Position toast at bottom-right, just above the status bar (which starts at outer[2])
+        // outer[2] starts at outer[0].height + outer[1].height, so toast goes one row above that
+        let toast_y = outer[2].y.saturating_sub(1);
         let toast_area = Rect::new(toast_x, toast_y, toast_width, 1);
         frame.render_widget(Clear, toast_area);
         frame.render_widget(
@@ -1120,6 +1122,29 @@ mod tests {
         assert!(rendered.contains("WARN"));
         assert!(rendered.contains(".."));
         assert!(!rendered.contains(message));
+    }
+
+    #[test]
+    fn toast_appears_at_bottom_not_overlapping_header() {
+        let mut app = sample_app();
+        let message = "Toast at bottom";
+        app.set_toast(ToastLevel::Info, message);
+
+        let rendered = render_app(app, 60, 15);
+        let lines: Vec<&str> = rendered.split('\n').collect();
+
+        // Toast should be visible
+        assert!(rendered.contains("INFO"), "Toast message not found in rendered output");
+
+        // Check that toast appears in the bottom area (around row 11-13)
+        // Terminal is 15 rows: header (rows 0-2), body (rows 3-10), status bar (rows 11-13)
+        // Toast should appear at row 10 (just above status bar at row 11)
+        let has_toast_in_lower_area = lines
+            .iter()
+            .skip(8) // Start checking from row 8 onwards
+            .any(|line| line.contains("INFO"));
+
+        assert!(has_toast_in_lower_area, "Toast should appear in lower area, not at top");
     }
 
     fn render_app(mut app: App, width: u16, height: u16) -> String {
