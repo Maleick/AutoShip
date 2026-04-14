@@ -7,5 +7,6 @@ description = "PE binary diff tooling — PE parser + string extraction for EQ b
 [dependencies]
 goblin = "0.9"
 anyhow = { workspace = true }
+iced-x86 = "1.21"
 
 [dev-dependencies]

@@ -7,6 +7,12 @@
 use anyhow::{Context, Result};
 use goblin::pe::PE;
 
+pub mod xref;
+pub use xref::{
+    build_string_xref_index, extract_imports, match_string_references, ImportedSymbol,
+    StringRefMatch,
+};
+
 /// A null-terminated ASCII or UTF-8 string found in a PE section, together
 /// with its Relative Virtual Address (RVA) inside the image.
 #[derive(Debug, Clone, PartialEq, Eq)]
