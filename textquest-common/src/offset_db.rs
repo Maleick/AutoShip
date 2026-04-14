@@ -829,8 +829,7 @@ mod tests {
         let mut db = OffsetDatabase::from_compiled_offsets();
         db.globals.insert("customGlobal".to_string(), 0xDEAD);
         db.functions.insert("customFunc".to_string(), 0xBEEF);
-        db.context_menu
-            .insert("numItems".to_string(), 0x42);
+        db.context_menu.insert("numItems".to_string(), 0x42);
 
         let dir = tempfile::tempdir().expect("create temp dir");
         let path = dir.path().join("roundtrip.json");

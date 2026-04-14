@@ -101,7 +101,7 @@ Default roadmap verifier:
 - The active queue policy lives in `AGENTS.md`; treat older project-mirror guidance as historical context only.
 - `scripts/reconcile-agent-queue.sh` and `scripts/sync_project.py` remain legacy transition tools while GitHub Projects retire; they are not part of the normal build-run loop.
 - Link to canonical `TextQuest-Ghidra` snapshot or manifest paths instead of copying immutable evidence payloads into this repo.
-- Do not commit transient automation state such as `autoresearch-launch.json`, `autoresearch-state.json`, or `research-results.tsv`.
+- Do not commit transient automation state. Keep current autoresearch runtime under `.claude/autoresearch/`, and treat legacy root spills such as `autoresearch-state.json` or `research-results.tsv` as local-only cleanup targets.
 
 ```mermaid
 flowchart LR

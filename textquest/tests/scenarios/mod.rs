@@ -6,9 +6,7 @@
 use std::collections::HashMap;
 
 use textquest::camp::config::CampConfig;
-use textquest::camp::state::{
-    CampAction, CampLoop, CampMember, CampSnapshot, PULL_DURATION, Role,
-};
+use textquest::camp::state::{CampAction, CampLoop, CampMember, CampSnapshot, PULL_DURATION, Role};
 use textquest_common::types::GameState;
 
 // ============================================================================
@@ -267,16 +265,15 @@ impl Scenario for SoloFarmingScenario {
         // Verify we had combat-related commands
         let has_attack_commands = events.iter().any(|e| {
             e.commands.iter().any(|(_, action)| {
-                matches!(action, CampAction::CombatEngage { .. } | CampAction::CombatDisengage)
-                    || matches!(action, CampAction::Slash(s) if s.contains("/attack"))
+                matches!(
+                    action,
+                    CampAction::CombatEngage { .. } | CampAction::CombatDisengage
+                ) || matches!(action, CampAction::Slash(s) if s.contains("/attack"))
             })
         });
 
         if !has_attack_commands {
-            return ScenarioResult::fail(
-                events.len(),
-                "No combat commands detected".to_string(),
-            );
+            return ScenarioResult::fail(events.len(), "No combat commands detected".to_string());
         }
 
         ScenarioResult::pass(
@@ -405,10 +402,8 @@ impl Scenario for GroupHealScenario {
 
         // Verify healer is NOT casting at high tank HP
         let healer_id = 101u32;
-        let healer_cmds_healthy: Vec<_> = cmds
-            .iter()
-            .filter(|(pid, _)| *pid == healer_id)
-            .collect();
+        let healer_cmds_healthy: Vec<_> =
+            cmds.iter().filter(|(pid, _)| *pid == healer_id).collect();
         let has_heal_healthy = healer_cmds_healthy
             .iter()
             .any(|(_, action)| matches!(action, CampAction::Slash(s) if s == "/cast 1"));
@@ -436,10 +431,8 @@ impl Scenario for GroupHealScenario {
         });
 
         // Verify healer IS casting at low tank HP
-        let healer_cmds_damaged: Vec<_> = cmds
-            .iter()
-            .filter(|(pid, _)| *pid == healer_id)
-            .collect();
+        let healer_cmds_damaged: Vec<_> =
+            cmds.iter().filter(|(pid, _)| *pid == healer_id).collect();
         let has_heal_damaged = healer_cmds_damaged
             .iter()
             .any(|(_, action)| matches!(action, CampAction::Slash(s) if s == "/cast 1"));
@@ -595,16 +588,19 @@ impl Scenario for ZoneRecoveryScenario {
 
     fn verify(&self, events: &[ScenarioEvent]) -> ScenarioResult {
         if events.len() < 6 {
-            return ScenarioResult::fail(events.len(), "Insufficient ticks for recovery".to_string());
+            return ScenarioResult::fail(
+                events.len(),
+                "Insufficient ticks for recovery".to_string(),
+            );
         }
 
         // Verify camp remained stable throughout
         let stable_ticks = events
             .iter()
             .filter(|e| {
-                e.commands.iter().any(|(_, action)| {
-                    matches!(action, CampAction::Slash(s) if s == "camp_stable")
-                })
+                e.commands
+                    .iter()
+                    .any(|(_, action)| matches!(action, CampAction::Slash(s) if s == "camp_stable"))
             })
             .count();
 

@@ -34,7 +34,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 /// Semantic version for data schemas: major.minor.patch
@@ -54,7 +54,11 @@ pub struct SchemaVersion {
 impl SchemaVersion {
     /// Create a new schema version.
     pub const fn new(major: u32, minor: u32, patch: u32) -> Self {
-        Self { major, minor, patch }
+        Self {
+            major,
+            minor,
+            patch,
+        }
     }
 
     /// Parse a schema version from a string like "1.2.3".
@@ -72,7 +76,6 @@ impl SchemaVersion {
             patch: parts[2].parse()?,
         })
     }
-
 }
 
 impl std::fmt::Display for SchemaVersion {
@@ -165,22 +168,20 @@ impl MigrationRunner {
     pub fn current_version(&self) -> Result<SchemaVersion> {
         match self.backend.load("__schema_version__")? {
             Some(serde_json::Value::Object(map)) => {
-                let major = map
-                    .get("major")
-                    .and_then(|v| v.as_u64())
-                    .ok_or_else(|| anyhow!("Invalid version metadata: missing or non-numeric major"))?
-                    as u32;
-                let minor = map
-                    .get("minor")
-                    .and_then(|v| v.as_u64())
-                    .ok_or_else(|| anyhow!("Invalid version metadata: missing or non-numeric minor"))?
-                    as u32;
-                let patch = map
-                    .get("patch")
-                    .and_then(|v| v.as_u64())
-                    .ok_or_else(|| anyhow!("Invalid version metadata: missing or non-numeric patch"))?
-                    as u32;
-                Ok(SchemaVersion { major, minor, patch })
+                let major = map.get("major").and_then(|v| v.as_u64()).ok_or_else(|| {
+                    anyhow!("Invalid version metadata: missing or non-numeric major")
+                })? as u32;
+                let minor = map.get("minor").and_then(|v| v.as_u64()).ok_or_else(|| {
+                    anyhow!("Invalid version metadata: missing or non-numeric minor")
+                })? as u32;
+                let patch = map.get("patch").and_then(|v| v.as_u64()).ok_or_else(|| {
+                    anyhow!("Invalid version metadata: missing or non-numeric patch")
+                })? as u32;
+                Ok(SchemaVersion {
+                    major,
+                    minor,
+                    patch,
+                })
             }
             Some(_) => Err(anyhow!(
                 "Invalid version metadata: expected object, got different type"
@@ -291,23 +292,19 @@ impl PersistenceBackend for JsonFileBackend {
         if !path.exists() {
             return Ok(None);
         }
-        let content = fs::read_to_string(&path).map_err(|e| {
-            anyhow!("Failed to read file {}: {}", path.display(), e)
-        })?;
-        let value = serde_json::from_str(&content).map_err(|e| {
-            anyhow!("Failed to parse JSON from {}: {}", path.display(), e)
-        })?;
+        let content = fs::read_to_string(&path)
+            .map_err(|e| anyhow!("Failed to read file {}: {}", path.display(), e))?;
+        let value = serde_json::from_str(&content)
+            .map_err(|e| anyhow!("Failed to parse JSON from {}: {}", path.display(), e))?;
         Ok(Some(value))
     }
 
     fn save(&self, key: &str, data: &serde_json::Value) -> Result<()> {
         let path = self.key_path(key)?;
-        let content = serde_json::to_string_pretty(data).map_err(|e| {
-            anyhow!("Failed to serialize data: {}", e)
-        })?;
-        fs::write(&path, content).map_err(|e| {
-            anyhow!("Failed to write file {}: {}", path.display(), e)
-        })?;
+        let content = serde_json::to_string_pretty(data)
+            .map_err(|e| anyhow!("Failed to serialize data: {}", e))?;
+        fs::write(&path, content)
+            .map_err(|e| anyhow!("Failed to write file {}: {}", path.display(), e))?;
         Ok(())
     }
 
@@ -341,7 +338,10 @@ mod tests {
         }
 
         fn save(&self, key: &str, data: &serde_json::Value) -> Result<()> {
-            self.data.lock().unwrap().insert(key.to_string(), data.clone());
+            self.data
+                .lock()
+                .unwrap()
+                .insert(key.to_string(), data.clone());
             Ok(())
         }
 
@@ -455,7 +455,8 @@ mod tests {
         let backend = Box::new(MockBackend::new());
         let mut runner = MigrationRunner::new(backend);
 
-        let migration = TestMigration::new(SchemaVersion::new(0, 0, 0), SchemaVersion::new(1, 0, 0));
+        let migration =
+            TestMigration::new(SchemaVersion::new(0, 0, 0), SchemaVersion::new(1, 0, 0));
         runner.register(migration);
 
         assert_eq!(runner.migrations.len(), 1);

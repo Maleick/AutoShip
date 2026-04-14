@@ -168,7 +168,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         })
         .unwrap_or_else(|| String::from("—"));
 
-    let mut lines: Vec<Line<'_>> = Vec::new();
+    let mut detail_lines: Vec<Line<'_>> = Vec::new();
 
     if let Some(client) = app.active_client() {
         let client_name = client.local_player.as_ref().map_or_else(
@@ -215,14 +215,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
             .map(|secs| format!("{}s", secs))
             .unwrap_or_else(|| String::from("—"));
 
-        lines.extend([
-            Line::from(Span::styled(
-                "Selected Route",
-                Style::default()
-                    .fg(t.text_accent)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
+        detail_lines.extend([
             Line::from(vec![
                 Span::styled("  Toon: ", Style::default().fg(t.text_muted)),
                 Span::styled(client_name, Style::default().fg(t.text_normal)),
@@ -247,17 +240,17 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         ]);
 
         if !progress.is_empty() {
-            lines.push(Line::from(vec![
+            detail_lines.push(Line::from(vec![
                 Span::styled("  Prog: ", Style::default().fg(t.text_muted)),
                 Span::styled(progress, Style::default().fg(t.text_secondary)),
             ]));
         }
 
-        lines.push(Line::from(vec![
+        detail_lines.push(Line::from(vec![
             Span::styled("  Recovery: ", Style::default().fg(t.text_muted)),
             Span::styled(recovery, Style::default().fg(t.hp_low)),
         ]));
-        lines.push(Line::from(vec![
+        detail_lines.push(Line::from(vec![
             Span::styled("  Failure: ", Style::default().fg(t.text_muted)),
             Span::styled(
                 truncate_inline(failure_reason, cols[1].width.saturating_sub(14) as usize),
@@ -268,7 +261,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                 }),
             ),
         ]));
-        lines.push(Line::from(vec![
+        detail_lines.push(Line::from(vec![
             Span::styled("  Blockers: ", Style::default().fg(t.text_muted)),
             Span::styled(
                 truncate_inline(&blockers, cols[1].width.saturating_sub(14) as usize),
@@ -281,20 +274,20 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         ]));
 
         // Zone transition state section
-        lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
+        detail_lines.push(Line::from(""));
+        detail_lines.push(Line::from(Span::styled(
             "Zone Transition",
             Style::default()
                 .fg(t.text_accent)
                 .add_modifier(Modifier::BOLD),
         )));
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
+        detail_lines.push(Line::from(""));
+        detail_lines.push(Line::from(vec![
             Span::styled("  FSM: ", Style::default().fg(t.text_muted)),
             Span::styled(zone_fsm_label, Style::default().fg(zone_fsm_color)),
         ]));
         if !zone_stuck_label.is_empty() {
-            lines.push(Line::from(vec![
+            detail_lines.push(Line::from(vec![
                 Span::styled("  Stuck: ", Style::default().fg(t.text_muted)),
                 Span::styled(
                     zone_stuck_label,
@@ -305,7 +298,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
             ]));
         }
         if zone_timeout_label != "—" {
-            lines.push(Line::from(vec![
+            detail_lines.push(Line::from(vec![
                 Span::styled("  Retry: ", Style::default().fg(t.text_muted)),
                 Span::styled(
                     zone_timeout_label,
@@ -319,10 +312,12 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                 ),
             ]));
         }
-        lines.push(Line::from(""));
+        detail_lines.push(Line::from(""));
     }
 
-    lines.extend([
+    let mut command_lines: Vec<Line<'_>> = Vec::new();
+
+    command_lines.extend([
         Line::from(Span::styled(
             "Operating Mode",
             Style::default()
@@ -350,13 +345,13 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
     ]);
 
     if let Some(ma) = &app.main_assist {
-        lines.push(Line::from(vec![
+        command_lines.push(Line::from(vec![
             Span::styled("  MA:   ", Style::default().fg(t.text_muted)),
             Span::styled(ma.as_str(), Style::default().fg(t.text_highlight)),
         ]));
     }
     if let Some(mt) = &app.main_tank {
-        lines.push(Line::from(vec![
+        command_lines.push(Line::from(vec![
             Span::styled("  MT:   ", Style::default().fg(t.text_muted)),
             Span::styled(mt.as_str(), Style::default().fg(t.hp_low)),
         ]));
@@ -364,14 +359,14 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
 
     // ── Group Nav summary ──────────────────────────────────────────────
     if app.has_live_group_data() {
-        lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
+        command_lines.push(Line::from(""));
+        command_lines.push(Line::from(Span::styled(
             "Group Nav",
             Style::default()
                 .fg(t.text_accent)
                 .add_modifier(Modifier::BOLD),
         )));
-        lines.push(Line::from(""));
+        command_lines.push(Line::from(""));
 
         let (live_groups, _) = app.build_live_groups();
         for group in &live_groups {
@@ -419,7 +414,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                 t.text_muted
             };
 
-            lines.push(Line::from(vec![
+            command_lines.push(Line::from(vec![
                 Span::styled(
                     format!("  {leader_display:<12}"),
                     Style::default().fg(t.text_normal),
@@ -430,7 +425,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                 ),
             ]));
             if dest_str != "\u{2014}" {
-                lines.push(Line::from(vec![
+                command_lines.push(Line::from(vec![
                     Span::styled("    -> ", Style::default().fg(t.text_muted)),
                     Span::styled(dest_str, Style::default().fg(t.text_accent)),
                 ]));
@@ -438,14 +433,14 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         }
     }
 
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
+    command_lines.push(Line::from(""));
+    command_lines.push(Line::from(Span::styled(
         "Nav Commands",
         Style::default()
             .fg(t.text_accent)
             .add_modifier(Modifier::BOLD),
     )));
-    lines.push(Line::from(""));
+    command_lines.push(Line::from(""));
 
     for (cmd, desc) in &[
         (":nav <dest>", "Mesh route or slash fallback"),
@@ -459,7 +454,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         (":circle on  ", "Start circle kite"),
         (":circle off ", "Stop circle kite"),
     ] {
-        lines.push(Line::from(vec![
+        command_lines.push(Line::from(vec![
             Span::styled(*cmd, cmd_s),
             Span::raw("  "),
             Span::styled(*desc, lbl_s),
@@ -468,25 +463,25 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
 
     // ── Nav Debug Diagnostics overlay ─────────────────────────────────
     if app.nav_state.show_nav_debug {
-        lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
+        command_lines.push(Line::from(""));
+        command_lines.push(Line::from(Span::styled(
             "Nav Debug Diagnostics",
             Style::default()
                 .fg(t.text_highlight)
                 .add_modifier(Modifier::BOLD),
         )));
-        lines.push(Line::from(""));
+        command_lines.push(Line::from(""));
 
         if let Some((pid, ref diag)) = app.nav_state.nav_diagnostics {
-            lines.push(Line::from(vec![
+            command_lines.push(Line::from(vec![
                 Span::styled("  PID:   ", Style::default().fg(t.text_muted)),
                 Span::styled(pid.to_string(), Style::default().fg(t.text_secondary)),
             ]));
-            lines.push(Line::from(vec![
+            command_lines.push(Line::from(vec![
                 Span::styled("  State: ", Style::default().fg(t.text_muted)),
                 Span::styled(diag.state.as_str(), Style::default().fg(t.text_highlight)),
             ]));
-            lines.push(Line::from(vec![
+            command_lines.push(Line::from(vec![
                 Span::styled("  Mesh:  ", Style::default().fg(t.text_muted)),
                 Span::styled(
                     if diag.mesh_loaded { "Loaded" } else { "None" },
@@ -497,7 +492,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                     }),
                 ),
             ]));
-            lines.push(Line::from(vec![
+            command_lines.push(Line::from(vec![
                 Span::styled("  Path:  ", Style::default().fg(t.text_muted)),
                 Span::styled(
                     if diag.path_exists { "Yes" } else { "No" },
@@ -509,33 +504,33 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                 ),
             ]));
             if let Some(len) = diag.path_length {
-                lines.push(Line::from(vec![
+                command_lines.push(Line::from(vec![
                     Span::styled("  Len:   ", Style::default().fg(t.text_muted)),
                     Span::styled(format!("{len:.0}u"), Style::default().fg(t.text_secondary)),
                 ]));
             }
-            lines.push(Line::from(vec![
+            command_lines.push(Line::from(vec![
                 Span::styled("  WP:    ", Style::default().fg(t.text_muted)),
                 Span::styled(
                     format!("{}/{}", diag.waypoint_index, diag.waypoint_count),
                     Style::default().fg(t.text_secondary),
                 ),
             ]));
-            lines.push(Line::from(vec![
+            command_lines.push(Line::from(vec![
                 Span::styled("  Dist:  ", Style::default().fg(t.text_muted)),
                 Span::styled(
                     format!("{:.0}u", diag.distance_remaining),
                     Style::default().fg(t.text_secondary),
                 ),
             ]));
-            lines.push(Line::from(vec![
+            command_lines.push(Line::from(vec![
                 Span::styled("  Vel:   ", Style::default().fg(t.text_muted)),
                 Span::styled(
                     format!("{:.1} u/s", diag.velocity),
                     Style::default().fg(t.text_secondary),
                 ),
             ]));
-            lines.push(Line::from(vec![
+            command_lines.push(Line::from(vec![
                 Span::styled("  ", Style::default()),
                 Span::styled(
                     "(run :nav ui again to refresh)",
@@ -543,21 +538,21 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                 ),
             ]));
         } else {
-            lines.push(Line::from(Span::styled(
+            command_lines.push(Line::from(Span::styled(
                 "  No live diagnostics — run :nav ui while a client is focused.",
                 Style::default().fg(t.text_muted),
             )));
         }
     }
 
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
+    command_lines.push(Line::from(""));
+    command_lines.push(Line::from(Span::styled(
         "Combat Commands",
         Style::default()
             .fg(t.text_accent)
             .add_modifier(Modifier::BOLD),
     )));
-    lines.push(Line::from(""));
+    command_lines.push(Line::from(""));
 
     for (cmd, desc) in &[
         (":invite <n>", "Invite to group"),
@@ -571,17 +566,37 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         (":ch stop   ", "Stop CH chain"),
         (":ch adaptive", "on/off"),
     ] {
-        lines.push(Line::from(vec![
+        command_lines.push(Line::from(vec![
             Span::styled(*cmd, cmd_s),
             Span::raw("  "),
             Span::styled(*desc, lbl_s),
         ]));
     }
 
-    frame.render_widget(
-        Paragraph::new(lines).block(panel(" Commands & Mode ", t.border_warn, t)),
-        cols[1],
-    );
+    if detail_lines.is_empty() {
+        frame.render_widget(
+            Paragraph::new(command_lines).block(panel(" Commands & Mode ", t.border_warn, t)),
+            cols[1],
+        );
+    } else {
+        let detail_panel_height = (detail_lines.len() as u16).saturating_add(2);
+        let right_sections = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(detail_panel_height.min(cols[1].height.saturating_sub(8))),
+                Constraint::Min(8),
+            ])
+            .split(cols[1]);
+
+        frame.render_widget(
+            Paragraph::new(detail_lines).block(panel(" Selected Route ", t.border_primary, t)),
+            right_sections[0],
+        );
+        frame.render_widget(
+            Paragraph::new(command_lines).block(panel(" Commands & Mode ", t.border_warn, t)),
+            right_sections[1],
+        );
+    }
 }
 
 #[cfg(test)]

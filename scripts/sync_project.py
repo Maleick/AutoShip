@@ -12,9 +12,9 @@ Typical nightly invocation (from automation.toml):
     python scripts/sync_project.py --promote --record
 
 Options:
-    --state FILE     Autoresearch state file (default: autoresearch-state.json)
+    --state FILE     Autoresearch state file (default: .claude/autoresearch/state.json)
     --roadmap FILE   Canonical roadmap file (default: docs/implementation-roadmap.md)
-    --out FILE       Where to write sync results (default: autoresearch-project-sync.json)
+    --out FILE       Where to write sync results (default: .claude/autoresearch/project-sync.json)
     --promote        Actually call `gh` to add/update project items and create issues.
                      Without this flag the script runs in dry-run mode.
     --record         Write the sync results file even in dry-run mode.
@@ -42,9 +42,11 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-DEFAULT_STATE_FILE  = REPO_ROOT / "autoresearch-state.json"
+AUTORESEARCH_RUNTIME_DIR = REPO_ROOT / ".claude" / "autoresearch"
+
+DEFAULT_STATE_FILE  = AUTORESEARCH_RUNTIME_DIR / "state.json"
 DEFAULT_ROADMAP     = REPO_ROOT / "docs" / "implementation-roadmap.md"
-DEFAULT_OUT_FILE    = REPO_ROOT / "autoresearch-project-sync.json"
+DEFAULT_OUT_FILE    = AUTORESEARCH_RUNTIME_DIR / "project-sync.json"
 # Legacy project URL retained only for historical transition tooling.
 # Override via --project-url when running against a fork or a different project.
 DEFAULT_PROJECT_URL = "https://github.com/users/Maleick/projects/1"
@@ -465,6 +467,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(payload, indent=2))
 
     if args.promote or args.record:
+        out_file.parent.mkdir(parents=True, exist_ok=True)
         out_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         if args.verbose:
             print(f"Sync results written to {out_file}")

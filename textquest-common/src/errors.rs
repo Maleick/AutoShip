@@ -5,10 +5,10 @@
 //! Each error variant includes a severity level (Fatal/Recoverable/Warning) and
 //! can be mapped to automatic recovery actions (Retry, Reconnect, Rezone, etc.).
 
+use crate::types::ClientId;
 use std::fmt;
 use std::io;
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::types::ClientId;
 
 /// Severity level for an error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -131,42 +131,24 @@ pub enum TextQuestError {
         reason: String,
     },
     /// Combat targeting error (target lost, dead, invalid).
-    TargetingError {
-        client_id: ClientId,
-        reason: String,
-    },
+    TargetingError { client_id: ClientId, reason: String },
     /// Combat rotation error (out of mana, interrupted, etc.).
-    RotationError {
-        client_id: ClientId,
-        reason: String,
-    },
+    RotationError { client_id: ClientId, reason: String },
     /// Melee combat failed (unreachable, blocked, etc.).
-    MeleeFailed {
-        client_id: ClientId,
-        reason: String,
-    },
+    MeleeFailed { client_id: ClientId, reason: String },
 
     // ─── Config Errors ────────────────────────────────────────────────
     /// Configuration file not found or unreadable.
-    ConfigLoadFailed {
-        path: String,
-        reason: String,
-    },
+    ConfigLoadFailed { path: String, reason: String },
     /// Configuration parsing failed (invalid TOML, etc.).
-    ConfigParseFailed {
-        path: String,
-        reason: String,
-    },
+    ConfigParseFailed { path: String, reason: String },
     /// Required configuration field is missing.
     ConfigMissing {
         field: String,
         section: Option<String>,
     },
     /// Configuration validation failed (invalid values, etc.).
-    ConfigValidationFailed {
-        section: String,
-        reason: String,
-    },
+    ConfigValidationFailed { section: String, reason: String },
 
     // ─── Injection Errors ────────────────────────────────────────────
     /// DLL injection into target process failed.
@@ -180,9 +162,7 @@ pub enum TextQuestError {
         process_name: Option<String>,
     },
     /// DLL hook initialization failed.
-    HookInitFailed {
-        reason: String,
-    },
+    HookInitFailed { reason: String },
     /// Memory access violation or invalid pointer.
     MemoryAccessFailed {
         address: Option<u64>,
@@ -191,22 +171,13 @@ pub enum TextQuestError {
 
     // ─── Network Errors ───────────────────────────────────────────────
     /// Network socket operation failed.
-    NetworkError {
-        reason: String,
-        severity: Severity,
-    },
+    NetworkError { reason: String, severity: Severity },
     /// Packet send/recv failed.
-    PacketError {
-        direction: String,
-        reason: String,
-    },
+    PacketError { direction: String, reason: String },
 
     // ─── Generic/Unknown Errors ──────────────────────────────────────
     /// Generic error not fitting other categories.
-    Other {
-        message: String,
-        severity: Severity,
-    },
+    Other { message: String, severity: Severity },
 }
 
 impl TextQuestError {
@@ -330,9 +301,7 @@ impl fmt::Display for TextQuestError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::IpcSendFailed {
-                client_id,
-                reason,
-                ..
+                client_id, reason, ..
             } => {
                 write!(
                     f,
@@ -344,9 +313,7 @@ impl fmt::Display for TextQuestError {
                 )
             }
             Self::IpcRecvFailed {
-                client_id,
-                reason,
-                ..
+                client_id, reason, ..
             } => {
                 write!(
                     f,
@@ -377,11 +344,12 @@ impl fmt::Display for TextQuestError {
                     reason
                 )
             }
-            Self::IpcTimeout {
-                client_id,
-                command,
-            } => {
-                write!(f, "IPC timeout (client {}, command: {})", client_id, command)
+            Self::IpcTimeout { client_id, command } => {
+                write!(
+                    f,
+                    "IPC timeout (client {}, command: {})",
+                    client_id, command
+                )
             }
             Self::ZoneDenied {
                 client_id,
@@ -437,35 +405,14 @@ impl fmt::Display for TextQuestError {
                     client_id, spell_name, reason
                 )
             }
-            Self::TargetingError {
-                client_id,
-                reason,
-            } => {
-                write!(
-                    f,
-                    "Targeting error for client {}: {}",
-                    client_id, reason
-                )
+            Self::TargetingError { client_id, reason } => {
+                write!(f, "Targeting error for client {}: {}", client_id, reason)
             }
-            Self::RotationError {
-                client_id,
-                reason,
-            } => {
-                write!(
-                    f,
-                    "Rotation error for client {}: {}",
-                    client_id, reason
-                )
+            Self::RotationError { client_id, reason } => {
+                write!(f, "Rotation error for client {}: {}", client_id, reason)
             }
-            Self::MeleeFailed {
-                client_id,
-                reason,
-            } => {
-                write!(
-                    f,
-                    "Melee failed for client {}: {}",
-                    client_id, reason
-                )
+            Self::MeleeFailed { client_id, reason } => {
+                write!(f, "Melee failed for client {}: {}", client_id, reason)
             }
             Self::ConfigLoadFailed { path, reason } => {
                 write!(f, "Config load failed ({}): {}", path, reason)
@@ -487,10 +434,7 @@ impl fmt::Display for TextQuestError {
             Self::ConfigValidationFailed { section, reason } => {
                 write!(f, "Config validation failed [{}]: {}", section, reason)
             }
-            Self::InjectionFailed {
-                target_pid,
-                reason,
-            } => {
+            Self::InjectionFailed { target_pid, reason } => {
                 write!(
                     f,
                     "DLL injection failed{}: {}",
@@ -500,15 +444,11 @@ impl fmt::Display for TextQuestError {
                     reason
                 )
             }
-            Self::ProcessNotFound {
-                pid,
-                process_name,
-            } => {
+            Self::ProcessNotFound { pid, process_name } => {
                 write!(
                     f,
                     "Process not found{}{}",
-                    pid.map(|p| format!(" (pid {})", p))
-                        .unwrap_or_default(),
+                    pid.map(|p| format!(" (pid {})", p)).unwrap_or_default(),
                     process_name
                         .as_ref()
                         .map(|n| format!(" ({})", n))
@@ -522,9 +462,7 @@ impl fmt::Display for TextQuestError {
                 write!(
                     f,
                     "Memory access failed{}: {}",
-                    address
-                        .map(|a| format!(" (0x{:X})", a))
-                        .unwrap_or_default(),
+                    address.map(|a| format!(" (0x{:X})", a)).unwrap_or_default(),
                     reason
                 )
             }

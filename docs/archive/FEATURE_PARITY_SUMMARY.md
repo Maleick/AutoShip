@@ -285,11 +285,11 @@ Every issue includes:
 | Resource | Link |
 |----------|------|
 | Epic Issue | [#790](https://github.com/Maleick/TextQuest/issues/790) |
-| Feature Parity Doc | [RGMERCS_FEATURE_PARITY.md](docs/RGMERCS_FEATURE_PARITY.md) |
-| Issue Index | [ISSUE_INDEX.md](docs/ISSUE_INDEX.md) |
-| Implementation Plan | [IMPLEMENTATION_BREAKDOWN.md](docs/IMPLEMENTATION_BREAKDOWN.md) |
+| Feature Parity Doc | [RGMERCS_FEATURE_PARITY.md](../RGMERCS_FEATURE_PARITY.md) |
+| Issue Index | [ISSUE_INDEX.md](../ISSUE_INDEX.md) |
+| Implementation Plan | [IMPLEMENTATION_BREAKDOWN.md](../IMPLEMENTATION_BREAKDOWN.md) |
 | RGMercs Repo | https://github.com/DerpleDude/rgmercs |
-| TextQuest CLAUDE.md | [CLAUDE.md](CLAUDE.md) |
+| TextQuest CLAUDE.md | [CLAUDE.md](../../CLAUDE.md) |
 | Working Branch | `claude/rgmercs-feature-parity-H1dBp` |
 
 ---
@@ -297,19 +297,19 @@ Every issue includes:
 ## 🎓 Next Steps
 
 ### For Project Managers
-1. Review [IMPLEMENTATION_BREAKDOWN.md](docs/IMPLEMENTATION_BREAKDOWN.md) for resource planning
+1. Review [IMPLEMENTATION_BREAKDOWN.md](../IMPLEMENTATION_BREAKDOWN.md) for resource planning
 2. Use the sample 8-week sprint plan as template
 3. Assign engineers based on expertise matrix
 4. Set Phase 1 completion as critical gate
 
 ### For Tech Leads
-1. Review [ISSUE_INDEX.md](docs/ISSUE_INDEX.md) for dependency graph
+1. Review [ISSUE_INDEX.md](../ISSUE_INDEX.md) for dependency graph
 2. Identify high-risk items (#1007, #1013, #1105, etc.)
 3. Plan architecture review for Phase 1
 4. Set up CI gates for testing requirements
 
 ### For Engineers
-1. Start with [ISSUE_INDEX.md](docs/ISSUE_INDEX.md) to find your assignment
+1. Start with [ISSUE_INDEX.md](../ISSUE_INDEX.md) to find your assignment
 2. Review the feature issue (e.g., #791) for context
 3. Break down sub-tasks into daily work
 4. Follow complexity/testing requirements in each issue
@@ -328,9 +328,9 @@ Every issue includes:
 ## 📞 Questions?
 
 Refer to the detailed documents:
-- **Questions about scope?** → [RGMERCS_FEATURE_PARITY.md](docs/RGMERCS_FEATURE_PARITY.md)
-- **Questions about tasks?** → [ISSUE_INDEX.md](docs/ISSUE_INDEX.md)
-- **Questions about planning?** → [IMPLEMENTATION_BREAKDOWN.md](docs/IMPLEMENTATION_BREAKDOWN.md)
+- **Questions about scope?** → [RGMERCS_FEATURE_PARITY.md](../RGMERCS_FEATURE_PARITY.md)
+- **Questions about tasks?** → [ISSUE_INDEX.md](../ISSUE_INDEX.md)
+- **Questions about planning?** → [IMPLEMENTATION_BREAKDOWN.md](../IMPLEMENTATION_BREAKDOWN.md)
 - **Questions about this project?** → This file
 
 ---

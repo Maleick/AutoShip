@@ -127,7 +127,9 @@ impl InMemoryCollector {
         let mut summary = HashMap::new();
 
         for metric in metrics.iter() {
-            let entry = summary.entry(metric.name.clone()).or_insert((metric.kind, 0));
+            let entry = summary
+                .entry(metric.name.clone())
+                .or_insert((metric.kind, 0));
             entry.1 += 1;
         }
 

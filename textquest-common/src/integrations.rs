@@ -84,9 +84,15 @@ impl std::fmt::Display for NotificationEvent {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum NotificationChannel {
     /// Discord webhook (configured with URL and optional role mention).
-    Discord { webhook_url: String, mention_role_id: Option<String> },
+    Discord {
+        webhook_url: String,
+        mention_role_id: Option<String>,
+    },
     /// Generic HTTP webhook.
-    Webhook { url: String, headers: Option<HashMap<String, String>> },
+    Webhook {
+        url: String,
+        headers: Option<HashMap<String, String>>,
+    },
     /// Log file output (via tracing integration).
     Log,
 }
@@ -231,7 +237,12 @@ impl NotificationMessage {
     pub fn format_plain(&self) -> String {
         format!(
             "[{}] {} | {} @ {} | {}\n{}",
-            self.severity, self.event, self.character_name, self.zone_name, self.title, self.details
+            self.severity,
+            self.event,
+            self.character_name,
+            self.zone_name,
+            self.title,
+            self.details
         )
     }
 
@@ -240,7 +251,12 @@ impl NotificationMessage {
     pub fn format_discord(&self) -> String {
         let mut msg = format!(
             "**[{}] {}**\n```\nCharacter: {}\nZone: {}\nTime: {}\n```\n{}",
-            self.severity, self.event, self.character_name, self.zone_name, self.timestamp, self.title
+            self.severity,
+            self.event,
+            self.character_name,
+            self.zone_name,
+            self.timestamp,
+            self.title
         );
 
         if !self.details.is_empty() {
@@ -407,8 +423,14 @@ mod tests {
         .with_metadata("killer", "SomeNPC")
         .with_metadata("exp_lost", "1000");
 
-        assert_eq!(msg.metadata.get("killer").map(String::as_str), Some("SomeNPC"));
-        assert_eq!(msg.metadata.get("exp_lost").map(String::as_str), Some("1000"));
+        assert_eq!(
+            msg.metadata.get("killer").map(String::as_str),
+            Some("SomeNPC")
+        );
+        assert_eq!(
+            msg.metadata.get("exp_lost").map(String::as_str),
+            Some("1000")
+        );
     }
 
     #[test]

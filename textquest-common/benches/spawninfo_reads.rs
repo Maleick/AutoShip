@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 /// Simulated benchmark for SpawnInfo field-by-field reads.
 ///
@@ -39,15 +39,12 @@ fn bench_spawninfo_batch_reads(c: &mut Criterion) {
     c.bench_function("spawninfo_batch_field_reads", |b| {
         b.iter(|| {
             // Simulate a full spawn read cycle with 30+ field reads.
-            let mut result = Vec::new();
-
-            // Basic identifiers
-            result.push(black_box(1234u32));  // spawn_id
-            result.push(black_box(5678u32));  // object_id
-
-            // Names
-            result.push(black_box(9u32));      // name_length_1
-            result.push(black_box(7u32));      // name_length_2
+            let mut result = vec![
+                black_box(1234u32),
+                black_box(5678u32),
+                black_box(9u32),
+                black_box(7u32),
+            ];
 
             // Levels and stats
             for i in 0..5 {

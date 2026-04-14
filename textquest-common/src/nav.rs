@@ -2570,40 +2570,48 @@ mod tests {
 
     #[test]
     fn nav_status_is_moving_true_only_for_moving() {
-        assert!(NavStatus::Moving {
-            waypoint_index: 0,
-            waypoint_count: 2,
-            distance_remaining: 10.0
-        }
-        .is_moving());
+        assert!(
+            NavStatus::Moving {
+                waypoint_index: 0,
+                waypoint_count: 2,
+                distance_remaining: 10.0
+            }
+            .is_moving()
+        );
         assert!(!NavStatus::Idle.is_moving());
         assert!(!NavStatus::Arrived.is_moving());
     }
 
     #[test]
     fn nav_status_is_paused_true_only_for_paused() {
-        assert!(NavStatus::Paused {
-            reason: PauseReason::UserPause,
-            waypoint_index: 0,
-            waypoint_count: 1,
-            distance_remaining: 5.0,
-        }
-        .is_paused());
+        assert!(
+            NavStatus::Paused {
+                reason: PauseReason::UserPause,
+                waypoint_index: 0,
+                waypoint_count: 1,
+                distance_remaining: 5.0,
+            }
+            .is_paused()
+        );
         assert!(!NavStatus::Idle.is_paused());
-        assert!(!NavStatus::Moving {
-            waypoint_index: 0,
-            waypoint_count: 1,
-            distance_remaining: 10.0
-        }
-        .is_paused());
+        assert!(
+            !NavStatus::Moving {
+                waypoint_index: 0,
+                waypoint_count: 1,
+                distance_remaining: 10.0
+            }
+            .is_paused()
+        );
     }
 
     #[test]
     fn nav_status_is_stuck_true_only_for_stuck() {
-        assert!(NavStatus::Stuck {
-            recovery_attempt: 3
-        }
-        .is_stuck());
+        assert!(
+            NavStatus::Stuck {
+                recovery_attempt: 3
+            }
+            .is_stuck()
+        );
         assert!(!NavStatus::Idle.is_stuck());
     }
 
@@ -2615,12 +2623,14 @@ mod tests {
 
     #[test]
     fn nav_status_is_circling_true_only_for_circling() {
-        assert!(NavStatus::Circling {
-            radius: 20.0,
-            angle: 0.0,
-            mode: CircleMode::Cw,
-        }
-        .is_circling());
+        assert!(
+            NavStatus::Circling {
+                radius: 20.0,
+                angle: 0.0,
+                mode: CircleMode::Cw,
+            }
+            .is_circling()
+        );
         assert!(!NavStatus::Idle.is_circling());
     }
 

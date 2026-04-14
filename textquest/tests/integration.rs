@@ -861,7 +861,7 @@ fn scenario_solo_farming_loop() {
 
 #[test]
 fn scenario_group_healing() {
-    use scenarios::{ScenarioRunner, GroupHealScenario};
+    use scenarios::{GroupHealScenario, ScenarioRunner};
 
     let scenario = GroupHealScenario;
     let result = ScenarioRunner::run(&scenario);

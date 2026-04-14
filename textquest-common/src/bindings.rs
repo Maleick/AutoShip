@@ -177,13 +177,24 @@ macro_rules! eq_fn {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Mutex, OnceLock};
+
     use crate::offset_db::OffsetDatabase;
     use crate::offsets;
 
     eq_fn!(test_eq_binding_binding(a: u32, ptr: *const u8) -> u64 = offsets::CAST_SPELL);
 
+    static FALLBACK_DB_TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
     static mut BINDING_CALL_ARG_A: u32 = 0;
     static mut BINDING_CALL_ARG_PTR: usize = 0;
+
+    fn lock_fallback_db_test() -> std::sync::MutexGuard<'static, ()> {
+        FALLBACK_DB_TEST_MUTEX
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("fallback database test mutex poisoned")
+    }
 
     unsafe extern "C" fn test_target(a: u32, ptr: *const u8) -> u64 {
         unsafe {
@@ -204,6 +215,7 @@ mod tests {
 
     #[test]
     fn eq_fn_uses_rebased_preferred_when_no_fallback() {
+        let _test_guard = lock_fallback_db_test();
         super::clear_fallback_database();
         let expected = offsets::rebase(offsets::CAST_SPELL, 0x1000).expect("expected rebase");
         assert_eq!(test_eq_binding_binding.addr(0x1000), expected);
@@ -211,6 +223,9 @@ mod tests {
 
     #[test]
     fn eq_fn_uses_offset_db_when_preferred_is_stale() {
+        let _test_guard = lock_fallback_db_test();
+        super::clear_fallback_database();
+
         let mut db = OffsetDatabase::from_compiled_offsets();
         db.eq_preferred_base = 0;
 
@@ -294,6 +309,9 @@ mod tests {
 
     #[test]
     fn install_and_clear_fallback_database() {
+        let _test_guard = lock_fallback_db_test();
+        super::clear_fallback_database();
+
         let db = OffsetDatabase::from_compiled_offsets();
         super::install_fallback_database(db);
         // Verify it's installed by checking the lock is populated

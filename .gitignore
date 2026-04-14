@@ -27,6 +27,7 @@ credentials.db*
 logs/
 autoresearch-*.json
 autoresearch-*.tsv
+autoresearch-project-sync.json
 research-results.tsv
 __pycache__/
 *.pyc
@@ -41,6 +42,11 @@ BEACON_PROMPT.md
 .beacon/
 autoresearch-security/
 pane.log
+
+# Root-local scratch/build leftovers
+.watcher.pid
+libobservability.rlib
+test_zoning_module.rs
 
 # Agent and OpenWolf runtime state
 .wolf/

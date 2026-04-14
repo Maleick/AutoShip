@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 /// Benchmark simple JSON parsing (used as config alternative).
 fn bench_simple_json_parse(c: &mut Criterion) {
@@ -86,8 +86,18 @@ fn bench_config_struct_deser(c: &mut Criterion) {
 
     c.bench_function("config_struct_deserialize", |b| {
         b.iter(|| {
-            let config: Result<SimpleConfig, _> = serde_json::from_str(black_box(json_data));
-            config
+            let config: SimpleConfig =
+                serde_json::from_str(black_box(json_data)).expect("deserialize config");
+            let summary = config.accounts.iter().fold(0usize, |count, account| {
+                black_box(account.name.as_str());
+                black_box(account.server.as_str());
+                black_box(account.character.as_str());
+                black_box(account.class.as_str());
+                black_box(account.group);
+                count + 1
+            });
+
+            black_box(summary)
         });
     });
 }

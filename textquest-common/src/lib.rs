@@ -17,10 +17,10 @@ pub mod combat;
 pub mod errors;
 /// ETW-TI event parser and LoadLibrary injection detector.
 pub mod etw_ti_detect;
-/// External integration infrastructure for notifications and alerts.
-pub mod integrations;
 /// SQLite-backed database for Ghidra binary analysis data.
 pub mod ghidra_db;
+/// External integration infrastructure for notifications and alerts.
+pub mod integrations;
 /// IPC command and response enums for orchestrator-to-DLL communication.
 pub mod ipc;
 /// Login automation shared types (credentials, server selection, login phases).
@@ -29,8 +29,6 @@ pub mod login;
 pub mod nav;
 /// Observability infrastructure for metrics collection and structured logging.
 pub mod observability;
-/// Data persistence framework with schema migration support.
-pub mod persistence;
 /// Hot-updatable offset database backed by JSON.
 pub mod offset_db;
 /// EQ memory addresses and struct field offsets (preferred-base, rebased at runtime).
@@ -41,6 +39,8 @@ pub mod packet;
 pub mod pattern_db;
 /// UDP multicast peer-discovery announcement types.
 pub mod peer_discovery;
+/// Data persistence framework with schema migration support.
+pub mod persistence;
 /// Wire protocol definitions for serialized IPC messages.
 pub mod protocol;
 /// Routing scope types for cross-client command dispatch (M8 Orchestrator).
