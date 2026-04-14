@@ -52,20 +52,27 @@ if [[ ! -f "$RESULT_FILE" ]] && [[ -f "AUTOSHIP_RESULT.md" ]]; then
   echo "Warning: AUTOSHIP_RESULT.md not found in worktree, falling back to repo root" >> .autoship/poll.log
   RESULT_FILE="AUTOSHIP_RESULT.md"
 fi
-# Validate — must start with "# Result: #<N> —"
+# Validate — must start with "# Result: #<N> —" AND have ## Status section
 _VALID_RESULT=false
 if [[ -f "$RESULT_FILE" ]]; then
   _FIRST_LINE=$(head -1 "$RESULT_FILE")
-  if echo "$_FIRST_LINE" | grep -qE '^# Result: #[0-9]+ —'; then
+  _HAS_STATUS=$(grep -q '^## Status:' "$RESULT_FILE" && echo "true" || echo "false")
+  _FILE_SIZE=$(wc -c < "$RESULT_FILE" 2>/dev/null || echo "0")
+
+  if echo "$_FIRST_LINE" | grep -qE '^# Result: #[0-9]+ —' && [[ "$_HAS_STATUS" == "true" ]] && (( _FILE_SIZE > 100 )); then
     _VALID_RESULT=true
   else
-    # Log detailed error for debugging
-    echo "ERROR: $RESULT_FILE validation failed" >> .autoship/poll.log
-    echo "  Expected first line format: # Result: #<issue-number> — <title>" >> .autoship/poll.log
-    echo "  Actual first line: $_FIRST_LINE" >> .autoship/poll.log
-    echo "  Full file content:" >> .autoship/poll.log
-    head -5 "$RESULT_FILE" | sed 's/^/    /' >> .autoship/poll.log
-    echo "Warning: skipping archival for $ISSUE_KEY — AUTOSHIP_RESULT.md format invalid. Check format: first line must be '# Result: #<number> —'" >&2
+    # ESCALATE: Mark issue as BLOCKED and queue urgent verify event
+    echo "CRITICAL: $RESULT_FILE validation FAILED for $ISSUE_KEY" >> .autoship/poll.log
+    echo "  Expected: First line matching '^# Result: #[0-9]+ —', contains '## Status:', >100 bytes" >> .autoship/poll.log
+    echo "  Actual: First line: '$_FIRST_LINE'" >> .autoship/poll.log
+    echo "  Has Status section: $_HAS_STATUS, File size: $_FILE_SIZE bytes" >> .autoship/poll.log
+    echo "  Full file (first 10 lines):" >> .autoship/poll.log
+    head -10 "$RESULT_FILE" | sed 's/^/    /' >> .autoship/poll.log
+
+    # Mark as BLOCKED for escalation to Opus
+    bash "$(cat .autoship/hooks_dir)/update-state.sh" set-blocked "$ISSUE_NUM" escalation_reason="invalid_result_format" 2>/dev/null || true
+    echo "ERROR: Issue $ISSUE_KEY escalated to BLOCKED — result file validation failed. Manual review required." >&2
   fi
 fi
 if [[ "$_VALID_RESULT" == "true" ]]; then

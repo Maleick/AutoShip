@@ -102,6 +102,14 @@ watch_logs() {
         trap 'rm -f "$pid_file"' EXIT
         tail -f "$logfile" 2>/dev/null | grep --line-buffered -E "^(COMPLETE|BLOCKED|STUCK)$" | \
           while read -r status; do
+            # CRITICAL: Validate .result_verified sentinel exists for COMPLETE status
+            if [[ "$status" == "COMPLETE" ]]; then
+              if [[ ! -f "$WORKSPACE_DIR/$key/.result_verified" ]]; then
+                echo "[AGENT_STATUS_INVALID] key=$key status=$status reason=missing_result_verified" >> .autoship/poll.log
+                echo "ERROR: Agent $key reported COMPLETE but .result_verified sentinel missing — file write may not have completed" >> .autoship/poll.log
+                continue  # Skip this status, keep watching
+              fi
+            fi
             echo "[AGENT_STATUS] key=$key status=$status"
             break
           done

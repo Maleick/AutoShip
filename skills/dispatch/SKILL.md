@@ -407,9 +407,12 @@ $(cat .autoship/project-context.md 2>/dev/null || echo "No project context avail
 - Run tests after making changes
 - Commit your work to `autoship/<issue-key>`
 - Do NOT push, merge, or close the issue
-- **MANDATORY:** When finished, write `AUTOSHIP_RESULT.md` to `.autoship/workspaces/<issue-key>/` (NOT repo root)
-- **VERIFY:** Before printing your final status, confirm the file exists and is readable: `ls -la .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md`
-- **ONLY THEN:** Print your completion status (COMPLETE/BLOCKED/STUCK)
+- **MANDATORY BEFORE COMPLETING:**
+  1. Write `AUTOSHIP_RESULT.md` to `.autoship/workspaces/<issue-key>/`
+  2. Verify file exists and has content: `[[ -s .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md ]] || exit 1`
+  3. Create sentinel to prove file write completed: `wc -l < .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md > .autoship/workspaces/<issue-key>/.result_verified`
+  4. Verify sentinel exists: `[[ -f .autoship/workspaces/<issue-key>/.result_verified ]] || { echo 'FAILED'; exit 1; }`
+- **ONLY AFTER ALL ABOVE:** Print your completion status (COMPLETE/BLOCKED/STUCK)
 
 ## AUTOSHIP_RESULT.md Template
 
@@ -571,9 +574,12 @@ $(cat .autoship/project-context.md 2>/dev/null || echo "No project context avail
 - Run tests after making changes
 - Commit your work to `autoship/<issue-key>`
 - Do NOT push, merge, or close the issue
-- **MANDATORY:** When finished, write `AUTOSHIP_RESULT.md` to `.autoship/workspaces/<issue-key>/` (NOT repo root)
-- **VERIFY:** Before printing your final status, confirm the file exists and is readable: `ls -la .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md`
-- **ONLY THEN:** Print your completion status (COMPLETE/BLOCKED/STUCK)
+- **MANDATORY BEFORE COMPLETING:**
+  1. Write `AUTOSHIP_RESULT.md` to `.autoship/workspaces/<issue-key>/`
+  2. Verify file exists and has content: `[[ -s .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md ]] || exit 1`
+  3. Create sentinel to prove file write completed: `wc -l < .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md > .autoship/workspaces/<issue-key>/.result_verified`
+  4. Verify sentinel exists: `[[ -f .autoship/workspaces/<issue-key>/.result_verified ]] || { echo 'FAILED'; exit 1; }`
+- **ONLY AFTER ALL ABOVE:** Print your completion status (COMPLETE/BLOCKED/STUCK)
 
 ## AUTOSHIP_RESULT.md Template
 
