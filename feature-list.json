@@ -9,6 +9,15 @@
         "python3 scripts/sync_wiki.py --check"
       ],
       "notes": "Completed pruning and simplification work. Documentation now reflects the merge gate, public docs site, and nightly/manual wiki publication lanes."
+    },
+    {
+      "id": "m10-economy-execution-scope",
+      "name": "M10 Economy execution scope",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "Roadmap-facing docs route provider-backed Soul/LLM work to M11 and economy execution loops to M10"
+      ],
+      "notes": "Loot intake, vendor cycle, banking cycle, and economy TUI summaries. Soul/LLM work routed to M11."
     }
   ]
 }
