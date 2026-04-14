@@ -48,4 +48,20 @@ mod tests {
         set_executable();
         set_writable();
     }
+
+    #[test]
+    fn set_executable_then_set_writable_roundtrip() {
+        // On non-Windows stubs, both should be no-ops that don't panic
+        set_executable();
+        set_writable();
+        set_executable();
+    }
+
+    #[test]
+    fn repeated_calls_are_safe() {
+        for _ in 0..10 {
+            set_executable();
+            set_writable();
+        }
+    }
 }

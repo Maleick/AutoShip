@@ -805,4 +805,112 @@ mod tests {
             db.get_context_menu_offset("numItems")
         );
     }
+
+    // ─── load/save edge cases ───────────────────────────────────────────
+
+    #[test]
+    fn load_from_nonexistent_path_object_returns_error() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let result = OffsetDatabase::load_from_file(&dir.path().join("does_not_exist.json"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_from_invalid_json_via_tempfile_returns_error() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join("bad.json");
+        std::fs::write(&path, "not valid json {{{").expect("write");
+        let result = OffsetDatabase::load_from_file(&path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn save_and_load_roundtrip_preserves_custom_entries() {
+        let mut db = OffsetDatabase::from_compiled_offsets();
+        db.globals.insert("customGlobal".to_string(), 0xDEAD);
+        db.functions.insert("customFunc".to_string(), 0xBEEF);
+        db.context_menu
+            .insert("numItems".to_string(), 0x42);
+
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join("roundtrip.json");
+        db.save_to_file(&path).expect("save");
+        let loaded = OffsetDatabase::load_from_file(&path).expect("load");
+        assert_eq!(loaded.get_global("customGlobal"), Some(0xDEAD));
+        assert_eq!(loaded.get_function("customFunc"), Some(0xBEEF));
+        assert_eq!(loaded.get_context_menu_offset("numItems"), Some(0x42));
+    }
+
+    // ─── rebase tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn rebase_returns_none_for_address_below_preferred_base() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        // An address smaller than preferred base should underflow
+        let result = db.rebase(0, db.eq_preferred_base + 1);
+        // 0 < eq_preferred_base for any realistic base, so checked_sub returns None
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn rebase_computes_correct_runtime_address() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let preferred_addr = db.eq_preferred_base + 0x1000;
+        let actual_base = 0x7FF0_0000_0000_u64;
+        let result = db.rebase(preferred_addr, actual_base);
+        assert_eq!(result, Some((actual_base + 0x1000) as usize));
+    }
+
+    #[test]
+    fn rebase_at_preferred_base_returns_actual_base() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        let result = db.rebase(db.eq_preferred_base, 0x1_0000);
+        assert_eq!(result, Some(0x1_0000));
+    }
+
+    // ─── get_* accessors for missing keys ───────────────────────────────
+
+    #[test]
+    fn get_global_missing_returns_none() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        assert!(db.get_global("nonExistentGlobal").is_none());
+    }
+
+    #[test]
+    fn get_player_base_offset_missing_returns_none() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        assert!(db.get_player_base_offset("nonExistent").is_none());
+    }
+
+    #[test]
+    fn get_player_zone_offset_missing_returns_none() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        assert!(db.get_player_zone_offset("nonExistent").is_none());
+    }
+
+    #[test]
+    fn get_function_missing_returns_none() {
+        let db = OffsetDatabase::from_compiled_offsets();
+        assert!(db.get_function("nonExistentFunction").is_none());
+    }
+
+    // ─── merge_scan_results edge cases ──────────────────────────────────
+
+    #[test]
+    fn merge_scan_results_empty_report_is_noop() {
+        let original = OffsetDatabase::from_compiled_offsets();
+        let mut db = original.clone();
+        let report = crate::scan_engine::ScanReport {
+            module: crate::pattern_db::ScanModule::EqGame,
+            entries_scanned: 0,
+            entries_found: 0,
+            entries_validated: 0,
+            entries_failed: vec![],
+            entries_skipped: vec![],
+            entries_moved: vec![],
+            results: vec![],
+        };
+        db.merge_scan_results(&report);
+        assert_eq!(db, original);
+    }
 }

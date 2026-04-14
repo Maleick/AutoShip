@@ -69,3 +69,56 @@ pub fn remove_all() {
     timing::remove();
     tracing::info!("All hooks removed");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use slot_manager::{HookGameState, HookKind};
+
+    #[test]
+    fn set_game_state_does_not_panic() {
+        // Exercises the OnceLock init + Mutex lock path.
+        set_game_state(HookGameState::Login);
+        set_game_state(HookGameState::InGame);
+        set_game_state(HookGameState::ZoneLoading);
+    }
+
+    #[test]
+    fn set_game_state_idempotent() {
+        // Calling the same state twice should not panic.
+        set_game_state(HookGameState::InGame);
+        set_game_state(HookGameState::InGame);
+    }
+
+    #[test]
+    fn install_all_returns_ok() {
+        assert!(install_all().is_ok());
+    }
+
+    #[test]
+    fn remove_all_does_not_panic() {
+        remove_all();
+    }
+
+    #[test]
+    fn manager_returns_same_instance() {
+        let a = manager() as *const _;
+        let b = manager() as *const _;
+        assert_eq!(a, b, "OnceLock should return the same instance");
+    }
+
+    #[test]
+    fn set_game_state_updates_slot_plan() {
+        // Verify the underlying manager state updates
+        set_game_state(HookGameState::InGame);
+        let guard = manager().lock().unwrap();
+        assert_eq!(guard.state(), HookGameState::InGame);
+        assert_eq!(guard.assignments()[0], Some(HookKind::ProcessGameEvents));
+    }
+
+    #[test]
+    fn hook_catalog_constant_is_set() {
+        assert!(!HOOK_CATALOG.is_empty());
+        assert!(HOOK_CATALOG.contains("hook-detection"));
+    }
+}

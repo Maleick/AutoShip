@@ -2393,4 +2393,390 @@ mod tests {
     fn arrival_distance_is_positive() {
         const _: () = assert!(ARRIVAL_DISTANCE > 0.0);
     }
+
+    // ─── step_toward_heading tests ──────────────────────────────────────
+
+    #[test]
+    fn step_toward_heading_small_positive_delta() {
+        // target slightly ahead — should arrive in one step
+        let result = step_toward_heading(100.0, 110.0, 16.0);
+        assert!((result - 110.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn step_toward_heading_small_negative_delta() {
+        let result = step_toward_heading(100.0, 90.0, 16.0);
+        assert!((result - 90.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn step_toward_heading_large_positive_delta_clamped() {
+        // 60 degrees apart, max step 16 → should only step 16
+        let result = step_toward_heading(100.0, 160.0, 16.0);
+        assert!((result - 116.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn step_toward_heading_large_negative_delta_clamped() {
+        let result = step_toward_heading(160.0, 100.0, 16.0);
+        assert!((result - 144.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn step_toward_heading_wraps_around_zero_boundary() {
+        // From 500 toward 10 — shortest path crosses the 0/512 boundary
+        let result = step_toward_heading(500.0, 10.0, 16.0);
+        // diff = 10 - 500 = -490 → normalize → -490 + 512 = 22 → step = +16
+        assert!((result - 4.0).abs() < f32::EPSILON, "got {result}");
+    }
+
+    #[test]
+    fn step_toward_heading_wraps_around_reverse() {
+        // From 10 toward 500 — shortest path is CCW
+        let result = step_toward_heading(10.0, 500.0, 16.0);
+        // diff = 500 - 10 = 490 → normalize → 490 - 512 = -22 → step = -16
+        // (10 - 16 + 512) % 512 = 506
+        assert!((result - 506.0).abs() < f32::EPSILON, "got {result}");
+    }
+
+    #[test]
+    fn step_toward_heading_exact_max_step_snaps() {
+        let result = step_toward_heading(100.0, 116.0, 16.0);
+        assert!((result - 116.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn step_toward_heading_zero_step() {
+        // max_step = 0 and diff > 0: steps 0, so stays at current
+        let result = step_toward_heading(100.0, 200.0, 0.0);
+        assert!((result - 100.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn step_toward_heading_same_heading() {
+        let result = step_toward_heading(256.0, 256.0, 16.0);
+        assert!((result - 256.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn step_toward_heading_opposite_direction() {
+        // Exactly 256 apart — tests the boundary condition of the shortest path
+        let result = step_toward_heading(0.0, 256.0, 16.0);
+        // diff = 256 → not strictly > 256, so doesn't trigger normalization.
+        // 256 > 16 → step = +16
+        assert!((result - 16.0).abs() < f32::EPSILON, "got {result}");
+    }
+
+    // ─── CircleConfig tests ─────────────────────────────────────────────
+
+    #[test]
+    fn circle_config_with_radius_sets_radius() {
+        let cfg = CircleConfig::with_radius(35.0);
+        assert!((cfg.radius - 35.0).abs() < f32::EPSILON);
+        assert_eq!(cfg.mode, CircleMode::Cw);
+        assert!(cfg.center.is_none());
+        assert!(cfg.target_id.is_none());
+        assert_eq!(cfg.drunken_interval, 20);
+    }
+
+    #[test]
+    fn circle_config_at_loc_sets_center_and_radius() {
+        let cfg = CircleConfig::at_loc(100.0, 200.0, 50.0, 25.0);
+        assert!((cfg.radius - 25.0).abs() < f32::EPSILON);
+        let center = cfg.center.expect("center should be set");
+        // Note: at_loc takes (y, x, z, radius) but constructs Waypoint::new(x, y, z)
+        assert!((center.x - 200.0).abs() < f32::EPSILON);
+        assert!((center.y - 100.0).abs() < f32::EPSILON);
+        assert!((center.z - 50.0).abs() < f32::EPSILON);
+        assert_eq!(cfg.mode, CircleMode::Cw);
+    }
+
+    #[test]
+    fn circle_config_default() {
+        let cfg = CircleConfig::default();
+        assert!((cfg.radius - 20.0).abs() < f32::EPSILON);
+        assert!(cfg.center.is_none());
+        assert!(cfg.target_id.is_none());
+    }
+
+    #[test]
+    fn circle_config_serde_roundtrip() {
+        let cfg = CircleConfig::at_loc(50.0, 60.0, 10.0, 30.0);
+        let json = serde_json::to_string(&cfg).expect("serialize");
+        let restored: CircleConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(cfg, restored);
+    }
+
+    // ─── NavStatus label and predicate coverage ─────────────────────────
+
+    #[test]
+    fn nav_status_label_all_variants() {
+        assert_eq!(NavStatus::Idle.label(), "Idle");
+        assert_eq!(
+            NavStatus::Moving {
+                waypoint_index: 0,
+                waypoint_count: 1,
+                distance_remaining: 10.0
+            }
+            .label(),
+            "Navigating"
+        );
+        assert_eq!(
+            NavStatus::Paused {
+                reason: PauseReason::Warp,
+                waypoint_index: 0,
+                waypoint_count: 1,
+                distance_remaining: 5.0,
+            }
+            .label(),
+            "Paused"
+        );
+        assert_eq!(
+            NavStatus::Stuck {
+                recovery_attempt: 1
+            }
+            .label(),
+            "Stuck"
+        );
+        assert_eq!(NavStatus::Arrived.label(), "Arrived");
+        assert_eq!(
+            NavStatus::Following {
+                leader_name: "Tank".to_string(),
+                distance_to_anchor: 10.0,
+                returning: false,
+            }
+            .label(),
+            "Following"
+        );
+        assert_eq!(
+            NavStatus::Sticking {
+                target_id: 1,
+                distance: 5.0,
+                in_range: true,
+            }
+            .label(),
+            "Sticking"
+        );
+        assert_eq!(
+            NavStatus::Circling {
+                radius: 20.0,
+                angle: 0.0,
+                mode: CircleMode::Cw,
+            }
+            .label(),
+            "Circling"
+        );
+    }
+
+    #[test]
+    fn nav_status_is_moving_true_only_for_moving() {
+        assert!(NavStatus::Moving {
+            waypoint_index: 0,
+            waypoint_count: 2,
+            distance_remaining: 10.0
+        }
+        .is_moving());
+        assert!(!NavStatus::Idle.is_moving());
+        assert!(!NavStatus::Arrived.is_moving());
+    }
+
+    #[test]
+    fn nav_status_is_paused_true_only_for_paused() {
+        assert!(NavStatus::Paused {
+            reason: PauseReason::UserPause,
+            waypoint_index: 0,
+            waypoint_count: 1,
+            distance_remaining: 5.0,
+        }
+        .is_paused());
+        assert!(!NavStatus::Idle.is_paused());
+        assert!(!NavStatus::Moving {
+            waypoint_index: 0,
+            waypoint_count: 1,
+            distance_remaining: 10.0
+        }
+        .is_paused());
+    }
+
+    #[test]
+    fn nav_status_is_stuck_true_only_for_stuck() {
+        assert!(NavStatus::Stuck {
+            recovery_attempt: 3
+        }
+        .is_stuck());
+        assert!(!NavStatus::Idle.is_stuck());
+    }
+
+    #[test]
+    fn nav_status_is_arrived_true_only_for_arrived() {
+        assert!(NavStatus::Arrived.is_arrived());
+        assert!(!NavStatus::Idle.is_arrived());
+    }
+
+    #[test]
+    fn nav_status_is_circling_true_only_for_circling() {
+        assert!(NavStatus::Circling {
+            radius: 20.0,
+            angle: 0.0,
+            mode: CircleMode::Cw,
+        }
+        .is_circling());
+        assert!(!NavStatus::Idle.is_circling());
+    }
+
+    // ─── NavPathMetrics factory tests ───────────────────────────────────
+
+    #[test]
+    fn nav_path_metrics_success_with_length() {
+        let m = NavPathMetrics::success(Some(100.0));
+        assert!(m.path_exists);
+        assert!((m.path_length.unwrap() - 100.0).abs() < f32::EPSILON);
+        assert!(m.failure_reason.is_none());
+        assert!(m.failure_kind.is_none());
+        assert!(!m.replan_recommended);
+    }
+
+    #[test]
+    fn nav_path_metrics_success_without_length() {
+        let m = NavPathMetrics::success(None);
+        assert!(m.path_exists);
+        assert!(m.path_length.is_none());
+    }
+
+    #[test]
+    fn nav_path_metrics_failure_data_gap() {
+        let m = NavPathMetrics::failure("no mesh", NavPathFailureKind::DataGap, None, true);
+        assert!(!m.path_exists);
+        assert_eq!(m.failure_reason.as_deref(), Some("no mesh"));
+        assert_eq!(m.failure_kind, Some(NavPathFailureKind::DataGap));
+        assert!(m.replan_recommended);
+    }
+
+    #[test]
+    fn nav_path_metrics_failure_transient() {
+        let m = NavPathMetrics::failure(
+            "blocked",
+            NavPathFailureKind::TransientBlockage,
+            Some(50.0),
+            false,
+        );
+        assert!(!m.path_exists);
+        assert!((m.path_length.unwrap() - 50.0).abs() < f32::EPSILON);
+        assert!(!m.replan_recommended);
+    }
+
+    #[test]
+    fn nav_path_failure_kind_labels() {
+        assert_eq!(NavPathFailureKind::DataGap.label(), "data gap");
+        assert_eq!(
+            NavPathFailureKind::TransientBlockage.label(),
+            "transient blockage"
+        );
+    }
+
+    #[test]
+    fn nav_path_metrics_serde_roundtrip() {
+        let m = NavPathMetrics::failure("test", NavPathFailureKind::DataGap, Some(10.0), true);
+        let json = serde_json::to_string(&m).expect("serialize");
+        let restored: NavPathMetrics = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(m, restored);
+    }
+
+    // ─── NavCampConfig::return_position_randomized tests ────────────────
+
+    #[test]
+    fn camp_config_return_position_randomized_without_scatter() {
+        let config = NavCampConfig {
+            center: Waypoint::new(50.0, 50.0, 0.0),
+            heading: 0.0,
+            radius: 30.0,
+            scatter: None,
+            role: "tank".to_string(),
+            leash_factor: 1.5,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
+            autopause: false,
+        };
+        let pos = config.return_position_randomized(0.5, 0.5);
+        assert!((pos.x - 50.0).abs() < f32::EPSILON);
+        assert!((pos.y - 50.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn camp_config_return_position_randomized_with_scatter() {
+        let config = NavCampConfig {
+            center: Waypoint::new(50.0, 50.0, 0.0),
+            heading: 0.0,
+            radius: 30.0,
+            scatter: Some(ScatterConfig::new(0.0, 20.0, 10.0)),
+            role: "healer".to_string(),
+            leash_factor: 1.5,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
+            autopause: false,
+        };
+        // With non-zero scatsize and seeds, position should differ from center
+        let pos = config.return_position_randomized(0.5, 0.5);
+        // The scatter should produce a point within scatdist + scatsize of center
+        let dist = config.center.distance_2d(&pos);
+        assert!(
+            dist <= 30.0,
+            "randomized position should be within scatdist+scatsize: dist={dist}"
+        );
+    }
+
+    #[test]
+    fn camp_config_return_position_randomized_zero_seeds() {
+        let config = NavCampConfig {
+            center: Waypoint::new(100.0, 200.0, 0.0),
+            heading: 0.0,
+            radius: 30.0,
+            scatter: Some(ScatterConfig::new(90.0, 15.0, 5.0)),
+            role: "dps".to_string(),
+            leash_factor: 1.5,
+            min_delay_ms: 0,
+            max_delay_ms: 0,
+            return_no_aggro: false,
+            return_not_looting: false,
+            autopause: false,
+        };
+        // angle_seed=0 → theta=0, dist_seed=0 → r=0 → scatter offset is zero
+        let pos = config.return_position_randomized(0.0, 0.0);
+        // With dist_seed=0, the scatter resolve reduces to the fixed offset
+        let expected = config.scatter.as_ref().unwrap().offset(&config.center);
+        assert!((pos.x - expected.x).abs() < f32::EPSILON);
+        assert!((pos.y - expected.y).abs() < f32::EPSILON);
+    }
+
+    // ─── HeadingMode coverage ───────────────────────────────────────────
+
+    #[test]
+    fn heading_mode_serde_roundtrip() {
+        for mode in [HeadingMode::True, HeadingMode::Loose] {
+            let json = serde_json::to_string(&mode).expect("serialize");
+            let restored: HeadingMode = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(mode, restored);
+        }
+    }
+
+    // ─── PauseReason coverage ───────────────────────────────────────────
+
+    #[test]
+    fn pause_reason_serde_roundtrip() {
+        let reasons = [
+            PauseReason::Warp,
+            PauseReason::UserPause,
+            PauseReason::UserInput,
+            PauseReason::GmNearby,
+        ];
+        for reason in reasons {
+            let json = serde_json::to_string(&reason).expect("serialize");
+            let restored: PauseReason = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(reason, restored);
+        }
+    }
 }
