@@ -52,20 +52,14 @@ class WorkflowContractTests(unittest.TestCase):
         text = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
         merge_gate = self._job_block(text, "merge_gate")
         secrets_scan = self._job_block(text, "secrets_scan")
-        windows = self._job_block(text, "windows")
+        advisory_checks = self._job_block(text, "advisory_checks")
 
         self.assertIn("    runs-on: ubuntu-latest", merge_gate)
         self.assertIn("    name: Secret scan", secrets_scan)
-        self.assertIn(
-            "    if: github.event_name == 'workflow_dispatch' && inputs.run_release_build",
-            windows,
-        )
-        self.assertIn("    needs: merge_gate", windows)
-        self.assertIn("    runs-on:", windows)
-        self.assertIn("      - self-hosted", windows)
-        self.assertIn("      - Windows", windows)
-        self.assertIn("      - X64", windows)
-        self.assertIn("      - textquest", windows)
+        self.assertIn("    name: Advisory dependency checks (manual)", advisory_checks)
+        self.assertIn("    if: github.event_name == 'workflow_dispatch'", advisory_checks)
+        self.assertIn("    continue-on-error: true", advisory_checks)
+        self.assertNotIn("\n  windows:\n", text)
         for forbidden in FORBIDDEN_CI_STRINGS:
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, text)
@@ -75,7 +69,10 @@ class WorkflowContractTests(unittest.TestCase):
 
         self.assertIn("workflow_dispatch", text)
         self.assertIn("schedule:", text)
-        self.assertIn("Build rolling nightly prerelease", text)
+        self.assertIn("build-nightly:", text)
+        self.assertIn("Weekly/manual Windows validation", text)
+        self.assertIn("Create or update rolling nightly prerelease", text)
+        self.assertIn("runs-on: [self-hosted, Windows, X64, textquest]", text)
 
     def test_feature_list_includes_ci_workflow_rationalization(self) -> None:
         data = json.loads(FEATURE_LIST.read_text(encoding="utf-8"))
