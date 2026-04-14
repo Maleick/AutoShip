@@ -238,22 +238,7 @@ impl Default for StagingNamePool {
     }
 }
 
-/// Compute the SHA256 hash of a file and return it as a hex-encoded string.
-fn compute_file_hash(path: &Path) -> Result<String> {
-    let mut file = std::fs::File::open(path)
-        .with_context(|| format!("Failed to open file for hashing: {}", path.display()))?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0; 8192];
-    loop {
-        let bytes_read = std::io::Read::read(&mut file, &mut buffer)
-            .with_context(|| format!("Failed to read file for hashing: {}", path.display()))?;
-        if bytes_read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..bytes_read]);
-    }
-    Ok(format!("{:x}", hasher.finalize()))
-}
+
 
 /// Copy the compiled DLL to a temp directory with a randomized name
 /// that looks like a plausible system component.

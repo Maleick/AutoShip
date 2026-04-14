@@ -114,22 +114,17 @@ impl QuestTracker {
 
     /// Claim the reward for a completed quest.
     ///
-    /// Returns `true` when the reward is claimed successfully, or when it was
-    /// already claimed for a completed quest and no further state change is
-    /// needed. Returns `false` if the quest is not yet complete or if the
-    /// quest is not found.
+    /// Returns `true` when the reward is claimed successfully (state changed).
+    /// Returns `false` if the quest is not yet complete, already claimed, or not found.
     pub fn claim_reward(&mut self, quest_id: u32) -> bool {
         let Some(quest) = self.quests.iter_mut().find(|q| q.id == quest_id) else {
             return false;
         };
 
-        if !quest.completed {
+        if !quest.completed || quest.reward_claimed {
             return false;
         }
 
-        if quest.reward_claimed {
-            return true;
-        }
         quest.reward_claimed = true;
         true
     }
