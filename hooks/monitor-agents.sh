@@ -13,6 +13,32 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
 }
 cd "$REPO_ROOT"
 
+# Check for stalled agents (no output for >60 minutes)
+check_stalled_agents() {
+  local now=$(date +%s)
+  for workspace in "$WORKSPACE_DIR"/*; do
+    [[ -d "$workspace" ]] || continue
+    key=$(basename "$workspace")
+    logfile="$workspace/pane.log"
+
+    if [[ -f "$logfile" ]]; then
+      # Get last line timestamp
+      last_output=$(tail -1 "$logfile" 2>/dev/null)
+      if [[ -n "$last_output" ]]; then
+        # Extract timestamp if logged, otherwise use file mtime
+        last_mtime=$(stat -f%m "$logfile" 2>/dev/null || stat -c%Y "$logfile" 2>/dev/null || echo 0)
+        elapsed=$(( now - last_mtime ))
+
+        # If >3600 seconds (60 minutes) with no output, mark as stalled
+        if (( elapsed > 3600 )); then
+          echo "[AGENT_STALLED] key=$key elapsed_seconds=$elapsed" >> .autoship/poll.log
+          echo "WARN: Agent $key stalled (no output for ${elapsed}s, limit=3600s)" >&2
+        fi
+      fi
+    fi
+  done
+}
+
 # Also check pane_dead as a fallback for third-party agents that don't emit
 # status words (crash detection). — Error Recovery #4: Tool crash mid-dispatch
 check_dead_panes() {
@@ -117,8 +143,9 @@ watch_logs() {
       echo $! > "$pid_file"
     done
 
-    # Fallback dead-pane check every 15s
+    # Fallback checks every 15s
     check_dead_panes
+    check_stalled_agents
 
     sleep 5
   done
