@@ -407,7 +407,18 @@ $(cat .autoship/project-context.md 2>/dev/null || echo "No project context avail
 - Run tests after making changes
 - Commit your work to `autoship/<issue-key>`
 - Do NOT push, merge, or close the issue
-- **MANDATORY BEFORE COMPLETING:**
+
+## CRITICAL: Before printing COMPLETE/STUCK
+
+You MUST commit your changes to git:
+
+```bash
+git add -A && git commit -m 'feat: <issue-title> (#<number>)'
+```
+
+**If you skip this step, ALL your work will be permanently deleted.** The worktree cleanup script removes all uncommitted work and then deletes the worktree. Only commits survive.
+
+## MANDATORY BEFORE COMPLETING:
   1. Write `AUTOSHIP_RESULT.md` to `.autoship/workspaces/<issue-key>/`
   2. Verify file exists and has content: `[[ -s .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md ]] || exit 1`
   3. Create sentinel to prove file write completed: `wc -l < .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md > .autoship/workspaces/<issue-key>/.result_verified`
@@ -574,6 +585,17 @@ $(cat .autoship/project-context.md 2>/dev/null || echo "No project context avail
 - Run tests after making changes
 - Commit your work to `autoship/<issue-key>`
 - Do NOT push, merge, or close the issue
+
+## CRITICAL: Before printing COMPLETE/STUCK
+
+You MUST commit your changes to git:
+
+```bash
+git add -A && git commit -m 'feat: <issue-title> (#<number>)'
+```
+
+**If you skip this step, ALL your work will be permanently deleted.** The worktree cleanup script removes all uncommitted work and then deletes the worktree. Only commits survive.
+
 - **MANDATORY BEFORE COMPLETING:**
   1. Write `AUTOSHIP_RESULT.md` to `.autoship/workspaces/<issue-key>/`
   2. Verify file exists and has content: `[[ -s .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md ]] || exit 1`

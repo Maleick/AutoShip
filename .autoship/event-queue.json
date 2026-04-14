@@ -1,1 +1,34 @@
-[]
+[
+  {
+    "type": "verify",
+    "issue": "issue-129",
+    "priority": 2,
+    "data": {
+      "agent": "claude-haiku"
+    }
+  },
+  {
+    "type": "verify",
+    "issue": "issue-135",
+    "priority": 2,
+    "data": {
+      "agent": "claude-haiku"
+    }
+  },
+  {
+    "type": "verify",
+    "issue": "issue-132",
+    "priority": 2,
+    "data": {
+      "agent": "claude-haiku"
+    }
+  },
+  {
+    "type": "verify",
+    "issue": "issue-134",
+    "priority": 2,
+    "data": {
+      "agent": "claude-haiku"
+    }
+  }
+]

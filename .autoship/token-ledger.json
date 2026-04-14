@@ -185,7 +185,41 @@
       "session_id": "session-1776165045-45999",
       "started_at": "2026-04-14T11:10:45Z",
       "repo": "Maleick/AutoShip",
-      "issues": []
+      "issues": [
+        {
+          "number": 134,
+          "type": "medium_code",
+          "complexity": "medium",
+          "agent": "",
+          "tokens_used": 0,
+          "duration_ms": 0,
+          "verdict": "pass",
+          "pr_number": 0,
+          "attempt": 1
+        },
+        {
+          "number": 129,
+          "type": "medium_code",
+          "complexity": "medium",
+          "agent": "",
+          "tokens_used": 0,
+          "duration_ms": 0,
+          "verdict": "pass",
+          "pr_number": 0,
+          "attempt": 1
+        },
+        {
+          "number": 132,
+          "type": "medium_code",
+          "complexity": "medium",
+          "agent": "",
+          "tokens_used": 0,
+          "duration_ms": 0,
+          "verdict": "pass",
+          "pr_number": 0,
+          "attempt": 1
+        }
+      ]
     }
   ]
 }
