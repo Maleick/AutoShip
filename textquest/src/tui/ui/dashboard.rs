@@ -27,9 +27,43 @@ const STACKED_ROSTER_MIN_COMPACT: u16 = 11;
 const STACKED_ROSTER_MIN_TINY: u16 = 8;
 
 /// Draw the main overview dashboard with roster and status panels.
-pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &App) {
+pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &mut App) {
     let stacked = area.width < WIDTH_OVERVIEW_STACK;
     let sections = overview_sections(app, area, stacked);
+
+    // If map is shown and not in stacked mode, split horizontally with map on the right
+    if app.overview_state.show_map && !stacked && area.width >= 100 {
+        let map_width = (f32::from(area.width) * 0.4).round() as u16;
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(50), Constraint::Length(map_width)])
+            .split(area);
+
+        // Draw dashboard on the left
+        let sidebar_width = if cols[0].width >= WIDTH_SIDEBAR_WIDE {
+            46
+        } else if cols[0].width >= WIDTH_SIDEBAR_MEDIUM {
+            42
+        } else {
+            38
+        };
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Min(30),
+                Constraint::Length(sidebar_width.min(cols[0].width.saturating_sub(24))),
+            ])
+            .split(cols[0]);
+
+        draw_dashboard_grid(frame, chunks[0], app);
+        if !sections.is_empty() {
+            draw_dashboard_sidebar(frame, chunks[1], app, &sections);
+        }
+
+        // Draw map on the right
+        crate::tui::ui::map::draw_map_view(frame, cols[1], app);
+        return;
+    }
 
     let chunks = if stacked {
         let sidebar_height = sections.iter().map(|section| section.height).sum::<u16>();

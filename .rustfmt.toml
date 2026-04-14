@@ -1,0 +1,31 @@
+# Edition to target
+edition = "2024"
+
+# Indentation and whitespace
+hard_tabs = false
+tab_spaces = 4
+newline_style = "Auto"
+indent_closing_brace = false
+
+# Line length
+max_width = 100
+comment_width = 80
+
+# Imports
+imports_granularity = "Crate"
+reorder_imports = true
+reorder_modules = true
+
+# Formatting
+format_strings = true
+normalize_comments = true
+wrap_comments = true
+comment_width = 80
+
+# Functions
+fn_single_line = false
+fn_args_layout = "Tall"
+
+# Traits and impls
+match_block_trailing_comma = false
+overflow_delimited_expressions = true

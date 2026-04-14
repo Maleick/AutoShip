@@ -446,7 +446,7 @@ fn place_heading_arrow(
     }
 }
 
-fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     use ratatui::style::Color;
     let theme = app.theme.clone();
     let t = &theme;

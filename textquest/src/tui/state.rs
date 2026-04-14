@@ -1205,6 +1205,8 @@ pub struct OverviewScreenState {
     pub profile_collapsed: bool,
     /// Whether the priorities panel is collapsed.
     pub priorities_collapsed: bool,
+    /// Whether the live map is shown in split-screen dashboard.
+    pub show_map: bool,
 }
 
 impl OverviewScreenState {
@@ -1222,6 +1224,7 @@ impl OverviewScreenState {
             session_collapsed: false,
             profile_collapsed: false,
             priorities_collapsed: false,
+            show_map: false,
         }
     }
 }

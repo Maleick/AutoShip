@@ -641,6 +641,10 @@ pub fn handle_events(
                 app.toggle_filters_visibility();
                 return Ok(true);
             }
+            (KeyCode::Char('m'), _) if app.active_screen == ActiveScreen::Overview => {
+                app.toggle_map();
+                return Ok(true);
+            }
             (KeyCode::Char('z'), _) => {
                 app.toggle_focused_section();
                 return Ok(true);

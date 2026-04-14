@@ -1079,6 +1079,16 @@ impl App {
         self.ensure_panel_focus();
     }
 
+    /// Toggles the live map visibility on the overview screen.
+    pub fn toggle_map(&mut self) {
+        self.overview_state.show_map = !self.overview_state.show_map;
+        if self.overview_state.show_map {
+            self.status_message = String::from("Overview: map shown");
+        } else {
+            self.status_message = String::from("Overview: map hidden");
+        }
+    }
+
     /// Collapses or expands the currently focused panel section.
     pub fn toggle_focused_section(&mut self) {
         let state = match self.active_panel {
