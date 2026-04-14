@@ -225,7 +225,7 @@ impl DpsAccumulator {
             .iter()
             .map(|(&pid, &dmg)| (pid, (dmg as f64 / duration_secs) as i64))
             .collect();
-        entries.sort_by(|a, b| b.1.cmp(&a.1));
+        entries.sort_by_key(|entry| std::cmp::Reverse(entry.1));
         entries
     }
 

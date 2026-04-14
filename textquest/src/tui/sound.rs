@@ -149,7 +149,7 @@ impl SoundAlertManager {
             .iter()
             .filter(|t| t.matches(event))
             .collect();
-        matches.sort_by(|a, b| b.priority.cmp(&a.priority));
+        matches.sort_by_key(|trigger| std::cmp::Reverse(trigger.priority));
         matches
     }
 
