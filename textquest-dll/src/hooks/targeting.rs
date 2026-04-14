@@ -359,7 +359,7 @@ impl TargetingController {
             let read_usize_checked = |addr: usize| -> Result<usize, TargetError> {
                 if !is_aligned(addr, std::mem::align_of::<usize>())
                     || !crate::hooks::game_loop::is_readable(
-                        addr as *const u8,
+                        addr,
                         std::mem::size_of::<usize>(),
                     )
                 {
@@ -372,7 +372,7 @@ impl TargetingController {
             let read_u32_checked = |addr: usize| -> Result<u32, TargetError> {
                 if !is_aligned(addr, std::mem::align_of::<u32>())
                     || !crate::hooks::game_loop::is_readable(
-                        addr as *const u8,
+                        addr,
                         std::mem::size_of::<u32>(),
                     )
                 {

@@ -75,17 +75,29 @@ mod dll_main {
     use windows::Win32::System::Threading::{PTP_CALLBACK_INSTANCE, PTP_WORK};
 
     /// Thread pool callback for PoolParty-style execution. Matches the
-    /// `PTP_WORK_CALLBACK` signature used by `CreateThreadpoolWork`.
+    /// `LPTHREAD_START_ROUTINE` for the init thread spawned by DllMain.
     ///
-    /// Runs on a pre-existing OS worker thread — no `CreateThread` or
-    /// `CreateRemoteThread` events are generated. Indistinguishable from
-    /// normal application thread pool activity across 36 clients.
+    /// Called on a fresh thread created by `CreateThread`. Matches the
+    /// `(LPVOID) -> DWORD` signature required by `CreateThread`.
+    unsafe extern "system" fn init_thread_fn(context: *mut core::ffi::c_void) -> u32 {
+        // Prevent double initialization if injected twice into the same process.
+        if super::ALREADY_INITIALIZED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return 0;
+        }
+        let dll_base = context as *mut u8;
+        if let Err(e) = super::initialize(dll_base) {
+            tracing::error!("TextQuest DLL initialization failed: {}", e);
+        }
+        0
+    }
+
+    /// PoolParty callback — kept for reference / future stealthier re-enable.
+    #[allow(dead_code)]
     unsafe extern "system" fn init_pool_callback(
         _instance: PTP_CALLBACK_INSTANCE,
         context: *mut core::ffi::c_void,
         _work: PTP_WORK,
     ) {
-        // Prevent double initialization if injected twice into the same process.
         if super::ALREADY_INITIALIZED.swap(true, std::sync::atomic::Ordering::SeqCst) {
             return;
         }
@@ -113,20 +125,20 @@ mod dll_main {
                 // + SubmitThreadpoolWork is safe under the loader lock — it only queues
                 // a work item to existing threads without creating new ones.
                 unsafe {
+                    use windows::Win32::System::Threading::{CreateThread, THREAD_CREATION_FLAGS};
+
                     // Suppress DLL_THREAD_ATTACH/DETACH notifications for perf.
                     let _ = DisableThreadLibraryCalls(module);
 
-                    // PoolParty: submit init to the process-default thread pool.
-                    // Our callback runs on an existing OS worker thread — no
-                    // CreateThread/CreateRemoteThread events across 36 clients.
-                    let context = Some(module.0 as *mut core::ffi::c_void);
-                    if let Err(e) = super::stealth::thread_pool::submit_to_thread_pool(
-                        init_pool_callback,
-                        context,
-                    ) {
-                        // Thread pool submission failed — this should be extremely rare.
-                        // Log will only appear if tracing is somehow already initialized.
-                        tracing::error!("PoolParty thread pool submission failed: {}", e);
+                    // Spawn init thread. PoolParty (CreateThreadpoolWork) was the
+                    // original approach but the process thread pool may be
+                    // unavailable or guarded by anti-cheat in EQ. CreateThread is
+                    // more detectable but reliably runs our initializer.
+                    let context = module.0 as *const core::ffi::c_void;
+                    let thread = CreateThread(None, 0, Some(init_thread_fn), Some(context), THREAD_CREATION_FLAGS(0), None);
+                    if let Err(e) = thread {
+                        // Nothing we can do — tracing not up yet.
+                        let _ = e;
                     }
                 }
                 TRUE

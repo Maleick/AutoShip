@@ -102,14 +102,42 @@ pub struct ParsedPe {
 }
 
 /// System DLLs that share base addresses across all processes on x64 Windows.
+/// All entries must be lowercase. These are resolved locally (GetModuleHandleA +
+/// GetProcAddress) rather than via remote process enumeration.
 const SYSTEM_DLLS: &[&str] = &[
+    // NT core
+    "ntdll.dll",
     "kernel32.dll",
     "kernelbase.dll",
-    "ntdll.dll",
+    // Win32 subsystem
     "user32.dll",
+    "gdi32.dll",
     "advapi32.dll",
     "ws2_32.dll",
+    // Security / crypto
+    "bcrypt.dll",
+    "bcryptprimitives.dll",
+    // COM / automation
+    "oleaut32.dll",
+    "ole32.dll",
+    // NOTE: d3d11.dll and dxgi.dll are intentionally excluded — textquest.exe
+    // does not load them, so GetModuleHandleA would fail. EQ does load them,
+    // so they're resolved via remote module enumeration (see resolve_imports).
+    // MSVC runtimes
     "msvcrt.dll",
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
+    "msvcp140.dll",
+    // UCRT API-Set forwarding stubs (always resolve to ucrtbase.dll internals)
+    "api-ms-win-crt-runtime-l1-1-0.dll",
+    "api-ms-win-crt-math-l1-1-0.dll",
+    "api-ms-win-crt-stdio-l1-1-0.dll",
+    "api-ms-win-crt-string-l1-1-0.dll",
+    "api-ms-win-crt-heap-l1-1-0.dll",
+    "api-ms-win-crt-utility-l1-1-0.dll",
+    "api-ms-win-crt-time-l1-1-0.dll",
+    // WinAPI API-Set stubs
+    "api-ms-win-core-synch-l1-2-0.dll",
 ];
 
 /// Check if a DLL is a system DLL (same base in all processes on x64 Windows).
@@ -1208,11 +1236,13 @@ mod tests {
         assert!(is_system_dll("ws2_32.dll"));
         assert!(is_system_dll("msvcrt.dll"));
 
+        // MSVC runtimes — system (loaded by textquest.exe itself)
+        assert!(is_system_dll("vcruntime140.dll"));
+
         // Non-system DLLs — should use remote resolution
-        assert!(!is_system_dll("d3d11.dll"));
-        assert!(!is_system_dll("dxgi.dll"));
+        assert!(!is_system_dll("d3d11.dll")); // not loaded by textquest.exe
+        assert!(!is_system_dll("dxgi.dll"));  // not loaded by textquest.exe
         assert!(!is_system_dll("eqgame.dll"));
-        assert!(!is_system_dll("vcruntime140.dll"));
     }
 
     /// Build a PE export table in a byte buffer and verify we can parse it.

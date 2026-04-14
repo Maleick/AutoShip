@@ -256,7 +256,16 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
                 .context("GetExitCodeThread failed after LoadLibraryW")?;
             exit_code
         };
-        ensure_remote_dll_loaded(pid, dll_path)?;
+        // thread_exit_code is the HMODULE returned by LoadLibraryW.
+        // Non-zero means success. The DLL unlinks itself from the PEB module
+        // list for stealth, so module-list enumeration always shows "not found"
+        // after a successful load — use the exit code as the success signal instead.
+        if thread_exit_code == 0 {
+            anyhow::bail!(
+                "LoadLibraryW returned NULL — DLL failed to load in process {pid}. \
+                 Check that the DLL and its dependencies are accessible."
+            );
+        }
 
         tracing::info!(
             pid,

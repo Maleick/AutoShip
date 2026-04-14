@@ -112,19 +112,21 @@ mod inner {
             // Cache QPC frequency for accurate tick conversion.
             let mut freq_value = 0i64;
             if windows::Win32::System::Performance::QueryPerformanceFrequency(&mut freq_value)
-                .as_bool()
+                .is_ok()
                 && freq_value > 0
             {
                 super::QPC_FREQUENCY_HZ.store(freq_value as u64, Ordering::Release);
             }
 
-            let get_tick_count_addr: GetTickCountFn =
-                windows::Win32::System::SystemInformation::GetTickCount;
+            let get_tick_count_addr: GetTickCountFn = std::mem::transmute(
+                windows::Win32::System::SystemInformation::GetTickCount as usize,
+            );
             GetTickCountHook.initialize(get_tick_count_addr, get_tick_count_detour)?;
             GetTickCountHook.enable()?;
 
-            let qpc_addr: QueryPerformanceCounterFn =
-                windows::Win32::System::Performance::QueryPerformanceCounter;
+            let qpc_addr: QueryPerformanceCounterFn = std::mem::transmute(
+                windows::Win32::System::Performance::QueryPerformanceCounter as usize,
+            );
             if let Err(e) =
                 QueryPerformanceCounterHook.initialize(qpc_addr, query_performance_counter_detour)
             {

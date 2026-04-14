@@ -38,8 +38,15 @@ BEACON_RESULT.md
 BEACON_PROMPT.md
 *.master
 .autoship/
+.beacon/
 autoresearch-security/
 pane.log
+
+# OpenWolf agent runtime state
+.wolf/
+
+# Local Claude session config (personal, not shared)
+.claude.local.md
 
 # AI/tooling runtime state (keep out of repo)
 .claude/

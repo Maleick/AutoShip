@@ -264,6 +264,16 @@ pub const fn remove() {}
 // ─── Windows implementation ────────────────────────────────────────────────
 
 #[cfg(windows)]
+fn on_packet_send(client_id: ClientId, buf: *const u8, len: usize) {
+    inner::handle_send(client_id, buf, len);
+}
+
+#[cfg(windows)]
+fn on_packet_recv(client_id: ClientId, buf: *const u8, len: usize) {
+    inner::handle_recv(client_id, buf, len);
+}
+
+#[cfg(windows)]
 mod inner {
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -561,6 +571,16 @@ mod inner {
             timestamp_ms,
             payload_size: len as u32,
         });
+    }
+
+    pub(super) fn handle_send(client_id: ClientId, buf: *const u8, len: usize) {
+        HOOK_CLIENT_ID.store(client_id as u32, Ordering::Relaxed);
+        on_packet(buf, len, PacketDirection::Outbound);
+    }
+
+    pub(super) fn handle_recv(client_id: ClientId, buf: *const u8, len: usize) {
+        HOOK_CLIENT_ID.store(client_id as u32, Ordering::Relaxed);
+        on_packet(buf, len, PacketDirection::Inbound);
     }
 }
 

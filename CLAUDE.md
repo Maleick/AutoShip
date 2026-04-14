@@ -108,14 +108,14 @@ See `docs/implementation-roadmap.md` for current milestone status and sequencing
 
 ## Configuration Files
 
-| File                        | Purpose                                                              |
-| --------------------------- | -------------------------------------------------------------------- |
-| `config/textquest.toml`     | Main config — process, launch, polling, group settings               |
-| `config/frostreaver.toml`   | Legacy alias (still present, superseded by textquest.toml)           |
-| `config/accounts.toml`      | Per-account name, server, character, class, group                    |
-| `config/camps/*.toml`       | Camp definitions — zone, pull point/radius, mana thresholds          |
-| `config/classes/*.toml`     | 16 class ability configs with cooldowns, priorities, level overrides |
-| `config/hvt_watchlist.toml` | High-value target alerts (named mob tracking + Discord)              |
+| File                        | Purpose                                                                                 |
+| --------------------------- | --------------------------------------------------------------------------------------- |
+| `config/textquest.toml`     | Main config — process, launch, polling, group settings                                  |
+| `config/frostreaver.toml`   | **Deprecated** — legacy alias, superseded by textquest.toml; do not add new config here |
+| `config/accounts.toml`      | Per-account name, server, character, class, group                                       |
+| `config/camps/*.toml`       | Camp definitions — zone, pull point/radius, mana thresholds                             |
+| `config/classes/*.toml`     | 16 class ability configs with cooldowns, priorities, level overrides                    |
+| `config/hvt_watchlist.toml` | High-value target alerts (named mob tracking + Discord)                                 |
 
 ## Log Locations
 
@@ -149,3 +149,8 @@ See `docs/implementation-roadmap.md` for current milestone status and sequencing
 - **README metrics badge format**: `update_readme_metrics.py` finds `[![Rust LOC]` and `[![Tests]` string markers for in-place replacement. HTML `<img>` badge format breaks it — keep these two badges as markdown even if other badges are HTML.
 - **Stale remote branch refs**: `git branch -r` can show 100+ phantom branches that no longer exist on GitHub. Run `git remote prune origin` to clear stale local tracking refs before any branch audit or bulk-delete operation.
 - **Pre-checkout bootstrap paradox**: The workspace prep bash block in `ci.yml`/`claude-agent.yml` must run before `actions/checkout`, so it cannot source a script from the repo. Keep it inlined in both workflows; `tests/test_ci_runner_workspace_prep.py` validates both blocks stay identical.
+- **Adding `ActiveScreen` variants**: touch 4 files — `app.rs` (enum + `label()` + `ALL` array + `layout_presets: [LayoutPreset; N]` + 3 match fns) and `tui/ui/mod.rs` (screen dispatch + 2 `header_tab_label` matches + help match).
+- **LSP diagnostics lag after edits**: `<new-diagnostics>` blocks reflect pre-edit state. Trust `cargo build` output, not the inline diagnostics, to confirm fixes landed.
+- **`GameState` test initializers**: always include `actual_version: None` — the field exists on the common-crate struct but is easy to miss in manual struct literals.
+- **OpenWolf system**: `.wolf/` directory holds anatomy.md (file map), cerebrum.md (preferences/do-not-repeat), memory.md (session log), and buglog.json (known fixes). Rules are loaded via `.claude/rules/openwolf.md`. Check `.wolf/buglog.json` before fixing any bug; update it after every fix.
+- **Stale worktree CLAUDE.md files**: `.claude/worktrees/agent-*/CLAUDE.md` are copies created by agent worktrees and are never current. Ignore them — only the repo root `CLAUDE.md` is authoritative.

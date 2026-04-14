@@ -15,6 +15,9 @@
   <a href="https://github.com/sponsors/Maleick"><img src="https://img.shields.io/github/sponsors/Maleick?label=Sponsor&logo=GitHub&color=EA4AAA&style=flat" alt="Sponsor"></a>
 </p>
 
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-168%2C779-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-~4%2C175-brightgreen?style=flat-square)](#testing)
+
 <p align="center">
 [![Rust LOC](https://img.shields.io/badge/Rust%20LOC-169%2C439-blue?style=flat-square)](#testing)
 [![Tests](https://img.shields.io/badge/Tests-~4%2C229-brightgreen?style=flat-square)](#testing)

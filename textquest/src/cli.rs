@@ -348,11 +348,9 @@ pub fn run_inject_mode() -> Result<()> {
 
     println!("Using DLL: {}", source_dll.display());
 
-    // Stage the DLL (copies with randomized name).
-    // TODO: Switch to reflective loader once d3d11.dll cross-process import
-    // resolution is fixed (addresses differ per-process due to ASLR).
-    let staged_dll = inject::dll_prep::prepare_dll_locked(&source_dll)?;
-    println!("Staged DLL: {}", staged_dll.path().display());
+    // Read DLL bytes for reflective injection (no staged file needed — loader maps from bytes).
+    let dll_bytes = std::fs::read(&source_dll)
+        .with_context(|| format!("Failed to read DLL: {}", source_dll.display()))?;
 
     let mut success = 0u32;
     let mut failed = 0u32;
@@ -366,7 +364,7 @@ pub fn run_inject_mode() -> Result<()> {
             failed += 1;
             continue;
         }
-        match inject::loader::inject_dll(pid, staged_dll.path()) {
+        match inject::reflective::inject_reflective(pid, &dll_bytes).map(|_| ()) {
             Ok(()) => {
                 println!("OK");
                 info!(pid, "Injection succeeded");
@@ -982,11 +980,12 @@ pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     // Write session token file BEFORE injection so DLL can read it during init.
     ipc::write_session_token_file(pid)?;
 
-    // TODO: Switch to reflective loader once cross-process import resolution is fixed.
-    let staged_dll = inject::dll_prep::prepare_dll_locked(&source_dll)?;
+    let dll_bytes = std::fs::read(&source_dll)
+        .with_context(|| format!("Failed to read DLL: {}", source_dll.display()))?;
     println!("Injecting into PID {pid}...");
 
-    inject::loader::inject_dll(pid, staged_dll.path())?;
+    inject::reflective::inject_reflective(pid, &dll_bytes)
+        .map_err(|e| anyhow::anyhow!("Reflective injection failed: {e}"))?;
     let config = load_config()?;
     if config.timing_correction {
         send_timing_correction_command(pid, true)?;
@@ -1233,6 +1232,8 @@ pub fn run_autologin_mode(
 
     // 5. Inject + Login for each process
     let source_dll = resolve_built_dll_path()?;
+    let dll_bytes = std::fs::read(&source_dll)
+        .with_context(|| format!("Failed to read DLL: {}", source_dll.display()))?;
     let mut success_count = 0u32;
     let mut fail_count = 0u32;
 
@@ -1274,16 +1275,8 @@ pub fn run_autologin_mode(
             }
 
             println!("  Injecting DLL...");
-            let staged_dll = match inject::dll_prep::prepare_dll_locked(&source_dll) {
-                Ok(staged) => staged,
-                Err(e) => {
-                    println!("  FAILED: staging DLL: {e}");
-                    fail_count += 1;
-                    continue;
-                }
-            };
-            match inject::loader::inject_dll(*pid, staged_dll.path()) {
-                Ok(()) => println!("  DLL injected successfully"),
+            match inject::reflective::inject_reflective(*pid, &dll_bytes) {
+                Ok(_base) => println!("  DLL injected successfully"),
                 Err(e) => {
                     println!("  FAILED: injection: {e}");
                     fail_count += 1;
