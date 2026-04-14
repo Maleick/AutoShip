@@ -4,8 +4,22 @@
 //! This hides the module from loader-backed enumeration paths (for example,
 //! "list modules" workflows that first resolve candidates via `PEB_LDR_DATA`)
 //! before any export-table inspection occurs.
+//!
+//! Defensive features:
+//! - Pointer validation before dereference (range check)
+//! - Idempotency guard (don't double-unlink)
+//! - Iteration limit to detect PEB corruption
+//! - Graceful error propagation (no panics)
 
 use std::ffi::c_void;
+
+// Valid kernel-mode pointer range for 64-bit Windows
+const MIN_VALID_POINTER: usize = 0x1000;
+const MAX_VALID_POINTER: usize = 0x7FFFFFFF000;
+
+fn is_valid_pointer(ptr: usize) -> bool {
+    ptr >= MIN_VALID_POINTER && ptr <= MAX_VALID_POINTER
+}
 
 #[repr(C)]
 struct ListEntry {
@@ -49,19 +63,50 @@ pub fn unlink_module(dll_base: *mut u8) -> Result<(), String> {
         if ldr.is_null() {
             return Err("PEB.Ldr is null".into());
         }
+
+        // Validate PEB_LDR_DATA pointer before dereferencing
+        if !is_valid_pointer(ldr as usize) {
+            return Err(format!("PEB.Ldr pointer invalid: {:#x}", ldr as usize));
+        }
+
         let head = &mut (*ldr).in_load_order_module_list as *mut ListEntry;
         let mut current = (*head).flink;
         let mut count = 0u32;
-        while current != head && count < 4096 {
+        const MAX_ITERATIONS: u32 = 4096;
+
+        while current != head && count < MAX_ITERATIONS {
+            // Validate flink/blink pointers before dereferencing
+            if !is_valid_pointer(current as usize) {
+                return Err(format!(
+                    "Corrupted list entry at iteration {}: {:#x}",
+                    count, current as usize
+                ));
+            }
+
             let entry = current as *mut LdrDataTableEntry;
             if (*entry).dll_base == dll_base as *mut c_void {
-                unlink_entry(&mut (*entry).in_load_order_links);
-                unlink_entry(&mut (*entry).in_memory_order_links);
-                unlink_entry(&mut (*entry).in_initialization_order_links);
+                // Found the entry. Check for double-unlink via idempotency guard.
+                // An already-unlinked entry points to itself in its primary list link.
+                let entry_ptr = entry as *mut ListEntry;
+                if (*entry_ptr).flink == entry_ptr && (*entry_ptr).blink == entry_ptr {
+                    return Err("Module already unlinked (idempotency guard)".into());
+                }
+
+                // Unlink from all three lists
+                unlink_entry(&mut (*entry).in_load_order_links)?;
+                unlink_entry(&mut (*entry).in_memory_order_links)?;
+                unlink_entry(&mut (*entry).in_initialization_order_links)?;
+
                 return Ok(());
             }
             current = (*current).flink;
             count += 1;
+        }
+        if count >= MAX_ITERATIONS {
+            return Err(format!(
+                "PEB module list walk exceeded {} iterations; possible corruption",
+                MAX_ITERATIONS
+            ));
         }
         Err(format!(
             "Module at base {:#x} not found in PEB module lists",
@@ -70,16 +115,35 @@ pub fn unlink_module(dll_base: *mut u8) -> Result<(), String> {
     }
 }
 
-unsafe fn unlink_entry(entry: *mut ListEntry) {
+unsafe fn unlink_entry(entry: *mut ListEntry) -> Result<(), String> {
+    // Validate entry pointer before dereferencing
+    if !is_valid_pointer(entry as usize) {
+        return Err(format!("Invalid entry pointer: {:#x}", entry as usize));
+    }
+
     let flink = (*entry).flink;
     let blink = (*entry).blink;
-    if flink == entry && blink == entry {
-        return;
+
+    // Validate flink and blink pointers before dereferencing them
+    if !is_valid_pointer(flink as usize) {
+        return Err(format!("Invalid flink pointer: {:#x}", flink as usize));
     }
+    if !is_valid_pointer(blink as usize) {
+        return Err(format!("Invalid blink pointer: {:#x}", blink as usize));
+    }
+
+    // Self-referential entry = already unlinked, noop
+    if flink == entry && blink == entry {
+        return Ok(());
+    }
+
+    // Perform the unlink operation
     (*blink).flink = flink;
     (*flink).blink = blink;
     (*entry).flink = entry;
     (*entry).blink = entry;
+
+    Ok(())
 }
 
 unsafe fn read_peb() -> *mut Peb {
@@ -100,7 +164,7 @@ mod tests {
         e.flink = &mut e;
         e.blink = &mut e;
         unsafe {
-            unlink_entry(&mut e);
+            unlink_entry(&mut e).expect("self-referential unlink should not fail");
         }
         assert_eq!(e.flink, &mut e as *mut ListEntry);
         assert_eq!(e.blink, &mut e as *mut ListEntry);
@@ -126,7 +190,7 @@ mod tests {
         c.flink = &mut a;
         c.blink = &mut b;
         unsafe {
-            unlink_entry(&mut b);
+            unlink_entry(&mut b).expect("unlink from chain should not fail");
         }
         let a_ptr = &mut a as *mut ListEntry;
         let c_ptr = &mut c as *mut ListEntry;
