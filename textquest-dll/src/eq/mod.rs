@@ -49,7 +49,7 @@ pub fn check_eq_version(base: u64) -> Option<String> {
         return None;
     }
 
-    let string_addr = unsafe { *(addr as *const usize) };
+    let string_addr = unsafe { std::ptr::read_unaligned(addr as *const usize) };
     if string_addr == 0 {
         return None;
     }
