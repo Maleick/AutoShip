@@ -317,6 +317,50 @@ bash "$HOOKS/quota-update.sh" decrement gemini <complexity>
 
 Never inline file contents into shell strings. Always use a file flag or wrapper script to avoid shell metacharacter injection from issue bodies.
 
+## Agent Completion Requirements (Shared by Haiku and Sonnet)
+
+**Before printing COMPLETE/BLOCKED/STUCK, agents MUST:**
+
+1. Commit all work to git:
+   ```bash
+   git add -A && git commit -m 'feat: <issue-title> (#<number>)'
+   ```
+   **Failure to commit deletes all work.** Worktree cleanup removes uncommitted changes.
+
+2. Write `AUTOSHIP_RESULT.md` to `.autoship/workspaces/<issue-key>/`:
+   ```bash
+   cat > .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md << 'EOF'
+   # Result: #<number> — <title>
+   ## Status: DONE | PARTIAL | STUCK
+   ## Changes Made
+   - <file>: <what changed and why>
+   ## Tests
+   - Command: `<test-command>`
+   - Result: PASS | FAIL
+   - New tests added: yes/no
+   ## Notes
+   <anything the reviewer should know>
+   EOF
+   ```
+
+3. Verify the result file exists and has content:
+   ```bash
+   [[ -s .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md ]] || { echo 'FAILED'; exit 1; }
+   ```
+
+4. Only after all above: Print completion status on its own line:
+   ```
+   COMPLETE
+   ```
+   or
+   ```
+   BLOCKED
+   ```
+   or
+   ```
+   STUCK
+   ```
+
 **Completion detection:**
 
 - Codex: `dispatch-codex-appserver.sh` writes `COMPLETE`/`STUCK` to `pane.log` and emits event to event-queue.json
@@ -421,23 +465,7 @@ $(cat .autoship/project-context.md 2>/dev/null || echo "No project context avail
 - Run tests after making changes
 - Commit your work to `autoship/<issue-key>`
 - Do NOT push, merge, or close the issue
-
-## CRITICAL: Before printing COMPLETE/STUCK
-
-You MUST commit your changes to git:
-
-```bash
-git add -A && git commit -m 'feat: <issue-title> (#<number>)'
-```
-
-**If you skip this step, ALL your work will be permanently deleted.** The worktree cleanup script removes all uncommitted work and then deletes the worktree. Only commits survive.
-
-## MANDATORY BEFORE COMPLETING:
-  1. Write `AUTOSHIP_RESULT.md` to `.autoship/workspaces/<issue-key>/`
-  2. Verify file exists and has content: `[[ -s .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md ]] || exit 1`
-  3. Create sentinel to prove file write completed: `wc -l < .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md > .autoship/workspaces/<issue-key>/.result_verified`
-  4. Verify sentinel exists: `[[ -f .autoship/workspaces/<issue-key>/.result_verified ]] || { echo 'FAILED'; exit 1; }`
-- **ONLY AFTER ALL ABOVE:** Print your completion status (COMPLETE/BLOCKED/STUCK)
+- See Agent Completion Requirements section below (MANDATORY before printing COMPLETE/BLOCKED/STUCK)
 
 ## AUTOSHIP_RESULT.md Template
 
@@ -463,8 +491,6 @@ git add -A && git commit -m 'feat: <issue-title> (#<number>)'
 
 Additional context the reviewer needs.
 ```
-
-**Validation:** First line must match regex `^# Result: #[0-9]+ —`. File must exist at `.autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md` BEFORE printing completion status.
 
 When you are completely finished, print exactly one of these words on its own line as your final output:
 COMPLETE
@@ -599,55 +625,7 @@ $(cat .autoship/project-context.md 2>/dev/null || echo "No project context avail
 - Run tests after making changes
 - Commit your work to `autoship/<issue-key>`
 - Do NOT push, merge, or close the issue
-
-## CRITICAL: Before printing COMPLETE/STUCK
-
-You MUST commit your changes to git:
-
-```bash
-git add -A && git commit -m 'feat: <issue-title> (#<number>)'
-```
-
-**If you skip this step, ALL your work will be permanently deleted.** The worktree cleanup script removes all uncommitted work and then deletes the worktree. Only commits survive.
-
-- **MANDATORY BEFORE COMPLETING:**
-  1. Write `AUTOSHIP_RESULT.md` to `.autoship/workspaces/<issue-key>/`
-  2. Verify file exists and has content: `[[ -s .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md ]] || exit 1`
-  3. Create sentinel to prove file write completed: `wc -l < .autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md > .autoship/workspaces/<issue-key>/.result_verified`
-  4. Verify sentinel exists: `[[ -f .autoship/workspaces/<issue-key>/.result_verified ]] || { echo 'FAILED'; exit 1; }`
-- **ONLY AFTER ALL ABOVE:** Print your completion status (COMPLETE/BLOCKED/STUCK)
-
-## AUTOSHIP_RESULT.md Template
-
-**CRITICAL:** First line MUST be `# Result: #<issue-number> — <title>`. Validation requires this exact format.
-
-```markdown
-# Result: #456 — Brief issue title
-
-## Status: DONE | PARTIAL | STUCK
-
-## Changes Made
-
-- src/file.rs: What changed and why
-- tests/test.rs: New test added
-
-## Tests
-
-- Command: `cargo test`
-- Result: PASS | FAIL
-- New tests added: yes/no
-
-## Notes
-
-Additional context the reviewer needs.
-```
-
-**Validation:** First line must match regex `^# Result: #[0-9]+ —`. File must exist at `.autoship/workspaces/<issue-key>/AUTOSHIP_RESULT.md` BEFORE printing completion status.
-
-When completely finished, print exactly one of these words on its own line:
-COMPLETE
-BLOCKED
-STUCK
+- See Agent Completion Requirements section (MANDATORY before printing COMPLETE/BLOCKED/STUCK)
 
 Dispatch:
 

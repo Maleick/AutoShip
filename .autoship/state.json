@@ -3,7 +3,7 @@
   "autoship_version": "0.1.0",
   "repo": "Maleick/AutoShip",
   "started_at": "2026-04-13T16:28:32Z",
-  "updated_at": "2026-04-14T18:58:19Z",
+  "updated_at": "2026-04-14T20:07:51Z",
   "plan": {
     "phases": [
       {
@@ -293,12 +293,12 @@
       "worktree_free": true
     },
     "issue-136": {
-      "state": "running",
+      "state": "unclaimed",
       "complexity": "medium",
-      "agent": "claude-sonnet",
+      "agent": null,
       "attempt": 1,
-      "worktree": "",
-      "pane_id": "",
+      "worktree": null,
+      "pane_id": null,
       "started_at": "2026-04-14T18:58:19Z",
       "attempts_history": [],
       "worktree_free": true
@@ -327,8 +327,8 @@
     }
   },
   "stats": {
-    "session_dispatched": 3,
-    "session_completed": 5,
+    "session_dispatched": 0,
+    "session_completed": 0,
     "total_dispatched_all_time": 20,
     "total_completed_all_time": 15,
     "failed": 0,

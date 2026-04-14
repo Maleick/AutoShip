@@ -10,6 +10,8 @@
 
 set -euo pipefail
 
+source "${BASH_SOURCE%/*}/lib/dispatch-helpers.sh"
+
 ISSUE_KEY="${1:?usage: dispatch-codex-appserver.sh <issue-key> <prompt-file>}"
 PROMPT_FILE="${2:?usage: dispatch-codex-appserver.sh <issue-key> <prompt-file>}"
 
@@ -63,20 +65,11 @@ fi
 
 mkdir -p "$WORKSPACE"
 
-# Kill any existing watcher process from previous dispatch attempt
-WATCHER_PID_FILE="${WORKSPACE}/.watcher.pid"
-if [[ -f "$WATCHER_PID_FILE" ]]; then
-  OLD_PID=$(cat "$WATCHER_PID_FILE" 2>/dev/null || echo "")
-  if [[ -n "$OLD_PID" ]]; then
-    kill "$OLD_PID" 2>/dev/null || true
-    rm -f "$WATCHER_PID_FILE"
-  fi
-fi
-
-# Truncate pane.log to avoid stale markers from previous attempts
-# Add watermark with dispatch attempt number to prevent re-processing old entries
-ATTEMPT_NUM=$(( $(grep -c "^===" "$PANE_LOG" 2>/dev/null || echo 0) + 1 ))
-> "$PANE_LOG"
+# Clean up stale watcher and increment attempt counter
+kill_old_watcher "$WORKSPACE"
+ATTEMPT_COUNT_FILE="${WORKSPACE}/.attempt_count"
+ATTEMPT_NUM=$(( $(cat "$ATTEMPT_COUNT_FILE" 2>/dev/null || echo 0) + 1 ))
+echo "$ATTEMPT_NUM" > "$ATTEMPT_COUNT_FILE"
 echo "=== Dispatch attempt #$ATTEMPT_NUM ===" >> "$PANE_LOG"
 
 # ---------------------------------------------------------------------------

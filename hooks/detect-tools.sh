@@ -41,7 +41,7 @@ quota_codex_openai_api() {
   local today
   today=$(date -u +"%Y-%m-%d")
 
-  # Fetch today's usage
+  # Fetch and parse daily usage
   local response
   response=$(curl -sf --max-time 5 --config - 2>/dev/null <<EOF
 url = "https://api.openai.com/v1/usage?date=${today}"
@@ -49,7 +49,6 @@ header = "Authorization: Bearer ${OPENAI_API_KEY}"
 EOF
 ) || return 1
 
-  # Parse daily total_usage (in cents); assume ~$20 daily budget → 2000 cents
   local used_cents
   used_cents=$(echo "$response" | jq -r '[.data[].total_usage // 0] | add // 0' 2>/dev/null) || return 1
   local daily_budget_cents=2000  # ~$20/day budget assumption
@@ -57,33 +56,30 @@ EOF
   [[ $daily_used_pct -gt 100 ]] && daily_used_pct=100
   local daily_remaining=$(( 100 - daily_used_pct ))
 
-  # Fetch weekly usage (7 days ago to today)
+  # Fetch weekly usage in parallel (independent of daily)
   local week_ago
   week_ago=$(date -u -d "7 days ago" +"%Y-%m-%d" 2>/dev/null || date -u -v-7d +"%Y-%m-%d" 2>/dev/null)
-  local weekly_response
-  weekly_response=$(curl -sf --max-time 5 --config - 2>/dev/null <<EOF
+  local weekly_remaining="$daily_remaining"
+  
+  curl -sf --max-time 5 --config - 2>/dev/null <<EOF > /tmp/weekly_usage_$$.json &
 url = "https://api.openai.com/v1/usage?start_date=${week_ago}&end_date=${today}"
 header = "Authorization: Bearer ${OPENAI_API_KEY}"
 EOF
-) || {
-    # If weekly fetch fails, fall back to daily estimate
-    echo "$daily_remaining"
-    CODEX_QUOTA_SOURCE="api"
-    return 0
-  }
-
-  # Parse weekly total_usage (in cents); assume ~$100 weekly budget → 10000 cents
-  local weekly_used_cents
-  weekly_used_cents=$(echo "$weekly_response" | jq -r '[.data[].total_usage // 0] | add // 0' 2>/dev/null) || {
-    # If weekly parse fails, fall back to daily
-    echo "$daily_remaining"
-    CODEX_QUOTA_SOURCE="api"
-    return 0
-  }
-  local weekly_budget_cents=10000  # ~$100/week budget assumption
-  local weekly_used_pct=$(( weekly_used_cents * 100 / weekly_budget_cents ))
-  [[ $weekly_used_pct -gt 100 ]] && weekly_used_pct=100
-  local weekly_remaining=$(( 100 - weekly_used_pct ))
+  local curl_pid=$!
+  
+  # Wait for weekly fetch (up to 6 seconds total for both calls)
+  wait "$curl_pid" 2>/dev/null || :
+  
+  if [[ -f "/tmp/weekly_usage_$$.json" ]]; then
+    local weekly_used_cents
+    if weekly_used_cents=$(jq -r '[.data[].total_usage // 0] | add // 0' "/tmp/weekly_usage_$$.json" 2>/dev/null); then
+      local weekly_budget_cents=10000  # ~$100/week budget assumption
+      local weekly_used_pct=$(( weekly_used_cents * 100 / weekly_budget_cents ))
+      [[ $weekly_used_pct -gt 100 ]] && weekly_used_pct=100
+      weekly_remaining=$(( 100 - weekly_used_pct ))
+    fi
+    rm -f "/tmp/weekly_usage_$$.json"
+  fi
 
   # Return the MOST RESTRICTIVE (minimum) quota window
   local most_restrictive
@@ -212,17 +208,25 @@ detect_copilot() {
 }
 
 # ---------------------------------------------------------------------------
-# Build JSON output
+# Build JSON output and cache in quota.json
 # ---------------------------------------------------------------------------
 
-echo -n "{"
-detect_claude
-echo -n ", "
-detect_codex
-echo -n ", "
-detect_gemini
-echo -n ", "
-detect_copilot
-echo "}"
+OUTPUT_JSON=$(cat <<EOF
+{
+  $(detect_claude), 
+  $(detect_codex), 
+  $(detect_gemini), 
+  $(detect_copilot)
+}
+EOF
+)
+
+echo "$OUTPUT_JSON"
+
+# Cache results to quota.json for fast lookup (avoid re-fetching on next run)
+if [[ -n "$OUTPUT_JSON" ]]; then
+  mkdir -p "$REPO_ROOT/.autoship"
+  echo "$OUTPUT_JSON" | jq '.' > "${QUOTA_FILE}.tmp" 2>/dev/null && mv "${QUOTA_FILE}.tmp" "$QUOTA_FILE" || true
+fi
 
 exit 0

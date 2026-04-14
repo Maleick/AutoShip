@@ -58,3 +58,8 @@ WARN: codex-spark available but never dispatched (17 total dispatches) — check
 WARN: codex-gpt available but never dispatched (17 total dispatches) — check CLI
 WARN: gemini available but never dispatched (17 total dispatches) — check CLI
 WARN: copilot available but never dispatched (17 total dispatches) — check CLI
+WARN: claude available but never dispatched (20 total dispatches) — check CLI
+WARN: codex-spark available but never dispatched (20 total dispatches) — check CLI
+WARN: codex-gpt available but never dispatched (20 total dispatches) — check CLI
+WARN: gemini available but never dispatched (20 total dispatches) — check CLI
+WARN: copilot available but never dispatched (20 total dispatches) — check CLI

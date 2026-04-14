@@ -58,6 +58,7 @@ fi
 while true; do
   sleep 60
   now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  watermark_updated=false
 
   # --- Hot-reload: re-parse AUTOSHIP.md if it changed since last poll ---
   AUTOSHIP_MD_CURRENT_MTIME=$(_autoship_md_mtime)
@@ -100,6 +101,9 @@ while true; do
     fi
   done
 
-  last_check=$now
-  echo "$last_check" > "$WATERMARK_FILE"
+  # Only write watermark if changed (avoid unnecessary disk I/O every 60s)
+  if [[ "$last_check" != "$now" ]]; then
+    last_check=$now
+    echo "$last_check" > "$WATERMARK_FILE"
+  fi
 done
