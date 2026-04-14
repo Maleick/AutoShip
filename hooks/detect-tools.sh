@@ -32,26 +32,64 @@ _read_quota() {
 }
 
 # Codex: try OpenAI usage API if OPENAI_API_KEY is set; fall back to decay estimate.
-# Returns integer 0-100. Sets CODEX_QUOTA_SOURCE="api" or "est".
+# Returns integer 0-100, representing the MOST RESTRICTIVE quota window (daily/weekly).
+# Sets CODEX_QUOTA_SOURCE="api" or "est".
 CODEX_QUOTA_SOURCE="est"
 quota_codex_openai_api() {
   [[ -z "${OPENAI_API_KEY:-}" ]] && return 1
-  # Fetch today's usage in dollars; compare to typical monthly budget
+
   local today
   today=$(date -u +"%Y-%m-%d")
+
+  # Fetch today's usage
   local response
   response=$(curl -sf --max-time 5 --config - 2>/dev/null <<EOF
 url = "https://api.openai.com/v1/usage?date=${today}"
 header = "Authorization: Bearer ${OPENAI_API_KEY}"
 EOF
 ) || return 1
-  # Parse total_usage (in cents); assume ~$20 daily budget → 2000 cents
+
+  # Parse daily total_usage (in cents); assume ~$20 daily budget → 2000 cents
   local used_cents
   used_cents=$(echo "$response" | jq -r '[.data[].total_usage // 0] | add // 0' 2>/dev/null) || return 1
-  local budget_cents=2000  # ~$20/day budget assumption
-  local used_pct=$(( used_cents * 100 / budget_cents ))
-  [[ $used_pct -gt 100 ]] && used_pct=100
-  echo $(( 100 - used_pct ))
+  local daily_budget_cents=2000  # ~$20/day budget assumption
+  local daily_used_pct=$(( used_cents * 100 / daily_budget_cents ))
+  [[ $daily_used_pct -gt 100 ]] && daily_used_pct=100
+  local daily_remaining=$(( 100 - daily_used_pct ))
+
+  # Fetch weekly usage (7 days ago to today)
+  local week_ago
+  week_ago=$(date -u -d "7 days ago" +"%Y-%m-%d" 2>/dev/null || date -u -v-7d +"%Y-%m-%d" 2>/dev/null)
+  local weekly_response
+  weekly_response=$(curl -sf --max-time 5 --config - 2>/dev/null <<EOF
+url = "https://api.openai.com/v1/usage?start_date=${week_ago}&end_date=${today}"
+header = "Authorization: Bearer ${OPENAI_API_KEY}"
+EOF
+) || {
+    # If weekly fetch fails, fall back to daily estimate
+    echo "$daily_remaining"
+    CODEX_QUOTA_SOURCE="api"
+    return 0
+  }
+
+  # Parse weekly total_usage (in cents); assume ~$100 weekly budget → 10000 cents
+  local weekly_used_cents
+  weekly_used_cents=$(echo "$weekly_response" | jq -r '[.data[].total_usage // 0] | add // 0' 2>/dev/null) || {
+    # If weekly parse fails, fall back to daily
+    echo "$daily_remaining"
+    CODEX_QUOTA_SOURCE="api"
+    return 0
+  }
+  local weekly_budget_cents=10000  # ~$100/week budget assumption
+  local weekly_used_pct=$(( weekly_used_cents * 100 / weekly_budget_cents ))
+  [[ $weekly_used_pct -gt 100 ]] && weekly_used_pct=100
+  local weekly_remaining=$(( 100 - weekly_used_pct ))
+
+  # Return the MOST RESTRICTIVE (minimum) quota window
+  local most_restrictive
+  most_restrictive=$(( daily_remaining < weekly_remaining ? daily_remaining : weekly_remaining ))
+
+  echo "$most_restrictive"
   CODEX_QUOTA_SOURCE="api"
   return 0
 }
