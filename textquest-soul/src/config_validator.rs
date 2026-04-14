@@ -3,7 +3,7 @@
 //! Validates [`SoulConfig`] fields and returns a list of [`ConfigError`]s.
 //! An empty result means the configuration is valid.
 
-use crate::soul::config::SoulConfig;
+use crate::config::SoulConfig;
 
 /// A single configuration validation error.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,8 +83,7 @@ impl SoulConfigValidator {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::soul::config::SoulConfig;
+    use crate::config::SoulConfig;
 
     fn valid_config() -> SoulConfig {
         SoulConfig {

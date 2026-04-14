@@ -67,7 +67,10 @@ mod inner {
     const ANTICHEAT_PROVIDERS: &[&[u8; 16]] = &[
         // Microsoft-Windows-Threat-Intelligence
         // GUID: 22FB2CD6-0E7B-422B-A0C7-2143CA8DCED3
-        &[0xD6, 0x2C, 0xFB, 0x22, 0x7B, 0x0E, 0x2B, 0x42, 0xA0, 0xC7, 0x21, 0x43, 0xCA, 0x8D, 0xCE, 0xD3],
+        &[
+            0xD6, 0x2C, 0xFB, 0x22, 0x7B, 0x0E, 0x2B, 0x42, 0xA0, 0xC7, 0x21, 0x43, 0xCA, 0x8D,
+            0xCE, 0xD3,
+        ],
         // Note: Additional anticheat provider GUIDs can be added here as needed.
         // The list is intentionally conservative — only known anticheat/security
         // providers are suppressed, allowing EQ telemetry to pass through.
@@ -86,7 +89,9 @@ mod inner {
         let guid = unsafe { &*provider_guid };
 
         // Check if this provider is in our anticheat suppression list.
-        ANTICHEAT_PROVIDERS.iter().any(|&anticheat_guid| guid == anticheat_guid)
+        ANTICHEAT_PROVIDERS
+            .iter()
+            .any(|&anticheat_guid| guid == anticheat_guid)
     }
 
     /// NtTraceEvent signature for parameter extraction.

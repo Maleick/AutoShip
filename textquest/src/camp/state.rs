@@ -524,10 +524,12 @@ impl CampLoop {
                 safe_to_rez,
             } => {
                 // Safety validation: only rez when out of combat.
-                let currently_safe = !Self::any_in_combat(snapshot);
+                let currently_safe = snapshot.map_or(safe_to_rez, |snap| {
+                    !snap.member_in_combat.iter().any(|(_, c)| *c)
+                });
 
                 // Update safe_to_rez flag if combat state changed.
-                if currently_safe != safe_to_rez {
+                if snapshot.is_some() && currently_safe != safe_to_rez {
                     self.state = CampState::Recovery {
                         started_tick,
                         safe_to_rez: currently_safe,

@@ -91,7 +91,10 @@ impl LlmRateLimiter {
         }
 
         // Check per-character limit
-        let char_window = self.character_windows.entry(character.to_owned()).or_default();
+        let char_window = self
+            .character_windows
+            .entry(character.to_owned())
+            .or_default();
         if char_window.len() as u32 >= self.per_character_limit {
             return false;
         }

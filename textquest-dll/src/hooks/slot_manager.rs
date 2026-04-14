@@ -168,7 +168,10 @@ mod tests {
         let mut mgr = HookSlotManager::new();
         mgr.rotate_hooks(HookGameState::Login);
         let plan = mgr.rotate_hooks(HookGameState::InGame);
-        assert!(plan.changed, "transitioning from Login to InGame should report changed");
+        assert!(
+            plan.changed,
+            "transitioning from Login to InGame should report changed"
+        );
     }
 
     #[test]

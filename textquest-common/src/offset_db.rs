@@ -113,9 +113,12 @@ impl OffsetDatabase {
             CCHAT_MGR_GET_RGBA, CCHAT_MGR_INIT_CONTEXT_MENU, CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT,
             CHANGE_HEIGHT, CHAR_LIST_ENTER_WORLD, CHAR_LIST_SELECT_CHAR, CLICKED_PLAYER,
             CONTEXT_MENU_MGR_HANDLE_MENU, DO_ATTACK, DO_COMBAT_ABILITY, DO_LOOT, DSP_CHAT,
-            EQ_PREFERRED_BASE, EXECUTE_CMD, FILE_INTEGRITY_DISPATCHER, FIX_HEADING,
-            FREE_TARGET_CAST_SPELL, GET_BEARING, GET_CON_LEVEL, GET_PC_CLIENT, INBOUND_MSG_COUNTER,
-            INTERPRET_CMD, INV_SLOT_GET_ITEM_BASE, INV_SLOT_MGR_FIND_SLOT, INV_SLOT_MGR_MOVE_ITEM,
+            EQ_BEGIN_ZONE, EQ_BUFF_PLAYER, EQ_BUY_ITEM, EQ_COMPLETE_TRADE, EQ_DISBAND, EQ_END_ZONE,
+            EQ_FINISH_ZONE, EQ_FOLLOW_PLAYER, EQ_INVITE_PLAYER, EQ_MAKE_LEADER, EQ_OPEN_TRADE,
+            EQ_PREFERRED_BASE, EQ_REMOVE_BUFF, EQ_SELL_ITEM, EQ_ZONE_CHANGE, EXECUTE_CMD,
+            FILE_INTEGRITY_DISPATCHER, FIX_HEADING, FREE_TARGET_CAST_SPELL, GET_BEARING,
+            GET_CON_LEVEL, GET_PC_CLIENT, INBOUND_MSG_COUNTER, INTERPRET_CMD,
+            INV_SLOT_GET_ITEM_BASE, INV_SLOT_MGR_FIND_SLOT, INV_SLOT_MGR_MOVE_ITEM,
             INV_SLOT_MGR_SELECT_SLOT, ISSUE_PET_COMMAND, MEMCHECK4_PROCESS_ENUM, NET_SEND,
             OUTBOUND_MSG_COUNTER, PINST_ACTIVE_CORPSE, PINST_CCHAT_WINDOW_MANAGER, PINST_CDISPLAY,
             PINST_CEVERQUEST, PINST_CINV_SLOT_MGR, PINST_CONTEXT_MENU_MANAGER,
@@ -291,6 +294,20 @@ impl OffsetDatabase {
             "contextMenuMgrHandleMenu".into(),
             CONTEXT_MENU_MGR_HANDLE_MENU,
         );
+        functions.insert("eqBeginZone".into(), EQ_BEGIN_ZONE);
+        functions.insert("eqEndZone".into(), EQ_END_ZONE);
+        functions.insert("eqFinishZone".into(), EQ_FINISH_ZONE);
+        functions.insert("eqZoneChange".into(), EQ_ZONE_CHANGE);
+        functions.insert("eqInvitePlayer".into(), EQ_INVITE_PLAYER);
+        functions.insert("eqDisband".into(), EQ_DISBAND);
+        functions.insert("eqFollowPlayer".into(), EQ_FOLLOW_PLAYER);
+        functions.insert("eqMakeLeader".into(), EQ_MAKE_LEADER);
+        functions.insert("eqBuyItem".into(), EQ_BUY_ITEM);
+        functions.insert("eqSellItem".into(), EQ_SELL_ITEM);
+        functions.insert("eqOpenTrade".into(), EQ_OPEN_TRADE);
+        functions.insert("eqCompleteTrade".into(), EQ_COMPLETE_TRADE);
+        functions.insert("eqBuffPlayer".into(), EQ_BUFF_PLAYER);
+        functions.insert("eqRemoveBuff".into(), EQ_REMOVE_BUFF);
 
         Self {
             client_date: crate::offsets::CLIENT_DATE.to_string(),

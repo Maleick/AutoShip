@@ -9,8 +9,8 @@ use goblin::pe::PE;
 
 pub mod xref;
 pub use xref::{
-    build_string_xref_index, extract_imports, match_string_references, ImportedSymbol,
-    StringRefMatch,
+    ImportedSymbol, StringRefMatch, build_string_xref_index, extract_imports,
+    match_string_references,
 };
 
 /// A null-terminated ASCII or UTF-8 string found in a PE section, together

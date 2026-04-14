@@ -190,8 +190,8 @@ pub enum NavCommand {
 #[cfg(test)]
 mod tests {
     use textquest_common::nav::{
-        CampSpot, CircleConfig, FollowConfig, HeadingMode, NavDiagnostics,
-        NavStateSignals, NavStatus, StickConfig, Waypoint,
+        CampSpot, CircleConfig, FollowConfig, HeadingMode, NavDiagnostics, NavStateSignals,
+        NavStatus, StickConfig, Waypoint,
     };
 
     use super::*;

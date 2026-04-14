@@ -371,7 +371,7 @@ mod tests {
             .map(|dest| ZoneConnection {
                 dest_zone_id: dest,
                 transfer_type: dest as u8,
-                disabled: dest % 2 == 0,
+                disabled: dest.is_multiple_of(2),
             })
             .collect();
         graph.zones.insert(
@@ -392,7 +392,7 @@ mod tests {
             let expected_dest = (i + 1) as u16;
             assert_eq!(*dest, expected_dest);
             assert_eq!(*ttype, expected_dest as u8);
-            assert_eq!(*disabled, expected_dest % 2 == 0);
+            assert_eq!(*disabled, expected_dest.is_multiple_of(2));
         }
     }
 }

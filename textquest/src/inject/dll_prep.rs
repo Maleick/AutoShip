@@ -50,7 +50,7 @@ pub(crate) fn compute_file_hash(path: &Path) -> Result<String> {
 }
 
 #[cfg(test)]
-mod tests {
+mod hash_tests {
     use super::compute_file_hash;
     use std::io::Write;
     use std::time::{SystemTime, UNIX_EPOCH};

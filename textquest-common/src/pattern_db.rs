@@ -505,7 +505,10 @@ mod tests {
         let json = db.to_json().expect("serialization failed");
         // Deserializing should skip the "(custom)" entry
         let db2 = PatternDb::from_json(&json).expect("deserialization failed");
-        assert!(db2.is_empty(), "custom entries should be skipped on deserialization");
+        assert!(
+            db2.is_empty(),
+            "custom entries should be skipped on deserialization"
+        );
     }
 
     #[test]

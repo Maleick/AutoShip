@@ -28,7 +28,11 @@ fn parse_version_string(bytes: &[u8]) -> Option<String> {
     let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
     let s = String::from_utf8_lossy(&bytes[..end]);
     let trimmed = s.trim();
-    if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 /// Read `__ActualVersionDate` from the given EQ base address.

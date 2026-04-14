@@ -205,11 +205,11 @@ mod tests {
     }
 
     #[test]
-    fn reset_sets_intensity_and_updates_tick() {
+    fn reset_sets_intensity_and_clears_last_tick() {
         let mut m = manager_at(0.3);
         m.reset(0.9);
         assert!((m.current_intensity - 0.9).abs() < f32::EPSILON);
-        assert!(m.last_tick.is_some());
+        assert!(m.last_tick.is_none());
     }
 
     #[test]

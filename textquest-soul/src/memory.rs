@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use chrono::{NaiveDateTime, Utc};
 use rusqlite::{Connection, params};
 use textquest_common::soul::{MoodState, SoulEvent, SpeechStyle};
 use textquest_common::types::ClientId;
@@ -55,6 +56,7 @@ impl DbHealth {
 }
 
 /// A cached record held in the fallback in-memory store.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct CachedMemory {
     character_id: ClientId,
@@ -205,13 +207,6 @@ where
     Err(last_err.expect("retry loop must set last_err"))
 }
 
-/// Compute a combined relevance score for a memory row used for LLM context ranking.
-///
-/// Higher score → preferred for inclusion in context.
-fn memory_combined_score(row: &MemoryRow) -> f32 {
-    row.importance
-}
-
 impl MemoryStore {
     /// Open (or create) the memory database at the given path.
     ///
@@ -251,7 +246,11 @@ impl MemoryStore {
         let conn = Connection::open_in_memory().expect("Failed to open in-memory SQLite");
         conn.execute_batch(SCHEMA)
             .expect("Failed to apply schema to in-memory store");
-        Self { conn }
+        Self {
+            conn,
+            health: Arc::new(DbHealth::default()),
+            fallback_cache: RefCell::new(VecDeque::new()),
+        }
     }
 
     /// Record a soul event as a memory for a character.
@@ -1059,7 +1058,7 @@ pub struct AuditDaySummary {
 }
 
 fn csv_field(s: &str) -> String {
-    let formula_safe = if matches!(s.chars().next(), Some('=' | '+' | '-' | '@')) {
+    let formula_safe = if matches!(s.trim_start().chars().next(), Some('=' | '+' | '-' | '@')) {
         format!("'{s}")
     } else {
         s.to_owned()
@@ -1074,6 +1073,39 @@ fn csv_field(s: &str) -> String {
     } else {
         formula_safe
     }
+}
+
+#[cfg(test)]
+fn format_context_for_llm(memories: &[MemoryRow]) -> String {
+    memories
+        .iter()
+        .map(|row| {
+            let zone = row.zone.as_deref().unwrap_or("-");
+            format!(
+                "[{}] zone={} mood={} importance={:.2} created_at={}",
+                row.event_type, zone, row.mood_at_time, row.importance, row.created_at
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn memory_recency(created_at: &str) -> f32 {
+    let created_at = match NaiveDateTime::parse_from_str(created_at, "%Y-%m-%d %H:%M:%S") {
+        Ok(dt) => dt,
+        Err(_) => return 0.0,
+    };
+
+    let age_seconds = Utc::now()
+        .naive_utc()
+        .signed_duration_since(created_at)
+        .num_seconds()
+        .max(0) as f32;
+    (1.0 - (age_seconds / 86_400.0) / 30.0).clamp(0.0, 1.0)
+}
+
+fn memory_combined_score(row: &MemoryRow) -> f32 {
+    row.importance * memory_recency(&row.created_at)
 }
 
 /// A row from the memories table.

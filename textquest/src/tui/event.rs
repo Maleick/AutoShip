@@ -587,7 +587,7 @@ pub fn handle_events(
                 return Ok(true);
             }
             (KeyCode::Char('6'), _) => {
-                app.set_active_screen(ActiveScreen::Orchestrator);
+                app.set_active_screen(ActiveScreen::Economy);
                 return Ok(true);
             }
             (KeyCode::Tab, _) => {

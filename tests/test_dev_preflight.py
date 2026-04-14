@@ -102,6 +102,25 @@ class DevPreflightTests(unittest.TestCase):
         self.assertEqual(results[0].status, "FAIL")
         self.assertEqual(results[0].name, "Windows Rust toolchain")
 
+    def test_check_offset_sync_records_success(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = Path(tmpdir)
+            script_path = repo_root / "scripts" / "validate_offsets_sync.py"
+            script_path.parent.mkdir(parents=True)
+            script_path.write_text("#!/usr/bin/env python3\nprint('Offset sync OK')\n")
+
+            results = []
+            completed = subprocess.CompletedProcess(("python3", str(script_path)), 0, stdout="Offset sync OK\n", stderr="")
+
+            with mock.patch.object(self.module, "REPO_ROOT", repo_root):
+                with mock.patch.object(self.module, "run_command", return_value=completed):
+                    self.module.check_offset_sync(results)
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].status, "PASS")
+        self.assertEqual(results[0].name, "Offset sync")
+        self.assertIn("Offset sync OK", results[0].detail)
+
 
 if __name__ == "__main__":
     unittest.main()

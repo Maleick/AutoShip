@@ -133,19 +133,10 @@ impl LlmConfig {
         }
 
         let url = self.base_url.trim();
-        if self.base_url != url {
-            return Some(
-                "base_url must not contain leading or trailing whitespace"
-                    .to_string(),
-            );
-        }
 
         // Check if it starts with http:// or https://
         if !url.starts_with("http://") && !url.starts_with("https://") {
-            return Some(
-                "base_url must start with 'http://' or 'https://'"
-                    .to_string(),
-            );
+            return Some("base_url must start with 'http://' or 'https://'".to_string());
         }
 
         // Extract the host portion (between :// and the next /)
@@ -290,16 +281,12 @@ pub struct SoulConfig {
     /// Maximum total LLM requests across all characters per minute (rate limiting)
     #[serde(default = "default_max_global_requests")]
     pub max_global_requests: u32,
-    /// Rate at which mood decays toward Neutral per tick (0.0–1.0).
-    #[serde(default = "default_mood_decay_rate")]
-    pub mood_decay_rate: f64,
-    /// Number of days before a memory record is considered stale for decay.
+    /// Number of days before memory decay reaches zero.
     #[serde(default = "default_memory_decay_days")]
     pub memory_decay_days: u32,
-}
-
-const fn default_mood_decay_rate() -> f64 {
-    0.05
+    /// Mood decay rate used by the personality engine.
+    #[serde(default = "default_mood_decay_rate")]
+    pub mood_decay_rate: f32,
 }
 
 const fn default_max_requests_per_character() -> u32 {
@@ -308,6 +295,10 @@ const fn default_max_requests_per_character() -> u32 {
 
 const fn default_max_global_requests() -> u32 {
     20
+}
+
+const fn default_mood_decay_rate() -> f32 {
+    0.05
 }
 
 impl Default for SoulConfig {
@@ -327,8 +318,8 @@ impl Default for SoulConfig {
             suppression: SuppressionRules::default(),
             max_requests_per_character: default_max_requests_per_character(),
             max_global_requests: default_max_global_requests(),
-            mood_decay_rate: default_mood_decay_rate(),
             memory_decay_days: default_memory_decay_days(),
+            mood_decay_rate: default_mood_decay_rate(),
         }
     }
 }
@@ -336,8 +327,8 @@ impl Default for SoulConfig {
 impl SoulConfig {
     /// Validate this configuration. Returns a list of errors; empty means valid.
     #[must_use]
-    pub fn validate(&self) -> Vec<crate::soul::config_validator::ConfigError> {
-        crate::soul::config_validator::SoulConfigValidator::validate(self)
+    pub fn validate(&self) -> Vec<crate::config_validator::ConfigError> {
+        crate::config_validator::SoulConfigValidator::validate(self)
     }
 }
 

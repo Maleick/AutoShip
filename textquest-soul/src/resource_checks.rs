@@ -43,7 +43,7 @@ struct ResourceSnapshot {
 /// # Example
 ///
 /// ```rust
-/// use textquest::soul::resource_checks::{ResourceGuard, ResourceState};
+/// use textquest_soul::resource_checks::{ResourceGuard, ResourceState};
 ///
 /// let state = ResourceState {
 ///     db_connection_count: 1,

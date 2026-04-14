@@ -330,8 +330,10 @@ mod tests {
 
     #[test]
     fn disable_suppression_via_config() {
-        let mut rules = SuppressionRules::default();
-        rules.suppress_chat_during_navigation = false;
+        let rules = SuppressionRules {
+            suppress_chat_during_navigation: false,
+            ..SuppressionRules::default()
+        };
 
         let mut state = make_game_state(1);
         state.nav_status = NavStatus::Moving {

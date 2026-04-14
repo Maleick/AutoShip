@@ -22,9 +22,9 @@ use crate::eq::named_tracker::{NamedAlert, NamedTracker};
 use crate::eq::spawn_alert::{MatchSource, SpawnAlertEvent, SpawnAlertFeed};
 use crate::eq::structs::{SpawnInfo, SpawnType};
 use crate::orchestrator::Orchestrator;
-use crate::soul::coordinator::SoulCoordinator;
 use anyhow::Context;
 use ratatui::style::Color;
+use textquest_soul::coordinator::SoulCoordinator;
 
 // Re-export extracted types so existing `use tui::app::*` paths still work.
 pub use super::client::ClientState;
@@ -3790,6 +3790,7 @@ impl App {
     }
 
     /// Handle `:set <key> <value>` commands for runtime configuration.
+    #[allow(dead_code)]
     fn handle_set_command(&mut self, args: &[&str]) {
         match args.first().copied() {
             Some("hook_rotation_interval") => {

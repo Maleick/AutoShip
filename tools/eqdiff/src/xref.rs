@@ -244,6 +244,7 @@ mod tests {
         buf
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn write_section_entry(
         buf: &mut [u8],
         offset: usize,

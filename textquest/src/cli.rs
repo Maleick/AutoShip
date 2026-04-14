@@ -13,7 +13,6 @@ use crate::nav;
 use crate::orchestrator;
 use crate::paths;
 use crate::process;
-use crate::soul;
 use crate::tui;
 
 use crate::{GHIDRA_DB_PATH, OPCODES_CONFIG_PATH, SOUL_DB_PATH, get_module_base};
@@ -255,7 +254,7 @@ pub fn run_tui_mode() -> Result<()> {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent).ok();
         }
-        match soul::coordinator::SoulCoordinator::new(config.soul, db_path) {
+        match textquest_soul::coordinator::SoulCoordinator::new(config.soul, db_path) {
             Ok(coordinator) => {
                 info!("Soul Engine initialized");
                 app.soul_coordinator = Some(coordinator);
@@ -368,11 +367,11 @@ pub fn run_inject_mode() -> Result<()> {
             Ok(()) => {
                 println!("OK");
                 info!(pid, "Injection succeeded");
-                if config.timing_correction {
-                    if let Err(e) = send_timing_correction_command(pid, true) {
-                        println!("  FAILED to send timing correction setting: {e:#}");
-                        error!(pid, error = %e, "Failed to send timing correction command");
-                    }
+                if config.timing_correction
+                    && let Err(e) = send_timing_correction_command(pid, true)
+                {
+                    println!("  FAILED to send timing correction setting: {e:#}");
+                    error!(pid, error = %e, "Failed to send timing correction command");
                 }
                 success += 1;
             }

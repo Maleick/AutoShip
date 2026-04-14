@@ -186,9 +186,9 @@ impl LlmRequestQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soul::config::EdginessLevel;
-    use crate::soul::llm::fallback::TraitDrivenResponder;
-    use crate::soul::llm::{LlmPriority, LlmRequest, Situation};
+    use crate::config::EdginessLevel;
+    use crate::llm::fallback::TraitDrivenResponder;
+    use crate::llm::{LlmPriority, LlmRequest, Situation};
     use textquest_common::soul::{MoodState, PersonalityTraits, SpeechStyle};
 
     fn make_request(name: &str, priority: LlmPriority) -> LlmRequest {

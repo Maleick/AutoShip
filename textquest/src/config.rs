@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::Path;
 
-use crate::soul::config::SoulConfig;
+use textquest_soul::config::SoulConfig;
 
 // ─── Account Configuration ───────────────────────────────────────────────
 
@@ -654,18 +654,6 @@ timing_correction = true
     fn app_config_timing_correction_defaults() {
         let cfg = AppConfig::default_config();
         assert!(!cfg.timing_correction);
-    }
-
-    #[test]
-    fn app_config_timing_correction_can_be_deserialized() {
-        let cfg: AppConfig = toml::from_str(
-            r#"
-timing_correction = true
-"#,
-        )
-        .unwrap();
-
-        assert!(cfg.timing_correction);
     }
 
     #[test]

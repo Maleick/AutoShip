@@ -368,19 +368,31 @@ mod tests {
     #[test]
     fn test_predicted_cast_ms_nan_haste_fallback() {
         let p = CastingPredictor::new(2000, f32::NAN);
-        assert_eq!(p.predicted_cast_ms(), 2000, "NaN haste should fall back to base");
+        assert_eq!(
+            p.predicted_cast_ms(),
+            2000,
+            "NaN haste should fall back to base"
+        );
     }
 
     #[test]
     fn test_predicted_cast_ms_infinity_haste_fallback() {
         let p = CastingPredictor::new(2000, f32::INFINITY);
-        assert_eq!(p.predicted_cast_ms(), 2000, "Infinity haste should fall back to base");
+        assert_eq!(
+            p.predicted_cast_ms(),
+            2000,
+            "Infinity haste should fall back to base"
+        );
     }
 
     #[test]
     fn test_predicted_cast_ms_neg_infinity_haste_fallback() {
         let p = CastingPredictor::new(2000, f32::NEG_INFINITY);
-        assert_eq!(p.predicted_cast_ms(), 2000, "-Infinity haste should fall back to base");
+        assert_eq!(
+            p.predicted_cast_ms(),
+            2000,
+            "-Infinity haste should fall back to base"
+        );
     }
 
     #[test]
@@ -398,7 +410,10 @@ mod tests {
         opt.add_candidate(make_spell(1, "Free", 0, 1000, 500));
         opt.add_candidate(make_spell(2, "Paid", 100, 1000, 200));
         let best = opt.best_efficiency().expect("should have a best");
-        assert_eq!(best.spell_id, 2, "Paid spell with 2.0 eff beats free with 0.0");
+        assert_eq!(
+            best.spell_id, 2,
+            "Paid spell with 2.0 eff beats free with 0.0"
+        );
     }
 
     #[test]

@@ -399,8 +399,8 @@ pub const INV_SLOT_GET_ITEM_BASE: u64 = 0x0001_4041_9520;
 pub const SPELL_BOOK_WND_MEMORIZE_SET: u64 = 0x0001_4050_EFE0;
 
 /// `EQBeginZone` — begin zone transition handler.
-/// Placeholder until scan/probe resolves the live address.
-pub const EQ_BEGIN_ZONE: u64 = 0x0;
+/// Source: test/eqgame.exe disassembly, client date 20260310.
+pub const EQ_BEGIN_ZONE: u64 = 0x0001_4028_D0E0;
 
 /// `EQEndZone` — end zone transition handler.
 /// Placeholder until scan/probe resolves the live address.
@@ -801,10 +801,10 @@ pub const ENTER_WORLD: u64 = 0x0001_400D_4B20;
 pub const PLAYER_CLIENT_SIZE: usize = 0x4000; // Placeholder; verify with sizeof or padding analysis
 /// Maximum offset within `SPAWNINFO` (PlayerClient's spawn data).
 pub const SPAWN_INFO_MAX_OFFSET: usize = 0x1000;
-/// Size of spell struct in spell book or spell array.
-pub const EQ_SPELL_SIZE: usize = 0x100; // Placeholder
-/// Size of zone zone array (spawn manager internal array).
-pub const SPAWN_MANAGER_ZONE_ZONE_SIZE: usize = 0x8;
+/// Size of `EQ_Spell` on the 2026-03-10 live client.
+pub const EQ_SPELL_SIZE: usize = 0x218;
+/// Size of `ZoneGuideZone` on the 2026-03-10 live client.
+pub const SPAWN_MANAGER_ZONE_ZONE_SIZE: usize = 0x48;
 
 // ─── PlayerClient (SPAWNINFO) field offsets ───
 // These are byte offsets within the PlayerClient struct.

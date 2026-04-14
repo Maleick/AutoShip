@@ -1241,7 +1241,7 @@ mod tests {
 
         // Non-system DLLs — should use remote resolution
         assert!(!is_system_dll("d3d11.dll")); // not loaded by textquest.exe
-        assert!(!is_system_dll("dxgi.dll"));  // not loaded by textquest.exe
+        assert!(!is_system_dll("dxgi.dll")); // not loaded by textquest.exe
         assert!(!is_system_dll("eqgame.dll"));
     }
 

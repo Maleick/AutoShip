@@ -8,7 +8,7 @@
 /// - `MemoryStore::recall_recent()` for 100 memories: < 5ms (budget 10ms with 2x margin)
 ///
 /// Run with:
-///   cargo test -p textquest soul::perf_tests -- --nocapture
+///   cargo test -p textquest-soul perf_tests -- --nocapture
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -19,9 +19,9 @@ mod tests {
     use textquest_common::soul::{MoodState, PersonalityTraits, SoulEvent, SpeechStyle};
     use textquest_common::types::{ClientId, GameState, SpawnData};
 
-    use crate::soul::config::{CharacterSoulConfig, SoulConfig};
-    use crate::soul::coordinator::SoulCoordinator;
-    use crate::soul::memory::MemoryStore;
+    use crate::config::{CharacterSoulConfig, SoulConfig};
+    use crate::coordinator::SoulCoordinator;
+    use crate::memory::MemoryStore;
 
     // ---------------------------------------------------------------------------
     // Latency budgets (milliseconds) — 2x safety margin applied here so tests

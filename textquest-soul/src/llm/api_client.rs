@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 
 use super::{LlmProvider, LlmRequest, LlmResponse, Situation};
-use crate::soul::config::{BotPersonalityConfig, LlmConfig, LlmProviderKind};
+use crate::config::{BotPersonalityConfig, LlmConfig, LlmProviderKind};
 
 /// LLM API client that routes to the configured provider.
 pub struct ApiLlmClient {
@@ -166,7 +166,7 @@ struct OllamaMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soul::config::{BotPersonalityPreset, LlmProviderKind};
+    use crate::config::{BotPersonalityPreset, LlmProviderKind};
     use textquest_common::soul::{MoodState, PersonalityTraits, SpeechStyle};
 
     fn test_config(provider: LlmProviderKind) -> LlmConfig {

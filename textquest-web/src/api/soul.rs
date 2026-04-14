@@ -328,7 +328,7 @@ pub async fn export_all_audit_csv(State(state): State<Arc<AppState>>) -> impl In
 // ── CSV helpers ───────────────────────────────────────────────────────────────
 
 fn csv_field(s: &str) -> String {
-    let formula_safe = if matches!(s.chars().next(), Some('=' | '+' | '-' | '@')) {
+    let formula_safe = if matches!(s.trim_start().chars().next(), Some('=' | '+' | '-' | '@')) {
         format!("'{s}")
     } else {
         s.to_owned()

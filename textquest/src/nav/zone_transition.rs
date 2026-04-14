@@ -114,11 +114,9 @@ fn safe_fallback_pos() -> Waypoint {
 fn recovery_pos_for(kind: &TransitionKind) -> Waypoint {
     match kind {
         TransitionKind::ZoneTo { zone_line_pos, .. } if is_safe_coordinate(zone_line_pos) => {
-            zone_line_pos.clone()
+            *zone_line_pos
         }
-        TransitionKind::WalkTo { destination } if is_safe_coordinate(destination) => {
-            destination.clone()
-        }
+        TransitionKind::WalkTo { destination } if is_safe_coordinate(destination) => *destination,
         _ => safe_fallback_pos(),
     }
 }
@@ -251,7 +249,7 @@ impl ZoneTransitionFsm {
             // Synthesize a WalkTo-back-to-origin recovery kind
             let recovery_kind = TransitionKind::ZoneTo {
                 zone_name: target_zone,
-                zone_line_pos: safe_pos.clone(),
+                zone_line_pos: safe_pos,
             };
             let (recovery_kind, safe_pos, attempts) = self.begin_recovery(recovery_kind, safe_pos);
             if let Some(k) = recovery_kind {
@@ -335,7 +333,7 @@ impl ZoneTransitionFsm {
                     let safe_pos = safe_fallback_pos();
                     let recovery_kind = TransitionKind::ZoneTo {
                         zone_name: target_zone.clone(),
-                        zone_line_pos: safe_pos.clone(),
+                        zone_line_pos: safe_pos,
                     };
                     let (recovery_kind, safe_pos, attempts) =
                         self.begin_recovery(recovery_kind, safe_pos);

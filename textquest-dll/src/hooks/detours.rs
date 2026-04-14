@@ -60,9 +60,10 @@ impl DetourManager {
         target_addr: usize,
         hook_fn: *const (),
     ) -> Result<(), Box<dyn Error>> {
-        let mut map = self.detours.lock().map_err(|_| {
-            DetourError("detour manager lock poisoned while installing")
-        })?;
+        let mut map = self
+            .detours
+            .lock()
+            .map_err(|_| DetourError("detour manager lock poisoned while installing"))?;
 
         if map.contains_key(name) {
             return Err(DetourError("detour already installed").into());
@@ -88,9 +89,10 @@ impl DetourManager {
     }
 
     pub fn uninstall(&self, name: &str) -> Result<(), Box<dyn Error>> {
-        let mut map = self.detours.lock().map_err(|_| {
-            DetourError("detour manager lock poisoned while uninstalling")
-        })?;
+        let mut map = self
+            .detours
+            .lock()
+            .map_err(|_| DetourError("detour manager lock poisoned while uninstalling"))?;
 
         let Some(record) = map.remove(name) else {
             return Err(DetourError("detour not installed").into());
@@ -98,11 +100,9 @@ impl DetourManager {
 
         match record {
             #[cfg(all(windows, not(test)))]
-            DetourRecord::Active(mut detour) => {
-                unsafe {
-                    detour.disable()?;
-                }
-            }
+            DetourRecord::Active(mut detour) => unsafe {
+                detour.disable()?;
+            },
             #[cfg(any(not(windows), test))]
             DetourRecord::Mock { .. } => {}
         }
@@ -216,13 +216,21 @@ mod tests {
         assert!(!manager.is_installed("ui_init"));
 
         manager
-            .install("ui_init", 0x1111_2222, hook_sidl_screen_wnd_init as *const ())
+            .install(
+                "ui_init",
+                0x1111_2222,
+                hook_sidl_screen_wnd_init as *const (),
+            )
             .expect("install should record detour");
         assert!(manager.is_installed("ui_init"));
 
         assert!(
             manager
-                .install("ui_init", 0x3333_4444, hook_crender_reset_device as *const ())
+                .install(
+                    "ui_init",
+                    0x3333_4444,
+                    hook_crender_reset_device as *const ()
+                )
                 .is_err()
         );
 

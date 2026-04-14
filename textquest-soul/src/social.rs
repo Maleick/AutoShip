@@ -224,6 +224,12 @@ impl SocialGraph {
     }
 }
 
+impl Default for SocialGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Compute faction and trust deltas for a social event.
 fn event_deltas(event: &SocialEvent) -> (i32, f32) {
     match event {

@@ -319,6 +319,34 @@ def check_reference_trees(
     record(results, "PASS", "Reference trees", f"Optional local reference roots are configured ({summary}). {profile_note}")
 
 
+def check_offset_sync(results: list[CheckResult]) -> None:
+    script = REPO_ROOT / "scripts" / "validate_offsets_sync.py"
+    if not script.exists():
+        record(
+            results,
+            "FAIL",
+            "Offset sync",
+            "scripts/validate_offsets_sync.py not found.",
+            "Add scripts/validate_offsets_sync.py and wire it into CI.",
+        )
+        return
+
+    completed = run_command(sys.executable, str(script))
+    if completed.returncode == 0:
+        detail = first_line(completed.stdout or completed.stderr)
+        record(results, "PASS", "Offset sync", detail)
+        return
+
+    detail = first_line(completed.stderr or completed.stdout)
+    record(
+        results,
+        "FAIL",
+        "Offset sync",
+        detail,
+        "Inspect the diff and reconcile config/offsets.json with textquest-common/src/offsets.rs.",
+    )
+
+
 def print_results(results: list[CheckResult], require_reference_trees: bool) -> int:
     counts = {"PASS": 0, "WARN": 0, "FAIL": 0}
     for result in results:
@@ -603,6 +631,8 @@ def main() -> int:
             record(results, "WARN", "Map validation", "scripts/validate-maps.py not found; skipping.")
     else:
         record(results, "PASS", "Map validation", "No config/maps/ directory; skipping.")
+
+    check_offset_sync(results)
 
     if args.update_docs and cargo_ok:
         update_test_count()

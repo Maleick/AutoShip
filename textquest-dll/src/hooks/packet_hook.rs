@@ -453,10 +453,9 @@ mod inner {
     /// - `VirtualQuery` confirms the range is within a committed, readable page
     fn is_safe_packet_buffer(addr: usize, len: usize) -> bool {
         use windows::Win32::System::Memory::{
-            MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ,
-            PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS,
-            PAGE_PROTECTION_FLAGS, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY,
-            VirtualQuery,
+            MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
+            PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS, PAGE_PROTECTION_FLAGS,
+            PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY, VirtualQuery,
         };
 
         // Null pointer or invalid size check
@@ -545,11 +544,7 @@ mod inner {
                 // read. The full declared length is still forwarded for
                 // reporting/logging semantics.
                 if is_safe_packet_buffer(buf_ptr, validated_len) {
-                    on_packet(
-                        buf.buf as *const u8,
-                        buf_len,
-                        PacketDirection::Outbound,
-                    );
+                    on_packet(buf.buf as *const u8, buf_len, PacketDirection::Outbound);
                 } else {
                     // Buffer bounds validation failed — log and skip
                     tracing::debug!(

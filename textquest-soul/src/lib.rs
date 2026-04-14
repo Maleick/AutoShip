@@ -18,12 +18,20 @@ pub mod idle;
 pub mod llm;
 /// Persistent memory — stores character experiences and relationships across sessions.
 pub mod memory;
-/// Game state observer — serializes TUI app state to compact JSON for the Gemma 4 LLM observer.
-pub mod observer;
+/// Natural mood decay over time.
+pub mod mood_decay;
+/// Operator controls and safety mechanisms.
+pub mod operator;
 /// Personality system — trait-based character archetypes and mood modeling.
 pub mod personality;
+/// LLM request rate limiting.
+pub mod rate_limiter;
 /// Error handling and recovery — retry, fallback, reload, and restart strategies.
 pub mod recovery;
+/// Resource leak detection and cleanup verification.
+pub mod resource_checks;
+/// Keyword-based sentiment scoring.
+pub mod sentiment;
 /// Social dynamics — inter-character relationships, group cohesion, banter triggers.
 pub mod social;
 /// Speech style evolution — catchphrase learning and adoption mechanics.

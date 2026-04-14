@@ -422,6 +422,7 @@ mod direction_arrow_tests {
 }
 /// Place a directional heading arrow in the grid cell adjacent to position (`col`, `row`)
 /// in the direction the player is facing. No-op if the target cell is out of bounds.
+#[allow(clippy::too_many_arguments)]
 fn place_heading_arrow(
     heading: f32,
     heading_rad: f32,
@@ -429,7 +430,7 @@ fn place_heading_arrow(
     row: i32,
     width: i32,
     height: i32,
-    grid: &mut Vec<Vec<(char, ratatui::style::Color)>>,
+    grid: &mut [Vec<(char, ratatui::style::Color)>],
     color: ratatui::style::Color,
 ) {
     let arrow = heading_arrow_char(heading);

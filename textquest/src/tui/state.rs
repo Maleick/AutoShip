@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use ratatui::style::Color;
 use ratatui::widgets::TableState;
@@ -202,6 +203,146 @@ impl HexDumpState {
         // Sort by offset for consistent display.
         self.annotations.sort_by_key(|a| a.offset);
     }
+}
+
+const DEFAULT_HOOK_ROTATION_INTERVAL_MS: u64 = 5_000;
+
+/// Status of a hook slot in the rotation display.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HookSlotState {
+    /// The hook is currently active.
+    Active,
+    /// The hook is temporarily unhooked.
+    Unhooked,
+}
+
+impl HookSlotState {
+    /// Returns the short uppercase display label.
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Active => "ACTIVE",
+            Self::Unhooked => "UNHOOKED",
+        }
+    }
+}
+
+/// A single hook entry in the rotation panel.
+#[derive(Debug, Clone)]
+pub struct HookRotationEntry {
+    /// Hook name shown in the panel.
+    pub name: String,
+    /// Current hook slot state.
+    pub state: HookSlotState,
+    /// Timestamp of the most recent rotation event, if any.
+    pub last_rotated_at: Option<Instant>,
+    /// Scheduled time for the next rotation, if any.
+    pub next_rotation_at: Option<Instant>,
+}
+
+impl HookRotationEntry {
+    /// Create a new entry with no rotation history.
+    #[must_use]
+    pub fn new(name: impl Into<String>, state: HookSlotState) -> Self {
+        Self {
+            name: name.into(),
+            state,
+            last_rotated_at: None,
+            next_rotation_at: None,
+        }
+    }
+
+    /// Milliseconds elapsed since the last rotation.
+    #[must_use]
+    pub fn ms_since_last_rotation(&self) -> Option<u64> {
+        self.last_rotated_at
+            .map(|instant| duration_ms(instant.elapsed()))
+    }
+
+    /// Milliseconds remaining until the next scheduled rotation.
+    #[must_use]
+    pub fn ms_until_next_rotation(&self) -> Option<u64> {
+        self.next_rotation_at
+            .map(|instant| duration_ms(instant.saturating_duration_since(Instant::now())))
+    }
+}
+
+/// Hook rotation status used by the debug panel.
+#[derive(Debug, Clone)]
+pub struct HookRotationState {
+    /// Current hook entries displayed in the panel.
+    pub entries: Vec<HookRotationEntry>,
+    /// Default rotation interval shown in the panel.
+    pub interval_ms: u64,
+}
+
+impl HookRotationState {
+    /// Create the default hook rotation view.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            entries: default_hook_rotation_entries(),
+            interval_ms: DEFAULT_HOOK_ROTATION_INTERVAL_MS,
+        }
+    }
+
+    /// Record a hook rotation for the named entry.
+    pub fn record_rotation(
+        &mut self,
+        name: impl Into<String>,
+        state: HookSlotState,
+        interval_ms: u64,
+    ) {
+        let name = name.into();
+        let now = Instant::now();
+        let next_rotation_at = now.checked_add(Duration::from_millis(interval_ms));
+
+        if let Some(entry) = self.entries.iter_mut().find(|entry| entry.name == name) {
+            entry.state = state;
+            entry.last_rotated_at = Some(now);
+            entry.next_rotation_at = next_rotation_at;
+        } else {
+            self.entries.push(HookRotationEntry {
+                name,
+                state,
+                last_rotated_at: Some(now),
+                next_rotation_at,
+            });
+        }
+    }
+
+    /// Update the panel-wide rotation interval and reschedule any active entries.
+    pub fn set_interval_ms(&mut self, interval_ms: u64) {
+        self.interval_ms = interval_ms;
+        let now = Instant::now();
+        for entry in &mut self.entries {
+            if entry.last_rotated_at.is_some() {
+                entry.next_rotation_at = now.checked_add(Duration::from_millis(interval_ms));
+            }
+        }
+    }
+}
+
+impl Default for HookRotationState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn duration_ms(duration: Duration) -> u64 {
+    let millis = duration.as_millis();
+    if millis > u64::MAX as u128 {
+        u64::MAX
+    } else {
+        millis as u64
+    }
+}
+
+fn default_hook_rotation_entries() -> Vec<HookRotationEntry> {
+    ["ProcessGameEvents", "CastHook", "SetGameState", "DspChat"]
+        .into_iter()
+        .map(|name| HookRotationEntry::new(name, HookSlotState::Active))
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1843,122 +1984,6 @@ impl Default for EconomyState {
 
             automation_paused: false,
         }
-    }
-}
-
-// ── Hook rotation tracking ────────────────────────────────────────────────────
-
-/// State of a single hook slot.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HookSlotState {
-    Active,
-    Unhooked,
-}
-
-impl HookSlotState {
-    /// Short display label.
-    #[must_use]
-    pub fn label(self) -> &'static str {
-        match self {
-            HookSlotState::Active => "ACTIVE",
-            HookSlotState::Unhooked => "UNHOOKED",
-        }
-    }
-}
-
-/// A single tracked hook slot with timing metadata.
-#[derive(Debug, Clone)]
-pub struct HookEntry {
-    /// Hook name (e.g. "ProcessGameEvents").
-    pub name: String,
-    /// Current hook state.
-    pub state: HookSlotState,
-    /// When the hook last fired.
-    pub last_rotated_at: Option<std::time::Instant>,
-    /// When the hook is expected to fire next.
-    pub next_rotation_at: Option<std::time::Instant>,
-}
-
-impl HookEntry {
-    /// Milliseconds since the hook last fired, or `None` if never fired.
-    #[must_use]
-    pub fn ms_since_last_rotation(&self) -> Option<u64> {
-        self.last_rotated_at.map(|t| t.elapsed().as_millis() as u64)
-    }
-
-    /// Milliseconds until the hook fires next, clamped to 0, or `None`.
-    #[must_use]
-    pub fn ms_until_next_rotation(&self) -> Option<u64> {
-        self.next_rotation_at.map(|t| {
-            let now = std::time::Instant::now();
-            if now >= t { 0 } else { (t - now).as_millis() as u64 }
-        })
-    }
-}
-
-/// Live hook-rotation status used by the Debug panel.
-#[derive(Debug, Clone)]
-pub struct HookRotationState {
-    /// Per-hook slot entries.
-    pub entries: Vec<HookEntry>,
-    /// Configured rotation interval in milliseconds.
-    pub interval_ms: u64,
-}
-
-impl HookRotationState {
-    /// Create a new `HookRotationState` with the four standard EQ hook slots.
-    #[must_use]
-    pub fn new() -> Self {
-        const DEFAULT_HOOKS: &[&str] =
-            &["ProcessGameEvents", "SetGameState", "CastHook", "MainLoop"];
-        Self {
-            entries: DEFAULT_HOOKS
-                .iter()
-                .map(|&name| HookEntry {
-                    name: name.to_string(),
-                    state: HookSlotState::Active,
-                    last_rotated_at: None,
-                    next_rotation_at: None,
-                })
-                .collect(),
-            interval_ms: 5_000,
-        }
-    }
-
-    /// Record a rotation event. Inserts a new entry if `name` is unknown.
-    pub fn record_rotation(&mut self, name: &str, state: HookSlotState, interval_ms: u64) {
-        let now = std::time::Instant::now();
-        let next = now + std::time::Duration::from_millis(interval_ms);
-        if let Some(entry) = self.entries.iter_mut().find(|e| e.name == name) {
-            entry.state = state;
-            entry.last_rotated_at = Some(now);
-            entry.next_rotation_at = Some(next);
-        } else {
-            self.entries.push(HookEntry {
-                name: name.to_string(),
-                state,
-                last_rotated_at: Some(now),
-                next_rotation_at: Some(next),
-            });
-        }
-    }
-
-    /// Update the rotation interval and reschedule all entries that have a pending time.
-    pub fn set_interval_ms(&mut self, ms: u64) {
-        self.interval_ms = ms;
-        let now = std::time::Instant::now();
-        for entry in &mut self.entries {
-            if entry.last_rotated_at.is_some() {
-                entry.next_rotation_at =
-                    Some(now + std::time::Duration::from_millis(ms));
-            }
-        }
-    }
-}
-
-impl Default for HookRotationState {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

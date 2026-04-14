@@ -227,7 +227,10 @@ mod tests {
         // Reconsume with a different cooldown — must update in-place.
         tracker.consume(1, Some(20), 0);
         assert!(!tracker.can_use(1, 0));
-        assert_eq!(tracker.availability(1, 0), AbilityAvailability::CoolingDown(20));
+        assert_eq!(
+            tracker.availability(1, 0),
+            AbilityAvailability::CoolingDown(20)
+        );
         // Tick 20 times — entry should be gone.
         for now in 0..20 {
             tracker.tick(now);

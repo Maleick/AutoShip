@@ -285,8 +285,12 @@ pub fn store_path() -> PathBuf {
 mod tests {
     use super::*;
 
+    fn safe_temp_dir() -> PathBuf {
+        fs::canonicalize(std::env::temp_dir()).unwrap_or_else(|_| std::env::temp_dir())
+    }
+
     fn temp_path(name: &str) -> PathBuf {
-        let mut path = std::env::temp_dir();
+        let mut path = safe_temp_dir();
         path.push(format!("textquest-waypoints-test-{name}.json"));
         if fs::symlink_metadata(&path).is_ok() {
             let _ = fs::remove_file(&path);
@@ -385,7 +389,7 @@ mod tests {
     fn validate_store_path_rejects_symlinked_ancestor() {
         use std::os::unix::fs::symlink;
 
-        let base = std::env::temp_dir().join("textquest-waypoints-test-symlink-ancestor");
+        let base = safe_temp_dir().join("textquest-waypoints-test-symlink-ancestor");
         let _ = fs::remove_dir_all(&base);
         fs::create_dir_all(&base).expect("create base dir");
 

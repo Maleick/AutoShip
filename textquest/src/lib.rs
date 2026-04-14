@@ -1,7 +1,7 @@
 //! TextQuest orchestrator crate — external process for EQ multibox control.
 //!
 //! This crate provides the TUI dashboard, process reading, IPC, client management,
-//! navigation, combat orchestration, camp loop, launcher, and Soul Engine modules.
+//! navigation, combat orchestration, camp loop, launcher, and the Soul Engine crate.
 
 #![allow(clippy::new_without_default)]
 
@@ -53,9 +53,6 @@ pub mod paths;
 /// OS-level process interaction — open, read memory, find processes.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub mod process;
-/// Soul Engine — LLM-driven character personalities, persistent memory.
-#[allow(dead_code)]
-pub mod soul;
 /// Terminal UI — app state, event handling, theme, renderers.
 pub mod tui;
 

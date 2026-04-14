@@ -1,7 +1,7 @@
 use textquest_common::nav::Xorshift32;
 use textquest_common::soul::{MoodState, PersonalityTraits, SayChannel, SoulAction, SoulEvent};
 
-use crate::soul::config::EdginessLevel;
+use crate::config::EdginessLevel;
 
 /// Snapshot of a character's current soul state, passed to engine methods.
 pub struct SoulContext<'a> {

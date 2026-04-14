@@ -708,7 +708,7 @@ mod tests {
         // recently fired member rather than becoming None.
         let (index, progress) = chain.cast_progress().expect("should have progress");
         assert_eq!(index, 1, "should be index 1 (second member)");
-        assert!(progress >= 0.0 && progress < 1.0);
+        assert!((0.0..1.0).contains(&progress));
     }
 
     // --- target/spell getter/setter tests ---

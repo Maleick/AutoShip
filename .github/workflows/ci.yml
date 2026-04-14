@@ -53,6 +53,9 @@ jobs:
       - name: Validate wiki sources
         run: python3 scripts/sync_wiki.py --check
 
+      - name: Validate offset sync
+        run: python3 scripts/validate_offsets_sync.py
+
       - name: Run Python tests (advisory)
         continue-on-error: true
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v

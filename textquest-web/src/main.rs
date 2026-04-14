@@ -102,9 +102,9 @@ fn credentials_db_path() -> PathBuf {
 /// - `event_tx` and `account_store` are always initialised empty.
 /// - `credential_store` is populated only when `TEXTQUEST_MASTER_PASSWORD` is
 ///   set in the environment; otherwise password routes return `501`.
-/// - `character_configs`, `loot_state`, and `soul_audit` are seeded with
-///   in-memory state; character-config routes still return `501` until a
-///   supported backing store is wired.
+/// - `character_configs`, `loot_state`, `economy_state`, and `soul_audit` are
+///   seeded with in-memory state; character-config routes still return `501`
+///   until a supported backing store is wired.
 fn build_state() -> Arc<AppState> {
     let (event_tx, _) = broadcast::channel::<String>(256);
     let credential_store = std::env::var("TEXTQUEST_MASTER_PASSWORD")

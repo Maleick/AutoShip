@@ -37,19 +37,20 @@ mod stealth;
 #[allow(dead_code)]
 mod syscall;
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+use textquest_common::offset_db::OffsetDatabase;
 
 /// Base address of eqgame.exe in memory. Set during initialization.
 /// All EQ offsets are added to this value to compute runtime addresses.
 pub static EQ_BASE: AtomicU64 = AtomicU64::new(0);
 
-/// Runtime offset overrides loaded from scan/config data.
-/// When populated, resolved offsets use this map before falling back to
+/// Runtime offset database loaded from scan/config data.
+/// When populated, resolved offsets use this database before falling back to
 /// compile-time rebase logic.
-pub static OFFSET_DB: OnceLock<HashMap<String, u64>> = OnceLock::new();
+pub static OFFSET_DB: OnceLock<OffsetDatabase> = OnceLock::new();
 /// Cached EQ build-date string detected at startup, if available.
 static EQ_ACTUAL_VERSION: OnceLock<Option<String>> = OnceLock::new();
 
@@ -135,7 +136,14 @@ mod dll_main {
                     // unavailable or guarded by anti-cheat in EQ. CreateThread is
                     // more detectable but reliably runs our initializer.
                     let context = module.0 as *const core::ffi::c_void;
-                    let thread = CreateThread(None, 0, Some(init_thread_fn), Some(context), THREAD_CREATION_FLAGS(0), None);
+                    let thread = CreateThread(
+                        None,
+                        0,
+                        Some(init_thread_fn),
+                        Some(context),
+                        THREAD_CREATION_FLAGS(0),
+                        None,
+                    );
                     if let Err(e) = thread {
                         // Nothing we can do — tracing not up yet.
                         let _ = e;
@@ -202,7 +210,7 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
     // Set TEXTQUEST_SCAN_OFFSETS=1 to enable. Results are logged and validated
     // against compiled constants but NOT used for control flow yet. See #746.
     if std::env::var("TEXTQUEST_SCAN_OFFSETS").as_deref() == Ok("1") {
-        scan_offsets(eq_base);
+        scan_offsets();
     }
 
     // 2.5. Initialize indirect syscall layer (RecycledGate).
@@ -497,7 +505,9 @@ fn install_remaining_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error
 }
 
 pub(crate) fn eq_actual_version() -> Option<String> {
-    EQ_ACTUAL_VERSION.get().and_then(|value: &Option<String>| value.clone())
+    EQ_ACTUAL_VERSION
+        .get()
+        .and_then(|value: &Option<String>| value.clone())
 }
 
 fn is_scan_active() -> bool {
@@ -507,10 +517,12 @@ fn is_scan_active() -> bool {
 
 #[allow(dead_code)]
 fn has_scanned_offsets() -> bool {
-    OFFSET_DB.get().is_some_and(|db: &HashMap<String, u64>| !db.is_empty())
+    OFFSET_DB
+        .get()
+        .is_some_and(|db: &OffsetDatabase| !db.globals.is_empty() || !db.functions.is_empty())
 }
 
-fn scan_offsets(eq_base: u64) {
+fn scan_offsets() {
     if !is_scan_active() {
         return;
     }
@@ -544,28 +556,20 @@ fn scan_offsets(eq_base: u64) {
         return;
     };
 
-    let mut resolved = HashMap::new();
-
-    for (name, compiled_addr) in db.functions.iter().chain(db.globals.iter()) {
-        if let Some(addr) = db.rebase(*compiled_addr, eq_base) {
-            resolved.insert(name.clone(), addr as u64);
-        }
-    }
-
-    let count = resolved.len();
-    match OFFSET_DB.set(resolved) {
+    let count = db.functions.len() + db.globals.len();
+    match OFFSET_DB.set(db) {
         Ok(()) => {
             tracing::info!(
                 path = resolved_path.display().to_string(),
                 count,
-                "Loaded scan-resolved offsets into OFFSET_DB"
+                "Loaded scan offsets into OFFSET_DB"
             );
         }
         Err(_) => {
             tracing::warn!(
                 path = resolved_path.display().to_string(),
                 count,
-                "OFFSET_DB was already initialized; skipping newly resolved scan offsets"
+                "OFFSET_DB was already initialized; skipping newly loaded scan offsets"
             );
         }
     }
@@ -574,17 +578,19 @@ fn scan_offsets(eq_base: u64) {
 /// Resolve a compile-time offset using scan-updated data first, then fallback to
 /// static rebase logic from the common offsets table.
 fn resolve_offset(name: &str, compiled_addr: u64, base: u64) -> Option<u64> {
-    resolve_offset_with_map(name, compiled_addr, base, OFFSET_DB.get())
+    resolve_offset_with_db(name, compiled_addr, base, OFFSET_DB.get())
 }
 
-fn resolve_offset_with_map(
+fn resolve_offset_with_db(
     name: &str,
     compiled_addr: u64,
     base: u64,
-    db: Option<&HashMap<String, u64>>,
+    db: Option<&OffsetDatabase>,
 ) -> Option<u64> {
-    if let Some(addr) = db.and_then(|cache| cache.get(name)) {
-        return Some(*addr);
+    if let Some(db) = db {
+        if let Some(addr) = db.get_function(name).or_else(|| db.get_global(name)) {
+            return db.rebase(addr, base).map(|addr| addr as u64);
+        }
     }
 
     textquest_common::offsets::rebase(compiled_addr, base).map(|addr| addr as u64)

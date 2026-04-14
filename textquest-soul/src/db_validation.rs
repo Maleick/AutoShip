@@ -198,6 +198,7 @@ pub fn run_migrations(conn: &Connection) -> Result<u32, MigrationError> {
                 is_player INTEGER NOT NULL DEFAULT 0,
                 channel TEXT NOT NULL DEFAULT 'say',
                 message TEXT NOT NULL,
+                sentiment REAL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
             CREATE TABLE IF NOT EXISTS memory_summaries (
@@ -302,7 +303,8 @@ mod tests {
                 zone TEXT,
                 mood_at_time TEXT,
                 importance REAL,
-                decayed INTEGER
+                decayed INTEGER,
+                created_at TEXT
              );
              CREATE TABLE conversations (
                 id INTEGER PRIMARY KEY,
@@ -311,6 +313,7 @@ mod tests {
                 is_player INTEGER,
                 channel TEXT,
                 message TEXT,
+                sentiment REAL,
                 created_at TEXT
              );
              CREATE TABLE memory_summaries (
@@ -318,7 +321,9 @@ mod tests {
                 character_id INTEGER,
                 period_start TEXT,
                 period_end TEXT,
-                summary TEXT
+                summary TEXT,
+                mood_trend TEXT,
+                created_at TEXT
              );
              CREATE TABLE shared_references (
                 id INTEGER PRIMARY KEY,

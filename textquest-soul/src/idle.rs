@@ -1,10 +1,10 @@
 use textquest_common::nav::Xorshift32;
 use textquest_common::soul::{IdleBehaviorType, MoodState, PersonalityTraits, SpeechStyle};
 
-use crate::soul::config::SoulConfig;
-use crate::soul::llm::fallback::TraitDrivenResponder;
-use crate::soul::llm::{LlmPriority, LlmProvider, LlmRequest, Situation};
-use crate::soul::personality::SoulContext;
+use crate::config::SoulConfig;
+use crate::llm::fallback::TraitDrivenResponder;
+use crate::llm::{LlmPriority, LlmProvider, LlmRequest, Situation};
+use crate::personality::SoulContext;
 
 /// An active idle behavior with its remaining duration.
 #[derive(Debug, Clone)]
@@ -332,9 +332,9 @@ fn adjust(weights: &mut [PrioritizedBehavior], target: &IdleBehaviorType, multip
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soul::config::{EdginessLevel, SoulConfig};
-    use crate::soul::llm::fallback::TraitDrivenResponder;
-    use crate::soul::personality::SoulContext;
+    use crate::config::{EdginessLevel, SoulConfig};
+    use crate::llm::fallback::TraitDrivenResponder;
+    use crate::personality::SoulContext;
     use textquest_common::soul::{IdleBehaviorType, MoodState, PersonalityTraits};
 
     fn default_config() -> SoulConfig {

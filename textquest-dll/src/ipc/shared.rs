@@ -420,7 +420,10 @@ mod tests {
         let mut buffer = Vec::new();
         // Provide a mapping_size smaller than any encoded frame could fit
         let result = encode_frame_into_buffer(&frame, &mut buffer, 16);
-        assert!(result.is_err(), "should fail when mapping_size is too small");
+        assert!(
+            result.is_err(),
+            "should fail when mapping_size is too small"
+        );
     }
 
     #[test]
@@ -431,12 +434,18 @@ mod tests {
         let mut buf1 = Vec::new();
         let mut buf2 = Vec::new();
 
-        let len_with =
-            encode_frame_into_buffer(&with_spawns, &mut buf1, textquest_common::ipc::SHARED_MEMORY_SIZE)
-                .expect("with spawns encodes");
-        let len_without =
-            encode_frame_into_buffer(&without_spawns, &mut buf2, textquest_common::ipc::SHARED_MEMORY_SIZE)
-                .expect("without spawns encodes");
+        let len_with = encode_frame_into_buffer(
+            &with_spawns,
+            &mut buf1,
+            textquest_common::ipc::SHARED_MEMORY_SIZE,
+        )
+        .expect("with spawns encodes");
+        let len_without = encode_frame_into_buffer(
+            &without_spawns,
+            &mut buf2,
+            textquest_common::ipc::SHARED_MEMORY_SIZE,
+        )
+        .expect("without spawns encodes");
 
         assert!(
             len_with > len_without,
@@ -449,14 +458,25 @@ mod tests {
         let frame = make_frame(false);
         let mut buffer = Vec::new();
 
-        encode_frame_into_buffer(&frame, &mut buffer, textquest_common::ipc::SHARED_MEMORY_SIZE)
-            .expect("first encode");
+        encode_frame_into_buffer(
+            &frame,
+            &mut buffer,
+            textquest_common::ipc::SHARED_MEMORY_SIZE,
+        )
+        .expect("first encode");
         let first_len = buffer.len();
 
-        encode_frame_into_buffer(&frame, &mut buffer, textquest_common::ipc::SHARED_MEMORY_SIZE)
-            .expect("second encode");
+        encode_frame_into_buffer(
+            &frame,
+            &mut buffer,
+            textquest_common::ipc::SHARED_MEMORY_SIZE,
+        )
+        .expect("second encode");
         let second_len = buffer.len();
 
-        assert_eq!(first_len, second_len, "repeated encodes should produce same length");
+        assert_eq!(
+            first_len, second_len,
+            "repeated encodes should produce same length"
+        );
     }
 }

@@ -80,32 +80,31 @@ impl SpawnFilter {
     /// Returns `true` if `spawn` satisfies every criterion set on this filter.
     #[must_use]
     pub fn matches(&self, spawn: &SpawnInfo) -> bool {
-        if let Some(ref needle) = self.name_contains {
-            if !spawn
+        if let Some(ref needle) = self.name_contains
+            && !spawn
                 .displayed_name
                 .to_lowercase()
                 .contains(&needle.to_lowercase())
-            {
-                return false;
-            }
+        {
+            return false;
         }
 
-        if let Some(min) = self.min_level {
-            if spawn.level < min {
-                return false;
-            }
+        if let Some(min) = self.min_level
+            && spawn.level < min
+        {
+            return false;
         }
 
-        if let Some(max) = self.max_level {
-            if spawn.level > max {
-                return false;
-            }
+        if let Some(max) = self.max_level
+            && spawn.level > max
+        {
+            return false;
         }
 
-        if let Some(type_filter) = self.spawn_type {
-            if !type_filter.matches(spawn) {
-                return false;
-            }
+        if let Some(type_filter) = self.spawn_type
+            && !type_filter.matches(spawn)
+        {
+            return false;
         }
 
         true
@@ -157,7 +156,7 @@ impl SpawnSorter {
     }
 
     /// Sort `spawns` in-place according to [`Self::sort_by`].
-    pub fn sort(&self, spawns: &mut Vec<SpawnInfo>) {
+    pub fn sort(&self, spawns: &mut [SpawnInfo]) {
         match &self.sort_by {
             SpawnSortKey::Name => {
                 spawns.sort_by(|a, b| a.displayed_name.cmp(&b.displayed_name));
@@ -285,6 +284,8 @@ impl NamedSpawnTracker {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::useless_vec)]
+
     use super::*;
     use crate::eq::structs::{EqClass, StandState};
 

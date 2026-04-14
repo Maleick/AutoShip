@@ -1,5 +1,7 @@
 //! REST API handlers for the web dashboard.
 
+#![allow(dead_code)] // Demo shapes and placeholder handlers stay in this module before router wiring.
+
 pub mod economy;
 pub mod loot;
 pub mod soul;

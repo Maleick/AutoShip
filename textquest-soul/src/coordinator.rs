@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use textquest_common::ipc::Command;
@@ -21,6 +21,8 @@ use super::suppression::{GameStateContext, SuppressionRules};
 
 /// Maximum number of entries in the IPC command queue before overflow drops occur.
 const IPC_QUEUE_MAX: usize = 512;
+/// Default time-to-live for buffered IPC commands.
+const IPC_QUEUE_TTL_SECS: u64 = 10;
 
 /// Priority of a queued IPC command — determines drop order on overflow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -39,21 +41,33 @@ struct QueuedCommand {
     client_id: ClientId,
     command: Command,
     priority: IpcCommandPriority,
+    queued_at: Instant,
 }
 
 /// Lightweight IPC command queue used when the named pipe is unavailable.
 ///
 /// Overflow policy: when the queue is full, the lowest-priority entry is
 /// dropped (FIFO within each priority tier).
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct IpcCommandQueue {
     queue: VecDeque<QueuedCommand>,
     dropped_low: u64,
+    dropped_stale: u64,
+    ttl: Duration,
 }
 
 impl IpcCommandQueue {
     fn new() -> Self {
-        Self::default()
+        Self::with_ttl(Duration::from_secs(IPC_QUEUE_TTL_SECS))
+    }
+
+    fn with_ttl(ttl: Duration) -> Self {
+        Self {
+            queue: VecDeque::new(),
+            dropped_low: 0,
+            dropped_stale: 0,
+            ttl,
+        }
     }
 
     /// Enqueue a command.  Drops the oldest low-priority entry on overflow.
@@ -95,20 +109,46 @@ impl IpcCommandQueue {
             client_id,
             command,
             priority,
+            queued_at: Instant::now(),
         });
-    }
-
-    /// Pop the front command from the queue.
-    pub fn pop(&mut self) -> Option<(ClientId, Command)> {
-        self.queue.pop_front().map(|q| (q.client_id, q.command))
     }
 
     /// Drain all queued commands, returning them for dispatch.
     pub fn drain(&mut self) -> Vec<(ClientId, Command)> {
-        self.queue
-            .drain(..)
-            .map(|q| (q.client_id, q.command))
-            .collect()
+        let now = Instant::now();
+        let mut drained = Vec::with_capacity(self.queue.len());
+        while let Some((client_id, command)) = self.pop_with_now(now) {
+            drained.push((client_id, command));
+        }
+        drained
+    }
+
+    /// Pop the oldest queued command in FIFO order.
+    #[cfg(test)]
+    fn pop(&mut self) -> Option<(ClientId, Command)> {
+        self.pop_with_now(Instant::now())
+    }
+
+    fn pop_with_now(&mut self, now: Instant) -> Option<(ClientId, Command)> {
+        while let Some(front) = self.queue.front() {
+            let age = now.saturating_duration_since(front.queued_at);
+            if age < self.ttl {
+                break;
+            }
+
+            let dropped = self.queue.pop_front().expect("front entry must exist");
+            self.dropped_stale += 1;
+            tracing::debug!(
+                client_id = dropped.client_id,
+                priority = ?dropped.priority,
+                age_ms = age.as_millis(),
+                ttl_ms = self.ttl.as_millis(),
+                dropped_total = self.dropped_stale,
+                "ipc_queue: dropped stale command on dequeue"
+            );
+        }
+
+        self.queue.pop_front().map(|q| (q.client_id, q.command))
     }
 
     /// Number of commands currently buffered.
@@ -125,21 +165,16 @@ impl IpcCommandQueue {
     pub fn dropped_low_count(&self) -> u64 {
         self.dropped_low
     }
-}
 
-/// Per-character alert tracking state used by `check_alerts_for`.
-#[derive(Debug)]
-struct AlertState {
-    mood_since: Instant,
-    last_mood: MoodState,
-    recent_chat_times: Vec<Instant>,
-    last_fired: HashMap<String, Instant>,
+    /// Total commands dropped because they exceeded the TTL before dequeue.
+    pub fn dropped_stale_count(&self) -> u64 {
+        self.dropped_stale
+    }
 }
 
 /// Per-character soul state.
 struct CharacterSoul {
     name: String,
-    client_id: ClientId,
     traits: PersonalityTraits,
     mood: MoodState,
     speech_style: SpeechStyle,
@@ -148,8 +183,6 @@ struct CharacterSoul {
     personality: PersonalityEngine,
     idle: IdleScheduler,
     responder: TraitDrivenResponder,
-    /// Alert detection tracking for this character.
-    alert_state: AlertState,
 }
 
 /// Tick-driven orchestrator for all Soul Engine subsystems.
@@ -173,7 +206,7 @@ pub struct SoulCoordinator {
     ipc_available: bool,
     /// Detects runtime anomalies and generates operator alerts.
     anomaly_detector: AnomalyDetector,
-    /// Optional audit logger; records key state changes as JSONL.
+    /// Optional JSONL audit logger for key Soul Engine events.
     audit: Option<SoulAuditLogger>,
 }
 
@@ -225,7 +258,6 @@ impl SoulCoordinator {
 
         let soul = CharacterSoul {
             name: char_config.name.clone(),
-            client_id,
             traits: char_config.traits.clone(),
             mood: MoodState::Neutral,
             speech_style: char_config.speech.clone(),
@@ -234,12 +266,6 @@ impl SoulCoordinator {
             personality: PersonalityEngine::new(client_id),
             idle: IdleScheduler::new(client_id, &self.config),
             responder: TraitDrivenResponder::new(client_id, edginess),
-            alert_state: AlertState {
-                mood_since: Instant::now(),
-                last_mood: MoodState::Neutral,
-                recent_chat_times: Vec::new(),
-                last_fired: HashMap::new(),
-            },
         };
 
         self.souls.insert(client_id, soul);
@@ -374,17 +400,17 @@ impl SoulCoordinator {
                         commands.push((client_id, Command::SoulAction { action }));
 
                         // If there's flavor text, emit it as chat (also subject to suppression)
-                        if let Some(text) = active.flavor_text {
-                            if !self.suppression.should_suppress_chat(suppress_ctx) {
-                                commands.push((
-                                    client_id,
-                                    Command::Say {
-                                        channel: textquest_common::soul::SayChannel::Group,
-                                        message: text,
-                                        target: None,
-                                    },
-                                ));
-                            }
+                        if let Some(text) = active.flavor_text
+                            && !self.suppression.should_suppress_chat(suppress_ctx)
+                        {
+                            commands.push((
+                                client_id,
+                                Command::Say {
+                                    channel: textquest_common::soul::SayChannel::Group,
+                                    message: text,
+                                    target: None,
+                                },
+                            ));
                         }
                     }
                 }
@@ -409,9 +435,6 @@ impl SoulCoordinator {
                 let _ = self.memory.decay_tick(client_id, 0.995);
                 let _ = self.memory.prune_low_importance(client_id, 0.05);
             }
-
-            // Alert detection — runs every tick, lightweight checks only.
-            self.check_alerts_for(client_id);
         }
 
         // Periodic memory summarization check (runs every tick, internally rate-limited to 1h)
@@ -479,21 +502,6 @@ impl SoulCoordinator {
 
         let alerts = self.anomaly_detector.check();
         (commands, alerts)
-    }
-
-    /// Periodically generate and persist per-character memory summaries.
-    ///
-    /// Runs every [`SUMMARY_INTERVAL_TICKS`] and summarizes the previous hour.
-    /// Run lightweight alert checks for one character.
-    fn check_alerts_for(&mut self, _client_id: ClientId) {
-        for alert in self.anomaly_detector.check() {
-            tracing::warn!(
-                character_id = alert.character_id,
-                alert_type = ?alert.alert_type,
-                "soul alert: {}",
-                alert.message
-            );
-        }
     }
 
     fn check_and_generate_summaries(&mut self) {
@@ -769,6 +777,7 @@ impl SoulCoordinator {
             tracing::info!(
                 buffered = self.ipc_queue.len(),
                 dropped_low = self.ipc_queue.dropped_low_count(),
+                dropped_stale = self.ipc_queue.dropped_stale_count(),
                 "soul_coordinator: IPC pipe restored — flushing command queue"
             );
             self.ipc_available = true;
@@ -1177,5 +1186,19 @@ mod tests {
                 expected_client_id
             );
         }
+    }
+
+    #[test]
+    fn ipc_queue_drops_stale_commands_on_pop() {
+        let mut queue = IpcCommandQueue::new();
+        queue.push(42, Command::StopMovement, IpcCommandPriority::Normal);
+
+        queue.queue[0].queued_at = Instant::now() - std::time::Duration::from_secs(11);
+
+        assert!(
+            queue.pop().is_none(),
+            "stale queued commands should be discarded on dequeue"
+        );
+        assert_eq!(queue.dropped_stale_count(), 1);
     }
 }

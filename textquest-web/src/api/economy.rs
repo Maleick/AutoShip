@@ -1,5 +1,6 @@
 //! REST API handlers for economy state and operator controls.
 
+#![allow(dead_code)] // Demo responses and placeholder handlers are exercised by tests, not the live router.
 #![allow(
     clippy::assigning_clones,
     clippy::cast_lossless,

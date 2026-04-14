@@ -249,14 +249,12 @@ fn run_loop(
         {
             // Use the first live (non-demo) client PID.
             let pid = app.clients.iter().find(|c| !c.is_demo).map(|c| c.pid);
-            if let Some(pid) = pid {
-                if let Some((address, bytes)) =
+            if let Some(pid) = pid
+                && let Some((address, bytes)) =
                     orchestrator.read_memory(pid, app.hex_state.hex_address, 0x200)
-                {
-                    if app.hex_state.hex_address == address {
-                        app.hex_state.hex_data = bytes;
-                    }
-                }
+                && app.hex_state.hex_address == address
+            {
+                app.hex_state.hex_data = bytes;
             }
             last_memory_poll = Instant::now();
         }

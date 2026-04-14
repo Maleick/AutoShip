@@ -38,7 +38,11 @@ pub struct SoulAlert {
 
 impl SoulAlert {
     /// Convenience constructor.
-    pub fn new(character: impl Into<String>, alert_type: SoulAlertType, message: impl Into<String>) -> Self {
+    pub fn new(
+        character: impl Into<String>,
+        alert_type: SoulAlertType,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
             character: character.into(),
             alert_type,

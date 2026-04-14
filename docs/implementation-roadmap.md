@@ -40,7 +40,7 @@ These milestones stay part of the project history.
 
 Packet Engine research (send/receive pipeline inventory, ability packet coverage, opcode scrambler requirements) was conducted as a research track and its findings are archived in `docs/external-research/`. Packet-related constraints feed into anti-cheat, zoning, and orchestrator milestones as needed rather than standing as a separate implementation milestone.
 
-The canonical active roadmap now resumes at `M5`.
+The canonical active roadmap now resumes at `M7`.
 
 ## Current Validated State vs Provisional Findings
 
@@ -70,7 +70,7 @@ Objective:
 
 Full research: [`docs/anti-detection.md`](anti-detection.md)
 
-#### Implementation slices (GitHub issues #344–#355)
+#### Historical implementation slices (GitHub issues #344–#355, all closed)
 
 **P1 — Critical path (implement in order)**
 

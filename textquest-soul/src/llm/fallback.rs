@@ -3,7 +3,7 @@ use textquest_common::nav::Xorshift32;
 use textquest_common::soul::{MoodState, PersonalityTraits, SpeechStyle};
 
 use super::{LlmProvider, LlmRequest, LlmResponse, Situation};
-use crate::soul::config::EdginessLevel;
+use crate::config::EdginessLevel;
 
 /// Phase 1 fallback: generates text from trait vectors + phrase templates.
 /// No LLM API calls — everything is deterministic based on personality.
@@ -348,8 +348,8 @@ fn bot_chat_responses(mood: MoodState, traits: &PersonalityTraits) -> &'static [
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soul::config::EdginessLevel;
-    use crate::soul::llm::{LlmPriority, LlmProvider, LlmRequest, Situation};
+    use crate::config::EdginessLevel;
+    use crate::llm::{LlmPriority, LlmProvider, LlmRequest, Situation};
     use textquest_common::soul::{MoodState, PersonalityTraits, SpeechStyle};
 
     fn make_request_with_situation(situation: Situation) -> LlmRequest {

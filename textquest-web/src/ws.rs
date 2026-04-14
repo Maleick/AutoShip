@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
+use axum::extract::Query;
 use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::Deserialize;
@@ -131,11 +131,12 @@ mod tests {
             axum::serve(listener, app).await.expect("server should run");
         });
 
-        let url = if state.api_token.is_some() {
-            // Include token in query if authentication is enabled
-            format!("ws://{addr}/ws?token={}", state.api_token.as_ref().unwrap())
-        } else {
-            format!("ws://{addr}/ws")
+        let url = match state.api_token.as_ref() {
+            Some(token) => {
+                // Include token in query if authentication is enabled.
+                format!("ws://{addr}/ws?token={token}")
+            }
+            None => format!("ws://{addr}/ws"),
         };
 
         (state, server, url)
@@ -283,12 +284,18 @@ mod tests {
         // Test 1: Connection without token should fail
         let url_no_token = format!("ws://{addr}/ws");
         let result = connect_async(url_no_token).await;
-        assert!(result.is_err(), "WebSocket should reject connection without token");
+        assert!(
+            result.is_err(),
+            "WebSocket should reject connection without token"
+        );
 
         // Test 2: Connection with wrong token should fail
         let url_wrong_token = format!("ws://{addr}/ws?token=wrong-token");
         let result = connect_async(url_wrong_token).await;
-        assert!(result.is_err(), "WebSocket should reject connection with wrong token");
+        assert!(
+            result.is_err(),
+            "WebSocket should reject connection with wrong token"
+        );
 
         // Test 3: Connection with correct token should succeed
         let url_correct_token = format!("ws://{addr}/ws?token=secret-token");

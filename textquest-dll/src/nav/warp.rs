@@ -243,7 +243,10 @@ mod tests {
         // After feeding None, a new large jump from origin is compared against
         // a clean slate (no previous position), so it should not warp-detect.
         let far = Waypoint::new(WARP_DISTANCE_THRESHOLD + 100.0, 0.0, 0.0);
-        assert!(matches!(monitor.update(Some(&sample(1, far))), WarpAction::None));
+        assert!(matches!(
+            monitor.update(Some(&sample(1, far))),
+            WarpAction::None
+        ));
     }
 
     #[test]

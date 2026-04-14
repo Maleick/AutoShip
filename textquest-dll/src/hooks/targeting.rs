@@ -352,16 +352,11 @@ impl TargetingController {
 
         #[cfg(windows)]
         unsafe {
-            let is_aligned = |addr: usize, align: usize| -> bool {
-                addr != 0 && addr % align == 0
-            };
+            let is_aligned = |addr: usize, align: usize| -> bool { addr != 0 && addr % align == 0 };
 
             let read_usize_checked = |addr: usize| -> Result<usize, TargetError> {
                 if !is_aligned(addr, std::mem::align_of::<usize>())
-                    || !crate::hooks::game_loop::is_readable(
-                        addr,
-                        std::mem::size_of::<usize>(),
-                    )
+                    || !crate::hooks::game_loop::is_readable(addr, std::mem::size_of::<usize>())
                 {
                     return Err(TargetError::InvalidAssistTarget);
                 }
@@ -371,10 +366,7 @@ impl TargetingController {
 
             let read_u32_checked = |addr: usize| -> Result<u32, TargetError> {
                 if !is_aligned(addr, std::mem::align_of::<u32>())
-                    || !crate::hooks::game_loop::is_readable(
-                        addr,
-                        std::mem::size_of::<u32>(),
-                    )
+                    || !crate::hooks::game_loop::is_readable(addr, std::mem::size_of::<u32>())
                 {
                     return Err(TargetError::InvalidAssistTarget);
                 }

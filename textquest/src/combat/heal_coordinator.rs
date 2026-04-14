@@ -775,7 +775,11 @@ mod tests {
         assert_eq!(coord.active_claim_count(), 2);
 
         coord.set_enabled(false);
-        assert_eq!(coord.active_claim_count(), 0, "disabling should clear claims");
+        assert_eq!(
+            coord.active_claim_count(),
+            0,
+            "disabling should clear claims"
+        );
     }
 
     #[test]
@@ -822,7 +826,10 @@ mod tests {
         let healers = vec![make_healer(1, 0, 75.0)];
         let targets = vec![make_target(10, 50.0, 1, CombatRole::DpsMelee)]; // different group
         let cmds = coord.tick(&healers, &targets);
-        assert!(cmds.is_empty(), "75% mana < 80% threshold should skip cross-group");
+        assert!(
+            cmds.is_empty(),
+            "75% mana < 80% threshold should skip cross-group"
+        );
     }
 
     #[test]
@@ -832,7 +839,10 @@ mod tests {
         let healers = vec![make_healer(1, 0, 100.0)];
         let targets = vec![make_target(10, 0.0, 0, CombatRole::DpsMelee)];
         let cmds = coord.tick(&healers, &targets);
-        assert!(cmds.is_empty(), "0% HP target should be skipped (likely dead)");
+        assert!(
+            cmds.is_empty(),
+            "0% HP target should be skipped (likely dead)"
+        );
     }
 
     // --- CureCoordinator edge cases ---

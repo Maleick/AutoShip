@@ -3,6 +3,7 @@
 //! The game engine reads these values each tick to process movement.
 
 use textquest_common::nav::Waypoint;
+pub use textquest_common::nav::calc_heading;
 
 use textquest_common::eq_fn;
 
@@ -16,21 +17,6 @@ pub const CMD_AUTORUN: u32 = 0;
 pub const CMD_JUMP: u32 = 1;
 pub const CMD_FORWARD: u32 = 2;
 pub const CMD_BACK: u32 = 3;
-
-/// Calculate heading from current position to target (EQ heading: 0-512, 0=north, increases CW).
-///
-/// Matches MQ2's formula from MQCommands.cpp `/face`:
-///   `atan2(target.x - player.x, target.y - player.y) * 256 / PI`
-/// which is equivalent to `atan2(dx, dy) * 256 / PI` mapped to 0..512.
-pub fn calc_heading(from: &Waypoint, to: &Waypoint) -> f32 {
-    let dx = to.x - from.x;
-    let dy = to.y - from.y;
-    let rad = dx.atan2(dy);
-    // 256/PI converts radians to EQ heading units (512 = full circle)
-    let heading = rad * 256.0 / std::f32::consts::PI;
-    // Normalize to 0..512
-    (heading + 512.0) % 512.0
-}
 
 /// Movement controller state -- holds a pointer to the local player's
 /// `PlayerClient` struct for direct memory writes.
@@ -125,22 +111,11 @@ impl MovementController {
 
     /// Read current player HP from the local player struct.
     pub fn read_hp_current(&self) -> Option<i64> {
-        #[cfg(windows)]
+        #[cfg(any(windows, test))]
         // SAFETY: player_base is a validated PlayerClient*. HP_CURRENT is a known
         // i64 field offset within the local player zone data. Reads are naturally
-        // aligned and within committed EQ memory. Null-checked below.
-        unsafe {
-            if self.player_base == 0 {
-                return None;
-            }
-            Some(std::ptr::read(
-                (self.player_base + textquest_common::offsets::player_zone::HP_CURRENT)
-                    as *const i64,
-            ))
-        }
-        #[cfg(all(not(windows), test))]
-        // SAFETY: tests may supply a backing buffer large enough to cover the
-        // HP_CURRENT offset so moveto safety logic can be validated on non-Windows.
+        // aligned and within committed EQ memory. Null-checked below. Tests may
+        // provide a synthetic backing buffer at the same offset.
         unsafe {
             if self.player_base == 0 {
                 return None;
@@ -236,40 +211,50 @@ mod tests {
     fn heading_north() {
         // Target directly north (+Y) from origin → heading 0 (or 512, equivalent)
         let heading = calc_heading(&wp(0.0, 0.0), &wp(0.0, 100.0));
-        assert!(heading.abs() < 1.0 || (heading - 512.0).abs() < 1.0,
-            "expected ~0 (north), got {heading}");
+        assert!(
+            heading.abs() < 1.0 || (heading - 512.0).abs() < 1.0,
+            "expected ~0 (north), got {heading}"
+        );
     }
 
     #[test]
     fn heading_south() {
         // Target directly south (-Y) → heading 256 (half circle)
         let heading = calc_heading(&wp(0.0, 0.0), &wp(0.0, -100.0));
-        assert!((heading - 256.0).abs() < 1.0,
-            "expected ~256 (south), got {heading}");
+        assert!(
+            (heading - 256.0).abs() < 1.0,
+            "expected ~256 (south), got {heading}"
+        );
     }
 
     #[test]
     fn heading_east() {
         // Target directly east (+X) → heading 128 (quarter turn CW)
         let heading = calc_heading(&wp(0.0, 0.0), &wp(100.0, 0.0));
-        assert!((heading - 128.0).abs() < 1.0,
-            "expected ~128 (east), got {heading}");
+        assert!(
+            (heading - 128.0).abs() < 1.0,
+            "expected ~128 (east), got {heading}"
+        );
     }
 
     #[test]
     fn heading_west() {
         // Target directly west (-X) → heading 384 (three-quarter turn CW)
         let heading = calc_heading(&wp(0.0, 0.0), &wp(-100.0, 0.0));
-        assert!((heading - 384.0).abs() < 1.0,
-            "expected ~384 (west), got {heading}");
+        assert!(
+            (heading - 384.0).abs() < 1.0,
+            "expected ~384 (west), got {heading}"
+        );
     }
 
     #[test]
     fn heading_northeast() {
         // 45 degrees NE → heading ~64 (128/2)
         let heading = calc_heading(&wp(0.0, 0.0), &wp(100.0, 100.0));
-        assert!((heading - 64.0).abs() < 1.0,
-            "expected ~64 (NE), got {heading}");
+        assert!(
+            (heading - 64.0).abs() < 1.0,
+            "expected ~64 (NE), got {heading}"
+        );
     }
 
     #[test]
@@ -277,22 +262,33 @@ mod tests {
         // Same position → atan2(0,0) = 0 → heading 0
         let heading = calc_heading(&wp(5.0, 5.0), &wp(5.0, 5.0));
         // atan2(0,0) is 0 in Rust, so (0*256/PI + 512) % 512 = 0
-        assert!(heading.abs() < 1.0 || (heading - 512.0).abs() < 1.0,
-            "expected ~0 for same position, got {heading}");
+        assert!(
+            heading.abs() < 1.0 || (heading - 512.0).abs() < 1.0,
+            "expected ~0 for same position, got {heading}"
+        );
     }
 
     #[test]
     fn heading_always_in_range() {
         // Verify heading is always in [0, 512) for various directions
         let directions = [
-            (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0),
-            (1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0),
-            (0.001, 1000.0), (1000.0, 0.001),
+            (1.0, 0.0),
+            (0.0, 1.0),
+            (-1.0, 0.0),
+            (0.0, -1.0),
+            (1.0, 1.0),
+            (-1.0, 1.0),
+            (1.0, -1.0),
+            (-1.0, -1.0),
+            (0.001, 1000.0),
+            (1000.0, 0.001),
         ];
         for (dx, dy) in &directions {
             let heading = calc_heading(&wp(0.0, 0.0), &wp(*dx, *dy));
-            assert!((0.0..512.0).contains(&heading),
-                "heading {heading} out of range for dx={dx}, dy={dy}");
+            assert!(
+                (0.0..512.0).contains(&heading),
+                "heading {heading} out of range for dx={dx}, dy={dy}"
+            );
         }
     }
 
@@ -301,8 +297,10 @@ mod tests {
         // Same relative direction from a non-zero origin should give same heading
         let h1 = calc_heading(&wp(0.0, 0.0), &wp(100.0, 0.0));
         let h2 = calc_heading(&wp(500.0, 500.0), &wp(600.0, 500.0));
-        assert!((h1 - h2).abs() < 0.01,
-            "heading should be the same regardless of origin: {h1} vs {h2}");
+        assert!(
+            (h1 - h2).abs() < 0.01,
+            "heading should be the same regardless of origin: {h1} vs {h2}"
+        );
     }
 
     #[test]
@@ -310,8 +308,10 @@ mod tests {
         let h_east = calc_heading(&wp(0.0, 0.0), &wp(100.0, 0.0));
         let h_west = calc_heading(&wp(0.0, 0.0), &wp(-100.0, 0.0));
         let diff = (h_west - h_east).abs();
-        assert!((diff - 256.0).abs() < 1.0,
-            "opposite headings should differ by ~256, got {diff}");
+        assert!(
+            (diff - 256.0).abs() < 1.0,
+            "opposite headings should differ by ~256, got {diff}"
+        );
     }
 
     // --- MovementController ---

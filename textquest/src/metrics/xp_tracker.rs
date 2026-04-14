@@ -57,10 +57,10 @@ impl XpTracker {
             .find(|s| s.character == character)
             .map(|s| s.level);
 
-        if let Some(prev) = prev_level {
-            if level > prev {
-                self.level_history.push((level, now));
-            }
+        if let Some(prev) = prev_level
+            && level > prev
+        {
+            self.level_history.push((level, now));
         }
 
         // Enforce capacity cap.
@@ -375,7 +375,9 @@ mod tests {
         tracker.record("Ranger", 99.0, 0.0, 50, make_instant_offset(base, 30 * 60));
 
         let now = make_instant_offset(base, 30 * 60);
-        let ttl = tracker.time_to_level_secs("Ranger", now).expect("should have TTL");
+        let ttl = tracker
+            .time_to_level_secs("Ranger", now)
+            .expect("should have TTL");
         let expected = 1800.0_f64;
         let diff = (ttl - expected).abs();
         assert!(diff < 1.0, "expected ~1800 s, got {ttl}");
@@ -391,7 +393,9 @@ mod tests {
         tracker.record("Monk", 100.0, 0.0, 50, make_instant_offset(base, 30 * 60));
 
         let now = make_instant_offset(base, 30 * 60);
-        let ttl = tracker.time_to_level_secs("Monk", now).expect("should be Some");
+        let ttl = tracker
+            .time_to_level_secs("Monk", now)
+            .expect("should be Some");
         assert!(ttl < 1.0, "at 100% XP, TTL should be near zero, got {ttl}");
     }
 

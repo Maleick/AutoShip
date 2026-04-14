@@ -16,12 +16,12 @@ pub mod hwbp;
 pub mod integrity;
 pub mod movement;
 pub mod packet_hook;
-pub mod timing;
 pub mod render;
 pub mod rotation;
 pub mod set_game_state;
 pub mod slot_manager;
 pub mod targeting;
+pub mod timing;
 
 use std::sync::{Mutex, OnceLock};
 
