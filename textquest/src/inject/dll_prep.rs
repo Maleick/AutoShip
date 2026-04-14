@@ -178,7 +178,7 @@ impl StagingNamePool {
     ///
     /// Returns `Err` if all names have been claimed.
     pub fn next_name(&self) -> Result<&'static str> {
-        use rand::seq::SliceRandom;
+        use rand::Rng;
         let mut used = self.used.lock().expect("pool lock poisoned");
 
         if used.len() >= LEGITIMATE_DLL_NAMES.len() {
@@ -193,10 +193,8 @@ impl StagingNamePool {
             .filter(|i| !used.contains(i))
             .collect();
 
-        let &idx = available
-            .as_slice()
-            .choose(&mut rng)
-            .expect("available is non-empty");
+        let idx_pos = rng.random_range(0..available.len());
+        let idx = available[idx_pos];
 
         used.push(idx);
         Ok(LEGITIMATE_DLL_NAMES[idx])
@@ -237,8 +235,6 @@ impl Default for StagingNamePool {
         Self::new()
     }
 }
-
-
 
 /// Copy the compiled DLL to a temp directory with a randomized name
 /// that looks like a plausible system component.
@@ -414,7 +410,7 @@ fn stage_target_file(target: &Path) -> Result<std::fs::File> {
 /// prefix/suffix/number pattern that a forensic scan could match against.
 fn generate_random_dll_name() -> String {
     use rand::RngCore;
-    let mut rng = rand::rngs::OsRng;
+    let mut rng = rand::rng();
     let hi = rng.next_u64();
     let lo = rng.next_u64();
     format!("{hi:016x}{lo:016x}.dll")

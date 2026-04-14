@@ -1,6 +1,6 @@
 use aes_gcm::{
     Aes256Gcm, Nonce,
-    aead::{Aead, KeyInit, OsRng},
+    aead::{Aead, KeyInit},
 };
 use anyhow::Result;
 use argon2::{Algorithm, Argon2, Params, Version};
@@ -58,7 +58,7 @@ pub fn encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<(Vec<u8>, Vec<u8>)> {
     let cipher = Aes256Gcm::new(key.into());
 
     let mut nonce_bytes = [0u8; 12];
-    OsRng.fill_bytes(&mut nonce_bytes);
+    rand::rng().fill_bytes(&mut nonce_bytes);
     let nonce = &Nonce::from(nonce_bytes);
 
     let ciphertext = cipher
@@ -87,7 +87,7 @@ pub fn decrypt(ciphertext: &[u8], key: &[u8; 32], nonce: &[u8]) -> Result<Vec<u8
 #[must_use]
 pub fn generate_salt() -> [u8; 32] {
     let mut salt = [0u8; 32];
-    OsRng.fill_bytes(&mut salt);
+    rand::rng().fill_bytes(&mut salt);
     salt
 }
 

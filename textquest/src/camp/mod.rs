@@ -1,5 +1,7 @@
 //! Camp loop state machine — pulls, fights, loots, meds, buffs.
 
+/// AA spend automation — prioritized alternate advancement point spending.
+pub mod aa_spend;
 /// Banking cycle controller — deposit plat, consolidate currency to a mule.
 pub mod banking;
 /// Buff tracking and rebuffing logic.
@@ -28,12 +30,10 @@ pub mod positioning;
 pub mod progression;
 /// Puller logic — pull target selection, pathing, split management.
 pub mod puller;
-/// Recovery phase — med, heal, rebuff between pulls.
-pub mod recovery;
-/// AA spend automation — prioritized alternate advancement point spending.
-pub mod aa_spend;
 /// Quest tracking and task automation — objective progress, auto-completion, reward claiming.
 pub mod quest_tracker;
+/// Recovery phase — med, heal, rebuff between pulls.
+pub mod recovery;
 /// Skill leveling and training automation — tracks skill levels, mastery, and tradeskill sessions.
 pub mod skill_tracker;
 /// Camp loop state machine — idle, pulling, fighting, looting, recovering.

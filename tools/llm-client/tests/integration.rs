@@ -1,8 +1,10 @@
 //! Integration tests for [`OllamaClient`] using a `wiremock` mock HTTP server.
 
 use llm_client::OllamaClient;
-use wiremock::matchers::{body_partial_json, method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{
+    Mock, MockServer, ResponseTemplate,
+    matchers::{body_partial_json, method, path},
+};
 
 fn success_body(text: &str) -> serde_json::Value {
     serde_json::json!({
@@ -134,8 +136,10 @@ async fn generate_errors_on_done_false() {
 
 #[tokio::test]
 async fn generate_works_with_custom_rate_limiter() {
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     struct CountingLimiter(Arc<AtomicUsize>);
 

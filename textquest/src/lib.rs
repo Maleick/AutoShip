@@ -66,6 +66,9 @@ pub mod testing;
 #[allow(dead_code)]
 pub mod economy;
 
+/// Zone transition management — failure codes, recovery actions, and retry logic.
+pub mod zoning;
+
 #[cfg(windows)]
 use anyhow::Context;
 use anyhow::Result;

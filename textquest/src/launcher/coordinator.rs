@@ -1,7 +1,6 @@
 use crate::config::{LaunchConfig, RetryConfig, ServerConfig};
 use crate::launcher::login_sm::{LoginAction, LoginEvent, LoginStateMachine};
 use crate::launcher::spawner;
-use rand::Rng;
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -319,7 +318,8 @@ pub(crate) fn compute_stagger_between(min_secs: u64, max_secs: u64) -> Duration 
     if min_secs >= max_secs {
         return Duration::from_secs(min_secs);
     }
-    let secs = rand::rng().gen_range(min_secs..=max_secs);
+    use rand::Rng;
+    let secs = rand::rng().random_range(min_secs..=max_secs);
     Duration::from_secs(secs)
 }
 

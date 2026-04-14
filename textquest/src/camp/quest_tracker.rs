@@ -149,7 +149,10 @@ mod tests {
         tracker.update_objective(qid, 0, 5);
 
         let quest = tracker.quests.iter().find(|q| q.id == qid).unwrap();
-        assert!(quest.objectives[0].completed, "objective should be complete");
+        assert!(
+            quest.objectives[0].completed,
+            "objective should be complete"
+        );
     }
 
     #[test]
@@ -160,7 +163,10 @@ mod tests {
         tracker.update_objective(qid, 0, 3);
 
         let quest = tracker.quests.iter().find(|q| q.id == qid).unwrap();
-        assert!(!quest.objectives[0].completed, "objective should not be complete yet");
+        assert!(
+            !quest.objectives[0].completed,
+            "objective should not be complete yet"
+        );
         assert!(!quest.completed, "quest should not be complete yet");
     }
 
@@ -173,17 +179,31 @@ mod tests {
         let (mut tracker, qid) = make_tracker_with_quest(objs);
 
         tracker.update_objective(qid, 0, 2);
-        assert!(!tracker.quests[0].completed, "quest should not be complete after first objective");
+        assert!(
+            !tracker.quests[0].completed,
+            "quest should not be complete after first objective"
+        );
 
         tracker.update_objective(qid, 1, 1);
-        assert!(tracker.quests[0].completed, "quest should be complete after all objectives");
+        assert!(
+            tracker.quests[0].completed,
+            "quest should be complete after all objectives"
+        );
     }
 
     #[test]
     fn pending_quests_filters_out_completed_quests() {
         let mut tracker = QuestTracker::new();
-        tracker.add_quest(Quest::new(1, "Active Quest", vec![QuestObjective::new("Do thing", 1)]));
-        tracker.add_quest(Quest::new(2, "Done Quest", vec![QuestObjective::new("Done", 1)]));
+        tracker.add_quest(Quest::new(
+            1,
+            "Active Quest",
+            vec![QuestObjective::new("Do thing", 1)],
+        ));
+        tracker.add_quest(Quest::new(
+            2,
+            "Done Quest",
+            vec![QuestObjective::new("Done", 1)],
+        ));
 
         // Complete quest 2.
         tracker.update_objective(2, 0, 1);
@@ -199,7 +219,10 @@ mod tests {
         let (mut tracker, qid) = make_tracker_with_quest(objs);
 
         let result = tracker.claim_reward(qid);
-        assert!(!result, "claim_reward should return false for incomplete quest");
+        assert!(
+            !result,
+            "claim_reward should return false for incomplete quest"
+        );
     }
 
     #[test]
@@ -209,7 +232,10 @@ mod tests {
 
         tracker.update_objective(qid, 0, 1);
         let result = tracker.claim_reward(qid);
-        assert!(result, "claim_reward should return true for completed quest");
+        assert!(
+            result,
+            "claim_reward should return true for completed quest"
+        );
 
         let quest = tracker.quests.iter().find(|q| q.id == qid).unwrap();
         assert!(quest.reward_claimed);
@@ -222,7 +248,10 @@ mod tests {
 
         tracker.update_objective(qid, 0, 1);
         assert!(tracker.claim_reward(qid));
-        assert!(!tracker.claim_reward(qid), "second claim_reward should return false");
+        assert!(
+            !tracker.claim_reward(qid),
+            "second claim_reward should return false"
+        );
     }
 
     #[test]

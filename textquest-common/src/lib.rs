@@ -37,6 +37,8 @@ pub mod peer_discovery;
 pub mod protocol;
 /// Routing scope types for cross-client command dispatch (M8 Orchestrator).
 pub mod routing;
+/// Safe coordinate types for zone transition recovery and position validation.
+pub mod safe_coords;
 /// Scan engine for runtime offset auto-detection (Auto Patch #746).
 pub mod scan_engine;
 /// Byte-pattern signature scanner for offset resolution across EQ patches.
@@ -47,3 +49,5 @@ pub mod soul;
 pub mod types;
 /// Struct size/range validation helpers.
 pub mod validation;
+/// Zone transition retry logic with exponential backoff.
+pub mod zone_transition;

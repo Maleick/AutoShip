@@ -105,9 +105,7 @@ impl AaSpendManager {
                 return false;
             }
             ability.current_rank += 1;
-            self.available_points = self
-                .available_points
-                .saturating_sub(ability.cost_per_rank);
+            self.available_points = self.available_points.saturating_sub(ability.cost_per_rank);
             true
         } else {
             false
@@ -116,7 +114,11 @@ impl AaSpendManager {
 
     /// Returns all abilities that have reached their maximum rank.
     pub fn fully_trained(&self) -> Vec<&AaAbility> {
-        self.config.abilities.iter().filter(|a| a.is_maxed()).collect()
+        self.config
+            .abilities
+            .iter()
+            .filter(|a| a.is_maxed())
+            .collect()
     }
 }
 

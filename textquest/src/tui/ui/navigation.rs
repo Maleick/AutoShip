@@ -63,7 +63,10 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
             cols[0],
         );
     } else {
-        let header = themed_header_row(&["", "Character", "Zone", "Status", "Destination"], t);
+        let header = themed_header_row(
+            &["", "Character", "Zone", "Status", "ZoneFSM", "Destination"],
+            t,
+        );
 
         let rows: Vec<Row> = visible
             .iter()
@@ -81,6 +84,26 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
 
                 let status_color = nav.map_or(t.text_muted, |s| nav_status_color(&s.status, t));
 
+                // Get zone FSM state
+                let zone_status = app.zone_status_state.zone_statuses.get(&client.pid);
+                let zone_fsm_label = zone_status.map_or("Idle", |s| s.fsm_state.label());
+                let zone_fsm_color = zone_status.map_or(t.text_muted, |s| {
+                    if s.stuck {
+                        t.text_highlight // yellow/gold for stuck
+                    } else {
+                        match s.fsm_state {
+                            crate::tui::ui::zone_status_panel::ZoneFsmState::Idle => t.text_muted,
+                            crate::tui::ui::zone_status_panel::ZoneFsmState::Walking => t.hp_high,
+                            crate::tui::ui::zone_status_panel::ZoneFsmState::Zoning => {
+                                t.text_accent
+                            }
+                            crate::tui::ui::zone_status_panel::ZoneFsmState::Recovering => {
+                                t.text_secondary
+                            }
+                        }
+                    }
+                });
+
                 let row_style = if is_sel {
                     Style::default()
                         .bg(t.row_selected_bg)
@@ -95,6 +118,8 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                     ratatui::widgets::Cell::from(client.zone_name.as_str())
                         .style(Style::default().fg(t.text_secondary)),
                     ratatui::widgets::Cell::from(status).style(Style::default().fg(status_color)),
+                    ratatui::widgets::Cell::from(zone_fsm_label)
+                        .style(Style::default().fg(zone_fsm_color)),
                     ratatui::widgets::Cell::from(dest).style(Style::default().fg(t.text_accent)),
                 ])
                 .style(row_style)
@@ -109,6 +134,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                     Constraint::Min(14),
                     Constraint::Min(14),
                     Constraint::Length(12),
+                    Constraint::Length(11),
                     Constraint::Min(14),
                 ],
             )
@@ -167,6 +193,27 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
         let blockers = nav
             .and_then(|status| status.blocker_summary())
             .unwrap_or_else(|| String::from("None"));
+
+        // Get zone FSM state for detailed info
+        let zone_status = app.zone_status_state.zone_statuses.get(&client.pid);
+        let zone_fsm_label = zone_status.map_or("Idle", |s| s.fsm_state.label());
+        let zone_fsm_color = zone_status.map_or(t.text_muted, |s| {
+            if s.stuck {
+                t.text_highlight // yellow for stuck
+            } else {
+                match s.fsm_state {
+                    crate::tui::ui::zone_status_panel::ZoneFsmState::Idle => t.text_muted,
+                    crate::tui::ui::zone_status_panel::ZoneFsmState::Walking => t.hp_high,
+                    crate::tui::ui::zone_status_panel::ZoneFsmState::Zoning => t.text_accent,
+                    crate::tui::ui::zone_status_panel::ZoneFsmState::Recovering => t.text_secondary,
+                }
+            }
+        });
+        let zone_stuck_label = zone_status.map_or("", |s| if s.stuck { "YES" } else { "" });
+        let zone_timeout_label = zone_status
+            .and_then(|s| s.timeout_secs)
+            .map(|secs| format!("{}s", secs))
+            .unwrap_or_else(|| String::from("—"));
 
         lines.extend([
             Line::from(Span::styled(
@@ -232,6 +279,46 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, ap
                 }),
             ),
         ]));
+
+        // Zone transition state section
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "Zone Transition",
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("  FSM: ", Style::default().fg(t.text_muted)),
+            Span::styled(zone_fsm_label, Style::default().fg(zone_fsm_color)),
+        ]));
+        if !zone_stuck_label.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("  Stuck: ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    zone_stuck_label,
+                    Style::default()
+                        .fg(t.text_highlight)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        }
+        if zone_timeout_label != "—" {
+            lines.push(Line::from(vec![
+                Span::styled("  Retry: ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    zone_timeout_label,
+                    Style::default().fg(
+                        if zone_status.is_some_and(|s| s.timeout_secs == Some(0)) {
+                            t.hp_low
+                        } else {
+                            t.text_secondary
+                        },
+                    ),
+                ),
+            ]));
+        }
         lines.push(Line::from(""));
     }
 

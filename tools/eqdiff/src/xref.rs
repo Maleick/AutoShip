@@ -14,7 +14,8 @@ use std::collections::HashMap;
 pub struct StringRefMatch {
     /// The string being referenced.
     pub string: ExtractedString,
-    /// List of RVAs in the code (usually `.text`) that reference the string's RVA.
+    /// List of RVAs in the code (usually `.text`) that reference the string's
+    /// RVA.
     pub referencing_rvas: Vec<u32>,
 }
 
@@ -42,10 +43,12 @@ pub fn extract_imports(pe: &PE) -> Result<Vec<ImportedSymbol>> {
     Ok(results)
 }
 
-/// Build an index mapping string RVAs to the RVAs of instructions that reference them.
+/// Build an index mapping string RVAs to the RVAs of instructions that
+/// reference them.
 ///
 /// This walks all executable sections (e.g., `.text`) and uses a disassembler
-/// to find instructions that reference addresses in the provided `strings` list.
+/// to find instructions that reference addresses in the provided `strings`
+/// list.
 pub fn build_string_xref_index(
     pe: &PE,
     bytes: &[u8],

@@ -716,6 +716,29 @@ pub enum Command {
     /// The DLL drains its pending spawn-event buffer and returns one
     /// `SpawnEventBatch` response.
     PollSpawnEvents,
+    // Zone transitions
+    /// Request a zone transition to a specific zone with optional destination coordinates.
+    ///
+    /// Initiates movement to a zone line and triggers the zone transition sequence.
+    /// If `destination_coords` is provided, navigation will target those coordinates
+    /// after zone load completes. Otherwise, the character will zone in at the default
+    /// arrival point.
+    RequestZone {
+        /// EverQuest zone ID to transition to.
+        zone_id: u32,
+        /// Optional destination coordinates (x, y, z) to navigate to after zoning.
+        destination_coords: Option<(f32, f32, f32)>,
+    },
+    /// Flush all pending movement commands from the movement queue.
+    ///
+    /// Clears any queued movements that have not yet been executed, allowing
+    /// immediate processing of new movement commands.
+    FlushMovementQueue,
+    /// Request safe starting coordinates for a specific zone.
+    ///
+    /// Queries the zone's predefined safe spawn point (typically a bind point
+    /// or known safe location) to avoid landing in dangerous areas.
+    RequestSafeCoords(u32), // zone_id
 }
 
 impl std::fmt::Debug for Command {
@@ -1067,6 +1090,54 @@ pub enum Response {
     SpawnEventBatch {
         /// Accumulated spawn events since last poll.
         events: Vec<SpawnEvent>,
+    },
+    /// Notification that a zone state transition has completed.
+    ///
+    /// Sent when the zone transition sequence completes, including both the
+    /// zone load and any post-load positioning.
+    ZoneStateChanged {
+        /// Target zone ID that was transitioned to.
+        zone_id: u32,
+        /// Previous zone state (e.g. "loading", "arrived").
+        old_state: String,
+        /// New zone state after transition.
+        new_state: String,
+        /// Timestamp in milliseconds when the state change occurred.
+        timestamp: u64,
+    },
+    /// Notification that zone validation failed.
+    ///
+    /// Sent when attempting to transition to a zone that is inaccessible,
+    /// invalid, or fails prerequisite checks.
+    ZoneValidationFailed {
+        /// Zone ID that failed validation.
+        zone_id: u32,
+        /// Error code indicating the type of validation failure.
+        error_code: i32,
+        /// Human-readable description of the validation failure.
+        reason: String,
+    },
+    /// Safe starting coordinates retrieved for a zone.
+    ///
+    /// Response to `Command::RequestSafeCoords` containing the safe spawn point
+    /// coordinates for the requested zone.
+    SafeCoordsRetrieved {
+        /// World X coordinate of the safe location.
+        x: f32,
+        /// World Y coordinate of the safe location.
+        y: f32,
+        /// World Z coordinate of the safe location.
+        z: f32,
+        /// Zone ID these coordinates belong to.
+        zone_id: u32,
+    },
+    /// Confirmation that the movement queue was flushed.
+    ///
+    /// Sent in response to `Command::FlushMovementQueue` with the count of
+    /// movements that were dropped from the queue.
+    MovementQueueFlushed {
+        /// Number of pending movements that were dropped.
+        count_dropped: u32,
     },
 }
 
@@ -1493,6 +1564,7 @@ mod tests {
             Command::PollPackets,
             Command::PollSpawnEvents,
             Command::PollChat,
+            Command::FlushMovementQueue,
             Command::SetRenderMode {
                 mode: RenderMode::NullRender,
             },
@@ -2503,5 +2575,164 @@ mod tests {
         );
         let clone = resp.clone();
         assert_eq!(clone.correlation_id, Some(55));
+    }
+
+    // ─── Zone transition IPC types: serialization roundtrips ──────────────────
+
+    #[test]
+    fn command_roundtrip_request_zone_with_coords() {
+        use crate::protocol::{decode, encode};
+
+        let cmd = Command::RequestZone {
+            zone_id: 123,
+            destination_coords: Some((100.5, 200.5, 50.0)),
+        };
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        if let Command::RequestZone {
+            zone_id,
+            destination_coords,
+        } = decoded
+        {
+            assert_eq!(zone_id, 123);
+            assert_eq!(destination_coords, Some((100.5, 200.5, 50.0)));
+        } else {
+            panic!("expected RequestZone");
+        }
+    }
+
+    #[test]
+    fn command_roundtrip_request_zone_no_coords() {
+        use crate::protocol::{decode, encode};
+
+        let cmd = Command::RequestZone {
+            zone_id: 456,
+            destination_coords: None,
+        };
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        if let Command::RequestZone {
+            zone_id,
+            destination_coords,
+        } = decoded
+        {
+            assert_eq!(zone_id, 456);
+            assert_eq!(destination_coords, None);
+        } else {
+            panic!("expected RequestZone");
+        }
+    }
+
+    #[test]
+    fn command_roundtrip_flush_movement_queue() {
+        use crate::protocol::{decode, encode};
+
+        let cmd = Command::FlushMovementQueue;
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        assert_eq!(decoded, Command::FlushMovementQueue);
+    }
+
+    #[test]
+    fn command_roundtrip_request_safe_coords() {
+        use crate::protocol::{decode, encode};
+
+        let cmd = Command::RequestSafeCoords(789);
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        if let Command::RequestSafeCoords(zone_id) = decoded {
+            assert_eq!(zone_id, 789);
+        } else {
+            panic!("expected RequestSafeCoords");
+        }
+    }
+
+    #[test]
+    fn response_roundtrip_zone_state_changed() {
+        use crate::protocol::{decode, encode};
+
+        let resp = Response::ZoneStateChanged {
+            zone_id: 123,
+            old_state: "loading".to_string(),
+            new_state: "arrived".to_string(),
+            timestamp: 1609459200000,
+        };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode");
+        if let Response::ZoneStateChanged {
+            zone_id,
+            old_state,
+            new_state,
+            timestamp,
+        } = decoded
+        {
+            assert_eq!(zone_id, 123);
+            assert_eq!(old_state, "loading");
+            assert_eq!(new_state, "arrived");
+            assert_eq!(timestamp, 1609459200000);
+        } else {
+            panic!("expected ZoneStateChanged");
+        }
+    }
+
+    #[test]
+    fn response_roundtrip_zone_validation_failed() {
+        use crate::protocol::{decode, encode};
+
+        let resp = Response::ZoneValidationFailed {
+            zone_id: 456,
+            error_code: -1,
+            reason: "Zone is locked".to_string(),
+        };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode");
+        if let Response::ZoneValidationFailed {
+            zone_id,
+            error_code,
+            reason,
+        } = decoded
+        {
+            assert_eq!(zone_id, 456);
+            assert_eq!(error_code, -1);
+            assert_eq!(reason, "Zone is locked");
+        } else {
+            panic!("expected ZoneValidationFailed");
+        }
+    }
+
+    #[test]
+    fn response_roundtrip_safe_coords_retrieved() {
+        use crate::protocol::{decode, encode};
+
+        let resp = Response::SafeCoordsRetrieved {
+            x: 100.5,
+            y: 200.5,
+            z: 50.0,
+            zone_id: 789,
+        };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode");
+        if let Response::SafeCoordsRetrieved { x, y, z, zone_id } = decoded {
+            assert_eq!(x, 100.5);
+            assert_eq!(y, 200.5);
+            assert_eq!(z, 50.0);
+            assert_eq!(zone_id, 789);
+        } else {
+            panic!("expected SafeCoordsRetrieved");
+        }
+    }
+
+    #[test]
+    fn response_roundtrip_movement_queue_flushed() {
+        use crate::protocol::{decode, encode};
+
+        let resp = Response::MovementQueueFlushed { count_dropped: 5 };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode");
+        if let Response::MovementQueueFlushed { count_dropped } = decoded {
+            assert_eq!(count_dropped, 5);
+        } else {
+            panic!("expected MovementQueueFlushed");
+        }
     }
 }

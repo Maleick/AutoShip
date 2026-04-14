@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::path::Path as FsPath;
 use std::sync::{Mutex, MutexGuard};
 
+use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit, OsRng},
@@ -23,7 +24,6 @@ use axum::{
     http::StatusCode,
     routing::{get, post, put},
 };
-use aes_gcm::aead::rand_core::RngCore;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

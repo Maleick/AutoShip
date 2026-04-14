@@ -616,6 +616,39 @@ fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> V
             max_width,
         );
     }
+
+    // Zone blocker count
+    let zone_blocker_count: usize = app
+        .zone_status_state
+        .zone_statuses
+        .values()
+        .filter(|s| {
+            s.stuck
+                || (s.timeout_secs.is_some_and(|t| t == 0))
+                || matches!(
+                    s.fsm_state,
+                    crate::tui::ui::zone_status_panel::ZoneFsmState::Zoning
+                )
+        })
+        .count();
+
+    if zone_blocker_count > 0 && width_class != WidthClass::Narrow {
+        let _ = push_segment_if_fits(
+            &mut spans,
+            vec![
+                Span::raw(" "),
+                Span::styled(
+                    format!(" Zone Blockers: {} ", zone_blocker_count),
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(t.hp_low)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ],
+            max_width,
+        );
+    }
+
     if width_class != WidthClass::Narrow {
         let _ = push_segment_if_fits(
             &mut spans,
