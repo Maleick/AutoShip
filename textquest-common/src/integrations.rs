@@ -760,4 +760,235 @@ min_severity = "CRITICAL"
         assert_eq!(NotificationEvent::RaidAlert.to_string(), "Raid Alert");
         assert_eq!(NotificationEvent::LowHealth.to_string(), "Low Health");
     }
+
+    #[test]
+    fn test_notification_event_display_all_variants() {
+        assert_eq!(NotificationEvent::Stuck.to_string(), "Stuck");
+        assert_eq!(NotificationEvent::ZoneFailed.to_string(), "Zone Failed");
+        assert_eq!(NotificationEvent::EconomyAlert.to_string(), "Economy Alert");
+        assert_eq!(NotificationEvent::CombatError.to_string(), "Combat Error");
+        assert_eq!(NotificationEvent::GroupSync.to_string(), "Group Sync");
+        assert_eq!(NotificationEvent::SkillUp.to_string(), "Skill Up");
+        assert_eq!(NotificationEvent::LootEvent.to_string(), "Loot Event");
+    }
+
+    #[test]
+    fn test_format_discord_empty_details_omits_detail_block() {
+        let msg = NotificationMessage::new(
+            NotificationEvent::GroupSync,
+            Severity::Info,
+            "Leader",
+            "crushbone",
+            "Group sync",
+            "",
+        );
+        let discord = msg.format_discord();
+        assert!(discord.contains("**[INFO]"));
+        assert!(discord.contains("Group Sync"));
+        // Empty details → no trailing blank line + detail text appended
+        assert!(!discord.ends_with("\n\n"));
+    }
+
+    #[test]
+    fn test_format_discord_with_no_metadata_omits_metadata_block() {
+        let msg = NotificationMessage::new(
+            NotificationEvent::SkillUp,
+            Severity::Info,
+            "Ranger",
+            "fieldofbone",
+            "Archery up",
+            "Skill increased to 150",
+        );
+        let discord = msg.format_discord();
+        assert!(!discord.contains("**Metadata:**"));
+        assert!(discord.contains("Archery up"));
+        assert!(discord.contains("Skill increased to 150"));
+    }
+
+    #[test]
+    fn test_format_discord_with_mention_role_and_metadata() {
+        let msg = NotificationMessage::new(
+            NotificationEvent::Death,
+            Severity::Critical,
+            "Paladin",
+            "gukbottom",
+            "Died",
+            "CR needed at -200, 300",
+        )
+        .with_metadata("x", "-200")
+        .with_metadata("y", "300");
+
+        let discord = msg.format_discord();
+        assert!(discord.contains("**[CRITICAL]"));
+        assert!(discord.contains("**Metadata:**"));
+        assert!(discord.contains("x"));
+        assert!(discord.contains("y"));
+    }
+
+    #[test]
+    fn test_parse_toml_disabled_config() {
+        let toml_str = r#"
+enabled = false
+"#;
+        let config = NotificationConfig::parse_toml(toml_str).expect("parse failed");
+        assert!(!config.enabled);
+        assert!(config.channels.is_empty());
+    }
+
+    #[test]
+    fn test_parse_toml_webhook_with_headers() {
+        let toml_str = r#"
+enabled = true
+
+[[channels]]
+type = "webhook"
+url = "https://example.com/hook"
+min_severity = "ERROR"
+
+[channels.headers]
+Authorization = "Bearer secret"
+X-Custom = "value"
+"#;
+        let config = NotificationConfig::parse_toml(toml_str).expect("parse failed");
+        assert_eq!(config.channels.len(), 1);
+        assert!(matches!(
+            &config.channels[0].channel,
+            NotificationChannel::Webhook { url, headers: Some(h) }
+                if url == "https://example.com/hook" && h.contains_key("Authorization")
+        ));
+        assert_eq!(config.channels[0].min_severity, Severity::Error);
+    }
+
+    #[test]
+    fn test_parse_toml_invalid_returns_error() {
+        let result = NotificationConfig::parse_toml("this is [not valid toml @@@@");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_from_file_reads_toml_from_disk() {
+        use std::io::Write;
+        let mut tmp = tempfile::NamedTempFile::new().expect("temp file");
+        writeln!(
+            tmp,
+            r#"enabled = true
+[[channels]]
+type = "log"
+min_severity = "INFO"
+"#
+        )
+        .expect("write");
+        let config = NotificationConfig::from_file(tmp.path()).expect("from_file failed");
+        assert!(config.enabled);
+        assert_eq!(config.channels.len(), 1);
+        assert!(matches!(&config.channels[0].channel, NotificationChannel::Log));
+    }
+
+    #[test]
+    fn test_from_file_missing_path_returns_error() {
+        let result = NotificationConfig::from_file("/tmp/textquest_nonexistent_xyz.toml");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_channel_config_matches_combined_filters() {
+        let config = ChannelConfig {
+            channel: NotificationChannel::Log,
+            min_severity: Severity::Warning,
+            event_filter: vec![NotificationEvent::Death],
+            character_filter: vec!["Tank".to_string()],
+            zone_filter: vec!["gukbottom".to_string()],
+        };
+
+        // All conditions satisfied → match
+        let ok = NotificationMessage::new(
+            NotificationEvent::Death,
+            Severity::Critical,
+            "Tank",
+            "gukbottom",
+            "Died",
+            "",
+        );
+        assert!(config.matches(&ok));
+
+        // Wrong event → no match
+        let wrong_event = NotificationMessage::new(
+            NotificationEvent::Stuck,
+            Severity::Critical,
+            "Tank",
+            "gukbottom",
+            "Stuck",
+            "",
+        );
+        assert!(!config.matches(&wrong_event));
+
+        // Wrong character → no match
+        let wrong_char = NotificationMessage::new(
+            NotificationEvent::Death,
+            Severity::Critical,
+            "Healer",
+            "gukbottom",
+            "Died",
+            "",
+        );
+        assert!(!config.matches(&wrong_char));
+
+        // Wrong zone → no match
+        let wrong_zone = NotificationMessage::new(
+            NotificationEvent::Death,
+            Severity::Critical,
+            "Tank",
+            "crushbone",
+            "Died",
+            "",
+        );
+        assert!(!config.matches(&wrong_zone));
+
+        // Severity too low → no match
+        let low_sev = NotificationMessage::new(
+            NotificationEvent::Death,
+            Severity::Info,
+            "Tank",
+            "gukbottom",
+            "Died",
+            "",
+        );
+        assert!(!config.matches(&low_sev));
+    }
+
+    #[test]
+    fn test_severity_error_level_filtering() {
+        let config = ChannelConfig {
+            channel: NotificationChannel::Log,
+            min_severity: Severity::Error,
+            event_filter: Vec::new(),
+            character_filter: Vec::new(),
+            zone_filter: Vec::new(),
+        };
+
+        let info = NotificationMessage::new(
+            NotificationEvent::LootEvent, Severity::Info, "C", "z", "t", "",
+        );
+        let warning = NotificationMessage::new(
+            NotificationEvent::LootEvent, Severity::Warning, "C", "z", "t", "",
+        );
+        let error = NotificationMessage::new(
+            NotificationEvent::LootEvent, Severity::Error, "C", "z", "t", "",
+        );
+        let critical = NotificationMessage::new(
+            NotificationEvent::LootEvent, Severity::Critical, "C", "z", "t", "",
+        );
+
+        assert!(!config.matches(&info));
+        assert!(!config.matches(&warning));
+        assert!(config.matches(&error));
+        assert!(config.matches(&critical));
+    }
+
+    #[test]
+    fn test_notification_config_default_is_enabled() {
+        let config: NotificationConfig = toml::from_str("").expect("parse empty");
+        assert!(config.enabled);
+        assert!(config.channels.is_empty());
+    }
 }
