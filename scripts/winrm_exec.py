@@ -73,6 +73,16 @@ def _encode_powershell_command(command: str) -> str:
     return b64
 
 
+def _build_interactive_task_command(encoded_command: str) -> str:
+    """Build the scheduled-task action for an encoded PowerShell payload.
+
+    Keeping the payload encoded and passing it directly to PowerShell avoids an
+    intermediate batch file and removes cmd.exe parsing from the interactive
+    execution path.
+    """
+    return f'powershell -NoProfile -EncodedCommand {encoded_command}'
+
+
 def run_session0(command: str, use_ps: bool = True) -> tuple[str, str, int]:
     """Run command in WinRM session (session 0). Fast but no GUI access."""
     s = get_session()
@@ -98,34 +108,19 @@ def run_interactive(command: str, capture: bool = True, timeout: int = 10) -> st
     task_id = uuid.uuid4().hex[:8]
     task_name = f"FrostExec_{task_id}"
 
-    # Use Base64 encoding to prevent command injection
-    # Build the command that will be executed, then encode it
     if capture:
         out_file = f"$env:USERPROFILE\\frost_output_{task_id}.txt"
-        # Command to execute: run user command and redirect output to file
         cmd_to_run = f'{command} > $env:USERPROFILE\\frost_output_{task_id}.txt 2>&1'
     else:
         out_file = None
         cmd_to_run = command
 
-    # Encode the command for safe execution
     encoded_cmd = _encode_powershell_command(cmd_to_run)
-
-    # Create batch file that runs the encoded command
-    bat_content = (
-        f'@echo off\n'
-        f'powershell -NoProfile -EncodedCommand {encoded_cmd}'
-    )
+    task_command = _build_interactive_task_command(encoded_cmd)
 
     ps_script = f"""
 $home = $env:USERPROFILE
-$bat = "$home\\frost_exec_{task_id}.bat"
-
-@"
-{bat_content}
-"@ | Out-File -FilePath $bat -Encoding ascii
-
-schtasks /Create /TN "{task_name}" /TR $bat /SC ONCE /ST 00:00 /F /IT /RL HIGHEST 2>&1 | Out-Null
+schtasks /Create /TN "{task_name}" /TR "{task_command}" /SC ONCE /ST 00:00 /F /IT /RL HIGHEST 2>&1 | Out-Null
 schtasks /Run /TN "{task_name}" 2>&1 | Out-Null
 """
 
@@ -146,13 +141,11 @@ if (Test-Path {out_file}) {{
     "ERROR: No output captured"
 }}
 schtasks /Delete /TN "{task_name}" /F 2>&1 | Out-Null
-Remove-Item $bat -ErrorAction SilentlyContinue
 """
     else:
         ps_script += f"""
 Start-Sleep -Seconds 2
 schtasks /Delete /TN "{task_name}" /F 2>&1 | Out-Null
-Remove-Item "$home\\frost_exec_{task_id}.bat" -ErrorAction SilentlyContinue
 """
 
     r = s.run_ps(ps_script)

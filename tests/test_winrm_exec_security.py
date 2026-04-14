@@ -65,6 +65,16 @@ class TestWinrmExecSecurity(unittest.TestCase):
         result = winrm_exec._encode_powershell_command("test")
         self.assertIsInstance(result, str)
 
+    def test_interactive_task_command_uses_encoded_payload_only(self):
+        """Test that the scheduled-task wrapper stays on the encoded path."""
+        encoded = self._assert_encodes_round_trip("Write-Host 'safe'")
+        task_command = winrm_exec._build_interactive_task_command(encoded)
+
+        self.assertIn("-EncodedCommand", task_command)
+        self.assertNotIn("Write-Host 'safe'", task_command)
+        self.assertNotIn("@echo off", task_command)
+        self.assertNotIn("cmd.exe", task_command)
+
 
 if __name__ == "__main__":
     unittest.main()
