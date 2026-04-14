@@ -19,25 +19,75 @@ body:
         - add `human:required` or `risk:high` to prevent unattended merge
 
   - type: textarea
+    id: description
+    attributes:
+      label: Task Description
+      description: Clear, concise summary and links to parent epic or dependencies.
+      placeholder: |
+        - summary of goal
+        - parent epic: #...
+        - dependencies: #...
+    validations:
+      required: true
+
+  - type: textarea
     id: scope
     attributes:
       label: Scope
       description: What is in scope for the agent to change?
       placeholder: |
         - files, modules, or user-facing behaviors that may change
-        - concrete constraints or boundaries
+        - what does NOT get built
+    validations:
+      required: true
+
+  - type: textarea
+    id: design
+    attributes:
+      label: Design
+      description: Architecture, data structures, and API contracts.
+      placeholder: |
+        - diagrams or flow
+        - data structures (field descriptions)
+        - configuration format
+    validations:
+      required: false
+
+  - type: textarea
+    id: implementation_notes
+    attributes:
+      label: Implementation Notes
+      description: Key algorithms, patterns, performance, and platform-specific handling.
+      placeholder: |
+        - algorithms
+        - performance considerations
+        - #[cfg(windows)] vs stubs
+    validations:
+      required: false
+
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing
+      description: Unit tests, integration scenarios, and performance benchmarks.
+      placeholder: |
+        - unit test expectations
+        - integration test scenarios
+        - coverage target (>70%)
     validations:
       required: true
 
   - type: textarea
     id: done_when
     attributes:
-      label: Done when
+      label: Done when (Acceptance Criteria)
       description: What outcomes or acceptance checks define success?
       placeholder: |
-        - observable behavior
-        - acceptance criteria
-        - PR-ready outcomes
+        - [ ] feature implemented
+        - [ ] tests pass (>70% coverage)
+        - [ ] no clippy warnings
+        - [ ] formatted with rustfmt
+        - [ ] documentation added
     validations:
       required: true
 

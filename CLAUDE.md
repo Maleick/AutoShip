@@ -125,6 +125,7 @@ See `docs/implementation-roadmap.md` for current milestone status and sequencing
 
 ## Patterns & Conventions
 
+- **Documentation & Polish**: Follow the [Documentation & Polish Standards](docs/dev/polish-standards.md) for all work. This includes specific issue structures, commit message formats, and code quality expectations (no `unwrap`, >70% coverage, etc.).
 - **Offset rebasing**: All EQ pointers in `offsets.rs` are absolute preferred-base addresses. Use `offsets::rebase(preferred_addr, actual_base)` to convert to runtime addresses.
 - **Spawn linked list**: `TList<PlayerClient*>` via SpawnManager. `read_all_spawns` walks `NEXT` pointers with a max-count safety limit.
 - **Field-by-field reads**: `SpawnInfo` is populated by individual `proc.read::<T>(addr + OFFSET)` calls, not by reading a C struct wholesale. This is intentional — field offsets from MQ2 headers may not be contiguous.

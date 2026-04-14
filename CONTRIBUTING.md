@@ -22,6 +22,36 @@ cargo build --release  # Release build — requires nightly MSVC on Windows
 
 The TUI runs on macOS in demo mode without a live EQ client, which makes UI development possible cross-platform.
 
+## Documentation and Polish Standards
+
+TextQuest maintains high standards for documentation and code quality. For a complete guide, see [Documentation & Polish Standards](docs/dev/polish-standards.md).
+
+### Issue Requirements
+
+Every task issue must include:
+- **Task Description**: Summary and links to parent/related tasks.
+- **Scope Section**: What is and isn't included, affected files.
+- **Design Section**: Architecture, data structures, API contracts.
+- **Implementation Notes**: Algorithms, performance, platform handling.
+- **Testing**: Unit/integration scenarios and benchmarks.
+- **Acceptance Criteria**: Concrete checklist for completion.
+
+### Pull Request Standards
+
+- **Commit Messages**: Follow Conventional Commits. Explain "why" in the description.
+- **Commit Hygiene**: One feature per commit; no WIP/debug commits.
+- **Code Comments**: Explain "why", not "what". Document `unsafe` blocks with `// SAFETY:`.
+- **Public APIs**: Must be documented with `///` and include examples.
+
+### Code Polish Checklist
+
+- [ ] No `unwrap()` or `panic!()` without justification.
+- [ ] No dead code or unused imports.
+- [ ] Unit tests cover core logic and edge cases (coverage >70%).
+- [ ] No clippy warnings.
+- [ ] Formatted with `rustfmt`.
+- [ ] Error messages are helpful and actionable.
+
 ## Development Workflow
 
 ### Branch Naming

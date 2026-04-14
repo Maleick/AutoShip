@@ -407,15 +407,22 @@ def run_ci_checks(results: list[CheckResult], *, fix: bool, skip_tests: bool, ha
         record(results, "FAIL", "cargo clippy", "Skipped — clippy not available.",
                "Run `rustup component add clippy`.")
 
+    # 3. cargo doc
+    run_ci_step(
+        "cargo doc",
+        results,
+        ["cargo", "doc", "--no-deps", "--workspace", "--all-features"],
+    )
+
     if skip_tests:
         record(results, "PASS", "cargo test", "Skipped (--skip-tests)")
         record(results, "PASS", "Python tests", "Skipped (--skip-tests)")
         return
 
-    # 3. cargo test
+    # 4. cargo test
     run_ci_step("cargo test", results, ["cargo", "test"])
 
-    # 4. Python tests
+    # 5. Python tests
     run_ci_step(
         "Python tests",
         results,
@@ -599,6 +606,15 @@ def main() -> int:
 
     if args.update_docs and cargo_ok:
         update_test_count()
+
+    if not args.env_only:
+        run_ci_checks(
+            results,
+            fix=args.fix,
+            skip_tests=args.skip_tests,
+            has_fmt=has_fmt,
+            has_clippy=has_clippy,
+        )
 
     return print_results(results, require_reference_trees=args.require_reference_trees)
 

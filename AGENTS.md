@@ -16,6 +16,10 @@
 - Keep Test references historical-only when they still help explain current behavior or evidence lineage.
 - If work is not solved in the current branch, open or update a strict GitHub issue instead of burying the gap in docs, memory, or thread context.
 
+## Standards and Quality
+
+All work performed by agents or human developers must adhere to the [Documentation & Polish Standards](docs/dev/polish-standards.md). This includes specific requirements for issue structure, PR content, code documentation, and testing.
+
 ## GitHub Tracking Policy
 
 - Issues are the default unit of work.
@@ -23,7 +27,7 @@
 - PRs are the implementation and review unit.
 - GitHub Projects are retired and historical-only.
 - Parent epic issues stay open as coordination shells until all child issues are complete.
-- Mark an issue `agent:ready` only when the body is concrete enough to execute and includes an explicit `Verify` section.
+- Mark an issue `agent:ready` only when the body follows the [Documentation & Polish Standards](docs/dev/polish-standards.md), specifically including the Task Description, Scope, Design (if needed), Implementation Notes, Testing, and Acceptance Criteria sections.
 - Use `agent:blocked` or `human:required` when required evidence, access, or policy decisions are missing.
 
 ## Issue Decomposition Standard
