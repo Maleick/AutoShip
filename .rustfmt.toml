@@ -20,7 +20,6 @@ reorder_modules = true
 format_strings = true
 normalize_comments = true
 wrap_comments = true
-comment_width = 80
 
 # Functions
 fn_single_line = false
