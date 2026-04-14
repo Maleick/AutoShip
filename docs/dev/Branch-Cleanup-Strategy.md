@@ -1,43 +1,45 @@
 # TextQuest Branch Cleanup Strategy
 
-**Status**: Repo setting + weekly cleanup enabled
+**Status**: Reference only
 **Last updated**: 2026-04-12
+
+> Historical note: `.github/workflows/branch-cleanup.yml` was removed during CI workflow rationalization on 2026-04-13. This document is reference-only and no longer describes active branch-cleanup automation.
 
 ---
 
 ## Overview
 
-Branch cleanup is critical for repository hygiene. TextQuest uses a multi-layered approach:
+Branch cleanup was historically handled through a mix of repository settings, a GitHub Actions workflow, manual commands, and branch protection rules. That automation was removed on 2026-04-13 and this page now serves as historical reference only.
 
 1. **Automatic cleanup on PR merge** (GitHub settings)
-2. **Scheduled stale branch cleanup** (weekly, via GitHub Actions)
+2. **Scheduled stale branch cleanup** (GitHub Actions workflow, removed on 2026-04-13)
 3. **Manual commands** for developer use
-4. **Protected branches** (master, main, develop, staging, production) are never auto-deleted
+4. **Protected branches** (master, main, develop, staging, production) were never auto-deleted
 
 ---
 
-## Automatic Cleanup Mechanisms
+## Historical Cleanup Mechanisms
 
 ### 1. GitHub Repository Settings
 
 **Enable "Delete head branch on merge"**:
-- When a PR is merged, the source branch is automatically deleted
-- Prevents accumulation of merged branches
-- Developers don't need to manually delete branches after merge
+- When a PR was merged, the source branch was automatically deleted if the setting was enabled
+- Prevented accumulation of merged branches
+- Reduced the need for manual branch deletion after merge
 
 **Setting location**: Repository Settings → General → "Automatically delete head branches"
 
-**Status**: ⏳ **RECOMMENDED** — Should be enabled in repository settings
+**Status**: Historical note — this was the recommended repository setting before the workflow was removed
 
 ### 2. GitHub Actions Workflow
 
-**File**: `.github/workflows/branch-cleanup.yml`
+**File**: `.github/workflows/branch-cleanup.yml` (removed on 2026-04-13)
 
 **Triggers**:
-- Weekly schedule (Sunday 3:00 AM UTC) — clean stale branches (>30 days old)
+- Weekly schedule (Sunday 3:00 AM UTC) — cleaned stale branches (>30 days old)
 - Manual dispatch — on-demand cleanup
 
-PR merge deletion is handled by the repository setting above, not by this workflow.
+The workflow no longer exists, so there is no active schedule, no dispatch target, and no job log location to inspect.
 
 **Protected branches** (never deleted):
 - `master`
@@ -47,17 +49,17 @@ PR merge deletion is handled by the repository setting above, not by this workfl
 - `production`
 
 **Features**:
-- Deletes branches with last commit >30 days old
-- Skips fork PR head branches and stale branches that still back open PRs
-- Prunes remote-tracking refs for deleted remotes
-- Reports cleanup status and remaining branches
-- Safe: skips protected branches, handles errors gracefully
+- Deleted branches with last commit >30 days old
+- Skipped fork PR head branches and stale branches that still backed open PRs
+- Pruned remote-tracking refs for deleted remotes
+- Reported cleanup status and remaining branches
+- Was safe: skipped protected branches and handled errors gracefully
 
 ---
 
 ## Branch Naming Conventions
 
-To work well with cleanup automation:
+These branch names were used to work well with the historical cleanup automation:
 
 ### Feature Branches
 Format: `feature/<description>` or `feat/<description>`
@@ -85,7 +87,7 @@ Format: `claude/<description>` or `copilot/<description>`
 
 ---
 
-## Manual Branch Cleanup
+## Historical Manual Cleanup
 
 ### List branches to delete
 ```bash
@@ -128,9 +130,9 @@ git branch -r | grep ': gone]' | awk '{print $1}' | xargs -r git branch -rd
 
 ---
 
-## Branch Cleanup Workflow for Teams
+## Historical Workflow for Teams
 
-### When you finish a feature:
+### When a feature was finished:
 
 1. **Create Pull Request**
    - Push your feature branch to origin
@@ -146,9 +148,9 @@ git branch -r | grep ': gone]' | awk '{print $1}' | xargs -r git branch -rd
    - Check: "Delete head branch" option is checked
    - Click "Merge"
 
-4. **Automatic Cleanup** (GitHub Actions)
-    - PR closed → branch automatically deleted
-    - No manual action needed
+4. **Automatic Cleanup** (GitHub Actions, removed on 2026-04-13)
+    - PR closed → branch was automatically deleted
+    - No manual action was needed
 
 5. **Local Cleanup**
    - `git fetch origin --prune`
@@ -157,18 +159,18 @@ git branch -r | grep ': gone]' | awk '{print $1}' | xargs -r git branch -rd
 
 ### For long-running branches:
 
-If your branch is active for >30 days:
-- Keep it on origin (daily updates)
-- Open PR branches are skipped by stale cleanup
-- No action needed from you
+If a branch was active for >30 days:
+- It was kept on origin with regular updates
+- Open PR branches were skipped by stale cleanup
+- No action was needed
 
-If your branch is abandoned:
-- Scheduled cleanup will delete it after 30 days
-- No action needed from you
+If a branch was abandoned:
+- Scheduled cleanup would delete it after 30 days
+- No action was needed
 
 ---
 
-## Branch Lifecycle
+## Historical Branch Lifecycle
 
 ```
 Created
@@ -177,12 +179,12 @@ Created
   ↓
   Stale (> 30 days)
   ↓
-  Scheduled cleanup (daily check)
+  Scheduled cleanup (historical daily check)
   ↓
   Deleted (if unpushed changes, git saves in reflog)
 ```
 
-**Important**: If you have unpushed work, git keeps it in the reflog for ~30 days. You can recover it with:
+**Important**: If you had unpushed work, git kept it in the reflog for ~30 days. You could recover it with:
 ```bash
 git reflog
 git checkout <commit-hash>
@@ -190,9 +192,9 @@ git checkout <commit-hash>
 
 ---
 
-## Exception: Protected Branches
+## Historical Protected Branches
 
-These branches are **never** automatically deleted:
+These branches were **never** automatically deleted:
 
 - `master` — production-ready code
 - `main` — primary development branch
@@ -200,7 +202,7 @@ These branches are **never** automatically deleted:
 - `staging` — pre-production branch
 - `production` — live code
 
-Branch protection rules should also be set:
+Branch protection rules were typically set to:
 - Require PR reviews before merge
 - Require status checks to pass
 - Require branch to be up to date
@@ -208,26 +210,28 @@ Branch protection rules should also be set:
 
 ---
 
-## GitHub Actions Cleanup Job
+## Removed GitHub Actions Cleanup Job
 
 ### `.github/workflows/branch-cleanup.yml`
 
+This workflow was removed on 2026-04-13. It used to:
+
 **On PR merge**:
-1. Detects merged PR
-2. Gets source branch name
-3. Verifies the branch belongs to this repository and is not protected
-4. Deletes remote branch
-5. Reports success
+1. Detected the merged PR
+2. Got the source branch name
+3. Verified the branch belonged to this repository and was not protected
+4. Deleted the remote branch
+5. Reported success
 
 **On schedule (daily)**:
-1. Fetches all remote branches
-2. Fetches open PR head branches
-3. Calculates branch age
-4. Identifies stale branches (>30 days) that are not protected and do not back open PRs
-5. Deletes eligible stale branches
-6. Generates cleanup report
+1. Fetched all remote branches
+2. Fetched open PR head branches
+3. Calculated branch age
+4. Identified stale branches (>30 days) that were not protected and did not back open PRs
+5. Deleted eligible stale branches
+6. Generated a cleanup report
 
-**Status report includes**:
+**Status report included**:
 - Total remote branches
 - Total local branches
 - Protected branches
@@ -236,12 +240,11 @@ Branch protection rules should also be set:
 
 ---
 
-## Monitoring & Reporting
+## Historical Monitoring & Reporting
 
 ### Check branch status
 ```bash
-# See what the cleanup job reports
-# Look at: Actions → Branch Cleanup → Latest run
+# Historical note: the workflow run used to appear under Actions → Branch Cleanup
 ```
 
 ### Manual inspection
@@ -264,17 +267,17 @@ done
 
 ---
 
-## Troubleshooting
+## Historical Troubleshooting
 
 ### "Branch is protected"
-- Branch is in protected list (master, main, etc.)
-- Contact repo admin to unprotect if needed
-- Cannot auto-delete protected branches (intentional)
+- Branch was in the protected list (master, main, etc.)
+- Repo admins controlled protection settings
+- Protected branches were not auto-deleted by design
 
 ### "Force push rejected"
-- Branch protection requires PR review
-- Create PR instead of pushing directly
-- Don't bypass branch protection
+- Branch protection required PR review
+- Contributors used PRs instead of direct pushes
+- Branch protection was not meant to be bypassed
 
 ### "Can't delete branch with unpushed changes"
 - Push changes first: `git push origin <branch>`
@@ -283,17 +286,17 @@ done
 
 ### "Local branch gone but still tracking"
 - Run: `git fetch origin --prune`
-- Local tracking branch will be removed
-- Your branch will be deleted next day
+- Local tracking branch was removed
+- Your local tracking ref will be pruned on the next fetch
 
 ---
 
-## Best Practices
+## Historical Best Practices
 
 ✅ **DO**:
 - Delete branches after PR merge
 - Use consistent naming conventions
-- Update branch daily if active
+- Update branches regularly while they were active
 - Keep feature branches focused
 
 ❌ **DON'T**:
@@ -304,10 +307,10 @@ done
 
 ---
 
-## Repository Settings Checklist
+## Historical Repository Settings Checklist
 
-- [ ] "Delete head branch on merge" enabled
-- [ ] Branch protection on master/main
+- [ ] "Delete head branch on merge" was enabled
+- [ ] Branch protection existed on master/main
 - [ ] Require PR reviews (1+)
 - [ ] Require status checks
 - [ ] Require up-to-date branch
@@ -319,13 +322,11 @@ done
 
 ## Summary
 
-**TextQuest branch cleanup is:**
-- ✅ Automatic on PR merge (GitHub setting)
-- ✅ Scheduled daily for stale branches (GitHub Actions)
-- ✅ Safe (protected branches never deleted)
-- ✅ Transparent (status reports generated)
-- ✅ Reversible (git reflog keeps history 30 days)
+**TextQuest branch cleanup was:**
+- ✅ Automatic on PR merge when the GitHub setting was enabled
+- ✅ Scheduled for stale branches via GitHub Actions before removal
+- ✅ Safe (protected branches were never deleted)
+- ✅ Transparent (status reports were generated)
+- ✅ Reversible (git reflog kept history for about 30 days)
 
-**No manual action needed** unless you have special requirements.
-
-For questions, check the automation job logs: **Actions → Branch Cleanup**.
+**No active workflow remains.** This page is reference-only, and there is no Branch Cleanup job log to inspect after 2026-04-13.

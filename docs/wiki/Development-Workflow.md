@@ -53,6 +53,13 @@ When behavior or roadmap guidance changes:
 5. run `python scripts/sync_wiki.py --dry-run` before a manual wiki publish
 6. include the wiki source changes in the same PR when possible
 
+## CI lanes
+
+- `ci.yml` is the only routine merge gate. It runs Linux-based wiki validation, Python tests, Rust format/lint/test, and secret scanning.
+- `nightly-release.yml` is the broader Windows/manual validation lane. Use it for release-like confidence and patch-sensitive pipeline checks.
+- `release.yml` remains the tagged release lane for shipping releases after merge safety has already passed.
+- Repo automation workflows are operational helpers, not product-health signals. Failures there should be triaged separately from merge safety.
+
 ## Roadmap and Tracking Workflow
 
 Live is the primary product target going forward. Test is historical and reference-only.

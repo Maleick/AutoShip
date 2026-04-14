@@ -52,7 +52,6 @@ pane.log
 # Local-sync only (synced between machines, not in repo)
 knowledge/
 downloads/
-feature-list.json
 HANDOFF.md
 scripts/sync-to-frostreaver.sh
 

@@ -193,34 +193,3 @@ jobs:
                 try { await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: label }); } catch (_) {}
               }
             }
-
-  sync-wiki:
-    name: Trigger wiki publish after merge
-    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
-    timeout-minutes: 5
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Dispatch wiki-nightly if docs changed
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const prNumber = context.payload.pull_request.number;
-            const sourceSha = context.payload.pull_request.merge_commit_sha;
-
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner, repo, pull_number: prNumber, per_page: 100,
-            });
-            const docsChanged = files.some(f => f.filename.startsWith("docs/"));
-            if (!docsChanged) { core.info("No docs/ changes — skipping wiki dispatch."); return; }
-
-            await github.rest.actions.createWorkflowDispatch({
-              owner, repo,
-              workflow_id: "wiki-nightly.yml",
-              ref: "master",
-              inputs: { publish: "true", source_sha: sourceSha },
-            });
-            core.info(`Dispatched wiki-nightly for ${sourceSha}`);

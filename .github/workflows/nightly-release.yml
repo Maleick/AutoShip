@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   gate:
-    name: Local time gate
+    name: Nightly/manual full-validation gate
     runs-on: [self-hosted, Windows, X64, textquest]
     outputs:
       should_run: ${{ steps.gate.outputs.should_run }}

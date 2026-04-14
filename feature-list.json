@@ -1,0 +1,14 @@
+{
+  "features": [
+    {
+      "id": "ci-workflow-rationalization",
+      "name": "CI workflow rationalization",
+      "status": "complete",
+      "acceptance_tests": [
+        "python3 -m unittest tests.test_workflow_contract -v",
+        "python3 scripts/sync_wiki.py --check"
+      ],
+      "notes": "Completed pruning and simplification work. Documentation now reflects the merge gate, public docs site, and nightly/manual wiki publication lanes."
+    }
+  ]
+}

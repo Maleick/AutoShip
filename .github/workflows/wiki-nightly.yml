@@ -1,4 +1,4 @@
-name: Wiki Nightly
+name: Wiki Publish
 
 on:
   workflow_run:

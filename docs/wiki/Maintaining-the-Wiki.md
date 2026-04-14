@@ -79,8 +79,9 @@ Fix:
 
 ## CI and PR Expectations
 
-- CI runs `python scripts/sync_wiki.py --check` on PRs
-- CI also builds the public site with `mkdocs build --strict`
+- PR CI runs `python3 scripts/sync_wiki.py --check`
+- GitHub Pages publication is handled separately from the merge gate
+- If wiki mirror publication is retained, it runs only after successful nightly validation or by manual dispatch
 - wiki updates should ship in the same PR as the behavior change whenever possible
 - README should continue to point contributors at `docs/wiki/` and the sync script commands
 - the metrics page is generated from the same source as the README badges
@@ -97,7 +98,7 @@ Fix:
 ### Current behavior
 
 - wiki maintenance stays repo-first and reviewable in normal PRs
-- publish still flows through `scripts/sync_wiki.py`
+- wiki mirror publication stays behind the retained nightly/manual lane, not the merge gate
 
 ### Future options
 

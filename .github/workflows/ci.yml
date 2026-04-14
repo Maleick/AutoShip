@@ -8,13 +8,13 @@ on:
   workflow_dispatch:
     inputs:
       run_release_build:
-        description: "Also run the Windows release build after the PR gate"
+        description: "Also run the Windows nightly-style build after CI"
         required: false
         default: false
         type: boolean
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -22,153 +22,51 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
 jobs:
-  pr_gate_untrusted:
-    name: PR gate (fork PR path)
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: windows-latest
-    timeout-minutes: 45
-    defaults:
-      run:
-        shell: cmd
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup verified Python
-        uses: ./.github/actions/setup-verified-python
-
-      - name: Setup Rust nightly
-        uses: ./.github/actions/setup-rust-nightly
-
-      - name: Ensure cmake on PATH
-        uses: ./.github/actions/ensure-cmake
-      - run: "%PYTHON_CMD% scripts/sync_wiki.py --check"
-      - run: "%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v"
-      - run: cargo fmt --all --check
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test
-
-  pr_gate_trusted:
-    name: PR gate (trusted path)
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: [self-hosted, Windows, X64, textquest]
-    timeout-minutes: 45
-    defaults:
-      run:
-        shell: cmd
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure Git safe directories
-        uses: ./.github/actions/configure-safe-directory
-
-      - name: Setup verified Python
-        uses: ./.github/actions/setup-verified-python
-
-      - name: Setup Rust nightly
-        uses: ./.github/actions/setup-rust-nightly
-
-      - name: Ensure cmake on PATH
-        uses: ./.github/actions/ensure-cmake
-      - run: "%PYTHON_CMD% scripts/sync_wiki.py --check"
-      - run: "%PYTHON_CMD% -m unittest discover -s tests -p test_*.py -v"
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test -- --nocapture
-
-  pr_gate:
+  merge_gate:
     name: PR gate (fmt + clippy + test + python)
-    if: github.event_name != 'push'
-    runs-on: [self-hosted, Linux, X64, textquest]
-    timeout-minutes: 90
-    permissions:
-      actions: read
-      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Wait for runner-specific gate result
-        uses: actions/github-script@v8
+      - uses: actions/checkout@v4
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang libclang-dev llvm-dev
+          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const isForkPr =
-              context.eventName === "pull_request" &&
-              context.payload.pull_request.head.repo.full_name !== `${owner}/${repo}`;
-            const targetJobName = isForkPr
-              ? "PR gate (fork PR path)"
-              : "PR gate (trusted path)";
-            const otherJobName = isForkPr
-              ? "PR gate (trusted path)"
-              : "PR gate (fork PR path)";
+          python-version: "3.12"
 
-            // listJobsForWorkflowRunAttempt requires attempt_number and returns 404 in some
-            // PR contexts (e.g. when context.runAttempt is unavailable).  Fall back to
-            // listJobsForWorkflowRun, which is always available, to avoid hard failures.
-            async function listJobs() {
-              if (context.runAttempt) {
-                try {
-                  return await github.paginate(github.rest.actions.listJobsForWorkflowRunAttempt, {
-                    owner,
-                    repo,
-                    run_id: context.runId,
-                    attempt_number: context.runAttempt,
-                    per_page: 100,
-                  });
-                } catch (e) {
-                  core.warning(
-                    `listJobsForWorkflowRunAttempt failed (${e.status ?? "unknown"}); ` +
-                    `falling back to listJobsForWorkflowRun`
-                  );
-                }
-              }
-              return await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
-                owner,
-                repo,
-                run_id: context.runId,
-                per_page: 100,
-              });
-            }
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt, clippy
 
-            for (let attempt = 1; attempt <= 360; attempt += 1) {
-              const jobs = await listJobs();
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
 
-              const target = jobs.find((job) => job.name === targetJobName);
-              const other = jobs.find((job) => job.name === otherJobName);
-              core.info(
-                `Attempt ${attempt}: ${targetJobName}=${target?.status ?? "missing"}/${target?.conclusion ?? "n/a"}, ` +
-                `${otherJobName}=${other?.status ?? "missing"}/${other?.conclusion ?? "n/a"}`
-              );
+      - name: Validate wiki sources
+        run: python3 scripts/sync_wiki.py --check
 
-              if (
-                other &&
-                other.status === "completed" &&
-                other.conclusion &&
-                other.conclusion !== "skipped"
-              ) {
-                core.setFailed(`Unexpected ${otherJobName} result: ${other.conclusion}`);
-                return;
-              }
+      - name: Run Python tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
-              if (!target || target.status !== "completed") {
-                await new Promise((resolve) => setTimeout(resolve, 10000));
-                continue;
-              }
+      - name: Check formatting
+        run: cargo fmt --all --check
 
-              if (target.conclusion !== "success") {
-                core.setFailed(`${targetJobName} concluded with ${target.conclusion}`);
-                return;
-              }
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
-              core.info(`${targetJobName} succeeded; merge gate satisfied.`);
-              return;
-            }
+      - name: Run Rust tests
+        run: cargo test --all --all-features
 
-            core.setFailed(`Timed out waiting for ${targetJobName} to finish.`);
-
-  secrets_scan_untrusted:
-    name: Secret scan (TruffleHog) — fork PR
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+  secrets_scan:
+    name: Secret scan
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -177,51 +75,19 @@ jobs:
           fetch-depth: 0
 
       - name: TruffleHog OSS
-        uses: trufflesecurity/trufflehog@6bd2d14f7a4bc1e569fa3550efa7ec632a4fa67b # v3.94.2
-        with:
-          extra_args: --only-verified
-
-  secrets_scan:
-    name: Secret scan (TruffleHog)
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: [self-hosted, Linux, X64, textquest]
-    timeout-minutes: 5
-    steps:
-      - name: Prepare Linux self-hosted workspace
-        shell: bash
-        run: |
-          set -euo pipefail
-          workspace="${GITHUB_WORKSPACE:-$PWD}"
-          repo_parent="$(dirname "$workspace")"
-          echo "Preparing self-hosted workspace at $workspace"
-          mkdir -p "$repo_parent" "$workspace"
-          if command -v sudo >/dev/null 2>&1; then
-            sudo chown -R "$(id -u):$(id -g)" "$repo_parent"
-            sudo chmod -R u+rwX "$repo_parent" || true
-          else
-            chown -R "$(id -u):$(id -g)" "$repo_parent" 2>/dev/null || true
-            chmod -R u+rwX "$repo_parent" 2>/dev/null || true
-          fi
-          find "$workspace" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-          if find "$workspace" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
-            echo "::error::Self-hosted workspace cleanup left stale files under $workspace. Fix runner ownership or install passwordless sudo."
-            exit 1
-          fi
-
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: TruffleHog OSS
-        uses: trufflesecurity/trufflehog@6bd2d14f7a4bc1e569fa3550efa7ec632a4fa67b # v3.94.2
+        uses: trufflesecurity/trufflehog@6bd2d14f7a4bc1e569fa3550efa7ec632a4fa67b
         with:
           extra_args: --only-verified
 
   windows:
     name: Windows release build (manual)
     if: github.event_name == 'workflow_dispatch' && inputs.run_release_build
-    needs: pr_gate
-    runs-on: [self-hosted, Windows, X64, textquest]
+    needs: merge_gate
+    runs-on:
+      - self-hosted
+      - Windows
+      - X64
+      - textquest
     timeout-minutes: 30
     defaults:
       run:
