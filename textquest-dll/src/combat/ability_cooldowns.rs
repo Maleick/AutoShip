@@ -194,4 +194,87 @@ mod tests {
             AbilityAvailability::WaitingForRetry { retry_at: 52 }
         );
     }
+
+    #[test]
+    fn is_ready_at_ready_variant() {
+        assert!(AbilityAvailability::Ready.is_ready_at(0));
+        assert!(AbilityAvailability::Ready.is_ready_at(u32::MAX));
+    }
+
+    #[test]
+    fn is_ready_at_cooling_down_nonzero_remaining_is_not_ready() {
+        assert!(!AbilityAvailability::CoolingDown(5).is_ready_at(0));
+        assert!(!AbilityAvailability::CoolingDown(1).is_ready_at(999));
+    }
+
+    #[test]
+    fn is_ready_at_cooling_down_zero_remaining_is_ready() {
+        assert!(AbilityAvailability::CoolingDown(0).is_ready_at(0));
+    }
+
+    #[test]
+    fn is_ready_at_waiting_for_retry_before_and_at_boundary() {
+        let state = AbilityAvailability::WaitingForRetry { retry_at: 10 };
+        assert!(!state.is_ready_at(9));
+        assert!(state.is_ready_at(10));
+        assert!(state.is_ready_at(11));
+    }
+
+    #[test]
+    fn consume_updates_existing_entry_without_adding_duplicate() {
+        let mut tracker = AbilityCooldownTracker::with_retry_ticks(5);
+        tracker.consume(1, Some(10), 0);
+        // Reconsume with a different cooldown — must update in-place.
+        tracker.consume(1, Some(20), 0);
+        assert!(!tracker.can_use(1, 0));
+        assert_eq!(tracker.availability(1, 0), AbilityAvailability::CoolingDown(20));
+        // Tick 20 times — entry should be gone.
+        for now in 0..20 {
+            tracker.tick(now);
+        }
+        assert!(tracker.can_use(1, 20));
+    }
+
+    #[test]
+    fn multiple_concurrent_abilities_tick_independently() {
+        let mut tracker = AbilityCooldownTracker::with_retry_ticks(5);
+        tracker.consume(1, Some(1), 0);
+        tracker.consume(2, Some(3), 0);
+
+        tracker.tick(1); // id=1 remaining becomes 0 and is pruned; id=2 becomes 2
+
+        assert!(tracker.can_use(1, 1));
+        assert!(!tracker.can_use(2, 1));
+
+        tracker.tick(2); // id=2 remaining becomes 1
+        tracker.tick(3); // id=2 remaining becomes 0 and is pruned
+
+        assert!(tracker.can_use(2, 3));
+    }
+
+    #[test]
+    fn capacity_limit_silently_drops_excess_entries() {
+        let mut tracker = AbilityCooldownTracker::with_retry_ticks(5);
+        // Fill all MAX_TRACKED_ABILITIES (16) slots.
+        for id in 0..MAX_TRACKED_ABILITIES as i32 {
+            tracker.consume(id, Some(100), 0);
+            assert!(!tracker.can_use(id, 0));
+        }
+        // Adding a 17th entry must be silently dropped.
+        let extra_id = MAX_TRACKED_ABILITIES as i32;
+        tracker.consume(extra_id, Some(100), 0);
+        // The extra entry is not tracked, so it reports Ready.
+        assert!(tracker.can_use(extra_id, 0));
+    }
+
+    #[test]
+    fn availability_treats_cooling_down_zero_remaining_as_ready() {
+        // Manually insert a CoolingDown(0) state via tick driving.
+        let mut tracker = AbilityCooldownTracker::with_retry_ticks(5);
+        tracker.consume(5, Some(1), 0);
+        // tick once: remaining goes to 0. The entry is pruned from the list,
+        // so availability returns Ready from the "not found" path.
+        tracker.tick(0);
+        assert_eq!(tracker.availability(5, 1), AbilityAvailability::Ready);
+    }
 }

@@ -211,4 +211,66 @@ mod tests {
             WarpAction::None
         ));
     }
+
+    #[test]
+    fn new_monitor_is_not_paused() {
+        let monitor = WarpMonitor::new();
+        assert!(!monitor.is_paused());
+    }
+
+    #[test]
+    fn reset_clears_paused_state() {
+        let mut monitor = WarpMonitor::new();
+        let start = Waypoint::new(0.0, 0.0, 0.0);
+        let warped = Waypoint::new(WARP_DISTANCE_THRESHOLD + 5.0, 0.0, 0.0);
+
+        monitor.update(Some(&sample(1, start)));
+        monitor.update(Some(&sample(1, warped)));
+        assert!(monitor.is_paused());
+
+        monitor.reset();
+        assert!(!monitor.is_paused());
+    }
+
+    #[test]
+    fn none_target_clears_tracking_state_and_returns_none_action() {
+        let mut monitor = WarpMonitor::new();
+        let pos = Waypoint::new(0.0, 0.0, 0.0);
+
+        monitor.update(Some(&sample(1, pos)));
+        // Feeding None clears state; subsequent same-position feed should not trigger warp.
+        assert!(matches!(monitor.update(None), WarpAction::None));
+        // After feeding None, a new large jump from origin is compared against
+        // a clean slate (no previous position), so it should not warp-detect.
+        let far = Waypoint::new(WARP_DISTANCE_THRESHOLD + 100.0, 0.0, 0.0);
+        assert!(matches!(monitor.update(Some(&sample(1, far))), WarpAction::None));
+    }
+
+    #[test]
+    fn movement_below_threshold_does_not_trigger_warp() {
+        let mut monitor = WarpMonitor::new();
+        let a = Waypoint::new(0.0, 0.0, 0.0);
+        let b = Waypoint::new(WARP_DISTANCE_THRESHOLD - 1.0, 0.0, 0.0);
+
+        monitor.update(Some(&sample(1, a)));
+        assert!(matches!(
+            monitor.update(Some(&sample(1, b))),
+            WarpAction::None
+        ));
+        assert!(!monitor.is_paused());
+    }
+
+    #[test]
+    fn movement_exactly_at_threshold_does_not_trigger_warp() {
+        let mut monitor = WarpMonitor::new();
+        let a = Waypoint::new(0.0, 0.0, 0.0);
+        let b = Waypoint::new(WARP_DISTANCE_THRESHOLD, 0.0, 0.0);
+
+        monitor.update(Some(&sample(1, a)));
+        assert!(matches!(
+            monitor.update(Some(&sample(1, b))),
+            WarpAction::None
+        ));
+        assert!(!monitor.is_paused());
+    }
 }

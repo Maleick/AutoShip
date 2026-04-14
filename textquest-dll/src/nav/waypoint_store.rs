@@ -408,4 +408,86 @@ mod tests {
             "symlinked ancestor should be rejected, got: {result:?}"
         );
     }
+
+    #[test]
+    fn normalize_accepts_exactly_64_char_name() {
+        let name = "a".repeat(64);
+        let normalized = normalize_name(&name).expect("64-char name should be valid");
+        assert_eq!(normalized.len(), 64);
+    }
+
+    #[test]
+    fn get_retrieves_previously_upserted_waypoint() {
+        let path = temp_path("get-test");
+        let mut store = WaypointStore {
+            path,
+            waypoints: BTreeMap::new(),
+        };
+        let wp = NamedWaypoint::new("pullspot", Waypoint::new(1.0, 2.0, 3.0), "commonlands");
+        store.upsert(wp.clone()).expect("upsert");
+
+        let retrieved = store.get("pullspot").expect("waypoint should be found");
+        assert_eq!(retrieved.name, wp.name);
+        assert_eq!(retrieved.zone, wp.zone);
+        assert_eq!(retrieved.position, wp.position);
+    }
+
+    #[test]
+    fn get_is_case_insensitive() {
+        let path = temp_path("get-case");
+        let mut store = WaypointStore {
+            path,
+            waypoints: BTreeMap::new(),
+        };
+        store
+            .upsert(NamedWaypoint::new(
+                "CampAlpha",
+                Waypoint::new(0.0, 0.0, 0.0),
+                "guk",
+            ))
+            .expect("upsert");
+
+        assert!(store.get("campalpha").is_some());
+        assert!(store.get("CAMPALPHA").is_some());
+        assert!(store.get("CampAlpha").is_some());
+    }
+
+    #[test]
+    fn delete_returns_false_for_nonexistent_waypoint() {
+        let path = temp_path("delete-nonexistent");
+        let mut store = WaypointStore {
+            path,
+            waypoints: BTreeMap::new(),
+        };
+        let removed = store.delete("nowhere").expect("delete should not error");
+        assert!(!removed);
+    }
+
+    #[test]
+    fn upsert_updates_existing_waypoint() {
+        let path = temp_path("upsert-update");
+        let mut store = WaypointStore {
+            path,
+            waypoints: BTreeMap::new(),
+        };
+        store
+            .upsert(NamedWaypoint::new(
+                "camp",
+                Waypoint::new(1.0, 2.0, 3.0),
+                "qeynos",
+            ))
+            .expect("first upsert");
+        store
+            .upsert(NamedWaypoint::new(
+                "camp",
+                Waypoint::new(9.0, 8.0, 7.0),
+                "freeport",
+            ))
+            .expect("second upsert");
+
+        let listed = store.list();
+        assert_eq!(listed.len(), 1, "upsert should not add a duplicate entry");
+        assert_eq!(listed[0].zone, "freeport");
+        assert_eq!(listed[0].position, Waypoint::new(9.0, 8.0, 7.0));
+    }
 }

@@ -153,4 +153,42 @@ mod tests {
         let second_plan = mgr.rotate_hooks(HookGameState::ZoneLoading);
         assert_eq!(*mgr.assignments(), second_plan.assignments);
     }
+
+    #[test]
+    fn new_manager_has_login_state_and_all_none_assignments() {
+        let mgr = HookSlotManager::new();
+        assert_eq!(mgr.state(), HookGameState::Login);
+        for slot in mgr.assignments().iter() {
+            assert_eq!(*slot, None);
+        }
+    }
+
+    #[test]
+    fn state_transition_between_different_states_reports_changed() {
+        let mut mgr = HookSlotManager::new();
+        mgr.rotate_hooks(HookGameState::Login);
+        let plan = mgr.rotate_hooks(HookGameState::InGame);
+        assert!(plan.changed, "transitioning from Login to InGame should report changed");
+    }
+
+    #[test]
+    fn game_state_display_formatting() {
+        assert_eq!(format!("{}", HookGameState::Login), "Login");
+        assert_eq!(format!("{}", HookGameState::InGame), "InGame");
+        assert_eq!(format!("{}", HookGameState::ZoneLoading), "ZoneLoading");
+    }
+
+    #[test]
+    fn slot_rotation_changed_flag_reflects_assignment_diff() {
+        let mut mgr = HookSlotManager::new();
+        // First rotate: initial assignments are all None, Login sets GiveTime in slot 0.
+        let first = mgr.rotate_hooks(HookGameState::Login);
+        assert!(first.changed);
+        // Second rotate with same state: no diff.
+        let second = mgr.rotate_hooks(HookGameState::Login);
+        assert!(!second.changed);
+        // Transition to ZoneLoading: different assignment set.
+        let third = mgr.rotate_hooks(HookGameState::ZoneLoading);
+        assert!(third.changed);
+    }
 }
