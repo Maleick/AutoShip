@@ -1,0 +1,95 @@
+# cargo-deny configuration — https://embarkstudios.github.io/cargo-deny/
+#
+# This configuration enforces dependency security and license checks.
+# Run locally with: cargo deny check
+# Run in CI: included in cargo-deny job in ci.yml
+
+[advisories]
+# The advisory database that will be fetched and checked against.
+db-path = "$CARGO_HOME/advisory-db"
+# The url(s) of the advisory databases to use
+db-urls = ["https://github.com/rustsec/advisory-db/raw/osv/crates"]
+# Git-based advisory database repository
+git-fetch-extra-args = []
+# How to handle crates with security vulnerabilities
+vulnerability = "deny"
+# How to handle unmaintained crates
+unmaintained = "warn"
+# How to handle crates with security notices
+notice = "warn"
+# A list of advisory IDs to ignore. Use this to dismiss advisories that either:
+# 1. Have not been addressed by the maintainer
+# 2. Are not actually applicable to your code
+# 3. Are for optional dependencies that you are not using
+ignore = [
+    #"RUSTSEC-2020-0001",
+]
+
+[licenses]
+# The lint level for the crates which do not have a detectable license
+unlicensed = "deny"
+# List of explicitly allowed licenses
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 OR MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Zlib",
+]
+# List of explicitly disallowed licenses. Any crate matching this will be denied.
+deny = [
+    "GPL-2.0",
+    "GPL-3.0",
+    "AGPL-3.0",
+]
+# Lint level for licenses considered copyleft
+copyleft = "warn"
+# Blanket approval or denial for OSI-approved or FSF Free/Libre licenses
+allow-osi-fsf-free = "both"
+# Lint level used when no other predicates are matched
+default = "deny"
+# The confidence threshold for detecting a license from license text.
+confidence-threshold = 0.8
+# Some crates don't have a detectable license. This option allows you to
+# specify the covers for said crates, the key is the fully qualified crate name
+# the the value is the license to assume the crate to be licensed under
+exceptions = [
+    # Each entry the name of a crate and the licensing information
+    # {name = "ansi_term", allow = ["MIT"]},
+]
+
+[bans]
+# Lint level for when multiple versions of the same crate are detected
+multiple-versions = "warn"
+# The graph highlighting used when creating dotgraphs
+highlight = "all"
+# List of explicitly allowed duplicate crates
+allow = [
+    #{ name = "ansi_term", version = "=0.11.0" },
+]
+# List of explicitly disallowed crates
+deny = [
+    # We don't want crates that have gone unmaintained
+    #{ name = "term_size", version = "*" },
+]
+# Certain crates/versions that will be skipped when doing duplicate checks.
+skip = [
+    #{ name = "ansi_term", version = "=0.11.0" },
+]
+# Similarly named crates that are allowed to coexist
+skip-tree = [
+    #{ name = "windows", version = "=0.48.0" },
+]
+
+[sources]
+# Lint level for what to happen when a crate from a crate registry that is not in the allow list is detected
+unknown-registry = "warn"
+# Lint level for what to happen when a crate from a git repository that is not in the allow list is detected
+unknown-git = "warn"
+# List of allowed crate registries containing allowed crates.
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# List of allowed Git repositories containing allowed crates.
+allow-git = []

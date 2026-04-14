@@ -1,0 +1,715 @@
+# Operator Guide
+
+This guide is for operators who want to set up, configure, and run TextQuest to control one or more EverQuest clients.
+
+## Table of Contents
+
+1. [Installation Prerequisites](#installation-prerequisites)
+2. [Build Instructions](#build-instructions)
+3. [Configuration Walkthrough](#configuration-walkthrough)
+4. [TUI Navigation and Keybindings](#tui-navigation-and-keybindings)
+5. [Common Troubleshooting](#common-troubleshooting)
+6. [Next Steps](#next-steps)
+
+---
+
+## Installation Prerequisites
+
+### All Platforms
+
+- **Rust** edition 2024 (install from [rustup.rs](https://rustup.rs))
+- Git for cloning the repository
+- Your favorite text editor for configuration files
+
+### Windows (Required for Live EQ Control)
+
+- **Windows 10 or later**
+- **MSVC toolchain** (part of Visual Studio; see [Rust Windows setup](https://doc.rust-lang.org/1.0.0/book/installing-rust.html))
+- **Nightly Rust** on Windows (because the DLL injection dependency `retour` uses unstable features)
+  - Install nightly: `rustup install nightly`
+  - Override for Windows builds: Create or edit `.cargo/config.toml` with `[build] rustflags = ...` (this is already done in the repo)
+- **CMake 3.5+** (for navmesh FFI build)
+- **LLVM/Clang** (for bindgen during the navmesh build)
+- Running **EverQuest client(s)** for live injection and control
+
+### macOS/Linux (Demo Mode Only)
+
+- **Rust stable** (install from [rustup.rs](https://rustup.rs))
+- Running the build and TUI in demo mode (no live EQ client needed)
+
+### Checking Your Environment
+
+Run the preflight script to validate your setup:
+
+```bash
+python3 scripts/dev-preflight.py
+```
+
+This runs the same checks as CI: formatting, linting, tests, and Python validation.
+
+---
+
+## Build Instructions
+
+### Quick Build
+
+```bash
+# Standard debug build
+cargo build
+
+# Run in demo mode (no EQ required)
+cargo run
+```
+
+Expected behavior:
+
+- The TUI opens and displays simulated characters and activity
+- All five screens (Characters, Map, Navigation, Debug, Packets) are interactive
+- Works on macOS, Linux, or Windows without a live EQ client
+
+### Release Build (Windows)
+
+```powershell
+# Build optimized binary
+cargo build --release
+
+# The binary is at: target\release\textquest.exe
+```
+
+### Running Tests Before Commit
+
+```bash
+# Format check
+cargo fmt --check
+
+# Linting (Clippy)
+cargo clippy --all-targets --all-features -- -D warnings
+
+# Run tests
+cargo test
+
+# Python tests
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+# All together (recommended before pushing)
+python3 scripts/dev-preflight.py
+```
+
+### Platform-Specific Notes
+
+#### macOS/Linux Development
+
+- Windows-specific process APIs are stubbed; demo mode is the normal workflow
+- Use `cargo run` to iterate on the TUI and operator workflow
+- Does not validate live EQ injection, navigation, or login paths
+
+#### Windows Production
+
+- `cargo run` launches in demo mode if no EQ clients are detected
+- To use live EQ:
+  1. Start one or more `eqgame.exe` clients
+  2. Run `textquest.exe inject` to inject the DLL
+  3. Run `textquest.exe tui` to open the dashboard
+  4. Commands and navigation execute directly against live EQ memory
+
+---
+
+## Configuration Walkthrough
+
+TextQuest stores configuration in `config/` relative to the working directory (or binary location).
+
+### Main Configuration: `config/textquest.toml`
+
+This is the primary operator configuration file. Key sections:
+
+```toml
+# Process discovery
+process_name = "eqgame"
+max_spawns = 10000
+
+# Server and session settings
+[server]
+name = "Firiona Vie"         # or your TLP server
+auto_discover = true         # Find running EQ clients
+polling_interval_ms = 100    # How often to read game state
+
+# Staggered login (used by :login all)
+[launch]
+stagger_ms = 2000            # Delay between each client launch
+max_clients = 6              # Max simultaneous clients
+
+# Group and role definitions
+[[group]]
+id = 1
+name = "Group 1"
+
+[[group]]
+id = 2
+name = "Group 2"
+```
+
+**When to edit:**
+
+- Change `server` name to match your TLP
+- Adjust `max_clients` if you run fewer or more clients
+- Add group definitions for your multibox composition
+
+### Accounts: `config/accounts.toml`
+
+Maps account names to character and group information:
+
+```toml
+[[accounts]]
+name = "account01"
+server = "Firiona Vie"
+character = "Warrior01"
+class = "WAR"
+group = 1
+
+[[accounts]]
+name = "account02"
+server = "Firiona Vie"
+character = "Cleric01"
+class = "CLR"
+group = 1
+```
+
+**When to edit:**
+
+- Add an entry for each account you want to launch
+- `name` is what you use in `:login account01`
+- `class` should match in-game (used for combat ability selection)
+- `group` assigns the character to a combat group (1–6)
+
+**Passwords:** Do NOT add passwords to this file. Use `:login account01` in the TUI; TextQuest will prompt for the password and store it securely.
+
+### Camps: `config/camps/*.toml`
+
+Define camp locations for automated pulling and looting:
+
+```toml
+zone = "gfaydark"
+camp_center = [200, -100, 50]   # X, Y, Z coordinates
+camp_radius = 200               # How far from center for pulls
+pull_point = [250, -150, 50]    # Where to stand and pull from
+pull_radius = 500               # Max distance to pull mobs
+leash_radius = 1000             # Leash distance for CC/melee
+
+# Mana and health thresholds
+heal_at_pct = 30                # Request heal if <= 30% HP
+mana_regen_secs = 6             # Mana recovery timer
+
+# Optional next/previous for camp chains
+next_camp = "gfaydark_camp2"
+prev_camp = "qey2hh1_camp"
+```
+
+**How to create:**
+
+1. Go to your pull location in EQ
+2. Use `:status` to see your coordinates
+3. Create `config/camps/zone_name.toml` with those coordinates
+4. Adjust `camp_radius` and `pull_radius` as needed
+5. Use `:camp start zone_name` to begin pulling
+
+**Available camps:**
+
+```bash
+:camp list
+```
+
+### Classes: `config/classes/*.toml`
+
+Define combat ability rotations for each class. TextQuest includes pre-configured rotations for all 16 classes (Bard, Beastlord, Berserker, Cleric, Druid, Enchanter, Magician, Monk, Necromancer, Paladin, Ranger, Rogue, Shadowknight, Shaman, Warrior, Wizard).
+
+Example (Warrior):
+
+```toml
+[warrior]
+# Offensive abilities in order of priority
+[[warrior.actions]]
+action = "ability"
+name = "Bash"
+cooldown_secs = 6
+
+[[warrior.actions]]
+action = "spell"
+name = "Kick"
+cooldown_secs = 12
+
+# Defensive overrides (HolyShit)
+[[warrior.holyshit]]
+trigger = "hp_below_20"
+action = "ability"
+name = "Shield Block"
+```
+
+**When to edit:**
+
+- Per-class rotation tuning happens in the class file
+- Per-character overrides go in `config/toons/<character>.toml`
+- Changes take effect after re-injection of the DLL
+
+### Per-Character Overrides: `config/toons/<character>.toml`
+
+Override the class rotation for a specific character:
+
+```toml
+[[spells]]
+name = "Cure Poison"
+cooldown_secs = 12
+
+[[disciplines]]
+name = "Holy Aura"
+cooldown_secs = 300
+```
+
+### HVT Watchlist: `config/hvt_watchlist.toml`
+
+Define high-value target mobs for named tracking and alerts:
+
+```toml
+[[named]]
+name = "Frostcreeper King"
+zone = "gfaydark"
+discord_alert = true      # Ping Discord when spawned
+
+[[named]]
+name = "Lady Vox"
+zone = "karnor"
+```
+
+### Named Mobs: `config/named_mobs/<zone>.toml`
+
+Define zone-specific named mobs for tracking:
+
+```toml
+[[named]]
+name = "Enraged Griffon"
+x = 100
+y = 200
+z = 50
+respawn_secs = 3600
+```
+
+---
+
+## TUI Navigation and Keybindings
+
+### The Five Screens
+
+Launch the TUI with `cargo run` (demo mode) or `textquest.exe tui` (live mode).
+
+| Screen         | Key | Purpose                                       |
+| -------------- | --- | --------------------------------------------- |
+| **Characters** | `1` | Roster, group focus, selected character state |
+| **Map**        | `2` | Zone map, spawn overlays, named tracking      |
+| **Navigation** | `3` | Route status, waypoints, stuck recovery       |
+| **Debug**      | `4` | Spawn list, hex dump, EQ internals browser    |
+| **Packets**    | `5` | Live send/receive opcode capture              |
+
+### Global Keybindings
+
+| Key           | Action                                       |
+| ------------- | -------------------------------------------- |
+| `1`–`5`       | Switch screens                               |
+| `Shift+1`–`6` | Focus groups 1–6                             |
+| `Shift+0`     | Clear group focus                            |
+| `Tab`         | Cycle panes on current screen                |
+| `[` / `]`     | Cycle between connected clients              |
+| `/`           | Open spawn search                            |
+| `f`           | Cycle spawn filter                           |
+| `g`           | Toggle group section                         |
+| `v`           | Toggle scope section                         |
+| `z`           | Collapse focused section                     |
+| `+` / `-`     | Adjust map Z slice                           |
+| `m`           | Maximize map                                 |
+| `p`           | Toggle privacy mode (redacts names)          |
+| `T`           | Cycle theme (Dark, Dracula, Classic, Neriak) |
+| `:`           | Enter command mode                           |
+| `?`           | Toggle help overlay                          |
+| `q`           | Quit                                         |
+
+### Command Mode (`:`)
+
+Commands start with `:` and are auto-completed. Press `Enter` to execute.
+
+#### Status and Inspection
+
+```text
+:status               Show overview of all clients
+:commands             List all available commands
+:help                 Show command help
+:help camp            Help for a specific command
+```
+
+#### Camp Control
+
+```text
+:camp list            List available camps
+:camp start zone      Start pulling at a camp
+:camp stop            Stop pulling
+:camp next            Go to next camp in chain
+:camp prev            Go to previous camp in chain
+:camp add camp_name   Mark a current location as a camp
+```
+
+#### Navigation
+
+```text
+:nav zone             Navigate all focused clients to zone
+:nav x y z            Navigate to coordinates (x, y, z)
+:nav camp_name        Navigate to a saved camp
+```
+
+#### Combat and Groups
+
+```text
+:ma warrior01         Make Warrior01 main assist
+:mt mage01            Make Mage01 main tank
+:engage               Engage current target
+:disengage            Stop attacking
+:invite warrior01     Invite to group
+:accept               Accept group invite
+```
+
+#### Corrective Healing (CH) Chain
+
+```text
+:ch status            Show CH chain state
+:ch start pid1,pid2 5 Healing spells every 5 seconds
+:ch stop              Stop CH chain
+:ch add pid           Add client to CH chain
+:ch remove pid        Remove from CH chain
+```
+
+#### Login and Lifecycle
+
+```text
+:login                Login one account (interactive)
+:login all            Login all configured accounts
+:login account01      Login specific account
+:login G1             Login all accounts in group 1
+:stop account01       Stop one account
+:stop all             Stop all clients
+```
+
+#### Utility
+
+```text
+:config               Open configuration editor
+:theme                Cycle color themes
+:privacy              Toggle privacy mode
+:quit                 Exit TextQuest
+```
+
+### Screen Details
+
+#### Characters Screen (1)
+
+Shows your roster with:
+
+- Health and mana bars
+- Buffs/debuffs
+- Cast bars for spells and abilities
+- Selected character highlighted
+- Group assignments
+
+**Use this for:**
+
+- Quick health checks
+- Group composition review
+- Focusing on specific clients with `Shift+1`–`6`
+
+#### Map Screen (2)
+
+Shows:
+
+- Zone geometry (from `config/maps/*.txt`)
+- Spawn positions and types
+- Named mob tracking and timers
+- Navigation target
+- Map controls (`+`/`-` for Z slice, `m` to maximize)
+
+**Use this for:**
+
+- Tactical awareness
+- Monitoring pull distance
+- Named mob respawn timers
+
+#### Navigation Screen (3)
+
+Shows per-client:
+
+- Current destination
+- Waypoint queue
+- Movement state (moving, stuck, arrived)
+- Recovery actions if stuck
+
+**Use this for:**
+
+- Confirming navigation is active
+- Spotting stuck clients
+- Verifying arrival
+
+#### Debug Screen (4)
+
+Shows:
+
+- Full spawn list (searchable with `/`)
+- Target details (click to highlight)
+- Raw hex dump of spawn data
+- EQ internals browser
+
+**Use this for:**
+
+- Troubleshooting spawn reads
+- Validating offsets after patches
+- Inspecting target data
+
+#### Packets Screen (5)
+
+Shows:
+
+- Live send/receive packets
+- Opcode decode
+- Filtering by opcode
+- Pause/resume capture
+
+**Use this for:**
+
+- Monitoring login sequences
+- Verifying ability casts
+- Debugging IPC issues
+
+---
+
+## Common Troubleshooting
+
+### "No EQ clients found" or TUI starts in demo mode
+
+**Symptoms:**
+
+- TUI displays simulated characters instead of real ones
+- `client-status-all` shows no clients
+
+**Checks:**
+
+1. Are you on **Windows**? (Live mode only works on Windows)
+2. Is `eqgame.exe` actually running?
+3. Is the process name correct? Check `config/textquest.toml`:
+   ```toml
+   process_name = "eqgame"
+   ```
+
+**Fix:**
+
+```powershell
+# On Windows:
+Start-Process "C:\path\to\eqgame.exe"
+timeout /t 10  # Wait for client to fully load
+cargo run  # or textquest.exe tui
+```
+
+### "Cannot open shared memory" or "No session token"
+
+**Symptoms:**
+
+- Commands execute but nothing happens
+- Status commands fail
+
+**What it means:**
+
+- DLL was not injected successfully, or the session token is missing
+
+**Fix:**
+
+```powershell
+# Step 1: Inject the DLL
+textquest.exe inject
+
+# Step 2: Verify injection succeeded
+# Check that %TEMP%\textquest\ contains token files:
+dir %TEMP%\textquest\
+# Look for: login_token_*.bin
+
+# Step 3: Retry commands
+textquest.exe tui
+```
+
+### DLL injection fails
+
+**Symptoms:**
+
+- `textquest.exe inject` completes but no token file is created
+- DLL log is not created
+
+**Checks:**
+
+1. Are you running as **Administrator**? (Required for injection)
+2. Is the DLL binary present? (Built with `cargo build --release`)
+3. Are EQ clients actually running?
+4. Check Windows Event Viewer for access denied errors
+
+**Fix:**
+
+```powershell
+# Run as Administrator
+runas /user:Administrator "textquest.exe inject"
+
+# Or rebuild and retry
+cargo build --release
+textquest.exe inject
+```
+
+### Navigation doesn't work or mobs won't move
+
+**Symptoms:**
+
+- `:nav coordinates` executes but character doesn't move
+- Movement commands appear in logs but no in-game action
+
+**Checks:**
+
+1. Is the DLL injected and running? (Check `client-status-all`)
+2. Are you **in combat**? Navigation is disabled during combat
+3. Check the **DLL log**: `%TEMP%\textquest\textquest-dll.log`
+4. Is the navmesh loaded? Run:
+   ```powershell
+   textquest.exe navmesh diagnostics gfaydark
+   ```
+
+**Common causes:**
+
+- Offset data is stale (after EQ patches)
+- Client is stuck or unresponsive
+- Navigation target is unreachable (try waypoint instead)
+
+**Fix:**
+
+```powershell
+# 1. Clear nav state
+textquest.exe cmd <pid> "/follow off"
+
+# 2. Reload navmesh for the zone
+textquest.exe navmesh reload gfaydark
+
+# 3. Try simpler nav command
+textquest.exe nav <pid> x y z
+
+# 4. If still failing, update offsets (see next section)
+```
+
+### "Offsets are stale" after EQ patches
+
+EverQuest patches often change memory layouts. TextQuest won't work correctly until offsets are revalidated.
+
+**Symptoms:**
+
+- Characters move erratically or crash the client
+- Spawn data is corrupted or missing
+- Login automation fails to click the right buttons
+
+**Temporary workaround:**
+
+- Use `:camp stop` and manual `/follow` commands
+- Avoid login automation until offsets are confirmed
+
+**Next step:**
+
+- See `docs/wiki/Research-Patch-Day-Reproduction.md` for offset revalidation steps
+- Or wait for an issue to be filed on GitHub with the latest offsets
+
+### Login automation not working
+
+**Symptoms:**
+
+- `:login account01` starts but gets stuck at character select
+- Login widgets are not being clicked
+
+**Checks:**
+
+1. Confirm account exists in `config/accounts.toml`
+2. Confirm password was stored (first `:login` run prompts for password)
+3. Check the **DLL log** for widget path errors
+4. After **EQ patches**, login widgets often move (offset change)
+
+**Fix:**
+
+```bash
+# 1. Check DLL log for widget errors
+cat %TEMP%\textquest\textquest-dll.log | tail -20
+
+# 2. If widgets changed after a patch, file an issue on GitHub
+# 3. Manually trigger calibration
+textquest.exe calibrate
+
+# 4. Retry login
+:login account01
+```
+
+### TUI crashes or is unresponsive
+
+**Symptoms:**
+
+- TUI freezes or exits unexpectedly
+- Terminal shows a panic message
+
+**Checks:**
+
+1. Check the **orchestrator log**: `logs/textquest.log`
+2. Look for error messages (permission denied, file not found, etc.)
+3. Confirm `config/textquest.toml` is valid TOML (no syntax errors)
+
+**Fix:**
+
+```bash
+# 1. Validate config syntax
+python3 -c "import toml; toml.load(open('config/textquest.toml'))"
+
+# 2. Clear temp files
+rm -r %TEMP%\textquest\  # Windows: rmdir /s %TEMP%\textquest
+
+# 3. Rebuild and restart
+cargo build
+cargo run
+```
+
+### Map is empty or showing the wrong zone
+
+**Symptoms:**
+
+- Map displays blank or gridlines only
+- Named tracking shows no mobs
+
+**Checks:**
+
+1. Is a map file present? Check `config/maps/gfaydark.txt`
+2. Is the zone ID correct in `config/maps/`?
+3. Are you actually in that zone? Check `:status`
+
+**Fix:**
+
+```bash
+# 1. Verify map files exist
+ls config/maps/ | grep -i gfaydark
+
+# 2. If missing, add a map file or use the wiki
+# TextQuest includes maps from RedGuides
+
+# 3. Clear map cache if one exists
+rm -r data/navmesh/
+```
+
+---
+
+## Next Steps
+
+1. **Read the Quick Start** for the fastest path: [Quick Start](Quick-Start.md)
+2. **Explore the Command Reference** for all available commands: [Command Reference](Command-Reference.md)
+3. **Learn camp and combat setup**: [Combat and Camp Loop](Combat-and-Camp-Loop.md)
+4. **Understand login automation**: [Login Automation](Login-Automation.md)
+5. **Master navigation**: [Navigation and Maps](Navigation-and-Maps.md)
+6. **Check the Architecture** to understand how TextQuest works: [Architecture Overview](Architecture-Overview.md)
+
+For developers or those extending TextQuest, see the [Developer Guide](Developer-Guide.md).

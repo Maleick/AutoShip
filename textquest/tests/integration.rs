@@ -837,3 +837,54 @@ fn camp_snapshot_driven_fight_to_loot_on_target_death() {
     camp.tick(Some(&dead_snapshot));
     assert!(matches!(camp.state, CampState::Looting { .. }));
 }
+
+// ============================================================================
+// Test 9: Integration Scenario Tests
+// ============================================================================
+
+mod scenarios;
+
+#[test]
+fn scenario_solo_farming_loop() {
+    use scenarios::{ScenarioRunner, SoloFarmingScenario};
+
+    let scenario = SoloFarmingScenario;
+    let result = ScenarioRunner::run(&scenario);
+
+    assert!(
+        result.passed,
+        "Solo farming scenario failed: {}",
+        result.reason.unwrap_or_default()
+    );
+    assert!(result.total_ticks > 0, "Scenario should execute ticks");
+}
+
+#[test]
+fn scenario_group_healing() {
+    use scenarios::{ScenarioRunner, GroupHealScenario};
+
+    let scenario = GroupHealScenario;
+    let result = ScenarioRunner::run(&scenario);
+
+    assert!(
+        result.passed,
+        "Group healing scenario failed: {}",
+        result.reason.unwrap_or_default()
+    );
+    assert!(result.total_ticks > 0, "Scenario should execute ticks");
+}
+
+#[test]
+fn scenario_zone_recovery() {
+    use scenarios::{ScenarioRunner, ZoneRecoveryScenario};
+
+    let scenario = ZoneRecoveryScenario;
+    let result = ScenarioRunner::run(&scenario);
+
+    assert!(
+        result.passed,
+        "Zone recovery scenario failed: {}",
+        result.reason.unwrap_or_default()
+    );
+    assert!(result.total_ticks > 0, "Scenario should execute ticks");
+}

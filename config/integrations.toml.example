@@ -1,0 +1,122 @@
+# TextQuest External Integration Configuration
+# Example file showing all available notification channels and filters.
+#
+# To use this:
+# 1. Copy this file to integrations.toml
+# 2. Replace __SET_*__ markers with actual values
+# 3. Enable only the channels you want to use
+#
+# Notification severity levels (in increasing order):
+#   - INFO: Informational events (group status, items, etc.)
+#   - WARNING: Warnings (low health, long navigation, etc.)
+#   - ERROR: Error conditions (stuck, zone failed, etc.)
+#   - CRITICAL: Critical events (death, raid wipe, system failure)
+#
+# Notification event types:
+#   - death: Character death or corpse recovery
+#   - stuck: Navigation error or timeout
+#   - zone_failed: Zone transition failed
+#   - raid_alert: Raid event detected (named spawn, etc.)
+#   - economy_alert: Economy-related alert (price shift, batch)
+#   - low_health: Low health/mana warning
+#   - combat_error: Combat timeout or rotation error
+#   - group_sync: Multibox coordination event
+#   - skill_up: Skill improvement
+#   - loot_event: Item looted or inventory event
+
+# Global enable/disable for all notifications
+enabled = true
+
+# ─── Discord Integration ───
+# Send notifications to Discord via webhook.
+# 1. Create a Discord webhook in your server: Server Settings > Integrations > Webhooks
+# 2. Copy the webhook URL here
+[[channels]]
+type = "discord"
+webhook_url = "https://discord.com/api/webhooks/__SET_WEBHOOK_ID__/__SET_WEBHOOK_TOKEN__"
+# Optional: mention a role for critical events (e.g., "@raid-alerts")
+mention_role_id = "__SET_ROLE_ID__"
+# Minimum severity to send on this channel
+min_severity = "CRITICAL"
+# Event types to include (empty = all events)
+event_filter = ["death", "raid_alert", "zone_failed"]
+# Character names to include (empty = all characters)
+character_filter = []
+# Zone names to include (empty = all zones)
+zone_filter = []
+
+# ─── Discord Integration (All Warnings) ───
+# Send all warnings and higher to a dedicated channel
+[[channels]]
+type = "discord"
+webhook_url = "https://discord.com/api/webhooks/__SET_WEBHOOK_ID_2__/__SET_WEBHOOK_TOKEN_2__"
+min_severity = "WARNING"
+# Filter to specific characters if desired
+character_filter = []
+
+# ─── Generic HTTP Webhook ───
+# Send notifications to any HTTP endpoint (e.g., custom Discord bot, Zapier, etc.)
+[[channels]]
+type = "webhook"
+url = "https://example.com/api/notifications"
+# Optional custom HTTP headers
+headers = { "Authorization" = "Bearer __SET_TOKEN__", "X-Source" = "textquest" }
+min_severity = "ERROR"
+event_filter = ["death", "stuck", "zone_failed", "combat_error"]
+character_filter = []
+zone_filter = []
+
+# ─── Log File Integration ───
+# Write notifications to structured logs (via tracing integration).
+# Logs are written to ./logs/textquest.log by default.
+[[channels]]
+type = "log"
+min_severity = "INFO"
+# Log all events for complete audit trail
+event_filter = []
+character_filter = []
+zone_filter = []
+
+# ─── Economy Alerts Only ───
+# Route economy-specific alerts to a separate channel
+[[channels]]
+type = "discord"
+webhook_url = "https://discord.com/api/webhooks/__SET_ECONOMY_WEBHOOK__/__SET_TOKEN__"
+min_severity = "INFO"
+event_filter = ["economy_alert"]
+character_filter = []
+zone_filter = []
+
+# ─── Raid Zone Alerts ───
+# Route high-value raid zone events to a leadership channel
+[[channels]]
+type = "discord"
+webhook_url = "https://discord.com/api/webhooks/__SET_RAID_WEBHOOK__/__SET_TOKEN__"
+min_severity = "WARNING"
+event_filter = ["raid_alert", "death", "zone_failed"]
+# Only alert on specific raid zone characters
+character_filter = ["RaidLeader", "MainTank", "OffTank"]
+# Only alert in raid zones
+zone_filter = ["sebilus", "nagafen", "permafrost", "dragon", "ssserver"]
+
+# ─── Individual Character Tracking ───
+# Track a specific character across all event types with low threshold
+[[channels]]
+type = "discord"
+webhook_url = "https://discord.com/api/webhooks/__SET_CHAR_WEBHOOK__/__SET_TOKEN__"
+min_severity = "INFO"
+# Empty event_filter = all events
+event_filter = []
+# Only this character
+character_filter = ["MainBox"]
+# All zones
+zone_filter = []
+
+# ─── Development/Debug Logging ───
+# Write everything to logs for debugging
+[[channels]]
+type = "log"
+min_severity = "INFO"
+event_filter = []
+character_filter = []
+zone_filter = []

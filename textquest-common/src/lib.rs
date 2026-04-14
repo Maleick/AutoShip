@@ -13,8 +13,12 @@ pub mod bindings;
 pub mod chat;
 /// Combat-related shared types (class roles, spell metadata, assist targets).
 pub mod combat;
+/// Unified error handling framework with structured error types and recovery actions.
+pub mod errors;
 /// ETW-TI event parser and LoadLibrary injection detector.
 pub mod etw_ti_detect;
+/// External integration infrastructure for notifications and alerts.
+pub mod integrations;
 /// SQLite-backed database for Ghidra binary analysis data.
 pub mod ghidra_db;
 /// IPC command and response enums for orchestrator-to-DLL communication.
@@ -23,6 +27,10 @@ pub mod ipc;
 pub mod login;
 /// Navigation shared types (waypoints, zones, pathfinding requests).
 pub mod nav;
+/// Observability infrastructure for metrics collection and structured logging.
+pub mod observability;
+/// Data persistence framework with schema migration support.
+pub mod persistence;
 /// Hot-updatable offset database backed by JSON.
 pub mod offset_db;
 /// EQ memory addresses and struct field offsets (preferred-base, rebased at runtime).

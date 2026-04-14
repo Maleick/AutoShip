@@ -8,6 +8,7 @@ serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 bincode.workspace = true
+toml.workspace = true
 rand = "0.9"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tracing.workspace = true
@@ -15,3 +16,16 @@ paste = "1"
 
 [dev-dependencies]
 tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "ipc_serialization"
+harness = false
+
+[[bench]]
+name = "spawninfo_reads"
+harness = false
+
+[[bench]]
+name = "config_parsing"
+harness = false
