@@ -87,14 +87,81 @@ fn ensure_remote_dll_loaded(pid: u32, dll_path: &Path) -> Result<()> {
     }
 }
 
+/// Re-hash the staged DLL and compare against the expected digest.
+///
+/// Aborts if the file was modified since staging — prevents DLL-swapping
+/// attacks in the TOCTOU window before `LoadLibraryW`.
+#[cfg(windows)]
+fn verify_dll_hash(dll_path: &Path, expected_hash: &str) -> Result<()> {
+    use crate::inject::dll_prep::compute_file_hash;
+    let actual = compute_file_hash(dll_path)?;
+    if actual != expected_hash {
+        anyhow::bail!(
+            "DLL payload integrity check failed — hash mismatch \
+             (expected {expected_hash}, got {actual}). Payload may have been tampered with."
+        );
+    }
+    Ok(())
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::verify_dll_hash;
+    use crate::inject::dll_prep::compute_file_hash;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_dll_path() -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before UNIX_EPOCH")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "textquest_loader_verify_dll_hash_{}_{}.dll",
+            std::process::id(),
+            nanos
+        ))
+    }
+
+    #[test]
+    fn verify_dll_hash_accepts_unchanged_file_and_rejects_mutation() {
+        let dll_path = unique_temp_dll_path();
+        let original_bytes = b"MZfake-dll-original-payload";
+        let tampered_bytes = b"MZfake-dll-tampered-payload";
+
+        fs::write(&dll_path, original_bytes).expect("failed to stage temporary DLL file");
+
+        let expected_hash =
+            compute_file_hash(&dll_path).expect("failed to compute hash for staged DLL file");
+
+        verify_dll_hash(&dll_path, &expected_hash)
+            .expect("verify_dll_hash should succeed for unchanged staged DLL");
+
+        fs::write(&dll_path, tampered_bytes).expect("failed to mutate temporary DLL file");
+
+        let err = verify_dll_hash(&dll_path, &expected_hash)
+            .expect_err("verify_dll_hash should fail after staged DLL is modified");
+        let err_text = err.to_string();
+        assert!(
+            err_text.contains("hash mismatch"),
+            "expected hash mismatch error, got: {err_text}"
+        );
+
+        let _ = fs::remove_file(&dll_path);
+    }
+}
 /// Inject a DLL into a target process by PID.
 /// Uses `CreateRemoteThread` + `LoadLibraryW` (classic injection technique).
 ///
+/// Verifies SHA-256 hash before injection to close the TOCTOU window between
+/// staging and `LoadLibraryW`.
+///
 /// # Errors
 ///
-/// Returns an error if the operation fails.
+/// Returns an error if the hash check or injection fails.
 #[cfg(windows)]
-pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
+pub fn inject_dll(pid: u32, dll_path: &Path, expected_hash: &str) -> Result<()> {
     use std::os::windows::ffi::OsStrExt;
 
     use windows::Win32::Foundation::WAIT_EVENT;
@@ -158,6 +225,7 @@ pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
     }
 
     validate_dll_path(dll_path)?;
+    verify_dll_hash(dll_path, expected_hash)?;
 
     let dll_path_wide: Vec<u16> = dll_path
         .as_os_str()
@@ -399,7 +467,7 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
 }
 
 #[cfg(not(windows))]
-pub fn inject_dll(pid: u32, dll_path: &Path) -> Result<()> {
+pub fn inject_dll(pid: u32, dll_path: &Path, _expected_hash: &str) -> Result<()> {
     tracing::warn!(
         pid,
         dll = %dll_path.display(),

@@ -1,8 +1,9 @@
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use anyhow::{Context, Result, anyhow};
+use sha2::{Digest, Sha256};
 
 const MAX_PREP_ATTEMPTS: u32 = 24;
 const DLL_EXTENSION: &str = "dll";
@@ -13,6 +14,7 @@ const FILE_SHARE_READ: u32 = 0x0000_0001;
 /// replacement while injection is in-flight.
 pub struct StagedDll {
     path: PathBuf,
+    hash: String,
     _guard: std::fs::File,
 }
 
@@ -21,8 +23,65 @@ impl StagedDll {
     pub fn path(&self) -> &Path {
         &self.path
     }
+
+    /// SHA-256 hex digest of the staged payload, computed immediately after staging.
+    #[must_use]
+    pub fn hash(&self) -> &str {
+        &self.hash
+    }
 }
 
+/// Compute the SHA-256 hash of a file, returning it as a lowercase hex string.
+pub(crate) fn compute_file_hash(path: &Path) -> Result<String> {
+    let mut file = std::fs::File::open(path)
+        .with_context(|| format!("Failed to open file for hashing: {}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = file
+            .read(&mut buf)
+            .with_context(|| format!("Failed to read file for hashing: {}", path.display()))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compute_file_hash;
+    use std::io::Write;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn compute_file_hash_returns_expected_sha256_hex_digest() {
+        let unique_suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock is before UNIX_EPOCH")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "textquest_compute_file_hash_test_{}_{}.bin",
+            std::process::id(),
+            unique_suffix
+        ));
+
+        {
+            let mut file = std::fs::File::create(&path).expect("create temp file");
+            file.write_all(b"abc").expect("write known test bytes");
+            file.flush().expect("flush temp file");
+        }
+
+        let hash = compute_file_hash(&path).expect("hash temp file");
+        assert_eq!(
+            hash,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+
+        std::fs::remove_file(&path).expect("remove temp file");
+    }
+}
 /// Legitimate Microsoft DLL names used for stealth staging.
 ///
 /// These are real DLLs found alongside .NET, CLR, WPF, diagnostics, and other
@@ -233,9 +292,11 @@ pub fn prepare_dll_locked(source_dll: &Path) -> Result<StagedDll> {
 
         match stage_dll_copy_locked(source_dll, &target_path) {
             Ok(guard) => {
-                tracing::info!(name = %random_name, "Prepared locked DLL payload");
+                let hash = compute_file_hash(&target_path)?;
+                tracing::info!(name = %random_name, hash = %hash, "Prepared locked DLL payload");
                 return Ok(StagedDll {
                     path: target_path,
+                    hash,
                     _guard: guard,
                 });
             }

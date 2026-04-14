@@ -133,7 +133,7 @@ impl ClientManager {
             .ok_or_else(|| anyhow::anyhow!("Client {client_id} not found"))?;
 
         let prepared = crate::inject::dll_prep::prepare_dll_locked(dll_source)?;
-        crate::inject::loader::inject_dll(session.pid, prepared.path())?;
+        crate::inject::loader::inject_dll(session.pid, prepared.path(), prepared.hash())?;
 
         session.dll_path = Some(prepared.path().to_path_buf());
         session.hook_status = textquest_common::types::HookStatus::Injected;
