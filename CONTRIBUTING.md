@@ -159,10 +159,11 @@ cargo test -p textquest test_name     # Single test by name (substring match)
 
 ### CI Gate
 
-The required check is **"PR gate (fmt + clippy + test + python)"**. It runs on self-hosted runners:
+The required check is **"PR gate (fmt + clippy + test + python)"**. It runs on GitHub-hosted Linux.
 
-- **Windows** (Frostreaver): Rust builds, release, nightly
-- **Linux** (DigitalOcean): merge gate, secrets scan, agent automation
+- **GitHub-hosted Linux**: runs the required PR gate; secret scan also runs here
+- **Windows self-hosted**: weekly/manual release validation and tagged release builds
+- **Linux self-hosted**: issue/PR automation and Claude agent workflows
 
 Do not merge until the CI gate is green and all review conversations are resolved.
 

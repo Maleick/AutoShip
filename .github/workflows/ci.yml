@@ -6,12 +6,6 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
-    inputs:
-      run_release_build:
-        description: "Also run the Windows nightly-style build after CI"
-        required: false
-        default: false
-        type: boolean
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
@@ -69,80 +63,6 @@ jobs:
       - name: Run Rust tests
         run: cargo test --all --all-features
 
-  clippy_autofix:
-    name: Clippy autofix (apply fixes to PR)
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install native build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake clang libclang-dev llvm-dev
-          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt, clippy
-
-      - name: Cache cargo registry
-        uses: Swatinem/rust-cache@v2
-
-      - name: Run clippy with fix
-        run: cargo clippy --all --fix --allow-dirty --all-features
-
-      - name: Check if changes exist
-        id: check_changes
-        run: |
-          if git diff --quiet; then
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Commit and push clippy fixes
-        if: steps.check_changes.outputs.has_changes == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "chore: apply clippy fixes"
-          git push
-
-  coverage:
-    name: Test coverage (advisory)
-    runs-on: [self-hosted, Linux, X64, textquest]
-    timeout-minutes: 30
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install native build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake clang libclang-dev llvm-dev
-          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt, clippy
-
-      - name: Cache cargo registry
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
-
-      - name: Generate coverage report
-        run: python3 scripts/coverage-report.py --threshold 60
-
   secrets_scan:
     name: Secret scan
     runs-on: ubuntu-latest
@@ -157,10 +77,11 @@ jobs:
         with:
           extra_args: --only-verified
 
-  cargo_audit:
-    name: Cargo audit (security advisories)
+  advisory_checks:
+    name: Advisory dependency checks (manual)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -172,92 +93,13 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
 
       - name: Run cargo audit
         run: cargo audit --deny warnings
 
-  unsafe_code_report:
-    name: Unsafe code report (cargo-geiger)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: Cache cargo registry
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install cargo-geiger
-        run: cargo install cargo-geiger
-
-      - name: Run cargo-geiger
-        run: cargo geiger --output Json | python3 -m json.tool
-
-  cargo_deny:
-    name: Cargo deny (license and policy checks)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: Cache cargo registry
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install cargo-deny
-        run: cargo install cargo-deny
-
-      - name: Run cargo-deny
+      - name: Run cargo deny
         run: cargo deny check
-
-  windows:
-    name: Windows release build (manual)
-    if: github.event_name == 'workflow_dispatch' && inputs.run_release_build
-    needs: merge_gate
-    runs-on:
-      - self-hosted
-      - Windows
-      - X64
-      - textquest
-    timeout-minutes: 30
-    defaults:
-      run:
-        shell: cmd
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure Git safe directories
-        uses: ./.github/actions/configure-safe-directory
-
-      - name: Reclaim leaked browser processes on self-hosted runner
-        shell: pwsh
-        run: |
-          $browserNames = @("chrome", "msedge", "chromium")
-          $browserProcesses = @(Get-Process -Name $browserNames -ErrorAction SilentlyContinue)
-          if ($browserProcesses.Count -gt 0) {
-            Write-Warning ("Stopping {0} leaked browser process(es) before the manual Windows build." -f $browserProcesses.Count)
-            $browserProcesses | Stop-Process -Force
-          } else {
-            Write-Host "No leaked Chrome/Edge/Chromium processes detected before the manual Windows build."
-          }
-          $os = Get-CimInstance Win32_OperatingSystem
-          $freeGiB = [math]::Round(($os.FreePhysicalMemory * 1KB) / 1GB, 2)
-          $totalGiB = [math]::Round(($os.TotalVisibleMemorySize * 1KB) / 1GB, 2)
-          Write-Host ("Available physical memory before build: {0} GiB / {1} GiB" -f $freeGiB, $totalGiB)
-
-      - name: Setup Rust nightly
-        uses: ./.github/actions/setup-rust-nightly
-
-      - name: Ensure cmake on PATH
-        uses: ./.github/actions/ensure-cmake
-
-      - run: cargo build --release
-        env:
-          LIBCLANG_PATH: "C:/Program Files/LLVM/lib"

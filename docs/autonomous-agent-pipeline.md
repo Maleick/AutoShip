@@ -80,7 +80,7 @@ The PR manager may merge or enable auto-merge only when all are true:
 
 - base branch is `master`
 - PR is non-draft
-- required Windows `PR gate (fmt + clippy + test + python)` is green
+- required `PR gate (fmt + clippy + test + python)` is green
 - no unresolved review threads remain
 - the PR or linked issue has `merge:auto`
 - neither the PR nor linked issue has `human:required`, `risk:high`, or `agent:blocked`
