@@ -665,11 +665,6 @@ pub enum Command {
         /// Filters applied before returning slot snapshots.
         filter: ContainerSlotQuery,
     },
-    /// Query passive bazaar search results from the populated EQ UI.
-    QueryBazaarResults {
-        /// Filters applied before returning bazaar list snapshots.
-        filter: BazaarQuery,
-    },
     // System
     /// Heartbeat ping — expects a Pong response.
     Ping,
@@ -787,6 +782,11 @@ pub enum Command {
     /// Queries the zone's predefined safe spawn point (typically a bind point
     /// or known safe location) to avoid landing in dangerous areas.
     RequestSafeCoords(u32), // zone_id
+    /// Query passive bazaar search results from the populated EQ UI.
+    QueryBazaarResults {
+        /// Filters applied before returning bazaar list snapshots.
+        filter: BazaarQuery,
+    },
 }
 
 impl std::fmt::Debug for Command {
@@ -1025,11 +1025,6 @@ pub enum Response {
         /// Matching open container slots.
         slots: Vec<ContainerSlotInfo>,
     },
-    /// Passive bazaar list snapshots captured from visible bazaar windows.
-    BazaarResults {
-        /// Matching bazaar window snapshots.
-        windows: Vec<BazaarWindowSnapshot>,
-    },
     /// Zone adjacency graph from `ZoneGuideManagerClient`.
     /// Simplified wire format: Vec of (`zone_id`, name, `min_level`, `max_level`, connections).
     /// Each connection is (`dest_zone_id`, `transfer_type`, disabled).
@@ -1191,6 +1186,11 @@ pub enum Response {
     MovementQueueFlushed {
         /// Number of pending movements that were dropped.
         count_dropped: u32,
+    },
+    /// Passive bazaar list snapshots captured from visible bazaar windows.
+    BazaarResults {
+        /// Matching bazaar window snapshots.
+        windows: Vec<BazaarWindowSnapshot>,
     },
 }
 

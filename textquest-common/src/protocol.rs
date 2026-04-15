@@ -385,7 +385,7 @@ mod tests {
         assert_eq!(
             encoded,
             vec![
-                b'T', b'Q', b'I', b'P', 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x44,
+                b'T', b'Q', b'I', b'P', 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x43,
             ]
         );
     }

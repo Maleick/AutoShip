@@ -20,6 +20,20 @@ const MAX_BAZAAR_COLUMNS: usize = 8;
 const MAX_WINDOW_COUNT: u32 = 500;
 const MAX_CHILD_WALK: u32 = 200;
 
+#[cfg(windows)]
+fn read_value<T: Copy>(addr: usize) -> Option<T> {
+    if !crate::hooks::game_loop::is_readable(addr, std::mem::size_of::<T>()) {
+        return None;
+    }
+
+    Some(unsafe { std::ptr::read_unaligned(addr as *const T) })
+}
+
+#[cfg(windows)]
+fn read_ptr(addr: usize) -> Option<usize> {
+    read_value::<usize>(addr).filter(|value| *value != 0)
+}
+
 fn window_looks_bazaar_related(window_text: Option<&str>, window_sidl_name: Option<&str>) -> bool {
     [window_text, window_sidl_name]
         .into_iter()
@@ -236,12 +250,12 @@ unsafe fn collect_bazaar_lists_for_window(
 
     let mut snapshots = Vec::new();
     let mut stack = Vec::new();
-    let mut node = *((root_wnd + eqmain::CXWND_FIRST_NODE) as *const usize);
+    let mut node = read_ptr(root_wnd + eqmain::CXWND_FIRST_NODE).unwrap_or(0);
     let mut seeded = 0u32;
     while node != 0 && seeded < MAX_CHILD_WALK {
         seeded += 1;
         stack.push(node);
-        node = *((node + eqmain::CXWND_NEXT) as *const usize);
+        node = read_ptr(node + eqmain::CXWND_NEXT).unwrap_or(0);
     }
 
     let mut walked = 0u32;
@@ -254,10 +268,10 @@ unsafe fn collect_bazaar_lists_for_window(
         let child_text = crate::eq::widgets::read_cxstr(current + eqmain::CXWND_WINDOW_TEXT);
         let child_sidl =
             crate::eq::widgets::read_cxstr(current + eqgame::CSIDL_SCREEN_WND_SIDL_TEXT);
-        let mut child = *((current + eqmain::CXWND_FIRST_NODE) as *const usize);
+        let mut child = read_ptr(current + eqmain::CXWND_FIRST_NODE).unwrap_or(0);
         while child != 0 && walked + stack.len() as u32 <= MAX_CHILD_WALK {
             stack.push(child);
-            child = *((child + eqmain::CXWND_NEXT) as *const usize);
+            child = read_ptr(child + eqmain::CXWND_NEXT).unwrap_or(0);
         }
 
         if !list_looks_bazaar_related(child_text.as_deref(), child_sidl.as_deref()) {
@@ -313,14 +327,17 @@ unsafe fn query_bazaar_results_windows(
     let Some(mgr_addr) = rebase(PINST_CXWND_MANAGER, eq_base) else {
         return Vec::new();
     };
-    let mgr_ptr = *(mgr_addr as *const usize);
-    if mgr_ptr == 0 {
+    let Some(mgr_ptr) = read_ptr(mgr_addr as usize) else {
         return Vec::new();
-    }
+    };
 
-    let array_ptr = *((mgr_ptr + eqgame::CXWNDMGR_WINDOWS_ARRAY) as *const usize);
-    let count = *((mgr_ptr + eqgame::CXWNDMGR_WINDOWS_COUNT) as *const u32);
-    if array_ptr == 0 || count == 0 || count > MAX_WINDOW_COUNT {
+    let Some(array_ptr) = read_ptr(mgr_ptr + eqgame::CXWNDMGR_WINDOWS_ARRAY) else {
+        return Vec::new();
+    };
+    let Some(count) = read_value::<u32>(mgr_ptr + eqgame::CXWNDMGR_WINDOWS_COUNT) else {
+        return Vec::new();
+    };
+    if count == 0 || count > MAX_WINDOW_COUNT {
         return Vec::new();
     }
 
@@ -330,8 +347,10 @@ unsafe fn query_bazaar_results_windows(
             break;
         }
 
-        let wnd_ptr = *((array_ptr + idx * size_of::<usize>()) as *const usize);
-        if wnd_ptr == 0 || !crate::eq::widgets::is_visible(wnd_ptr) {
+        let Some(wnd_ptr) = read_ptr(array_ptr + idx * std::mem::size_of::<usize>()) else {
+            continue;
+        };
+        if !crate::eq::widgets::is_visible(wnd_ptr) {
             continue;
         }
 
