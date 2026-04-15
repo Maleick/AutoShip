@@ -93,13 +93,18 @@ class SebilisValidationDocsTests(unittest.TestCase):
         generated_maps = (
             REPO_ROOT / "scripts" / "generate_maps.py"
         ).read_text(encoding="utf-8")
+        orchestration_design = (
+            REPO_ROOT / "docs" / "orchestration-design.md"
+        ).read_text(encoding="utf-8")
 
         self.assertEqual(prev_camp_config["next_camp"], "sebilis_disco")
         self.assertIn("\"to_Field_of_Bone\"", generated_maps)
         self.assertIn("\"to_Trakanons_Teeth\"", generated_maps)
+        self.assertIn("Camp database for launch zones", orchestration_design)
         self.assertIn(f"`next_camp = \"{prev_camp_config['next_camp']}\"`", text)
         self.assertIn("`to_Field_of_Bone`", text)
         self.assertIn("`to_Trakanons_Teeth`", text)
+        self.assertIn("`Camp database for launch zones`", text)
         self.assertIn(
             "These routing references show current repo assumptions, not a live-confirmed Scars launch path into Sebilis.",
             text,

@@ -16,6 +16,7 @@ automation claims beyond the evidence state recorded here.
 | TextQuest has a forage automation surface that can drive `/forage` on an interval. | Research-backed | `textquest/src/camp/forage.rs` | The manager tracks attempts and result strings, but no Sebilis-specific Nodding Blue Lily baseline is captured in-repo. |
 | Timing variation and operator hardening reduce visibility. | Research-backed | `docs/wiki/Security-and-Anti-Detection-Notes.md`, `docs/wiki/Research-Anti-Detection.md` | The repo explicitly treats anti-detection value as bounded guidance rather than proof of safety. |
 | The repo already tracks missing unattended-session safeguards and telemetry as overnight requirements or gaps. | Research-backed blocker | `docs/MQ2_COVERAGE_GAP_ANALYSIS.md`, `docs/OVERNIGHT-ISSUE-SUMMARY.md` | GM alerts, auto-camp-on-death, kill or plat tracking, and session logs are documented as required or gap-tracked overnight tooling, not validated Sebilis-safe automation. |
+| Launch-zone routing support is still planned rather than proven. | Research-backed blocker | `docs/orchestration-design.md` | The orchestration roadmap still lists a `Camp database for launch zones` as unfinished TLP-launch work, so this repo does not yet present a complete launch-zone routing surface for Sebilis. |
 
 ## Research-backed inputs already in repo
 
@@ -35,6 +36,8 @@ automation claims beyond the evidence state recorded here.
   `next_camp = "sebilis_disco"`.
 - `scripts/generate_maps.py` currently labels Sebilis with
   `to_Field_of_Bone` and `to_Trakanons_Teeth` map exits.
+- `docs/orchestration-design.md` still lists `Camp database for launch zones`
+  as unfinished TLP-launch work.
 - These routing references show current repo assumptions, not a live-confirmed Scars launch path into Sebilis.
 - `config/named_mobs/sebilis.toml` records named placeholders and timer ranges
   for Trakanon, Baron Yosig, Crypt Caretaker, and Sebilite Protector.
