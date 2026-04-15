@@ -46,12 +46,13 @@ export function useCharacterConfigs() {
 
   const saveConfig = useCallback(
     async (config: CharacterConfig): Promise<void> => {
+      const { tribute_status: _tributeStatus, ...updatePayload } = config;
       const res = await fetch(
         `/api/config/characters/${encodeURIComponent(config.character_name)}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(config),
+          body: JSON.stringify(updatePayload),
         },
       );
       if (res.status === 404 || res.status === 501) {

@@ -7,7 +7,9 @@ use textquest_common::ghidra_db::GhidraDatabase;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
-use crate::{config, eq, inject, ipc, nav, orchestrator, paths, process, tui};
+use crate::{
+    box_chat, command_dispatch, config, eq, inject, ipc, nav, orchestrator, paths, process, tui,
+};
 
 use crate::{GHIDRA_DB_PATH, OPCODES_CONFIG_PATH, SOUL_DB_PATH, get_module_base};
 
@@ -205,6 +207,7 @@ fn resolve_built_dll_path() -> Result<PathBuf> {
 pub fn run_tui_mode() -> Result<()> {
     let mut app = tui::app::App::new();
     let config = load_config()?;
+    let config_path = box_chat::default_config_path();
 
     // Set server name and launch path from config
     app.server_name = config.server.name.clone();
@@ -243,6 +246,13 @@ pub fn run_tui_mode() -> Result<()> {
     {
         app.status_message = String::from("DEMO MODE — macOS build (no EQ process)");
     }
+
+    box_chat::configure(config_path, config.box_chat.clone())?;
+    box_chat::update_local_clients(
+        app.clients
+            .iter()
+            .map(|client| (client.pid, client.character_name.clone())),
+    );
 
     // Initialize Soul Engine if enabled
     if config.soul.enabled {
@@ -314,7 +324,9 @@ pub fn run_tui_mode() -> Result<()> {
     }
 
     let orchestrator = orchestrator::Orchestrator::new();
-    tui::run::run_tui(app, orchestrator)
+    let result = tui::run::run_tui(app, orchestrator);
+    box_chat::stop();
+    result
 }
 
 /// Inject mode (--inject) — find eqgame.exe processes and inject
@@ -1423,24 +1435,31 @@ pub fn run_calibrate_mode() -> Result<()> {
 ///
 /// Returns an error if the operation fails.
 pub fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
-    use textquest_common::ipc::Command;
-
     println!("Sending command to PID {pid}: {command}");
 
-    if let Some(message) = nav::try_handle_local_slash_command(pid, command)? {
-        println!("{message}");
-        return Ok(());
+    match textquest_common::box_chat::parse_slash_route(command) {
+        None => {}
+        Some(Err(error)) => return Err(anyhow::anyhow!(error)),
+        Some(Ok(_)) => {
+            let config = load_config()?;
+            box_chat::configure_connector_only(
+                box_chat::default_config_path(),
+                config.box_chat.clone(),
+            )?;
+            box_chat::update_local_clients([(pid, pid.to_string())]);
+
+            if let Some(report) = box_chat::dispatch_if_box_chat(command)? {
+                println!("{}", report.summary());
+                box_chat::stop();
+                return Ok(());
+            }
+        }
     }
 
-    let pipe = connect_authenticated_pipe(pid)?;
-    // Send the slash command (fire-and-forget — DLL disconnects pipe after read).
-    let cmd = Command::SlashCommand {
-        command: command.to_string(),
-    };
-
-    pipe.send_async(&cmd).context("Failed to send command")?;
+    command_dispatch::dispatch_local_command(pid, command).context("Failed to send command")?;
 
     println!("Command sent successfully.");
+    box_chat::stop();
 
     Ok(())
 }
@@ -1655,6 +1674,7 @@ pub fn run_dump_mode() -> Result<()> {
 /// Blocks until Ctrl+C is pressed.
 pub fn run_orchestrate_mode() -> Result<()> {
     let config = load_config()?;
+    box_chat::configure(box_chat::default_config_path(), config.box_chat.clone())?;
 
     let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
     rt.block_on(async {
@@ -1678,7 +1698,7 @@ pub fn run_orchestrate_mode() -> Result<()> {
         info!(events = events.len(), "Orchestrator loop stopped");
         eprintln!("Orchestrator loop stopped ({} events).", events.len());
     });
-
+    box_chat::stop();
     Ok(())
 }
 
@@ -1820,7 +1840,7 @@ pub fn run_dashboard_mode(port: u16, open: bool) -> Result<()> {
 }
 
 // ─── Configuration
-// ─────────────────────────────────���────────────────────────
+// ──────────────────────────────────────────────────────────
 
 /// Validate the configuration file.
 pub fn run_config_check_mode(path: Option<&str>) -> Result<()> {

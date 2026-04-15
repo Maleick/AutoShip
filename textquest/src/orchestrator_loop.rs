@@ -204,12 +204,14 @@ impl OrchestratorLoop {
                     for event in &events {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
+                    self.sync_box_chat_runtime();
                 }
                 _ = launch_interval.tick() => {
                     let events = self.tick_launch_coordinator();
                     for event in &events {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
+                    self.sync_box_chat_runtime();
                 }
                 _ = orch_interval.tick() => {
                     let events = self.tick_peer_discovery();
@@ -218,6 +220,7 @@ impl OrchestratorLoop {
                     }
                     self.orchestrator.tick();
                     self.tick_death_camp();
+                    self.sync_box_chat_runtime();
                 }
                 Ok(()) = self.shutdown_rx.changed() => {
                     if *self.shutdown_rx.borrow() {
@@ -363,6 +366,24 @@ impl OrchestratorLoop {
         }
     }
 
+    fn sync_box_chat_runtime(&self) {
+        crate::box_chat::update_local_clients(
+            self.orchestrator
+                .client_names
+                .iter()
+                .map(|(pid, name)| (*pid, name.clone())),
+        );
+        match crate::box_chat::reload_from_disk() {
+            Ok(Some(config)) => {
+                tracing::info!(?config, "Reloaded box-chat config from disk");
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(%error, "Failed to reload box-chat config from disk");
+            }
+        }
+    }
+
     fn send_death_camp_alert(
         &self,
         character_name: &str,
@@ -468,7 +489,7 @@ impl OrchestratorLoop {
 
         self.shared_password
             .as_ref()
-            .map(std::string::ToString::to_string)
+            .map(|p| p.as_str().to_string())
     }
 
     /// Run health checks on all managed clients.

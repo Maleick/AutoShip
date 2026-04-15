@@ -6,6 +6,7 @@ import {
   ShieldWarning,
   Bag,
   Brain,
+  Broadcast,
 } from "@phosphor-icons/react";
 
 export type ActiveView =
@@ -14,7 +15,8 @@ export type ActiveView =
   | "map"
   | "security"
   | "loot"
-  | "soul";
+  | "soul"
+  | "boxchat";
 
 const navItems: {
   icon: typeof Sword;
@@ -28,6 +30,7 @@ const navItems: {
   { icon: ShieldWarning, label: "Security Wards", id: "security" },
   { icon: Bag, label: "Loot Configuration", id: "loot" },
   { icon: Brain, label: "Soul Engine", id: "soul" },
+  { icon: Broadcast, label: "Network Box Chat", id: "boxchat" },
 ];
 
 interface LeftSidebarProps {

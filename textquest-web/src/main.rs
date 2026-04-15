@@ -1,8 +1,8 @@
 //! TextQuest Web Dashboard — Axum backend for the monitoring UI.
 //!
 //! The backend serves:
-//! - live health plus explicit `501` responses for unsupported session and
-//!   economy endpoints
+//! - live health, session, economy, dashboard, and per-character tuning
+//!   endpoints
 //! - loot APIs
 //! - account-management APIs backed by an in-memory registry plus optional
 //!   credential storage
@@ -116,9 +116,10 @@ fn credentials_db_path() -> PathBuf {
 /// - `event_tx` and `account_store` are always initialised empty.
 /// - `credential_store` is populated only when `TEXTQUEST_MASTER_PASSWORD` is
 ///   set in the environment; otherwise password routes return `501`.
-/// - `character_configs`, `loot_state`, `economy_state`, and `soul_audit` are
-///   seeded with in-memory state. Character-config routes are live, but the
-///   data resets on process restart until a durable backing store is wired.
+/// - `character_configs`, `loot_state`, `economy_state`, `dashboard_state`,
+///   and `soul_audit` are seeded with in-memory state. Character-config routes
+///   are live, but the data resets on process restart until a durable backing
+///   store is wired.
 fn build_state() -> Arc<AppState> {
     let (event_tx, _) = broadcast::channel::<String>(256);
     let credential_store = std::env::var("TEXTQUEST_MASTER_PASSWORD")
@@ -196,6 +197,10 @@ fn build_loot_router() -> Router<Arc<AppState>> {
 fn build_api_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(api::health))
+        .route(
+            "/box-chat/settings",
+            get(api::get_box_chat_settings).put(api::put_box_chat_settings),
+        )
         .route("/sessions", get(api::list_sessions))
         .nest("/dashboard", api::dashboard::router())
         .nest("/accounts", accounts::router())
@@ -364,7 +369,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn character_config_routes_are_mounted() {
+    async fn character_config_routes_are_live() {
         let app = build_app(build_state());
         let (status, body) = json_response(
             app.clone(),
@@ -375,44 +380,49 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::OK);
-        let configs = body.as_array().expect("character config array");
+        let configs = body.as_array().expect("character configs array");
         assert!(!configs.is_empty(), "expected demo character configs");
-        assert_eq!(configs[0]["character_name"], "Aelrindel");
-        assert!(configs[0]["auto_rez"].is_object());
-        assert!(
-            body.as_array().is_some(),
-            "list endpoint should return a json array"
-        );
+        let first = &configs[0];
+        assert_eq!(first["character_name"], "Aelrindel");
+        assert!(first["auto_rez"].is_object());
+        assert!(first.get("tribute_preferences").is_some());
+        assert!(first.get("tribute_status").is_some());
+        assert!(first.get("auto_camp_on_death").is_some());
 
         let (status, body) = json_response(
             app,
             Request::builder()
                 .method("PUT")
-                .uri("/api/config/characters/Aelrindel")
+                .uri("/api/config/characters/Frostreaver")
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
                         "character_name": "ignored",
-                        "class": "Wizard",
-                        "role": "DPS",
-                        "heal_at_pct": 50,
-                        "mana_sit_pct": 20,
-                        "nuke_at_pct": 80,
+                        "class": "Cleric",
+                        "role": "Healer",
+                        "heal_at_pct": 72,
+                        "mana_sit_pct": 28,
+                        "nuke_at_pct": 95,
                         "rotation": [],
                         "class_params": {},
                         "auto_rez": {
                             "enabled": true,
                             "min_xp_pct": 96,
-                            "trusted_casters": ["Frostreaver", "Highclerk"],
+                            "trusted_casters": ["Highclerk", "Leafbinder"],
                             "decline_if_untrusted": true,
                             "delay_ms": 5100
                         },
                         "group_override": false,
-                        "group_name": "Group 2",
+                        "group_name": "Group 1",
                         "auto_camp_on_death": {
                             "enabled": true,
                             "camp_delay_secs": 60,
                             "relog_wait_secs": 1800
+                        },
+                        "tribute_preferences": {
+                            "auto_activate": true,
+                            "warning_threshold_secs": 180,
+                            "preferred_tributes": ["Marr's Gift", "Champion's Aura"]
                         }
                     })
                     .to_string(),
@@ -421,8 +431,14 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["character_name"], "Aelrindel");
+        assert_eq!(body["character_name"], "Frostreaver");
         assert_eq!(body["auto_rez"]["min_xp_pct"], 96);
+        assert_eq!(
+            body["tribute_preferences"]["preferred_tributes"],
+            json!(["Marr's Gift", "Champion's Aura"])
+        );
+        assert_eq!(body["tribute_status"]["alert_state"], "expiring");
+        assert_eq!(body["tribute_status"]["point_balance"], json!(3_200));
         assert_eq!(body["auto_rez"]["delay_ms"], 5100);
         assert_eq!(body["auto_camp_on_death"]["camp_delay_secs"], 60);
     }

@@ -9,6 +9,8 @@ pub use paste;
 
 /// Typed, runtime-rebased function bindings.
 pub mod bindings;
+/// Box-chat config, slash-route parsing, and TCP relay wire types.
+pub mod box_chat;
 /// Chat channel types, STML stripping, and structured chat event parsing.
 pub mod chat;
 /// Combat-related shared types (class roles, spell metadata, assist targets).

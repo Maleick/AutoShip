@@ -47,6 +47,17 @@ eq_path = "C:\\Path\\To\\EverQuest"
 # node_name = "__SET_NODE_NAME__"  # Optional; empty falls back to hostname
 # multicast_ttl = 1
 
+# ─── Optional Network Box Chat ───
+# Enable this to expose an EQBC-style TCP relay for `/bc`, `/bca`, `/bcaa`,
+# and `/bct` commands across multiple TextQuest machines.
+# Set `host` to the relay server machine. When `auto_connect` is false, the
+# local TextQuest instance only listens for inbound peers on `port`.
+# [box_chat]
+# enabled = true
+# host = "192.168.1.25"
+# port = 2112
+# auto_connect = true
+
 # ─── Soul Engine ───
 # AI personality system for character behavior and social dynamics.
 # [soul]

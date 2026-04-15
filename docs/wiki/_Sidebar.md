@@ -10,6 +10,7 @@
 ## Operation
 
 - [Combat and Camp Loop](Combat-and-Camp-Loop)
+- [Sebilis Farming Validation](Sebilis-Farming-Validation)
 - [Navigation and Maps](Navigation-and-Maps)
 - [Login Automation](Login-Automation)
 - [Soul Engine](Soul-Engine)
@@ -51,6 +52,7 @@
 - [JMB Relay Comparison](Research-JMB-Relay-Comparison)
 - [KissAssist Gap Analysis](Research-KissAssist-Gap-Analysis)
 - [Local Claude](Research-Local-Claude)
+- [Monetization Opportunities](Research-Monetization-Opportunities)
 - [MQ2 Comparison](Research-MQ2-Comparison)
 - [MQ2 Deep Dive](Research-MQ2-Deep-Dive)
 - [MQ2 Launch Plugin Survey](Research-MQ2-Launch-Plugin-Survey)

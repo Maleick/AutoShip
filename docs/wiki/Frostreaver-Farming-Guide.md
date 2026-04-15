@@ -177,6 +177,12 @@ Applied to the locked roster:
 
 ### Level 50-60: Endgame Leveling (Velious Cap)
 
+Old Sebilis remains research-backed and still needs live proof for Scars-launch
+access, spawn cadence, camp overlap, Nodding Blue Lily forage rate, and
+automation risk. Use [Sebilis Farming
+Validation](Sebilis-Farming-Validation.md) as the canonical ledger before
+treating the zone as a solved overnight farm.
+
 | Zone                          | Level Range | Why                                | Multi-Group? | Notable Loot                                                                                         | Notes                                                                                                              |
 | ----------------------------- | ----------- | ---------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | **Old Sebilis**               | 50-60       | Best XP in the game for Kunark     | 4-6 groups   | Box of Nil Space, Cone of Mystics, Froglok Bonecaster's Robe, Hierophant's Cloak, Runebranded Girdle | Right wing (Disco 1+2) for lower; juggs/myconids underneath for money AND XP. Can easily absorb your entire 36-box |
