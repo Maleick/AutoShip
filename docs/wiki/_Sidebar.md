@@ -46,6 +46,7 @@
 - [EQ Zoning System](Research-EQ-Zoning-System)
 - [Hate and Sky Early Raid Targets](Research-Hate-and-Sky-Early-Raid-Targets)
 - [Hells Gate](Research-Hells-Gate)
+- [In-Demand Services](Research-In-Demand-Services)
 - [JMB Relay Comparison](Research-JMB-Relay-Comparison)
 - [KissAssist Gap Analysis](Research-KissAssist-Gap-Analysis)
 - [Local Claude](Research-Local-Claude)
