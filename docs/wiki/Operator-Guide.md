@@ -45,7 +45,7 @@ Run the preflight script to validate your setup:
 python3 scripts/dev-preflight.py
 ```
 
-This runs the same checks as CI: formatting, linting, tests, and Python validation.
+This bundles local formatting with the wiki, lint, test, and Python validation used by the required PR gate.
 
 ---
 

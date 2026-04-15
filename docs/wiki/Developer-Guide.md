@@ -211,14 +211,14 @@ cargo test
 # Python tests
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 
-# All together (recommended)
+# All together (recommended: local format + PR-gate validation)
 python3 scripts/dev-preflight.py
 ```
 
 ### 4. When You're Ready to Push
 
 ```bash
-# Ensure all checks pass
+# Ensure local format + PR-gate validation pass
 python3 scripts/dev-preflight.py
 
 # Create a feature branch

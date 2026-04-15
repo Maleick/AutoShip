@@ -95,7 +95,7 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         uses: dtolnay/rust-toolchain@nightly
         with:
-          components: rustfmt, clippy
+          components: clippy
 
       - name: Cache cargo registry
         if: steps.scope.outputs.docs_only != 'true'
@@ -111,10 +111,6 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         continue-on-error: true
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
-
-      - name: Check formatting
-        if: steps.scope.outputs.docs_only != 'true'
-        run: cargo fmt --all --check
 
       - name: Run clippy
         if: steps.scope.outputs.docs_only != 'true'
