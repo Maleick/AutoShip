@@ -40,6 +40,13 @@ describe("useCharacterConfigs", () => {
             nuke_at_pct: 80,
             rotation: [],
             class_params: {},
+            auto_rez: {
+              enabled: false,
+              min_xp_pct: 90,
+              trusted_casters: [],
+              decline_if_untrusted: false,
+              delay_ms: 0,
+            },
             group_override: false,
           },
         ])
@@ -60,6 +67,13 @@ describe("useCharacterConfigs", () => {
             nuke_at_pct: 90,
             rotation: [],
             class_params: {},
+            auto_rez: {
+              enabled: true,
+              min_xp_pct: 96,
+              trusted_casters: ["Frostreaver"],
+              decline_if_untrusted: true,
+              delay_ms: 5100,
+            },
             group_override: true,
           },
         ])
@@ -78,6 +92,13 @@ describe("useCharacterConfigs", () => {
         nuke_at_pct: 90,
         rotation: [],
         class_params: {},
+        auto_rez: {
+          enabled: true,
+          min_xp_pct: 96,
+          trusted_casters: ["Frostreaver"],
+          decline_if_untrusted: true,
+          delay_ms: 5100,
+        },
         group_override: true,
       });
     });
