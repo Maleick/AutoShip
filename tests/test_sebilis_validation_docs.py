@@ -30,7 +30,7 @@ class SebilisValidationDocsTests(unittest.TestCase):
         header = template.read_text(encoding="utf-8").splitlines()[0]
         self.assertEqual(
             header,
-            "sample_id,validated_at_utc,character,zone_path,camp_name,camp_area,target_metric,measurement_window_minutes,attempts,successes,result_per_hour,notes,evidence_state",
+            "sample_id,validated_at_utc,character,zone_path,camp_name,camp_area,target_metric,target_name,measurement_window_minutes,attempts,successes,observed_item,observed_item_count,result_per_hour,notes,evidence_state",
         )
 
     def test_farming_guide_links_to_validation_doc_and_marks_sebilis_as_unproven(self) -> None:
@@ -176,6 +176,30 @@ class SebilisValidationDocsTests(unittest.TestCase):
         self.assertIn("`Operator environment` as `High` confidence", text)
         self.assertIn(
             "These repo-grounded exposure labels do not make unattended Sebilis macroing safe.",
+            text,
+        )
+
+    def test_validation_doc_and_template_record_theorized_items_without_promoting_them_to_validated_outputs(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        template_header = (
+            REPO_ROOT / "docs" / "wiki" / "assets" / "sebilis-validation-template.csv"
+        ).read_text(encoding="utf-8").splitlines()[0]
+
+        for item_name in (
+            "Nodding Blue Lily",
+            "Runebranded Girdle",
+            "Fungi Tunic",
+            "Froglok Blood",
+        ):
+            self.assertIn(f"`{item_name}`", text)
+
+        self.assertIn("target_name", template_header)
+        self.assertIn("observed_item", template_header)
+        self.assertIn("observed_item_count", template_header)
+        self.assertIn(
+            "Record theorized Sebilis outputs as hypotheses only until a live sample observes them.",
             text,
         )
 

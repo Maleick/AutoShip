@@ -113,6 +113,11 @@ Use [sebilis-validation-template.csv](assets/sebilis-validation-template.csv)
 for live sampling. It is intentionally blank so the repo does not invent spawn,
 route, or forage numbers that were never observed.
 
+Record theorized Sebilis outputs as hypotheses only until a live sample observes them.
+Current theory items worth capturing explicitly in the template include
+`Nodding Blue Lily`, `Runebranded Girdle`, `Fungi Tunic`, and
+`Froglok Blood`.
+
 Suggested target metrics:
 
 - `route_time_minutes`
