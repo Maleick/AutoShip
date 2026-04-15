@@ -583,3 +583,45 @@ export interface PlayerWatchConfig {
   sound_on_zone_in: boolean;
   friends: string[];
 }
+
+// ── Spawn Alert types ──────────────────────────────────────────────────────────
+
+export interface SpawnAlertEntry {
+  id: number;
+  spawn_name: string;
+  zone: string;
+  is_up: boolean;
+  timestamp: string;
+  time_since_last_pop_ms: number | null;
+  match_source: string;
+}
+
+export interface WatchPattern {
+  pattern: string;
+  enabled: boolean;
+}
+
+export interface SpawnAlertConfig {
+  watch_named_enabled: boolean;
+  watch_patterns: WatchPattern[];
+  broadcast_to_web: boolean;
+  broadcast_to_clients: boolean;
+}
+
+export interface SpawnAlertStats {
+  total_alerts: number;
+  spawns_up: number;
+  spawns_down: number;
+}
+
+export interface SpawnAlertPage {
+  total: number;
+  offset: number;
+  limit: number;
+  entries: SpawnAlertEntry[];
+}
+
+export interface WatchListResponse {
+  watch_named_enabled: boolean;
+  patterns: WatchPattern[];
+}

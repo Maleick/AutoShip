@@ -64,6 +64,8 @@ pub struct AppState {
     pub player_watch_config: tokio::sync::RwLock<api::PlayerWatchConfig>,
     /// GM alert state — zone-wide GM detection status for web dashboard.
     pub gm_alert_state: Arc<api::gm_alerts::GmAlertState>,
+    /// In-memory spawn alert state for rare spawn monitoring.
+    pub spawn_alerts: Arc<api::spawn_alerts::SpawnAlertState>,
     /// Optional static API token for protecting all `/api` endpoints.
     /// Set via `TEXTQUEST_API_TOKEN` environment variable.
     /// When `None`, API endpoints are unauthenticated (localhost-only
@@ -177,6 +179,7 @@ fn build_state() -> Arc<AppState> {
         discord_state: api::discord::DiscordState::new_demo(),
         player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
+        spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
         api_token,
         live_session_snapshot_path: live_session_snapshot_path(),
         xassist_configs: api::xassist::demo_xassist_configs(),
@@ -263,6 +266,18 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .route(
             "/config/player-watch",
             get(api::get_player_watch_config).put(api::put_player_watch_config),
+        )
+        // Spawn Alerts API
+        .route(
+            "/spawn-alerts",
+            get(api::spawn_alerts::list_alerts).delete(api::spawn_alerts::clear_alerts),
+        )
+        .route("/spawn-alerts/stats", get(api::spawn_alerts::get_stats))
+        .route("/spawn-alerts/config", get(api::spawn_alerts::get_config).put(api::spawn_alerts::put_config))
+        .route("/spawn-alerts/watch-list", get(api::spawn_alerts::get_watch_list))
+        .route(
+            "/spawn-alerts/watch-list/{pattern}",
+            put(api::spawn_alerts::put_watch_pattern).delete(api::spawn_alerts::delete_watch_pattern),
         )
         .nest("/loot", build_loot_router())
         .nest("/soul", build_soul_router())
@@ -377,6 +392,7 @@ mod tests {
             discord_state: api::discord::DiscordState::new_demo(),
             player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
+            spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
             api_token: None, // No auth in tests — auth middleware is a no-op when None
             live_session_snapshot_path: path.with_file_name("live_sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),

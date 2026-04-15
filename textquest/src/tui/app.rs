@@ -31,6 +31,7 @@ use crate::{
     },
     orchestrator::Orchestrator,
 };
+
 use anyhow::Context;
 use ratatui::style::Color;
 use textquest_soul::coordinator::SoulCoordinator;
@@ -501,6 +502,10 @@ pub struct App {
     pub spawn_alert_feed: SpawnAlertFeed,
     /// Whether to auto-alert on named NPC spawns.
     pub spawn_watch_named: bool,
+    /// Rare spawn tracker for time-since-last-pop tracking.
+    pub rare_spawn_tracker: crate::eq::spawn_alert::RareSpawnTracker,
+    /// Sound alert manager for spawn events.
+    pub sound_alert_manager: crate::tui::sound::SoundAlertManager,
 
     /// Player zone notification filter mode (all, strangers only, friends only).
     pub player_notification_filter: crate::config::PlayerFilterMode,
@@ -791,6 +796,8 @@ impl App {
             sound_on_player_zone_in: false,
             player_notification_friends: std::collections::HashSet::new(),
             pending_terminal_bells: 0,
+            rare_spawn_tracker: RareSpawnTracker::new(),
+            sound_alert_manager: crate::tui::sound::SoundAlertManager::new(),
             tracked_spawns: HashMap::new(),
 
             help_visible: false,
@@ -3035,6 +3042,14 @@ impl App {
                     NamedAlert::SpawnUp { name, .. } => (name.clone(), true),
                     NamedAlert::SpawnDown { name, .. } => (name.clone(), false),
                 };
+
+                // Calculate time since last pop for UP events
+                let time_since_last_pop = if is_up {
+                    self.rare_spawn_tracker.record_spawn(&name)
+                } else {
+                    None
+                };
+
                 self.spawn_alert_feed.push(SpawnAlertEvent {
                     spawn_name: name.clone(),
                     zone: zone.clone(),
@@ -3042,14 +3057,34 @@ impl App {
                     timestamp: std::time::SystemTime::now(),
                     tick,
                     match_source: MatchSource::Named,
+                    time_since_last_pop,
                 });
+
+                // Fire sound alert for spawn events
+                let sound_event = format!("named_spawn_{}", if is_up { "up" } else { "down" });
+                if let Some(trigger) = self.sound_alert_manager.check_event(&sound_event).first() {
+                    if let Some(sound_file) = &trigger.sound_file {
+                        tracing::info!(sound_file = %sound_file, spawn = %name, "Playing sound alert for named spawn");
+                        // Sound playback would be handled by the sound system
+                    }
+                }
+
                 let label = if is_up { "UP" } else { "DOWN" };
                 let level = if is_up {
                     ToastLevel::Success
                 } else {
                     ToastLevel::Warning
                 };
-                self.set_feedback(level, format!("[Named] {name} {label} in {zone}"), true);
+
+                // Include time since last pop in the alert message if available
+                let message = if let Some(duration) = time_since_last_pop {
+                    let minutes = duration.as_secs() / 60;
+                    let seconds = duration.as_secs() % 60;
+                    format!("[Named] {name} {label} in {zone} (last: {minutes}m {seconds}s ago)")
+                } else {
+                    format!("[Named] {name} {label} in {zone}")
+                };
+                self.set_feedback(level, message, true);
             }
         }
         self.check_watched_spawn_changes();

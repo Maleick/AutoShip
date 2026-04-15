@@ -617,6 +617,7 @@ use std::path::PathBuf;
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             discord_state: crate::api::discord::DiscordState::new_demo(),
             player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
             api_token: None,
             live_session_snapshot_path: test_live_session_snapshot_path("api-sessions-ok.json"),
         });
@@ -709,6 +710,8 @@ use std::path::PathBuf;
             economy_state: crate::api::economy::EconomyState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             discord_state: crate::api::discord::DiscordState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
             api_token: None,
             live_session_snapshot_path: test_live_session_snapshot_path(
                 "api-character-configs-demo.json",
@@ -731,6 +734,8 @@ use std::path::PathBuf;
             economy_state: crate::api::economy::EconomyState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             discord_state: crate::api::discord::DiscordState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
             api_token: None,
             live_session_snapshot_path: test_live_session_snapshot_path(
                 "api-put-character-config.json",

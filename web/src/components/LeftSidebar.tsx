@@ -7,6 +7,7 @@ import {
   Bag,
   Brain,
   Broadcast,
+  Skull,
 } from "@phosphor-icons/react";
 
 export type ActiveView =
@@ -16,7 +17,8 @@ export type ActiveView =
   | "security"
   | "loot"
   | "soul"
-  | "boxchat";
+  | "boxchat"
+  | "spawns";
 
 const navItems: {
   icon: typeof Sword;
@@ -27,6 +29,7 @@ const navItems: {
   { icon: Sword, label: "Active Engagements", id: "engagements", pulse: true },
   { icon: UsersThree, label: "Fleet Formations", id: "formations" },
   { icon: Globe, label: "Realm Map (Norrath)", id: "map" },
+  { icon: Skull, label: "Rare Spawn Alerts", id: "spawns", pulse: true },
   { icon: ShieldWarning, label: "Auto-Accept Wards", id: "security" },
   { icon: Bag, label: "Loot Configuration", id: "loot" },
   { icon: Brain, label: "Soul Engine", id: "soul" },
