@@ -881,7 +881,10 @@ min_severity = "INFO"
         let config = NotificationConfig::from_file(tmp.path()).expect("from_file failed");
         assert!(config.enabled);
         assert_eq!(config.channels.len(), 1);
-        assert!(matches!(&config.channels[0].channel, NotificationChannel::Log));
+        assert!(matches!(
+            &config.channels[0].channel,
+            NotificationChannel::Log
+        ));
     }
 
     #[test]
@@ -967,16 +970,36 @@ min_severity = "INFO"
         };
 
         let info = NotificationMessage::new(
-            NotificationEvent::LootEvent, Severity::Info, "C", "z", "t", "",
+            NotificationEvent::LootEvent,
+            Severity::Info,
+            "C",
+            "z",
+            "t",
+            "",
         );
         let warning = NotificationMessage::new(
-            NotificationEvent::LootEvent, Severity::Warning, "C", "z", "t", "",
+            NotificationEvent::LootEvent,
+            Severity::Warning,
+            "C",
+            "z",
+            "t",
+            "",
         );
         let error = NotificationMessage::new(
-            NotificationEvent::LootEvent, Severity::Error, "C", "z", "t", "",
+            NotificationEvent::LootEvent,
+            Severity::Error,
+            "C",
+            "z",
+            "t",
+            "",
         );
         let critical = NotificationMessage::new(
-            NotificationEvent::LootEvent, Severity::Critical, "C", "z", "t", "",
+            NotificationEvent::LootEvent,
+            Severity::Critical,
+            "C",
+            "z",
+            "t",
+            "",
         );
 
         assert!(!config.matches(&info));
