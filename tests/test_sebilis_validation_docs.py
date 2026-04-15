@@ -343,6 +343,50 @@ class SebilisValidationDocsTests(unittest.TestCase):
             text,
         )
 
+    def test_validation_doc_records_generic_hvt_tracking_as_non_sebilis_specific_measurement_aid(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        hvt_text = (REPO_ROOT / "textquest" / "src" / "eq" / "hvt.rs").read_text(
+            encoding="utf-8"
+        )
+        puller_text = (
+            REPO_ROOT / "textquest" / "src" / "camp" / "puller.rs"
+        ).read_text(encoding="utf-8")
+        hvt_config_text = (
+            REPO_ROOT / "config" / "hvt_watchlist.toml"
+        ).read_text(encoding="utf-8")
+        operator_guide_text = (
+            REPO_ROOT / "docs" / "wiki" / "Operator-Guide.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("pub zone: String,", hvt_text)
+        self.assertIn("pub priority: HvtPriority,", hvt_text)
+        self.assertIn("pub alert_discord: bool,", hvt_text)
+        self.assertIn("Prefer HVT watchlist targets", puller_text)
+        self.assertIn("config/hvt_watchlist.toml", operator_guide_text)
+        self.assertIn("Lord Nagafen", hvt_config_text)
+        self.assertNotIn("Trakanon", hvt_config_text)
+        self.assertNotIn("Crypt Caretaker", hvt_config_text)
+        self.assertIn("generic HVT and named-priority surfaces", text)
+        self.assertIn("`zone`", text)
+        self.assertIn("`priority`", text)
+        self.assertIn("`alert_discord`", text)
+        self.assertIn("`Trakanon`", text)
+        self.assertIn("`Crypt Caretaker`", text)
+        self.assertIn(
+            "The checked-in HVT watchlist is still generic and currently does not include",
+            text,
+        )
+        self.assertIn(
+            "Sebilis names like `Trakanon` or `Crypt Caretaker`, so it does not yet serve",
+            text,
+        )
+        self.assertIn(
+            "as a Sebilis-specific named-overlap or respawn baseline.",
+            text,
+        )
+
     def test_validation_doc_and_template_record_theorized_items_without_promoting_them_to_validated_outputs(self) -> None:
         text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
             encoding="utf-8"
