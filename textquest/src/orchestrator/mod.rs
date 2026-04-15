@@ -3,22 +3,30 @@
 /// Session and group control model for the orchestrator.
 pub mod session_control;
 
-use crate::camp::cc::CcType;
-use crate::camp::config::CampConfig;
-use crate::camp::hunt::{HuntLoop, HuntSnapshot, OperatingMode, Pos2D};
-use crate::camp::progression::{CampDatabase, CampProgressionEvent, check_progression};
-use crate::camp::state::{
-    CampAction, CampEvent, CampLoop, CampMember, CampSnapshot, CampState, Role,
+use crate::{
+    camp::{
+        cc::CcType,
+        config::CampConfig,
+        hunt::{HuntLoop, HuntSnapshot, OperatingMode, Pos2D},
+        progression::{CampDatabase, CampProgressionEvent, check_progression},
+        state::{CampAction, CampEvent, CampLoop, CampMember, CampSnapshot, CampState, Role},
+        vendor::{SellCycle, SellState, VendorConfig},
+    },
+    combat::coordinator::CombatCoordinator,
+    economy::price_monitor::TradePriceMonitor,
+    ipc::{pipe::CommandPipe, shared::SharedStateReader},
 };
-use crate::camp::vendor::{SellCycle, SellState, VendorConfig};
-use crate::combat::coordinator::CombatCoordinator;
-use crate::ipc::pipe::CommandPipe;
-use crate::ipc::shared::SharedStateReader;
-use std::collections::HashMap;
-use textquest_common::combat::HateTargetCategory;
-use textquest_common::ipc::{Command, Response, SessionToken};
-use textquest_common::routing::RoutingScope;
-use textquest_common::types::GameState;
+use std::{
+    collections::HashMap,
+    path::Path,
+    time::{Duration, Instant},
+};
+use textquest_common::{
+    combat::HateTargetCategory,
+    ipc::{ChatMessageInfo, Command, Response, SessionToken},
+    routing::RoutingScope,
+    types::GameState,
+};
 
 /// Generate a cryptographically random 32-byte session token using OS entropy.
 #[allow(dead_code)] // Used when IPC is wired up in later milestones
@@ -35,6 +43,9 @@ const PROGRESSION_CHECK_INTERVAL: u64 = 50;
 
 /// Ticks before CC expiry to push a `CcExpiring` event.
 const CC_EXPIRY_BUFFER: u64 = 3;
+
+/// Poll interval for passive trade-chat capture.
+const TRADE_CHAT_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 /// Top-level orchestrator that ticks the camp loop and dispatches commands.
 pub struct Orchestrator {
@@ -73,10 +84,18 @@ pub struct Orchestrator {
     pub camp_db: Option<CampDatabase>,
     /// Suggested camp from progression check (for TUI display).
     pub suggested_camp: Option<String>,
-    /// Previous CC state snapshot for charm break detection (`spawn_id` -> `CcType`).
+    /// Previous CC state snapshot for charm break detection (`spawn_id` ->
+    /// `CcType`).
     prev_cc_state: HashMap<u32, CcType>,
     /// Previous nearby spawn IDs for add detection.
     prev_nearby_spawns: HashMap<u32, String>,
+    /// Lazy-initialized passive trade-price monitor.
+    trade_price_monitor: Option<TradePriceMonitor>,
+    /// Prevent repeated warning spam when the local trade-price DB cannot be
+    /// opened.
+    trade_price_monitor_open_failed: bool,
+    /// Last time passive trade chat was polled from the DLL.
+    last_trade_chat_poll: Option<Instant>,
 
     // --- M8 Orchestrator routing ---
     /// Active routing scope (synced from TUI `App::routing_scope` each tick).
@@ -115,6 +134,9 @@ impl Orchestrator {
             suggested_camp: None,
             prev_cc_state: HashMap::new(),
             prev_nearby_spawns: HashMap::new(),
+            trade_price_monitor: None,
+            trade_price_monitor_open_failed: false,
+            last_trade_chat_poll: None,
             routing_scope: RoutingScope::AllSession,
             scope_pids: Vec::new(),
         }
@@ -156,8 +178,9 @@ impl Orchestrator {
         }
     }
 
-    /// Build a `CampSnapshot` from live game state for the active camp's members.
-    /// Returns `None` if any critical role (tank/healer) has stale state.
+    /// Build a `CampSnapshot` from live game state for the active camp's
+    /// members. Returns `None` if any critical role (tank/healer) has stale
+    /// state.
     fn build_camp_snapshot(&self) -> Option<CampSnapshot> {
         let camp = self.active_camp.as_ref()?;
 
@@ -178,7 +201,8 @@ impl Orchestrator {
                 );
                 return None;
             }
-            // No timestamp at all means we never read state — handled by get() below
+            // No timestamp at all means we never read state — handled by get()
+            // below
         }
 
         let tank_state = self.game_states.get(&tank.pid)?;
@@ -214,7 +238,8 @@ impl Orchestrator {
             .collect();
 
         // Build per-member combat state from game state.
-        // A character is considered "in combat" if their Combatant FSM is not idle/recovering.
+        // A character is considered "in combat" if their Combatant FSM is not
+        // idle/recovering.
         let member_in_combat: Vec<(u32, bool)> = camp
             .members
             .iter()
@@ -241,13 +266,14 @@ impl Orchestrator {
         })
     }
 
-    /// Advance the camp/hunt loop (if active), collect commands, and send via IPC.
-    /// Returns the number of commands dispatched.
+    /// Advance the camp/hunt loop (if active), collect commands, and send via
+    /// IPC. Returns the number of commands dispatched.
     pub fn tick(&mut self) -> usize {
         self.tick_count += 1;
         self.last_dispatched.clear();
 
         self.poll_game_states();
+        self.poll_trade_chat_if_due();
 
         let commands = match self.operating_mode {
             OperatingMode::Camp => self.tick_camp(),
@@ -273,7 +299,8 @@ impl Orchestrator {
     /// Returns the PIDs that should receive camp/hunt loop dispatches under the
     /// current routing scope.
     ///
-    /// - `AllSession` (or an empty `scope_pids` list) → every registered client.
+    /// - `AllSession` (or an empty `scope_pids` list) → every registered
+    ///   client.
     /// - Narrowed scope → only PIDs that were pre-computed by the TUI app and
     ///   stored in `scope_pids`.
     pub fn pids_in_scope(&self) -> Vec<u32> {
@@ -284,7 +311,8 @@ impl Orchestrator {
         }
     }
 
-    /// Tick the camp loop, including sell cycle, progression checks, and event production.
+    /// Tick the camp loop, including sell cycle, progression checks, and event
+    /// production.
     fn tick_camp(&mut self) -> Vec<(u32, CampAction)> {
         let snapshot = self.build_camp_snapshot();
 
@@ -414,7 +442,8 @@ impl Orchestrator {
         }
     }
 
-    /// Check camp progression and set `suggested_camp` if the group has outleveled.
+    /// Check camp progression and set `suggested_camp` if the group has
+    /// outleveled.
     fn check_camp_progression(&mut self) {
         let Some(camp) = &self.active_camp else {
             return;
@@ -746,7 +775,8 @@ impl Orchestrator {
     }
 
     /// Send a structured IPC command to a client via named pipe.
-    /// Creates a fresh connection per command (connect → token → command → drop).
+    /// Creates a fresh connection per command (connect → token → command →
+    /// drop).
     pub(crate) fn send_ipc_command(&mut self, pid: u32, cmd: Command) {
         let name = self
             .client_names
@@ -800,6 +830,21 @@ impl Orchestrator {
         }
     }
 
+    /// Poll a client for accumulated chat messages captured by the DLL.
+    pub fn poll_chat(&mut self, pid: u32) -> Vec<ChatMessageInfo> {
+        let Some(pipe) = self.get_pipe(pid) else {
+            return Vec::new();
+        };
+        match pipe.send(&Command::PollChat) {
+            Ok(Response::ChatBatch { messages }) => messages,
+            Ok(_) => Vec::new(),
+            Err(e) => {
+                tracing::debug!(pid, error = %e, "Failed to poll chat");
+                Vec::new()
+            }
+        }
+    }
+
     /// Read raw bytes from the EQ process address space via IPC.
     /// Sends `ReadMemory` and returns `(address, bytes)` on success, or `None`
     /// if the pipe is unavailable or the DLL returns an unexpected response.
@@ -844,6 +889,100 @@ impl Orchestrator {
         self.session_tokens.remove(&pid);
         self.state_timestamps.remove(&pid);
         tracing::info!(pid, "Client removed from orchestrator");
+    }
+
+    fn poll_trade_chat_if_due(&mut self) {
+        if self
+            .last_trade_chat_poll
+            .is_some_and(|last| last.elapsed() < TRADE_CHAT_POLL_INTERVAL)
+        {
+            return;
+        }
+        self.last_trade_chat_poll = Some(Instant::now());
+
+        let pids = self.client_pids.clone();
+        if pids.is_empty() {
+            return;
+        }
+
+        let mut recorded = 0usize;
+        for pid in pids {
+            let Some((zone, local_character_name)) = self.game_states.get(&pid).map(|state| {
+                let zone = if !state.zone_short_name.is_empty() {
+                    state.zone_short_name.clone()
+                } else {
+                    state.zone_long_name.clone()
+                };
+                let local_character_name = state
+                    .local_player
+                    .as_ref()
+                    .map(|player| player.displayed_name.clone())
+                    .or_else(|| self.client_names.get(&pid).cloned());
+                (zone, local_character_name)
+            }) else {
+                continue;
+            };
+
+            let messages = self.poll_chat(pid);
+            if messages.is_empty() {
+                continue;
+            }
+
+            let Some(monitor) = self.ensure_trade_price_monitor() else {
+                return;
+            };
+
+            for message in messages {
+                let Some(chat) = textquest_common::chat::parse_chat_text(&message.text) else {
+                    continue;
+                };
+
+                match monitor.record_chat(
+                    pid,
+                    &zone,
+                    local_character_name.as_deref(),
+                    &chat,
+                    message.timestamp_ms as i64,
+                ) {
+                    Ok(true) => recorded += 1,
+                    Ok(false) => {}
+                    Err(error) => tracing::warn!(
+                        pid,
+                        zone = zone.as_str(),
+                        error = %error,
+                        "Failed to record passive trade chat"
+                    ),
+                }
+            }
+        }
+
+        if recorded > 0 {
+            tracing::info!(recorded, "Recorded passive trade-price observations");
+        }
+    }
+
+    fn ensure_trade_price_monitor(&mut self) -> Option<&mut TradePriceMonitor> {
+        if self.trade_price_monitor.is_none() {
+            match TradePriceMonitor::open(Path::new(crate::TRADE_PRICE_DB_PATH)) {
+                Ok(monitor) => {
+                    self.trade_price_monitor = Some(monitor);
+                    self.trade_price_monitor_open_failed = false;
+                }
+                Err(error) => {
+                    if !self.trade_price_monitor_open_failed {
+                        tracing::warn!(
+                            error = %error,
+                            path = crate::TRADE_PRICE_DB_PATH,
+                            "Passive trade-price monitor disabled"
+                        );
+                    }
+                    self.trade_price_monitor_open_failed = true;
+                    return None;
+                }
+            }
+        }
+
+        self.trade_price_monitor.as_mut()
     }
 
     /// Send a single slash command to a client via named pipe.
@@ -993,9 +1132,11 @@ mod tests {
 
     #[test]
     fn test_build_camp_snapshot_with_game_state() {
-        use textquest_common::combat::CombatStatus;
-        use textquest_common::nav::NavStatus;
-        use textquest_common::types::{GameState, SpawnData};
+        use textquest_common::{
+            combat::CombatStatus,
+            nav::NavStatus,
+            types::{GameState, SpawnData},
+        };
 
         let mut orch = Orchestrator::new();
         orch.start_camp(test_config(), test_members());
@@ -1086,9 +1227,11 @@ mod tests {
 
     #[test]
     fn test_stale_state_returns_none_snapshot() {
-        use textquest_common::combat::CombatStatus;
-        use textquest_common::nav::NavStatus;
-        use textquest_common::types::{GameState, SpawnData};
+        use textquest_common::{
+            combat::CombatStatus,
+            nav::NavStatus,
+            types::{GameState, SpawnData},
+        };
 
         let mut orch = Orchestrator::new();
         orch.start_camp(test_config(), test_members());
@@ -1369,9 +1512,11 @@ mod tests {
 
     #[test]
     fn test_add_detection() {
-        use textquest_common::combat::CombatStatus;
-        use textquest_common::nav::NavStatus;
-        use textquest_common::types::{GameState, SpawnData};
+        use textquest_common::{
+            combat::CombatStatus,
+            nav::NavStatus,
+            types::{GameState, SpawnData},
+        };
 
         let mut orch = Orchestrator::new();
         orch.start_camp(test_config(), test_members());

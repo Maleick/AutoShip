@@ -1,7 +1,8 @@
 //! TextQuest orchestrator crate — external process for EQ multibox control.
 //!
-//! This crate provides the TUI dashboard, process reading, IPC, client management,
-//! navigation, combat orchestration, camp loop, launcher, and the Soul Engine crate.
+//! This crate provides the TUI dashboard, process reading, IPC, client
+//! management, navigation, combat orchestration, camp loop, launcher, and the
+//! Soul Engine crate.
 
 #![allow(clippy::new_without_default)]
 
@@ -16,7 +17,8 @@ pub mod client;
 pub mod combat;
 /// TOML configuration loading.
 pub mod config;
-/// Crash reporting and session recovery — per-character context snapshots and recovery commands.
+/// Crash reporting and session recovery — per-character context snapshots and
+/// recovery commands.
 pub mod crash_reporter;
 /// Encrypted credential store (Argon2id + AES-256-GCM).
 #[allow(dead_code)]
@@ -46,7 +48,8 @@ pub mod metrics;
 pub mod nav;
 /// Orchestrator — wires camp loop state machine to IPC command delivery.
 pub mod orchestrator;
-/// Orchestrator event loop — async tick loop wiring ClientManager, LaunchCoordinator, and Orchestrator.
+/// Orchestrator event loop — async tick loop wiring ClientManager,
+/// LaunchCoordinator, and Orchestrator.
 pub mod orchestrator_loop;
 /// Shared runtime paths for logs and local state.
 pub mod paths;
@@ -66,7 +69,8 @@ pub mod testing;
 #[allow(dead_code)]
 pub mod economy;
 
-/// Zone transition management — failure codes, recovery actions, and retry logic.
+/// Zone transition management — failure codes, recovery actions, and retry
+/// logic.
 pub mod zoning;
 
 #[cfg(windows)]
@@ -79,6 +83,9 @@ pub const SOUL_DB_PATH: &str = "data/soul_memory.db";
 /// Default path for the Ghidra analysis SQLite cache.
 pub const GHIDRA_DB_PATH: &str = "data/ghidra.db";
 
+/// Default path for passive Krono trade-price observations.
+pub const TRADE_PRICE_DB_PATH: &str = "data/trade_prices.db";
+
 /// Path to the opcodes config file imported into the Ghidra DB at startup.
 pub const OPCODES_CONFIG_PATH: &str = "config/opcodes.json";
 
@@ -89,10 +96,12 @@ pub const OPCODES_CONFIG_PATH: &str = "config/opcodes.json";
 /// Returns an error if the operation fails.
 #[cfg(windows)]
 pub fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::ProcessStatus::{EnumProcessModulesEx, LIST_MODULES_ALL};
-    use windows::Win32::System::Threading::{
-        OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+    use windows::Win32::{
+        Foundation::CloseHandle,
+        System::{
+            ProcessStatus::{EnumProcessModulesEx, LIST_MODULES_ALL},
+            Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ},
+        },
     };
 
     let handle =
@@ -102,9 +111,10 @@ pub fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
     let mut modules = [windows::Win32::Foundation::HMODULE::default(); 1024];
     let mut bytes_needed: u32 = 0;
 
-    // SAFETY: `handle` is a valid process handle opened with PROCESS_QUERY_INFORMATION
-    // and PROCESS_VM_READ. `modules` is a stack-allocated array of sufficient size.
-    // `bytes_needed` receives the count of bytes written.
+    // SAFETY: `handle` is a valid process handle opened with
+    // PROCESS_QUERY_INFORMATION and PROCESS_VM_READ. `modules` is a
+    // stack-allocated array of sufficient size. `bytes_needed` receives the
+    // count of bytes written.
     unsafe {
         EnumProcessModulesEx(
             handle,
@@ -117,7 +127,8 @@ pub fn get_module_base(proc: &process::memory::ProcessHandle) -> Result<u64> {
     .context("EnumProcessModulesEx failed")?;
 
     let base = modules[0].0 as u64;
-    // SAFETY: `handle` is a valid, open handle that we own. Closing it once is correct.
+    // SAFETY: `handle` is a valid, open handle that we own. Closing it once is
+    // correct.
     let _ = unsafe { CloseHandle(handle) };
 
     Ok(base)
