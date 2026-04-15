@@ -232,6 +232,49 @@ class SebilisValidationDocsTests(unittest.TestCase):
             text,
         )
 
+    def test_validation_doc_distinguishes_rotation_and_output_priors_from_issue_only_theory(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        frostreaver_text = (
+            REPO_ROOT / "docs" / "wiki" / "Frostreaver-Farming-Guide.md"
+        ).read_text(encoding="utf-8")
+        p99_text = (REPO_ROOT / "docs" / "wiki" / "P99-Zone-Guide.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("Right wing (Disco 1+2)", frostreaver_text)
+        self.assertIn("juggs/myconids", frostreaver_text)
+        self.assertIn("5-6 groups", p99_text)
+        self.assertIn("Requires key", p99_text)
+        self.assertIn("~400pp/hr", p99_text)
+        self.assertIn("500-1000pp", frostreaver_text)
+
+        self.assertIn("### Current routing, rotation, and output theory status", text)
+        self.assertIn("Research-backed rotation theory", text)
+        self.assertIn("Research-backed route requirement", text)
+        self.assertIn("Research-backed economy theory", text)
+        self.assertIn(
+            "Current guides describe `4-6 groups` or `5-6 groups` across these camp areas, but the repo still lacks live wait-time and overlap measurements.",
+            text,
+        )
+        self.assertIn(
+            "The guide says `Requires key`, but this repo still has no live Scars-launch route or corpse-recovery sample proving the requirement in practice.",
+            text,
+        )
+        self.assertIn(
+            "These are planning priors from guides, not live TextQuest output data.",
+            text,
+        )
+        self.assertIn(
+            "Overnight Sebilis output should land around `1000-2000pp per Shaman per night`.",
+            text,
+        )
+        self.assertIn(
+            "This output target is still unanchored by repo-local evidence or live samples.",
+            text,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

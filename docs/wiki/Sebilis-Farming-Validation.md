@@ -118,6 +118,15 @@ Current theory items worth capturing explicitly in the template include
 `Nodding Blue Lily`, `Runebranded Girdle`, `Fungi Tunic`, and
 `Froglok Blood`.
 
+### Current routing, rotation, and output theory status
+
+| Claim | Current evidence state | Repo basis | Notes |
+| --- | --- | --- | --- |
+| Sebilis can support a multi-camp rotation across Disco 1+2, left wing, crypt, and juggs/myconids. | Research-backed rotation theory | `docs/wiki/Frostreaver-Farming-Guide.md`, `docs/wiki/P99-Zone-Guide.md` | Current guides describe `4-6 groups` or `5-6 groups` across these camp areas, but the repo still lacks live wait-time and overlap measurements. |
+| Sebilis access likely depends on keying before deeper farming is practical. | Research-backed route requirement | `docs/wiki/P99-Zone-Guide.md` | The guide says `Requires key`, but this repo still has no live Scars-launch route or corpse-recovery sample proving the requirement in practice. |
+| Existing research suggests Sebilis money camps may land around `~400pp/hr` at gem camp and `500-1000pp` at juggs/myconids. | Research-backed economy theory | `docs/wiki/P99-Zone-Guide.md`, `docs/wiki/Frostreaver-Farming-Guide.md` | These are planning priors from guides, not live TextQuest output data. |
+| Overnight Sebilis output should land around `1000-2000pp per Shaman per night`. | Issue-theory only | Issue `#1526` description | This output target is still unanchored by repo-local evidence or live samples. |
+
 ### Current drop theory status
 
 | Target | Current evidence state | Repo basis | Notes |
