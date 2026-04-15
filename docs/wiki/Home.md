@@ -24,6 +24,7 @@ This site is the published public docs surface. The repo-side `docs/wiki/` tree 
 - [Command Reference](Command-Reference.md)
 - [Troubleshooting](Troubleshooting.md)
 - [Project Metrics](Project-Metrics.md)
+- [Frostreaver Cost Model](Frostreaver-Cost-Model.md)
 
 ### Developers
 

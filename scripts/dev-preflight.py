@@ -395,14 +395,15 @@ def run_ci_step(name: str, results: list[CheckResult], args: list[str], fix: str
 
 
 def run_ci_checks(results: list[CheckResult], *, fix: bool, skip_tests: bool, has_fmt: bool, has_clippy: bool) -> None:
-    """Run the checks from the PR gate locally (fmt, clippy, test, python).
+    """Run local validation (fmt plus the PR gate checks).
 
     The order is optimised for fast local feedback (fmt first, then clippy,
-    then tests) and may differ from the CI workflow in ci.yml.
+    then tests), so it intentionally includes local formatting before the
+    wiki/lint/test/Python checks that the PR gate enforces in ci.yml.
     """
     print("\n")
     print("=" * 60)
-    print("  Running CI checks (covers the same checks as the PR gate)")
+    print("  Running local validation (fmt + PR gate checks)")
     print("=" * 60)
 
     # 0. Wiki sync check (CI runs this before cargo steps)

@@ -28,6 +28,7 @@
 ## Reporting
 
 - [Project Metrics](Project-Metrics)
+- [Frostreaver Cost Model](Frostreaver-Cost-Model)
 - [Troubleshooting](Troubleshooting)
 
 ## Research
@@ -37,6 +38,7 @@
 - [Automation Sources](Research-Automation-Sources)
 - [Cross-Client Control](Research-Cross-Client-Control)
 - [Daybreak Detection](Research-Daybreak-Detection)
+- [Dozekar Tear Quest Items](Research-Dozekar-Tear-Quest-Items)
 - [EQ Ability Packets](Research-EQ-Ability-Packets)
 - [EQ AntiCheat Notes](Research-EQ-AntiCheat-Notes)
 - [EQ INI Optimization](Research-EQ-INI-Optimization)
@@ -44,6 +46,7 @@
 - [EQ Network Architecture](Research-EQ-Network-Architecture)
 - [EQ Protocol](Research-EQ-Protocol)
 - [EQ Zoning System](Research-EQ-Zoning-System)
+- [Enchanter Epic Quest](Research-Enchanter-Epic-Quest)
 - [Hells Gate](Research-Hells-Gate)
 - [JMB Relay Comparison](Research-JMB-Relay-Comparison)
 - [KissAssist Gap Analysis](Research-KissAssist-Gap-Analysis)
