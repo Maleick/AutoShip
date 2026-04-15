@@ -325,6 +325,7 @@ export interface CharacterConfig {
   group_name?: string;
   tribute_preferences: TributePreferences;
   tribute_status: TributeStatus;
+  bard?: BardConfig;
 }
 
 // ── Loot configuration types ─────────────────────────────────────────────────
@@ -395,15 +396,66 @@ export interface MasterLooter {
   character: string | null;
 }
 
-// ── Soul Engine types ─────────────────────────────────────────────────────────
+// ── Bard song configuration types ────────────────────────────────────────────
 
-export type SoulMood =
-  | "content"
-  | "anxious"
-  | "focused"
-  | "bored"
-  | "excited"
-  | "melancholic";
+export type InstrumentType = "None" | "String" | "Brass" | "Wind" | "Percussion";
+
+export type InstrumentSlot = "Primary" | "Secondary";
+
+export type SongCategory =
+  | "Haste"
+  | "SpellFocus"
+  | "MeleeProc"
+  | "Crescendo"
+  | "Insult"
+  | "RunSpeed"
+  | "Regen"
+  | "Tank"
+  | "Slow"
+  | "Accelerando"
+  | "Mez"
+  | "Dot"
+  | "Arcane"
+  | "Other";
+
+export interface SongSlotConfig {
+  id: string;
+  gem: number;
+  name: string;
+  priority: number;
+  enabled: boolean;
+  min_recast_ticks: number;
+  buff_duration_ticks: number | null;
+  category: SongCategory;
+  instrument_type: InstrumentType;
+  instrument_slot: InstrumentSlot;
+}
+
+export interface InstrumentSet {
+  string_item_id: number | null;
+  brass_item_id: number | null;
+  wind_item_id: number | null;
+  percussion_item_id: number | null;
+}
+
+export interface BardConfig {
+  character_name: string;
+  twist_enabled: boolean;
+  full_rotation_enabled: boolean;
+  instrument_swap_enabled: boolean;
+  songs: SongSlotConfig[];
+  instruments: InstrumentSet[];
+}
+
+export interface BardStatus {
+  character_name: string;
+  active_songs: string[];
+  current_twist_index: number;
+  twist_active: boolean;
+  equipped_instrument: InstrumentType;
+  next_cast_gem: number | null;
+  mez_queue_size: number;
+}
 
 export interface SoulState {
   character_id: string;

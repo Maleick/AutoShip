@@ -4,8 +4,8 @@ use crate::combat::{
     mez_queue::MezQueue,
     strategy::{ClassStrategy, CombatContext},
     twist::{
-        DEFAULT_SONG_DURATION_TICKS, DEFAULT_TWIST_DELAY_TICKS, SongCategory, SongSlot,
-        TwistAction, TwistEngine,
+        DEFAULT_SONG_DURATION_TICKS, DEFAULT_TWIST_DELAY_TICKS, InstrumentSlot, InstrumentSwapAction,
+        InstrumentSwapEngine, InstrumentType, SongCategory, SongSlot, TwistAction, TwistEngine,
     },
 };
 
@@ -20,13 +20,11 @@ pub struct BardStrategy {
     twist: TwistEngine,
     melody_fallback_active: bool,
     tick: u32,
-    /// CC queue — tracks mobs that need mezzing.
     mez_queue: MezQueue,
-    /// Spell gem containing the mez song (None = no mez configured).
     mez_gem: Option<u8>,
-    /// Whether to use full-rotation (song weaving) mode.
-    /// When enabled, the twist engine restarts from song 0 every frame.
     full_rotation_enabled: bool,
+    instrument_swap: InstrumentSwapEngine,
+    instrument_swap_enabled: bool,
 }
 
 impl BardStrategy {
@@ -39,6 +37,8 @@ impl BardStrategy {
             mez_queue: MezQueue::new(4),
             mez_gem: None,
             full_rotation_enabled: false,
+            instrument_swap: InstrumentSwapEngine::new(),
+            instrument_swap_enabled: true,
         }
     }
 
@@ -51,14 +51,11 @@ impl BardStrategy {
             mez_queue: MezQueue::new(4),
             mez_gem: None,
             full_rotation_enabled: false,
+            instrument_swap: InstrumentSwapEngine::new(),
+            instrument_swap_enabled: true,
         }
     }
 
-    /// Create a bard with full-rotation song weaving enabled.
-    ///
-    /// Songs are provided in priority order. The twist engine will restart
-    /// from index 0 every frame and only re-cast songs whose buffs are
-    /// about to expire.
     pub fn with_weaving(class_id: u8, songs: Vec<SongSlot>) -> Self {
         Self {
             class_id,
@@ -72,24 +69,20 @@ impl BardStrategy {
             mez_queue: MezQueue::new(4),
             mez_gem: None,
             full_rotation_enabled: true,
+            instrument_swap: InstrumentSwapEngine::new(),
+            instrument_swap_enabled: true,
         }
     }
 
-    /// Enable or disable full-rotation (song weaving) mode.
     pub fn set_weaving(&mut self, enabled: bool) {
         self.full_rotation_enabled = enabled;
         self.twist.set_full_rotation(enabled);
     }
 
-    /// Returns whether song weaving mode is active.
     pub fn is_weaving(&self) -> bool {
         self.full_rotation_enabled
     }
 
-    /// Build a default combat song list with buff durations and categories.
-    ///
-    /// Songs are ordered by priority (highest first). The full-rotation engine
-    /// evaluates them top-to-bottom each frame.
     pub fn default_combat_songs() -> Vec<SongSlot> {
         vec![
             SongSlot {
@@ -98,6 +91,8 @@ impl BardStrategy {
                 min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
                 buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
                 category: SongCategory::Haste,
+                instrument_type: None,
+                instrument_slot: InstrumentSlot::Primary,
             },
             SongSlot {
                 gem: 2,
@@ -105,6 +100,8 @@ impl BardStrategy {
                 min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
                 buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
                 category: SongCategory::SpellFocus,
+                instrument_type: None,
+                instrument_slot: InstrumentSlot::Primary,
             },
             SongSlot {
                 gem: 3,
@@ -112,6 +109,8 @@ impl BardStrategy {
                 min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
                 buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
                 category: SongCategory::MeleeProc,
+                instrument_type: None,
+                instrument_slot: InstrumentSlot::Primary,
             },
             SongSlot {
                 gem: 4,
@@ -119,18 +118,21 @@ impl BardStrategy {
                 min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
                 buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
                 category: SongCategory::Crescendo,
+                instrument_type: None,
+                instrument_slot: InstrumentSlot::Primary,
             },
             SongSlot {
                 gem: 5,
                 priority: 10,
                 min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
-                buff_duration_ticks: None, // DD — always castable
+                buff_duration_ticks: None,
                 category: SongCategory::Insult,
+                instrument_type: None,
+                instrument_slot: InstrumentSlot::Primary,
             },
         ]
     }
 
-    /// Build a downtime song list (regen + run speed).
     pub fn default_downtime_songs() -> Vec<SongSlot> {
         vec![
             SongSlot {
@@ -139,6 +141,8 @@ impl BardStrategy {
                 min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
                 buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
                 category: SongCategory::Regen,
+                instrument_type: None,
+                instrument_slot: InstrumentSlot::Primary,
             },
             SongSlot {
                 gem: 7,
@@ -146,40 +150,35 @@ impl BardStrategy {
                 min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
                 buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
                 category: SongCategory::RunSpeed,
+                instrument_type: None,
+                instrument_slot: InstrumentSlot::Primary,
             },
         ]
     }
 
-    /// Configure the mez spell gem for CC duties.
     pub fn set_mez_gem(&mut self, gem: u8) {
         self.mez_gem = Some(gem);
     }
 
-    /// Queue a mob for mezzing. The next available twist cycle will
-    /// save target → switch → cast mez → restore target → resume rotation.
     pub fn queue_mez(&mut self, target_id: u32) {
         self.mez_queue
             .add_target(target_id, MEZ_DURATION_TICKS, self.tick);
         tracing::info!(target_id, "Bard: mez target queued");
     }
 
-    /// Record a successful mez landing — refresh the duration timer.
     pub fn record_mez_landed(&mut self, target_id: u32) {
         self.mez_queue
             .record_mez_success(target_id, MEZ_DURATION_TICKS, self.tick);
     }
 
-    /// Record a mez resist — decrement retries.
     pub fn record_mez_resist(&mut self, target_id: u32) {
         self.mez_queue.record_mez_resist(target_id);
     }
 
-    /// Remove a mez target (died, despawned, etc.).
     pub fn remove_mez_target(&mut self, target_id: u32) {
         self.mez_queue.remove_target(target_id);
     }
 
-    /// Number of mobs in the mez queue.
     pub fn mez_queue_len(&self) -> usize {
         self.mez_queue.len()
     }
@@ -207,6 +206,8 @@ impl BardStrategy {
                 min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
                 buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
                 category: SongCategory::Other,
+                instrument_type: None,
+                instrument_slot: InstrumentSlot::Primary,
             })
             .collect()
     }
@@ -221,6 +222,48 @@ impl BardStrategy {
 
     pub fn release_hold(&mut self) {
         self.twist.release_hold();
+    }
+
+    pub fn set_instrument_swap_enabled(&mut self, enabled: bool) {
+        self.instrument_swap_enabled = enabled;
+        self.instrument_swap.set_enabled(enabled);
+    }
+
+    pub fn is_instrument_swap_enabled(&self) -> bool {
+        self.instrument_swap_enabled
+    }
+
+    pub fn configure_instrument(&mut self, set_index: usize, inst_type: InstrumentType, item_id: u32) {
+        self.instrument_swap
+            .configure_instrument(set_index, inst_type, item_id);
+    }
+
+    pub fn set_equipped(&mut self, slot: InstrumentSlot, item_id: Option<u32>) {
+        self.instrument_swap.set_equipped(slot, item_id);
+    }
+
+    pub fn equipped_item(&self, slot: InstrumentSlot) -> Option<u32> {
+        self.instrument_swap.equipped_item(slot)
+    }
+
+    pub fn active_instrument_type(&self) -> Option<InstrumentType> {
+        self.instrument_swap.active_instrument_type()
+    }
+
+    pub fn prepare_for_song(&mut self, song: &SongSlot) -> InstrumentSwapAction {
+        self.instrument_swap.prepare_for_song(song)
+    }
+
+    pub fn restore_after_cast(&mut self) -> InstrumentSwapAction {
+        self.instrument_swap.restore_after_cast()
+    }
+
+    pub fn is_instrument_ready(&self, song: &SongSlot) -> bool {
+        self.instrument_swap.is_instrument_ready(song)
+    }
+
+    pub fn instrument_swap_mut(&mut self) -> &mut InstrumentSwapEngine {
+        &mut self.instrument_swap
     }
 }
 
@@ -342,6 +385,18 @@ mod tests {
             min_mana_pct: 0.0,
             priority: 1,
             is_aoe: false,
+        }
+    }
+
+    fn s(g: u8, p: u8) -> SongSlot {
+        SongSlot {
+            gem: g,
+            priority: p,
+            min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
+            buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
+            category: SongCategory::Other,
+            instrument_type: None,
+            instrument_slot: InstrumentSlot::Primary,
         }
     }
 

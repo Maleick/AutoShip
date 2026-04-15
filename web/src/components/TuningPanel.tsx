@@ -8,6 +8,7 @@ import {
   CheckSquare,
   Square,
   UsersThree,
+  MusicNotes,
 } from "@phosphor-icons/react";
 import type {
   AutoRezConfig,
@@ -18,6 +19,7 @@ import type {
 } from "../types";
 import { useCharacterConfigs } from "../hooks/useTuning";
 import { formatDuration } from "../utils/time";
+import BardSongPanel, { makeDefaultConfig } from "./BardSongPanel";
 
 const DEFAULT_AUTO_REZ_CONFIG: AutoRezConfig = {
   enabled: false,
@@ -787,6 +789,24 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
           )}
         </div>
       </section>
+
+      {/* Bard song configuration */}
+      {draft.class === "Bard" && (
+        <section>
+          <h4 className="font-archaic text-xs uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
+            <MusicNotes size={12} className="text-magentaglow" />
+            Bard Song Automation
+          </h4>
+          <div className="bg-violet/20 border border-white/5 p-4">
+            <BardSongPanel
+              config={draft.bard ?? makeDefaultConfig(draft.character_name)}
+              onSave={async (bardConfig) => {
+                setDraft({ ...draft, bard: bardConfig });
+              }}
+            />
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -862,6 +882,43 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       active_tributes: ["Stalwart Ward", "Champion's Aura"],
       alert_state: "ok",
     },
+  },
+  {
+    character_name: "Melodica",
+    class: "Bard",
+    role: "Support",
+    heal_at_pct: 60,
+    mana_sit_pct: 25,
+    nuke_at_pct: 90,
+    rotation: [
+      { id: "b1", name: "Celestial Clarity", priority: 1, enabled: true },
+      { id: "b2", name: "Aeon's Harmony", priority: 2, enabled: true },
+      { id: "b3", name: "Blade Chords", priority: 3, enabled: true },
+      { id: "b4", name: "Crescendo of the Siren", priority: 4, enabled: true },
+      { id: "b5", name: "Warless Superbia", priority: 5, enabled: false },
+    ],
+    class_params: {},
+    auto_rez: {
+      enabled: false,
+      min_xp_pct: 90,
+      trusted_casters: [],
+      decline_if_untrusted: false,
+      delay_ms: 3000,
+    },
+    group_override: false,
+    tribute_preferences: {
+      auto_activate: true,
+      warning_threshold_secs: 300,
+      preferred_tributes: [],
+    },
+    tribute_status: {
+      active: false,
+      remaining_secs: 0,
+      point_balance: 0,
+      active_tributes: [],
+      alert_state: "ok",
+    },
+    bard: makeDefaultConfig("Melodica"),
   },
 ];
 

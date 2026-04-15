@@ -1,4 +1,10 @@
 //! Bard TwistEngine — custom song rotation with priority and hold support.
+//!
+//! This module provides:
+//! - [`TwistEngine`]: Song twisting with priority, hold, and full-rotation modes
+//! - [`InstrumentSwapEngine`]: Automatic instrument equipping before song casting
+//! - [`SongCategory`]: Categorization for song rotation decisions
+//! - [`InstrumentType`]: Instrument type mapping (string, brass, wind, percussion)
 
 /// Song category for bard rotation decisions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,6 +39,60 @@ pub enum SongCategory {
     Other,
 }
 
+impl SongCategory {
+    pub fn default_instrument(&self) -> InstrumentType {
+        match self {
+            SongCategory::Haste
+            | SongCategory::MeleeProc
+            | SongCategory::Insult
+            | SongCategory::RunSpeed => InstrumentType::String,
+            SongCategory::SpellFocus
+            | SongCategory::Crescendo
+            | SongCategory::Arcane
+            | SongCategory::Regen => InstrumentType::Wind,
+            SongCategory::Tank
+            | SongCategory::Slow
+            | SongCategory::Accelerando
+            | SongCategory::Mez
+            | SongCategory::Dot
+            | SongCategory::Other => InstrumentType::Brass,
+        }
+    }
+}
+
+/// Instrument types for bard songs — MQ2BardSwap parity.
+///
+/// Each type maps to the skill bonus the instrument provides:
+/// - **String**: Wind instruments (flutes, horns) — commonly used for str/dex/haste
+/// - **Brass**: String instruments (lutes, bards) — commonly used for mana/end regen
+/// - **Wind**: Wind instruments (drums, percs) — commonly used for spell damage/buffs
+/// - **Percussion**: Percussion instruments (cymbals, bells) — rare, for specific songs
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InstrumentType {
+    #[default]
+    None,
+    String,
+    Brass,
+    Wind,
+    Percussion,
+}
+
+impl InstrumentType {
+    pub fn is_valid(&self) -> bool {
+        !matches!(self, InstrumentType::None)
+    }
+}
+
+/// Which equipment slot holds the instrument.
+///
+/// Bard instruments can be in Primary (most common) or Secondary (offhand) slots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InstrumentSlot {
+    #[default]
+    Primary,
+    Secondary,
+}
+
 #[derive(Debug, Clone)]
 pub struct SongSlot {
     pub gem: u8,
@@ -43,6 +103,25 @@ pub struct SongSlot {
     pub buff_duration_ticks: Option<u32>,
     /// Song category for rotation selection logic.
     pub category: SongCategory,
+    /// Instrument type required for this song's skill bonus.
+    /// When `None`, the default instrument for the category is used.
+    #[serde(default)]
+    pub instrument_type: Option<InstrumentType>,
+    /// Which equipment slot holds the instrument for this song.
+    #[serde(default)]
+    pub instrument_slot: InstrumentSlot,
+}
+
+impl SongSlot {
+    pub fn with_instrument(mut self, inst_type: InstrumentType, slot: InstrumentSlot) -> Self {
+        self.instrument_type = Some(inst_type);
+        self.instrument_slot = slot;
+        self
+    }
+
+    pub fn effective_instrument(&self) -> InstrumentType {
+        self.instrument_type.unwrap_or_else(|| self.category.default_instrument())
+    }
 }
 
 const TICKS_PER_SECOND: u32 = 20;
@@ -74,6 +153,15 @@ pub enum TwistAction {
         gem: u8,
     },
     Interrupt,
+    /// Equip an instrument before casting.
+    EquipInstrument {
+        instrument_slot: InstrumentSlot,
+        item_id: u32,
+    },
+    /// Restore the previous instrument after casting.
+    RestoreInstrument {
+        instrument_slot: InstrumentSlot,
+    },
 }
 
 pub struct TwistEngine {
@@ -458,6 +546,454 @@ impl TwistEngine {
     pub fn song_count(&self) -> usize {
         self.songs.len()
     }
+
+    pub fn songs(&self) -> &[SongSlot] {
+        &self.songs
+    }
+
+    pub fn get_song(&self, gem: u8) -> Option<&SongSlot> {
+        self.songs.iter().find(|s| s.gem == gem)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// InstrumentSwapEngine — MQ2BardSwap parity
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MAX_INSTRUMENT_SETS: usize = 8;
+
+#[derive(Debug, Clone, Default)]
+struct InstrumentSet {
+    string_item_id: Option<u32>,
+    brass_item_id: Option<u32>,
+    wind_item_id: Option<u32>,
+    percussion_item_id: Option<u32>,
+}
+
+impl InstrumentSet {
+    fn get(&self, inst_type: InstrumentType) -> Option<u32> {
+        match inst_type {
+            InstrumentType::String => self.string_item_id,
+            InstrumentType::Brass => self.brass_item_id,
+            InstrumentType::Wind => self.wind_item_id,
+            InstrumentType::Percussion => self.percussion_item_id,
+            InstrumentType::None => None,
+        }
+    }
+
+    fn set(&mut self, inst_type: InstrumentType, item_id: Option<u32>) {
+        match inst_type {
+            InstrumentType::String => self.string_item_id = item_id,
+            InstrumentType::Brass => self.brass_item_id = item_id,
+            InstrumentType::Wind => self.wind_item_id = item_id,
+            InstrumentType::Percussion => self.percussion_item_id = item_id,
+            InstrumentType::None => {}
+        }
+    }
+}
+
+/// Instrument swap action returned by the InstrumentSwapEngine.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InstrumentSwapAction {
+    /// No action needed — current instrument is correct.
+    None,
+    /// Equip the specified instrument.
+    Equip {
+        slot: InstrumentSlot,
+        item_id: u32,
+        instrument_type: InstrumentType,
+    },
+    /// Restore the previously equipped item.
+    Restore {
+        slot: InstrumentSlot,
+        item_id: u32,
+    },
+}
+
+impl Default for InstrumentSwapAction {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+/// Engine for automatic instrument swapping — MQ2BardSwap parity.
+///
+/// The InstrumentSwapEngine tracks:
+/// - Which instruments are available in inventory
+/// - Which instrument is currently equipped in each slot
+/// - When to swap instruments based on the song being cast
+///
+/// ## Usage
+///
+/// 1. Call `configure_instrument` for each instrument type the bard has available
+/// 2. Before casting a song, call `prepare_for_song` to get the swap action
+/// 3. After casting completes, call `restore_after_cast` to restore the original item
+///
+/// ## Example
+///
+/// ```
+/// let mut swap_engine = InstrumentSwapEngine::new();
+/// swap_engine.configure_instrument(InstrumentType::String, 1001); // Epic 1.5
+/// swap_engine.configure_instrument(InstrumentType::Wind, 1002);   // Misty Note
+///
+/// // Before casting a string song
+/// if let InstrumentSwapAction::Equip { item_id, .. } = swap_engine.prepare_for_song(
+///     &SongSlot { gem: 1, priority: 1, min_recast_ticks: 66, buff_duration_ticks: Some(240),
+///                  category: SongCategory::Haste, instrument_type: None, instrument_slot: InstrumentSlot::Primary }
+/// ) {
+///     // Equip item_id in Primary slot
+/// }
+///
+/// // After casting completes
+/// if let InstrumentSwapAction::Restore { item_id, .. } = swap_engine.restore_after_cast() {
+///     // Restore item_id to Primary slot
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct InstrumentSwapEngine {
+    instrument_sets: Vec<InstrumentSet>,
+    current_primary: Option<u32>,
+    current_secondary: Option<u32>,
+    last_swapped_type: Option<InstrumentType>,
+    last_swapped_slot: Option<InstrumentSlot>,
+    enabled: bool,
+}
+
+impl Default for InstrumentSwapEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl InstrumentSwapEngine {
+    pub fn new() -> Self {
+        Self {
+            instrument_sets: vec![InstrumentSet::default(); MAX_INSTRUMENT_SETS],
+            current_primary: None,
+            current_secondary: None,
+            last_swapped_type: None,
+            last_swapped_slot: None,
+            enabled: true,
+        }
+    }
+
+    /// Configure an instrument item for a specific instrument type.
+    ///
+    /// The `set_index` allows configuring multiple instruments of the same type
+    /// (e.g., different quality instruments for different situations).
+    pub fn configure_instrument(
+        &mut self,
+        set_index: usize,
+        inst_type: InstrumentType,
+        item_id: u32,
+    ) {
+        if set_index < MAX_INSTRUMENT_SETS && inst_type.is_valid() {
+            self.instrument_sets[set_index].set(inst_type, Some(item_id));
+        }
+    }
+
+    /// Remove an instrument from a specific set.
+    pub fn remove_instrument(&mut self, set_index: usize, inst_type: InstrumentType) {
+        if set_index < MAX_INSTRUMENT_SETS {
+            self.instrument_sets[set_index].set(inst_type, None);
+        }
+    }
+
+    /// Update the currently equipped instruments (call after equip/restore).
+    pub fn set_equipped(&mut self, slot: InstrumentSlot, item_id: Option<u32>) {
+        match slot {
+            InstrumentSlot::Primary => self.current_primary = item_id,
+            InstrumentSlot::Secondary => self.current_secondary = item_id,
+        }
+    }
+
+    /// Get the currently equipped item in a slot.
+    pub fn equipped_item(&self, slot: InstrumentSlot) -> Option<u32> {
+        match slot {
+            InstrumentSlot::Primary => self.current_primary,
+            InstrumentSlot::Secondary => self.current_secondary,
+        }
+    }
+
+    /// Enable or disable instrument swapping.
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    /// Returns whether instrument swapping is enabled.
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    /// Find the best available instrument for the given type.
+    ///
+    /// Searches through instrument sets in order and returns the first
+    /// available item ID for the requested type.
+    fn find_instrument(&self, inst_type: InstrumentType) -> Option<(u32, InstrumentSlot)> {
+        for set in &self.instrument_sets {
+            if let Some(item_id) = set.get(inst_type) {
+                return Some((item_id, InstrumentSlot::Primary));
+            }
+        }
+        None
+    }
+
+    /// Prepare to cast a song by equipping the correct instrument.
+    ///
+    /// Returns `InstrumentSwapAction::Equip` if a swap is needed,
+    /// or `InstrumentSwapAction::None` if the current instrument is correct.
+    pub fn prepare_for_song(&mut self, song: &SongSlot) -> InstrumentSwapAction {
+        if !self.enabled {
+            return InstrumentSwapAction::None;
+        }
+
+        let needed_type = song.effective_instrument();
+        let slot = song.instrument_slot;
+
+        if !needed_type.is_valid() {
+            return InstrumentSwapAction::None;
+        }
+
+        let current_item = match slot {
+            InstrumentSlot::Primary => self.current_primary,
+            InstrumentSlot::Secondary => self.current_secondary,
+        };
+
+        if let Some((item_id, _)) = self.find_instrument(needed_type) {
+            if current_item == Some(item_id) {
+                return InstrumentSwapAction::None;
+            }
+            self.last_swapped_type = Some(needed_type);
+            self.last_swapped_slot = Some(slot);
+            InstrumentSwapAction::Equip {
+                slot,
+                item_id,
+                instrument_type: needed_type,
+            }
+        } else {
+            InstrumentSwapAction::None
+        }
+    }
+
+    /// Restore the original instrument after casting completes.
+    ///
+    /// Returns `InstrumentSwapAction::Restore` if a restore is needed,
+    /// or `InstrumentSwapAction::None` if no swap occurred.
+    pub fn restore_after_cast(&mut self) -> InstrumentSwapAction {
+        if !self.enabled {
+            return InstrumentSwapAction::None;
+        }
+
+        if let (Some(_type), Some(slot)) = (self.last_swapped_type, self.last_swapped_slot) {
+            let current_item = match slot {
+                InstrumentSlot::Primary => self.current_primary,
+                InstrumentSlot::Secondary => self.current_secondary,
+            };
+
+            if let Some(restore_id) = current_item {
+                self.last_swapped_type = None;
+                self.last_swapped_slot = None;
+                return InstrumentSwapAction::Restore {
+                    slot,
+                    item_id: restore_id,
+                };
+            }
+        }
+        InstrumentSwapAction::None
+    }
+
+    /// Check if the current instrument matches the song's requirement.
+    pub fn is_instrument_ready(&self, song: &SongSlot) -> bool {
+        let needed_type = song.effective_instrument();
+        let slot = song.instrument_slot;
+
+        if !needed_type.is_valid() {
+            return true;
+        }
+
+        if let Some((item_id, _)) = self.find_instrument(needed_type) {
+            let current = match slot {
+                InstrumentSlot::Primary => self.current_primary,
+                InstrumentSlot::Secondary => self.current_secondary,
+            };
+            current == Some(item_id)
+        } else {
+            true
+        }
+    }
+
+    pub fn active_instrument_type(&self) -> Option<InstrumentType> {
+        if let Some(primary) = self.current_primary {
+            for set in &self.instrument_sets {
+                for (t, item_id) in [
+                    (InstrumentType::String, set.string_item_id),
+                    (InstrumentType::Brass, set.brass_item_id),
+                    (InstrumentType::Wind, set.wind_item_id),
+                    (InstrumentType::Percussion, set.percussion_item_id),
+                ] {
+                    if item_id == Some(primary) {
+                        return Some(t);
+                    }
+                }
+            }
+        }
+        None
+    }
+}
+
+#[cfg(test)]
+mod instrument_swap_tests {
+    use super::*;
+
+    fn make_song(gem: u8, inst_type: InstrumentType) -> SongSlot {
+        SongSlot {
+            gem,
+            priority: 1,
+            min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
+            buff_duration_ticks: Some(DEFAULT_SONG_DURATION_TICKS),
+            category: SongCategory::Haste,
+            instrument_type: Some(inst_type),
+            instrument_slot: InstrumentSlot::Primary,
+        }
+    }
+
+    #[test]
+    fn default_disabled() {
+        let engine = InstrumentSwapEngine::new();
+        assert!(engine.is_enabled());
+    }
+
+    #[test]
+    fn configure_instrument() {
+        let mut engine = InstrumentSwapEngine::new();
+        engine.configure_instrument(0, InstrumentType::String, 1001);
+        let song = make_song(1, InstrumentType::String);
+        let action = engine.prepare_for_song(&song);
+        match action {
+            InstrumentSwapAction::Equip { item_id, .. } => assert_eq!(item_id, 1001),
+            _ => panic!("Expected Equip action"),
+        }
+    }
+
+    #[test]
+    fn no_swap_when_correct_instrument() {
+        let mut engine = InstrumentSwapEngine::new();
+        engine.configure_instrument(0, InstrumentType::String, 1001);
+        engine.set_equipped(InstrumentSlot::Primary, Some(1001));
+        let song = make_song(1, InstrumentType::String);
+        assert_eq!(engine.prepare_for_song(&song), InstrumentSwapAction::None);
+    }
+
+    #[test]
+    fn swap_when_different_instrument() {
+        let mut engine = InstrumentSwapEngine::new();
+        engine.configure_instrument(0, InstrumentType::String, 1001);
+        engine.configure_instrument(0, InstrumentType::Wind, 1002);
+        engine.set_equipped(InstrumentSlot::Primary, Some(1002));
+        let song = make_song(1, InstrumentType::String);
+        let action = engine.prepare_for_song(&song);
+        match action {
+            InstrumentSwapAction::Equip { item_id, .. } => assert_eq!(item_id, 1001),
+            _ => panic!("Expected Equip action"),
+        }
+    }
+
+    #[test]
+    fn restore_after_cast() {
+        let mut engine = InstrumentSwapEngine::new();
+        engine.configure_instrument(0, InstrumentType::String, 1001);
+        engine.configure_instrument(0, InstrumentType::Wind, 1002);
+        engine.set_equipped(InstrumentSlot::Primary, Some(1002));
+        let song = make_song(1, InstrumentType::String);
+        let _ = engine.prepare_for_song(&song);
+        engine.set_equipped(InstrumentSlot::Primary, Some(1001));
+        let action = engine.restore_after_cast();
+        match action {
+            InstrumentSwapAction::Restore { item_id, .. } => assert_eq!(item_id, 1001),
+            _ => panic!("Expected Restore action"),
+        }
+    }
+
+    #[test]
+    fn no_swap_when_disabled() {
+        let mut engine = InstrumentSwapEngine::new();
+        engine.set_enabled(false);
+        engine.configure_instrument(0, InstrumentType::String, 1001);
+        engine.set_equipped(InstrumentSlot::Primary, Some(9999));
+        let song = make_song(1, InstrumentType::String);
+        assert_eq!(engine.prepare_for_song(&song), InstrumentSwapAction::None);
+    }
+
+    #[test]
+    fn instrument_type_default_instrument() {
+        assert_eq!(
+            SongCategory::Haste.default_instrument(),
+            InstrumentType::String
+        );
+        assert_eq!(
+            SongCategory::Regen.default_instrument(),
+            InstrumentType::Wind
+        );
+        assert_eq!(
+            SongCategory::Mez.default_instrument(),
+            InstrumentType::Brass
+        );
+    }
+
+    #[test]
+    fn song_slot_with_instrument() {
+        let song = SongSlot {
+            gem: 1,
+            priority: 1,
+            min_recast_ticks: 66,
+            buff_duration_ticks: Some(240),
+            category: SongCategory::Haste,
+            instrument_type: None,
+            instrument_slot: InstrumentSlot::Primary,
+        }
+        .with_instrument(InstrumentType::String, InstrumentSlot::Primary);
+        assert_eq!(song.instrument_type, Some(InstrumentType::String));
+        assert_eq!(song.instrument_slot, InstrumentSlot::Primary);
+        assert_eq!(song.effective_instrument(), InstrumentType::String);
+    }
+
+    #[test]
+    fn song_slot_effective_instrument_uses_category_default() {
+        let song = SongSlot {
+            gem: 1,
+            priority: 1,
+            min_recast_ticks: 66,
+            buff_duration_ticks: Some(240),
+            category: SongCategory::Regen,
+            instrument_type: None,
+            instrument_slot: InstrumentSlot::Primary,
+        };
+        assert_eq!(song.effective_instrument(), InstrumentType::Wind);
+    }
+
+    #[test]
+    fn multiple_instrument_sets() {
+        let mut engine = InstrumentSwapEngine::new();
+        engine.configure_instrument(0, InstrumentType::String, 1001);
+        engine.configure_instrument(1, InstrumentType::String, 1002);
+        let song = make_song(1, InstrumentType::String);
+        let action = engine.prepare_for_song(&song);
+        match action {
+            InstrumentSwapAction::Equip { item_id, .. } => {
+                assert!(item_id == 1001 || item_id == 1002)
+            }
+            _ => panic!("Expected Equip action"),
+        }
+    }
+
+    #[test]
+    fn instrument_type_is_valid() {
+        assert!(!InstrumentType::None.is_valid());
+        assert!(InstrumentType::String.is_valid());
+        assert!(InstrumentType::Brass.is_valid());
+        assert!(InstrumentType::Wind.is_valid());
+        assert!(InstrumentType::Percussion.is_valid());
+    }
 }
 
 #[cfg(test)]
@@ -471,6 +1007,8 @@ mod tests {
             min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
             buff_duration_ticks: None,
             category: SongCategory::Other,
+            instrument_type: None,
+            instrument_slot: InstrumentSlot::Primary,
         }
     }
 
@@ -481,6 +1019,8 @@ mod tests {
             min_recast_ticks: DEFAULT_TWIST_DELAY_TICKS,
             buff_duration_ticks: Some(dur),
             category: SongCategory::Haste,
+            instrument_type: None,
+            instrument_slot: InstrumentSlot::Primary,
         }
     }
 
