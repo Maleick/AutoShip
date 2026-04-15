@@ -44,6 +44,7 @@
 - [EQ Network Architecture](Research-EQ-Network-Architecture)
 - [EQ Protocol](Research-EQ-Protocol)
 - [EQ Zoning System](Research-EQ-Zoning-System)
+- [Hate and Sky Early Raid Targets](Research-Hate-and-Sky-Early-Raid-Targets)
 - [Hells Gate](Research-Hells-Gate)
 - [JMB Relay Comparison](Research-JMB-Relay-Comparison)
 - [KissAssist Gap Analysis](Research-KissAssist-Gap-Analysis)

@@ -4,6 +4,8 @@
 
 ### 36-Box Setup (6 Groups of 6)
 
+Detailed early-planar raid research now lives in [Research: Plane of Hate and Plane of Sky Early Raid Targets](Research-Hate-and-Sky-Early-Raid-Targets.md). Use that page for lockout planning, epic-component mapping, and Krono-value assumptions.
+
 ---
 
 ## Table of Contents
