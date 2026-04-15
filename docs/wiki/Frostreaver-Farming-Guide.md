@@ -79,6 +79,20 @@ This final roster does **not** maintain a separate raid-only bench. Instead, it 
 - Pet tanking is optional in farm content and explicitly unnecessary in raid planning. Mage and beastlord pets are bonus DPS and utility, not the main mitigation plan.
 - The total raid target is the full 36-character roster. The composition is deliberately stable across one-group progression, six-group farming, and full-raid nights.
 
+### Partner-Contingent Planning
+
+> `TextQuest#1588` reviewed the repository and GitHub issue history on 2026-04-15. No tracked evidence currently confirms Dave's participation or any other named partner roster commitment, so the finalized `TextQuest#1521` 36-box baseline stays unchanged until a partner's attendance and class mix are explicitly recorded.
+
+| Scenario | Current evidence state | Planning rule | Composition impact |
+| -------- | ---------------------- | ------------- | ------------------ |
+| No confirmed partners | No GitHub/repo confirmation for Dave or any other partner | Keep the locked 36-box baseline exactly as documented above | No changes |
+| Stable tank/heal-heavy partner | Partner attendance is confirmed and the partner's class mix is recorded for full-raid nights | Re-open roster planning before changing any owned accounts; do not make speculative cuts while confirmation is still missing | Candidate future cuts are redundant recovery slots, but only after the partner proves reliable enough to replace them |
+| Stable DPS/utility-heavy partner | Partner attendance is confirmed, but they are not replacing the tank/heal backbone | Preserve the current tank/heal floor and treat partner DPS as bonus throughput first | Usually no baseline changes; partner accounts act as overflow |
+| Irregular or one-off partner attendance | Partner may join some nights but is not a dependable every-raid presence | Treat partner accounts as bonus bench only and keep the owned roster self-sufficient | No permanent changes |
+
+- The documented baseline remains the default because `TextQuest#1593` and `TextQuest#1594` both reinforce survivability-first automation over speculative DPS optimization.
+- If a partner roster is later confirmed in tracked evidence, update the linked planning issue first and only then revise the canonical roster docs.
+
 ---
 
 ## Leveling Zones by Level Range
