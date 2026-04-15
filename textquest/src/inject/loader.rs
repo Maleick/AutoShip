@@ -30,10 +30,12 @@ fn dll_module_name(dll_path: &Path) -> Result<String> {
 
 #[cfg(windows)]
 fn find_remote_module_base(pid: u32, dll_name: &str) -> Result<Option<isize>> {
-    use windows::Win32::Foundation::{CloseHandle, HMODULE};
-    use windows::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, MODULEENTRY32W, Module32FirstW, Module32NextW, TH32CS_SNAPMODULE,
-        TH32CS_SNAPMODULE32,
+    use windows::Win32::{
+        Foundation::{CloseHandle, HMODULE},
+        System::Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, MODULEENTRY32W, Module32FirstW, Module32NextW,
+            TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32,
+        },
     };
 
     let snap = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid) }
@@ -97,8 +99,8 @@ fn verify_dll_hash(dll_path: &Path, expected_hash: &str) -> Result<()> {
     let actual = compute_file_hash(dll_path)?;
     if actual != expected_hash {
         anyhow::bail!(
-            "DLL payload integrity check failed — hash mismatch \
-             (expected {expected_hash}, got {actual}). Payload may have been tampered with."
+            "DLL payload integrity check failed — hash mismatch (expected {expected_hash}, got \
+             {actual}). Payload may have been tampered with."
         );
     }
     Ok(())
@@ -108,9 +110,11 @@ fn verify_dll_hash(dll_path: &Path, expected_hash: &str) -> Result<()> {
 mod tests {
     use super::verify_dll_hash;
     use crate::inject::dll_prep::compute_file_hash;
-    use std::fs;
-    use std::path::PathBuf;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     fn unique_temp_dll_path() -> PathBuf {
         let nanos = SystemTime::now()
@@ -164,17 +168,20 @@ mod tests {
 pub fn inject_dll(pid: u32, dll_path: &Path, expected_hash: &str) -> Result<()> {
     use std::os::windows::ffi::OsStrExt;
 
-    use windows::Win32::Foundation::WAIT_EVENT;
-    use windows::Win32::Foundation::{CloseHandle, HANDLE};
-    use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
-    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-    use windows::Win32::System::Memory::{
-        MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE, VirtualAllocEx, VirtualFreeEx,
-    };
-    use windows::Win32::System::Threading::{
-        CreateRemoteThread, GetExitCodeThread, OpenProcess, PROCESS_CREATE_THREAD,
-        PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
-        WaitForSingleObject,
+    use windows::Win32::{
+        Foundation::{CloseHandle, HANDLE, WAIT_EVENT},
+        System::{
+            Diagnostics::Debug::WriteProcessMemory,
+            LibraryLoader::GetModuleHandleW,
+            Memory::{
+                MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE, VirtualAllocEx, VirtualFreeEx,
+            },
+            Threading::{
+                CreateRemoteThread, GetExitCodeThread, OpenProcess, PROCESS_CREATE_THREAD,
+                PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
+                WaitForSingleObject,
+            },
+        },
     };
     const WAIT_OBJECT_0: WAIT_EVENT = WAIT_EVENT(0);
     use windows::core::w;
@@ -316,7 +323,8 @@ pub fn inject_dll(pid: u32, dll_path: &Path, expected_hash: &str) -> Result<()> 
             let wait_result = WaitForSingleObject(thread.raw(), INJECTION_TIMEOUT_MS);
             if wait_result != WAIT_OBJECT_0 {
                 anyhow::bail!(
-                    "DLL injection timed out — LoadLibrary did not complete within the timeout period"
+                    "DLL injection timed out — LoadLibrary did not complete within the timeout \
+                     period"
                 );
             }
             let mut exit_code = 0u32;
@@ -330,8 +338,8 @@ pub fn inject_dll(pid: u32, dll_path: &Path, expected_hash: &str) -> Result<()> 
         // after a successful load — use the exit code as the success signal instead.
         if thread_exit_code == 0 {
             anyhow::bail!(
-                "LoadLibraryW returned NULL — DLL failed to load in process {pid}. \
-                 Check that the DLL and its dependencies are accessible."
+                "LoadLibraryW returned NULL — DLL failed to load in process {pid}. Check that the \
+                 DLL and its dependencies are accessible."
             );
         }
 
@@ -352,8 +360,7 @@ pub fn inject_dll(pid: u32, dll_path: &Path, expected_hash: &str) -> Result<()> 
 
 #[cfg(windows)]
 fn validate_dll_path(path: &Path) -> Result<()> {
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
+    use std::{ffi::OsStr, os::windows::ffi::OsStrExt};
 
     if path.as_os_str().is_empty() {
         anyhow::bail!("DLL path is empty");
@@ -373,10 +380,11 @@ fn validate_dll_path(path: &Path) -> Result<()> {
         );
     }
 
-    // Preflight existence check. A narrow TOCTOU race window exists between this check and
-    // LoadLibraryW, but that risk is acceptable: the alternative — skipping this check — allows
-    // a false-positive success path where `ensure_remote_dll_loaded` matches a same-named module
-    // already in the target process, returning Ok without the intended payload ever loading.
+    // Preflight existence check. A narrow TOCTOU race window exists between this
+    // check and LoadLibraryW, but that risk is acceptable: the alternative —
+    // skipping this check — allows a false-positive success path where
+    // `ensure_remote_dll_loaded` matches a same-named module already in the
+    // target process, returning Ok without the intended payload ever loading.
     let meta = std::fs::metadata(path)
         .with_context(|| format!("DLL path is not accessible: {}", path.display()))?;
     if !meta.is_file() {
@@ -386,10 +394,11 @@ fn validate_dll_path(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Eject a DLL from a target process via `CreateRemoteThread(FreeLibrary, module_base)`.
+/// Eject a DLL from a target process via `CreateRemoteThread(FreeLibrary,
+/// module_base)`.
 ///
-/// Finds the DLL's module base address in the target process using a Toolhelp snapshot,
-/// then spawns a remote thread calling `FreeLibrary` on that address.
+/// Finds the DLL's module base address in the target process using a Toolhelp
+/// snapshot, then spawns a remote thread calling `FreeLibrary` on that address.
 ///
 /// # Errors
 ///
@@ -398,14 +407,19 @@ fn validate_dll_path(path: &Path) -> Result<()> {
 #[allow(dead_code)] // Will be used by graceful eject command path
 pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
     use anyhow::Context;
-    use windows::Win32::Foundation::WAIT_EVENT;
-    use windows::Win32::Foundation::{CloseHandle, HMODULE};
-    use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
-    use windows::Win32::System::Threading::{
-        CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
-        PROCESS_VM_READ, WaitForSingleObject,
+    use windows::{
+        Win32::{
+            Foundation::{CloseHandle, HMODULE, WAIT_EVENT},
+            System::{
+                LibraryLoader::{GetModuleHandleW, GetProcAddress},
+                Threading::{
+                    CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD,
+                    PROCESS_QUERY_INFORMATION, PROCESS_VM_READ, WaitForSingleObject,
+                },
+            },
+        },
+        core::w,
     };
-    use windows::core::w;
     const WAIT_OBJECT_0: WAIT_EVENT = WAIT_EVENT(0);
 
     let Some(module_base) = find_remote_module_base(pid, dll_name)?.map(HMODULE) else {
@@ -423,7 +437,8 @@ pub fn eject_dll(pid: u32, dll_name: &str) -> Result<()> {
     .context("OpenProcess failed for eject")?;
 
     let result = (|| -> Result<()> {
-        // Get FreeLibrary address from kernel32 — identical in all processes on x64 Windows.
+        // Get FreeLibrary address from kernel32 — identical in all processes on x64
+        // Windows.
         let kernel32 = unsafe { GetModuleHandleW(w!("kernel32.dll")) }
             .context("Failed to get kernel32 handle")?;
 
@@ -521,7 +536,8 @@ mod tests {
     fn validate_dll_path_rejects_nonexistent_file() {
         use super::validate_dll_path;
         // A path with the right extension but no file on disk must be rejected,
-        // even if a same-named module could theoretically be present in a target process.
+        // even if a same-named module could theoretically be present in a target
+        // process.
         let err = validate_dll_path(Path::new(r"C:\nonexistent_dir\payload.dll")).unwrap_err();
         let msg = err.to_string();
         assert!(

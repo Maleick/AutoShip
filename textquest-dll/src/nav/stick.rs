@@ -13,16 +13,20 @@
 //! | `/stick id #`      | Stick to a specific spawn ID regardless of current target  |
 //! | `/stick moveback`  | Back up when target walks closer than stick distance       |
 
-use textquest_common::nav::{NavStatus, StickConfig, StickDistance, StickMode, Waypoint};
-use textquest_common::types::SpawnData;
+use textquest_common::{
+    nav::{NavStatus, StickConfig, StickDistance, StickMode, Waypoint},
+    types::SpawnData,
+};
 
 /// Default stick distance in EQ units when no explicit distance is configured.
 pub const DEFAULT_STICK_DISTANCE: f32 = 15.0;
 
-/// Minimum effective stick distance — prevents jitter when distance_mod is very negative.
+/// Minimum effective stick distance — prevents jitter when distance_mod is very
+/// negative.
 const MIN_STICK_DISTANCE: f32 = 3.0;
 
-/// How close the player must be to the desired stick position before movement stops.
+/// How close the player must be to the desired stick position before movement
+/// stops.
 pub const STICK_ARRIVAL_THRESHOLD: f32 = 2.0;
 
 /// Result of one [`StickEngine::tick`] call.
@@ -55,7 +59,8 @@ pub enum StickTickResult {
     TooClose {
         target_id: u32,
         distance: f32,
-        /// The position to retreat toward (away from target, at stick distance).
+        /// The position to retreat toward (away from target, at stick
+        /// distance).
         retreat_pos: Waypoint,
     },
 }
@@ -63,7 +68,8 @@ pub enum StickTickResult {
 /// The stick-to-target engine for one EQ client.
 pub struct StickEngine {
     config: StickConfig,
-    /// Spawn ID locked at stick-start time (populated when `hold` or `id` is set).
+    /// Spawn ID locked at stick-start time (populated when `hold` or `id` is
+    /// set).
     locked_id: Option<u32>,
     /// Whether a stick session is currently active.
     active: bool,
@@ -112,8 +118,9 @@ impl StickEngine {
 
     /// Apply a distance modifier delta (`/stick mod #`).
     ///
-    /// Adds `delta` to `config.distance_mod`.  May be called while a stick session
-    /// is active or before one starts (the mod persists until `stop()` is called).
+    /// Adds `delta` to `config.distance_mod`.  May be called while a stick
+    /// session is active or before one starts (the mod persists until
+    /// `stop()` is called).
     pub fn apply_mod(&mut self, delta: f32) {
         self.config.distance_mod += delta;
         tracing::debug!(
@@ -130,9 +137,11 @@ impl StickEngine {
     /// Compute one tick of stick logic.
     ///
     /// # Parameters
-    /// - `player_pos`       — current player position (from `MovementController::read_position`)
+    /// - `player_pos`       — current player position (from
+    ///   `MovementController::read_position`)
     /// - `current_target`   — game's current target (may be `None`)
-    /// - `nearby`           — nearby spawn snapshot (used for `id` / `hold` lookup)
+    /// - `nearby`           — nearby spawn snapshot (used for `id` / `hold`
+    ///   lookup)
     pub fn tick(
         &self,
         player_pos: &Waypoint,
@@ -214,7 +223,8 @@ impl StickEngine {
         }
     }
 
-    /// Resolve the current stick target and convert it into a warp-monitor sample.
+    /// Resolve the current stick target and convert it into a warp-monitor
+    /// sample.
     pub fn target_sample(
         &self,
         current_target: Option<&SpawnData>,
@@ -227,7 +237,8 @@ impl StickEngine {
             })
     }
 
-    /// Whether the current stick session should remain armed when the target is lost.
+    /// Whether the current stick session should remain armed when the target is
+    /// lost.
     pub fn keep_armed_on_target_loss(&self) -> bool {
         self.active && self.config.always
     }
@@ -280,7 +291,8 @@ impl StickEngine {
 }
 
 /// Compute the position that is `desired_dist` EQ units from `target` along
-/// the line from `target` toward `player`.  Used to find the "stand here" point.
+/// the line from `target` toward `player`.  Used to find the "stand here"
+/// point.
 fn lerp_toward(
     player: &Waypoint,
     target: &Waypoint,
@@ -339,8 +351,9 @@ fn position_at_angle(target: &Waypoint, angle: f32, dist: f32) -> Waypoint {
 
 /// Compute the desired stick position with arc mode awareness.
 ///
-/// For `StickMode::Any`, this is equivalent to `lerp_toward` (approach from current direction).
-/// For arc modes, the character is steered into the target arc defined by the target's heading.
+/// For `StickMode::Any`, this is equivalent to `lerp_toward` (approach from
+/// current direction). For arc modes, the character is steered into the target
+/// arc defined by the target's heading.
 fn arc_position(
     player: &Waypoint,
     target: &Waypoint,
@@ -372,7 +385,8 @@ fn arc_position(
         }
 
         StickMode::NotFront => {
-            // Exclude the frontal cone. If player is in the front arc, steer to nearest edge.
+            // Exclude the frontal cone. If player is in the front arc, steer to nearest
+            // edge.
             let half_front = (not_front_arc_deg.clamp(5.1, 259.9) / 2.0).to_radians();
             let diff = normalize_angle(player_angle - face_rad);
             if diff.abs() < half_front {
@@ -625,7 +639,8 @@ mod tests {
         let mut config = StickConfig::default();
         config.distance = StickDistance::Absolute(10.0);
         engine.start(config, None);
-        // Player at (0,0), target at (50,0) → distance 50, effective dist 10 → OutOfRange
+        // Player at (0,0), target at (50,0) → distance 50, effective dist 10 →
+        // OutOfRange
         let player = player_at(0.0, 0.0);
         let target = make_spawn(5, 50.0, 0.0);
         match engine.tick(&player, Some(&target), &[]) {
@@ -638,9 +653,9 @@ mod tests {
                 assert_eq!(target_id, 5);
                 assert!((distance - 50.0).abs() < 0.1);
                 // Desired position should be ~10 units from target toward player (x-axis).
-                // Target at x=50, player at x=0 → desired x ≈ 50 - 10*(-1) = wait, let me recalculate.
-                // unit vec from target toward player: dx = (0-50)/50 = -1, dy = 0
-                // desired = (50 + (-1)*10, 0) = (40, 0)
+                // Target at x=50, player at x=0 → desired x ≈ 50 - 10*(-1) = wait, let me
+                // recalculate. unit vec from target toward player: dx =
+                // (0-50)/50 = -1, dy = 0 desired = (50 + (-1)*10, 0) = (40, 0)
                 assert!((desired_pos.x - 40.0).abs() < 0.2);
                 assert!(desired_pos.y.abs() < 0.2);
             }

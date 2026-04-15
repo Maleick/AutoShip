@@ -44,7 +44,8 @@ use ratatui::{
 use super::widgets::{panel, themed_header_row};
 use crate::tui::app::App;
 
-// ── Zone FSM state ────────────────────────────────────────────────────────────
+// ── Zone FSM state
+// ────────────────────────────────────────────────────────────
 
 /// Current phase in the zoning FSM.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,7 +116,8 @@ impl ZoneStatusState {
     }
 }
 
-// ── Color helpers ─────────────────────────────────────────────────────────────
+// ── Color helpers
+// ─────────────────────────────────────────────────────────────
 
 /// Returns the status color for a zone client entry.
 fn zone_status_color(status: &ZoneClientStatus, t: &crate::tui::theme::Theme) -> Color {
@@ -263,9 +265,11 @@ pub fn draw_zone_status_legend(frame: &mut Frame, area: ratatui::layout::Rect, a
     frame.render_widget(Paragraph::new(line), area);
 }
 
-// ── Demo data helpers ─────────────────────────────────────────────────────────
+// ── Demo data helpers
+// ─────────────────────────────────────────────────────────
 
-/// Populate zone status state with demo data for TUI preview mode (macOS / no live EQ).
+/// Populate zone status state with demo data for TUI preview mode (macOS / no
+/// live EQ).
 pub fn load_demo_zone_statuses(state: &mut ZoneStatusState, clients: &[(u32, &str)]) {
     let demo_entries = [
         (ZoneFsmState::Idle, false, None, "commons"),

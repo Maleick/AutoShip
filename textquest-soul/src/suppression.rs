@@ -1,10 +1,10 @@
 use serde::Deserialize;
-use textquest_common::combat::CombatStatus;
-use textquest_common::nav::NavStatus;
-use textquest_common::soul::IdleBehaviorType;
-use textquest_common::types::GameState;
+use textquest_common::{
+    combat::CombatStatus, nav::NavStatus, soul::IdleBehaviorType, types::GameState,
+};
 
-/// Configuration for when soul actions should be suppressed based on game state.
+/// Configuration for when soul actions should be suppressed based on game
+/// state.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct SuppressionRules {

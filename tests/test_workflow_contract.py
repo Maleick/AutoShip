@@ -55,6 +55,7 @@ class WorkflowContractTests(unittest.TestCase):
         advisory_checks = self._job_block(text, "advisory_checks")
 
         self.assertIn("    runs-on: ubuntu-latest", merge_gate)
+        self.assertNotIn("        run: cargo fmt --all --check", merge_gate)
         self.assertIn("    name: Secret scan", secrets_scan)
         self.assertIn("    name: Advisory dependency checks (manual)", advisory_checks)
         self.assertIn("    if: github.event_name == 'workflow_dispatch'", advisory_checks)

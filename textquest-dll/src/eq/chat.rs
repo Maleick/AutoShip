@@ -1,9 +1,9 @@
 //! Direct memory-read access to the EQ chat window manager.
 //!
-//! Reads chat text stored inside `CChatWindowManager` → `CChatWindow` → `CStmlWnd`
-//! → `STextLine` linked list.  This path gives access to chat *history* already
-//! displayed in a chat window, complementing the `dsp_chat` HWBP hook which only
-//! captures messages as they arrive.
+//! Reads chat text stored inside `CChatWindowManager` → `CChatWindow` →
+//! `CStmlWnd` → `STextLine` linked list.  This path gives access to chat
+//! *history* already displayed in a chat window, complementing the `dsp_chat`
+//! HWBP hook which only captures messages as they arrive.
 //!
 //! # Usage
 //!
@@ -196,7 +196,8 @@ unsafe fn read_all_chat_window_lines_impl(
 /// (a `CStmlWnd`) and collect up to `max_lines` rendered text lines.
 ///
 /// Lines are returned most-recent first (tail-to-head order).
-/// Color metadata is not available at this path (use the `dsp_chat` hook for that).
+/// Color metadata is not available at this path (use the `dsp_chat` hook for
+/// that).
 #[cfg(windows)]
 unsafe fn read_stml_lines(window_ptr: usize, max_lines: usize) -> Vec<ChatMessageInfo> {
     if max_lines == 0 {

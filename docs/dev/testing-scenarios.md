@@ -105,6 +105,58 @@ Tests camp stability across zone transitions:
 - Marks the camp as stable
 - Verifies the camp remained in a consistent state
 
+## Survivability-Core Recovery Scenarios
+
+Issue `TextQuest#1594` adds a design constraint for unattended automation: scenario coverage should prove that groups with the survivability core fail soft when tanks, healers, or add control break down. These do not all need to exist in the codebase yet, but they are the minimum scenario set to add as the camp loop and combat engine harden.
+
+### 1. `TankDeathPromotesPickupScenario`
+
+Use a group with an actual pickup tank (`PAL` or `SK`) and verify that tank death does not immediately collapse the camp.
+
+- Start in `Fighting` with a stable target lock
+- Mark the main tank dead in the next snapshot
+- Expect the camp loop to suppress new pulls and emit metadata such as `pickup_tank_promoted: true`
+- Verify the backup tank receives the aggro/assist commands and the healer target swaps to that actor
+- Pass only if the group remains in recovery or fighting state without transitioning straight to wipe/reset
+
+### 2. `TankDeathStallAndDisengageScenario`
+
+Use a warrior-led group without a real backup tank and verify that the group stalls rather than pretending a DPS character can absorb the fight indefinitely.
+
+- Start from the standard melee pod (`WAR / CLR / BRD / SHM / MNK / MNK`)
+- Kill the main tank in a snapshot while the mob is still alive
+- Expect new pulls to be blocked and metadata such as `stall_mode_enabled: true`
+- Verify bard peel/mez or disengage commands are emitted before burn or re-engage commands
+- Pass only if the scenario ends in controlled disengage, regroup, or corpse recovery instead of full-group death
+
+### 3. `PrimaryHealerDeathSecondaryHealerTakeoverScenario`
+
+Verify that the second healer becomes the temporary primary healer and that DPS backs off while coverage is thin.
+
+- Start with `CLR + SHM` or `CLR + PAL` healer coverage
+- Mark the cleric dead while tank HP is trending down
+- Expect metadata such as `secondary_healer_takeover: true` and `new_pull_suppressed: true`
+- Verify the surviving healer receives direct-heal commands and DPS receives reduced-burn or mana-light instructions
+- Pass only if the tank survives long enough to finish the fight or execute an orderly disengage
+
+### 4. `UnexpectedAddPickupScenario`
+
+Verify that a named add, bad split, or mez resist forces control-first behavior.
+
+- Start a normal pull, then inject a second hostile target before the kill target is dead
+- Expect the camp loop to pause pull advancement and emit `unexpected_add_isolated: true` only after control lands
+- Verify the first-line response is bard or CC control, with pickup-tank commands only if control fails
+- Pass only if the primary target remains stable and the group does not continue normal burn while the add is loose
+
+### 5. `CoreBrokenAbortScenario`
+
+Verify that the automation chooses the least-loss retreat path when the survivability core is gone.
+
+- Remove the second healer and introduce either healer death or multiple uncontrolled adds
+- Expect metadata such as `recovery_floor_broken: true`
+- Verify the scenario issues evac, disengage, or regroup commands instead of continuing the damage rotation
+- Pass only if the system chooses orderly retreat over optimistic all-in combat
+
 ## Running Scenarios
 
 ### Run all scenario tests:

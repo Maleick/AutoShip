@@ -1,14 +1,13 @@
 //! DLL-side login automation — drives EQ's login UI autonomously.
 //!
 //! The orchestrator sends credentials once via `StartLogin`; the FSM handles
-//! all UI steps (credential entry, server select, character select, enter world)
-//! and reports progress back via `LoginPhaseUpdate` IPC responses.
+//! all UI steps (credential entry, server select, character select, enter
+//! world) and reports progress back via `LoginPhaseUpdate` IPC responses.
 
 pub mod eqmain;
 pub mod widgets;
 
-use std::sync::Mutex;
-use std::time::Instant;
+use std::{sync::Mutex, time::Instant};
 
 use textquest_common::login::{LoginError, LoginPhase, RelogConfig, RelogPhase, RetryState};
 use zeroize::Zeroizing;
@@ -69,7 +68,8 @@ pub fn advance_to_server_select() {
             fsm.action_taken = true;
             fsm.transition(State::WaitForServerSelect);
             tracing::info!(
-                "FSM advanced to WaitForServerSelect (credentials already written by GiveTime hook)"
+                "FSM advanced to WaitForServerSelect (credentials already written by GiveTime \
+                 hook)"
             );
         }
     }
@@ -149,7 +149,8 @@ pub fn switch_character(character_name: String) {
     }
 }
 
-/// Check if the login FSM has completed (in world, error, or idle after completion).
+/// Check if the login FSM has completed (in world, error, or idle after
+/// completion).
 pub fn is_done() -> bool {
     let guard = LOGIN_FSM
         .lock()
@@ -159,7 +160,8 @@ pub fn is_done() -> bool {
         .is_none_or(|fsm| matches!(fsm.state, State::InWorld | State::Error(_) | State::Idle))
 }
 
-/// Internal states for the login FSM — more granular than the IPC-facing `LoginPhase`.
+/// Internal states for the login FSM — more granular than the IPC-facing
+/// `LoginPhase`.
 #[derive(Debug, Clone, PartialEq)]
 enum State {
     Idle,
@@ -202,9 +204,10 @@ enum ConflictDialog {
 
 /// Credentials stored temporarily in memory, zeroized after use.
 ///
-/// The `password` field uses `Zeroizing<String>` which overwrites the heap buffer
-/// with volatile zeroes on drop — preventing compiler optimization from eliding the
-/// zeroing and covering prior heap reallocations that a manual loop would miss.
+/// The `password` field uses `Zeroizing<String>` which overwrites the heap
+/// buffer with volatile zeroes on drop — preventing compiler optimization from
+/// eliding the zeroing and covering prior heap reallocations that a manual loop
+/// would miss.
 struct Credentials {
     account_name: String,
     password: Zeroizing<String>,
@@ -217,7 +220,8 @@ fn issue_slash_command(cmd: &str) {
     crate::hooks::game_loop::queue_slash_command(cmd.to_string());
 }
 
-/// The login state machine. Drives EQ's login UI from credential entry to in-world.
+/// The login state machine. Drives EQ's login UI from credential entry to
+/// in-world.
 pub struct LoginFsm {
     state: State,
     /// Current IPC-facing phase (sent to orchestrator).
@@ -226,7 +230,8 @@ pub struct LoginFsm {
     credentials: Option<Credentials>,
     /// Server name — kept after credential zeroization for server selection.
     server_name: String,
-    /// Character name — kept after credential zeroization for character selection.
+    /// Character name — kept after credential zeroization for character
+    /// selection.
     character_name: String,
     /// Timestamp when we entered the current state (for timeout detection).
     state_entered_at: Instant,
@@ -240,7 +245,8 @@ pub struct LoginFsm {
     eqmain_base: u64,
     /// Ticks since entering current state (for action throttling).
     ticks_in_state: u32,
-    /// Whether we've performed the action for this state (prevents double-actions).
+    /// Whether we've performed the action for this state (prevents
+    /// double-actions).
     action_taken: bool,
     // ── Relog state ──
     /// Active relog configuration (set when a relog is in progress).
@@ -286,7 +292,8 @@ impl LoginFsm {
             character = %character_name,
             "Login credentials received (password redacted)"
         );
-        // Keep server/character names separately — they're needed after password zeroization
+        // Keep server/character names separately — they're needed after password
+        // zeroization
         self.server_name = server_name.clone();
         self.character_name = character_name.clone();
         self.credentials = Some(Credentials {
@@ -301,8 +308,8 @@ impl LoginFsm {
     /// Advance the FSM by one tick. Returns Some(phase) when the phase changes.
     ///
     /// The FSM detects which screen EQ is showing by scanning for visible SIDL
-    /// windows each tick (the MQ2 `AutoLogin` approach). This replaces the previous
-    /// timer-based polling that ran on a background thread.
+    /// windows each tick (the MQ2 `AutoLogin` approach). This replaces the
+    /// previous timer-based polling that ran on a background thread.
     pub fn tick(&mut self) -> Option<LoginPhase> {
         let prev_phase = self.phase.clone();
 
@@ -647,7 +654,8 @@ impl LoginFsm {
         self.do_select_character_via_game_loop(eq_base, &char_name);
     }
 
-    /// Queue character selection and enter world via the game loop's existing mechanism.
+    /// Queue character selection and enter world via the game loop's existing
+    /// mechanism.
     fn do_select_character_via_game_loop(&mut self, eq_base: u64, character_name: &str) {
         // Find CCharacterListWnd by scanning eqgame.exe's CXWndManager.
         // We use rescan_char_list_wnd() from the game loop module — it scans by
@@ -919,7 +927,8 @@ impl LoginFsm {
 
     // ── Switch methods ──────────────────────────────────────────────────
 
-    /// Switch to a different server — camp desktop → re-authenticate on new server.
+    /// Switch to a different server — camp desktop → re-authenticate on new
+    /// server.
     fn start_switch_server(
         &mut self,
         server_name: String,

@@ -70,7 +70,8 @@ pub struct TellRelay {
     pub enabled: bool,
     /// Bounded ring-buffer of recent tells.
     pub history: VecDeque<TellEntry>,
-    /// Keywords that trigger a mention alert (stored lower-cased for fast matching).
+    /// Keywords that trigger a mention alert (stored lower-cased for fast
+    /// matching).
     pub mention_keywords: Vec<String>,
     /// Maximum entries kept in `history`.
     max_history: usize,
@@ -124,8 +125,8 @@ impl TellRelay {
 
     /// Format a relay entry as an EQ slash command string.
     ///
-    /// Returns a `/tell` command that wraps the original tell in a relay header,
-    /// suitable for delivery through the IPC command channel.
+    /// Returns a `/tell` command that wraps the original tell in a relay
+    /// header, suitable for delivery through the IPC command channel.
     #[must_use]
     pub fn forwarded_as_cmd(entry: &TellEntry) -> String {
         format!(
@@ -134,7 +135,8 @@ impl TellRelay {
         )
     }
 
-    /// Returns `true` if `message` contains any of the configured mention keywords.
+    /// Returns `true` if `message` contains any of the configured mention
+    /// keywords.
     ///
     /// Comparison is case-insensitive.
     #[must_use]

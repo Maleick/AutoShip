@@ -1,11 +1,19 @@
-use crate::config::{LaunchConfig, RetryConfig, ServerConfig};
-use crate::launcher::login_sm::{LoginAction, LoginEvent, LoginStateMachine};
-use crate::launcher::spawner;
-use std::collections::{HashMap, VecDeque};
-use std::path::Path;
-use std::time::{Duration, Instant};
-use textquest_common::login::{AccountInfo, LoginError};
-use textquest_common::types::ClientId;
+use crate::{
+    config::{LaunchConfig, RetryConfig, ServerConfig},
+    launcher::{
+        login_sm::{LoginAction, LoginEvent, LoginStateMachine},
+        spawner,
+    },
+};
+use std::{
+    collections::{HashMap, VecDeque},
+    path::Path,
+    time::{Duration, Instant},
+};
+use textquest_common::{
+    login::{AccountInfo, LoginError},
+    types::ClientId,
+};
 
 /// Coordinates staggered launching and login of multiple EQ clients.
 pub struct LaunchCoordinator {
@@ -15,7 +23,8 @@ pub struct LaunchCoordinator {
     launch_queue: VecDeque<(ClientId, AccountInfo)>,
     active_logins: Vec<LoginStateMachine>,
     failure_window: VecDeque<(Instant, ClientId)>,
-    /// Per-client earliest retry time, honoring backoff from `LoginAction::Retry`.
+    /// Per-client earliest retry time, honoring backoff from
+    /// `LoginAction::Retry`.
     retry_not_before: HashMap<ClientId, Instant>,
     paused: bool,
     last_launch: Option<Instant>,
@@ -165,6 +174,16 @@ impl LaunchCoordinator {
                     _ => {}
                 }
             }
+
+            let client_id = self.active_logins[i].client_id;
+            if matches!(
+                self.active_logins[i].phase,
+                textquest_common::login::LoginPhase::Ready
+            ) && !self.active_logins[i].ready_event_emitted
+            {
+                self.active_logins[i].ready_event_emitted = true;
+                events.push(CoordinatorEvent::ClientReady { client_id });
+            }
             i += 1;
         }
 
@@ -262,6 +281,13 @@ impl LaunchCoordinator {
             .iter()
             .filter(|sm| !sm.is_terminal())
             .count()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn seed_ready_login_for_test(&mut self, client_id: ClientId, account: AccountInfo) {
+        let mut sm = LoginStateMachine::new(client_id, account);
+        sm.phase = textquest_common::login::LoginPhase::Ready;
+        self.active_logins.push(sm);
     }
 
     fn should_launch_next(&self) -> bool {
@@ -521,5 +547,29 @@ mod tests {
         };
         let debug = format!("{:?}", event);
         assert!(debug.contains("test reason"));
+    }
+
+    #[test]
+    fn ready_event_emits_for_each_login_instance() {
+        let (launch, retry, server) = test_configs();
+        let mut coord = LaunchCoordinator::new(launch, retry, server);
+        let account = test_account("acct1");
+
+        coord.seed_ready_login_for_test(1, account.clone());
+        let first_events = coord.tick();
+        assert!(
+            first_events
+                .iter()
+                .any(|event| matches!(event, CoordinatorEvent::ClientReady { client_id: 1 }))
+        );
+
+        coord.active_logins.clear();
+        coord.seed_ready_login_for_test(1, account);
+        let second_events = coord.tick();
+        assert!(
+            second_events
+                .iter()
+                .any(|event| matches!(event, CoordinatorEvent::ClientReady { client_id: 1 }))
+        );
     }
 }

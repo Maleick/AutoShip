@@ -1,7 +1,10 @@
-//! DPS tracker — rolling-window damage-per-second calculation for group members.
+//! DPS tracker — rolling-window damage-per-second calculation for group
+//! members.
 
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 /// A single damage sample recorded at a point in time.
 #[derive(Debug, Clone)]

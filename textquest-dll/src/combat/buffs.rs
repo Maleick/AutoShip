@@ -153,7 +153,8 @@ pub fn has_buff(buffs: &[BuffInfo], spell_id: i32) -> bool {
 }
 
 /// Get the remaining duration in seconds for a specific spell.
-/// Returns `None` if the spell is not active, or `Some(0.0)` for permanent buffs.
+/// Returns `None` if the spell is not active, or `Some(0.0)` for permanent
+/// buffs.
 #[must_use]
 pub fn buff_remaining_seconds(buffs: &[BuffInfo], spell_id: i32) -> Option<f32> {
     buffs

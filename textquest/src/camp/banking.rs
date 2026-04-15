@@ -1,21 +1,23 @@
 //! Banking cycle controller — deposit plat, consolidate currency to a mule.
 //!
 //! The banking cycle is a two-level FSM:
-//! - Outer: `BankingState` — `Idle` → `NavigatingToBank` → `Depositing` → `Consolidating` →
-//!   `ReturningHome`
-//! - Inner: `DepositStep` — sub-states within `Depositing` that drive the banker UI interaction
-//!   (target, open window, deposit plat, close).
+//! - Outer: `BankingState` — `Idle` → `NavigatingToBank` → `Depositing` →
+//!   `Consolidating` → `ReturningHome`
+//! - Inner: `DepositStep` — sub-states within `Depositing` that drive the
+//!   banker UI interaction (target, open window, deposit plat, close).
 //!
 //! # Plat tracking
 //!
-//! The controller tracks per-character plat totals and a deposit history ring buffer.
-//! Consolidation moves plat from regular characters to a designated mule/bank character by
-//! generating `/platinum` slash commands (same pattern as MQ2 `/platinum give`).
+//! The controller tracks per-character plat totals and a deposit history ring
+//! buffer. Consolidation moves plat from regular characters to a designated
+//! mule/bank character by generating `/platinum` slash commands (same pattern
+//! as MQ2 `/platinum give`).
 //!
 //! # Offline-testable design
 //!
-//! Navigation and plat transfers are represented as slash commands returned from `tick()`.
-//! No live EQ process or IPC is required — callers mock navigation by advancing ticks.
+//! Navigation and plat transfers are represented as slash commands returned
+//! from `tick()`. No live EQ process or IPC is required — callers mock
+//! navigation by advancing ticks.
 
 use std::collections::HashMap;
 
@@ -28,7 +30,8 @@ pub struct BankingConfig {
     pub banker_name: String,
     /// Name of the character that holds consolidated plat (the mule).
     pub mule_character: String,
-    /// Minimum plat a character must have before it contributes to consolidation.
+    /// Minimum plat a character must have before it contributes to
+    /// consolidation.
     pub consolidate_threshold: u64,
     /// Ticks to simulate traveling to/from bank.
     pub travel_ticks: u64,
@@ -98,7 +101,8 @@ pub struct PlatLedger {
 impl PlatLedger {
     const MAX_HISTORY: usize = 256;
 
-    /// Record a deposit. Reduces the character's balance and appends to history.
+    /// Record a deposit. Reduces the character's balance and appends to
+    /// history.
     pub fn record_deposit(&mut self, character: &str, amount: u64, tick: u64) {
         let balance = self.balances.entry(character.to_string()).or_insert(0);
         *balance = balance.saturating_sub(amount);
@@ -182,9 +186,9 @@ impl BankingCycleController {
     /// Start a banking run manually or automatically.
     ///
     /// * `banker_pid` — PID of the character that will walk to the bank.
-    /// * `character_pids` — slice of `(character_name, pid)` for all group members.
-    ///   Characters whose balance exceeds `consolidate_threshold` will be added to
-    ///   the consolidation queue.
+    /// * `character_pids` — slice of `(character_name, pid)` for all group
+    ///   members. Characters whose balance exceeds `consolidate_threshold` will
+    ///   be added to the consolidation queue.
     /// * `current_tick` — current simulation tick.
     pub fn start_banking_run(
         &mut self,

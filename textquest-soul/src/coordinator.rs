@@ -1,25 +1,33 @@
-use std::collections::{HashMap, VecDeque};
-use std::path::Path;
-use std::time::{Duration, Instant};
+use std::{
+    collections::{HashMap, VecDeque},
+    path::Path,
+    time::{Duration, Instant},
+};
 
 use anyhow::Result;
-use textquest_common::ipc::Command;
-use textquest_common::soul::{MoodState, PersonalityTraits, SoulAction, SoulEvent, SpeechStyle};
-use textquest_common::types::{ClientId, GameState};
+use textquest_common::{
+    ipc::Command,
+    soul::{MoodState, PersonalityTraits, SoulAction, SoulEvent, SpeechStyle},
+    types::{ClientId, GameState},
+};
 
-use super::alerts::{Alert, AnomalyDetector};
-use super::audit::{AuditActionType, SoulAuditLogger};
-use super::config::{CharacterSoulConfig, EdginessLevel, SoulConfig};
-use super::idle::{IdleScheduler, IdleTransition};
-use super::llm::fallback::TraitDrivenResponder;
-use super::llm::priority_queue::LlmRequestQueue;
-use super::llm::{LlmPriority, LlmProvider, LlmRequest, Situation};
-use super::memory::MemoryStore;
-use super::personality::{PersonalityEngine, SoulContext};
-use super::social::SocialGraph;
-use super::suppression::{GameStateContext, SuppressionRules};
+use super::{
+    alerts::{Alert, AnomalyDetector},
+    audit::{AuditActionType, SoulAuditLogger},
+    config::{CharacterSoulConfig, EdginessLevel, SoulConfig},
+    idle::{IdleScheduler, IdleTransition},
+    llm::{
+        LlmPriority, LlmProvider, LlmRequest, Situation, fallback::TraitDrivenResponder,
+        priority_queue::LlmRequestQueue,
+    },
+    memory::MemoryStore,
+    personality::{PersonalityEngine, SoulContext},
+    social::SocialGraph,
+    suppression::{GameStateContext, SuppressionRules},
+};
 
-/// Maximum number of entries in the IPC command queue before overflow drops occur.
+/// Maximum number of entries in the IPC command queue before overflow drops
+/// occur.
 const IPC_QUEUE_MAX: usize = 512;
 /// Default time-to-live for buffered IPC commands.
 const IPC_QUEUE_TTL_SECS: u64 = 10;
@@ -195,7 +203,8 @@ pub struct SoulCoordinator {
     config: SoulConfig,
     /// Sliding-window request timestamps per character for LLM rate limiting.
     character_request_counts: HashMap<ClientId, VecDeque<Instant>>,
-    /// Sliding-window request timestamps across all characters for LLM rate limiting.
+    /// Sliding-window request timestamps across all characters for LLM rate
+    /// limiting.
     global_request_counts: VecDeque<Instant>,
     suppression: SuppressionRules,
     /// Tick counter for timing.
@@ -272,10 +281,12 @@ impl SoulCoordinator {
         self.anomaly_detector.register_character(client_id);
     }
 
-    /// Check whether an LLM request is allowed for the given character right now.
+    /// Check whether an LLM request is allowed for the given character right
+    /// now.
     ///
     /// Prunes stale entries (>60s old) on each check.
-    /// Returns `true` if both the per-character limit and the global limit have not been reached.
+    /// Returns `true` if both the per-character limit and the global limit have
+    /// not been reached.
     pub fn can_request(&mut self, client_id: ClientId) -> bool {
         let window = std::time::Duration::from_secs(60);
         let now = Instant::now();
@@ -292,7 +303,8 @@ impl SoulCoordinator {
             return false;
         }
 
-        // Prune per-character stale entries without creating a new entry for unknown clients.
+        // Prune per-character stale entries without creating a new entry for unknown
+        // clients.
         let mut remove_character_entry = false;
         if let Some(char_counts) = self.character_request_counts.get_mut(&client_id) {
             while let Some(&front) = char_counts.front() {
@@ -328,7 +340,8 @@ impl SoulCoordinator {
     }
 
     /// Main tick — called every 5000ms by the orchestrator.
-    /// Returns `(commands, alerts)` so the caller can dispatch commands and act on anomalies.
+    /// Returns `(commands, alerts)` so the caller can dispatch commands and act
+    /// on anomalies.
     pub fn tick(
         &mut self,
         states: &HashMap<ClientId, GameState>,
@@ -437,7 +450,8 @@ impl SoulCoordinator {
             }
         }
 
-        // Periodic memory summarization check (runs every tick, internally rate-limited to 1h)
+        // Periodic memory summarization check (runs every tick, internally rate-limited
+        // to 1h)
         self.check_and_generate_summaries();
 
         // Process any queued LLM requests
@@ -445,8 +459,9 @@ impl SoulCoordinator {
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_secs());
 
-        // Drain all ready requests, then process each with the matching soul's responder
-        // In Phase 2, this will use a real LLM provider instead of per-soul fallback responders
+        // Drain all ready requests, then process each with the matching soul's
+        // responder In Phase 2, this will use a real LLM provider instead of
+        // per-soul fallback responders
         let pending: Vec<_> = {
             let mut results = Vec::new();
             while let Some(prioritized) = self.llm_queue.pop_next(now_secs) {
@@ -475,7 +490,8 @@ impl SoulCoordinator {
                             },
                         ));
                     }
-                    // If chat is suppressed, we discard the response (don't queue it)
+                    // If chat is suppressed, we discard the response (don't
+                    // queue it)
                 } else {
                     // No game state available — emit the response anyway
                     commands.push((
@@ -490,8 +506,9 @@ impl SoulCoordinator {
             }
         }
 
-        // If the IPC pipe is unavailable, buffer the commands instead of returning them.
-        // High-priority commands are buffered; low-priority idle chatter is dropped on overflow.
+        // If the IPC pipe is unavailable, buffer the commands instead of returning
+        // them. High-priority commands are buffered; low-priority idle chatter
+        // is dropped on overflow.
         if !self.ipc_available {
             for (client_id, cmd) in commands {
                 let priority = ipc_command_priority(&cmd);
@@ -850,7 +867,8 @@ fn is_in_combat(state: &GameState) -> bool {
     )
 }
 
-/// Extract zone name from game state (placeholder until zone tracking is added).
+/// Extract zone name from game state (placeholder until zone tracking is
+/// added).
 fn zone_from_state(_state: &GameState) -> &'static str {
     "unknown"
 }
@@ -858,10 +876,12 @@ fn zone_from_state(_state: &GameState) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use textquest_common::combat::CombatStatus;
-    use textquest_common::nav::NavStatus;
-    use textquest_common::soul::{PersonalityTraits, SpeechStyle};
-    use textquest_common::types::SpawnData;
+    use textquest_common::{
+        combat::CombatStatus,
+        nav::NavStatus,
+        soul::{PersonalityTraits, SpeechStyle},
+        types::SpawnData,
+    };
 
     fn make_game_state(client_id: ClientId) -> GameState {
         GameState {
@@ -1133,7 +1153,8 @@ mod tests {
         assert!(result.is_ok());
         // Memory store should have 1 entry for this client
         let memories = coord.memory_store().recall_about(1, "a dragon", 10);
-        // recall_about returns Result; it should succeed and have >= 0 entries (event is recorded)
+        // recall_about returns Result; it should succeed and have >= 0 entries (event
+        // is recorded)
         assert!(memories.is_ok());
     }
 

@@ -4,8 +4,10 @@
 //! actively executing. On Windows, trampoline memory is moved to RX after
 //! installation to reduce RWX exposure.
 
-use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::{
+    collections::HashMap,
+    sync::{Mutex, OnceLock},
+};
 
 /// XOR key used for trampoline concealment.
 pub const TRAMPOLINE_XOR_KEY: u8 = 0xA5;
@@ -143,10 +145,11 @@ mod tests {
 
     use super::*;
 
-    /// Serialize all tests in this module: they share a global `TRAMPOLINE_REGISTRY`
-    /// and each test starts by calling `clear_registry()`, which races when tests
-    /// run in parallel. Holding `TEST_GUARD` for the duration of each test prevents
-    /// concurrent access to the shared registry.
+    /// Serialize all tests in this module: they share a global
+    /// `TRAMPOLINE_REGISTRY` and each test starts by calling
+    /// `clear_registry()`, which races when tests run in parallel. Holding
+    /// `TEST_GUARD` for the duration of each test prevents concurrent
+    /// access to the shared registry.
     static TEST_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
 
     fn lock_tests() -> std::sync::MutexGuard<'static, ()> {

@@ -2,19 +2,20 @@
 //!
 //! This module backs the web dashboard account-management slice.
 //!
-//! Passwords are encrypted with AES-256-GCM using a per-account key derived from the
-//! master key via Argon2id, and persisted in the shared `data/credentials.db`
-//! SQLite database — the same schema used by the CLI credential store in the
-//! orchestrator crate.
+//! Passwords are encrypted with AES-256-GCM using a per-account key derived
+//! from the master key via Argon2id, and persisted in the shared
+//! `data/credentials.db` SQLite database — the same schema used by the CLI
+//! credential store in the orchestrator crate.
 
-use std::collections::HashMap;
-use std::path::Path as FsPath;
-use std::sync::{Mutex, MutexGuard};
+use std::{
+    collections::HashMap,
+    path::Path as FsPath,
+    sync::{Mutex, MutexGuard},
+};
 
-use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::{
     Aes256Gcm, Nonce,
-    aead::{Aead, KeyInit, OsRng},
+    aead::{Aead, KeyInit, OsRng, rand_core::RngCore},
 };
 use anyhow::{Context, Result};
 use argon2::{Algorithm, Argon2, Params, Version};
@@ -59,7 +60,8 @@ pub enum AccountStatus {
     Banned,
 }
 
-/// A single EQ account record (metadata only — no plaintext password stored here).
+/// A single EQ account record (metadata only — no plaintext password stored
+/// here).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountRecord {
     /// Stable identifier (UUID v4).
@@ -152,7 +154,8 @@ impl AccountStore {
         Ok(())
     }
 
-    /// Update an existing account.  Returns the updated record or an error if not found.
+    /// Update an existing account.  Returns the updated record or an error if
+    /// not found.
     pub fn update(&mut self, name: &str, req: &UpdateAccountRequest) -> Result<AccountRecord> {
         let rec = self
             .accounts
@@ -209,10 +212,11 @@ impl AccountStore {
     }
 }
 
-// ─── Credential store ─────────────────────────────────────────────────────────
+// ─── Credential store
+// ─────────────────────────────────────────────────────────
 
-/// Schema for the credential store — intentionally identical to the orchestrator's schema
-/// so both tools can share `data/credentials.db`.
+/// Schema for the credential store — intentionally identical to the
+/// orchestrator's schema so both tools can share `data/credentials.db`.
 const CREDENTIAL_SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS accounts (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -231,9 +235,9 @@ CREATE TABLE IF NOT EXISTS meta (
 ";
 
 fn argon2_instance() -> Result<Argon2<'static>> {
-    // Parameters match the orchestrator's credential store (textquest/src/credentials/crypto.rs):
-    //   m_cost  = 65536 KiB (64 MiB memory cost)
-    //   t_cost  = 3     (time / iteration count)
+    // Parameters match the orchestrator's credential store
+    // (textquest/src/credentials/crypto.rs):   m_cost  = 65536 KiB (64 MiB
+    // memory cost)   t_cost  = 3     (time / iteration count)
     //   p_cost  = 4     (parallelism)
     //   output  = 32    bytes (256-bit key for AES-256-GCM)
     let params = Params::new(65536, 3, 4, Some(32))
@@ -450,7 +454,8 @@ impl CredentialStore {
     }
 }
 
-// ─── Constructor helpers ──────────────────────────────────────────────────────
+// ─── Constructor helpers
+// ──────────────────────────────────────────────────────
 
 /// Build an `AccountRecord` from a create request, generating a fresh UUID.
 pub fn build_record(req: CreateAccountRequest) -> AccountRecord {

@@ -50,7 +50,8 @@ const BACKSTAB_OFFSET: f32 = 5.0;
 ///
 /// EQ heading is 0-512. "Behind" = heading + 256 (mod 512).
 /// Heading-to-radians: `radians = heading * (2π / 512)`.
-/// Position: `(target_x + offset * sin(behind_heading_rad), target_y + offset * cos(behind_heading_rad))`.
+/// Position: `(target_x + offset * sin(behind_heading_rad), target_y + offset *
+/// cos(behind_heading_rad))`.
 #[must_use]
 pub fn behind_target_position(
     target_x: f32,
@@ -66,10 +67,11 @@ pub fn behind_target_position(
     )
 }
 
-/// Generate movement commands for a rogue to get behind their target for backstab.
+/// Generate movement commands for a rogue to get behind their target for
+/// backstab.
 ///
-/// If already behind the target (within backstab offset range), returns just `/face`.
-/// Otherwise returns `/face` + movement to the behind position.
+/// If already behind the target (within backstab offset range), returns just
+/// `/face`. Otherwise returns `/face` + movement to the behind position.
 #[must_use]
 pub fn rogue_positioning_commands(
     player_pos: (f32, f32),
@@ -92,7 +94,8 @@ pub fn rogue_positioning_commands(
 /// Returns `/face` commands for all melee members (Tank, DPS) in a camp group.
 /// Intended to be called periodically during the Fighting state.
 ///
-/// Rogues (identified by `is_rogue` closure) get backstab positioning instead of plain `/face`.
+/// Rogues (identified by `is_rogue` closure) get backstab positioning instead
+/// of plain `/face`.
 #[must_use]
 pub fn fighting_face_commands(members: &[(u32, super::state::Role)]) -> Vec<(u32, String)> {
     members

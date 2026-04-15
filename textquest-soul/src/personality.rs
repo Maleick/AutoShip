@@ -1,5 +1,7 @@
-use textquest_common::nav::Xorshift32;
-use textquest_common::soul::{MoodState, PersonalityTraits, SayChannel, SoulAction, SoulEvent};
+use textquest_common::{
+    nav::Xorshift32,
+    soul::{MoodState, PersonalityTraits, SayChannel, SoulAction, SoulEvent},
+};
 
 use crate::config::EdginessLevel;
 
@@ -162,7 +164,8 @@ impl PersonalityEngine {
         }
     }
 
-    /// Generate an emote action appropriate for the current mood and personality.
+    /// Generate an emote action appropriate for the current mood and
+    /// personality.
     pub fn generate_emote(&mut self, ctx: &SoulContext<'_>) -> SoulAction {
         let emotes = emotes_for_mood(ctx.mood);
         let idx = (self.rng.next_u32() as usize) % emotes.len();
@@ -171,7 +174,8 @@ impl PersonalityEngine {
         }
     }
 
-    /// Generate a chat message (say/group) appropriate for mood and personality.
+    /// Generate a chat message (say/group) appropriate for mood and
+    /// personality.
     pub fn generate_chat(&mut self, ctx: &SoulContext<'_>) -> SoulAction {
         let phrases = phrases_for_mood(ctx.mood, ctx.edginess);
         let idx = (self.rng.next_u32() as usize) % phrases.len();
@@ -1140,9 +1144,9 @@ mod tests {
 
 /// Decay rate (per 5-second tick) for each non-Neutral mood toward `Neutral`.
 ///
-/// Values are dimensionless probabilities in `[0, 1)`. A call to `decay_mood_rng`
-/// with a uniform random sample in `[0, 1)` returns `Neutral` when the sample is
-/// below this rate (scaled to the actual tick duration).
+/// Values are dimensionless probabilities in `[0, 1)`. A call to
+/// `decay_mood_rng` with a uniform random sample in `[0, 1)` returns `Neutral`
+/// when the sample is below this rate (scaled to the actual tick duration).
 fn mood_decay_rate(mood: MoodState) -> f64 {
     match mood {
         MoodState::Excited => 0.010,
@@ -1264,7 +1268,8 @@ mod decay_tests {
         }
     }
 
-    /// Excited has the highest decay rate (1.0 %); a sample just below 0.01 fires it.
+    /// Excited has the highest decay rate (1.0 %); a sample just below 0.01
+    /// fires it.
     #[test]
     fn excited_decay_rate_threshold() {
         // rng_sample 0.009 < 0.010 → decays
@@ -1300,10 +1305,12 @@ mod decay_tests {
 }
 
 impl PersonalityEngine {
-    /// Apply one tick of mood decay, using this engine's internal RNG for the roll.
+    /// Apply one tick of mood decay, using this engine's internal RNG for the
+    /// roll.
     ///
-    /// Delegates to `decay_mood_rng` with a uniform sample drawn from the engine's
-    /// `Xorshift32`, so each character drifts independently and deterministically.
+    /// Delegates to `decay_mood_rng` with a uniform sample drawn from the
+    /// engine's `Xorshift32`, so each character drifts independently and
+    /// deterministically.
     pub fn tick_decay(
         &mut self,
         current_mood: MoodState,

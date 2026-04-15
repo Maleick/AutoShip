@@ -1,12 +1,15 @@
 //! Soul audit logging — append-only JSONL log of key Soul Engine state changes.
 //!
-//! Each significant action (mood change, memory record, LLM request, event processed)
-//! is serialized as a single JSON line and appended to `logs/soul_audit.log`.
+//! Each significant action (mood change, memory record, LLM request, event
+//! processed) is serialized as a single JSON line and appended to
+//! `logs/soul_audit.log`.
 
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::{
+    fs::{File, OpenOptions},
+    io::{BufRead, BufReader, Write},
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -134,8 +137,8 @@ impl SoulAuditLogger {
 
     /// Read all entries from the audit log that match `character_id`.
     ///
-    /// Parses every line in the JSONL file; lines that fail to parse are skipped
-    /// with a `tracing::warn`. Useful for tests and diagnostics.
+    /// Parses every line in the JSONL file; lines that fail to parse are
+    /// skipped with a `tracing::warn`. Useful for tests and diagnostics.
     ///
     /// # Errors
     ///

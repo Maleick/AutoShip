@@ -10,7 +10,8 @@ pub struct Xorshift32 {
 }
 
 impl Xorshift32 {
-    /// Create a new PRNG with the given seed. Seed must not be 0 (use `from_client_id` for safe seeding).
+    /// Create a new PRNG with the given seed. Seed must not be 0 (use
+    /// `from_client_id` for safe seeding).
     #[must_use]
     pub fn new(seed: u32) -> Self {
         Self { state: seed }
@@ -81,7 +82,8 @@ pub const LOOSE_MAX_TURN_PER_TICK: f32 = 16.0;
 /// Arrival threshold in game units (close enough to "be there").
 pub const ARRIVAL_DISTANCE: f32 = 15.0;
 
-/// Calculate heading from current position to target (EQ heading: 0-512, 0=north, increases CW).
+/// Calculate heading from current position to target (EQ heading: 0-512,
+/// 0=north, increases CW).
 ///
 /// Matches MQ2's formula from MQCommands.cpp `/face`:
 ///   `atan2(target.x - player.x, target.y - player.y) * 256 / PI`
@@ -182,7 +184,8 @@ impl FollowConfig {
 
 impl Default for FollowConfig {
     /// Returns a follow config with MQ2MoveUtils-parity defaults:
-    /// follow distance 15 EQ units, leash 75 EQ units, no delays, no aggro/loot gates.
+    /// follow distance 15 EQ units, leash 75 EQ units, no delays, no aggro/loot
+    /// gates.
     fn default() -> Self {
         Self::new("", 15.0, 75.0)
     }
@@ -204,7 +207,8 @@ pub enum StickDistance {
 /// relative to the target's facing direction.
 ///
 /// MQ2MoveUtils equivalents: `behind`, `!front`, `pin`, `front`.
-/// Default arc widths match MQ2 defaults; overridable via `behind_arc` / `not_front_arc`.
+/// Default arc widths match MQ2 defaults; overridable via `behind_arc` /
+/// `not_front_arc`.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum StickMode {
     /// No arc constraint — stick from any direction (default MQ2 behaviour).
@@ -222,8 +226,9 @@ pub enum StickMode {
     /// Position in the frontal arc (`/stick front`).
     /// For tanks who need to face the mob head-on.
     Front,
-    /// Snap to the opposite side of the target from the current position (`/stick snaproll`).
-    /// Used for instant repositioning during combat (#183).
+    /// Snap to the opposite side of the target from the current position
+    /// (`/stick snaproll`). Used for instant repositioning during combat
+    /// (#183).
     SnapRoll,
 }
 
@@ -266,7 +271,8 @@ pub struct CircleConfig {
     /// Optional explicit center point.
     ///
     /// When `None`, the player's position at the time `/circle on` is issued
-    /// becomes the center.  When `Some`, the character circles that fixed point.
+    /// becomes the center.  When `Some`, the character circles that fixed
+    /// point.
     pub center: Option<Waypoint>,
     /// Optional spawn ID to orbit around.
     ///
@@ -328,16 +334,19 @@ impl CircleConfig {
 pub struct StickConfig {
     /// Base distance to maintain from the target.
     pub distance: StickDistance,
-    /// Additive distance modifier applied on top of `distance` (from `/stick mod #`).
+    /// Additive distance modifier applied on top of `distance` (from `/stick
+    /// mod #`).
     pub distance_mod: f32,
-    /// Lock onto the current target's spawn ID even if the player retargets (`hold`).
+    /// Lock onto the current target's spawn ID even if the player retargets
+    /// (`hold`).
     pub hold: bool,
     /// Keep the stick engine active and auto-resume on the next valid NPC
     /// when the current target is lost (`always`).
     pub always: bool,
     /// Stick to a specific spawn ID regardless of current target (`id #`).
     pub id: Option<u32>,
-    /// Positional arc mode — controls where to stand relative to target's facing.
+    /// Positional arc mode — controls where to stand relative to target's
+    /// facing.
     pub mode: StickMode,
     /// Custom arc width for `Behind` mode in degrees (MQ2 default: 45.0).
     /// Valid range: 5.1 to 259.9.
@@ -348,12 +357,13 @@ pub struct StickConfig {
     /// Back up when the target moves closer than the desired stick distance.
     /// MQ2MoveUtils equivalent: `/stick moveback`.
     pub moveback: bool,
-    /// Distance below `effective_distance` at which moveback engages (EQ units).
-    /// For example, if `backup_dist` is 5.0 and effective stick distance is 15.0,
-    /// moveback triggers when the player is closer than 10.0 units.
-    /// MQ2MoveUtils equivalent: `backupdist #`. Default: 5.0.
+    /// Distance below `effective_distance` at which moveback engages (EQ
+    /// units). For example, if `backup_dist` is 5.0 and effective stick
+    /// distance is 15.0, moveback triggers when the player is closer than
+    /// 10.0 units. MQ2MoveUtils equivalent: `backupdist #`. Default: 5.0.
     pub backup_dist: f32,
-    /// Healer stick mode — maintain distance and face target for ranged casting (#163).
+    /// Healer stick mode — maintain distance and face target for ranged casting
+    /// (#163).
     pub healer: bool,
     /// Autopause — pause stick movement on player keyboard input (#164).
     pub autopause: bool,
@@ -421,7 +431,8 @@ pub enum NavStatus {
     },
     /// Actively sticking to a target spawn (MQ2MoveUtils `/stick` equivalent).
     Sticking {
-        /// Spawn ID of the current stick target (0 when target is temporarily lost).
+        /// Spawn ID of the current stick target (0 when target is temporarily
+        /// lost).
         target_id: u32,
         /// Current 2D distance to the stick target.
         distance: f32,
@@ -567,7 +578,8 @@ impl NavPathMetrics {
 /// A generic indexed cursor over a `Vec<T>`.
 ///
 /// Provides sequential traversal with `current()` / `advance()` semantics.
-/// Used to deduplicate the cursor-over-Vec pattern in `WaypointQueue` and `TravelPlan`.
+/// Used to deduplicate the cursor-over-Vec pattern in `WaypointQueue` and
+/// `TravelPlan`.
 pub struct IndexedQueue<T> {
     items: Vec<T>,
     index: usize,
@@ -742,7 +754,8 @@ pub struct CampDefinition {
     pub spots: Vec<CampSpot>,
 }
 
-/// Per-character scatter offset within a camp — MQ2MoveUtils `/makecamp` scatter parity.
+/// Per-character scatter offset within a camp — MQ2MoveUtils `/makecamp`
+/// scatter parity.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ScatterConfig {
     /// Compass bearing from camp center (degrees, 0=N, 90=E, 180=S, 270=W).
@@ -923,7 +936,8 @@ pub struct MoveToConfig {
     /// Optional spawn ID to track (moveto id #). When set, destination updates
     /// each tick to the target's current position.
     pub target_id: Option<u32>,
-    /// Stop navigation if aggro is detected (nearby hostile NPC moving toward player).
+    /// Stop navigation if aggro is detected (nearby hostile NPC moving toward
+    /// player).
     pub break_on_aggro: bool,
     /// Stop navigation if the tracked target warps unexpectedly.
     #[serde(default)]
@@ -931,14 +945,16 @@ pub struct MoveToConfig {
     /// Pause navigation until the tracked target stabilizes after a warp.
     #[serde(default)]
     pub pause_on_warp: bool,
-    /// Stop navigation if the player is summoned or otherwise displaced unexpectedly.
+    /// Stop navigation if the player is summoned or otherwise displaced
+    /// unexpectedly.
     #[serde(default)]
     pub break_on_summon: bool,
     /// Stop navigation if the player takes damage.
     pub break_on_hit: bool,
     /// Use walk speed instead of run.
     pub use_walk: bool,
-    /// Move backward toward the destination instead of turning and running forward.
+    /// Move backward toward the destination instead of turning and running
+    /// forward.
     pub use_back: bool,
     /// Autopause — pause movement on player keyboard input.
     pub autopause: bool,
@@ -947,7 +963,8 @@ pub struct MoveToConfig {
     /// When `None`, the DLL's default `ARRIVAL_DISTANCE` constant is used.
     #[serde(default)]
     pub dist: Option<f32>,
-    /// Axis constraint for arrival detection (`/moveto xloc`/`yloc` beeline mode).
+    /// Axis constraint for arrival detection (`/moveto xloc`/`yloc` beeline
+    /// mode).
     ///
     /// Defaults to `ArrivalAxis::Both` (standard 2D distance check).
     #[serde(default)]
@@ -994,10 +1011,12 @@ pub struct NavDiagnostics {
     pub distance_remaining: f32,
 }
 
-/// Navigation state signals — a compact boolean/metric summary for TLO-style queries.
+/// Navigation state signals — a compact boolean/metric summary for TLO-style
+/// queries.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct NavStateSignals {
-    /// True if the navigator is actively processing (Moving, Following, Sticking).
+    /// True if the navigator is actively processing (Moving, Following,
+    /// Sticking).
     pub active: bool,
     /// True if a navmesh is loaded for the current zone.
     pub mesh_loaded: bool,
@@ -1031,7 +1050,8 @@ impl MoveToConfig {
         }
     }
 
-    /// Compute the distance from `current` to `destination` according to `self.axis`.
+    /// Compute the distance from `current` to `destination` according to
+    /// `self.axis`.
     ///
     /// - `ArrivalAxis::Both` — standard 2D XY distance.
     /// - `ArrivalAxis::X`   — absolute X-axis separation only.
@@ -1045,10 +1065,11 @@ impl MoveToConfig {
         }
     }
 
-    /// Return the arrival distance threshold, applying the `dist` override when set.
+    /// Return the arrival distance threshold, applying the `dist` override when
+    /// set.
     ///
-    /// Falls back to `default_arrival_distance` (the DLL's `ARRIVAL_DISTANCE` constant)
-    /// when no explicit `dist` was configured.
+    /// Falls back to `default_arrival_distance` (the DLL's `ARRIVAL_DISTANCE`
+    /// constant) when no explicit `dist` was configured.
     #[must_use]
     pub fn effective_arrival_distance(&self, default_arrival_distance: f32) -> f32 {
         self.dist.unwrap_or(default_arrival_distance)
@@ -2178,7 +2199,8 @@ mod tests {
 
     #[test]
     fn moveto_config_serde_backward_compat_missing_dist_axis() {
-        // JSON without dist/axis fields should deserialize without error using serde defaults.
+        // JSON without dist/axis fields should deserialize without error using serde
+        // defaults.
         let json = r#"{"destination":{"x":1.0,"y":2.0,"z":0.0},"target_id":null,"break_on_aggro":false,"break_on_warp":false,"pause_on_warp":false,"break_on_summon":false,"break_on_hit":false,"use_walk":false,"use_back":false,"autopause":false}"#;
         let config: MoveToConfig = serde_json::from_str(json).expect("deserialize legacy JSON");
         assert!(config.dist.is_none());

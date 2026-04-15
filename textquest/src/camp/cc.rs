@@ -1,4 +1,5 @@
-//! Crowd control subsystem — mez, stun, charm, snare, root tracking and assignment.
+//! Crowd control subsystem — mez, stun, charm, snare, root tracking and
+//! assignment.
 //!
 //! CC priority (highest to lowest):
 //! 1. Stun (instant, highest priority)
@@ -11,7 +12,8 @@ use std::collections::HashMap;
 
 use textquest_common::combat::HateTargetCategory;
 
-/// Types of crowd control, ordered by priority (lower discriminant = higher priority).
+/// Types of crowd control, ordered by priority (lower discriminant = higher
+/// priority).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CcType {
     /// Instant stun — highest priority CC.
@@ -83,7 +85,8 @@ pub struct CcTarget {
     pub assigned_to_pid: Option<u32>,
     /// Whether debuffs (Tash/Malo) have been applied.
     pub debuffed: bool,
-    /// How this off-target mob is classified for CC and kiting priority decisions.
+    /// How this off-target mob is classified for CC and kiting priority
+    /// decisions.
     pub category: HateTargetCategory,
 }
 
@@ -121,10 +124,9 @@ impl CcTracker {
     ///
     /// - `current_spawn_ids`: all mob spawn IDs currently in camp radius
     /// - `assist_target_id`: the mob being killed — do NOT CC this one
-    /// - `tick`: current game tick
-    ///   Add a single new CC target without pruning existing targets.
-    ///   Used when an add spawns mid-fight — we don't want to lose
-    ///   existing CC state on other mobs.
+    /// - `tick`: current game tick Add a single new CC target without pruning
+    ///   existing targets. Used when an add spawns mid-fight — we don't want to
+    ///   lose existing CC state on other mobs.
     pub fn add_target(&mut self, spawn_id: u32, name: String, category: HateTargetCategory) {
         if !self.targets.iter().any(|t| t.spawn_id == spawn_id) {
             self.targets.push(CcTarget {
@@ -139,10 +141,12 @@ impl CcTracker {
         }
     }
 
-    /// Updates CC targets based on current spawns, expiring old CC and adding new mobs.
+    /// Updates CC targets based on current spawns, expiring old CC and adding
+    /// new mobs.
     ///
-    /// New targets added via this method are categorized as [`HateTargetCategory::ActiveHater`]
-    /// by default. Use [`CcTracker::add_target`] directly when the category is known.
+    /// New targets added via this method are categorized as
+    /// [`HateTargetCategory::ActiveHater`] by default. Use
+    /// [`CcTracker::add_target`] directly when the category is known.
     pub fn update(
         &mut self,
         current_spawns: &[(u32, String)],
@@ -211,7 +215,8 @@ impl CcTracker {
         });
 
         for idx in uncontrolled {
-            // Find best available member: lowest CC priority value, fewest existing assignments, off cooldown
+            // Find best available member: lowest CC priority value, fewest existing
+            // assignments, off cooldown
             let best = members
                 .iter()
                 .filter(|m| !m.cc_abilities.is_empty())
@@ -263,7 +268,8 @@ impl CcTracker {
         commands
     }
 
-    /// Emergency response to a charm break. Returns immediate stun/mez commands.
+    /// Emergency response to a charm break. Returns immediate stun/mez
+    /// commands.
     ///
     /// Priority: stun first (instant), then mez as backup.
     pub fn charm_break_response(
@@ -321,7 +327,8 @@ impl CcTracker {
 
     /// Check for CCs about to expire and return re-mez/re-CC commands.
     ///
-    /// `buffer_ticks`: how many ticks before expiry to start re-casting (default: 3).
+    /// `buffer_ticks`: how many ticks before expiry to start re-casting
+    /// (default: 3).
     pub fn needs_remez(
         &mut self,
         tick: u64,
@@ -437,11 +444,12 @@ impl CcTracker {
             .count()
     }
 
-    /// Returns spawn IDs sorted by kiting urgency (lowest `kite_priority()` first).
+    /// Returns spawn IDs sorted by kiting urgency (lowest `kite_priority()`
+    /// first).
     ///
-    /// Callers can use this list to decide which mob the kiter should run away from
-    /// or snare next. Mobs with equal kite priority are ordered by spawn ID for
-    /// determinism.
+    /// Callers can use this list to decide which mob the kiter should run away
+    /// from or snare next. Mobs with equal kite priority are ordered by
+    /// spawn ID for determinism.
     #[must_use]
     pub fn kite_priority_order(&self) -> Vec<u32> {
         let mut targets: Vec<&CcTarget> = self.targets.iter().collect();
@@ -850,14 +858,15 @@ mod tests {
 
         // Later: check for remez
         let _remez_cmds = tracker.needs_remez(tick + 16, 3, &mut members);
-        // If cc_expiry is tick+4 (stun duration), and we're at tick+16, it already expired
-        // so needs_remez won't fire (cc_applied would have been cleared by update)
-        // Let's manually set a mez instead for this test
+        // If cc_expiry is tick+4 (stun duration), and we're at tick+16, it already
+        // expired so needs_remez won't fire (cc_applied would have been cleared
+        // by update) Let's manually set a mez instead for this test
         tracker.targets[0].cc_applied = Some(CcType::Mez);
         tracker.targets[0].cc_expiry_tick = tick + 33;
         tracker.targets[0].assigned_to_pid = Some(100);
 
-        // tick + 31 is past the mez cooldown (3 ticks) since last cast was updated at tick+16
+        // tick + 31 is past the mez cooldown (3 ticks) since last cast was updated at
+        // tick+16
         let remez_cmds = tracker.needs_remez(tick + 31, 3, &mut members);
         assert!(!remez_cmds.is_empty());
 
@@ -908,9 +917,10 @@ mod tests {
         // First mob gets CC'd
         assert_eq!(cmds.len(), 2);
         // Member is now on cooldown at tick 10, so second mob should NOT get CC'd
-        // (stun cooldown is 6, so next available at tick 16; mez cooldown is 3, so available at tick 13)
-        // Actually, the second uncontrolled mob is still there — but the member's
-        // last_cast_tick was updated to 10 during the first assignment
+        // (stun cooldown is 6, so next available at tick 16; mez cooldown is 3, so
+        // available at tick 13) Actually, the second uncontrolled mob is still
+        // there — but the member's last_cast_tick was updated to 10 during the
+        // first assignment
         assert_eq!(members[0].last_cast_tick, 10);
     }
 
@@ -1037,7 +1047,8 @@ mod tests {
         tracker.add_target(10, "active hater".into(), HateTargetCategory::ActiveHater);
 
         let mut members = vec![make_enchanter(100)];
-        // First CC cast should hit the ActiveHater (priority 1), not the Roamer (priority 5)
+        // First CC cast should hit the ActiveHater (priority 1), not the Roamer
+        // (priority 5)
         let cmds = tracker.assign_cc(&mut members, 10);
         // Only one cast possible (cooldown prevents second)
         assert!(!cmds.is_empty());

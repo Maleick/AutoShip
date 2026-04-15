@@ -1,15 +1,21 @@
-use std::cell::RefCell;
-use std::collections::VecDeque;
-use std::path::Path;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::time::Duration;
+use std::{
+    cell::RefCell,
+    collections::VecDeque,
+    path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU32, Ordering},
+    },
+    time::Duration,
+};
 
 use anyhow::{Context, Result};
 use chrono::{NaiveDateTime, Utc};
 use rusqlite::{Connection, params};
-use textquest_common::soul::{MoodState, SoulEvent, SpeechStyle};
-use textquest_common::types::ClientId;
+use textquest_common::{
+    soul::{MoodState, SoulEvent, SpeechStyle},
+    types::ClientId,
+};
 
 /// Exponential backoff delays for database retry logic (milliseconds).
 const RETRY_DELAYS_MS: [u64; 5] = [100, 500, 1_000, 5_000, 30_000];
@@ -44,7 +50,8 @@ impl DbHealth {
         if count >= CIRCUIT_BREAKER_THRESHOLD && !self.circuit_open.load(Ordering::Relaxed) {
             self.circuit_open.store(true, Ordering::Relaxed);
             tracing::error!(
-                "memory_store: circuit breaker OPEN after {} consecutive failures — DB writes disabled",
+                "memory_store: circuit breaker OPEN after {} consecutive failures — DB writes \
+                 disabled",
                 count
             );
         }
@@ -210,7 +217,8 @@ where
 impl MemoryStore {
     /// Open (or create) the memory database at the given path.
     ///
-    /// On transient failures, retries with exponential backoff (up to 5 attempts).
+    /// On transient failures, retries with exponential backoff (up to 5
+    /// attempts).
     ///
     /// # Errors
     ///
@@ -257,13 +265,14 @@ impl MemoryStore {
     ///
     /// Uses exponential backoff retry on transient failures. If the circuit
     /// breaker is open, the memory is written to an in-memory fallback cache
-    /// instead of the database so no data is permanently lost for recent events.
+    /// instead of the database so no data is permanently lost for recent
+    /// events.
     ///
     /// # Errors
     ///
-    /// Returns an error if serialization fails. DB errors are handled internally
-    /// (logged + fallback cache) and do not propagate unless the caller needs
-    /// the inserted row ID for further operations.
+    /// Returns an error if serialization fails. DB errors are handled
+    /// internally (logged + fallback cache) and do not propagate unless the
+    /// caller needs the inserted row ID for further operations.
     pub fn record(
         &self,
         character_id: ClientId,
@@ -297,9 +306,17 @@ impl MemoryStore {
         let result = retry_db_op("record_memory", || {
             self.conn
                 .execute(
-                    "INSERT INTO memories (character_id, event_type, event_json, zone, mood_at_time, importance)
+                    "INSERT INTO memories (character_id, event_type, event_json, zone, \
+                     mood_at_time, importance)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    params![character_id, event_type, &event_json, &zone, &mood_str, importance],
+                    params![
+                        character_id,
+                        event_type,
+                        &event_json,
+                        &zone,
+                        &mood_str,
+                        importance
+                    ],
                 )
                 .context("Failed to record memory")
         });
@@ -357,7 +374,8 @@ impl MemoryStore {
     /// Returns an error if the operation fails.
     pub fn recall_recent(&self, character_id: ClientId, limit: usize) -> Result<Vec<MemoryRow>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, decayed
+            "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, \
+             decayed
              FROM memories
              WHERE character_id = ?1 AND decayed = 0
              ORDER BY created_at DESC
@@ -373,8 +391,8 @@ impl MemoryStore {
     }
 
     /// Recall memories about a specific subject (zone, player name, etc.).
-    /// Applies rehearsal effect: each recalled memory gets +0.1 importance boost,
-    /// simulating how remembering something reinforces the memory.
+    /// Applies rehearsal effect: each recalled memory gets +0.1 importance
+    /// boost, simulating how remembering something reinforces the memory.
     ///
     /// # Errors
     ///
@@ -388,7 +406,8 @@ impl MemoryStore {
         let escaped = subject.replace('%', "\\%").replace('_', "\\_");
         let pattern = format!("%{escaped}%");
         let mut stmt = self.conn.prepare(
-            "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, decayed
+            "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, \
+             decayed
              FROM memories
              WHERE character_id = ?1 AND decayed = 0
                AND (event_json LIKE ?2 ESCAPE '\\' OR zone LIKE ?2 ESCAPE '\\')
@@ -426,11 +445,21 @@ impl MemoryStore {
         message: &str,
         sentiment: f32,
     ) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO conversations (character_id, speaker, is_player, channel, message, sentiment)
+        self.conn
+            .execute(
+                "INSERT INTO conversations (character_id, speaker, is_player, channel, message, \
+                 sentiment)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![character_id, speaker, i32::from(is_player), channel, message, sentiment],
-        ).context("Failed to record conversation")?;
+                params![
+                    character_id,
+                    speaker,
+                    i32::from(is_player),
+                    channel,
+                    message,
+                    sentiment
+                ],
+            )
+            .context("Failed to record conversation")?;
 
         Ok(())
     }
@@ -535,8 +564,10 @@ impl MemoryStore {
         let adopted_slang_json = serde_json::to_string(&style.adopted_slang)
             .context("Failed to serialize adopted_slang")?;
 
-        self.conn.execute(
-            "INSERT INTO speech_patterns (character_id, vocabulary_level, emote_frequency, typing_speed, catchphrases, adopted_slang, updated_at)
+        self.conn
+            .execute(
+                "INSERT INTO speech_patterns (character_id, vocabulary_level, emote_frequency, \
+                 typing_speed, catchphrases, adopted_slang, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))
              ON CONFLICT(character_id) DO UPDATE SET
                 vocabulary_level = excluded.vocabulary_level,
@@ -545,15 +576,16 @@ impl MemoryStore {
                 catchphrases = excluded.catchphrases,
                 adopted_slang = excluded.adopted_slang,
                 updated_at = datetime('now')",
-            params![
-                character_id,
-                style.vocabulary_level,
-                style.emote_frequency,
-                style.typing_speed,
-                catchphrases_json,
-                adopted_slang_json,
-            ],
-        ).context("Failed to update speech patterns")?;
+                params![
+                    character_id,
+                    style.vocabulary_level,
+                    style.emote_frequency,
+                    style.typing_speed,
+                    catchphrases_json,
+                    adopted_slang_json,
+                ],
+            )
+            .context("Failed to update speech patterns")?;
 
         Ok(())
     }
@@ -571,11 +603,14 @@ impl MemoryStore {
         summary: &str,
         mood_trend: Option<&str>,
     ) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO memory_summaries (character_id, period_start, period_end, summary, mood_trend)
+        self.conn
+            .execute(
+                "INSERT INTO memory_summaries (character_id, period_start, period_end, summary, \
+                 mood_trend)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![character_id, period_start, period_end, summary, mood_trend],
-        ).context("Failed to record summary")?;
+                params![character_id, period_start, period_end, summary, mood_trend],
+            )
+            .context("Failed to record summary")?;
 
         Ok(())
     }
@@ -608,7 +643,8 @@ impl MemoryStore {
         &self.conn
     }
 
-    /// Return the top `max_memories` memories ranked by combined importance × recency score.
+    /// Return the top `max_memories` memories ranked by combined importance ×
+    /// recency score.
     ///
     /// Recency is computed as `max(0.0, 1.0 - (days_ago / 30.0))` so memories
     /// created today score 1.0 and memories older than 30 days score 0.0.
@@ -626,7 +662,8 @@ impl MemoryStore {
     ) -> Result<Vec<MemoryRow>> {
         // Pull all non-decayed memories for the character.
         let mut stmt = self.conn.prepare(
-            "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, decayed
+            "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, \
+             decayed
              FROM memories
              WHERE character_id = ?1 AND decayed = 0",
         )?;
@@ -713,13 +750,14 @@ impl MemoryStore {
         Ok(())
     }
 
-    /// Generate a compact text summary of memories in a unix-timestamp time window.
+    /// Generate a compact text summary of memories in a unix-timestamp time
+    /// window.
     ///
     /// Queries all non-decayed memories for `character_id` with `created_at`
     /// between `period_start` and `period_end` (inclusive, unix seconds).
-    /// Formats each event as "[zone] event_type: description" (one line per event).
-    /// Appends the most common mood in the window at the end as "Mood trend: X".
-    /// The returned string is capped at 500 bytes.
+    /// Formats each event as "[zone] event_type: description" (one line per
+    /// event). Appends the most common mood in the window at the end as
+    /// "Mood trend: X". The returned string is capped at 500 bytes.
     ///
     /// # Errors
     ///
@@ -873,9 +911,8 @@ impl MemoryStore {
     ) -> Result<i64> {
         self.conn
             .execute(
-                "INSERT INTO soul_audit_log \
-                 (character_id, action_type, action_json, reason, operator_id) \
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO soul_audit_log (character_id, action_type, action_json, reason, \
+                 operator_id) VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![character_id, action_type, action_json, reason, operator_id],
             )
             .context("Failed to append audit log entry")?;
@@ -883,7 +920,8 @@ impl MemoryStore {
         Ok(self.conn.last_insert_rowid())
     }
 
-    /// Retrieve audit log entries for a character within an optional date range.
+    /// Retrieve audit log entries for a character within an optional date
+    /// range.
     ///
     /// `start_date` and `end_date` are ISO-8601 strings (`"YYYY-MM-DD"` or
     /// `"YYYY-MM-DD HH:MM:SS"`).  Pass `None` to omit the respective bound.
@@ -899,8 +937,7 @@ impl MemoryStore {
     ) -> Result<Vec<AuditEntry>> {
         let mut sql = String::from(
             "SELECT id, character_id, action_type, action_json, reason, operator_id, created_at \
-             FROM soul_audit_log \
-             WHERE character_id = ?1",
+             FROM soul_audit_log WHERE character_id = ?1",
         );
         if start_date.is_some() {
             sql.push_str(" AND created_at >= ?2");
@@ -935,7 +972,8 @@ impl MemoryStore {
         Ok(rows)
     }
 
-    /// Retrieve all audit log entries for a given action type (across all characters).
+    /// Retrieve all audit log entries for a given action type (across all
+    /// characters).
     ///
     /// # Errors
     ///
@@ -943,9 +981,7 @@ impl MemoryStore {
     pub fn get_audit_log_by_action(&self, action_type: &str) -> Result<Vec<AuditEntry>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, character_id, action_type, action_json, reason, operator_id, created_at \
-             FROM soul_audit_log \
-             WHERE action_type = ?1 \
-             ORDER BY created_at DESC",
+             FROM soul_audit_log WHERE action_type = ?1 ORDER BY created_at DESC",
         )?;
 
         let rows = stmt
@@ -965,11 +1001,8 @@ impl MemoryStore {
     /// Returns an error if the query fails.
     pub fn get_audit_summary(&self, character_id: ClientId) -> Result<Vec<AuditDaySummary>> {
         let mut stmt = self.conn.prepare(
-            "SELECT date(created_at) AS day, COUNT(*) AS cnt \
-             FROM soul_audit_log \
-             WHERE character_id = ?1 \
-             GROUP BY day \
-             ORDER BY day ASC",
+            "SELECT date(created_at) AS day, COUNT(*) AS cnt FROM soul_audit_log WHERE \
+             character_id = ?1 GROUP BY day ORDER BY day ASC",
         )?;
 
         let rows = stmt
@@ -987,7 +1020,8 @@ impl MemoryStore {
 
     /// Export the full audit log for a character as a CSV string.
     ///
-    /// Columns: `id,character_id,action_type,action_json,reason,operator_id,created_at`
+    /// Columns: `id,character_id,action_type,action_json,reason,operator_id,
+    /// created_at`
     ///
     /// # Errors
     ///

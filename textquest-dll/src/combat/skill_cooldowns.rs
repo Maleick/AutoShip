@@ -1,8 +1,9 @@
 //! Per-skill cooldown tracking for melee abilities.
 //!
-//! EQ melee skills have individual cooldowns (e.g. taunt ~6s, kick ~7s, bash ~10s).
-//! This tracker replaces the old shared 60-tick timer with per-skill timers so
-//! skills fire as soon as they come off cooldown rather than all at once.
+//! EQ melee skills have individual cooldowns (e.g. taunt ~6s, kick ~7s, bash
+//! ~10s). This tracker replaces the old shared 60-tick timer with per-skill
+//! timers so skills fire as soon as they come off cooldown rather than all at
+//! once.
 
 /// Maximum number of concurrent skill cooldowns tracked.
 const MAX_TRACKED_SKILLS: usize = 16;

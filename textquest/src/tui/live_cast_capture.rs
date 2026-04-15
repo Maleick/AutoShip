@@ -2,10 +2,12 @@ use crate::eq::structs::{CastDurationSource, CastState};
 use std::sync::LazyLock;
 use textquest_common::offsets::launch_spell_data;
 
-/// Environment variable that enables live cast capture logs in `logs/textquest.log`.
+/// Environment variable that enables live cast capture logs in
+/// `logs/textquest.log`.
 pub const LIVE_CAST_CAPTURE_ENV: &str = "TEXTQUEST_CAST_CAPTURE";
 
-/// Quantize remaining cast time to reduce log spam while still showing progress updates.
+/// Quantize remaining cast time to reduce log spam while still showing progress
+/// updates.
 const LIVE_CAST_CAPTURE_BUCKET_MS: u32 = 250;
 
 static LIVE_CAST_CAPTURE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
@@ -37,7 +39,8 @@ struct LiveCastCaptureFingerprint {
     duration_source: CastDurationSource,
 }
 
-/// Snapshot of the active cast fields we want to validate against a real EQ client.
+/// Snapshot of the active cast fields we want to validate against a real EQ
+/// client.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveCastCaptureSnapshot {
     pub spell_id: i32,
@@ -98,7 +101,8 @@ impl LiveCastCaptureSnapshot {
     }
 }
 
-/// Meaningful active-cast transition worth logging during a live client validation run.
+/// Meaningful active-cast transition worth logging during a live client
+/// validation run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LiveCastCaptureEvent {
     Started {

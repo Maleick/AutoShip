@@ -3,14 +3,19 @@
 //! Extracted from `run.rs` to reduce inline data duplication. Each zone gets
 //! a curated spawn list mixing PCs, NPCs, and corpses appropriate to the zone.
 
-use crate::eq::named_tracker::is_named;
-use crate::eq::structs::{
-    CastDurationSource, CastState as EqCastState, EqClass, SpawnInfo, SpawnType, StandState,
+use crate::eq::{
+    named_tracker::is_named,
+    structs::{
+        CastDurationSource, CastState as EqCastState, EqClass, SpawnInfo, SpawnType, StandState,
+    },
 };
-use textquest_common::nav::{NavStatus, Waypoint};
-use textquest_common::offsets::launch_spell_data;
+use textquest_common::{
+    nav::{NavStatus, Waypoint},
+    offsets::launch_spell_data,
+};
 
-/// Spawn definition tuple: (name, level, `class_id`, `spawn_type`, hp, `hp_max`, `stand_state`).
+/// Spawn definition tuple: (name, level, `class_id`, `spawn_type`, hp,
+/// `hp_max`, `stand_state`).
 type SpawnDef<'a> = (&'a str, u8, u8, SpawnType, i64, i64, StandState);
 
 #[derive(Clone, Copy)]
@@ -461,7 +466,8 @@ pub fn demo_client_cast_info(
     demo_action_for_profile(profile, tick_count)
         .cast
         .map(|cast| {
-            // Recompute the progress with the caller's cadence so tests can assert exact values.
+            // Recompute the progress with the caller's cadence so tests can assert exact
+            // values.
             demo_cast_info(
                 cast.spell_slot,
                 cast.spell_label,
@@ -481,7 +487,8 @@ pub fn demo_client_nav_info(name: &str, pid: u32, tick_count: u64) -> Option<Dem
     demo_action_for_profile(profile, tick_count).nav
 }
 
-/// Deterministic demo priority snapshots — cycles through healing/buffing/CC states.
+/// Deterministic demo priority snapshots — cycles through healing/buffing/CC
+/// states.
 #[must_use]
 pub fn demo_priority_snapshots(tick_count: u64) -> Vec<crate::tui::priorities::PrioritySnapshot> {
     use crate::tui::priorities::{BlockedReason, PriorityEntry, PrioritySnapshot};

@@ -12,8 +12,10 @@ use super::widgets::{
     cast_summary, cast_time_remaining_label, hp_color, panel, spawn_info_lines, spawn_row_style,
     themed_header_row,
 };
-use crate::eq::structs::SpawnInfo;
-use crate::tui::app::{ActivePanel, App};
+use crate::{
+    eq::structs::SpawnInfo,
+    tui::app::{ActivePanel, App},
+};
 
 fn current_spellset_lines(spells: &[crate::eq::structs::SpellSlot]) -> Vec<String> {
     spells
@@ -138,7 +140,8 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
             let style = spawn_row_style(spawn, player_level, t);
             let name = app.redact_name(&spawn.displayed_name);
 
-            // 2D Euclidean distance — Z (altitude) intentionally excluded for tactical range
+            // 2D Euclidean distance — Z (altitude) intentionally excluded for tactical
+            // range
             let dist_str = match player_pos {
                 Some((px, py)) => {
                     let dist = ((spawn.x - px).powi(2) + (spawn.y - py).powi(2)).sqrt();
@@ -356,7 +359,8 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
                 Style::default().fg(t.text_highlight),
             ));
 
-            // Annotation label: show field name if this row starts at or contains a field boundary.
+            // Annotation label: show field name if this row starts at or contains a field
+            // boundary.
             if annotating && let Some(ann) = app.hex_state.annotation_at(row_offset) {
                 let color = ANNOTATION_COLORS[ann.color_idx as usize % 6];
                 // Only show label on the first row of the field.
@@ -444,8 +448,7 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
 
 /// 3-column layout: detail/hex | spawns | EQ Internals + explorer stacked.
 fn draw_debug_with_explorer(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
-    use super::eq_internals::draw_eq_internals_panel;
-    use super::explorer::draw_explorer_panel;
+    use super::{eq_internals::draw_eq_internals_panel, explorer::draw_explorer_panel};
 
     let cols = Layout::default()
         .direction(Direction::Horizontal)
@@ -678,8 +681,7 @@ fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
 /// Shows a table with one row per hook slot: name, state (ACTIVE / UNHOOKED),
 /// time since last rotation, and countdown to next rotation.
 pub fn draw_hook_rotation_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    use crate::tui::app::HookSlotState;
-    use crate::tui::ui::widgets::themed_header_row;
+    use crate::tui::{app::HookSlotState, ui::widgets::themed_header_row};
 
     let t = &app.theme;
     let state = &app.hook_rotation_state;

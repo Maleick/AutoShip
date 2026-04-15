@@ -1,4 +1,5 @@
-//! Encrypted credential store — Argon2id key derivation + AES-256-GCM encryption.
+//! Encrypted credential store — Argon2id key derivation + AES-256-GCM
+//! encryption.
 
 /// Cryptographic primitives — key derivation and authenticated encryption.
 pub mod crypto;

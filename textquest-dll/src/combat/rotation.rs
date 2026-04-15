@@ -1,4 +1,5 @@
-//! Data-driven rotation engine — executes ordered lists of actions with conditions.
+//! Data-driven rotation engine — executes ordered lists of actions with
+//! conditions.
 //!
 //! Modeled after the rgmercs rotation system: each class defines named rotation
 //! groups (Downtime, Combat, Emergency, Burn, etc.) with per-entry conditions.
@@ -20,7 +21,8 @@ use super::strategy::CombatContext;
 /// whose condition passes and whose action is ready gets executed.
 #[derive(Debug, Clone)]
 pub struct RotationEntry {
-    /// Human-readable name (matches an AbilitySet name or literal ability name).
+    /// Human-readable name (matches an AbilitySet name or literal ability
+    /// name).
     pub name: String,
     /// What type of action to perform.
     pub action_type: ActionType,
@@ -405,8 +407,10 @@ pub fn group(name: &str, target: TargetSelector, state: CombatStateReq) -> Rotat
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::{ActionType, CombatConfig, ConditionExpr};
-    use textquest_common::types::SpawnData;
+    use textquest_common::{
+        combat::{ActionType, CombatConfig, ConditionExpr},
+        types::SpawnData,
+    };
 
     fn make_ctx(
         _in_combat: bool,

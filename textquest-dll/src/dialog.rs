@@ -10,14 +10,13 @@
 
 use std::{
     sync::{
-        LazyLock, Mutex,
         atomic::{AtomicBool, Ordering},
+        LazyLock, Mutex,
     },
     time::{Duration, Instant},
 };
 
 use textquest_common::ipc::AutoRezConfig;
-
 /// Whether auto-accept is enabled. Disabled by default; toggled via IPC
 /// `SetAutoAccept`.
 static AUTO_ACCEPT_ENABLED: AtomicBool = AtomicBool::new(false);

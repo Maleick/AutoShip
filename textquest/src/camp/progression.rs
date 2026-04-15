@@ -2,8 +2,7 @@
 
 use crate::camp::config::CampConfig;
 use anyhow::{Context, Result};
-use std::collections::HashMap;
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 /// Event emitted when the group should move to a new camp.
 #[derive(Debug, Clone, PartialEq)]
@@ -147,7 +146,8 @@ impl CampDatabase {
     }
 }
 
-/// Checks whether a camp progression event should fire based on average group level.
+/// Checks whether a camp progression event should fire based on average group
+/// level.
 #[must_use]
 pub fn check_progression(
     current_camp: &CampConfig,

@@ -1,10 +1,13 @@
-use textquest_common::nav::Xorshift32;
-use textquest_common::soul::{IdleBehaviorType, MoodState, PersonalityTraits, SpeechStyle};
+use textquest_common::{
+    nav::Xorshift32,
+    soul::{IdleBehaviorType, MoodState, PersonalityTraits, SpeechStyle},
+};
 
-use crate::config::SoulConfig;
-use crate::llm::fallback::TraitDrivenResponder;
-use crate::llm::{LlmPriority, LlmProvider, LlmRequest, Situation};
-use crate::personality::SoulContext;
+use crate::{
+    config::SoulConfig,
+    llm::{LlmPriority, LlmProvider, LlmRequest, Situation, fallback::TraitDrivenResponder},
+    personality::SoulContext,
+};
 
 /// An active idle behavior with its remaining duration.
 #[derive(Debug, Clone)]
@@ -137,7 +140,8 @@ impl IdleScheduler {
         self.ticks_idle = 0;
     }
 
-    /// Compute weighted behavior list using personality engine's `idle_weights`.
+    /// Compute weighted behavior list using personality engine's
+    /// `idle_weights`.
     fn compute_weights(&self, ctx: &SoulContext<'_>) -> Vec<PrioritizedBehavior> {
         let t = ctx.traits;
         let mood = ctx.mood;
@@ -281,7 +285,8 @@ impl IdleScheduler {
         (base_secs + jitter).max(600.0) as u64
     }
 
-    /// Generate flavor text for the behavior start using the `TraitDrivenResponder`.
+    /// Generate flavor text for the behavior start using the
+    /// `TraitDrivenResponder`.
     fn generate_flavor_text(
         &mut self,
         behavior: &IdleBehaviorType,
@@ -332,9 +337,11 @@ fn adjust(weights: &mut [PrioritizedBehavior], target: &IdleBehaviorType, multip
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{EdginessLevel, SoulConfig};
-    use crate::llm::fallback::TraitDrivenResponder;
-    use crate::personality::SoulContext;
+    use crate::{
+        config::{EdginessLevel, SoulConfig},
+        llm::fallback::TraitDrivenResponder,
+        personality::SoulContext,
+    };
     use textquest_common::soul::{IdleBehaviorType, MoodState, PersonalityTraits};
 
     fn default_config() -> SoulConfig {

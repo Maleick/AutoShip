@@ -28,7 +28,8 @@ use serde::{Deserialize, Serialize, de::Error as _};
 
 use crate::scanner::{self, Pattern};
 
-// ── Scan module classification ────────────────────────────────────────────────
+// ── Scan module classification
+// ────────────────────────────────────────────────
 
 /// Module identifier for offset resolution (e.g., eqgame.dll).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -54,7 +55,8 @@ pub enum OffsetCategory {
 pub enum ResolveMode {
     /// Direct offset at match location.
     Direct,
-    /// RIP-relative (e.g., LEA instruction); disp_offset is the byte offset from match start to the displacement field.
+    /// RIP-relative (e.g., LEA instruction); disp_offset is the byte offset
+    /// from match start to the displacement field.
     RipRelative { disp_offset: usize },
 }
 
@@ -77,7 +79,8 @@ pub struct ScanEntry {
     pub expected_preferred: Option<u64>,
 }
 
-// ── Internal entry ────────────────────────────────────────────────────────────
+// ── Internal entry
+// ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 struct Entry {
@@ -87,7 +90,8 @@ struct Entry {
     ida: String,
 }
 
-// ── Serialization proxy ───────────────────────────────────────────────────────
+// ── Serialization proxy
+// ───────────────────────────────────────────────────────
 
 /// Serializable form of a single pattern entry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -250,7 +254,6 @@ impl PatternDb {
         Ok(Pattern::from_ida(ida))
     }
 
-    ///
     /// # Errors
     ///
     /// Returns a [`serde_json::Error`] if the JSON is malformed or if an

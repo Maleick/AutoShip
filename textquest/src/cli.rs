@@ -1,19 +1,13 @@
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::{
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 use textquest_common::ghidra_db::GhidraDatabase;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
-use crate::config;
-use crate::eq;
-use crate::inject;
-use crate::ipc;
-use crate::nav;
-use crate::orchestrator;
-use crate::paths;
-use crate::process;
-use crate::tui;
+use crate::{config, eq, inject, ipc, nav, orchestrator, paths, process, tui};
 
 use crate::{GHIDRA_DB_PATH, OPCODES_CONFIG_PATH, SOUL_DB_PATH, get_module_base};
 
@@ -36,7 +30,8 @@ fn read_shared_state_with_retry(
 fn load_pid_session(pid: u32) -> Result<(textquest_common::ipc::SessionToken, u64)> {
     let token = ipc::load_session_token(pid).ok_or_else(|| {
         anyhow::anyhow!(
-            "No session token for PID {pid}. Inject the DLL first to create authenticated IPC state."
+            "No session token for PID {pid}. Inject the DLL first to create authenticated IPC \
+             state."
         )
     })?;
     let session_id = textquest_common::ipc::session_id_from_token(&token);
@@ -196,7 +191,8 @@ fn resolve_built_dll_path() -> Result<PathBuf> {
         .cloned()
         .ok_or_else(|| {
             anyhow::anyhow!(
-                "Cannot find textquest_dll.dll near the textquest executable. Run `cargo build --release` first."
+                "Cannot find textquest_dll.dll near the textquest executable. Run `cargo build \
+                 --release` first."
             )
         })
 }
@@ -321,7 +317,8 @@ pub fn run_tui_mode() -> Result<()> {
     tui::run::run_tui(app, orchestrator)
 }
 
-/// Inject mode (--inject) — find eqgame.exe processes and inject `textquest_dll.dll` into each.
+/// Inject mode (--inject) — find eqgame.exe processes and inject
+/// `textquest_dll.dll` into each.
 ///
 /// # Errors
 ///
@@ -347,7 +344,8 @@ pub fn run_inject_mode() -> Result<()> {
 
     println!("Using DLL: {}", source_dll.display());
 
-    // Read DLL bytes for reflective injection (no staged file needed — loader maps from bytes).
+    // Read DLL bytes for reflective injection (no staged file needed — loader maps
+    // from bytes).
     let dll_bytes = std::fs::read(&source_dll)
         .with_context(|| format!("Failed to read DLL: {}", source_dll.display()))?;
 
@@ -402,14 +400,17 @@ pub fn run_inject_mode() -> Result<()> {
     Ok(())
 }
 
-/// Zones mode (`--zones PID`) — query the zone adjacency graph from an injected client.
+/// Zones mode (`--zones PID`) — query the zone adjacency graph from an injected
+/// client.
 ///
 /// # Errors
 ///
 /// Returns an error if the operation fails.
 pub fn run_zones_mode(pid: u32) -> Result<()> {
-    use textquest_common::ipc::{Command, Response};
-    use textquest_common::nav::ZoneGraph;
+    use textquest_common::{
+        ipc::{Command, Response},
+        nav::ZoneGraph,
+    };
 
     println!("Querying zone graph from PID {pid}...");
 
@@ -479,7 +480,8 @@ pub fn run_zones_mode(pid: u32) -> Result<()> {
     Ok(())
 }
 
-/// Navmesh reload mode — discard the cached zone mesh, redownload it, and verify it loads.
+/// Navmesh reload mode — discard the cached zone mesh, redownload it, and
+/// verify it loads.
 pub fn run_navmesh_reload_mode(zone: Option<&str>, pid: Option<u32>) -> Result<()> {
     let zone = resolve_navmesh_zone(zone, pid)?;
     println!("Reloading navmesh for zone '{zone}'...");
@@ -501,7 +503,8 @@ pub fn run_navmesh_reload_mode(zone: Option<&str>, pid: Option<u32>) -> Result<(
     Ok(())
 }
 
-/// Navmesh diagnostics mode — inspect the cached zone mesh and, optionally, the live DLL nav state.
+/// Navmesh diagnostics mode — inspect the cached zone mesh and, optionally, the
+/// live DLL nav state.
 pub fn run_navmesh_diagnostics_mode(zone: Option<&str>, pid: Option<u32>) -> Result<()> {
     let zone = resolve_navmesh_zone(zone, pid)?;
     let diagnostics = nav::mesh::cached_zone_mesh_diagnostics(&zone)?;
@@ -624,7 +627,8 @@ pub fn run_status_mode(pid: u32) -> Result<()> {
     Ok(())
 }
 
-/// Status-all mode (--statusall) — read shared memory for all EQ clients and print a summary table.
+/// Status-all mode (--statusall) — read shared memory for all EQ clients and
+/// print a summary table.
 ///
 /// # Errors
 ///
@@ -702,7 +706,8 @@ pub fn run_statusall_mode() -> Result<()> {
                                 state.zone_short_name.clone()
                             };
                             println!(
-                                "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<16}{:<8}{:<12}{:<12}{:<12}{:<10}{:<7}",
+                                "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<16}{:<8}{:<12}{:<12}{:<12}{:\
+                                 <10}{:<7}",
                                 pid,
                                 player.name,
                                 zone,
@@ -719,7 +724,8 @@ pub fn run_statusall_mode() -> Result<()> {
                             );
                         } else {
                             println!(
-                                "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<16}{:<8}{:<12}{:<12}{:<12}{:<10}{:<7}",
+                                "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<16}{:<8}{:<12}{:<12}{:<12}{:\
+                                 <10}{:<7}",
                                 pid,
                                 "(no player)",
                                 "(not in world)",
@@ -738,7 +744,8 @@ pub fn run_statusall_mode() -> Result<()> {
                     }
                     None => {
                         println!(
-                            "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<16}{:<8}{:<12}{:<12}{:<12}{:<10}{:<7}",
+                            "{:<7}{:<14}{:<18}{:<24}{:<6}{:<4}{:<16}{:<8}{:<12}{:<12}{:<12}{:\
+                             <10}{:<7}",
                             pid,
                             "(no data)",
                             "-",
@@ -786,8 +793,7 @@ pub fn run_statusall_mode() -> Result<()> {
 ///
 /// Returns an error if the operation fails.
 pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
-    use textquest_common::ipc::Command;
-    use textquest_common::nav::Waypoint;
+    use textquest_common::{ipc::Command, nav::Waypoint};
 
     println!("Navigating PID {pid} -> ({x}, {y}, {z})");
 
@@ -821,7 +827,8 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
                             }
                             Err(e) => {
                                 warn!(
-                                    "Navmesh path query failed: {:#} — falling back to straight line",
+                                    "Navmesh path query failed: {:#} — falling back to straight \
+                                     line",
                                     e
                                 );
                                 println!("Navmesh path failed: {e} — using straight line");
@@ -830,7 +837,8 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
                         },
                         Err(e) => {
                             warn!(
-                                "Cannot load navmesh for zone '{}': {:#} — falling back to straight line",
+                                "Cannot load navmesh for zone '{}': {:#} — falling back to \
+                                 straight line",
                                 zone, e
                             );
                             println!("No navmesh for '{zone}': {e} — using straight line");
@@ -866,8 +874,7 @@ pub fn run_nav_mode(pid: u32, x: f32, y: f32, z: f32) -> Result<()> {
 ///
 /// Returns an error if the operation fails.
 pub fn run_navall_mode(x: f32, y: f32, z: f32) -> Result<()> {
-    use textquest_common::ipc::Command;
-    use textquest_common::nav::Waypoint;
+    use textquest_common::{ipc::Command, nav::Waypoint};
 
     let config = load_config()?;
     let pids = process::memory::find_processes_by_name(&config.process_name)?;
@@ -993,7 +1000,8 @@ pub fn run_inject_pid_mode(pid: u32) -> Result<()> {
     Ok(())
 }
 
-/// Login mode targeting a specific PID (`--login-pid PID account password [server] [character]`).
+/// Login mode targeting a specific PID (`--login-pid PID account password
+/// [server] [character]`).
 ///
 /// # Errors
 ///
@@ -1024,7 +1032,8 @@ pub fn run_login_pid_mode(
     Ok(())
 }
 
-/// Login mode (`--login account password [server] [character]`) — send `StartLogin` to all injected EQ clients.
+/// Login mode (`--login account password [server] [character]`) — send
+/// `StartLogin` to all injected EQ clients.
 ///
 /// # Errors
 ///
@@ -1078,7 +1087,8 @@ pub fn run_login_mode(
     Ok(())
 }
 
-/// End-to-end autologin: find/spawn EQ processes → inject DLL → send StartLogin.
+/// End-to-end autologin: find/spawn EQ processes → inject DLL → send
+/// StartLogin.
 ///
 /// Reads `config/accounts.toml` for the account roster. Per-account passwords
 /// come from the encrypted credential store (`data/credentials.db`) when a
@@ -1132,7 +1142,8 @@ pub fn run_autologin_mode(
 
     println!("Autologin: {} account(s) to process", targets.len());
 
-    // 2. Load per-account passwords from encrypted store (if master password provided)
+    // 2. Load per-account passwords from encrypted store (if master password
+    //    provided)
     let master_password = master_password_flag.map(Zeroizing::new).or_else(|| {
         std::env::var("TEXTQUEST_MASTER_PASSWORD")
             .ok()
@@ -1362,7 +1373,8 @@ pub fn run_autologin_mode(
     Ok(())
 }
 
-/// Calibrate mode (--calibrate) — find all EQ processes and send `calibrate_login` to each.
+/// Calibrate mode (--calibrate) — find all EQ processes and send
+/// `calibrate_login` to each.
 ///
 /// # Errors
 ///
@@ -1404,7 +1416,8 @@ pub fn run_calibrate_mode() -> Result<()> {
     Ok(())
 }
 
-/// Command mode (`--cmd pid command`) — send a slash command to an injected client.
+/// Command mode (`--cmd pid command`) — send a slash command to an injected
+/// client.
 ///
 /// # Errors
 ///
@@ -1524,7 +1537,8 @@ pub fn run_renderall_mode(mode_str: &str) -> Result<()> {
     Ok(())
 }
 
-/// Navpath mode (--navpath) — download zone navmesh and query a path between two points.
+/// Navpath mode (--navpath) — download zone navmesh and query a path between
+/// two points.
 ///
 /// # Errors
 ///
@@ -1635,7 +1649,8 @@ pub fn run_dump_mode() -> Result<()> {
 
 // ─── Orchestration ──────────────────────────────────────────────────────────
 
-/// Run the orchestrator event loop — health checks, launch coordinator, camp loop.
+/// Run the orchestrator event loop — health checks, launch coordinator, camp
+/// loop.
 ///
 /// Blocks until Ctrl+C is pressed.
 pub fn run_orchestrate_mode() -> Result<()> {
@@ -1804,7 +1819,8 @@ pub fn run_dashboard_mode(port: u16, open: bool) -> Result<()> {
     Ok(())
 }
 
-// ─── Configuration ─────────────────────────────────���────────────────────────
+// ─── Configuration
+// ─────────────────────────────────���────────────────────────
 
 /// Validate the configuration file.
 pub fn run_config_check_mode(path: Option<&str>) -> Result<()> {
@@ -1816,7 +1832,8 @@ pub fn run_config_check_mode(path: Option<&str>) -> Result<()> {
         let legacy = Path::new("config/frostreaver.toml");
         if legacy.exists() {
             eprintln!(
-                "Config file not found at {config_path}, using legacy path: config/frostreaver.toml"
+                "Config file not found at {config_path}, using legacy path: \
+                 config/frostreaver.toml"
             );
             let cfg = config::AppConfig::load(legacy).context("Failed to parse configuration")?;
             eprintln!("Configuration is valid.");
@@ -1942,7 +1959,8 @@ fn load_or_create_master_salt(db_path: &std::path::Path) -> Result<[u8; 32]> {
     })?;
     conn.execute(
         &format!(
-            "CREATE TABLE IF NOT EXISTS {CREDENTIAL_META_TABLE} (key TEXT PRIMARY KEY, value BLOB NOT NULL)"
+            "CREATE TABLE IF NOT EXISTS {CREDENTIAL_META_TABLE} (key TEXT PRIMARY KEY, value BLOB \
+             NOT NULL)"
         ),
         [],
     )
@@ -2052,8 +2070,8 @@ fn format_hex_dump(base_addr: usize, bytes: &[u8]) -> String {
     lines.join("\n")
 }
 
-/// Diagnostic hex dump of `SpawnManager`, the `TList`, and the first spawn node.
-/// Helps debug why the NEXT pointer reads as 0x0 after the first spawn.
+/// Diagnostic hex dump of `SpawnManager`, the `TList`, and the first spawn
+/// node. Helps debug why the NEXT pointer reads as 0x0 after the first spawn.
 #[allow(unused_variables)]
 fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u64) {
     use crate::process::memory::is_probably_valid_process_ptr;
@@ -2159,7 +2177,8 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
 
     info!("First spawn node at: {:#x}", first_node);
 
-    // Step 5: Dump first 64 bytes of the first spawn (covers TListNode + vtable area)
+    // Step 5: Dump first 64 bytes of the first spawn (covers TListNode + vtable
+    // area)
     info!("--- First spawn: first 64 bytes (TListNode region + beyond) ---");
     match proc.read_bytes(first_node, 64) {
         Ok(bytes) => {
@@ -2287,7 +2306,8 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
     info!("===================================================");
 }
 
-/// Helper: read and log a hex dump of `count` bytes starting at `base_addr + start_offset`.
+/// Helper: read and log a hex dump of `count` bytes starting at `base_addr +
+/// start_offset`.
 #[allow(dead_code)]
 fn dump_hex_region(
     proc: &process::memory::ProcessHandle,
@@ -2335,7 +2355,6 @@ fn dump_hex_region(
         ),
     }
 }
-///
 /// # Errors
 ///
 /// Returns an error if the operation fails.

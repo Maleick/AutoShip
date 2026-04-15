@@ -90,8 +90,9 @@ pub struct TwistEngine {
     active: bool,
     /// Consecutive failures per gem — skip after MAX_CONSECUTIVE_FAILURES.
     consecutive_failures: [u8; MAX_GEMS],
-    /// When true, rotation restarts from index 0 every frame (bard full-rotation mode).
-    /// Songs are evaluated in priority order and only cast when their buff needs refreshing.
+    /// When true, rotation restarts from index 0 every frame (bard
+    /// full-rotation mode). Songs are evaluated in priority order and only
+    /// cast when their buff needs refreshing.
     full_rotation: bool,
 }
 
@@ -261,7 +262,8 @@ impl TwistEngine {
             return None;
         }
 
-        // Priority preemption: check if any song has higher priority than current rotation slot
+        // Priority preemption: check if any song has higher priority than current
+        // rotation slot
         let current_priority = self
             .songs
             .get(self.rotation_index)
@@ -389,9 +391,10 @@ impl TwistEngine {
         }
     }
 
-    /// Handle a song interrupt: re-queue the interrupted gem for immediate re-cast.
-    /// Resets the gem refresh timer so the song can be cast again right away,
-    /// and moves the FSM back to Idle so the next tick picks it up.
+    /// Handle a song interrupt: re-queue the interrupted gem for immediate
+    /// re-cast. Resets the gem refresh timer so the song can be cast again
+    /// right away, and moves the FSM back to Idle so the next tick picks it
+    /// up.
     pub fn on_interrupt(&mut self, gem: u8) {
         if !self.active {
             return;

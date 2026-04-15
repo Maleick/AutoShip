@@ -4,8 +4,7 @@
 //! 1. **Named tracker** — automatic alerts for named NPCs (via `NamedTracker`)
 //! 2. **Watch patterns** — user-defined glob-style patterns (`:watch *moss*`)
 
-use std::collections::VecDeque;
-use std::time::SystemTime;
+use std::{collections::VecDeque, time::SystemTime};
 
 /// How a spawn alert was triggered.
 #[derive(Debug, Clone, PartialEq, Eq)]

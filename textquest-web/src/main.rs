@@ -50,6 +50,8 @@ pub struct AppState {
     pub loot_state: Arc<api::loot::LootState>,
     /// In-memory economy cycle state.
     pub economy_state: Arc<api::economy::EconomyState>,
+    /// In-memory operator dashboard snapshot and action state.
+    pub dashboard_state: Arc<api::dashboard::DashboardState>,
     /// In-memory soul audit log.
     pub soul_audit: Arc<api::soul::SoulAuditState>,
     /// Optional static API token for protecting all `/api` endpoints.
@@ -149,6 +151,7 @@ fn build_state() -> Arc<AppState> {
         character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
         loot_state: api::loot::LootState::new_demo(),
         economy_state: api::economy::EconomyState::new_demo(),
+        dashboard_state: api::dashboard::DashboardState::new_demo(),
         soul_audit: api::soul::SoulAuditState::new_demo(),
         api_token,
     })
@@ -193,6 +196,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(api::health))
         .route("/sessions", get(api::list_sessions))
+        .nest("/dashboard", api::dashboard::router())
         .nest("/accounts", accounts::router())
         .route(
             "/economy/settings",
@@ -271,6 +275,7 @@ async fn main() {
         .init();
 
     let state = build_state();
+    api::dashboard::spawn_dashboard_tick_loop(state.clone());
     let app = build_app(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3001));
@@ -315,6 +320,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
             loot_state: api::loot::LootState::new_demo(),
             economy_state: api::economy::EconomyState::new_demo(),
+            dashboard_state: api::dashboard::DashboardState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
             api_token: None, // No auth in tests — auth middleware is a no-op when None
         })
@@ -408,6 +414,48 @@ mod tests {
         assert_eq!(body["character_name"], "Aelrindel");
         assert_eq!(body["auto_rez"]["min_xp_pct"], 96);
         assert_eq!(body["auto_rez"]["delay_ms"], 5100);
+    }
+
+    #[tokio::test]
+    async fn dashboard_routes_are_mounted() {
+        let app = build_app(build_state());
+
+        let (status, body) = json_response(
+            app.clone(),
+            Request::builder()
+                .uri("/api/dashboard")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.get("sessions").is_some());
+
+        let (status, body) = json_response(
+            app,
+            Request::builder()
+                .method("POST")
+                .uri("/api/dashboard/action")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "type": "create_session",
+                        "profile": "Loot Crew",
+                        "character_name": "Newpuller"
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            body["sessions"]["items"]
+                .as_array()
+                .expect("sessions array")
+                .iter()
+                .any(|session| session["characterName"] == "Newpuller")
+        );
     }
 
     #[tokio::test]

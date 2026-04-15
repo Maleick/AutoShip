@@ -7,6 +7,7 @@
 | `config/textquest.toml` | Main TextQuest app config |
 | `config/accounts.toml` | Account and group-launch metadata |
 | `data/credentials.db` | Encrypted account password store used by `textquest autologin` |
+| `data/trade_prices.db` | Local SQLite store for passive `/ooc` and `/auction` Krono price observations |
 | `config/camps/*.toml` | Saved camp locations and thresholds |
 | `config/classes/*.toml` | Per-class combat and ability config |
 | `config/toons/*.toml` | Per-toon combat action overrides for the injected DLL |
@@ -143,6 +144,12 @@ This state currently lives in memory inside `textquest-web`. It is available to 
 - `data/ghidra.db` and `data/ghidra-export/` are local runtime/debug caches only.
 - Canonical manifests, snapshot variants, baseline selection, and copied evidence live in the sibling `Maleick/TextQuest-Ghidra` repo under `snapshots/` and `baseline-selection/current.json`.
 - If a runbook needs durable evidence, link to the canonical `TextQuest-Ghidra` snapshot path rather than copying payload into this repo.
+
+## Passive Trade Price Cache
+
+- `data/trade_prices.db` is a repo-local SQLite database populated from the DLL's existing passive chat capture path.
+- The orchestrator polls accumulated `PollChat` batches, filters `/ooc` and `/auction` messages to trade hub zones, and stores Krono-denominated item sightings for later trend analysis.
+- This cache is mutable runtime state, not canonical evidence. Treat it like other local operator data stores and rebuild it from live captures when needed.
 
 ## Internals
 

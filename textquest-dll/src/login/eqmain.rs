@@ -4,12 +4,12 @@
 //! `CSidlManager`, `LoginServerAPI`, and other pre-game systems.
 
 /// Find eqmain.dll base address in the current process.
-/// Returns 0 if not found (eqmain.dll may not be loaded yet during early startup).
+/// Returns 0 if not found (eqmain.dll may not be loaded yet during early
+/// startup).
 pub fn find_eqmain() -> u64 {
     #[cfg(windows)]
     {
-        use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-        use windows::core::w;
+        use windows::{Win32::System::LibraryLoader::GetModuleHandleW, core::w};
 
         // SAFETY: GetModuleHandleW is always safe to call — it queries the
         // module table for a loaded DLL by name. Returns NULL if not loaded.
@@ -68,7 +68,8 @@ pub fn resolve_login_server_api(eqmain_base: u64) -> Option<usize> {
 }
 
 /// Resolve the `LoginClient` pointer from eqmain.dll globals.
-/// `LoginClient` contains pLoginData (`EQLogin`*) which has the username/password char arrays.
+/// `LoginClient` contains pLoginData (`EQLogin`*) which has the
+/// username/password char arrays.
 pub fn resolve_login_client(eqmain_base: u64) -> Option<usize> {
     #[cfg(windows)]
     {
