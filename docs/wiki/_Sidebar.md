@@ -16,6 +16,12 @@
 - [Configuration](Configuration)
 - [Security and Anti-Detection Notes](Security-and-Anti-Detection-Notes)
 
+## Frostreaver Planning
+
+- [Frostreaver Farming & XP Guide](Frostreaver-Farming-Guide)
+- [Frostreaver Starting City Logistics](Frostreaver-Starting-City-Logistics)
+- [P99 Zone Guide](P99-Zone-Guide)
+
 ## Development
 
 - [Architecture Overview](Architecture-Overview)

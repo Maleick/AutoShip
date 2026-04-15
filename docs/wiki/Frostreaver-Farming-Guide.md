@@ -21,6 +21,8 @@
 ## Finalized 36-Box Roster Reference
 
 > Finalized from the `TextQuest#1521` owner decision recorded on 2026-04-14. The farm roster and the raid roster are intentionally the same 36-character stable, so leveling, gearing, and AA time spent farming flows directly into raid readiness.
+>
+> Launch-day city split, convergence routing, gear handoffs, and Legacy XP sequencing are documented separately in [Frostreaver Starting City Logistics](Frostreaver-Starting-City-Logistics.md).
 
 | Group      | Tank | Healer | Support 1 | Support 2 | DPS 1 | DPS 2 |
 | ---------- | ---- | ------ | --------- | --------- | ----- | ----- |
