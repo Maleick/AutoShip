@@ -52,6 +52,7 @@
 - [JMB Relay Comparison](Research-JMB-Relay-Comparison)
 - [KissAssist Gap Analysis](Research-KissAssist-Gap-Analysis)
 - [Local Claude](Research-Local-Claude)
+- [Monetization Opportunities](Research-Monetization-Opportunities)
 - [MQ2 Comparison](Research-MQ2-Comparison)
 - [MQ2 Deep Dive](Research-MQ2-Deep-Dive)
 - [MQ2 Launch Plugin Survey](Research-MQ2-Launch-Plugin-Survey)
