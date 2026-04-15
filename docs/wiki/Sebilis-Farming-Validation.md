@@ -20,6 +20,10 @@ automation claims beyond the evidence state recorded here.
 
 - `config/camps/sebilis_disco.toml` defines an initial Disco camp center, pull
   point, leash, mana thresholds, and pull list for Sebilis.
+- Current `sebilis_disco` defaults are `pull_radius = 220`,
+  `camp_radius = 30`, `level_range = [45, 55]`, and
+  `prev_camp = "lguk_dead_side"`.
+- These defaults are planning inputs only, not live-validated route or spawn proof.
 - `config/named_mobs/sebilis.toml` records named placeholders and timer ranges
   for Trakanon, Baron Yosig, Crypt Caretaker, and Sebilite Protector.
 - `textquest/src/camp/forage.rs` provides the current `/forage` loop and result

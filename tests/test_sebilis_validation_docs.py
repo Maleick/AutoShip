@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tomllib
 import unittest
 
 
@@ -38,6 +39,25 @@ class SebilisValidationDocsTests(unittest.TestCase):
 
         self.assertIn("Sebilis-Farming-Validation.md", text)
         self.assertIn("research-backed and still needs live proof", text)
+
+    def test_validation_doc_records_current_sebilis_config_defaults_as_provisional_inputs(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        camp_config = tomllib.loads(
+            (REPO_ROOT / "config" / "camps" / "sebilis_disco.toml").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        self.assertIn(f"`pull_radius = {camp_config['pull_radius']}`", text)
+        self.assertIn(f"`camp_radius = {camp_config['camp_radius']}`", text)
+        self.assertIn(
+            f"`level_range = [{camp_config['level_range'][0]}, {camp_config['level_range'][1]}]`",
+            text,
+        )
+        self.assertIn(f"`prev_camp = \"{camp_config['prev_camp']}\"`", text)
+        self.assertIn("These defaults are planning inputs only, not live-validated route or spawn proof.", text)
 
 
 if __name__ == "__main__":
