@@ -55,6 +55,7 @@
 - [EQ Protocol](Research-EQ-Protocol)
 - [EQ Zoning System](Research-EQ-Zoning-System)
 - [Enchanter Epic Quest](Research-Enchanter-Epic-Quest)
+- [Frostreaver Loot Tier Optimization](Research-Frostreaver-Loot-Tier-Optimization)
 - [Grey/Black Market Risk Assessment](Research-Grey-Black-Market-Risk-Assessment)
 - [Hells Gate](Research-Hells-Gate)
 - [JMB Relay Comparison](Research-JMB-Relay-Comparison)

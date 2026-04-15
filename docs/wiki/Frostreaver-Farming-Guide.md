@@ -339,11 +339,12 @@ For breakeven math, farming opportunity-cost thresholds, and a recommended early
 
 ### How Randomized Loot Works (Learned from Mischief/Teek)
 
-- **Rare NPCs** drop loot from other rare NPCs of a **similar level within the same expansion**
-- **Raid NPCs** drop loot from other raid NPCs of a **similar level within the same expansion**
+- Frostreaver is confirmed to launch with **Randomized Loot**, **Free Trade**, and **Encounter Locking**
+- Public Mischief/Teek raid data shows Velious raid loot is **bucketed**, not strict same-level matching
+- The observed Velious raid implementation resolves into **four raid pools**, and the widest one spans **level 55 through level 70**
 - Loot randomization is **expansion-based, not zone-based**
-- There is a chance at **extra drops** beyond the normal loot table
-- Loot tiers depend on **mob's actual level at time of spawning**, not its max level
+- For raid planning, treat loot sharing as **same expansion + observed bucket**
+- See [Research: Frostreaver Loot Tier Optimization](Research-Frostreaver-Loot-Tier-Optimization.md) for the current Velious bucket map and farm recommendations
 
 ### How This Changes Camp Selection
 
