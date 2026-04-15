@@ -1574,11 +1574,11 @@ fn on_game_tick() {
     read_and_publish_state(tick);
 
     let overhead = tick_start.elapsed();
-    let overhead_nanos = overhead.as_nanos();
+    let overhead = tick_start.elapsed();
     crate::hooks::timing::record_game_loop_hook_overhead(overhead);
     #[cfg(debug_assertions)]
     tracing::debug!(
-        elapsed_ns = overhead_nanos,
+        elapsed_ns = overhead.as_nanos(),
         tick = tick,
         "ProcessGameEvents hook overhead recorded"
     );

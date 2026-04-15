@@ -1,10 +1,10 @@
 //! Orchestrator dashboard — consolidated operator surface for session, group,
 //! navigation, economy, combat, and system visibility.
 
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    fs,
-};
+use std::collections::{HashMap, HashSet, VecDeque};
+
+#[cfg(target_os = "linux")]
+use std::fs;
 
 use ratatui::{
     Frame,

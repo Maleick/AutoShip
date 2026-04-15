@@ -1,7 +1,9 @@
 //! Compile-time-like struct range validations for known EQ layouts.
 
+#[allow(unused_imports)]
 use std::mem::size_of;
 
+#[allow(unused_imports)]
 use crate::offsets;
 
 #[cfg(any(test, debug_assertions))]
@@ -117,6 +119,7 @@ pub fn validate_struct_sizes() -> Vec<String> {
     violations
 }
 
+#[allow(dead_code)]
 fn check_fields(
     struct_name: &str,
     struct_size: usize,
