@@ -1437,14 +1437,23 @@ pub fn run_calibrate_mode() -> Result<()> {
 pub fn run_cmd_mode(pid: u32, command: &str) -> Result<()> {
     println!("Sending command to PID {pid}: {command}");
 
-    let config = load_config()?;
-    box_chat::configure(box_chat::default_config_path(), config.box_chat.clone())?;
-    box_chat::update_local_clients([(pid, pid.to_string())]);
+    match textquest_common::box_chat::parse_slash_route(command) {
+        None => {}
+        Some(Err(error)) => return Err(anyhow::anyhow!(error)),
+        Some(Ok(_)) => {
+            let config = load_config()?;
+            box_chat::configure_connector_only(
+                box_chat::default_config_path(),
+                config.box_chat.clone(),
+            )?;
+            box_chat::update_local_clients([(pid, pid.to_string())]);
 
-    if let Some(report) = box_chat::dispatch_if_box_chat(command)? {
-        println!("{}", report.summary());
-        box_chat::stop();
-        return Ok(());
+            if let Some(report) = box_chat::dispatch_if_box_chat(command)? {
+                println!("{}", report.summary());
+                box_chat::stop();
+                return Ok(());
+            }
+        }
     }
 
     command_dispatch::dispatch_local_command(pid, command).context("Failed to send command")?;

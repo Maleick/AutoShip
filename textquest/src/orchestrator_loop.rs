@@ -173,8 +173,14 @@ impl OrchestratorLoop {
                 .iter()
                 .map(|(pid, name)| (*pid, name.clone())),
         );
-        if let Ok(Some(config)) = crate::box_chat::reload_from_disk() {
-            tracing::info!(?config, "Reloaded box-chat config from disk");
+        match crate::box_chat::reload_from_disk() {
+            Ok(Some(config)) => {
+                tracing::info!(?config, "Reloaded box-chat config from disk");
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(%error, "Failed to reload box-chat config from disk");
+            }
         }
     }
 

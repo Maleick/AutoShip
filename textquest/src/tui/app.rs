@@ -4020,38 +4020,46 @@ impl App {
         let (command_name, rest) = self.split_command(&input);
         match command_name {
             "bc" | "bca" | "bcaa" => {
-                let slash = format!("/{command_name} {rest}").trim().to_string();
-                match crate::box_chat::dispatch_if_box_chat(&slash) {
-                    Ok(Some(report)) => {
-                        self.set_feedback(ToastLevel::Success, report.summary(), true);
-                    }
-                    Ok(None) => {
-                        self.usage_feedback(command_name, "Missing box-chat payload.");
-                    }
-                    Err(error) => {
-                        self.set_feedback(
-                            ToastLevel::Error,
-                            format!("Box chat failed: {error}"),
-                            true,
-                        );
+                if rest.trim().is_empty() {
+                    self.usage_feedback(command_name, "Missing box-chat payload.");
+                } else {
+                    let slash = format!("/{command_name} {rest}").trim().to_string();
+                    match crate::box_chat::dispatch_if_box_chat(&slash) {
+                        Ok(Some(report)) => {
+                            self.set_feedback(ToastLevel::Success, report.summary(), true);
+                        }
+                        Ok(None) => {
+                            self.usage_feedback(command_name, "Missing box-chat payload.");
+                        }
+                        Err(error) => {
+                            self.set_feedback(
+                                ToastLevel::Error,
+                                format!("Box chat failed: {error}"),
+                                true,
+                            );
+                        }
                     }
                 }
             }
             "bct" => {
-                let slash = format!("/bct {rest}").trim().to_string();
-                match crate::box_chat::dispatch_if_box_chat(&slash) {
-                    Ok(Some(report)) => {
-                        self.set_feedback(ToastLevel::Success, report.summary(), true);
-                    }
-                    Ok(None) => {
-                        self.usage_feedback("bct", "Missing target or slash command.");
-                    }
-                    Err(error) => {
-                        self.set_feedback(
-                            ToastLevel::Error,
-                            format!("Box chat failed: {error}"),
-                            true,
-                        );
+                if rest.split_whitespace().count() < 2 {
+                    self.usage_feedback("bct", "Missing target or slash command.");
+                } else {
+                    let slash = format!("/bct {rest}").trim().to_string();
+                    match crate::box_chat::dispatch_if_box_chat(&slash) {
+                        Ok(Some(report)) => {
+                            self.set_feedback(ToastLevel::Success, report.summary(), true);
+                        }
+                        Ok(None) => {
+                            self.usage_feedback("bct", "Missing target or slash command.");
+                        }
+                        Err(error) => {
+                            self.set_feedback(
+                                ToastLevel::Error,
+                                format!("Box chat failed: {error}"),
+                                true,
+                            );
+                        }
                     }
                 }
             }

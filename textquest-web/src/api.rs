@@ -90,9 +90,7 @@ pub async fn health() -> Json<HealthResponse> {
 fn textquest_config_path() -> PathBuf {
     std::env::var("TEXTQUEST_CONFIG_PATH")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/textquest.toml")
-        })
+        .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
 }
 
 fn read_box_chat_settings_from_disk() -> Result<BoxChatConfig, String> {
@@ -119,6 +117,9 @@ fn write_box_chat_settings_to_disk(settings: &BoxChatConfig) -> Result<(), Strin
     if settings.host.trim().is_empty() {
         return Err("Box chat host must not be empty".to_string());
     }
+    if settings.port == 0 {
+        return Err("Box chat port must be between 1 and 65535".to_string());
+    }
 
     let path = textquest_config_path();
     let mut doc = if path.exists() {
@@ -142,8 +143,44 @@ fn write_box_chat_settings_to_disk(settings: &BoxChatConfig) -> Result<(), Strin
         std::fs::create_dir_all(parent)
             .map_err(|error| format!("Failed to create {}: {error}", parent.display()))?;
     }
-    std::fs::write(&path, doc.to_string())
-        .map_err(|error| format!("Failed to write {}: {error}", path.display()))?;
+
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("Failed to determine file name for {}", path.display()))?;
+    let temp_path = path.with_file_name(format!(
+        ".{file_name}.tmp.{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|error| format!("Failed to build temp path for {}: {error}", path.display()))?
+            .as_nanos()
+    ));
+
+    let mut temp_file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp_path)
+        .map_err(|error| {
+            format!(
+                "Failed to create temp file {}: {error}",
+                temp_path.display()
+            )
+        })?;
+    std::io::Write::write_all(&mut temp_file, doc.to_string().as_bytes())
+        .map_err(|error| format!("Failed to write temp file {}: {error}", temp_path.display()))?;
+    temp_file
+        .sync_all()
+        .map_err(|error| format!("Failed to sync temp file {}: {error}", temp_path.display()))?;
+    drop(temp_file);
+
+    std::fs::rename(&temp_path, &path).map_err(|error| {
+        let _ = std::fs::remove_file(&temp_path);
+        format!(
+            "Failed to replace {} with {}: {error}",
+            path.display(),
+            temp_path.display()
+        )
+    })?;
     Ok(())
 }
 
@@ -708,6 +745,29 @@ mod tests {
         let reloaded: BoxChatConfig =
             serde_json::from_slice(&body).expect("settings response should parse");
         assert_eq!(reloaded, settings);
+    }
+
+    #[tokio::test]
+    async fn put_box_chat_settings_rejects_zero_port() {
+        let dir = tempdir().expect("tempdir should exist");
+        let config_path = dir.path().join("textquest.toml");
+        let _guard = ConfigPathGuard::set(&config_path);
+
+        let response = put_box_chat_settings(Json(BoxChatConfig {
+            enabled: true,
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            auto_connect: true,
+        }))
+        .await
+        .into_response();
+
+        let (status, body) = error_response_json(response).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            body,
+            serde_json::json!({ "error": "Box chat port must be between 1 and 65535" })
+        );
     }
 
     #[tokio::test]

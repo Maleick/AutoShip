@@ -11,7 +11,7 @@ use std::{
         mpsc,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant, SystemTime},
 };
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -19,6 +19,7 @@ use textquest_common::box_chat::{BoxChatConfig, OutboundRoute, WireMessage, pars
 
 const IO_POLL_INTERVAL: Duration = Duration::from_millis(200);
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
+const CONFIG_RELOAD_INTERVAL: Duration = Duration::from_secs(1);
 
 static MANAGER: OnceLock<BoxChatManager> = OnceLock::new();
 
@@ -140,8 +141,11 @@ impl HubState {
 struct RuntimeState {
     config_path: PathBuf,
     config: BoxChatConfig,
+    mode: RuntimeMode,
     listener: Option<ListenerHandle>,
     connector: Option<ConnectorHandle>,
+    last_reload_check: Option<Instant>,
+    last_loaded_mtime: Option<SystemTime>,
 }
 
 impl Default for RuntimeState {
@@ -149,10 +153,19 @@ impl Default for RuntimeState {
         Self {
             config_path: default_config_path(),
             config: BoxChatConfig::default(),
+            mode: RuntimeMode::Full,
             listener: None,
             connector: None,
+            last_reload_check: None,
+            last_loaded_mtime: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeMode {
+    Full,
+    ConnectorOnly,
 }
 
 struct BoxChatManager {
@@ -169,11 +182,28 @@ impl BoxChatManager {
     }
 
     fn configure(&self, config_path: PathBuf, config: BoxChatConfig) -> Result<()> {
+        self.configure_with_mode(config_path, config, RuntimeMode::Full)
+    }
+
+    fn configure_connector_only(&self, config_path: PathBuf, config: BoxChatConfig) -> Result<()> {
+        self.configure_with_mode(config_path, config, RuntimeMode::ConnectorOnly)
+    }
+
+    fn configure_with_mode(
+        &self,
+        config_path: PathBuf,
+        config: BoxChatConfig,
+        mode: RuntimeMode,
+    ) -> Result<()> {
         let characters = self.character_names();
         let mut runtime = self.runtime.lock().expect("box chat runtime lock");
         let old_config = runtime.config.clone();
+        let old_mode = runtime.mode;
         runtime.config_path = config_path;
         runtime.config = config.clone();
+        runtime.mode = mode;
+        runtime.last_reload_check = Some(Instant::now());
+        runtime.last_loaded_mtime = config_modified_time(&runtime.config_path)?;
 
         if !config.enabled {
             stop_listener(&mut runtime);
@@ -181,26 +211,43 @@ impl BoxChatManager {
             return Ok(());
         }
 
-        let listener_needs_restart =
-            runtime.listener.is_none() || !old_config.enabled || old_config.port != config.port;
-        if listener_needs_restart {
+        let listener_allowed = matches!(mode, RuntimeMode::Full);
+        if listener_allowed {
+            let listener_needs_restart = runtime.listener.is_none()
+                || !old_config.enabled
+                || old_config.port != config.port
+                || old_mode != mode;
+            if listener_needs_restart {
+                stop_listener(&mut runtime);
+                runtime.listener = Some(start_listener(config.port, Arc::clone(&self.shared))?);
+            }
+        } else {
             stop_listener(&mut runtime);
-            runtime.listener = Some(start_listener(config.port, Arc::clone(&self.shared))?);
         }
 
-        if config.auto_connect {
+        let suppress_self_connector =
+            listener_allowed && runtime.listener.is_some() && is_self_connector_target(&config);
+        if suppress_self_connector {
+            tracing::info!(
+                host = %config.host,
+                port = config.port,
+                "Skipping box-chat upstream connector for self endpoint"
+            );
+            stop_connector(&mut runtime);
+        } else if config.auto_connect {
             let connector_needs_restart = runtime.connector.is_none()
                 || !old_config.enabled
                 || !old_config.auto_connect
                 || old_config.host != config.host
-                || old_config.port != config.port;
+                || old_config.port != config.port
+                || old_mode != mode;
             if connector_needs_restart {
                 stop_connector(&mut runtime);
                 runtime.connector = Some(start_connector(
                     config.clone(),
                     characters.clone(),
                     Arc::clone(&self.shared),
-                ));
+                )?);
             } else if let Some(connector) = runtime.connector.as_ref() {
                 connector.update_characters(characters);
             }
@@ -216,18 +263,41 @@ impl BoxChatManager {
         stop_listener(&mut runtime);
         stop_connector(&mut runtime);
         runtime.config = BoxChatConfig::default();
+        runtime.mode = RuntimeMode::Full;
+        runtime.last_reload_check = None;
+        runtime.last_loaded_mtime = None;
     }
 
     fn reload_config(&self) -> Result<Option<BoxChatConfig>> {
-        let (config_path, current) = {
-            let runtime = self.runtime.lock().expect("box chat runtime lock");
-            (runtime.config_path.clone(), runtime.config.clone())
+        let (config_path, current, mode, last_loaded_mtime) = {
+            let mut runtime = self.runtime.lock().expect("box chat runtime lock");
+            let now = Instant::now();
+            if runtime
+                .last_reload_check
+                .is_some_and(|last| now.duration_since(last) < CONFIG_RELOAD_INTERVAL)
+            {
+                return Ok(None);
+            }
+            runtime.last_reload_check = Some(now);
+            (
+                runtime.config_path.clone(),
+                runtime.config.clone(),
+                runtime.mode,
+                runtime.last_loaded_mtime,
+            )
         };
-        let next = load_box_chat_config(&config_path)?;
-        if next == current {
+        let next_mtime = config_modified_time(&config_path)?;
+        if next_mtime == last_loaded_mtime {
             return Ok(None);
         }
-        self.configure(config_path, next.clone())?;
+
+        let next = load_box_chat_config(&config_path)?;
+        if next == current {
+            let mut runtime = self.runtime.lock().expect("box chat runtime lock");
+            runtime.last_loaded_mtime = next_mtime;
+            return Ok(None);
+        }
+        self.configure_with_mode(config_path, next.clone(), mode)?;
         Ok(Some(next))
     }
 
@@ -369,6 +439,11 @@ pub fn configure(config_path: PathBuf, config: BoxChatConfig) -> Result<()> {
     BoxChatManager::global().configure(config_path, config)
 }
 
+/// Start box-chat in a connector-only mode suitable for one-shot CLI dispatch.
+pub fn configure_connector_only(config_path: PathBuf, config: BoxChatConfig) -> Result<()> {
+    BoxChatManager::global().configure_connector_only(config_path, config)
+}
+
 /// Stop all box-chat listener and connector threads in this process.
 pub fn stop() {
     BoxChatManager::global().stop();
@@ -399,6 +474,27 @@ fn load_box_chat_config(path: &Path) -> Result<BoxChatConfig> {
     } else {
         Ok(BoxChatConfig::default())
     }
+}
+
+fn config_modified_time(path: &Path) -> Result<Option<SystemTime>> {
+    match std::fs::metadata(path) {
+        Ok(metadata) => metadata
+            .modified()
+            .map(Some)
+            .map_err(|error| anyhow!(error).context("failed to read box-chat config mtime")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(anyhow!(error).context("failed to stat box-chat config")),
+    }
+}
+
+fn is_self_connector_target(config: &BoxChatConfig) -> bool {
+    let host = config
+        .host
+        .trim()
+        .trim_matches(['[', ']'])
+        .to_ascii_lowercase();
+    matches!(host.as_str(), "127.0.0.1" | "localhost" | "0.0.0.0" | "::1")
+        || host == node_name().to_ascii_lowercase()
 }
 
 fn execute_route_locally(shared: &SharedState, route: &OutboundRoute) -> Result<(usize, usize)> {
@@ -588,7 +684,7 @@ fn start_connector(
     config: BoxChatConfig,
     characters: Vec<String>,
     shared: Arc<SharedState>,
-) -> ConnectorHandle {
+) -> Result<ConnectorHandle> {
     let stop = Arc::new(AtomicBool::new(false));
     let connected = Arc::new(AtomicBool::new(false));
     let (tx, rx) = mpsc::channel::<ConnectorCommand>();
@@ -597,14 +693,14 @@ fn start_connector(
     let join = thread::Builder::new()
         .name(format!("textquest-box-chat-connector-{}", config.port))
         .spawn(move || connector_loop(config, characters, shared, rx, stop_flag, connected_flag))
-        .expect("failed to spawn box-chat connector thread");
+        .context("failed to spawn box-chat connector thread")?;
 
-    ConnectorHandle {
+    Ok(ConnectorHandle {
         stop,
         connected,
         tx,
         join,
-    }
+    })
 }
 
 fn connector_loop(

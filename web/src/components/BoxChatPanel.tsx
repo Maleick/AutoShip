@@ -83,12 +83,32 @@ export default function BoxChatPanel() {
     setDraft(settings);
   }, [settings]);
 
+  const normalizedHost = draft.host.trim();
+  const normalizedPort = Number(draft.port);
+  const portIsValid =
+    Number.isInteger(normalizedPort) && normalizedPort >= 1 && normalizedPort <= 65535;
+  const canSave = !loading && !saving && normalizedHost.length > 0 && portIsValid;
+  const validationMessage =
+    normalizedHost.length === 0
+      ? "Relay host is required."
+      : !portIsValid
+        ? "Relay port must be between 1 and 65535."
+        : null;
+
   async function handleSave() {
-    await save({
-      ...draft,
-      host: draft.host.trim(),
-      port: Number(draft.port),
-    });
+    if (!canSave) {
+      return;
+    }
+
+    try {
+      await save({
+        ...draft,
+        host: normalizedHost,
+        port: normalizedPort,
+      });
+    } catch {
+      // useBoxChatSettings already exposes the error state for UI feedback.
+    }
   }
 
   return (
@@ -114,7 +134,7 @@ export default function BoxChatPanel() {
         <button
           type="button"
           onClick={handleSave}
-          disabled={loading || saving}
+          disabled={!canSave}
           className="inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <FloppyDisk size={16} />
@@ -125,6 +145,8 @@ export default function BoxChatPanel() {
       <div className="mt-6 space-y-4">
         {loading ? (
           <StatusBanner tone="neutral" text="Loading persisted box-chat settings..." />
+        ) : validationMessage ? (
+          <StatusBanner tone="error" text={validationMessage} />
         ) : error ? (
           <StatusBanner tone="error" text={error} />
         ) : savedAt ? (
@@ -169,7 +191,7 @@ export default function BoxChatPanel() {
               onChange={(port) =>
                 setDraft((prev) => ({
                   ...prev,
-                  port: Number(port) || 0,
+                  port: Number(port),
                 }))
               }
             />
