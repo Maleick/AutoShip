@@ -62,6 +62,7 @@
 - [Syscall Evasion](Research-Syscall-Evasion)
 - [TUI Map Navmesh Audit](Research-TUI-Map-Navmesh-Audit)
 - [TUI Map Polish](Research-TUI-Map-Polish)
+- [Velious Class Synergy](Research-Velious-Class-Synergy)
 - [VNC](Research-VNC)
 - [WinEQ](Research-WinEQ)
 - [Zoning Validation](Research-Zoning-Validation)
