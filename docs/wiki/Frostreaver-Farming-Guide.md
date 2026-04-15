@@ -278,6 +278,8 @@ From easiest to hardest within NToV:
 
 **36-Box Feasibility:** With 6 CLR, 6 BRD, 4 SHM, a dedicated ENC, and a real tank core of 3 WAR + 1 SK + 2 PAL, your force can handle most NToV content. Lord Vyemm and Vulak'Aerr will still require strong Kael/Kunark gear and disciplined healing rotations, but the roster has enough real tanks, healers, and monk DPS to clear the zone without leaning on pet tanking.
 
+For breakeven math, farming opportunity-cost thresholds, and a recommended early-phase loot policy for NToV, see [Research: Frostreaver Raid Economics](Research-Raid-Economics.md).
+
 ---
 
 ## Encounter Locking Strategy
