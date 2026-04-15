@@ -286,7 +286,9 @@ pub fn validate_command(cmd: &Command) -> bool {
                 .text_contains
                 .as_ref()
                 .is_none_or(|value| !value.is_empty() && value.len() <= 128)
-                && filter.max_rows.is_none_or(|value| value > 0 && value <= 2000)
+                && filter
+                    .max_rows
+                    .is_none_or(|value| value > 0 && value <= 2000)
         }
         Command::StartLogin {
             account_name,

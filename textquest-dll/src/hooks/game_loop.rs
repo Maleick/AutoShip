@@ -2755,9 +2755,7 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             tracing::info!(?filter, "QueryBazaarResults received");
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
             let windows = crate::eq::bazaar::query_bazaar_results(eq_base, &filter);
-            crate::ipc::send_response(textquest_common::ipc::Response::BazaarResults {
-                windows,
-            });
+            crate::ipc::send_response(textquest_common::ipc::Response::BazaarResults { windows });
         }
         Command::QueryContextMenu => {
             tracing::info!("QueryContextMenu received");
