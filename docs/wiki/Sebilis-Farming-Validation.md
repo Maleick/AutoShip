@@ -16,6 +16,7 @@ automation claims beyond the evidence state recorded here.
 | TextQuest has a forage automation surface that can drive `/forage` on an interval. | Research-backed | `textquest/src/camp/forage.rs` | The manager tracks attempts and result strings, but no Sebilis-specific Nodding Blue Lily baseline is captured in-repo. |
 | TextQuest already exposes operator pause controls and a zone-scoped observability contract for attended validation runs. | Research-backed | `textquest/src/tui/event.rs`, `textquest/src/tui/state.rs`, `docs/dev/observability.md` | HOME/END and economy control bindings can pause, resume, or abort automation, and observability docs already standardize `zone` labels like `sebilis`; none of that is the same as a live Sebilis spawn-rate or safety baseline. |
 | TextQuest already emits spawn-refresh observability that can support attended measurement runs. | Research-backed | `textquest/src/eq/spawn.rs`, `textquest/src/tui/run.rs`, `docs/dev/observability.md` | Spawn traversal and TUI refresh logs already include `spawn_count`, and observability docs define a `spawn_count` metric with `zone` labels, but the repo still does not persist camp-by-camp Sebilis respawn timing or overlap measurements. |
+| TextQuest already has zone-failure recovery plumbing that can frame corpse-recovery risk during route validation. | Research-backed | `textquest/src/zoning/failure_codes.rs`, `textquest/src/zoning/recovery.rs`, `docs/zone-transition-state-map.md` | The repo models `CorpseInZone = -22`, safe-coordinate recovery, and live validation tasks for recovery outcomes, but none of that proves the intended Sebilis access route is corpse-recovery-safe in practice. |
 | Timing variation and operator hardening reduce visibility. | Research-backed | `docs/wiki/Security-and-Anti-Detection-Notes.md`, `docs/wiki/Research-Anti-Detection.md` | The repo explicitly treats anti-detection value as bounded guidance rather than proof of safety. |
 | The repo already tracks missing unattended-session safeguards and telemetry as overnight requirements or gaps. | Research-backed blocker | `docs/MQ2_COVERAGE_GAP_ANALYSIS.md`, `docs/OVERNIGHT-ISSUE-SUMMARY.md` | GM alerts, auto-camp-on-death, kill or plat tracking, and session logs are documented as required or gap-tracked overnight tooling, not validated Sebilis-safe automation. |
 | Launch-zone routing support is still planned rather than proven. | Research-backed blocker | `docs/orchestration-design.md` | The orchestration roadmap still lists a `Camp database for launch zones` as unfinished TLP-launch work, so this repo does not yet present a complete launch-zone routing surface for Sebilis. |
@@ -80,6 +81,18 @@ automation claims beyond the evidence state recorded here.
 - These spawn observability hooks help instrument attended sampling sessions,
   but they still do not capture camp-by-camp Sebilis respawn timing, named
   overlap, or validated wait-time baselines.
+- `textquest/src/zoning/failure_codes.rs` already maps
+  `CorpseInZone = -22` as a zone-entry failure that needs investigation before
+  retry.
+- `textquest/src/zoning/recovery.rs` already exposes safe-coordinate recovery
+  orchestration with `MAX_RECOVERY_RETRIES = 3`, backoff scheduling, and
+  response validation.
+- `docs/zone-transition-state-map.md` already says live route tests should
+  record trigger, visible behavior, and recovery outcome, including whether
+  recovery returns the client to an origin or destination safe point.
+- These zone-recovery hooks help scope corpse-risk and route-failure checks for
+  attended Sebilis validation, but they still do not prove the Scars-launch
+  route is stable for corpse recovery or repeated turnover.
 - `docs/wiki/Frostreaver-Farming-Guide.md` and `docs/wiki/P99-Zone-Guide.md`
   contain the existing research narrative about Disco, left wing, crypt,
   juggernauts, and myconids.

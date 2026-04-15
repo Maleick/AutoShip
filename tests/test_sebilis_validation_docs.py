@@ -307,6 +307,42 @@ class SebilisValidationDocsTests(unittest.TestCase):
         )
         self.assertIn("overlap, or validated wait-time baselines.", text)
 
+    def test_validation_doc_records_zone_recovery_plumbing_as_route_risk_aid_not_live_path_proof(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        failure_codes_text = (
+            REPO_ROOT / "textquest" / "src" / "zoning" / "failure_codes.rs"
+        ).read_text(encoding="utf-8")
+        recovery_text = (
+            REPO_ROOT / "textquest" / "src" / "zoning" / "recovery.rs"
+        ).read_text(encoding="utf-8")
+        state_map_text = (
+            REPO_ROOT / "docs" / "zone-transition-state-map.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("CorpseInZone = -22", failure_codes_text)
+        self.assertIn("MAX_RECOVERY_RETRIES: u32 = 3", recovery_text)
+        self.assertIn("Safe-coordinate recovery orchestration", recovery_text)
+        self.assertIn("Each task should record: trigger, observed game state value, visible client behavior, and recovery outcome.", state_map_text)
+        self.assertIn("Whether recovery is to the origin zone safe point or the destination zone safe point", state_map_text)
+        self.assertIn("TextQuest already has zone-failure recovery plumbing", text)
+        self.assertIn("`CorpseInZone = -22`", text)
+        self.assertIn("`MAX_RECOVERY_RETRIES = 3`", text)
+        self.assertIn("safe-coordinate recovery", text)
+        self.assertIn(
+            "These zone-recovery hooks help scope corpse-risk and route-failure checks for",
+            text,
+        )
+        self.assertIn(
+            "attended Sebilis validation, but they still do not prove the Scars-launch",
+            text,
+        )
+        self.assertIn(
+            "route is stable for corpse recovery or repeated turnover.",
+            text,
+        )
+
     def test_validation_doc_and_template_record_theorized_items_without_promoting_them_to_validated_outputs(self) -> None:
         text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
             encoding="utf-8"
