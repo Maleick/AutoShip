@@ -328,11 +328,44 @@ For breakeven math, farming opportunity-cost thresholds, and a recommended early
 4. **Split camps across groups:** Each group locks its own camp. 6 groups = 6 simultaneously locked camp areas in a dungeon
 5. **Raid formation for bosses:** Combine all 6 groups into a raid; one person tags the boss, entire raid can engage
 
-**Power Leveling with Encounter Locking:**
+### FTE Powerleveling Status (`TextQuest#1580`)
 
-- Put lower-level alts in the group with a high-level tagger
-- The tagger hits every mob (locking to the group), then you can kill with lower-level characters getting XP
-- Works for catch-up leveling of replacement characters
+This subsection separates official rules, community workarounds, and repo-observed automation support so launch planning does not assume an exploit still works.
+
+**Evidence anchors used here:**
+
+- `Research-backed`: public EverQuest ruleset text or checked-in TextQuest code supports the claim.
+- `Provisional`: community-reported workaround with no current Frostreaver live proof in this repo.
+- `Needs Live Proof`: plausible on paper, but not validated on a current live client in this workspace.
+
+| Method | Evidence state | What we know | Launch recommendation |
+| ------ | -------------- | ------------ | --------------------- |
+| Traditional DS PL (high-level tagger or outside killer does the damage) | `Research-backed` for the rule conflict, `Needs Live Proof` for current-patch reproduction | Official encounter-locking rules still say the lock follows the first hate-list owner, outside players cannot damage the mob unless it is semi-unlocked with `/yell`, and XP goes to the player/group/raid that does the most damage. That combination implies the old "tag once, let a DS or outside killer do the work" pattern is no longer a safe default. Oakwynd community reports also described the classic DS flow as effectively dead under FTE. | Treat as broken for Frostreaver planning. Do not build leveling throughput assumptions around it. |
+| Group the lowbies with the puller, make every alt get hit once, then drop the puller and finish with DS | `Provisional` | Oakwynd-era community reports say this can work for up to five alts if the puller has no riposte or DS and every target gets each mob on its hate list before the puller drops group. The same discussion also describes the flow as timing-sensitive and bug-prone. | Keep as a manual fallback only. Not stable enough to be baseline process or automation target. |
+| `/yell` every mob to semi-unlock it, then kill with an AE/DS finisher | `Research-backed` for `/yell` mechanics, `Provisional` for PL viability | Official FAQ text confirms `/yell` semi-unlocks a targeted encounter-locked NPC. Community reports say using it mob-by-mob for powerleveling was "still very buggy." | Use only as an emergency/manual experiment, not as the planned leveling path. |
+| Charm-based leveling group | `Research-backed` for FTE compatibility, `Needs Live Proof` for XP/hour | Charm DPS stays inside the lock-owning group and does not depend on broken DS credit tricks. That makes it mechanically compatible with encounter locking. What is still missing here is measured Frostreaver XP/hour versus a normal dungeon group. | This is the best advanced alternative on paper, but treat the throughput claim as unproven until live launch testing exists. |
+
+### What TextQuest Can Actually Automate Today
+
+TextQuest currently covers only the first half of the charm-recovery loop:
+
+- `textquest/src/orchestrator/mod.rs` detects `CharmBreak` events while a camp is in active combat.
+- `textquest/src/camp/cc.rs` converts that event into an emergency stun/mez response so the group has a chance to recover safely.
+- The repo does **not** currently implement the full "re-charm, re-haste, re-send pet" loop described by mature EQ automation stacks.
+
+That means charm-heavy leveling is an operator-assisted path today, not a fire-and-forget replacement for normal XP groups.
+
+Candidate shells worth testing once Frostreaver is live:
+
+- Option A: 2 Enchanter / Bard / Cleric / Druid / Necromancer
+- Option B: 3 Enchanter / Bard / Cleric / Druid
+
+### Practical Launch Stance
+
+1. Assume traditional DS PL is off the table until a live Frostreaver pass disproves it.
+2. Treat the drop-group workaround and per-target `/yell` unlock flow as `Provisional` bug workarounds, not production doctrine.
+3. Use normal dungeon groups as the planning baseline for replacement-character catch-up.
+4. If you want a higher-upside FTE-compatible alternative, test one charm-centric group first instead of converting the entire roster around an unvalidated XP/hour assumption.
 
 ---
 
@@ -456,6 +489,7 @@ See [P99 Wiki Zone Guide](P99-Zone-Guide.md) for the full P99 wiki-sourced zone 
 - [EQProgression TLP Server Rules and Info](https://www.eqprogression.com/tlp-server-rules-and-info/)
 - [Temple of Veeshan (Project 1999 Wiki)](https://wiki.project1999.com/Temple_of_Veeshan)
 - [Velious Raiding Gear (Project 1999 Wiki)](https://wiki.project1999.com/Players:Velious_Raiding_Gear)
+- [Votes are in! (EverQuest 2026 TLP poll outcome)](https://www.everquest.com/news/eq-2026-tlp-polls-outcome)
 - [Fangbreaker Rulesets FAQ (EverQuest Official)](https://www.everquest.com/guides/eq-2025-tlp-ruleset-faq)
 - [Mischief TLP Discussion (Fires of Heaven)](https://www.firesofheaven.org/threads/eq-tlp-mischief-free-trade-random-loot.12847/)
 - [Dynamic Loot Tiers (RedGuides)](https://www.redguides.com/community/threads/info-random-loot-server-dynamic-loot-tiers.91960/)
