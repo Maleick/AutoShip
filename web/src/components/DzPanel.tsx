@@ -10,6 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import { dzLockouts, raidInstances, dzHistory } from "../data/demo";
 import type { DzLockout, RaidInstance, DzHistoryEntry } from "../types";
+import { formatDuration } from "../utils/time";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -37,16 +38,6 @@ function formatDate(iso: string): string {
     timeZone: "UTC",
     timeZoneName: "short",
   });
-}
-
-/** Format duration in seconds to "Xh Ym Zs" style. */
-function formatDuration(secs: number): string {
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = secs % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
 }
 
 /** Colour class for the urgency of a lockout countdown. */

@@ -138,6 +138,42 @@ pub struct ClassParams {
     pub slow_at_hp_pct: Option<u8>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TributeAlertState {
+    Ok,
+    Expiring,
+    Expired,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TributePreferences {
+    pub auto_activate: bool,
+    pub warning_threshold_secs: u64,
+    pub preferred_tributes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TributeStatus {
+    pub active: bool,
+    pub remaining_secs: u64,
+    pub point_balance: u32,
+    pub active_tributes: Vec<String>,
+    pub alert_state: TributeAlertState,
+}
+
+impl Default for TributeStatus {
+    fn default() -> Self {
+        Self {
+            active: false,
+            remaining_secs: 0,
+            point_balance: 0,
+            active_tributes: Vec::new(),
+            alert_state: TributeAlertState::Expired,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CharacterConfig {
     pub character_name: String,
@@ -152,6 +188,58 @@ pub struct CharacterConfig {
     pub auto_rez: AutoRezConfig,
     pub group_override: bool,
     pub group_name: Option<String>,
+    pub tribute_preferences: TributePreferences,
+    pub tribute_status: TributeStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterConfigUpdate {
+    pub character_name: String,
+    pub class: String,
+    pub role: String,
+    pub heal_at_pct: u8,
+    pub mana_sit_pct: u8,
+    pub nuke_at_pct: u8,
+    pub rotation: Vec<RotationEntry>,
+    pub class_params: ClassParams,
+    #[serde(default)]
+    pub auto_rez: AutoRezConfig,
+    pub group_override: bool,
+    pub group_name: Option<String>,
+    pub tribute_preferences: TributePreferences,
+}
+
+fn tribute_preferences(
+    preferred_tributes: &[&str],
+    warning_threshold_secs: u64,
+) -> TributePreferences {
+    TributePreferences {
+        auto_activate: true,
+        warning_threshold_secs,
+        preferred_tributes: preferred_tributes
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect(),
+    }
+}
+
+fn tribute_status(
+    active: bool,
+    remaining_secs: u64,
+    point_balance: u32,
+    active_tributes: &[&str],
+    alert_state: TributeAlertState,
+) -> TributeStatus {
+    TributeStatus {
+        active,
+        remaining_secs,
+        point_balance,
+        active_tributes: active_tributes
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect(),
+        alert_state,
+    }
 }
 
 pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
@@ -191,6 +279,14 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 1".into()),
+            tribute_preferences: tribute_preferences(&["Marr's Gift", "Champion's Aura"], 300),
+            tribute_status: tribute_status(
+                true,
+                240,
+                3_200,
+                &["Marr's Gift"],
+                TributeAlertState::Expiring,
+            ),
         },
         CharacterConfig {
             character_name: "Noxus".into(),
@@ -215,6 +311,14 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 1".into()),
+            tribute_preferences: tribute_preferences(&["Stalwart Ward", "Champion's Aura"], 420),
+            tribute_status: tribute_status(
+                true,
+                3_600,
+                1_950,
+                &["Stalwart Ward", "Champion's Aura"],
+                TributeAlertState::Ok,
+            ),
         },
         CharacterConfig {
             character_name: "Aelrindel".into(),
@@ -242,6 +346,8 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 2".into()),
+            tribute_preferences: tribute_preferences(&["Arcane Fury", "Hero's Fortitude"], 180),
+            tribute_status: tribute_status(false, 0, 875, &[], TributeAlertState::Expired),
         },
         CharacterConfig {
             character_name: "Grok".into(),
@@ -269,6 +375,14 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 2".into()),
+            tribute_preferences: tribute_preferences(&["Ancient Bulwark", "Spirit's Resolve"], 300),
+            tribute_status: tribute_status(
+                true,
+                1_020,
+                1_480,
+                &["Ancient Bulwark"],
+                TributeAlertState::Ok,
+            ),
         },
         CharacterConfig {
             character_name: "Valerius".into(),
@@ -296,6 +410,17 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 3".into()),
+            tribute_preferences: tribute_preferences(
+                &["Fervor of Shadows", "Hero's Vitality"],
+                240,
+            ),
+            tribute_status: tribute_status(
+                true,
+                150,
+                2_250,
+                &["Fervor of Shadows"],
+                TributeAlertState::Expiring,
+            ),
         },
     ] {
         configs.insert(cfg.character_name.clone(), cfg);
@@ -319,17 +444,33 @@ pub async fn list_character_configs(
 pub async fn put_character_config(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
-    Json(mut config): Json<CharacterConfig>,
+    Json(config): Json<CharacterConfigUpdate>,
 ) -> Result<Json<CharacterConfig>, StatusCode> {
     if name.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    config.character_name = name;
-    {
-        let mut configs_map = state.character_configs.write().await;
-        configs_map.insert(config.character_name.clone(), config.clone());
-    }
-    Ok(Json(config))
+    let mut configs_map = state.character_configs.write().await;
+    let tribute_status = configs_map
+        .get(&name)
+        .map(|existing| existing.tribute_status.clone())
+        .unwrap_or_default();
+    let saved = CharacterConfig {
+        character_name: name,
+        class: config.class,
+        role: config.role,
+        heal_at_pct: config.heal_at_pct,
+        mana_sit_pct: config.mana_sit_pct,
+        nuke_at_pct: config.nuke_at_pct,
+        rotation: config.rotation,
+        class_params: config.class_params,
+        auto_rez: config.auto_rez,
+        group_override: config.group_override,
+        group_name: config.group_name,
+        tribute_preferences: config.tribute_preferences,
+        tribute_status,
+    };
+    configs_map.insert(saved.character_name.clone(), saved.clone());
+    Ok(Json(saved))
 }
 
 // ── Economy types
@@ -652,6 +793,20 @@ mod tests {
         let Json(configs) = list_character_configs(State(state)).await;
         assert!(!configs.is_empty());
         assert!(configs.iter().any(|c| c.character_name == "Frostreaver"));
+        let frostreaver = configs
+            .into_iter()
+            .find(|c| c.character_name == "Frostreaver")
+            .expect("demo config should exist");
+        let json = serde_json::to_value(frostreaver).expect("config should serialize");
+        assert_eq!(json["tribute_preferences"]["auto_activate"], true);
+        assert_eq!(
+            json["tribute_status"]["point_balance"],
+            serde_json::json!(3_200)
+        );
+        assert_eq!(
+            json["tribute_status"]["alert_state"],
+            serde_json::json!("expiring")
+        );
     }
 
     #[tokio::test]
@@ -667,7 +822,7 @@ mod tests {
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         });
-        let input = CharacterConfig {
+        let input = CharacterConfigUpdate {
             character_name: "IgnoredName".into(),
             class: "Wizard".into(),
             role: "DPS".into(),
@@ -685,12 +840,23 @@ mod tests {
             },
             group_override: false,
             group_name: None,
+            tribute_preferences: tribute_preferences(&["Arcane Fury", "Hero's Fortitude"], 180),
         };
         let Json(saved) =
             put_character_config(State(state.clone()), Path("Aelrindel".into()), Json(input))
                 .await
                 .expect("put character config should succeed");
         assert_eq!(saved.character_name, "Aelrindel");
+        let saved_json = serde_json::to_value(&saved).expect("saved config should serialize");
+        assert_eq!(
+            saved_json["tribute_preferences"]["preferred_tributes"],
+            serde_json::json!(["Arcane Fury", "Hero's Fortitude"])
+        );
+        assert_eq!(
+            saved_json["tribute_status"]["alert_state"],
+            serde_json::json!("expired")
+        );
+        assert_eq!(saved_json["tribute_status"]["point_balance"], serde_json::json!(875));
 
         let Json(configs) = list_character_configs(State(state)).await;
         let updated = configs

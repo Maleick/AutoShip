@@ -132,6 +132,20 @@ The auto-rez policy currently covers:
 - `decline_if_untrusted`
 - `delay_ms`
 
+Tribute automation is also exposed per character. The dashboard currently carries:
+
+- tribute auto-activate toggle
+- tribute warning lead time in seconds
+- preferred tribute list
+- live tribute status snapshot:
+  - active/inactive state
+  - time remaining
+  - current tribute point balance
+  - current active tribute list
+  - alert state (`ok`, `expiring`, or `expired`)
+
+The live demo/API shape for those settings is served from `textquest-web/src/api.rs` via `/api/config/characters` and `/api/config/characters/:name`.
+
 This state currently lives in memory inside `textquest-web`. It is available to the running dashboard process, but it is not yet persisted across backend restarts.
 
 ## Maps and Offsets

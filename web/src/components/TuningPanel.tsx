@@ -14,8 +14,10 @@ import type {
   CharacterConfig,
   ClassParams,
   RotationEntry,
+  TributeAlertState,
 } from "../types";
 import { useCharacterConfigs } from "../hooks/useTuning";
+import { formatDuration } from "../utils/time";
 
 const DEFAULT_AUTO_REZ_CONFIG: AutoRezConfig = {
   enabled: false,
@@ -143,6 +145,26 @@ function RotationRow({
       </div>
     </div>
   );
+}
+
+function tributeTone(alertState: TributeAlertState) {
+  switch (alertState) {
+    case "expiring":
+      return {
+        badge: "border-amber-400/40 bg-amber-400/10 text-amber-200",
+        label: "Expiring",
+      };
+    case "expired":
+      return {
+        badge: "border-red-500/40 bg-red-500/10 text-red-300",
+        label: "Expired",
+      };
+    default:
+      return {
+        badge: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
+        label: "Stable",
+      };
+  }
 }
 
 // ─── Class-specific params section ───────────────────────────────────────────
@@ -596,6 +618,141 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
         </div>
       </section>
 
+      {/* Tribute automation */}
+      <section>
+        <h4 className="font-archaic text-xs uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
+          <Faders size={12} className="text-amber-300" />
+          Tribute Automation
+        </h4>
+        <div className="bg-violet/20 border border-white/5 p-4 flex flex-col gap-4">
+          <div className="grid grid-cols-4 gap-3">
+            <div className="border border-white/10 bg-void/40 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-widest text-white/35 font-rune">
+                Status
+              </div>
+              <div className="mt-2">
+                <span
+                  className={`inline-flex items-center border px-2 py-1 text-[10px] uppercase tracking-widest font-rune ${
+                    tributeTone(draft.tribute_status.alert_state).badge
+                  }`}
+                >
+                  {draft.tribute_status.active ? "Active" : "Inactive"} ·{" "}
+                  {tributeTone(draft.tribute_status.alert_state).label}
+                </span>
+              </div>
+            </div>
+            <div className="border border-white/10 bg-void/40 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-widest text-white/35 font-rune">
+                Time Remaining
+              </div>
+              <div className="mt-2 font-rune text-lg text-white">
+                {formatDuration(draft.tribute_status.remaining_secs)}
+              </div>
+            </div>
+            <div className="border border-white/10 bg-void/40 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-widest text-white/35 font-rune">
+                Tribute Balance
+              </div>
+              <div className="mt-2 font-rune text-lg text-amber-200">
+                {draft.tribute_status.point_balance.toLocaleString()}
+              </div>
+            </div>
+            <div className="border border-white/10 bg-void/40 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-widest text-white/35 font-rune">
+                Active Bonuses
+              </div>
+              <div className="mt-2 text-xs text-white/70 font-tech">
+                {draft.tribute_status.active_tributes.length > 0
+                  ? draft.tribute_status.active_tributes.join(", ")
+                  : "None"}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 border border-white/10 bg-void/30 px-3 py-2">
+            <button
+              onClick={() =>
+                setDraft({
+                  ...draft,
+                  tribute_preferences: {
+                    ...draft.tribute_preferences,
+                    auto_activate: !draft.tribute_preferences.auto_activate,
+                  },
+                })
+              }
+              className="flex items-center gap-2 text-sm font-tech transition-colors hover:text-magentaglow"
+            >
+              {draft.tribute_preferences.auto_activate ? (
+                <CheckSquare weight="fill" size={16} className="text-magentaglow" />
+              ) : (
+                <Square size={16} className="text-white/40" />
+              )}
+              <span className="text-white/70">Auto-activate on expiry</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-[180px_1fr] gap-3 items-start">
+            <label
+              htmlFor="tribute-warning-threshold"
+              className="text-[10px] uppercase tracking-widest text-white/35 font-rune pt-2"
+            >
+              Warning Lead Time
+            </label>
+            <input
+              id="tribute-warning-threshold"
+              type="number"
+              min={0}
+              value={draft.tribute_preferences.warning_threshold_secs}
+              onChange={(e) => {
+                const nextValue = e.currentTarget.valueAsNumber;
+                if (!Number.isFinite(nextValue)) {
+                  return;
+                }
+                setDraft({
+                  ...draft,
+                  tribute_preferences: {
+                    ...draft.tribute_preferences,
+                    warning_threshold_secs: Math.max(0, Math.trunc(nextValue)),
+                  },
+                });
+              }}
+              className="w-40 bg-void border border-white/20 text-white text-xs px-3 py-2 focus:outline-none focus:border-magentaglow font-rune"
+            />
+          </div>
+
+          <div className="grid grid-cols-[180px_1fr] gap-3 items-start">
+            <label
+              htmlFor="preferred-tributes"
+              className="text-[10px] uppercase tracking-widest text-white/35 font-rune pt-2"
+            >
+              Preferred Tributes
+            </label>
+            <input
+              id="preferred-tributes"
+              type="text"
+              value={draft.tribute_preferences.preferred_tributes.join(", ")}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  tribute_preferences: {
+                    ...draft.tribute_preferences,
+                    preferred_tributes: e.target.value
+                      .split(",")
+                      .map((entry) => entry.trim())
+                      .filter(Boolean),
+                  },
+                })
+              }
+              className="w-full bg-void border border-white/20 text-white text-xs px-3 py-2 focus:outline-none focus:border-magentaglow font-rune"
+            />
+          </div>
+          <p className="text-[10px] text-white/35 font-rune">
+            Comma-separated tribute names. The monitor warns before expiry and
+            re-activates this list when points are available.
+          </p>
+        </div>
+      </section>
+
       {/* Group override */}
       <section>
         <h4 className="font-archaic text-xs uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
@@ -659,6 +816,18 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       delay_ms: 5000,
     },
     group_override: false,
+    tribute_preferences: {
+      auto_activate: true,
+      warning_threshold_secs: 300,
+      preferred_tributes: ["Marr's Gift", "Champion's Aura"],
+    },
+    tribute_status: {
+      active: true,
+      remaining_secs: 240,
+      point_balance: 3200,
+      active_tributes: ["Marr's Gift"],
+      alert_state: "expiring",
+    },
   },
   {
     character_name: "Noxus",
@@ -681,6 +850,18 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       delay_ms: 3000,
     },
     group_override: false,
+    tribute_preferences: {
+      auto_activate: true,
+      warning_threshold_secs: 420,
+      preferred_tributes: ["Stalwart Ward", "Champion's Aura"],
+    },
+    tribute_status: {
+      active: true,
+      remaining_secs: 3600,
+      point_balance: 1950,
+      active_tributes: ["Stalwart Ward", "Champion's Aura"],
+      alert_state: "ok",
+    },
   },
 ];
 

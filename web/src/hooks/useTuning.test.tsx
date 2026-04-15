@@ -48,6 +48,18 @@ describe("useCharacterConfigs", () => {
               delay_ms: 0,
             },
             group_override: false,
+            tribute_preferences: {
+              auto_activate: true,
+              warning_threshold_secs: 300,
+              preferred_tributes: ["Arcane Fury"],
+            },
+            tribute_status: {
+              active: true,
+              remaining_secs: 240,
+              point_balance: 1800,
+              active_tributes: ["Arcane Fury"],
+              alert_state: "expiring",
+            },
           },
         ])
       )
@@ -75,6 +87,18 @@ describe("useCharacterConfigs", () => {
               delay_ms: 5100,
             },
             group_override: true,
+            tribute_preferences: {
+              auto_activate: true,
+              warning_threshold_secs: 180,
+              preferred_tributes: ["Arcane Fury", "Hero's Fortitude"],
+            },
+            tribute_status: {
+              active: false,
+              remaining_secs: 0,
+              point_balance: 1800,
+              active_tributes: [],
+              alert_state: "expired",
+            },
           },
         ])
       );
@@ -100,6 +124,18 @@ describe("useCharacterConfigs", () => {
           delay_ms: 5100,
         },
         group_override: true,
+        tribute_preferences: {
+          auto_activate: true,
+          warning_threshold_secs: 180,
+          preferred_tributes: ["Arcane Fury", "Hero's Fortitude"],
+        },
+        tribute_status: {
+          active: false,
+          remaining_secs: 0,
+          point_balance: 1800,
+          active_tributes: [],
+          alert_state: "expired",
+        },
       });
     });
 
@@ -109,6 +145,7 @@ describe("useCharacterConfigs", () => {
       expect.objectContaining({ method: "PUT" })
     );
     expect(result.current.configs[0].heal_at_pct).toBe(60);
+    expect(result.current.configs[0].tribute_preferences.warning_threshold_secs).toBe(180);
     expect(result.current.error).toBeNull();
   });
 });

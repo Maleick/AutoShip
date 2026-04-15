@@ -280,6 +280,22 @@ export interface ClassParams {
   slow_at_hp_pct?: number;
 }
 
+export type TributeAlertState = "ok" | "expiring" | "expired";
+
+export interface TributePreferences {
+  auto_activate: boolean;
+  warning_threshold_secs: number;
+  preferred_tributes: string[];
+}
+
+export interface TributeStatus {
+  active: boolean;
+  remaining_secs: number;
+  point_balance: number;
+  active_tributes: string[];
+  alert_state: TributeAlertState;
+}
+
 export interface AutoRezConfig {
   enabled: boolean;
   min_xp_pct: number;
@@ -300,6 +316,8 @@ export interface CharacterConfig {
   auto_rez: AutoRezConfig;
   group_override: boolean;
   group_name?: string;
+  tribute_preferences: TributePreferences;
+  tribute_status: TributeStatus;
 }
 
 // ── Loot configuration types ─────────────────────────────────────────────────
