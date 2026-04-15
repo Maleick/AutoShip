@@ -2,11 +2,14 @@
 
 use std::sync::Arc;
 
-use axum::extract::Query;
-use axum::extract::State;
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::{
+    extract::{
+        Query, State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
+    },
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use serde::Deserialize;
 
 use crate::AppState;
@@ -20,7 +23,8 @@ pub struct WsQuery {
     token: Option<String>,
 }
 
-/// Constant-time string comparison to prevent timing oracle attacks on the API token.
+/// Constant-time string comparison to prevent timing oracle attacks on the API
+/// token.
 fn constant_time_eq_str(a: &str, b: &str) -> bool {
     let ab = a.as_bytes();
     let bb = b.as_bytes();
@@ -35,8 +39,9 @@ fn constant_time_eq_str(a: &str, b: &str) -> bool {
 
 /// Upgrade HTTP connection to WebSocket for live session events.
 ///
-/// If `TEXTQUEST_API_TOKEN` is configured, requires a matching `?token=` query parameter.
-/// Rejects the upgrade with `401 Unauthorized` if token validation fails.
+/// If `TEXTQUEST_API_TOKEN` is configured, requires a matching `?token=` query
+/// parameter. Rejects the upgrade with `401 Unauthorized` if token validation
+/// fails.
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     Query(query): Query<WsQuery>,
@@ -100,11 +105,11 @@ async fn receive_message(socket: &mut WebSocket) -> Option<Message> {
 mod tests {
     use crate::{AppState, accounts, api, build_app};
     use futures_util::{SinkExt, StreamExt};
-    use std::sync::{Arc, Mutex};
-    use std::time::Duration;
-    use tokio::net::TcpListener;
-    use tokio::task::JoinHandle;
-    use tokio::time::timeout;
+    use std::{
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
+    use tokio::{net::TcpListener, task::JoinHandle, time::timeout};
     use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage};
 
     fn test_state() -> Arc<AppState> {

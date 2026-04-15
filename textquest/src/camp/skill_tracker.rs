@@ -1,5 +1,6 @@
 //! Skill leveling and training automation — tracks character skill levels,
-//! identifies mastered and undertrained skills, and records tradeskill sessions.
+//! identifies mastered and undertrained skills, and records tradeskill
+//! sessions.
 
 /// A single skill entry for a character.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,7 +66,8 @@ impl SkillTracker {
 
     /// Returns all skills for `character` where `(current / max) < pct`.
     ///
-    /// Skills with `max_level == 0` are excluded (progress is treated as 100 %).
+    /// Skills with `max_level == 0` are excluded (progress is treated as 100
+    /// %).
     pub fn skills_below_pct(&self, character: &str, pct: f32) -> Vec<&SkillEntry> {
         self.skills
             .iter()
@@ -177,7 +179,8 @@ mod tests {
     #[test]
     fn skills_below_pct_max_zero_excluded() {
         let mut tracker = SkillTracker::new();
-        // max_level == 0 → progress treated as 100 %, should not appear below any threshold
+        // max_level == 0 → progress treated as 100 %, should not appear below any
+        // threshold
         tracker.skills.push(SkillEntry {
             name: "Odd Skill".to_owned(),
             current_level: 0,

@@ -7,7 +7,8 @@
 /// A byte pattern with optional wildcard positions for memory scanning.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pattern {
-    /// Pattern bytes (wildcard positions hold 0x00 but are ignored during matching).
+    /// Pattern bytes (wildcard positions hold 0x00 but are ignored during
+    /// matching).
     bytes: Vec<u8>,
     /// Mask: `true` = must match, `false` = wildcard (skip).
     mask: Vec<bool>,
@@ -69,8 +70,9 @@ impl Pattern {
 
     /// Parse a code-style pattern with a separate mask string.
     ///
-    /// `code` is raw bytes (e.g. `b"\x48\x8B\x05\x00\x00\x00\x00\x48\x85\xC0\x74"`),
-    /// `mask_str` uses `x` for match and `?` for wildcard (e.g. `"xxx????xxxx"`).
+    /// `code` is raw bytes (e.g.
+    /// `b"\x48\x8B\x05\x00\x00\x00\x00\x48\x85\xC0\x74"`), `mask_str` uses
+    /// `x` for match and `?` for wildcard (e.g. `"xxx????xxxx"`).
     ///
     /// # Panics
     ///
@@ -194,7 +196,8 @@ fn matches_at(data: &[u8], offset: usize, pattern: &Pattern) -> bool {
 ///
 /// # Safety
 ///
-/// The caller must ensure `base` points to readable memory of at least `size` bytes.
+/// The caller must ensure `base` points to readable memory of at least `size`
+/// bytes.
 #[cfg(windows)]
 pub unsafe fn scan_process_memory(
     base: *const u8,
@@ -223,7 +226,8 @@ pub unsafe fn scan_process_memory(
 ///
 /// # Safety
 ///
-/// The caller must ensure `base` points to readable memory of at least `size` bytes.
+/// The caller must ensure `base` points to readable memory of at least `size`
+/// bytes.
 #[cfg(windows)]
 pub unsafe fn scan_process_memory_all(
     base: *const u8,
@@ -234,7 +238,8 @@ pub unsafe fn scan_process_memory_all(
     scan_all(data, pattern)
 }
 
-/// Scan live process memory for all matches (macOS stub — always returns empty).
+/// Scan live process memory for all matches (macOS stub — always returns
+/// empty).
 ///
 /// # Safety
 ///

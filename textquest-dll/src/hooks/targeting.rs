@@ -243,9 +243,10 @@ impl TargetingController {
 
     /// Assist another character -- target their target.
     ///
-    /// Finds the `PlayerClient` for `assist_spawn_id`, reads its `ManagedTarget`
-    /// pointer (the spawn they are currently targeting), then writes that pointer
-    /// to our own `pinstTarget`. If the assist target has no target, clears ours.
+    /// Finds the `PlayerClient` for `assist_spawn_id`, reads its
+    /// `ManagedTarget` pointer (the spawn they are currently targeting),
+    /// then writes that pointer to our own `pinstTarget`. If the assist
+    /// target has no target, clears ours.
     pub fn assist(&self, assist_spawn_id: u32) -> Result<(), TargetError> {
         #[cfg(windows)]
         // SAFETY: assist_addr is a valid PlayerClient* returned by find_spawn_addr,
@@ -294,8 +295,9 @@ impl TargetingController {
 
     /// Walk the spawn linked list to find a spawn by ID. Returns its address.
     ///
-    /// Traverses the `TList`<`PlayerClient`*> starting from `SpawnManager`'s player
-    /// list, following NEXT pointers until a matching `SPAWN_ID` is found.
+    /// Traverses the `TList`<`PlayerClient`*> starting from `SpawnManager`'s
+    /// player list, following NEXT pointers until a matching `SPAWN_ID` is
+    /// found.
     fn find_spawn_addr(&self, spawn_id: u32) -> Result<usize, TargetError> {
         if self.eq_base == 0 {
             return Err(TargetError::NoBaseAddress);
@@ -344,7 +346,8 @@ impl TargetingController {
         }
     }
 
-    /// Walk the spawn list to verify a spawn address is still live and get its ID.
+    /// Walk the spawn list to verify a spawn address is still live and get its
+    /// ID.
     fn find_spawn_id_by_addr(&self, spawn_addr: usize) -> Result<u32, TargetError> {
         if self.eq_base == 0 {
             return Err(TargetError::NoBaseAddress);

@@ -1,5 +1,4 @@
-use textquest_common::combat::ExtendedTargetList;
-use textquest_common::nav::Waypoint;
+use textquest_common::{combat::ExtendedTargetList, nav::Waypoint};
 
 /// Check if a specific mob has aggro on us, using the extended target list
 /// (auto-haters) first, falling back to heading heuristics.

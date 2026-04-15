@@ -14,9 +14,10 @@ use ratatui::{
 use super::widgets::{
     WidthClass, classify_width, hp_color, panel, render_cast_bar, truncate_inline,
 };
-use crate::tui::app::extract_account_number;
-use crate::tui::app::{App, ClientState, GroupDef, LiveGroup};
-use crate::tui::theme::Theme;
+use crate::tui::{
+    app::{App, ClientState, GroupDef, LiveGroup, extract_account_number},
+    theme::Theme,
+};
 
 struct MemberRenderEntry<'a> {
     primary: Line<'a>,

@@ -3,10 +3,13 @@ use textquest_common::combat::{
     SpellEntry, TargetSelector,
 };
 
-use crate::combat::rotation::{self, RotationGroup};
-use crate::combat::strategy::{self, ClassStrategy, CombatContext};
+use crate::combat::{
+    rotation::{self, RotationGroup},
+    strategy::{self, ClassStrategy, CombatContext},
+};
 
-/// Warrior strategy: main tank, selects nearest enemy, uses taunt/aggro abilities.
+/// Warrior strategy: main tank, selects nearest enemy, uses taunt/aggro
+/// abilities.
 ///
 /// Rotation order (modeled after rgmercs warrior):
 /// 1. Downtime — self buffs when out of combat
@@ -247,8 +250,7 @@ impl ClassStrategy for WarriorStrategy {
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::CombatConfig;
-    use textquest_common::types::SpawnData;
+    use textquest_common::{combat::CombatConfig, types::SpawnData};
 
     static DEFAULT_CONFIG: std::sync::LazyLock<CombatConfig> =
         std::sync::LazyLock::new(CombatConfig::default);
@@ -557,7 +559,8 @@ mod tests {
             extended_targets: None,
         };
 
-        // Execute full rotation — should return an action from HateTools (first combat group)
+        // Execute full rotation — should return an action from HateTools (first combat
+        // group)
         let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx);
         assert!(action.is_some(), "Should produce an action during combat");
         assert_eq!(action.unwrap().entry_name, "Taunt");

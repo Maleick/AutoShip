@@ -1,4 +1,5 @@
-//! Toast notification system — ephemeral messages for achievements, warnings, and status.
+//! Toast notification system — ephemeral messages for achievements, warnings,
+//! and status.
 
 use std::time::{Duration, Instant};
 

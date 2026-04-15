@@ -10,7 +10,8 @@
 
 use std::sync::OnceLock;
 
-/// Per-client spoofed fingerprint values, generated once from the session token.
+/// Per-client spoofed fingerprint values, generated once from the session
+/// token.
 static SPOOFED: OnceLock<SpoofedFingerprint> = OnceLock::new();
 
 /// The four hardware fingerprint fields that EQ's SystemFingerprint sends.

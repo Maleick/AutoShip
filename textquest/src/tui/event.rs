@@ -3,9 +3,10 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifier
 use std::time::Duration;
 
 use super::app::{ActivePanel, ActiveScreen, App};
-use crate::orchestrator::Orchestrator;
-use crate::tui::state::MapFilterKind;
-use crate::tui::ui::ch_chain::ChPanelFocus;
+use crate::{
+    orchestrator::Orchestrator,
+    tui::{state::MapFilterKind, ui::ch_chain::ChPanelFocus},
+};
 
 fn toggle_tactical_map_layer(app: &mut App, layer: u8) {
     let status = app.map_state.toggle_layer(layer);

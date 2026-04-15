@@ -3,22 +3,25 @@
 /// Session and group control model for the orchestrator.
 pub mod session_control;
 
-use crate::camp::cc::CcType;
-use crate::camp::config::CampConfig;
-use crate::camp::hunt::{HuntLoop, HuntSnapshot, OperatingMode, Pos2D};
-use crate::camp::progression::{CampDatabase, CampProgressionEvent, check_progression};
-use crate::camp::state::{
-    CampAction, CampEvent, CampLoop, CampMember, CampSnapshot, CampState, Role,
+use crate::{
+    camp::{
+        cc::CcType,
+        config::CampConfig,
+        hunt::{HuntLoop, HuntSnapshot, OperatingMode, Pos2D},
+        progression::{CampDatabase, CampProgressionEvent, check_progression},
+        state::{CampAction, CampEvent, CampLoop, CampMember, CampSnapshot, CampState, Role},
+        vendor::{SellCycle, SellState, VendorConfig},
+    },
+    combat::coordinator::CombatCoordinator,
+    ipc::{pipe::CommandPipe, shared::SharedStateReader},
 };
-use crate::camp::vendor::{SellCycle, SellState, VendorConfig};
-use crate::combat::coordinator::CombatCoordinator;
-use crate::ipc::pipe::CommandPipe;
-use crate::ipc::shared::SharedStateReader;
 use std::collections::HashMap;
-use textquest_common::combat::HateTargetCategory;
-use textquest_common::ipc::{Command, Response, SessionToken};
-use textquest_common::routing::RoutingScope;
-use textquest_common::types::GameState;
+use textquest_common::{
+    combat::HateTargetCategory,
+    ipc::{Command, Response, SessionToken},
+    routing::RoutingScope,
+    types::GameState,
+};
 
 /// Generate a cryptographically random 32-byte session token using OS entropy.
 #[allow(dead_code)] // Used when IPC is wired up in later milestones
@@ -73,7 +76,8 @@ pub struct Orchestrator {
     pub camp_db: Option<CampDatabase>,
     /// Suggested camp from progression check (for TUI display).
     pub suggested_camp: Option<String>,
-    /// Previous CC state snapshot for charm break detection (`spawn_id` -> `CcType`).
+    /// Previous CC state snapshot for charm break detection (`spawn_id` ->
+    /// `CcType`).
     prev_cc_state: HashMap<u32, CcType>,
     /// Previous nearby spawn IDs for add detection.
     prev_nearby_spawns: HashMap<u32, String>,
@@ -156,8 +160,9 @@ impl Orchestrator {
         }
     }
 
-    /// Build a `CampSnapshot` from live game state for the active camp's members.
-    /// Returns `None` if any critical role (tank/healer) has stale state.
+    /// Build a `CampSnapshot` from live game state for the active camp's
+    /// members. Returns `None` if any critical role (tank/healer) has stale
+    /// state.
     fn build_camp_snapshot(&self) -> Option<CampSnapshot> {
         let camp = self.active_camp.as_ref()?;
 
@@ -178,7 +183,8 @@ impl Orchestrator {
                 );
                 return None;
             }
-            // No timestamp at all means we never read state — handled by get() below
+            // No timestamp at all means we never read state — handled by get()
+            // below
         }
 
         let tank_state = self.game_states.get(&tank.pid)?;
@@ -214,7 +220,8 @@ impl Orchestrator {
             .collect();
 
         // Build per-member combat state from game state.
-        // A character is considered "in combat" if their Combatant FSM is not idle/recovering.
+        // A character is considered "in combat" if their Combatant FSM is not
+        // idle/recovering.
         let member_in_combat: Vec<(u32, bool)> = camp
             .members
             .iter()
@@ -241,8 +248,8 @@ impl Orchestrator {
         })
     }
 
-    /// Advance the camp/hunt loop (if active), collect commands, and send via IPC.
-    /// Returns the number of commands dispatched.
+    /// Advance the camp/hunt loop (if active), collect commands, and send via
+    /// IPC. Returns the number of commands dispatched.
     pub fn tick(&mut self) -> usize {
         self.tick_count += 1;
         self.last_dispatched.clear();
@@ -273,7 +280,8 @@ impl Orchestrator {
     /// Returns the PIDs that should receive camp/hunt loop dispatches under the
     /// current routing scope.
     ///
-    /// - `AllSession` (or an empty `scope_pids` list) → every registered client.
+    /// - `AllSession` (or an empty `scope_pids` list) → every registered
+    ///   client.
     /// - Narrowed scope → only PIDs that were pre-computed by the TUI app and
     ///   stored in `scope_pids`.
     pub fn pids_in_scope(&self) -> Vec<u32> {
@@ -284,7 +292,8 @@ impl Orchestrator {
         }
     }
 
-    /// Tick the camp loop, including sell cycle, progression checks, and event production.
+    /// Tick the camp loop, including sell cycle, progression checks, and event
+    /// production.
     fn tick_camp(&mut self) -> Vec<(u32, CampAction)> {
         let snapshot = self.build_camp_snapshot();
 
@@ -414,7 +423,8 @@ impl Orchestrator {
         }
     }
 
-    /// Check camp progression and set `suggested_camp` if the group has outleveled.
+    /// Check camp progression and set `suggested_camp` if the group has
+    /// outleveled.
     fn check_camp_progression(&mut self) {
         let Some(camp) = &self.active_camp else {
             return;
@@ -746,7 +756,8 @@ impl Orchestrator {
     }
 
     /// Send a structured IPC command to a client via named pipe.
-    /// Creates a fresh connection per command (connect → token → command → drop).
+    /// Creates a fresh connection per command (connect → token → command →
+    /// drop).
     pub(crate) fn send_ipc_command(&mut self, pid: u32, cmd: Command) {
         let name = self
             .client_names
@@ -993,9 +1004,11 @@ mod tests {
 
     #[test]
     fn test_build_camp_snapshot_with_game_state() {
-        use textquest_common::combat::CombatStatus;
-        use textquest_common::nav::NavStatus;
-        use textquest_common::types::{GameState, SpawnData};
+        use textquest_common::{
+            combat::CombatStatus,
+            nav::NavStatus,
+            types::{GameState, SpawnData},
+        };
 
         let mut orch = Orchestrator::new();
         orch.start_camp(test_config(), test_members());
@@ -1086,9 +1099,11 @@ mod tests {
 
     #[test]
     fn test_stale_state_returns_none_snapshot() {
-        use textquest_common::combat::CombatStatus;
-        use textquest_common::nav::NavStatus;
-        use textquest_common::types::{GameState, SpawnData};
+        use textquest_common::{
+            combat::CombatStatus,
+            nav::NavStatus,
+            types::{GameState, SpawnData},
+        };
 
         let mut orch = Orchestrator::new();
         orch.start_camp(test_config(), test_members());
@@ -1369,9 +1384,11 @@ mod tests {
 
     #[test]
     fn test_add_detection() {
-        use textquest_common::combat::CombatStatus;
-        use textquest_common::nav::NavStatus;
-        use textquest_common::types::{GameState, SpawnData};
+        use textquest_common::{
+            combat::CombatStatus,
+            nav::NavStatus,
+            types::{GameState, SpawnData},
+        };
 
         let mut orch = Orchestrator::new();
         orch.start_camp(test_config(), test_members());

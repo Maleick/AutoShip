@@ -18,7 +18,8 @@ use std::collections::VecDeque;
 use super::widgets::panel;
 use crate::tui::theme::Theme;
 
-// ── Domain types ──────────────────────────────────────────────────────────────
+// ── Domain types
+// ──────────────────────────────────────────────────────────────
 
 /// Health status for a session or the relay overall.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,7 +106,8 @@ pub struct RelayCommandEntry {
     pub latency_ms: u64,
 }
 
-// ── Panel state ───────────────────────────────────────────────────────────────
+// ── Panel state
+// ───────────────────────────────────────────────────────────────
 
 /// Mutable state for the orchestrator visibility panel.
 #[derive(Debug, Clone)]
@@ -243,7 +245,8 @@ impl Default for OrchestratorPanelState {
     }
 }
 
-// ── Demo / stub data ──────────────────────────────────────────────────────────
+// ── Demo / stub data
+// ──────────────────────────────────────────────────────────
 
 fn demo_sessions() -> Vec<OrchestratorSession> {
     vec![
@@ -319,7 +322,8 @@ fn demo_command_history() -> VecDeque<RelayCommandEntry> {
         .collect()
 }
 
-// ── Rendering ─────────────────────────────────────────────────────────────────
+// ── Rendering
+// ─────────────────────────────────────────────────────────────────
 
 /// Draw the orchestrator overview screen.
 pub fn draw_orchestrator_screen(

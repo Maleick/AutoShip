@@ -1,15 +1,15 @@
 //! External integration infrastructure for notifications and alerts.
 //!
-//! Provides structured types for notification channels (Discord, Webhooks, Logs),
-//! event types (Death, Stuck, ZoneFailed, etc.), and configuration loading from TOML.
+//! Provides structured types for notification channels (Discord, Webhooks,
+//! Logs), event types (Death, Stuck, ZoneFailed, etc.), and configuration
+//! loading from TOML.
 //!
-//! This module defines the contract for sending notifications to external systems
-//! without implementing HTTP clients — that responsibility belongs to the integration
-//! layer in `textquest` or `textquest-web`.
+//! This module defines the contract for sending notifications to external
+//! systems without implementing HTTP clients — that responsibility belongs to
+//! the integration layer in `textquest` or `textquest-web`.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 /// Notification severity levels for filtering and routing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

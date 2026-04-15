@@ -16,8 +16,7 @@
     clippy::redundant_field_names
 )]
 
-use std::collections::HashMap;
-use std::sync::Mutex;
+use std::{collections::HashMap, sync::Mutex};
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
@@ -73,7 +72,8 @@ pub struct LedgerEntry {
     pub source: EntrySource,
     /// Character that gained/lost this item or plat.
     pub character_id: String,
-    /// Platinum delta (positive = gained, negative = spent). 0 for pure item entries.
+    /// Platinum delta (positive = gained, negative = spent). 0 for pure item
+    /// entries.
     pub plat_delta: i64,
     /// Optional freeform note.
     pub note: Option<String>,
@@ -170,8 +170,8 @@ impl EconomyLedger {
         )
     }
 
-    /// Record a vendor sale (character sells an item — plat_delta is positive for selling,
-    /// negative for buying).
+    /// Record a vendor sale (character sells an item — plat_delta is positive
+    /// for selling, negative for buying).
     pub fn record_vendor_sale(
         &self,
         item_id: i64,
@@ -201,7 +201,8 @@ impl EconomyLedger {
         self.record(0, "", 0, EntrySource::Bank, character_id, plat_delta, note)
     }
 
-    /// Record a distribution (loot assigned from raid/group to a specific character).
+    /// Record a distribution (loot assigned from raid/group to a specific
+    /// character).
     pub fn record_distribution(
         &self,
         item_id: i64,
@@ -256,13 +257,15 @@ impl EconomyLedger {
         let conn = self.conn.lock().expect("ledger mutex poisoned");
         let (sql, param) = if let Some(c) = character_filter {
             (
-                "SELECT id, timestamp, item_id, item_name, quantity, source, character_id, plat_delta, note
+                "SELECT id, timestamp, item_id, item_name, quantity, source, character_id, \
+                 plat_delta, note
                    FROM economy_ledger WHERE character_id = ?1 ORDER BY timestamp ASC",
                 Some(c.to_string()),
             )
         } else {
             (
-                "SELECT id, timestamp, item_id, item_name, quantity, source, character_id, plat_delta, note
+                "SELECT id, timestamp, item_id, item_name, quantity, source, character_id, \
+                 plat_delta, note
                    FROM economy_ledger ORDER BY timestamp ASC",
                 None,
             )
@@ -427,19 +430,22 @@ mod tests {
         {
             let conn = db.conn.lock().unwrap();
             conn.execute(
-                "INSERT INTO economy_ledger (timestamp, item_id, item_name, quantity, source, character_id, plat_delta)
+                "INSERT INTO economy_ledger (timestamp, item_id, item_name, quantity, source, \
+                 character_id, plat_delta)
                  VALUES ('2026-04-10 12:00:00', 1, 'Sword', 1, 'drop', 'Warrior1', 0)",
                 [],
             )
             .unwrap();
             conn.execute(
-                "INSERT INTO economy_ledger (timestamp, item_id, item_name, quantity, source, character_id, plat_delta)
+                "INSERT INTO economy_ledger (timestamp, item_id, item_name, quantity, source, \
+                 character_id, plat_delta)
                  VALUES ('2026-04-10 14:00:00', 2, 'Shield', 2, 'drop', 'Warrior1', 0)",
                 [],
             )
             .unwrap();
             conn.execute(
-                "INSERT INTO economy_ledger (timestamp, item_id, item_name, quantity, source, character_id, plat_delta)
+                "INSERT INTO economy_ledger (timestamp, item_id, item_name, quantity, source, \
+                 character_id, plat_delta)
                  VALUES ('2026-04-11 09:00:00', 0, '', 0, 'bank', 'Warrior1', 500)",
                 [],
             )
@@ -464,13 +470,15 @@ mod tests {
         {
             let conn = db.conn.lock().unwrap();
             conn.execute(
-                "INSERT INTO economy_ledger (timestamp, item_id, item_name, quantity, source, character_id, plat_delta)
+                "INSERT INTO economy_ledger (timestamp, item_id, item_name, quantity, source, \
+                 character_id, plat_delta)
                  VALUES ('2026-04-10 12:00:00', 1, 'Ring', 1, 'drop', 'Rogue1', 0)",
                 [],
             )
             .unwrap();
             conn.execute(
-                "INSERT INTO economy_ledger (timestamp, item_id, item_name, quantity, source, character_id, plat_delta)
+                "INSERT INTO economy_ledger (timestamp, item_id, item_name, quantity, source, \
+                 character_id, plat_delta)
                  VALUES ('2026-04-10 13:00:00', 2, 'Belt', 1, 'drop', 'Cleric1', 0)",
                 [],
             )

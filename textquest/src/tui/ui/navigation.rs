@@ -9,8 +9,7 @@ use ratatui::{
 };
 
 use super::widgets::{panel, themed_header_row};
-use crate::tui::app::App;
-use crate::tui::ui::widgets::truncate_inline;
+use crate::tui::{app::App, ui::widgets::truncate_inline};
 
 fn nav_status_color(
     status: &textquest_common::nav::NavStatus,

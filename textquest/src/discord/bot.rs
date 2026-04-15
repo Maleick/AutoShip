@@ -1,7 +1,7 @@
 //! Embedded Discord bot — DZ lockout tracker + open world target announcer.
 //!
-//! Runs as a tokio task within the TextQuest orchestrator (not a separate process).
-//! Uses the `serenity` crate for Discord gateway and slash commands.
+//! Runs as a tokio task within the TextQuest orchestrator (not a separate
+//! process). Uses the `serenity` crate for Discord gateway and slash commands.
 //!
 //! # Features
 //!
@@ -12,18 +12,19 @@
 //! # Startup
 //!
 //! Call [`start`] with a bot token and a [`BotBridge`] handle. The bot connects
-//! to Discord and registers slash commands on the configured guild. If the token
-//! is empty, the bot is a no-op.
+//! to Discord and registers slash commands on the configured guild. If the
+//! token is empty, the bot is a no-op.
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use serenity::all::{
-    Command, CommandInteraction, CommandOptionType, Context, CreateCommand, CreateCommandOption,
-    CreateInteractionResponse, CreateInteractionResponseMessage, EventHandler, GatewayIntents,
-    GuildId, Interaction, Ready,
+use serenity::{
+    all::{
+        Command, CommandInteraction, CommandOptionType, Context, CreateCommand,
+        CreateCommandOption, CreateInteractionResponse, CreateInteractionResponseMessage,
+        EventHandler, GatewayIntents, GuildId, Interaction, Ready,
+    },
+    async_trait,
 };
-use serenity::async_trait;
 use tokio::sync::RwLock;
 
 use super::bridge::BotBridge;
@@ -270,9 +271,11 @@ async fn handle_lockouts(state: &BotState, cmd: &CommandInteraction) -> String {
 
 async fn handle_status() -> String {
     // Basic fleet status — will be enriched when wired to the orchestrator.
-    // NOTE: Process ID is intentionally omitted — it would aid anti-cheat fingerprinting
-    // and external process enumeration attacks.
-    "**TextQuest Fleet Status**\n- Status: running\n- Use `/lockouts` for DZ timers, `/spawns` for contested mobs".to_string()
+    // NOTE: Process ID is intentionally omitted — it would aid anti-cheat
+    // fingerprinting and external process enumeration attacks.
+    "**TextQuest Fleet Status**\n- Status: running\n- Use `/lockouts` for DZ timers, `/spawns` for \
+     contested mobs"
+        .to_string()
 }
 
 async fn handle_spawns(state: &BotState) -> String {

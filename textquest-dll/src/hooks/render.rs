@@ -35,7 +35,8 @@ static CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// On the first call, this also triggers deferred DX11 hook installation
 /// (the device may not have been ready at DLL init time).
 pub fn set_mode(mode: RenderMode) {
-    // Ensure DX11 vtable hooks are installed (deferred from init if device was null).
+    // Ensure DX11 vtable hooks are installed (deferred from init if device was
+    // null).
     super::dx11_null::ensure_installed();
 
     let encoded = match mode {
@@ -110,7 +111,8 @@ mod inner {
     /// Remove the render hook.
     pub fn remove() {
         // SAFETY: Disabling a retour hook restores the original function bytes.
-        // Safe to call during graceful_shutdown() — see game_loop::remove() for details.
+        // Safe to call during graceful_shutdown() — see game_loop::remove() for
+        // details.
         unsafe {
             if RenderHook.is_enabled() {
                 let _ = RenderHook.disable();

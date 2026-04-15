@@ -5,8 +5,7 @@
 //! and recovery into a single state machine.
 
 use std::time::{Duration, Instant};
-use textquest_common::ipc::Command;
-use textquest_common::types::ClientId;
+use textquest_common::{ipc::Command, types::ClientId};
 
 /// The camp loop state machine.
 #[derive(Debug)]

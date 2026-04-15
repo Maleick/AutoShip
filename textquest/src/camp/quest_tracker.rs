@@ -1,5 +1,5 @@
-//! Quest tracking and task automation — tracks active quests, objective progress,
-//! and reward claims for automated multibox quest coordination.
+//! Quest tracking and task automation — tracks active quests, objective
+//! progress, and reward claims for automated multibox quest coordination.
 
 /// A single objective within a quest.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,7 +115,8 @@ impl QuestTracker {
     /// Claim the reward for a completed quest.
     ///
     /// Returns `true` when the reward is claimed successfully (state changed).
-    /// Returns `false` if the quest is not yet complete, already claimed, or not found.
+    /// Returns `false` if the quest is not yet complete, already claimed, or
+    /// not found.
     pub fn claim_reward(&mut self, quest_id: u32) -> bool {
         let Some(quest) = self.quests.iter_mut().find(|q| q.id == quest_id) else {
             return false;

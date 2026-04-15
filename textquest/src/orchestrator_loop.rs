@@ -2,17 +2,20 @@
 //! and Orchestrator into a single async tick loop with health checks, crash
 //! recovery, and graceful shutdown.
 
-use crate::client::discovery::PeerDiscoveryEvent;
-use crate::client::healing::ClientHealth;
-use crate::client::manager::ClientManager;
-use crate::client::session::SlotLifecycle;
-use crate::config::{AppConfig, OrchestratorConfig};
-use crate::launcher::coordinator::{CoordinatorEvent, LaunchCoordinator};
-use crate::orchestrator::Orchestrator;
+use crate::{
+    client::{
+        discovery::PeerDiscoveryEvent, healing::ClientHealth, manager::ClientManager,
+        session::SlotLifecycle,
+    },
+    config::{AppConfig, OrchestratorConfig},
+    launcher::coordinator::{CoordinatorEvent, LaunchCoordinator},
+    orchestrator::Orchestrator,
+};
 use std::time::Duration;
 use tokio::sync::watch;
 
-/// Events emitted by the orchestrator loop for external consumers (TUI, logging).
+/// Events emitted by the orchestrator loop for external consumers (TUI,
+/// logging).
 #[derive(Debug, Clone)]
 pub enum LoopEvent {
     /// A client was detected as unhealthy and sent `/camp desktop`.
@@ -86,7 +89,8 @@ impl OrchestratorLoop {
 
     /// Run the event loop until shutdown is signaled.
     ///
-    /// Returns accumulated events from the final tick (or empty on clean shutdown).
+    /// Returns accumulated events from the final tick (or empty on clean
+    /// shutdown).
     pub async fn run(&mut self) -> Vec<LoopEvent> {
         tracing::info!(
             health_check_ms = self.config.health_check_interval_ms,

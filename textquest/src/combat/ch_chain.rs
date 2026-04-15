@@ -5,7 +5,8 @@
 //! creating a steady stream of heals landing on the tank.
 //!
 //! Timing: all intervals are in *frames* (~20/sec, ~50ms each).
-//! An EQ "game tick" is 6 seconds (~120 frames) — used for regen/DoTs, not casting.
+//! An EQ "game tick" is 6 seconds (~120 frames) — used for regen/DoTs, not
+//! casting.
 
 // Main loop iterations per second (~20fps = ~50ms per frame).
 const FRAMES_PER_SECOND: u64 = 20;
@@ -39,7 +40,8 @@ pub struct ChChain {
     frame_count: u64,
     /// Frame index when the last cast started.
     last_fire_frame: Option<u64>,
-    /// Frames between each CH cast (computed from `interval_secs` × `FRAMES_PER_SECOND`).
+    /// Frames between each CH cast (computed from `interval_secs` ×
+    /// `FRAMES_PER_SECOND`).
     frames_per_interval: u64,
     /// The spawn ID of the CH target (usually the main tank).
     target_id: u32,
@@ -51,12 +53,14 @@ pub struct ChChain {
     last_tank_hp: f32,
     /// Ring buffer of recent HP-delta-per-second samples.
     damage_samples: Vec<f32>,
-    /// Frame counter for sampling damage rate (sample every ~1 sec = 20 frames).
+    /// Frame counter for sampling damage rate (sample every ~1 sec = 20
+    /// frames).
     sample_frame: u64,
 }
 
 impl ChChain {
-    /// Creates a new CH chain with the given clerics, interval, target, and spell gem.
+    /// Creates a new CH chain with the given clerics, interval, target, and
+    /// spell gem.
     #[must_use]
     pub fn new(members: Vec<u32>, interval_secs: f32, target_id: u32, spell_slot: u8) -> Self {
         Self {
@@ -79,8 +83,8 @@ impl ChChain {
 
     /// Start (or restart) the chain from the beginning.
     /// Resets frame counter and rotation index to zero.
-    /// Use `resume()` instead if you need to re-activate without losing position
-    /// (e.g., substituting a dead cleric mid-rotation).
+    /// Use `resume()` instead if you need to re-activate without losing
+    /// position (e.g., substituting a dead cleric mid-rotation).
     pub fn start(&mut self) {
         self.active = true;
         self.frame_count = 0;
@@ -96,7 +100,8 @@ impl ChChain {
         self.active = true;
     }
 
-    /// Stop the chain. No more CH casts will fire until `start()` or `resume()`.
+    /// Stop the chain. No more CH casts will fire until `start()` or
+    /// `resume()`.
     pub fn stop(&mut self) {
         self.active = false;
         self.last_fired_index = None;
@@ -295,7 +300,8 @@ impl ChChain {
         }
     }
 
-    /// Recalculate the CH interval based on average damage rate and cleric count.
+    /// Recalculate the CH interval based on average damage rate and cleric
+    /// count.
     ///
     /// Logic: Complete Heal restores ~100% HP. If the tank takes `D` %HP/sec of
     /// damage, each CH needs to land every `100/D` seconds. With `N` clerics in
@@ -637,8 +643,8 @@ mod tests {
         // Actually: ideal_interval = 100 / (D * N), so 4 clerics = 2.5, 2 clerics = 5.0
         // With 4 clerics each casts every 2.5s, total chain time = 10s
         // With 2 clerics each casts every 5s, total chain time = 10s
-        // Both achieve same total coverage. The 4-cleric interval is SHORTER per cleric.
-        // So chain_4.interval < chain_2.interval — fix assertion:
+        // Both achieve same total coverage. The 4-cleric interval is SHORTER per
+        // cleric. So chain_4.interval < chain_2.interval — fix assertion:
         assert!(
             chain_4.interval_secs() <= chain_2.interval_secs(),
             "4-cleric interval ({}) should be <= 2-cleric interval ({})",

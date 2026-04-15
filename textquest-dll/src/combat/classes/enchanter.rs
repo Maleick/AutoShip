@@ -2,7 +2,8 @@ use textquest_common::combat::{AbilityCandidate, AbilitySet, CombatRole, SpellEn
 
 use crate::combat::strategy::{ClassStrategy, CombatContext};
 
-/// Enchanter strategy: crowd control, mezzes off-targets, nukes when only one enemy.
+/// Enchanter strategy: crowd control, mezzes off-targets, nukes when only one
+/// enemy.
 ///
 /// When multiple enemies are present, the enchanter picks the first unmezzed
 /// off-target for CC.  "Unmezzed" is approximated by skipping the primary
@@ -17,7 +18,8 @@ impl EnchanterStrategy {
         Self { class_id }
     }
 
-    /// Build enchanter ability sets — CC, haste, slow, nuke lines tiered by level.
+    /// Build enchanter ability sets — CC, haste, slow, nuke lines tiered by
+    /// level.
     fn build_ability_sets() -> Vec<AbilitySet> {
         vec![
             AbilitySet {
@@ -222,8 +224,8 @@ impl ClassStrategy for EnchanterStrategy {
     }
 
     fn select_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
-        // spawn_type: 0 = Player, 1 = NPC. Mez NPCs, nuke players (PvP) or assist target.
-        // In group XP, off-targets are NPCs that should be mezzed.
+        // spawn_type: 0 = Player, 1 = NPC. Mez NPCs, nuke players (PvP) or assist
+        // target. In group XP, off-targets are NPCs that should be mezzed.
         let is_mez_target = ctx.target.is_some_and(|t| t.spawn_type == 1);
 
         let spells = &ctx.config.spells;
@@ -232,7 +234,8 @@ impl ClassStrategy for EnchanterStrategy {
         }
 
         if is_mez_target && ctx.nearby_enemies.len() > 1 {
-            // Return highest priority spell (mez should be highest priority in enchanter config).
+            // Return highest priority spell (mez should be highest priority in enchanter
+            // config).
             spells.iter().max_by_key(|s| s.priority).cloned()
         } else {
             // Return lowest priority spell (nuke is lower priority than mez).
@@ -263,10 +266,12 @@ impl ClassStrategy for EnchanterStrategy {
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::{
-        CombatConfig, ExtendedTargetList, ExtendedTargetSlot, XTargetSlotStatus, XTargetType,
+    use textquest_common::{
+        combat::{
+            CombatConfig, ExtendedTargetList, ExtendedTargetSlot, XTargetSlotStatus, XTargetType,
+        },
+        types::SpawnData,
     };
-    use textquest_common::types::SpawnData;
 
     fn make_ctx<'a>(
         player: &'a SpawnData,
@@ -393,7 +398,8 @@ mod tests {
         ];
         let config = CombatConfig::default();
         let ctx = make_ctx(&player, None, &enemies, &config);
-        // No current target, so first off-target (index 1) won't match current_target_id (None)
+        // No current target, so first off-target (index 1) won't match
+        // current_target_id (None)
         assert_eq!(enc.select_target(&ctx), Some(2));
     }
 

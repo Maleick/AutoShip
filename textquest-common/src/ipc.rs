@@ -1,7 +1,8 @@
 use crate::types::ClientId;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// Generates monotonically increasing correlation IDs for IPC request-response matching.
+/// Generates monotonically increasing correlation IDs for IPC request-response
+/// matching.
 ///
 /// Each orchestrator instance should create one generator and use it for all
 /// outgoing commands. The DLL echoes back the correlation ID in its response,
@@ -11,7 +12,8 @@ pub struct CorrelationIdGenerator {
 }
 
 impl CorrelationIdGenerator {
-    /// Create a new generator starting at 1 (0 is reserved as "no correlation").
+    /// Create a new generator starting at 1 (0 is reserved as "no
+    /// correlation").
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -31,11 +33,13 @@ impl Default for CorrelationIdGenerator {
     }
 }
 
-/// A command paired with an optional correlation ID for request-response matching.
+/// A command paired with an optional correlation ID for request-response
+/// matching.
 ///
-/// When the orchestrator sends a command with a `correlation_id`, the DLL should
-/// echo that ID back in the corresponding `IpcResponse`. Commands without a
-/// correlation ID (`None`) are fire-and-forget or matched by convention.
+/// When the orchestrator sends a command with a `correlation_id`, the DLL
+/// should echo that ID back in the corresponding `IpcResponse`. Commands
+/// without a correlation ID (`None`) are fire-and-forget or matched by
+/// convention.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct IpcCommand {
     /// The command to execute.
@@ -70,7 +74,8 @@ impl From<Command> for IpcCommand {
     }
 }
 
-/// A response paired with an optional correlation ID echoed from the originating command.
+/// A response paired with an optional correlation ID echoed from the
+/// originating command.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct IpcResponse {
     /// The response payload.
@@ -133,7 +138,8 @@ impl std::fmt::Display for RenderMode {
 /// Filter for querying open inventory container slots from the injected client.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ContainerSlotQuery {
-    /// Restrict results to a specific container backing store (e.g. "possessions", "bank").
+    /// Restrict results to a specific container backing store (e.g.
+    /// "possessions", "bank").
     pub location: Option<String>,
     /// Restrict results to a specific top-level slot number.
     pub top_slot: Option<i16>,
@@ -233,7 +239,8 @@ pub struct ContextMenuInfo {
 /// per-session state transitions, group membership, and routing scope.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SessionControlCommand {
-    /// Pause this session — suspend command dispatch until `Resume` is received.
+    /// Pause this session — suspend command dispatch until `Resume` is
+    /// received.
     Pause,
     /// Resume a paused session — return to active command dispatch.
     Resume,
@@ -275,12 +282,13 @@ pub enum Command {
     ///
     /// The `kill` and `recast` flags mirror MQ2Cast `/casting` control options:
     /// - `kill`: keep re-casting the spell until the target's HP reaches zero.
-    ///   The loop is cancelled automatically when the target dies or disappears,
-    ///   or when a `CancelCastLoop` command is received.
-    /// - `recast`: repeat the cast up to `recast` times (1-255) with deterministic
-    ///   exponential backoff between attempts (base 8 ticks, cap 30 ticks).
-    ///   Setting `recast` to 0 is treated as a single cast (no repetition).
-    ///   Validation rejects combining `kill` and `recast` in the same command.
+    ///   The loop is cancelled automatically when the target dies or
+    ///   disappears, or when a `CancelCastLoop` command is received.
+    /// - `recast`: repeat the cast up to `recast` times (1-255) with
+    ///   deterministic exponential backoff between attempts (base 8 ticks, cap
+    ///   30 ticks). Setting `recast` to 0 is treated as a single cast (no
+    ///   repetition). Validation rejects combining `kill` and `recast` in the
+    ///   same command.
     CastSpell {
         /// Memorized spell slot (1-indexed gem number, 1-13).
         spell_slot: u8,
@@ -317,13 +325,16 @@ pub enum Command {
     ClearTarget,
     /// Right-click interact with the current target (NPC, door, or object).
     InteractTarget,
-    /// Target and activate the nearest door or switch (`/doortarget` + `/click left door`).
+    /// Target and activate the nearest door or switch (`/doortarget` + `/click
+    /// left door`).
     ///
-    /// Equivalent to MQ2's `/click door` — selects the nearest EQ switch and opens it.
+    /// Equivalent to MQ2's `/click door` — selects the nearest EQ switch and
+    /// opens it.
     InteractDoor,
     /// Click the nearest ground item or world object (`/click left item`).
     ///
-    /// Equivalent to MQ2's `/click item` — interacts with the nearest ground spawn.
+    /// Equivalent to MQ2's `/click item` — interacts with the nearest ground
+    /// spawn.
     ClickObject,
     // Utility
     /// Sit down (mana/HP regen).
@@ -369,7 +380,8 @@ pub enum Command {
     NavItem,
     /// Reload the navmesh for the current zone (`/nav reload`).
     NavReload,
-    /// Save a named waypoint at the current position (`/nav waypoint save <name>`).
+    /// Save a named waypoint at the current position (`/nav waypoint save
+    /// <name>`).
     NavWaypointSave {
         /// Name to assign to the waypoint.
         name: String,
@@ -392,9 +404,10 @@ pub enum Command {
     NavDiagnosticsQuery,
     /// Start MQ2MoveUtils-style `/makecamp player` follow mode.
     ///
-    /// The DLL navigator tracks a dynamic anchor (the leader's last-known position).
-    /// When the follower strays beyond `leash_distance` it automatically navigates
-    /// back. Once within `follow_distance` it holds position until the anchor moves.
+    /// The DLL navigator tracks a dynamic anchor (the leader's last-known
+    /// position). When the follower strays beyond `leash_distance` it
+    /// automatically navigates back. Once within `follow_distance` it holds
+    /// position until the anchor moves.
     FollowPlayer {
         /// Follow configuration (leader name, follow distance, leash distance).
         config: crate::nav::FollowConfig,
@@ -433,7 +446,8 @@ pub enum Command {
     /// Query the current login phase from the DLL.
     LoginPhaseQuery,
     /// Dump all login-related pointer addresses to the DLL log for calibration.
-    /// Used to validate offsets on the live client before attempting auto-login.
+    /// Used to validate offsets on the live client before attempting
+    /// auto-login.
     CalibrateLogin,
     /// Start the automated login sequence. The DLL handles all UI steps
     /// autonomously and reports progress via `LoginPhaseUpdate` responses.
@@ -532,9 +546,11 @@ pub enum Command {
     /// - `/stick always` → `config.always = true`
     /// - `/stick id #`   → `config.id = Some(#)`
     ///
-    /// Advanced moveto — MQ2MoveUtils `/moveto` with full option support (#184).
+    /// Advanced moveto — MQ2MoveUtils `/moveto` with full option support
+    /// (#184).
     MoveToAdvanced {
-        /// Full moveto configuration including target tracking, break conditions.
+        /// Full moveto configuration including target tracking, break
+        /// conditions.
         config: crate::nav::MoveToConfig,
     },
     /// Enable or disable autopause globally (#164).
@@ -542,10 +558,12 @@ pub enum Command {
         /// Whether autopause should be active.
         enabled: bool,
     },
-    /// Enable or disable break-on-GM safety halt for navigation and combat movement.
+    /// Enable or disable break-on-GM safety halt for navigation and combat
+    /// movement.
     ///
-    /// When enabled, navigation pauses (path retained) whenever a GM-flagged spawn
-    /// is detected in the nearby spawn list, mirroring MQ2MoveUtils breakongm behavior.
+    /// When enabled, navigation pauses (path retained) whenever a GM-flagged
+    /// spawn is detected in the nearby spawn list, mirroring MQ2MoveUtils
+    /// breakongm behavior.
     SetBreakOnGm {
         /// Whether break-on-GM should be active.
         enabled: bool,
@@ -561,14 +579,16 @@ pub enum Command {
         mode: crate::nav::HeadingMode,
     },
     StickTo {
-        /// Stick configuration including distance, hold, always, and id options.
+        /// Stick configuration including distance, hold, always, and id
+        /// options.
         config: crate::nav::StickConfig,
     },
     /// Stop sticking — `/stick off`.
     StickOff,
     /// Adjust the active stick distance modifier — `/stick mod #`.
     ///
-    /// Adds `delta` to `StickConfig::distance_mod` on the running stick session.
+    /// Adds `delta` to `StickConfig::distance_mod` on the running stick
+    /// session.
     StickMod {
         /// Delta to add to the current distance modifier (may be negative).
         delta: f32,
@@ -581,7 +601,8 @@ pub enum Command {
     /// - `clockwise` / `cw`              → `config.mode = CircleMode::Cw`
     /// - `counterclockwise` / `ccw`      → `config.mode = CircleMode::Ccw`
     /// - `drunken`                        → `config.mode = CircleMode::Drunken`
-    /// - `backward`                       → `config.mode = CircleMode::Backward`
+    /// - `backward`                       → `config.mode =
+    ///   CircleMode::Backward`
     CircleKite {
         /// Circle kiting configuration.
         config: crate::nav::CircleConfig,
@@ -599,7 +620,8 @@ pub enum Command {
     QueryZoneGraph,
     // Packet monitor
     /// Poll for accumulated captured packet events.
-    /// The DLL drains its pending packet buffer and responds with `PacketBatch`.
+    /// The DLL drains its pending packet buffer and responds with
+    /// `PacketBatch`.
     PollPackets,
     // Chat monitor
     /// Poll for accumulated chat messages captured since the last `PollChat`.
@@ -637,7 +659,8 @@ pub enum Command {
         /// Whether hooks should be active.
         enabled: bool,
     },
-    /// Enable or disable automatic dialog acceptance (group invite, trade, etc.).
+    /// Enable or disable automatic dialog acceptance (group invite, trade,
+    /// etc.).
     SetAutoAccept {
         /// Whether auto-accept is enabled.
         enabled: bool,
@@ -682,7 +705,8 @@ pub enum Command {
         password: String,
     },
     /// Switch to a different character on the current server.
-    /// The DLL issues `/camp`, waits for character select, then picks the new character.
+    /// The DLL issues `/camp`, waits for character select, then picks the new
+    /// character.
     SwitchCharacter {
         /// Character name to switch to.
         character_name: String,
@@ -690,21 +714,23 @@ pub enum Command {
     /// Capture a single-frame screenshot from a null-rendered client.
     ///
     /// Temporarily enables rendering for one frame, captures the backbuffer
-    /// after Present, saves to a temp file, and restores the previous render mode.
-    /// Returns `ScreenshotCaptured` with the file path on success.
+    /// after Present, saves to a temp file, and restores the previous render
+    /// mode. Returns `ScreenshotCaptured` with the file path on success.
     CaptureScreenshot,
     // Context menus
     /// Query all currently visible context menus from `CContextMenuManager`.
     ///
-    /// Returns `Response::ContextMenuState` with a snapshot of every menu currently
-    /// registered in the manager, including item labels and enabled/checked state.
-    /// If no menus are open the response list will be empty.
+    /// Returns `Response::ContextMenuState` with a snapshot of every menu
+    /// currently registered in the manager, including item labels and
+    /// enabled/checked state. If no menus are open the response list will
+    /// be empty.
     QueryContextMenu,
     /// Activate a specific item in a specific `CContextMenu`.
     ///
-    /// Calls `CContextMenuManager::HandleMenu(menu_index, item_index, point)` on the
-    /// game loop thread. The point is set to `(0, 0)` which is correct for
-    /// programmatic activation (EQ ignores the coordinates for most menu items).
+    /// Calls `CContextMenuManager::HandleMenu(menu_index, item_index, point)`
+    /// on the game loop thread. The point is set to `(0, 0)` which is
+    /// correct for programmatic activation (EQ ignores the coordinates for
+    /// most menu items).
     ActivateContextMenuItem {
         /// Zero-based index of the menu within `CContextMenuManager`.
         menu_index: u32,
@@ -717,16 +743,18 @@ pub enum Command {
     /// `SpawnEventBatch` response.
     PollSpawnEvents,
     // Zone transitions
-    /// Request a zone transition to a specific zone with optional destination coordinates.
+    /// Request a zone transition to a specific zone with optional destination
+    /// coordinates.
     ///
-    /// Initiates movement to a zone line and triggers the zone transition sequence.
-    /// If `destination_coords` is provided, navigation will target those coordinates
-    /// after zone load completes. Otherwise, the character will zone in at the default
-    /// arrival point.
+    /// Initiates movement to a zone line and triggers the zone transition
+    /// sequence. If `destination_coords` is provided, navigation will
+    /// target those coordinates after zone load completes. Otherwise, the
+    /// character will zone in at the default arrival point.
     RequestZone {
         /// EverQuest zone ID to transition to.
         zone_id: u32,
-        /// Optional destination coordinates (x, y, z) to navigate to after zoning.
+        /// Optional destination coordinates (x, y, z) to navigate to after
+        /// zoning.
         destination_coords: Option<(f32, f32, f32)>,
     },
     /// Flush all pending movement commands from the movement queue.
@@ -924,10 +952,11 @@ pub enum Response {
         message: String,
     },
     /// Navigation status push notification from the DLL's nav state machine.
-    /// Note: `NavStatus` is also available in `GameState.nav_status` (shared memory).
-    /// `GameState.nav_status` is authoritative — it is updated every tick.
-    /// `NavUpdate` is sent only on state transitions (Idle→Moving, Moving→Arrived, etc.)
-    /// for low-latency notification without polling shared memory.
+    /// Note: `NavStatus` is also available in `GameState.nav_status` (shared
+    /// memory). `GameState.nav_status` is authoritative — it is updated
+    /// every tick. `NavUpdate` is sent only on state transitions
+    /// (Idle→Moving, Moving→Arrived, etc.) for low-latency notification
+    /// without polling shared memory.
     NavUpdate {
         /// Current navigation FSM state.
         status: crate::nav::NavStatus,
@@ -965,11 +994,13 @@ pub enum Response {
         /// Accumulated packet events since last poll.
         events: Vec<PacketEventInfo>,
     },
-    /// Raw bytes read from the EQ process address space, in response to `Command::ReadMemory`.
+    /// Raw bytes read from the EQ process address space, in response to
+    /// `Command::ReadMemory`.
     MemoryData {
         /// The address that was read.
         address: usize,
-        /// The bytes that were read. May be shorter than requested if the read was partial.
+        /// The bytes that were read. May be shorter than requested if the read
+        /// was partial.
         bytes: Vec<u8>,
     },
     /// Slot metadata and item info for currently open container windows.
@@ -978,8 +1009,9 @@ pub enum Response {
         slots: Vec<ContainerSlotInfo>,
     },
     /// Zone adjacency graph from `ZoneGuideManagerClient`.
-    /// Simplified wire format: Vec of (`zone_id`, name, `min_level`, `max_level`, connections).
-    /// Each connection is (`dest_zone_id`, `transfer_type`, disabled).
+    /// Simplified wire format: Vec of (`zone_id`, name, `min_level`,
+    /// `max_level`, connections). Each connection is (`dest_zone_id`,
+    /// `transfer_type`, disabled).
     ZoneGraph {
         /// List of zone entries with connectivity data.
         zones: Vec<ZoneGraphEntry>,
@@ -1026,7 +1058,8 @@ pub enum Response {
         /// Diagnostics snapshot.
         diagnostics: crate::nav::NavDiagnostics,
     },
-    /// Spawn alert notification — a watched or named spawn appeared/disappeared.
+    /// Spawn alert notification — a watched or named spawn
+    /// appeared/disappeared.
     SpawnAlert {
         /// PID of the client that detected the event.
         client_id: ClientId,
@@ -1047,9 +1080,10 @@ pub enum Response {
         color: i32,
         /// Timestamp in milliseconds when the message was captured.
         timestamp_ms: u64,
-        /// Structured chat event extracted from `text` after stripping STML markup.
-        /// `None` when the text does not match a recognised EQ chat verb pattern
-        /// (e.g. system messages, spell feedback, or unknown formats).
+        /// Structured chat event extracted from `text` after stripping STML
+        /// markup. `None` when the text does not match a recognised EQ
+        /// chat verb pattern (e.g. system messages, spell feedback, or
+        /// unknown formats).
         parsed: Option<crate::chat::ChatEvent>,
     },
     /// Batched chat messages in response to `Command::PollChat`.
@@ -1086,7 +1120,8 @@ pub enum Response {
     },
     /// Batched spawn list delta events from `game_loop`.
     ///
-    /// Returned in `Response::SpawnEventBatch` after calling `Command::PollSpawnEvents`.
+    /// Returned in `Response::SpawnEventBatch` after calling
+    /// `Command::PollSpawnEvents`.
     SpawnEventBatch {
         /// Accumulated spawn events since last poll.
         events: Vec<SpawnEvent>,
@@ -1141,8 +1176,9 @@ pub enum Response {
     },
 }
 
-/// Wire-format for a single zone entry: (`zone_id`, name, `min_level`, `max_level`, connections).
-/// Each connection is (`dest_zone_id`, `transfer_type`, disabled).
+/// Wire-format for a single zone entry: (`zone_id`, name, `min_level`,
+/// `max_level`, connections). Each connection is (`dest_zone_id`,
+/// `transfer_type`, disabled).
 pub type ZoneGraphEntry = (u16, String, i32, i32, Vec<(u16, u8, bool)>);
 
 /// Random session token generated at injection time for IPC authentication.
@@ -1159,7 +1195,8 @@ pub const PERF_TRACE_ENV: &str = "TEXTQUEST_PERF_TRACE";
 /// Legacy named pipe prefix — prefer `pipe_name()` with a session ID.
 pub const PIPE_NAME_PREFIX: &str = r"\\.\pipe\textquest_";
 
-/// Legacy shared memory name prefix — prefer `shared_memory_name()` with a session ID.
+/// Legacy shared memory name prefix — prefer `shared_memory_name()` with a
+/// session ID.
 pub const SHARED_MEMORY_NAME_PREFIX: &str = "textquest_state_";
 
 const SESSION_TOKEN_DIR: &str = "textquest";
@@ -1199,7 +1236,8 @@ fn write_session_token_path(path: &std::path::Path, token: SessionToken) -> std:
     verify_not_symlink_path(path)?;
     std::fs::write(path, token)?;
     // Restrict token file to owner-only access (mode 0o600 on Unix).
-    // On Windows, %TEMP% is already user-specific, but we tighten further where possible.
+    // On Windows, %TEMP% is already user-specific, but we tighten further where
+    // possible.
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -1240,8 +1278,8 @@ pub fn generate_random_token() -> SessionToken {
     token
 }
 
-/// Write a CSPRNG session token file for the given PID. The DLL reads this during init.
-/// Must be called BEFORE injection.
+/// Write a CSPRNG session token file for the given PID. The DLL reads this
+/// during init. Must be called BEFORE injection.
 ///
 /// # Errors
 ///
@@ -1254,7 +1292,8 @@ pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
     let token = generate_random_token();
 
     write_session_token_path(&token_path, token)?;
-    // Also persist a copy for later CLI commands that reconnect to the injected client.
+    // Also persist a copy for later CLI commands that reconnect to the injected
+    // client.
     let login_token_path = token_dir.join(format!("login_token_{pid}.bin"));
     write_session_token_path(&login_token_path, token)?;
 
@@ -1288,7 +1327,8 @@ mod token_tests {
             let target = std::env::temp_dir().join("textquest-symlink-target");
             let _ = std::fs::remove_file(&target);
             std::fs::write(&target, b"z").expect("write target");
-            // creating symlink may fail on platforms not supporting std::os::unix::fs::symlink in this config
+            // creating symlink may fail on platforms not supporting
+            // std::os::unix::fs::symlink in this config
             if symlink(&target, &token_path).is_ok() {
                 let token_path = token_path.clone();
                 assert!(
@@ -1448,8 +1488,10 @@ mod tests {
 
     #[test]
     fn response_roundtrip_login_phase_update() {
-        use crate::login::LoginPhase;
-        use crate::protocol::{decode, encode};
+        use crate::{
+            login::LoginPhase,
+            protocol::{decode, encode},
+        };
 
         let resp = Response::LoginPhaseUpdate {
             phase: LoginPhase::CharacterSelecting,
@@ -1903,8 +1945,10 @@ mod tests {
 
     #[test]
     fn command_navigate_to_roundtrip() {
-        use crate::nav::Waypoint;
-        use crate::protocol::{decode, encode};
+        use crate::{
+            nav::Waypoint,
+            protocol::{decode, encode},
+        };
         let cmd = Command::NavigateTo {
             waypoints: vec![Waypoint::new(1.0, 2.0, 3.0), Waypoint::new(4.0, 5.0, 6.0)],
         };
@@ -1919,8 +1963,10 @@ mod tests {
 
     #[test]
     fn command_stick_to_roundtrip() {
-        use crate::nav::{StickConfig, StickDistance};
-        use crate::protocol::{decode, encode};
+        use crate::{
+            nav::{StickConfig, StickDistance},
+            protocol::{decode, encode},
+        };
         let config = StickConfig {
             distance: StickDistance::Absolute(20.0),
             distance_mod: 3.5,
@@ -1978,8 +2024,10 @@ mod tests {
 
     #[test]
     fn command_circle_kite_roundtrip() {
-        use crate::nav::{CircleConfig, CircleMode, Waypoint};
-        use crate::protocol::{decode, encode};
+        use crate::{
+            nav::{CircleConfig, CircleMode, Waypoint},
+            protocol::{decode, encode},
+        };
         let config = CircleConfig {
             radius: 30.0,
             mode: CircleMode::Ccw,
@@ -2169,8 +2217,10 @@ mod tests {
 
     #[test]
     fn nav_status_sticking_roundtrip() {
-        use crate::nav::NavStatus;
-        use crate::protocol::{decode, encode};
+        use crate::{
+            nav::NavStatus,
+            protocol::{decode, encode},
+        };
         let resp = Response::NavUpdate {
             status: NavStatus::Sticking {
                 target_id: 99,
@@ -2357,8 +2407,10 @@ mod tests {
 
     #[test]
     fn nav_waypoint_list_response_roundtrip() {
-        use crate::nav::{NamedWaypoint, Waypoint};
-        use crate::protocol::{decode, encode};
+        use crate::{
+            nav::{NamedWaypoint, Waypoint},
+            protocol::{decode, encode},
+        };
         let resp = Response::NavWaypointList {
             waypoints: vec![
                 NamedWaypoint::new("camp1", Waypoint::new(1.0, 2.0, 3.0), "qey2hh1"),
@@ -2378,8 +2430,10 @@ mod tests {
 
     #[test]
     fn nav_signals_response_roundtrip() {
-        use crate::nav::NavStateSignals;
-        use crate::protocol::{decode, encode};
+        use crate::{
+            nav::NavStateSignals,
+            protocol::{decode, encode},
+        };
         let resp = Response::NavSignals {
             signals: NavStateSignals {
                 active: true,
@@ -2402,8 +2456,10 @@ mod tests {
 
     #[test]
     fn nav_diagnostics_response_roundtrip() {
-        use crate::nav::NavDiagnostics;
-        use crate::protocol::{decode, encode};
+        use crate::{
+            nav::NavDiagnostics,
+            protocol::{decode, encode},
+        };
         let resp = Response::NavDiagnosticsResult {
             diagnostics: NavDiagnostics {
                 state: "Moving".to_string(),

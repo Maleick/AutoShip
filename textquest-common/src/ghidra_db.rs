@@ -90,8 +90,8 @@ pub struct FunctionEntry {
     pub category: Option<String>,
     pub source: Option<String>,
     pub description: Option<String>,
-    /// Exploitability classification: 'client_authoritative', 'server_validated',
-    /// 'hybrid', 'untested', or 'not_applicable'.
+    /// Exploitability classification: 'client_authoritative',
+    /// 'server_validated', 'hybrid', 'untested', or 'not_applicable'.
     pub usability: Option<String>,
     /// Free-form annotations added during testing.
     pub notes: Option<String>,
@@ -166,7 +166,8 @@ impl GhidraDatabase {
     pub fn import_functions(&self, data: &[FunctionEntry]) -> Result<usize> {
         let tx = self.conn.unchecked_transaction()?;
         let mut stmt = tx.prepare_cached(
-            "INSERT OR REPLACE INTO functions (address, name, size, category, source, description, usability, notes)
+            "INSERT OR REPLACE INTO functions (address, name, size, category, source, \
+             description, usability, notes)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         )?;
         let mut count = 0usize;
@@ -339,7 +340,8 @@ impl GhidraDatabase {
     /// Get all functions that call the function at `addr`.
     pub fn get_callers(&self, addr: u64) -> Result<Vec<FunctionEntry>> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT f.address, f.name, f.size, f.category, f.source, f.description, f.usability, f.notes
+            "SELECT f.address, f.name, f.size, f.category, f.source, f.description, f.usability, \
+             f.notes
              FROM functions f
              JOIN function_calls fc ON f.address = fc.caller_addr
              WHERE fc.callee_addr = ?1",
@@ -364,7 +366,8 @@ impl GhidraDatabase {
     /// Get all functions called by the function at `addr`.
     pub fn get_callees(&self, addr: u64) -> Result<Vec<FunctionEntry>> {
         let mut stmt = self.conn.prepare_cached(
-            "SELECT f.address, f.name, f.size, f.category, f.source, f.description, f.usability, f.notes
+            "SELECT f.address, f.name, f.size, f.category, f.source, f.description, f.usability, \
+             f.notes
              FROM functions f
              JOIN function_calls fc ON f.address = fc.callee_addr
              WHERE fc.caller_addr = ?1",
@@ -441,7 +444,8 @@ impl GhidraDatabase {
         })
     }
 
-    /// Load opcode entries from a JSON file and bulk-insert them into the database.
+    /// Load opcode entries from a JSON file and bulk-insert them into the
+    /// database.
     ///
     /// The file must contain a JSON array of objects with fields matching
     /// [`OpcodeEntry`]: `code`, `handler_addr` (optional), `direction`

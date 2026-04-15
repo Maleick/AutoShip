@@ -1,4 +1,5 @@
-//! EverQuest data layer — spawn reading, log parsing, map loading, named mob tracking.
+//! EverQuest data layer — spawn reading, log parsing, map loading, named mob
+//! tracking.
 
 /// Anti-cheat state reads for EQ memory inspection.
 pub mod cheater;

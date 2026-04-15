@@ -1,7 +1,7 @@
 //! SIMD XOR encryption of the DLL's .text section.
 //!
-//! **Layer 2** of per-frame sleep obfuscation. Between frames, the .text section
-//! is XOR-encrypted with a random 16-byte key (refreshed each cycle).
+//! **Layer 2** of per-frame sleep obfuscation. Between frames, the .text
+//! section is XOR-encrypted with a random 16-byte key (refreshed each cycle).
 //!
 //! Uses SSE2 SIMD intrinsics (128-bit XOR). SSE2 is guaranteed on x86_64.
 //!
@@ -21,8 +21,8 @@ static TEXT_LOCATED: AtomicBool = AtomicBool::new(false);
 
 /// 16-byte XOR key, regenerated each encrypt cycle via OS entropy.
 ///
-/// Only accessed from the game loop thread (encrypt generates, decrypt consumes).
-/// They strictly alternate — never concurrent.
+/// Only accessed from the game loop thread (encrypt generates, decrypt
+/// consumes). They strictly alternate — never concurrent.
 static mut XOR_KEY: [u8; 16] = [0u8; 16];
 
 /// Return the .text section base pointer and size.

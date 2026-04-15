@@ -6,27 +6,37 @@
 //!
 //! # What works (confirmed live 2026-03-29)
 //!
-//! - **`find_window_by_name()`** — `CXWndManager` window array scan, exact match by `WindowText`
-//! - **`find_window_by_text_contains()`** — same scan, substring match (for fuzzy UI detection)
-//! - **`find_child_button_by_text()`** — walk `CXWnd` child `TList` for button lookup
+//! - **`find_window_by_name()`** — `CXWndManager` window array scan, exact
+//!   match by `WindowText`
+//! - **`find_window_by_text_contains()`** — same scan, substring match (for
+//!   fuzzy UI detection)
+//! - **`find_child_button_by_text()`** — walk `CXWnd` child `TList` for button
+//!   lookup
 //! - **`read_cxstr()`** — read a `CXStr` value from a raw `CStrRep` pointer
-//! - **`write_cxstr_inplace()`** — overwrite an existing `CStrRep` buffer (non-null only)
-//! - **`clone_cstrrep()`** — `HeapAlloc` a new `CStrRep` cloned from a donor (for null `CXStr` fields)
-//! - **`click_button_via_vtable()`** — WndNotification(XWM_LCLICK) through `CXWnd` vtable
+//! - **`write_cxstr_inplace()`** — overwrite an existing `CStrRep` buffer
+//!   (non-null only)
+//! - **`clone_cstrrep()`** — `HeapAlloc` a new `CStrRep` cloned from a donor
+//!   (for null `CXStr` fields)
+//! - **`click_button_via_vtable()`** — WndNotification(XWM_LCLICK) through
+//!   `CXWnd` vtable
 //!
 //! # What does NOT work
 //!
-//! - **`set_edit_text_via_vtable()`** — `SetWindowText` vtable 0x280 does not work in eqmain.dll
-//!   context. Kept for reference and possible eqgame.exe use. Use `write_cxstr_inplace()` instead.
-//! - **`PostMessageW` (`WM_CHAR/VK_RETURN`)** — EQ uses `DirectInput`, not Win32 message pump.
-//! - **`EQLogin` char array write alone** — UI doesn't read from backend arrays; must also write `CXStr`.
+//! - **`set_edit_text_via_vtable()`** — `SetWindowText` vtable 0x280 does not
+//!   work in eqmain.dll context. Kept for reference and possible eqgame.exe
+//!   use. Use `write_cxstr_inplace()` instead.
+//! - **`PostMessageW` (`WM_CHAR/VK_RETURN`)** — EQ uses `DirectInput`, not
+//!   Win32 message pump.
+//! - **`EQLogin` char array write alone** — UI doesn't read from backend
+//!   arrays; must also write `CXStr`.
 //!
 //! # Thread safety
 //!
 //! Button clicks via vtable **must** be called from EQ's main game loop thread.
-//! Use `game_loop::queue_button_click()` to safely schedule clicks from IPC threads.
-//! `CXStr` reads/writes are safe from any thread as long as the game isn't concurrently
-//! modifying the same widget (which it won't during login screens).
+//! Use `game_loop::queue_button_click()` to safely schedule clicks from IPC
+//! threads. `CXStr` reads/writes are safe from any thread as long as the game
+//! isn't concurrently modifying the same widget (which it won't during login
+//! screens).
 //!
 //! # `CXStr` memory layout
 //!
@@ -47,8 +57,9 @@ const MAX_WINDOW_COUNT: u32 = 500;
 /// Maximum child nodes to walk (prevents infinite loops on corrupted `TLists`).
 const MAX_CHILD_WALK: u32 = 200;
 
-/// Depth-first walk of a `CXWnd` child list (FirstNode/Next), applying `visitor`
-/// to each node until it returns `false` or the walk limit is reached.
+/// Depth-first walk of a `CXWnd` child list (FirstNode/Next), applying
+/// `visitor` to each node until it returns `false` or the walk limit is
+/// reached.
 ///
 /// `first_child` is the parent's `FirstNode` pointer. `get_first_child` and
 /// `get_next` fetch the offsets for a given node. This helper is platform
@@ -101,14 +112,16 @@ fn walk_child_list_depth_first<FChild, FNext, FVisit>(
 /// `WindowText` `CXStr` against `name`.
 ///
 /// # Arguments
-/// * `cxwnd_mgr` — resolved `CXWndManager` pointer (from `eqmain::resolve_cxwnd_manager()`)
+/// * `cxwnd_mgr` — resolved `CXWndManager` pointer (from
+///   `eqmain::resolve_cxwnd_manager()`)
 /// * `name` — exact window text to match (case-insensitive)
 ///
 /// # Returns
 /// Raw pointer to the `CXWnd`, or `None` if not found.
 ///
 /// # Safety
-/// `cxwnd_mgr` must be a valid `CXWndManager` pointer. Called from game process context.
+/// `cxwnd_mgr` must be a valid `CXWndManager` pointer. Called from game process
+/// context.
 #[cfg(windows)]
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn find_window_by_name(cxwnd_mgr: usize, name: &str) -> Option<usize> {
@@ -143,7 +156,8 @@ pub unsafe fn find_window_by_name(_cxwnd_mgr: usize, _name: &str) -> Option<usiz
 
 /// Find a window whose `WindowText` contains `substring` (case-insensitive).
 ///
-/// Used for fuzzy matching pre-login screens whose exact text varies between patches.
+/// Used for fuzzy matching pre-login screens whose exact text varies between
+/// patches.
 ///
 /// # Safety
 /// `cxwnd_mgr` must be a valid `CXWndManager` pointer.
@@ -181,9 +195,11 @@ pub unsafe fn find_window_by_text_contains(_cxwnd_mgr: usize, _substring: &str) 
 }
 
 /// Walk a parent window's child `TList` looking for a child whose `WindowText`
-/// contains `button_text` (case-insensitive). Recurses one level into grandchildren.
+/// contains `button_text` (case-insensitive). Recurses one level into
+/// grandchildren.
 ///
-/// `CXWnd` children: first child at `CXWND_FIRST_NODE`, next sibling at `CXWND_NEXT`.
+/// `CXWnd` children: first child at `CXWND_FIRST_NODE`, next sibling at
+/// `CXWND_NEXT`.
 ///
 /// # Safety
 /// `parent_wnd` must be a valid `CXWnd` pointer.
@@ -219,8 +235,8 @@ pub unsafe fn find_child_button_by_text(_parent_wnd: usize, _button_text: &str) 
     None
 }
 
-/// Iterate all windows in `CXWndManager`, calling `callback(index, wnd_ptr, window_text)`.
-/// Stops early if the callback returns `false`.
+/// Iterate all windows in `CXWndManager`, calling `callback(index, wnd_ptr,
+/// window_text)`. Stops early if the callback returns `false`.
 ///
 /// # Safety
 /// `cxwnd_mgr` must be a valid `CXWndManager` pointer.
@@ -266,7 +282,8 @@ where
 /// Convenience wrapper over [`read_cxstr_with_max_len`] for widget text.
 ///
 /// # Safety
-/// `cxstr_addr` must point to a valid `CXStr` field (a `usize` holding a `CStrRep` pointer).
+/// `cxstr_addr` must point to a valid `CXStr` field (a `usize` holding a
+/// `CStrRep` pointer).
 #[cfg(windows)]
 pub unsafe fn read_cxstr(cxstr_addr: usize) -> Option<String> {
     unsafe { read_cxstr_with_max_len(cxstr_addr, 256) }
@@ -315,8 +332,9 @@ pub unsafe fn read_cxstr_with_max_len(_cxstr_addr: usize, _max_len: usize) -> Op
 
 /// Write a string into an existing `CXStr`'s `CStrRep` buffer.
 ///
-/// Overwrites the data in-place. Fails if the `CStrRep` is null (use `clone_cstrrep()`
-/// to allocate one first) or if the text exceeds the allocated buffer size.
+/// Overwrites the data in-place. Fails if the `CStrRep` is null (use
+/// `clone_cstrrep()` to allocate one first) or if the text exceeds the
+/// allocated buffer size.
 ///
 /// # Safety
 /// `cxstr_addr` must point to a valid `CXStr` field with a non-null `CStrRep`.
@@ -357,15 +375,16 @@ pub unsafe fn write_cxstr_inplace(_cxstr_addr: usize, _text: &str) -> bool {
 
 /// Clone a `CStrRep` from a donor, allocating on the Windows process heap.
 ///
-/// EQ manages `CStrRep` memory through its own `CXFreeList` mechanism. Using the
-/// process default heap (via `HeapAlloc`) ensures EQ can safely free the buffer.
-/// The freeList pointer is copied from the donor so EQ's deallocator works correctly.
+/// EQ manages `CStrRep` memory through its own `CXFreeList` mechanism. Using
+/// the process default heap (via `HeapAlloc`) ensures EQ can safely free the
+/// buffer. The freeList pointer is copied from the donor so EQ's deallocator
+/// works correctly.
 ///
 /// Returns the address of the new `CStrRep`, or `None` on allocation failure.
 ///
 /// # Safety
-/// `donor_rep` must be a valid `CStrRep` pointer. The returned `CStrRep` is empty
-/// (length=0) and must be written to via `write_cxstr_inplace()`.
+/// `donor_rep` must be a valid `CStrRep` pointer. The returned `CStrRep` is
+/// empty (length=0) and must be written to via `write_cxstr_inplace()`.
 #[cfg(windows)]
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn clone_cstrrep(donor_rep: usize) -> Option<usize> {
@@ -403,9 +422,9 @@ pub unsafe fn clone_cstrrep(_donor_rep: usize) -> Option<usize> {
 
 /// Allocate a fresh `CStrRep` on the process heap with the given text.
 ///
-/// Unlike `clone_cstrrep()`, this creates a standalone `CStrRep` without a donor.
-/// The freeList is set to 0 (no `CXFreeList`). EQ will still free it via `HeapFree`
-/// when the refCount drops to 0.
+/// Unlike `clone_cstrrep()`, this creates a standalone `CStrRep` without a
+/// donor. The freeList is set to 0 (no `CXFreeList`). EQ will still free it via
+/// `HeapFree` when the refCount drops to 0.
 ///
 /// Ownership is transferred to EQ — do NOT free the returned pointer from Rust.
 ///
@@ -453,10 +472,11 @@ pub unsafe fn alloc_cstrrep(_text: &str) -> Option<usize> {
 
 // ─── Button Clicking ───
 
-/// Click a button widget by calling `WndNotification(XWM_LCLICK)` through the `CXWnd` vtable.
+/// Click a button widget by calling `WndNotification(XWM_LCLICK)` through the
+/// `CXWnd` vtable.
 ///
-/// This is the confirmed working approach for all EQ button interactions — login,
-/// splash dismiss, server select, character select, etc.
+/// This is the confirmed working approach for all EQ button interactions —
+/// login, splash dismiss, server select, character select, etc.
 ///
 /// # Thread safety
 /// **Must** be called from EQ's main game loop thread. Use
@@ -492,11 +512,13 @@ pub unsafe fn click_button_via_vtable(_button_wnd: usize) {}
 
 /// Click a button, choosing the correct mechanism for the current EQ phase.
 ///
-/// During eqmain (login, server select): calls `click_button_via_vtable()` directly
-/// because ProcessGameEvents is not hooked yet and queue_button_click() would never drain.
+/// During eqmain (login, server select): calls `click_button_via_vtable()`
+/// directly because ProcessGameEvents is not hooked yet and
+/// queue_button_click() would never drain.
 ///
-/// During eqgame (character select, in-world): uses `queue_button_click()` to schedule
-/// the click on the game loop thread where it's safe to manipulate EQ UI state.
+/// During eqgame (character select, in-world): uses `queue_button_click()` to
+/// schedule the click on the game loop thread where it's safe to manipulate EQ
+/// UI state.
 ///
 /// # Safety
 /// `button_wnd` must be a valid `CXWnd` pointer with an intact vtable.
@@ -528,14 +550,16 @@ pub unsafe fn click_button_for_phase(_button_wnd: usize, _in_eqmain: bool) {}
 /// Set text on a `CEditWnd` by calling `SetWindowText` through the vtable.
 ///
 /// **WARNING: Does NOT work in eqmain.dll context** (login screens). The vtable
-/// function at offset 0x280 appears to be a different virtual in eqmain's `CXWnd`
-/// class hierarchy. Kept for potential use in eqgame.exe (character select, chat).
+/// function at offset 0x280 appears to be a different virtual in eqmain's
+/// `CXWnd` class hierarchy. Kept for potential use in eqgame.exe (character
+/// select, chat).
 ///
 /// Uses `alloc_cstrrep()` to create a heap-allocated `CStrRep` and transfers
 /// ownership to EQ via refCount.
 ///
 /// # Safety
-/// `edit_wnd` must be a valid `CEditWnd` pointer. Only call from game loop thread.
+/// `edit_wnd` must be a valid `CEditWnd` pointer. Only call from game loop
+/// thread.
 #[cfg(windows)]
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn set_edit_text_via_vtable(edit_wnd: usize, text: &str) -> bool {
@@ -619,11 +643,13 @@ pub unsafe fn xml_index(_wnd_ptr: usize) -> i32 {
 
 // ─── SIDL-Based Window Finding ───
 
-/// Find a visible window by its SIDL name (`CSidlScreenWnd::SidlText` at +0x270).
+/// Find a visible window by its SIDL name (`CSidlScreenWnd::SidlText` at
+/// +0x270).
 ///
-/// This is the MQ2 `AutoLogin` approach: scan `CXWndManager`'s window array, read
-/// each window's `SidlText`, and check the dShow visibility flag. SIDL names
-/// are stable across patches (e.g., "connect", "serverselect", "yesnodialog").
+/// This is the MQ2 `AutoLogin` approach: scan `CXWndManager`'s window array,
+/// read each window's `SidlText`, and check the dShow visibility flag. SIDL
+/// names are stable across patches (e.g., "connect", "serverselect",
+/// "yesnodialog").
 ///
 /// Works for both eqmain.dll and eqgame.exe contexts — the caller provides the
 /// correct `CXWndManager` pointer and specifies which offsets to use.
@@ -631,7 +657,8 @@ pub unsafe fn xml_index(_wnd_ptr: usize) -> i32 {
 /// # Arguments
 /// * `cxwnd_mgr` — resolved `CXWndManager` pointer
 /// * `sidl_name` — SIDL name to match (case-insensitive)
-/// * `sidl_text_offset` — offset of `SidlText` in the window struct (differs between eqmain/eqgame)
+/// * `sidl_text_offset` — offset of `SidlText` in the window struct (differs
+///   between eqmain/eqgame)
 /// * `array_offset` — `CXWndManager` array offset
 /// * `count_offset` — `CXWndManager` count offset
 ///
@@ -749,8 +776,7 @@ pub unsafe fn find_visible_window_by_name(_cxwnd_mgr: usize, _name: &str) -> Opt
 #[cfg(windows)]
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn find_child_by_sidl_text(parent_wnd: usize, sidl_name: &str) -> Option<usize> {
-    use textquest_common::offsets::eqgame as eqg;
-    use textquest_common::offsets::eqmain as off;
+    use textquest_common::offsets::{eqgame as eqg, eqmain as off};
 
     let mut child = *((parent_wnd + off::CXWND_FIRST_NODE) as *const usize);
     let mut count = 0u32;
@@ -776,8 +802,9 @@ pub unsafe fn find_child_by_sidl_text(_parent_wnd: usize, _sidl_name: &str) -> O
 
 /// Read text from a `CListWnd` cell at (row, column).
 ///
-/// Walks the `CListWnd`'s `ItemsArray` → `SListWndLine` → `SListWndCell` → Text (`CXStr`).
-/// Returns `None` if the row/column is out of bounds or the text is empty/corrupt.
+/// Walks the `CListWnd`'s `ItemsArray` → `SListWndLine` → `SListWndCell` → Text
+/// (`CXStr`). Returns `None` if the row/column is out of bounds or the text is
+/// empty/corrupt.
 ///
 /// # Safety
 /// `list_wnd` must be a valid `CListWnd` pointer.

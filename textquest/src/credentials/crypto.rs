@@ -13,7 +13,8 @@ fn argon2_instance() -> Result<Argon2<'static>> {
     Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
 }
 
-/// Derive a 32-byte encryption key from a master password and salt using Argon2id.
+/// Derive a 32-byte encryption key from a master password and salt using
+/// Argon2id.
 ///
 /// # Errors
 ///
@@ -27,7 +28,8 @@ pub fn derive_key<M: AsRef<str>>(master_password: M, salt: &[u8]) -> Result<Zero
     Ok(key)
 }
 
-/// Derive a per-account encryption key from the master key and a per-account salt using Argon2id.
+/// Derive a per-account encryption key from the master key and a per-account
+/// salt using Argon2id.
 ///
 /// # Errors
 ///

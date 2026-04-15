@@ -20,7 +20,8 @@ pub struct LootRules {
     /// Items to pick up and immediately destroy (junk clogging inventory).
     #[serde(default)]
     pub destroy_items: HashSet<String>,
-    /// If true, loot everything not in `destroy_items`. Overrides keep/sell lists.
+    /// If true, loot everything not in `destroy_items`. Overrides keep/sell
+    /// lists.
     #[serde(default = "default_true")]
     pub loot_all: bool,
     /// If true, auto-split coin with group.

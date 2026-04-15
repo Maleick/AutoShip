@@ -3,8 +3,10 @@
 //! Tracks session events (connections, zone changes, deaths, level-ups, loot)
 //! across all managed EQ clients and provides fleet-level summaries.
 
-use std::collections::{HashMap, VecDeque};
-use std::time::Instant;
+use std::{
+    collections::{HashMap, VecDeque},
+    time::Instant,
+};
 
 use serde::{Deserialize, Serialize};
 
