@@ -132,6 +132,32 @@ The cleric-side override is honored in the DLL combat strategy layer, where CH c
 
 Both modes are represented in code today, but they are not the same workflow. When documenting or testing changes, keep them separate.
 
+## Survivability-First Automation Constraint
+
+TextQuest's camp loop and combat rotation design are constrained by one rule: unattended automation must prefer wipe avoidance over peak clean-pull DPS. In practice that means the default group template assumes a survivability core of `bard + cleric + second healer/support-healer`, where `shaman` is preferred and `paladin` is the lower-throughput fallback when pickup coverage matters more than raw damage.
+
+This matters because the system is proactive, not reactive:
+
+- it can pre-program recovery behavior
+- it cannot improvise like a human boxer when a pull goes bad
+- any group that drops below the survivability core must be treated as a utility or reduced-risk exception
+
+### Fallback Behavior Matrix
+
+| Trigger | Orchestrator-side response | DLL / class-layer response | Success condition |
+| ------- | -------------------------- | -------------------------- | ----------------- |
+| Main tank dies and a configured pickup tank exists | Stop new pulls, freeze aggressive retarget churn, promote the pickup tank, and keep the encounter local to camp instead of expanding the fight | Bard stays on defensive melody, cleric swaps to the pickup tank, paladin or shadowknight takes aggro, DPS drops burn priorities | Group stabilizes without a full wipe |
+| Main tank dies and no real pickup tank exists | Suppress new pulls and switch the group from kill mode to stall-and-recover mode | Bard peels, mezes, or kites if possible; secondary healer buys time; DPS stops chasing parse value and helps disengage | Corpse recovery or orderly reset happens before the whole group dies |
+| Primary healer dies | Mark the surviving healer as temporary primary, lower mana-floor restrictions for emergency healing, and defer any new pull decision until healer coverage is restored | Shaman or paladin takes direct-heal priority, bard keeps mana and resist songs up, DPS uses mana-light rotation | Encounter survives long enough to finish or disengage |
+| Unexpected add or mez resist | Pause assist churn, assign the first add to the configured control/pickup unit, and refuse to progress the pull loop until add state is stable | Bard handles first-line crowd control, paladin or shadowknight picks up if control fails, flex CC reinforces as needed | Kill target and add target are isolated instead of free-casting into the group |
+| Survivability core breaks completely (`no second healer`, `no pickup`, or `multiple uncontrolled adds`) | Abort greedy combat continuation and transition to the least-loss recovery path | Druid evac if available; otherwise disengage, regroup, and start corpse recovery | The automation avoids a cascading wipe even if the encounter is lost |
+
+### Design Consequences
+
+- Camp-loop FSM transitions should never assume that operator rescue will arrive within the next tick.
+- Rotation engines should bias toward slower but stable behavior whenever healer count, add state, or tank state falls below the safe threshold.
+- Utility or logistics groups that do not meet the survivability core should not be scheduled as the unattended default for named camps or unstable dungeon pulls.
+
 ## Current Behavior vs Roadmap
 
 ### Current behavior

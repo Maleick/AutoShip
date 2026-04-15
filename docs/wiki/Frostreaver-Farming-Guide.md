@@ -84,6 +84,20 @@ This final roster does **not** maintain a separate raid-only bench. Instead, it 
 - Pet tanking is optional in farm content and explicitly unnecessary in raid planning. Mage and beastlord pets are bonus DPS and utility, not the main mitigation plan.
 - The total raid target is the full 36-character roster. The composition is deliberately stable across one-group progression, six-group farming, and full-raid nights.
 
+### Automation Survivability Core
+
+For unattended camp automation, TextQuest treats `BRD + CLR + second healer/support-healer` as the minimum survivability core. The second healing slot is a deliberate trade: it gives up one higher-throughput DPS slot so the group can survive bad pulls, named pops, healer desync, and pathing mistakes without operator rescue.
+
+- Preferred core: `tank + CLR + BRD + SHM + DPS + DPS`. Shaman is the best second healer because slow reduces incoming damage before the cleric has to spend mana catching up.
+- Lower-throughput fallback: `tank + CLR + BRD + PAL + DPS + flex`. Paladin does not match shaman's slow value, but it adds pickup, stun, and emergency healing for recovery windows.
+- Utility exception: `BRD + CLR` by itself is acceptable only for travel, caster logistics, or lower-risk camps. It is not the default unattended template for named-heavy or unstable camps.
+
+Applied to the locked roster:
+
+- Groups 1-4 cleanly satisfy the survivability core with `CLR + BRD + SHM`.
+- Group 5 is a controlled exception: druid covers the second-healer role for travel and evac-heavy utility work, but it is still less robust than the shaman groups.
+- Group 6 is the clearest exception. It keeps the universal `BRD + CLR` floor, but it should be treated as a support/logistics group unless adjacent support or lower-risk content keeps the recovery burden low.
+
 ### Partner-Contingent Planning
 
 > `TextQuest#1588` reviewed the repository and GitHub issue history on 2026-04-15. No tracked evidence currently confirms Dave's participation or any other named partner roster commitment, so the finalized `TextQuest#1521` 36-box baseline stays unchanged until a partner's attendance and class mix are explicitly recorded.
