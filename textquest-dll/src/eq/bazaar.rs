@@ -196,13 +196,44 @@ fn listing_matches_query(listing: &BazaarListing, filter: &BazaarQuery) -> bool 
     })
 }
 
-#[cfg(windows)]
-fn max_rows_for_filter(filter: &BazaarQuery, row_count: usize) -> usize {
+fn match_limit_for_filter(filter: &BazaarQuery, row_count: usize) -> usize {
     filter
         .max_rows
         .map_or(row_count, usize::from)
         .min(row_count)
         .min(MAX_BAZAAR_ROWS)
+}
+
+fn collect_matching_listings<F>(
+    row_count: usize,
+    filter: &BazaarQuery,
+    mut read_row: F,
+) -> Vec<BazaarListing>
+where
+    F: FnMut(usize) -> Vec<String>,
+{
+    let scan_limit = row_count.min(MAX_BAZAAR_ROWS);
+    let match_limit = match_limit_for_filter(filter, scan_limit);
+    let mut listings = Vec::new();
+
+    for row in 0..scan_limit {
+        let columns = read_row(row);
+        if columns.is_empty() {
+            continue;
+        }
+
+        let listing = normalize_listing(row as u32, columns);
+        if !listing_matches_query(&listing, filter) {
+            continue;
+        }
+
+        listings.push(listing);
+        if listings.len() >= match_limit {
+            break;
+        }
+    }
+
+    listings
 }
 
 #[cfg(windows)]
@@ -283,18 +314,8 @@ unsafe fn collect_bazaar_lists_for_window(
             continue;
         }
 
-        let max_rows = max_rows_for_filter(filter, row_count);
-        let listings: Vec<BazaarListing> = (0..max_rows)
-            .filter_map(|row| {
-                let columns = read_list_row(current, row);
-                if columns.is_empty() {
-                    return None;
-                }
-
-                let listing = normalize_listing(row as u32, columns);
-                listing_matches_query(&listing, filter).then_some(listing)
-            })
-            .collect();
+        let listings =
+            collect_matching_listings(row_count, filter, |row| read_list_row(current, row));
 
         if listings.is_empty() {
             continue;
@@ -447,5 +468,24 @@ mod tests {
                 max_rows: None,
             }
         ));
+    }
+
+    #[test]
+    fn collect_matching_listings_applies_max_rows_after_filtering() {
+        let rows = [
+            vec!["Banded Mail".into(), "100".into(), "Traderone".into()],
+            vec!["Fine Steel".into(), "200".into(), "Tradertwo".into()],
+            vec!["Fungi Tunic".into(), "2,000".into(), "Traderbob".into()],
+            vec!["Fungi Staff".into(), "3,000".into(), "Traderbob".into()],
+        ];
+        let filter = BazaarQuery {
+            text_contains: Some("fungi".into()),
+            max_rows: Some(1),
+        };
+
+        let listings = collect_matching_listings(rows.len(), &filter, |row| rows[row].clone());
+
+        assert_eq!(listings.len(), 1);
+        assert_eq!(listings[0].item_name.as_deref(), Some("Fungi Tunic"));
     }
 }
