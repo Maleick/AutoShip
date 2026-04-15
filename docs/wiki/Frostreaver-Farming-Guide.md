@@ -252,7 +252,7 @@ With 36 characters (6 full groups), you have a significant force. Here is what i
 | **King Tormax**            | Kael Drakkel      | Moderate-Hard  | King Tormax loot                                              | Requires clearing to throne room                         |
 | **Lord Yelinak**           | Skyshrine         | Moderate       | Yelinak loot                                                  | Dragon lord                                              |
 | **Tunare**                 | Plane of Growth   | Moderate-Hard  | Nature-themed raid loot                                       | Full raid clear needed                                   |
-| **ToV Halls of Testing**   | Temple of Veeshan | Moderate       | HoT dragon drops, Dozekar quest items                         | Mid-tier ToV content; doable with 36                     |
+| **ToV Halls of Testing**   | Temple of Veeshan | Moderate       | HoT dragon drops, Dozekar quest items                         | Mid-tier ToV content; doable with 36. See [Research: Dozekar Tear Quest Items](Research-Dozekar-Tear-Quest-Items.md) for reward mapping and price strategy. |
 | **ToV West Wing**          | Temple of Veeshan | Moderate       | Kael quest armor (unmade pieces)                              | CoV-faction aligned; safe if ally faction                |
 | **ToV North Wing (NToV)**  | Temple of Veeshan | Hard           | Best loot in Velious era                                      | See NToV section below                                   |
 | **Vulak'Aerr**             | NToV              | Very Hard      | Abashi's Rod, Do'Vassir's Gauntlets, Crystasia's Ring (AC 30) | Final boss of Velious; 36 well-geared chars may be tight |
