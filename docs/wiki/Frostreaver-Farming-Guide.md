@@ -8,27 +8,76 @@
 
 ## Table of Contents
 
-1. [Leveling Zones by Level Range](#leveling-zones-by-level-range)
-2. [Plat Farming Locations by Era](#plat-farming-locations-by-era)
-3. [Raid Targets Available at Velious Launch](#raid-targets-available-at-velious-launch)
-4. [Encounter Locking Strategy](#encounter-locking-strategy)
-5. [Randomized Loot Meta & Lessons from Mischief/Teek](#randomized-loot-meta)
-6. [Group Composition Notes](#group-composition-notes)
+1. [Finalized 36-Box Roster Reference](#finalized-36-box-roster-reference)
+2. [Leveling Zones by Level Range](#leveling-zones-by-level-range)
+3. [Plat Farming Locations by Era](#plat-farming-locations-by-era)
+4. [Raid Targets Available at Velious Launch](#raid-targets-available-at-velious-launch)
+5. [Encounter Locking Strategy](#encounter-locking-strategy)
+6. [Randomized Loot Meta & Lessons from Mischief/Teek](#randomized-loot-meta)
+7. [Group Composition Notes](#group-composition-notes)
 
 ---
 
-## Your 36-Box Roster Reference
+## Finalized 36-Box Roster Reference
 
-| Group          | Tank | Healer 1 | Healer 2 | DPS 1 | DPS 2 | Support |
-| -------------- | ---- | -------- | -------- | ----- | ----- | ------- |
-| G1 Tank        | WAR  | SHM      | CLR      | CLR   | WIZ   | BRD     |
-| G2 Offtank     | PAL  | ENC      | CLR      | CLR   | WIZ   | BRD     |
-| G3 Offtank DPS | SK   | WIZ      | CLR      | CLR   | WIZ   | BRD     |
-| G4 Caster DPS  | MAG  | WIZ      | CLR      | CLR   | WIZ   | BRD     |
-| G5 DPS Ranged  | RNG  | BST      | CLR      | CLR   | WIZ   | BRD     |
-| G6 Caster      | DRU  | NEC      | CLR      | CLR   | WIZ   | BRD     |
+> Finalized from the `TextQuest#1521` owner decision recorded on 2026-04-14. The farm roster and the raid roster are intentionally the same 36-character stable, so leveling, gearing, and AA time spent farming flows directly into raid readiness.
 
-**Key roster strengths:** 12 CLR (massive heal throughput), 6 BRD (selos + mana song for every group), 6+ WIZ (ports + burst DPS), SHM slow, ENC haste/mez, MAG DS/pet, NEC twitch/FD, DRU evac/DS, SK FD pull.
+| Group      | Tank | Healer | Support 1 | Support 2 | DPS 1 | DPS 2 |
+| ---------- | ---- | ------ | --------- | --------- | ----- | ----- |
+| G1 Driver  | SK   | CLR    | BRD       | SHM       | MNK   | MNK   |
+| G2 Melee   | WAR  | CLR    | BRD       | SHM       | MNK   | MNK   |
+| G3 Melee   | WAR  | CLR    | BRD       | SHM       | MNK   | MNK   |
+| G4 Melee   | WAR  | CLR    | BRD       | SHM       | MNK   | MNK   |
+| G5 Utility | PAL  | CLR    | BRD       | DRU       | BST   | RNG   |
+| G6 Caster  | PAL  | CLR    | BRD       | ENC       | WIZ   | MAG   |
+
+### Class Totals (36)
+
+| Class | Count | Notes |
+| ----- | ----- | ----- |
+| Warrior | 3 | Defensive Discipline rotation for raid main-tank duty |
+| Shadowknight | 1 | Driver character, snap aggro, FD pulls, and snare coverage |
+| Paladin | 2 | Utility tanks for raid support and safer split-camp farming |
+| Cleric | 6 | One per group; raid Complete Heal chain backbone |
+| Bard | 6 | One per group; movement, pull control, ADPS, and resist coverage |
+| Shaman | 4 | Slow, buffs, spot heals, and AFK alchemy backbone |
+| Monk | 8 | Launch-era default melee DPS because they are effective before weapons stabilize |
+| Druid | 1 | Ports, evac, snare, and backup heals |
+| Enchanter | 1 | CC, mana utility, and jewelry crafting |
+| Beastlord | 1 | Utility melee DPS with slow backup and pet support |
+| Ranger | 1 | Tracking, outdoor pull utility, and ranged DPS |
+| Wizard | 1 | Burst caster DPS and port support |
+| Magician | 1 | Summons, Call of the Hero utility, and extra caster DPS |
+
+### Farming-First Takeaway
+
+This final roster does **not** maintain a separate raid-only bench. Instead, it favors six self-sufficient camp teams that can split across the world and then collapse into a full six-group raid without dead slots or pet-tank dependencies.
+
+- Groups 1-4 are interchangeable melee farm teams: tank + cleric + bard + shaman with two monks for steady dungeon clearing.
+- Group 5 is the outdoor and travel utility team: paladin durability, druid ports/evac, beastlord slow backup, and ranger tracking.
+- Group 6 is the caster and logistics team: paladin safety, enchanter CC, wizard ports, and magician summon/vendor utility.
+- AFK tradeskill scaling remains present but capped on purpose: four shamans cover alchemy, while the enchanter carries jewelry crafting. The roster gives up the original 6-8 shaman / 4-6 enchanter idea so more slots stay raid-viable.
+
+### Farming/Raiding Overlap
+
+| Role | Farming job | Raid job | Flex verdict |
+| ---- | ----------- | -------- | ------------ |
+| Warriors | Named-camp tanks for the three hardest groups | Main tanks and Defensive rotation anchors | Mandatory in both modes |
+| Shadowknight | Driver, FD pulls, snap aggro, solo utility | Pull tank, aggro preload, pickup tank | High overlap, but not a warrior replacement |
+| Paladins | Utility tanks for safer camps and recovery | Off-tanks, stun utility, backup heals | Strong flex tanks |
+| Clerics | Group sustain and wipe recovery | Complete Heal chain backbone | Fixed-role backbone |
+| Shamans | Slow, buffs, alchemy, backup healing | Slow, buffs, hybrid heals | Highest overlap support class |
+| Bards | Pull speed, mana/song support, travel | Per-group ADPS, resists, movement | Mandatory in both modes |
+| Monks | Weapon-light launch DPS and backup pulling | Primary melee DPS | Cleanest pure flex DPS slot |
+| Druid / Enchanter | Travel, evac, tracking, CC, crafting | Utility healing, mana control, CC | Specialty flex slots |
+| Beastlord / Ranger / Wizard / Mage | Outdoor utility, tracking, summon, vendor support | Remaining DPS and utility flex | Raid-safe, but not core tank/heal infrastructure |
+
+### Raid-First Takeaway
+
+- Three warriors are the real tank floor. The shadowknight plus two paladins cover pickup, add control, and lower-risk farm content, but raid tanking is built around the warrior trio.
+- Six clerics are the hard commitment. Shamans and the druid supplement heals; they do not replace the cleric chain.
+- Pet tanking is optional in farm content and explicitly unnecessary in raid planning. Mage and beastlord pets are bonus DPS and utility, not the main mitigation plan.
+- The total raid target is the full 36-character roster. The composition is deliberately stable across one-group progression, six-group farming, and full-raid nights.
 
 ---
 
@@ -227,7 +276,7 @@ From easiest to hardest within NToV:
 12. **Lord Vyemm** (Paladin) - "Arguably the most difficult dragon in ToV" even harder than Vulak solo
 13. **Vulak'Aerr** (Level 70, final boss) - Reigning lord of ToV, premium loot
 
-**36-Box Feasibility:** With 12 CLR, 6 BRD, SHM slow, ENC haste, and stacking DPS, your force can handle most NToV content. Lord Vyemm and Vulak'Aerr will require your team to be well-geared (Kael armor + Kunark raid gear minimum). The 2-high-level-group or 4-55+ estimate from community sources suggests 36 level 60s is more than sufficient for the zone overall.
+**36-Box Feasibility:** With 6 CLR, 6 BRD, 4 SHM, a dedicated ENC, and a real tank core of 3 WAR + 1 SK + 2 PAL, your force can handle most NToV content. Lord Vyemm and Vulak'Aerr will still require strong Kael/Kunark gear and disciplined healing rotations, but the roster has enough real tanks, healers, and monk DPS to clear the zone without leaning on pet tanking.
 
 ---
 
@@ -331,26 +380,22 @@ From easiest to hardest within NToV:
 
 ### Optimal Zone Assignments by Group Strength
 
-| Group                        | Best Role                    | Ideal Zones                                                |
-| ---------------------------- | ---------------------------- | ---------------------------------------------------------- |
-| G1 (WAR/SHM/CLR/CLR/WIZ/BRD) | Main tank group, slow debuff | Raids, Kael named, NToV                                    |
-| G2 (PAL/ENC/CLR/CLR/WIZ/BRD) | CC-heavy group, haste        | Zones with mez-needed pulls (Seb, Chardok), charm camps    |
-| G3 (SK/WIZ/CLR/CLR/WIZ/BRD)  | FD pulling, double WIZ burst | Dungeon crawling (Howling Stones, Chardok), FD split camps |
-| G4 (MAG/WIZ/CLR/CLR/WIZ/BRD) | Pet tank + triple caster DPS | AoE farming (Velks), outdoor camps where pet can tank      |
-| G5 (RNG/BST/CLR/CLR/WIZ/BRD) | Ranged DPS, BST slow backup  | Outdoor zones (Western Wastes, Cobalt Scar), kiting camps  |
-| G6 (DRU/NEC/CLR/CLR/WIZ/BRD) | Evac safety, NEC dots/twitch | Dangerous zones (Dragon Necropolis), DRU port hub          |
+| Group | Best Role | Ideal Zones |
+| ----- | --------- | ----------- |
+| G1 (SK/CLR/BRD/SHM/MNK/MNK) | Driver group, FD pulls, controlled named farming | Howling Stones, Chardok, Sebilis camps that need precise pulls |
+| G2-G4 (WAR/CLR/BRD/SHM/MNK/MNK) | Interchangeable melee grind teams | Old Sebilis, Kael Drakkel, Crystal Caverns, Tower of Frozen Shadow |
+| G5 (PAL/CLR/BRD/DRU/BST/RNG) | Outdoor utility, evac insurance, tracking | Western Wastes, Cobalt Scar, Great Divide, open-world named routes |
+| G6 (PAL/CLR/BRD/ENC/WIZ/MAG) | Caster utility, CC, summon/vendor support | Velketor's, Siren's Grotto, support duty for contested named or recovery pulls |
 
 ### Raid Formation
 
 For raids, combine all 6 groups into a single raid:
 
-- G1 WAR = Main Tank, G2 PAL and G3 SK = Offtanks
-- 12 CLR in CH rotation = nearly unlimited healing throughput
-- SHM slow + ENC haste on MT
-- 6 BRD running resist songs, mana regen, haste
-- Stack all WIZ for coordinated burst (6+ wizards nuking simultaneously)
-- NEC twitch feeds mana to CLR chain
-- DRU/MAG DS stacking on tanks
+- 3 WAR handle the main tank rotation; the SK is the driver/pull tank and the 2 PAL handle off-tank and utility assignments.
+- 6 CLR form the Complete Heal chain, while 4 SHM + 1 DRU cover slows, buffs, and spot-heal cleanup.
+- 6 BRD remain one-per-group so every raid group keeps movement, resist songs, and ADPS online.
+- 8 MNK are the default launch-era DPS stack because they are immediately effective before weapon supply stabilizes.
+- MAG and BST pets add damage, but raid survival is built around real tanks and healers rather than pet tanking.
 
 ---
 
