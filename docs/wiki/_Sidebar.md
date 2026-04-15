@@ -54,6 +54,7 @@
 - [EQ Network Architecture](Research-EQ-Network-Architecture)
 - [EQ Protocol](Research-EQ-Protocol)
 - [EQ Zoning System](Research-EQ-Zoning-System)
+- [Epic Character Sales](Research-Epic-Character-Sales)
 - [Enchanter Epic Quest](Research-Enchanter-Epic-Quest)
 - [Frostreaver Loot Tier Optimization](Research-Frostreaver-Loot-Tier-Optimization)
 - [Grey/Black Market Risk Assessment](Research-Grey-Black-Market-Risk-Assessment)

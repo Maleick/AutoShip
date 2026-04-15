@@ -221,6 +221,7 @@ On a free trade server like Frostreaver, every item is tradeable. This means:
 - Gear cascades down as guilds upgrade, creating a healthy economy
 - Even "bad" random loot rolls produce tradeable items worth selling
 - Focus on volume of named kills rather than specific camps
+- Epic monetization behaves differently from generic loot farming; see [Research: Epic Character Sales](Research-Epic-Character-Sales) for the MQ-vs-character-sale pipeline and pricing model.
 
 ---
 
