@@ -24,6 +24,13 @@ use textquest_common::{combat::CombatStatus, ipc::Command, login::RelogConfig};
 use tokio::sync::watch;
 use zeroize::Zeroizing;
 
+const DEAD_STAND_STATE: u8 = 111;
+
+enum RelogDispatchOutcome {
+    Handled,
+    RetryableFailure,
+}
+
 /// Events emitted by the orchestrator loop for external consumers (TUI,
 /// logging).
 #[derive(Debug, Clone)]
@@ -61,6 +68,12 @@ pub struct OrchestratorLoop {
 }
 
 impl OrchestratorLoop {
+    fn is_missing_account_lookup(error: &anyhow::Error) -> bool {
+        error
+            .chain()
+            .any(|cause| cause.to_string().contains("not found"))
+    }
+
     /// Create a new orchestrator loop.
     ///
     /// `shutdown_rx` receives `true` when the loop should stop.
@@ -253,55 +266,54 @@ impl OrchestratorLoop {
             .unwrap_or(Duration::ZERO)
             .as_secs();
 
-        let observations = self
-            .client_manager
-            .all_sessions()
-            .filter_map(|session| {
-                let character_name = session.character_name.clone().or_else(|| {
-                    session
-                        .bound_toon
-                        .as_ref()
-                        .map(|toon| toon.character_name.clone())
-                })?;
-                let settings = self
-                    .auto_camp_settings
-                    .get(&character_name.to_ascii_lowercase())
-                    .cloned()
-                    .unwrap_or(AutoCampOnDeathSettings {
-                        enabled: false,
-                        camp_delay_secs: 30,
-                        relog_wait_secs: 900,
-                    });
-                let is_dead =
-                    self.orchestrator
-                        .game_states
-                        .get(&session.pid)
-                        .is_some_and(|state| {
-                            matches!(state.combat_status, CombatStatus::Dead)
-                                || state
-                                    .local_player
-                                    .as_ref()
-                                    .is_some_and(|player| player.stand_state == 111)
+        let observations =
+            self.client_manager
+                .all_sessions()
+                .filter_map(|session| {
+                    let character_name = session.character_name.clone().or_else(|| {
+                        session
+                            .bound_toon
+                            .as_ref()
+                            .map(|toon| toon.character_name.clone())
+                    })?;
+                    let settings = self
+                        .auto_camp_settings
+                        .get(&character_name.to_ascii_lowercase())
+                        .cloned()
+                        .unwrap_or(AutoCampOnDeathSettings {
+                            enabled: false,
+                            camp_delay_secs: 30,
+                            relog_wait_secs: 900,
                         });
+                    let is_dead =
+                        self.orchestrator
+                            .game_states
+                            .get(&session.pid)
+                            .is_some_and(|state| {
+                                matches!(state.combat_status, CombatStatus::Dead)
+                                    || state.local_player.as_ref().is_some_and(|player| {
+                                        player.stand_state == DEAD_STAND_STATE
+                                    })
+                            });
 
-                Some(DeathCampObservation {
-                    client_id: session.client_id,
-                    pid: session.pid,
-                    character_name,
-                    account_name: session
-                        .bound_toon
-                        .as_ref()
-                        .map(|toon| toon.account_name.clone())
-                        .or_else(|| session.account_name.clone()),
-                    server_name: session
-                        .bound_toon
-                        .as_ref()
-                        .map(|toon| toon.server_name.clone()),
-                    is_dead,
-                    settings,
+                    Some(DeathCampObservation {
+                        client_id: session.client_id,
+                        pid: session.pid,
+                        character_name,
+                        account_name: session
+                            .bound_toon
+                            .as_ref()
+                            .map(|toon| toon.account_name.clone())
+                            .or_else(|| session.account_name.clone()),
+                        server_name: session
+                            .bound_toon
+                            .as_ref()
+                            .map(|toon| toon.server_name.clone()),
+                        is_dead,
+                        settings,
+                    })
                 })
-            })
-            .collect::<Vec<_>>();
+                .collect::<Vec<_>>();
 
         let active_client_ids = observations
             .iter()
@@ -331,13 +343,21 @@ impl OrchestratorLoop {
                     DeathCampAction::TriggerRelog {
                         character_name,
                         relog_wait_secs,
-                    } => self.trigger_death_relog(
-                        observation.pid,
-                        &character_name,
-                        observation.account_name.as_deref(),
-                        observation.server_name.as_deref(),
-                        relog_wait_secs,
-                    ),
+                    } => {
+                        if matches!(
+                            self.trigger_death_relog(
+                                observation.pid,
+                                &character_name,
+                                observation.account_name.as_deref(),
+                                observation.server_name.as_deref(),
+                                relog_wait_secs,
+                            ),
+                            RelogDispatchOutcome::Handled
+                        ) {
+                            self.death_camp_tracker
+                                .mark_relog_handled(observation.client_id);
+                        }
+                    }
                 }
             }
         }
@@ -367,14 +387,14 @@ impl OrchestratorLoop {
         account_name: Option<&str>,
         server_name: Option<&str>,
         relog_wait_secs: u64,
-    ) {
+    ) -> RelogDispatchOutcome {
         let Some(account_name) = account_name.filter(|name| !name.trim().is_empty()) else {
             tracing::warn!(
                 pid,
                 character_name,
                 "Cannot auto-relog after death without an account name"
             );
-            return;
+            return RelogDispatchOutcome::Handled;
         };
 
         let Some(password) = self.resolve_password(account_name) else {
@@ -393,7 +413,7 @@ impl OrchestratorLoop {
                     ),
                 );
             }
-            return;
+            return RelogDispatchOutcome::Handled;
         };
 
         let mut relog_config = RelogConfig::default();
@@ -408,7 +428,7 @@ impl OrchestratorLoop {
             .unwrap_or(&self.default_server_name)
             .to_string();
 
-        self.orchestrator.send_ipc_command(
+        if self.orchestrator.send_ipc_command(
             pid,
             Command::Relog {
                 account_name: account_name.to_string(),
@@ -417,7 +437,11 @@ impl OrchestratorLoop {
                 character_name: character_name.to_string(),
                 config: relog_config,
             },
-        );
+        ) {
+            RelogDispatchOutcome::Handled
+        } else {
+            RelogDispatchOutcome::RetryableFailure
+        }
     }
 
     fn resolve_password(&self, account_name: &str) -> Option<String> {
@@ -425,6 +449,14 @@ impl OrchestratorLoop {
             match store.get_password(account_name) {
                 Ok(password) => return Some(password.to_string()),
                 Err(error) => {
+                    if !Self::is_missing_account_lookup(&error) {
+                        tracing::warn!(
+                            account_name,
+                            error = %error,
+                            "Credential store lookup failed; shared password fallback disabled"
+                        );
+                        return None;
+                    }
                     tracing::debug!(
                         account_name,
                         error = %error,

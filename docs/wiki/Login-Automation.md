@@ -116,9 +116,10 @@ workflow:
 
 - death is detected from the live per-client game-state pulse
 - each toon can enable `auto_camp_on_death` in `config/textquest.toml`
+- when death is first observed, TextQuest immediately sends a status alert
 - the character waits `camp_delay_secs` before camping so a live rez can land
-- after the delay expires, TextQuest sends a status alert and dispatches the
-  existing DLL-side `Relog` flow, which issues `/camp desktop`
+- after the delay expires, TextQuest dispatches the existing DLL-side `Relog`
+  flow, which issues `/camp desktop`
 - the relog flow waits `relog_wait_secs` before re-entering credentials and
   logging the character back in
 

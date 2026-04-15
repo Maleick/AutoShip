@@ -145,6 +145,16 @@ pub struct AutoCampOnDeathConfig {
     pub relog_wait_secs: u64,
 }
 
+impl Default for AutoCampOnDeathConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            camp_delay_secs: 30,
+            relog_wait_secs: 900,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CharacterConfig {
     pub character_name: String,
@@ -159,6 +169,7 @@ pub struct CharacterConfig {
     pub auto_rez: AutoRezConfig,
     pub group_override: bool,
     pub group_name: Option<String>,
+    #[serde(default)]
     pub auto_camp_on_death: AutoCampOnDeathConfig,
 }
 
@@ -752,5 +763,31 @@ mod tests {
         assert_eq!(updated.auto_rez.min_xp_pct, 96);
         assert_eq!(updated.auto_rez.trusted_casters, vec!["Frostreaver"]);
         assert!(updated.auto_camp_on_death.enabled);
+    }
+
+    #[test]
+    fn character_config_defaults_missing_death_config() {
+        let config: CharacterConfig = serde_json::from_value(serde_json::json!({
+            "character_name": "Aelrindel",
+            "class": "Wizard",
+            "role": "DPS",
+            "heal_at_pct": 45,
+            "mana_sit_pct": 20,
+            "nuke_at_pct": 80,
+            "rotation": [],
+            "class_params": {},
+            "auto_rez": {
+                "enabled": true,
+                "min_xp_pct": 96,
+                "trusted_casters": ["Frostreaver"],
+                "decline_if_untrusted": true,
+                "delay_ms": 5100
+            },
+            "group_override": false,
+            "group_name": null
+        }))
+        .expect("legacy payload should deserialize");
+
+        assert_eq!(config.auto_camp_on_death, AutoCampOnDeathConfig::default());
     }
 }

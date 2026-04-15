@@ -349,6 +349,7 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
   };
 
   const autoRez = draft.auto_rez ?? DEFAULT_AUTO_REZ_CONFIG;
+  const deathRecovery = draft.auto_camp_on_death ?? DEFAULT_AUTO_CAMP_ON_DEATH;
 
   const handleSave = async () => {
     setSaving(true);
@@ -458,14 +459,14 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
               setDraft({
                 ...draft,
                 auto_camp_on_death: {
-                  ...(draft.auto_camp_on_death ?? DEFAULT_AUTO_CAMP_ON_DEATH),
-                  enabled: !draft.auto_camp_on_death.enabled,
+                  ...deathRecovery,
+                  enabled: !deathRecovery.enabled,
                 },
               })
             }
             className="flex items-center gap-2 text-sm font-tech transition-colors hover:text-red-300"
           >
-            {draft.auto_camp_on_death.enabled ? (
+            {deathRecovery.enabled ? (
               <CheckSquare weight="fill" size={16} className="text-red-300" />
             ) : (
               <Square size={16} className="text-white/40" />
@@ -484,12 +485,12 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
               <input
                 type="number"
                 min={0}
-                value={draft.auto_camp_on_death.camp_delay_secs}
+                value={deathRecovery.camp_delay_secs}
                 onChange={(e) =>
                   setDraft({
                     ...draft,
                     auto_camp_on_death: {
-                      ...draft.auto_camp_on_death,
+                      ...deathRecovery,
                       camp_delay_secs: Math.max(0, Number(e.target.value) || 0),
                     },
                   })
@@ -502,12 +503,12 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
               <input
                 type="number"
                 min={0}
-                value={draft.auto_camp_on_death.relog_wait_secs}
+                value={deathRecovery.relog_wait_secs}
                 onChange={(e) =>
                   setDraft({
                     ...draft,
                     auto_camp_on_death: {
-                      ...draft.auto_camp_on_death,
+                      ...deathRecovery,
                       relog_wait_secs: Math.max(0, Number(e.target.value) || 0),
                     },
                   })
