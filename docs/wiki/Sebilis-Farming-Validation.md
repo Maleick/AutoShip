@@ -26,6 +26,12 @@ automation claims beyond the evidence state recorded here.
 - These defaults are planning inputs only, not live-validated route or spawn proof.
 - `config/named_mobs/sebilis.toml` records named placeholders and timer ranges
   for Trakanon, Baron Yosig, Crypt Caretaker, and Sebilite Protector.
+- Current named-config timer windows are:
+  - `Trakanon` -> `72-84 minutes`
+  - `Baron Yosig` -> `28-36 minutes`
+  - `Crypt Caretaker` -> `22-28 minutes`
+  - `Sebilite Protector` -> `22-28 minutes`
+- These timer windows come from the checked-in named config and remain unvalidated until a live sample confirms them.
 - `textquest/src/camp/forage.rs` provides the current `/forage` loop and result
   history that live sampling can reuse.
 - `docs/wiki/Frostreaver-Farming-Guide.md` and `docs/wiki/P99-Zone-Guide.md`

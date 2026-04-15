@@ -59,6 +59,27 @@ class SebilisValidationDocsTests(unittest.TestCase):
         self.assertIn(f"`prev_camp = \"{camp_config['prev_camp']}\"`", text)
         self.assertIn("These defaults are planning inputs only, not live-validated route or spawn proof.", text)
 
+    def test_validation_doc_records_named_timer_baselines_as_config_not_live_spawn_data(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        named_config = tomllib.loads(
+            (REPO_ROOT / "config" / "named_mobs" / "sebilis.toml").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        for named in named_config["named"]:
+            self.assertIn(named["name"], text)
+            self.assertIn(
+                f"`{named['respawn_min_minutes']}-{named['respawn_max_minutes']} minutes`",
+                text,
+            )
+        self.assertIn(
+            "These timer windows come from the checked-in named config and remain unvalidated until a live sample confirms them.",
+            text,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
