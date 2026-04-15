@@ -180,6 +180,30 @@ export interface BoxChatSettings {
   auto_connect: boolean;
 }
 
+// ── GM Alert types ───────────────────────────────────────────────────────────
+
+export interface GmAlertConfig {
+  enabled: boolean;
+  soundEnabled: boolean;
+  soundFile: string | null;
+  toastEnabled: boolean;
+  autoPauseEnabled: boolean;
+  discordWebhookUrl: string | null;
+  broadcastAllClients: boolean;
+}
+
+export interface GmPresenceStatus {
+  isGmInZone: boolean;
+  gmCount: number;
+  gmNames: string[];
+}
+
+export interface GmAlertStatus {
+  config: GmAlertConfig;
+  presence: GmPresenceStatus;
+  automationPaused: boolean;
+}
+
 // ── Group Builder types ────────────────────────────────────────────────────
 
 export type EQClass =

@@ -123,6 +123,7 @@ mod tests {
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: api::dashboard::DashboardState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
+            gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             api_token: None,
         })
     }
@@ -275,6 +276,7 @@ mod tests {
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: api::dashboard::DashboardState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
+            gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             api_token: Some("secret-token".to_string()),
         });
 

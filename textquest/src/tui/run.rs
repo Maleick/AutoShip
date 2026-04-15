@@ -210,6 +210,7 @@ fn run_loop(
             }
             app.update_tracked_spawns();
             app.update_spawn_alerts();
+            app.update_gm_detection();
             last_refresh = Instant::now();
         }
 
