@@ -135,6 +135,8 @@ pub enum ActivePanel {
     EconomyControls,
     /// Orchestrator dashboard panel with internal parity tabs.
     OrchestratorDashboard,
+    /// Spawn event feed panel (zone in/out notifications).
+    SpawnEvents,
 }
 
 /// Layout preset for panel arrangement within a screen.
@@ -500,6 +502,15 @@ pub struct App {
     /// Whether to auto-alert on named NPC spawns.
     pub spawn_watch_named: bool,
 
+    /// Player zone notification filter mode (all, strangers only, friends only).
+    pub player_notification_filter: crate::config::PlayerFilterMode,
+    /// Whether to emit a terminal bell on player zone-in events.
+    pub sound_on_player_zone_in: bool,
+    /// Normalized friend list for player notification filtering (lowercase names).
+    player_notification_friends: std::collections::HashSet<String>,
+    /// Pending terminal bell requests to drain in the run loop.
+    pending_terminal_bells: u8,
+
     /// User-tracked spawns registered via the `:track` command.
     pub tracked_spawns: HashMap<String, TrackedSpawn>,
 
@@ -776,6 +787,10 @@ impl App {
             },
             spawn_alert_feed: SpawnAlertFeed::new(200),
             spawn_watch_named: true,
+            player_notification_filter: crate::config::PlayerFilterMode::All,
+            sound_on_player_zone_in: false,
+            player_notification_friends: std::collections::HashSet::new(),
+            pending_terminal_bells: 0,
             tracked_spawns: HashMap::new(),
 
             help_visible: false,
@@ -3275,6 +3290,34 @@ impl App {
         }
     }
 
+    fn should_announce_player(&self, name: &str) -> bool {
+        let is_friend = self
+            .player_notification_friends
+            .contains(&name.to_ascii_lowercase());
+        match self.player_notification_filter {
+            crate::config::PlayerFilterMode::All => true,
+            crate::config::PlayerFilterMode::StrangersOnly => !is_friend,
+            crate::config::PlayerFilterMode::FriendsOnly => is_friend,
+        }
+    }
+
+    pub fn set_player_notification_friends(&mut self, friends: impl IntoIterator<Item = String>) {
+        self.player_notification_friends.clear();
+        for name in friends {
+            self.player_notification_friends.insert(name.to_ascii_lowercase());
+        }
+    }
+
+    pub fn pending_terminal_bells(&self) -> u8 {
+        self.pending_terminal_bells
+    }
+
+    pub fn drain_terminal_bells(&mut self) -> u8 {
+        let count = self.pending_terminal_bells;
+        self.pending_terminal_bells = 0;
+        count
+    }
+
     pub fn apply_spawn_events(&mut self, events: Vec<textquest_common::ipc::SpawnEvent>) {
         let tick = self.tick_count;
 
@@ -3300,6 +3343,26 @@ impl App {
                 format!("[Spawn] {} {} in {}", event.spawn_name, label, event.zone),
                 false,
             );
+
+            let is_player = event.spawn_type == 0;
+            if is_player && self.should_announce_player(&event.spawn_name) {
+                let verb = if is_up { "entered" } else { "left" };
+                self.set_feedback(
+                    if is_up {
+                        ToastLevel::Warning
+                    } else {
+                        ToastLevel::Info
+                    },
+                    format!(
+                        "[Player] {} {verb} {}",
+                        event.spawn_name, event.zone
+                    ),
+                    true,
+                );
+                if is_up && self.sound_on_player_zone_in {
+                    self.pending_terminal_bells = self.pending_terminal_bells.saturating_add(1);
+                }
+            }
         }
     }
 
@@ -3394,6 +3457,177 @@ impl App {
             }
             Some(sub) => {
                 self.usage_feedback("alerts", format!("Unknown subcommand: {sub}"));
+            }
+        }
+    }
+
+    fn execute_pf_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            None => {
+                let current = match self.player_notification_filter {
+                    crate::config::PlayerFilterMode::All => "all",
+                    crate::config::PlayerFilterMode::StrangersOnly => "strangers",
+                    crate::config::PlayerFilterMode::FriendsOnly => "friends",
+                };
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!("Player filter: {} (use pf [all|strangers|friends])", current),
+                    false,
+                );
+            }
+            Some("all") => {
+                self.player_notification_filter = crate::config::PlayerFilterMode::All;
+                self.set_feedback(
+                    ToastLevel::Success,
+                    String::from("Player filter: announcing ALL PCs"),
+                    true,
+                );
+            }
+            Some("strangers") | Some("stranger") => {
+                self.player_notification_filter = crate::config::PlayerFilterMode::StrangersOnly;
+                self.set_feedback(
+                    ToastLevel::Success,
+                    String::from("Player filter: announcing STRANGERS only"),
+                    true,
+                );
+            }
+            Some("friends") | Some("friend") => {
+                self.player_notification_filter = crate::config::PlayerFilterMode::FriendsOnly;
+                self.set_feedback(
+                    ToastLevel::Success,
+                    String::from("Player filter: announcing FRIENDS only"),
+                    true,
+                );
+            }
+            Some(other) => {
+                self.usage_feedback("pf", format!("Unknown filter mode: {other} (use all/strangers/friends)"));
+            }
+        }
+    }
+
+    fn execute_sound_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            None => {
+                let state = if self.sound_on_player_zone_in { "ON" } else { "OFF" };
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!("Sound on zone-in: {} (use sound [on|off])", state),
+                    false,
+                );
+            }
+            Some("on") | Some("1") | Some("true") => {
+                self.sound_on_player_zone_in = true;
+                self.set_feedback(
+                    ToastLevel::Success,
+                    String::from("Sound on zone-in: ENABLED"),
+                    true,
+                );
+            }
+            Some("off") | Some("0") | Some("false") => {
+                self.sound_on_player_zone_in = false;
+                self.set_feedback(
+                    ToastLevel::Success,
+                    String::from("Sound on zone-in: DISABLED"),
+                    true,
+                );
+            }
+            Some(other) => {
+                self.usage_feedback("sound", format!("Unknown option: {other} (use on/off)"));
+            }
+        }
+    }
+
+    fn execute_friends_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            None => {
+                let friends: Vec<String> = self
+                    .player_notification_friends
+                    .iter()
+                    .map(|s| s.clone())
+                    .collect();
+                if friends.is_empty() {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        String::from("Friends list is empty (use friends add <name>)"),
+                        false,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Friends: {}", friends.join(", ")),
+                        false,
+                    );
+                }
+            }
+            Some("list") => {
+                let friends: Vec<String> = self
+                    .player_notification_friends
+                    .iter()
+                    .map(|s| s.clone())
+                    .collect();
+                if friends.is_empty() {
+                    self.set_feedback(ToastLevel::Info, String::from("Friends list is empty"), false);
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Friends ({}): {}", friends.len(), friends.join(", ")),
+                        false,
+                    );
+                }
+            }
+            Some("clear") => {
+                self.player_notification_friends.clear();
+                self.set_feedback(
+                    ToastLevel::Success,
+                    String::from("Friends list cleared"),
+                    true,
+                );
+            }
+            Some("add") => {
+                if let Some(name) = args.get(1) {
+                    let lower = name.to_ascii_lowercase();
+                    if self.player_notification_friends.insert(lower) {
+                        self.set_feedback(
+                            ToastLevel::Success,
+                            format!("Added friend: {name}"),
+                            true,
+                        );
+                    } else {
+                        self.set_feedback(
+                            ToastLevel::Info,
+                            format!("Already in friends list: {name}"),
+                            false,
+                        );
+                    }
+                } else {
+                    self.usage_feedback("friends add", "Missing friend name: friends add <name>");
+                }
+            }
+            Some("remove") | Some("rm") | Some("del") => {
+                if let Some(name) = args.get(1) {
+                    let lower = name.to_ascii_lowercase();
+                    if self.player_notification_friends.remove(&lower) {
+                        self.set_feedback(
+                            ToastLevel::Success,
+                            format!("Removed friend: {name}"),
+                            true,
+                        );
+                    } else {
+                        self.set_feedback(
+                            ToastLevel::Warning,
+                            format!("Not in friends list: {name}"),
+                            false,
+                        );
+                    }
+                } else {
+                    self.usage_feedback("friends remove", "Missing friend name: friends remove <name>");
+                }
+            }
+            Some(other) => {
+                self.usage_feedback(
+                    "friends",
+                    format!("Unknown subcommand: {other} (use add/remove/list/clear)"),
+                );
             }
         }
     }
@@ -4490,6 +4724,15 @@ impl App {
             }
             "alerts" => {
                 self.execute_alerts_command(&parts[1..]);
+            }
+            "pf" | "playerfilter" | "player_filter" => {
+                self.execute_pf_command(&parts[1..]);
+            }
+            "sound" => {
+                self.execute_sound_command(&parts[1..]);
+            }
+            "friends" | "friend" => {
+                self.execute_friends_command(&parts[1..]);
             }
             "mode" => match parts.get(1).copied() {
                 Some("camp") => {

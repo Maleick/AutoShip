@@ -256,6 +256,11 @@ fn run_loop(
 
                 let spawn_events = orchestrator.poll_spawn_events(pid);
                 app.apply_spawn_events(spawn_events);
+
+                let bells = app.drain_terminal_bells();
+                for _ in 0..bells {
+                    eprint!("\x07");
+                }
             }
             last_packet_poll = Instant::now();
         }

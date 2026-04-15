@@ -68,8 +68,57 @@ pub async fn character_config_unavailable(Path(character): Path<String>) -> impl
     )
 }
 
-// ─── Health
-// ───────────────────────────────────────────────────────────────────
+// ─── Player Watch Config ────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlayerWatchConfig {
+    pub filter_mode: String,
+    pub sound_on_zone_in: bool,
+    pub friends: Vec<String>,
+}
+
+impl Default for PlayerWatchConfig {
+    fn default() -> Self {
+        Self {
+            filter_mode: "all".to_string(),
+            sound_on_zone_in: false,
+            friends: Vec::new(),
+        }
+    }
+}
+
+pub async fn get_player_watch_config(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let cfg = state.player_watch_config.read().await.clone();
+    (StatusCode::OK, Json(cfg))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdatePlayerWatchConfig {
+    pub filter_mode: Option<String>,
+    pub sound_on_zone_in: Option<bool>,
+    pub friends: Option<Vec<String>>,
+}
+
+pub async fn put_player_watch_config(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<UpdatePlayerWatchConfig>,
+) -> impl IntoResponse {
+    let mut cfg = state.player_watch_config.write().await;
+    if let Some(filter_mode) = input.filter_mode {
+        cfg.filter_mode = filter_mode;
+    }
+    if let Some(sound) = input.sound_on_zone_in {
+        cfg.sound_on_zone_in = sound;
+    }
+    if let Some(friends) = input.friends {
+        cfg.friends = friends;
+    }
+    (StatusCode::OK, Json(cfg.clone()))
+}
+
+// ─── Health ───────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct HealthResponse {
@@ -1012,6 +1061,7 @@ mod tests {
             economy_state: crate::api::economy::EconomyState::new_demo(),
             dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
             api_token: None,
         });
         let Json(configs) = list_character_configs(State(state)).await;
@@ -1044,6 +1094,7 @@ mod tests {
             economy_state: crate::api::economy::EconomyState::new_demo(),
             dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
             api_token: None,
         });
         let input = CharacterConfigUpdate {
@@ -1090,5 +1141,56 @@ mod tests {
         assert_eq!(updated.heal_at_pct, 50);
         assert_eq!(updated.auto_rez.min_xp_pct, 96);
         assert_eq!(updated.auto_rez.trusted_casters, vec!["Frostreaver"]);
+    }
+
+    #[tokio::test]
+    async fn player_watch_config_returns_defaults() {
+        let state = Arc::new(AppState {
+            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
+            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
+            loot_state: crate::api::loot::LootState::new_demo(),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
+            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            api_token: None,
+        });
+        let response = get_player_watch_config(State(state)).await.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let cfg: PlayerWatchConfig = serde_json::from_slice(&body).unwrap();
+        assert_eq!(cfg.filter_mode, "all");
+        assert!(!cfg.sound_on_zone_in);
+        assert!(cfg.friends.is_empty());
+    }
+
+    #[tokio::test]
+    async fn player_watch_config_put_updates_state() {
+        let state = Arc::new(AppState {
+            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
+            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
+            loot_state: crate::api::loot::LootState::new_demo(),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
+            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            api_token: None,
+        });
+        let input = UpdatePlayerWatchConfig {
+            filter_mode: Some("friends_only".to_string()),
+            sound_on_zone_in: Some(true),
+            friends: Some(vec!["FriendOne".to_string(), "FriendTwo".to_string()]),
+        };
+        let response = put_player_watch_config(State(state.clone()), Json(input))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let cfg = state.player_watch_config.read().await;
+        assert_eq!(cfg.filter_mode, "friends_only");
+        assert!(cfg.sound_on_zone_in);
+        assert_eq!(cfg.friends.len(), 2);
     }
 }

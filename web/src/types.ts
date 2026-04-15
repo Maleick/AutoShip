@@ -506,3 +506,13 @@ export interface LootHistoryEntry {
   policy: LootPolicy;
   estimated_value: number;
 }
+
+// ── Player Watch types ─────────────────────────────────────────────────────────
+
+export type PlayerFilterMode = "all" | "strangers_only" | "friends_only";
+
+export interface PlayerWatchConfig {
+  filter_mode: PlayerFilterMode;
+  sound_on_zone_in: boolean;
+  friends: string[];
+}

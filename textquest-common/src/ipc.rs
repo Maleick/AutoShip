@@ -950,6 +950,8 @@ pub struct SpawnEvent {
     pub zone: String,
     /// Name of the spawn.
     pub spawn_name: String,
+    /// Spawn type: 0=player, 1=NPC, 2=corpse, 3=any.
+    pub spawn_type: u8,
     /// Spawn lifecycle kind.
     pub kind: SpawnEventKind,
     /// Epoch milliseconds when the event was detected.

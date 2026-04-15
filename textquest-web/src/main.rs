@@ -54,6 +54,8 @@ pub struct AppState {
     pub dashboard_state: Arc<api::dashboard::DashboardState>,
     /// In-memory soul audit log.
     pub soul_audit: Arc<api::soul::SoulAuditState>,
+    /// In-memory player watch (zone entry/exit) configuration.
+    pub player_watch_config: tokio::sync::RwLock<api::PlayerWatchConfig>,
     /// GM alert state — zone-wide GM detection status for web dashboard.
     pub gm_alert_state: Arc<api::gm_alerts::GmAlertState>,
     /// Optional static API token for protecting all `/api` endpoints.
@@ -156,6 +158,7 @@ fn build_state() -> Arc<AppState> {
         economy_state: api::economy::EconomyState::new_demo(),
         dashboard_state: api::dashboard::DashboardState::new_demo(),
         soul_audit: api::soul::SoulAuditState::new_demo(),
+        player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         api_token,
     })
@@ -229,6 +232,10 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .route(
             "/config/characters/{character}",
             put(api::put_character_config),
+        )
+        .route(
+            "/config/player-watch",
+            get(api::get_player_watch_config).put(api::put_player_watch_config),
         )
         .nest("/loot", build_loot_router())
         .nest("/soul", build_soul_router())
@@ -331,6 +338,7 @@ mod tests {
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: api::dashboard::DashboardState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             api_token: None, // No auth in tests — auth middleware is a no-op when None
         })

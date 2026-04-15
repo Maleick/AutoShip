@@ -1746,12 +1746,12 @@ fn read_and_publish_state(tick: u64) {
 }
 
 fn compute_spawn_delta_events(
-    previous: &std::collections::HashMap<u32, String>,
+    previous: &std::collections::HashMap<u32, (String, u8)>,
     current: &[textquest_common::types::SpawnData],
     zone: String,
     timestamp_ms: u64,
 ) -> (
-    std::collections::HashMap<u32, String>,
+    std::collections::HashMap<u32, (String, u8)>,
     Vec<textquest_common::ipc::SpawnEvent>,
 ) {
     let mut next = std::collections::HashMap::new();
@@ -1760,31 +1760,33 @@ fn compute_spawn_delta_events(
         if spawn.spawn_id == 0 {
             continue;
         }
-        next.insert(spawn.spawn_id, spawn.displayed_name.clone());
+        next.insert(spawn.spawn_id, (spawn.displayed_name.clone(), spawn.spawn_type));
     }
 
     if previous.is_empty() {
         return (next, events);
     }
 
-    for (spawn_id, name) in &next {
+    for (spawn_id, (name, spawn_type)) in &next {
         if !previous.contains_key(spawn_id) {
             events.push(textquest_common::ipc::SpawnEvent {
                 client_id: std::process::id(),
                 zone: zone.clone(),
                 spawn_name: name.clone(),
+                spawn_type: *spawn_type,
                 kind: textquest_common::ipc::SpawnEventKind::Created,
                 timestamp_ms,
             });
         }
     }
 
-    for (spawn_id, name) in previous {
+    for (spawn_id, (name, spawn_type)) in previous {
         if !next.contains_key(spawn_id) {
             events.push(textquest_common::ipc::SpawnEvent {
                 client_id: std::process::id(),
                 zone: zone.clone(),
                 spawn_name: name.clone(),
+                spawn_type: *spawn_type,
                 kind: textquest_common::ipc::SpawnEventKind::Destroyed,
                 timestamp_ms,
             });

@@ -1248,6 +1248,8 @@ pub struct TacticalScreenState {
     pub show_named: bool,
     /// Whether the navigation panel is visible.
     pub show_navigation: bool,
+    /// Whether the spawn events panel is visible.
+    pub show_spawn_events: bool,
     /// Whether the named panel is collapsed.
     pub named_collapsed: bool,
     /// Whether the navigation panel is collapsed.
@@ -1262,6 +1264,7 @@ impl TacticalScreenState {
             map_maximized: false,
             show_named: true,
             show_navigation: true,
+            show_spawn_events: true,
             named_collapsed: false,
             navigation_collapsed: false,
         }

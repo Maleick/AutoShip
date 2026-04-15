@@ -5,6 +5,20 @@ use std::path::Path;
 use textquest_common::box_chat::BoxChatConfig;
 use textquest_soul::config::SoulConfig;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayerFilterMode {
+    All,
+    StrangersOnly,
+    FriendsOnly,
+}
+
+impl Default for PlayerFilterMode {
+    fn default() -> Self {
+        Self::All
+    }
+}
+
 // ─── Account Configuration ───────────────────────────────────────────────
 
 /// A single account entry from config/accounts.toml.
@@ -518,6 +532,9 @@ pub struct SpawnWatchConfig {
     pub watch_names: Vec<String>,
     pub alert_named: bool,
     pub max_feed_entries: usize,
+    pub player_filter_mode: PlayerFilterMode,
+    pub sound_on_player_zone_in: bool,
+    pub friends: Vec<String>,
 }
 
 impl Default for SpawnWatchConfig {
@@ -527,6 +544,9 @@ impl Default for SpawnWatchConfig {
             watch_names: Vec::new(),
             alert_named: true,
             max_feed_entries: 200,
+            player_filter_mode: PlayerFilterMode::default(),
+            sound_on_player_zone_in: false,
+            friends: Vec::new(),
         }
     }
 }
@@ -640,6 +660,45 @@ character = "Foo"
         assert!(!cfg.timing_correction);
         assert!(!cfg.hook_rotation_enabled);
         assert_eq!(cfg.hook_rotation_interval_ms, 30_000);
+    }
+
+    #[test]
+    fn spawn_watch_defaults_include_player_notifications() {
+        let cfg = AppConfig::default_config();
+        assert_eq!(cfg.spawn_watch.player_filter_mode, PlayerFilterMode::All);
+        assert!(!cfg.spawn_watch.sound_on_player_zone_in);
+        assert!(cfg.spawn_watch.friends.is_empty());
+    }
+
+    #[test]
+    fn player_filter_mode_default_is_all() {
+        assert_eq!(PlayerFilterMode::default(), PlayerFilterMode::All);
+    }
+
+    #[test]
+    fn spawn_watch_player_filter_mode_parses_from_toml() {
+        let cfg: AppConfig = toml::from_str(
+            r#"
+[spawn_watch]
+player_filter_mode = "strangers_only"
+"#,
+        )
+        .unwrap();
+        assert_eq!(cfg.spawn_watch.player_filter_mode, PlayerFilterMode::StrangersOnly);
+    }
+
+    #[test]
+    fn spawn_watch_friends_parses_from_toml() {
+        let cfg: AppConfig = toml::from_str(
+            r#"
+[spawn_watch]
+friends = ["Camrene", "Zisdarenu"]
+"#,
+        )
+        .unwrap();
+        assert_eq!(cfg.spawn_watch.friends.len(), 2);
+        assert!(cfg.spawn_watch.friends.contains(&"Camrene".to_string()));
+        assert!(cfg.spawn_watch.friends.contains(&"Zisdarenu".to_string()));
     }
 
     #[test]

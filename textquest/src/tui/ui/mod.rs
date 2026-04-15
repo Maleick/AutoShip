@@ -21,6 +21,7 @@ pub mod map;
 pub mod navigation;
 pub mod orchestrator_panel;
 pub mod packets;
+pub mod spawn_events;
 pub mod spawns;
 pub mod widgets;
 pub mod zone_status_panel;
