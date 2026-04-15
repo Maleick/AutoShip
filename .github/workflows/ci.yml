@@ -104,6 +104,43 @@ jobs:
       - name: Validate wiki sources
         run: python3 scripts/sync_wiki.py --check
 
+      - name: Enforce wiki update for behavior changes
+        if: steps.scope.outputs.docs_only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ]]; then
+            echo "Wiki enforcement only runs on PRs; skipping."
+            exit 0
+          fi
+
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+
+          changed_files=$(git diff --name-only "$base" "$head")
+
+          # Source files that require operator-facing docs
+          source_files=$(echo "$changed_files" | grep -vE '^docs/wiki/|^tests/|\.md$|\.yml$|\.yaml$' || true)
+
+          if [[ -z "$source_files" ]]; then
+            echo "No source files changed; wiki enforcement passed."
+            exit 0
+          fi
+
+          wiki_updated=$(echo "$changed_files" | grep -q '^docs/wiki/' && echo "yes" || echo "no")
+
+          if [[ "$wiki_updated" == "no" ]]; then
+            echo "::error::Source files changed but no docs/wiki/ update detected."
+            echo "::error::When behavior or operator workflow changes, update the matching docs/wiki/ page."
+            echo "Changed source files:"
+            echo "$source_files"
+            exit 1
+          fi
+
+          echo "Wiki update detected alongside source changes."
+          echo "$changed_files" | grep '^docs/wiki/'
+
       - name: Validate offset sync
         run: python3 scripts/validate_offsets_sync.py
 

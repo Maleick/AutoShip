@@ -1,0 +1,20 @@
+# CODEOWNERS
+
+# Default owner for everything
+* @Maleick
+
+# Rust core
+textquest*/** @Maleick
+
+# Web / TypeScript
+web/** @Maleick
+
+# Scripts and automation
+scripts/** @Maleick
+.github/workflows/** @Maleick
+
+# Documentation
+docs/** @Maleick
+
+# Offsets and EQ internals
+textquest-common/src/offsets.rs @Maleick

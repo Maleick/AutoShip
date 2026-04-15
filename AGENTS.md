@@ -56,3 +56,51 @@ Every identified gap, bug, or feature must be filed as a parent GitHub issue and
 - Link to canonical `TextQuest-Ghidra` snapshot and manifest paths instead of copying immutable evidence into this repo.
 - Treat repo-local caches such as `data/ghidra.db` or local export folders as mutable runtime and debug state, not canonical evidence.
 - Update the matching `docs/wiki/` page in the same PR whenever behavior or operator workflow changes.
+
+## Quality Commands
+
+Run these before every push and PR:
+
+```bash
+# Fast feedback loop (macOS/Linux)
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test
+python3 scripts/dev-preflight.py   # bundles wiki/lint/test/python — mirrors CI gate
+```
+
+- **`dev-preflight.py`** is the canonical local pre-push check. It runs `cargo fmt`, wiki sync validation, offset sync validation, Rust tests, and Python tests.
+- Python tests are **advisory** (they do not block merge) — CI runs them with `continue-on-error: true`. If they fail, note it in the PR body.
+- Do not `#[allow(...)]` clippy lints without an inline comment explaining why.
+- `cargo test` on macOS runs all workspace crates. Windows-only tests are gated `#[cfg(windows)]`.
+
+## Requesting Code Review
+
+**Use the `requesting-code-review` skill before opening a PR or marking implementation complete.** It guides verification of scope, coverage, and code quality before requesting human review.
+
+When the PR is green and all conversations are resolved:
+- Enable auto-merge with `gh pr merge --auto --squash --delete-branch`.
+- Move the GitHub issue to `Merging` once auto-merge is active.
+
+## Branch Naming
+
+| Prefix          | Owner    | Use for                                                      |
+| --------------- | -------- | ------------------------------------------------------------ |
+| `feature/*`     | Humans   | New features, user-initiated                                 |
+| `fix/*`         | Humans   | Bug fixes, user-initiated                                    |
+| `claude/*`      | Claude   | Human-initiated agent tasks                                  |
+| `codex/*`       | Codex    | Agent-initiated work (orchestrator, AI-driven)              |
+| `autoship/*`    | AutoShip | Automated issue work                                         |
+
+Branch off `origin/master` for every piece of work. Keep PRs small and honest.
+
+## Definition of Done
+
+A leaf issue is done when:
+1. All acceptance criteria in the issue body are met and verified.
+2. `cargo fmt --check` and `cargo clippy --all-targets --all-features -- -D warnings` pass.
+3. `cargo test` passes.
+4. `python3 scripts/dev-preflight.py` passes.
+5. New logic has unit tests (coverage target: >80% on new code, >70% on modified).
+6. `docs/wiki/` is updated if behavior or operator workflow changed.
+7. PR is open with a closing keyword for the issue.

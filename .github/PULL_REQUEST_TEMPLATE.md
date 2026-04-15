@@ -23,6 +23,10 @@
 - [ ] Performance benchmarks (if applicable)
 - [ ] Coverage verified with `python3 scripts/coverage-report.py` (new code ≥80%, modified code ≥70%)
 
+## Wiki Updates
+
+- [ ] `docs/wiki/` updated if behavior or operator workflow changed (required for all source changes)
+
 ## Polish Checklist
 
 - [ ] Feature implemented and verified
