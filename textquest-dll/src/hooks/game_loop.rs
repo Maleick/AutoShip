@@ -314,9 +314,9 @@ pub fn queue_slash_command(command: String) {
 //               `CancelCastLoop` command.
 //
 // `recast` mode: cast N+1 times total with exponential backoff between
-//                attempts.  The backoff starts at
-// `CAST_LOOP_BASE_BACKOFF_TICKS`                and doubles each attempt,
-// capped at `CAST_LOOP_MAX_BACKOFF_TICKS`.
+//                attempts. The backoff starts at
+//                `CAST_LOOP_BASE_BACKOFF_TICKS` and doubles each attempt,
+//                capped at `CAST_LOOP_MAX_BACKOFF_TICKS`.
 
 /// Base backoff between recast attempts (~0.4 s at 20 ticks/sec).
 const CAST_LOOP_BASE_BACKOFF_TICKS: u64 = 8;

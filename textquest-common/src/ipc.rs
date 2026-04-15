@@ -111,7 +111,7 @@ impl From<Response> for IpcResponse {
 }
 
 /// Configuration for automatic resurrection-offer handling.
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AutoRezConfig {
     /// Whether the auto-rez workflow is enabled for this character.
     pub enabled: bool,
@@ -123,6 +123,18 @@ pub struct AutoRezConfig {
     pub decline_if_untrusted: bool,
     /// Delay before accepting or declining an offer, in milliseconds.
     pub delay_ms: u32,
+}
+
+impl Default for AutoRezConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            min_xp_pct: 90,
+            trusted_casters: Vec::new(),
+            decline_if_untrusted: false,
+            delay_ms: 3_000,
+        }
+    }
 }
 
 /// Rendering mode for an injected client.
@@ -2393,6 +2405,20 @@ mod tests {
         let encoded = encode(&cmd).expect("encode SetAutoRezConfig");
         let (decoded, _): (Command, _) = decode(&encoded).expect("decode SetAutoRezConfig");
         assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn auto_rez_config_default_matches_ui_baseline() {
+        assert_eq!(
+            AutoRezConfig::default(),
+            AutoRezConfig {
+                enabled: false,
+                min_xp_pct: 90,
+                trusted_casters: vec![],
+                decline_if_untrusted: false,
+                delay_ms: 3_000,
+            }
+        );
     }
 
     #[test]

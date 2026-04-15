@@ -553,7 +553,10 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
                     ...draft,
                     auto_rez: {
                       ...autoRez,
-                      delay_ms: Math.max(0, Number(e.target.value) || 0),
+                      delay_ms: Math.min(
+                        15000,
+                        Math.max(0, Math.trunc(Number(e.target.value) || 0)),
+                      ),
                     },
                   })
                 }

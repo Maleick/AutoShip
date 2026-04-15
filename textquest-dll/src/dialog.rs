@@ -24,7 +24,7 @@ static AUTO_REZ_CONFIG: LazyLock<Mutex<AutoRezConfig>> =
     LazyLock::new(|| Mutex::new(AutoRezConfig::default()));
 static PENDING_REZ_OFFER: LazyLock<Mutex<Option<PendingRezOffer>>> =
     LazyLock::new(|| Mutex::new(None));
-static RECENT_REZ_ACCEPT: LazyLock<Mutex<Option<Instant>>> = LazyLock::new(|| Mutex::new(None));
+static RECENT_REZ_CONTEXT: LazyLock<Mutex<Option<Instant>>> = LazyLock::new(|| Mutex::new(None));
 
 const RECENT_REZ_RESPAWN_WINDOW: Duration = Duration::from_secs(10);
 const REZ_CONFIRM_DIALOG: &str = "ConfirmationDialogBox";
@@ -34,6 +34,7 @@ const REZ_NO_BUTTONS: &[&str] = &["No_Button", "CD_No_Button"];
 const GENERIC_DIALOG_ACCEPT_PAIRS: &[(&str, &str)] = &[
     ("TradeWnd", "TRDW_Trade_Button"),
     ("TaskSelectWnd", "TaskSelectAcceptButton"),
+    ("RespawnWnd", "RW_SelectButton"),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,9 +108,30 @@ fn clear_rez_runtime_state() {
     *PENDING_REZ_OFFER
         .lock()
         .expect("pending rez offer lock poisoned") = None;
-    *RECENT_REZ_ACCEPT
+    *RECENT_REZ_CONTEXT
         .lock()
-        .expect("recent rez accept lock poisoned") = None;
+        .expect("recent rez context lock poisoned") = None;
+}
+
+fn mark_recent_rez_context(at: Instant) {
+    *RECENT_REZ_CONTEXT
+        .lock()
+        .expect("recent rez context lock poisoned") = Some(at);
+}
+
+fn rez_offer_matches_policy(config: &AutoRezConfig, offer: &RezOffer) -> bool {
+    config.enabled
+        && offer.xp_pct >= config.min_xp_pct
+        && config
+            .trusted_casters
+            .iter()
+            .any(|trusted| trusted.trim().eq_ignore_ascii_case(&offer.caster_name))
+}
+
+fn is_rez_offer_text(lower: &str) -> bool {
+    lower.contains("resurrect")
+        || lower.contains("resurrection")
+        || lower.contains("return you to your corpse")
 }
 
 fn parse_rez_offer_text(text: &str) -> Option<RezOffer> {
@@ -131,6 +153,10 @@ fn parse_rez_offer_text(text: &str) -> Option<RezOffer> {
     }
 
     let lower = normalized.to_ascii_lowercase();
+    if !is_rez_offer_text(&lower) {
+        return None;
+    }
+
     let xp_pct = if lower.contains("return you to your corpse") {
         100
     } else {
@@ -162,13 +188,7 @@ fn decide_rez_offer(config: &AutoRezConfig, offer: &RezOffer, elapsed_ms: u64) -
         return RezDecision::Wait;
     }
 
-    let trusted = config
-        .trusted_casters
-        .iter()
-        .any(|trusted| trusted.trim().eq_ignore_ascii_case(&offer.caster_name));
-    let meets_xp = offer.xp_pct >= config.min_xp_pct;
-
-    if trusted && meets_xp {
+    if rez_offer_matches_policy(config, offer) {
         RezDecision::Accept
     } else if config.decline_if_untrusted {
         RezDecision::Decline
@@ -322,6 +342,10 @@ unsafe fn handle_rez_confirmation_dialog(mgr: usize, config: &AutoRezConfig) -> 
         }
     };
 
+    if rez_offer_matches_policy(config, &offer) {
+        mark_recent_rez_context(now);
+    }
+
     match decide_rez_offer(config, &offer, elapsed_ms) {
         RezDecision::Wait | RezDecision::Ignore => true,
         RezDecision::Accept => {
@@ -332,9 +356,7 @@ unsafe fn handle_rez_confirmation_dialog(mgr: usize, config: &AutoRezConfig) -> 
                     elapsed_ms,
                     "Accepted resurrection offer"
                 );
-                *RECENT_REZ_ACCEPT
-                    .lock()
-                    .expect("recent rez accept lock poisoned") = Some(now);
+                mark_recent_rez_context(now);
                 *PENDING_REZ_OFFER
                     .lock()
                     .expect("pending rez offer lock poisoned") = None;
@@ -422,13 +444,13 @@ unsafe fn handle_recent_rez_respawn(mgr: usize) -> bool {
     use textquest_common::offsets::eqgame as eqg;
 
     {
-        let mut guard = RECENT_REZ_ACCEPT
+        let mut guard = RECENT_REZ_CONTEXT
             .lock()
-            .expect("recent rez accept lock poisoned");
-        let Some(accepted_at) = *guard else {
+            .expect("recent rez context lock poisoned");
+        let Some(context_at) = *guard else {
             return false;
         };
-        if accepted_at.elapsed() > RECENT_REZ_RESPAWN_WINDOW {
+        if context_at.elapsed() > RECENT_REZ_RESPAWN_WINDOW {
             *guard = None;
             return false;
         }
@@ -455,9 +477,9 @@ unsafe fn handle_recent_rez_respawn(mgr: usize) -> bool {
 
     tracing::info!("Completing resurrection via RespawnWnd");
     crate::eq::widgets::click_button_via_vtable(button_wnd);
-    *RECENT_REZ_ACCEPT
+    *RECENT_REZ_CONTEXT
         .lock()
-        .expect("recent rez accept lock poisoned") = None;
+        .expect("recent rez context lock poisoned") = None;
     true
 }
 
@@ -517,6 +539,14 @@ mod tests {
     }
 
     #[test]
+    fn generic_dialog_pairs_contain_respawn_window() {
+        let has_respawn = GENERIC_DIALOG_ACCEPT_PAIRS
+            .iter()
+            .any(|(parent, _)| *parent == "RespawnWnd");
+        assert!(has_respawn, "Must have RespawnWnd pair");
+    }
+
+    #[test]
     fn auto_accept_starts_disabled() {
         let _guard = auto_accept_test_lock();
         set_enabled(false);
@@ -549,6 +579,13 @@ mod tests {
                 caster_name: "Clericbob".into(),
                 xp_pct: 100,
             }
+        );
+    }
+
+    #[test]
+    fn parse_rez_offer_rejects_unrelated_confirmation_text() {
+        assert!(
+            parse_rez_offer_text("Clericbob invites you to join the raid (96 members).").is_none()
         );
     }
 
