@@ -53,6 +53,7 @@
 - [MQ2 Parity Matrix](Research-MQ2-Parity-Matrix)
 - [Packet Engine](Research-Packet-Engine)
 - [Packet Zoning](Research-Packet-Zoning)
+- [Raid Economics](Research-Raid-Economics)
 - [RDP Automation](Research-RDP-Automation)
 - [RedGuides](Research-RedGuides)
 - [Remote Control Setup](Research-Remote-Control-Setup)
