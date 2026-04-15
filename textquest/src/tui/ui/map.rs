@@ -22,7 +22,7 @@ use super::{
     },
 };
 use crate::{
-    eq::structs::SpawnType,
+    eq::structs::{SpawnInfo, SpawnType},
     tui::{
         app::{ActivePanel, App, MapViewportMode},
         state::{MapSpawnPresentationCell, MapSpawnPresentationKey},
@@ -374,6 +374,49 @@ fn heading_arrow_char(heading: f32) -> char {
         6 => '→', // E
         7 => '↗', // NE
         _ => '↑', // fallback
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct TargetDirectionCompass {
+    heading_eq: f32,
+    heading_degrees: u16,
+    distance_2d: f32,
+    arrow: char,
+}
+
+/// Convert a world-space EQ heading into an 8-direction arrow using
+/// `calc_heading` semantics.
+///
+/// `textquest_common::nav::calc_heading` returns 0=North, 128=East, 256=South,
+/// 384=West.
+fn world_heading_arrow_char(heading: f32) -> char {
+    let h = ((heading % 512.0) + 512.0) % 512.0;
+    let octant = ((h + 32.0) % 512.0) as u32 / 64;
+    match octant {
+        0 => '↑',
+        1 => '↗',
+        2 => '→',
+        3 => '↘',
+        4 => '↓',
+        5 => '↙',
+        6 => '←',
+        7 => '↖',
+        _ => '↑',
+    }
+}
+
+fn target_direction_compass(player: &SpawnInfo, target: &SpawnInfo) -> TargetDirectionCompass {
+    let from = textquest_common::nav::Waypoint::new(player.x, player.y, player.z);
+    let to = textquest_common::nav::Waypoint::new(target.x, target.y, target.z);
+    let heading_eq = textquest_common::nav::calc_heading(&from, &to);
+    let heading_degrees = ((heading_eq * 360.0 / 512.0).round() as i32).rem_euclid(360) as u16;
+    let distance_2d = (target.x - player.x).hypot(target.y - player.y);
+    TargetDirectionCompass {
+        heading_eq,
+        heading_degrees,
+        distance_2d,
+        arrow: world_heading_arrow_char(heading_eq),
     }
 }
 
@@ -1066,6 +1109,7 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         .collect();
 
     frame.render_widget(Paragraph::new(lines), inner);
+    draw_target_direction_overlay(frame, inner, app);
 
     if let Some(mini_bounds) = minimap_area(inner, w, h)
         && let Some(bounds) = map_bounds.as_ref()
@@ -1085,6 +1129,44 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
     }
 }
 
+fn draw_target_direction_overlay(frame: &mut Frame, inner: ratatui::layout::Rect, app: &App) {
+    let Some(player) = app.local_player.as_ref() else {
+        return;
+    };
+    let Some(target) = app.target.as_ref() else {
+        return;
+    };
+    if inner.width < 14 || inner.height < 4 {
+        return;
+    }
+
+    let t = &app.theme;
+    let overlay = target_direction_compass(player, target);
+    let overlay_width = 14u16.min(inner.width);
+    let overlay_rect = ratatui::layout::Rect::new(inner.x, inner.y, overlay_width, 4);
+    let value_style = Style::default()
+        .fg(t.text_highlight)
+        .add_modifier(Modifier::BOLD);
+    let label_style = Style::default().fg(t.text_muted);
+    let lines = vec![
+        Line::from(vec![
+            Span::styled(overlay.arrow.to_string(), value_style),
+            Span::raw(" "),
+            Span::styled(format!("{:03}°", overlay.heading_degrees), value_style),
+        ]),
+        Line::from(vec![
+            Span::styled(format!("{:.0}u", overlay.distance_2d), value_style),
+            Span::raw(" "),
+            Span::styled("away", label_style),
+        ]),
+    ];
+
+    frame.render_widget(Clear, overlay_rect);
+    frame.render_widget(
+        Paragraph::new(lines).block(panel(" OTD ", t.border_warn, t)),
+        overlay_rect,
+    );
+}
 /// Collapse a row of `(char, Color)` cells into spans grouped by consecutive
 /// color runs. Produces ~10-30 spans per row instead of one per cell, avoiding
 /// thousands of heap allocations.
@@ -2618,6 +2700,45 @@ mod tests {
         without_target_line.target = Some(test_spawn(77, "target", 6.0, 0.0));
         let without_target = render_map_view_text(without_target_line, 140, 16);
         assert!(!without_target.contains("Target"));
+    }
+
+    #[test]
+    fn map_otd_overlay_renders_heading_and_distance_without_target_line() {
+        let mut app = test_app_with_spawns();
+        app.map_state.show_target_line = false;
+        app.target = Some(test_spawn(77, "target", 6.0, 0.0));
+
+        let rendered = render_map_view_text(app, 100, 18);
+
+        assert!(rendered.contains("OTD"));
+        assert!(rendered.contains('→'));
+        assert!(rendered.contains("090°"));
+        assert!(rendered.contains("6u"));
+    }
+
+    #[test]
+    fn target_direction_compass_uses_world_heading_math() {
+        let player = test_spawn(99, "Player", 0.0, 0.0);
+        let target = test_spawn(77, "target", 6.0, 0.0);
+
+        let overlay = target_direction_compass(&player, &target);
+
+        assert!((overlay.heading_eq - 128.0).abs() < 0.1, "{overlay:?}");
+        assert_eq!(overlay.heading_degrees, 90, "{overlay:?}");
+        assert_eq!(overlay.arrow, '→');
+        assert!((overlay.distance_2d - 6.0).abs() < 0.1, "{overlay:?}");
+    }
+
+    #[test]
+    fn map_otd_overlay_updates_for_diagonal_targets() {
+        let mut app = test_app_with_spawns();
+        app.target = Some(test_spawn(77, "target", 4.0, 4.0));
+
+        let rendered = render_map_view_text(app, 100, 18);
+
+        assert!(rendered.contains("OTD"));
+        assert!(rendered.contains('↗'));
+        assert!(rendered.contains("045°"));
     }
 
     // ── clip_line_z tests ──────────────────────────────────────────────

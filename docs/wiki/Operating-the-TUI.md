@@ -69,6 +69,7 @@ Use this for:
 
 - zone geometry from `config/maps`
 - spawn overlays
+- compact `OTD` heading/range overlay for the current target
 - navmesh overlay when available
 - named tracking with timers
 
