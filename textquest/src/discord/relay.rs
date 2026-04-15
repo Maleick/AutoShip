@@ -1,12 +1,14 @@
-//! Event relay — converts `FleetEvent` observations into Discord webhook alerts.
+//! Event relay — converts `FleetEvent` observations into Discord webhook
+//! alerts.
 //!
 //! Bridges the metrics pipeline to Discord by translating fleet events into
 //! typed [`DiscordAlert`]s routed through [`WebhookSender`].
 //!
 //! # Chat message routing
 //!
-//! In-game chat (group, raid, guild) can be relayed to per-channel Discord webhooks
-//! via [`ChatRelay`]. Configure routing with `[discord.chat_channels]` in TOML:
+//! In-game chat (group, raid, guild) can be relayed to per-channel Discord
+//! webhooks via [`ChatRelay`]. Configure routing with `[discord.chat_channels]`
+//! in TOML:
 //!
 //! ```toml
 //! [discord.chat_channels]
@@ -24,7 +26,8 @@
 //! - `FleetEvent::LootDrop`     → `EventCategory::Loot`
 //! - `FleetEvent::LevelUp`      → `EventCategory::Feats`
 //! - `FleetEvent::Death`        → `EventCategory::Status`
-//! - `FleetEvent::CombatRound`  → buffered; call [`EventRelay::flush_dps`] to post a DPS summary
+//! - `FleetEvent::CombatRound`  → buffered; call [`EventRelay::flush_dps`] to
+//!   post a DPS summary
 //! - `FleetEvent::ZoneChange`   → `EventCategory::Status`
 
 use std::collections::HashMap;
@@ -33,7 +36,8 @@ use crate::metrics::events::FleetEvent;
 
 use super::webhook::{AlertLevel, DiscordAlert, EventCategory, WebhookSender};
 
-// ─── Chat relay ───────────────────────────────────────────────────────────────
+// ─── Chat relay
+// ───────────────────────────────────────────────────────────────
 
 /// EverQuest chat channel types that can be relayed to Discord.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -186,7 +190,8 @@ impl ChatRelay {
     }
 }
 
-// ─── CombatRound accumulator ──────────────────────────────────────────────────
+// ─── CombatRound accumulator
+// ──────────────────────────────────────────────────
 
 /// Accumulates `CombatRound` events and produces a DPS summary.
 #[derive(Debug, Default)]
@@ -243,7 +248,8 @@ impl DpsAccumulator {
     }
 }
 
-// ─── EventRelay ───────────────────────────────────────────────────────────────
+// ─── EventRelay
+// ───────────────────────────────────────────────────────────────
 
 /// Converts [`FleetEvent`] stream into Discord webhook alerts.
 ///

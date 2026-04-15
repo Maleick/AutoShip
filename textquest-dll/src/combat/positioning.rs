@@ -1,4 +1,5 @@
-//! Melee positioning logic — tank facing, rogue backstab angle, camp range enforcement.
+//! Melee positioning logic — tank facing, rogue backstab angle, camp range
+//! enforcement.
 //!
 //! EQ melee attacks have positional requirements:
 //! - Tanks should face the mob (auto-attack misses from behind)
@@ -6,16 +7,17 @@
 //! - All melee should stay within ~15 unit range
 //! - Characters should return to camp after combat if they've drifted
 
-use textquest_common::nav::Waypoint;
-use textquest_common::types::SpawnData;
+use textquest_common::{nav::Waypoint, types::SpawnData};
 
 /// Maximum melee range in EQ units. Beyond this, melee attacks won't connect.
 const MELEE_RANGE: f32 = 15.0;
 
-/// Distance threshold for "close enough" — don't micro-adjust within this range.
+/// Distance threshold for "close enough" — don't micro-adjust within this
+/// range.
 const CLOSE_ENOUGH: f32 = 5.0;
 
-/// Default maximum distance a character can drift from camp before being pulled back.
+/// Default maximum distance a character can drift from camp before being pulled
+/// back.
 pub const DEFAULT_CAMP_DRIFT: f32 = 100.0;
 
 /// Result of a positioning check — tells the caller what movement is needed.

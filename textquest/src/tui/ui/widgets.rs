@@ -109,8 +109,9 @@ pub fn centered_popup(
 
 // ─── Block / panel helper ────────────────────────────────────────────────────
 
-/// Build a `Block` with the project's standard chrome: border type + style + title.
-/// Using this everywhere ensures every panel switches to rounded borders together.
+/// Build a `Block` with the project's standard chrome: border type + style +
+/// title. Using this everywhere ensures every panel switches to rounded borders
+/// together.
 pub fn panel<'a>(
     title: impl Into<ratatui::text::Line<'a>>,
     border_style: Style,
@@ -237,7 +238,8 @@ pub fn cast_time_remaining_label(cast: &CastState) -> Option<String> {
 
 // ─── Spawn info lines ────────────────────────────────────────────────────────
 
-/// Render a `SpawnInfo` as a list of styled lines (used by target panel and character screen).
+/// Render a `SpawnInfo` as a list of styled lines (used by target panel and
+/// character screen).
 pub fn spawn_info_lines(
     spawn: &SpawnInfo,
     redact: &dyn Fn(&str) -> std::borrow::Cow<str>,
@@ -590,7 +592,8 @@ pub struct CommandHint {
     pub description: &'static str,
 }
 
-/// Return the full list of available commands with usage hints and descriptions.
+/// Return the full list of available commands with usage hints and
+/// descriptions.
 #[must_use]
 pub fn command_hints() -> Vec<CommandHint> {
     command::command_entries()

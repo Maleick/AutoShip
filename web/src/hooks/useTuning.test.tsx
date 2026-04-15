@@ -40,7 +40,26 @@ describe("useCharacterConfigs", () => {
             nuke_at_pct: 80,
             rotation: [],
             class_params: {},
+            auto_rez: {
+              enabled: false,
+              min_xp_pct: 90,
+              trusted_casters: [],
+              decline_if_untrusted: false,
+              delay_ms: 0,
+            },
             group_override: false,
+            tribute_preferences: {
+              auto_activate: true,
+              warning_threshold_secs: 300,
+              preferred_tributes: ["Arcane Fury"],
+            },
+            tribute_status: {
+              active: true,
+              remaining_secs: 240,
+              point_balance: 1800,
+              active_tributes: ["Arcane Fury"],
+              alert_state: "expiring",
+            },
           },
         ])
       )
@@ -60,7 +79,26 @@ describe("useCharacterConfigs", () => {
             nuke_at_pct: 90,
             rotation: [],
             class_params: {},
+            auto_rez: {
+              enabled: true,
+              min_xp_pct: 96,
+              trusted_casters: ["Frostreaver"],
+              decline_if_untrusted: true,
+              delay_ms: 5100,
+            },
             group_override: true,
+            tribute_preferences: {
+              auto_activate: true,
+              warning_threshold_secs: 180,
+              preferred_tributes: ["Arcane Fury", "Hero's Fortitude"],
+            },
+            tribute_status: {
+              active: false,
+              remaining_secs: 0,
+              point_balance: 1800,
+              active_tributes: [],
+              alert_state: "expired",
+            },
           },
         ])
       );
@@ -78,7 +116,26 @@ describe("useCharacterConfigs", () => {
         nuke_at_pct: 90,
         rotation: [],
         class_params: {},
+        auto_rez: {
+          enabled: true,
+          min_xp_pct: 96,
+          trusted_casters: ["Frostreaver"],
+          decline_if_untrusted: true,
+          delay_ms: 5100,
+        },
         group_override: true,
+        tribute_preferences: {
+          auto_activate: true,
+          warning_threshold_secs: 180,
+          preferred_tributes: ["Arcane Fury", "Hero's Fortitude"],
+        },
+        tribute_status: {
+          active: false,
+          remaining_secs: 0,
+          point_balance: 1800,
+          active_tributes: [],
+          alert_state: "expired",
+        },
       });
     });
 
@@ -88,6 +145,7 @@ describe("useCharacterConfigs", () => {
       expect.objectContaining({ method: "PUT" })
     );
     expect(result.current.configs[0].heal_at_pct).toBe(60);
+    expect(result.current.configs[0].tribute_preferences.warning_threshold_secs).toBe(180);
     expect(result.current.error).toBeNull();
   });
 });

@@ -68,7 +68,8 @@ impl ApiLlmClient {
             }
             Situation::FleetCommentary { event_summary } => {
                 format!(
-                    "[Fleet Update] {event_summary}\nProvide snarky commentary on this fleet event."
+                    "[Fleet Update] {event_summary}\nProvide snarky commentary on this fleet \
+                     event."
                 )
             }
         }

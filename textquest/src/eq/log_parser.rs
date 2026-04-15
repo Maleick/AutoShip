@@ -1,7 +1,10 @@
-use std::collections::{HashMap, VecDeque};
-use std::time::{Duration, Instant};
+use std::{
+    collections::{HashMap, VecDeque},
+    time::{Duration, Instant},
+};
 
-// Re-export chat types from the shared crate so existing call-sites don't need updating.
+// Re-export chat types from the shared crate so existing call-sites don't need
+// updating.
 use textquest_common::chat::parse_stripped_chat_text;
 pub use textquest_common::chat::{ChatChannel, ChatEvent};
 
@@ -180,7 +183,8 @@ pub struct LootDatabase {
 }
 
 impl LootDatabase {
-    /// Maximum amount of XP event history retained for windowed rate calculations.
+    /// Maximum amount of XP event history retained for windowed rate
+    /// calculations.
     const XP_EVENT_RETENTION: Duration = Duration::from_secs(24 * 60 * 60);
 
     /// Creates a new empty loot database.
@@ -330,7 +334,8 @@ mod tests {
 
     #[test]
     fn test_parse_money_full() {
-        let line = "[Thu Mar 28 12:37:00 2026] You receive 5 platinum, 3 gold, 2 silver and 1 copper from the corpse.";
+        let line = "[Thu Mar 28 12:37:00 2026] You receive 5 platinum, 3 gold, 2 silver and 1 \
+                    copper from the corpse.";
         let event = parse_log_line(line).unwrap();
         assert_eq!(
             event,

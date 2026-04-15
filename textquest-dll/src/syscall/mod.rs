@@ -6,16 +6,20 @@
 //!
 //! # Architecture
 //!
-//! 1. **hash** — DJB2 hashing of function names (no plaintext API strings in binary)
-//! 2. **table** — TartarusGate SSN extraction from a fresh ntdll mapped via KnownDlls
+//! 1. **hash** — DJB2 hashing of function names (no plaintext API strings in
+//!    binary)
+//! 2. **table** — TartarusGate SSN extraction from a fresh ntdll mapped via
+//!    KnownDlls
 //! 3. **gate** — Assembly stubs that JMP to ntdll's `syscall;ret` gadget
 //!
 //! # Usage
 //!
 //! Call [`init()`] once during DLL initialization (after tracing is set up).
-//! Then use the `gate::nt_*` functions which read from the global syscall table.
+//! Then use the `gate::nt_*` functions which read from the global syscall
+//! table.
 //!
-//! All code is behind `#[cfg(windows)]` with macOS stubs that return STATUS_SUCCESS.
+//! All code is behind `#[cfg(windows)]` with macOS stubs that return
+//! STATUS_SUCCESS.
 
 pub mod gate;
 pub mod hash;
@@ -38,7 +42,8 @@ const TARGET_HASHES: [u32; 4] = [
 /// Initialize the indirect syscall layer.
 ///
 /// Maps a fresh ntdll from KnownDlls, extracts SSNs for target functions,
-/// locates a `syscall;ret` gadget in the real ntdll, then unmaps the fresh copy.
+/// locates a `syscall;ret` gadget in the real ntdll, then unmaps the fresh
+/// copy.
 ///
 /// Call once during DLL init, after tracing is configured. Safe to call
 /// multiple times (subsequent calls are no-ops).

@@ -2,8 +2,10 @@
 
 use std::collections::HashMap;
 
-use crate::camp::class_config::ClassConfig;
-use crate::camp::state::{CampMember, CampState, Role};
+use crate::camp::{
+    class_config::ClassConfig,
+    state::{CampMember, CampState, Role},
+};
 
 /// Priority ordering for buff types (lower = higher priority).
 const PRIORITY_HASTE: u8 = 0;
@@ -90,7 +92,8 @@ fn buff_priority(buff_name: &str) -> u8 {
     }
 }
 
-/// Check all members for expired buffs and return `(caster_pid, command)` pairs.
+/// Check all members for expired buffs and return `(caster_pid, command)`
+/// pairs.
 ///
 /// Only returns rebuff commands when the camp is in Idle or Medding state.
 /// Buffs are prioritized: haste > HP buff > mana regen > stat buffs.

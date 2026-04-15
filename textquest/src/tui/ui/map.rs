@@ -1,8 +1,10 @@
 //! Map screen — zone map renderer, spawn position list, named tracker panel.
 
-use std::collections::{HashMap, HashSet};
-use std::sync::LazyLock;
-use std::time::Instant;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::LazyLock,
+    time::Instant,
+};
 
 use ratatui::{
     Frame,
@@ -19,10 +21,14 @@ use super::{
         WIDTH_SIDEBAR_WIDE, panel, themed_header_row,
     },
 };
-use crate::eq::structs::SpawnType;
-use crate::tui::app::{ActivePanel, App, MapViewportMode};
-use crate::tui::state::{MapSpawnPresentationCell, MapSpawnPresentationKey};
-use crate::tui::theme::Theme;
+use crate::{
+    eq::structs::{SpawnInfo, SpawnType},
+    tui::{
+        app::{ActivePanel, App, MapViewportMode},
+        state::{MapSpawnPresentationCell, MapSpawnPresentationKey},
+        theme::Theme,
+    },
+};
 
 static PERF_TRACE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
     std::env::var(textquest_common::ipc::PERF_TRACE_ENV)
@@ -345,15 +351,18 @@ fn spawn_marker_glyph(
     }
 }
 
-/// Convert an EQ heading value (0–512, where 0=North, 128=West, 256=South, 384=East)
-/// to an 8-direction Unicode arrow character indicating the player's facing direction.
+/// Convert an EQ heading value (0–512, where 0=North, 128=West, 256=South,
+/// 384=East) to an 8-direction Unicode arrow character indicating the player's
+/// facing direction.
 ///
-/// The EQ heading range is 0–512 (full circle). We map it to 8 octants of 64 units each:
-///   0/512=N(↑), 64=NW(↖), 128=W(←), 192=SW(↙), 256=S(↓), 320=SE(↘), 384=E(→), 448=NE(↗)
+/// The EQ heading range is 0–512 (full circle). We map it to 8 octants of 64
+/// units each:   0/512=N(↑), 64=NW(↖), 128=W(←), 192=SW(↙), 256=S(↓),
+/// 320=SE(↘), 384=E(→), 448=NE(↗)
 fn heading_arrow_char(heading: f32) -> char {
     // Normalise to [0, 512)
     let h = ((heading % 512.0) + 512.0) % 512.0;
-    // Each octant spans 64 units; centre at multiples of 64, offset by 32 for rounding.
+    // Each octant spans 64 units; centre at multiples of 64, offset by 32 for
+    // rounding.
     let octant = ((h + 32.0) % 512.0) as u32 / 64;
     match octant {
         0 => '↑', // N
@@ -365,6 +374,49 @@ fn heading_arrow_char(heading: f32) -> char {
         6 => '→', // E
         7 => '↗', // NE
         _ => '↑', // fallback
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct TargetDirectionCompass {
+    heading_eq: f32,
+    heading_degrees: u16,
+    distance_2d: f32,
+    arrow: char,
+}
+
+/// Convert a world-space EQ heading into an 8-direction arrow using
+/// `calc_heading` semantics.
+///
+/// `textquest_common::nav::calc_heading` returns 0=North, 128=East, 256=South,
+/// 384=West.
+fn world_heading_arrow_char(heading: f32) -> char {
+    let h = ((heading % 512.0) + 512.0) % 512.0;
+    let octant = ((h + 32.0) % 512.0) as u32 / 64;
+    match octant {
+        0 => '↑',
+        1 => '↗',
+        2 => '→',
+        3 => '↘',
+        4 => '↓',
+        5 => '↙',
+        6 => '←',
+        7 => '↖',
+        _ => '↑',
+    }
+}
+
+fn target_direction_compass(player: &SpawnInfo, target: &SpawnInfo) -> TargetDirectionCompass {
+    let from = textquest_common::nav::Waypoint::new(player.x, player.y, player.z);
+    let to = textquest_common::nav::Waypoint::new(target.x, target.y, target.z);
+    let heading_eq = textquest_common::nav::calc_heading(&from, &to);
+    let heading_degrees = ((heading_eq * 360.0 / 512.0).round() as i32).rem_euclid(360) as u16;
+    let distance_2d = (target.x - player.x).hypot(target.y - player.y);
+    TargetDirectionCompass {
+        heading_eq,
+        heading_degrees,
+        distance_2d,
+        arrow: world_heading_arrow_char(heading_eq),
     }
 }
 
@@ -420,8 +472,9 @@ mod direction_arrow_tests {
         assert_eq!(direction_arrow(0, 0), '·');
     }
 }
-/// Place a directional heading arrow in the grid cell adjacent to position (`col`, `row`)
-/// in the direction the player is facing. No-op if the target cell is out of bounds.
+/// Place a directional heading arrow in the grid cell adjacent to position
+/// (`col`, `row`) in the direction the player is facing. No-op if the target
+/// cell is out of bounds.
 #[allow(clippy::too_many_arguments)]
 fn place_heading_arrow(
     heading: f32,
@@ -529,23 +582,21 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             )
         })
         .unwrap_or_default();
-    let provisional_map_info = app
-        .map_state
-        .zone_map
-        .as_ref()
-        .map_or_else(
-            || {
-                format!(
-                    " {zone_label} (no data){player_pos_label}{selected_spawn_label} |{layer_label} | {filter_label} | Z:{z_range:.0} "
-                )
-            },
-            |_| {
-                format!(
-                    " {zone_label}{player_pos_label}{selected_spawn_label} | {provisional_view_label} {:.2}x{provisional_view_center} |{layer_label} | {filter_label} | Z:{z_range:.0} ",
-                    app.map_state.zoom,
-                )
-            },
-        );
+    let provisional_map_info = app.map_state.zone_map.as_ref().map_or_else(
+        || {
+            format!(
+                " {zone_label} (no data){player_pos_label}{selected_spawn_label} |{layer_label} | \
+                 {filter_label} | Z:{z_range:.0} "
+            )
+        },
+        |_| {
+            format!(
+                " {zone_label}{player_pos_label}{selected_spawn_label} | {provisional_view_label} \
+                 {:.2}x{provisional_view_center} |{layer_label} | {filter_label} | Z:{z_range:.0} ",
+                app.map_state.zoom,
+            )
+        },
+    );
 
     let blk_for_size = panel(provisional_map_info.as_str(), border_style, t);
     let inner = blk_for_size.inner(area);
@@ -568,23 +619,21 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             )
         })
         .unwrap_or_default();
-    let map_info = app
-        .map_state
-        .zone_map
-        .as_ref()
-        .map_or_else(
-            || {
-                format!(
-                    " {zone_label} (no data){player_pos_label}{selected_spawn_label} |{layer_label} | {filter_label} | Z:{z_range:.0} "
-                )
-            },
-            |_| {
-                format!(
-                    " {zone_label}{player_pos_label}{selected_spawn_label} | {view_label} {:.2}x{view_center} |{layer_label} | {filter_label} | Z:{z_range:.0} ",
-                    app.map_state.zoom,
-                )
-            },
-        );
+    let map_info = app.map_state.zone_map.as_ref().map_or_else(
+        || {
+            format!(
+                " {zone_label} (no data){player_pos_label}{selected_spawn_label} |{layer_label} | \
+                 {filter_label} | Z:{z_range:.0} "
+            )
+        },
+        |_| {
+            format!(
+                " {zone_label}{player_pos_label}{selected_spawn_label} | {view_label} \
+                 {:.2}x{view_center} |{layer_label} | {filter_label} | Z:{z_range:.0} ",
+                app.map_state.zoom,
+            )
+        },
+    );
     let blk = panel(map_info.as_str(), border_style, t);
     frame.render_widget(blk, area);
 
@@ -840,28 +889,25 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
 
         // Draw FOV wedge — full coordinate-transform proof:
         //
-        // 1. EQ heading: 0=N, 128=W, 256=S, 384=E. CW in EQ world coords,
-        //    512 heading units = full circle = 2*pi radians.
+        // 1. EQ heading: 0=N, 128=W, 256=S, 384=E. CW in EQ world coords, 512 heading
+        //    units = full circle = 2*pi radians.
         //
-        // 2. EQ world → map coords: we negate both axes via to_grid(-y, -x).
-        //    This is a 180-degree rotation, which mirrors both axes and
-        //    preserves angular direction (CW stays CW in map space).
+        // 2. EQ world → map coords: we negate both axes via to_grid(-y, -x). This is a
+        //    180-degree rotation, which mirrors both axes and preserves angular
+        //    direction (CW stays CW in map space).
         //
-        // 3. Map → screen coords: screen Y increases downward, so we use
-        //    `row - sin(a)` (line 212), which flips the Y axis. This converts
-        //    CW angles into CCW angles in screen space.
+        // 3. Map → screen coords: screen Y increases downward, so we use `row - sin(a)`
+        //    (line 212), which flips the Y axis. This converts CW angles into CCW
+        //    angles in screen space.
         //
-        // 4. Standard math angles are CCW with 0=East. EQ heading 0 (North)
-        //    should map to pi/2 (screen-up). The formula:
-        //      heading_rad = (512 - heading) * pi / 256
-        //    At heading=0:   (512-0)*pi/256   = 2*pi ≡ 0 (East in math).
-        //    But step 3's Y-flip (row - sin) makes 0 rad point screen-up,
-        //    because -sin(0)=0 for col and cos(0)=1 becomes row-1 (up).
-        //    Wait — cos is on col and sin on row:
-        //      end_col = col + cos(a) * len   → horizontal
-        //      end_row = row - sin(a) * len   → vertical (inverted)
-        //    At a=0: col+len, row-0 → points right (East). But EQ heading 0
-        //    is North. With (512-0)*pi/256 = 2*pi ≡ 0, this points East...
+        // 4. Standard math angles are CCW with 0=East. EQ heading 0 (North) should map
+        //    to pi/2 (screen-up). The formula: heading_rad = (512 - heading) * pi / 256
+        //    At heading=0:   (512-0)*pi/256   = 2*pi ≡ 0 (East in math). But step 3's
+        //    Y-flip (row - sin) makes 0 rad point screen-up, because -sin(0)=0 for col
+        //    and cos(0)=1 becomes row-1 (up). Wait — cos is on col and sin on row:
+        //    end_col = col + cos(a) * len   → horizontal end_row = row - sin(a) * len →
+        //    vertical (inverted) At a=0: col+len, row-0 → points right (East). But EQ
+        //    heading 0 is North. With (512-0)*pi/256 = 2*pi ≡ 0, this points East...
         //    unless the 180-degree rotation from step 2 remaps it.
         //
         //    The axis swap (-y→mx, -x→my) means EQ North (+Y in world) maps
@@ -870,8 +916,9 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         //    directions empirically, but the interaction of swap + negate +
         //    Y-flip makes a clean closed-form proof non-trivial.
         //
-        // NOTE: FOV direction derived from EQ heading convention (0 ≡ 512 = North, CW; 512 units = full circle).
-        // Empirically correct in TUI demo; final live-client verification deferred.
+        // NOTE: FOV direction derived from EQ heading convention (0 ≡ 512 = North, CW;
+        // 512 units = full circle). Empirically correct in TUI demo; final
+        // live-client verification deferred.
         let heading_rad = (512.0 - player.heading) * std::f32::consts::PI / 256.0;
         let half_fov = std::f32::consts::PI / 6.0; // 30-degree half-angle (60 total)
         let cone_len: f32 = 4.0; // length in grid cells
@@ -1062,6 +1109,7 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         .collect();
 
     frame.render_widget(Paragraph::new(lines), inner);
+    draw_target_direction_overlay(frame, inner, app);
 
     if let Some(mini_bounds) = minimap_area(inner, w, h)
         && let Some(bounds) = map_bounds.as_ref()
@@ -1081,8 +1129,47 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
     }
 }
 
-/// Collapse a row of `(char, Color)` cells into spans grouped by consecutive color runs.
-/// Produces ~10-30 spans per row instead of one per cell, avoiding thousands of heap allocations.
+fn draw_target_direction_overlay(frame: &mut Frame, inner: ratatui::layout::Rect, app: &App) {
+    let Some(player) = app.local_player.as_ref() else {
+        return;
+    };
+    let Some(target) = app.target.as_ref() else {
+        return;
+    };
+    if inner.width < 14 || inner.height < 4 {
+        return;
+    }
+
+    let t = &app.theme;
+    let overlay = target_direction_compass(player, target);
+    let overlay_width = 14u16.min(inner.width);
+    let overlay_rect = ratatui::layout::Rect::new(inner.x, inner.y, overlay_width, 4);
+    let value_style = Style::default()
+        .fg(t.text_highlight)
+        .add_modifier(Modifier::BOLD);
+    let label_style = Style::default().fg(t.text_muted);
+    let lines = vec![
+        Line::from(vec![
+            Span::styled(overlay.arrow.to_string(), value_style),
+            Span::raw(" "),
+            Span::styled(format!("{:03}°", overlay.heading_degrees), value_style),
+        ]),
+        Line::from(vec![
+            Span::styled(format!("{:.0}u", overlay.distance_2d), value_style),
+            Span::raw(" "),
+            Span::styled("away", label_style),
+        ]),
+    ];
+
+    frame.render_widget(Clear, overlay_rect);
+    frame.render_widget(
+        Paragraph::new(lines).block(panel(" OTD ", t.border_warn, t)),
+        overlay_rect,
+    );
+}
+/// Collapse a row of `(char, Color)` cells into spans grouped by consecutive
+/// color runs. Produces ~10-30 spans per row instead of one per cell, avoiding
+/// thousands of heap allocations.
 fn color_run_spans(row: Vec<(char, Color)>) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     let mut buf = String::new();
@@ -1648,12 +1735,14 @@ fn clip_line_z(
     Some((cx1, cy1, cx2, cy2))
 }
 
-/// Returns true if `(col, row)` is within a `w × h` grid (both non-negative and in-bounds).
+/// Returns true if `(col, row)` is within a `w × h` grid (both non-negative and
+/// in-bounds).
 fn grid_in_bounds(col: i32, row: i32, w: usize, h: usize) -> bool {
     col >= 0 && (col as usize) < w && row >= 0 && (row as usize) < h
 }
 
-/// Z-clip a line segment, project both endpoints via `to_grid`, and draw with Bresenham.
+/// Z-clip a line segment, project both endpoints via `to_grid`, and draw with
+/// Bresenham.
 #[allow(clippy::too_many_arguments)]
 fn clip_project_draw_line(
     x1: f32,
@@ -2204,8 +2293,9 @@ fn draw_named_markers(
     }
 }
 
-/// Draw camp location overlays: camp center marker (⊕, green), pull point marker
-/// (⊗, red), camp radius circle (green dots), and pull radius circle (red dots).
+/// Draw camp location overlays: camp center marker (⊕, green), pull point
+/// marker (⊗, red), camp radius circle (green dots), and pull radius circle
+/// (red dots).
 fn draw_camp_overlays(
     app: &App,
     to_grid: &impl Fn(f32, f32) -> (i32, i32),
@@ -2309,9 +2399,10 @@ fn draw_radius_overlays(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eq::structs::{SpawnInfo, SpawnType, StandState};
-    use crate::tui::app::ClientState;
-    use crate::tui::state::MapRadiusOverlay;
+    use crate::{
+        eq::structs::{SpawnInfo, SpawnType, StandState},
+        tui::{app::ClientState, state::MapRadiusOverlay},
+    };
     use ratatui::{Terminal, backend::TestBackend, layout::Rect, style::Color};
 
     fn test_spawn(id: u32, name: &str, x: f32, y: f32) -> SpawnInfo {
@@ -2576,7 +2667,8 @@ mod tests {
     #[test]
     fn minimap_target_marker_uses_target_line_instead_of_nav_paths() {
         let mut app = test_app_with_spawns();
-        // Keep nav paths disabled to prove the target marker follows show_target_line directly.
+        // Keep nav paths disabled to prove the target marker follows show_target_line
+        // directly.
         app.map_state.show_nav_paths = false;
         app.map_state.show_target_line = true;
         app.target = Some(test_spawn(77, "target", 6.0, 0.0));
@@ -2592,7 +2684,8 @@ mod tests {
     #[test]
     fn map_legend_target_entry_uses_target_line_instead_of_nav_paths() {
         let mut app = test_app_with_spawns();
-        // Keep nav paths disabled to prove the legend entry follows show_target_line directly.
+        // Keep nav paths disabled to prove the legend entry follows show_target_line
+        // directly.
         app.map_state.show_nav_paths = false;
         app.map_state.show_target_line = true;
         app.target = Some(test_spawn(77, "target", 6.0, 0.0));
@@ -2607,6 +2700,45 @@ mod tests {
         without_target_line.target = Some(test_spawn(77, "target", 6.0, 0.0));
         let without_target = render_map_view_text(without_target_line, 140, 16);
         assert!(!without_target.contains("Target"));
+    }
+
+    #[test]
+    fn map_otd_overlay_renders_heading_and_distance_without_target_line() {
+        let mut app = test_app_with_spawns();
+        app.map_state.show_target_line = false;
+        app.target = Some(test_spawn(77, "target", 6.0, 0.0));
+
+        let rendered = render_map_view_text(app, 100, 18);
+
+        assert!(rendered.contains("OTD"));
+        assert!(rendered.contains('→'));
+        assert!(rendered.contains("090°"));
+        assert!(rendered.contains("6u"));
+    }
+
+    #[test]
+    fn target_direction_compass_uses_world_heading_math() {
+        let player = test_spawn(99, "Player", 0.0, 0.0);
+        let target = test_spawn(77, "target", 6.0, 0.0);
+
+        let overlay = target_direction_compass(&player, &target);
+
+        assert!((overlay.heading_eq - 128.0).abs() < 0.1, "{overlay:?}");
+        assert_eq!(overlay.heading_degrees, 90, "{overlay:?}");
+        assert_eq!(overlay.arrow, '→');
+        assert!((overlay.distance_2d - 6.0).abs() < 0.1, "{overlay:?}");
+    }
+
+    #[test]
+    fn map_otd_overlay_updates_for_diagonal_targets() {
+        let mut app = test_app_with_spawns();
+        app.target = Some(test_spawn(77, "target", 4.0, 4.0));
+
+        let rendered = render_map_view_text(app, 100, 18);
+
+        assert!(rendered.contains("OTD"));
+        assert!(rendered.contains('↗'));
+        assert!(rendered.contains("045°"));
     }
 
     // ── clip_line_z tests ──────────────────────────────────────────────
@@ -2759,14 +2891,16 @@ mod tests {
 
         draw_radius_overlays(&app, &to_grid, 32, 24, &mut grid);
 
-        // spawn at x=4,y=4: circle point at (7,4) should not be drawn when spawns hidden
+        // spawn at x=4,y=4: circle point at (7,4) should not be drawn when spawns
+        // hidden
         assert_ne!(grid[4][7], ('·', Color::Red));
     }
 
     #[test]
     fn aggro_radius_respects_z_filter() {
         let mut app = test_app_with_spawns();
-        // Move all existing spawns far above player (z=0) by setting z_filter_range tight
+        // Move all existing spawns far above player (z=0) by setting z_filter_range
+        // tight
         for spawn in &mut app.spawns {
             spawn.z = 200.0; // 200 units above player z=0
         }
@@ -2802,7 +2936,8 @@ mod tests {
     #[test]
     fn player_marker_color_is_map_you() {
         // Verify that heading_arrow_char returns a non-space arrow for any heading.
-        // We test the function directly via a full render and confirm the arrow glyphs appear.
+        // We test the function directly via a full render and confirm the arrow glyphs
+        // appear.
         let app = test_app_with_spawns(); // player heading=0 → North → ↑
         let rendered = render_map_view_text(app, 80, 20);
         // The ↑ heading arrow should appear near the player marker.

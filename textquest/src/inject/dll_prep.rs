@@ -1,6 +1,8 @@
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::{
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
 use anyhow::{Context, Result, anyhow};
 use sha2::{Digest, Sha256};
@@ -24,7 +26,8 @@ impl StagedDll {
         &self.path
     }
 
-    /// SHA-256 hex digest of the staged payload, computed immediately after staging.
+    /// SHA-256 hex digest of the staged payload, computed immediately after
+    /// staging.
     #[must_use]
     pub fn hash(&self) -> &str {
         &self.hash
@@ -52,8 +55,10 @@ pub(crate) fn compute_file_hash(path: &Path) -> Result<String> {
 #[cfg(test)]
 mod hash_tests {
     use super::compute_file_hash;
-    use std::io::Write;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{
+        io::Write,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     #[test]
     fn compute_file_hash_returns_expected_sha256_hex_digest() {

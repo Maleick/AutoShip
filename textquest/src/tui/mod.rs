@@ -1,4 +1,5 @@
-//! Terminal UI — ratatui-based dashboard with spawn list, player panels, map, navigation.
+//! Terminal UI — ratatui-based dashboard with spawn list, player panels, map,
+//! navigation.
 
 /// Achievement system — milestones, raid firsts, and progression unlocks.
 pub mod achievements;
@@ -10,13 +11,16 @@ pub mod cast;
 pub mod client;
 /// Shared command metadata for help, hints, and suggestions.
 pub mod command;
-/// Tamagotchi-style fleet companion — creature that evolves with fleet performance.
+/// Tamagotchi-style fleet companion — creature that evolves with fleet
+/// performance.
 pub mod companion;
 /// Configuration panel with tree view and inline editing.
 pub mod config_panel;
-/// Demo data generator — synthetic spawns and player data for macOS development.
+/// Demo data generator — synthetic spawns and player data for macOS
+/// development.
 pub mod demo_data;
-/// DPS tracker — rolling-window damage-per-second calculation for group members.
+/// DPS tracker — rolling-window damage-per-second calculation for group
+/// members.
 pub mod dps;
 /// Event handling — keyboard input mapping and command dispatch.
 pub mod event;
@@ -33,7 +37,8 @@ pub mod priorities;
 pub mod run;
 /// Session monitor — fleet overview and per-client drill-down tracking.
 pub mod session_monitor;
-/// Sound alert system — configurable audio event triggers for fleet notifications.
+/// Sound alert system — configurable audio event triggers for fleet
+/// notifications.
 pub mod sound;
 /// ASCII sprite definitions for the map overlay.
 pub mod sprites;
@@ -41,7 +46,8 @@ pub mod sprites;
 pub mod state;
 /// Color theme system — multiple themes with per-element color definitions.
 pub mod theme;
-/// Toast notification system — ephemeral messages for achievements, warnings, and status.
+/// Toast notification system — ephemeral messages for achievements, warnings,
+/// and status.
 pub mod toast;
 /// UI renderers — per-panel drawing functions for each dashboard section.
 pub mod ui;

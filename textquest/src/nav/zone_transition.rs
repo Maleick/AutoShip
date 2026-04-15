@@ -1,5 +1,6 @@
-//! Zone transition state machine — handles WalkTo, ZoneTo, and PortTo transitions
-//! with safe-coordinate validation, timeout detection, and recovery logic.
+//! Zone transition state machine — handles WalkTo, ZoneTo, and PortTo
+//! transitions with safe-coordinate validation, timeout detection, and recovery
+//! logic.
 
 #![allow(
     clippy::missing_errors_doc,
@@ -11,8 +12,7 @@
 
 use std::time::{Duration, Instant};
 
-use textquest_common::nav::Waypoint;
-use textquest_common::types::ClientId;
+use textquest_common::{nav::Waypoint, types::ClientId};
 
 /// Maximum time allowed for a single zone transition before recovery triggers.
 pub const ZONE_TRANSITION_TIMEOUT: Duration = Duration::from_secs(30);
@@ -107,10 +107,11 @@ fn safe_fallback_pos() -> Waypoint {
     Waypoint::new(0.0, 0.0, 0.0)
 }
 
-/// Computes the best safe-coordinate recovery position given the attempted transition.
+/// Computes the best safe-coordinate recovery position given the attempted
+/// transition.
 ///
-/// For `WalkTo` / `ZoneTo`, we use the zone-line position if it is valid, otherwise
-/// the origin. For `PortTo`, we always fall back to the origin.
+/// For `WalkTo` / `ZoneTo`, we use the zone-line position if it is valid,
+/// otherwise the origin. For `PortTo`, we always fall back to the origin.
 fn recovery_pos_for(kind: &TransitionKind) -> Waypoint {
     match kind {
         TransitionKind::ZoneTo { zone_line_pos, .. } if is_safe_coordinate(zone_line_pos) => {
@@ -155,7 +156,8 @@ impl ZoneTransitionFsm {
         }
     }
 
-    /// Start a transition. If a transition is already in progress it is replaced.
+    /// Start a transition. If a transition is already in progress it is
+    /// replaced.
     pub fn start(&mut self, kind: TransitionKind) {
         tracing::info!(
             client_id = self.client_id,
@@ -224,9 +226,11 @@ impl ZoneTransitionFsm {
         }
     }
 
-    /// Notify the FSM that the zone has loaded and provide the landing position.
+    /// Notify the FSM that the zone has loaded and provide the landing
+    /// position.
     ///
-    /// If `landing_pos` fails safe-coordinate validation, transitions to `Recovering`.
+    /// If `landing_pos` fails safe-coordinate validation, transitions to
+    /// `Recovering`.
     pub fn on_zone_loaded(&mut self, landing_pos: Waypoint) -> TickResult {
         let target_zone = match &self.state {
             ZoneTransitionState::Zoning { target_zone, .. } => target_zone.clone(),

@@ -1,5 +1,4 @@
-use std::path::Path;
-use std::sync::Mutex;
+use std::{path::Path, sync::Mutex};
 
 use anyhow::{Context, Result};
 use rusqlite::Connection;

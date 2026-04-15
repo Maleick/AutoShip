@@ -1,7 +1,6 @@
 //! SQLite-backed item database, loot tables, wishlists, and loot history.
 
-use std::path::Path;
-use std::sync::Mutex;
+use std::{path::Path, sync::Mutex};
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -182,7 +181,8 @@ impl LootStore {
             "INSERT INTO items (name, lucy_id, slot, item_type, ac, hp, mana, damage, delay,
                 level_req, weight, magic, lore, nodrop, expansion, effect, stats_json, source_url,
                 updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, datetime('now'))
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, \
+             ?18, datetime('now'))
              ON CONFLICT(name) DO UPDATE SET
                 lucy_id = excluded.lucy_id,
                 slot = excluded.slot,
@@ -262,9 +262,11 @@ impl LootStore {
         for item in items {
             tx.execute(
                 "INSERT INTO items (name, lucy_id, slot, item_type, ac, hp, mana, damage, delay,
-                    level_req, weight, magic, lore, nodrop, expansion, effect, stats_json, source_url,
+                    level_req, weight, magic, lore, nodrop, expansion, effect, stats_json, \
+                 source_url,
                     updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, datetime('now'))
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, \
+                 ?17, ?18, datetime('now'))
                  ON CONFLICT(name) DO UPDATE SET
                     lucy_id = excluded.lucy_id,
                     slot = excluded.slot,
@@ -492,7 +494,8 @@ impl LootStore {
     ) -> Result<i64> {
         let conn = self.conn.lock().expect("loot lock poisoned");
         conn.execute(
-            "INSERT INTO loot_tables (table_name, mob_name, zone, min_level, max_level, expansion, notes)
+            "INSERT INTO loot_tables (table_name, mob_name, zone, min_level, max_level, \
+             expansion, notes)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
              ON CONFLICT(table_name, mob_name) DO UPDATE SET
                 zone = excluded.zone,
@@ -500,7 +503,9 @@ impl LootStore {
                 max_level = excluded.max_level,
                 expansion = excluded.expansion,
                 notes = excluded.notes",
-            params![table_name, mob_name, zone, min_level, max_level, expansion, notes],
+            params![
+                table_name, mob_name, zone, min_level, max_level, expansion, notes
+            ],
         )
         .context("Failed to upsert loot table entry")?;
         Ok(conn.last_insert_rowid())
@@ -536,7 +541,8 @@ impl LootStore {
         let conn = self.conn.lock().expect("loot lock poisoned");
         let mut stmt = conn
             .prepare(
-                "SELECT id, table_name, mob_name, zone, min_level, max_level, expansion, notes, created_at
+                "SELECT id, table_name, mob_name, zone, min_level, max_level, expansion, notes, \
+                 created_at
                  FROM loot_tables WHERE table_name = ?1 ORDER BY mob_name",
             )
             .context("Failed to prepare loot table query")?;
@@ -703,8 +709,8 @@ impl LootStore {
             .context("Failed to collect wishlist rows")
     }
 
-    /// "Who needs this?" — find all characters who have this item on their wishlist
-    /// and haven't obtained it yet.
+    /// "Who needs this?" — find all characters who have this item on their
+    /// wishlist and haven't obtained it yet.
     pub fn who_needs_item(&self, item_id: i64) -> Result<Vec<WishlistRow>> {
         let conn = self.conn.lock().expect("loot lock poisoned");
         let mut stmt = conn
@@ -765,9 +771,19 @@ impl LootStore {
     ) -> Result<i64> {
         let conn = self.conn.lock().expect("loot lock poisoned");
         conn.execute(
-            "INSERT INTO loot_log (item_id, item_name, recipient, source_mob, zone, table_name, quantity, assigned_by)
+            "INSERT INTO loot_log (item_id, item_name, recipient, source_mob, zone, table_name, \
+             quantity, assigned_by)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![item_id, item_name, recipient, source_mob, zone, table_name, quantity, assigned_by],
+            params![
+                item_id,
+                item_name,
+                recipient,
+                source_mob,
+                zone,
+                table_name,
+                quantity,
+                assigned_by
+            ],
         )
         .context("Failed to record loot")?;
         Ok(conn.last_insert_rowid())

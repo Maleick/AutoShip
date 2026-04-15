@@ -1,10 +1,10 @@
 //! Hook integrity self-check — verifies HWBP slot state before IPC activation.
 //!
-//! Called during DLL initialization after hooks are installed and before the IPC
-//! command listener starts accepting commands. If any slot is in an inconsistent
-//! state (active flag set without a valid address or callback, or vice-versa),
-//! the check fails and the DLL enters safe mode: no hook callbacks will be
-//! dispatched and IPC commands are rejected.
+//! Called during DLL initialization after hooks are installed and before the
+//! IPC command listener starts accepting commands. If any slot is in an
+//! inconsistent state (active flag set without a valid address or callback, or
+//! vice-versa), the check fails and the DLL enters safe mode: no hook callbacks
+//! will be dispatched and IPC commands are rejected.
 //!
 //! "Trampoline integrity" in the context of this codebase means verifying
 //! the HWBP (hardware-breakpoint) hook registry — since we use VEH-based
@@ -51,8 +51,8 @@ impl IntegrityReport {
 /// A slot is consistent when:
 /// - If `active` is true: `address != 0` AND `has_callback` is true
 /// - If `active` is false: `address == 0` AND `has_callback` is false
-///   (address/callback may be non-zero temporarily during registration,
-///   but after `remove_all()` they must be zero)
+///   (address/callback may be non-zero temporarily during registration, but
+///   after `remove_all()` they must be zero)
 ///
 /// We treat an active slot with zero address or missing callback as corrupted —
 /// the VEH handler would dispatch to address 0 or a null function pointer.
@@ -112,8 +112,9 @@ fn check_slot(idx: usize) -> SlotCheckResult {
 
 /// Run the full hook integrity self-check.
 ///
-/// Checks every HWBP slot for internal consistency. Returns an `IntegrityReport`
-/// describing per-slot results and whether the overall check passed.
+/// Checks every HWBP slot for internal consistency. Returns an
+/// `IntegrityReport` describing per-slot results and whether the overall check
+/// passed.
 ///
 /// This is designed to run cross-platform: on non-Windows builds all slots are
 /// inactive (stubs), so all slots must have zero address and no callback —
@@ -175,7 +176,8 @@ pub fn verify_hooks_or_safe_mode() -> Result<(), String> {
     ))
 }
 
-/// Returns `true` if the DLL is currently in safe mode (integrity check failed).
+/// Returns `true` if the DLL is currently in safe mode (integrity check
+/// failed).
 pub fn is_safe_mode() -> bool {
     SAFE_MODE.load(Ordering::Acquire)
 }

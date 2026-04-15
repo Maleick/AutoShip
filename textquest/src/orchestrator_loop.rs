@@ -2,17 +2,20 @@
 //! and Orchestrator into a single async tick loop with health checks, crash
 //! recovery, and graceful shutdown.
 
-use crate::client::discovery::PeerDiscoveryEvent;
-use crate::client::healing::ClientHealth;
-use crate::client::manager::ClientManager;
-use crate::client::session::SlotLifecycle;
-use crate::config::{AppConfig, OrchestratorConfig};
-use crate::launcher::coordinator::{CoordinatorEvent, LaunchCoordinator};
-use crate::orchestrator::Orchestrator;
+use crate::{
+    client::{
+        discovery::PeerDiscoveryEvent, healing::ClientHealth, manager::ClientManager,
+        session::SlotLifecycle,
+    },
+    config::{AppConfig, OrchestratorConfig},
+    launcher::coordinator::{CoordinatorEvent, LaunchCoordinator},
+    orchestrator::Orchestrator,
+};
 use std::time::Duration;
 use tokio::sync::watch;
 
-/// Events emitted by the orchestrator loop for external consumers (TUI, logging).
+/// Events emitted by the orchestrator loop for external consumers (TUI,
+/// logging).
 #[derive(Debug, Clone)]
 pub enum LoopEvent {
     /// A client was detected as unhealthy and sent `/camp desktop`.
@@ -86,7 +89,8 @@ impl OrchestratorLoop {
 
     /// Run the event loop until shutdown is signaled.
     ///
-    /// Returns accumulated events from the final tick (or empty on clean shutdown).
+    /// Returns accumulated events from the final tick (or empty on clean
+    /// shutdown).
     pub async fn run(&mut self) -> Vec<LoopEvent> {
         tracing::info!(
             health_check_ms = self.config.health_check_interval_ms,
@@ -115,12 +119,14 @@ impl OrchestratorLoop {
                     for event in &events {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
+                    self.sync_box_chat_runtime();
                 }
                 _ = launch_interval.tick() => {
                     let events = self.tick_launch_coordinator();
                     for event in &events {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
+                    self.sync_box_chat_runtime();
                 }
                 _ = orch_interval.tick() => {
                     let events = self.tick_peer_discovery();
@@ -128,6 +134,7 @@ impl OrchestratorLoop {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
                     self.orchestrator.tick();
+                    self.sync_box_chat_runtime();
                 }
                 Ok(()) = self.shutdown_rx.changed() => {
                     if *self.shutdown_rx.borrow() {
@@ -157,6 +164,24 @@ impl OrchestratorLoop {
                 }
             })
             .collect()
+    }
+
+    fn sync_box_chat_runtime(&self) {
+        crate::box_chat::update_local_clients(
+            self.orchestrator
+                .client_names
+                .iter()
+                .map(|(pid, name)| (*pid, name.clone())),
+        );
+        match crate::box_chat::reload_from_disk() {
+            Ok(Some(config)) => {
+                tracing::info!(?config, "Reloaded box-chat config from disk");
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(%error, "Failed to reload box-chat config from disk");
+            }
+        }
     }
 
     /// Run health checks on all managed clients.
@@ -244,6 +269,21 @@ impl OrchestratorLoop {
                         let pid = session.pid;
                         session.slot_lifecycle = SlotLifecycle::Live;
                         self.orchestrator.register_client(pid);
+
+                        if let Some(account) = session.bound_toon.as_ref() {
+                            if let Ok(group_id) = u8::try_from(account.group_id) {
+                                self.orchestrator.set_client_group(pid, group_id);
+                            } else {
+                                tracing::warn!(
+                                    client_id,
+                                    pid,
+                                    group_id = account.group_id,
+                                    "Skipping out-of-range group assignment for coordination"
+                                );
+                            }
+                            self.orchestrator
+                                .set_client_class_name(pid, account.class_name.clone());
+                        }
 
                         // Store the session token for the DLL
                         if let Some(name) = &session.character_name {
@@ -335,6 +375,7 @@ impl OrchestratorLoop {
 mod tests {
     use super::*;
     use crate::config::OrchestratorConfig;
+    use textquest_common::login::AccountInfo;
 
     fn test_config() -> OrchestratorConfig {
         OrchestratorConfig {
@@ -411,6 +452,41 @@ mod tests {
         let events = oloop.tick_launch_coordinator();
         // No queued clients = no events
         assert!(events.is_empty());
+    }
+
+    #[test]
+    fn client_ready_caches_group_and_class_metadata() {
+        let config = make_app_config();
+        let (_tx, rx) = watch::channel(false);
+        let mut oloop = OrchestratorLoop::from_config(&config, rx);
+
+        oloop.client_manager.track_client(7, 4242);
+        let account = AccountInfo {
+            account_name: "acct".into(),
+            character_name: "Cleric42".into(),
+            class_name: "Cleric".into(),
+            level: 60,
+            group_id: 2,
+            server_name: "Frostreaver".into(),
+        };
+        {
+            let session = oloop.client_manager.get_mut(7).expect("session");
+            session.bound_toon = Some(account.clone());
+            session.character_name = Some("Cleric42".into());
+        }
+
+        oloop
+            .launch_coordinator
+            .seed_ready_login_for_test(7, account);
+
+        let events = oloop.tick_launch_coordinator();
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, LoopEvent::ClientRegistered { pid: 4242 }))
+        );
+        assert_eq!(oloop.orchestrator.client_group(4242), Some(2));
+        assert_eq!(oloop.orchestrator.client_class_name(4242), Some("Cleric"));
     }
 
     #[test]

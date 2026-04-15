@@ -3,8 +3,7 @@
 //! Captures per-character context snapshots and provides recovery command
 //! sequences when a client crashes or becomes unresponsive.
 
-use std::collections::HashMap;
-use std::time::SystemTime;
+use std::{collections::HashMap, time::SystemTime};
 
 /// A snapshot of the known good state for a single EQ client.
 #[derive(Debug, Clone)]
@@ -36,7 +35,8 @@ impl CrashReporter {
         Self::default()
     }
 
-    /// Stores (or replaces) the latest context for the character named in `ctx`.
+    /// Stores (or replaces) the latest context for the character named in
+    /// `ctx`.
     pub fn record_context(&mut self, ctx: CrashContext) {
         self.contexts.insert(ctx.character.clone(), ctx);
     }
@@ -49,7 +49,8 @@ impl CrashReporter {
 
     /// Looks up crash context for `character`.
     ///
-    /// This is an alias for [`Self::last_context`] retained for API compatibility.
+    /// This is an alias for [`Self::last_context`] retained for API
+    /// compatibility.
     #[must_use]
     pub fn on_crash(&self, character: &str) -> Option<&CrashContext> {
         self.last_context(character)
@@ -57,7 +58,8 @@ impl CrashReporter {
 
     /// Returns the default recovery command sequence for `character`.
     ///
-    /// If a context exists the sequence is `["/camp desktop"]`; otherwise empty.
+    /// If a context exists the sequence is `["/camp desktop"]`; otherwise
+    /// empty.
     #[must_use]
     pub fn recovery_commands(&self, character: &str) -> Vec<String> {
         if self.contexts.contains_key(character) {
@@ -87,7 +89,8 @@ impl CrashReporter {
         };
 
         Some(format!(
-            "=== Crash Report: {} ===\nPID:        {}\nCharacter:  {}\nZone:       {}\nLast State: {}\nTimestamp:  {} (unix secs)\nLog Tail:\n    {}",
+            "=== Crash Report: {} ===\nPID:        {}\nCharacter:  {}\nZone:       {}\nLast \
+             State: {}\nTimestamp:  {} (unix secs)\nLog Tail:\n    {}",
             ctx.character,
             ctx.pid,
             ctx.character,

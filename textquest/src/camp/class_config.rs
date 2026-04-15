@@ -1,4 +1,5 @@
-//! Class-specific ability configurations — loadable from TOML files in `config/classes/`.
+//! Class-specific ability configurations — loadable from TOML files in
+//! `config/classes/`.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -18,15 +19,17 @@ pub struct ClassAbility {
     /// Optional condition expression for when to use this ability.
     #[serde(default)]
     pub condition: Option<String>,
-    /// Buff duration in seconds. For `buff_abilities`, this is how long the buff
-    /// lasts on the target (NOT the recast cooldown). Defaults to `cooldown_secs`
-    /// if not specified, which is correct for abilities where cooldown ≈ duration.
+    /// Buff duration in seconds. For `buff_abilities`, this is how long the
+    /// buff lasts on the target (NOT the recast cooldown). Defaults to
+    /// `cooldown_secs` if not specified, which is correct for abilities
+    /// where cooldown ≈ duration.
     #[serde(default)]
     pub duration_secs: Option<f32>,
 }
 
 impl ClassAbility {
-    /// Effective buff duration — uses explicit `duration_secs` if set, else `cooldown_secs`.
+    /// Effective buff duration — uses explicit `duration_secs` if set, else
+    /// `cooldown_secs`.
     #[must_use]
     pub fn effective_duration_secs(&self) -> f32 {
         self.duration_secs.unwrap_or(self.cooldown_secs)
@@ -127,7 +130,8 @@ impl AbilityProfile {
     }
 }
 
-/// A level-gated override that can replace portions of the base ability profile.
+/// A level-gated override that can replace portions of the base ability
+/// profile.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AbilityProfileOverride {
     /// Human-friendly name for this override profile.
@@ -220,8 +224,8 @@ impl ClassConfig {
         Ok(())
     }
 
-    /// Resolve the effective ability profile for a given level, applying the most
-    /// specific matching override when available.
+    /// Resolve the effective ability profile for a given level, applying the
+    /// most specific matching override when available.
     #[must_use]
     pub fn profile_for_level(&self, level: Option<u8>) -> AbilityProfile {
         let base = AbilityProfile::from_config(self);

@@ -9,8 +9,34 @@ import {
   Square,
   UsersThree,
 } from "@phosphor-icons/react";
-import type { CharacterConfig, ClassParams, RotationEntry } from "../types";
+import type {
+  AutoRezConfig,
+  CharacterConfig,
+  ClassParams,
+  RotationEntry,
+  TributeAlertState,
+} from "../types";
 import { useCharacterConfigs } from "../hooks/useTuning";
+import { formatDuration } from "../utils/time";
+
+const DEFAULT_AUTO_REZ_CONFIG: AutoRezConfig = {
+  enabled: false,
+  min_xp_pct: 90,
+  trusted_casters: [],
+  decline_if_untrusted: false,
+  delay_ms: 3000,
+};
+
+function parseTrustedCasters(value: string): string[] {
+  return Array.from(
+    new Set(
+      value
+        .split(/[\n,]/)
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    ),
+  );
+}
 
 // ─── Slider ──────────────────────────────────────────────────────────────────
 
@@ -119,6 +145,26 @@ function RotationRow({
       </div>
     </div>
   );
+}
+
+function tributeTone(alertState: TributeAlertState) {
+  switch (alertState) {
+    case "expiring":
+      return {
+        badge: "border-amber-400/40 bg-amber-400/10 text-amber-200",
+        label: "Expiring",
+      };
+    case "expired":
+      return {
+        badge: "border-red-500/40 bg-red-500/10 text-red-300",
+        label: "Expired",
+      };
+    default:
+      return {
+        badge: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
+        label: "Stable",
+      };
+  }
 }
 
 // ─── Class-specific params section ───────────────────────────────────────────
@@ -283,13 +329,19 @@ interface CharacterEditorProps {
 }
 
 function CharacterEditor({ config, onSave }: CharacterEditorProps) {
-  const [draft, setDraft] = useState<CharacterConfig>(config);
+  const [draft, setDraft] = useState<CharacterConfig>({
+    ...config,
+    auto_rez: config.auto_rez ?? DEFAULT_AUTO_REZ_CONFIG,
+  });
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
   // Reset draft when selected character changes.
   useEffect(() => {
-    setDraft(config);
+    setDraft({
+      ...config,
+      auto_rez: config.auto_rez ?? DEFAULT_AUTO_REZ_CONFIG,
+    });
     setSaveMsg(null);
   }, [config]);
 
@@ -311,6 +363,8 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
     );
     setDraft({ ...draft, rotation: rot });
   };
+
+  const autoRez = draft.auto_rez ?? DEFAULT_AUTO_REZ_CONFIG;
 
   const handleSave = async () => {
     setSaving(true);
@@ -448,6 +502,257 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
         </div>
       </section>
 
+      <section>
+        <h4 className="font-archaic text-xs uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
+          <Faders size={12} className="text-green-400" />
+          Resurrection Offers
+        </h4>
+        <div className="bg-violet/20 border border-white/5 p-4 flex flex-col gap-5">
+          <button
+            onClick={() =>
+              setDraft({
+                ...draft,
+                auto_rez: { ...autoRez, enabled: !autoRez.enabled },
+              })
+            }
+            className="flex items-center gap-2 text-sm font-tech transition-colors hover:text-magentaglow"
+          >
+            {autoRez.enabled ? (
+              <CheckSquare weight="fill" size={16} className="text-magentaglow" />
+            ) : (
+              <Square size={16} className="text-white/40" />
+            )}
+            <span className="text-white/70">
+              Auto-handle incoming resurrection offers
+            </span>
+          </button>
+
+          <ThresholdSlider
+            label="Minimum Rez XP %"
+            value={autoRez.min_xp_pct}
+            color="text-green-400"
+            onChange={(v) =>
+              setDraft({
+                ...draft,
+                auto_rez: { ...autoRez, min_xp_pct: v },
+              })
+            }
+          />
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() =>
+                setDraft({
+                  ...draft,
+                  auto_rez: {
+                    ...autoRez,
+                    decline_if_untrusted: !autoRez.decline_if_untrusted,
+                  },
+                })
+              }
+              className="flex items-center gap-2 text-sm font-tech transition-colors hover:text-magentaglow"
+            >
+              {autoRez.decline_if_untrusted ? (
+                <CheckSquare weight="fill" size={16} className="text-magentaglow" />
+              ) : (
+                <Square size={16} className="text-white/40" />
+              )}
+              <span className="text-white/70">
+                Auto-decline offers that fail policy checks
+              </span>
+            </button>
+
+            <label className="ml-auto flex items-center gap-2 text-xs font-tech text-white/70">
+              Delay
+              <input
+                type="number"
+                min={0}
+                max={15000}
+                step={100}
+                value={autoRez.delay_ms}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    auto_rez: {
+                      ...autoRez,
+                      delay_ms: Math.min(
+                        15000,
+                        Math.max(0, Math.trunc(Number(e.target.value) || 0)),
+                      ),
+                    },
+                  })
+                }
+                className="w-28 bg-void border border-white/20 text-white text-xs px-3 py-1
+                  focus:outline-none focus:border-magentaglow font-rune"
+              />
+              <span className="text-white/40 font-rune">ms</span>
+            </label>
+          </div>
+
+          <label className="flex flex-col gap-2 text-xs font-tech text-white/70">
+            Trusted Casters
+            <textarea
+              rows={4}
+              value={autoRez.trusted_casters.join("\n")}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  auto_rez: {
+                    ...autoRez,
+                    trusted_casters: parseTrustedCasters(e.target.value),
+                  },
+                })
+              }
+              placeholder="One character per line or comma-separated"
+              className="bg-void border border-white/20 text-white text-xs px-3 py-2
+                focus:outline-none focus:border-magentaglow font-rune placeholder:text-white/30
+                resize-y min-h-24"
+            />
+          </label>
+
+          <p className="text-[10px] text-white/35 font-rune">
+            Offers are only accepted when the rez percent meets the threshold
+            and the caster appears in the trust list. The delay leaves a manual
+            override window before TextQuest clicks the popup.
+          </p>
+        </div>
+      </section>
+
+      {/* Tribute automation */}
+      <section>
+        <h4 className="font-archaic text-xs uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
+          <Faders size={12} className="text-amber-300" />
+          Tribute Automation
+        </h4>
+        <div className="bg-violet/20 border border-white/5 p-4 flex flex-col gap-4">
+          <div className="grid grid-cols-4 gap-3">
+            <div className="border border-white/10 bg-void/40 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-widest text-white/35 font-rune">
+                Status
+              </div>
+              <div className="mt-2">
+                <span
+                  className={`inline-flex items-center border px-2 py-1 text-[10px] uppercase tracking-widest font-rune ${
+                    tributeTone(draft.tribute_status.alert_state).badge
+                  }`}
+                >
+                  {draft.tribute_status.active ? "Active" : "Inactive"} ·{" "}
+                  {tributeTone(draft.tribute_status.alert_state).label}
+                </span>
+              </div>
+            </div>
+            <div className="border border-white/10 bg-void/40 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-widest text-white/35 font-rune">
+                Time Remaining
+              </div>
+              <div className="mt-2 font-rune text-lg text-white">
+                {formatDuration(draft.tribute_status.remaining_secs)}
+              </div>
+            </div>
+            <div className="border border-white/10 bg-void/40 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-widest text-white/35 font-rune">
+                Tribute Balance
+              </div>
+              <div className="mt-2 font-rune text-lg text-amber-200">
+                {draft.tribute_status.point_balance.toLocaleString()}
+              </div>
+            </div>
+            <div className="border border-white/10 bg-void/40 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-widest text-white/35 font-rune">
+                Active Bonuses
+              </div>
+              <div className="mt-2 text-xs text-white/70 font-tech">
+                {draft.tribute_status.active_tributes.length > 0
+                  ? draft.tribute_status.active_tributes.join(", ")
+                  : "None"}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 border border-white/10 bg-void/30 px-3 py-2">
+            <button
+              onClick={() =>
+                setDraft({
+                  ...draft,
+                  tribute_preferences: {
+                    ...draft.tribute_preferences,
+                    auto_activate: !draft.tribute_preferences.auto_activate,
+                  },
+                })
+              }
+              className="flex items-center gap-2 text-sm font-tech transition-colors hover:text-magentaglow"
+            >
+              {draft.tribute_preferences.auto_activate ? (
+                <CheckSquare weight="fill" size={16} className="text-magentaglow" />
+              ) : (
+                <Square size={16} className="text-white/40" />
+              )}
+              <span className="text-white/70">Auto-activate on expiry</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-[180px_1fr] gap-3 items-start">
+            <label
+              htmlFor="tribute-warning-threshold"
+              className="text-[10px] uppercase tracking-widest text-white/35 font-rune pt-2"
+            >
+              Warning Lead Time
+            </label>
+            <input
+              id="tribute-warning-threshold"
+              type="number"
+              min={0}
+              value={draft.tribute_preferences.warning_threshold_secs}
+              onChange={(e) => {
+                const nextValue = e.currentTarget.valueAsNumber;
+                if (!Number.isFinite(nextValue)) {
+                  return;
+                }
+                setDraft({
+                  ...draft,
+                  tribute_preferences: {
+                    ...draft.tribute_preferences,
+                    warning_threshold_secs: Math.max(0, Math.trunc(nextValue)),
+                  },
+                });
+              }}
+              className="w-40 bg-void border border-white/20 text-white text-xs px-3 py-2 focus:outline-none focus:border-magentaglow font-rune"
+            />
+          </div>
+
+          <div className="grid grid-cols-[180px_1fr] gap-3 items-start">
+            <label
+              htmlFor="preferred-tributes"
+              className="text-[10px] uppercase tracking-widest text-white/35 font-rune pt-2"
+            >
+              Preferred Tributes
+            </label>
+            <input
+              id="preferred-tributes"
+              type="text"
+              value={draft.tribute_preferences.preferred_tributes.join(", ")}
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  tribute_preferences: {
+                    ...draft.tribute_preferences,
+                    preferred_tributes: e.target.value
+                      .split(",")
+                      .map((entry) => entry.trim())
+                      .filter(Boolean),
+                  },
+                })
+              }
+              className="w-full bg-void border border-white/20 text-white text-xs px-3 py-2 focus:outline-none focus:border-magentaglow font-rune"
+            />
+          </div>
+          <p className="text-[10px] text-white/35 font-rune">
+            Comma-separated tribute names. The monitor warns before expiry and
+            re-activates this list when points are available.
+          </p>
+        </div>
+      </section>
+
       {/* Group override */}
       <section>
         <h4 className="font-archaic text-xs uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
@@ -503,7 +808,26 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       { id: "3", name: "Minor Healing", priority: 3, enabled: true },
     ],
     class_params: { ch_chain_timing_ms: 200 },
+    auto_rez: {
+      enabled: true,
+      min_xp_pct: 96,
+      trusted_casters: ["Highclerk", "Leafbinder"],
+      decline_if_untrusted: true,
+      delay_ms: 5000,
+    },
     group_override: false,
+    tribute_preferences: {
+      auto_activate: true,
+      warning_threshold_secs: 300,
+      preferred_tributes: ["Marr's Gift", "Champion's Aura"],
+    },
+    tribute_status: {
+      active: true,
+      remaining_secs: 240,
+      point_balance: 3200,
+      active_tributes: ["Marr's Gift"],
+      alert_state: "expiring",
+    },
   },
   {
     character_name: "Noxus",
@@ -518,7 +842,26 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       { id: "3", name: "Taunt", priority: 3, enabled: true },
     ],
     class_params: { burn_at_hp_pct: 30, slow_at_hp_pct: 80 },
+    auto_rez: {
+      enabled: false,
+      min_xp_pct: 90,
+      trusted_casters: ["Frostreaver"],
+      decline_if_untrusted: false,
+      delay_ms: 3000,
+    },
     group_override: false,
+    tribute_preferences: {
+      auto_activate: true,
+      warning_threshold_secs: 420,
+      preferred_tributes: ["Stalwart Ward", "Champion's Aura"],
+    },
+    tribute_status: {
+      active: true,
+      remaining_secs: 3600,
+      point_balance: 1950,
+      active_tributes: ["Stalwart Ward", "Champion's Aura"],
+      alert_state: "ok",
+    },
   },
 ];
 

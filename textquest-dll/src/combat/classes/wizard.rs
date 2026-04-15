@@ -2,8 +2,8 @@ use textquest_common::combat::{AbilityCandidate, AbilitySet, CombatRole, SpellEn
 
 use crate::combat::strategy::{ClassStrategy, CombatContext};
 
-/// Wizard strategy: pure nuke DPS. Highest priority spell available, mana-aware.
-/// EQ class ID: 12
+/// Wizard strategy: pure nuke DPS. Highest priority spell available,
+/// mana-aware. EQ class ID: 12
 pub struct WizardStrategy {
     class_id: u8,
 }
@@ -185,8 +185,7 @@ impl ClassStrategy for WizardStrategy {
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::CombatConfig;
-    use textquest_common::types::SpawnData;
+    use textquest_common::{combat::CombatConfig, types::SpawnData};
 
     fn make_ctx<'a>(
         player: &'a SpawnData,

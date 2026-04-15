@@ -10,11 +10,13 @@ pub mod buffs;
 pub mod cc;
 /// Per-class ability configuration for the camp loop.
 pub mod class_config;
-/// Collectible and tribute management — collection quest progress, tribute automation.
+/// Collectible and tribute management — collection quest progress, tribute
+/// automation.
 pub mod collectibles;
 /// Camp loop configuration — timers, thresholds, zone settings.
 pub mod config;
-/// Event trigger system — configurable condition → action rules for game events (OpenVanilla parity).
+/// Event trigger system — configurable condition → action rules for game events
+/// (OpenVanilla parity).
 pub mod event_triggers;
 /// Auto-forage automation — periodic `/forage` command dispatch.
 pub mod forage;
@@ -30,11 +32,13 @@ pub mod positioning;
 pub mod progression;
 /// Puller logic — pull target selection, pathing, split management.
 pub mod puller;
-/// Quest tracking and task automation — objective progress, auto-completion, reward claiming.
+/// Quest tracking and task automation — objective progress, auto-completion,
+/// reward claiming.
 pub mod quest_tracker;
 /// Recovery phase — med, heal, rebuff between pulls.
 pub mod recovery;
-/// Skill leveling and training automation — tracks skill levels, mastery, and tradeskill sessions.
+/// Skill leveling and training automation — tracks skill levels, mastery, and
+/// tradeskill sessions.
 pub mod skill_tracker;
 /// Camp loop state machine — idle, pulling, fighting, looting, recovering.
 pub mod state;

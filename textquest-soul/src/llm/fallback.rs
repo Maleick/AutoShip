@@ -1,6 +1,8 @@
 use anyhow::Result;
-use textquest_common::nav::Xorshift32;
-use textquest_common::soul::{MoodState, PersonalityTraits, SpeechStyle};
+use textquest_common::{
+    nav::Xorshift32,
+    soul::{MoodState, PersonalityTraits, SpeechStyle},
+};
 
 use super::{LlmProvider, LlmRequest, LlmResponse, Situation};
 use crate::config::EdginessLevel;
@@ -217,7 +219,8 @@ fn idle_phrases(
     traits: &PersonalityTraits,
 ) -> &'static [&'static str] {
     // Delegate to personality engine's phrase tables via mood + edginess
-    // These are additional idle-specific phrases beyond the personality engine's set
+    // These are additional idle-specific phrases beyond the personality engine's
+    // set
     match (mood, edginess) {
         (MoodState::Bored, _) if traits.wanderlust > 0.6 => &[
             "Wonder what's in the next zone over...",
@@ -348,8 +351,10 @@ fn bot_chat_responses(mood: MoodState, traits: &PersonalityTraits) -> &'static [
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::EdginessLevel;
-    use crate::llm::{LlmPriority, LlmProvider, LlmRequest, Situation};
+    use crate::{
+        config::EdginessLevel,
+        llm::{LlmPriority, LlmProvider, LlmRequest, Situation},
+    };
     use textquest_common::soul::{MoodState, PersonalityTraits, SpeechStyle};
 
     fn make_request_with_situation(situation: Situation) -> LlmRequest {

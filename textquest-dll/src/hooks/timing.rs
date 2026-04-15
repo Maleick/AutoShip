@@ -2,11 +2,13 @@
 //!
 //! Win32 timing API hooks (`GetTickCount` / `QueryPerformanceCounter`) can
 //! distort execution measurements when hook callbacks add measurable latency.
-//! TextQuest can optionally subtract accumulated hook overhead from timing values
-//! to avoid false-positive anti-debug detections.
+//! TextQuest can optionally subtract accumulated hook overhead from timing
+//! values to avoid false-positive anti-debug detections.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::Duration;
+use std::{
+    sync::atomic::{AtomicBool, AtomicU64, Ordering},
+    time::Duration,
+};
 
 const NS_PER_MS: u64 = 1_000_000;
 

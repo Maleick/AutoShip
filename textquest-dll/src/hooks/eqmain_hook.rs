@@ -11,8 +11,10 @@
 //! The IPC thread queues commands via atomics; this hook consumes them.
 
 use super::hwbp::{self, HwbpSlot};
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::{
+    Mutex,
+    atomic::{AtomicBool, AtomicU8, Ordering},
+};
 
 const EQMAIN_HOOK_SLOT: HwbpSlot = HwbpSlot::Dr1;
 
@@ -274,7 +276,8 @@ fn resolve_server_id(name: &str) -> Option<i32> {
     None
 }
 
-/// Attempt to join server via `LoginServerAPI::JoinServer`. Returns `true` on success.
+/// Attempt to join server via `LoginServerAPI::JoinServer`. Returns `true` on
+/// success.
 #[cfg(windows)]
 fn try_join_server_api(eqmain_base: u64) -> bool {
     use textquest_common::offsets::eqmain as off;

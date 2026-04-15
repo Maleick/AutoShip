@@ -2,11 +2,12 @@ use anyhow::Result;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use ratatui::Terminal;
-use ratatui::prelude::CrosstermBackend;
-use std::collections::{HashMap, HashSet};
-use std::io;
-use std::time::{Duration, Instant};
+use ratatui::{Terminal, prelude::CrosstermBackend};
+use std::{
+    collections::{HashMap, HashSet},
+    io,
+    time::{Duration, Instant},
+};
 
 #[cfg(windows)]
 use std::sync::LazyLock;
@@ -23,15 +24,17 @@ impl Drop for TerminalGuard {
     }
 }
 
-use super::app::App;
-use super::app::{ChChainStatus, NavClientStatus};
-use super::cast::{CastDisplay, short_cast_label};
-use super::event::handle_events;
-use super::live_cast_capture::{LIVE_CAST_CAPTURE_ENV, live_cast_capture_enabled};
-use super::ui::ch_chain::{CastState as ChPanelCastState, ChainCleric};
-use super::ui::draw;
-use crate::eq::structs::SpawnInfo;
-use crate::orchestrator::Orchestrator;
+use super::{
+    app::{App, ChChainStatus, NavClientStatus},
+    cast::{CastDisplay, short_cast_label},
+    event::handle_events,
+    live_cast_capture::{LIVE_CAST_CAPTURE_ENV, live_cast_capture_enabled},
+    ui::{
+        ch_chain::{CastState as ChPanelCastState, ChainCleric},
+        draw,
+    },
+};
+use crate::{eq::structs::SpawnInfo, orchestrator::Orchestrator};
 #[cfg(any(windows, test))]
 use textquest_common::nav::{NavStatus, PauseReason};
 
@@ -168,6 +171,20 @@ fn run_loop(
                 .collect();
             orchestrator.routing_scope = app.routing_scope.clone();
             orchestrator.scope_pids = app.focused_pids();
+            crate::box_chat::update_local_clients(
+                app.clients
+                    .iter()
+                    .map(|client| (client.pid, client.character_name.clone())),
+            );
+            match crate::box_chat::reload_from_disk() {
+                Ok(Some(config)) => {
+                    tracing::info!(?config, "Reloaded box-chat config from disk");
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    tracing::warn!(%error, "Failed to reload box-chat config from disk");
+                }
+            }
             last_process_scan = Instant::now();
         }
 
@@ -751,8 +768,7 @@ fn refresh_eq_data_live(
     shared_state_readers: &mut HashMap<u32, SharedStateReader>,
     shared_state_reader_retry_at: &mut HashMap<u32, Instant>,
 ) {
-    use crate::eq;
-    use crate::process::memory::ProcessHandle;
+    use crate::{eq, process::memory::ProcessHandle};
 
     let selected_index = app.selected_client;
     let now = Instant::now();
@@ -827,7 +843,8 @@ fn refresh_eq_data_live(
         }
         client.last_fast_refresh = Some(now);
 
-        // Read spawn list on a staged cadence: selected client stays fast, others are throttled.
+        // Read spawn list on a staged cadence: selected client stays fast, others are
+        // throttled.
         if refresh_spawns {
             let perf_start = if *PERF_TRACE_ENABLED {
                 Some(Instant::now())
@@ -858,8 +875,8 @@ fn refresh_eq_data_live(
             }
         }
 
-        // Read zone name on the same cadence as spawn snapshots unless the active client
-        // is currently missing zone data.
+        // Read zone name on the same cadence as spawn snapshots unless the active
+        // client is currently missing zone data.
         if refresh_zone {
             match eq::spawn::read_zone_name(&proc, client.eq_base) {
                 Ok(zone) => client.zone_name = zone,
@@ -1080,8 +1097,9 @@ fn load_demo_data(app: &mut App) {
     // Names use trailing digits (e.g., "Dmft01") so they match group slots
     // via extract_account_number().
     //
-    // Format: (name, class_id, level, hp, hp_max, mana, mana_max, stand_state, zone, race_id)
-    // Melee classes have mana 0. Caster/hybrid mana is class-appropriate.
+    // Format: (name, class_id, level, hp, hp_max, mana, mana_max, stand_state,
+    // zone, race_id) Melee classes have mana 0. Caster/hybrid mana is
+    // class-appropriate.
     type DemoClient<'a> = (
         &'a str,
         u8,
@@ -1493,8 +1511,8 @@ fn clamp_demo_xy_to_map_bounds(
 }
 
 /// Convert a zone display name (long name from zoneHeader) to its EQ short name
-/// for Brewall map file lookup. Handles both display names ("West Freeport") and
-/// short names that are already correct ("freportw").
+/// for Brewall map file lookup. Handles both display names ("West Freeport")
+/// and short names that are already correct ("freportw").
 pub(super) fn zone_to_short_name(zone_name: &str) -> String {
     let lower = zone_name.to_lowercase();
     match lower.as_str() {
@@ -1547,7 +1565,8 @@ pub(super) fn zone_to_short_name(zone_name: &str) -> String {
 }
 
 /// Tick the Soul Engine coordinator (if enabled).
-/// Generates soul commands (idle behaviors, chat, emotes) for all registered characters.
+/// Generates soul commands (idle behaviors, chat, emotes) for all registered
+/// characters.
 fn tick_soul_engine(app: &mut App) {
     let Some(coordinator) = app.soul_coordinator.as_mut() else {
         return;
@@ -1555,7 +1574,8 @@ fn tick_soul_engine(app: &mut App) {
 
     // Build game states from current app data
     // In the full orchestrator, this comes from shared memory per client.
-    // For now, use an empty map (no clients registered yet = no commands generated).
+    // For now, use an empty map (no clients registered yet = no commands
+    // generated).
     let states: HashMap<textquest_common::types::ClientId, textquest_common::types::GameState> =
         HashMap::new();
 
@@ -1564,7 +1584,8 @@ fn tick_soul_engine(app: &mut App) {
     if !commands.is_empty() {
         tracing::debug!(count = commands.len(), "Soul Engine generated commands");
         // Soul commands are logged but not dispatched in TUI demo mode.
-        // The Orchestrator handles IPC delivery when live clients are connected.
+        // The Orchestrator handles IPC delivery when live clients are
+        // connected.
     }
 
     for alert in &alerts {
@@ -1580,7 +1601,8 @@ fn tick_soul_engine(app: &mut App) {
     app.soul_tick_counter += 1;
 }
 
-/// Poll all log watchers for new events and merge into the aggregate loot database.
+/// Poll all log watchers for new events and merge into the aggregate loot
+/// database.
 fn poll_log_watchers(app: &mut App) {
     use crate::eq::log_parser::LogEvent;
     for watcher in &mut app.log_watchers {
@@ -1715,7 +1737,8 @@ mod tests {
         assert_eq!(
             stuck.blockers,
             vec![String::from(
-                "Movement validation reported no progress; recovery attempt 2 is active in greatdivide."
+                "Movement validation reported no progress; recovery attempt 2 is active in \
+                 greatdivide."
             )]
         );
     }

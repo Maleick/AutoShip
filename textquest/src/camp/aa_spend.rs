@@ -1,7 +1,8 @@
 //! AA spend automation — prioritized alternate advancement point spending.
 //!
-//! Tracks available AA points and a prioritized list of abilities, automatically
-//! selecting the next ability to purchase based on priority and affordability.
+//! Tracks available AA points and a prioritized list of abilities,
+//! automatically selecting the next ability to purchase based on priority and
+//! affordability.
 
 /// A single alternate advancement ability with rank progression.
 #[derive(Debug, Clone)]
@@ -75,7 +76,8 @@ impl AaSpendManager {
             .saturating_sub(self.config.min_reserve_points)
     }
 
-    /// Returns the highest-priority ability that is not yet maxed and affordable.
+    /// Returns the highest-priority ability that is not yet maxed and
+    /// affordable.
     ///
     /// Abilities are selected by lowest `priority` value first. Among equal
     /// priorities, the first in the list wins.
@@ -91,7 +93,8 @@ impl AaSpendManager {
             .min_by_key(|a| a.priority)
     }
 
-    /// Records a successful purchase of the given ability, incrementing its rank.
+    /// Records a successful purchase of the given ability, incrementing its
+    /// rank.
     ///
     /// Returns `false` if the ability is already at max rank or not found.
     pub fn record_purchase(&mut self, ability_id: u32) -> bool {

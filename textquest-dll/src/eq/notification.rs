@@ -8,21 +8,24 @@
 //! # Design
 //!
 //! - [`XwmMessage`] — typed enum covering all 51 known `EXWndNotification` IDs.
-//!   Raw `u32` codes are decoded via `From<u32>`. Unknown codes become [`XwmMessage::Unknown`].
+//!   Raw `u32` codes are decoded via `From<u32>`. Unknown codes become
+//!   [`XwmMessage::Unknown`].
 //! - [`NotificationController`] — in-memory registry that maps message types to
-//!   a list of handler closures. Call [`NotificationController::register`] to subscribe,
-//!   [`NotificationController::unregister`] to remove a subscription, and
-//!   [`NotificationController::dispatch`] to fire all handlers for an event.
-//! - Module-level free functions (`register`, `unregister`, `dispatch`) delegate to a
-//!   process-wide singleton (`NOTIFICATION_CONTROLLER`) so callers don't need to pass
-//!   controller references through call chains.
+//!   a list of handler closures. Call [`NotificationController::register`] to
+//!   subscribe, [`NotificationController::unregister`] to remove a
+//!   subscription, and [`NotificationController::dispatch`] to fire all
+//!   handlers for an event.
+//! - Module-level free functions (`register`, `unregister`, `dispatch`)
+//!   delegate to a process-wide singleton (`NOTIFICATION_CONTROLLER`) so
+//!   callers don't need to pass controller references through call chains.
 //!
 //! # Thread safety
 //!
-//! All singleton access is guarded by a [`std::sync::Mutex`]. **Handlers must not call
-//! `register` or `unregister` on the global singleton while inside a `dispatch` call** —
-//! that would attempt to re-acquire the same lock and deadlock. If re-entrant registration
-//! is needed, schedule it for the next game tick.
+//! All singleton access is guarded by a [`std::sync::Mutex`]. **Handlers must
+//! not call `register` or `unregister` on the global singleton while inside a
+//! `dispatch` call** — that would attempt to re-acquire the same lock and
+//! deadlock. If re-entrant registration is needed, schedule it for the next
+//! game tick.
 //!
 //! # Usage
 //!
@@ -46,19 +49,22 @@
 //! notification::unregister(id);
 //! ```
 
-use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::{
+    collections::HashMap,
+    sync::{Mutex, OnceLock},
+};
 
 // ─── Message enum ────────────────────────────────────────────────────────────
 
 /// EQ window notification message IDs (`EXWndNotification` enum).
 ///
-/// Covers the full vocabulary of 51 message types used by `CXWnd::WndNotification`.
-/// Numeric values match EQ's vtable call convention (confirmed from MQ2 eqlib headers).
+/// Covers the full vocabulary of 51 message types used by
+/// `CXWnd::WndNotification`. Numeric values match EQ's vtable call convention
+/// (confirmed from MQ2 eqlib headers).
 ///
-/// Value 1 (`LClick`) is the only type currently dispatched by existing DLL code;
-/// the rest are defined here so handlers can be registered ahead of the vtable hook
-/// without manually tracking raw `u32` constants.
+/// Value 1 (`LClick`) is the only type currently dispatched by existing DLL
+/// code; the rest are defined here so handlers can be registered ahead of the
+/// vtable hook without manually tracking raw `u32` constants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum XwmMessage {
     /// Null / no-op message. Rarely dispatched.
@@ -285,7 +291,8 @@ impl From<XwmMessage> for u32 {
     }
 }
 
-// ─── Event struct ─────────────────────────────────────────────────────────────
+// ─── Event struct
+// ─────────────────────────────────────────────────────────────
 
 /// Context passed to handlers when a notification is dispatched.
 #[derive(Debug, Clone, Copy)]
@@ -300,7 +307,8 @@ pub struct NotificationEvent {
     pub data: usize,
 }
 
-// ─── Controller ───────────────────────────────────────────────────────────────
+// ─── Controller
+// ───────────────────────────────────────────────────────────────
 
 /// Opaque registration handle returned by [`NotificationController::register`].
 ///
@@ -320,9 +328,9 @@ struct HandlerEntry {
 /// Maintains a per-message-type list of handler closures. Handlers are called
 /// synchronously from [`dispatch`], in registration order.
 ///
-/// Use the module-level free functions [`register`], [`unregister`], and [`dispatch`]
-/// to interact with the process-wide singleton, or construct a local instance for
-/// isolated testing.
+/// Use the module-level free functions [`register`], [`unregister`], and
+/// [`dispatch`] to interact with the process-wide singleton, or construct a
+/// local instance for isolated testing.
 pub struct NotificationController {
     next_id: u64,
     handlers: HashMap<XwmMessage, Vec<HandlerEntry>>,
@@ -365,7 +373,8 @@ impl NotificationController {
 
     /// Remove a handler by its registration ID.
     ///
-    /// Returns `true` if the handler was found and removed, `false` if not found.
+    /// Returns `true` if the handler was found and removed, `false` if not
+    /// found.
     pub fn unregister(&mut self, id: HandlerId) -> bool {
         for handlers in self.handlers.values_mut() {
             if let Some(pos) = handlers.iter().position(|e| e.id == id) {
@@ -381,14 +390,17 @@ impl NotificationController {
         false
     }
 
-    /// Dispatch a notification event to all handlers registered for its message type.
+    /// Dispatch a notification event to all handlers registered for its message
+    /// type.
     ///
-    /// Logs the event at `debug` level regardless of how many handlers are registered.
-    /// If no handlers are registered for the message type, this is a no-op (not an error).
+    /// Logs the event at `debug` level regardless of how many handlers are
+    /// registered. If no handlers are registered for the message type, this
+    /// is a no-op (not an error).
     ///
-    /// **Do not call `register` or `unregister` on the global singleton from inside a
-    /// handler** — that would deadlock while the singleton mutex is held. Schedule
-    /// any re-entrant registration for the next game tick instead.
+    /// **Do not call `register` or `unregister` on the global singleton from
+    /// inside a handler** — that would deadlock while the singleton mutex
+    /// is held. Schedule any re-entrant registration for the next game tick
+    /// instead.
     pub fn dispatch(&self, event: NotificationEvent) {
         tracing::debug!(
             message = ?event.message,
@@ -422,7 +434,8 @@ impl Default for NotificationController {
     }
 }
 
-// ─── Global singleton ─────────────────────────────────────────────────────────
+// ─── Global singleton
+// ─────────────────────────────────────────────────────────
 
 static NOTIFICATION_CONTROLLER: OnceLock<Mutex<NotificationController>> = OnceLock::new();
 

@@ -8,9 +8,7 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::tui::dps::DpsTracker;
-use crate::tui::theme::Theme;
-use crate::tui::ui::widgets::panel;
+use crate::tui::{dps::DpsTracker, theme::Theme, ui::widgets::panel};
 
 /// Color palette for DPS bars — cycles through these for visual distinction.
 const BAR_COLORS: [fn(&Theme) -> ratatui::style::Color; 6] = [

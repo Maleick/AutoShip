@@ -48,7 +48,7 @@ Options:
 Profiles:
   dev   Install Rust stable + nightly, clippy, rustfmt. Check for cargo, git.
   test  Everything in dev, plus check for python3 and install Python test deps.
-  full  Everything in test, plus check for gh CLI (GitHub CLI).
+  full  Everything in test, plus verify gh CLI (GitHub CLI) auth.
 
 Examples:
   $(basename "$0")                     # Minimal dev setup
@@ -234,8 +234,53 @@ fi
 if [[ "$PROFILE" == "full" ]]; then
     header "8. GitHub CLI (gh)"
     if command -v gh &>/dev/null; then
-        GH_VER=$(gh --version 2>&1 | head -1)
+        GH_VERSION_CONFIG="$(mktemp -d)"
+        GH_VER=$(GH_CONFIG_DIR="$GH_VERSION_CONFIG" gh --version 2>&1 | head -1)
+        rm -rf "$GH_VERSION_CONFIG"
         pass "gh: $GH_VER"
+
+        info "Checking gh auth..."
+        GH_AUTH_SOURCE="local gh auth session"
+        GH_ENV_PREFIX=()
+        GH_CLEAN_CONFIG=""
+        if [[ -n "${GH_TOKEN:-}" || -n "${GITHUB_TOKEN:-}" ]]; then
+            GH_AUTH_SOURCE="GH_TOKEN/GITHUB_TOKEN environment"
+            GH_CLEAN_CONFIG="$(mktemp -d)"
+            GH_ENV_PREFIX=(env "GH_CONFIG_DIR=$GH_CLEAN_CONFIG")
+        fi
+
+        if [[ $DRY_RUN -eq 1 ]]; then
+            if [[ -n "$GH_CLEAN_CONFIG" ]]; then
+                info "would run: GH_CONFIG_DIR=<temp> gh auth status"
+                info "would run: GH_CONFIG_DIR=<temp> gh repo view"
+            else
+                info "would run: gh auth status"
+                info "would run: gh repo view"
+            fi
+            pass "gh auth verification configured ($GH_AUTH_SOURCE)"
+        else
+            GH_AUTH_OK=0
+            GH_REPO_OK=0
+            if "${GH_ENV_PREFIX[@]}" gh auth status >/dev/null 2>&1; then
+                GH_AUTH_OK=1
+                if "${GH_ENV_PREFIX[@]}" gh repo view >/dev/null 2>&1; then
+                    GH_REPO_OK=1
+                fi
+            fi
+
+            if [[ -n "$GH_CLEAN_CONFIG" ]]; then
+                rm -rf "$GH_CLEAN_CONFIG"
+            fi
+
+            if [[ $GH_AUTH_OK -eq 1 && $GH_REPO_OK -eq 1 ]]; then
+                pass "gh auth OK ($GH_AUTH_SOURCE)"
+            elif [[ $GH_AUTH_OK -eq 1 ]]; then
+                warn "gh auth is configured, but repo access could not be verified from this checkout"
+                info "If this repo should be reachable, run: gh repo view"
+            else
+                fail "gh auth is not usable — run 'gh auth login' or export GH_TOKEN/GITHUB_TOKEN"
+            fi
+        fi
     else
         PLATFORM="$(uname -s)"
         if [[ "$PLATFORM" == "Darwin" ]] && command -v brew &>/dev/null; then
@@ -244,6 +289,7 @@ if [[ "$PROFILE" == "full" ]]; then
             if command -v gh &>/dev/null; then
                 GH_VER=$(gh --version 2>&1 | head -1)
                 pass "gh installed: $GH_VER"
+                fail "gh is installed, but auth is not configured yet — run 'gh auth login' or export GH_TOKEN/GITHUB_TOKEN"
             else
                 fail "gh installation failed — install manually: https://cli.github.com"
             fi
@@ -253,6 +299,7 @@ if [[ "$PROFILE" == "full" ]]; then
             info "  Debian/Ubuntu: sudo apt install gh"
             info "  Fedora/RHEL:   sudo dnf install gh"
             info "  Arch:          sudo pacman -S github-cli"
+            info "After install, run: gh auth login"
             ERRORS=$((ERRORS + 1))
         else
             fail "gh CLI is not installed — install from https://cli.github.com"

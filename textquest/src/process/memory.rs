@@ -44,15 +44,15 @@ impl ProcessHandle {
         Ok(Self { pid })
     }
 
-    /// Get the base address of the main executable module in the target process.
+    /// Get the base address of the main executable module in the target
+    /// process.
     ///
     /// # Errors
     ///
     /// Returns an error if the operation fails.
     #[cfg(windows)]
     pub fn module_base(&self) -> Result<u64> {
-        use windows::Win32::Foundation::HMODULE;
-        use windows::Win32::System::ProcessStatus::EnumProcessModules;
+        use windows::Win32::{Foundation::HMODULE, System::ProcessStatus::EnumProcessModules};
 
         let mut module = HMODULE::default();
         let mut bytes_needed: u32 = 0;
@@ -228,10 +228,12 @@ impl Drop for ProcessHandle {
 /// Returns an error if the operation fails.
 #[cfg(windows)]
 pub fn find_processes_by_name(name: &str) -> Result<Vec<u32>> {
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::ProcessStatus::{EnumProcesses, GetModuleBaseNameW};
-    use windows::Win32::System::Threading::{
-        OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+    use windows::Win32::{
+        Foundation::CloseHandle,
+        System::{
+            ProcessStatus::{EnumProcesses, GetModuleBaseNameW},
+            Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ},
+        },
     };
 
     let mut pids = [0u32; 4096];

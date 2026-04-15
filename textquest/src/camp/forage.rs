@@ -10,8 +10,7 @@
     clippy::too_long_first_doc_paragraph
 )]
 
-use std::sync::mpsc;
-use std::time::Instant;
+use std::{sync::mpsc, time::Instant};
 
 use serde::{Deserialize, Serialize};
 use textquest_common::ipc::{Command, IpcCommand};
@@ -67,7 +66,8 @@ pub struct ForageManager {
     pub last_forage_tick: Option<Instant>,
     /// Total number of `/forage` commands sent this session.
     pub skill_uses: u64,
-    /// Ring buffer of recent forage result messages (capped at `max_results_history`).
+    /// Ring buffer of recent forage result messages (capped at
+    /// `max_results_history`).
     pub results: Vec<String>,
     /// Maximum number of entries kept in `results`.
     max_results_history: usize,

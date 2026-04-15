@@ -3,12 +3,14 @@
 //! This module provides structured error types and automatic recovery actions
 //! covering IPC, Zone, Combat, Config, Injection, and Network error categories.
 //! Each error variant includes a severity level (Fatal/Recoverable/Warning) and
-//! can be mapped to automatic recovery actions (Retry, Reconnect, Rezone, etc.).
+//! can be mapped to automatic recovery actions (Retry, Reconnect, Rezone,
+//! etc.).
 
 use crate::types::ClientId;
-use std::fmt;
-use std::io;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    fmt, io,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 /// Severity level for an error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

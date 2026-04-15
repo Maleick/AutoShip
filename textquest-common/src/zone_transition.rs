@@ -184,7 +184,8 @@ impl ZoneTransitionRetryState {
 
     /// Schedule the next backoff period using exponential backoff formula.
     ///
-    /// Backoff time = `base_backoff_ms * 2^(attempt_count - 1)`, capped at `max_backoff_ms`.
+    /// Backoff time = `base_backoff_ms * 2^(attempt_count - 1)`, capped at
+    /// `max_backoff_ms`.
     fn schedule_backoff(&mut self) {
         if self.attempt_count == 0 {
             self.backoff_until = Instant::now();

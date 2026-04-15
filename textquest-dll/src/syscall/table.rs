@@ -51,7 +51,8 @@ impl SyscallTable {
 //   B8 XX XX 00 00  mov eax, <SSN>
 // A hooked stub typically starts with E9 (JMP).
 
-/// Byte pattern for the start of a clean syscall stub: `mov r10, rcx; mov eax,`.
+/// Byte pattern for the start of a clean syscall stub: `mov r10, rcx; mov
+/// eax,`.
 const CLEAN_STUB_PREFIX: [u8; 4] = [0x4C, 0x8B, 0xD1, 0xB8];
 
 /// Byte pattern for the `syscall; ret` gadget we search for inside ntdll.
@@ -289,9 +290,13 @@ struct ImageSectionHeader {
 /// Only resolves functions whose DJB2 hash matches `target_hashes`.
 #[cfg(windows)]
 pub fn build_syscall_table(target_hashes: &[u32]) -> Result<SyscallTable, SyscallError> {
-    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-    use windows::Win32::System::Memory::{MEMORY_MAPPED_VIEW_ADDRESS, UnmapViewOfFile};
-    use windows::core::PCWSTR;
+    use windows::{
+        Win32::System::{
+            LibraryLoader::GetModuleHandleW,
+            Memory::{MEMORY_MAPPED_VIEW_ADDRESS, UnmapViewOfFile},
+        },
+        core::PCWSTR,
+    };
 
     // 1. Get the real loaded ntdll base (for gadget search).
     let real_ntdll_base = unsafe {
@@ -362,9 +367,13 @@ fn map_fresh_ntdll() -> Result<*const u8, SyscallError> {
 /// to the clean copy.
 #[cfg(windows)]
 fn open_knowndlls_section() -> Result<windows::Win32::Foundation::HANDLE, SyscallError> {
-    use windows::Win32::Foundation::HANDLE;
-    use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
-    use windows::core::{PCWSTR, s};
+    use windows::{
+        Win32::{
+            Foundation::HANDLE,
+            System::LibraryLoader::{GetModuleHandleW, GetProcAddress},
+        },
+        core::{PCWSTR, s},
+    };
 
     let ntdll = unsafe {
         let name: Vec<u16> = "ntdll.dll\0".encode_utf16().collect();

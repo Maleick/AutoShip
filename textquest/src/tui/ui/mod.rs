@@ -1,4 +1,5 @@
-//! TUI renderer — entry point and global chrome (header, status bar, help overlay).
+//! TUI renderer — entry point and global chrome (header, status bar, help
+//! overlay).
 //!
 //! Each screen lives in its own sub-module:
 //! - [`dashboard`]   — character grid + health gauges + session stats
@@ -6,7 +7,8 @@
 //! - [`map`]         — zone map + named tracker
 //! - [`groups`]      — per-group panels with buff timer columns
 //! - [`navigation`]  — nav status + commands reference
-//! - [`widgets`]     — shared helpers (`panel`, `themed_header_row`, colour fns …)
+//! - [`widgets`]     — shared helpers (`panel`, `themed_header_row`, colour fns
+//!   …)
 
 pub mod ch_chain;
 pub mod dashboard;
@@ -31,15 +33,18 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
-use crate::tui::app::{ActivePanel, ActiveScreen, App, HelpFocus, ToastLevel};
-use crate::tui::command::HelpSection;
-use crate::tui::ui::widgets::{
-    WidthClass, centered_popup, classify_width, line_width, spans_width, truncate_inline,
+use crate::tui::{
+    app::{ActivePanel, ActiveScreen, App, HelpFocus, ToastLevel},
+    command::HelpSection,
+    ui::widgets::{
+        WidthClass, centered_popup, classify_width, line_width, spans_width, truncate_inline,
+    },
 };
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
-/// Top-level render function — applies outer margin then dispatches to the active screen.
+/// Top-level render function — applies outer margin then dispatches to the
+/// active screen.
 pub fn draw(frame: &mut Frame, app: &mut App) {
     // Apply a 1-cell horizontal margin so content never touches the terminal edges.
     let area = frame.area().inner(Margin {
@@ -65,7 +70,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         ActiveScreen::Debug => spawns::draw_debug_screen(frame, outer[1], app),
         ActiveScreen::PacketMonitor => packets::draw_packet_monitor(frame, outer[1], app),
         ActiveScreen::Economy => economy_controls::draw_economy_screen(frame, outer[1], app),
-        ActiveScreen::Orchestrator => economy_controls::draw_economy_screen(frame, outer[1], app),
+        ActiveScreen::Orchestrator => {
+            orchestrator_panel::draw_orchestrator_screen(frame, outer[1], app);
+        }
     }
 
     draw_status_bar(frame, outer[2], app);
@@ -166,8 +173,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         let toast_text = truncate_inline(&full_text, area.width.saturating_sub(4) as usize);
         let toast_width = (toast_text.chars().count() + 2).min(area.width as usize) as u16;
         let toast_x = area.x + area.width.saturating_sub(toast_width).saturating_sub(1);
-        // Position toast at bottom-right, just above the status bar (which starts at outer[2])
-        // outer[2] starts at outer[0].height + outer[1].height, so toast goes one row above that
+        // Position toast at bottom-right, just above the status bar (which starts at
+        // outer[2]) outer[2] starts at outer[0].height + outer[1].height, so
+        // toast goes one row above that
         let toast_y = outer[2].y.saturating_sub(1);
         let toast_area = Rect::new(toast_x, toast_y, toast_width, 1);
         frame.render_widget(Clear, toast_area);
@@ -736,7 +744,8 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     );
 }
 
-// ─── Help overlay ─────────────────────────────────────────────────────────────
+// ─── Help overlay
+// ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
 struct HelpLine {
@@ -1051,11 +1060,13 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eq::structs::{
-        BuffSlot, CastDurationSource, CastState as EqCastState, EqClass, SpawnInfo, SpawnType,
-        StandState,
+    use crate::{
+        eq::structs::{
+            BuffSlot, CastDurationSource, CastState as EqCastState, EqClass, SpawnInfo, SpawnType,
+            StandState,
+        },
+        tui::app::{ChChainStatus, ClientState, GroupDef, NavClientStatus},
     };
-    use crate::tui::app::{ChChainStatus, ClientState, GroupDef, NavClientStatus};
     use ratatui::{Terminal, backend::TestBackend};
     use textquest_common::nav::NavStatus;
 
@@ -1123,6 +1134,44 @@ mod tests {
     }
 
     #[test]
+    fn orchestrator_screen_dispatches_to_dashboard_renderer() {
+        let mut app = sample_app();
+        app.set_active_screen(ActiveScreen::Orchestrator);
+
+        let rendered = render_app(app, 150, 36);
+
+        assert!(rendered.contains("Session"));
+        assert!(rendered.contains("System"));
+        assert!(!rendered.contains("Economy Operator Controls"));
+    }
+
+    #[test]
+    fn orchestrator_screen_renders_system_health_when_tab_changes() {
+        let mut app = sample_app();
+        app.set_active_screen(ActiveScreen::Orchestrator);
+        app.orchestrator_state.active_tab =
+            crate::tui::ui::orchestrator_panel::OrchestratorTab::System;
+
+        let rendered = render_app(app, 140, 34);
+
+        assert!(rendered.contains("Client Health"));
+        assert!(rendered.contains("System Detail"));
+        assert!(rendered.contains("IPC p50/p95/p99"));
+    }
+
+    #[test]
+    fn orchestrator_screen_stays_readable_on_narrow_terminals() {
+        let mut app = sample_app();
+        app.set_active_screen(ActiveScreen::Orchestrator);
+
+        let rendered = render_app(app, 90, 24);
+
+        assert!(rendered.contains("Operator Dashboard"));
+        assert!(rendered.contains("Dashboard Shortcuts"));
+        assert!(rendered.contains("Session"));
+    }
+
+    #[test]
     fn help_overlay_small_host_uses_compact_rows() {
         let mut app = sample_app();
         app.help_visible = true;
@@ -1173,8 +1222,9 @@ mod tests {
         );
 
         // Check that toast appears in the bottom area (around row 11-13)
-        // Terminal is 15 rows: header (rows 0-2), body (rows 3-10), status bar (rows 11-13)
-        // Toast should appear at row 10 (just above status bar at row 11)
+        // Terminal is 15 rows: header (rows 0-2), body (rows 3-10), status bar (rows
+        // 11-13) Toast should appear at row 10 (just above status bar at row
+        // 11)
         let has_toast_in_lower_area = lines
             .iter()
             .skip(8) // Start checking from row 8 onwards
@@ -1222,6 +1272,14 @@ mod tests {
             is_adaptive: true,
             target_id: 42,
         });
+        app.economy_state.loot_recent_items = vec![
+            String::from("Fungus Covered Scale Tunic"),
+            String::from("Crown of Narandi"),
+        ];
+        app.economy_state.loot_queue_size = 3;
+        app.economy_state.vendor_cycles_completed = 2;
+        app.economy_state.banking_chars_total = 6;
+        app.economy_state.banking_chars_done = 4;
         app.clients = (1..=12).map(sample_client).collect();
         app.selected_client = 0;
         app.sync_from_selected_client();

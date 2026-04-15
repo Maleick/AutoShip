@@ -1,8 +1,8 @@
 //! Operator controls and safety mechanisms for the Soul Engine.
 //!
-//! Provides a kill-switch, per-character suppression, alert history, and chat-rate
-//! thresholds so an operator can quickly quell unwanted behavior across all managed
-//! characters without restarting the process.
+//! Provides a kill-switch, per-character suppression, alert history, and
+//! chat-rate thresholds so an operator can quickly quell unwanted behavior
+//! across all managed characters without restarting the process.
 
 use std::collections::{HashSet, VecDeque};
 
@@ -15,7 +15,8 @@ use std::collections::{HashSet, VecDeque};
 pub enum SoulAlertType {
     /// A character exceeded the configured chat-rate threshold.
     ExcessiveChatRate,
-    /// A character produced output that fell outside expected behavioral bounds.
+    /// A character produced output that fell outside expected behavioral
+    /// bounds.
     UnexpectedBehavior,
     /// The Soul Engine's LLM request queue has grown beyond healthy levels.
     QueueBackpressure,
@@ -26,13 +27,15 @@ pub enum SoulAlertType {
 /// A single operator-visible alert emitted by the Soul Engine.
 #[derive(Debug, Clone)]
 pub struct SoulAlert {
-    /// The character that triggered this alert (or `"<system>"` for system-level alerts).
+    /// The character that triggered this alert (or `"<system>"` for
+    /// system-level alerts).
     pub character: String,
     /// Category of this alert.
     pub alert_type: SoulAlertType,
     /// Human-readable description of the event.
     pub message: String,
-    /// Monotonic instant at which the alert was recorded, for elapsed-time calculations.
+    /// Monotonic instant at which the alert was recorded, for elapsed-time
+    /// calculations.
     pub timestamp: std::time::SystemTime,
 }
 
@@ -65,10 +68,11 @@ const MAX_ALERT_HISTORY: usize = 50;
 /// before producing output for a character.  Operators can:
 ///
 /// * Toggle a **global kill-switch** that immediately blocks all characters.
-/// * **Suppress** individual characters without affecting the rest of the group.
+/// * **Suppress** individual characters without affecting the rest of the
+///   group.
 /// * Inspect an **alert history** of recent safety events.
-/// * Configure a **chat-rate threshold** (chats per minute) used by monitoring code
-///   to emit [`SoulAlertType::ExcessiveChatRate`] alerts.
+/// * Configure a **chat-rate threshold** (chats per minute) used by monitoring
+///   code to emit [`SoulAlertType::ExcessiveChatRate`] alerts.
 #[derive(Debug)]
 pub struct SoulOperatorControls {
     /// When `true`, no Soul Engine output is permitted for any character.

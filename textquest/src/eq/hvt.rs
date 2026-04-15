@@ -1,6 +1,5 @@
 use serde::Deserialize;
-use std::collections::HashMap;
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 /// Priority level for a high-value target.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -33,7 +32,8 @@ pub struct HvtTarget {
     pub note: String,
 }
 
-/// Container for the full HVT watchlist, indexed by lowercase name for fast lookup.
+/// Container for the full HVT watchlist, indexed by lowercase name for fast
+/// lookup.
 #[derive(Debug, Clone, PartialEq)]
 pub struct HvtWatchlist {
     targets: HashMap<String, HvtTarget>,

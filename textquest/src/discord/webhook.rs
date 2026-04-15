@@ -1,11 +1,10 @@
 //! Discord webhook sender — POST alerts to per-category Discord channels.
 //!
 //! Routes alerts to different webhook URLs based on event category.
-//! Falls back to a default webhook URL when no category-specific channel is configured.
+//! Falls back to a default webhook URL when no category-specific channel is
+//! configured.
 
-use std::collections::HashMap;
-use std::sync::mpsc;
-use std::thread;
+use std::{collections::HashMap, sync::mpsc, thread};
 
 /// Event categories for channel routing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

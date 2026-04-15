@@ -1,27 +1,29 @@
-//! `CContextMenuManager` — read active popup menus and dispatch item activation.
+//! `CContextMenuManager` — read active popup menus and dispatch item
+//! activation.
 //!
 //! # What this module provides
 //!
-//! - **`read_context_menus(eq_base)`** — walk `CContextMenuManager` and collect every
-//!   registered `CContextMenu` into a `Vec<ContextMenuInfo>`.  Each menu's rows are
-//!   read through the existing `CListWnd` layout (`eqgame::CLISTWND_ITEMS_ARRAY`).
+//! - **`read_context_menus(eq_base)`** — walk `CContextMenuManager` and collect
+//!   every registered `CContextMenu` into a `Vec<ContextMenuInfo>`.  Each
+//!   menu's rows are read through the existing `CListWnd` layout
+//!   (`eqgame::CLISTWND_ITEMS_ARRAY`).
 //!
 //! - **`activate_context_menu_item(eq_base, menu_index, item_index)`** — call
-//!   `CContextMenuManager::HandleMenu(menu_index, item_index, CXPoint{0,0})` from the
-//!   game-loop thread to programmatically select a context-menu entry.
+//!   `CContextMenuManager::HandleMenu(menu_index, item_index, CXPoint{0,0})`
+//!   from the game-loop thread to programmatically select a context-menu entry.
 //!
 //! # Thread safety
 //!
 //! Both functions **must** be called from EQ's main game-loop thread.
-//! The IPC handler queues these as PENDING_COMMANDS; the game loop drains them on each
-//! tick.
+//! The IPC handler queues these as PENDING_COMMANDS; the game loop drains them
+//! on each tick.
 //!
 //! # Address calibration
 //!
 //! `PINST_CONTEXT_MENU_MANAGER` and `CONTEXT_MENU_MGR_HANDLE_MENU` in
 //! `textquest_common::offsets` must match the running eqgame.exe binary.
-//! Use Ghidra or binary search against the string `"GFContextMenu"` to locate the
-//! manager singleton if the addresses need updating for a new patch.
+//! Use Ghidra or binary search against the string `"GFContextMenu"` to locate
+//! the manager singleton if the addresses need updating for a new patch.
 
 #[cfg(windows)]
 use std::mem::size_of;
@@ -41,7 +43,8 @@ struct CXPoint {
 #[cfg(windows)]
 eq_fn!(context_menu_handle_menu(this: usize, menu_id: i32, item_id: i32, pt: *const CXPoint) -> () = textquest_common::offsets::CONTEXT_MENU_MGR_HANDLE_MENU);
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+// ─── Public API
+// ───────────────────────────────────────────────────────────────
 
 /// Walk `CContextMenuManager` and return a snapshot of every registered menu.
 ///
@@ -90,7 +93,8 @@ pub fn activate_context_menu_item(
     }
 }
 
-// ─── Windows implementation ───────────────────────────────────────────────────
+// ─── Windows implementation
+// ───────────────────────────────────────────────────
 
 /// Maximum number of menus to process — mirrors the safety cap applied in
 /// both `read_context_menus_windows` and `activate_context_menu_item_windows`.
@@ -251,7 +255,8 @@ unsafe fn activate_context_menu_item_windows(
     let effective_menus = menus_count.min(MAX_CONTEXT_MENUS) as u32;
     if menu_index >= effective_menus {
         return Err(format!(
-            "menu_index {menu_index} out of range (manager has {menus_count} menus, effective cap {effective_menus})"
+            "menu_index {menu_index} out of range (manager has {menus_count} menus, effective cap \
+             {effective_menus})"
         ));
     }
     if menus_data == 0 {
@@ -266,13 +271,15 @@ unsafe fn activate_context_menu_item_windows(
     let items_count = *((menu_ptr + eqgame::CLISTWND_ITEMS_COUNT) as *const i32);
     if items_count <= 0 {
         return Err(format!(
-            "item_index {item_index} out of range for menu_index {menu_index} (menu has {items_count} items)"
+            "item_index {item_index} out of range for menu_index {menu_index} (menu has \
+             {items_count} items)"
         ));
     }
     let effective_items = items_count.min(MAX_MENU_ITEMS) as u32;
     if item_index >= effective_items {
         return Err(format!(
-            "item_index {item_index} out of range for menu_index {menu_index} (menu has {items_count} items, effective cap {effective_items})"
+            "item_index {item_index} out of range for menu_index {menu_index} (menu has \
+             {items_count} items, effective cap {effective_items})"
         ));
     }
 
@@ -303,7 +310,8 @@ unsafe fn activate_context_menu_item_windows(
     Ok(())
 }
 
-// ─── Unit tests ───────────────────────────────────────────────────────────────
+// ─── Unit tests
+// ───────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {

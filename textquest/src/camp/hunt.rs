@@ -1,12 +1,14 @@
 //! Hunt mode — tank roams for mobs while group members maintain formation.
 //!
-//! Unlike camp mode where the group anchors at a position and pulls mobs to camp,
-//! hunt mode has the tank roaming through the zone engaging mobs in place while
-//! the rest of the group follows at role-appropriate distances.
+//! Unlike camp mode where the group anchors at a position and pulls mobs to
+//! camp, hunt mode has the tank roaming through the zone engaging mobs in place
+//! while the rest of the group follows at role-appropriate distances.
 
-use super::config::CampConfig;
-use super::positioning::distance_2d;
-use super::state::{CampMember, Role};
+use super::{
+    config::CampConfig,
+    positioning::distance_2d,
+    state::{CampMember, Role},
+};
 
 /// Operating mode for a group — camp (stationary) or hunt (roaming).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -132,11 +134,13 @@ impl FormationManager {
         Self { config }
     }
 
-    /// Determine movement commands for a member based on their role and distance to tank.
-    /// Returns slash commands if the member needs to move, or empty vec if in position.
+    /// Determine movement commands for a member based on their role and
+    /// distance to tank. Returns slash commands if the member needs to
+    /// move, or empty vec if in position.
     ///
-    /// Movement uses discrete steps: /face toward tank, hold forward key, release when close.
-    /// Does NOT use /follow to avoid EQ's rubber-banding behavior.
+    /// Movement uses discrete steps: /face toward tank, hold forward key,
+    /// release when close. Does NOT use /follow to avoid EQ's
+    /// rubber-banding behavior.
     #[must_use]
     pub fn formation_commands(
         &self,
@@ -278,7 +282,8 @@ impl HuntLoop {
         commands
     }
 
-    /// Generate formation movement commands for all followers (non-tank/non-puller).
+    /// Generate formation movement commands for all followers
+    /// (non-tank/non-puller).
     fn formation_tick(&self, snap: &HuntSnapshot) -> Vec<(u32, String)> {
         let mut commands = Vec::new();
         let tank_name = self
@@ -623,7 +628,8 @@ mod tests {
     fn test_full_hunt_cycle() {
         let mut hunt = HuntLoop::new(test_config(), test_members());
 
-        // Run through a full cycle: Roaming -> Engaging -> Fighting -> Looting -> Roaming
+        // Run through a full cycle: Roaming -> Engaging -> Fighting -> Looting ->
+        // Roaming
         for _ in 0..50 {
             hunt.tick(None);
             if hunt.state == HuntState::Roaming && hunt.tick > 1 {

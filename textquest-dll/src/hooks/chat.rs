@@ -1,10 +1,12 @@
-//! Chat message hook — intercepts `CEverQuest::dsp_chat` to capture all in-game text.
+//! Chat message hook — intercepts `CEverQuest::dsp_chat` to capture all in-game
+//! text.
 //!
-//! Uses hardware breakpoint DR1. When EQ calls `dsp_chat`, the VEH handler fires,
-//! we read the chat text and color from the function arguments, buffer the message
-//! internally, then resume the original function. Buffered messages are returned
-//! to the orchestrator when it sends `Command::PollChat`; the DLL replies with
-//! `Response::ChatBatch`. No unsolicited IPC response is sent per chat line.
+//! Uses hardware breakpoint DR1. When EQ calls `dsp_chat`, the VEH handler
+//! fires, we read the chat text and color from the function arguments, buffer
+//! the message internally, then resume the original function. Buffered messages
+//! are returned to the orchestrator when it sends `Command::PollChat`; the DLL
+//! replies with `Response::ChatBatch`. No unsolicited IPC response is sent per
+//! chat line.
 //!
 //! `dsp_chat` signature (x64 Microsoft ABI):
 //!   - RCX = this (CEverQuest*)
@@ -12,8 +14,8 @@
 //!   - R8  = color (int, default 273)
 //!   - R9  = log (bool)
 //!
-//! We only need text and color. The remaining params (percent_convert, stml_safe,
-//! chat_filter) are on the stack and not needed for capture.
+//! We only need text and color. The remaining params (percent_convert,
+//! stml_safe, chat_filter) are on the stack and not needed for capture.
 
 use super::hwbp::{self, HwbpSlot};
 
@@ -25,8 +27,8 @@ fn should_forward_to_combat(parsed: Option<&textquest_common::chat::ChatEvent>) 
 
 /// HWBP callback for the chat hook.
 ///
-/// Reads the `text` (RDX) and `color` (R8) registers from the exception context,
-/// then buffers it for retrieval through the `PollChat` IPC command.
+/// Reads the `text` (RDX) and `color` (R8) registers from the exception
+/// context, then buffers it for retrieval through the `PollChat` IPC command.
 #[cfg(windows)]
 #[cfg_attr(windows, unsafe(link_section = ".tq"))]
 fn chat_callback(exception_info: *mut ()) -> bool {
@@ -153,7 +155,8 @@ mod tests {
         // Unparsed system-like text should continue to forward.
 
         // Self-authored channel text is structured player chat — must not be forwarded
-        // even though it arrives as "You <verb>, '...'" rather than "Sender <verb>, '...'".
+        // even though it arrives as "You <verb>, '...'" rather than "Sender <verb>,
+        // '...'".
         assert!(!should_forward_to_combat(you_say.as_ref()));
         assert!(!should_forward_to_combat(you_shout.as_ref()));
         assert!(!should_forward_to_combat(you_group.as_ref()));
@@ -175,8 +178,8 @@ mod tests {
 
         if std::env::var_os("TEXTQUEST_RUN_HWBP_TESTS").is_none() {
             tracing::warn!(
-                "Skipping chat hook install/remove roundtrip check; \
-                 set TEXTQUEST_RUN_HWBP_TESTS=1 to opt in"
+                "Skipping chat hook install/remove roundtrip check; set \
+                 TEXTQUEST_RUN_HWBP_TESTS=1 to opt in"
             );
             hwbp::remove_all();
             return;

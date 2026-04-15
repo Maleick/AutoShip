@@ -2,16 +2,21 @@
 
 #![allow(dead_code)] // Demo shapes and placeholder handlers stay in this module before router wiring.
 
+pub mod dashboard;
 pub mod economy;
 pub mod loot;
 pub mod soul;
-use axum::Json;
-use axum::extract::{Path, State};
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use textquest_common::box_chat::BoxChatConfig;
+use textquest_common::ipc::AutoRezConfig;
+use toml_edit::{DocumentMut, Item, Table, value};
 
 use crate::AppState;
 
@@ -38,7 +43,8 @@ pub async fn api_not_found() -> impl IntoResponse {
     json_error(StatusCode::NOT_FOUND, "API route not found")
 }
 
-/// Placeholder response for known raid-config endpoints that are not implemented on this build.
+/// Placeholder response for known raid-config endpoints that are not
+/// implemented on this build.
 pub async fn raid_config_unavailable() -> impl IntoResponse {
     json_error(
         StatusCode::NOT_IMPLEMENTED,
@@ -62,7 +68,8 @@ pub async fn character_config_unavailable(Path(character): Path<String>) -> impl
     )
 }
 
-// ─── Health ───────────────────────────────────────────────────────────────────
+// ─── Health
+// ───────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct HealthResponse {
@@ -78,7 +85,122 @@ pub async fn health() -> Json<HealthResponse> {
     })
 }
 
-// ─── Sessions ─────────────────────────────────────────────────────────────────
+// ─── Box Chat Settings ──────────────────────────────────────────────────────
+
+fn textquest_config_path() -> PathBuf {
+    std::env::var("TEXTQUEST_CONFIG_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
+}
+
+fn read_box_chat_settings_from_disk() -> Result<BoxChatConfig, String> {
+    let path = textquest_config_path();
+    if !path.exists() {
+        return Ok(BoxChatConfig::default());
+    }
+
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
+    let doc = content
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("Failed to parse {}: {error}", path.display()))?;
+
+    let Some(item) = doc.get("box_chat") else {
+        return Ok(BoxChatConfig::default());
+    };
+    let settings = toml_edit::de::from_str::<BoxChatConfig>(&item.to_string())
+        .map_err(|error| format!("Failed to decode [box_chat]: {error}"))?;
+    Ok(settings)
+}
+
+fn write_box_chat_settings_to_disk(settings: &BoxChatConfig) -> Result<(), String> {
+    if settings.host.trim().is_empty() {
+        return Err("Box chat host must not be empty".to_string());
+    }
+    if settings.port == 0 {
+        return Err("Box chat port must be between 1 and 65535".to_string());
+    }
+
+    let path = textquest_config_path();
+    let mut doc = if path.exists() {
+        let content = std::fs::read_to_string(&path)
+            .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
+        content
+            .parse::<DocumentMut>()
+            .map_err(|error| format!("Failed to parse {}: {error}", path.display()))?
+    } else {
+        DocumentMut::new()
+    };
+
+    let mut table = Table::new();
+    table["enabled"] = value(settings.enabled);
+    table["host"] = value(settings.host.clone());
+    table["port"] = value(i64::from(settings.port));
+    table["auto_connect"] = value(settings.auto_connect);
+    doc["box_chat"] = Item::Table(table);
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create {}: {error}", parent.display()))?;
+    }
+
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("Failed to determine file name for {}", path.display()))?;
+    let temp_path = path.with_file_name(format!(
+        ".{file_name}.tmp.{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|error| format!("Failed to build temp path for {}: {error}", path.display()))?
+            .as_nanos()
+    ));
+
+    let mut temp_file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp_path)
+        .map_err(|error| {
+            format!(
+                "Failed to create temp file {}: {error}",
+                temp_path.display()
+            )
+        })?;
+    std::io::Write::write_all(&mut temp_file, doc.to_string().as_bytes())
+        .map_err(|error| format!("Failed to write temp file {}: {error}", temp_path.display()))?;
+    temp_file
+        .sync_all()
+        .map_err(|error| format!("Failed to sync temp file {}: {error}", temp_path.display()))?;
+    drop(temp_file);
+
+    std::fs::rename(&temp_path, &path).map_err(|error| {
+        let _ = std::fs::remove_file(&temp_path);
+        format!(
+            "Failed to replace {} with {}: {error}",
+            path.display(),
+            temp_path.display()
+        )
+    })?;
+    Ok(())
+}
+
+/// GET /api/box-chat/settings — read persisted EQBC-style relay settings.
+pub async fn get_box_chat_settings() -> impl IntoResponse {
+    match read_box_chat_settings_from_disk() {
+        Ok(settings) => (StatusCode::OK, Json(settings)).into_response(),
+        Err(error) => json_error(StatusCode::INTERNAL_SERVER_ERROR, error).into_response(),
+    }
+}
+
+/// PUT /api/box-chat/settings — persist EQBC-style relay settings.
+pub async fn put_box_chat_settings(Json(settings): Json<BoxChatConfig>) -> impl IntoResponse {
+    match write_box_chat_settings_to_disk(&settings) {
+        Ok(()) => (StatusCode::OK, Json(settings)).into_response(),
+        Err(error) => json_error(StatusCode::BAD_REQUEST, error).into_response(),
+    }
+}
+// ─── Sessions
+// ─────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct SessionInfo {
@@ -94,7 +216,8 @@ pub struct SessionInfo {
 /// List active sessions.
 pub async fn list_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     // Build a list of sessions from character configs.
-    // In a production system, this would read from IPC shared memory or a session registry.
+    // In a production system, this would read from IPC shared memory or a session
+    // registry.
     let configs = state.character_configs.read().await;
     let sessions: Vec<SessionInfo> = configs
         .values()
@@ -131,6 +254,42 @@ pub struct ClassParams {
     pub slow_at_hp_pct: Option<u8>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TributeAlertState {
+    Ok,
+    Expiring,
+    Expired,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TributePreferences {
+    pub auto_activate: bool,
+    pub warning_threshold_secs: u64,
+    pub preferred_tributes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TributeStatus {
+    pub active: bool,
+    pub remaining_secs: u64,
+    pub point_balance: u32,
+    pub active_tributes: Vec<String>,
+    pub alert_state: TributeAlertState,
+}
+
+impl Default for TributeStatus {
+    fn default() -> Self {
+        Self {
+            active: false,
+            remaining_secs: 0,
+            point_balance: 0,
+            active_tributes: Vec::new(),
+            alert_state: TributeAlertState::Expired,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CharacterConfig {
     pub character_name: String,
@@ -141,8 +300,62 @@ pub struct CharacterConfig {
     pub nuke_at_pct: u8,
     pub rotation: Vec<RotationEntry>,
     pub class_params: ClassParams,
+    #[serde(default)]
+    pub auto_rez: AutoRezConfig,
     pub group_override: bool,
     pub group_name: Option<String>,
+    pub tribute_preferences: TributePreferences,
+    pub tribute_status: TributeStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterConfigUpdate {
+    pub character_name: String,
+    pub class: String,
+    pub role: String,
+    pub heal_at_pct: u8,
+    pub mana_sit_pct: u8,
+    pub nuke_at_pct: u8,
+    pub rotation: Vec<RotationEntry>,
+    pub class_params: ClassParams,
+    #[serde(default)]
+    pub auto_rez: AutoRezConfig,
+    pub group_override: bool,
+    pub group_name: Option<String>,
+    pub tribute_preferences: TributePreferences,
+}
+
+fn tribute_preferences(
+    preferred_tributes: &[&str],
+    warning_threshold_secs: u64,
+) -> TributePreferences {
+    TributePreferences {
+        auto_activate: true,
+        warning_threshold_secs,
+        preferred_tributes: preferred_tributes
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect(),
+    }
+}
+
+fn tribute_status(
+    active: bool,
+    remaining_secs: u64,
+    point_balance: u32,
+    active_tributes: &[&str],
+    alert_state: TributeAlertState,
+) -> TributeStatus {
+    TributeStatus {
+        active,
+        remaining_secs,
+        point_balance,
+        active_tributes: active_tributes
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect(),
+        alert_state,
+    }
 }
 
 pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
@@ -173,8 +386,23 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 ch_chain_timing_ms: Some(2500),
                 ..ClassParams::default()
             },
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 96,
+                trusted_casters: vec!["Highclerk".into(), "Leafbinder".into()],
+                decline_if_untrusted: true,
+                delay_ms: 5_000,
+            },
             group_override: false,
             group_name: Some("Group 1".into()),
+            tribute_preferences: tribute_preferences(&["Marr's Gift", "Champion's Aura"], 300),
+            tribute_status: tribute_status(
+                true,
+                240,
+                3_200,
+                &["Marr's Gift"],
+                TributeAlertState::Expiring,
+            ),
         },
         CharacterConfig {
             character_name: "Noxus".into(),
@@ -190,8 +418,23 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 enabled: true,
             }],
             class_params: ClassParams::default(),
+            auto_rez: AutoRezConfig {
+                enabled: false,
+                min_xp_pct: 90,
+                trusted_casters: vec!["Frostreaver".into()],
+                decline_if_untrusted: false,
+                delay_ms: 3_000,
+            },
             group_override: false,
             group_name: Some("Group 1".into()),
+            tribute_preferences: tribute_preferences(&["Stalwart Ward", "Champion's Aura"], 420),
+            tribute_status: tribute_status(
+                true,
+                3_600,
+                1_950,
+                &["Stalwart Ward", "Champion's Aura"],
+                TributeAlertState::Ok,
+            ),
         },
         CharacterConfig {
             character_name: "Aelrindel".into(),
@@ -210,8 +453,17 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 burn_at_hp_pct: Some(30),
                 ..ClassParams::default()
             },
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 90,
+                trusted_casters: vec!["Frostreaver".into(), "Oakmantle".into()],
+                decline_if_untrusted: false,
+                delay_ms: 2_500,
+            },
             group_override: false,
             group_name: Some("Group 2".into()),
+            tribute_preferences: tribute_preferences(&["Arcane Fury", "Hero's Fortitude"], 180),
+            tribute_status: tribute_status(false, 0, 875, &[], TributeAlertState::Expired),
         },
         CharacterConfig {
             character_name: "Grok".into(),
@@ -230,8 +482,23 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 slow_at_hp_pct: Some(95),
                 ..ClassParams::default()
             },
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 96,
+                trusted_casters: vec!["Frostreaver".into()],
+                decline_if_untrusted: true,
+                delay_ms: 4_000,
+            },
             group_override: false,
             group_name: Some("Group 2".into()),
+            tribute_preferences: tribute_preferences(&["Ancient Bulwark", "Spirit's Resolve"], 300),
+            tribute_status: tribute_status(
+                true,
+                1_020,
+                1_480,
+                &["Ancient Bulwark"],
+                TributeAlertState::Ok,
+            ),
         },
         CharacterConfig {
             character_name: "Valerius".into(),
@@ -250,8 +517,26 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 dot_overlap_pct: Some(10),
                 ..ClassParams::default()
             },
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 90,
+                trusted_casters: vec!["Frostreaver".into(), "Highclerk".into()],
+                decline_if_untrusted: true,
+                delay_ms: 3_500,
+            },
             group_override: false,
             group_name: Some("Group 3".into()),
+            tribute_preferences: tribute_preferences(
+                &["Fervor of Shadows", "Hero's Vitality"],
+                240,
+            ),
+            tribute_status: tribute_status(
+                true,
+                150,
+                2_250,
+                &["Fervor of Shadows"],
+                TributeAlertState::Expiring,
+            ),
         },
     ] {
         configs.insert(cfg.character_name.clone(), cfg);
@@ -260,8 +545,6 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
 }
 
 /// GET /api/config/characters — list all character tuning configs.
-/// Not yet mounted in the live API router (returns 501 via placeholder); kept for future use.
-#[allow(dead_code)]
 pub async fn list_character_configs(
     State(state): State<Arc<AppState>>,
 ) -> Json<Vec<CharacterConfig>> {
@@ -274,25 +557,40 @@ pub async fn list_character_configs(
 }
 
 /// PUT /api/config/characters/:name — upsert per-character tuning config.
-/// Not yet mounted in the live API router (returns 501 via placeholder); kept for future use.
-#[allow(dead_code)]
 pub async fn put_character_config(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
-    Json(mut config): Json<CharacterConfig>,
+    Json(config): Json<CharacterConfigUpdate>,
 ) -> Result<Json<CharacterConfig>, StatusCode> {
     if name.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    config.character_name = name;
-    {
-        let mut configs_map = state.character_configs.write().await;
-        configs_map.insert(config.character_name.clone(), config.clone());
-    }
-    Ok(Json(config))
+    let mut configs_map = state.character_configs.write().await;
+    let tribute_status = configs_map
+        .get(&name)
+        .map(|existing| existing.tribute_status.clone())
+        .unwrap_or_default();
+    let saved = CharacterConfig {
+        character_name: name,
+        class: config.class,
+        role: config.role,
+        heal_at_pct: config.heal_at_pct,
+        mana_sit_pct: config.mana_sit_pct,
+        nuke_at_pct: config.nuke_at_pct,
+        rotation: config.rotation,
+        class_params: config.class_params,
+        auto_rez: config.auto_rez,
+        group_override: config.group_override,
+        group_name: config.group_name,
+        tribute_preferences: config.tribute_preferences,
+        tribute_status,
+    };
+    configs_map.insert(saved.character_name.clone(), saved.clone());
+    Ok(Json(saved))
 }
 
-// ── Economy types ─────────────────────────────────────────────────────────────
+// ── Economy types
+// ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KronoSettings {
@@ -353,7 +651,8 @@ pub struct EconomySettings {
     pub tradeskill_supplies: Vec<TradeskillSupply>,
 }
 
-// ── Economy handlers ──────────────────────────────────────────────────────────
+// ── Economy handlers
+// ──────────────────────────────────────────────────────────
 
 /// GET /api/economy/settings — return full economy configuration.
 pub async fn get_economy_settings() -> impl IntoResponse {
@@ -485,6 +784,32 @@ mod tests {
     use axum::response::IntoResponse;
     use http_body_util::BodyExt;
     use serde_json::Value;
+    use tempfile::tempdir;
+
+    struct ConfigPathGuard {
+        original: Option<String>,
+    }
+
+    impl ConfigPathGuard {
+        fn set(path: &std::path::Path) -> Self {
+            let original = std::env::var("TEXTQUEST_CONFIG_PATH").ok();
+            unsafe {
+                std::env::set_var("TEXTQUEST_CONFIG_PATH", path);
+            }
+            Self { original }
+        }
+    }
+
+    impl Drop for ConfigPathGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match &self.original {
+                    Some(value) => std::env::set_var("TEXTQUEST_CONFIG_PATH", value),
+                    None => std::env::remove_var("TEXTQUEST_CONFIG_PATH"),
+                }
+            }
+        }
+    }
 
     async fn error_response_json(response: axum::response::Response) -> (StatusCode, Value) {
         let status = response.status();
@@ -505,6 +830,88 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn box_chat_settings_default_when_config_missing() {
+        let dir = tempdir().expect("tempdir should exist");
+        let config_path = dir.path().join("textquest.toml");
+        let _guard = ConfigPathGuard::set(&config_path);
+
+        let response = get_box_chat_settings().await.into_response();
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body should collect")
+            .to_bytes();
+        let settings: BoxChatConfig =
+            serde_json::from_slice(&body).expect("settings response should parse");
+
+        assert_eq!(settings, BoxChatConfig::default());
+    }
+
+    #[tokio::test]
+    async fn put_box_chat_settings_writes_config_section() {
+        let dir = tempdir().expect("tempdir should exist");
+        let config_path = dir.path().join("textquest.toml");
+        std::fs::write(
+            &config_path,
+            "process_name = \"eqgame.exe\"\n[launch]\neq_path = \"C:/EQ\"\n",
+        )
+        .expect("seed config should write");
+        let _guard = ConfigPathGuard::set(&config_path);
+
+        let settings = BoxChatConfig {
+            enabled: true,
+            host: "192.168.1.25".to_string(),
+            port: 3002,
+            auto_connect: true,
+        };
+
+        let response = put_box_chat_settings(Json(settings.clone()))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let written = std::fs::read_to_string(&config_path).expect("config should exist");
+        assert!(written.contains("process_name = \"eqgame.exe\""));
+        assert!(written.contains("[box_chat]"));
+        assert!(written.contains("host = \"192.168.1.25\""));
+
+        let response = get_box_chat_settings().await.into_response();
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body should collect")
+            .to_bytes();
+        let reloaded: BoxChatConfig =
+            serde_json::from_slice(&body).expect("settings response should parse");
+        assert_eq!(reloaded, settings);
+    }
+
+    #[tokio::test]
+    async fn put_box_chat_settings_rejects_zero_port() {
+        let dir = tempdir().expect("tempdir should exist");
+        let config_path = dir.path().join("textquest.toml");
+        let _guard = ConfigPathGuard::set(&config_path);
+
+        let response = put_box_chat_settings(Json(BoxChatConfig {
+            enabled: true,
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            auto_connect: true,
+        }))
+        .await
+        .into_response();
+
+        let (status, body) = error_response_json(response).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            body,
+            serde_json::json!({ "error": "Box chat port must be between 1 and 65535" })
+        );
+    }
+
+    #[tokio::test]
     async fn sessions_returns_ok() {
         let state = Arc::new(AppState {
             event_tx: tokio::sync::broadcast::channel::<String>(8).0,
@@ -513,6 +920,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         });
@@ -602,12 +1010,27 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         });
         let Json(configs) = list_character_configs(State(state)).await;
         assert!(!configs.is_empty());
         assert!(configs.iter().any(|c| c.character_name == "Frostreaver"));
+        let frostreaver = configs
+            .into_iter()
+            .find(|c| c.character_name == "Frostreaver")
+            .expect("demo config should exist");
+        let json = serde_json::to_value(frostreaver).expect("config should serialize");
+        assert_eq!(json["tribute_preferences"]["auto_activate"], true);
+        assert_eq!(
+            json["tribute_status"]["point_balance"],
+            serde_json::json!(3_200)
+        );
+        assert_eq!(
+            json["tribute_status"]["alert_state"],
+            serde_json::json!("expiring")
+        );
     }
 
     #[tokio::test]
@@ -619,10 +1042,11 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         });
-        let input = CharacterConfig {
+        let input = CharacterConfigUpdate {
             character_name: "IgnoredName".into(),
             class: "Wizard".into(),
             role: "DPS".into(),
@@ -631,14 +1055,32 @@ mod tests {
             nuke_at_pct: 70,
             rotation: vec![],
             class_params: ClassParams::default(),
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 96,
+                trusted_casters: vec!["Frostreaver".into()],
+                decline_if_untrusted: true,
+                delay_ms: 5_100,
+            },
             group_override: false,
             group_name: None,
+            tribute_preferences: tribute_preferences(&["Arcane Fury", "Hero's Fortitude"], 180),
         };
         let Json(saved) =
             put_character_config(State(state.clone()), Path("Aelrindel".into()), Json(input))
                 .await
                 .expect("put character config should succeed");
         assert_eq!(saved.character_name, "Aelrindel");
+        let saved_json = serde_json::to_value(&saved).expect("saved config should serialize");
+        assert_eq!(
+            saved_json["tribute_preferences"]["preferred_tributes"],
+            serde_json::json!(["Arcane Fury", "Hero's Fortitude"])
+        );
+        assert_eq!(
+            saved_json["tribute_status"]["alert_state"],
+            serde_json::json!("expired")
+        );
+        assert_eq!(saved_json["tribute_status"]["point_balance"], serde_json::json!(875));
 
         let Json(configs) = list_character_configs(State(state)).await;
         let updated = configs
@@ -646,5 +1088,7 @@ mod tests {
             .find(|c| c.character_name == "Aelrindel")
             .expect("updated config should exist");
         assert_eq!(updated.heal_at_pct, 50);
+        assert_eq!(updated.auto_rez.min_xp_pct, 96);
+        assert_eq!(updated.auto_rez.trusted_casters, vec!["Frostreaver"]);
     }
 }

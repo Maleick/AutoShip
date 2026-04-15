@@ -19,11 +19,12 @@ pub fn spawn_eq_client(
     server: &str,
     extra_args: &[String],
 ) -> Result<SpawnedProcess> {
-    use std::ffi::OsString;
-    use std::os::windows::ffi::OsStrExt;
-    use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Threading::{
-        CreateProcessW, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTUPINFOW,
+    use std::{ffi::OsString, os::windows::ffi::OsStrExt};
+    use windows::Win32::{
+        Foundation::CloseHandle,
+        System::Threading::{
+            CreateProcessW, PROCESS_CREATION_FLAGS, PROCESS_INFORMATION, STARTUPINFOW,
+        },
     };
 
     // MQ2 syntax: eqgame.exe patchme /login:username

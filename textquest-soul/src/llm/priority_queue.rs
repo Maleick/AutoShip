@@ -1,5 +1,4 @@
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
+use std::{cmp::Ordering, collections::BinaryHeap};
 
 use super::{LlmProvider, LlmRequest, LlmResponse};
 use anyhow::Result;
@@ -90,7 +89,8 @@ impl Ord for PrioritizedRequest {
 
 /// Priority queue for LLM requests.
 /// Phase 1: processes requests immediately via the fallback provider.
-/// Phase 2+: batches requests and dispatches to real LLM providers with budget control.
+/// Phase 2+: batches requests and dispatches to real LLM providers with budget
+/// control.
 pub struct LlmRequestQueue {
     queue: BinaryHeap<PrioritizedRequest>,
     next_seq: u64,
@@ -186,9 +186,10 @@ impl LlmRequestQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::EdginessLevel;
-    use crate::llm::fallback::TraitDrivenResponder;
-    use crate::llm::{LlmPriority, LlmRequest, Situation};
+    use crate::{
+        config::EdginessLevel,
+        llm::{LlmPriority, LlmRequest, Situation, fallback::TraitDrivenResponder},
+    };
     use textquest_common::soul::{MoodState, PersonalityTraits, SpeechStyle};
 
     fn make_request(name: &str, priority: LlmPriority) -> LlmRequest {
