@@ -151,6 +151,49 @@ pub struct ContainerSlotQuery {
     pub include_empty: bool,
 }
 
+/// Filter for querying passive bazaar search results from the injected client.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BazaarQuery {
+    /// Case-insensitive substring applied against the listing's raw columns.
+    pub text_contains: Option<String>,
+    /// Maximum number of rows to return per matching bazaar list.
+    pub max_rows: Option<u16>,
+}
+
+/// One bazaar listing row captured from an in-game `CListWnd`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BazaarListing {
+    /// Zero-based row index within the source list window.
+    pub row_index: u32,
+    /// Raw text columns as displayed in the list.
+    pub columns: Vec<String>,
+    /// Best-effort normalized item name.
+    pub item_name: Option<String>,
+    /// Best-effort normalized trader name.
+    pub trader_name: Option<String>,
+    /// Raw price text from the list row.
+    pub price_text: Option<String>,
+    /// Parsed price in copper when the row exposes a numeric price.
+    pub price_copper: Option<u64>,
+    /// Parsed quantity when present.
+    pub quantity: Option<u32>,
+}
+
+/// Snapshot of one bazaar-related list window in the active EQ UI.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BazaarWindowSnapshot {
+    /// Root window display text when available.
+    pub window_text: Option<String>,
+    /// Root window SIDL name when available.
+    pub window_sidl_name: Option<String>,
+    /// Child list SIDL name when available.
+    pub list_sidl_name: Option<String>,
+    /// Number of rows observed in the list window.
+    pub row_count: u32,
+    /// Listing rows captured from the window.
+    pub listings: Vec<BazaarListing>,
+}
+
 /// Snapshot of the item shown in an open container slot.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ContainerSlotItemInfo {
@@ -767,6 +810,11 @@ pub enum Command {
     /// Queries the zone's predefined safe spawn point (typically a bind point
     /// or known safe location) to avoid landing in dangerous areas.
     RequestSafeCoords(u32), // zone_id
+    /// Query passive bazaar search results from the populated EQ UI.
+    QueryBazaarResults {
+        /// Filters applied before returning bazaar list snapshots.
+        filter: BazaarQuery,
+    },
 }
 
 impl std::fmt::Debug for Command {
@@ -1173,6 +1221,11 @@ pub enum Response {
     MovementQueueFlushed {
         /// Number of pending movements that were dropped.
         count_dropped: u32,
+    },
+    /// Passive bazaar list snapshots captured from visible bazaar windows.
+    BazaarResults {
+        /// Matching bazaar window snapshots.
+        windows: Vec<BazaarWindowSnapshot>,
     },
 }
 
@@ -1603,6 +1656,9 @@ mod tests {
             Command::InteractDoor,
             Command::ClickObject,
             Command::QueryZoneGraph,
+            Command::QueryBazaarResults {
+                filter: BazaarQuery::default(),
+            },
             Command::PollPackets,
             Command::PollSpawnEvents,
             Command::PollChat,
@@ -1623,6 +1679,22 @@ mod tests {
             let (decoded, _): (Command, usize) = decode(&encoded).expect("decode failed");
             assert_eq!(*cmd, decoded);
         }
+    }
+
+    #[test]
+    fn command_query_bazaar_results_roundtrip_preserves_filter() {
+        use crate::protocol::{decode, encode};
+
+        let command = Command::QueryBazaarResults {
+            filter: BazaarQuery {
+                text_contains: Some("fungi".into()),
+                max_rows: Some(25),
+            },
+        };
+
+        let encoded = encode(&command).expect("encode failed");
+        let (decoded, _): (Command, usize) = decode(&encoded).expect("decode failed");
+        assert_eq!(command, decoded);
     }
 
     #[test]
@@ -1671,6 +1743,23 @@ mod tests {
                         timestamp_ms: 2,
                     },
                 ],
+            },
+            Response::BazaarResults {
+                windows: vec![BazaarWindowSnapshot {
+                    window_text: Some("Bazaar Search".into()),
+                    window_sidl_name: Some("BZR_SearchWnd".into()),
+                    list_sidl_name: Some("BZR_ItemList".into()),
+                    row_count: 1,
+                    listings: vec![BazaarListing {
+                        row_index: 0,
+                        columns: vec!["Fungi Tunic".into(), "Traderbob".into(), "2,000".into()],
+                        item_name: Some("Fungi Tunic".into()),
+                        trader_name: Some("Traderbob".into()),
+                        price_text: Some("2,000".into()),
+                        price_copper: Some(2_000_000),
+                        quantity: Some(1),
+                    }],
+                }],
             },
             Response::ZoneGraph { zones: vec![] },
             Response::RenderModeChanged {

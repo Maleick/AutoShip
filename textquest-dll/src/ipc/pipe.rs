@@ -292,6 +292,15 @@ pub fn validate_command(cmd: &Command) -> bool {
                     .as_ref()
                     .is_none_or(|value| !value.is_empty() && value.len() <= 128)
         }
+        Command::QueryBazaarResults { filter } => {
+            filter
+                .text_contains
+                .as_ref()
+                .is_none_or(|value| !value.is_empty() && value.len() <= 128)
+                && filter
+                    .max_rows
+                    .is_none_or(|value| value > 0 && value <= 2000)
+        }
         Command::StartLogin {
             account_name,
             password,
@@ -436,7 +445,7 @@ impl Drop for CommandListener {
 #[cfg(test)]
 mod tests {
     use super::validate_command;
-    use textquest_common::ipc::Command;
+    use textquest_common::ipc::{BazaarQuery, Command};
 
     #[test]
     fn validate_cast_spell_valid_slot() {
@@ -509,5 +518,48 @@ mod tests {
     #[test]
     fn validate_cancel_cast_loop_always_valid() {
         assert!(validate_command(&Command::CancelCastLoop));
+    }
+
+    #[test]
+    fn validate_query_bazaar_results_accepts_default_filter() {
+        assert!(validate_command(&Command::QueryBazaarResults {
+            filter: BazaarQuery::default(),
+        }));
+    }
+
+    #[test]
+    fn validate_query_bazaar_results_rejects_empty_text_filter() {
+        assert!(!validate_command(&Command::QueryBazaarResults {
+            filter: BazaarQuery {
+                text_contains: Some(String::new()),
+                max_rows: None,
+            },
+        }));
+    }
+
+    #[test]
+    fn validate_query_bazaar_results_rejects_oversized_text_filter() {
+        assert!(!validate_command(&Command::QueryBazaarResults {
+            filter: BazaarQuery {
+                text_contains: Some("x".repeat(129)),
+                max_rows: None,
+            },
+        }));
+    }
+
+    #[test]
+    fn validate_query_bazaar_results_rejects_zero_or_large_row_limits() {
+        assert!(!validate_command(&Command::QueryBazaarResults {
+            filter: BazaarQuery {
+                text_contains: None,
+                max_rows: Some(0),
+            },
+        }));
+        assert!(!validate_command(&Command::QueryBazaarResults {
+            filter: BazaarQuery {
+                text_contains: None,
+                max_rows: Some(2001),
+            },
+        }));
     }
 }

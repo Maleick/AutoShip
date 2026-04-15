@@ -2,6 +2,7 @@
 //! primitives. These are offsets from the eqgame.exe base address.
 //! Derived from MQ2 source headers.
 
+pub mod bazaar;
 pub mod chat;
 pub mod context_menu;
 pub mod inventory;
