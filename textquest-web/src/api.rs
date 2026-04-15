@@ -286,6 +286,16 @@ pub struct TributePreferences {
     pub preferred_tributes: Vec<String>,
 }
 
+impl Default for TributePreferences {
+    fn default() -> Self {
+        Self {
+            auto_activate: false,
+            warning_threshold_secs: 300,
+            preferred_tributes: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TributeStatus {
     pub active: bool,
@@ -323,7 +333,9 @@ pub struct CharacterConfig {
     pub group_name: Option<String>,
     #[serde(default)]
     pub auto_camp_on_death: AutoCampOnDeathConfig,
+    #[serde(default)]
     pub tribute_preferences: TributePreferences,
+    #[serde(default)]
     pub tribute_status: TributeStatus,
 }
 
