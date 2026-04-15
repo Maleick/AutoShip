@@ -1,8 +1,11 @@
 //! Orchestrator — wires the camp loop state machine to IPC command delivery.
 
+/// Cross-group emergency coordination for same-zone rez and assist flows.
+pub mod cross_group;
 /// Session and group control model for the orchestrator.
 pub mod session_control;
 
+use self::{cross_group::CrossGroupCoordinator, session_control::SessionControl};
 use crate::{
     camp::{
         cc::CcType,
@@ -23,7 +26,7 @@ use std::{
 };
 use textquest_common::{
     combat::HateTargetCategory,
-    ipc::{ChatMessageInfo, Command, Response, SessionToken},
+    ipc::{ChatMessageInfo, Command, Response, SessionControlCommand, SessionToken},
     routing::RoutingScope,
     types::GameState,
 };
@@ -69,6 +72,12 @@ pub struct Orchestrator {
     session_tokens: HashMap<u32, SessionToken>,
     /// Tick number when each client's game state was last updated.
     state_timestamps: HashMap<u32, u64>,
+    /// Per-client coordination state, including group membership.
+    session_controls: HashMap<u32, SessionControl>,
+    /// Cached class names for clients registered through the launcher flow.
+    client_class_names: HashMap<u32, String>,
+    /// Same-zone cross-group rez and assist coordinator.
+    cross_group: CrossGroupCoordinator,
     // Pipe connections are created per-command (connect → token → command → drop).
     // The DLL's pipe server disconnects after each command, so persistent
     // connections would fail on the second write.
@@ -127,6 +136,9 @@ impl Orchestrator {
             state_readers: HashMap::new(),
             session_tokens: HashMap::new(),
             state_timestamps: HashMap::new(),
+            session_controls: HashMap::new(),
+            client_class_names: HashMap::new(),
+            cross_group: CrossGroupCoordinator::new(),
             operating_mode: OperatingMode::Camp,
             active_hunt: None,
             sell_cycle: None,
@@ -287,12 +299,24 @@ impl Orchestrator {
             .into_iter()
             .filter(|(pid, _)| in_scope.is_empty() || in_scope.contains(pid))
             .collect();
+        let emergency = self.cross_group.tick(
+            &self.session_controls,
+            &self.client_names,
+            &self.client_class_names,
+            &self.game_states,
+            &self.state_timestamps,
+            self.tick_count,
+        );
 
-        let count = scoped.len();
+        let count = scoped.len() + emergency.len();
         for (pid, action) in &scoped {
             self.dispatch_action(*pid, action);
         }
+        for (pid, action) in &emergency {
+            self.dispatch_action(*pid, action);
+        }
         self.last_dispatched = scoped;
+        self.last_dispatched.extend(emergency);
         count
     }
 
@@ -715,7 +739,40 @@ impl Orchestrator {
         if !self.client_pids.contains(&pid) {
             self.client_pids.push(pid);
         }
+        self.session_controls
+            .entry(pid)
+            .or_insert_with(|| SessionControl::new(pid));
         token
+    }
+
+    /// Assign a client to a logical orchestration group for cross-group
+    /// coordination.
+    pub fn set_client_group(&mut self, pid: u32, group_id: u8) {
+        let control = self
+            .session_controls
+            .entry(pid)
+            .or_insert_with(|| SessionControl::new(pid));
+        control.apply_command(&SessionControlCommand::SetGroup { group_id });
+    }
+
+    /// Return the configured orchestration group for a client, if known.
+    #[must_use]
+    pub fn client_group(&self, pid: u32) -> Option<u8> {
+        self.session_controls
+            .get(&pid)
+            .map(|control| control.group_id)
+    }
+
+    /// Cache a class name for a client so coordination logic can make
+    /// class-aware decisions.
+    pub fn set_client_class_name(&mut self, pid: u32, class_name: impl Into<String>) {
+        self.client_class_names.insert(pid, class_name.into());
+    }
+
+    /// Return the cached class name for a client, if one is known.
+    #[must_use]
+    pub fn client_class_name(&self, pid: u32) -> Option<&str> {
+        self.client_class_names.get(&pid).map(String::as_str)
     }
 
     /// Dispatch a `CampAction` to the appropriate client via IPC.
@@ -888,6 +945,8 @@ impl Orchestrator {
         self.state_readers.remove(&pid);
         self.session_tokens.remove(&pid);
         self.state_timestamps.remove(&pid);
+        self.session_controls.remove(&pid);
+        self.client_class_names.remove(&pid);
         tracing::info!(pid, "Client removed from orchestrator");
     }
 
@@ -1030,6 +1089,11 @@ impl Orchestrator {
 mod tests {
     use super::*;
     use crate::camp::state::Role;
+    use textquest_common::{
+        combat::CombatStatus,
+        nav::NavStatus,
+        types::{GameState, SpawnData},
+    };
 
     fn test_config() -> CampConfig {
         CampConfig {
@@ -1058,6 +1122,60 @@ mod tests {
             CampMember::new(101, "Healer".into(), Role::Healer),
             CampMember::new(102, "DPS".into(), Role::Dps),
         ]
+    }
+
+    fn make_spawn_named(name: &str, class_id: u8, hp_current: i64, hp_max: i64) -> SpawnData {
+        SpawnData {
+            spawn_id: 1,
+            name: name.into(),
+            displayed_name: name.into(),
+            spawn_type: 0,
+            level: 60,
+            class_id,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            heading: 0.0,
+            hp_current,
+            hp_max,
+            mana_current: 1000,
+            mana_max: 1000,
+            endurance_current: 100,
+            endurance_max: 100,
+            speed_run: 0.0,
+            stand_state: if hp_current <= 0 { 111 } else { 0 },
+            is_gm: false,
+        }
+    }
+
+    fn make_game_state(
+        client_id: u32,
+        zone: &str,
+        local_player: SpawnData,
+        target: Option<SpawnData>,
+    ) -> GameState {
+        GameState {
+            client_id,
+            local_player: Some(local_player),
+            target,
+            nearby_spawns: vec![],
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status: if client_id.is_multiple_of(10) {
+                CombatStatus::Idle
+            } else {
+                CombatStatus::Engaging { target_id: 999 }
+            },
+            zone_short_name: zone.to_string(),
+            zone_long_name: zone.to_string(),
+            actual_version: None,
+        }
+    }
+
+    fn mark_states_fresh(orch: &mut Orchestrator, pids: &[u32]) {
+        for &pid in pids {
+            orch.state_timestamps.insert(pid, orch.tick_count);
+        }
     }
 
     #[test]
@@ -1672,5 +1790,390 @@ mod tests {
         let orch = Orchestrator::new();
         assert_eq!(orch.routing_scope, RoutingScope::AllSession);
         assert!(orch.scope_pids.is_empty());
+    }
+
+    #[test]
+    fn cross_group_rez_dispatches_same_zone_cleric_once() {
+        let mut orch = Orchestrator::new();
+
+        for pid in [100, 101, 200, 201] {
+            orch.register_client(pid);
+        }
+
+        orch.client_names.insert(100, "Warrior01".into());
+        orch.client_names.insert(101, "Cleric01".into());
+        orch.client_names.insert(200, "Warrior02".into());
+        orch.client_names.insert(201, "Cleric02".into());
+
+        orch.set_client_group(100, 1);
+        orch.set_client_group(101, 1);
+        orch.set_client_group(200, 2);
+        orch.set_client_group(201, 2);
+
+        orch.set_client_class_name(100, "Warrior");
+        orch.set_client_class_name(101, "Cleric");
+        orch.set_client_class_name(200, "Warrior");
+        orch.set_client_class_name(201, "Cleric");
+
+        orch.game_states.insert(
+            100,
+            make_game_state(
+                100,
+                "crushbone",
+                make_spawn_named("Warrior01", 1, 1800, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            101,
+            make_game_state(
+                101,
+                "crushbone",
+                make_spawn_named("Cleric01", 2, 1500, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            200,
+            make_game_state(
+                200,
+                "crushbone",
+                make_spawn_named("Warrior02", 1, 0, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            201,
+            make_game_state(
+                201,
+                "crushbone",
+                make_spawn_named("Cleric02", 2, 0, 2000),
+                None,
+            ),
+        );
+        mark_states_fresh(&mut orch, &[100, 101, 200, 201]);
+
+        let first_tick = orch.tick();
+        assert_eq!(first_tick, 2, "expected rez target + cast commands");
+        assert!(
+            orch.last_dispatched
+                .iter()
+                .any(|(pid, action)| *pid == 101 && action == "/target Cleric02")
+        );
+        assert!(
+            orch.last_dispatched
+                .iter()
+                .any(|(pid, action)| *pid == 101 && action == "/cast 5")
+        );
+
+        let second_tick = orch.tick();
+        assert_eq!(second_tick, 0, "rez request should not spam every tick");
+    }
+
+    #[test]
+    fn cross_group_assist_dispatches_same_zone_attackers_once() {
+        let mut orch = Orchestrator::new();
+
+        for pid in [110, 111, 210, 211] {
+            orch.register_client(pid);
+        }
+
+        orch.client_names.insert(110, "Warrior10".into());
+        orch.client_names.insert(111, "Cleric10".into());
+        orch.client_names.insert(210, "Warrior20".into());
+        orch.client_names.insert(211, "Ranger20".into());
+
+        orch.set_client_group(110, 1);
+        orch.set_client_group(111, 1);
+        orch.set_client_group(210, 2);
+        orch.set_client_group(211, 2);
+
+        orch.set_client_class_name(110, "Warrior");
+        orch.set_client_class_name(111, "Cleric");
+        orch.set_client_class_name(210, "Warrior");
+        orch.set_client_class_name(211, "Ranger");
+
+        let rescue_target = Some(make_spawn_named("an_orc_centurion", 1, 900, 1000));
+        orch.game_states.insert(
+            110,
+            make_game_state(
+                110,
+                "crushbone",
+                make_spawn_named("Warrior10", 1, 300, 2000),
+                rescue_target.clone(),
+            ),
+        );
+        orch.game_states.insert(
+            111,
+            make_game_state(
+                111,
+                "crushbone",
+                make_spawn_named("Cleric10", 2, 500, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            210,
+            make_game_state(
+                210,
+                "crushbone",
+                make_spawn_named("Warrior20", 1, 1800, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            211,
+            make_game_state(
+                211,
+                "crushbone",
+                make_spawn_named("Ranger20", 4, 1600, 2000),
+                None,
+            ),
+        );
+        mark_states_fresh(&mut orch, &[110, 111, 210, 211]);
+
+        let first_tick = orch.tick();
+        assert_eq!(first_tick, 4, "expected assist + attack for each responder");
+        assert!(
+            orch.last_dispatched
+                .iter()
+                .any(|(pid, action)| *pid == 210 && action == "/assist Warrior10")
+        );
+        assert!(
+            orch.last_dispatched
+                .iter()
+                .any(|(pid, action)| *pid == 211 && action == "/assist Warrior10")
+        );
+
+        let second_tick = orch.tick();
+        assert_eq!(second_tick, 0, "assist request should not spam every tick");
+    }
+
+    #[test]
+    fn cross_group_coordination_skips_other_zones() {
+        let mut orch = Orchestrator::new();
+
+        for pid in [120, 121, 220] {
+            orch.register_client(pid);
+        }
+
+        orch.client_names.insert(120, "Warrior12".into());
+        orch.client_names.insert(121, "Cleric12".into());
+        orch.client_names.insert(220, "Cleric22".into());
+
+        orch.set_client_group(120, 1);
+        orch.set_client_group(121, 1);
+        orch.set_client_group(220, 2);
+
+        orch.set_client_class_name(120, "Warrior");
+        orch.set_client_class_name(121, "Cleric");
+        orch.set_client_class_name(220, "Cleric");
+
+        orch.game_states.insert(
+            120,
+            make_game_state(
+                120,
+                "mistmoore",
+                make_spawn_named("Warrior12", 1, 0, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            121,
+            make_game_state(
+                121,
+                "mistmoore",
+                make_spawn_named("Cleric12", 2, 0, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            220,
+            make_game_state(
+                220,
+                "guktop",
+                make_spawn_named("Cleric22", 2, 1700, 2000),
+                None,
+            ),
+        );
+        mark_states_fresh(&mut orch, &[120, 121, 220]);
+
+        assert_eq!(orch.tick(), 0, "different-zone groups must not coordinate");
+        assert!(orch.last_dispatched.is_empty());
+    }
+
+    #[test]
+    fn cross_group_priority_reserves_responder_for_rez_before_assist() {
+        let mut orch = Orchestrator::new();
+
+        for pid in [130, 131, 230, 231, 330, 331] {
+            orch.register_client(pid);
+        }
+
+        orch.client_names.insert(130, "Warrior13".into());
+        orch.client_names.insert(131, "Cleric13".into());
+        orch.client_names.insert(230, "Warrior23".into());
+        orch.client_names.insert(231, "Cleric23".into());
+        orch.client_names.insert(330, "Warrior33".into());
+        orch.client_names.insert(331, "Cleric33".into());
+
+        orch.set_client_group(130, 1);
+        orch.set_client_group(131, 1);
+        orch.set_client_group(230, 2);
+        orch.set_client_group(231, 2);
+        orch.set_client_group(330, 3);
+        orch.set_client_group(331, 3);
+
+        orch.set_client_class_name(130, "Warrior");
+        orch.set_client_class_name(131, "Cleric");
+        orch.set_client_class_name(230, "Warrior");
+        orch.set_client_class_name(231, "Cleric");
+        orch.set_client_class_name(330, "Warrior");
+        orch.set_client_class_name(331, "Cleric");
+
+        orch.game_states.insert(
+            130,
+            make_game_state(
+                130,
+                "crushbone",
+                make_spawn_named("Warrior13", 1, 0, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            131,
+            make_game_state(
+                131,
+                "crushbone",
+                make_spawn_named("Cleric13", 2, 0, 2000),
+                None,
+            ),
+        );
+
+        let mut add_target = make_spawn_named("an_orc_legionnaire", 1, 900, 1000);
+        add_target.spawn_type = 1;
+        orch.game_states.insert(
+            230,
+            make_game_state(
+                230,
+                "crushbone",
+                make_spawn_named("Warrior23", 1, 400, 2000),
+                Some(add_target.clone()),
+            ),
+        );
+        orch.game_states.insert(
+            231,
+            make_game_state(
+                231,
+                "crushbone",
+                make_spawn_named("Cleric23", 2, 500, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            330,
+            make_game_state(
+                330,
+                "crushbone",
+                make_spawn_named("Warrior33", 1, 1800, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            331,
+            make_game_state(
+                331,
+                "crushbone",
+                make_spawn_named("Cleric33", 2, 1700, 2000),
+                None,
+            ),
+        );
+        mark_states_fresh(&mut orch, &[130, 131, 230, 231, 330, 331]);
+
+        let first_tick = orch.tick();
+        assert_eq!(
+            first_tick, 2,
+            "single responder group should be reserved for the higher-priority rez"
+        );
+        assert!(
+            orch.last_dispatched
+                .iter()
+                .any(|(pid, action)| *pid == 331 && action == "/target Cleric13")
+        );
+        assert!(
+            orch.last_dispatched
+                .iter()
+                .all(|(_, action)| !action.starts_with("/assist "))
+        );
+    }
+
+    #[test]
+    fn cross_group_ignores_stale_group_state() {
+        let mut orch = Orchestrator::new();
+
+        for pid in [140, 141, 240, 241] {
+            orch.register_client(pid);
+        }
+
+        orch.client_names.insert(140, "Warrior14".into());
+        orch.client_names.insert(141, "Cleric14".into());
+        orch.client_names.insert(240, "Warrior24".into());
+        orch.client_names.insert(241, "Cleric24".into());
+
+        orch.set_client_group(140, 1);
+        orch.set_client_group(141, 1);
+        orch.set_client_group(240, 2);
+        orch.set_client_group(241, 2);
+
+        orch.set_client_class_name(140, "Warrior");
+        orch.set_client_class_name(141, "Cleric");
+        orch.set_client_class_name(240, "Warrior");
+        orch.set_client_class_name(241, "Cleric");
+
+        orch.game_states.insert(
+            140,
+            make_game_state(
+                140,
+                "crushbone",
+                make_spawn_named("Warrior14", 1, 0, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            141,
+            make_game_state(
+                141,
+                "crushbone",
+                make_spawn_named("Cleric14", 2, 0, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            240,
+            make_game_state(
+                240,
+                "crushbone",
+                make_spawn_named("Warrior24", 1, 1800, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            241,
+            make_game_state(
+                241,
+                "crushbone",
+                make_spawn_named("Cleric24", 2, 1700, 2000),
+                None,
+            ),
+        );
+
+        orch.tick_count = STALE_TICK_THRESHOLD + 5;
+        orch.state_timestamps.insert(140, 1);
+        orch.state_timestamps.insert(141, 1);
+        orch.state_timestamps.insert(240, orch.tick_count);
+        orch.state_timestamps.insert(241, orch.tick_count);
+
+        assert_eq!(orch.tick(), 0, "stale groups must not request rescue");
+        assert!(orch.last_dispatched.is_empty());
     }
 }

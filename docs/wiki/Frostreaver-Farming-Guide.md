@@ -4,6 +4,8 @@
 
 ### 36-Box Setup (6 Groups of 6)
 
+Detailed early-planar raid research now lives in [Research: Plane of Hate and Plane of Sky Early Raid Targets](Research-Hate-and-Sky-Early-Raid-Targets.md). Use that page for lockout planning, epic-component mapping, and Krono-value assumptions.
+
 ---
 
 ## Table of Contents
@@ -81,6 +83,20 @@ This final roster does **not** maintain a separate raid-only bench. Instead, it 
 - Six clerics are the hard commitment. Shamans and the druid supplement heals; they do not replace the cleric chain.
 - Pet tanking is optional in farm content and explicitly unnecessary in raid planning. Mage and beastlord pets are bonus DPS and utility, not the main mitigation plan.
 - The total raid target is the full 36-character roster. The composition is deliberately stable across one-group progression, six-group farming, and full-raid nights.
+
+### Automation Survivability Core
+
+For unattended camp automation, TextQuest treats `BRD + CLR + second healer/support-healer` as the minimum survivability core. The second healing slot is a deliberate trade: it gives up one higher-throughput DPS slot so the group can survive bad pulls, named pops, healer desync, and pathing mistakes without operator rescue.
+
+- Preferred core: `tank + CLR + BRD + SHM + DPS + DPS`. Shaman is the best second healer because slow reduces incoming damage before the cleric has to spend mana catching up.
+- Lower-throughput fallback: `tank + CLR + BRD + PAL + DPS + flex`. Paladin does not match shaman's slow value, but it adds pickup, stun, and emergency healing for recovery windows.
+- Utility exception: `BRD + CLR` by itself is acceptable only for travel, caster logistics, or lower-risk camps. It is not the default unattended template for named-heavy or unstable camps.
+
+Applied to the locked roster:
+
+- Groups 1-4 cleanly satisfy the survivability core with `CLR + BRD + SHM`.
+- Group 5 is a controlled exception: druid covers the second-healer role for travel and evac-heavy utility work, but it is still less robust than the shaman groups.
+- Group 6 is the clearest exception. It keeps the universal `BRD + CLR` floor, but it should be treated as a support/logistics group unless adjacent support or lower-risk content keeps the recovery burden low.
 
 ### Partner-Contingent Planning
 
@@ -275,6 +291,8 @@ With 36 characters (6 full groups), you have a significant force. Here is what i
 | **ToV North Wing (NToV)**  | Temple of Veeshan | Hard           | Best loot in Velious era                                      | See NToV section below                                   |
 | **Vulak'Aerr**             | NToV              | Very Hard      | Abashi's Rod, Do'Vassir's Gauntlets, Crystasia's Ring (AC 30) | Final boss of Velious; 36 well-geared chars may be tight |
 | **Sleeper's Tomb**         | Sleeper's Tomb    | Hard-Very Hard | ST-specific loot, warders                                     | Ancient dragons; significant challenge                   |
+
+For the key quest, tradeability assumptions, 36-account keying order, and the expected seller window, see [Research: Sleeper's Tomb Keying Opportunity Window](Research-Sleepers-Tomb-Keying).
 
 ### NToV Dragon Difficulty Ranking (for your 36-box)
 
