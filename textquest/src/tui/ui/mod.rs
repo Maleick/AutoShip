@@ -70,7 +70,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         ActiveScreen::Debug => spawns::draw_debug_screen(frame, outer[1], app),
         ActiveScreen::PacketMonitor => packets::draw_packet_monitor(frame, outer[1], app),
         ActiveScreen::Economy => economy_controls::draw_economy_screen(frame, outer[1], app),
-        ActiveScreen::Orchestrator => economy_controls::draw_economy_screen(frame, outer[1], app),
+        ActiveScreen::Orchestrator => {
+            orchestrator_panel::draw_orchestrator_screen(frame, outer[1], app);
+        }
     }
 
     draw_status_bar(frame, outer[2], app);
@@ -1132,6 +1134,44 @@ mod tests {
     }
 
     #[test]
+    fn orchestrator_screen_dispatches_to_dashboard_renderer() {
+        let mut app = sample_app();
+        app.set_active_screen(ActiveScreen::Orchestrator);
+
+        let rendered = render_app(app, 150, 36);
+
+        assert!(rendered.contains("Session"));
+        assert!(rendered.contains("System"));
+        assert!(!rendered.contains("Economy Operator Controls"));
+    }
+
+    #[test]
+    fn orchestrator_screen_renders_system_health_when_tab_changes() {
+        let mut app = sample_app();
+        app.set_active_screen(ActiveScreen::Orchestrator);
+        app.orchestrator_state.active_tab =
+            crate::tui::ui::orchestrator_panel::OrchestratorTab::System;
+
+        let rendered = render_app(app, 140, 34);
+
+        assert!(rendered.contains("Client Health"));
+        assert!(rendered.contains("System Detail"));
+        assert!(rendered.contains("IPC p50/p95/p99"));
+    }
+
+    #[test]
+    fn orchestrator_screen_stays_readable_on_narrow_terminals() {
+        let mut app = sample_app();
+        app.set_active_screen(ActiveScreen::Orchestrator);
+
+        let rendered = render_app(app, 90, 24);
+
+        assert!(rendered.contains("Operator Dashboard"));
+        assert!(rendered.contains("Dashboard Shortcuts"));
+        assert!(rendered.contains("Session"));
+    }
+
+    #[test]
     fn help_overlay_small_host_uses_compact_rows() {
         let mut app = sample_app();
         app.help_visible = true;
@@ -1232,6 +1272,14 @@ mod tests {
             is_adaptive: true,
             target_id: 42,
         });
+        app.economy_state.loot_recent_items = vec![
+            String::from("Fungus Covered Scale Tunic"),
+            String::from("Crown of Narandi"),
+        ];
+        app.economy_state.loot_queue_size = 3;
+        app.economy_state.vendor_cycles_completed = 2;
+        app.economy_state.banking_chars_total = 6;
+        app.economy_state.banking_chars_done = 4;
         app.clients = (1..=12).map(sample_client).collect();
         app.selected_client = 0;
         app.sync_from_selected_client();

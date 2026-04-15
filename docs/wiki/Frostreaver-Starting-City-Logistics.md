@@ -92,8 +92,8 @@ Operationally there are five travel origins because the Freeport cluster include
 
 ### Earliest Practical Full-Roster Convergence
 
-**Level target:** 12  
-**Staging zone:** Butcherblock Mountains docks  
+**Level target:** 12
+**Staging zone:** Butcherblock Mountains docks
 **First shared XP target:** Estate of Unrest yard / entry
 
 This is the earliest point where the convergence is still efficient instead of merely possible.
