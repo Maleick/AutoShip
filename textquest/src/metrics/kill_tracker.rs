@@ -4,8 +4,7 @@
 //! computes DPS metrics, and provides efficiency scoring for
 //! camp optimization feedback.
 
-use std::collections::HashMap;
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use serde::{Deserialize, Serialize};
 

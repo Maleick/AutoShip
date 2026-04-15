@@ -163,7 +163,8 @@ mod tests {
         queue.add_target(1, 200, 0); // expires at 200
         queue.add_target(2, 100, 0); // expires at 100
 
-        // At tick 80, target 2 is in refresh window (80+40>=100), target 1 is not (80+40<200)
+        // At tick 80, target 2 is in refresh window (80+40>=100), target 1 is not
+        // (80+40<200)
         assert_eq!(queue.next_refresh_target(80), Some(2));
     }
 

@@ -5,8 +5,10 @@
 
 use std::collections::HashMap;
 
-use textquest::camp::config::CampConfig;
-use textquest::camp::state::{CampAction, CampLoop, CampMember, CampSnapshot, PULL_DURATION, Role};
+use textquest::camp::{
+    config::CampConfig,
+    state::{CampAction, CampLoop, CampMember, CampSnapshot, PULL_DURATION, Role},
+};
 use textquest_common::types::GameState;
 
 // ============================================================================

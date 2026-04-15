@@ -4,8 +4,7 @@
 //! into the metrics SQLite store. Each variant captures the minimum
 //! data needed for fleet intelligence queries.
 
-use std::collections::HashMap;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
@@ -127,7 +126,8 @@ pub struct PlatTracker {
     session_start: i64,
     /// Last known balance per character (from the most recent `PlatEvent`).
     last_balance: HashMap<String, i64>,
-    /// Cumulative plat earned (sum of positive deltas) per character since session start.
+    /// Cumulative plat earned (sum of positive deltas) per character since
+    /// session start.
     session_earned: HashMap<String, i64>,
 }
 
@@ -154,7 +154,8 @@ impl PlatTracker {
         self.record_with_source(pid, character, new_balance, None, timestamp)
     }
 
-    /// Record a platinum event with an optional source label, updating internal state.
+    /// Record a platinum event with an optional source label, updating internal
+    /// state.
     ///
     /// Returns the computed `PlatEvent` with delta filled in.
     pub fn record_with_source(

@@ -1,10 +1,14 @@
 //! Periodic hook rotation for anti-detection.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread;
 #[cfg(windows)]
 use std::time::{Duration, Instant};
+use std::{
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
+    thread,
+};
 
 type HookFn = Box<dyn Fn() + Send + Sync + 'static>;
 
@@ -181,8 +185,10 @@ impl HookRotationManager {
 #[cfg(windows)]
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::Duration;
+    use std::{
+        sync::atomic::{AtomicU64, Ordering},
+        time::Duration,
+    };
 
     use super::HookRotationManager;
 
@@ -219,8 +225,10 @@ mod tests {
 mod tests {
     use super::HookRotationManager;
 
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
 
     #[test]
     fn start_register_stop_stubbed() {

@@ -1,7 +1,8 @@
-//! EQ internal function addresses, signatures, and widget interaction primitives.
-//! These are offsets from the eqgame.exe base address.
+//! EQ internal function addresses, signatures, and widget interaction
+//! primitives. These are offsets from the eqgame.exe base address.
 //! Derived from MQ2 source headers.
 
+pub mod bazaar;
 pub mod chat;
 pub mod context_menu;
 pub mod inventory;
@@ -140,14 +141,17 @@ fn get_eq_base() -> Option<u64> {
     if base == 0 { None } else { Some(base) }
 }
 
-/// Validate that a rebased function pointer address is safe to transmute and call.
+/// Validate that a rebased function pointer address is safe to transmute and
+/// call.
 ///
 /// Checks:
 /// 1. Address is non-zero
-/// 2. Address falls within the EQ module's memory region (base .. base + reasonable size)
+/// 2. Address falls within the EQ module's memory region (base .. base +
+///    reasonable size)
 /// 3. (Windows only) The memory page is committed and has execute permission
 ///
-/// Returns `true` if the address looks valid, `false` otherwise (with a warning log).
+/// Returns `true` if the address looks valid, `false` otherwise (with a warning
+/// log).
 #[cfg(windows)]
 pub(crate) fn validate_fn_ptr(addr: usize, name: &str) -> bool {
     use windows::Win32::System::Memory::{
@@ -326,7 +330,8 @@ pub fn read_memorized_spells() -> [i32; MAX_MEMORIZED_SPELL_GEMS] {
 /// `gem_id`: 0-based gem slot index.
 /// `spell_id`: the spell's ID number.
 ///
-/// Calls `CharacterZoneClient::CastSpell(gemid`, spellid, `item_ptr=null`, item_guid=0).
+/// Calls `CharacterZoneClient::CastSpell(gemid`, spellid, `item_ptr=null`,
+/// item_guid=0).
 pub fn cast_spell(gem_id: u8, spell_id: i32) {
     #[cfg(windows)]
     {
@@ -491,7 +496,8 @@ pub fn use_skill(skill_id: u32, target: Option<*mut c_void>) {
 /// Use a combat ability (discipline, AA, etc.).
 ///
 /// `spell_id`: the ability's spell ID.
-/// `allow_lower_rank`: whether to allow using a lower rank if the exact rank is unavailable.
+/// `allow_lower_rank`: whether to allow using a lower rank if the exact rank is
+/// unavailable.
 ///
 /// Calls `PcZoneClient::DoCombatAbility(spellID`, allowLowerRank).
 pub fn do_combat_ability(spell_id: i32, allow_lower_rank: bool) {
@@ -697,7 +703,8 @@ pub fn send_living_shield(target_id: u32) -> Result<(), String> {
 
         tracing::warn!(
             target_id,
-            "Living Shield packet injection is disabled until the connection pointer path is recalibrated"
+            "Living Shield packet injection is disabled until the connection pointer path is \
+             recalibrated"
         );
         Err("Living Shield packet injection is not implemented in this build.".to_string())
     }

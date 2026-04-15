@@ -132,6 +132,8 @@ pub enum ActivePanel {
     DebugInternals,
     /// Economy controls panel (vendor cycle, banking, loot queue).
     EconomyControls,
+    /// Orchestrator dashboard panel with internal parity tabs.
+    OrchestratorDashboard,
 }
 
 /// Layout preset for panel arrangement within a screen.
@@ -579,6 +581,9 @@ pub struct App {
 
     /// Economy Controls screen state (vendor cycle, banking, loot queue).
     pub economy_state: super::state::EconomyState,
+    /// Orchestrator dashboard state (tab selection, telemetry history, error
+    /// log).
+    pub orchestrator_state: super::ui::orchestrator_panel::OrchestratorDashboardState,
 }
 
 /// Navigation status for a single client.
@@ -810,6 +815,7 @@ impl App {
             automation_paused: false,
             priority_snapshots: Vec::new(),
             economy_state: super::state::EconomyState::default(),
+            orchestrator_state: super::ui::orchestrator_panel::OrchestratorDashboardState::new(),
         };
         app.cmd_state.load_history_from_disk();
         app
@@ -961,7 +967,7 @@ impl App {
             ActiveScreen::Debug => ActivePanel::DebugSpawns,
             ActiveScreen::PacketMonitor => ActivePanel::PacketMonitorLog,
             ActiveScreen::Economy => ActivePanel::EconomyControls,
-            ActiveScreen::Orchestrator => ActivePanel::EconomyControls,
+            ActiveScreen::Orchestrator => ActivePanel::OrchestratorDashboard,
         }
     }
 
@@ -1003,7 +1009,7 @@ impl App {
             }
             ActiveScreen::PacketMonitor => vec![ActivePanel::PacketMonitorLog],
             ActiveScreen::Economy => vec![ActivePanel::EconomyControls],
-            ActiveScreen::Orchestrator => vec![ActivePanel::EconomyControls],
+            ActiveScreen::Orchestrator => vec![ActivePanel::OrchestratorDashboard],
         }
     }
 
@@ -4982,13 +4988,15 @@ impl App {
         }
     }
 
-    ///   ch start <pid1,pid2,...> <interval> <`target_id`> [`spell_slot`]
-    ///   ch stop                  — Stop the running CH chain
-    ///   ch add <pid>             — Add a cleric to the chain
-    ///   ch remove <pid>          — Remove a cleric from the chain (`rm` alias
-    /// supported)   ch interval <seconds>    — Set the interval between
-    /// casts   ch adaptive on|off       — Toggle adaptive timing mode
-    ///   ch status                — Show current chain status
+    /// CH commands:
+    /// - `ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]`
+    /// - `ch stop`: stop the running CH chain
+    /// - `ch add <pid>`: add a cleric to the chain
+    /// - `ch remove <pid>`: remove a cleric from the chain (`rm` alias
+    ///   supported)
+    /// - `ch interval <seconds>`: set the interval between casts
+    /// - `ch adaptive on|off`: toggle adaptive timing mode
+    /// - `ch status`: show current chain status
     fn execute_ch_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
         match args.first().copied() {
             None | Some("status") => {

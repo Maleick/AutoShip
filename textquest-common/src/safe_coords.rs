@@ -15,7 +15,8 @@ pub const SAFE_COORD_MAX: f32 = 10_000.0;
 /// Avoids false positives from floating-point noise.
 pub const POSITION_EPSILON: f32 = 0.1;
 
-/// Request sent from orchestrator to DLL to get safe coordinates after zone denial.
+/// Request sent from orchestrator to DLL to get safe coordinates after zone
+/// denial.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SafeCoordRequest {
     /// Zone short name (e.g., "qey2hh1").
@@ -51,8 +52,8 @@ pub struct SafeCoordResponse {
     /// The safe coordinate validated by the DLL (in-zone, within bounds).
     pub safe_pos: (f32, f32, f32),
 
-    /// Whether this position was pre-calculated (e.g., zone origin) or looked up
-    /// from navmesh/zone data.
+    /// Whether this position was pre-calculated (e.g., zone origin) or looked
+    /// up from navmesh/zone data.
     pub is_validated: bool,
 
     /// Human-readable reason for the selected position (e.g., "zone origin",
@@ -174,7 +175,8 @@ impl PositionValidation {
     }
 }
 
-/// Determines if position has moved significantly enough to consider it different.
+/// Determines if position has moved significantly enough to consider it
+/// different.
 ///
 /// Uses `POSITION_EPSILON` to avoid floating-point noise.
 pub fn positions_differ(from: (f32, f32, f32), to: (f32, f32, f32)) -> bool {
@@ -183,7 +185,8 @@ pub fn positions_differ(from: (f32, f32, f32), to: (f32, f32, f32)) -> bool {
         || (from.2 - to.2).abs() > POSITION_EPSILON
 }
 
-/// Computes distance between two positions (Manhattan distance, fast approximation).
+/// Computes distance between two positions (Manhattan distance, fast
+/// approximation).
 pub fn position_distance_manhattan(from: (f32, f32, f32), to: (f32, f32, f32)) -> f32 {
     (from.0 - to.0).abs() + (from.1 - to.1).abs() + (from.2 - to.2).abs()
 }

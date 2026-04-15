@@ -54,16 +54,18 @@
 )]
 use std::sync::Arc;
 
-use axum::Json;
-use axum::extract::State;
-use axum::http::HeaderMap;
-use axum::http::StatusCode;
+use axum::{
+    Json,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::AppState;
 
-// ── Shared economy state ──────────────────────────────────────────────────────
+// ── Shared economy state
+// ──────────────────────────────────────────────────────
 
 /// In-memory economy cycle state shared across handlers.
 pub struct EconomyState {
@@ -92,12 +94,14 @@ impl EconomyState {
     }
 }
 
-// ── Response types ────────────────────────────────────────────────────────────
+// ── Response types
+// ────────────────────────────────────────────────────────────
 
 /// Response for GET /api/economy/status.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EconomyStatusResponse {
-    /// Names of currently active economy cycles (e.g. "loot", "vendor", "banking").
+    /// Names of currently active economy cycles (e.g. "loot", "vendor",
+    /// "banking").
     pub active_cycles: Vec<String>,
     /// Whether the economy engine is globally paused.
     pub is_paused: bool,
@@ -123,7 +127,8 @@ pub struct EconomyQueuesResponse {
     pub vendor_backlog_len: u32,
 }
 
-// ── Handlers ──────────────────────────────────────────────────────────────────
+// ── Handlers
+// ──────────────────────────────────────────────────────────────────
 
 /// GET /api/economy/status — current active cycles and pause state.
 pub async fn get_status(State(state): State<Arc<AppState>>) -> Json<EconomyStatusResponse> {
@@ -135,7 +140,8 @@ pub async fn get_status(State(state): State<Arc<AppState>>) -> Json<EconomyStatu
     })
 }
 
-/// GET /api/economy/ledger — summary stats (plat/hour, items distributed, vendor sales).
+/// GET /api/economy/ledger — summary stats (plat/hour, items distributed,
+/// vendor sales).
 pub async fn get_ledger(State(state): State<Arc<AppState>>) -> Json<EconomyLedgerResponse> {
     let ledger = state.economy_state.ledger.read().await.clone();
     Json(ledger)
@@ -182,6 +188,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         })

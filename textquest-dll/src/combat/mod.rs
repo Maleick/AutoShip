@@ -20,8 +20,10 @@ pub mod xtarget;
 
 use std::sync::Mutex;
 
-use textquest_common::combat::{CastResult, CombatConfig, CombatStatus};
-use textquest_common::types::SpawnData;
+use textquest_common::{
+    combat::{CastResult, CombatConfig, CombatStatus},
+    types::SpawnData,
+};
 
 use state::Combatant;
 

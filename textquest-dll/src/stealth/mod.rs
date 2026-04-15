@@ -5,7 +5,8 @@
 //!
 //! 1. **VirtualProtect toggle** (page_guard): Flips .text between RW and RX.
 //! 2. **SIMD XOR encryption** (text_encrypt): Encrypts .text with random key.
-//! 3. **Call stack spoofing** (stack_spoof): Stub for hypnus-style masking (#345).
+//! 3. **Call stack spoofing** (stack_spoof): Stub for hypnus-style masking
+//!    (#345).
 //!
 //! Functions in wake/sleep transitions use `#[link_section = ".tq"]` to stay
 //! executable when `.text` is encrypted.

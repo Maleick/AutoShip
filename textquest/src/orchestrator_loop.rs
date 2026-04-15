@@ -264,6 +264,21 @@ impl OrchestratorLoop {
                         session.slot_lifecycle = SlotLifecycle::Live;
                         self.orchestrator.register_client(pid);
 
+                        if let Some(account) = session.bound_toon.as_ref() {
+                            if let Ok(group_id) = u8::try_from(account.group_id) {
+                                self.orchestrator.set_client_group(pid, group_id);
+                            } else {
+                                tracing::warn!(
+                                    client_id,
+                                    pid,
+                                    group_id = account.group_id,
+                                    "Skipping out-of-range group assignment for coordination"
+                                );
+                            }
+                            self.orchestrator
+                                .set_client_class_name(pid, account.class_name.clone());
+                        }
+
                         // Store the session token for the DLL
                         if let Some(name) = &session.character_name {
                             self.orchestrator.client_names.insert(pid, name.clone());
@@ -354,6 +369,7 @@ impl OrchestratorLoop {
 mod tests {
     use super::*;
     use crate::config::OrchestratorConfig;
+    use textquest_common::login::AccountInfo;
 
     fn test_config() -> OrchestratorConfig {
         OrchestratorConfig {
@@ -430,6 +446,41 @@ mod tests {
         let events = oloop.tick_launch_coordinator();
         // No queued clients = no events
         assert!(events.is_empty());
+    }
+
+    #[test]
+    fn client_ready_caches_group_and_class_metadata() {
+        let config = make_app_config();
+        let (_tx, rx) = watch::channel(false);
+        let mut oloop = OrchestratorLoop::from_config(&config, rx);
+
+        oloop.client_manager.track_client(7, 4242);
+        let account = AccountInfo {
+            account_name: "acct".into(),
+            character_name: "Cleric42".into(),
+            class_name: "Cleric".into(),
+            level: 60,
+            group_id: 2,
+            server_name: "Frostreaver".into(),
+        };
+        {
+            let session = oloop.client_manager.get_mut(7).expect("session");
+            session.bound_toon = Some(account.clone());
+            session.character_name = Some("Cleric42".into());
+        }
+
+        oloop
+            .launch_coordinator
+            .seed_ready_login_for_test(7, account);
+
+        let events = oloop.tick_launch_coordinator();
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event, LoopEvent::ClientRegistered { pid: 4242 }))
+        );
+        assert_eq!(oloop.orchestrator.client_group(4242), Some(2));
+        assert_eq!(oloop.orchestrator.client_class_name(4242), Some("Cleric"));
     }
 
     #[test]

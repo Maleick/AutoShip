@@ -1,7 +1,9 @@
-use std::collections::HashMap;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
-use std::sync::{Mutex, OnceLock};
+use std::{
+    collections::HashMap,
+    error::Error,
+    fmt::{Display, Formatter},
+    sync::{Mutex, OnceLock},
+};
 
 #[cfg(all(windows, not(test)))]
 use retour::RawDetour;

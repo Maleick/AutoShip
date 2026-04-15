@@ -1,4 +1,5 @@
-//! Death recovery — detect dead members, request resurrections, resume camp loop.
+//! Death recovery — detect dead members, request resurrections, resume camp
+//! loop.
 
 /// Death state for a single group member.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,8 +111,9 @@ fn rez_priority(role: &str) -> u8 {
 /// - Dead char after rez: /stand
 /// - Returns `(pid, command)` pairs
 ///
-/// `role_map` provides an optional `(pid, role_name)` list for rez prioritization.
-/// When provided, dead members are rezzed in priority order: Healer > Tank > CC > DPS.
+/// `role_map` provides an optional `(pid, role_name)` list for rez
+/// prioritization. When provided, dead members are rezzed in priority order:
+/// Healer > Tank > CC > DPS.
 pub fn death_commands(
     members_state: &mut [(u32, String, DeathState)],
     cleric_pid: Option<u32>,

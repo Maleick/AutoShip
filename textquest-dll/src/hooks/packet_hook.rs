@@ -108,8 +108,10 @@ static WSARECV_ADDR: AtomicUsize = AtomicUsize::new(0);
 /// Resolve the address of a named export from a loaded module.
 #[cfg(windows)]
 fn resolve_ws2_function(name: &str) -> Result<usize, Box<dyn std::error::Error>> {
-    use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
-    use windows::core::PCSTR;
+    use windows::{
+        Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress},
+        core::PCSTR,
+    };
 
     let module_name = std::ffi::CString::new("ws2_32.dll")?;
     let func_name = std::ffi::CString::new(name)?;
@@ -275,15 +277,21 @@ fn on_packet_recv(client_id: ClientId, buf: *const u8, len: usize) {
 
 #[cfg(windows)]
 mod inner {
-    use std::sync::OnceLock;
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::{
+        OnceLock,
+        atomic::{AtomicU32, Ordering},
+    };
 
     use retour::static_detour;
-    use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
-    use windows::core::s;
+    use windows::{
+        Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress},
+        core::s,
+    };
 
-    use textquest_common::ipc::{PacketDirection, Response};
-    use textquest_common::types::ClientId;
+    use textquest_common::{
+        ipc::{PacketDirection, Response},
+        types::ClientId,
+    };
 
     // ── Raw Winsock types ────────────────────────────────────────────────────
     //
@@ -309,7 +317,8 @@ mod inner {
     unsafe impl Send for WSABUF {}
     unsafe impl Sync for WSABUF {}
 
-    /// Winsock2 OVERLAPPED — async I/O control block (opaque; never dereferenced).
+    /// Winsock2 OVERLAPPED — async I/O control block (opaque; never
+    /// dereferenced).
     #[repr(C)]
     #[allow(non_camel_case_types)]
     struct OVERLAPPED([usize; 5]);
@@ -372,8 +381,9 @@ mod inner {
     /// Minimum packet length to contain the EQ opcode at bytes [2..4].
     const MIN_OPCODE_PACKET_LEN: usize = 4;
 
-    /// Maximum allowable packet size (64 KiB). Larger packets are discarded as invalid.
-    /// This prevents unbounded reads from adversarial or corrupted WSABUF structures.
+    /// Maximum allowable packet size (64 KiB). Larger packets are discarded as
+    /// invalid. This prevents unbounded reads from adversarial or corrupted
+    /// WSABUF structures.
     const MAX_PACKET_SIZE: usize = 65536;
 
     // ── Install / remove ─────────────────────────────────────────────────────
@@ -656,7 +666,8 @@ mod inner {
 
     // ── Packet handler ───────────────────────────────────────────────────────
 
-    /// Extract the EQ opcode from a raw packet buffer and enqueue a `PacketEvent`.
+    /// Extract the EQ opcode from a raw packet buffer and enqueue a
+    /// `PacketEvent`.
     ///
     /// EverQuest EQStream protocol layout:
     /// ```text

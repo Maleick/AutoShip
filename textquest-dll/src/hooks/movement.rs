@@ -153,7 +153,8 @@ impl MovementController {
     }
 
     /// Call EQ's __ExecuteCmd to simulate key presses.
-    /// Signature: void __ExecuteCmd(uint32_t command, bool keyDown, void* data, void* pTarget)
+    /// Signature: void __ExecuteCmd(uint32_t command, bool keyDown, void* data,
+    /// void* pTarget)
     pub fn execute_cmd(&self, command: u32, key_down: bool) {
         #[cfg(windows)]
         {

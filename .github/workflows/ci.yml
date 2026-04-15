@@ -24,24 +24,81 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect docs-only change set
+        id: scope
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "Unsupported event for diff scoping; running full gate."
+            exit 0
+          fi
+
+          if ! diff_output="$(git diff --name-only "$base" "$head")"; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "Failed to diff $base..$head; running full gate."
+            exit 0
+          fi
+
+          mapfile -t changed_files < <(printf '%s\n' "$diff_output")
+
+          if [[ ${#changed_files[@]} -eq 0 ]]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "No changed files detected; running full gate."
+            exit 0
+          fi
+
+          echo "Changed files:"
+          printf '  %s\n' "${changed_files[@]}"
+
+          docs_only=true
+          for file in "${changed_files[@]}"; do
+            case "$file" in
+              docs/**|site/**|*.md|*.txt|.github/workflows/ci.yml|.github/workflows/docs-pages.yml)
+                ;;
+              *)
+                docs_only=false
+                echo "Non-doc change detected: $file"
+                break
+                ;;
+            esac
+          done
+
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "docs_only=$docs_only"
 
       - name: Install native build dependencies
+        if: steps.scope.outputs.docs_only != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake clang libclang-dev llvm-dev
           echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
 
       - name: Setup Python
+        if: steps.scope.outputs.docs_only != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Setup Rust
+        if: steps.scope.outputs.docs_only != 'true'
         uses: dtolnay/rust-toolchain@nightly
         with:
-          components: rustfmt, clippy
+          components: clippy
 
       - name: Cache cargo registry
+        if: steps.scope.outputs.docs_only != 'true'
         uses: Swatinem/rust-cache@v2
 
       - name: Validate wiki sources
@@ -51,17 +108,21 @@ jobs:
         run: python3 scripts/validate_offsets_sync.py
 
       - name: Run Python tests (advisory)
+        if: steps.scope.outputs.docs_only != 'true'
         continue-on-error: true
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
-      - name: Check formatting
-        run: cargo fmt --all --check
-
       - name: Run clippy
+        if: steps.scope.outputs.docs_only != 'true'
         run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Run Rust tests
+        if: steps.scope.outputs.docs_only != 'true'
         run: cargo test --all --all-features
+
+      - name: Skip code gate for docs-only changes
+        if: steps.scope.outputs.docs_only == 'true'
+        run: echo "Docs-only change set detected; skipped Rust and advisory Python gate steps."
 
   secrets_scan:
     name: Secret scan

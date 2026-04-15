@@ -1,23 +1,28 @@
-//! Platform-independent integration tests for the Login -> Enter World -> Navigate pipeline.
-//! Uses the pure FSM APIs directly — no live EQ process, no mocks, no trait abstractions.
+//! Platform-independent integration tests for the Login -> Enter World ->
+//! Navigate pipeline. Uses the pure FSM APIs directly — no live EQ process, no
+//! mocks, no trait abstractions.
 
 use std::collections::HashMap;
 
-use textquest::camp::config::CampConfig;
-use textquest::camp::state::{
-    CampAction, CampLoop, CampMember, CampSnapshot, CampState, PULL_DURATION, Role,
+use textquest::{
+    camp::{
+        config::CampConfig,
+        state::{CampAction, CampLoop, CampMember, CampSnapshot, CampState, PULL_DURATION, Role},
+    },
+    config::{LaunchConfig, RetryConfig, ServerConfig},
+    launcher::{
+        coordinator::LaunchCoordinator,
+        login_sm::{LoginAction, LoginEvent, LoginStateMachine},
+        post_login::{PostLoginEvent, PostLoginSequencer},
+    },
+    nav::router::{GroupRouter, TravelPlan, TravelStep, generate_zone_staggers, plan_group_travel},
 };
-use textquest::config::{LaunchConfig, RetryConfig, ServerConfig};
-use textquest::launcher::coordinator::LaunchCoordinator;
-use textquest::launcher::login_sm::{LoginAction, LoginEvent, LoginStateMachine};
-use textquest::launcher::post_login::{PostLoginEvent, PostLoginSequencer};
-use textquest::nav::router::{
-    GroupRouter, TravelPlan, TravelStep, generate_zone_staggers, plan_group_travel,
+use textquest_common::{
+    ipc::Command,
+    login::{AccountInfo, LoginError, LoginPhase},
+    nav::Waypoint,
+    types::GameState,
 };
-use textquest_common::ipc::Command;
-use textquest_common::login::{AccountInfo, LoginError, LoginPhase};
-use textquest_common::nav::Waypoint;
-use textquest_common::types::GameState;
 
 // ============================================================================
 // Helpers
@@ -104,7 +109,8 @@ fn test_configs() -> (LaunchConfig, RetryConfig, ServerConfig) {
     (launch, retry, server)
 }
 
-/// Drive a LoginStateMachine through the full happy path and return it in Ready state.
+/// Drive a LoginStateMachine through the full happy path and return it in Ready
+/// state.
 fn drive_login_to_ready(sm: &mut LoginStateMachine) {
     sm.advance(LoginEvent::ProcessStarted { pid: 1234 });
     sm.advance(LoginEvent::LoginScreenDetected);

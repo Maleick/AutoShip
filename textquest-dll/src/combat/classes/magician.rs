@@ -54,8 +54,7 @@ impl ClassStrategy for MagicianStrategy {
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::CombatConfig;
-    use textquest_common::types::SpawnData;
+    use textquest_common::{combat::CombatConfig, types::SpawnData};
 
     fn make_ctx<'a>(
         player: &'a SpawnData,

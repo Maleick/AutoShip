@@ -62,6 +62,7 @@ The Map screen currently supports:
 
 - zone line and label rendering from `config/maps`
 - spawn overlays
+- compact `OTD` target-direction overlay with live heading and range to the current target
 - selected-character location display
 - named tracking overlays
 - adjustable Z slice

@@ -39,7 +39,8 @@ pub struct PeerSessionAnnouncement {
 pub struct PeerAnnouncement {
     /// Packet format version.
     pub version: u16,
-    /// Random per-process instance identifier used to ignore self-announcements.
+    /// Random per-process instance identifier used to ignore
+    /// self-announcements.
     pub instance_id: u64,
     /// Human-readable machine / node label.
     pub node_name: String,

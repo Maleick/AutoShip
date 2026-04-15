@@ -1,14 +1,15 @@
 //! TextQuest injected DLL payload.
-//! This cdylib is loaded into eqgame.exe via reflective injection. Initialization
-//! runs on the OS thread pool (PoolParty) — no `CreateThread` / `CreateRemoteThread`.
-//! It hooks internal EQ functions and communicates with the TextQuest orchestrator via IPC.
+//! This cdylib is loaded into eqgame.exe via reflective injection.
+//! Initialization runs on the OS thread pool (PoolParty) — no `CreateThread` /
+//! `CreateRemoteThread`. It hooks internal EQ functions and communicates with
+//! the TextQuest orchestrator via IPC.
 
 //! Export-table exposure audit:
 //! - `Cargo.toml` declares `crate-type = ["cdylib", "rlib"]`, which allows a
 //!   native export surface if symbols are emitted by the Rust/LLVM toolchain.
-//! - Runtime hardening is applied by unlinking from PEB module lists and erasing
-//!   PE headers after startup so scanners that walk in-process exports do not
-//!   recover a valid exported symbol table from the loaded image.
+//! - Runtime hardening is applied by unlinking from PEB module lists and
+//!   erasing PE headers after startup so scanners that walk in-process exports
+//!   do not recover a valid exported symbol table from the loaded image.
 
 // Deeply nested unsafe FFI code with many conditional pointer checks — collapsing
 // these ifs reduces readability in practice. Also suppress needless_return for
@@ -37,9 +38,13 @@ mod stealth;
 #[allow(dead_code)]
 mod syscall;
 
-use std::path::PathBuf;
-use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::{
+    path::PathBuf,
+    sync::{
+        OnceLock,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
+};
 
 use textquest_common::offset_db::OffsetDatabase;
 
@@ -59,8 +64,8 @@ static EQ_ACTUAL_VERSION: OnceLock<Option<String>> = OnceLock::new();
 pub static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 
 /// Guard against double injection. Set to true on first `DLL_PROCESS_ATTACH`.
-/// If a second copy is loaded (randomized DLL names bypass `LoadLibrary` dedup),
-/// the init thread exits immediately.
+/// If a second copy is loaded (randomized DLL names bypass `LoadLibrary`
+/// dedup), the init thread exits immediately.
 #[cfg(windows)]
 static ALREADY_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
@@ -70,10 +75,14 @@ static HOOK_ROTATION_MANAGER: OnceLock<std::sync::Mutex<hooks::rotation::HookRot
 
 #[cfg(windows)]
 mod dll_main {
-    use windows::Win32::Foundation::{BOOL, HMODULE, TRUE};
-    use windows::Win32::System::LibraryLoader::DisableThreadLibraryCalls;
-    use windows::Win32::System::SystemServices::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH};
-    use windows::Win32::System::Threading::{PTP_CALLBACK_INSTANCE, PTP_WORK};
+    use windows::Win32::{
+        Foundation::{BOOL, HMODULE, TRUE},
+        System::{
+            LibraryLoader::DisableThreadLibraryCalls,
+            SystemServices::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH},
+            Threading::{PTP_CALLBACK_INSTANCE, PTP_WORK},
+        },
+    };
 
     /// Thread pool callback for PoolParty-style execution. Matches the
     /// `LPTHREAD_START_ROUTINE` for the init thread spawned by DllMain.
@@ -187,7 +196,8 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
     EQ_BASE.store(eq_base, Ordering::Release);
     tracing::info!(base = format!("{:#x}", eq_base), "EQ base address resolved");
 
-    // Version check — read __ActualVersionDate pointer and validate against expected patch.
+    // Version check — read __ActualVersionDate pointer and validate against
+    // expected patch.
     let actual_version = eq::check_eq_version(eq_base);
     match &actual_version {
         Some(version) if eq::version_matches_expected(version) => {
@@ -224,8 +234,8 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // 3. Install function hooks. If the EQ window isn't available yet (e.g.,
-    //    injected at login screen), spawn a background thread that retries
-    //    until the window appears and the HWBP can be set on the main thread.
+    //    injected at login screen), spawn a background thread that retries until
+    //    the window appears and the HWBP can be set on the main thread.
     if let Err(e) = install_hooks(eq_base) {
         tracing::warn!("Hook installation deferred (window not ready): {}", e);
         std::thread::spawn(move || {
@@ -262,7 +272,8 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
         }
     } else {
         tracing::info!(
-            "eqmain.dll not loaded at init — GiveTime hook skipped (game may already be at char select)"
+            "eqmain.dll not loaded at init — GiveTime hook skipped (game may already be at char \
+             select)"
         );
     }
 
@@ -280,11 +291,12 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("Sleep obfuscation init failed (non-fatal): {}", e);
     }
 
-    // 5.5. Hook integrity self-check — verify HWBP slot state before accepting IPC commands.
-    // If any slot is inconsistent (active without address/callback, or stale metadata after
-    // removal), enter safe mode: the IPC listener will reject all commands until the DLL
-    // is reinjected. This is non-fatal — we log the error and continue so the process can
-    // still run without crash; operators see "safe mode" in log and re-inject to recover.
+    // 5.5. Hook integrity self-check — verify HWBP slot state before accepting IPC
+    // commands. If any slot is inconsistent (active without address/callback,
+    // or stale metadata after removal), enter safe mode: the IPC listener will
+    // reject all commands until the DLL is reinjected. This is non-fatal — we
+    // log the error and continue so the process can still run without crash;
+    // operators see "safe mode" in log and re-inject to recover.
     if let Err(e) = hooks::integrity::verify_hooks_or_safe_mode() {
         tracing::error!(
             error = %e,
@@ -384,9 +396,13 @@ fn resolve_eq_base() -> u64 {
 fn get_module_size(base_addr: u64) -> usize {
     #[cfg(windows)]
     {
-        use windows::Win32::Foundation::HMODULE;
-        use windows::Win32::System::ProcessStatus::{GetModuleInformation, MODULEINFO};
-        use windows::Win32::System::Threading::GetCurrentProcess;
+        use windows::Win32::{
+            Foundation::HMODULE,
+            System::{
+                ProcessStatus::{GetModuleInformation, MODULEINFO},
+                Threading::GetCurrentProcess,
+            },
+        };
 
         let mut info = MODULEINFO::default();
         // SAFETY: GetCurrentProcess returns a pseudo-handle that is always valid.
@@ -435,7 +451,8 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
             tracing::warn!(
                 computed = format!("{:#x}", main_loop_addr),
                 expected = format!("{:#x}", expected),
-                "MAIN_LOOP_OFFSET disagrees with offsets::PROCESS_GAME_EVENTS — using offsets rebase"
+                "MAIN_LOOP_OFFSET disagrees with offsets::PROCESS_GAME_EVENTS — using offsets \
+                 rebase"
             );
             expected
         } else {
@@ -485,7 +502,8 @@ fn install_remaining_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error
     }
 
     // Install DX11 null device hooks — vtable-hook CreateTexture2D + CreateBuffer
-    // so NullRender mode can create 1×1 textures instead of full-size, saving ~500 MB.
+    // so NullRender mode can create 1×1 textures instead of full-size, saving ~500
+    // MB.
     if let Err(e) = hooks::dx11_null::install(eq_base) {
         tracing::warn!(
             "DX11 null hooks failed (continuing without texture reduction): {}",
@@ -575,8 +593,8 @@ fn scan_offsets() {
     }
 }
 
-/// Resolve a compile-time offset using scan-updated data first, then fallback to
-/// static rebase logic from the common offsets table.
+/// Resolve a compile-time offset using scan-updated data first, then fallback
+/// to static rebase logic from the common offsets table.
 fn resolve_offset(name: &str, compiled_addr: u64, base: u64) -> Option<u64> {
     resolve_offset_with_db(name, compiled_addr, base, OFFSET_DB.get())
 }
@@ -598,10 +616,11 @@ fn resolve_offset_with_db(
 
 /// Read the session token injected by the orchestrator.
 ///
-/// The orchestrator writes a 32-byte CSPRNG token to `%TEMP%/textquest/token_{pid}.bin`
-/// before injection. The DLL reads it once during init and deletes the file.
-/// Falls back to a PID-derived token with a warning if the file is missing (e.g.
-/// during development or manual injection).
+/// The orchestrator writes a 32-byte CSPRNG token to
+/// `%TEMP%/textquest/token_{pid}.bin` before injection. The DLL reads it once
+/// during init and deletes the file. Falls back to a PID-derived token with a
+/// warning if the file is missing (e.g. during development or manual
+/// injection).
 #[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn generate_session_token(pid: u32) -> textquest_common::ipc::SessionToken {
     let token_path = std::env::temp_dir()
@@ -609,7 +628,8 @@ fn generate_session_token(pid: u32) -> textquest_common::ipc::SessionToken {
         .join(format!("token_{pid}.bin"));
 
     if let Ok(mut file) = std::fs::File::open(&token_path) {
-        // Read a fixed-size token without ever allocating based on attacker-controlled file size.
+        // Read a fixed-size token without ever allocating based on attacker-controlled
+        // file size.
         let mut token = [0u8; 32];
         let read_ok = std::io::Read::read_exact(&mut file, &mut token).is_ok();
         let mut extra = [0u8; 1];
@@ -637,8 +657,9 @@ fn generate_session_token(pid: u32) -> textquest_common::ipc::SessionToken {
     // even without the orchestrator's token file (e.g. during manual injection).
     let mut token = [0u8; 32];
     if getrandom::getrandom(&mut token).is_err() {
-        // getrandom itself failed — extremely unlikely on any supported Windows version.
-        // Log prominently and fall back to a PID-mixed value as absolute last resort.
+        // getrandom itself failed — extremely unlikely on any supported Windows
+        // version. Log prominently and fall back to a PID-mixed value as
+        // absolute last resort.
         tracing::error!(
             "getrandom failed — session token entropy is degraded (should never happen)"
         );
@@ -659,8 +680,9 @@ fn shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);
 }
 
-/// Full cleanup — call from the eject command handler, NOT from `DLL_PROCESS_DETACH`.
-/// This runs outside the loader lock so it's safe to do I/O, remove hooks, etc.
+/// Full cleanup — call from the eject command handler, NOT from
+/// `DLL_PROCESS_DETACH`. This runs outside the loader lock so it's safe to do
+/// I/O, remove hooks, etc.
 #[allow(dead_code)] // Only called from #[cfg(windows)] DllMain
 fn graceful_shutdown() {
     SHUTTING_DOWN.store(true, Ordering::SeqCst);

@@ -1,9 +1,9 @@
 //! Pull target selection — picks the best mob to pull from nearby spawns.
 
-use crate::camp::cc::CcTracker;
-use crate::camp::config::CampConfig;
-use crate::camp::positioning::distance_2d;
-use crate::eq::named_tracker::NamedTracker;
+use crate::{
+    camp::{cc::CcTracker, config::CampConfig, positioning::distance_2d},
+    eq::named_tracker::NamedTracker,
+};
 
 /// Spawn type discriminator matching EQ's internal spawn types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -399,11 +399,13 @@ mod tests {
         config.pull_radius = 10.0;
         // Spawn exactly at pull_radius distance
         let spawns = vec![
-            make_spawn(1, "boundary orc", SpawnType::Npc, 160.0, 250.0), // dist = 10.0 from pull_point
+            make_spawn(1, "boundary orc", SpawnType::Npc, 160.0, 250.0), /* dist = 10.0 from
+                                                                          * pull_point */
         ];
         let cc = CcTracker::new();
         let result = select_pull_target(&spawns, &config, &cc, &[]);
-        // distance_2d(160, 250, 150, 250) = 10.0, equal to pull_radius => should be included
+        // distance_2d(160, 250, 150, 250) = 10.0, equal to pull_radius => should be
+        // included
         assert_eq!(result, Some("boundary orc".into()));
     }
 }

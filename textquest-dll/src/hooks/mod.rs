@@ -1,6 +1,8 @@
 //! Hook management -- hardware breakpoint hooks via VEH (DR0-DR3).
 //!
-//! Hook catalog: [docs/research/hook-detection-surface.md](../docs/research/hook-detection-surface.md).
+//! Hook catalog:
+//! [docs/research/hook-detection-surface.md](../docs/research/
+//! hook-detection-surface.md).
 
 /// Runtime hook catalog reference for detector-tuning work.
 pub const HOOK_CATALOG: &str = "docs/research/hook-detection-surface.md";
@@ -33,11 +35,13 @@ fn manager() -> &'static Mutex<slot_manager::HookSlotManager> {
     SLOT_MANAGER.get_or_init(|| Mutex::new(slot_manager::HookSlotManager::new()))
 }
 
-/// Update the active game state, rotating HWBP slot assignments if the state changed.
+/// Update the active game state, rotating HWBP slot assignments if the state
+/// changed.
 ///
-/// This records the new planned slot layout via [`HookSlotManager`] and logs the
-/// transition. Actual HWBP register writes happen on the Windows game thread and are
-/// wired separately in the platform-specific hook installation path.
+/// This records the new planned slot layout via [`HookSlotManager`] and logs
+/// the transition. Actual HWBP register writes happen on the Windows game
+/// thread and are wired separately in the platform-specific hook installation
+/// path.
 pub fn set_game_state(game_state: HookGameState) {
     let rotation = {
         let mut guard = manager()

@@ -1,8 +1,10 @@
 //! `EqSession` — represents a single managed EQ client.
 
 use super::healing::{ClientHealth, HealthMonitor};
-use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::{
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 use textquest_common::types::{ClientId, GameState, HookStatus};
 
 /// Outer lifecycle state for a managed client slot.

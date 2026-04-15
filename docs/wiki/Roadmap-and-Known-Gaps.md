@@ -127,12 +127,20 @@ The current economy pass stays intentionally bounded to operator-visible executi
 - treat loot intake, distribution, vendor, and banking work as explicit queues and state machines, not as hidden background automation
 - reuse the existing authenticated routing and session/group scope model instead of inventing a separate economy control plane
 - ship pause/skip/abort/resume controls and economy-facing TUI summaries alongside each loop before claiming a self-sustaining farm workflow
+- keep grey-market or off-platform monetization out of scope unless a separate evidence-backed issue explicitly reopens it; current assessment remains blocked in [Grey/Black Market Risk Assessment](Research-Grey-Black-Market-Risk-Assessment)
 
 The current follow-on implementation slices are:
 
 - loot intake plus distribution ownership and reserve rules
 - vendor and banking route controllers with failure-state visibility
 - plat/item ledger summaries plus operator overrides
+- operator-triggered bazaar price capture via passive UI memory reads after one normal player search, with raw row snapshots preserved for later field calibration
+
+Current bazaar capture stays intentionally bounded:
+
+- no packet hook or synthetic bazaar query generation is required for price sampling
+- the DLL only snapshots visible bazaar search list rows already populated in client memory
+- bazaar price intelligence remains an early-game utility; durable long-tail monitoring still belongs to chat/event capture work
 
 ## Developer Guidance
 

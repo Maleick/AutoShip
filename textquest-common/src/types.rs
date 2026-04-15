@@ -47,10 +47,12 @@ impl GameState {
     }
 }
 
-/// Internal shared-memory payload written by the DLL and reconstructed by the reader.
+/// Internal shared-memory payload written by the DLL and reconstructed by the
+/// reader.
 ///
-/// This is intentionally separate from `GameState` so spawn data can be omitted on
-/// non-refresh ticks without changing the public snapshot shape consumed elsewhere.
+/// This is intentionally separate from `GameState` so spawn data can be omitted
+/// on non-refresh ticks without changing the public snapshot shape consumed
+/// elsewhere.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SharedStateFrame {
     /// PID of the EQ client this state belongs to.
@@ -71,7 +73,8 @@ pub struct SharedStateFrame {
     pub zone_short_name: String,
     /// Zone long name (e.g. "Queynos Hills").
     pub zone_long_name: String,
-    /// Monotonic spawn snapshot version. Increments only when `nearby_spawns` is present.
+    /// Monotonic spawn snapshot version. Increments only when `nearby_spawns`
+    /// is present.
     pub spawn_epoch: u64,
     /// Detected EQ patch date from `__ActualVersionDate` if available.
     #[serde(default)]
@@ -79,7 +82,8 @@ pub struct SharedStateFrame {
 }
 
 impl SharedStateFrame {
-    /// Reconstruct a full `GameState` by applying cached spawns when this frame omitted them.
+    /// Reconstruct a full `GameState` by applying cached spawns when this frame
+    /// omitted them.
     #[must_use]
     pub fn into_game_state(self, cached_spawns: Vec<SpawnData>) -> GameState {
         GameState {
@@ -131,9 +135,11 @@ pub struct SpawnData {
     /// Signed because EQ can drain endurance below zero internally.
     pub endurance_current: i32,
     /// Unsigned in the EQ struct (`PlayerZoneClient`). Do not compare directly
-    /// with `endurance_current` without casting — signedness differs intentionally.
+    /// with `endurance_current` without casting — signedness differs
+    /// intentionally.
     pub endurance_max: u32,
-    /// Current movement speed (`SpeedRun`). Non-zero means the character is in motion.
+    /// Current movement speed (`SpeedRun`). Non-zero means the character is in
+    /// motion.
     pub speed_run: f32,
     /// Stand state: 0=standing, 1=frozen, 2=looting, 3=sitting, 4=ducking,
     /// 110=feigned, 111=dead. Only 0 (standing) allows spell casting.
@@ -143,7 +149,8 @@ pub struct SpawnData {
 }
 
 impl SpawnData {
-    /// Returns current HP as a percentage (0.0 - 100.0). Returns 100.0 if max HP is zero or negative.
+    /// Returns current HP as a percentage (0.0 - 100.0). Returns 100.0 if max
+    /// HP is zero or negative.
     #[must_use]
     pub fn hp_pct(&self) -> f32 {
         if self.hp_max > 0 {
@@ -153,7 +160,8 @@ impl SpawnData {
         }
     }
 
-    /// Returns current mana as a percentage (0.0 - 100.0). Returns 100.0 if max mana is zero or negative.
+    /// Returns current mana as a percentage (0.0 - 100.0). Returns 100.0 if max
+    /// mana is zero or negative.
     #[must_use]
     pub fn mana_pct(&self) -> f32 {
         if self.mana_max > 0 {
@@ -163,7 +171,8 @@ impl SpawnData {
         }
     }
 
-    /// Returns `true` when the character is in motion (speed is non-negligible).
+    /// Returns `true` when the character is in motion (speed is
+    /// non-negligible).
     ///
     /// EQ sets `SpeedRun` to a non-zero value while the character is moving.
     /// A small epsilon avoids false positives from floating-point noise.
@@ -172,10 +181,12 @@ impl SpawnData {
         self.speed_run.abs() > 0.01
     }
 
-    /// Returns `true` when the character is standing and eligible to cast spells.
+    /// Returns `true` when the character is standing and eligible to cast
+    /// spells.
     ///
-    /// Stand state 0 is the only state from which a spell cast can be initiated.
-    /// Sitting (3), ducking (4), feigning death (110), and dead (111) all prevent casting.
+    /// Stand state 0 is the only state from which a spell cast can be
+    /// initiated. Sitting (3), ducking (4), feigning death (110), and dead
+    /// (111) all prevent casting.
     #[must_use]
     pub fn is_standing(&self) -> bool {
         self.stand_state == 0

@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 /// Hot-updatable offset database backed by JSON.
 ///
@@ -89,7 +88,8 @@ impl OffsetDatabase {
         self.context_menu.get(name).copied()
     }
 
-    /// Convert a preferred-base address to a runtime address using this database's preferred base.
+    /// Convert a preferred-base address to a runtime address using this
+    /// database's preferred base.
     #[must_use]
     pub fn rebase(&self, preferred_addr: u64, actual_base: u64) -> Option<usize> {
         let offset = preferred_addr.checked_sub(self.eq_preferred_base)?;
@@ -326,8 +326,10 @@ impl OffsetDatabase {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pattern_db::{OffsetCategory, ScanModule};
-    use crate::scan_engine::{ScanReport, ScanResult};
+    use crate::{
+        pattern_db::{OffsetCategory, ScanModule},
+        scan_engine::{ScanReport, ScanResult},
+    };
     use tempfile::tempdir;
 
     #[test]

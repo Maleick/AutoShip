@@ -45,9 +45,9 @@ fn main() {
         Some(dir) => dir,
         None => {
             eprintln!(
-                "cargo:warning=Could not find recastnavigation-sys Detour headers in {}. \
-                 The C++ shim will not be compiled. \
-                 Ensure recastnavigation-sys is downloaded (cargo fetch).",
+                "cargo:warning=Could not find recastnavigation-sys Detour headers in {}. The C++ \
+                 shim will not be compiled. Ensure recastnavigation-sys is downloaded (cargo \
+                 fetch).",
                 registry_src.display()
             );
             return;

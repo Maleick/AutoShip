@@ -4,7 +4,8 @@ use crate::process::memory::ProcessHandle;
 
 /// Read the `CheaterLdFlag` anti-cheat indicator from EQ memory.
 ///
-/// Returns `Some(value)` on Windows when the value can be read, and `None` otherwise.
+/// Returns `Some(value)` on Windows when the value can be read, and `None`
+/// otherwise.
 #[cfg(windows)]
 pub fn read_cheater_ld_flag(proc: &ProcessHandle, eq_base: u64) -> Option<i32> {
     let flag_addr =
@@ -12,7 +13,8 @@ pub fn read_cheater_ld_flag(proc: &ProcessHandle, eq_base: u64) -> Option<i32> {
     proc.read::<i32>(flag_addr).ok()
 }
 
-/// Non-Windows stub — returns `None` because process memory reads are unsupported.
+/// Non-Windows stub — returns `None` because process memory reads are
+/// unsupported.
 #[cfg(not(windows))]
 pub fn read_cheater_ld_flag(_proc: &ProcessHandle, _eq_base: u64) -> Option<i32> {
     None

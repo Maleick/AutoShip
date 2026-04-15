@@ -88,6 +88,9 @@ pub const SOUL_DB_PATH: &str = "data/soul_memory.db";
 /// Default path for the Ghidra analysis SQLite cache.
 pub const GHIDRA_DB_PATH: &str = "data/ghidra.db";
 
+/// Default path for passive Krono trade-price observations.
+pub const TRADE_PRICE_DB_PATH: &str = "data/trade_prices.db";
+
 /// Path to the opcodes config file imported into the Ghidra DB at startup.
 pub const OPCODES_CONFIG_PATH: &str = "config/opcodes.json";
 

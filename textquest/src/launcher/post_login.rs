@@ -1,10 +1,13 @@
-use textquest_common::ipc::Command;
-use textquest_common::types::{ClientId, GameState};
+use textquest_common::{
+    ipc::Command,
+    types::{ClientId, GameState},
+};
 
 use crate::client::session::PostLoginPhase;
 use std::time::Instant;
 
-/// Sequences post-login actions: group join -> buff -> navigate to camp -> ready.
+/// Sequences post-login actions: group join -> buff -> navigate to camp ->
+/// ready.
 pub struct PostLoginSequencer {
     client_id: ClientId,
     group_id: u32,
@@ -71,7 +74,8 @@ impl PostLoginSequencer {
     }
 
     /// Mark that the current phase's command was dispatched.
-    /// Advances `NotStarted` -> `JoiningGroup` after the `JoinGroup` command is sent.
+    /// Advances `NotStarted` -> `JoiningGroup` after the `JoinGroup` command is
+    /// sent.
     pub fn mark_dispatched(&mut self) {
         if matches!(self.phase, PostLoginPhase::NotStarted) {
             self.phase = PostLoginPhase::JoiningGroup;

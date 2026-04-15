@@ -1,9 +1,9 @@
 //! Per-character personality profiles for anti-synchronicity.
 //!
-//! Each character gets a deterministic personality derived from their name hash.
-//! This ensures the same character always behaves the same way, but different
-//! characters have visibly different timing patterns to avoid synchronized
-//! bot-like behavior.
+//! Each character gets a deterministic personality derived from their name
+//! hash. This ensures the same character always behaves the same way, but
+//! different characters have visibly different timing patterns to avoid
+//! synchronized bot-like behavior.
 
 use textquest_common::nav::{KNUTH_HASH, Xorshift32};
 
@@ -16,7 +16,8 @@ pub struct PersonalityProfile {
     pub reaction_speed: f32,
     /// Affects pull timing aggressiveness (0.8 = cautious, 1.2 = eager).
     pub aggression: f32,
-    /// How closely the character follows its rotation (0.9 = sloppy, 1.0 = precise).
+    /// How closely the character follows its rotation (0.9 = sloppy, 1.0 =
+    /// precise).
     pub discipline: f32,
     /// Variance applied to mana sit/stand thresholds (e.g. +/- 5%).
     pub med_threshold_jitter: f32,

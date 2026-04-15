@@ -58,8 +58,10 @@ impl ClassStrategy for BerserkerStrategy {
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::{CombatConfig, SpellEntry};
-    use textquest_common::types::SpawnData;
+    use textquest_common::{
+        combat::{CombatConfig, SpellEntry},
+        types::SpawnData,
+    };
 
     static DEFAULT_CONFIG: std::sync::LazyLock<CombatConfig> =
         std::sync::LazyLock::new(CombatConfig::default);

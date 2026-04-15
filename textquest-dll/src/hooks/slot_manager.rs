@@ -184,7 +184,8 @@ mod tests {
     #[test]
     fn slot_rotation_changed_flag_reflects_assignment_diff() {
         let mut mgr = HookSlotManager::new();
-        // First rotate: initial assignments are all None, Login sets GiveTime in slot 0.
+        // First rotate: initial assignments are all None, Login sets GiveTime in slot
+        // 0.
         let first = mgr.rotate_hooks(HookGameState::Login);
         assert!(first.changed);
         // Second rotate with same state: no diff.

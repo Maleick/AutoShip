@@ -93,7 +93,8 @@ const REQUIRED_COLUMNS: &[(&str, &str)] = &[
 
 /// Validate that the database schema matches what the Soul Engine requires.
 ///
-/// Checks PRAGMA integrity, required tables, required columns, and required indexes.
+/// Checks PRAGMA integrity, required tables, required columns, and required
+/// indexes.
 pub fn validate_schema(conn: &Connection) -> Result<(), SchemaError> {
     // Integrity check
     let integrity: String = conn
@@ -236,14 +237,21 @@ pub fn run_migrations(conn: &Connection) -> Result<u32, MigrationError> {
                 adopted_slang TEXT NOT NULL DEFAULT '[]',
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
-            CREATE INDEX IF NOT EXISTS idx_memories_character ON memories(character_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_memories_character ON memories(character_id, created_at \
+             DESC);
             CREATE INDEX IF NOT EXISTS idx_memories_zone ON memories(character_id, zone);
-            CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(character_id, created_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_conversations_speaker ON conversations(character_id, speaker);
-            CREATE INDEX IF NOT EXISTS idx_summaries_character ON memory_summaries(character_id, period_start DESC);
-            CREATE INDEX IF NOT EXISTS idx_shared_refs ON shared_references(character_a, character_b);
-            CREATE INDEX IF NOT EXISTS idx_audit_character ON soul_audit_log(character_id, created_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_audit_action_type ON soul_audit_log(action_type, created_at DESC);",
+            CREATE INDEX IF NOT EXISTS idx_conversations_character ON conversations(character_id, \
+             created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_conversations_speaker ON conversations(character_id, \
+             speaker);
+            CREATE INDEX IF NOT EXISTS idx_summaries_character ON memory_summaries(character_id, \
+             period_start DESC);
+            CREATE INDEX IF NOT EXISTS idx_shared_refs ON shared_references(character_a, \
+             character_b);
+            CREATE INDEX IF NOT EXISTS idx_audit_character ON soul_audit_log(character_id, \
+             created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_action_type ON soul_audit_log(action_type, \
+             created_at DESC);",
         ),
     ];
 

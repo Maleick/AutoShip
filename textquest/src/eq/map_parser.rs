@@ -1,8 +1,10 @@
 use anyhow::{Context, Result, bail};
-use std::cmp::Ordering;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::{
+    cmp::Ordering,
+    fs::File,
+    io::{BufRead, BufReader},
+    path::Path,
+};
 
 /// A line segment from an EQ map file (L line).
 #[derive(Debug, Clone)]

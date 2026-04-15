@@ -41,7 +41,8 @@ impl CastDisplay {
         }
     }
 
-    /// Create a provisional cast strip when only coarse local cast state is known.
+    /// Create a provisional cast strip when only coarse local cast state is
+    /// known.
     #[must_use]
     pub fn provisional(
         label: impl Into<String>,
@@ -171,9 +172,9 @@ fn live_cast_status_text(cast: &CastState) -> Option<String> {
 
 /// Build the best available live cast-strip model from a real EQ `CastState`.
 ///
-/// Exact runtime progress is used only when the backend can prove the total cast
-/// duration. Otherwise we still surface exact remaining time and resolved spell
-/// names while keeping `exact = false`.
+/// Exact runtime progress is used only when the backend can prove the total
+/// cast duration. Otherwise we still surface exact remaining time and resolved
+/// spell names while keeping `exact = false`.
 #[must_use]
 pub fn live_cast_display(
     cast: &CastState,

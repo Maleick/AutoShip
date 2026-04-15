@@ -32,7 +32,7 @@ function ToggleField({
   detail: string;
 }) {
   return (
-    <label className="flex items-start justify-between gap-4 border border-white/10 bg-void/40 px-4 py-3">
+    <label className="flex items-start justify-between gap-4 rounded-2xl border border-white/10 bg-[#0d0715] px-4 py-3">
       <div>
         <div className="text-sm font-semibold text-white">{label}</div>
         <div className="mt-1 text-xs uppercase tracking-[0.18em] text-white/45">
@@ -69,7 +69,7 @@ function TextField({
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="border border-white/15 bg-void/60 px-3 py-2 text-white outline-none transition-colors focus:border-magentaglow"
+        className="rounded-2xl border border-white/15 bg-[#0d0715] px-3 py-2 text-white outline-none transition-colors focus:border-cyan-300/40"
       />
     </label>
   );
@@ -92,10 +92,10 @@ export default function BoxChatPanel() {
   }
 
   return (
-    <section className="flex-1 min-w-0 stone-pillar px-8 py-7 overflow-auto relative z-10">
+    <section className="rounded-[1.5rem] border border-cyan-400/20 bg-[#120a1d]/88 p-5 shadow-[0_12px_40px_rgba(34,211,238,0.08)] backdrop-blur">
       <div className="flex items-center justify-between gap-6 border-b border-white/10 pb-6">
         <div>
-          <div className="flex items-center gap-3 text-magentaglow">
+          <div className="flex items-center gap-3 text-cyan-200">
             <Broadcast size={20} weight="fill" />
             <span className="text-xs uppercase tracking-[0.32em] text-white/45">
               Network Box Chat
@@ -115,7 +115,7 @@ export default function BoxChatPanel() {
           type="button"
           onClick={handleSave}
           disabled={loading || saving}
-          className="inline-flex items-center gap-2 border border-magentaglow/40 bg-magentadark/20 px-4 py-2 text-sm font-semibold text-magentaglow transition-colors hover:bg-magentadark/35 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <FloppyDisk size={16} />
           {saving ? "Saving..." : "Save Settings"}
@@ -176,8 +176,8 @@ export default function BoxChatPanel() {
           </div>
         </div>
 
-        <div className="border border-white/10 bg-void/35 p-5">
-          <div className="flex items-center gap-3 text-spectral">
+        <div className="rounded-3xl border border-white/10 bg-[#0d0715] p-5">
+          <div className="flex items-center gap-3 text-cyan-200">
             <LinkSimple size={18} weight="bold" />
             <h3 className="font-archaic text-xl uppercase tracking-[0.16em] text-white">
               Usage Notes

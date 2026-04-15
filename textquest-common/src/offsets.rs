@@ -12,8 +12,9 @@ pub const EQ_PREFERRED_BASE: u64 = 0x0001_4000_0000;
 /// EQ client build date these offsets target, in `YYYYMMDD` format.
 ///
 /// Single source of truth for runtime version checks — referenced by
-/// `scan_engine::EXPECTED_CLIENT_DATE` and `OffsetDatabase::from_compiled_offsets()`.
-/// Update this value when importing new offsets on patch day.
+/// `scan_engine::EXPECTED_CLIENT_DATE` and
+/// `OffsetDatabase::from_compiled_offsets()`. Update this value when importing
+/// new offsets on patch day.
 pub const CLIENT_DATE: &str = "20260310";
 
 /// Address in EQ memory holding the current runtime date/version string.
@@ -109,7 +110,8 @@ pub const PINST_ADVANCED_LOOT_WND: u64 = 0x0;
 pub const PINST_REAL_ESTATE_ITEMS: u64 = 0x0;
 
 // ─── Active Hacks Offsets (Pending verification for 20260310) ───
-// These are offsets from the eqgame.exe base address, currently reflecting January 2025.
+// These are offsets from the eqgame.exe base address, currently reflecting
+// January 2025.
 pub const OFFSET_PACKET_SCRAMBLER: usize = 0x00dc_6340;
 pub const OFFSET_HTON: usize = 0x0068_2e50;
 pub const OFFSET_NETWORK_SEND: usize = 0x0055_7090;
@@ -131,14 +133,16 @@ pub const CAST_SPELL: u64 = 0x0001_400D_9F20;
 pub const DO_COMBAT_ABILITY: u64 = 0x0001_402E_D490;
 
 /// `CharacterZoneClient::UseSkill` — use a skill on a target
-/// Signature: void UseSkill(unsigned char skill, `PlayerZoneClient`* Target, bool bAuto)
+/// Signature: void UseSkill(unsigned char skill, `PlayerZoneClient`* Target,
+/// bool bAuto)
 pub const USE_SKILL: u64 = 0x0001_4010_52A0;
 
 /// `CharacterZoneClient::CanUseItem` — check if an item is usable
 pub const CAN_USE_ITEM: u64 = 0x0001_400E_DDB0;
 
 /// `PlayerZoneClient::DoAttack` — perform a melee attack
-/// Signature: bool DoAttack(BYTE slot, BYTE skill, `PlayerZoneClient`* Target, ...)
+/// Signature: bool DoAttack(BYTE slot, BYTE skill, `PlayerZoneClient`* Target,
+/// ...)
 pub const DO_ATTACK: u64 = 0x0001_4031_B890;
 
 /// __ExecuteCmd — execute any EQ command by command ID (most versatile)
@@ -149,9 +153,9 @@ pub const EXECUTE_CMD: u64 = 0x0001_4022_35B0;
 /// Signature: void InterpretCmd(PlayerClient*, const char*)
 pub const INTERPRET_CMD: u64 = 0x0001_4028_3FB0;
 
-/// `CEverQuest::RightClickedOnPlayer` — open NPC interaction window (merchant, bank, quest)
-/// Signature: void RightClickedOnPlayer(PlayerClient* target, int unknown)
-/// Source: eqlib/offsets/eqgame.h `CEverQuest__RightClickedOnPlayer_x`
+/// `CEverQuest::RightClickedOnPlayer` — open NPC interaction window (merchant,
+/// bank, quest) Signature: void RightClickedOnPlayer(PlayerClient* target, int
+/// unknown) Source: eqlib/offsets/eqgame.h `CEverQuest__RightClickedOnPlayer_x`
 pub const RIGHT_CLICKED_ON_PLAYER: u64 = 0x0001_4029_6D30;
 
 /// `pinstCEverQuest` — pointer to the global CEverQuest instance
@@ -162,7 +166,8 @@ pub const PINST_EVERQUEST: u64 = 0x0001_40F1_1758;
 // Source: eqlib PcClient.h, client date 20260310
 
 /// Offset of `pExtendedTargetList` within PcClient (ExtendedTargetList*).
-/// Source: PcClient.h line 1690: `/*0x2e98*/ ExtendedTargetList* pExtendedTargetList`
+/// Source: PcClient.h line 1690: `/*0x2e98*/ ExtendedTargetList*
+/// pExtendedTargetList`
 pub const PCCLIENT_EXTENDED_TARGET_LIST: u64 = 0x2e98;
 
 /// Offset of `InCombat` within PcClient (bool).
@@ -217,7 +222,8 @@ pub const CHAR_LIST_SELECT_CHAR: u64 = 0x0001_400D_5D20;
 pub const CLICKED_PLAYER: u64 = 0x0001_4027_24F0;
 
 /// `CEverQuest::IssuePetCommand` — issue a pet command
-/// Signature: void IssuePetCommand(ePetCommandType, int `TargetID`, bool bQuiet, ...)
+/// Signature: void IssuePetCommand(ePetCommandType, int `TargetID`, bool
+/// bQuiet, ...)
 pub const ISSUE_PET_COMMAND: u64 = 0x0001_4028_56A0;
 
 /// `PcClient::GetConLevel` — get consider level of target
@@ -236,8 +242,9 @@ pub const PINST_ACTIVE_CORPSE: u64 = 0x0001_40E8_E390;
 pub const PROCESS_GAME_EVENTS: u64 = 0x0001_4028_E0F0;
 
 /// `CEverQuest::dsp_chat` — chat message display function.
-/// Signature: `void dsp_chat(const char* text, int color, bool log, bool percent_convert)`
-/// Source: eqgame.h `CEverQuest__dsp_chat_x` (ChatManagerClient__DisplayChatText)
+/// Signature: `void dsp_chat(const char* text, int color, bool log, bool
+/// percent_convert)` Source: eqgame.h `CEverQuest__dsp_chat_x`
+/// (ChatManagerClient__DisplayChatText)
 pub const DSP_CHAT: u64 = 0x0001_4010_CFC0;
 
 /// `CEverQuest::SetGameState` — hook point for game lifecycle transitions.
@@ -269,9 +276,9 @@ pub const EQGRAPHICS_RENDER_FRAME: u64 = 0x0001_40A0_0400;
 pub const EQGRAPHICS_DX_PRESENT: u64 = 0x0001_40A0_0500;
 
 /// `pinstSGraphicsEngine` — pointer to SGraphicsEngine struct.
-/// SGraphicsEngine+0x18 = CRender*. CRender+0x0F00 = DeviceImpl* (DX9 wrapper over DX11).
-/// DeviceImpl+0x28 = Device*. Device+0x18 = SwapChain (inline). SwapChain+0x00 = ID3D11Device*.
-/// Source: eqgame.h `pinstSGraphicsEngine_x`
+/// SGraphicsEngine+0x18 = CRender*. CRender+0x0F00 = DeviceImpl* (DX9 wrapper
+/// over DX11). DeviceImpl+0x28 = Device*. Device+0x18 = SwapChain (inline).
+/// SwapChain+0x00 = ID3D11Device*. Source: eqgame.h `pinstSGraphicsEngine_x`
 pub const PINST_SGRAPHICSENGINE: u64 = 0x0001_40F3_6B68;
 
 /// __FixHeading — normalize heading value
@@ -304,23 +311,25 @@ pub const ZONE_GUIDE_MANAGER: u64 = 0x0001_4035_71F0;
 // Source: eqgame.h, client date 20260310
 // Calling convention: x64 MSVC (this in RCX for member functions)
 
-/// `CChatWindowManager::GetRGBAFromIndex` — get an RGBA color from a chat color index
-/// Signature: COLORREF GetRGBAFromIndex(int index)
+/// `CChatWindowManager::GetRGBAFromIndex` — get an RGBA color from a chat color
+/// index Signature: COLORREF GetRGBAFromIndex(int index)
 pub const CCHAT_MGR_GET_RGBA: u64 = 0x0001_403B_2D40;
 
-/// `CChatWindowManager::InitContextMenu` — initialize the chat window context menu
+/// `CChatWindowManager::InitContextMenu` — initialize the chat window context
+/// menu
 pub const CCHAT_MGR_INIT_CONTEXT_MENU: u64 = 0x0001_403B_2ED0;
 
 /// `CChatWindowManager::FreeChatWindow` — free/destroy a chat window
 /// Signature: void FreeChatWindow(CChatWindow* pWnd)
 pub const CCHAT_MGR_FREE_CHAT_WINDOW: u64 = 0x0001_403B_1D40;
 
-/// `CChatWindowManager::SetLockedActiveChatWindow` — lock the active chat window
-/// Signature: void SetLockedActiveChatWindow(CChatWindow* pWnd)
+/// `CChatWindowManager::SetLockedActiveChatWindow` — lock the active chat
+/// window Signature: void SetLockedActiveChatWindow(CChatWindow* pWnd)
 pub const CCHAT_MGR_SET_LOCKED_ACTIVE_CHAT: u64 = 0x0001_403B_B240;
 
 /// `CChatWindowManager::CreateChatWindow` — create a new chat window
-/// Signature: CChatWindow* CreateChatWindow(CTabWnd* pTabs, int, int, CXStr name, int, int, int, int, int)
+/// Signature: CChatWindow* CreateChatWindow(CTabWnd* pTabs, int, int, CXStr
+/// name, int, int, int, int, int)
 pub const CCHAT_MGR_CREATE_CHAT_WINDOW: u64 = 0x0001_403B_1780;
 
 /// `CSidlScreenWnd::Init` — UI window initialization hook candidate
@@ -363,10 +372,12 @@ pub const SERVER_MEMCHECK_HANDLER: u64 = 0x0001_400B_5720;
 /// World authentication function
 pub const WORLD_AUTHENTICATE: u64 = 0x0001_402C_9C80;
 
-/// SystemFingerprint: sends VideoCardId, NetworkCardId, HardriveId, ComputerName
+/// SystemFingerprint: sends VideoCardId, NetworkCardId, HardriveId,
+/// ComputerName
 pub const SYSTEM_FINGERPRINT: u64 = 0x0001_4059_4840;
 
-/// `CheaterLdFlag` format string used by anti-cheat detection logs (`CheaterLdFlag=%d\n`).
+/// `CheaterLdFlag` format string used by anti-cheat detection logs
+/// (`CheaterLdFlag=%d\n`).
 pub const CHEATER_LD_FLAG_STRING: u64 = 0x0001_40AF_EBC8;
 
 /// `CheaterLdFlag` global flag variable storing the current anti-cheat state.
@@ -380,7 +391,8 @@ pub const CHEATER_LD_FLAG_VAR: u64 = 0x0001_40AF_ED90;
 pub const INV_SLOT_MGR_FIND_SLOT: u64 = 0x0001_4042_1100;
 
 /// `CInvSlotMgr::MoveItem` — move an item between inventory slots
-/// Signature: bool MoveItem(ItemGlobalIndex const&, ItemGlobalIndex const&, bool, bool, bool, bool)
+/// Signature: bool MoveItem(ItemGlobalIndex const&, ItemGlobalIndex const&,
+/// bool, bool, bool, bool)
 pub const INV_SLOT_MGR_MOVE_ITEM: u64 = 0x0001_4042_1C90;
 
 /// `CInvSlotMgr::SelectSlot` — select an inventory slot
@@ -455,8 +467,8 @@ pub const EQ_BUFF_PLAYER: u64 = 0x0;
 pub const EQ_REMOVE_BUFF: u64 = 0x0;
 
 // ─── CContextMenuManager global pointer and function addresses ───
-// Source: eqgame.h `pinstCContextMenuManager_x` and `CContextMenuManager__HandleMenu_x`,
-// client date 20260310
+// Source: eqgame.h `pinstCContextMenuManager_x` and
+// `CContextMenuManager__HandleMenu_x`, client date 20260310
 // Calling convention: x64 MSVC (this in RCX for member functions)
 
 /// Singleton `CContextMenuManager*` instance pointer (preferred base).
@@ -470,7 +482,8 @@ pub const CONTEXT_MENU_MGR_HANDLE_MENU: u64 = 0x0001_4046_E770;
 
 /// Convert a preferred-base offset to an actual address given the runtime base.
 ///
-/// Returns `None` if `preferred_addr` is below `EQ_PREFERRED_BASE` (would underflow).
+/// Returns `None` if `preferred_addr` is below `EQ_PREFERRED_BASE` (would
+/// underflow).
 #[must_use]
 pub fn rebase(preferred_addr: u64, actual_base: u64) -> Option<usize> {
     let offset = preferred_addr.checked_sub(EQ_PREFERRED_BASE)?;
@@ -478,9 +491,9 @@ pub fn rebase(preferred_addr: u64, actual_base: u64) -> Option<usize> {
 }
 
 // ─── eqmain.dll offsets ───
-// These are preferred-base addresses within eqmain.dll (loaded into eqgame.exe process).
-// eqmain.dll has its own base address; use `eqmain::rebase()` to convert.
-// Source: MQ2 AutoLogin / eqmain offsets, client date 20260310
+// These are preferred-base addresses within eqmain.dll (loaded into eqgame.exe
+// process). eqmain.dll has its own base address; use `eqmain::rebase()` to
+// convert. Source: MQ2 AutoLogin / eqmain offsets, client date 20260310
 
 /// Offsets within eqmain.dll (login/server select UI module).
 pub mod eqmain {
@@ -536,7 +549,8 @@ pub mod eqmain {
     // ─── Login pointer addresses (preferred base) ───
 
     /// Pointer to `LoginClient` instance (`LoginClient`*)
-    /// Source: eqmain.h `EQMain__pinstLoginClient_x` (derived from pinstCLoginViewManager - 8)
+    /// Source: eqmain.h `EQMain__pinstLoginClient_x` (derived from
+    /// pinstCLoginViewManager - 8)
     pub const PINST_LOGIN_CLIENT: u64 = 0x0001_8017_F4E0;
 
     /// Pointer to `LoginController` instance
@@ -570,7 +584,8 @@ pub mod eqmain {
     /// `EQLogin::Character` (char\[0x40\] array) at offset 0x97C
     pub const EQLOGIN_CHARACTER: usize = 0x97C;
 
-    /// Maximum length of login/password fields (0x80 = 128 bytes, use 0x7F for null terminator)
+    /// Maximum length of login/password fields (0x80 = 128 bytes, use 0x7F for
+    /// null terminator)
     pub const EQLOGIN_FIELD_MAX: usize = 0x7F;
 
     // ─── UI widget field offsets ───
@@ -582,14 +597,16 @@ pub mod eqmain {
     /// `XWM_LCLICK` notification code for button clicks
     pub const XWM_LCLICK: u32 = 1;
 
-    /// `CXWnd` vtable offset for `SetWindowText` (virtual void `SetWindowText`(const `CXStr`&))
-    /// From MQ2: `CXWnd` vtable layout has `SetWindowText` at /*0x280*/
+    /// `CXWnd` vtable offset for `SetWindowText` (virtual void
+    /// `SetWindowText`(const `CXStr`&)) From MQ2: `CXWnd` vtable layout has
+    /// `SetWindowText` at /*0x280*/
     pub const CXWND_VTABLE_SET_WINDOW_TEXT: usize = 0x280;
 
     /// `CXWnd` vtable offset for `WndNotification` (eqmain.dll layout)
-    /// Signature: int WndNotification(CXWnd* sender, `uint32_t` message, void* data)
-    /// IMPORTANT: eqmain::`CXWnd` has this at 0x110, eqgame's `CXWnd` has it at 0x120!
-    /// This offset is for eqmain context (login/server screens).
+    /// Signature: int WndNotification(CXWnd* sender, `uint32_t` message, void*
+    /// data) IMPORTANT: eqmain::`CXWnd` has this at 0x110, eqgame's `CXWnd`
+    /// has it at 0x120! This offset is for eqmain context (login/server
+    /// screens).
     pub const CXWND_VTABLE_WND_NOTIFICATION: usize = 0x110;
 
     // ─── CXWndManager struct offsets ───
@@ -597,7 +614,8 @@ pub mod eqmain {
     // ArrayClass<T> = { T* m_array; int m_length; int m_alloc; }
 
     /// `CXWndManager::pWindows.m_array` (pointer to `CXWnd`* array)
-    /// NOTE: eqmain.dll layout differs from eqgame.exe — calibrated from hex dump
+    /// NOTE: eqmain.dll layout differs from eqgame.exe — calibrated from hex
+    /// dump
     pub const CXWNDMGR_WINDOWS_ARRAY: usize = 0x010;
     /// `CXWndManager::pWindows.m_length` (window count, u32)
     pub const CXWNDMGR_WINDOWS_COUNT: usize = 0x018;
@@ -637,13 +655,13 @@ pub mod eqmain {
 }
 
 // ─── eqgame.exe CXWndManager offsets ───
-// NOTE: These differ from eqmain.dll! eqgame.exe has CXWndManager::pWindows at +0x008,
-// while eqmain.dll has it at +0x010 (different struct layout).
+// NOTE: These differ from eqmain.dll! eqgame.exe has CXWndManager::pWindows at
+// +0x008, while eqmain.dll has it at +0x010 (different struct layout).
 /// Offsets within eqgame.exe (in-game UI and window manager).
 pub mod eqgame {
     /// `CXWndManager::pWindows.m_length` in eqgame.exe
-    /// `ArrayClass` layout: `m_length` at +0x00, `m_array` at +0x08 within the `ArrayClass`
-    /// pWindows `ArrayClass` starts at `CXWndManager` +0x008
+    /// `ArrayClass` layout: `m_length` at +0x00, `m_array` at +0x08 within the
+    /// `ArrayClass` pWindows `ArrayClass` starts at `CXWndManager` +0x008
     pub const CXWNDMGR_WINDOWS_COUNT: usize = 0x008;
     /// `CXWndManager::pWindows.m_array` in eqgame.exe
     pub const CXWNDMGR_WINDOWS_ARRAY: usize = 0x010;
@@ -659,7 +677,8 @@ pub mod eqgame {
     // ─── CListWnd offsets (for character list reading) ───
     // Source: eqlib UI headers — CListWnd inherits CSidlScreenWnd
 
-    /// `CListWnd::ItemsArray.m_array` — pointer to `SListWndLine` array (at +0x270)
+    /// `CListWnd::ItemsArray.m_array` — pointer to `SListWndLine` array (at
+    /// +0x270)
     pub const CLISTWND_ITEMS_ARRAY: usize = 0x270;
     /// `CListWnd::ItemsArray.m_length` — row count (int at +0x278)
     pub const CLISTWND_ITEMS_COUNT: usize = 0x278;
@@ -790,10 +809,12 @@ pub mod item_definition {
 
 // ─── Character select offsets (eqgame.exe) ───
 
-/// `CCharacterListWnd::SelectCharacter` function address (preferred base, eqgame.exe)
+/// `CCharacterListWnd::SelectCharacter` function address (preferred base,
+/// eqgame.exe)
 pub const SELECT_CHARACTER: u64 = 0x0001_400D_5D20;
 
-/// `CCharacterListWnd::EnterWorld` function address (preferred base, eqgame.exe)
+/// `CCharacterListWnd::EnterWorld` function address (preferred base,
+/// eqgame.exe)
 pub const ENTER_WORLD: u64 = 0x0001_400D_4B20;
 
 // ─── Struct size constants ───
@@ -846,8 +867,9 @@ pub mod player_base {
     pub const LASTNAME: usize = 0x048;
     /// `PlayerClient`* — the spawn's current target (ManagedTarget pointer).
     /// Source: eqlib PlayerBase, ManagedTarget field at 0x268.
-    /// Used by the assist system to read "target's target" for focus-fire logic.
-    /// TODO: verify against a live build hex dump — layout may shift on patch day.
+    /// Used by the assist system to read "target's target" for focus-fire
+    /// logic. TODO: verify against a live build hex dump — layout may shift
+    /// on patch day.
     pub const MANAGED_TARGET: usize = 0x268;
 }
 
@@ -880,7 +902,8 @@ pub mod buff_slots {
     /// `EQ_Affect::InitialDuration` (i32 at +0x74) — ticks when applied.
     pub const INITIAL_DURATION: usize = 0x74;
 
-    /// `EQ_Affect::HitCount` (i32 at +0x78) — remaining hit count for limited-hit buffs.
+    /// `EQ_Affect::HitCount` (i32 at +0x78) — remaining hit count for
+    /// limited-hit buffs.
     pub const HIT_COUNT: usize = 0x78;
 
     /// `EQ_Affect::Modifier` (f32 at +0x80) — bard song modifier (1.0 default).
@@ -898,7 +921,8 @@ pub mod buff_slots {
 
 /// Pointer chain from `PINST_LOCAL_PC` → profile → buff array.
 /// Source: PcClient.h (`ProfileManager` at 0x2e48, `GetCurrentProfile()`),
-///         PcProfile.h (`BaseProfile::Buffs` at 0x0098, `SoeUtil::Array` layout).
+///         PcProfile.h (`BaseProfile::Buffs` at 0x0098, `SoeUtil::Array`
+/// layout).
 pub mod profile {
     /// `PcClient::ProfileManager` offset within PcClient.
     pub const PROFILE_MANAGER: usize = 0x2e48;
@@ -919,7 +943,8 @@ pub mod profile {
     pub const SPELL_BOOK_SLOT_COUNT: usize = (MEMORIZED_SPELLS - SPELL_BOOK) / 4;
     /// Visible spell-gem slots used by the live client UI.
     pub const MEMORIZED_SPELL_GEM_COUNT: usize = 15;
-    /// Alias for `MEMORIZED_SPELL_GEM_COUNT` — used by external callers in `textquest-dll`.
+    /// Alias for `MEMORIZED_SPELL_GEM_COUNT` — used by external callers in
+    /// `textquest-dll`.
     pub const MEMORIZED_SPELL_GEMS: usize = MEMORIZED_SPELL_GEM_COUNT;
 
     /// `SoeUtil::Array::m_array` (data pointer) at +0x08 within the array.
@@ -954,7 +979,8 @@ pub mod chat_window_mgr {
     /// `int NumWindows` — count of currently active chat windows.
     pub const NUM_WINDOWS: usize = 0x0d0;
 
-    /// `CChatWindow* pLockedActiveChatWnd` — the currently locked/active window.
+    /// `CChatWindow* pLockedActiveChatWnd` — the currently locked/active
+    /// window.
     pub const LOCKED_ACTIVE_WND: usize = 0x0d8;
 }
 
@@ -1038,14 +1064,16 @@ pub mod launch_spell_data {
 pub mod client_spell_manager {
     /// `int` — largest valid spell ID in the loaded spell database.
     pub const MAX_SPELL_ID: usize = 0x0064;
-    /// `SoeUtil::HashMap<int, EQ_Spell>` — loaded spell records keyed by spell ID.
+    /// `SoeUtil::HashMap<int, EQ_Spell>` — loaded spell records keyed by spell
+    /// ID.
     pub const SPELLS: usize = 0x2240;
 }
 
 /// Offsets within `EQ_Spell`.
 /// Source: eqlib `Spells.h`
 pub mod eq_spell {
-    /// `uint32_t` — base cast time from spell data (does not include live haste/focus modifiers).
+    /// `uint32_t` — base cast time from spell data (does not include live
+    /// haste/focus modifiers).
     pub const CAST_TIME: usize = 0x0010;
     /// `int` — spell ID inside the record.
     pub const ID: usize = 0x008c;
@@ -1096,17 +1124,20 @@ pub mod player_zone {
     pub const HP_MAX: usize = 0x0338;
     /// `int64_t` — current HP
     pub const HP_CURRENT: usize = 0x03a0;
-    /// `int32_t` — maximum mana (only valid for local player; other spawns have garbage)
+    /// `int32_t` — maximum mana (only valid for local player; other spawns have
+    /// garbage)
     pub const MANA_MAX: usize = 0x03ac;
-    /// `int32_t` — current mana (only valid for local player; other spawns have garbage)
+    /// `int32_t` — current mana (only valid for local player; other spawns have
+    /// garbage)
     pub const MANA_CURRENT: usize = 0x03fc;
     /// `uint8_t` — character level
     pub const LEVEL: usize = 0x03ef;
-    /// `uint8_t` — standing state (0=standing, 1=frozen, 2=looting, 3=sitting, 4=ducking, 110=feigned, 111=dead)
-    /// Source: `PlayerZoneClient` offset 0x0574 in PlayerClient.h
-    /// TODO: 0x0574 reads 110 (FD) when character is sitting on March 10, 2026 build.
-    /// Needs hex dump calibration scan on a live client to find correct offset.
-    /// Old offset 0x0134 always read 0 (Standing). Neither is correct.
+    /// `uint8_t` — standing state (0=standing, 1=frozen, 2=looting, 3=sitting,
+    /// 4=ducking, 110=feigned, 111=dead) Source: `PlayerZoneClient` offset
+    /// 0x0574 in PlayerClient.h TODO: 0x0574 reads 110 (FD) when character
+    /// is sitting on March 10, 2026 build. Needs hex dump calibration scan
+    /// on a live client to find correct offset. Old offset 0x0134 always
+    /// read 0 (Standing). Neither is correct.
     pub const STANDSTATE: usize = 0x0574;
     /// char — GM flag (nonzero = GM). Source: PlayerClient.h offset 0x03ec
     pub const GM: usize = 0x03ec;
@@ -1116,8 +1147,8 @@ pub mod player_zone {
     pub const SPELL_GEM_ETA: usize = 0x03b0;
     /// `uint8_t` — character class ID (1=WAR, 2=CLR, ..., 16=BER)
     /// Source: `PlayerZoneClient` offset 0x0420 in PlayerClient.h
-    /// This is the direct field — more reliable than the `ActorClient` path (0x0FDC)
-    /// which requires traversing through mActorClient at 0x0FC0.
+    /// This is the direct field — more reliable than the `ActorClient` path
+    /// (0x0FDC) which requires traversing through mActorClient at 0x0FC0.
     pub const CHAR_CLASS: usize = 0x0420;
     /// `int32_t` — current endurance
     pub const ENDURANCE_CURRENT: usize = 0x04f8;
@@ -1270,12 +1301,14 @@ pub mod zone_guide {
 /// the shared `eqgame::CLISTWND_ITEMS_ARRAY` / `CLISTWND_ITEMS_COUNT` offsets).
 pub mod context_menu_mgr {
     /// `ArrayClass<CContextMenu*>` — array of registered menus.
-    /// `ArrayClass` layout: `m_length` (int) at `+0x00`, `m_array` (ptr) at `+0x08`.
-    /// The `ArrayClass` starts at `CContextMenuManager` `+0x010`.
+    /// `ArrayClass` layout: `m_length` (int) at `+0x00`, `m_array` (ptr) at
+    /// `+0x08`. The `ArrayClass` starts at `CContextMenuManager` `+0x010`.
     pub const MENUS_ARRAY_BASE: usize = 0x010;
-    /// Length of the `pMenus` `ArrayClass` (`int` at `MENUS_ARRAY_BASE + 0x00`).
+    /// Length of the `pMenus` `ArrayClass` (`int` at `MENUS_ARRAY_BASE +
+    /// 0x00`).
     pub const MENUS_COUNT: usize = 0x010;
-    /// Data pointer of the `pMenus` `ArrayClass` (`CContextMenu**` at `MENUS_ARRAY_BASE + 0x08`).
+    /// Data pointer of the `pMenus` `ArrayClass` (`CContextMenu**` at
+    /// `MENUS_ARRAY_BASE + 0x08`).
     pub const MENUS_DATA: usize = 0x018;
     /// Index of the currently displayed menu (`int` at `+0x020`).
     pub const CUR_MENU: usize = 0x020;
@@ -1761,7 +1794,8 @@ mod tests {
     fn cheater_ld_flag_offsets_do_not_overlap() {
         use std::collections::HashSet;
 
-        // Include the new constants alongside existing ones to verify no address collisions.
+        // Include the new constants alongside existing ones to verify no address
+        // collisions.
         let all_offsets: &[u64] = &[
             CHEATER_LD_FLAG_STRING,
             CHEATER_LD_FLAG_VAR,

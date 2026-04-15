@@ -1,7 +1,8 @@
 //! Data persistence framework with schema migration support.
 //!
-//! This module provides a foundation for persisting game state and configuration
-//! with built-in schema versioning and automatic migration capabilities.
+//! This module provides a foundation for persisting game state and
+//! configuration with built-in schema versioning and automatic migration
+//! capabilities.
 //!
 //! # Overview
 //!
@@ -30,9 +31,11 @@
 //! runner.run()?;
 //! ```
 
-use std::collections::BTreeMap;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};

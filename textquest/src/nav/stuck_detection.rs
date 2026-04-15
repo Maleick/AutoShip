@@ -1,12 +1,15 @@
 //! Stuck detection monitors position deltas over time windows.
 //!
-//! When a player remains nearly stationary for >30 seconds, triggers recovery action:
+//! When a player remains nearly stationary for >30 seconds, triggers recovery
+//! action:
 //! - Logs alert via tracing
 //! - Broadcasts IPC update
 //! - Optionally auto-resets position
 
-use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 
 use textquest_common::nav::Waypoint;
 
@@ -19,10 +22,13 @@ struct PositionSample {
 
 /// Detects when a character remains stuck (movement < 1 unit per 5s).
 ///
-/// Stuck detection works by tracking position samples in a 5-second rolling window:
+/// Stuck detection works by tracking position samples in a 5-second rolling
+/// window:
 /// - Each sample includes position and timestamp
-/// - Every 1 second (or on poll), we compute distance delta from oldest → newest sample in window
-/// - If delta < 1.0 unit, increment stuck counter (tracks consecutive 5s windows with low motion)
+/// - Every 1 second (or on poll), we compute distance delta from oldest →
+///   newest sample in window
+/// - If delta < 1.0 unit, increment stuck counter (tracks consecutive 5s
+///   windows with low motion)
 /// - If stuck counter ≥ 6 (30+ seconds), trigger recovery action
 /// - If motion resumes (delta ≥ 1.0), reset stuck counter to 0
 #[derive(Debug)]
@@ -156,7 +162,8 @@ impl Default for StuckDetector {
 mod tests {
     use super::*;
 
-    /// Helper: move detector forward in virtual time by advancing internal Instant
+    /// Helper: move detector forward in virtual time by advancing internal
+    /// Instant
     fn advance_time_and_record(
         detector: &mut StuckDetector,
         duration: Duration,
@@ -175,7 +182,8 @@ mod tests {
     }
 
     /// Scenario 1: Normal movement — character moves consistently.
-    /// Position changes by >1 unit per 5s, so stuck counter remains 0 and no recovery triggers.
+    /// Position changes by >1 unit per 5s, so stuck counter remains 0 and no
+    /// recovery triggers.
     #[test]
     fn normal_movement_no_stuck() {
         let mut detector = StuckDetector::new();

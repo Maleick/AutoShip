@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
-use super::named_db::{NamedMobDatabase, NamedPriority};
-use super::structs::{SpawnInfo, SpawnType};
+use super::{
+    named_db::{NamedMobDatabase, NamedPriority},
+    structs::{SpawnInfo, SpawnType},
+};
 
 /// Status of a tracked named spawn.
 #[derive(Debug, Clone)]

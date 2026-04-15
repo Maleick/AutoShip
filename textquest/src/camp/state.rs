@@ -4,30 +4,36 @@
 //!
 //! Two systems cooperate for combat:
 //!
-//! - **Camp loop** (this module, orchestrator-side): Generates macro-level slash commands
-//!   (`/assist`, `/attack`, `/target`) to drive the pull→fight→loot→med cycle. It manages
-//!   group-level flow: who pulls, when to engage, when to loot, when to med.
+//! - **Camp loop** (this module, orchestrator-side): Generates macro-level
+//!   slash commands (`/assist`, `/attack`, `/target`) to drive the
+//!   pull→fight→loot→med cycle. It manages group-level flow: who pulls, when to
+//!   engage, when to loot, when to med.
 //!
-//! - **Combatant FSM** (`textquest-dll/src/combat/state.rs`, DLL-side): Handles micro-level
-//!   execution per character — class strategy spell rotations, melee skill firing, GCD
-//!   tracking, mana governance, and `HolyShit` emergency overrides.
+//! - **Combatant FSM** (`textquest-dll/src/combat/state.rs`, DLL-side): Handles
+//!   micro-level execution per character — class strategy spell rotations,
+//!   melee skill firing, GCD tracking, mana governance, and `HolyShit`
+//!   emergency overrides.
 //!
-//! Both are needed: the camp loop orchestrates the group, the combatant executes per-character
-//! combat logic. Integration point: `transition_to_fighting()` sends slash commands AND should
-//! trigger a `CombatEngage` IPC command so each DLL's Combatant FSM transitions from Idle to
-//! Engaging (activating class strategies).
+//! Both are needed: the camp loop orchestrates the group, the combatant
+//! executes per-character combat logic. Integration point:
+//! `transition_to_fighting()` sends slash commands AND should
+//! trigger a `CombatEngage` IPC command so each DLL's Combatant FSM transitions
+//! from Idle to Engaging (activating class strategies).
 //!
-//! Recovery: The `RecoveryTracker` (from `recovery.rs`) detects dead members and generates
-//! rez commands. It is checked every tick before the main state match — if recovery is in
-//! progress, pulling is paused until all members are alive.
+//! Recovery: The `RecoveryTracker` (from `recovery.rs`) detects dead members
+//! and generates rez commands. It is checked every tick before the main state
+//! match — if recovery is in progress, pulling is paused until all members are
+//! alive.
 
-use crate::camp::buffs::{BuffTracker, check_buffs};
-use crate::camp::cc::{CcMember, CcTracker};
-use crate::camp::class_config::ClassConfig;
-use crate::camp::config::CampConfig;
-use crate::camp::loot::{CorpseEntry, LootConfig, LootCycle};
-use crate::camp::personality::PersonalityProfile;
-use crate::camp::recovery::{RecoveryTracker, death_commands_with_roles};
+use crate::camp::{
+    buffs::{BuffTracker, check_buffs},
+    cc::{CcMember, CcTracker},
+    class_config::ClassConfig,
+    config::CampConfig,
+    loot::{CorpseEntry, LootConfig, LootCycle},
+    personality::PersonalityProfile,
+    recovery::{RecoveryTracker, death_commands_with_roles},
+};
 use std::collections::HashMap;
 use textquest_common::combat::HateTargetCategory;
 
@@ -75,7 +81,8 @@ pub struct CampSnapshot {
     pub member_hp: Vec<(u32, i32)>,
     /// Per-member combat state: `(pid, in_combat)`. Used by `return_no_aggro`
     /// to suppress return-to-camp movement for characters that have aggro.
-    /// Empty when combat state data is unavailable (treated as "not in combat").
+    /// Empty when combat state data is unavailable (treated as "not in
+    /// combat").
     pub member_in_combat: Vec<(u32, bool)>,
 }
 
@@ -168,12 +175,13 @@ pub enum CampState {
         /// Tick when buff phase started.
         started_tick: u64,
     },
-    /// One or more group members have died; awaiting resurrection and repositioning.
-    /// The camp loop is paused during this phase.
+    /// One or more group members have died; awaiting resurrection and
+    /// repositioning. The camp loop is paused during this phase.
     Recovery {
         /// Tick when recovery phase started.
         started_tick: u64,
-        /// Whether the group is currently safe to cast rez (not in active combat).
+        /// Whether the group is currently safe to cast rez (not in active
+        /// combat).
         safe_to_rez: bool,
     },
 }
@@ -211,7 +219,8 @@ pub struct CampMember {
 }
 
 impl CampMember {
-    /// Create a new camp member with an auto-generated personality from their name.
+    /// Create a new camp member with an auto-generated personality from their
+    /// name.
     #[must_use]
     pub fn new(pid: u32, name: String, role: Role) -> Self {
         let personality = PersonalityProfile::generate(&name);
@@ -271,7 +280,8 @@ pub struct CampLoop {
     pub pending_corpses: Vec<CorpseEntry>,
     /// Tracks death/recovery state for rez coordination.
     pub recovery: RecoveryTracker,
-    /// Spell gem number used for resurrection (e.g., 5 for cleric rez in gem 5).
+    /// Spell gem number used for resurrection (e.g., 5 for cleric rez in gem
+    /// 5).
     pub rez_gem: u8,
     /// Buff duration tracker for rebuff scheduling.
     pub buff_tracker: BuffTracker,
@@ -315,7 +325,8 @@ impl CampLoop {
         self.pending_events.push(event);
     }
 
-    /// Process all pending events, returning commands. Called at the start of tick().
+    /// Process all pending events, returning commands. Called at the start of
+    /// tick().
     fn process_events(&mut self) -> Vec<(u32, CampAction)> {
         let mut commands = Vec::new();
         let events: Vec<CampEvent> = self.pending_events.drain(..).collect();
@@ -368,11 +379,12 @@ impl CampLoop {
         }
     }
 
-    /// Advance the state machine by one tick. Returns `(pid, slash_command)` pairs
-    /// to send to EQ clients.
+    /// Advance the state machine by one tick. Returns `(pid, slash_command)`
+    /// pairs to send to EQ clients.
     ///
-    /// When `snapshot` is `Some`, real game state drives transitions (target dead,
-    /// healer mana ready, tank HP emergency). Falls back to tick timers when `None`.
+    /// When `snapshot` is `Some`, real game state drives transitions (target
+    /// dead, healer mana ready, tank HP emergency). Falls back to tick
+    /// timers when `None`.
     pub fn tick(&mut self, snapshot: Option<&CampSnapshot>) -> Vec<(u32, CampAction)> {
         self.tick += 1;
         let mut commands: Vec<(u32, CampAction)> = Vec::new();
@@ -486,7 +498,8 @@ impl CampLoop {
                 }
             }
             CampState::Medding { started_tick } => {
-                // Transition when healer mana is above pull threshold (real data) or timer (fallback).
+                // Transition when healer mana is above pull threshold (real data) or timer
+                // (fallback).
                 let mana_ready =
                     snapshot.is_some_and(|s| s.healer_mana_pct >= self.healer_mana_threshold());
                 let timer_expired = self.tick - started_tick >= MED_DURATION;
@@ -797,7 +810,8 @@ impl CampLoop {
         }
     }
 
-    /// Check if a specific member is currently in combat according to the snapshot.
+    /// Check if a specific member is currently in combat according to the
+    /// snapshot.
     fn member_has_aggro(pid: u32, snapshot: Option<&CampSnapshot>) -> bool {
         snapshot.is_some_and(|snap| {
             snap.member_in_combat
@@ -1703,8 +1717,8 @@ mod tests {
     #[test]
     fn test_recovery_repositions_after_all_alive() {
         let mut camp = CampLoop::new(test_config(), test_members());
-        // All members alive, but we are in Recovery state — waiting for reposition timer.
-        // Set started_tick = current tick so elapsed starts at 0.
+        // All members alive, but we are in Recovery state — waiting for reposition
+        // timer. Set started_tick = current tick so elapsed starts at 0.
         let start = 10;
         camp.tick = start;
         camp.state = CampState::Recovery {
@@ -1723,7 +1737,8 @@ mod tests {
             );
         }
 
-        // Final tick: elapsed reaches RECOVERY_REPOSITION_TICKS => reposition and go to Medding
+        // Final tick: elapsed reaches RECOVERY_REPOSITION_TICKS => reposition and go to
+        // Medding
         let cmds = camp.tick(None);
         assert!(
             matches!(camp.state, CampState::Medding { .. }),
@@ -1744,14 +1759,14 @@ mod tests {
     #[test]
     fn test_recovery_rez_priority_healer_before_tank() {
         let mut camp = CampLoop::new(test_config(), test_members());
-        // Both tank (pid 100) and a second cleric (replace cc with healer role) are dead
-        // Use existing members: tank=100 Dead, healer=101 Alive (rezzer), cc=102 Dead
-        // Setup: manually mark members dead
+        // Both tank (pid 100) and a second cleric (replace cc with healer role) are
+        // dead Use existing members: tank=100 Dead, healer=101 Alive (rezzer),
+        // cc=102 Dead Setup: manually mark members dead
         camp.recovery.members[0].2 = crate::camp::recovery::DeathState::Dead { died_at_tick: 1 }; // Tank
         camp.recovery.members[2].2 = crate::camp::recovery::DeathState::Dead { died_at_tick: 1 }; // CC (Enchanter)
 
-        // Add a second member with Healer role so they compete: use pid 102 as dead Healer
-        // Override role on member index 2 to Healer to test priority
+        // Add a second member with Healer role so they compete: use pid 102 as dead
+        // Healer Override role on member index 2 to Healer to test priority
         camp.members[2].role = Role::Healer;
 
         camp.state = CampState::Recovery {

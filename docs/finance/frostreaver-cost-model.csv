@@ -1,0 +1,22 @@
+Section,Line Item,Value,Unit,Source / Notes
+Model,Target break-even window (months),18,months,Default planning assumption from issue #1523
+Model,Managed accounts,36,accounts,Frostreaver roster target from issue #1523
+Inputs,All Access monthly price,,USD/account/month,Operator-only input; fill with the current Daybreak subscription rate
+Inputs,Startup Krono quantity,,Krono,Operator-only input; number of Krono reserved as launch trading float
+Inputs,Krono unit price,17.99,USD/Krono,Seed assumption for startup capital modeling; update if market pricing changes
+Inputs,Sunk costs to date,,USD,Operator-only input covering TextQuest development spend plus purchased hardware
+Startup,Startup Krono capital,=C5*C6,USD,Formula from startup Krono quantity multiplied by Krono unit price
+Operations,Server/hardware running cost,,USD/month,Operator-only input for power hosting or hardware amortization
+Operations,Monthly subscription burn,=C3*C4,USD/month,Formula from managed accounts multiplied by All Access monthly price
+Operations,Infrastructure cost,,USD/month,Operator-only input for VPN build runners storage or other recurring infra
+Operations,Monthly Krono replenishment budget,,USD/month,Operator-only input for ongoing market float or restock
+Revenue,Current monthly revenue,,USD/month,Operator-only input from actual loot Krono plat or service monetization
+Operations,Wife maintenance budget,,USD/month,Operator-only project cost covering flowers dinner and massage
+Startup,Working capital reserve,,USD,Operator-only one-time cushion tuned to aggressive push versus steady grind risk tolerance
+Summary,Monthly burn rate,=SUM(C9:C12)+C14,USD/month,Formula for recurring burn including the non-optional wife budget
+Summary,Required monthly revenue for 18-month break-even,=C16+((SUM(C7:C8)+C15)/C2),USD/month,Formula for monthly burn plus startup recovery over the 18-month target
+Summary,Monthly net after burn,=C13-C16,USD/month,Positive means monthly operations out-earn recurring burn
+Summary,"Break-even months at current revenue","=IF(C18<=0,""UNBOUNDED"",ROUNDUP((SUM(C7:C8)+C15)/C18,0))",months,Returns UNBOUNDED when current revenue does not cover burn
+Summary,Revenue shortfall vs 18-month target,"=MAX(0,C17-C13)",USD/month,Formula for the monetization gap against the 18-month target
+Summary,"Model completeness flag","=IF(COUNTBLANK(C4:C15)=0,""complete"",""needs operator inputs"")",status,Returns complete only when all required operator input cells for the main summaries are populated
+Scenario,Risk tolerance profile,,profile,Operator-only input; choose aggressive early push or steady grind and adjust working capital reserve accordingly

@@ -139,7 +139,8 @@ impl FailureHistory {
             .unwrap_or(0)
     }
 
-    /// Reset all failure counts for a specific actor (e.g., after a successful cycle).
+    /// Reset all failure counts for a specific actor (e.g., after a successful
+    /// cycle).
     pub fn reset_actor(&mut self, actor: ClientId) {
         self.counts.remove(&actor);
     }

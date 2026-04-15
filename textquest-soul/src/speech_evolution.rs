@@ -1,7 +1,7 @@
-//! Speech style evolution — catchphrase learning mechanics for Soul Engine characters.
+//! Speech style evolution — catchphrase learning mechanics for Soul Engine
+//! characters.
 
-use std::collections::VecDeque;
-use std::time::Instant;
+use std::{collections::VecDeque, time::Instant};
 
 const MAX_OBSERVATION_HISTORY: usize = 1_000;
 
@@ -51,7 +51,8 @@ impl SpeechEvolution {
         }
     }
 
-    /// Observe another character using a phrase. Returns true if the phrase was adopted.
+    /// Observe another character using a phrase. Returns true if the phrase was
+    /// adopted.
     ///
     /// - `trust_level`: 0.0–1.0+, where >= 1.0 activates the trust multiplier
     /// - `rng_roll`: caller-provided random value in 0.0–1.0

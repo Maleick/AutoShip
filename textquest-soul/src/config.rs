@@ -80,7 +80,8 @@ pub enum LlmProviderKind {
 pub struct LlmConfig {
     /// Which LLM provider to use
     pub provider: LlmProviderKind,
-    /// Optional auth token for operator-managed local endpoints. Unused for default ollama.
+    /// Optional auth token for operator-managed local endpoints. Unused for
+    /// default ollama.
     #[serde(default)]
     pub api_key: String,
     /// Model name
@@ -121,10 +122,12 @@ impl Default for LlmConfig {
 }
 
 impl LlmConfig {
-    /// Validate that base_url only points to localhost, 127.0.0.1, or ::1 (if set).
-    /// Returns an error message if the URL is invalid or points to a remote host.
+    /// Validate that base_url only points to localhost, 127.0.0.1, or ::1 (if
+    /// set). Returns an error message if the URL is invalid or points to a
+    /// remote host.
     ///
-    /// Since Ollama runs locally, only localhost, 127.0.0.1, and ::1 addresses are allowed.
+    /// Since Ollama runs locally, only localhost, 127.0.0.1, and ::1 addresses
+    /// are allowed.
     #[must_use]
     pub fn validate_base_url(&self) -> Option<String> {
         if self.base_url.is_empty() {
@@ -231,13 +234,25 @@ impl BotPersonalityPreset {
     pub fn system_prompt(&self) -> &'static str {
         match self {
             Self::FippyDarkpaw => {
-                "You are Fippy Darkpaw, the legendary gnoll from EverQuest who endlessly charges the gates of Qeynos despite being slain every time. You are eternally optimistic, scrappy, and never learn from your mistakes. You speak in short, excitable sentences. You refer to the multibox fleet as 'the pack' and the operator as 'alpha gnoll'. Comment on fleet events with gnoll-flavored enthusiasm. Keep responses under 2 sentences. Never break character."
+                "You are Fippy Darkpaw, the legendary gnoll from EverQuest who endlessly charges \
+                 the gates of Qeynos despite being slain every time. You are eternally optimistic, \
+                 scrappy, and never learn from your mistakes. You speak in short, excitable \
+                 sentences. You refer to the multibox fleet as 'the pack' and the operator as \
+                 'alpha gnoll'. Comment on fleet events with gnoll-flavored enthusiasm. Keep \
+                 responses under 2 sentences. Never break character."
             }
             Self::DruzzilRo => {
-                "You are Druzzil Ro, Goddess of Magic in EverQuest. You speak in cryptic, poetic riddles about the nature of power and the weave of magic. You view the multibox fleet as mortal pawns in a grand arcane tapestry. Comment on fleet events with mysterious detachment and veiled prophecy. Keep responses under 2 sentences. Never break character."
+                "You are Druzzil Ro, Goddess of Magic in EverQuest. You speak in cryptic, poetic \
+                 riddles about the nature of power and the weave of magic. You view the multibox \
+                 fleet as mortal pawns in a grand arcane tapestry. Comment on fleet events with \
+                 mysterious detachment and veiled prophecy. Keep responses under 2 sentences. \
+                 Never break character."
             }
             Self::Bristlebane => {
-                "You are Bristlebane, the Trickster God of EverQuest. Everything is a joke to you. You make terrible puns, play pranks with words, and find humor in every situation — especially deaths and failures. Comment on fleet events with mischievous glee and bad wordplay. Keep responses under 2 sentences. Never break character."
+                "You are Bristlebane, the Trickster God of EverQuest. Everything is a joke to you. \
+                 You make terrible puns, play pranks with words, and find humor in every situation \
+                 — especially deaths and failures. Comment on fleet events with mischievous glee \
+                 and bad wordplay. Keep responses under 2 sentences. Never break character."
             }
             Self::Custom => "You are a helpful EverQuest bot. Comment on fleet events concisely.",
         }
@@ -272,13 +287,15 @@ pub struct SoulConfig {
     /// Discord bot personality for fleet commentary
     #[serde(default)]
     pub bot_personality: BotPersonalityConfig,
-    /// Game-state suppression rules for gating soul actions during orchestrator-critical work.
+    /// Game-state suppression rules for gating soul actions during
+    /// orchestrator-critical work.
     #[serde(default)]
     pub suppression: SuppressionRules,
     /// Maximum LLM requests per character per minute (rate limiting)
     #[serde(default = "default_max_requests_per_character")]
     pub max_requests_per_character: u32,
-    /// Maximum total LLM requests across all characters per minute (rate limiting)
+    /// Maximum total LLM requests across all characters per minute (rate
+    /// limiting)
     #[serde(default = "default_max_global_requests")]
     pub max_global_requests: u32,
     /// Number of days before memory decay reaches zero.
@@ -325,7 +342,8 @@ impl Default for SoulConfig {
 }
 
 impl SoulConfig {
-    /// Validate this configuration. Returns a list of errors; empty means valid.
+    /// Validate this configuration. Returns a list of errors; empty means
+    /// valid.
     #[must_use]
     pub fn validate(&self) -> Vec<crate::config_validator::ConfigError> {
         crate::config_validator::SoulConfigValidator::validate(self)

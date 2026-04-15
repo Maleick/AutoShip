@@ -38,7 +38,8 @@ AUTOSHIP_PROMPT.md
 BEACON_RESULT.md
 BEACON_PROMPT.md
 *.master
-.autoship/
+.autoship/*
+!.autoship/PHASE1_HANDOFF.md
 .beacon/
 autoresearch-security/
 pane.log

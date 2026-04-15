@@ -287,6 +287,14 @@ export interface ClassParams {
   slow_at_hp_pct?: number;
 }
 
+export interface AutoRezConfig {
+  enabled: boolean;
+  min_xp_pct: number;
+  trusted_casters: string[];
+  decline_if_untrusted: boolean;
+  delay_ms: number;
+}
+
 export interface CharacterConfig {
   character_name: string;
   class: string;
@@ -296,6 +304,7 @@ export interface CharacterConfig {
   nuke_at_pct: number;
   rotation: RotationEntry[];
   class_params: ClassParams;
+  auto_rez: AutoRezConfig;
   group_override: boolean;
   group_name?: string;
 }

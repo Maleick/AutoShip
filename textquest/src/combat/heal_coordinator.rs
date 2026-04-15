@@ -1,8 +1,9 @@
 //! Cross-group heal arbitration and assignment deconfliction.
 //!
-//! The `HealCoordinator` sits in the orchestrator and coordinates healing across
-//! all groups in a 36-box raid. It prevents double-healing by tracking heal claims
-//! (time-expiring locks) and provides a priority-ordered target list for each healer.
+//! The `HealCoordinator` sits in the orchestrator and coordinates healing
+//! across all groups in a 36-box raid. It prevents double-healing by tracking
+//! heal claims (time-expiring locks) and provides a priority-ordered target
+//! list for each healer.
 //!
 //! # Heal Priority Order
 //! 1. Own group tank
@@ -11,15 +12,14 @@
 //! 4. Cross-group members
 //!
 //! # Claim System
-//! When a healer starts casting, the orchestrator registers a claim on the target.
-//! Other healers skip claimed targets and move to the next-lowest-HP target.
-//! Claims auto-expire after the estimated cast time to handle interrupted casts.
+//! When a healer starts casting, the orchestrator registers a claim on the
+//! target. Other healers skip claimed targets and move to the next-lowest-HP
+//! target. Claims auto-expire after the estimated cast time to handle
+//! interrupted casts.
 
 use std::collections::HashMap;
 
-use textquest_common::combat::CombatRole;
-use textquest_common::ipc::Command;
-use textquest_common::types::ClientId;
+use textquest_common::{combat::CombatRole, ipc::Command, types::ClientId};
 
 /// HP threshold below which a target is considered needing a heal.
 const HEAL_NEEDED_HP: f32 = 85.0;
@@ -94,7 +94,8 @@ pub struct HealCoordinator {
     tick: u32,
     /// Whether cross-group healing is enabled.
     enabled: bool,
-    /// Minimum mana% to allow cross-group healing (conserve mana for own group).
+    /// Minimum mana% to allow cross-group healing (conserve mana for own
+    /// group).
     cross_group_mana_threshold: f32,
 }
 

@@ -1,4 +1,5 @@
-//! Packet capture types — opcode filtering, capture sessions, and disk persistence.
+//! Packet capture types — opcode filtering, capture sessions, and disk
+//! persistence.
 //!
 //! Provides infrastructure for capturing EQ network packets with:
 //! - Direction-aware filtering (client→server, server→client)
@@ -9,9 +10,11 @@
 //! - Session diffing to spot behavioral changes
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::io::{self, Read, Write};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashSet,
+    io::{self, Read, Write},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 // ---------------------------------------------------------------------------
 // Core types

@@ -1,8 +1,9 @@
 //! Read zone adjacency graph from EQ's `ZoneGuideManagerClient`.
 //!
 //! `ZoneGuideManagerClient` is a singleton containing a fixed-size array of 888
-//! `ZoneGuideZone` entries. Each zone has a name, level range, and an `ArrayClass`
-//! of `ZoneGuideConnection` entries describing how to reach neighboring zones.
+//! `ZoneGuideZone` entries. Each zone has a name, level range, and an
+//! `ArrayClass` of `ZoneGuideConnection` entries describing how to reach
+//! neighboring zones.
 
 use textquest_common::nav::ZoneGraph;
 
@@ -15,8 +16,10 @@ use textquest_common::nav::ZoneGraph;
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn read_zone_graph(eq_base: u64) -> Option<ZoneGraph> {
     use crate::eq::widgets::read_cxstr;
-    use textquest_common::nav::{ZoneConnection, ZoneNode};
-    use textquest_common::offsets::{self, zone_guide as zg};
+    use textquest_common::{
+        nav::{ZoneConnection, ZoneNode},
+        offsets::{self, zone_guide as zg},
+    };
     use windows::Win32::System::Memory::{
         MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE, PAGE_EXECUTE_READ,
         PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS, PAGE_READONLY,

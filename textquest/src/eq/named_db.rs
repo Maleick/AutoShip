@@ -2,8 +2,7 @@
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::collections::HashMap;
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 /// Priority level for a named mob.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -38,7 +37,8 @@ pub struct NamedMobEntry {
 }
 
 impl NamedMobEntry {
-    /// Convert `respawn_min_minutes` to ticks (at 250ms per tick = 4 ticks/sec).
+    /// Convert `respawn_min_minutes` to ticks (at 250ms per tick = 4
+    /// ticks/sec).
     #[must_use]
     pub fn respawn_min_ticks(&self) -> u64 {
         u64::from(self.respawn_min_minutes) * 60 * 4

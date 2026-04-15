@@ -113,10 +113,29 @@ Responses include:
 
 - `Pong`
 - `CommandResult`
+- `ChatBatch`
 - `NavUpdate`
 - `LoginPhaseUpdate`
 - `CombatUpdate`
 - `ZoneGraph`
+
+## Passive Chat Capture for Krono Monitoring
+
+The DLL already captures rendered chat lines at the `CEverQuest::dsp_chat` boundary and buffers them for later IPC polling. The trade-price monitor builds on that existing path instead of adding packet hooks or any outbound network traffic.
+
+Current passive capture flow:
+
+1. `textquest-dll` intercepts client-rendered chat and queues raw lines in its in-process chat buffer.
+2. The orchestrator polls `Command::PollChat` on a short interval and drains buffered `ChatBatch` messages.
+3. `textquest_common::chat::parse_chat_text()` normalizes the lines into structured chat events.
+4. `textquest::economy::price_monitor` keeps only `/ooc` and `/auction` traffic from trade hub zones such as Nexus and Plane of Knowledge.
+5. Krono-denominated buy/sell/trade messages are parsed into item-plus-price observations and written to `data/trade_prices.db`.
+
+The monitor intentionally stays passive:
+
+- no extra EQ network traffic is generated
+- duplicate observations from multiple watching clients are suppressed in-memory before persistence
+- non-hub-zone and non-Krono chatter is ignored before it reaches the SQLite store
 
 ## Current Behavior vs Roadmap
 
