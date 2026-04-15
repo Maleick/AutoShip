@@ -1840,7 +1840,7 @@ pub fn run_dashboard_mode(port: u16, open: bool) -> Result<()> {
 }
 
 // ─── Configuration
-// ─────────────────────────────────���────────────────────────
+// ──────────────────────────────────────────────────────────
 
 /// Validate the configuration file.
 pub fn run_config_check_mode(path: Option<&str>) -> Result<()> {
