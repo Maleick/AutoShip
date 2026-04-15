@@ -19,6 +19,7 @@ automation claims beyond the evidence state recorded here.
 | TextQuest already has zone-failure recovery plumbing that can frame corpse-recovery risk during route validation. | Research-backed | `textquest/src/zoning/failure_codes.rs`, `textquest/src/zoning/recovery.rs`, `docs/zone-transition-state-map.md` | The repo models `CorpseInZone = -22`, safe-coordinate recovery, and live validation tasks for recovery outcomes, but none of that proves the intended Sebilis access route is corpse-recovery-safe in practice. |
 | TextQuest already has generic HVT and named-priority surfaces that can aid attended named sampling. | Research-backed | `textquest/src/eq/hvt.rs`, `textquest/src/camp/puller.rs`, `config/hvt_watchlist.toml`, `docs/wiki/Operator-Guide.md` | The repo can load a watchlist and prefer HVTs during pull selection, but the checked-in watchlist is generic and does not currently anchor Sebilis-specific named tracking or overlap baselines. |
 | TextQuest already exposes a map-screen named tracker panel and `watch named` controls for attended spawn monitoring. | Research-backed | `textquest/src/tui/ui/map.rs`, `textquest/src/tui/app.rs`, `docs/wiki/Research-MQ2-Parity-Matrix.md` | The UI already exposes generic named-tracking surfaces, but the current parity audit still calls them display-only and missing per-zone Sebilis configuration or validated timer baselines. |
+| TextQuest already exposes generic camp-overlay visuals for attended radius tuning. | Research-backed | `textquest/src/tui/ui/map.rs`, `textquest/src/tui/config_panel.rs` | The map already renders camp and pull radius circles and the config panel surfaces pull-radius state, but the repo still has no Sebilis-specific optimal radius baseline or overlap proof. |
 | Timing variation and operator hardening reduce visibility. | Research-backed | `docs/wiki/Security-and-Anti-Detection-Notes.md`, `docs/wiki/Research-Anti-Detection.md` | The repo explicitly treats anti-detection value as bounded guidance rather than proof of safety. |
 | The repo already tracks missing unattended-session safeguards and telemetry as overnight requirements or gaps. | Research-backed blocker | `docs/MQ2_COVERAGE_GAP_ANALYSIS.md`, `docs/OVERNIGHT-ISSUE-SUMMARY.md` | GM alerts, auto-camp-on-death, kill or plat tracking, and session logs are documented as required or gap-tracked overnight tooling, not validated Sebilis-safe automation. |
 | Launch-zone routing support is still planned rather than proven. | Research-backed blocker | `docs/orchestration-design.md` | The orchestration roadmap still lists a `Camp database for launch zones` as unfinished TLP-launch work, so this repo does not yet present a complete launch-zone routing surface for Sebilis. |
@@ -113,6 +114,14 @@ automation claims beyond the evidence state recorded here.
 - These named-tracking controls help attended Sebilis observation, but they do
   not yet provide a Sebilis-specific timer feed, alert contract, or overlap
   baseline that could close this issue.
+- `textquest/src/tui/ui/map.rs` already draws camp overlays with a green camp
+  radius circle, a red pull radius circle, and center markers for both points.
+- `textquest/src/tui/config_panel.rs` already surfaces `Pull Radius` as
+  `camp.pull_radius` in the generic camp config tree.
+- These map and config surfaces help an operator inspect current camp geometry
+  during attended Sebilis tuning, but they do not prove that the checked-in
+  radius values are optimal for Disco rotation, named overlap, or safe pull
+  recovery.
 - `docs/wiki/Frostreaver-Farming-Guide.md` and `docs/wiki/P99-Zone-Guide.md`
   contain the existing research narrative about Disco, left wing, crypt,
   juggernauts, and myconids.

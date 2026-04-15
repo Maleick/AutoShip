@@ -420,6 +420,41 @@ class SebilisValidationDocsTests(unittest.TestCase):
         )
         self.assertIn("baseline that could close this issue.", text)
 
+    def test_validation_doc_records_generic_radius_overlay_controls_as_attended_tuning_aid(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        map_ui_text = (
+            REPO_ROOT / "textquest" / "src" / "tui" / "ui" / "map.rs"
+        ).read_text(encoding="utf-8")
+        config_panel_text = (
+            REPO_ROOT / "textquest" / "src" / "tui" / "config_panel.rs"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("Draw camp location overlays", map_ui_text)
+        self.assertIn("camp radius circle", map_ui_text)
+        self.assertIn("pull radius circle", map_ui_text)
+        self.assertIn('label: "Pull Radius".into()', config_panel_text)
+        self.assertIn('key: "camp.pull_radius".into()', config_panel_text)
+        self.assertIn("generic camp-overlay visuals for attended radius tuning", text)
+        self.assertIn("green camp", text)
+        self.assertIn("red pull radius circle", text)
+        self.assertIn("`Pull Radius`", text)
+        self.assertIn("`camp.pull_radius`", text)
+        self.assertIn(
+            "These map and config surfaces help an operator inspect current camp geometry",
+            text,
+        )
+        self.assertIn(
+            "during attended Sebilis tuning, but they do not prove that the checked-in",
+            text,
+        )
+        self.assertIn(
+            "radius values are optimal for Disco rotation, named overlap, or safe pull",
+            text,
+        )
+        self.assertIn("recovery.", text)
+
     def test_validation_doc_and_template_record_theorized_items_without_promoting_them_to_validated_outputs(self) -> None:
         text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
             encoding="utf-8"
