@@ -119,8 +119,8 @@ These may become valuable later, but they require audience building or market in
 ### Blocked: do not use for near-term planning
 
 1. RMT sales
-2. account or power-level sales
-3. other grey-market monetization
+2. Account sales or power-leveling services
+3. Other grey-market monetization
 
 Treat them as risk-review topics only until the dedicated follow-on issues produce a compliance position.
 
