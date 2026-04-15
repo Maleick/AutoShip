@@ -133,6 +133,13 @@ The current follow-on implementation slices are:
 - loot intake plus distribution ownership and reserve rules
 - vendor and banking route controllers with failure-state visibility
 - plat/item ledger summaries plus operator overrides
+- operator-triggered bazaar price capture via passive UI memory reads after one normal player search, with raw row snapshots preserved for later field calibration
+
+Current bazaar capture stays intentionally bounded:
+
+- no packet hook or synthetic bazaar query generation is required for price sampling
+- the DLL only snapshots visible bazaar search list rows already populated in client memory
+- bazaar price intelligence remains an early-game utility; durable long-tail monitoring still belongs to chat/event capture work
 
 ## Developer Guidance
 
