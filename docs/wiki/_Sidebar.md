@@ -10,6 +10,7 @@
 ## Operation
 
 - [Combat and Camp Loop](Combat-and-Camp-Loop)
+- [Sebilis Farming Validation](Sebilis-Farming-Validation)
 - [Navigation and Maps](Navigation-and-Maps)
 - [Login Automation](Login-Automation)
 - [Soul Engine](Soul-Engine)
