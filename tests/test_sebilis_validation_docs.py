@@ -230,6 +230,47 @@ class SebilisValidationDocsTests(unittest.TestCase):
         )
         self.assertIn("instrumented in TextQuest.", text)
 
+    def test_validation_doc_records_operator_controls_and_observability_as_attended_run_aids(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        event_text = (REPO_ROOT / "textquest" / "src" / "tui" / "event.rs").read_text(
+            encoding="utf-8"
+        )
+        state_text = (REPO_ROOT / "textquest" / "src" / "tui" / "state.rs").read_text(
+            encoding="utf-8"
+        )
+        observability_text = (
+            REPO_ROOT / "docs" / "dev" / "observability.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("KeyCode::Home", event_text)
+        self.assertIn("Automation PAUSED", event_text)
+        self.assertIn("KeyCode::End", event_text)
+        self.assertIn("Automation RESUMED", event_text)
+        self.assertIn('KeyCode::Char(\'p\' | \'P\')', event_text)
+        self.assertIn('KeyCode::Char(\'r\' | \'R\')', event_text)
+        self.assertIn('KeyCode::Char(\'a\' | \'A\')', event_text)
+        self.assertIn("pub automation_paused: bool,", state_text)
+        self.assertIn("automation_paused: false,", state_text)
+        self.assertIn('zone = "sebilis"', observability_text)
+        self.assertIn('`HOME` pauses automation, `END` resumes automation', text)
+        self.assertIn('binds `P` to pause, `R` to resume, and `A` to abort', text)
+        self.assertIn("`automation_paused` as explicit operator", text)
+        self.assertIn('structured `zone = "sebilis"`', text)
+        self.assertIn(
+            "These operator controls and observability examples are useful for attended",
+            text,
+        )
+        self.assertIn(
+            "Sebilis sampling, but they do not prove that unattended handling is safe or",
+            text,
+        )
+        self.assertIn(
+            "that Sebilis-specific spawn or forage metrics are already captured.",
+            text,
+        )
+
     def test_validation_doc_and_template_record_theorized_items_without_promoting_them_to_validated_outputs(self) -> None:
         text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
             encoding="utf-8"

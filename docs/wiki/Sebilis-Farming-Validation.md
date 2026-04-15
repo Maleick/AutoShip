@@ -14,6 +14,7 @@ automation claims beyond the evidence state recorded here.
 | Old Sebilis is a plausible Kunark-era endgame farm for 50-60 groups. | Research-backed | `docs/wiki/Frostreaver-Farming-Guide.md`, `docs/wiki/P99-Zone-Guide.md` | These guides describe Sebilis as a top-end XP and plat zone, but they are still planning inputs, not live TextQuest validation. |
 | TextQuest already has Sebilis-specific camp and named configuration. | Research-backed | `config/camps/sebilis_disco.toml`, `config/named_mobs/sebilis.toml` | The repo knows about Disco, named placeholders, and a bounded pull/camp radius. |
 | TextQuest has a forage automation surface that can drive `/forage` on an interval. | Research-backed | `textquest/src/camp/forage.rs` | The manager tracks attempts and result strings, but no Sebilis-specific Nodding Blue Lily baseline is captured in-repo. |
+| TextQuest already exposes operator pause controls and a zone-scoped observability contract for attended validation runs. | Research-backed | `textquest/src/tui/event.rs`, `textquest/src/tui/state.rs`, `docs/dev/observability.md` | HOME/END and economy control bindings can pause, resume, or abort automation, and observability docs already standardize `zone` labels like `sebilis`; none of that is the same as a live Sebilis spawn-rate or safety baseline. |
 | Timing variation and operator hardening reduce visibility. | Research-backed | `docs/wiki/Security-and-Anti-Detection-Notes.md`, `docs/wiki/Research-Anti-Detection.md` | The repo explicitly treats anti-detection value as bounded guidance rather than proof of safety. |
 | The repo already tracks missing unattended-session safeguards and telemetry as overnight requirements or gaps. | Research-backed blocker | `docs/MQ2_COVERAGE_GAP_ANALYSIS.md`, `docs/OVERNIGHT-ISSUE-SUMMARY.md` | GM alerts, auto-camp-on-death, kill or plat tracking, and session logs are documented as required or gap-tracked overnight tooling, not validated Sebilis-safe automation. |
 | Launch-zone routing support is still planned rather than proven. | Research-backed blocker | `docs/orchestration-design.md` | The orchestration roadmap still lists a `Camp database for launch zones` as unfinished TLP-launch work, so this repo does not yet present a complete launch-zone routing surface for Sebilis. |
@@ -58,6 +59,16 @@ automation claims beyond the evidence state recorded here.
 - Current forage defaults are `enabled = false`, `interval_ms = 3000`, and
   `max_results_history = 50`.
 - These forage defaults describe the current command loop only; they do not prove a safe unattended cadence or a live Nodding Blue Lily rate.
+- `textquest/src/tui/event.rs` already wires global operator controls:
+  `HOME` pauses automation, `END` resumes automation, and the economy panel
+  binds `P` to pause, `R` to resume, and `A` to abort.
+- `textquest/src/tui/state.rs` tracks `automation_paused` as explicit operator
+  state and defaults it to `false`.
+- `docs/dev/observability.md` already standardizes structured `zone = "sebilis"`
+  fields and `zone` metric labels for logs and counters.
+- These operator controls and observability examples are useful for attended
+  Sebilis sampling, but they do not prove that unattended handling is safe or
+  that Sebilis-specific spawn or forage metrics are already captured.
 - `docs/wiki/Frostreaver-Farming-Guide.md` and `docs/wiki/P99-Zone-Guide.md`
   contain the existing research narrative about Disco, left wing, crypt,
   juggernauts, and myconids.
