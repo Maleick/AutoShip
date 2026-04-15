@@ -112,6 +112,28 @@ Supported sections are:
 
 These files are optional. When no per-toon file exists, TextQuest keeps using the existing built-in class strategy and any already-supplied combat config data.
 
+## Web Strategy Tuning
+
+The Strategy Tuning panel and `/api/config/characters` expose a per-character web configuration surface.
+
+Current fields include:
+
+- heal, mana-sit, and nuke thresholds
+- ordered rotation entries
+- class-specific strategy parameters
+- group override metadata
+- auto-rez policy
+
+The auto-rez policy currently covers:
+
+- `enabled`
+- `min_xp_pct`
+- `trusted_casters`
+- `decline_if_untrusted`
+- `delay_ms`
+
+This state currently lives in memory inside `textquest-web`. It is available to the running dashboard process, but it is not yet persisted across backend restarts.
+
 ## Maps and Offsets
 
 - `config/maps/*.txt` supplies zone linework and labels for the TUI map.

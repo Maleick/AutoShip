@@ -14,6 +14,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
+use textquest_common::ipc::AutoRezConfig;
 
 use crate::AppState;
 
@@ -147,6 +148,8 @@ pub struct CharacterConfig {
     pub nuke_at_pct: u8,
     pub rotation: Vec<RotationEntry>,
     pub class_params: ClassParams,
+    #[serde(default)]
+    pub auto_rez: AutoRezConfig,
     pub group_override: bool,
     pub group_name: Option<String>,
 }
@@ -179,6 +182,13 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 ch_chain_timing_ms: Some(2500),
                 ..ClassParams::default()
             },
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 96,
+                trusted_casters: vec!["Highclerk".into(), "Leafbinder".into()],
+                decline_if_untrusted: true,
+                delay_ms: 5_000,
+            },
             group_override: false,
             group_name: Some("Group 1".into()),
         },
@@ -196,6 +206,13 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 enabled: true,
             }],
             class_params: ClassParams::default(),
+            auto_rez: AutoRezConfig {
+                enabled: false,
+                min_xp_pct: 90,
+                trusted_casters: vec!["Frostreaver".into()],
+                decline_if_untrusted: false,
+                delay_ms: 3_000,
+            },
             group_override: false,
             group_name: Some("Group 1".into()),
         },
@@ -215,6 +232,13 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             class_params: ClassParams {
                 burn_at_hp_pct: Some(30),
                 ..ClassParams::default()
+            },
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 90,
+                trusted_casters: vec!["Frostreaver".into(), "Oakmantle".into()],
+                decline_if_untrusted: false,
+                delay_ms: 2_500,
             },
             group_override: false,
             group_name: Some("Group 2".into()),
@@ -236,6 +260,13 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 slow_at_hp_pct: Some(95),
                 ..ClassParams::default()
             },
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 96,
+                trusted_casters: vec!["Frostreaver".into()],
+                decline_if_untrusted: true,
+                delay_ms: 4_000,
+            },
             group_override: false,
             group_name: Some("Group 2".into()),
         },
@@ -256,6 +287,13 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 dot_overlap_pct: Some(10),
                 ..ClassParams::default()
             },
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 90,
+                trusted_casters: vec!["Frostreaver".into(), "Highclerk".into()],
+                decline_if_untrusted: true,
+                delay_ms: 3_500,
+            },
             group_override: false,
             group_name: Some("Group 3".into()),
         },
@@ -266,9 +304,6 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
 }
 
 /// GET /api/config/characters — list all character tuning configs.
-/// Not yet mounted in the live API router (returns 501 via placeholder); kept
-/// for future use.
-#[allow(dead_code)]
 pub async fn list_character_configs(
     State(state): State<Arc<AppState>>,
 ) -> Json<Vec<CharacterConfig>> {
@@ -281,9 +316,6 @@ pub async fn list_character_configs(
 }
 
 /// PUT /api/config/characters/:name — upsert per-character tuning config.
-/// Not yet mounted in the live API router (returns 501 via placeholder); kept
-/// for future use.
-#[allow(dead_code)]
 pub async fn put_character_config(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
@@ -644,6 +676,13 @@ mod tests {
             nuke_at_pct: 70,
             rotation: vec![],
             class_params: ClassParams::default(),
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 96,
+                trusted_casters: vec!["Frostreaver".into()],
+                decline_if_untrusted: true,
+                delay_ms: 5_100,
+            },
             group_override: false,
             group_name: None,
         };
@@ -659,5 +698,7 @@ mod tests {
             .find(|c| c.character_name == "Aelrindel")
             .expect("updated config should exist");
         assert_eq!(updated.heal_at_pct, 50);
+        assert_eq!(updated.auto_rez.min_xp_pct, 96);
+        assert_eq!(updated.auto_rez.trusted_casters, vec!["Frostreaver"]);
     }
 }

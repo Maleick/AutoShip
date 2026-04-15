@@ -110,6 +110,33 @@ impl From<Response> for IpcResponse {
     }
 }
 
+/// Configuration for automatic resurrection-offer handling.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AutoRezConfig {
+    /// Whether the auto-rez workflow is enabled for this character.
+    pub enabled: bool,
+    /// Minimum experience percentage required to accept the rez offer.
+    pub min_xp_pct: u8,
+    /// Case-insensitive allowlist of trusted rez casters.
+    pub trusted_casters: Vec<String>,
+    /// Whether to explicitly decline offers that do not satisfy the policy.
+    pub decline_if_untrusted: bool,
+    /// Delay before accepting or declining an offer, in milliseconds.
+    pub delay_ms: u32,
+}
+
+impl Default for AutoRezConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            min_xp_pct: 90,
+            trusted_casters: Vec::new(),
+            decline_if_untrusted: false,
+            delay_ms: 3_000,
+        }
+    }
+}
+
 /// Rendering mode for an injected client.
 ///
 /// Controls how much GPU work eqgame.exe does. Game logic, network,
@@ -707,6 +734,11 @@ pub enum Command {
     SetAutoAccept {
         /// Whether auto-accept is enabled.
         enabled: bool,
+    },
+    /// Configure automatic resurrection-offer handling for this client.
+    SetAutoRezConfig {
+        /// Policy and timing for auto-accepting or declining rez offers.
+        config: AutoRezConfig,
     },
     /// Set the rendering mode for this client.
     ///
@@ -2354,6 +2386,39 @@ mod tests {
                 panic!("expected SetRenderMode");
             }
         }
+    }
+
+    #[test]
+    fn auto_rez_config_command_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let cmd = Command::SetAutoRezConfig {
+            config: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 96,
+                trusted_casters: vec!["Clericbob".into(), "Druidgal".into()],
+                decline_if_untrusted: true,
+                delay_ms: 5_100,
+            },
+        };
+
+        let encoded = encode(&cmd).expect("encode SetAutoRezConfig");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode SetAutoRezConfig");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn auto_rez_config_default_matches_ui_baseline() {
+        assert_eq!(
+            AutoRezConfig::default(),
+            AutoRezConfig {
+                enabled: false,
+                min_xp_pct: 90,
+                trusted_casters: vec![],
+                decline_if_untrusted: false,
+                delay_ms: 3_000,
+            }
+        );
     }
 
     #[test]

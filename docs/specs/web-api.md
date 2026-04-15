@@ -123,17 +123,7 @@ Retrieve all active character sessions currently under orchestration.
 
 Retrieve all character ability and behavior configurations.
 
-**Status**: 501 Not Implemented (placeholder)
-
-**Response**: 501 Not Implemented
-
-```json
-{
-  "error": "Character configuration API is not implemented in this build"
-}
-```
-
-**Future Response** (when implemented): 200 OK
+**Status**: 200 OK
 
 ```json
 [
@@ -164,6 +154,13 @@ Retrieve all character ability and behavior configurations.
       "burn_at_hp_pct": null,
       "slow_at_hp_pct": null
     },
+    "auto_rez": {
+      "enabled": true,
+      "min_xp_pct": 96,
+      "trusted_casters": ["Highclerk", "Leafbinder"],
+      "decline_if_untrusted": true,
+      "delay_ms": 5000
+    },
     "group_override": false,
     "group_name": "Group 1"
   }
@@ -180,6 +177,7 @@ Retrieve all character ability and behavior configurations.
 - `nuke_at_pct: u8` — Nuke trigger threshold (%)
 - `rotation: Vec<RotationEntry>` — Rotation abilities
 - `class_params: ClassParams` — Class-specific tuning
+- `auto_rez: AutoRezConfig` — Resurrection-offer policy for trust list, minimum XP, decline behavior, and delay
 - `group_override: bool` — Override group assignment
 - `group_name: Option<String>` — Group assignment
 
@@ -203,7 +201,7 @@ Retrieve a single character's configuration.
 
 Create or update a character configuration.
 
-**Status**: 501 Not Implemented (placeholder)
+**Status**: 200 OK
 
 **Path Parameters**:
 
@@ -211,17 +209,34 @@ Create or update a character configuration.
 
 **Request Body**: `CharacterConfig` (character_name field ignored, uses path param)
 
-**Response**: 501 Not Implemented
-
-**Future Response** (when implemented): 200 OK
-
 ```json
 {
   "character_name": "Frostreaver",
   "class": "Cleric",
-  ...
+  "role": "Healer",
+  "heal_at_pct": 70,
+  "mana_sit_pct": 25,
+  "nuke_at_pct": 90,
+  "rotation": [],
+  "class_params": {
+    "ch_chain_timing_ms": 2500
+  },
+  "auto_rez": {
+    "enabled": true,
+    "min_xp_pct": 96,
+    "trusted_casters": ["Highclerk", "Leafbinder"],
+    "decline_if_untrusted": true,
+    "delay_ms": 5000
+  },
+  "group_override": false,
+  "group_name": "Group 1"
 }
 ```
+
+**Notes**:
+
+- The current implementation stores character configs in memory for the running `textquest-web` process.
+- The request-body `character_name` is ignored and replaced with the `:name` path parameter.
 
 ---
 
