@@ -226,7 +226,7 @@ impl RareSpawnTracker {
     pub fn record_spawn(&mut self, name: &str) -> Option<Duration> {
         let key = name.to_lowercase();
         let now = SystemTime::now();
-        let result = self.last_seen.get(&key).and_then(|last| now.duration_since(*last));
+        let result = self.last_seen.get(&key).and_then(|last| now.duration_since(*last).ok());
         self.last_seen.insert(key, now);
         result
     }
@@ -237,7 +237,7 @@ impl RareSpawnTracker {
     #[must_use]
     pub fn time_since_last_pop(&self, name: &str) -> Option<Duration> {
         let key = name.to_lowercase();
-        self.last_seen.get(&key).and_then(|last| SystemTime::now().duration_since(*last))
+        self.last_seen.get(&key).and_then(|last| SystemTime::now().duration_since(*last).ok())
     }
 
     /// Clear all tracked spawn times (e.g., on zone change).

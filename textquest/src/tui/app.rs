@@ -26,7 +26,7 @@ use crate::{
         log_watcher::LogWatcher,
         named_db::NamedMobDatabase,
         named_tracker::{NamedAlert, NamedTracker},
-        spawn_alert::{MatchSource, SpawnAlertEvent, SpawnAlertFeed},
+        spawn_alert::{MatchSource, RareSpawnTracker, SpawnAlertEvent, SpawnAlertFeed},
         structs::{SpawnInfo, SpawnType},
     },
     orchestrator::Orchestrator,
@@ -3290,6 +3290,7 @@ impl App {
                         timestamp: std::time::SystemTime::now(),
                         tick,
                         match_source: MatchSource::WatchPattern(pattern.to_string()),
+                        time_since_last_pop: None,
                     });
                 }
             }
@@ -3312,6 +3313,7 @@ impl App {
                 timestamp: std::time::SystemTime::now(),
                 tick,
                 match_source: MatchSource::WatchPattern(String::new()),
+                time_since_last_pop: None,
             };
             self.spawn_alert_feed.push(event);
             self.set_feedback(
@@ -3382,6 +3384,7 @@ impl App {
                 timestamp: std::time::SystemTime::now(),
                 tick,
                 match_source: MatchSource::WatchPattern("spawn-delta".to_string()),
+                time_since_last_pop: None,
             });
             self.set_feedback(
                 level,
