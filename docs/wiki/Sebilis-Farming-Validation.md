@@ -46,7 +46,13 @@ automation claims beyond the evidence state recorded here.
   - `Baron Yosig` -> `28-36 minutes`
   - `Crypt Caretaker` -> `22-28 minutes`
   - `Sebilite Protector` -> `22-28 minutes`
+- Current named-config drop lists are `Singing Short Sword`,
+  `Trakanon's Tooth`, `Elder Spiritist's Helm`,
+  `Crypt Caretaker's Shield`, and `Sebilite Scale Leggings`.
 - These timer windows come from the checked-in named config and remain unvalidated until a live sample confirms them.
+- Those checked-in named drops do not currently anchor the issue's primary
+  target outputs of `Nodding Blue Lily`, `Runebranded Girdle`, `Fungi Tunic`,
+  or `Froglok Blood`.
 - `textquest/src/camp/forage.rs` provides the current `/forage` loop and result
   history that live sampling can reuse.
 - Current forage defaults are `enabled = false`, `interval_ms = 3000`, and
@@ -145,6 +151,12 @@ Current theory items worth capturing explicitly in the template include
 | `Nodding Blue Lily` | Issue-theory only | Issue `#1526` description | `Nodding Blue Lily` remains an issue-theory hypothesis until a repo-local source or live sample anchors it. |
 | `Fungi Tunic` | Issue-theory only | `docs/wiki/Research-MQ2-Deep-Dive.md` | `Fungi Tunic` currently appears only in a generic item-command example, not a Sebilis evidence source. |
 | `Froglok Blood` | Issue-theory only | Issue `#1526` description | `Froglok Blood` currently has no repo-local Sebilis evidence source beyond the issue theory. |
+
+The current `config/named_mobs/sebilis.toml` drop list instead tracks
+`Singing Short Sword`, `Trakanon's Tooth`, `Elder Spiritist's Helm`,
+`Crypt Caretaker's Shield`, and `Sebilite Scale Leggings`, which means the
+repo's checked-in named evidence still diverges from most of the issue's
+proposed Sebilis output targets.
 
 Suggested target metrics:
 

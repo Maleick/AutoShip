@@ -76,10 +76,21 @@ class SebilisValidationDocsTests(unittest.TestCase):
                 f"`{named['respawn_min_minutes']}-{named['respawn_max_minutes']} minutes`",
                 text,
             )
+            for drop in named["drops"]:
+                self.assertIn(f"`{drop}`", text)
         self.assertIn(
             "These timer windows come from the checked-in named config and remain unvalidated until a live sample confirms them.",
             text,
         )
+        self.assertIn(
+            "Those checked-in named drops do not currently anchor the issue's primary",
+            text,
+        )
+        self.assertIn(
+            "target outputs of `Nodding Blue Lily`, `Runebranded Girdle`, `Fungi Tunic`,",
+            text,
+        )
+        self.assertIn("or `Froglok Blood`.", text)
 
     def test_validation_doc_records_repo_routing_assumptions_as_unvalidated_pathing_inputs(self) -> None:
         text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
@@ -271,6 +282,15 @@ class SebilisValidationDocsTests(unittest.TestCase):
             "`Froglok Blood` currently has no repo-local Sebilis evidence source beyond the issue theory.",
             text,
         )
+        self.assertIn(
+            "The current `config/named_mobs/sebilis.toml` drop list instead tracks",
+            text,
+        )
+        self.assertIn("`Singing Short Sword`", text)
+        self.assertIn("`Trakanon's Tooth`", text)
+        self.assertIn("`Elder Spiritist's Helm`", text)
+        self.assertIn("`Crypt Caretaker's Shield`", text)
+        self.assertIn("`Sebilite Scale Leggings`", text)
 
     def test_validation_doc_distinguishes_rotation_and_output_priors_from_issue_only_theory(self) -> None:
         text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
