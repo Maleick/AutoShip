@@ -24,6 +24,11 @@ automation claims beyond the evidence state recorded here.
   `camp_radius = 30`, `level_range = [45, 55]`, and
   `prev_camp = "lguk_dead_side"`.
 - These defaults are planning inputs only, not live-validated route or spawn proof.
+- `config/camps/lguk_dead_side.toml` currently links forward with
+  `next_camp = "sebilis_disco"`.
+- `scripts/generate_maps.py` currently labels Sebilis with
+  `to_Field_of_Bone` and `to_Trakanons_Teeth` map exits.
+- These routing references show current repo assumptions, not a live-confirmed Scars launch path into Sebilis.
 - `config/named_mobs/sebilis.toml` records named placeholders and timer ranges
   for Trakanon, Baron Yosig, Crypt Caretaker, and Sebilite Protector.
 - Current named-config timer windows are:
@@ -34,6 +39,9 @@ automation claims beyond the evidence state recorded here.
 - These timer windows come from the checked-in named config and remain unvalidated until a live sample confirms them.
 - `textquest/src/camp/forage.rs` provides the current `/forage` loop and result
   history that live sampling can reuse.
+- Current forage defaults are `enabled = false`, `interval_ms = 3000`, and
+  `max_results_history = 50`.
+- These forage defaults describe the current command loop only; they do not prove a safe unattended cadence or a live Nodding Blue Lily rate.
 - `docs/wiki/Frostreaver-Farming-Guide.md` and `docs/wiki/P99-Zone-Guide.md`
   contain the existing research narrative about Disco, left wing, crypt,
   juggernauts, and myconids.

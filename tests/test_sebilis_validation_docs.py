@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import tomllib
 import unittest
 
@@ -77,6 +78,63 @@ class SebilisValidationDocsTests(unittest.TestCase):
             )
         self.assertIn(
             "These timer windows come from the checked-in named config and remain unvalidated until a live sample confirms them.",
+            text,
+        )
+
+    def test_validation_doc_records_repo_routing_assumptions_as_unvalidated_pathing_inputs(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        prev_camp_config = tomllib.loads(
+            (REPO_ROOT / "config" / "camps" / "lguk_dead_side.toml").read_text(
+                encoding="utf-8"
+            )
+        )
+        generated_maps = (
+            REPO_ROOT / "scripts" / "generate_maps.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertEqual(prev_camp_config["next_camp"], "sebilis_disco")
+        self.assertIn("\"to_Field_of_Bone\"", generated_maps)
+        self.assertIn("\"to_Trakanons_Teeth\"", generated_maps)
+        self.assertIn(f"`next_camp = \"{prev_camp_config['next_camp']}\"`", text)
+        self.assertIn("`to_Field_of_Bone`", text)
+        self.assertIn("`to_Trakanons_Teeth`", text)
+        self.assertIn(
+            "These routing references show current repo assumptions, not a live-confirmed Scars launch path into Sebilis.",
+            text,
+        )
+
+    def test_validation_doc_records_forage_defaults_as_runtime_inputs_not_safety_proof(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        forage_source = (REPO_ROOT / "textquest" / "src" / "camp" / "forage.rs").read_text(
+            encoding="utf-8"
+        )
+
+        interval_match = re.search(
+            r"fn default_interval_ms\(\) -> u64 \{\s*([0-9_]+)\s*\}",
+            forage_source,
+            re.MULTILINE,
+        )
+        history_match = re.search(
+            r"fn default_max_results_history\(\) -> usize \{\s*([0-9_]+)\s*\}",
+            forage_source,
+            re.MULTILINE,
+        )
+
+        self.assertIsNotNone(interval_match)
+        self.assertIsNotNone(history_match)
+        interval_ms = int(interval_match.group(1).replace("_", ""))
+        max_results_history = int(history_match.group(1).replace("_", ""))
+
+        self.assertIn("enabled: false", forage_source)
+        self.assertIn("`enabled = false`", text)
+        self.assertIn(f"`interval_ms = {interval_ms}`", text)
+        self.assertIn(f"`max_results_history = {max_results_history}`", text)
+        self.assertIn(
+            "These forage defaults describe the current command loop only; they do not prove a safe unattended cadence or a live Nodding Blue Lily rate.",
             text,
         )
 
