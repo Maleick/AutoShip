@@ -15,6 +15,7 @@ automation claims beyond the evidence state recorded here.
 | TextQuest already has Sebilis-specific camp and named configuration. | Research-backed | `config/camps/sebilis_disco.toml`, `config/named_mobs/sebilis.toml` | The repo knows about Disco, named placeholders, and a bounded pull/camp radius. |
 | TextQuest has a forage automation surface that can drive `/forage` on an interval. | Research-backed | `textquest/src/camp/forage.rs` | The manager tracks attempts and result strings, but no Sebilis-specific Nodding Blue Lily baseline is captured in-repo. |
 | TextQuest already exposes operator pause controls and a zone-scoped observability contract for attended validation runs. | Research-backed | `textquest/src/tui/event.rs`, `textquest/src/tui/state.rs`, `docs/dev/observability.md` | HOME/END and economy control bindings can pause, resume, or abort automation, and observability docs already standardize `zone` labels like `sebilis`; none of that is the same as a live Sebilis spawn-rate or safety baseline. |
+| TextQuest already emits spawn-refresh observability that can support attended measurement runs. | Research-backed | `textquest/src/eq/spawn.rs`, `textquest/src/tui/run.rs`, `docs/dev/observability.md` | Spawn traversal and TUI refresh logs already include `spawn_count`, and observability docs define a `spawn_count` metric with `zone` labels, but the repo still does not persist camp-by-camp Sebilis respawn timing or overlap measurements. |
 | Timing variation and operator hardening reduce visibility. | Research-backed | `docs/wiki/Security-and-Anti-Detection-Notes.md`, `docs/wiki/Research-Anti-Detection.md` | The repo explicitly treats anti-detection value as bounded guidance rather than proof of safety. |
 | The repo already tracks missing unattended-session safeguards and telemetry as overnight requirements or gaps. | Research-backed blocker | `docs/MQ2_COVERAGE_GAP_ANALYSIS.md`, `docs/OVERNIGHT-ISSUE-SUMMARY.md` | GM alerts, auto-camp-on-death, kill or plat tracking, and session logs are documented as required or gap-tracked overnight tooling, not validated Sebilis-safe automation. |
 | Launch-zone routing support is still planned rather than proven. | Research-backed blocker | `docs/orchestration-design.md` | The orchestration roadmap still lists a `Camp database for launch zones` as unfinished TLP-launch work, so this repo does not yet present a complete launch-zone routing surface for Sebilis. |
@@ -69,6 +70,16 @@ automation claims beyond the evidence state recorded here.
 - These operator controls and observability examples are useful for attended
   Sebilis sampling, but they do not prove that unattended handling is safe or
   that Sebilis-specific spawn or forage metrics are already captured.
+- `textquest/src/eq/spawn.rs` already logs `spawn_count = spawns.len()` when
+  spawn traversal stops on unreadable or overflow conditions.
+- `textquest/src/tui/run.rs` already emits `TUI spawn snapshot refreshed` with
+  `spawn_count`, `spawn_revision`, and `elapsed_ms` when perf tracing is
+  enabled.
+- `docs/dev/observability.md` already defines a `spawn_count` metric example
+  keyed by `zone`.
+- These spawn observability hooks help instrument attended sampling sessions,
+  but they still do not capture camp-by-camp Sebilis respawn timing, named
+  overlap, or validated wait-time baselines.
 - `docs/wiki/Frostreaver-Farming-Guide.md` and `docs/wiki/P99-Zone-Guide.md`
   contain the existing research narrative about Disco, left wing, crypt,
   juggernauts, and myconids.

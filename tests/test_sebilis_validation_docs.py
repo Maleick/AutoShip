@@ -271,6 +271,42 @@ class SebilisValidationDocsTests(unittest.TestCase):
             text,
         )
 
+    def test_validation_doc_records_spawn_observability_as_measurement_aid_not_respawn_proof(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        spawn_text = (REPO_ROOT / "textquest" / "src" / "eq" / "spawn.rs").read_text(
+            encoding="utf-8"
+        )
+        tui_run_text = (REPO_ROOT / "textquest" / "src" / "tui" / "run.rs").read_text(
+            encoding="utf-8"
+        )
+        observability_text = (
+            REPO_ROOT / "docs" / "dev" / "observability.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("spawn_count = spawns.len()", spawn_text)
+        self.assertIn("\"TUI spawn snapshot refreshed\"", tui_run_text)
+        self.assertIn("spawn_count = client.spawns.len()", tui_run_text)
+        self.assertIn("spawn_revision", tui_run_text)
+        self.assertIn("elapsed_ms", tui_run_text)
+        self.assertIn('name: "spawn_count".to_string()', observability_text)
+        self.assertIn('("zone".to_string(), "sebilis".to_string())', observability_text)
+        self.assertIn("TextQuest already emits spawn-refresh observability", text)
+        self.assertIn("`spawn_count`", text)
+        self.assertIn("`TUI spawn snapshot refreshed`", text)
+        self.assertIn("`spawn_revision`", text)
+        self.assertIn("`elapsed_ms`", text)
+        self.assertIn(
+            "These spawn observability hooks help instrument attended sampling sessions,",
+            text,
+        )
+        self.assertIn(
+            "but they still do not capture camp-by-camp Sebilis respawn timing, named",
+            text,
+        )
+        self.assertIn("overlap, or validated wait-time baselines.", text)
+
     def test_validation_doc_and_template_record_theorized_items_without_promoting_them_to_validated_outputs(self) -> None:
         text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
             encoding="utf-8"
