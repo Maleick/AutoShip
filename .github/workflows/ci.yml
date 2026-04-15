@@ -24,6 +24,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Detect docs-only change set
         id: scope
@@ -43,7 +45,13 @@ jobs:
             exit 0
           fi
 
-          mapfile -t changed_files < <(git diff --name-only "$base" "$head")
+          if ! diff_output="$(git diff --name-only "$base" "$head")"; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "Failed to diff $base..$head; running full gate."
+            exit 0
+          fi
+
+          mapfile -t changed_files < <(printf '%s\n' "$diff_output")
 
           if [[ ${#changed_files[@]} -eq 0 ]]; then
             echo "docs_only=false" >> "$GITHUB_OUTPUT"
