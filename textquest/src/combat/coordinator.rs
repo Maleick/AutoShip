@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use textquest_common::{
-    combat::CombatStatus,
+    combat::{CombatRole, CombatStatus},
     ipc::Command,
     soul::SoulEvent,
     types::{ClientId, GameState},
@@ -9,8 +9,29 @@ use textquest_common::{
 use super::{
     camp_loop::{CampEvent, CampLoop, CampState},
     ch_chain::ChChain,
-    heal_coordinator::{CureCoordinator, HealCoordinator},
+    heal_coordinator::{CureCoordinator, HealCoordinator, HealTarget, HealerInfo},
 };
+
+/// Per-class settings for cross-client reactive heal coordination.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HealerCoordinationProfile {
+    /// Whether this class participates in reactive heal assignment.
+    pub enabled: bool,
+    /// HP threshold below which this class should respond.
+    pub heal_threshold_pct: f32,
+    /// Lower numbers claim first.
+    pub response_priority: u8,
+}
+
+impl Default for HealerCoordinationProfile {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            heal_threshold_pct: 85.0,
+            response_priority: 100,
+        }
+    }
+}
 
 /// Coordinates group combat — assist targeting, CC assignments, and camp loop
 /// FSM.
@@ -29,6 +50,10 @@ pub struct CombatCoordinator {
     pub heal_coordinator: HealCoordinator,
     /// Cross-group cure coordination — prevents duplicate curing.
     pub cure_coordinator: CureCoordinator,
+    /// Per-class reactive-heal settings keyed by EQ class ID.
+    heal_profiles: HashMap<u8, HealerCoordinationProfile>,
+    /// Known orchestration-group membership keyed by client ID.
+    client_groups: HashMap<ClientId, u8>,
     /// Pending soul events to be consumed by the orchestrator each tick.
     pending_soul_events: Vec<(ClientId, SoulEvent)>,
     /// Name of the current assist target mob (for kill event attribution).
@@ -47,8 +72,14 @@ impl CombatCoordinator {
             prev_in_combat: false,
             prev_dead: HashMap::new(),
             ch_chain: None,
-            heal_coordinator: HealCoordinator::new(),
+            heal_coordinator: {
+                let mut coordinator = HealCoordinator::new();
+                coordinator.set_enabled(true);
+                coordinator
+            },
             cure_coordinator: CureCoordinator::new(),
+            heal_profiles: HashMap::new(),
+            client_groups: HashMap::new(),
             pending_soul_events: Vec::new(),
             assist_target_name: None,
         }
@@ -87,6 +118,17 @@ impl CombatCoordinator {
     /// Set the puller for the camp loop.
     pub fn set_puller(&mut self, client_id: ClientId) {
         self.camp_loop.set_puller(client_id);
+    }
+
+    /// Configure reactive-heal participation for an EQ class ID.
+    pub fn set_heal_profile(&mut self, class_id: u8, profile: HealerCoordinationProfile) {
+        self.heal_profiles.insert(class_id, profile);
+    }
+
+    /// Record the orchestration group for a client so heal coordination can
+    /// distinguish same-group and cross-group targets.
+    pub fn set_client_group(&mut self, client_id: ClientId, group_id: u8) {
+        self.client_groups.insert(client_id, group_id);
     }
 
     /// Called each orchestrator tick with all client states.
@@ -153,7 +195,11 @@ impl CombatCoordinator {
             }
         }
 
-        // 3. Camp loop integration — detect state changes and feed events
+        // 3. Reactive heal coordination — reserve active CH-chain clerics for
+        // the rotation, then distribute single-target heals across the rest.
+        commands.extend(self.tick_reactive_heals(states));
+
+        // 4. Camp loop integration — detect state changes and feed events
         if self.camp_loop.is_active() {
             let camp_events = self.detect_camp_events(states);
             for event in camp_events {
@@ -171,6 +217,75 @@ impl CombatCoordinator {
         commands
     }
 
+    fn tick_reactive_heals(
+        &mut self,
+        states: &HashMap<ClientId, GameState>,
+    ) -> Vec<(ClientId, Command)> {
+        if !self.heal_coordinator.is_enabled() {
+            return Vec::new();
+        }
+
+        let reserved_chain_members: HashSet<ClientId> = self
+            .ch_chain
+            .as_ref()
+            .filter(|chain| chain.is_active())
+            .map(|chain| chain.members().iter().copied().collect())
+            .unwrap_or_default();
+
+        let healers = states
+            .iter()
+            .filter_map(|(&client_id, state)| {
+                let player = state.local_player.as_ref()?;
+                let profile = self
+                    .heal_profiles
+                    .get(&player.class_id)
+                    .copied()
+                    .or_else(|| default_healer_profile(player.class_id))?;
+                if !profile.enabled
+                    || reserved_chain_members.contains(&client_id)
+                    || matches!(state.combat_status, CombatStatus::Dead)
+                    || player.hp_current <= 0
+                {
+                    return None;
+                }
+
+                Some(HealerInfo {
+                    client_id,
+                    group_id: self.client_group_id(client_id),
+                    is_primary: profile.response_priority <= 10,
+                    mana_pct: player.mana_pct(),
+                    heal_threshold_pct: profile.heal_threshold_pct,
+                    response_priority: profile.response_priority,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        if healers.is_empty() {
+            return Vec::new();
+        }
+
+        let targets = states
+            .iter()
+            .filter_map(|(&client_id, state)| {
+                let player = state.local_player.as_ref()?;
+                Some(HealTarget {
+                    spawn_id: player.spawn_id,
+                    hp_pct: player.hp_pct(),
+                    role: combat_role_for_client(self.main_tank_id, client_id, player.class_id),
+                    group_id: self.client_group_id(client_id),
+                    has_detrimental: false,
+                    is_dead: matches!(state.combat_status, CombatStatus::Dead)
+                        || player.hp_current <= 0,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        self.heal_coordinator.tick(&healers, &targets)
+    }
+
+    fn client_group_id(&self, client_id: ClientId) -> u8 {
+        self.client_groups.get(&client_id).copied().unwrap_or(0)
+    }
     /// Detect combat state changes from `GameState` and convert to
     /// `CampEvents`.
     fn detect_camp_events(&mut self, states: &HashMap<ClientId, GameState>) -> Vec<CampEvent> {
@@ -377,6 +492,50 @@ impl CombatCoordinator {
         }
 
         commands
+    }
+}
+
+fn combat_role_for_client(
+    main_tank_id: Option<ClientId>,
+    client_id: ClientId,
+    class_id: u8,
+) -> CombatRole {
+    if Some(client_id) == main_tank_id {
+        return CombatRole::MainTank;
+    }
+
+    match class_id {
+        1 | 3 | 5 => CombatRole::OffTank,
+        2 | 6 | 10 => CombatRole::Healer,
+        8 => CombatRole::Support,
+        11 | 12 | 13 | 16 => CombatRole::DpsRanged,
+        _ => CombatRole::DpsMelee,
+    }
+}
+
+fn default_healer_profile(class_id: u8) -> Option<HealerCoordinationProfile> {
+    match class_id {
+        2 => Some(HealerCoordinationProfile {
+            enabled: true,
+            heal_threshold_pct: 85.0,
+            response_priority: 10,
+        }),
+        6 => Some(HealerCoordinationProfile {
+            enabled: true,
+            heal_threshold_pct: 80.0,
+            response_priority: 20,
+        }),
+        10 => Some(HealerCoordinationProfile {
+            enabled: true,
+            heal_threshold_pct: 75.0,
+            response_priority: 30,
+        }),
+        3 => Some(HealerCoordinationProfile {
+            enabled: true,
+            heal_threshold_pct: 60.0,
+            response_priority: 40,
+        }),
+        _ => None,
     }
 }
 
@@ -598,6 +757,235 @@ mod tests {
         // First tick fires first remaining member (20)
         let cmds = coord.tick(&states);
         assert_eq!(cmds[0].0, 20);
+    }
+
+    #[test]
+    fn tick_assigns_reactive_heal_to_non_chain_healer() {
+        let mut coord = CombatCoordinator::new();
+        coord.set_main_tank(30);
+        coord.set_heal_profile(
+            2,
+            HealerCoordinationProfile {
+                enabled: true,
+                heal_threshold_pct: 85.0,
+                response_priority: 10,
+            },
+        );
+        coord.set_heal_profile(
+            6,
+            HealerCoordinationProfile {
+                enabled: true,
+                heal_threshold_pct: 70.0,
+                response_priority: 20,
+            },
+        );
+        coord.start_ch_chain(vec![10], 1.0, 30, 8);
+
+        let mut states = HashMap::new();
+        let mut chain_cleric = make_game_state(10, None);
+        chain_cleric
+            .local_player
+            .as_mut()
+            .expect("local player")
+            .class_id = 2;
+        states.insert(10, chain_cleric);
+
+        let mut druid = make_game_state(20, None);
+        druid.local_player.as_mut().expect("local player").class_id = 6;
+        states.insert(20, druid);
+
+        let mut tank = make_game_state(30, None);
+        let tank_player = tank.local_player.as_mut().expect("local player");
+        tank_player.class_id = 1;
+        tank_player.hp_current = 2_500;
+        tank_player.hp_max = 10_000;
+        states.insert(30, tank);
+
+        let commands = coord.tick(&states);
+
+        assert!(
+            commands.iter().any(|(cid, cmd)| {
+                *cid == 10
+                    && matches!(
+                        cmd,
+                        Command::CastSpell {
+                            target_id: Some(30),
+                            ..
+                        }
+                    )
+            }),
+            "CH chain should still drive the chain cleric"
+        );
+        assert!(
+            commands.iter().any(|(cid, cmd)| {
+                *cid == 20
+                    && matches!(cmd, Command::CombatEmergencyHeal { target_id } if *target_id == 30)
+            }),
+            "non-chain healer should receive the reactive heal assignment"
+        );
+        assert!(
+            !commands.iter().any(|(cid, cmd)| {
+                *cid == 10 && matches!(cmd, Command::CombatEmergencyHeal { .. })
+            }),
+            "chain members should not also be assigned reactive heal claims"
+        );
+    }
+
+    #[test]
+    fn tick_uses_default_healer_profile_when_no_override_is_set() {
+        let mut coord = CombatCoordinator::new();
+        coord.set_main_tank(20);
+
+        let mut states = HashMap::new();
+
+        let mut cleric = make_game_state(10, None);
+        cleric.local_player.as_mut().expect("local player").class_id = 2;
+        states.insert(10, cleric);
+
+        let mut tank = make_game_state(20, None);
+        let tank_player = tank.local_player.as_mut().expect("local player");
+        tank_player.class_id = 1;
+        tank_player.hp_current = 2_000;
+        tank_player.hp_max = 10_000;
+        states.insert(20, tank);
+
+        let commands = coord.tick(&states);
+
+        assert!(commands.iter().any(|(cid, cmd)| {
+            *cid == 10
+                && matches!(
+                    cmd,
+                    Command::CombatEmergencyHeal { target_id } if *target_id == 20
+                )
+        }));
+    }
+
+    #[test]
+    fn tick_skips_dead_healers_for_reactive_assignment() {
+        let mut coord = CombatCoordinator::new();
+        coord.set_main_tank(30);
+        coord.set_heal_profile(
+            2,
+            HealerCoordinationProfile {
+                enabled: true,
+                heal_threshold_pct: 85.0,
+                response_priority: 10,
+            },
+        );
+        coord.set_heal_profile(
+            6,
+            HealerCoordinationProfile {
+                enabled: true,
+                heal_threshold_pct: 85.0,
+                response_priority: 20,
+            },
+        );
+
+        let mut states = HashMap::new();
+
+        let mut dead_cleric = make_game_state(10, None);
+        dead_cleric
+            .local_player
+            .as_mut()
+            .expect("local player")
+            .class_id = 2;
+        dead_cleric
+            .local_player
+            .as_mut()
+            .expect("local player")
+            .hp_current = 0;
+        dead_cleric.combat_status = CombatStatus::Dead;
+        states.insert(10, dead_cleric);
+
+        let mut druid = make_game_state(20, None);
+        druid.local_player.as_mut().expect("local player").class_id = 6;
+        states.insert(20, druid);
+
+        let mut tank = make_game_state(30, None);
+        let tank_player = tank.local_player.as_mut().expect("local player");
+        tank_player.class_id = 1;
+        tank_player.hp_current = 2_500;
+        tank_player.hp_max = 10_000;
+        states.insert(30, tank);
+
+        let commands = coord.tick(&states);
+
+        assert!(commands.iter().any(|(cid, cmd)| {
+            *cid == 20
+                && matches!(
+                    cmd,
+                    Command::CombatEmergencyHeal { target_id } if *target_id == 30
+                )
+        }));
+        assert!(!commands.iter().any(|(cid, _)| *cid == 10));
+    }
+
+    #[test]
+    fn tick_prefers_same_group_targets_for_reactive_heals() {
+        let mut coord = CombatCoordinator::new();
+        coord.set_heal_profile(
+            2,
+            HealerCoordinationProfile {
+                enabled: true,
+                heal_threshold_pct: 85.0,
+                response_priority: 10,
+            },
+        );
+        coord.set_client_group(10, 1);
+        coord.set_client_group(20, 1);
+        coord.set_client_group(30, 2);
+
+        let mut states = HashMap::new();
+
+        let mut cleric = make_game_state(10, None);
+        cleric.local_player.as_mut().expect("local player").class_id = 2;
+        states.insert(10, cleric);
+
+        let mut same_group = make_game_state(20, None);
+        same_group
+            .local_player
+            .as_mut()
+            .expect("local player")
+            .class_id = 9;
+        same_group
+            .local_player
+            .as_mut()
+            .expect("local player")
+            .hp_current = 7_000;
+        same_group
+            .local_player
+            .as_mut()
+            .expect("local player")
+            .hp_max = 10_000;
+        states.insert(20, same_group);
+
+        let mut other_group = make_game_state(30, None);
+        other_group
+            .local_player
+            .as_mut()
+            .expect("local player")
+            .class_id = 9;
+        other_group
+            .local_player
+            .as_mut()
+            .expect("local player")
+            .hp_current = 6_000;
+        other_group
+            .local_player
+            .as_mut()
+            .expect("local player")
+            .hp_max = 10_000;
+        states.insert(30, other_group);
+
+        let commands = coord.tick(&states);
+
+        assert!(commands.iter().any(|(cid, cmd)| {
+            *cid == 10
+                && matches!(
+                    cmd,
+                    Command::CombatEmergencyHeal { target_id } if *target_id == 20
+                )
+        }));
     }
 
     // --- Soul event tests ---

@@ -362,7 +362,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn known_unimplemented_routes_return_json_501() {
+    async fn mixed_api_routes_return_expected_statuses() {
         let app = build_app(build_state());
         let (status, body) = json_response(
             app.clone(),

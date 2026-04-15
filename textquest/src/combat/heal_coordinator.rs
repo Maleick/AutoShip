@@ -81,6 +81,10 @@ pub struct HealerInfo {
     pub is_primary: bool,
     /// Healer's current mana percentage.
     pub mana_pct: f32,
+    /// HP threshold below which this healer should respond.
+    pub heal_threshold_pct: f32,
+    /// Lower values claim first when multiple healers are eligible.
+    pub response_priority: u8,
 }
 
 /// Cross-group heal coordination engine.
@@ -97,6 +101,8 @@ pub struct HealCoordinator {
     /// Minimum mana% to allow cross-group healing (conserve mana for own
     /// group).
     cross_group_mana_threshold: f32,
+    /// Default claim lifetime for tick-assigned heals.
+    claim_timeout_frames: u32,
 }
 
 impl HealCoordinator {
@@ -108,6 +114,7 @@ impl HealCoordinator {
             tick: 0,
             enabled: false,
             cross_group_mana_threshold: 50.0,
+            claim_timeout_frames: DEFAULT_CAST_FRAMES,
         }
     }
 
@@ -128,6 +135,11 @@ impl HealCoordinator {
     /// Set the minimum mana% for cross-group healing.
     pub fn set_cross_group_mana_threshold(&mut self, threshold: f32) {
         self.cross_group_mana_threshold = threshold;
+    }
+
+    /// Set the default timeout for tick-assigned heal claims.
+    pub fn set_claim_timeout_frames(&mut self, frames: u32) {
+        self.claim_timeout_frames = frames.max(1);
     }
 
     /// Register a heal claim — healer is casting on target.
@@ -177,7 +189,15 @@ impl HealCoordinator {
 
         let mut commands = Vec::new();
 
-        for healer in healers {
+        let mut ordered_healers = healers.iter().collect::<Vec<_>>();
+        ordered_healers.sort_by(|a, b| {
+            a.response_priority
+                .cmp(&b.response_priority)
+                .then_with(|| b.is_primary.cmp(&a.is_primary))
+                .then_with(|| a.client_id.cmp(&b.client_id))
+        });
+
+        for healer in ordered_healers {
             // Skip healers that already have an active claim
             if self.has_active_claim(healer.client_id) {
                 continue;
@@ -185,7 +205,7 @@ impl HealCoordinator {
 
             if let Some(target) = self.select_target(healer, targets) {
                 // Register the claim
-                self.claim_target(healer.client_id, target.spawn_id, DEFAULT_CAST_FRAMES);
+                self.claim_target(healer.client_id, target.spawn_id, self.claim_timeout_frames);
 
                 // Send heal command — CombatEmergencyHeal tells the DLL to
                 // target and cast highest-priority heal on the target.
@@ -228,7 +248,7 @@ impl HealCoordinator {
             .iter()
             .filter(|t| {
                 !t.is_dead
-                    && t.hp_pct < HEAL_NEEDED_HP
+                    && t.hp_pct < healer.heal_threshold_pct
                     && t.hp_pct > 0.0
                     && !self.is_claimed_by_other(t.spawn_id, healer.client_id)
             })
@@ -470,6 +490,8 @@ mod tests {
             group_id,
             is_primary: true,
             mana_pct,
+            heal_threshold_pct: HEAL_NEEDED_HP,
+            response_priority: 100,
         }
     }
 
@@ -830,6 +852,84 @@ mod tests {
         assert!(
             cmds.is_empty(),
             "75% mana < 80% threshold should skip cross-group"
+        );
+    }
+
+    #[test]
+    fn higher_priority_healer_claims_first_when_listed_second() {
+        let mut coord = HealCoordinator::new();
+        coord.set_enabled(true);
+
+        let healers = vec![
+            HealerInfo {
+                client_id: 10,
+                group_id: 0,
+                is_primary: false,
+                mana_pct: 100.0,
+                heal_threshold_pct: 80.0,
+                response_priority: 50,
+            },
+            HealerInfo {
+                client_id: 20,
+                group_id: 0,
+                is_primary: true,
+                mana_pct: 100.0,
+                heal_threshold_pct: 80.0,
+                response_priority: 10,
+            },
+        ];
+        let targets = vec![make_target(101, 45.0, 0, CombatRole::MainTank)];
+
+        let cmds = coord.tick(&healers, &targets);
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(
+            cmds[0].0, 20,
+            "higher-priority healer should claim first regardless of slice order"
+        );
+    }
+
+    #[test]
+    fn healer_threshold_controls_whether_target_needs_heal() {
+        let mut coord = HealCoordinator::new();
+        coord.set_enabled(true);
+
+        let healers = vec![HealerInfo {
+            client_id: 10,
+            group_id: 0,
+            is_primary: true,
+            mana_pct: 100.0,
+            heal_threshold_pct: 40.0,
+            response_priority: 10,
+        }];
+        let targets = vec![make_target(101, 55.0, 0, CombatRole::MainTank)];
+
+        let cmds = coord.tick(&healers, &targets);
+        assert!(
+            cmds.is_empty(),
+            "targets above the healer threshold should not trigger a claim"
+        );
+    }
+
+    #[test]
+    fn configured_claim_timeout_applies_to_tick_assignments() {
+        let mut coord = HealCoordinator::new();
+        coord.set_enabled(true);
+        coord.set_claim_timeout_frames(5);
+
+        let healers = vec![make_healer(1, 0, 100.0)];
+        let targets = vec![make_target(10, 30.0, 0, CombatRole::MainTank)];
+
+        let cmds = coord.tick(&healers, &targets);
+        assert_eq!(cmds.len(), 1);
+        assert!(coord.is_claimed_by_other(10, 2));
+
+        for _ in 0..6 {
+            coord.tick(&[], &[]);
+        }
+
+        assert!(
+            !coord.is_claimed_by_other(10, 2),
+            "tick-assigned claims should expire using the configured timeout"
         );
     }
 

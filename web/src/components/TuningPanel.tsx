@@ -184,6 +184,8 @@ function ClassParamsEditor({
 }: ClassParamsEditorProps) {
   const cls = charClass.toLowerCase();
   const hasClericParams = cls === "cleric";
+  const hasCrossClientHealParams =
+    cls === "cleric" || cls === "druid" || cls === "shaman" || cls === "paladin";
   const hasNecroParams = cls === "necromancer";
   const hasBurnParam =
     cls === "warrior" ||
@@ -194,7 +196,13 @@ function ClassParamsEditor({
   const hasSlowParam =
     cls === "warrior" || cls === "shaman" || cls === "enchanter";
 
-  if (!hasClericParams && !hasNecroParams && !hasBurnParam && !hasSlowParam) {
+  if (
+    !hasClericParams &&
+    !hasCrossClientHealParams &&
+    !hasNecroParams &&
+    !hasBurnParam &&
+    !hasSlowParam
+  ) {
     return (
       <p className="text-xs text-white/30 font-rune italic">
         No class-specific parameters for {charClass}.
@@ -235,6 +243,115 @@ function ClassParamsEditor({
           <div className="flex justify-between text-[9px] text-white/30 font-rune">
             <span>50 ms</span>
             <span>1000 ms</span>
+          </div>
+        </div>
+      )}
+
+      {hasCrossClientHealParams && (
+        <div className="flex flex-col gap-4 border border-white/5 bg-void/40 p-3">
+          <button
+            onClick={() =>
+              onChange({
+                ...params,
+                cross_client_heal_enabled: !(params.cross_client_heal_enabled ?? false),
+              })
+            }
+            className="flex items-center gap-2 text-sm font-tech transition-colors hover:text-magentaglow"
+          >
+            {params.cross_client_heal_enabled ? (
+              <CheckSquare weight="fill" size={16} className="text-magentaglow" />
+            ) : (
+              <Square size={16} className="text-white/40" />
+            )}
+            <span className="text-white/70">Cross-Client Heal</span>
+          </button>
+
+          <div className="flex flex-col gap-1">
+            <div className="flex justify-between text-xs font-tech">
+              <span className="text-white/70">Cross-Client Heal At %</span>
+              <span className="font-bold text-green-400">
+                {params.cross_client_heal_threshold_pct ?? 85}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min={10}
+              max={95}
+              value={params.cross_client_heal_threshold_pct ?? 85}
+              onChange={(e) =>
+                onChange({
+                  ...params,
+                  cross_client_heal_threshold_pct: Number(e.target.value),
+                })
+              }
+              className="w-full h-1.5 appearance-none cursor-pointer bg-void border border-white/10
+                [&::-webkit-slider-thumb]:appearance-none
+                [&::-webkit-slider-thumb]:w-3
+                [&::-webkit-slider-thumb]:h-3
+                [&::-webkit-slider-thumb]:rotate-45
+                [&::-webkit-slider-thumb]:bg-green-400
+                [&::-webkit-slider-thumb]:cursor-pointer"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <div className="flex justify-between text-xs font-tech">
+              <span className="text-white/70">Response Priority</span>
+              <span className="font-bold text-spectral">
+                {params.cross_client_heal_priority ?? 10}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={100}
+              value={params.cross_client_heal_priority ?? 10}
+              onChange={(e) =>
+                onChange({
+                  ...params,
+                  cross_client_heal_priority: Number(e.target.value),
+                })
+              }
+              className="w-full h-1.5 appearance-none cursor-pointer bg-void border border-white/10
+                [&::-webkit-slider-thumb]:appearance-none
+                [&::-webkit-slider-thumb]:w-3
+                [&::-webkit-slider-thumb]:h-3
+                [&::-webkit-slider-thumb]:rotate-45
+                [&::-webkit-slider-thumb]:bg-spectral
+                [&::-webkit-slider-thumb]:cursor-pointer"
+            />
+            <p className="text-[10px] text-white/30 font-rune">
+              Lower numbers claim first.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <div className="flex justify-between text-xs font-tech">
+              <span className="text-white/70">Claim Timeout (ms)</span>
+              <span className="font-bold text-yellow-400">
+                {params.cross_client_claim_timeout_ms ?? 3000} ms
+              </span>
+            </div>
+            <input
+              type="range"
+              min={500}
+              max={8000}
+              step={250}
+              value={params.cross_client_claim_timeout_ms ?? 3000}
+              onChange={(e) =>
+                onChange({
+                  ...params,
+                  cross_client_claim_timeout_ms: Number(e.target.value),
+                })
+              }
+              className="w-full h-1.5 appearance-none cursor-pointer bg-void border border-white/10
+                [&::-webkit-slider-thumb]:appearance-none
+                [&::-webkit-slider-thumb]:w-3
+                [&::-webkit-slider-thumb]:h-3
+                [&::-webkit-slider-thumb]:rotate-45
+                [&::-webkit-slider-thumb]:bg-yellow-400
+                [&::-webkit-slider-thumb]:cursor-pointer"
+            />
           </div>
         </div>
       )}
@@ -914,7 +1031,13 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       { id: "2", name: "Light Healing", priority: 2, enabled: true },
       { id: "3", name: "Minor Healing", priority: 3, enabled: true },
     ],
-    class_params: { ch_chain_timing_ms: 200 },
+    class_params: {
+      ch_chain_timing_ms: 200,
+      cross_client_heal_enabled: true,
+      cross_client_heal_threshold_pct: 85,
+      cross_client_heal_priority: 10,
+      cross_client_claim_timeout_ms: 3000,
+    },
     auto_rez: {
       enabled: true,
       min_xp_pct: 96,

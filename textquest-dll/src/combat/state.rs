@@ -286,6 +286,8 @@ pub struct Combatant {
     /// Required for healer strategies (cleric, druid, shaman) to select
     /// heal targets. Empty until the orchestrator sends group state updates.
     group_members: Vec<GroupMemberState>,
+    /// One-off orchestrator-directed target for reactive heal assignment.
+    forced_heal_target: Option<GroupMemberState>,
     skill_cooldowns: SkillCooldownTracker,
     /// Cooldown state for disciplines and AA-like activations.
     ability_cooldowns: AbilityCooldownTracker,
@@ -342,6 +344,7 @@ impl Combatant {
             flee_requested: false,
             needs_on_engage: false,
             group_members: Vec::new(),
+            forced_heal_target: None,
             skill_cooldowns: SkillCooldownTracker::new(),
             ability_cooldowns: AbilityCooldownTracker::new(),
             dot_tracker: DotTracker::new(),
@@ -475,6 +478,7 @@ impl Combatant {
             self.state,
             CombatState::Engaging { .. } | CombatState::Casting { .. } | CombatState::OnGcd
         ) && target.is_none()
+            && self.forced_heal_target.is_none()
         {
             tracing::warn!("Combat target lost (zone/despawn/disconnect) — auto-disengaging");
             // If we were mid-cast, notify the strategy this was an interrupt (not
@@ -498,7 +502,7 @@ impl Combatant {
                     CastResult::Interrupted,
                 );
             } else {
-                let group_members = std::mem::take(&mut self.group_members);
+                let group_members = self.effective_group_members();
                 let cleanup_ctx = CombatContext {
                     player,
                     target: None,
@@ -514,7 +518,6 @@ impl Combatant {
                     extended_targets: None,
                 };
                 self.strategy.on_action_complete(&cleanup_ctx);
-                self.group_members = group_members;
             }
             crate::eq::toggle_auto_attack(false);
             // Clear DoT tracking — target is gone (zone/despawn/disconnect).
@@ -523,6 +526,7 @@ impl Combatant {
             }
             self.dot_tracker.prune_expired(self.tick_count);
             self.assist_target = None;
+            self.forced_heal_target = None;
             self.flee_requested = false;
             self.state = CombatState::Idle;
             return;
@@ -537,11 +541,12 @@ impl Combatant {
 
         let (current_target_id, pet_status, pet_action) = {
             // Build context snapshot for this tick.
+            let effective_group_members = self.effective_group_members();
             let ctx = CombatContext {
                 player,
                 target,
                 nearby_enemies: nearby,
-                group_members: &self.group_members,
+                group_members: &effective_group_members,
                 config: &self.config,
                 tick: self.tick_count,
                 in_combat: !matches!(self.state, CombatState::Idle | CombatState::Recovering),
@@ -570,15 +575,15 @@ impl Combatant {
             }
         }
 
+        let effective_group_members = self.effective_group_members();
         if self.maybe_recharm(player, target, nearby, current_target_id, extended_targets) {
             return;
         }
-
         let ctx = CombatContext {
             player,
             target,
             nearby_enemies: nearby,
-            group_members: &self.group_members,
+            group_members: &effective_group_members,
             config: &self.config,
             tick: self.tick_count,
             in_combat: !matches!(self.state, CombatState::Idle | CombatState::Recovering),
@@ -664,11 +669,12 @@ impl Combatant {
                     tracing::warn!("HolyShit: FLEE — disengaging and requesting flee movement");
                     // Notify strategy of combat end so class-specific cleanup runs
                     // (e.g., bard stops /melody).
+                    let effective_group_members = self.effective_group_members();
                     let flee_ctx = CombatContext {
                         player,
                         target,
                         nearby_enemies: nearby,
-                        group_members: &self.group_members,
+                        group_members: &effective_group_members,
                         config: &self.config,
                         tick: self.tick_count,
                         in_combat: false,
@@ -680,6 +686,7 @@ impl Combatant {
                     };
                     self.strategy.on_action_complete(&flee_ctx);
                     self.assist_target = None;
+                    self.forced_heal_target = None;
                     self.flee_requested = true;
                     self.state = CombatState::Idle;
                     return;
@@ -1109,11 +1116,12 @@ impl Combatant {
 
         // Notify strategy of kill/disengage for state cleanup
         let player = SpawnData::default();
+        let effective_group_members = self.effective_group_members();
         let ctx = CombatContext {
             player: &player,
             target: None,
             nearby_enemies: &[],
-            group_members: &self.group_members,
+            group_members: &effective_group_members,
             config: &self.config,
             tick: self.tick_count,
             in_combat: false,
@@ -1135,6 +1143,7 @@ impl Combatant {
         }
 
         self.assist_target = None;
+        self.forced_heal_target = None;
         self.state = CombatState::Idle;
     }
 
@@ -1143,6 +1152,23 @@ impl Combatant {
     /// healers have no targets to evaluate.
     pub fn set_group_members(&mut self, members: Vec<GroupMemberState>) {
         self.group_members = members;
+    }
+
+    /// Force the healer logic to resolve a heal against `target_id`.
+    pub fn request_emergency_heal(&mut self, target_id: u32) {
+        tracing::info!(target_id, "Emergency heal requested");
+        self.forced_heal_target = Some(GroupMemberState {
+            spawn_id: target_id,
+            hp_pct: 1.0,
+            mana_pct: 0.0,
+            class_id: 1,
+            is_dead: false,
+            name: format!("Spawn{target_id}"),
+            has_detrimental: false,
+        });
+        self.assist_target = None;
+        self.needs_on_engage = true;
+        self.state = CombatState::Engaging { target_id };
     }
 
     /// Whether a `HolyShit` Flee was triggered and not yet acknowledged.
@@ -1179,7 +1205,7 @@ impl Combatant {
         retry_count: u8,
         result: CastResult,
     ) {
-        let group_members = std::mem::take(&mut self.group_members);
+        let group_members = self.effective_group_members();
         let ctx = CombatContext {
             player,
             target,
@@ -1259,7 +1285,6 @@ impl Combatant {
                 retry_count: new_retry_count,
                 backoff_ticks: backoff,
             };
-            self.group_members = group_members;
             return;
         }
 
@@ -1283,7 +1308,19 @@ impl Combatant {
             }
             _ => CombatState::OnGcd,
         };
-        self.group_members = group_members;
+        self.forced_heal_target = None;
+    }
+
+    fn effective_group_members(&self) -> Vec<GroupMemberState> {
+        let mut members = self.group_members.clone();
+        if let Some(forced) = &self.forced_heal_target {
+            if let Some(existing) = members.iter_mut().find(|m| m.spawn_id == forced.spawn_id) {
+                *existing = forced.clone();
+            } else {
+                members.push(forced.clone());
+            }
+        }
+        members
     }
 
     /// Fire class-appropriate melee skills (kick, bash, taunt, backstab, etc.)
@@ -1726,6 +1763,19 @@ mod tests {
         c.tick(&player, None, &[]);
 
         assert!(matches!(c.status(), CombatStatus::Idle));
+    }
+
+    #[test]
+    fn emergency_heal_without_current_target_does_not_auto_disengage() {
+        let mut config = test_config();
+        config.role = CombatRole::Healer;
+        let mut c = Combatant::new(2, 0, config);
+        let player = test_player();
+
+        c.request_emergency_heal(200);
+        c.tick(&player, None, &[]);
+
+        assert!(!matches!(c.status(), CombatStatus::Idle));
     }
 
     #[test]

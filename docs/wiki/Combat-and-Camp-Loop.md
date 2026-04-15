@@ -17,6 +17,15 @@ The main operator commands are:
 
 Camp configs come from `config/camps/*.toml`. Class behavior comes from `config/classes/*.toml`.
 
+Reactive cross-client heal coordination is tuned from the web dashboard's
+**Strategy Tuning** panel rather than a TUI command surface. The per-healer
+controls now include:
+
+- `Cross-Client Heal` enable/disable
+- `Cross-Client Heal At %`
+- `Response Priority`
+- `Claim Timeout (ms)`
+
 ## Current Camp Loop State
 
 The current orchestrator-side camp loop in `textquest/src/camp/state.rs` uses these phases:
@@ -151,6 +160,26 @@ Current capabilities:
 - set chain target and spell slot through the start parameters
 
 The cleric-side override is honored in the DLL combat strategy layer, where CH can preempt the normal cleric priority flow.
+
+## Cross-Client Heal Coordination
+
+Reactive single-target heals now share the same orchestrator-side combat
+coordinator as the CH chain, but they solve a different problem:
+
+- **CH chain** reserves named clerics for a planned tank-heal rotation.
+- **Cross-client reactive healing** assigns ad hoc heals to the best available
+  non-chain healer and places a time-bounded claim on that target.
+
+The current behavior is:
+
+- reactive healers are selected per class ID from the orchestrator-side heal profile map
+- lower `Response Priority` values claim first
+- each assignment creates a claim with a configurable timeout so another healer
+  can take over if the first one stalls or the cast never lands
+- active CH-chain members are excluded from reactive assignments so chain
+  coverage and emergency spot heals do not fight each other
+- the DLL receives `Command::CombatEmergencyHeal` and seeds a one-off forced
+  heal target into the healer combat FSM
 
 ## Current Combat Strategy Coverage
 

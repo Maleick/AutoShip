@@ -298,6 +298,10 @@ pub struct RotationEntry {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ClassParams {
     pub ch_chain_timing_ms: Option<u32>,
+    pub cross_client_heal_enabled: Option<bool>,
+    pub cross_client_heal_threshold_pct: Option<u8>,
+    pub cross_client_heal_priority: Option<u8>,
+    pub cross_client_claim_timeout_ms: Option<u32>,
     pub dot_overlap_pct: Option<u8>,
     pub burn_at_hp_pct: Option<u8>,
     pub slow_at_hp_pct: Option<u8>,
@@ -466,6 +470,10 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             ],
             class_params: ClassParams {
                 ch_chain_timing_ms: Some(2500),
+                cross_client_heal_enabled: Some(true),
+                cross_client_heal_threshold_pct: Some(85),
+                cross_client_heal_priority: Some(10),
+                cross_client_claim_timeout_ms: Some(3000),
                 ..ClassParams::default()
             },
             auto_rez: AutoRezConfig {
@@ -1169,7 +1177,13 @@ mod tests {
             mana_sit_pct: 15,
             nuke_at_pct: 70,
             rotation: vec![],
-            class_params: ClassParams::default(),
+            class_params: ClassParams {
+                cross_client_heal_enabled: Some(true),
+                cross_client_heal_threshold_pct: Some(72),
+                cross_client_heal_priority: Some(33),
+                cross_client_claim_timeout_ms: Some(4200),
+                ..ClassParams::default()
+            },
             auto_rez: AutoRezConfig {
                 enabled: true,
                 min_xp_pct: 96,
@@ -1216,6 +1230,16 @@ mod tests {
             .find(|c| c.character_name == "Aelrindel")
             .expect("updated config should exist");
         assert_eq!(updated.heal_at_pct, 50);
+        assert_eq!(updated.class_params.cross_client_heal_enabled, Some(true));
+        assert_eq!(
+            updated.class_params.cross_client_heal_threshold_pct,
+            Some(72)
+        );
+        assert_eq!(updated.class_params.cross_client_heal_priority, Some(33));
+        assert_eq!(
+            updated.class_params.cross_client_claim_timeout_ms,
+            Some(4200)
+        );
         assert_eq!(updated.auto_rez.min_xp_pct, 96);
         assert_eq!(updated.auto_rez.trusted_casters, vec!["Frostreaver"]);
         assert!(updated.auto_camp_on_death.enabled);

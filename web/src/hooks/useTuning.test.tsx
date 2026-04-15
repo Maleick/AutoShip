@@ -39,7 +39,12 @@ describe("useCharacterConfigs", () => {
             mana_sit_pct: 20,
             nuke_at_pct: 80,
             rotation: [],
-            class_params: {},
+            class_params: {
+              cross_client_heal_enabled: true,
+              cross_client_heal_threshold_pct: 82,
+              cross_client_heal_priority: 14,
+              cross_client_claim_timeout_ms: 3100,
+            },
             auto_rez: {
               enabled: false,
               min_xp_pct: 90,
@@ -48,23 +53,7 @@ describe("useCharacterConfigs", () => {
               delay_ms: 0,
             },
             group_override: false,
-            auto_camp_on_death: {
-              enabled: false,
-              camp_delay_secs: 30,
-              relog_wait_secs: 900,
-            },
-            tribute_preferences: {
-              auto_activate: true,
-              warning_threshold_secs: 300,
-              preferred_tributes: ["Arcane Fury"],
-            },
-            tribute_status: {
-              active: true,
-              remaining_secs: 240,
-              point_balance: 1800,
-              active_tributes: ["Arcane Fury"],
-              alert_state: "expiring",
-            },
+
           },
         ])
       )
@@ -83,7 +72,12 @@ describe("useCharacterConfigs", () => {
             mana_sit_pct: 25,
             nuke_at_pct: 90,
             rotation: [],
-            class_params: {},
+            class_params: {
+              cross_client_heal_enabled: true,
+              cross_client_heal_threshold_pct: 75,
+              cross_client_heal_priority: 11,
+              cross_client_claim_timeout_ms: 4000,
+            },
             auto_rez: {
               enabled: true,
               min_xp_pct: 96,
@@ -92,23 +86,6 @@ describe("useCharacterConfigs", () => {
               delay_ms: 5100,
             },
             group_override: true,
-            auto_camp_on_death: {
-              enabled: true,
-              camp_delay_secs: 45,
-              relog_wait_secs: 1800,
-            },
-            tribute_preferences: {
-              auto_activate: true,
-              warning_threshold_secs: 180,
-              preferred_tributes: ["Arcane Fury", "Hero's Fortitude"],
-            },
-            tribute_status: {
-              active: false,
-              remaining_secs: 0,
-              point_balance: 1800,
-              active_tributes: [],
-              alert_state: "expired",
-            },
           },
         ])
       );
@@ -125,7 +102,12 @@ describe("useCharacterConfigs", () => {
         mana_sit_pct: 25,
         nuke_at_pct: 90,
         rotation: [],
-        class_params: {},
+        class_params: {
+          cross_client_heal_enabled: true,
+          cross_client_heal_threshold_pct: 75,
+          cross_client_heal_priority: 11,
+          cross_client_claim_timeout_ms: 4000,
+        },
         auto_rez: {
           enabled: true,
           min_xp_pct: 96,
@@ -134,23 +116,6 @@ describe("useCharacterConfigs", () => {
           delay_ms: 5100,
         },
         group_override: true,
-        auto_camp_on_death: {
-          enabled: true,
-          camp_delay_secs: 45,
-          relog_wait_secs: 1800,
-        },
-        tribute_preferences: {
-          auto_activate: true,
-          warning_threshold_secs: 180,
-          preferred_tributes: ["Arcane Fury", "Hero's Fortitude"],
-        },
-        tribute_status: {
-          active: false,
-          remaining_secs: 0,
-          point_balance: 1800,
-          active_tributes: [],
-          alert_state: "expired",
-        },
       });
     });
 
@@ -168,6 +133,7 @@ describe("useCharacterConfigs", () => {
       },
     });
     expect(result.current.configs[0].heal_at_pct).toBe(60);
+    expect(result.current.configs[0].class_params.cross_client_claim_timeout_ms).toBe(4000);
     expect(result.current.configs[0].auto_camp_on_death.relog_wait_secs).toBe(1800);
     expect(result.current.configs[0].tribute_preferences.warning_threshold_secs).toBe(180);
     expect(result.current.error).toBeNull();

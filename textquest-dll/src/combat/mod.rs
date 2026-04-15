@@ -39,6 +39,9 @@ pub enum CombatCommand {
     Disengage,
     /// Set the main-assist target for assist-train behavior.
     SetAssistTarget { spawn_id: u32 },
+    /// Force the combat FSM to execute a single-target heal on a specific
+    /// spawn.
+    EmergencyHeal { target_id: u32 },
 }
 
 /// Initialize the combat system for this client.
@@ -97,6 +100,7 @@ pub fn handle_command(cmd: CombatCommand) {
         CombatCommand::Engage { target_id } => combatant.engage(target_id),
         CombatCommand::Disengage => combatant.disengage(),
         CombatCommand::SetAssistTarget { spawn_id } => combatant.set_assist_target(spawn_id),
+        CombatCommand::EmergencyHeal { target_id } => combatant.request_emergency_heal(target_id),
     }
 }
 

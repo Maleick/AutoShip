@@ -2872,6 +2872,12 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 spawn_id,
             });
         }
+        Command::CombatEmergencyHeal { target_id } => {
+            tracing::info!(target_id, "CombatEmergencyHeal received");
+            crate::combat::handle_command(crate::combat::CombatCommand::EmergencyHeal {
+                target_id,
+            });
+        }
         Command::LootCorpse => {
             tracing::info!("LootCorpse received");
             crate::combat::loot::loot_nearest_corpse();

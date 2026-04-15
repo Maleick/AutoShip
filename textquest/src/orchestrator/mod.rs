@@ -287,6 +287,17 @@ impl Orchestrator {
         self.poll_game_states();
         self.poll_trade_chat_if_due();
 
+        let in_scope = self.pids_in_scope();
+        let combat_commands: Vec<_> = self
+            .tick_combat()
+            .into_iter()
+            .filter(|(pid, _)| in_scope.is_empty() || in_scope.contains(pid))
+            .collect();
+        let combat_command_count = combat_commands.len();
+        for (pid, command) in combat_commands {
+            self.send_ipc_command(pid, command);
+        }
+
         let commands = match self.operating_mode {
             OperatingMode::Camp => self.tick_camp(),
             OperatingMode::Hunt => self.tick_hunt(),
@@ -294,7 +305,6 @@ impl Orchestrator {
 
         // Filter to in-scope PIDs so the operator's routing scope is respected
         // by camp/hunt loop commands just as it is for TUI-initiated commands.
-        let in_scope = self.pids_in_scope();
         let scoped: Vec<_> = commands
             .into_iter()
             .filter(|(pid, _)| in_scope.is_empty() || in_scope.contains(pid))
@@ -308,7 +318,7 @@ impl Orchestrator {
             self.tick_count,
         );
 
-        let count = scoped.len() + emergency.len();
+        let count = scoped.len() + emergency.len() + combat_command_count;
         for (pid, action) in &scoped {
             self.dispatch_action(*pid, action);
         }
@@ -335,6 +345,11 @@ impl Orchestrator {
         }
     }
 
+    /// Run orchestrator-side combat coordination against the latest `GameState`
+    /// cache and return structured IPC commands for in-process execution.
+    fn tick_combat(&mut self) -> Vec<(u32, Command)> {
+        self.combat.tick(&self.game_states)
+    }
     /// Tick the camp loop, including sell cycle, progression checks, and event
     /// production.
     fn tick_camp(&mut self) -> Vec<(u32, CampAction)> {
@@ -753,6 +768,7 @@ impl Orchestrator {
             .entry(pid)
             .or_insert_with(|| SessionControl::new(pid));
         control.apply_command(&SessionControlCommand::SetGroup { group_id });
+        self.combat.set_client_group(pid, group_id);
     }
 
     /// Return the configured orchestration group for a client, if known.
@@ -1179,6 +1195,79 @@ mod tests {
         for &pid in pids {
             orch.state_timestamps.insert(pid, orch.tick_count);
         }
+    }
+
+    #[test]
+    fn tick_combat_returns_reactive_heal_commands() {
+        let mut orch = Orchestrator::new();
+        orch.combat.set_main_tank(100);
+        orch.combat.heal_coordinator.set_enabled(true);
+        orch.combat.set_heal_profile(
+            2,
+            crate::combat::coordinator::HealerCoordinationProfile {
+                enabled: true,
+                heal_threshold_pct: 85.0,
+                response_priority: 10,
+            },
+        );
+
+        let mut healer = GameState {
+            client_id: 101,
+            local_player: Some(textquest_common::types::SpawnData {
+                spawn_id: 101,
+                name: "Healer".into(),
+                displayed_name: "Healer".into(),
+                spawn_type: 0,
+                level: 60,
+                class_id: 2,
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                heading: 0.0,
+                hp_current: 8_000,
+                hp_max: 8_000,
+                mana_current: 5_000,
+                mana_max: 5_000,
+                endurance_current: 100,
+                endurance_max: 100,
+                speed_run: 0.0,
+                stand_state: 0,
+                is_gm: false,
+            }),
+            target: None,
+            nearby_spawns: vec![],
+            timestamp_ms: 0,
+            nav_status: textquest_common::nav::NavStatus::Idle,
+            combat_status: textquest_common::combat::CombatStatus::Idle,
+            zone_short_name: "qeynos".into(),
+            zone_long_name: "South Qeynos".into(),
+            actual_version: None,
+        };
+        healer.local_player.as_mut().expect("local player").class_id = 2;
+
+        let mut tank = healer.clone();
+        tank.client_id = 100;
+        {
+            let lp = tank.local_player.as_mut().expect("local player");
+            lp.spawn_id = 100;
+            lp.name = "Tank".into();
+            lp.displayed_name = "Tank".into();
+            lp.class_id = 1;
+            lp.hp_current = 2_500;
+            lp.hp_max = 10_000;
+        }
+
+        orch.game_states.insert(101, healer);
+        orch.game_states.insert(100, tank);
+
+        let commands = orch.tick_combat();
+        assert!(
+            commands.iter().any(|(cid, cmd)| {
+                *cid == 101
+                    && matches!(cmd, Command::CombatEmergencyHeal { target_id } if *target_id == 100)
+            }),
+            "orchestrator combat tick should surface reactive heal assignments"
+        );
     }
 
     #[test]

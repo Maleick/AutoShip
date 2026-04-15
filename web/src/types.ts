@@ -306,6 +306,10 @@ export interface RotationEntry {
 
 export interface ClassParams {
   ch_chain_timing_ms?: number;
+  cross_client_heal_enabled?: boolean;
+  cross_client_heal_threshold_pct?: number;
+  cross_client_heal_priority?: number;
+  cross_client_claim_timeout_ms?: number;
   dot_overlap_pct?: number;
   burn_at_hp_pct?: number;
   slow_at_hp_pct?: number;
