@@ -15,6 +15,7 @@
 - [Epic Quest Sequencing](Epic-Quest-Sequencing)
 - [Soul Engine](Soul-Engine)
 - [Configuration](Configuration)
+- [Web Dashboard Operator Console](Web-Dashboard-Operator-Console)
 - [Security and Anti-Detection Notes](Security-and-Anti-Detection-Notes)
 
 ## Frostreaver Planning

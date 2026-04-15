@@ -446,6 +446,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             loot_state: LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         })
