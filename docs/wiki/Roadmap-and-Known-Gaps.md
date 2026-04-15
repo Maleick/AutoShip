@@ -127,6 +127,7 @@ The current economy pass stays intentionally bounded to operator-visible executi
 - treat loot intake, distribution, vendor, and banking work as explicit queues and state machines, not as hidden background automation
 - reuse the existing authenticated routing and session/group scope model instead of inventing a separate economy control plane
 - ship pause/skip/abort/resume controls and economy-facing TUI summaries alongside each loop before claiming a self-sustaining farm workflow
+- current monetization prioritization research lives in [`Monetization Opportunities Deep Dive`](Research-Monetization-Opportunities) and keeps grey-market lanes explicitly compliance-gated
 
 The current follow-on implementation slices are:
 
