@@ -387,6 +387,39 @@ class SebilisValidationDocsTests(unittest.TestCase):
             text,
         )
 
+    def test_validation_doc_records_named_tracker_ui_as_non_sebilis_specific_monitoring_surface(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        map_ui_text = (
+            REPO_ROOT / "textquest" / "src" / "tui" / "ui" / "map.rs"
+        ).read_text(encoding="utf-8")
+        app_text = (REPO_ROOT / "textquest" / "src" / "tui" / "app.rs").read_text(
+            encoding="utf-8"
+        )
+        parity_text = (
+            REPO_ROOT / "docs" / "wiki" / "Research-MQ2-Parity-Matrix.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("named tracker panel", map_ui_text)
+        self.assertIn("watch named [on|off]", app_text)
+        self.assertIn("Named spawn alerts: {label}", app_text)
+        self.assertIn("display-only", parity_text)
+        self.assertIn("per-zone configuration", parity_text)
+        self.assertIn("map-screen named tracker panel", text)
+        self.assertIn("`watch named [on|off]`", text)
+        self.assertIn("`Named spawn alerts: ON/OFF`", text)
+        self.assertIn("display-only", text)
+        self.assertIn(
+            "These named-tracking controls help attended Sebilis observation, but they do",
+            text,
+        )
+        self.assertIn(
+            "not yet provide a Sebilis-specific timer feed, alert contract, or overlap",
+            text,
+        )
+        self.assertIn("baseline that could close this issue.", text)
+
     def test_validation_doc_and_template_record_theorized_items_without_promoting_them_to_validated_outputs(self) -> None:
         text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
             encoding="utf-8"
