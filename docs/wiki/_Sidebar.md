@@ -12,6 +12,7 @@
 - [Combat and Camp Loop](Combat-and-Camp-Loop)
 - [Navigation and Maps](Navigation-and-Maps)
 - [Login Automation](Login-Automation)
+- [Epic Quest Sequencing](Epic-Quest-Sequencing)
 - [Soul Engine](Soul-Engine)
 - [Configuration](Configuration)
 - [Security and Anti-Detection Notes](Security-and-Anti-Detection-Notes)
