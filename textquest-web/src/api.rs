@@ -138,6 +138,13 @@ pub struct ClassParams {
     pub slow_at_hp_pct: Option<u8>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AutoCampOnDeathConfig {
+    pub enabled: bool,
+    pub camp_delay_secs: u64,
+    pub relog_wait_secs: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CharacterConfig {
     pub character_name: String,
@@ -152,6 +159,7 @@ pub struct CharacterConfig {
     pub auto_rez: AutoRezConfig,
     pub group_override: bool,
     pub group_name: Option<String>,
+    pub auto_camp_on_death: AutoCampOnDeathConfig,
 }
 
 pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
@@ -191,6 +199,11 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 1".into()),
+            auto_camp_on_death: AutoCampOnDeathConfig {
+                enabled: true,
+                camp_delay_secs: 30,
+                relog_wait_secs: 900,
+            },
         },
         CharacterConfig {
             character_name: "Noxus".into(),
@@ -215,6 +228,11 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 1".into()),
+            auto_camp_on_death: AutoCampOnDeathConfig {
+                enabled: false,
+                camp_delay_secs: 30,
+                relog_wait_secs: 900,
+            },
         },
         CharacterConfig {
             character_name: "Aelrindel".into(),
@@ -242,6 +260,11 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 2".into()),
+            auto_camp_on_death: AutoCampOnDeathConfig {
+                enabled: true,
+                camp_delay_secs: 45,
+                relog_wait_secs: 1200,
+            },
         },
         CharacterConfig {
             character_name: "Grok".into(),
@@ -269,6 +292,11 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 2".into()),
+            auto_camp_on_death: AutoCampOnDeathConfig {
+                enabled: false,
+                camp_delay_secs: 30,
+                relog_wait_secs: 900,
+            },
         },
         CharacterConfig {
             character_name: "Valerius".into(),
@@ -296,6 +324,11 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 3".into()),
+            auto_camp_on_death: AutoCampOnDeathConfig {
+                enabled: false,
+                camp_delay_secs: 30,
+                relog_wait_secs: 900,
+            },
         },
     ] {
         configs.insert(cfg.character_name.clone(), cfg);
@@ -652,6 +685,11 @@ mod tests {
         let Json(configs) = list_character_configs(State(state)).await;
         assert!(!configs.is_empty());
         assert!(configs.iter().any(|c| c.character_name == "Frostreaver"));
+        assert!(
+            configs
+                .iter()
+                .any(|c| c.auto_camp_on_death.enabled && c.auto_camp_on_death.camp_delay_secs == 30)
+        );
     }
 
     #[tokio::test]
@@ -685,12 +723,25 @@ mod tests {
             },
             group_override: false,
             group_name: None,
+            auto_camp_on_death: AutoCampOnDeathConfig {
+                enabled: true,
+                camp_delay_secs: 75,
+                relog_wait_secs: 1800,
+            },
         };
         let Json(saved) =
             put_character_config(State(state.clone()), Path("Aelrindel".into()), Json(input))
                 .await
                 .expect("put character config should succeed");
         assert_eq!(saved.character_name, "Aelrindel");
+        assert_eq!(
+            saved.auto_camp_on_death,
+            AutoCampOnDeathConfig {
+                enabled: true,
+                camp_delay_secs: 75,
+                relog_wait_secs: 1800,
+            }
+        );
 
         let Json(configs) = list_character_configs(State(state)).await;
         let updated = configs
@@ -700,5 +751,6 @@ mod tests {
         assert_eq!(updated.heal_at_pct, 50);
         assert_eq!(updated.auto_rez.min_xp_pct, 96);
         assert_eq!(updated.auto_rez.trusted_casters, vec!["Frostreaver"]);
+        assert!(updated.auto_camp_on_death.enabled);
     }
 }

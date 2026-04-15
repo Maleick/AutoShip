@@ -6,8 +6,9 @@
 //! - loot APIs
 //! - account-management APIs backed by an in-memory registry plus optional
 //!   credential storage
-//! - raid placeholders plus in-memory character-configuration APIs for the
-//!   strategy tuning panel
+//! - explicit `501` placeholders for not-yet-implemented raid configuration
+//!   APIs
+//! - live character-configuration APIs backed by in-memory dashboard state
 //! - a WebSocket endpoint for live session monitoring
 
 use std::{
@@ -378,6 +379,10 @@ mod tests {
         assert!(!configs.is_empty(), "expected demo character configs");
         assert_eq!(configs[0]["character_name"], "Aelrindel");
         assert!(configs[0]["auto_rez"].is_object());
+        assert!(
+            body.as_array().is_some(),
+            "list endpoint should return a json array"
+        );
 
         let (status, body) = json_response(
             app,
@@ -386,13 +391,13 @@ mod tests {
                 .uri("/api/config/characters/Aelrindel")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    serde_json::json!({
+                    json!({
                         "character_name": "ignored",
                         "class": "Wizard",
                         "role": "DPS",
-                        "heal_at_pct": 55,
-                        "mana_sit_pct": 25,
-                        "nuke_at_pct": 85,
+                        "heal_at_pct": 50,
+                        "mana_sit_pct": 20,
+                        "nuke_at_pct": 80,
                         "rotation": [],
                         "class_params": {},
                         "auto_rez": {
@@ -403,7 +408,12 @@ mod tests {
                             "delay_ms": 5100
                         },
                         "group_override": false,
-                        "group_name": "Group 2"
+                        "group_name": "Group 2",
+                        "auto_camp_on_death": {
+                            "enabled": true,
+                            "camp_delay_secs": 60,
+                            "relog_wait_secs": 1800
+                        }
                     })
                     .to_string(),
                 ))
@@ -414,6 +424,7 @@ mod tests {
         assert_eq!(body["character_name"], "Aelrindel");
         assert_eq!(body["auto_rez"]["min_xp_pct"], 96);
         assert_eq!(body["auto_rez"]["delay_ms"], 5100);
+        assert_eq!(body["auto_camp_on_death"]["camp_delay_secs"], 60);
     }
 
     #[tokio::test]

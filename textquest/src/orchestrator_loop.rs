@@ -4,15 +4,25 @@
 
 use crate::{
     client::{
-        discovery::PeerDiscoveryEvent, healing::ClientHealth, manager::ClientManager,
+        death_camp::{AutoCampOnDeathSettings, DeathCampAction, DeathCampTracker},
+        discovery::PeerDiscoveryEvent,
+        healing::ClientHealth,
+        manager::ClientManager,
         session::SlotLifecycle,
     },
     config::{AppConfig, OrchestratorConfig},
+    credentials::store::CredentialStore,
+    discord::webhook::WebhookSender,
     launcher::coordinator::{CoordinatorEvent, LaunchCoordinator},
     orchestrator::Orchestrator,
 };
-use std::time::Duration;
+use std::{
+    collections::{HashMap, HashSet},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+use textquest_common::{combat::CombatStatus, ipc::Command, login::RelogConfig};
 use tokio::sync::watch;
+use zeroize::Zeroizing;
 
 /// Events emitted by the orchestrator loop for external consumers (TUI,
 /// logging).
@@ -40,6 +50,12 @@ pub struct OrchestratorLoop {
     pub launch_coordinator: LaunchCoordinator,
     pub orchestrator: Orchestrator,
     config: OrchestratorConfig,
+    auto_camp_settings: HashMap<String, AutoCampOnDeathSettings>,
+    default_server_name: String,
+    death_camp_tracker: DeathCampTracker,
+    credential_store: Option<CredentialStore>,
+    shared_password: Option<Zeroizing<String>>,
+    status_webhook: Option<WebhookSender>,
     timing_correction_enabled: bool,
     shutdown_rx: watch::Receiver<bool>,
 }
@@ -53,6 +69,11 @@ impl OrchestratorLoop {
         launch_coordinator: LaunchCoordinator,
         orchestrator: Orchestrator,
         config: OrchestratorConfig,
+        auto_camp_settings: HashMap<String, AutoCampOnDeathSettings>,
+        default_server_name: String,
+        credential_store: Option<CredentialStore>,
+        shared_password: Option<Zeroizing<String>>,
+        status_webhook: Option<WebhookSender>,
         timing_correction_enabled: bool,
         shutdown_rx: watch::Receiver<bool>,
     ) -> Self {
@@ -61,6 +82,12 @@ impl OrchestratorLoop {
             launch_coordinator,
             orchestrator,
             config,
+            auto_camp_settings,
+            default_server_name,
+            death_camp_tracker: DeathCampTracker::new(),
+            credential_store,
+            shared_password,
+            status_webhook,
             timing_correction_enabled,
             shutdown_rx,
         }
@@ -76,12 +103,57 @@ impl OrchestratorLoop {
             app_config.server.clone(),
         );
         let orchestrator = Orchestrator::new();
+        let auto_camp_settings = app_config
+            .group
+            .iter()
+            .flat_map(|group| group.toon.iter())
+            .map(|toon| {
+                (
+                    toon.name.to_ascii_lowercase(),
+                    AutoCampOnDeathSettings {
+                        enabled: toon.auto_camp_on_death.enabled,
+                        camp_delay_secs: toon.auto_camp_on_death.camp_delay_secs,
+                        relog_wait_secs: toon.auto_camp_on_death.relog_wait_secs,
+                    },
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        let credential_store = std::env::var("TEXTQUEST_MASTER_PASSWORD")
+            .ok()
+            .filter(|password| !password.trim().is_empty())
+            .and_then(|password| match CredentialStore::open_default(&password) {
+                Ok(store) => Some(store),
+                Err(error) => {
+                    tracing::error!(
+                        error = %error,
+                        "Failed to initialize unattended relog credential store"
+                    );
+                    None
+                }
+            });
+        let shared_password = std::env::var("TEXTQUEST_PASSWORD")
+            .ok()
+            .filter(|password| !password.trim().is_empty())
+            .map(Zeroizing::new);
+        let status_webhook = (app_config.discord.alert_status
+            && !app_config.discord.webhook_url.trim().is_empty())
+        .then(|| {
+            WebhookSender::with_channels(
+                app_config.discord.webhook_url.clone(),
+                app_config.discord.channels.clone(),
+            )
+        });
 
         Self::new(
             client_manager,
             launch_coordinator,
             orchestrator,
             app_config.orchestrator.clone(),
+            auto_camp_settings,
+            app_config.server.name.clone(),
+            credential_store,
+            shared_password,
+            status_webhook,
             app_config.timing_correction,
             shutdown_rx,
         )
@@ -132,6 +204,7 @@ impl OrchestratorLoop {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
                     self.orchestrator.tick();
+                    self.tick_death_camp();
                 }
                 Ok(()) = self.shutdown_rx.changed() => {
                     if *self.shutdown_rx.borrow() {
@@ -161,6 +234,209 @@ impl OrchestratorLoop {
                 }
             })
             .collect()
+    }
+
+    fn tick_death_camp(&mut self) {
+        #[derive(Debug, Clone)]
+        struct DeathCampObservation {
+            client_id: u32,
+            pid: u32,
+            character_name: String,
+            account_name: Option<String>,
+            server_name: Option<String>,
+            is_dead: bool,
+            settings: AutoCampOnDeathSettings,
+        }
+
+        let now_secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::ZERO)
+            .as_secs();
+
+        let observations = self
+            .client_manager
+            .all_sessions()
+            .filter_map(|session| {
+                let character_name = session.character_name.clone().or_else(|| {
+                    session
+                        .bound_toon
+                        .as_ref()
+                        .map(|toon| toon.character_name.clone())
+                })?;
+                let settings = self
+                    .auto_camp_settings
+                    .get(&character_name.to_ascii_lowercase())
+                    .cloned()
+                    .unwrap_or(AutoCampOnDeathSettings {
+                        enabled: false,
+                        camp_delay_secs: 30,
+                        relog_wait_secs: 900,
+                    });
+                let is_dead =
+                    self.orchestrator
+                        .game_states
+                        .get(&session.pid)
+                        .is_some_and(|state| {
+                            matches!(state.combat_status, CombatStatus::Dead)
+                                || state
+                                    .local_player
+                                    .as_ref()
+                                    .is_some_and(|player| player.stand_state == 111)
+                        });
+
+                Some(DeathCampObservation {
+                    client_id: session.client_id,
+                    pid: session.pid,
+                    character_name,
+                    account_name: session
+                        .bound_toon
+                        .as_ref()
+                        .map(|toon| toon.account_name.clone())
+                        .or_else(|| session.account_name.clone()),
+                    server_name: session
+                        .bound_toon
+                        .as_ref()
+                        .map(|toon| toon.server_name.clone()),
+                    is_dead,
+                    settings,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let active_client_ids = observations
+            .iter()
+            .map(|observation| observation.client_id)
+            .collect::<HashSet<_>>();
+        self.death_camp_tracker.retain_clients(&active_client_ids);
+
+        for observation in observations {
+            let actions = self.death_camp_tracker.observe(
+                observation.client_id,
+                &observation.character_name,
+                observation.is_dead,
+                &observation.settings,
+                now_secs,
+            );
+            for action in actions {
+                match action {
+                    DeathCampAction::SendAlert {
+                        character_name,
+                        camp_delay_secs,
+                        relog_wait_secs,
+                    } => self.send_death_camp_alert(
+                        &character_name,
+                        camp_delay_secs,
+                        relog_wait_secs,
+                    ),
+                    DeathCampAction::TriggerRelog {
+                        character_name,
+                        relog_wait_secs,
+                    } => self.trigger_death_relog(
+                        observation.pid,
+                        &character_name,
+                        observation.account_name.as_deref(),
+                        observation.server_name.as_deref(),
+                        relog_wait_secs,
+                    ),
+                }
+            }
+        }
+    }
+
+    fn send_death_camp_alert(
+        &self,
+        character_name: &str,
+        camp_delay_secs: u64,
+        relog_wait_secs: u64,
+    ) {
+        if let Some(webhook) = &self.status_webhook {
+            webhook.warn(
+                "Character death detected",
+                &format!(
+                    "{character_name} died. Camping to desktop in {camp_delay_secs}s and re-login \
+                     will wait {relog_wait_secs}s."
+                ),
+            );
+        }
+    }
+
+    fn trigger_death_relog(
+        &mut self,
+        pid: u32,
+        character_name: &str,
+        account_name: Option<&str>,
+        server_name: Option<&str>,
+        relog_wait_secs: u64,
+    ) {
+        let Some(account_name) = account_name.filter(|name| !name.trim().is_empty()) else {
+            tracing::warn!(
+                pid,
+                character_name,
+                "Cannot auto-relog after death without an account name"
+            );
+            return;
+        };
+
+        let Some(password) = self.resolve_password(account_name) else {
+            tracing::warn!(
+                pid,
+                character_name,
+                account_name,
+                "Cannot auto-relog after death without credentials"
+            );
+            if let Some(webhook) = &self.status_webhook {
+                webhook.critical(
+                    "Death auto-relog skipped",
+                    &format!(
+                        "{character_name} could not auto-relog because credentials for account \
+                         '{account_name}' are unavailable."
+                    ),
+                );
+            }
+            return;
+        };
+
+        let mut relog_config = RelogConfig::default();
+        relog_config.retry_policy.initial_delay = Duration::from_secs(relog_wait_secs);
+        relog_config.retry_policy.max_delay = relog_config
+            .retry_policy
+            .max_delay
+            .max(Duration::from_secs(relog_wait_secs));
+
+        let server_name = server_name
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or(&self.default_server_name)
+            .to_string();
+
+        self.orchestrator.send_ipc_command(
+            pid,
+            Command::Relog {
+                account_name: account_name.to_string(),
+                password,
+                server_name,
+                character_name: character_name.to_string(),
+                config: relog_config,
+            },
+        );
+    }
+
+    fn resolve_password(&self, account_name: &str) -> Option<String> {
+        if let Some(store) = &self.credential_store {
+            match store.get_password(account_name) {
+                Ok(password) => return Some(password.to_string()),
+                Err(error) => {
+                    tracing::debug!(
+                        account_name,
+                        error = %error,
+                        "Credential store lookup failed; falling back to shared password"
+                    );
+                }
+            }
+        }
+
+        self.shared_password
+            .as_ref()
+            .map(std::string::ToString::to_string)
     }
 
     /// Run health checks on all managed clients.

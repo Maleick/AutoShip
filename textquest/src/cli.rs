@@ -1868,9 +1868,6 @@ pub fn run_config_show_mode() -> Result<()> {
 
 // ─── Credential management ──────────────────────────────────────────────────
 
-const CREDENTIAL_DB_PATH: &str = "data/credentials.db";
-const CREDENTIAL_META_TABLE: &str = "credential_store_meta";
-
 /// Load decrypted account passwords from the encrypted credential store.
 ///
 /// Returns an empty map if no master password is provided.
@@ -1939,55 +1936,7 @@ pub fn run_credential_remove_mode(
 pub fn open_credential_store(
     master_password: &str,
 ) -> Result<crate::credentials::store::CredentialStore> {
-    let db_path = std::path::PathBuf::from(CREDENTIAL_DB_PATH);
-    if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
-    let salt = load_or_create_master_salt(&db_path)?;
-    let master_key = crate::credentials::crypto::derive_key(master_password, &salt)?;
-    crate::credentials::store::CredentialStore::open(&db_path, master_key)
-}
-
-fn load_or_create_master_salt(db_path: &std::path::Path) -> Result<[u8; 32]> {
-    use rusqlite::OptionalExtension;
-
-    let conn = rusqlite::Connection::open(db_path).with_context(|| {
-        format!(
-            "Failed to open credential metadata DB at {}",
-            db_path.display()
-        )
-    })?;
-    conn.execute(
-        &format!(
-            "CREATE TABLE IF NOT EXISTS {CREDENTIAL_META_TABLE} (key TEXT PRIMARY KEY, value BLOB \
-             NOT NULL)"
-        ),
-        [],
-    )
-    .context("Failed to initialize credential metadata table")?;
-
-    let salt_blob: Option<Vec<u8>> = conn
-        .query_row(
-            &format!("SELECT value FROM {CREDENTIAL_META_TABLE} WHERE key = 'master_salt'"),
-            [],
-            |row| row.get(0),
-        )
-        .optional()
-        .context("Failed to query credential master salt")?;
-
-    if let Some(salt_blob) = salt_blob {
-        return salt_blob
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("Stored credential master salt has invalid length"));
-    }
-
-    let salt = crate::credentials::crypto::generate_salt();
-    conn.execute(
-        &format!("INSERT INTO {CREDENTIAL_META_TABLE} (key, value) VALUES ('master_salt', ?1)"),
-        [&salt[..]],
-    )
-    .context("Failed to persist credential master salt")?;
-    Ok(salt)
+    crate::credentials::store::CredentialStore::open_default(master_password)
 }
 
 // ─── Platform helpers ───────────────────────────────────────────────────────

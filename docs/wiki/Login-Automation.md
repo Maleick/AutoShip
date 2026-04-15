@@ -109,6 +109,45 @@ Current repo behavior:
 - crypto uses Argon2id plus AES-256-GCM
 - the DLL zeroizes stored password material after credential entry
 
+## Death Auto-Camp
+
+TextQuest now supports unattended death handling that mirrors the MQ2AutoCamp
+workflow:
+
+- death is detected from the live per-client game-state pulse
+- each toon can enable `auto_camp_on_death` in `config/textquest.toml`
+- the character waits `camp_delay_secs` before camping so a live rez can land
+- after the delay expires, TextQuest sends a status alert and dispatches the
+  existing DLL-side `Relog` flow, which issues `/camp desktop`
+- the relog flow waits `relog_wait_secs` before re-entering credentials and
+  logging the character back in
+
+Per-toon TOML shape:
+
+```toml
+[[group.toon]]
+name = "Aelrindel"
+class = "WIZ"
+role = "dps"
+
+[group.toon.auto_camp_on_death]
+enabled = true
+camp_delay_secs = 30
+relog_wait_secs = 900
+```
+
+Operational notes:
+
+- account metadata still comes from `config/accounts.toml`
+- unattended relog resolves passwords from the encrypted credential store when
+  `TEXTQUEST_MASTER_PASSWORD` is set
+- if no per-account credential is available, TextQuest falls back to the shared
+  `TEXTQUEST_PASSWORD` environment variable
+- status notifications use the existing Discord webhook routing and require
+  `discord.alert_status = true`
+- the dashboard character-config API now exposes the same
+  `auto_camp_on_death` fields for per-character editing
+
 ## Post-Login Sequencing
 
 The post-login sequencer in `textquest/src/launcher/post_login.rs` currently models:

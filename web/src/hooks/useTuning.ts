@@ -1,6 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import type { CharacterConfig } from "../types";
 
+function normalizeConfig(config: CharacterConfig): CharacterConfig {
+  return {
+    ...config,
+    auto_camp_on_death: config.auto_camp_on_death ?? {
+      enabled: false,
+      camp_delay_secs: 30,
+      relog_wait_secs: 900,
+    },
+  };
+}
+
 /** Fetch the full list of character configs and expose a save function. */
 export function useCharacterConfigs() {
   const [configs, setConfigs] = useState<CharacterConfig[]>([]);
@@ -16,7 +27,7 @@ export function useCharacterConfigs() {
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: CharacterConfig[] = await res.json();
-      setConfigs(data);
+      setConfigs(data.map(normalizeConfig));
       setError(null);
     } catch (e) {
       setError(
