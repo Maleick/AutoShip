@@ -276,6 +276,8 @@ With 36 characters (6 full groups), you have a significant force. Here is what i
 | **Vulak'Aerr**             | NToV              | Very Hard      | Abashi's Rod, Do'Vassir's Gauntlets, Crystasia's Ring (AC 30) | Final boss of Velious; 36 well-geared chars may be tight |
 | **Sleeper's Tomb**         | Sleeper's Tomb    | Hard-Very Hard | ST-specific loot, warders                                     | Ancient dragons; significant challenge                   |
 
+For the key quest, tradeability assumptions, 36-account keying order, and the expected seller window, see [Research: Sleeper's Tomb Keying Opportunity Window](Research-Sleepers-Tomb-Keying).
+
 ### NToV Dragon Difficulty Ranking (for your 36-box)
 
 From easiest to hardest within NToV:

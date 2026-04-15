@@ -59,6 +59,7 @@
 - [Remote Control Setup](Research-Remote-Control-Setup)
 - [RGMercs Analysis](Research-RGMercs-Analysis)
 - [RunEQ Headless](Research-RunEQ-Headless)
+- [Sleeper's Tomb Keying](Research-Sleepers-Tomb-Keying)
 - [Syscall Evasion](Research-Syscall-Evasion)
 - [TUI Map Navmesh Audit](Research-TUI-Map-Navmesh-Audit)
 - [TUI Map Polish](Research-TUI-Map-Polish)
