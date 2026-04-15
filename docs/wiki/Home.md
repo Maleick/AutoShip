@@ -40,6 +40,7 @@ This site is the published public docs surface. The repo-side `docs/wiki/` tree 
 - [Soul Engine](Soul-Engine)
 - [Offsets, EQ Internals, and MacroQuest References](Offsets-EQ-Internals-and-MacroQuest-References)
 - [Development Workflow](Development-Workflow)
+- [AutoShip Phase 1 Handoff](AutoShip-Phase-1-Handoff)
 - [Roadmap and Known Gaps](Roadmap-and-Known-Gaps)
 - [Codebase Audit — 2026-04-13](Codebase-Audit-2026-04-13)
 - [Maintaining the Wiki](Maintaining-the-Wiki)
