@@ -10,14 +10,18 @@
 
 #[cfg(windows)]
 mod inner {
-    use std::sync::Mutex;
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-
-    use windows::Win32::System::Diagnostics::Debug::{
-        AddVectoredExceptionHandler, EXCEPTION_POINTERS, RemoveVectoredExceptionHandler,
+    use std::sync::{
+        Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     };
-    use windows::Win32::System::Memory::{
-        PAGE_EXECUTE_READ, PAGE_NOACCESS, PAGE_PROTECTION_FLAGS, PAGE_READWRITE, VirtualProtect,
+
+    use windows::Win32::System::{
+        Diagnostics::Debug::{
+            AddVectoredExceptionHandler, EXCEPTION_POINTERS, RemoveVectoredExceptionHandler,
+        },
+        Memory::{
+            PAGE_EXECUTE_READ, PAGE_NOACCESS, PAGE_PROTECTION_FLAGS, PAGE_READWRITE, VirtualProtect,
+        },
     };
 
     const PAGE_SIZE: usize = 4096;
@@ -212,7 +216,8 @@ mod inner {
     }
 
     /// # Safety
-    /// Must not be called while other threads are actively executing encrypted pages.
+    /// Must not be called while other threads are actively executing encrypted
+    /// pages.
     pub unsafe fn cleanup() {
         if !ACTIVE.swap(false, Ordering::AcqRel) {
             return;

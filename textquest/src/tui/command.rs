@@ -682,7 +682,8 @@ pub fn command_entry(input: &str) -> Option<&'static CommandEntry> {
     })
 }
 
-/// Normalize a typed command by expanding exact aliases and first-token aliases.
+/// Normalize a typed command by expanding exact aliases and first-token
+/// aliases.
 #[must_use]
 pub fn normalize_command_alias(input: &str) -> String {
     let trimmed = input.trim();

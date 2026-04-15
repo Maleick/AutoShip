@@ -14,18 +14,25 @@ mod inner {
     use std::sync::OnceLock;
 
     use tracing::{debug, warn};
-    use windows::Win32::Foundation::HMODULE;
-    use windows::Win32::System::LibraryLoader::GetModuleHandleA;
-    use windows::Win32::System::ProcessStatus::{GetModuleInformation, MODULEINFO};
-    use windows::Win32::System::Threading::GetCurrentProcess;
-    use windows::core::PCSTR;
+    use windows::{
+        Win32::{
+            Foundation::HMODULE,
+            System::{
+                LibraryLoader::GetModuleHandleA,
+                ProcessStatus::{GetModuleInformation, MODULEINFO},
+                Threading::GetCurrentProcess,
+            },
+        },
+        core::PCSTR,
+    };
 
     /// Cached gadgets from ntdll + kernel32.
     static GADGETS: OnceLock<Vec<usize>> = OnceLock::new();
 
-    /// Locate `ret` (0xC3) gadgets at plausible function-boundary offsets within
-    /// a loaded module. We only keep addresses that sit right after a sequence of
-    /// non-zero bytes (heuristic for "end of a real function").
+    /// Locate `ret` (0xC3) gadgets at plausible function-boundary offsets
+    /// within a loaded module. We only keep addresses that sit right after
+    /// a sequence of non-zero bytes (heuristic for "end of a real
+    /// function").
     pub fn find_gadgets(module_name: &str) -> Vec<usize> {
         let c_name = std::ffi::CString::new(module_name).unwrap_or_default();
 
@@ -165,7 +172,8 @@ mod inner {
         GADGETS.get().map(|v| v.as_slice()).unwrap_or(&[])
     }
 
-    /// Execute `f` with the top stack frames spoofed to point into ntdll/kernel32.
+    /// Execute `f` with the top stack frames spoofed to point into
+    /// ntdll/kernel32.
     ///
     /// The return addresses are restored via RAII (Drop) even if `f` panics.
     pub fn with_spoofed_stack<F: FnOnce() -> R, R>(f: F) -> R {

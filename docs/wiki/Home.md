@@ -22,8 +22,13 @@ This site is the published public docs surface. The repo-side `docs/wiki/` tree 
 - [Installation and Build](Installation-and-Build.md)
 - [Operating the TUI](Operating-the-TUI.md)
 - [Command Reference](Command-Reference.md)
+- [Epic Quest Sequencing](Epic-Quest-Sequencing.md)
 - [Troubleshooting](Troubleshooting.md)
 - [Project Metrics](Project-Metrics.md)
+- [Frostreaver Farming & XP Guide](Frostreaver-Farming-Guide.md)
+- [Frostreaver Starting City Logistics](Frostreaver-Starting-City-Logistics.md)
+- [P99 Zone Guide](P99-Zone-Guide.md)
+- [Frostreaver Cost Model](Frostreaver-Cost-Model.md)
 
 ### Developers
 

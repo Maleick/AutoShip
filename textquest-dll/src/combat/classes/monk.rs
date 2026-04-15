@@ -2,8 +2,8 @@ use textquest_common::combat::{CombatRole, SpellEntry};
 
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
-/// Monk strategy: melee DPS + puller, flying kick/round kick priority, feign death escape.
-/// EQ class ID: 7
+/// Monk strategy: melee DPS + puller, flying kick/round kick priority, feign
+/// death escape. EQ class ID: 7
 pub struct MonkStrategy {
     class_id: u8,
 }
@@ -56,8 +56,10 @@ impl ClassStrategy for MonkStrategy {
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::{CombatConfig, SpellEntry};
-    use textquest_common::types::SpawnData;
+    use textquest_common::{
+        combat::{CombatConfig, SpellEntry},
+        types::SpawnData,
+    };
 
     fn test_config() -> CombatConfig {
         CombatConfig::default()

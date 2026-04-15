@@ -2,16 +2,18 @@
 
 #![allow(dead_code)] // Demo shapes and placeholder handlers stay in this module before router wiring.
 
+pub mod dashboard;
 pub mod economy;
 pub mod loot;
 pub mod soul;
-use axum::Json;
-use axum::extract::{Path, State};
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::AppState;
 
@@ -38,7 +40,8 @@ pub async fn api_not_found() -> impl IntoResponse {
     json_error(StatusCode::NOT_FOUND, "API route not found")
 }
 
-/// Placeholder response for known raid-config endpoints that are not implemented on this build.
+/// Placeholder response for known raid-config endpoints that are not
+/// implemented on this build.
 pub async fn raid_config_unavailable() -> impl IntoResponse {
     json_error(
         StatusCode::NOT_IMPLEMENTED,
@@ -62,7 +65,8 @@ pub async fn character_config_unavailable(Path(character): Path<String>) -> impl
     )
 }
 
-// ─── Health ───────────────────────────────────────────────────────────────────
+// ─── Health
+// ───────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct HealthResponse {
@@ -78,7 +82,8 @@ pub async fn health() -> Json<HealthResponse> {
     })
 }
 
-// ─── Sessions ─────────────────────────────────────────────────────────────────
+// ─── Sessions
+// ─────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct SessionInfo {
@@ -94,7 +99,8 @@ pub struct SessionInfo {
 /// List active sessions.
 pub async fn list_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     // Build a list of sessions from character configs.
-    // In a production system, this would read from IPC shared memory or a session registry.
+    // In a production system, this would read from IPC shared memory or a session
+    // registry.
     let configs = state.character_configs.read().await;
     let sessions: Vec<SessionInfo> = configs
         .values()
@@ -260,7 +266,8 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
 }
 
 /// GET /api/config/characters — list all character tuning configs.
-/// Not yet mounted in the live API router (returns 501 via placeholder); kept for future use.
+/// Not yet mounted in the live API router (returns 501 via placeholder); kept
+/// for future use.
 #[allow(dead_code)]
 pub async fn list_character_configs(
     State(state): State<Arc<AppState>>,
@@ -274,7 +281,8 @@ pub async fn list_character_configs(
 }
 
 /// PUT /api/config/characters/:name — upsert per-character tuning config.
-/// Not yet mounted in the live API router (returns 501 via placeholder); kept for future use.
+/// Not yet mounted in the live API router (returns 501 via placeholder); kept
+/// for future use.
 #[allow(dead_code)]
 pub async fn put_character_config(
     State(state): State<Arc<AppState>>,
@@ -292,7 +300,8 @@ pub async fn put_character_config(
     Ok(Json(config))
 }
 
-// ── Economy types ─────────────────────────────────────────────────────────────
+// ── Economy types
+// ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KronoSettings {
@@ -353,7 +362,8 @@ pub struct EconomySettings {
     pub tradeskill_supplies: Vec<TradeskillSupply>,
 }
 
-// ── Economy handlers ──────────────────────────────────────────────────────────
+// ── Economy handlers
+// ──────────────────────────────────────────────────────────
 
 /// GET /api/economy/settings — return full economy configuration.
 pub async fn get_economy_settings() -> impl IntoResponse {
@@ -513,6 +523,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         });
@@ -602,6 +613,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         });
@@ -619,6 +631,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         });

@@ -1,4 +1,5 @@
-//! Orchestrator-side navigation — routing, recording, camp management, navmesh pathfinding.
+//! Orchestrator-side navigation — routing, recording, camp management, navmesh
+//! pathfinding.
 
 use std::time::{Duration, Instant};
 
@@ -34,7 +35,8 @@ fn read_shared_state_with_retry(
 fn navmesh_zone_for_pid(pid: u32) -> Result<String> {
     let token = ipc::load_session_token(pid).ok_or_else(|| {
         anyhow::anyhow!(
-            "No session token for PID {pid}. Inject the DLL first to create authenticated IPC state."
+            "No session token for PID {pid}. Inject the DLL first to create authenticated IPC \
+             state."
         )
     })?;
     let session_id = textquest_common::ipc::session_id_from_token(&token);

@@ -49,7 +49,8 @@ pub struct PeSection {
     pub name: String,
     /// RVA where this section should be mapped relative to the image base.
     pub virtual_address: u32,
-    /// Size of the section in memory (may be larger than raw data due to alignment).
+    /// Size of the section in memory (may be larger than raw data due to
+    /// alignment).
     pub virtual_size: u32,
     /// Raw bytes of the section from the PE file.
     pub data: Vec<u8>,
@@ -60,7 +61,8 @@ pub struct PeSection {
 pub struct Relocation {
     /// RVA of the address that needs patching.
     pub rva: u32,
-    /// Relocation type (IMAGE_REL_BASED_DIR64 = 10, IMAGE_REL_BASED_HIGHLOW = 3).
+    /// Relocation type (IMAGE_REL_BASED_DIR64 = 10, IMAGE_REL_BASED_HIGHLOW =
+    /// 3).
     pub rel_type: u8,
 }
 
@@ -102,8 +104,8 @@ pub struct ParsedPe {
 }
 
 /// System DLLs that share base addresses across all processes on x64 Windows.
-/// All entries must be lowercase. These are resolved locally (GetModuleHandleA +
-/// GetProcAddress) rather than via remote process enumeration.
+/// All entries must be lowercase. These are resolved locally (GetModuleHandleA
+/// + GetProcAddress) rather than via remote process enumeration.
 const SYSTEM_DLLS: &[&str] = &[
     // NT core
     "ntdll.dll",
@@ -166,7 +168,8 @@ fn checked_remote_export_table_len(
     })
 }
 
-/// Parse a PE file from raw bytes, extracting sections, relocations, and imports.
+/// Parse a PE file from raw bytes, extracting sections, relocations, and
+/// imports.
 pub fn parse_pe(dll_bytes: &[u8]) -> Result<ParsedPe, InjectError> {
     use goblin::pe::PE;
 
@@ -332,8 +335,8 @@ fn rva_to_offset(
     None
 }
 
-/// Apply a single base relocation: compute the delta between actual and preferred base,
-/// then patch the address at the given RVA in the mapped image.
+/// Apply a single base relocation: compute the delta between actual and
+/// preferred base, then patch the address at the given RVA in the mapped image.
 pub fn apply_relocation(
     image: &mut [u8],
     reloc: &Relocation,
@@ -385,18 +388,20 @@ pub fn apply_relocation(
 mod platform {
     use super::*;
 
-    use windows::Win32::Foundation::{CloseHandle, WAIT_EVENT};
-    use windows::Win32::System::Diagnostics::Debug::{ReadProcessMemory, WriteProcessMemory};
-    use windows::Win32::System::Memory::{
-        MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE,
-        VirtualAllocEx, VirtualFreeEx, VirtualProtectEx,
-    };
-    use windows::Win32::System::ProcessStatus::{
-        EnumProcessModulesEx, GetModuleFileNameExW, LIST_MODULES_ALL,
-    };
-    use windows::Win32::System::Threading::{
-        CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
-        PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE, WaitForSingleObject,
+    use windows::Win32::{
+        Foundation::{CloseHandle, WAIT_EVENT},
+        System::{
+            Diagnostics::Debug::{ReadProcessMemory, WriteProcessMemory},
+            Memory::{
+                MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE,
+                VirtualAllocEx, VirtualFreeEx, VirtualProtectEx,
+            },
+            ProcessStatus::{EnumProcessModulesEx, GetModuleFileNameExW, LIST_MODULES_ALL},
+            Threading::{
+                CreateRemoteThread, OpenProcess, PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION,
+                PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE, WaitForSingleObject,
+            },
+        },
     };
 
     const WAIT_OBJECT_0: WAIT_EVENT = WAIT_EVENT(0);
@@ -478,8 +483,8 @@ mod platform {
                 apply_relocation(&mut image, reloc, delta)?;
             }
 
-            // 4. Resolve imports — system DLLs use local resolution (same base),
-            //    non-system DLLs use remote process export table parsing.
+            // 4. Resolve imports — system DLLs use local resolution (same base), non-system
+            //    DLLs use remote process export table parsing.
             Self::resolve_imports(&mut image, &pe.imports, process_handle)?;
 
             // 5. Write the fully prepared image to the target process
@@ -527,8 +532,10 @@ mod platform {
             imports: &[ImportEntry],
             process_handle: windows::Win32::Foundation::HANDLE,
         ) -> Result<(), InjectError> {
-            use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
-            use windows::core::PCSTR;
+            use windows::{
+                Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress},
+                core::PCSTR,
+            };
 
             // Build remote module map lazily — only if we encounter a non-system DLL
             let mut remote_modules: Option<Vec<(String, usize)>> = None;
@@ -696,7 +703,8 @@ mod platform {
 
             let e_lfanew = u32::from_le_bytes(dos_header[0x3C..0x40].try_into().unwrap()) as usize;
 
-            // Read PE signature + COFF header + optional header (enough for data directories)
+            // Read PE signature + COFF header + optional header (enough for data
+            // directories)
             let mut pe_header = [0u8; 264];
             read_remote(remote_addr(e_lfanew, "PE header")?, &mut pe_header)?;
 
@@ -780,7 +788,8 @@ mod platform {
                             ) as usize;
                             if ordinal_index >= num_functions {
                                 return Err(InjectError::ReadFailed(format!(
-                                    "invalid export ordinal index: {ordinal_index} >= {num_functions}",
+                                    "invalid export ordinal index: {ordinal_index} >= \
+                                     {num_functions}",
                                 )));
                             }
 
@@ -794,7 +803,9 @@ mod platform {
                                     .checked_add(func_entry_offset)
                                     .ok_or_else(|| {
                                         InjectError::ReadFailed(format!(
-                                            "function RVA table offset overflow: base={addr_of_functions:#x} offset={func_entry_offset:#x}",
+                                            "function RVA table offset overflow: \
+                                             base={addr_of_functions:#x} \
+                                             offset={func_entry_offset:#x}",
                                         ))
                                     })?,
                                 "function RVA entry",
@@ -846,7 +857,8 @@ mod platform {
                             .checked_add(func_entry_offset)
                             .ok_or_else(|| {
                                 InjectError::ReadFailed(format!(
-                                    "function RVA table offset overflow: base={addr_of_functions:#x} offset={func_entry_offset:#x}",
+                                    "function RVA table offset overflow: \
+                                     base={addr_of_functions:#x} offset={func_entry_offset:#x}",
                                 ))
                             })?,
                         "function RVA entry",
@@ -1246,7 +1258,8 @@ mod tests {
     }
 
     /// Build a PE export table in a byte buffer and verify we can parse it.
-    /// This tests the export directory format parsing without needing a real process.
+    /// This tests the export directory format parsing without needing a real
+    /// process.
     #[test]
     fn test_export_table_parsing() {
         let mut buf = vec![0u8; 0x2000];

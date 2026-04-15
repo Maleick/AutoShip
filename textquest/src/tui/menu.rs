@@ -17,7 +17,8 @@ pub struct MenuItem {
     pub label: &'static str,
     /// The command to execute when selected (same as `:` command bar input).
     pub command: &'static str,
-    /// Whether selecting this item should prefill command mode instead of executing immediately.
+    /// Whether selecting this item should prefill command mode instead of
+    /// executing immediately.
     pub requires_input: bool,
     /// Keyboard shortcut hint displayed on the right.
     pub shortcut: &'static str,
@@ -466,7 +467,8 @@ impl<'a> MenuDropdown<'a> {
         self
     }
 
-    /// Calculate the position and size for the dropdown given the menu bar area.
+    /// Calculate the position and size for the dropdown given the menu bar
+    /// area.
     pub fn dropdown_rect(&self, menu_bar_area: Rect) -> Rect {
         let cat = &MENU_CATEGORIES[self.state.selected_category];
 

@@ -1,7 +1,6 @@
 //! SQLite-backed fleet metrics store.
 
-use std::path::Path;
-use std::sync::Mutex;
+use std::{path::Path, sync::Mutex};
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -120,7 +119,8 @@ impl MetricsStore {
     ) -> Result<i64> {
         let conn = self.conn.lock().expect("metrics lock poisoned");
         conn.execute(
-            "INSERT INTO events (event_type, character, zone, details, pid) VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO events (event_type, character, zone, details, pid) VALUES (?1, ?2, ?3, \
+             ?4, ?5)",
             params![event_type, character, zone, details, pid.map(|p| p as i64)],
         )
         .context("Failed to insert event")?;
@@ -131,7 +131,10 @@ impl MetricsStore {
     pub fn recent_events(&self, limit: u32) -> Result<Vec<EventRow>> {
         let conn = self.conn.lock().expect("metrics lock poisoned");
         let mut stmt = conn
-            .prepare("SELECT id, timestamp, event_type, character, zone, details, pid FROM events ORDER BY id DESC LIMIT ?1")
+            .prepare(
+                "SELECT id, timestamp, event_type, character, zone, details, pid FROM events \
+                 ORDER BY id DESC LIMIT ?1",
+            )
             .context("Failed to prepare events query")?;
         let rows = stmt
             .query_map(params![limit], |row| {
@@ -164,7 +167,8 @@ impl MetricsStore {
     ) -> Result<i64> {
         let conn = self.conn.lock().expect("metrics lock poisoned");
         conn.execute(
-            "INSERT INTO dps_snapshots (character, target, damage, spell_name, zone, encounter) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO dps_snapshots (character, target, damage, spell_name, zone, encounter) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![character, target, damage, spell_name, zone, encounter],
         )
         .context("Failed to insert DPS snapshot")?;
@@ -175,7 +179,10 @@ impl MetricsStore {
     pub fn encounter_dps_summary(&self, encounter: &str) -> Result<Vec<(String, i64)>> {
         let conn = self.conn.lock().expect("metrics lock poisoned");
         let mut stmt = conn
-            .prepare("SELECT character, SUM(damage) FROM dps_snapshots WHERE encounter = ?1 GROUP BY character ORDER BY SUM(damage) DESC")
+            .prepare(
+                "SELECT character, SUM(damage) FROM dps_snapshots WHERE encounter = ?1 GROUP BY \
+                 character ORDER BY SUM(damage) DESC",
+            )
             .context("Failed to prepare DPS summary")?;
         let rows = stmt
             .query_map(params![encounter], |row| Ok((row.get(0)?, row.get(1)?)))
@@ -198,7 +205,8 @@ impl MetricsStore {
     ) -> Result<i64> {
         let conn = self.conn.lock().expect("metrics lock poisoned");
         conn.execute(
-            "INSERT INTO loot_history (item_name, item_id, recipient, source, zone, value_plat) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO loot_history (item_name, item_id, recipient, source, zone, value_plat) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![item_name, item_id, recipient, source, zone, value_plat],
         )
         .context("Failed to insert loot")?;
@@ -209,7 +217,10 @@ impl MetricsStore {
     pub fn recent_loot(&self, limit: u32) -> Result<Vec<LootRow>> {
         let conn = self.conn.lock().expect("metrics lock poisoned");
         let mut stmt = conn
-            .prepare("SELECT id, timestamp, item_name, item_id, recipient, source, zone, value_plat FROM loot_history ORDER BY id DESC LIMIT ?1")
+            .prepare(
+                "SELECT id, timestamp, item_name, item_id, recipient, source, zone, value_plat \
+                 FROM loot_history ORDER BY id DESC LIMIT ?1",
+            )
             .context("Failed to prepare loot query")?;
         let rows = stmt
             .query_map(params![limit], |row| {
@@ -235,8 +246,8 @@ impl MetricsStore {
     pub fn upsert_lockout(&self, character: &str, instance: &str, expires_at: &str) -> Result<()> {
         let conn = self.conn.lock().expect("metrics lock poisoned");
         conn.execute(
-            "INSERT INTO lockouts (character, instance, expires_at) VALUES (?1, ?2, ?3) \
-             ON CONFLICT(character, instance) DO UPDATE SET expires_at = excluded.expires_at",
+            "INSERT INTO lockouts (character, instance, expires_at) VALUES (?1, ?2, ?3) ON \
+             CONFLICT(character, instance) DO UPDATE SET expires_at = excluded.expires_at",
             params![character, instance, expires_at],
         )
         .context("Failed to upsert lockout")?;
@@ -248,8 +259,8 @@ impl MetricsStore {
         let conn = self.conn.lock().expect("metrics lock poisoned");
         let mut stmt = conn
             .prepare(
-                "SELECT id, character, instance, expires_at, created_at FROM lockouts \
-                 WHERE character = ?1 AND expires_at > datetime('now') ORDER BY expires_at",
+                "SELECT id, character, instance, expires_at, created_at FROM lockouts WHERE \
+                 character = ?1 AND expires_at > datetime('now') ORDER BY expires_at",
             )
             .context("Failed to prepare lockout query")?;
         let rows = stmt
@@ -280,7 +291,8 @@ impl MetricsStore {
     ) -> Result<i64> {
         let conn = self.conn.lock().expect("metrics lock poisoned");
         conn.execute(
-            "INSERT INTO plat_ledger (character, amount, balance, source, note) VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO plat_ledger (character, amount, balance, source, note) VALUES (?1, ?2, \
+             ?3, ?4, ?5)",
             params![character, amount, balance, source, note],
         )
         .context("Failed to insert plat transaction")?;
@@ -300,13 +312,14 @@ impl MetricsStore {
     }
 
     /// Total plat earned (sum of positive `amount` entries) by `character`
-    /// since `since_timestamp` (ISO datetime string, e.g. "2026-04-12 00:00:00").
+    /// since `since_timestamp` (ISO datetime string, e.g. "2026-04-12
+    /// 00:00:00").
     pub fn plat_earned_since(&self, character: &str, since_timestamp: &str) -> Result<i64> {
         let conn = self.conn.lock().expect("metrics lock poisoned");
         let total: i64 = conn
             .query_row(
-                "SELECT COALESCE(SUM(amount), 0) FROM plat_ledger \
-                 WHERE character = ?1 AND amount > 0 AND timestamp >= ?2",
+                "SELECT COALESCE(SUM(amount), 0) FROM plat_ledger WHERE character = ?1 AND amount \
+                 > 0 AND timestamp >= ?2",
                 params![character, since_timestamp],
                 |row| row.get(0),
             )
@@ -320,8 +333,8 @@ impl MetricsStore {
         let conn = self.conn.lock().expect("metrics lock poisoned");
         let total: i64 = conn
             .query_row(
-                "SELECT COALESCE(SUM(amount), 0) FROM plat_ledger \
-                 WHERE amount > 0 AND timestamp >= ?1",
+                "SELECT COALESCE(SUM(amount), 0) FROM plat_ledger WHERE amount > 0 AND timestamp \
+                 >= ?1",
                 params![since_timestamp],
                 |row| row.get(0),
             )
@@ -334,8 +347,8 @@ impl MetricsStore {
         let conn = self.conn.lock().expect("metrics lock poisoned");
         let mut stmt = conn
             .prepare(
-                "SELECT id, timestamp, character, amount, balance, source, note \
-                 FROM plat_ledger WHERE character = ?1 ORDER BY id DESC LIMIT ?2",
+                "SELECT id, timestamp, character, amount, balance, source, note FROM plat_ledger \
+                 WHERE character = ?1 ORDER BY id DESC LIMIT ?2",
             )
             .context("Failed to prepare plat query")?;
         let rows = stmt

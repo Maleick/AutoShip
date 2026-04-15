@@ -11,7 +11,8 @@ const MODERATE_HP: f32 = 65.0;
 /// HP threshold for snare (fleeing mob prevention).
 const SNARE_HP: f32 = 20.0;
 
-/// Druid strategy: hybrid healer/nuker/snarer with resurrection and buff support.
+/// Druid strategy: hybrid healer/nuker/snarer with resurrection and buff
+/// support.
 ///
 /// Priority order (MQ2-style cascade):
 /// 0. Resurrect dead group members (out of combat, if rez spell available)
@@ -93,7 +94,8 @@ impl ClassStrategy for DruidStrategy {
     }
 
     fn select_target(&self, ctx: &CombatContext) -> Option<u32> {
-        // Rez targeting: don't override target — rez spell selection handles corpse targeting
+        // Rez targeting: don't override target — rez spell selection handles corpse
+        // targeting
         if !ctx.in_combat
             && self.dead_member(ctx).is_some()
             && self

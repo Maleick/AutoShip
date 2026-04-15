@@ -1,8 +1,8 @@
 //! EQ Internals panel — offset browser for compiled EQ memory offsets.
 //!
 //! Lists all known offsets from `OffsetDatabase::from_compiled_offsets()` in a
-//! scrollable table. Selecting an offset auto-scrolls the hex dump panel to that
-//! address. Category filter cycles with `c`, search with `/`.
+//! scrollable table. Selecting an offset auto-scrolls the hex dump panel to
+//! that address. Category filter cycles with `c`, search with `/`.
 
 use ratatui::{
     Frame,
@@ -13,8 +13,10 @@ use ratatui::{
 };
 
 use super::widgets::{panel, themed_header_row};
-use crate::tui::app::{ActivePanel, App};
-use crate::tui::state::OffsetCategory;
+use crate::tui::{
+    app::{ActivePanel, App},
+    state::OffsetCategory,
+};
 
 /// Draw the EQ Internals offset browser panel.
 pub fn draw_eq_internals_panel(frame: &mut Frame, area: Rect, app: &mut App) {

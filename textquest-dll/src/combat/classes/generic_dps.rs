@@ -60,8 +60,7 @@ impl ClassStrategy for GenericDpsStrategy {
 mod tests {
     use super::*;
     use crate::combat::strategy::CombatContext;
-    use textquest_common::combat::CombatConfig;
-    use textquest_common::types::SpawnData;
+    use textquest_common::{combat::CombatConfig, types::SpawnData};
 
     fn make_ctx<'a>(
         player: &'a SpawnData,

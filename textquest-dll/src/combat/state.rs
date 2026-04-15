@@ -2,30 +2,35 @@
 //!
 //! Each injected DLL runs one `Combatant` that drives a single EQ character
 //! through the Idle → Engaging → Casting → `OnGcd` → Engaging loop, with
-//! `HolyShit` emergency overrides evaluated every tick before the normal rotation.
+//! `HolyShit` emergency overrides evaluated every tick before the normal
+//! rotation.
 
-use std::collections::HashMap;
-use std::sync::atomic::Ordering;
+use std::{collections::HashMap, sync::atomic::Ordering};
 
-use textquest_common::combat::{
-    ActionType, CastResult, CombatConfig, CombatRole, CombatStatus, HolyShitAction, ResolvedAbility,
+use textquest_common::{
+    combat::{
+        ActionType, CastResult, CombatConfig, CombatRole, CombatStatus, HolyShitAction,
+        ResolvedAbility,
+    },
+    nav::Waypoint,
+    types::SpawnData,
 };
-use textquest_common::nav::Waypoint;
-use textquest_common::types::SpawnData;
 
-use super::ability_cooldowns::AbilityCooldownTracker;
-use super::dot_tracker::DotTracker;
-use super::gcd::GcdTracker;
-use super::holyshit::HolyShitEvaluator;
-use super::humanize::CombatPersonality;
-use super::mana::ManaGovernor;
-use super::rotation::{self, RotationGroup};
-use super::skill_cooldowns::{SkillCooldownTracker, default_cooldown};
-use super::strategy::{
-    ClassStrategy, CombatContext, GroupMemberState, PetAction, PetStatus, build_strategy,
-    pet_attack_focused, pet_back_off,
+use super::{
+    ability_cooldowns::AbilityCooldownTracker,
+    dot_tracker::DotTracker,
+    gcd::GcdTracker,
+    holyshit::HolyShitEvaluator,
+    humanize::CombatPersonality,
+    mana::ManaGovernor,
+    rotation::{self, RotationGroup},
+    skill_cooldowns::{SkillCooldownTracker, default_cooldown},
+    strategy::{
+        ClassStrategy, CombatContext, GroupMemberState, PetAction, PetStatus, build_strategy,
+        pet_attack_focused, pet_back_off,
+    },
+    toon_config,
 };
-use super::toon_config;
 
 /// Maximum spell range in EQ units. Spells beyond this distance will not fire.
 const MAX_SPELL_RANGE: f32 = 200.0;
@@ -137,8 +142,9 @@ fn plan_spell_cast(
 
 /// Build a safe `/useitem` slash command for an item name.
 ///
-/// EQ item names commonly contain spaces, so they are quoted. Quotes and control
-/// characters are stripped to avoid malformed commands or command injection.
+/// EQ item names commonly contain spaces, so they are quoted. Quotes and
+/// control characters are stripped to avoid malformed commands or command
+/// injection.
 fn use_item_command(item_name: &str) -> Option<String> {
     let sanitized = item_name
         .chars()
@@ -152,7 +158,8 @@ fn use_item_command(item_name: &str) -> Option<String> {
     }
 }
 
-/// Stable key for tracking item-action retry windows in the ability cooldown map.
+/// Stable key for tracking item-action retry windows in the ability cooldown
+/// map.
 ///
 /// `ActionType::Item` currently carries only a display string, so the runtime
 /// needs a deterministic surrogate key to reuse the existing integer-keyed
@@ -243,7 +250,8 @@ pub struct Combatant {
     /// via `status()` (which returns `CombatStatus::Fleeing`) to know it
     /// should send a flee waypoint to the navigator.
     flee_requested: bool,
-    /// True when we just entered Engaging state — triggers `on_engage` callback.
+    /// True when we just entered Engaging state — triggers `on_engage`
+    /// callback.
     needs_on_engage: bool,
     /// Group member snapshots, populated by the orchestrator via IPC.
     /// Required for healer strategies (cleric, druid, shaman) to select
@@ -363,8 +371,8 @@ impl Combatant {
 
     /// Resolve ability sets for this character's known spells and level.
     ///
-    /// Called by the orchestrator when the spell book scan completes (post-login
-    /// or on level-up).
+    /// Called by the orchestrator when the spell book scan completes
+    /// (post-login or on level-up).
     pub fn resolve_abilities(
         &mut self,
         known: &[textquest_common::combat::KnownAbility],
@@ -393,7 +401,8 @@ impl Combatant {
     }
 
     /// Advance the combat FSM by one frame (~50ms, ~20/sec).
-    /// Note: an EQ "game tick" is 6 seconds (~120 frames); this runs every frame.
+    /// Note: an EQ "game tick" is 6 seconds (~120 frames); this runs every
+    /// frame.
     pub fn tick(&mut self, player: &SpawnData, target: Option<&SpawnData>, nearby: &[SpawnData]) {
         self.try_load_toon_actions(player);
         self.tick_count += 1;
@@ -421,7 +430,8 @@ impl Combatant {
         ) && target.is_none()
         {
             tracing::warn!("Combat target lost (zone/despawn/disconnect) — auto-disengaging");
-            // If we were mid-cast, notify the strategy this was an interrupt (not completion)
+            // If we were mid-cast, notify the strategy this was an interrupt (not
+            // completion)
             if let CombatState::Casting {
                 spell_slot,
                 spell_id,
@@ -1013,7 +1023,8 @@ impl Combatant {
 
     /// Begin combat against a specific target.
     /// Issues `/face` to turn toward the target (melee misses without facing),
-    /// `/pet attack` for pet classes, and immediate taunt for tanks without aggro.
+    /// `/pet attack` for pet classes, and immediate taunt for tanks without
+    /// aggro.
     pub fn engage(&mut self, target_id: u32) {
         tracing::info!(target_id, "Engaging target");
 
@@ -1083,9 +1094,9 @@ impl Combatant {
         self.state = CombatState::Idle;
     }
 
-    /// Update group member snapshots (called when the orchestrator sends group state).
-    /// Required for healer strategies to function — without this, healers have no
-    /// targets to evaluate.
+    /// Update group member snapshots (called when the orchestrator sends group
+    /// state). Required for healer strategies to function — without this,
+    /// healers have no targets to evaluate.
     pub fn set_group_members(&mut self, members: Vec<GroupMemberState>) {
         self.group_members = members;
     }
@@ -1095,12 +1106,14 @@ impl Combatant {
         self.flee_requested
     }
 
-    /// Clear the flee flag after the orchestrator has dispatched a flee waypoint.
+    /// Clear the flee flag after the orchestrator has dispatched a flee
+    /// waypoint.
     pub fn clear_flee_requested(&mut self) {
         self.flee_requested = false;
     }
 
-    /// Queue a cast outcome parsed from chat/system feedback for the current cast.
+    /// Queue a cast outcome parsed from chat/system feedback for the current
+    /// cast.
     pub fn observe_chat_message(&mut self, text: &str) -> Option<CastResult> {
         let result = CastResult::from_feedback_message(text)?;
         if matches!(self.state, CombatState::Casting { .. }) {
@@ -1213,10 +1226,11 @@ impl Combatant {
             1 => WARRIOR_MELEE_SKILLS,       // Warrior: taunt, kick
             3 => PALADIN_MELEE_SKILLS,       // Paladin: taunt, bash, kick
             5 => SHADOW_KNIGHT_MELEE_SKILLS, // Shadow Knight: taunt, bash, kick
-            7 => MONK_MELEE_SKILLS, // Monk: flying kick, round kick, tiger claw, eagle strike
-            9 => ROGUE_MELEE_SKILLS, // Rogue: backstab
+            7 => MONK_MELEE_SKILLS,          // Monk: flying kick, round kick, tiger claw, eagle
+            // strike
+            9 => ROGUE_MELEE_SKILLS,      // Rogue: backstab
             15 => BEASTLORD_MELEE_SKILLS, // Beastlord: kick, flying kick
-            _ => DEFAULT_MELEE_SKILLS, // Berserker / Generic: kick
+            _ => DEFAULT_MELEE_SKILLS,    // Berserker / Generic: kick
         };
 
         // Fire each skill independently when its cooldown is ready
@@ -1354,8 +1368,7 @@ impl Combatant {
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use crate::combat::ability_cooldowns::AbilityAvailability;
-    use crate::combat::rotation;
+    use crate::combat::{ability_cooldowns::AbilityAvailability, rotation};
     use textquest_common::combat::{ActionType, CastRetryPolicy, CombatConfig};
 
     fn test_config() -> CombatConfig {
@@ -2161,7 +2174,8 @@ mod tests {
 
     /// Verify that a retry attempt (retry_count > 0, ticks_remaining == 20,
     /// no pending result) consumes the GCD — confirming the re-issue path runs.
-    /// Also verifies that the spell_id stored in Casting state is preserved on retry.
+    /// Also verifies that the spell_id stored in Casting state is preserved on
+    /// retry.
     #[test]
     fn recast_retry_reissue_consumes_gcd_and_preserves_spell_id() {
         // max_tries=3 so retry is allowed, no backoff needed.

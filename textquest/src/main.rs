@@ -11,9 +11,9 @@ use tracing_subscriber::{EnvFilter, fmt};
     author,
     version,
     about = "TextQuest — EverQuest multibox controller",
-    long_about = "TextQuest is an EverQuest multibox controller with TUI dashboard, DLL injection,\n\
-                   navigation, combat automation, and web dashboard support.\n\n\
-                   Run without arguments to launch the TUI dashboard."
+    long_about = "TextQuest is an EverQuest multibox controller with TUI dashboard, DLL \
+                  injection,\nnavigation, combat automation, and web dashboard support.\n\nRun \
+                  without arguments to launch the TUI dashboard."
 )]
 #[command(propagate_version = true)]
 struct Args {
@@ -88,13 +88,14 @@ enum Commands {
         /// Login only accounts in this group number.
         #[arg(long)]
         group: Option<u32>,
-        /// EQ password (same for all accounts). Prefer the `TEXTQUEST_PASSWORD` env var —
-        /// CLI flags are visible in process listings (ps/Task Manager) and shell history.
+        /// EQ password (same for all accounts). Prefer the `TEXTQUEST_PASSWORD`
+        /// env var — CLI flags are visible in process listings (ps/Task
+        /// Manager) and shell history.
         #[arg(long, hide = true)]
         password: Option<String>,
         /// Master password for encrypted credential store. Prefer the
-        /// `TEXTQUEST_MASTER_PASSWORD` env var — CLI flags are visible in process
-        /// listings (ps/Task Manager) and shell history.
+        /// `TEXTQUEST_MASTER_PASSWORD` env var — CLI flags are visible in
+        /// process listings (ps/Task Manager) and shell history.
         #[arg(long, hide = true)]
         master_password: Option<String>,
         /// Spawn new EQ processes (default: use existing eqgame.exe processes)
@@ -181,7 +182,8 @@ enum Commands {
     Calibrate,
 
     // ── Orchestration ─────────────────────────────────────────────────
-    /// Run the orchestrator event loop (health checks, launch coordinator, camp loop)
+    /// Run the orchestrator event loop (health checks, launch coordinator, camp
+    /// loop)
     Orchestrate,
 
     // ── Configuration ─────────────────────────────────────────────────
@@ -203,7 +205,8 @@ enum Commands {
 enum NavMeshAction {
     /// Redownload and validate the zone navmesh cache
     Reload {
-        /// Zone short name (for example `gfaydark`). Omit with `--pid` to use the live client's zone.
+        /// Zone short name (for example `gfaydark`). Omit with `--pid` to use
+        /// the live client's zone.
         zone: Option<String>,
         /// Resolve the zone from a live injected client
         #[arg(long)]
@@ -211,9 +214,11 @@ enum NavMeshAction {
     },
     /// Print cache and live navigator diagnostics for a zone
     Diagnostics {
-        /// Zone short name (for example `gfaydark`). Omit with `--pid` to use the live client's zone.
+        /// Zone short name (for example `gfaydark`). Omit with `--pid` to use
+        /// the live client's zone.
         zone: Option<String>,
-        /// Resolve the zone from a live injected client and query its navigator state
+        /// Resolve the zone from a live injected client and query its navigator
+        /// state
         #[arg(long)]
         pid: Option<u32>,
     },
@@ -238,7 +243,8 @@ enum CredentialAction {
         /// Account name (e.g., "Frostreaver01")
         account: String,
         /// Account password (non-interactive mode; omit to be prompted).
-        /// WARNING: CLI flags are visible in process listings — prefer interactive prompt.
+        /// WARNING: CLI flags are visible in process listings — prefer
+        /// interactive prompt.
         #[arg(long, hide = true)]
         password: Option<String>,
         /// Master password (non-interactive mode; omit to be prompted).

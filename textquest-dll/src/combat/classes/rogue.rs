@@ -2,8 +2,8 @@ use textquest_common::combat::{CombatRole, SpellEntry};
 
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
-/// Rogue strategy: melee DPS, backstab priority, uses configured spells + `UseSkill` for backstab.
-/// EQ class ID: 9
+/// Rogue strategy: melee DPS, backstab priority, uses configured spells +
+/// `UseSkill` for backstab. EQ class ID: 9
 pub struct RogueStrategy {
     class_id: u8,
 }
@@ -56,8 +56,10 @@ impl ClassStrategy for RogueStrategy {
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::{CombatConfig, SpellEntry};
-    use textquest_common::types::SpawnData;
+    use textquest_common::{
+        combat::{CombatConfig, SpellEntry},
+        types::SpawnData,
+    };
 
     fn test_config() -> CombatConfig {
         CombatConfig::default()

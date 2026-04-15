@@ -1,24 +1,31 @@
 //! IPC between the injected DLL and the TextQuest orchestrator.
 //!
 //! Provides two channels:
-//! - **Shared memory** (`SharedStateWriter`): DLL publishes `GameState` each tick
-//! - **Named pipe** (`CommandListener`): orchestrator sends `Command`s, DLL replies
+//! - **Shared memory** (`SharedStateWriter`): DLL publishes `GameState` each
+//!   tick
+//! - **Named pipe** (`CommandListener`): orchestrator sends `Command`s, DLL
+//!   replies
 //!
-//! The listener runs on a background thread. Received commands are buffered in a
-//! channel and drained each game tick via `poll_commands()`.
+//! The listener runs on a background thread. Received commands are buffered in
+//! a channel and drained each game tick via `poll_commands()`.
 
 pub mod pipe;
 pub mod shared;
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
-use std::thread;
+use std::{
+    sync::{
+        Mutex, OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+};
 
-use textquest_common::ipc::{Command, IpcCommand, IpcResponse, Response, SessionToken};
-use textquest_common::types::{ClientId, SharedStateFrame};
+use textquest_common::{
+    ipc::{Command, IpcCommand, IpcResponse, Response, SessionToken},
+    types::{ClientId, SharedStateFrame},
+};
 
-use self::pipe::CommandListener;
-use self::shared::SharedStateWriter;
+use self::{pipe::CommandListener, shared::SharedStateWriter};
 
 /// Shared memory writer, created once at IPC start.
 static SHARED_WRITER: OnceLock<Mutex<SharedStateWriter>> = OnceLock::new();
@@ -37,8 +44,8 @@ pub fn is_running() -> bool {
 /// Start IPC: shared memory writer + command listener thread.
 ///
 /// `client_id` identifies this EQ client instance. `token` is the session token
-/// generated at injection time; the orchestrator must present it when connecting
-/// to the command pipe.
+/// generated at injection time; the orchestrator must present it when
+/// connecting to the command pipe.
 pub fn start(client_id: ClientId, token: SessionToken) -> Result<(), Box<dyn std::error::Error>> {
     if IPC_RUNNING.load(Ordering::SeqCst) {
         tracing::warn!(client_id, "IPC already running, ignoring duplicate start");
@@ -129,8 +136,8 @@ static PENDING_RESPONSES: OnceLock<Mutex<Vec<Response>>> = OnceLock::new();
 
 /// Dedicated buffer for chat messages captured by the `dsp_chat` HWBP hook.
 ///
-/// Kept separate from `PENDING_RESPONSES` so that `PollPackets` does not consume
-/// chat messages and `PollChat` does not consume packet events.
+/// Kept separate from `PENDING_RESPONSES` so that `PollPackets` does not
+/// consume chat messages and `PollChat` does not consume packet events.
 static PENDING_CHAT: OnceLock<Mutex<Vec<textquest_common::ipc::ChatMessageInfo>>> = OnceLock::new();
 
 /// Maximum number of chat messages retained in `PENDING_CHAT` before oldest
@@ -168,7 +175,8 @@ pub fn send_response(response: Response) {
 /// Enqueue a captured chat message into the dedicated chat buffer.
 ///
 /// Called from the `dsp_chat` HWBP callback on every in-game chat event.
-/// Messages stored here are returned by `Command::PollChat` / `Response::ChatBatch`.
+/// Messages stored here are returned by `Command::PollChat` /
+/// `Response::ChatBatch`.
 ///
 /// Skips buffering when IPC is not running. Enforces a retention cap of
 /// [`MAX_PENDING_CHAT`] entries; oldest messages are dropped when the cap is
@@ -229,10 +237,12 @@ pub fn drain_spawn_responses() -> Vec<textquest_common::ipc::SpawnEvent> {
     spawn_events
 }
 
-/// Drain only `PacketEvent` responses from `PENDING_RESPONSES`, leaving all other
-/// response variants (e.g. `NavSignals`, `ContainerSlots`) intact in the queue.
+/// Drain only `PacketEvent` responses from `PENDING_RESPONSES`, leaving all
+/// other response variants (e.g. `NavSignals`, `ContainerSlots`) intact in the
+/// queue.
 ///
-/// This prevents `PollPackets` from silently discarding unrelated queued responses.
+/// This prevents `PollPackets` from silently discarding unrelated queued
+/// responses.
 pub fn drain_packet_responses() -> Vec<textquest_common::ipc::PacketEventInfo> {
     let Some(pending) = PENDING_RESPONSES.get() else {
         return Vec::new();
@@ -266,7 +276,8 @@ pub fn drain_packet_responses() -> Vec<textquest_common::ipc::PacketEventInfo> {
     packet_events
 }
 
-/// Drain pending chat messages. Called by the IPC listener for `Command::PollChat`.
+/// Drain pending chat messages. Called by the IPC listener for
+/// `Command::PollChat`.
 pub fn drain_chat_messages() -> Vec<textquest_common::ipc::ChatMessageInfo> {
     let Some(pending) = PENDING_CHAT.get() else {
         return Vec::new();

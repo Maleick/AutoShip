@@ -1,11 +1,14 @@
-//! Import a local Ghidra JSON cache into the runtime/debug GhidraDatabase (SQLite).
+//! Import a local Ghidra JSON cache into the runtime/debug GhidraDatabase
+//! (SQLite).
 //!
 //! Usage: import_ghidra [DB_PATH] [JSON_DIR]
 //!   DB_PATH  — SQLite cache path (default: data/ghidra.db)
-//!   JSON_DIR — Directory containing local Ghidra export cache files (default: data/ghidra-export/)
+//!   JSON_DIR — Directory containing local Ghidra export cache files (default:
+//! data/ghidra-export/)
 //!
 //! Immutable manifests and snapshot evidence stay canonical in the sibling
-//! `Maleick/TextQuest-Ghidra` repo; this tool only hydrates local runtime/debug state.
+//! `Maleick/TextQuest-Ghidra` repo; this tool only hydrates local runtime/debug
+//! state.
 
 use std::path::{Path, PathBuf};
 

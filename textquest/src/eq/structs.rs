@@ -1,5 +1,4 @@
-use std::borrow::Cow;
-use std::fmt;
+use std::{borrow::Cow, fmt};
 
 use textquest_common::offsets::launch_spell_data;
 
@@ -266,7 +265,8 @@ impl BuffSlot {
 pub struct SpellSlot {
     /// Slot index in the backing EQ array.
     ///
-    /// Spell gems use zero-based slot indices; spellbook entries use book-slot indices.
+    /// Spell gems use zero-based slot indices; spellbook entries use book-slot
+    /// indices.
     pub slot: usize,
     /// Spell ID stored in this slot.
     pub spell_id: u32,
@@ -291,7 +291,8 @@ impl SpellSlot {
 }
 
 /// Active spell cast state for a spawn.
-/// Backed by `PlayerZoneClient::CastingData`; local spawns may also include gem timers.
+/// Backed by `PlayerZoneClient::CastingData`; local spawns may also include gem
+/// timers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CastDurationSource {
     /// No trustworthy total cast duration is currently available.
@@ -306,7 +307,8 @@ pub enum CastDurationSource {
 }
 
 impl CastDurationSource {
-    /// Returns `true` when the total cast duration is exact for the live cast in progress.
+    /// Returns `true` when the total cast duration is exact for the live cast
+    /// in progress.
     #[must_use]
     pub fn is_exact(self) -> bool {
         matches!(self, Self::ExactRuntime)
@@ -327,13 +329,16 @@ pub struct CastState {
     pub item_id: i32,
     /// Active gem slot (0-based). `0xFF` = not currently using a spell gem.
     pub spell_slot: u8,
-    /// Remaining cast time in milliseconds, if the display timestamp was available.
+    /// Remaining cast time in milliseconds, if the display timestamp was
+    /// available.
     pub remaining_ms: Option<u32>,
     /// Total cast duration in milliseconds, when the backend can determine one.
     pub total_cast_ms: Option<u32>,
-    /// Where `total_cast_ms` came from. This lets UI code avoid false precision.
+    /// Where `total_cast_ms` came from. This lets UI code avoid false
+    /// precision.
     pub duration_source: CastDurationSource,
-    /// Per-gem recast timestamps (15 entries, 0 = ready) for the local player only.
+    /// Per-gem recast timestamps (15 entries, 0 = ready) for the local player
+    /// only.
     pub gem_etas: Option<[u32; 15]>,
 }
 
@@ -344,7 +349,8 @@ impl CastState {
         self.spell_id != launch_spell_data::NOT_CASTING_SPELL_ID
     }
 
-    /// Active spell gem number (1-based), if the cast is coming from a memorized gem.
+    /// Active spell gem number (1-based), if the cast is coming from a
+    /// memorized gem.
     #[must_use]
     pub fn spell_gem(&self) -> Option<u8> {
         if self.is_casting() && self.spell_slot != launch_spell_data::NOT_CASTING_SPELL_SLOT {
@@ -374,7 +380,8 @@ impl CastState {
         }
     }
 
-    /// Elapsed cast time in milliseconds, if both total and remaining durations are known.
+    /// Elapsed cast time in milliseconds, if both total and remaining durations
+    /// are known.
     #[must_use]
     pub fn cast_time_elapsed_ms(&self) -> Option<u32> {
         let total_ms = self.cast_time_total_ms()?;
@@ -382,7 +389,8 @@ impl CastState {
         Some(total_ms.saturating_sub(remaining_ms))
     }
 
-    /// Normalized cast progress from `0.0` to `1.0`, if both total and remaining are known.
+    /// Normalized cast progress from `0.0` to `1.0`, if both total and
+    /// remaining are known.
     #[must_use]
     pub fn cast_progress(&self) -> Option<f64> {
         let total_ms = self.cast_time_total_ms()?;
@@ -468,13 +476,15 @@ pub struct SpawnInfo {
     pub is_gm: bool,
     /// Race ID from `ActorClient` (e.g., Human=1, Barbarian=2, etc.)
     pub race_id: u32,
-    /// Active buff slots (populated only for local player via `read_buff_slots`).
+    /// Active buff slots (populated only for local player via
+    /// `read_buff_slots`).
     pub buff_slots: Vec<BuffSlot>,
     /// Scribed spellbook entries (populated only for the local player).
     pub spellbook: Vec<SpellSlot>,
     /// Currently memorized spell gems (populated only for the local player).
     pub memorized_spells: Vec<SpellSlot>,
-    /// Cast state for this spawn. Local player snapshots also include gem recast timers.
+    /// Cast state for this spawn. Local player snapshots also include gem
+    /// recast timers.
     pub cast_state: Option<CastState>,
 }
 
@@ -505,7 +515,8 @@ impl SpawnInfo {
         self.class_label().into_owned()
     }
 
-    /// Returns the short class label, borrowing known class names to avoid allocation.
+    /// Returns the short class label, borrowing known class names to avoid
+    /// allocation.
     #[must_use]
     pub fn class_label(&self) -> Cow<'static, str> {
         self.class.as_ref().map_or_else(

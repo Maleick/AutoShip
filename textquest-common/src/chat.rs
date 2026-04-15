@@ -1,19 +1,22 @@
 //! Chat event types and STML parsing utilities.
 //!
-//! This module provides the shared `ChatChannel` and `ChatEvent` types used by both the
-//! injected DLL (to produce structured events from `dsp_chat` intercepts) and the
-//! external orchestrator (to consume them from IPC and log files).
+//! This module provides the shared `ChatChannel` and `ChatEvent` types used by
+//! both the injected DLL (to produce structured events from `dsp_chat`
+//! intercepts) and the external orchestrator (to consume them from IPC and log
+//! files).
 //!
 //! # STML stripping
 //!
-//! EverQuest uses a simple markup language (STML) for in-game text with tags like
-//! `<BR>`, `<c "#FF0000">`, and `</c>`.  [`strip_stml`] removes all such sequences and
-//! collapses whitespace so that downstream parsers see plain ASCII.
+//! EverQuest uses a simple markup language (STML) for in-game text with tags
+//! like `<BR>`, `<c "#FF0000">`, and `</c>`.  [`strip_stml`] removes all such
+//! sequences and collapses whitespace so that downstream parsers see plain
+//! ASCII.
 //!
 //! # Chat parsing
 //!
-//! [`parse_chat_text`] accepts a raw `dsp_chat` string (with or without STML tags),
-//! strips markup, and pattern-matches the EQ verb syntax to produce a [`ChatEvent`].
+//! [`parse_chat_text`] accepts a raw `dsp_chat` string (with or without STML
+//! tags), strips markup, and pattern-matches the EQ verb syntax to produce a
+//! [`ChatEvent`].
 
 /// EQ chat channel.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -38,7 +41,8 @@ pub enum ChatChannel {
     Auction,
 }
 
-/// A structured chat message extracted from EQ `dsp_chat` output or a log file line.
+/// A structured chat message extracted from EQ `dsp_chat` output or a log file
+/// line.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChatEvent {
     /// Which chat channel this message was on.
@@ -51,9 +55,10 @@ pub struct ChatEvent {
 
 /// Strip STML/HTML-like markup tags from EQ text.
 ///
-/// EQ uses a simple markup language (STML) for in-game and dialog text with tags like
-/// `<BR>`, `<c "#FF0000">`, and `</c>`.  This function removes all `<…>` sequences and
-/// collapses runs of whitespace so that downstream parsers see plain ASCII.
+/// EQ uses a simple markup language (STML) for in-game and dialog text with
+/// tags like `<BR>`, `<c "#FF0000">`, and `</c>`.  This function removes all
+/// `<…>` sequences and collapses runs of whitespace so that downstream parsers
+/// see plain ASCII.
 ///
 /// # Examples
 ///
@@ -80,7 +85,8 @@ pub fn strip_stml(text: &str) -> String {
     result.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Parse raw `dsp_chat` text (possibly STML-tagged) into a structured [`ChatEvent`].
+/// Parse raw `dsp_chat` text (possibly STML-tagged) into a structured
+/// [`ChatEvent`].
 ///
 /// The function first calls [`strip_stml`] to remove all markup tags, then
 /// pattern-matches the EQ verb syntax:
@@ -131,8 +137,8 @@ pub fn parse_chat_text(raw: &str) -> Option<ChatEvent> {
 
 /// Parse already-stripped (no STML tags) chat text into a [`ChatEvent`].
 ///
-/// This is the core parsing logic shared by [`parse_chat_text`] and the log-file
-/// parser (which has already stripped the EQ timestamp prefix).
+/// This is the core parsing logic shared by [`parse_chat_text`] and the
+/// log-file parser (which has already stripped the EQ timestamp prefix).
 pub fn parse_stripped_chat_text(text: &str) -> Option<ChatEvent> {
     // Tell out: "You told Soandso, 'message'"
     if let Some(rest) = text.strip_prefix("You told ")
@@ -198,9 +204,10 @@ pub fn parse_stripped_chat_text(text: &str) -> Option<ChatEvent> {
                 sender: sender.to_string(),
                 message: msg.to_string(),
             })
-        // Self-authored channel messages: EQ uses singular verb forms for the local player.
-        // These must be explicitly matched because the sender-prefix strip_suffix approach
-        // only works for third-person verbs (" says", " shouts", etc.).
+        // Self-authored channel messages: EQ uses singular verb forms for the
+        // local player. These must be explicitly matched because the
+        // sender-prefix strip_suffix approach only works for
+        // third-person verbs (" says", " shouts", etc.).
         } else if lhs == "You say" {
             Some(ChatEvent {
                 channel: ChatChannel::Say,
@@ -433,12 +440,14 @@ mod tests {
     fn parse_you_say_spoofed_cast_feedback_is_structured() {
         // This is the critical security test: a player saying a spoofed cast-feedback
         // phrase must be recognized as structured channel chat (not None), so that
-        // should_forward_to_combat returns false and it never reaches cast-outcome parsing.
+        // should_forward_to_combat returns false and it never reaches cast-outcome
+        // parsing.
         let ev =
             parse_chat_text("You say, 'You don\\'t have enough mana to cast this spell.'").unwrap();
         assert_eq!(ev.channel, ChatChannel::Say);
         assert_eq!(ev.sender, "You");
-        // The message body itself is irrelevant here — what matters is that `Some` is returned.
+        // The message body itself is irrelevant here — what matters is that
+        // `Some` is returned.
     }
 
     #[test]

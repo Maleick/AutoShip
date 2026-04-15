@@ -12,9 +12,17 @@
 - [Combat and Camp Loop](Combat-and-Camp-Loop)
 - [Navigation and Maps](Navigation-and-Maps)
 - [Login Automation](Login-Automation)
+- [Epic Quest Sequencing](Epic-Quest-Sequencing)
 - [Soul Engine](Soul-Engine)
 - [Configuration](Configuration)
+- [Web Dashboard Operator Console](Web-Dashboard-Operator-Console)
 - [Security and Anti-Detection Notes](Security-and-Anti-Detection-Notes)
+
+## Frostreaver Planning
+
+- [Frostreaver Farming & XP Guide](Frostreaver-Farming-Guide)
+- [Frostreaver Starting City Logistics](Frostreaver-Starting-City-Logistics)
+- [P99 Zone Guide](P99-Zone-Guide)
 
 ## Development
 
@@ -28,6 +36,7 @@
 ## Reporting
 
 - [Project Metrics](Project-Metrics)
+- [Frostreaver Cost Model](Frostreaver-Cost-Model)
 - [Troubleshooting](Troubleshooting)
 
 ## Research
@@ -37,6 +46,7 @@
 - [Automation Sources](Research-Automation-Sources)
 - [Cross-Client Control](Research-Cross-Client-Control)
 - [Daybreak Detection](Research-Daybreak-Detection)
+- [Dozekar Tear Quest Items](Research-Dozekar-Tear-Quest-Items)
 - [EQ Ability Packets](Research-EQ-Ability-Packets)
 - [EQ AntiCheat Notes](Research-EQ-AntiCheat-Notes)
 - [EQ INI Optimization](Research-EQ-INI-Optimization)
@@ -44,6 +54,10 @@
 - [EQ Network Architecture](Research-EQ-Network-Architecture)
 - [EQ Protocol](Research-EQ-Protocol)
 - [EQ Zoning System](Research-EQ-Zoning-System)
+- [Epic Character Sales](Research-Epic-Character-Sales)
+- [Enchanter Epic Quest](Research-Enchanter-Epic-Quest)
+- [Frostreaver Loot Tier Optimization](Research-Frostreaver-Loot-Tier-Optimization)
+- [Grey/Black Market Risk Assessment](Research-Grey-Black-Market-Risk-Assessment)
 - [Hells Gate](Research-Hells-Gate)
 - [JMB Relay Comparison](Research-JMB-Relay-Comparison)
 - [KissAssist Gap Analysis](Research-KissAssist-Gap-Analysis)

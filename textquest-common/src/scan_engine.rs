@@ -6,9 +6,11 @@
 //!
 //! See #746 (Auto Patch) for the roadmap.
 
-use crate::offset_db::OffsetDatabase;
-use crate::pattern_db::{OffsetCategory, ResolveMode, ScanEntry, ScanModule};
-use crate::scanner::Pattern;
+use crate::{
+    offset_db::OffsetDatabase,
+    pattern_db::{OffsetCategory, ResolveMode, ScanEntry, ScanModule},
+    scanner::Pattern,
+};
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -62,8 +64,8 @@ pub struct ScanReport {
 /// Check if a pattern string is a placeholder stub (all `CC` bytes).
 ///
 /// Placeholder patterns like `"CC CC CC CC CC CC CC CC"` would match the first
-/// `int3` padding run in any module, producing identical bogus results for every
-/// entry. The scan engine skips these to avoid misleading log output.
+/// `int3` padding run in any module, producing identical bogus results for
+/// every entry. The scan engine skips these to avoid misleading log output.
 fn is_placeholder_pattern(pattern: &str) -> bool {
     let mut tokens = pattern.split_whitespace();
     match tokens.next() {
@@ -78,15 +80,15 @@ fn is_placeholder_pattern(pattern: &str) -> bool {
 ///
 /// # Arguments
 ///
-/// * `data` — byte slice of the **full** module image starting at `module_base`.
-///   Both `Direct` and `RipRelative` resolution assume byte offset 0 in `data`
-///   corresponds to `module_base` (i.e. the image's DOS header). Passing a
-///   sub-section (e.g. `.text` only) will produce incorrect preferred-base
-///   addresses.
+/// * `data` — byte slice of the **full** module image starting at
+///   `module_base`. Both `Direct` and `RipRelative` resolution assume byte
+///   offset 0 in `data` corresponds to `module_base` (i.e. the image's DOS
+///   header). Passing a sub-section (e.g. `.text` only) will produce incorrect
+///   preferred-base addresses.
 /// * `module_base` — runtime virtual address of the module (e.g. the actual
 ///   base of eqgame.exe as returned by `GetModuleHandle`).
-/// * `preferred_base` — the compile-time preferred base of the module
-///   (e.g. `0x140000000` for eqgame.exe).
+/// * `preferred_base` — the compile-time preferred base of the module (e.g.
+///   `0x140000000` for eqgame.exe).
 /// * `module` — which module this scan targets (entries for other modules are
 ///   skipped).
 /// * `entries` — the full `SCAN_ENTRIES` slice; only entries whose `module`
@@ -235,15 +237,16 @@ pub const EXPECTED_CLIENT_DATE: &str = crate::offsets::CLIENT_DATE;
 
 /// Scan the module image for an EQ client date string.
 ///
-/// EQ embeds `__ActualVersionDate` as an ASCII string in the form `"MonthName DD YYYY"`
-/// (e.g., `"Mar 10 2026"`). This function scans for date-like patterns and returns
-/// a normalized `YYYYMMDD` string if found.
+/// EQ embeds `__ActualVersionDate` as an ASCII string in the form `"MonthName
+/// DD YYYY"` (e.g., `"Mar 10 2026"`). This function scans for date-like
+/// patterns and returns a normalized `YYYYMMDD` string if found.
 ///
 /// Returns `None` if no date string is found.
 #[must_use]
 pub fn detect_client_date(data: &[u8]) -> Option<String> {
     // EQ uses abbreviated month names in __ActualVersionDate.
-    // max_day is the maximum valid day for that month (Feb uses 29 to allow leap years).
+    // max_day is the maximum valid day for that month (Feb uses 29 to allow leap
+    // years).
     const MONTHS: &[(&[u8], &str, u32)] = &[
         (b"Jan", "01", 31),
         (b"Feb", "02", 29),
@@ -260,8 +263,9 @@ pub fn detect_client_date(data: &[u8]) -> Option<String> {
     ];
 
     // Scan for patterns like "Mon DD YYYY" (11 bytes) or "Mon  D YYYY" (11 bytes).
-    // We look for month abbreviations followed by a space, day digits, space, 4-digit year.
-    // Minimum date string is 11 bytes (e.g., "Jan  5 2026"), so iterate up to len-11.
+    // We look for month abbreviations followed by a space, day digits, space,
+    // 4-digit year. Minimum date string is 11 bytes (e.g., "Jan  5 2026"), so
+    // iterate up to len-11.
     for window_start in 0..data.len().saturating_sub(10) {
         for &(month_bytes, month_num, max_day) in MONTHS {
             if data[window_start..window_start + 3] != *month_bytes {

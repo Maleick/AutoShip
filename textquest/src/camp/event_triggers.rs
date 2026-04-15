@@ -1,4 +1,5 @@
-//! Event trigger system — configurable condition → action rules for game events.
+//! Event trigger system — configurable condition → action rules for game
+//! events.
 //!
 //! Inspired by MQ2Events (OpenVanilla parity). Users define triggers that fire
 //! actions when game events match their conditions.
@@ -19,13 +20,17 @@ pub enum GameEvent {
 /// Condition that must be satisfied for a trigger to fire.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TriggerCondition {
-    /// Fires when a spawn dies and its name contains the given substring (case-insensitive).
+    /// Fires when a spawn dies and its name contains the given substring
+    /// (case-insensitive).
     SpawnDeath { name_contains: String },
-    /// Fires when a specific player character dies (exact match, case-insensitive).
+    /// Fires when a specific player character dies (exact match,
+    /// case-insensitive).
     PlayerDeath { character: String },
-    /// Fires when a chat message contains the given pattern (case-insensitive substring).
+    /// Fires when a chat message contains the given pattern (case-insensitive
+    /// substring).
     ChatMessage { pattern: String },
-    /// Fires when a specific character levels up (exact match, case-insensitive).
+    /// Fires when a specific character levels up (exact match,
+    /// case-insensitive).
     LevelUp { character: String },
     /// Fires on any death event (spawn or player).
     AnyDeath,

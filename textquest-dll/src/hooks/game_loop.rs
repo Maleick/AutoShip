@@ -46,13 +46,15 @@ static WINDOW_IS_FOREGROUND: std::sync::atomic::AtomicBool =
 /// Track tick count for throttling background checks.
 static TICK_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Pending login button click — set by IPC thread, executed on game loop thread.
-/// Contains the `CXWnd`* address of the button to click, or 0 if none pending.
+/// Pending login button click — set by IPC thread, executed on game loop
+/// thread. Contains the `CXWnd`* address of the button to click, or 0 if none
+/// pending.
 static PENDING_BUTTON_CLICK: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
-/// Pending Enter World sequence — set by IPC thread, executed on game loop thread.
-/// Stage 0 = idle, 1 = `SelectCharacter` pending, 2 = waiting, 3 = `EnterWorld` pending.
+/// Pending Enter World sequence — set by IPC thread, executed on game loop
+/// thread. Stage 0 = idle, 1 = `SelectCharacter` pending, 2 = waiting, 3 =
+/// `EnterWorld` pending.
 static PENDING_ENTER_WORLD_WND: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 /// The rebased `EnterWorld` function address.
@@ -78,7 +80,8 @@ static PENDING_CHAR_NAME: std::sync::OnceLock<std::sync::Mutex<String>> =
 static CACHED_NEARBY_FOR_STICK: std::sync::Mutex<Vec<textquest_common::types::SpawnData>> =
     std::sync::Mutex::new(Vec::new());
 
-/// Previous nearby-spawn snapshot used for delta detection and spawn event emission.
+/// Previous nearby-spawn snapshot used for delta detection and spawn event
+/// emission.
 static PREV_NEARBY_SPAWNS: std::sync::OnceLock<
     std::sync::Mutex<std::collections::HashMap<u32, String>>,
 > = std::sync::OnceLock::new();
@@ -91,8 +94,9 @@ pub fn queue_button_click(button_wnd: usize) {
 
 /// Queue a `SelectCharacter` → EnterWorld() sequence on the game loop thread.
 /// Called from the IPC thread during Phase 3 of login chain.
-/// The game loop will: (1) find character index by name, (2) call SelectCharacter(index),
-/// (3) wait ~90 ticks (~3s), (4) call EnterWorld(). All calls happen on the game loop thread.
+/// The game loop will: (1) find character index by name, (2) call
+/// SelectCharacter(index), (3) wait ~90 ticks (~3s), (4) call EnterWorld(). All
+/// calls happen on the game loop thread.
 pub fn queue_enter_world(char_list_wnd: usize, enter_world_fn: usize, character_name: String) {
     // Also resolve SelectCharacter address
     let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
@@ -117,8 +121,9 @@ pub fn queue_enter_world(char_list_wnd: usize, enter_world_fn: usize, character_
 }
 
 /// Re-scan `CXWndManager` for `CCharacterListWnd` by `SidlText`.
-/// Used in Stage 3 to validate the pointer is still valid before calling `EnterWorld`,
-/// and by the login FSM to find the window for initial character selection.
+/// Used in Stage 3 to validate the pointer is still valid before calling
+/// `EnterWorld`, and by the login FSM to find the window for initial character
+/// selection.
 #[cfg(windows)]
 pub fn rescan_char_list_wnd() -> Option<usize> {
     use textquest_common::offsets::eqgame as eqg;
@@ -169,9 +174,10 @@ pub fn rescan_char_list_wnd() -> Option<usize> {
 
 /// Find the index of a character by name in the `Character_List` `CListWnd`.
 ///
-/// Walks the `CCharacterListWnd`'s child windows to find "`Character_List`" (a `CListWnd`),
-/// then reads each row's column 2 (character name) for a case-insensitive match.
-/// Returns the matched index, or 0 as fallback if the name is empty or not found.
+/// Walks the `CCharacterListWnd`'s child windows to find "`Character_List`" (a
+/// `CListWnd`), then reads each row's column 2 (character name) for a
+/// case-insensitive match. Returns the matched index, or 0 as fallback if the
+/// name is empty or not found.
 #[cfg(windows)]
 fn find_character_index(char_list_wnd: usize, character_name: &str) -> i32 {
     const MAX_CHARACTER_LIST_SCAN_ROWS: usize = 64;
@@ -308,8 +314,9 @@ pub fn queue_slash_command(command: String) {
 //               `CancelCastLoop` command.
 //
 // `recast` mode: cast N+1 times total with exponential backoff between
-//                attempts.  The backoff starts at `CAST_LOOP_BASE_BACKOFF_TICKS`
-//                and doubles each attempt, capped at `CAST_LOOP_MAX_BACKOFF_TICKS`.
+//                attempts.  The backoff starts at
+// `CAST_LOOP_BASE_BACKOFF_TICKS`                and doubles each attempt,
+// capped at `CAST_LOOP_MAX_BACKOFF_TICKS`.
 
 /// Base backoff between recast attempts (~0.4 s at 20 ticks/sec).
 const CAST_LOOP_BASE_BACKOFF_TICKS: u64 = 8;
@@ -372,8 +379,9 @@ impl CastingLoop {
         self.active = false;
     }
 
-    /// Execute one tick of the loop.  Queues a cast slash command if appropriate.
-    /// Returns `false` when the loop should be stopped (target dead, casts exhausted).
+    /// Execute one tick of the loop.  Queues a cast slash command if
+    /// appropriate. Returns `false` when the loop should be stopped (target
+    /// dead, casts exhausted).
     fn tick(&mut self, current_tick: u64, eq_base: u64) -> bool {
         if !self.active {
             return false;
@@ -586,9 +594,9 @@ fn parse_casting_command(command: &str) -> Option<Result<ParsedCastingCommand, S
     }
 
     let Some(cast_type) = cast_type else {
-        return Some(Err(
-            "missing cast type (expected gem#, item, or an item slot)".to_string(),
-        ));
+        return Some(Err("missing cast type (expected gem#, item, or an item \
+                         slot)"
+            .to_string()));
     };
 
     let cast_type_lower = cast_type.to_ascii_lowercase();
@@ -1287,7 +1295,8 @@ fn process_pending_commands(current_tick: u64) {
         }
     });
 
-    // Drop the lock before dispatching to avoid holding it during command execution.
+    // Drop the lock before dispatching to avoid holding it during command
+    // execution.
     drop(queue);
 
     for cmd in ready {
@@ -1317,7 +1326,8 @@ fn on_game_tick() {
         }
     }
 
-    // Rename window every 100 frames (~5 seconds) to "[TQ] EQ - CharName (ZoneName)".
+    // Rename window every 100 frames (~5 seconds) to "[TQ] EQ - CharName
+    // (ZoneName)".
     if tick % 100 == 5 {
         update_window_title();
     }
@@ -1340,7 +1350,8 @@ fn on_game_tick() {
         if !is_readable(button_addr, 8) {
             tracing::warn!(
                 ptr = format!("{:#x}", button_addr),
-                "Pending button click target is no longer readable — skipping (window may have been destroyed)"
+                "Pending button click target is no longer readable — skipping (window may have \
+                 been destroyed)"
             );
         } else {
             tracing::info!(
@@ -1577,9 +1588,11 @@ fn on_game_tick() {
 /// Used at character select to click "Enter World".
 #[cfg(windows)]
 pub fn send_enter_to_eq() {
-    use windows::Win32::Foundation::{BOOL, HWND, LPARAM, WPARAM};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowThreadProcessId, IsWindowVisible, PostMessageW,
+    use windows::Win32::{
+        Foundation::{BOOL, HWND, LPARAM, WPARAM},
+        UI::WindowsAndMessaging::{
+            EnumWindows, GetWindowThreadProcessId, IsWindowVisible, PostMessageW,
+        },
     };
 
     let our_pid = std::process::id();
@@ -1587,7 +1600,8 @@ pub fn send_enter_to_eq() {
 
     // SAFETY: This callback is only invoked by EnumWindows below, which passes
     // our `data` pointer as LPARAM. The cast back to (u32, *mut isize) is valid
-    // because we control the LPARAM value. HWND is always valid within the callback.
+    // because we control the LPARAM value. HWND is always valid within the
+    // callback.
     #[allow(unsafe_op_in_unsafe_fn)]
     unsafe extern "system" fn find_eq_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
         let data = &mut *(lparam.0 as *mut (u32, *mut isize));
@@ -1603,7 +1617,8 @@ pub fn send_enter_to_eq() {
     let mut data = (our_pid, &mut target_hwnd as *mut isize);
     // SAFETY: EnumWindows calls find_eq_window for each top-level window.
     // `data` lives on the stack and outlives the synchronous EnumWindows call.
-    // The LPARAM cast is valid because we cast it back to the same type in the callback.
+    // The LPARAM cast is valid because we cast it back to the same type in the
+    // callback.
     unsafe {
         let _ = EnumWindows(Some(find_eq_window), LPARAM(&mut data as *mut _ as isize));
     }
@@ -1635,9 +1650,10 @@ pub fn send_enter_to_eq() {}
 /// Local player + target are read every tick (fast — just pointer derefs).
 /// Nearby spawns are read every 30 ticks (~1 second) to reduce overhead.
 ///
-/// Uses a cached `GameState` to avoid cloning ~100 `SpawnData` (each with 2 String
-/// heap allocations) on the 29/30 ticks where spawns haven't changed. Only the
-/// cheap fields (player, target, timestamp, nav/combat status) are updated in place.
+/// Uses a cached `GameState` to avoid cloning ~100 `SpawnData` (each with 2
+/// String heap allocations) on the 29/30 ticks where spawns haven't changed.
+/// Only the cheap fields (player, target, timestamp, nav/combat status) are
+/// updated in place.
 fn read_and_publish_state(tick: u64) {
     let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
     if eq_base == 0 {
@@ -1653,9 +1669,10 @@ fn read_and_publish_state(tick: u64) {
     // Read target (every tick).
     let target = read_target_state(eq_base);
 
-    // Cache the entire GameState to avoid cloning the spawn Vec on non-refresh ticks.
-    // On refresh ticks (every 30): rebuild spawns + all fields.
-    // On other ticks: update only cheap fields in place (no heap allocations for spawns).
+    // Cache the entire GameState to avoid cloning the spawn Vec on non-refresh
+    // ticks. On refresh ticks (every 30): rebuild spawns + all fields.
+    // On other ticks: update only cheap fields in place (no heap allocations for
+    // spawns).
     static CACHED_STATE: Mutex<Option<textquest_common::types::GameState>> = Mutex::new(None);
     static SPAWN_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
@@ -1689,7 +1706,8 @@ fn read_and_publish_state(tick: u64) {
             }
         }
 
-        // Update cached nearby spawns for the stick engine (accessed by nav::tick each frame).
+        // Update cached nearby spawns for the stick engine (accessed by nav::tick each
+        // frame).
         if let Ok(mut cached_nearby) = CACHED_NEARBY_FOR_STICK.lock() {
             cached_nearby.clone_from(&spawns);
         }
@@ -1776,7 +1794,8 @@ fn compute_spawn_delta_events(
     (next, events)
 }
 
-/// Check whether `addr` points to at least `len` bytes of readable committed memory.
+/// Check whether `addr` points to at least `len` bytes of readable committed
+/// memory.
 ///
 /// Uses `VirtualQuery` to verify the page is committed and readable before we
 /// dereference it. Returns `false` for null, misaligned, or unmapped addresses.
@@ -1827,7 +1846,8 @@ pub(crate) fn is_readable(_addr: usize, _len: usize) -> bool {
     true
 }
 
-/// Read a null-terminated string from an in-process address into a stack buffer.
+/// Read a null-terminated string from an in-process address into a stack
+/// buffer.
 ///
 /// Uses a fixed 128-byte stack buffer (sufficient for EQ name/zone fields) to
 /// avoid per-call heap allocations on the hot path. Only allocates a `String`
@@ -1917,8 +1937,8 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> textquest_common::types::SpawnDat
     let z = unsafe { *((spawn_ptr + player_base::Z) as *const f32) };
     let heading = unsafe { *((spawn_ptr + player_base::HEADING) as *const f32) };
 
-    // Diagnostic: log once if position looks suspicious (near-zero with valid name).
-    // Log metadata only (never raw process memory or addresses).
+    // Diagnostic: log once if position looks suspicious (near-zero with valid
+    // name). Log metadata only (never raw process memory or addresses).
     {
         use std::sync::atomic::{AtomicU64, Ordering};
         static DIAG_TICK: AtomicU64 = AtomicU64::new(0);
@@ -2145,8 +2165,7 @@ fn current_time_ms() -> u64 {
 fn update_foreground_status() {
     #[cfg(windows)]
     {
-        use windows::Win32::Foundation::HWND;
-        use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+        use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::GetForegroundWindow};
 
         // SAFETY: GetForegroundWindow and GetWindowThreadProcessId are always
         // safe Win32 calls. GetForegroundWindow returns NULL if no window is
@@ -2180,7 +2199,8 @@ pub fn is_foreground() -> bool {
 }
 
 /// Read character name + zone name from EQ memory and set the window title
-/// to "[TQ] EQ - `CharName` (`ZoneName`)" so the orchestrator can identify clients by PID.
+/// to "[TQ] EQ - `CharName` (`ZoneName`)" so the orchestrator can identify
+/// clients by PID.
 fn update_window_title() {
     #[cfg(windows)]
     {
@@ -2201,7 +2221,8 @@ fn update_window_title() {
             .or_else(|| read_zone_short_name(eq_base))
             .unwrap_or_default();
 
-        // Build title: "[TQ] EQ - CharName (ZoneName)" or "[TQ] EQ - CharName" if no zone.
+        // Build title: "[TQ] EQ - CharName (ZoneName)" or "[TQ] EQ - CharName" if no
+        // zone.
         let title = if zone_name.is_empty() {
             tracing::trace!(char_name = %char_name, "Zone name empty — title without zone");
             format!("[TQ] EQ - {char_name}\0")
@@ -2264,7 +2285,8 @@ fn read_zone_short_name(_eq_base: u64) -> Option<String> {
     None
 }
 
-/// Read the zone long name (char[128]) from instEQZoneInfo (e.g., "West Freeport").
+/// Read the zone long name (char[128]) from instEQZoneInfo (e.g., "West
+/// Freeport").
 #[cfg(windows)]
 fn read_zone_long_name(eq_base: u64) -> Option<String> {
     use textquest_common::offsets::zone_info;
@@ -2289,11 +2311,15 @@ fn read_zone_long_name(_eq_base: u64) -> Option<String> {
 /// Set the window title for all top-level windows belonging to the given PID.
 #[cfg(windows)]
 fn set_window_title_for_pid(pid: u32, title: &str) {
-    use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowThreadProcessId, IsWindowVisible, SetWindowTextA,
+    use windows::{
+        Win32::{
+            Foundation::{BOOL, HWND, LPARAM},
+            UI::WindowsAndMessaging::{
+                EnumWindows, GetWindowThreadProcessId, IsWindowVisible, SetWindowTextA,
+            },
+        },
+        core::PCSTR,
     };
-    use windows::core::PCSTR;
 
     // We use a simple callback that captures our PID + title via LPARAM.
     struct CallbackData {
@@ -2650,14 +2676,16 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             }
         }
         Command::NavDoor => {
-            // Navigate to nearest door: use /doortarget to select it, then navigate to target.
-            // Full DoorsManager-based position lookup is an M7 feature requiring
-            // additional offsets for EQSwitch/DoorsManager memory layout.
+            // Navigate to nearest door: use /doortarget to select it, then navigate to
+            // target. Full DoorsManager-based position lookup is an M7 feature
+            // requiring additional offsets for EQSwitch/DoorsManager memory
+            // layout.
             tracing::info!("NavDoor received — queuing /doortarget for nearest door");
             queue_slash_command("/doortarget".to_string());
-            // After /doortarget, the door becomes the active door target (not PINST_TARGET),
-            // so NavTarget-style coordinate navigation is not directly available here.
-            // For now, issue InteractDoor to open the nearest door in place.
+            // After /doortarget, the door becomes the active door target (not
+            // PINST_TARGET), so NavTarget-style coordinate navigation is not
+            // directly available here. For now, issue InteractDoor to open the
+            // nearest door in place.
             interact_with_door();
         }
         Command::NavItem => {
@@ -2750,6 +2778,12 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
             let slots = crate::eq::inventory::query_open_container_slots(eq_base, &filter);
             crate::ipc::send_response(textquest_common::ipc::Response::ContainerSlots { slots });
+        }
+        Command::QueryBazaarResults { filter } => {
+            tracing::info!(?filter, "QueryBazaarResults received");
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
+            let windows = crate::eq::bazaar::query_bazaar_results(eq_base, &filter);
+            crate::ipc::send_response(textquest_common::ipc::Response::BazaarResults { windows });
         }
         Command::QueryContextMenu => {
             tracing::info!("QueryContextMenu received");
@@ -2951,8 +2985,9 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                     // so they execute in order on successive game frames.
                     queue_slash_command(format!("/target id {tid}"));
                     queue_slash_command(format!("/cast {spell_slot}"));
-                    // Note: target restore after cast completion is the orchestrator's
-                    // responsibility — it knows who the original target was and can
+                    // Note: target restore after cast completion is the
+                    // orchestrator's responsibility — it
+                    // knows who the original target was and can
                     // send a follow-up /target command when the cast finishes.
                 } else {
                     // Cast on current target, no swap needed.
@@ -3023,8 +3058,9 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             let bytes_read = {
                 #[cfg(windows)]
                 {
-                    use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
-                    use windows::Win32::System::Threading::GetCurrentProcess;
+                    use windows::Win32::System::{
+                        Diagnostics::Debug::ReadProcessMemory, Threading::GetCurrentProcess,
+                    };
                     let mut bytes_read = 0usize;
                     let _ = unsafe {
                         ReadProcessMemory(
@@ -3186,9 +3222,9 @@ fn parse_nav_destination_command(
 
     if mode.eq_ignore_ascii_case("loc") {
         if rest.len() != 3 {
-            return Some(Err(
-                "loc navigation requires coordinates in `/nav loc Y X Z` order".to_string(),
-            ));
+            return Some(Err("loc navigation requires coordinates in `/nav loc Y X \
+                             Z` order"
+                .to_string()));
         }
 
         let parse_coord = |value: &str, axis: &str| {
@@ -3520,7 +3556,8 @@ fn remove_spell_set_entries(content: &str, set_name: &str) -> Option<String> {
     Some(updated)
 }
 
-/// Call `CEverQuest::RightClickedOnPlayer(target, 0)` to open NPC interaction windows.
+/// Call `CEverQuest::RightClickedOnPlayer(target, 0)` to open NPC interaction
+/// windows.
 fn interact_with_target() {
     #[cfg(windows)]
     {
@@ -3567,7 +3604,8 @@ fn interact_with_target() {
     tracing::trace!("InteractTarget (stub)");
 }
 
-/// Interact with the nearest door or switch by queuing `/doortarget` and `/click left door`.
+/// Interact with the nearest door or switch by queuing `/doortarget` and
+/// `/click left door`.
 ///
 /// This replicates MQ2's `/click door` behaviour:
 /// 1. `/doortarget` selects the nearest `EQSwitch` in the zone.
@@ -3820,9 +3858,9 @@ mod tests {
     fn nav_destination_parser_rejects_bad_loc_inputs() {
         assert_eq!(
             parse_nav_destination_command("/nav loc 100 200"),
-            Some(Err(
-                "loc navigation requires coordinates in `/nav loc Y X Z` order".to_string()
-            ))
+            Some(Err("loc navigation requires coordinates in `/nav loc Y X \
+                      Z` order"
+                .to_string()))
         );
         assert_eq!(
             parse_nav_destination_command("/nav to loc 100 nope 30"),

@@ -31,7 +31,8 @@ struct ParentContainerInfo {
     id: i32,
 }
 
-/// Query open container-window slots from the live EQ client and apply filtering.
+/// Query open container-window slots from the live EQ client and apply
+/// filtering.
 pub fn query_open_container_slots(
     eq_base: u64,
     filter: &ContainerSlotQuery,

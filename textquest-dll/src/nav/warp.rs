@@ -31,7 +31,8 @@ pub enum WarpAction {
     Resume,
 }
 
-/// Tracks target position deltas to detect warps and gate movement until stable.
+/// Tracks target position deltas to detect warps and gate movement until
+/// stable.
 pub struct WarpMonitor {
     last_position: Option<Waypoint>,
     last_id: Option<u32>,
@@ -238,7 +239,8 @@ mod tests {
         let pos = Waypoint::new(0.0, 0.0, 0.0);
 
         monitor.update(Some(&sample(1, pos)));
-        // Feeding None clears state; subsequent same-position feed should not trigger warp.
+        // Feeding None clears state; subsequent same-position feed should not trigger
+        // warp.
         assert!(matches!(monitor.update(None), WarpAction::None));
         // After feeding None, a new large jump from origin is compared against
         // a clean slate (no previous position), so it should not warp-detect.

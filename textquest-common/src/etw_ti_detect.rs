@@ -189,8 +189,8 @@ pub struct InjectionDetection {
 /// The detector looks for this three-event sequence within the event stream:
 ///
 /// 1. `ALLOCVM_REMOTE` where `CallingProcessId != TargetProcessId`
-/// 2. `WRITEVM_REMOTE` from the same caller to the same target at the same
-///    base address
+/// 2. `WRITEVM_REMOTE` from the same caller to the same target at the same base
+///    address
 /// 3. (Optional) `IMAGELOAD` in the target process
 ///
 /// Events need not be adjacent — other events may interleave — but they must
@@ -231,8 +231,9 @@ pub fn detect_loadlibrary_injection(events: &[EtwTiEvent]) -> Vec<InjectionDetec
                 }
             }
             _ => {
-                // ImageLoad events from Kernel-Process provider have no CallingProcessId.
-                // They are matched separately below.
+                // ImageLoad events from Kernel-Process provider have no
+                // CallingProcessId. They are matched separately
+                // below.
             }
         }
     }

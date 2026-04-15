@@ -15,13 +15,17 @@
 mod inner {
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-    use windows::Win32::System::Diagnostics::Debug::{
-        AddVectoredExceptionHandler, CONTEXT, CONTEXT_FLAGS, GetThreadContext,
-        RemoveVectoredExceptionHandler, SetThreadContext,
+    use windows::{
+        Win32::System::{
+            Diagnostics::Debug::{
+                AddVectoredExceptionHandler, CONTEXT, CONTEXT_FLAGS, GetThreadContext,
+                RemoveVectoredExceptionHandler, SetThreadContext,
+            },
+            LibraryLoader::{GetModuleHandleA, GetProcAddress},
+            Threading::GetCurrentThread,
+        },
+        core::s,
     };
-    use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
-    use windows::Win32::System::Threading::GetCurrentThread;
-    use windows::core::s;
 
     /// Address of `NtTraceEvent` — set once during init, read by the VEH.
     static NT_TRACE_EVENT_ADDR: AtomicU64 = AtomicU64::new(0);
@@ -77,7 +81,8 @@ mod inner {
     ];
 
     /// Check if a provider GUID should be suppressed (anticheat-related).
-    /// Returns true if the provider is in the anticheat allowlist and should be blocked.
+    /// Returns true if the provider is in the anticheat allowlist and should be
+    /// blocked.
     fn should_suppress_provider(provider_guid: *const [u8; 16]) -> bool {
         if provider_guid.is_null() {
             // If provider pointer is null, allow the event to pass.
@@ -206,7 +211,8 @@ mod inner {
         }
     }
 
-    /// Initialize ETW blinding: resolve NtTraceEvent, set HW breakpoint, install VEH.
+    /// Initialize ETW blinding: resolve NtTraceEvent, set HW breakpoint,
+    /// install VEH.
     pub fn init() -> Result<(), String> {
         if ACTIVE.load(Ordering::Acquire) {
             return Ok(());
@@ -259,9 +265,10 @@ mod inner {
         ACTIVE.load(Ordering::Acquire)
     }
 
-    /// Enable or disable ETW filtering. When filtering is enabled, only anticheat
-    /// providers are suppressed. When disabled, all NtTraceEvent calls are suppressed.
-    /// Default is enabled. Must be called before init().
+    /// Enable or disable ETW filtering. When filtering is enabled, only
+    /// anticheat providers are suppressed. When disabled, all NtTraceEvent
+    /// calls are suppressed. Default is enabled. Must be called before
+    /// init().
     pub fn set_filtering_enabled(enabled: bool) {
         FILTERING_ENABLED.store(enabled, Ordering::Release);
         if ACTIVE.load(Ordering::Acquire) {
@@ -319,22 +326,23 @@ mod tests {
     //
     // Running that inside the default multi-threaded Rust test harness causes
     // STATUS_ACCESS_VIOLATION (0xc0000005):
-    //   1. init() sets ACTIVE=true, installs the VEH, and arms DR0 — but the
-    //      test named "init_stub_does_not_panic" calls init() without a matching
+    //   1. init() sets ACTIVE=true, installs the VEH, and arms DR0 — but the test
+    //      named "init_stub_does_not_panic" calls init() without a matching
     //      cleanup(), leaving the VEH and HWBP live for the rest of the run.
     //   2. ETW (NtTraceEvent) is called pervasively by Windows internals on every
     //      live thread (heap, loader, WER, etc.).  Each call triggers a
     //      EXCEPTION_SINGLE_STEP that the VEH intercepts.
     //   3. The VEH "returns" from NtTraceEvent by reading the caller's return
-    //      address off the stack (*(ctx.Rsp as *const u64)) and jumping to it.
-    //      If RSP is in an unexpected state (stack unwinding, exception dispatch,
+    //      address off the stack (*(ctx.Rsp as *const u64)) and jumping to it. If
+    //      RSP is in an unexpected state (stack unwinding, exception dispatch,
     //      thread-pool callback teardown), that read faults → crash.
     //
     // On non-Windows init() / cleanup() are no-op stubs, so the same test names
     // remain valid there.  The Windows code paths are covered by the #[ignore]
     // integration test below, which must be run serially and in isolation.
 
-    /// Verifies the non-Windows no-op stub: init() returns Ok and is idempotent.
+    /// Verifies the non-Windows no-op stub: init() returns Ok and is
+    /// idempotent.
     #[cfg(not(windows))]
     #[test]
     fn init_stub_does_not_panic() {
@@ -400,9 +408,8 @@ mod tests {
     //     --test-threads=1
     #[cfg(windows)]
     #[test]
-    #[ignore = "installs a process-wide VEH and DR0 HWBP on NtTraceEvent; \
-                must not run in the default multi-threaded test harness — \
-                run manually with --ignored --test-threads=1"]
+    #[ignore = "installs a process-wide VEH and DR0 HWBP on NtTraceEvent; must not run in the \
+                default multi-threaded test harness — run manually with --ignored --test-threads=1"]
     fn windows_init_cleanup_roundtrip() {
         let _ = init();
         cleanup();

@@ -3,8 +3,10 @@
 //! Provides a dedicated UI for managing the cleric heal chain,
 //! including chain ordering, timing, target selection, and real-time status.
 
-use crate::tui::cast::CastDisplay;
-use crate::tui::ui::widgets::{render_cast_bar, truncate_inline};
+use crate::tui::{
+    cast::CastDisplay,
+    ui::widgets::{render_cast_bar, truncate_inline},
+};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
@@ -584,8 +586,7 @@ fn apply_row_background(mut line: Line<'static>, background: Color) -> Line<'sta
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::buffer::Buffer;
-    use ratatui::layout::Rect;
+    use ratatui::{buffer::Buffer, layout::Rect};
 
     #[test]
     fn ch_panel_state_defaults() {

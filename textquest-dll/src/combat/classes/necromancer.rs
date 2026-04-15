@@ -2,8 +2,8 @@ use textquest_common::combat::{CombatRole, SpellEntry};
 
 use crate::combat::strategy::{self, ClassStrategy, CombatContext, PetAction};
 
-/// Necromancer strategy: DoT-focused DPS with pet, lifetap sustain, feign death escape.
-/// EQ class ID: 11
+/// Necromancer strategy: DoT-focused DPS with pet, lifetap sustain, feign death
+/// escape. EQ class ID: 11
 pub struct NecromancerStrategy {
     class_id: u8,
 }

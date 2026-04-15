@@ -2,7 +2,8 @@
 pub mod api_client;
 /// Trait-based fallback responder — generates text without an LLM API.
 pub mod fallback;
-/// Priority queue for LLM requests — ensures high-priority requests are processed first.
+/// Priority queue for LLM requests — ensures high-priority requests are
+/// processed first.
 pub mod priority_queue;
 
 use anyhow::Result;
@@ -90,7 +91,8 @@ pub struct LlmResponse {
 }
 
 /// Trait for LLM providers. Sync in Phase 1 (no async runtime).
-/// Implementations: `TraitDrivenResponder` (fallback), future local model clients.
+/// Implementations: `TraitDrivenResponder` (fallback), future local model
+/// clients.
 pub trait LlmProvider {
     /// Generate a response for the given request.
     /// Returns Ok(response) or Err if generation fails entirely.
@@ -103,7 +105,8 @@ pub trait LlmProvider {
     /// Provider name for logging/diagnostics.
     fn name(&self) -> &str;
 
-    /// Whether this provider is currently available (API key set, quota remaining, etc.)
+    /// Whether this provider is currently available (API key set, quota
+    /// remaining, etc.)
     fn is_available(&self) -> bool;
 }
 

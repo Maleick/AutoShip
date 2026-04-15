@@ -3,8 +3,7 @@
 //! Maintains a rolling window of XP samples per character and derives
 //! XP/hour rate, time-to-level estimates, and level-up history.
 
-use std::collections::VecDeque;
-use std::time::Instant;
+use std::{collections::VecDeque, time::Instant};
 
 const MAX_SAMPLES: usize = 1000;
 const WINDOW_SECS: f32 = 3600.0; // 60 minutes

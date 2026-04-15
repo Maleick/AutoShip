@@ -3,10 +3,12 @@
 use super::session::EqSession;
 use crate::config::PeerDiscoveryConfig;
 use rand::random;
-use std::collections::HashMap;
-use std::io::ErrorKind;
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    io::ErrorKind,
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
 use textquest_common::peer_discovery::{PeerAnnouncement, PeerSessionAnnouncement};
 
 /// Remote peer currently visible through multicast discovery.
