@@ -118,6 +118,15 @@ Current theory items worth capturing explicitly in the template include
 `Nodding Blue Lily`, `Runebranded Girdle`, `Fungi Tunic`, and
 `Froglok Blood`.
 
+### Current drop theory status
+
+| Target | Current evidence state | Repo basis | Notes |
+| --- | --- | --- | --- |
+| `Runebranded Girdle` | Research-backed loot theory | `docs/wiki/Frostreaver-Farming-Guide.md`, `docs/wiki/P99-Zone-Guide.md` | Current Sebilis planning guides already list this as notable Sebilis loot, but it still needs a live sample before it can be promoted as validated output. |
+| `Nodding Blue Lily` | Issue-theory only | Issue `#1526` description | `Nodding Blue Lily` remains an issue-theory hypothesis until a repo-local source or live sample anchors it. |
+| `Fungi Tunic` | Issue-theory only | `docs/wiki/Research-MQ2-Deep-Dive.md` | `Fungi Tunic` currently appears only in a generic item-command example, not a Sebilis evidence source. |
+| `Froglok Blood` | Issue-theory only | Issue `#1526` description | `Froglok Blood` currently has no repo-local Sebilis evidence source beyond the issue theory. |
+
 Suggested target metrics:
 
 - `route_time_minutes`

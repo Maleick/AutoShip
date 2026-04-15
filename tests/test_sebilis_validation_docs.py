@@ -203,6 +203,35 @@ class SebilisValidationDocsTests(unittest.TestCase):
             text,
         )
 
+    def test_validation_doc_distinguishes_research_backed_sebilis_loot_from_unsourced_theory(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        frostreaver_text = (
+            REPO_ROOT / "docs" / "wiki" / "Frostreaver-Farming-Guide.md"
+        ).read_text(encoding="utf-8")
+        p99_text = (REPO_ROOT / "docs" / "wiki" / "P99-Zone-Guide.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("Runebranded Girdle", frostreaver_text)
+        self.assertIn("Runebranded Girdle", p99_text)
+        self.assertIn("`Runebranded Girdle`", text)
+        self.assertIn("Research-backed loot theory", text)
+        self.assertIn("Issue-theory only", text)
+        self.assertIn(
+            "`Nodding Blue Lily` remains an issue-theory hypothesis until a repo-local source or live sample anchors it.",
+            text,
+        )
+        self.assertIn(
+            "`Fungi Tunic` currently appears only in a generic item-command example, not a Sebilis evidence source.",
+            text,
+        )
+        self.assertIn(
+            "`Froglok Blood` currently has no repo-local Sebilis evidence source beyond the issue theory.",
+            text,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
