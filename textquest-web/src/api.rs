@@ -304,6 +304,23 @@ pub struct ClassParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AutoCampOnDeathConfig {
+    pub enabled: bool,
+    pub camp_delay_secs: u64,
+    pub relog_wait_secs: u64,
+}
+
+impl Default for AutoCampOnDeathConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            camp_delay_secs: 30,
+            relog_wait_secs: 900,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum TributeAlertState {
     Ok,
@@ -316,6 +333,16 @@ pub struct TributePreferences {
     pub auto_activate: bool,
     pub warning_threshold_secs: u64,
     pub preferred_tributes: Vec<String>,
+}
+
+impl Default for TributePreferences {
+    fn default() -> Self {
+        Self {
+            auto_activate: false,
+            warning_threshold_secs: 300,
+            preferred_tributes: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -353,7 +380,11 @@ pub struct CharacterConfig {
     pub auto_rez: AutoRezConfig,
     pub group_override: bool,
     pub group_name: Option<String>,
+    #[serde(default)]
+    pub auto_camp_on_death: AutoCampOnDeathConfig,
+    #[serde(default)]
     pub tribute_preferences: TributePreferences,
+    #[serde(default)]
     pub tribute_status: TributeStatus,
 }
 
@@ -371,6 +402,8 @@ pub struct CharacterConfigUpdate {
     pub auto_rez: AutoRezConfig,
     pub group_override: bool,
     pub group_name: Option<String>,
+    #[serde(default)]
+    pub auto_camp_on_death: AutoCampOnDeathConfig,
     pub tribute_preferences: TributePreferences,
 }
 
@@ -444,6 +477,11 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 1".into()),
+            auto_camp_on_death: AutoCampOnDeathConfig {
+                enabled: true,
+                camp_delay_secs: 30,
+                relog_wait_secs: 900,
+            },
             tribute_preferences: tribute_preferences(&["Marr's Gift", "Champion's Aura"], 300),
             tribute_status: tribute_status(
                 true,
@@ -476,6 +514,11 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 1".into()),
+            auto_camp_on_death: AutoCampOnDeathConfig {
+                enabled: false,
+                camp_delay_secs: 30,
+                relog_wait_secs: 900,
+            },
             tribute_preferences: tribute_preferences(&["Stalwart Ward", "Champion's Aura"], 420),
             tribute_status: tribute_status(
                 true,
@@ -511,6 +554,11 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 2".into()),
+            auto_camp_on_death: AutoCampOnDeathConfig {
+                enabled: true,
+                camp_delay_secs: 45,
+                relog_wait_secs: 1200,
+            },
             tribute_preferences: tribute_preferences(&["Arcane Fury", "Hero's Fortitude"], 180),
             tribute_status: tribute_status(false, 0, 875, &[], TributeAlertState::Expired),
         },
@@ -540,6 +588,11 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 2".into()),
+            auto_camp_on_death: AutoCampOnDeathConfig {
+                enabled: false,
+                camp_delay_secs: 30,
+                relog_wait_secs: 900,
+            },
             tribute_preferences: tribute_preferences(&["Ancient Bulwark", "Spirit's Resolve"], 300),
             tribute_status: tribute_status(
                 true,
@@ -575,6 +628,11 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             },
             group_override: false,
             group_name: Some("Group 3".into()),
+            auto_camp_on_death: AutoCampOnDeathConfig {
+                enabled: false,
+                camp_delay_secs: 30,
+                relog_wait_secs: 900,
+            },
             tribute_preferences: tribute_preferences(
                 &["Fervor of Shadows", "Hero's Vitality"],
                 240,
@@ -631,6 +689,7 @@ pub async fn put_character_config(
         auto_rez: config.auto_rez,
         group_override: config.group_override,
         group_name: config.group_name,
+        auto_camp_on_death: config.auto_camp_on_death,
         tribute_preferences: config.tribute_preferences,
         tribute_status,
     };
@@ -1067,6 +1126,11 @@ mod tests {
         let Json(configs) = list_character_configs(State(state)).await;
         assert!(!configs.is_empty());
         assert!(configs.iter().any(|c| c.character_name == "Frostreaver"));
+        assert!(
+            configs
+                .iter()
+                .any(|c| c.auto_camp_on_death.enabled && c.auto_camp_on_death.camp_delay_secs == 30)
+        );
         let frostreaver = configs
             .into_iter()
             .find(|c| c.character_name == "Frostreaver")
@@ -1115,6 +1179,11 @@ mod tests {
             },
             group_override: false,
             group_name: None,
+            auto_camp_on_death: AutoCampOnDeathConfig {
+                enabled: true,
+                camp_delay_secs: 75,
+                relog_wait_secs: 1800,
+            },
             tribute_preferences: tribute_preferences(&["Arcane Fury", "Hero's Fortitude"], 180),
         };
         let Json(saved) =
@@ -1122,6 +1191,14 @@ mod tests {
                 .await
                 .expect("put character config should succeed");
         assert_eq!(saved.character_name, "Aelrindel");
+        assert_eq!(
+            saved.auto_camp_on_death,
+            AutoCampOnDeathConfig {
+                enabled: true,
+                camp_delay_secs: 75,
+                relog_wait_secs: 1800,
+            }
+        );
         let saved_json = serde_json::to_value(&saved).expect("saved config should serialize");
         assert_eq!(
             saved_json["tribute_preferences"]["preferred_tributes"],
@@ -1141,6 +1218,33 @@ mod tests {
         assert_eq!(updated.heal_at_pct, 50);
         assert_eq!(updated.auto_rez.min_xp_pct, 96);
         assert_eq!(updated.auto_rez.trusted_casters, vec!["Frostreaver"]);
+        assert!(updated.auto_camp_on_death.enabled);
+    }
+
+    #[test]
+    fn character_config_defaults_missing_death_config() {
+        let config: CharacterConfig = serde_json::from_value(serde_json::json!({
+            "character_name": "Aelrindel",
+            "class": "Wizard",
+            "role": "DPS",
+            "heal_at_pct": 45,
+            "mana_sit_pct": 20,
+            "nuke_at_pct": 80,
+            "rotation": [],
+            "class_params": {},
+            "auto_rez": {
+                "enabled": true,
+                "min_xp_pct": 96,
+                "trusted_casters": ["Frostreaver"],
+                "decline_if_untrusted": true,
+                "delay_ms": 5100
+            },
+            "group_override": false,
+            "group_name": null
+        }))
+        .expect("legacy payload should deserialize");
+
+        assert_eq!(config.auto_camp_on_death, AutoCampOnDeathConfig::default());
     }
 
     #[tokio::test]

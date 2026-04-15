@@ -29,6 +29,11 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 ";
 
+/// Default on-disk credential store path used by CLI and unattended relog
+/// flows.
+pub const DEFAULT_CREDENTIAL_DB_PATH: &str = "data/credentials.db";
+const DEFAULT_CREDENTIAL_META_TABLE: &str = "credential_store_meta";
+
 impl CredentialStore {
     /// Open (or create) the credential store at the given path.
     ///
@@ -145,6 +150,73 @@ impl CredentialStore {
 
         Ok(())
     }
+
+    /// Open the default on-disk credential store using a master password
+    /// string.
+    ///
+    /// This derives the master key, creates the metadata table if needed, and
+    /// reuses the same DB path as the interactive credential-management CLI.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the store cannot be opened or the key material
+    /// cannot be derived.
+    pub fn open_default(master_password: &str) -> Result<Self> {
+        let db_path = std::path::PathBuf::from(DEFAULT_CREDENTIAL_DB_PATH);
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent).ok();
+        }
+        let salt = load_or_create_master_salt(&db_path)?;
+        let master_key = crypto::derive_key(master_password, &salt)?;
+        Self::open(&db_path, master_key)
+    }
+}
+
+fn load_or_create_master_salt(db_path: &Path) -> Result<[u8; 32]> {
+    use rusqlite::OptionalExtension;
+
+    let conn = Connection::open(db_path).with_context(|| {
+        format!(
+            "Failed to open credential metadata DB at {}",
+            db_path.display()
+        )
+    })?;
+    conn.execute(
+        &format!(
+            "CREATE TABLE IF NOT EXISTS {DEFAULT_CREDENTIAL_META_TABLE} (key TEXT PRIMARY KEY, \
+             value BLOB NOT NULL)"
+        ),
+        [],
+    )
+    .context("Failed to ensure credential metadata table exists")?;
+
+    let existing: Option<Vec<u8>> = conn
+        .query_row(
+            &format!("SELECT value FROM {DEFAULT_CREDENTIAL_META_TABLE} WHERE key = 'master_salt'"),
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .context("Failed to query credential store master salt")?;
+
+    if let Some(bytes) = existing {
+        if bytes.len() != 32 {
+            anyhow::bail!("Credential store master salt has invalid length");
+        }
+        let mut salt = [0u8; 32];
+        salt.copy_from_slice(&bytes);
+        return Ok(salt);
+    }
+
+    let salt = crypto::generate_salt();
+    conn.execute(
+        &format!(
+            "INSERT INTO {DEFAULT_CREDENTIAL_META_TABLE} (key, value) VALUES ('master_salt', ?1)"
+        ),
+        rusqlite::params![salt.to_vec()],
+    )
+    .context("Failed to persist credential store master salt")?;
+    Ok(salt)
 }
 
 #[cfg(test)]

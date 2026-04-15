@@ -834,7 +834,7 @@ impl Orchestrator {
     /// Send a structured IPC command to a client via named pipe.
     /// Creates a fresh connection per command (connect → token → command →
     /// drop).
-    pub(crate) fn send_ipc_command(&mut self, pid: u32, cmd: Command) {
+    pub(crate) fn send_ipc_command(&mut self, pid: u32, cmd: Command) -> bool {
         let name = self
             .client_names
             .get(&pid)
@@ -842,14 +842,17 @@ impl Orchestrator {
             .to_string();
 
         let Some(pipe) = self.get_pipe(pid) else {
-            return;
+            tracing::warn!(pid, name = %name, ?cmd, "No IPC pipe available for command");
+            return false;
         };
         match pipe.send(&cmd) {
             Ok(_response) => {
                 tracing::debug!(pid, name = %name, ?cmd, "Dispatched IPC command");
+                true
             }
             Err(e) => {
                 tracing::warn!(pid, name = %name, ?cmd, error = %e, "Failed to send command");
+                false
             }
         }
         // pipe is dropped here — DLL will disconnect its end too

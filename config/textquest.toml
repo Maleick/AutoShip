@@ -97,6 +97,14 @@ name = "__SET_CHARACTER_NAME__"
 class = "WAR"
 role = "main_tank"
 
+# Optional unattended death handling for this toon. When enabled, TextQuest
+# waits `camp_delay_secs` for a rez attempt, then sends `/camp desktop` via the
+# existing DLL relog flow and logs the client back in after `relog_wait_secs`.
+# [group.toon.auto_camp_on_death]
+# enabled = true
+# camp_delay_secs = 30
+# relog_wait_secs = 900
+
 [[group.toon]]
 name = "__SET_CHARACTER_NAME__"
 class = "SHM"

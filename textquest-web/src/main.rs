@@ -6,8 +6,9 @@
 //! - loot APIs
 //! - account-management APIs backed by an in-memory registry plus optional
 //!   credential storage
-//! - raid placeholders plus in-memory character-configuration APIs for the
-//!   strategy tuning panel
+//! - explicit `501` placeholders for not-yet-implemented raid configuration
+//!   APIs
+//! - live character-configuration APIs backed by in-memory dashboard state
 //! - a WebSocket endpoint for live session monitoring
 
 use std::{
@@ -399,6 +400,7 @@ mod tests {
         assert!(first["auto_rez"].is_object());
         assert!(first.get("tribute_preferences").is_some());
         assert!(first.get("tribute_status").is_some());
+        assert!(first.get("auto_camp_on_death").is_some());
 
         let (status, body) = json_response(
             app,
@@ -425,6 +427,11 @@ mod tests {
                         },
                         "group_override": false,
                         "group_name": "Group 1",
+                        "auto_camp_on_death": {
+                            "enabled": true,
+                            "camp_delay_secs": 60,
+                            "relog_wait_secs": 1800
+                        },
                         "tribute_preferences": {
                             "auto_activate": true,
                             "warning_threshold_secs": 180,
@@ -446,6 +453,7 @@ mod tests {
         assert_eq!(body["tribute_status"]["alert_state"], "expiring");
         assert_eq!(body["tribute_status"]["point_balance"], json!(3_200));
         assert_eq!(body["auto_rez"]["delay_ms"], 5100);
+        assert_eq!(body["auto_camp_on_death"]["camp_delay_secs"], 60);
     }
 
     #[tokio::test]

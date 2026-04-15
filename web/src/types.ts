@@ -335,6 +335,12 @@ export interface AutoRezConfig {
   delay_ms: number;
 }
 
+export interface AutoCampOnDeathConfig {
+  enabled: boolean;
+  camp_delay_secs: number;
+  relog_wait_secs: number;
+}
+
 export interface CharacterConfig {
   character_name: string;
   class: string;
@@ -347,6 +353,7 @@ export interface CharacterConfig {
   auto_rez: AutoRezConfig;
   group_override: boolean;
   group_name?: string;
+  auto_camp_on_death: AutoCampOnDeathConfig;
   tribute_preferences: TributePreferences;
   tribute_status: TributeStatus;
   bard?: BardConfig;

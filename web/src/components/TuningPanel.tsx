@@ -330,6 +330,12 @@ interface CharacterEditorProps {
   onSave: (cfg: CharacterConfig) => Promise<void>;
 }
 
+const DEFAULT_AUTO_CAMP_ON_DEATH = {
+  enabled: false,
+  camp_delay_secs: 30,
+  relog_wait_secs: 900,
+};
+
 function CharacterEditor({ config, onSave }: CharacterEditorProps) {
   const [draft, setDraft] = useState<CharacterConfig>({
     ...config,
@@ -367,6 +373,7 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
   };
 
   const autoRez = draft.auto_rez ?? DEFAULT_AUTO_REZ_CONFIG;
+  const deathRecovery = draft.auto_camp_on_death ?? DEFAULT_AUTO_CAMP_ON_DEATH;
 
   const handleSave = async () => {
     setSaving(true);
@@ -463,6 +470,86 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
           />
         </div>
       </section>
+
+      {/* Death auto-camp */}
+      {(() => {
+        const deathCfg =
+          draft.auto_camp_on_death ?? DEFAULT_AUTO_CAMP_ON_DEATH;
+
+        return (
+          <section>
+            <h4 className="font-archaic text-xs uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
+              <Faders size={12} className="text-red-400" />
+              Death Recovery
+            </h4>
+            <div className="bg-violet/20 border border-white/5 p-4 flex flex-col gap-4">
+              <button
+                onClick={() =>
+                  setDraft({
+                    ...draft,
+                    auto_camp_on_death: {
+                      ...deathCfg,
+                      enabled: !deathCfg.enabled,
+                    },
+                  })
+                }
+                className="flex items-center gap-2 text-sm font-tech transition-colors hover:text-red-300"
+              >
+                {deathCfg.enabled ? (
+                  <CheckSquare weight="fill" size={16} className="text-red-300" />
+                ) : (
+                  <Square size={16} className="text-white/40" />
+                )}
+                <span className="text-white/70">
+                  Auto-camp to desktop after death
+                </span>
+              </button>
+              <p className="text-[10px] font-rune text-white/35">
+                Wait for a rez window, then camp out and hand off to AutoLogin for
+                a delayed return.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1 text-[10px] font-rune uppercase tracking-widest text-white/45">
+                  Camp Delay (s)
+                  <input
+                    type="number"
+                    min={0}
+                    value={deathCfg.camp_delay_secs}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        auto_camp_on_death: {
+                          ...deathCfg,
+                          camp_delay_secs: Math.max(0, Number(e.target.value) || 0),
+                        },
+                      })
+                    }
+                    className="bg-void border border-white/20 text-white text-sm px-3 py-2 focus:outline-none focus:border-red-300"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-[10px] font-rune uppercase tracking-widest text-white/45">
+                  Relog Wait (s)
+                  <input
+                    type="number"
+                    min={0}
+                    value={deathCfg.relog_wait_secs}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        auto_camp_on_death: {
+                          ...deathCfg,
+                          relog_wait_secs: Math.max(0, Number(e.target.value) || 0),
+                        },
+                      })
+                    }
+                    className="bg-void border border-white/20 text-white text-sm px-3 py-2 focus:outline-none focus:border-red-300"
+                  />
+                </label>
+              </div>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* Rotation priority */}
       <section>
@@ -836,6 +923,11 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       delay_ms: 5000,
     },
     group_override: false,
+    auto_camp_on_death: {
+      enabled: true,
+      camp_delay_secs: 30,
+      relog_wait_secs: 900,
+    },
     tribute_preferences: {
       auto_activate: true,
       warning_threshold_secs: 300,
@@ -870,6 +962,11 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       delay_ms: 3000,
     },
     group_override: false,
+    auto_camp_on_death: {
+      enabled: false,
+      camp_delay_secs: 30,
+      relog_wait_secs: 900,
+    },
     tribute_preferences: {
       auto_activate: true,
       warning_threshold_secs: 420,

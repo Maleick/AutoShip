@@ -315,6 +315,28 @@ pub struct GroupConfig {
     pub toon: Vec<ToonConfig>,
 }
 
+/// Per-character unattended death handling.
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[serde(default)]
+pub struct AutoCampOnDeathConfig {
+    /// Enable automatic `/camp desktop` plus relog scheduling after death.
+    pub enabled: bool,
+    /// Seconds to wait after death before camping to allow a rez attempt.
+    pub camp_delay_secs: u64,
+    /// Seconds to stay logged out before triggering AutoLogin relog.
+    pub relog_wait_secs: u64,
+}
+
+impl Default for AutoCampOnDeathConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            camp_delay_secs: 30,
+            relog_wait_secs: 900,
+        }
+    }
+}
+
 /// Configuration for a single character (toon) within a group.
 #[allow(dead_code)] // Deserialized from config, consumed in later milestones
 #[derive(Debug, Deserialize, Clone)]
@@ -331,6 +353,9 @@ pub struct ToonConfig {
     /// Account name this toon belongs to.
     #[serde(default)]
     pub account: Option<String>,
+    /// Unattended death auto-camp and relog behavior.
+    #[serde(default)]
+    pub auto_camp_on_death: AutoCampOnDeathConfig,
 }
 
 /// Configuration for EQ client launching — paths, stagger timing, and resource
@@ -521,6 +546,15 @@ impl AppConfig {
             box_chat: BoxChatConfig::default(),
             timing_correction: false,
         }
+    }
+
+    /// Find a toon definition by character name, case-insensitively.
+    #[must_use]
+    pub fn find_toon(&self, character_name: &str) -> Option<&ToonConfig> {
+        self.group
+            .iter()
+            .flat_map(|group| group.toon.iter())
+            .find(|toon| toon.name.eq_ignore_ascii_case(character_name))
     }
 }
 
@@ -993,6 +1027,38 @@ timing_correction = true
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
         assert!(cfg.group[0].toon[0].eq_window_title.is_empty());
         assert!(cfg.group[0].toon[0].account.is_none());
+        assert_eq!(
+            cfg.group[0].toon[0].auto_camp_on_death,
+            AutoCampOnDeathConfig::default()
+        );
+    }
+
+    #[test]
+    fn toon_config_parses_auto_camp_on_death() {
+        let toml_str = r#"
+            [[group]]
+            id = 1
+            name = "Test"
+
+            [[group.toon]]
+            name = "Foo"
+            class = "WAR"
+            role = "dps"
+
+            [group.toon.auto_camp_on_death]
+            enabled = true
+            camp_delay_secs = 45
+            relog_wait_secs = 1200
+        "#;
+        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            cfg.group[0].toon[0].auto_camp_on_death,
+            AutoCampOnDeathConfig {
+                enabled: true,
+                camp_delay_secs: 45,
+                relog_wait_secs: 1200,
+            }
+        );
     }
 
     #[test]
