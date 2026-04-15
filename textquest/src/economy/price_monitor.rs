@@ -150,9 +150,16 @@ impl TradePriceStore {
             .query_map(params![limit], |row| {
                 let channel: String = row.get(3)?;
                 let intent: String = row.get(5)?;
+                let source_pid = row.get::<_, i64>(1)?;
                 Ok(TradePriceObservation {
                     observed_at_ms: row.get(0)?,
-                    source_pid: row.get::<_, i64>(1)? as u32,
+                    source_pid: u32::try_from(source_pid).map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            1,
+                            rusqlite::types::Type::Integer,
+                            Box::new(error),
+                        )
+                    })?,
                     zone: row.get(2)?,
                     channel: channel_from_key(&channel).ok_or_else(|| {
                         rusqlite::Error::FromSqlConversionFailure(
@@ -500,4 +507,40 @@ fn intent_buy_regex() -> &'static Regex {
         Regex::new(r"(?i)\b(?:wtb|buying|looking\s+for|lf|paying)\b")
             .expect("valid buy intent regex")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recent_observations_rejects_invalid_source_pid() {
+        let store = TradePriceStore::open_memory().expect("in-memory trade store");
+        store
+            .conn
+            .execute(
+                "INSERT INTO trade_price_observations (
+                    observed_at_ms, source_pid, zone, channel, speaker, intent,
+                    item_name, price_milli_krono, raw_message
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    1_i64,
+                    -1_i64,
+                    "nexus",
+                    "auction",
+                    "Trader",
+                    "sell",
+                    "Fungi Tunic",
+                    3_000_i64,
+                    "WTS fungi 3 krono",
+                ],
+            )
+            .expect("insert corrupted row");
+
+        let error = store
+            .recent_observations(1)
+            .expect_err("invalid pid should fail conversion");
+        let message = format!("{error:#}");
+        assert!(message.contains("trade-price rows"));
+    }
 }

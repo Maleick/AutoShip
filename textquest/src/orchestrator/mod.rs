@@ -898,14 +898,15 @@ impl Orchestrator {
         {
             return;
         }
-        self.last_trade_chat_poll = Some(Instant::now());
 
         let pids = self.client_pids.clone();
         if pids.is_empty() {
             return;
         }
+        self.last_trade_chat_poll = Some(Instant::now());
 
         let mut recorded = 0usize;
+        let mut monitor_available = self.trade_price_monitor.is_some();
         for pid in pids {
             let Some((zone, local_character_name)) = self.game_states.get(&pid).map(|state| {
                 let zone = if !state.zone_short_name.is_empty() {
@@ -928,8 +929,11 @@ impl Orchestrator {
                 continue;
             }
 
-            let Some(monitor) = self.ensure_trade_price_monitor() else {
-                return;
+            if !monitor_available {
+                monitor_available = self.ensure_trade_price_monitor().is_some();
+            }
+            let Some(monitor) = self.trade_price_monitor.as_mut() else {
+                continue;
             };
 
             for message in messages {
