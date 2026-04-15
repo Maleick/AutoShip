@@ -87,6 +87,39 @@ Handled mostly in `textquest/src/camp/`, `textquest/src/combat/`, and `textquest
 - manage assist and tank metadata
 - track buffs, death recovery, positioning, vendor checks, and camp transitions
 
+### Cross-group emergency coordination
+
+The orchestrator now also evaluates same-zone cross-group emergencies in
+`textquest/src/orchestrator/cross_group.rs`.
+
+Current behavior:
+
+- group membership comes from launcher account metadata and is cached when a
+  client reaches `ClientReady`
+- coordination only happens between groups in the same zone
+- rez support is requested when a group has dead members and no alive cleric
+- assist support is requested when a group has an alive anchor plus multiple
+  low-HP members or deaths
+- responder groups must be stable before responding: no deaths and no low-HP
+  members
+- rez responders are selected from healthy same-zone groups with an alive cleric
+- assist responders are selected from healthy same-zone groups with available
+  non-cleric attackers
+- responder groups are reserved per evaluation pass so one healthy group does
+  not get assigned to multiple emergencies at once
+- emergency priority is deterministic: rez before assist, then more deaths,
+  then more low-HP pressure, then lower group id as the final tie-break
+
+Current rescue commands:
+
+- rez response: `/target <dead toon>` then `/cast 5`
+- assist response: `/assist <distressed anchor>` then `/attack`
+
+Validation note:
+
+- this is code-backed and unit-tested in the manager-side orchestrator
+- live EQ validation is still pending
+
 ### DLL-side responsibilities
 
 Handled mostly in `textquest-dll/src/combat/`:

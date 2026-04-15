@@ -18,6 +18,8 @@ pub struct LoginStateMachine {
     pub last_transition: Instant,
     /// Maximum time allowed in the current phase before timeout.
     pub phase_timeout: Duration,
+    /// Whether this specific login attempt has already emitted `ClientReady`.
+    pub ready_event_emitted: bool,
 }
 
 /// Events that drive login state transitions.
@@ -106,6 +108,7 @@ impl LoginStateMachine {
             attempts: 0,
             last_transition: Instant::now(),
             phase_timeout: DEFAULT_TIMEOUT,
+            ready_event_emitted: false,
         }
     }
 
