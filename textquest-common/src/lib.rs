@@ -1,19 +1,22 @@
 //! Shared types and utilities for the TextQuest workspace.
 //!
-//! This crate contains domain types, IPC protocol definitions, EQ memory offsets,
-//! and common structures used by both the external orchestrator (`textquest`) and the
-//! injected DLL (`textquest-dll`).
+//! This crate contains domain types, IPC protocol definitions, EQ memory
+//! offsets, and common structures used by both the external orchestrator
+//! (`textquest`) and the injected DLL (`textquest-dll`).
 
 #[doc(hidden)]
 pub use paste;
 
 /// Typed, runtime-rebased function bindings.
 pub mod bindings;
+/// Box-chat config, slash-route parsing, and TCP relay wire types.
+pub mod box_chat;
 /// Chat channel types, STML stripping, and structured chat event parsing.
 pub mod chat;
 /// Combat-related shared types (class roles, spell metadata, assist targets).
 pub mod combat;
-/// Unified error handling framework with structured error types and recovery actions.
+/// Unified error handling framework with structured error types and recovery
+/// actions.
 pub mod errors;
 /// ETW-TI event parser and LoadLibrary injection detector.
 pub mod etw_ti_detect;
@@ -31,9 +34,11 @@ pub mod nav;
 pub mod observability;
 /// Hot-updatable offset database backed by JSON.
 pub mod offset_db;
-/// EQ memory addresses and struct field offsets (preferred-base, rebased at runtime).
+/// EQ memory addresses and struct field offsets (preferred-base, rebased at
+/// runtime).
 pub mod offsets;
-/// Packet capture types — opcode filtering, capture sessions, and disk persistence.
+/// Packet capture types — opcode filtering, capture sessions, and disk
+/// persistence.
 pub mod packet;
 /// Pattern database registry for scan entries and offset metadata.
 pub mod pattern_db;

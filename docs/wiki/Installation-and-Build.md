@@ -28,6 +28,22 @@ The repository already sets this through repo configuration, but the explicit ex
 - There is no required project `.env` file today.
 - The main user-provided setup is installing the host tools: Rust, CMake, and on Windows LLVM/Clang.
 
+### GitHub CLI verification
+
+For issue, PR, and wiki automation work, use the full setup profile:
+
+```bash
+./scripts/setup-dev-env.sh --profile full
+```
+
+The full profile now verifies that `gh` is both installed and usable from this checkout:
+
+- it runs `gh auth status`
+- it verifies repo access with `gh repo view`
+- it accepts either a local `gh auth login` session or a `GH_TOKEN` / `GITHUB_TOKEN` environment fallback
+
+If your desktop `gh` config is broken but a token is available in the environment, the setup check uses a clean temporary `GH_CONFIG_DIR` so the auth probe still succeeds.
+
 ## Build Commands
 
 ### Standard development build

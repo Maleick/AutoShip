@@ -76,7 +76,7 @@ chore: update offsets for April patch
 
 ### Pull Request Process
 
-1. Run the dev preflight locally — it mirrors the CI gate exactly:
+1. Run the dev preflight locally — it bundles local formatting with the same wiki/lint/test/Python validation as the required PR gate:
    ```bash
    python3 scripts/dev-preflight.py
    ```
@@ -123,7 +123,7 @@ Populate `SpawnInfo` and similar structs via individual `proc.read::<T>(addr + O
 ```bash
 cargo test                            # All workspace crates (~3,100 tests)
 python3 -m unittest discover -s tests -p 'test_*.py' -v  # Python tests
-python3 scripts/dev-preflight.py      # Full CI-equivalent sequence
+python3 scripts/dev-preflight.py      # Local format + PR-gate validation
 ```
 
 ### Per-Crate and Targeted Tests
@@ -160,6 +160,8 @@ cargo test -p textquest test_name     # Single test by name (substring match)
 ### CI Gate
 
 The required check is **"PR gate (fmt + clippy + test + python)"**. It runs on GitHub-hosted Linux.
+
+The check name is retained for branch-protection compatibility. Local `python3 scripts/dev-preflight.py` still runs `cargo fmt` before the wiki/lint/test/Python gate checks that GitHub enforces.
 
 - **GitHub-hosted Linux**: runs the required PR gate; secret scan also runs here
 - **Windows self-hosted**: weekly/manual release validation and tagged release builds

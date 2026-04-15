@@ -220,15 +220,17 @@ impl ExtendedTargetList {
 // Hate-target categories — classify off-target adds for CC / kiting decisions
 // ---------------------------------------------------------------------------
 
-/// Classifies an off-target mob for CC assignment and kiting priority decisions.
+/// Classifies an off-target mob for CC assignment and kiting priority
+/// decisions.
 ///
 /// The category drives two independent priority axes:
 /// * **CC priority** — which add should be controlled first.
 /// * **Kite priority** — which add should be kited away from the group first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum HateTargetCategory {
-    /// Mob is on the XTarget auto-hater list — actively attacking a group member.
-    /// Highest default CC priority; must be controlled before it deals damage.
+    /// Mob is on the XTarget auto-hater list — actively attacking a group
+    /// member. Highest default CC priority; must be controlled before it
+    /// deals damage.
     #[default]
     ActiveHater,
     /// Mob is a spellcaster (nuker, healer, or debuffer).
@@ -248,7 +250,8 @@ pub enum HateTargetCategory {
 impl HateTargetCategory {
     /// CC assignment priority (lower = higher priority).
     ///
-    /// Order: `ActiveHater` → `CasterAdd` → `Approaching` → `MeleeAdd` → `Roamer`.
+    /// Order: `ActiveHater` → `CasterAdd` → `Approaching` → `MeleeAdd` →
+    /// `Roamer`.
     #[must_use]
     pub fn cc_priority(self) -> u8 {
         match self {
@@ -275,13 +278,15 @@ impl HateTargetCategory {
         }
     }
 
-    /// Returns `true` if this category should be handled with CC rather than kiting.
+    /// Returns `true` if this category should be handled with CC rather than
+    /// kiting.
     ///
-    /// [`CasterAdd`] appears in both `prefers_cc` and [`prefers_kite`] because casters
-    /// are dangerous at range: the group wants them either silenced via CC (ideal) or
-    /// kited far enough away that their spells land out of range (fallback when no CC
-    /// is available). Callers should prefer CC when a CC member is ready; fall back to
-    /// kiting only when no CC ability is off cooldown.
+    /// [`CasterAdd`] appears in both `prefers_cc` and [`prefers_kite`] because
+    /// casters are dangerous at range: the group wants them either silenced
+    /// via CC (ideal) or kited far enough away that their spells land out
+    /// of range (fallback when no CC is available). Callers should prefer
+    /// CC when a CC member is ready; fall back to kiting only when no CC
+    /// ability is off cooldown.
     ///
     /// [`CasterAdd`]: Self::CasterAdd
     /// [`prefers_kite`]: Self::prefers_kite
@@ -290,11 +295,13 @@ impl HateTargetCategory {
         matches!(self, Self::ActiveHater | Self::MeleeAdd | Self::CasterAdd)
     }
 
-    /// Returns `true` if this category is a better kite candidate than CC target.
+    /// Returns `true` if this category is a better kite candidate than CC
+    /// target.
     ///
-    /// [`CasterAdd`] is included here as a fallback strategy: when no CC ability is
-    /// available, kiting a caster is preferable to leaving it free-casting in melee
-    /// range. See [`prefers_cc`] for the primary strategy.
+    /// [`CasterAdd`] is included here as a fallback strategy: when no CC
+    /// ability is available, kiting a caster is preferable to leaving it
+    /// free-casting in melee range. See [`prefers_cc`] for the primary
+    /// strategy.
     ///
     /// [`CasterAdd`]: Self::CasterAdd
     /// [`prefers_cc`]: Self::prefers_cc
@@ -337,7 +344,8 @@ pub struct BuffInfo {
 }
 
 impl BuffInfo {
-    /// Remaining duration in seconds (ticks × 6). Returns 0 for permanent buffs.
+    /// Remaining duration in seconds (ticks × 6). Returns 0 for permanent
+    /// buffs.
     #[must_use]
     pub fn remaining_seconds(&self) -> f32 {
         if self.duration_ticks <= 0 {
@@ -445,7 +453,8 @@ pub enum AssistMode {
 pub struct SpellEntry {
     /// Memorized spell slot (0-indexed gem number).
     pub slot: u8,
-    /// EQ spell ID — used by `CastSpell` FFI. 0 = use whatever is memorized in slot.
+    /// EQ spell ID — used by `CastSpell` FFI. 0 = use whatever is memorized in
+    /// slot.
     #[serde(default)]
     pub spell_id: i32,
     /// Human-readable spell name for logging/config.
@@ -500,9 +509,11 @@ pub enum ConditionExpr {
     Not(Box<ConditionExpr>),
     /// Always true — unconditional trigger.
     Always,
-    /// Number of mobs on the extended target hate list is at or above the given count.
+    /// Number of mobs on the extended target hate list is at or above the given
+    /// count.
     XTargetHaterCountAbove(u32),
-    /// We have aggro from at least one mob (checked via the XTarget auto-hater list).
+    /// We have aggro from at least one mob (checked via the XTarget auto-hater
+    /// list).
     HasXTargetAggro,
 }
 
@@ -539,7 +550,8 @@ pub struct DisciplineEntry {
     pub spell_id: i32,
     /// Priority relative to other disciplines (lower = higher priority).
     pub priority: u8,
-    /// Cooldown in game ticks (~20 ticks/sec). Disciplines have long reuse timers.
+    /// Cooldown in game ticks (~20 ticks/sec). Disciplines have long reuse
+    /// timers.
     pub cooldown_ticks: u32,
     /// Minimum HP % to use this disc (e.g., Defensive only when < 50% HP)
     pub min_hp_pct: f32,
@@ -877,7 +889,8 @@ impl CastResult {
 /// hammer the spell queue on repeated failures.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CastRetryPolicy {
-    /// Maximum total cast attempts (initial + retries).  `None` means unlimited.
+    /// Maximum total cast attempts (initial + retries).  `None` means
+    /// unlimited.
     pub max_tries: Option<u8>,
     /// Base delay in FSM ticks to wait before the next retry.
     /// Actual delay = `base_backoff_ticks * attempt_number` (linear growth).
@@ -894,7 +907,8 @@ impl Default for CastRetryPolicy {
 }
 
 impl CastRetryPolicy {
-    /// Return true when another retry is allowed after this many prior attempts.
+    /// Return true when another retry is allowed after this many prior
+    /// attempts.
     ///
     /// `attempts` is the number of times the spell has already been cast
     /// (including the initial attempt).

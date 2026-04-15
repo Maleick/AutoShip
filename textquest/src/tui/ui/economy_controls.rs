@@ -1,4 +1,5 @@
-//! Economy Controls panel — vendor cycle, banking status, loot queue, and operator controls.
+//! Economy Controls panel — vendor cycle, banking status, loot queue, and
+//! operator controls.
 //!
 //! Displays stub/demo economy state with color-coded status indicators and
 //! a reference card of economy control keybindings.

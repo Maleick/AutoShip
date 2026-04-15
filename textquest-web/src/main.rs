@@ -1,29 +1,35 @@
 //! TextQuest Web Dashboard — Axum backend for the monitoring UI.
 //!
 //! The backend serves:
-//! - live health plus explicit `501` responses for unsupported session and
-//!   economy endpoints
+//! - live health, session, economy, dashboard, and per-character tuning
+//!   endpoints
 //! - loot APIs
 //! - account-management APIs backed by an in-memory registry plus optional
 //!   credential storage
-//! - explicit `501` placeholders for not-yet-implemented raid and character
-//!   configuration APIs
+//! - raid placeholders plus in-memory character-configuration APIs for the
+//!   strategy tuning panel
 //! - a WebSocket endpoint for live session monitoring
 
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
-use axum::Router;
-use axum::extract::Request;
-use axum::http::{HeaderValue, Method, StatusCode};
-use axum::middleware::{self, Next};
-use axum::response::Response;
-use axum::routing::{get, put};
+use axum::{
+    Router,
+    extract::Request,
+    http::{HeaderValue, Method, StatusCode},
+    middleware::{self, Next},
+    response::Response,
+    routing::{get, put},
+};
 use tokio::sync::broadcast;
-use tower_http::cors::CorsLayer;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::{
+    cors::CorsLayer,
+    services::{ServeDir, ServeFile},
+};
 
 mod accounts;
 mod api;
@@ -35,7 +41,8 @@ pub struct AppState {
     pub event_tx: broadcast::Sender<String>,
     /// In-memory account registry.
     pub account_store: Mutex<accounts::AccountStore>,
-    /// Optional encrypted password store, enabled by `TEXTQUEST_MASTER_PASSWORD`.
+    /// Optional encrypted password store, enabled by
+    /// `TEXTQUEST_MASTER_PASSWORD`.
     pub credential_store: Option<accounts::CredentialStore>,
     /// In-memory character tuning config store for the strategy tuning panel.
     pub character_configs: tokio::sync::RwLock<HashMap<String, api::CharacterConfig>>,
@@ -43,18 +50,23 @@ pub struct AppState {
     pub loot_state: Arc<api::loot::LootState>,
     /// In-memory economy cycle state.
     pub economy_state: Arc<api::economy::EconomyState>,
+    /// In-memory operator dashboard snapshot and action state.
+    pub dashboard_state: Arc<api::dashboard::DashboardState>,
     /// In-memory soul audit log.
     pub soul_audit: Arc<api::soul::SoulAuditState>,
     /// Optional static API token for protecting all `/api` endpoints.
     /// Set via `TEXTQUEST_API_TOKEN` environment variable.
-    /// When `None`, API endpoints are unauthenticated (localhost-only deployment).
+    /// When `None`, API endpoints are unauthenticated (localhost-only
+    /// deployment).
     pub api_token: Option<String>,
 }
 
-/// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is set.
+/// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is
+/// set.
 ///
-/// If the env var is unset, all requests pass through (backward-compatible default).
-/// When set, requests without a matching token receive `401 Unauthorized`.
+/// If the env var is unset, all requests pass through (backward-compatible
+/// default). When set, requests without a matching token receive `401
+/// Unauthorized`.
 async fn api_token_auth(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
     req: Request,
@@ -80,7 +92,8 @@ async fn api_token_auth(
     Ok(next.run(req).await)
 }
 
-/// Constant-time string comparison to prevent timing oracle attacks on the API token.
+/// Constant-time string comparison to prevent timing oracle attacks on the API
+/// token.
 fn constant_time_eq_str(a: &str, b: &str) -> bool {
     let ab = a.as_bytes();
     let bb = b.as_bytes();
@@ -102,9 +115,10 @@ fn credentials_db_path() -> PathBuf {
 /// - `event_tx` and `account_store` are always initialised empty.
 /// - `credential_store` is populated only when `TEXTQUEST_MASTER_PASSWORD` is
 ///   set in the environment; otherwise password routes return `501`.
-/// - `character_configs`, `loot_state`, `economy_state`, and `soul_audit` are
-///   seeded with in-memory state; character-config routes still return `501`
-///   until a supported backing store is wired.
+/// - `character_configs`, `loot_state`, `economy_state`, `dashboard_state`,
+///   and `soul_audit` are seeded with in-memory state. Character-config routes
+///   are live, but the data resets on process restart until a durable backing
+///   store is wired.
 fn build_state() -> Arc<AppState> {
     let (event_tx, _) = broadcast::channel::<String>(256);
     let credential_store = std::env::var("TEXTQUEST_MASTER_PASSWORD")
@@ -126,8 +140,8 @@ fn build_state() -> Arc<AppState> {
 
     if api_token.is_none() {
         tracing::warn!(
-            "TEXTQUEST_API_TOKEN is not set — API endpoints are unauthenticated. \
-             Set this env var to enable token-based authentication."
+            "TEXTQUEST_API_TOKEN is not set — API endpoints are unauthenticated. Set this env var \
+             to enable token-based authentication."
         );
     }
 
@@ -138,6 +152,7 @@ fn build_state() -> Arc<AppState> {
         character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
         loot_state: api::loot::LootState::new_demo(),
         economy_state: api::economy::EconomyState::new_demo(),
+        dashboard_state: api::dashboard::DashboardState::new_demo(),
         soul_audit: api::soul::SoulAuditState::new_demo(),
         api_token,
     })
@@ -181,7 +196,12 @@ fn build_loot_router() -> Router<Arc<AppState>> {
 fn build_api_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(api::health))
+        .route(
+            "/box-chat/settings",
+            get(api::get_box_chat_settings).put(api::put_box_chat_settings),
+        )
         .route("/sessions", get(api::list_sessions))
+        .nest("/dashboard", api::dashboard::router())
         .nest("/accounts", accounts::router())
         .route(
             "/economy/settings",
@@ -202,13 +222,10 @@ fn build_api_router() -> Router<Arc<AppState>> {
             "/raid/config",
             get(api::raid_config_unavailable).put(api::raid_config_unavailable),
         )
-        .route(
-            "/config/characters",
-            get(api::character_configs_unavailable),
-        )
+        .route("/config/characters", get(api::list_character_configs))
         .route(
             "/config/characters/{character}",
-            put(api::character_config_unavailable),
+            put(api::put_character_config),
         )
         .nest("/loot", build_loot_router())
         .nest("/soul", build_soul_router())
@@ -263,6 +280,7 @@ async fn main() {
         .init();
 
     let state = build_state();
+    api::dashboard::spawn_dashboard_tick_loop(state.clone());
     let app = build_app(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3001));
@@ -275,8 +293,10 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::Body;
-    use axum::http::{Request, StatusCode};
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
     use http_body_util::BodyExt;
     use serde_json::{Value, json};
     use tower::ServiceExt;
@@ -305,6 +325,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
             loot_state: api::loot::LootState::new_demo(),
             economy_state: api::economy::EconomyState::new_demo(),
+            dashboard_state: api::dashboard::DashboardState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
             api_token: None, // No auth in tests — auth middleware is a no-op when None
         })
@@ -344,21 +365,115 @@ mod tests {
                 .unwrap_or_default()
                 .contains("not implemented")
         );
+    }
 
+    #[tokio::test]
+    async fn character_config_routes_are_live() {
+        let app = build_app(build_state());
         let (status, body) = json_response(
-            app,
+            app.clone(),
             Request::builder()
                 .uri("/api/config/characters")
                 .body(Body::empty())
                 .expect("request"),
         )
         .await;
-        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(status, StatusCode::OK);
+        let configs = body.as_array().expect("character configs array");
+        assert!(!configs.is_empty(), "expected demo character configs");
+        let first = &configs[0];
+        assert_eq!(first["character_name"], "Aelrindel");
+        assert!(first["auto_rez"].is_object());
+        assert!(first.get("tribute_preferences").is_some());
+        assert!(first.get("tribute_status").is_some());
+
+        let (status, body) = json_response(
+            app,
+            Request::builder()
+                .method("PUT")
+                .uri("/api/config/characters/Frostreaver")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "character_name": "ignored",
+                        "class": "Cleric",
+                        "role": "Healer",
+                        "heal_at_pct": 72,
+                        "mana_sit_pct": 28,
+                        "nuke_at_pct": 95,
+                        "rotation": [],
+                        "class_params": {},
+                        "auto_rez": {
+                            "enabled": true,
+                            "min_xp_pct": 96,
+                            "trusted_casters": ["Highclerk", "Leafbinder"],
+                            "decline_if_untrusted": true,
+                            "delay_ms": 5100
+                        },
+                        "group_override": false,
+                        "group_name": "Group 1",
+                        "tribute_preferences": {
+                            "auto_activate": true,
+                            "warning_threshold_secs": 180,
+                            "preferred_tributes": ["Marr's Gift", "Champion's Aura"]
+                        }
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["character_name"], "Frostreaver");
+        assert_eq!(body["auto_rez"]["min_xp_pct"], 96);
+        assert_eq!(
+            body["tribute_preferences"]["preferred_tributes"],
+            json!(["Marr's Gift", "Champion's Aura"])
+        );
+        assert_eq!(body["tribute_status"]["alert_state"], "expiring");
+        assert_eq!(body["tribute_status"]["point_balance"], json!(3_200));
+        assert_eq!(body["auto_rez"]["delay_ms"], 5100);
+    }
+
+    #[tokio::test]
+    async fn dashboard_routes_are_mounted() {
+        let app = build_app(build_state());
+
+        let (status, body) = json_response(
+            app.clone(),
+            Request::builder()
+                .uri("/api/dashboard")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.get("sessions").is_some());
+
+        let (status, body) = json_response(
+            app,
+            Request::builder()
+                .method("POST")
+                .uri("/api/dashboard/action")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "type": "create_session",
+                        "profile": "Loot Crew",
+                        "character_name": "Newpuller"
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
         assert!(
-            body["error"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("not implemented")
+            body["sessions"]["items"]
+                .as_array()
+                .expect("sessions array")
+                .iter()
+                .any(|session| session["characterName"] == "Newpuller")
         );
     }
 

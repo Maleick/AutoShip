@@ -119,11 +119,13 @@ Current evidence state: `Research-backed` for existence and dual-instance patter
 | `ProcessGroupPacket` | `0x1402de700` | Group membership and updates | `Blocked` — group state read from EQ structs, not from packet hook |
 | `ProcessEmotePacket` | `0x14020cea0` | Inbound emote handling | `Blocked` — no emote receive path in TextQuest |
 | `ProcessChannelMessagePacket` | `0x14020a1b0` | Chat channel messages | `Blocked` — no in-process chat receive path; candidates for `M11` Soul Engine chat |
-| `ProcessBazaarPacket` | `0x14020eab0` | Bazaar transaction data | `Blocked` — economy work is `M10` |
+| `ProcessBazaarPacket` | `0x14020eab0` | Bazaar transaction data | `Blocked` — bazaar price capture uses passive UI memory reads from the populated bazaar window, not a packet receive hook |
 | `CEverQuest__ProcessWorldPacket` | `0x1401e6d00` | General world state updates | `Blocked` — world state read from EQ memory, not from packet hook |
 | `CEverQuest__ProcessZonePacket` | `0x1402802b0` | Zone-specific inbound packets | `Blocked` — zoning work is `M6` |
 
 Current evidence state: `Research-backed` for address set; `Needs Live Proof` for current-build addresses and dispatch coverage.
+
+Bazaar note: current `M10` price sampling is intentionally implemented as a passive read of bazaar window list data already resident in client memory after a normal player search. This keeps bazaar capture inside the existing EQ-memory observation boundary and avoids promoting `ProcessBazaarPacket` into the live requirement set.
 
 ## Capability Boundary Summary
 

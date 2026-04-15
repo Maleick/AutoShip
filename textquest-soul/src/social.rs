@@ -147,7 +147,8 @@ impl SocialGraph {
             .or_default()
     }
 
-    /// Apply a social event between two characters (bidirectional with asymmetric deltas).
+    /// Apply a social event between two characters (bidirectional with
+    /// asymmetric deltas).
     pub fn apply_event(&mut self, from: &str, to: &str, event: &SocialEvent) {
         let (faction_delta, trust_delta) = event_deltas(event);
 

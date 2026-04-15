@@ -1,6 +1,8 @@
 use std::time::{Duration, Instant};
-use textquest_common::login::{AccountInfo, LoginError, LoginPhase};
-use textquest_common::types::ClientId;
+use textquest_common::{
+    login::{AccountInfo, LoginError, LoginPhase},
+    types::ClientId,
+};
 
 /// State machine driving a single client through the EQ login flow.
 pub struct LoginStateMachine {
@@ -16,6 +18,8 @@ pub struct LoginStateMachine {
     pub last_transition: Instant,
     /// Maximum time allowed in the current phase before timeout.
     pub phase_timeout: Duration,
+    /// Whether this specific login attempt has already emitted `ClientReady`.
+    pub ready_event_emitted: bool,
 }
 
 /// Events that drive login state transitions.
@@ -54,7 +58,8 @@ pub enum LoginEvent {
     },
 }
 
-/// Actions the login coordinator should perform in response to state transitions.
+/// Actions the login coordinator should perform in response to state
+/// transitions.
 pub enum LoginAction {
     /// No action needed.
     None,
@@ -103,6 +108,7 @@ impl LoginStateMachine {
             attempts: 0,
             last_transition: Instant::now(),
             phase_timeout: DEFAULT_TIMEOUT,
+            ready_event_emitted: false,
         }
     }
 
@@ -204,7 +210,8 @@ impl LoginStateMachine {
         }
     }
 
-    /// Returns `true` if the login is in a terminal state (Ready, Failed, or ProcessExiting).
+    /// Returns `true` if the login is in a terminal state (Ready, Failed, or
+    /// ProcessExiting).
     #[must_use]
     pub fn is_terminal(&self) -> bool {
         matches!(

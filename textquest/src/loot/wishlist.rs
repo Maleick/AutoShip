@@ -71,7 +71,8 @@ pub struct WishlistRule {
     pub action: WishlistAction,
     /// Conflict-resolution priority (higher wins).
     pub priority: u8,
-    /// Optional level/class restrictions.  `None` means the rule always applies.
+    /// Optional level/class restrictions.  `None` means the rule always
+    /// applies.
     pub conditions: Option<RuleConditions>,
 }
 
@@ -182,10 +183,11 @@ impl WishlistManager {
 
     // ── Rule candidates ───────────────────────────────────────────────────
 
-    /// Collect all eligible rules for `item_id` / `char_id` at `level` / `class_bit`.
+    /// Collect all eligible rules for `item_id` / `char_id` at `level` /
+    /// `class_bit`.
     ///
-    /// Character-specific rules are returned first (they shadow group rules when
-    /// their priority is >= the best group rule).
+    /// Character-specific rules are returned first (they shadow group rules
+    /// when their priority is >= the best group rule).
     fn candidates(
         &self,
         item_id: u32,
@@ -307,7 +309,8 @@ mod tests {
         assert_eq!(resolve_action(ITEM_A, CHAR_1, &mgr), WishlistAction::Keep);
     }
 
-    // 5. Priority tie resolved by action weight (Keep > Distribute > Bank > Vendor).
+    // 5. Priority tie resolved by action weight (Keep > Distribute > Bank >
+    //    Vendor).
     #[test]
     fn tie_broken_by_action_weight() {
         let mut mgr = WishlistManager::new();

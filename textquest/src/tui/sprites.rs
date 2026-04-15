@@ -138,7 +138,8 @@ fn class_sprites(class: Option<&EqClass>) -> &'static [Sprite] {
 }
 
 // ── Color palettes ───────────────────────────────────────────────────
-// 1=primary body, 2=secondary/darker, 3=accent, 4=highlight, 5=detail, 6=emblem, 7=feet/base
+// 1=primary body, 2=secondary/darker, 3=accent, 4=highlight, 5=detail,
+// 6=emblem, 7=feet/base
 
 // Warrior: steel and red
 const PAL_WARRIOR: Palette = &[
@@ -379,8 +380,8 @@ const SPRITE_SITTING: [Sprite; 2] = [
 ];
 
 // ── Class-specific emblem sprites ────────────────────────────────────
-// Each class has an iconic emblem (not a humanoid figure) with 3 animation frames:
-//   Frame 0: Base emblem
+// Each class has an iconic emblem (not a humanoid figure) with 3 animation
+// frames:   Frame 0: Base emblem
 //   Frame 1: Active / glowing
 //   Frame 2: Full power with particle effects (sparkles around edges)
 
@@ -979,7 +980,8 @@ mod tests {
         let t6 = class_sprite(Some(&EqClass::Warrior), &StandState::Standing, 6);
         // Frame 0 and frame 1 (tick=2) should differ
         assert_ne!(format!("{:?}", t0), format!("{:?}", t2));
-        // Frame 0 and frame 3 (tick=6, wraps back to frame 0 with 3 frames) should be same
+        // Frame 0 and frame 3 (tick=6, wraps back to frame 0 with 3 frames) should be
+        // same
         assert_eq!(format!("{:?}", t0), format!("{:?}", t6));
     }
 

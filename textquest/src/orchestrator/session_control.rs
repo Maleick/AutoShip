@@ -4,15 +4,15 @@
 //! active/paused state. Commands arrive via the IPC layer as
 //! `SessionControlCommand` variants and are processed by `apply_command`.
 
-use textquest_common::ipc::SessionControlCommand;
-use textquest_common::routing::RoutingScope;
+use textquest_common::{ipc::SessionControlCommand, routing::RoutingScope};
 
 /// Lifecycle state of a managed EQ session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionState {
     /// Session is active and accepting commands.
     Active,
-    /// Session has been paused by the operator — commands are queued or dropped.
+    /// Session has been paused by the operator — commands are queued or
+    /// dropped.
     Paused,
     /// Session has entered an error state and requires intervention.
     Error,
@@ -46,7 +46,8 @@ pub struct SessionControl {
 }
 
 impl SessionControl {
-    /// Create a new `SessionControl` in the `Active` state with `AllSession` routing scope.
+    /// Create a new `SessionControl` in the `Active` state with `AllSession`
+    /// routing scope.
     #[must_use]
     pub fn new(session_id: u32) -> Self {
         Self {

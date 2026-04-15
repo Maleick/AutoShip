@@ -1,4 +1,5 @@
-//! Sound alert system — configurable audio event triggers for fleet notifications.
+//! Sound alert system — configurable audio event triggers for fleet
+//! notifications.
 
 use serde::{Deserialize, Serialize};
 
@@ -54,7 +55,8 @@ impl SoundTrigger {
         self
     }
 
-    /// Whether this trigger matches the given event string (case-insensitive substring).
+    /// Whether this trigger matches the given event string (case-insensitive
+    /// substring).
     #[must_use]
     pub fn matches(&self, event: &str) -> bool {
         if !self.enabled {

@@ -14,11 +14,13 @@ use warp::TargetSample;
 
 use std::sync::Mutex;
 
-use textquest_common::nav::{
-    CampSpot, CircleConfig, FollowConfig, MoveToConfig, NavCampConfig, NavStatus, StickConfig,
-    Waypoint,
+use textquest_common::{
+    nav::{
+        CampSpot, CircleConfig, FollowConfig, MoveToConfig, NavCampConfig, NavStatus, StickConfig,
+        Waypoint,
+    },
+    types::SpawnData,
 };
-use textquest_common::types::SpawnData;
 
 /// Global navigator instance, persists across game ticks.
 /// `Mutex<Option<...>>` because the game loop is single-threaded but
@@ -178,7 +180,8 @@ pub enum NavCommand {
     CircleKite {
         /// Circle kiting configuration (radius, mode, target_id, etc.).
         config: CircleConfig,
-        /// Center of the circle.  `None` means use the player's current position.
+        /// Center of the circle.  `None` means use the player's current
+        /// position.
         center: Option<Waypoint>,
     },
     /// Stop circle-kiting and return to Idle.

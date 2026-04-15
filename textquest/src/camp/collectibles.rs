@@ -1,4 +1,5 @@
-//! Collectible and tribute management — OpenVanilla MQ2Collectible / MQ2TributeManager parity.
+//! Collectible and tribute management — OpenVanilla MQ2Collectible /
+//! MQ2TributeManager parity.
 //!
 //! Tracks collection quest progress and automates tribute system interactions.
 
@@ -76,7 +77,8 @@ impl CollectibleTracker {
         changed
     }
 
-    /// Return the fraction of all items collected across all sets, in `[0.0, 1.0]`.
+    /// Return the fraction of all items collected across all sets, in `[0.0,
+    /// 1.0]`.
     ///
     /// Returns `0.0` if there are no items.
     #[must_use]
@@ -136,7 +138,8 @@ impl TributeTracker {
 
     /// Add a tribute item and its point value.
     ///
-    /// Duplicate `item_id` entries are allowed (each add accumulates points independently).
+    /// Duplicate `item_id` entries are allowed (each add accumulates points
+    /// independently).
     pub fn add_tribute(&mut self, item_id: u32, points: u32) {
         self.active_tribute_items.push(item_id);
         self.tribute_points += points;
@@ -153,6 +156,131 @@ impl TributeTracker {
     #[must_use]
     pub fn entries(&self) -> &[TributeEntry] {
         &self.entries
+    }
+}
+
+/// Operator-configured tribute automation preferences for one character.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TributePreference {
+    /// Whether tribute should be re-activated automatically once it expires.
+    pub auto_activate: bool,
+    /// How many seconds before expiry should trigger a warning.
+    pub warning_threshold_secs: u64,
+    /// Preferred tribute names to activate when tribute expires.
+    pub preferred_tributes: Vec<String>,
+}
+
+impl Default for TributePreference {
+    fn default() -> Self {
+        Self {
+            auto_activate: true,
+            warning_threshold_secs: 300,
+            preferred_tributes: Vec::new(),
+        }
+    }
+}
+
+/// Snapshot of a character's current tribute runtime state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TributeStatus {
+    /// Whether tribute is currently active in-game.
+    pub active: bool,
+    /// Seconds remaining before the active tribute expires.
+    pub remaining_secs: u64,
+    /// Current tribute point balance.
+    pub point_balance: u32,
+    /// Currently active tribute names, if known.
+    pub active_tributes: Vec<String>,
+}
+
+/// Alert emitted by the tribute automation monitor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TributeAlert {
+    /// Tribute is within the configured warning window.
+    ExpiringSoon { remaining_secs: u64 },
+}
+
+/// Request to activate the configured preferred tributes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TributeActivationRequest {
+    /// Tribute names that should be activated together.
+    pub tributes: Vec<String>,
+}
+
+/// Result of one tribute automation evaluation tick.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TributeAutomationOutcome {
+    /// Warning emitted for the current tick, if any.
+    pub alert: Option<TributeAlert>,
+    /// Activation request emitted for the current tick, if any.
+    pub activation: Option<TributeActivationRequest>,
+}
+
+/// Monitors tribute status and emits alerts or activation requests.
+///
+/// This controller is intentionally edge-triggered: it emits one activation
+/// request per expiry transition, and the caller owns delivery, retry, and
+/// backoff policy once that request leaves the controller.
+#[derive(Debug, Clone)]
+pub struct TributeAutomationController {
+    preferences: TributePreference,
+    expiring_alert_sent: bool,
+    activation_sent: bool,
+}
+
+impl TributeAutomationController {
+    /// Create a controller for the supplied preferences.
+    #[must_use]
+    pub fn new(preferences: TributePreference) -> Self {
+        Self {
+            preferences,
+            expiring_alert_sent: false,
+            activation_sent: false,
+        }
+    }
+
+    /// Evaluate the latest tribute status and emit the next action, if any.
+    #[must_use]
+    pub fn evaluate(&mut self, status: &TributeStatus) -> TributeAutomationOutcome {
+        if status.active && status.remaining_secs > self.preferences.warning_threshold_secs {
+            self.expiring_alert_sent = false;
+            self.activation_sent = false;
+            return TributeAutomationOutcome::default();
+        }
+
+        if status.active && status.remaining_secs > 0 {
+            self.activation_sent = false;
+            if !self.expiring_alert_sent
+                && status.remaining_secs <= self.preferences.warning_threshold_secs
+            {
+                self.expiring_alert_sent = true;
+                return TributeAutomationOutcome {
+                    alert: Some(TributeAlert::ExpiringSoon {
+                        remaining_secs: status.remaining_secs,
+                    }),
+                    activation: None,
+                };
+            }
+            return TributeAutomationOutcome::default();
+        }
+
+        self.expiring_alert_sent = false;
+
+        if self.activation_sent
+            || !self.preferences.auto_activate
+            || self.preferences.preferred_tributes.is_empty()
+            || status.point_balance == 0
+        {
+            return TributeAutomationOutcome::default();
+        }
+
+        self.activation_sent = true;
+        TributeAutomationOutcome {
+            alert: None,
+            activation: Some(TributeActivationRequest {
+                tributes: self.preferences.preferred_tributes.clone(),
+            }),
+        }
     }
 }
 
@@ -415,6 +543,106 @@ mod tests {
                 item_id: 1002,
                 points: 250
             }
+        );
+    }
+
+    #[test]
+    fn test_tribute_automation_alerts_once_when_expiring() {
+        let preferences = TributePreference {
+            auto_activate: true,
+            warning_threshold_secs: 300,
+            preferred_tributes: vec!["Marr's Gift".into(), "Champion's Aura".into()],
+        };
+        let mut controller = TributeAutomationController::new(preferences);
+        let status = TributeStatus {
+            active: true,
+            remaining_secs: 240,
+            point_balance: 3_200,
+            active_tributes: vec!["Marr's Gift".into()],
+        };
+
+        let first = controller.evaluate(&status);
+        assert_eq!(
+            first.alert,
+            Some(TributeAlert::ExpiringSoon {
+                remaining_secs: 240
+            })
+        );
+        assert_eq!(first.activation, None);
+
+        let second = controller.evaluate(&status);
+        assert_eq!(second, TributeAutomationOutcome::default());
+    }
+
+    #[test]
+    fn test_tribute_automation_rearms_after_refresh() {
+        let preferences = TributePreference {
+            auto_activate: true,
+            warning_threshold_secs: 300,
+            preferred_tributes: vec!["Marr's Gift".into()],
+        };
+        let mut controller = TributeAutomationController::new(preferences);
+
+        let expiring = TributeStatus {
+            active: true,
+            remaining_secs: 180,
+            point_balance: 800,
+            active_tributes: vec!["Marr's Gift".into()],
+        };
+        let refreshed = TributeStatus {
+            active: true,
+            remaining_secs: 1_200,
+            point_balance: 800,
+            active_tributes: vec!["Marr's Gift".into()],
+        };
+
+        assert!(controller.evaluate(&expiring).alert.is_some());
+        assert_eq!(
+            controller.evaluate(&refreshed),
+            TributeAutomationOutcome::default()
+        );
+
+        let expiring_again = TributeStatus {
+            active: true,
+            remaining_secs: 120,
+            point_balance: 800,
+            active_tributes: vec!["Marr's Gift".into()],
+        };
+        assert_eq!(
+            controller.evaluate(&expiring_again).alert,
+            Some(TributeAlert::ExpiringSoon {
+                remaining_secs: 120
+            })
+        );
+    }
+
+    #[test]
+    fn test_tribute_automation_requests_activation_when_expired() {
+        let preferences = TributePreference {
+            auto_activate: true,
+            warning_threshold_secs: 300,
+            preferred_tributes: vec!["Marr's Gift".into(), "Champion's Aura".into()],
+        };
+        let mut controller = TributeAutomationController::new(preferences);
+        let expired = TributeStatus {
+            active: false,
+            remaining_secs: 0,
+            point_balance: 1_250,
+            active_tributes: Vec::new(),
+        };
+
+        let outcome = controller.evaluate(&expired);
+        assert_eq!(outcome.alert, None);
+        assert_eq!(
+            outcome.activation,
+            Some(TributeActivationRequest {
+                tributes: vec!["Marr's Gift".into(), "Champion's Aura".into()],
+            })
+        );
+
+        assert_eq!(
+            controller.evaluate(&expired),
+            TributeAutomationOutcome::default()
         );
     }
 }

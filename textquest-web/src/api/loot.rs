@@ -1,11 +1,12 @@
 //! REST API handlers for loot rules and distribution configuration.
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use axum::Json;
-use axum::extract::{Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::{
+    Json,
+    extract::{Path, Query, State},
+    http::{HeaderMap, StatusCode},
+};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -276,7 +277,8 @@ fn demo_history() -> Vec<LootHistoryEntry> {
     ]
 }
 
-// ── Origin allowlist ──────────────────────────────────────────────────────────
+// ── Origin allowlist
+// ──────────────────────────────────────────────────────────
 
 /// Trusted local-dev origins shared with the global CORS configuration in
 /// `main.rs`.  Both the CORS middleware and the per-handler origin guard must
@@ -444,6 +446,7 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             loot_state: LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
         })

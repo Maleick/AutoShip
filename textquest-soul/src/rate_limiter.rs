@@ -1,7 +1,10 @@
-//! LLM request rate limiting — global and per-character sliding-window throttles.
+//! LLM request rate limiting — global and per-character sliding-window
+//! throttles.
 
-use std::collections::{HashMap, VecDeque};
-use std::time::Instant;
+use std::{
+    collections::{HashMap, VecDeque},
+    time::Instant,
+};
 
 use serde::Deserialize;
 
@@ -118,7 +121,8 @@ impl LlmRateLimiter {
     }
 }
 
-/// Remove entries from `window` that are older than `WINDOW_SECS` relative to `now`.
+/// Remove entries from `window` that are older than `WINDOW_SECS` relative to
+/// `now`.
 fn drain_window(window: &mut VecDeque<Instant>, now: Instant) {
     while let Some(&front) = window.front() {
         if now.duration_since(front).as_secs() >= WINDOW_SECS {

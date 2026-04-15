@@ -4,8 +4,7 @@
 //! Corpse detection walks the spawn list looking for `spawn_type` == 2 (corpse)
 //! within loot range.
 
-use textquest_common::nav::Waypoint;
-use textquest_common::types::SpawnData;
+use textquest_common::{nav::Waypoint, types::SpawnData};
 
 /// Maximum range to detect lootable corpses (EQ units).
 const LOOT_RANGE: f32 = 50.0;
@@ -15,7 +14,8 @@ const SPAWN_TYPE_CORPSE: u8 = 2;
 
 /// Attempt to loot the nearest corpse via /loot slash command.
 ///
-/// The /loot command targets the nearest corpse within range and opens the loot window.
+/// The /loot command targets the nearest corpse within range and opens the loot
+/// window.
 pub fn loot_nearest_corpse() {
     tracing::info!("Loot: attempting to loot nearest corpse via /loot");
     crate::hooks::game_loop::queue_slash_command("/loot".to_string());
@@ -23,7 +23,8 @@ pub fn loot_nearest_corpse() {
 
 /// Loot all items from the currently open loot window via /lootall.
 ///
-/// Requires the loot window to already be open (from a prior /loot or corpse click).
+/// Requires the loot window to already be open (from a prior /loot or corpse
+/// click).
 pub fn loot_all_items() {
     tracing::info!("Loot: looting all items via /lootall");
     crate::hooks::game_loop::queue_slash_command("/lootall".to_string());

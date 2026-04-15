@@ -7,7 +7,8 @@
 use crate::hooks::movement::MovementController;
 use textquest_common::nav::Waypoint;
 
-/// How many ticks with < `MIN_MOVEMENT` unit movement before we consider ourselves stuck.
+/// How many ticks with < `MIN_MOVEMENT` unit movement before we consider
+/// ourselves stuck.
 const STUCK_TICK_THRESHOLD: u32 = 40; // ~2 seconds at 20 Hz
 /// Minimum movement per tick to not be considered stuck (game units).
 const MIN_MOVEMENT: f32 = 0.5;

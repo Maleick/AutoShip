@@ -49,7 +49,8 @@ impl Default for PersonalityTraits {
     }
 }
 
-/// Current mood of a character. Affects combat style, social behavior, idle choices.
+/// Current mood of a character. Affects combat style, social behavior, idle
+/// choices.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MoodState {
     /// Baseline emotional state.
@@ -75,7 +76,8 @@ pub enum MoodState {
     Exhausted,
 }
 
-/// Types of idle behavior a character can perform when not in combat or traveling.
+/// Types of idle behavior a character can perform when not in combat or
+/// traveling.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IdleBehaviorType {
     /// Sit down to regen mana/HP.

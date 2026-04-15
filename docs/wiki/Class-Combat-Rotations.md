@@ -217,7 +217,9 @@ Crowd control is the #1 priority. One missed mez can wipe the group. Secondary: 
 - Tash > Mez sequence should be atomic
 - Haste buff tracking per group member
 - Clarity buff tracking per caster
-- Charm pet management: re-charm on break, haste the pet, send pet in
+- The DLL now tracks successful **Enchanter** charm casts, detects a break when the former pet drops out of `MyPet` and shows back up as hostile, and immediately re-casts the resolved charm spell.
+- Retryable re-charm failures (for example cooldown/pending-style outcomes) still use the normal cast retry policy; terminal failures such as resists/immunity are counted separately and stop after 3 attempts so the group can fall back to killing the mob.
+- Current scope is the resolved `Charm` line in the DLL combat FSM; Druid/Necromancer animal/undead charm extensions still need explicit spell-line support before they get the same automation path.
 - Color Flux (PBAE stun) is the emergency "everything broke" button
 
 ---
@@ -856,33 +858,52 @@ Pet class DPS. Pet provides consistent melee damage. Supplemental nuking. Utilit
 
 ## Cross-Class Group Composition Notes
 
-### Ideal 6-Person Group (Velious)
+### Automation-First 6-Person Group (Velious)
 
-| Slot | Class      | Role                                     |
-| ---- | ---------- | ---------------------------------------- |
-| 1    | Warrior    | Main tank; hold aggro                    |
-| 2    | Cleric     | Main healer; keep tank alive             |
-| 3    | Enchanter  | CC; haste tank; clarity casters          |
-| 4    | Shaman     | Slow mob; off-heal; buffs                |
-| 5    | Monk       | Pull; melee DPS                          |
-| 6    | DPS (flex) | Wizard/Necro/Mage/Bard depending on zone |
+| Slot | Class             | Role |
+| ---- | ----------------- | ---- |
+| 1    | Tank              | Warrior, shadowknight, or paladin holds aggro and anchors positioning |
+| 2    | Cleric            | Primary healer, rez anchor, and worst-case recovery backbone |
+| 3    | Bard              | Passive resist and mana floor, movement control, peel/mez backup |
+| 4    | Shaman or Paladin | Preferred second healer (`SHM`) or pickup-and-heal fallback (`PAL`) |
+| 5    | Monk              | Puller and primary melee DPS |
+| 6    | DPS or CC flex    | Second monk for farm speed, or enchanter / caster utility if the camp requires it |
+
+TextQuest's unattended default is intentionally more conservative than a manual-boxer "ideal" group. The automation target is a group that can survive surprises, not just win clean pulls faster.
+
+### Survivability Core and DPS Tradeoff
+
+The main composition trade is whether slot 4 becomes a second healer/support-healer or a third real damage/CC slot.
+
+For design budgeting, use an effective-DPS-slot model instead of pretending we have live parse certainty:
+
+- `tank ~= 0.3 DPS slot` while holding aggro
+- `bard ~= 0.3 DPS slot` while staying in support melody
+- `shaman/paladin second healer ~= 0.4-0.6 DPS slot` while healing, slowing, stunning, or picking up
+
+| Layout | Effective DPS slot budget | Clean-fight pace | Recovery margin |
+| ------ | ------------------------- | ---------------- | --------------- |
+| `Tank / CLR / BRD / SHM|PAL / DPS / DPS` | about `3.0-3.2` | roughly `15-25%` slower than a DPS-first layout | high |
+| `Tank / CLR / BRD / DPS|CC / DPS / DPS` | about `3.6-3.8` | faster on clean pulls | medium to low |
+
+That loss is acceptable for TextQuest because automation cannot make human-speed judgment calls. The second healer/support slot is there to prevent a single resist, lag spike, or bad path from cascading into a wipe.
 
 ### Pull-to-Kill Sequence (Automated)
 
-1. **Monk** pulls single mob via FD split
-2. **Warrior** taunts and establishes aggro
-3. **Enchanter** Tash + Mez any adds
-4. **Shaman** Slow the kill target
-5. **Cleric** heals warrior (Superior Healing / CH)
-6. **DPS** classes engage (nukes, DOTs, pets)
-7. **Enchanter** re-mez adds as needed
-8. Kill mob; move to next add or next pull
+1. **Bard** starts the defensive melody package before the pull lands so mana, resist, and movement coverage are already online.
+2. **Monk** or the configured puller brings a single mob via split tools.
+3. **Tank** establishes aggro and locks the mob in camp geometry.
+4. **Shaman or Paladin** applies the survivability layer first: slow if present, then off-heal or pickup support as needed.
+5. **Cleric** owns the tank HP floor and keeps rez/recovery priority above any offensive cast.
+6. **Flex DPS/CC** joins only after the mob is stable. If an add shows up, that slot pivots to control rather than greedily finishing the kill target.
+7. **Bard or CC flex** isolates the first unexpected add. If control fails, the pickup class takes the add and the group drops into stabilization instead of burn.
+8. Kill the target only after the add state is clean or the group has switched to an orderly disengage.
 
 ### Multi-Group Coordination (36-Box)
 
 With 36 characters across 6 groups:
 
-- Each group operates the above sequence independently
+- Each group operates the above sequence independently, but unattended groups are expected to preserve the `BRD + CLR + second healer/support-healer` floor whenever the content is unstable.
 - **CH Chain** across groups for raid content (3-5 clerics rotating)
 - **Bard** in each group for passive buffs (set `/melody` and forget)
 - **Call of the Hero** (magician) for rapid group assembly

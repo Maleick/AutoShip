@@ -1,7 +1,8 @@
 //! Shared memory WRITER (DLL side).
 //!
 //! Creates a named shared memory region and publishes game state snapshots for
-//! the orchestrator to read. On non-Windows platforms this is a compile-only stub.
+//! the orchestrator to read. On non-Windows platforms this is a compile-only
+//! stub.
 
 use anyhow::Result;
 use std::sync::LazyLock;
@@ -33,9 +34,9 @@ pub struct SharedStateWriter {
     encode_buffer: Vec<u8>,
 }
 
-// SAFETY: SharedStateWriter is only accessed from the game loop thread (single writer).
-// The sequence number uses AtomicU64 with Release ordering as a write fence.
-// The reader side uses Acquire ordering to observe the complete payload.
+// SAFETY: SharedStateWriter is only accessed from the game loop thread (single
+// writer). The sequence number uses AtomicU64 with Release ordering as a write
+// fence. The reader side uses Acquire ordering to observe the complete payload.
 #[cfg(windows)]
 unsafe impl Send for SharedStateWriter {}
 #[cfg(windows)]
@@ -49,11 +50,15 @@ impl SharedStateWriter {
         #[cfg(windows)]
         {
             use textquest_common::ipc::SHARED_MEMORY_SIZE;
-            use windows::Win32::Foundation::INVALID_HANDLE_VALUE;
-            use windows::Win32::System::Memory::{
-                CreateFileMappingW, FILE_MAP_WRITE, MapViewOfFile, PAGE_READWRITE,
+            use windows::{
+                Win32::{
+                    Foundation::INVALID_HANDLE_VALUE,
+                    System::Memory::{
+                        CreateFileMappingW, FILE_MAP_WRITE, MapViewOfFile, PAGE_READWRITE,
+                    },
+                },
+                core::PCWSTR,
             };
-            use windows::core::PCWSTR;
 
             let name: Vec<u16> = format!(
                 "{}\0",
@@ -63,12 +68,15 @@ impl SharedStateWriter {
             .collect();
 
             // Restrict shared memory access to the current user via an explicit DACL.
-            // Fail closed: if DACL creation fails, abort rather than using default (open) security.
-            // sa_setup must be kept alive until after CreateFileMappingW returns.
-            let sa_setup = create_current_user_security_attributes()
-                .ok_or_else(|| anyhow::anyhow!(
-                    "DACL creation failed for client {client_id} — refusing to create shared memory with default security"
-                ))?;
+            // Fail closed: if DACL creation fails, abort rather than using default (open)
+            // security. sa_setup must be kept alive until after
+            // CreateFileMappingW returns.
+            let sa_setup = create_current_user_security_attributes().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "DACL creation failed for client {client_id} — refusing to create shared \
+                     memory with default security"
+                )
+            })?;
             let sa_ptr = Some(sa_setup.sa_ptr());
 
             // SAFETY: CreateFileMappingW with INVALID_HANDLE_VALUE creates a
@@ -122,8 +130,10 @@ impl SharedStateWriter {
     pub fn write(&mut self, frame: &SharedStateFrame) -> Result<()> {
         #[cfg(windows)]
         {
-            use std::sync::atomic::{AtomicU64, Ordering};
-            use std::time::Instant;
+            use std::{
+                sync::atomic::{AtomicU64, Ordering},
+                time::Instant,
+            };
 
             let perf_start = if *PERF_TRACE_ENABLED {
                 Some(Instant::now())
@@ -232,22 +242,26 @@ impl SecuritySetup {
 #[cfg(windows)]
 fn create_current_user_security_attributes() -> Option<SecuritySetup> {
     use std::mem;
-    use windows::Win32::Foundation::{CloseHandle, HANDLE};
-    use windows::Win32::Security::{
-        ACE_REVISION, ACL, AddAccessAllowedAce, GetLengthSid, GetTokenInformation, InitializeAcl,
-        InitializeSecurityDescriptor, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
-        SECURITY_DESCRIPTOR, SetSecurityDescriptorDacl, TOKEN_QUERY, TOKEN_USER, TokenUser,
+    use windows::Win32::{
+        Foundation::{CloseHandle, HANDLE},
+        Security::{
+            ACE_REVISION, ACL, AddAccessAllowedAce, GetLengthSid, GetTokenInformation,
+            InitializeAcl, InitializeSecurityDescriptor, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
+            SECURITY_DESCRIPTOR, SetSecurityDescriptorDacl, TOKEN_QUERY, TOKEN_USER, TokenUser,
+        },
+        System::{
+            Memory::FILE_MAP_ALL_ACCESS,
+            Threading::{GetCurrentProcess, OpenProcessToken},
+        },
     };
-    use windows::Win32::System::Memory::FILE_MAP_ALL_ACCESS;
-    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
     unsafe {
         // 1. Open the current process token (read-only query — no write needed).
         let mut token = HANDLE::default();
         OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).ok()?;
 
-        // 2. Two-pass GetTokenInformation to obtain the user SID.
-        //    First call returns ERROR_INSUFFICIENT_BUFFER with the required size.
+        // 2. Two-pass GetTokenInformation to obtain the user SID. First call returns
+        //    ERROR_INSUFFICIENT_BUFFER with the required size.
         let mut info_size = 0u32;
         let _ = GetTokenInformation(token, TokenUser, None, 0, &mut info_size);
         let mut user_buf = vec![0u8; info_size as usize];
@@ -264,8 +278,8 @@ fn create_current_user_security_attributes() -> Option<SecuritySetup> {
         let token_user = &*(user_buf.as_ptr() as *const TOKEN_USER);
         let sid = token_user.User.Sid; // type inferred from TOKEN_USER.User.Sid
 
-        // 3. Build an ACL with one ACCESS_ALLOWED_ACE for the current user.
-        //    Layout: ACL header (8 B) + ACE_HEADER+ACCESS_MASK (8 B) + SID bytes.
+        // 3. Build an ACL with one ACCESS_ALLOWED_ACE for the current user. Layout: ACL
+        //    header (8 B) + ACE_HEADER+ACCESS_MASK (8 B) + SID bytes.
         let sid_len = GetLengthSid(sid) as usize;
         let ace_size = 8usize + sid_len; // sizeof(ACE_HEADER) + sizeof(ACCESS_MASK) + SID
         let acl_size = mem::size_of::<ACL>() + ace_size;
@@ -299,9 +313,9 @@ fn create_current_user_security_attributes() -> Option<SecuritySetup> {
         )
         .ok()?;
 
-        // 5. Assemble SECURITY_ATTRIBUTES.
-        //    lpSecurityDescriptor points into sd_buf's heap allocation, which is
-        //    stable as long as SecuritySetup (and therefore sd_buf) is alive.
+        // 5. Assemble SECURITY_ATTRIBUTES. lpSecurityDescriptor points into sd_buf's
+        //    heap allocation, which is stable as long as SecuritySetup (and therefore
+        //    sd_buf) is alive.
         let sa = SECURITY_ATTRIBUTES {
             nLength: mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
             lpSecurityDescriptor: sd_buf.as_mut_ptr() as *mut _,
@@ -320,8 +334,7 @@ impl Drop for SharedStateWriter {
     fn drop(&mut self) {
         #[cfg(windows)]
         {
-            use windows::Win32::Foundation::CloseHandle;
-            use windows::Win32::System::Memory::UnmapViewOfFile;
+            use windows::Win32::{Foundation::CloseHandle, System::Memory::UnmapViewOfFile};
 
             // SAFETY: self.ptr is a valid mapped view from MapViewOfFile (validated
             // non-null in new()). self._handle is a valid file mapping handle from

@@ -4,9 +4,12 @@
 //! operations delegate to `crate::eq` primitives which resolve and call
 //! EQ's internal functions directly:
 //!
-//! - `cast_spell`   → `CharacterZoneClient::CastSpell`  (via `crate::eq::cast_spell`)
-//! - `use_ability`  → `PcZoneClient::DoCombatAbility`   (via `crate::eq::do_combat_ability`)
-//! - `use_item`     → `/useitem` slash command           (via `crate::eq::slash_command`)
+//! - `cast_spell`   → `CharacterZoneClient::CastSpell`  (via
+//!   `crate::eq::cast_spell`)
+//! - `use_ability`  → `PcZoneClient::DoCombatAbility`   (via
+//!   `crate::eq::do_combat_ability`)
+//! - `use_item`     → `/useitem` slash command           (via
+//!   `crate::eq::slash_command`)
 //!
 //! On non-Windows platforms all operations are no-ops that log a warning
 //! (the underlying `crate::eq` functions handle the platform stub).
@@ -54,7 +57,8 @@ impl CastingController {
     /// Calls `CharacterZoneClient::CastSpell` via `crate::eq::cast_spell`.
     /// The gem slot is converted from 1-based (EQ UI) to 0-based (internal).
     /// spell_id=0 means "use whatever is memorized in that gem".
-    /// The target should be set via the `TargetingController` before calling this.
+    /// The target should be set via the `TargetingController` before calling
+    /// this.
     pub fn cast_spell(&self, spell_slot: u8, _target_id: u32) -> Result<(), CastError> {
         if spell_slot == 0 || spell_slot > 13 {
             return Err(CastError::InvalidSlot(spell_slot));
@@ -105,8 +109,9 @@ impl CastingController {
             const STANDSTATE: usize = 0x14;
             tracing::info!("interrupt_cast: writing duck state to cancel cast");
             // SAFETY: player_base is a validated non-null PlayerClient* inside eqgame.exe.
-            // Writing 4 (duck) to StandState is the standard MQ2 approach to interrupt a cast.
-            // If the offset is wrong, this will corrupt game state — offset sourced from eqlib.
+            // Writing 4 (duck) to StandState is the standard MQ2 approach to interrupt a
+            // cast. If the offset is wrong, this will corrupt game state —
+            // offset sourced from eqlib.
             unsafe {
                 std::ptr::write((player_base + STANDSTATE) as *mut u8, 4);
             }
@@ -160,7 +165,8 @@ impl CastingController {
     /// Use an ability or discipline by spell ID.
     ///
     /// Abilities include disciplines, AAs, and combat skills.
-    /// Calls `PcZoneClient::DoCombatAbility` via `crate::eq::do_combat_ability`.
+    /// Calls `PcZoneClient::DoCombatAbility` via
+    /// `crate::eq::do_combat_ability`.
     pub fn use_ability(&self, ability_id: u32) -> Result<(), CastError> {
         if self.eq_base == 0 {
             return Err(CastError::NoBaseAddress);

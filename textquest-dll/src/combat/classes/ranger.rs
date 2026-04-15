@@ -1,14 +1,18 @@
-use textquest_common::combat::{CombatRole, SpellEntry};
-use textquest_common::nav::Waypoint;
-use textquest_common::types::SpawnData;
+use textquest_common::{
+    combat::{CombatRole, SpellEntry},
+    nav::Waypoint,
+    types::SpawnData,
+};
 
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
 /// Ranger strategy: ranged/melee hybrid DPS with tracking and bow pulling.
 ///
 /// Rangers operate in two stances:
-/// - **Ranged**: Use bow attacks and `DoT` spells from distance (default when pulling)
-/// - **Melee**: Switch to melee when target is close, use kicks and backstab-style abilities
+/// - **Ranged**: Use bow attacks and `DoT` spells from distance (default when
+///   pulling)
+/// - **Melee**: Switch to melee when target is close, use kicks and
+///   backstab-style abilities
 ///
 /// Rangers also provide: tracking (find mobs), snare (Snare/Ensnare),
 /// and at higher levels, Headshot AA for trivial kills.

@@ -10,18 +10,22 @@
 
 use crate::hooks::movement::{self, ARRIVAL_DISTANCE, MovementController};
 // Distance methods are on Waypoint directly (e.g., a.distance_2d(&b)).
-use textquest_common::nav::{
-    CampSpot, CircleConfig, CircleMode, FollowConfig, HeadingMode, LOOSE_MAX_TURN_PER_TICK,
-    MoveToConfig, NavCampConfig, NavDiagnostics, NavStateSignals, NavStatus, PauseReason,
-    StickConfig, Waypoint, step_toward_heading,
+use textquest_common::{
+    nav::{
+        CampSpot, CircleConfig, CircleMode, FollowConfig, HeadingMode, LOOSE_MAX_TURN_PER_TICK,
+        MoveToConfig, NavCampConfig, NavDiagnostics, NavStateSignals, NavStatus, PauseReason,
+        StickConfig, Waypoint, step_toward_heading,
+    },
+    types::SpawnData,
 };
-use textquest_common::types::SpawnData;
 
-use super::humanize::MovementPersonality;
-use super::stick::StickEngine;
-use super::stuck::StuckDetector;
-use super::warp::{TargetSample, WarpAction, WarpMonitor};
-use super::waypoint::WaypointQueue;
+use super::{
+    humanize::MovementPersonality,
+    stick::StickEngine,
+    stuck::StuckDetector,
+    warp::{TargetSample, WarpAction, WarpMonitor},
+    waypoint::WaypointQueue,
+};
 
 /// Internal state for the navigation FSM.
 enum State {
@@ -68,7 +72,8 @@ pub struct Navigator {
     stuck: StuckDetector,
     /// Per-character movement personality for humanization.
     personality: MovementPersonality,
-    /// Cached distance to current waypoint (updated each tick, read by status()).
+    /// Cached distance to current waypoint (updated each tick, read by
+    /// status()).
     cached_distance: f32,
     /// Stick-to-target engine.
     stick: StickEngine,
@@ -99,9 +104,11 @@ pub struct Navigator {
     heading_mode: HeadingMode,
 }
 
-/// Radius for hostile NPC proximity checks (aggro detection), in EQ world units.
+/// Radius for hostile NPC proximity checks (aggro detection), in EQ world
+/// units.
 const AGGRO_CHECK_RADIUS: f32 = 50.0;
-/// Distance delta that counts as an unexpected player displacement (e.g. summon).
+/// Distance delta that counts as an unexpected player displacement (e.g.
+/// summon).
 const SUMMON_DISTANCE_THRESHOLD: f32 = 60.0;
 
 /// Radius for GM proximity check (break-on-GM detection), in EQ world units.
@@ -131,7 +138,8 @@ fn has_gm_nearby(nearby: &[SpawnData], pos: &Waypoint) -> bool {
 /// last observed HP.  Updates `last_hp` to the new sample.
 ///
 /// - If `last_hp` is `None` (first sample), stores it and returns `false`.
-/// - If `current_hp` is `None` (HP unreadable), leaves `last_hp` unchanged and returns `false`.
+/// - If `current_hp` is `None` (HP unreadable), leaves `last_hp` unchanged and
+///   returns `false`.
 fn break_on_hit_triggered(last_hp_current: &mut Option<i64>, current_hp: Option<i64>) -> bool {
     let Some(current_hp) = current_hp else {
         return false;
@@ -392,7 +400,8 @@ impl Navigator {
         tracing::info!("Stick off — returning to Idle");
     }
 
-    /// Apply a distance modifier delta to the active stick session (`/stick mod #`).
+    /// Apply a distance modifier delta to the active stick session (`/stick mod
+    /// #`).
     pub fn stick_mod(&mut self, delta: f32) {
         self.stick.apply_mod(delta);
     }
@@ -427,7 +436,8 @@ impl Navigator {
     /// Enable or disable break-on-GM safety halt.
     ///
     /// When enabled, navigation pauses (path retained) whenever a GM-flagged
-    /// spawn is detected within GM_CHECK_RADIUS, mirroring MQ2MoveUtils breakongm.
+    /// spawn is detected within GM_CHECK_RADIUS, mirroring MQ2MoveUtils
+    /// breakongm.
     pub fn set_break_on_gm(&mut self, enabled: bool) {
         self.break_on_gm = enabled;
         tracing::info!(enabled, "BreakOnGm set");
@@ -448,7 +458,8 @@ impl Navigator {
     /// Apply a target heading according to the active [`HeadingMode`].
     ///
     /// - `True`:  writes heading field only (instant snap).
-    /// - `Fast`:  writes both heading and speed-heading (instant snap, default).
+    /// - `Fast`:  writes both heading and speed-heading (instant snap,
+    ///   default).
     /// - `Loose`: steps toward `target` from the current heading by at most
     ///   [`LOOSE_MAX_TURN_PER_TICK`] EQ units, then writes both fields.
     fn apply_heading(&self, target: f32) {
@@ -931,9 +942,10 @@ impl Navigator {
 
     /// Start circle-kiting mode.
     ///
-    /// `center` is the resolved orbit center (already computed by the caller from
-    /// the player's current position or an explicit location).  When `config.target_id`
-    /// is set, `tick_circling` will update the center live from the spawn list each tick.
+    /// `center` is the resolved orbit center (already computed by the caller
+    /// from the player's current position or an explicit location).  When
+    /// `config.target_id` is set, `tick_circling` will update the center
+    /// live from the spawn list each tick.
     pub fn circle_kite(&mut self, config: CircleConfig, center: Option<Waypoint>) {
         let resolved_center = center.unwrap_or_else(|| self.controller.read_position());
 
@@ -991,7 +1003,8 @@ impl Navigator {
     /// 4. Face and move toward it.
     fn tick_circling(&mut self, nearby: &[SpawnData]) {
         // Angular advance per tick (radians). At radius=20 and 20 ticks/sec this
-        // puts the "lead" waypoint ~3 units ahead, producing smooth continuous movement.
+        // puts the "lead" waypoint ~3 units ahead, producing smooth continuous
+        // movement.
         const CIRCLE_ANGLE_STEP: f32 = 0.15;
 
         // Extract mutable state — we need to mutate self while holding refs.
@@ -1157,9 +1170,10 @@ impl Navigator {
     /// One tick for player follow mode.
     ///
     /// Implements the leash/return logic:
-    /// - If distance to anchor > `leash_distance`: start (or continue) navigating back,
-    ///   subject to return policy gates (`return_no_aggro`).
-    /// - If currently returning and distance <= `follow_distance`: stop, hold position.
+    /// - If distance to anchor > `leash_distance`: start (or continue)
+    ///   navigating back, subject to return policy gates (`return_no_aggro`).
+    /// - If currently returning and distance <= `follow_distance`: stop, hold
+    ///   position.
     fn tick_following(&mut self, nearby: &[SpawnData]) {
         if let State::Following {
             ref config,

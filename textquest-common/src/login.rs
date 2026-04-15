@@ -1,14 +1,12 @@
-use std::collections::HashMap;
-use std::path::Path;
-use std::time::Duration;
+use std::{collections::HashMap, path::Path, time::Duration};
 
 use serde::{Deserialize, Serialize};
 
 /// Configurable retry policy with exponential backoff for login failures.
 ///
-/// Delays escalate as: `initial_delay * backoff_multiplier^attempt`, capped at `max_delay`.
-/// Optional jitter adds up to ±25% randomization to prevent thundering-herd retries
-/// across multiple clients.
+/// Delays escalate as: `initial_delay * backoff_multiplier^attempt`, capped at
+/// `max_delay`. Optional jitter adds up to ±25% randomization to prevent
+/// thundering-herd retries across multiple clients.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RetryPolicy {
     /// Maximum number of retry attempts before giving up.
@@ -40,7 +38,8 @@ impl Default for RetryPolicy {
 impl RetryPolicy {
     /// Returns the next retry delay if retries remain, or `None` if exhausted.
     ///
-    /// The returned duration includes jitter (if enabled) and is clamped to `max_delay`.
+    /// The returned duration includes jitter (if enabled) and is clamped to
+    /// `max_delay`.
     pub fn next_delay(&self, state: &RetryState) -> Option<Duration> {
         if state.attempt_count >= self.max_retries {
             return None;
@@ -93,7 +92,8 @@ fn apply_jitter(secs: f64) -> f64 {
     secs * (1.0 + jitter_factor)
 }
 
-/// Serde helper to serialize `Duration` as fractional seconds (f64) for TOML/JSON.
+/// Serde helper to serialize `Duration` as fractional seconds (f64) for
+/// TOML/JSON.
 mod serde_duration_secs {
     use std::time::Duration;
 
@@ -221,7 +221,8 @@ impl Default for RelogConfig {
     }
 }
 
-/// Progress of an in-flight relog operation, sent via IPC for operator telemetry.
+/// Progress of an in-flight relog operation, sent via IPC for operator
+/// telemetry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RelogPhase {
     /// `/camp desktop` issued, waiting for camp timer.

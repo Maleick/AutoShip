@@ -1,7 +1,8 @@
 //! Vendor/sell cycle — periodically sell loot to a nearby vendor.
 //!
 //! The sell cycle is a two-level FSM:
-//! - Outer: `SellState` — `NotNeeded` → `TravelingToVendor` → Selling → Returning
+//! - Outer: `SellState` — `NotNeeded` → `TravelingToVendor` → Selling →
+//!   Returning
 //! - Inner: `VendorStep` — sub-states within `Selling` that drive the actual
 //!   vendor UI interaction (target, approach, open window, sell items, close).
 
@@ -22,7 +23,8 @@ pub struct VendorConfig {
     pub sellable_items: Vec<String>,
     /// Ticks to wait between each sell-item command pair (prevents UI race).
     pub sell_step_delay: u64,
-    /// Optional gate/origin spell gem for return travel (e.g., "gate" or "5" for gem 5).
+    /// Optional gate/origin spell gem for return travel (e.g., "gate" or "5"
+    /// for gem 5).
     pub return_spell: Option<String>,
 }
 
@@ -35,7 +37,8 @@ pub enum VendorStep {
     Approaching,
     /// Right-click vendor to open the merchant window.
     OpeningWindow,
-    /// Sell items one at a time. `index` tracks progress through sellable inventory.
+    /// Sell items one at a time. `index` tracks progress through sellable
+    /// inventory.
     SellingItems {
         /// Index of the item currently being sold.
         index: usize,
@@ -104,7 +107,8 @@ impl SellCycle {
     }
 
     /// Set the list of items to sell this cycle. Call before `start_sell`.
-    /// Filters out keep-list items, and applies `sellable_items` as an allowlist when non-empty.
+    /// Filters out keep-list items, and applies `sellable_items` as an
+    /// allowlist when non-empty.
     pub fn queue_sell_items(&mut self, inventory: &[String]) {
         let use_allowlist = !self.config.sellable_items.is_empty();
         self.sell_queue = inventory
@@ -123,8 +127,8 @@ impl SellCycle {
         }
     }
 
-    /// Advance the sell state machine by one tick. Returns `(pid, command)` pairs
-    /// for the designated seller.
+    /// Advance the sell state machine by one tick. Returns `(pid, command)`
+    /// pairs for the designated seller.
     pub fn tick(&mut self, seller_pid: u32, current_tick: u64) -> Vec<(u32, String)> {
         match &self.state {
             SellState::NotNeeded => Vec::new(),

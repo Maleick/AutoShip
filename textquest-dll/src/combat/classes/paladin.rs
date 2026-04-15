@@ -2,11 +2,13 @@ use textquest_common::combat::{CombatRole, SpellEntry};
 
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
-/// Paladin strategy: off-tank + healer hybrid, stuns, cures, heals, undead nukes.
+/// Paladin strategy: off-tank + healer hybrid, stuns, cures, heals, undead
+/// nukes.
 ///
 /// Priority order (MQ2-style cascade):
 /// 1. Stun (interrupt, aggro)
-/// 2. Cure disease/poison (Paladins get Cure Disease at level 6, Cure Poison at 22)
+/// 2. Cure disease/poison (Paladins get Cure Disease at level 6, Cure Poison at
+///    22)
 /// 3. Emergency heal (< 40% HP)
 /// 4. Moderate heal (< 60% HP)
 /// 5. Nuke (undead DD, general)

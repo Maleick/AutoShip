@@ -22,9 +22,9 @@ pub struct WindowHandle {
 #[cfg(windows)]
 pub fn find_windows_by_title(substring: &str) -> Result<Vec<WindowHandle>> {
     use std::sync::Mutex;
-    use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowTextW, GetWindowThreadProcessId,
+    use windows::Win32::{
+        Foundation::{BOOL, HWND, LPARAM},
+        UI::WindowsAndMessaging::{EnumWindows, GetWindowTextW, GetWindowThreadProcessId},
     };
 
     unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {

@@ -1,6 +1,8 @@
-use std::fs::File;
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
-use std::path::PathBuf;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader, Seek, SeekFrom},
+    path::PathBuf,
+};
 
 use super::log_parser::{LogEvent, LootDatabase};
 
@@ -25,7 +27,8 @@ impl LogWatcher {
         }
     }
 
-    /// Read new lines since last poll, parse them, and return any recognized events.
+    /// Read new lines since last poll, parse them, and return any recognized
+    /// events.
     pub fn poll(&mut self) -> Vec<LogEvent> {
         let mut events = Vec::new();
 

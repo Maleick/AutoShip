@@ -1,17 +1,24 @@
-use std::collections::HashMap;
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    io::Write,
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
-use ratatui::style::Color;
-use ratatui::widgets::TableState;
+use ratatui::{style::Color, widgets::TableState};
 
-use super::app::{NavClientStatus, NavScope, SpawnFilter, SpawnSort};
-use super::theme::ThemeKind;
-use crate::eq::map_parser::ZoneMap;
-use crate::eq::named_tracker;
-use crate::eq::structs::{SpawnInfo, SpawnType};
-use crate::nav::mesh::NavMeshOverlay;
+use super::{
+    app::{NavClientStatus, NavScope, SpawnFilter, SpawnSort},
+    theme::ThemeKind,
+};
+use crate::{
+    eq::{
+        map_parser::ZoneMap,
+        named_tracker,
+        structs::{SpawnInfo, SpawnType},
+    },
+    nav::mesh::NavMeshOverlay,
+};
 
 // ─── Per-screen state sub-structs ────────────────────────────────────────────
 
@@ -167,7 +174,8 @@ impl HexDumpState {
 
     /// Build annotations from PlayerBase struct field offsets.
     ///
-    /// These annotations apply when viewing raw spawn memory (base at struct start).
+    /// These annotations apply when viewing raw spawn memory (base at struct
+    /// start).
     pub fn load_player_base_annotations(&mut self) {
         use textquest_common::offsets::player_base;
 
@@ -311,7 +319,8 @@ impl HookRotationState {
         }
     }
 
-    /// Update the panel-wide rotation interval and reschedule any active entries.
+    /// Update the panel-wide rotation interval and reschedule any active
+    /// entries.
     pub fn set_interval_ms(&mut self, interval_ms: u64) {
         self.interval_ms = interval_ms;
         let now = Instant::now();
@@ -748,7 +757,8 @@ pub fn save_named_markers(path: &PathBuf, markers: &[NamedMapMarker]) -> anyhow:
     // Atomically replace the destination.
     // On Unix this is a rename(2); on Windows tempfile uses MoveFileExW with
     // MOVEFILE_REPLACE_EXISTING, so no separate pre-deletion is needed.
-    // If persist fails the NamedTempFile is returned in the error and auto-removed on drop.
+    // If persist fails the NamedTempFile is returned in the error and auto-removed
+    // on drop.
     staged.persist(path).map(|_| ()).map_err(|e| {
         anyhow::anyhow!(
             "Failed to persist marker file {}: {}",
@@ -889,7 +899,8 @@ pub struct MapScreenState {
     pub map_dir: std::path::PathBuf,
     /// The zone short name currently loaded, used to avoid redundant reloads.
     pub loaded_zone: String,
-    /// Z-depth filter range — spawns farther than this from the player's Z are hidden.
+    /// Z-depth filter range — spawns farther than this from the player's Z are
+    /// hidden.
     pub z_filter_range: f32,
     pub viewport_mode: MapViewportMode,
     pub zoom: f32,
@@ -1290,7 +1301,8 @@ pub struct NavigationScreenState {
     pub nav_statuses: HashMap<u32, NavClientStatus>,
     /// Whether the `/nav ui` debug diagnostics overlay is enabled.
     pub show_nav_debug: bool,
-    /// Most recently fetched nav diagnostics for the focused client (PID, diagnostics).
+    /// Most recently fetched nav diagnostics for the focused client (PID,
+    /// diagnostics).
     pub nav_diagnostics: Option<(u32, textquest_common::nav::NavDiagnostics)>,
 }
 
@@ -1440,7 +1452,8 @@ impl CommandBarState {
         self.set_buffer(self.command_history[idx].clone());
     }
 
-    /// Browse to the next command in history, restoring the in-progress draft at the end.
+    /// Browse to the next command in history, restoring the in-progress draft
+    /// at the end.
     pub fn history_next(&mut self) {
         match self.command_history_idx {
             Some(idx) if idx + 1 < self.command_history.len() => {
@@ -1498,8 +1511,8 @@ impl CommandBarState {
     }
 
     /// Normalize a command for frequency tracking.
-    /// Strips arguments for grouping: "ma Warrior" → "ma", "G1 /sit" → "G1 /sit"
-    /// but preserves slash commands: "all /sit" → "all /sit"
+    /// Strips arguments for grouping: "ma Warrior" → "ma", "G1 /sit" → "G1
+    /// /sit" but preserves slash commands: "all /sit" → "all /sit"
     fn normalize_command(cmd: &str) -> String {
         let trimmed = cmd.trim();
         let parts: Vec<&str> = trimmed.splitn(3, ' ').collect();
@@ -1667,7 +1680,8 @@ pub struct PacketMonitorState {
     pub auto_scroll: bool,
     /// Scroll offset from the bottom (0 = latest).
     pub scroll_offset: usize,
-    /// Optional opcode filter — when set, only show packets matching this opcode.
+    /// Optional opcode filter — when set, only show packets matching this
+    /// opcode.
     pub filter_opcode: Option<u16>,
     /// Optional direction filter.
     pub filter_direction: Option<textquest_common::ipc::PacketDirection>,
@@ -1921,7 +1935,8 @@ impl EqInternalsState {
     }
 }
 
-// ─── Economy State ────────────────────────────────────────────────────────────
+// ─── Economy State
+// ────────────────────────────────────────────────────────────
 
 /// State for the Economy Controls screen.
 ///

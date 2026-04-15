@@ -1,4 +1,5 @@
-//! Character screen — operator roster, group scope, and selected character detail.
+//! Character screen — operator roster, group scope, and selected character
+//! detail.
 
 use ratatui::{
     Frame,
@@ -13,8 +14,10 @@ use super::widgets::{
     WIDTH_SIDEBAR_MEDIUM, WIDTH_SIDEBAR_WIDE, WidthClass, classify_width, hp_color, panel,
     render_cast_bar, stand_state_color, themed_header_row, truncate_inline,
 };
-use crate::eq::structs::{EqClass, StandState};
-use crate::tui::app::{ActivePanel, App, ClientState};
+use crate::{
+    eq::structs::{EqClass, StandState},
+    tui::app::{ActivePanel, App, ClientState},
+};
 use textquest_common::types::SlotLifecycle;
 
 const MIN_HEIGHT_FOR_FOCUS_STRIP: u16 = 28;
@@ -31,7 +34,8 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &mut App) {
     let stacked = area.width < WIDTH_OVERVIEW_STACK;
     let sections = overview_sections(app, area, stacked);
 
-    // If map is shown and not in stacked mode, split horizontally with map on the right
+    // If map is shown and not in stacked mode, split horizontally with map on the
+    // right
     if app.overview_state.show_map && !stacked && area.width >= 100 {
         let map_width = (f32::from(area.width) * 0.4).round() as u16;
         let cols = Layout::default()
@@ -554,7 +558,8 @@ enum OverviewSectionKind {
     Filters,
     Combat,
     Session,
-    /// Launch profile, session preset, and slot lifecycle for the selected client.
+    /// Launch profile, session preset, and slot lifecycle for the selected
+    /// client.
     SlotProfile,
 }
 
@@ -1413,7 +1418,8 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
     );
 }
 
-// ─── Slot profile panel ───────────────────────────────────────────────────────
+// ─── Slot profile panel
+// ───────────────────────────────────────────────────────
 
 /// Return the theme colour for a given `SlotLifecycle` state.
 fn lifecycle_color(state: SlotLifecycle, t: &crate::tui::theme::Theme) -> ratatui::style::Color {

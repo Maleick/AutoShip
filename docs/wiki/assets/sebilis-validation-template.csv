@@ -1,0 +1,1 @@
+sample_id,validated_at_utc,character,launch_staging_point,zone_path,required_keying,camp_name,camp_area,target_metric,target_name,measurement_window_minutes,travel_time_minutes,placeholder_count,named_count,mean_respawn_minutes,wait_time_minutes,attempts,successes,observed_item,observed_item_count,result_per_hour,operator_mode,notes,evidence_state

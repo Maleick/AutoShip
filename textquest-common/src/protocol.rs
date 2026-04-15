@@ -2,7 +2,8 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::fmt;
 
 /// Maximum allowed message size (64 KB). Frames larger than this are rejected
-/// during decode to prevent memory exhaustion from malformed or malicious input.
+/// during decode to prevent memory exhaustion from malformed or malicious
+/// input.
 pub const MAX_MESSAGE_SIZE: u32 = 65536;
 const MAX_MESSAGE_SIZE_USIZE: usize = MAX_MESSAGE_SIZE as usize;
 /// Fixed four-byte magic for every IPC frame.
@@ -126,9 +127,11 @@ pub fn decode<T: DeserializeOwned>(data: &[u8]) -> Option<(T, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ipc::{Command, Response};
-    use crate::nav::Waypoint;
-    use crate::soul::SayChannel;
+    use crate::{
+        ipc::{Command, Response},
+        nav::Waypoint,
+        soul::SayChannel,
+    };
 
     #[test]
     fn command_roundtrip_ping() {
@@ -401,7 +404,8 @@ mod tests {
         assert_eq!(
             consumed,
             encoded.len() - 4,
-            "The number of bytes consumed should account for the header and payload, leaving the extra bytes."
+            "The number of bytes consumed should account for the header and payload, leaving the \
+             extra bytes."
         );
     }
 

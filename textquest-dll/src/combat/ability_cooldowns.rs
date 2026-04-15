@@ -15,7 +15,8 @@ pub enum AbilityAvailability {
     Ready,
     /// Ability is cooling down with the given ticks remaining.
     CoolingDown(u32),
-    /// Cooldown metadata was unavailable; wait until `retry_at` before retrying.
+    /// Cooldown metadata was unavailable; wait until `retry_at` before
+    /// retrying.
     WaitingForRetry { retry_at: u32 },
 }
 
@@ -32,7 +33,8 @@ impl AbilityAvailability {
 }
 
 /// Tracks cooldown state for abilities with optional metadata.
-/// Uses a fixed-capacity array instead of HashMap for zero-allocation per-tick operation.
+/// Uses a fixed-capacity array instead of HashMap for zero-allocation per-tick
+/// operation.
 pub struct AbilityCooldownTracker {
     entries: [(i32, AbilityAvailability); MAX_TRACKED_ABILITIES],
     len: usize,

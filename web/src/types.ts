@@ -173,6 +173,13 @@ export interface WealthHistory {
   snapshots: WealthSnapshot[];
 }
 
+export interface BoxChatSettings {
+  enabled: boolean;
+  host: string;
+  port: number;
+  auto_connect: boolean;
+}
+
 // ── Group Builder types ────────────────────────────────────────────────────
 
 export type EQClass =
@@ -280,6 +287,30 @@ export interface ClassParams {
   slow_at_hp_pct?: number;
 }
 
+export type TributeAlertState = "ok" | "expiring" | "expired";
+
+export interface TributePreferences {
+  auto_activate: boolean;
+  warning_threshold_secs: number;
+  preferred_tributes: string[];
+}
+
+export interface TributeStatus {
+  active: boolean;
+  remaining_secs: number;
+  point_balance: number;
+  active_tributes: string[];
+  alert_state: TributeAlertState;
+}
+
+export interface AutoRezConfig {
+  enabled: boolean;
+  min_xp_pct: number;
+  trusted_casters: string[];
+  decline_if_untrusted: boolean;
+  delay_ms: number;
+}
+
 export interface CharacterConfig {
   character_name: string;
   class: string;
@@ -289,8 +320,11 @@ export interface CharacterConfig {
   nuke_at_pct: number;
   rotation: RotationEntry[];
   class_params: ClassParams;
+  auto_rez: AutoRezConfig;
   group_override: boolean;
   group_name?: string;
+  tribute_preferences: TributePreferences;
+  tribute_status: TributeStatus;
 }
 
 // ── Loot configuration types ─────────────────────────────────────────────────

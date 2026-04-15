@@ -1,8 +1,10 @@
 //! Camp position management — assign characters to role-based spots.
 
 use std::collections::HashMap;
-use textquest_common::nav::{CampDefinition, CampSpot, FollowConfig, Waypoint};
-use textquest_common::types::ClientId;
+use textquest_common::{
+    nav::{CampDefinition, CampSpot, FollowConfig, Waypoint},
+    types::ClientId,
+};
 
 /// Minimum leader movement distance (2-D) that triggers an `UpdateFollowAnchor`
 /// broadcast. Below this threshold we skip the update to avoid churning IPC.
@@ -30,7 +32,8 @@ impl PlayerFollowMode {
         }
     }
 
-    /// Check whether the leader has moved far enough to warrant an anchor update.
+    /// Check whether the leader has moved far enough to warrant an anchor
+    /// update.
     ///
     /// Returns the new anchor if the leader has moved more than
     /// `FOLLOW_ANCHOR_UPDATE_THRESHOLD` units since the last broadcast, or if
@@ -53,8 +56,9 @@ impl PlayerFollowMode {
         }
     }
 
-    /// Force the last anchor to the given position without triggering an update.
-    /// Used when follow mode is first set up to avoid a double-broadcast.
+    /// Force the last anchor to the given position without triggering an
+    /// update. Used when follow mode is first set up to avoid a
+    /// double-broadcast.
     pub fn set_last_anchor(&mut self, pos: Waypoint) {
         self.last_anchor = Some(pos);
     }
@@ -88,7 +92,8 @@ impl CampManager {
     }
 
     /// Set the active camp and assign characters to spots based on their roles.
-    /// `role_map` maps `client_id` to their role string (e.g., "tank", "healer1").
+    /// `role_map` maps `client_id` to their role string (e.g., "tank",
+    /// "healer1").
     pub fn set_camp(
         &mut self,
         camp: CampDefinition,
@@ -461,7 +466,8 @@ mod tests {
         let camp = create_standard_camp(Waypoint::new(0.0, 0.0, 0.0), 0.0, 1);
         let tank = &camp.spots[0];
         let healer = &camp.spots[1];
-        // Tank should be 20 units from center, healer 15 units but in opposite direction
+        // Tank should be 20 units from center, healer 15 units but in opposite
+        // direction
         let tank_dist = (tank.position.x.powi(2) + tank.position.y.powi(2)).sqrt();
         let healer_dist = (healer.position.x.powi(2) + healer.position.y.powi(2)).sqrt();
         assert!((tank_dist - 20.0).abs() < 0.1);

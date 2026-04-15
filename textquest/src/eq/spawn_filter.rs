@@ -23,8 +23,8 @@ pub enum SpawnTypeFilter {
     Npc,
     /// Player characters only.
     Pc,
-    /// Pet spawns — detected heuristically as NPCs whose name ends with "`'s pet`"
-    /// or "`'s familiar`" (case-insensitive).
+    /// Pet spawns — detected heuristically as NPCs whose name ends with "`'s
+    /// pet`" or "`'s familiar`" (case-insensitive).
     Pet,
 }
 
@@ -209,7 +209,8 @@ fn dist_sq(ax: f32, ay: f32, az: f32, bx: f32, by: f32, bz: f32) -> f32 {
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct NamedSpawnTracker {
-    /// Map from lowercase tracked name → last seen `SpawnInfo`, if the mob is up.
+    /// Map from lowercase tracked name → last seen `SpawnInfo`, if the mob is
+    /// up.
     pub tracked: HashMap<String, Option<SpawnInfo>>,
 }
 

@@ -1,21 +1,26 @@
 //! Observability infrastructure for metrics collection and structured logging.
 //!
-//! This module provides pluggable metrics collection with support for counters, gauges,
-//! and histograms. The trait-based design allows different backends (in-memory, Prometheus,
-//! etc.) without core dependencies.
+//! This module provides pluggable metrics collection with support for counters,
+//! gauges, and histograms. The trait-based design allows different backends
+//! (in-memory, Prometheus, etc.) without core dependencies.
 //!
 //! # Logging Conventions
 //!
 //! - Use the `tracing` crate with structured fields
-//! - Log levels: ERROR (crashes), WARN (recovery), INFO (state changes), DEBUG (IPC details)
-//! - File output: `./logs/textquest.log` (orchestrator), `%TEMP%/textquest/textquest-dll.log` (DLL)
-//! - Never use `println!` / `eprintln!` for structured logs (reserved for CLI/TUI output only)
+//! - Log levels: ERROR (crashes), WARN (recovery), INFO (state changes), DEBUG
+//!   (IPC details)
+//! - File output: `./logs/textquest.log` (orchestrator),
+//!   `%TEMP%/textquest/textquest-dll.log` (DLL)
+//! - Never use `println!` / `eprintln!` for structured logs (reserved for
+//!   CLI/TUI output only)
 //!
 //! # Metrics Naming Conventions
 //!
-//! - Use snake_case for metric names: `command_latency_ms`, `spawn_count`, `ipc_errors_total`
+//! - Use snake_case for metric names: `command_latency_ms`, `spawn_count`,
+//!   `ipc_errors_total`
 //! - Include unit in the name when appropriate: `_ms`, `_bytes`, `_total`
-//! - Use labels/tags for dimensionality: `{"client_id": "42", "zone": "sebilis"}`
+//! - Use labels/tags for dimensionality: `{"client_id": "42", "zone":
+//!   "sebilis"}`
 //!
 //! # Example
 //!
@@ -46,9 +51,11 @@
 //! collector.record(memory_metric);
 //! ```
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::SystemTime,
+};
 
 /// Metric kind enumeration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,7 +86,8 @@ pub struct Metric {
 /// Pluggable metrics collection backend.
 ///
 /// Implementers can provide different storage and export strategies
-/// (in-memory aggregation, Prometheus push, etc.) without changing the caller API.
+/// (in-memory aggregation, Prometheus push, etc.) without changing the caller
+/// API.
 pub trait MetricsCollector: Send + Sync {
     /// Record a single metric observation.
     fn record(&self, metric: Metric);
@@ -98,8 +106,8 @@ pub trait MetricsCollector: Send + Sync {
 
 /// In-memory metrics collector for testing and ephemeral storage.
 ///
-/// Thread-safe implementation using Arc<Mutex<>>. Suitable for integration tests
-/// and scenarios where metrics need to be queried synchronously.
+/// Thread-safe implementation using Arc<Mutex<>>. Suitable for integration
+/// tests and scenarios where metrics need to be queried synchronously.
 pub struct InMemoryCollector {
     metrics: Arc<Mutex<Vec<Metric>>>,
 }

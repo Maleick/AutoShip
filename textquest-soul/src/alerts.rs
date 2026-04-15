@@ -1,10 +1,13 @@
 //! Operator alerts and anomaly detection for the Soul Engine.
 //!
-//! `AnomalyDetector` runs on each coordinator tick and surfaces operator-visible alerts
-//! for conditions that indicate the Soul Engine is misbehaving or resource-constrained.
+//! `AnomalyDetector` runs on each coordinator tick and surfaces
+//! operator-visible alerts for conditions that indicate the Soul Engine is
+//! misbehaving or resource-constrained.
 
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use textquest_common::types::ClientId;
 
@@ -27,7 +30,8 @@ pub enum AlertType {
     MoodOscillation,
     /// Persistent memory record count exceeded 500 for a character.
     MemoryOverflow,
-    /// LLM token quota has been exhausted (budget == 0 and requests are pending).
+    /// LLM token quota has been exhausted (budget == 0 and requests are
+    /// pending).
     LlmQuotaExhausted,
 }
 
@@ -63,12 +67,14 @@ impl CharacterState {
     }
 }
 
-// ── AnomalyDetector ───────────────────────────────────────────────────────────
+// ── AnomalyDetector
+// ───────────────────────────────────────────────────────────
 
-/// Detects operational anomalies in the Soul Engine and returns operator alerts.
+/// Detects operational anomalies in the Soul Engine and returns operator
+/// alerts.
 ///
-/// Intended to be called once per coordinator tick.  Results are surfaced to the
-/// TUI operator dashboard and, optionally, to the Discord webhook.
+/// Intended to be called once per coordinator tick.  Results are surfaced to
+/// the TUI operator dashboard and, optionally, to the Discord webhook.
 pub struct AnomalyDetector {
     characters: HashMap<ClientId, CharacterState>,
     /// If `true`, the LLM quota is exhausted (budget == 0, requests pending).
@@ -224,7 +230,8 @@ impl AnomalyDetector {
     }
 }
 
-// ── Unit tests ────────────────────────────────────────────────────────────────
+// ── Unit tests
+// ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {

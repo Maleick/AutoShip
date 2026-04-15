@@ -5,7 +5,6 @@ import {
   SmileySad,
   SmileyNervous,
   SmileyWink,
-  SmileyXEyes,
 } from "@phosphor-icons/react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────

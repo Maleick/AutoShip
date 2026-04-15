@@ -2,7 +2,8 @@
 //!
 //! The extended target list is accessed via PcClient->pExtendedTargetList,
 //! which contains an ArrayClass<ExtendedTargetSlot> with up to ~23 slots.
-//! Each slot has a type (AutoHater, GroupTank, etc.), status, spawn ID, and name.
+//! Each slot has a type (AutoHater, GroupTank, etc.), status, spawn ID, and
+//! name.
 
 use textquest_common::combat::{
     ExtendedTargetList, ExtendedTargetSlot, XTargetSlotStatus, XTargetType,

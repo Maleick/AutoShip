@@ -22,16 +22,20 @@ pub enum ZoneFailureCode {
     /// Zone too far — destination zone or waypoint is out of reach (code -2).
     TooFar = -2,
 
-    /// Wrong zone type — attempted zone transition to incompatible zone type (code -3).
+    /// Wrong zone type — attempted zone transition to incompatible zone type
+    /// (code -3).
     WrongType = -3,
 
-    /// Character level too low — character does not meet zone entry requirements (code -4).
+    /// Character level too low — character does not meet zone entry
+    /// requirements (code -4).
     LevelTooLow = -4,
 
-    /// Character level too high — character exceeds zone level restrictions (code -5).
+    /// Character level too high — character exceeds zone level restrictions
+    /// (code -5).
     LevelTooHigh = -5,
 
-    /// Invalid coordinates — landing position is invalid or out of bounds (code -6).
+    /// Invalid coordinates — landing position is invalid or out of bounds (code
+    /// -6).
     InvalidCoordinates = -6,
 
     /// No path available — no valid path to zone or waypoint exists (code -7).
@@ -40,7 +44,8 @@ pub enum ZoneFailureCode {
     /// Zone temporarily locked — zone is instanced and not available (code -8).
     ZoneLockedInstance = -8,
 
-    /// Insufficient mana for port spell — caster does not have enough mana (code -9).
+    /// Insufficient mana for port spell — caster does not have enough mana
+    /// (code -9).
     InsufficientMana = -9,
 
     /// Spell resisted — port spell or zone ability was resisted (code -10).
@@ -49,19 +54,23 @@ pub enum ZoneFailureCode {
     /// Zone queue full — zone has reached max capacity (code -11).
     ZoneQueueFull = -11,
 
-    /// Raid lockout active — character has active raid lockout for zone (code -12).
+    /// Raid lockout active — character has active raid lockout for zone (code
+    /// -12).
     RaidLockoutActive = -12,
 
-    /// Character already zoning — concurrent zone transition detected (code -13).
+    /// Character already zoning — concurrent zone transition detected (code
+    /// -13).
     AlreadyZoning = -13,
 
-    /// Zone load timeout — zone data failed to load within time limit (code -14).
+    /// Zone load timeout — zone data failed to load within time limit (code
+    /// -14).
     ZoneLoadTimeout = -14,
 
     /// Movement blocked — collision or environmental obstruction (code -15).
     MovementBlocked = -15,
 
-    /// Out of zone bounds — character position is outside valid zone area (code -16).
+    /// Out of zone bounds — character position is outside valid zone area (code
+    /// -16).
     OutOfBounds = -16,
 
     /// Guild hall unavailable — guild hall zone not accessible (code -17).
@@ -73,13 +82,16 @@ pub enum ZoneFailureCode {
     /// Port spell duration expired — zone port spell timeout (code -19).
     PortSpellExpired = -19,
 
-    /// Zone restricted by server — zone entry forbidden by server rules (code -20).
+    /// Zone restricted by server — zone entry forbidden by server rules (code
+    /// -20).
     ZoneRestricted = -20,
 
-    /// Expansion not unlocked — character or account lacks expansion access (code -21).
+    /// Expansion not unlocked — character or account lacks expansion access
+    /// (code -21).
     ExpansionNotUnlocked = -21,
 
-    /// Corpse recovery zone — character has corpse in zone blocking entry (code -22).
+    /// Corpse recovery zone — character has corpse in zone blocking entry (code
+    /// -22).
     CorpseInZone = -22,
 
     /// Network timeout — communication with zone server lost (code -23).
@@ -204,7 +216,8 @@ pub enum RecoveryAction {
     RevalidatePath,
 }
 
-/// Zone failure recovery state — tracks failure, recovery action, and retry progress.
+/// Zone failure recovery state — tracks failure, recovery action, and retry
+/// progress.
 #[derive(Debug, Clone)]
 pub struct ZoneFailureState {
     /// The failure code that occurred.
@@ -290,7 +303,8 @@ impl ZoneFailureState {
         Instant::now() >= self.backoff_until
     }
 
-    /// Increment retry count and update backoff deadline using exponential backoff.
+    /// Increment retry count and update backoff deadline using exponential
+    /// backoff.
     ///
     /// Backoff time = 2^retry_count seconds (capped at `max_backoff`).
     pub fn advance_backoff(&mut self, max_backoff: Duration) {
@@ -307,7 +321,8 @@ impl ZoneFailureState {
         );
     }
 
-    /// Check if this failure is retryable (has a retry action and retries available).
+    /// Check if this failure is retryable (has a retry action and retries
+    /// available).
     pub fn is_retryable(&self) -> bool {
         !matches!(
             self.recovery_action,
@@ -320,7 +335,8 @@ impl ZoneFailureState {
         self.failed_at.elapsed()
     }
 
-    /// Time remaining until the next retry is permitted (or zero if backoff expired).
+    /// Time remaining until the next retry is permitted (or zero if backoff
+    /// expired).
     pub fn time_until_retry(&self) -> Duration {
         if self.backoff_until > Instant::now() {
             self.backoff_until - Instant::now()

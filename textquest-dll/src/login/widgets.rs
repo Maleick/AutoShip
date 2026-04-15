@@ -1,11 +1,13 @@
 //! UI widget manipulation helpers for EQ's login system.
 //!
-//! Uses direct memory writes to `EQLogin`'s fixed char arrays for credential entry,
-//! bypassing CXStr/SIDL widget navigation entirely. For other UI interactions
-//! (splash dismiss, error dialogs), falls back to SIDL window lookup.
+//! Uses direct memory writes to `EQLogin`'s fixed char arrays for credential
+//! entry, bypassing CXStr/SIDL widget navigation entirely. For other UI
+//! interactions (splash dismiss, error dialogs), falls back to SIDL window
+//! lookup.
 //!
-//! Core widget primitives (`CXStr` read/write, button click, window find) live in
-//! `crate::eq::widgets` — this module re-exports and composes them for login-specific flows.
+//! Core widget primitives (`CXStr` read/write, button click, window find) live
+//! in `crate::eq::widgets` — this module re-exports and composes them for
+//! login-specific flows.
 //!
 //! All functions are no-ops on non-Windows platforms.
 
@@ -105,8 +107,9 @@ pub fn find_visible_sidl_window(eqmain_base: u64, sidl_name: &str) -> Option<usi
 
         let cxwnd_mgr = super::eqmain::resolve_cxwnd_manager(eqmain_base)?;
 
-        // eqmain.dll uses SidlText at the same offset as eqgame's CSIDL_SCREEN_WND_SIDL_TEXT
-        // (0x270), but CXWndManager layout differs (array at +0x010, count at +0x018).
+        // eqmain.dll uses SidlText at the same offset as eqgame's
+        // CSIDL_SCREEN_WND_SIDL_TEXT (0x270), but CXWndManager layout differs
+        // (array at +0x010, count at +0x018).
         unsafe {
             crate::eq::widgets::find_visible_window_by_sidl_name(
                 cxwnd_mgr,
@@ -131,8 +134,7 @@ pub fn find_visible_sidl_window(eqmain_base: u64, sidl_name: &str) -> Option<usi
 pub fn find_visible_child_by_sidl(parent_wnd: usize, sidl_name: &str) -> Option<usize> {
     #[cfg(windows)]
     {
-        use textquest_common::offsets::eqgame as eqg;
-        use textquest_common::offsets::eqmain as off;
+        use textquest_common::offsets::{eqgame as eqg, eqmain as off};
 
         if parent_wnd == 0 {
             return None;
@@ -173,8 +175,7 @@ pub fn find_visible_child_by_sidl(parent_wnd: usize, sidl_name: &str) -> Option<
 pub fn read_yesno_dialog_text(dialog_wnd: usize) -> Option<String> {
     #[cfg(windows)]
     {
-        use textquest_common::offsets::eqgame as eqg;
-        use textquest_common::offsets::eqmain as off;
+        use textquest_common::offsets::{eqgame as eqg, eqmain as off};
 
         if dialog_wnd == 0 {
             return None;
@@ -210,7 +211,8 @@ pub fn read_yesno_dialog_text(dialog_wnd: usize) -> Option<String> {
     }
 }
 
-/// Click the Yes button in a `YesNo` dialog by finding the `YESNO_YesButton` child.
+/// Click the Yes button in a `YesNo` dialog by finding the `YESNO_YesButton`
+/// child.
 pub fn click_yesno_yes(dialog_wnd: usize) -> bool {
     #[cfg(windows)]
     {
@@ -242,7 +244,8 @@ pub fn click_yesno_yes(dialog_wnd: usize) -> bool {
     }
 }
 
-/// Click the No button in a `YesNo` dialog by finding the `YESNO_NoButton` child.
+/// Click the No button in a `YesNo` dialog by finding the `YESNO_NoButton`
+/// child.
 pub fn click_yesno_no(dialog_wnd: usize) -> bool {
     #[cfg(windows)]
     {
@@ -294,15 +297,17 @@ pub fn click_ok_dialog(dialog_wnd: usize) -> bool {
     }
 }
 
-/// Find a SIDL window by its XML name. Resolves `CXWndManager` from `eqmain_base`,
-/// then delegates to `crate::eq::widgets::find_window_by_name()`.
+/// Find a SIDL window by its XML name. Resolves `CXWndManager` from
+/// `eqmain_base`, then delegates to
+/// `crate::eq::widgets::find_window_by_name()`.
 #[cfg(windows)]
 fn find_window_by_name(eqmain_base: u64, name: &str) -> Option<usize> {
     let cxwnd_mgr = super::eqmain::resolve_cxwnd_manager(eqmain_base)?;
     unsafe { crate::eq::widgets::find_window_by_name(cxwnd_mgr, name) }
 }
 
-/// Find a window whose `WindowText` contains the given substring (case-insensitive).
+/// Find a window whose `WindowText` contains the given substring
+/// (case-insensitive).
 #[cfg(windows)]
 fn find_window_by_text_contains(eqmain_base: u64, substring: &str) -> Option<usize> {
     let cxwnd_mgr = super::eqmain::resolve_cxwnd_manager(eqmain_base)?;
@@ -342,7 +347,8 @@ pub fn write_login_credentials(eqmain_base: u64, account: &str, password: &str) 
         // preserve the null terminator). The buffers are within committed eqmain
         // memory. If eqlogin were freed, resolve_eqlogin would have returned None.
         unsafe {
-            // Write username: zero buffer, then copy bytes (max 0x7F to leave null terminator)
+            // Write username: zero buffer, then copy bytes (max 0x7F to leave null
+            // terminator)
             let username_addr = (eqlogin + eqmain_offsets::EQLOGIN_USERNAME) as *mut u8;
             std::ptr::write_bytes(username_addr, 0, 0x80);
             let username_len = account.len().min(eqmain_offsets::EQLOGIN_FIELD_MAX);
@@ -373,16 +379,17 @@ pub fn write_login_credentials(eqmain_base: u64, account: &str, password: &str) 
 /// Set text in a `CEditWnd` (username/password fields).
 ///
 /// For login fields (`LOGIN_UsernameEdit`, `LOGIN_PasswordEdit`), this uses
-/// direct memory writes to `EQLogin`'s char arrays instead of `CXStr` manipulation.
-/// For other edit widgets, falls back to the SIDL-based approach.
+/// direct memory writes to `EQLogin`'s char arrays instead of `CXStr`
+/// manipulation. For other edit widgets, falls back to the SIDL-based approach.
 pub fn set_edit_text(eqmain_base: u64, window_name: &str, text: &str) -> bool {
     #[cfg(windows)]
     {
         // For login credential fields, use direct-write path (bypasses CXStr entirely)
         if window_name == LOGIN_USERNAME_EDIT || window_name == LOGIN_PASSWORD_EDIT {
-            // The direct-write path writes both fields at once via write_login_credentials().
-            // Individual field writes aren't meaningful since both must be set before login.
-            // Return true if EQLogin is accessible (the FSM calls write_login_credentials
+            // The direct-write path writes both fields at once via
+            // write_login_credentials(). Individual field writes aren't
+            // meaningful since both must be set before login. Return true if
+            // EQLogin is accessible (the FSM calls write_login_credentials
             // separately before clicking connect).
             tracing::debug!(
                 window = window_name,
@@ -413,11 +420,13 @@ pub fn set_edit_text(eqmain_base: u64, window_name: &str, text: &str) -> bool {
     }
 }
 
-/// Write credentials directly to login `CEditWnd` widgets and optionally click Login.
+/// Write credentials directly to login `CEditWnd` widgets and optionally click
+/// Login.
 ///
-/// Security note: this function only writes when the login SIDL screen (`connect`)
-/// is visible and all widgets are resolved by stable XML/SIDL names. This avoids
-/// positional pointer inference from `CXWndManager::pWindows`.
+/// Security note: this function only writes when the login SIDL screen
+/// (`connect`) is visible and all widgets are resolved by stable XML/SIDL
+/// names. This avoids positional pointer inference from
+/// `CXWndManager::pWindows`.
 pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &str) -> bool {
     #[cfg(windows)]
     {
@@ -571,16 +580,18 @@ pub fn type_credentials_to_window(eqmain_base: u64, account: &str, password: &st
 }
 
 /// Simulate pressing Enter on the EQ window to submit login credentials.
-/// Type the password into EQ's focused password field using PostMessageW(WM_CHAR).
-/// This works even when EQ is not the foreground window. The username should
-/// already be filled by the /login: command-line flag.
+/// Type the password into EQ's focused password field using
+/// PostMessageW(WM_CHAR). This works even when EQ is not the foreground window.
+/// The username should already be filled by the /login: command-line flag.
 ///
 /// Flow: click password field → type password char-by-char → press Enter.
 pub fn type_password_wm_char(eqmain_base: u64, password: &str) -> bool {
     #[cfg(windows)]
     {
-        use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
-        use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
+        use windows::Win32::{
+            Foundation::{HWND, LPARAM, WPARAM},
+            UI::WindowsAndMessaging::PostMessageW,
+        };
 
         let Some(hwnd_val) = super::eqmain::resolve_eq_hwnd(eqmain_base) else {
             tracing::warn!("Cannot type password — EQ HWND not resolved");
@@ -634,12 +645,15 @@ pub fn type_password_wm_char(eqmain_base: u64, password: &str) -> bool {
     }
 }
 
-/// Simulate pressing Enter via `PostMessageW` — works even when EQ is not foreground.
+/// Simulate pressing Enter via `PostMessageW` — works even when EQ is not
+/// foreground.
 pub fn simulate_enter_key(eqmain_base: u64) -> bool {
     #[cfg(windows)]
     {
-        use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
-        use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
+        use windows::Win32::{
+            Foundation::{HWND, LPARAM, WPARAM},
+            UI::WindowsAndMessaging::PostMessageW,
+        };
 
         let Some(hwnd_val) = super::eqmain::resolve_eq_hwnd(eqmain_base) else {
             tracing::warn!("Cannot simulate Enter — EQ HWND not resolved");
@@ -678,7 +692,8 @@ pub fn simulate_enter_key(eqmain_base: u64) -> bool {
 
 /// Click a button widget by sending `XWM_LCLICK` notification.
 /// Delegates to `crate::eq::widgets::click_button_via_vtable` which uses the
-/// named vtable offset (`CXWND_VTABLE_WND_NOTIFICATION`) rather than a hardcoded index.
+/// named vtable offset (`CXWND_VTABLE_WND_NOTIFICATION`) rather than a
+/// hardcoded index.
 pub fn click_button(eqmain_base: u64, window_name: &str) -> bool {
     #[cfg(windows)]
     {
@@ -708,8 +723,9 @@ pub fn click_button(eqmain_base: u64, window_name: &str) -> bool {
 /// hooked — `queue_button_click()` queues a pointer that never drains. So we
 /// call `click_button_via_vtable()` directly on the IPC/background thread.
 ///
-/// During **eqgame** (character select, in-world), the game loop hook IS active,
-/// so we queue the click for the next game tick to stay on the correct thread.
+/// During **eqgame** (character select, in-world), the game loop hook IS
+/// active, so we queue the click for the next game tick to stay on the correct
+/// thread.
 ///
 /// The `in_eqmain` flag indicates which context we're in:
 /// - `true` = eqmain.dll is loaded (login screen or server select)
@@ -945,8 +961,9 @@ fn strip_stml_tags(text: &str) -> String {
 
 /// Read text content from the OK error dialog.
 ///
-/// The `okdialog` window contains STML-formatted text in a child display widget.
-/// Walks child windows to find the text, then strips STML tags to return plain text.
+/// The `okdialog` window contains STML-formatted text in a child display
+/// widget. Walks child windows to find the text, then strips STML tags to
+/// return plain text.
 pub fn read_ok_dialog_text(eqmain_base: u64) -> Option<String> {
     #[cfg(windows)]
     {
@@ -956,7 +973,8 @@ pub fn read_ok_dialog_text(eqmain_base: u64) -> Option<String> {
 
         unsafe {
             // Walk children looking for the display widget with the message text.
-            // The OK dialog's text child is typically the longest WindowText among children.
+            // The OK dialog's text child is typically the longest WindowText among
+            // children.
             let mut best_text: Option<String> = None;
             let mut child = *((dialog_wnd + off::CXWND_FIRST_NODE) as *const usize);
             let mut count = 0u32;
@@ -1063,41 +1081,45 @@ pub fn classify_dialog_error(text: &str) -> LoginError {
 /// # Intended behavior (when fully implemented)
 ///
 /// 1. Resolve the `LoginServerAPI` pointer from eqmain.dll globals.
-/// 2. Iterate `LoginClient::ServerList` (a `DoublyLinkedList<EQClientServerData*>` at
-///    offset `0x178`) to find the entry whose `ServerName` (`CXStr` at `+0x08`) matches
-///    `server_name`.
+/// 2. Iterate `LoginClient::ServerList` (a
+///    `DoublyLinkedList<EQClientServerData*>` at offset `0x178`) to find the
+///    entry whose `ServerName` (`CXStr` at `+0x08`) matches `server_name`.
 /// 3. Extract the `ServerID` (at `+0x00`) from the matching entry.
-/// 4. Call `LoginServerAPI::JoinServer(api, server_id, nullptr, 10)` to initiate
-///    the server connection.
+/// 4. Call `LoginServerAPI::JoinServer(api, server_id, nullptr, 10)` to
+///    initiate the server connection.
 ///
 /// # Why this is a stub
 ///
-/// The `LoginServerAPI` pointer and `JoinServer` function address are successfully
-/// resolved, but the server-list iteration is not yet implemented. We need to:
-/// - Validate the `EQClientServerData` struct layout via a calibration dump on a live
-///   client (field offsets come from MQ2's `LoginFrontend.h` but are unverified).
-/// - Confirm the `JoinServer` calling convention (`extern "C"`, 4 args) matches the
-///   target client build.
+/// The `LoginServerAPI` pointer and `JoinServer` function address are
+/// successfully resolved, but the server-list iteration is not yet implemented.
+/// We need to:
+/// - Validate the `EQClientServerData` struct layout via a calibration dump on
+///   a live client (field offsets come from MQ2's `LoginFrontend.h` but are
+///   unverified).
+/// - Confirm the `JoinServer` calling convention (`extern "C"`, 4 args) matches
+///   the target client build.
 ///
-/// The current login FSM bypasses this entirely by clicking "PLAY EVERQUEST!" which
-/// joins the last-used server. Named server selection requires this function.
+/// The current login FSM bypasses this entirely by clicking "PLAY EVERQUEST!"
+/// which joins the last-used server. Named server selection requires this
+/// function.
 ///
 /// # Returns
 ///
 /// Always returns `false` — the stub has not yet performed any server join.
-/// When implemented, returns `true` if the join request was successfully dispatched.
+/// When implemented, returns `true` if the join request was successfully
+/// dispatched.
 ///
 /// # Related
 ///
-/// - `calibrate_login_dump()` in this module dumps `LoginServerAPI` addresses for
-///   reverse-engineering the server list.
+/// - `calibrate_login_dump()` in this module dumps `LoginServerAPI` addresses
+///   for reverse-engineering the server list.
 /// - `LoginFsm::tick_selecting_server()` in `mod.rs` uses the "PLAY EVERQUEST!"
 ///   button click as a workaround.
-///
-// STUB: Server-list iteration and JoinServer call not yet implemented. The "PLAY
-// EVERQUEST!" button workaround is sufficient for single-server setups. Named server
-// selection (needed for multi-server TLP configs) requires iterating LoginClient::ServerList
-// at offset 0x178 and calling LoginServerAPI::JoinServer with the resolved ServerID.
+// STUB: Server-list iteration and JoinServer call not yet implemented. The
+// "PLAY EVERQUEST!" button workaround is sufficient for single-server setups.
+// Named server selection (needed for multi-server TLP configs) requires
+// iterating LoginClient::ServerList at offset 0x178 and calling
+// LoginServerAPI::JoinServer with the resolved ServerID.
 pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
     #[cfg(windows)]
     {
@@ -1116,14 +1138,16 @@ pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
             return false;
         };
 
-        // Server ID lookup requires iterating LoginClient::ServerList (DoublyLinkedList<EQClientServerData*> at offset 0x178).
-        // EQClientServerData layout: ServerID at 0x00, ServerName (CXStr) at 0x08. Needs calibration dump on live client.
+        // Server ID lookup requires iterating LoginClient::ServerList
+        // (DoublyLinkedList<EQClientServerData*> at offset 0x178).
+        // EQClientServerData layout: ServerID at 0x00, ServerName (CXStr) at 0x08.
+        // Needs calibration dump on live client.
         tracing::info!(
             server = server_name,
             login_api = format!("{:#x}", login_api),
             join_server_fn = format!("{:#x}", join_server_addr),
-            "JoinServer: API resolved but server ID lookup not yet implemented. \
-             Use CalibrateLogin to dump server list."
+            "JoinServer: API resolved but server ID lookup not yet implemented. Use \
+             CalibrateLogin to dump server list."
         );
 
         // When server ID is known, the call will be:
@@ -1147,19 +1171,21 @@ pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
 ///
 /// 1. Find the `Character_List` `CListWnd` in eqgame.exe's `CXWndManager`.
 /// 2. Iterate the list items to find the row matching `character_name`.
-/// 3. Call `CCharacterListWnd::SelectCharacter(index)` to highlight the character.
+/// 3. Call `CCharacterListWnd::SelectCharacter(index)` to highlight the
+///    character.
 /// 4. Call `CCharacterListWnd::EnterWorld()` to zone into the game.
 ///
-/// Both `SelectCharacter` and `EnterWorld` are eqgame.exe functions (not eqmain.dll),
-/// since eqmain.dll unloads during the transition from server select to character select.
+/// Both `SelectCharacter` and `EnterWorld` are eqgame.exe functions (not
+/// eqmain.dll), since eqmain.dll unloads during the transition from server
+/// select to character select.
 ///
 /// # Why this is a stub
 ///
-/// Reading `CListWnd` item text requires understanding the `CListWnd` vtable layout
-/// to call `GetItemText(row, col)`, which has not been reverse-engineered yet. The
-/// function addresses for `SelectCharacter` and `EnterWorld` are resolved successfully,
-/// but we cannot determine which list row corresponds to the desired character without
-/// the item-text accessor.
+/// Reading `CListWnd` item text requires understanding the `CListWnd` vtable
+/// layout to call `GetItemText(row, col)`, which has not been
+/// reverse-engineered yet. The function addresses for `SelectCharacter` and
+/// `EnterWorld` are resolved successfully, but we cannot determine which list
+/// row corresponds to the desired character without the item-text accessor.
 ///
 /// The login FSM works around this via `do_select_character_via_game_loop()` in
 /// `mod.rs`, which uses `queue_enter_world()` from the game loop hook to select
@@ -1176,12 +1202,13 @@ pub fn join_server(eqmain_base: u64, server_name: &str) -> bool {
 ///
 /// - `LoginFsm::do_select_character_via_game_loop()` in `mod.rs` is the working
 ///   alternative that bypasses this function entirely.
-/// - `crate::hooks::game_loop::queue_enter_world()` is the mechanism used by the FSM.
-///
-// STUB: Direct CListWnd item iteration and SelectCharacter/EnterWorld calls not yet
-// implemented. The game-loop-based workaround (`queue_enter_world`) handles character
-// selection reliably. Direct calls would be cleaner but require reading CListWnd items
-// via GetItemText vtable call (unverified) or by walking the ItemsArray (see eq::widgets).
+/// - `crate::hooks::game_loop::queue_enter_world()` is the mechanism used by
+///   the FSM.
+// STUB: Direct CListWnd item iteration and SelectCharacter/EnterWorld calls not
+// yet implemented. The game-loop-based workaround (`queue_enter_world`) handles
+// character selection reliably. Direct calls would be cleaner but require
+// reading CListWnd items via GetItemText vtable call (unverified) or by walking
+// the ItemsArray (see eq::widgets).
 pub fn select_character(eqmain_base: u64, eq_base: u64, character_name: &str) -> bool {
     #[cfg(windows)]
     {
@@ -1218,7 +1245,8 @@ pub fn select_character(eqmain_base: u64, eq_base: u64, character_name: &str) ->
 }
 
 /// Log all window texts visible in the `CXWndManager` array.
-/// Used for calibration — helps identify EULA and pre-login screen widget names.
+/// Used for calibration — helps identify EULA and pre-login screen widget
+/// names.
 pub fn log_all_window_texts(eqmain_base: u64) {
     #[cfg(windows)]
     {
@@ -1362,7 +1390,8 @@ pub fn calibrate_login_dump(eqmain_base: u64) {
         }
     }
 
-    // Hex dump CXWndManager to discover actual struct layout (eqmain vs eqgame offsets differ)
+    // Hex dump CXWndManager to discover actual struct layout (eqmain vs eqgame
+    // offsets differ)
     #[cfg(windows)]
     if let Some(cxwnd_mgr) = eqmain::resolve_cxwnd_manager(eqmain_base) {
         tracing::info!("=== CXWNDMANAGER HEX DUMP ===");

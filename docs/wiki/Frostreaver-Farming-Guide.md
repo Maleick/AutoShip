@@ -4,31 +4,113 @@
 
 ### 36-Box Setup (6 Groups of 6)
 
+Detailed early-planar raid research now lives in [Research: Plane of Hate and Plane of Sky Early Raid Targets](Research-Hate-and-Sky-Early-Raid-Targets.md). Use that page for lockout planning, epic-component mapping, and Krono-value assumptions.
+
 ---
 
 ## Table of Contents
 
-1. [Leveling Zones by Level Range](#leveling-zones-by-level-range)
-2. [Plat Farming Locations by Era](#plat-farming-locations-by-era)
-3. [Raid Targets Available at Velious Launch](#raid-targets-available-at-velious-launch)
-4. [Encounter Locking Strategy](#encounter-locking-strategy)
-5. [Randomized Loot Meta & Lessons from Mischief/Teek](#randomized-loot-meta)
-6. [Group Composition Notes](#group-composition-notes)
+1. [Finalized 36-Box Roster Reference](#finalized-36-box-roster-reference)
+2. [Leveling Zones by Level Range](#leveling-zones-by-level-range)
+3. [Plat Farming Locations by Era](#plat-farming-locations-by-era)
+4. [Raid Targets Available at Velious Launch](#raid-targets-available-at-velious-launch)
+5. [Encounter Locking Strategy](#encounter-locking-strategy)
+6. [Randomized Loot Meta & Lessons from Mischief/Teek](#randomized-loot-meta)
+7. [Group Composition Notes](#group-composition-notes)
 
 ---
 
-## Your 36-Box Roster Reference
+## Finalized 36-Box Roster Reference
 
-| Group          | Tank | Healer 1 | Healer 2 | DPS 1 | DPS 2 | Support |
-| -------------- | ---- | -------- | -------- | ----- | ----- | ------- |
-| G1 Tank        | WAR  | SHM      | CLR      | CLR   | WIZ   | BRD     |
-| G2 Offtank     | PAL  | ENC      | CLR      | CLR   | WIZ   | BRD     |
-| G3 Offtank DPS | SK   | WIZ      | CLR      | CLR   | WIZ   | BRD     |
-| G4 Caster DPS  | MAG  | WIZ      | CLR      | CLR   | WIZ   | BRD     |
-| G5 DPS Ranged  | RNG  | BST      | CLR      | CLR   | WIZ   | BRD     |
-| G6 Caster      | DRU  | NEC      | CLR      | CLR   | WIZ   | BRD     |
+> Finalized from the `TextQuest#1521` owner decision recorded on 2026-04-14. The farm roster and the raid roster are intentionally the same 36-character stable, so leveling, gearing, and AA time spent farming flows directly into raid readiness.
+>
+> Independent source-backed validation of the roster's class-synergy tradeoffs lives in [Research - Velious Class Synergy Validation](Research-Velious-Class-Synergy.md).
+> Launch-day city split, convergence routing, gear handoffs, and Legacy XP sequencing are documented separately in [Frostreaver Starting City Logistics](Frostreaver-Starting-City-Logistics.md).
 
-**Key roster strengths:** 12 CLR (massive heal throughput), 6 BRD (selos + mana song for every group), 6+ WIZ (ports + burst DPS), SHM slow, ENC haste/mez, MAG DS/pet, NEC twitch/FD, DRU evac/DS, SK FD pull.
+| Group      | Tank | Healer | Support 1 | Support 2 | DPS 1 | DPS 2 |
+| ---------- | ---- | ------ | --------- | --------- | ----- | ----- |
+| G1 Driver  | SK   | CLR    | BRD       | SHM       | MNK   | MNK   |
+| G2 Melee   | WAR  | CLR    | BRD       | SHM       | MNK   | MNK   |
+| G3 Melee   | WAR  | CLR    | BRD       | SHM       | MNK   | MNK   |
+| G4 Melee   | WAR  | CLR    | BRD       | SHM       | MNK   | MNK   |
+| G5 Utility | PAL  | CLR    | BRD       | DRU       | BST   | RNG   |
+| G6 Caster  | PAL  | CLR    | BRD       | ENC       | WIZ   | MAG   |
+
+### Class Totals (36)
+
+| Class | Count | Notes |
+| ----- | ----- | ----- |
+| Warrior | 3 | Defensive Discipline rotation for raid main-tank duty |
+| Shadowknight | 1 | Driver character, snap aggro, FD pulls, and snare coverage |
+| Paladin | 2 | Utility tanks for raid support and safer split-camp farming |
+| Cleric | 6 | One per group; raid Complete Heal chain backbone |
+| Bard | 6 | One per group; movement, pull control, ADPS, and resist coverage |
+| Shaman | 4 | Slow, buffs, spot heals, and AFK alchemy backbone |
+| Monk | 8 | Launch-era default melee DPS because they are effective before weapons stabilize |
+| Druid | 1 | Ports, evac, snare, and backup heals |
+| Enchanter | 1 | CC, mana utility, and jewelry crafting |
+| Beastlord | 1 | Utility melee DPS with slow backup and pet support |
+| Ranger | 1 | Tracking, outdoor pull utility, and ranged DPS |
+| Wizard | 1 | Burst caster DPS and port support |
+| Magician | 1 | Summons, Call of the Hero utility, and extra caster DPS |
+
+### Farming-First Takeaway
+
+This final roster does **not** maintain a separate raid-only bench. Instead, it favors six self-sufficient camp teams that can split across the world and then collapse into a full six-group raid without dead slots or pet-tank dependencies.
+
+- Groups 1-4 are interchangeable melee farm teams: tank + cleric + bard + shaman with two monks for steady dungeon clearing.
+- Group 5 is the outdoor and travel utility team: paladin durability, druid ports/evac, beastlord slow backup, and ranger tracking.
+- Group 6 is the caster and logistics team: paladin safety, enchanter CC, wizard ports, and magician summon/vendor utility.
+- AFK tradeskill scaling remains present but capped on purpose: four shamans cover alchemy, while the enchanter carries jewelry crafting. The roster gives up the original 6-8 shaman / 4-6 enchanter idea so more slots stay raid-viable.
+
+### Farming/Raiding Overlap
+
+| Role | Farming job | Raid job | Flex verdict |
+| ---- | ----------- | -------- | ------------ |
+| Warriors | Named-camp tanks for the three hardest groups | Main tanks and Defensive rotation anchors | Mandatory in both modes |
+| Shadowknight | Driver, FD pulls, snap aggro, solo utility | Pull tank, aggro preload, pickup tank | High overlap, but not a warrior replacement |
+| Paladins | Utility tanks for safer camps and recovery | Off-tanks, stun utility, backup heals | Strong flex tanks |
+| Clerics | Group sustain and wipe recovery | Complete Heal chain backbone | Fixed-role backbone |
+| Shamans | Slow, buffs, alchemy, backup healing | Slow, buffs, hybrid heals | Highest overlap support class |
+| Bards | Pull speed, mana/song support, travel | Per-group ADPS, resists, movement | Mandatory in both modes |
+| Monks | Weapon-light launch DPS and backup pulling | Primary melee DPS | Cleanest pure flex DPS slot |
+| Druid / Enchanter | Travel, evac, tracking, CC, crafting | Utility healing, mana control, CC | Specialty flex slots |
+| Beastlord / Ranger / Wizard / Mage | Outdoor utility, tracking, summon, vendor support | Remaining DPS and utility flex | Raid-safe, but not core tank/heal infrastructure |
+
+### Raid-First Takeaway
+
+- Three warriors are the real tank floor. The shadowknight plus two paladins cover pickup, add control, and lower-risk farm content, but raid tanking is built around the warrior trio.
+- Six clerics are the hard commitment. Shamans and the druid supplement heals; they do not replace the cleric chain.
+- Pet tanking is optional in farm content and explicitly unnecessary in raid planning. Mage and beastlord pets are bonus DPS and utility, not the main mitigation plan.
+- The total raid target is the full 36-character roster. The composition is deliberately stable across one-group progression, six-group farming, and full-raid nights.
+
+### Automation Survivability Core
+
+For unattended camp automation, TextQuest treats `BRD + CLR + second healer/support-healer` as the minimum survivability core. The second healing slot is a deliberate trade: it gives up one higher-throughput DPS slot so the group can survive bad pulls, named pops, healer desync, and pathing mistakes without operator rescue.
+
+- Preferred core: `tank + CLR + BRD + SHM + DPS + DPS`. Shaman is the best second healer because slow reduces incoming damage before the cleric has to spend mana catching up.
+- Lower-throughput fallback: `tank + CLR + BRD + PAL + DPS + flex`. Paladin does not match shaman's slow value, but it adds pickup, stun, and emergency healing for recovery windows.
+- Utility exception: `BRD + CLR` by itself is acceptable only for travel, caster logistics, or lower-risk camps. It is not the default unattended template for named-heavy or unstable camps.
+
+Applied to the locked roster:
+
+- Groups 1-4 cleanly satisfy the survivability core with `CLR + BRD + SHM`.
+- Group 5 is a controlled exception: druid covers the second-healer role for travel and evac-heavy utility work, but it is still less robust than the shaman groups.
+- Group 6 is the clearest exception. It keeps the universal `BRD + CLR` floor, but it should be treated as a support/logistics group unless adjacent support or lower-risk content keeps the recovery burden low.
+
+### Partner-Contingent Planning
+
+> `TextQuest#1588` reviewed the repository and GitHub issue history on 2026-04-15. No tracked evidence currently confirms Dave's participation or any other named partner roster commitment, so the finalized `TextQuest#1521` 36-box baseline stays unchanged until a partner's attendance and class mix are explicitly recorded.
+
+| Scenario | Current evidence state | Planning rule | Composition impact |
+| -------- | ---------------------- | ------------- | ------------------ |
+| No confirmed partners | No GitHub/repo confirmation for Dave or any other partner | Keep the locked 36-box baseline exactly as documented above | No changes |
+| Stable tank/heal-heavy partner | Partner attendance is confirmed and the partner's class mix is recorded for full-raid nights | Re-open roster planning before changing any owned accounts; do not make speculative cuts while confirmation is still missing | Candidate future cuts are redundant recovery slots, but only after the partner proves reliable enough to replace them |
+| Stable DPS/utility-heavy partner | Partner attendance is confirmed, but they are not replacing the tank/heal backbone | Preserve the current tank/heal floor and treat partner DPS as bonus throughput first | Usually no baseline changes; partner accounts act as overflow |
+| Irregular or one-off partner attendance | Partner may join some nights but is not a dependable every-raid presence | Treat partner accounts as bonus bench only and keep the owned roster self-sufficient | No permanent changes |
+
+- The documented baseline remains the default because `TextQuest#1593` and `TextQuest#1594` both reinforce survivability-first automation over speculative DPS optimization.
+- If a partner roster is later confirmed in tracked evidence, update the linked planning issue first and only then revise the canonical roster docs.
 
 ---
 
@@ -95,6 +177,12 @@
 
 ### Level 50-60: Endgame Leveling (Velious Cap)
 
+Old Sebilis remains research-backed and still needs live proof for Scars-launch
+access, spawn cadence, camp overlap, Nodding Blue Lily forage rate, and
+automation risk. Use [Sebilis Farming
+Validation](Sebilis-Farming-Validation.md) as the canonical ledger before
+treating the zone as a solved overnight farm.
+
 | Zone                          | Level Range | Why                                | Multi-Group? | Notable Loot                                                                                         | Notes                                                                                                              |
 | ----------------------------- | ----------- | ---------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | **Old Sebilis**               | 50-60       | Best XP in the game for Kunark     | 4-6 groups   | Box of Nil Space, Cone of Mystics, Froglok Bonecaster's Robe, Hierophant's Cloak, Runebranded Girdle | Right wing (Disco 1+2) for lower; juggs/myconids underneath for money AND XP. Can easily absorb your entire 36-box |
@@ -156,6 +244,7 @@ On a free trade server like Frostreaver, every item is tradeable. This means:
 - Gear cascades down as guilds upgrade, creating a healthy economy
 - Even "bad" random loot rolls produce tradeable items worth selling
 - Focus on volume of named kills rather than specific camps
+- Epic monetization behaves differently from generic loot farming; see [Research: Epic Character Sales](Research-Epic-Character-Sales) for the MQ-vs-character-sale pipeline and pricing model.
 
 ---
 
@@ -203,11 +292,13 @@ With 36 characters (6 full groups), you have a significant force. Here is what i
 | **King Tormax**            | Kael Drakkel      | Moderate-Hard  | King Tormax loot                                              | Requires clearing to throne room                         |
 | **Lord Yelinak**           | Skyshrine         | Moderate       | Yelinak loot                                                  | Dragon lord                                              |
 | **Tunare**                 | Plane of Growth   | Moderate-Hard  | Nature-themed raid loot                                       | Full raid clear needed                                   |
-| **ToV Halls of Testing**   | Temple of Veeshan | Moderate       | HoT dragon drops, Dozekar quest items                         | Mid-tier ToV content; doable with 36                     |
+| **ToV Halls of Testing**   | Temple of Veeshan | Moderate       | HoT dragon drops, Dozekar quest items                         | Mid-tier ToV content; doable with 36. See [Research: Dozekar Tear Quest Items](Research-Dozekar-Tear-Quest-Items.md) for reward mapping and price strategy. |
 | **ToV West Wing**          | Temple of Veeshan | Moderate       | Kael quest armor (unmade pieces)                              | CoV-faction aligned; safe if ally faction                |
 | **ToV North Wing (NToV)**  | Temple of Veeshan | Hard           | Best loot in Velious era                                      | See NToV section below                                   |
 | **Vulak'Aerr**             | NToV              | Very Hard      | Abashi's Rod, Do'Vassir's Gauntlets, Crystasia's Ring (AC 30) | Final boss of Velious; 36 well-geared chars may be tight |
 | **Sleeper's Tomb**         | Sleeper's Tomb    | Hard-Very Hard | ST-specific loot, warders                                     | Ancient dragons; significant challenge                   |
+
+For the key quest, tradeability assumptions, 36-account keying order, and the expected seller window, see [Research: Sleeper's Tomb Keying Opportunity Window](Research-Sleepers-Tomb-Keying).
 
 ### NToV Dragon Difficulty Ranking (for your 36-box)
 
@@ -227,7 +318,9 @@ From easiest to hardest within NToV:
 12. **Lord Vyemm** (Paladin) - "Arguably the most difficult dragon in ToV" even harder than Vulak solo
 13. **Vulak'Aerr** (Level 70, final boss) - Reigning lord of ToV, premium loot
 
-**36-Box Feasibility:** With 12 CLR, 6 BRD, SHM slow, ENC haste, and stacking DPS, your force can handle most NToV content. Lord Vyemm and Vulak'Aerr will require your team to be well-geared (Kael armor + Kunark raid gear minimum). The 2-high-level-group or 4-55+ estimate from community sources suggests 36 level 60s is more than sufficient for the zone overall.
+**36-Box Feasibility:** With 6 CLR, 6 BRD, 4 SHM, a dedicated ENC, and a real tank core of 3 WAR + 1 SK + 2 PAL, your force can handle most NToV content. Lord Vyemm and Vulak'Aerr will still require strong Kael/Kunark gear and disciplined healing rotations, but the roster has enough real tanks, healers, and monk DPS to clear the zone without leaning on pet tanking.
+
+For breakeven math, farming opportunity-cost thresholds, and a recommended early-phase loot policy for NToV, see [Research: Frostreaver Raid Economics](Research-Raid-Economics.md).
 
 ---
 
@@ -260,11 +353,44 @@ From easiest to hardest within NToV:
 4. **Split camps across groups:** Each group locks its own camp. 6 groups = 6 simultaneously locked camp areas in a dungeon
 5. **Raid formation for bosses:** Combine all 6 groups into a raid; one person tags the boss, entire raid can engage
 
-**Power Leveling with Encounter Locking:**
+### FTE Powerleveling Status (`TextQuest#1580`)
 
-- Put lower-level alts in the group with a high-level tagger
-- The tagger hits every mob (locking to the group), then you can kill with lower-level characters getting XP
-- Works for catch-up leveling of replacement characters
+This subsection separates official rules, community workarounds, and repo-observed automation support so launch planning does not assume an exploit still works.
+
+**Evidence anchors used here:**
+
+- `Research-backed`: public EverQuest ruleset text or checked-in TextQuest code supports the claim.
+- `Provisional`: community-reported workaround with no current Frostreaver live proof in this repo.
+- `Needs Live Proof`: plausible on paper, but not validated on a current live client in this workspace.
+
+| Method | Evidence state | What we know | Launch recommendation |
+| ------ | -------------- | ------------ | --------------------- |
+| Traditional DS PL (high-level tagger or outside killer does the damage) | `Research-backed` for the rule conflict, `Needs Live Proof` for current-patch reproduction | Official encounter-locking rules still say the lock follows the first hate-list owner, outside players cannot damage the mob unless it is semi-unlocked with `/yell`, and XP goes to the player/group/raid that does the most damage. That combination implies the old "tag once, let a DS or outside killer do the work" pattern is no longer a safe default. Oakwynd community reports also described the classic DS flow as effectively dead under FTE. | Treat as broken for Frostreaver planning. Do not build leveling throughput assumptions around it. |
+| Group the lowbies with the puller, make every alt get hit once, then drop the puller and finish with DS | `Provisional` | Oakwynd-era community reports say this can work for up to five alts if the puller has no riposte or DS and every target gets each mob on its hate list before the puller drops group. The same discussion also describes the flow as timing-sensitive and bug-prone. | Keep as a manual fallback only. Not stable enough to be baseline process or automation target. |
+| `/yell` every mob to semi-unlock it, then kill with an AE/DS finisher | `Research-backed` for `/yell` mechanics, `Provisional` for PL viability | Official FAQ text confirms `/yell` semi-unlocks a targeted encounter-locked NPC. Community reports say using it mob-by-mob for powerleveling was "still very buggy." | Use only as an emergency/manual experiment, not as the planned leveling path. |
+| Charm-based leveling group | `Research-backed` for FTE compatibility, `Needs Live Proof` for XP/hour | Charm DPS stays inside the lock-owning group and does not depend on broken DS credit tricks. That makes it mechanically compatible with encounter locking. What is still missing here is measured Frostreaver XP/hour versus a normal dungeon group. | This is the best advanced alternative on paper, but treat the throughput claim as unproven until live launch testing exists. |
+
+### What TextQuest Can Actually Automate Today
+
+TextQuest currently covers only the first half of the charm-recovery loop:
+
+- `textquest/src/orchestrator/mod.rs` detects `CharmBreak` events while a camp is in active combat.
+- `textquest/src/camp/cc.rs` converts that event into an emergency stun/mez response so the group has a chance to recover safely.
+- The repo does **not** currently implement the full "re-charm, re-haste, re-send pet" loop described by mature EQ automation stacks.
+
+That means charm-heavy leveling is an operator-assisted path today, not a fire-and-forget replacement for normal XP groups.
+
+Candidate shells worth testing once Frostreaver is live:
+
+- Option A: 2 Enchanter / Bard / Cleric / Druid / Necromancer
+- Option B: 3 Enchanter / Bard / Cleric / Druid
+
+### Practical Launch Stance
+
+1. Assume traditional DS PL is off the table until a live Frostreaver pass disproves it.
+2. Treat the drop-group workaround and per-target `/yell` unlock flow as `Provisional` bug workarounds, not production doctrine.
+3. Use normal dungeon groups as the planning baseline for replacement-character catch-up.
+4. If you want a higher-upside FTE-compatible alternative, test one charm-centric group first instead of converting the entire roster around an unvalidated XP/hour assumption.
 
 ---
 
@@ -272,11 +398,12 @@ From easiest to hardest within NToV:
 
 ### How Randomized Loot Works (Learned from Mischief/Teek)
 
-- **Rare NPCs** drop loot from other rare NPCs of a **similar level within the same expansion**
-- **Raid NPCs** drop loot from other raid NPCs of a **similar level within the same expansion**
+- Frostreaver is confirmed to launch with **Randomized Loot**, **Free Trade**, and **Encounter Locking**
+- Public Mischief/Teek raid data shows Velious raid loot is **bucketed**, not strict same-level matching
+- The observed Velious raid implementation resolves into **four raid pools**, and the widest one spans **level 55 through level 70**
 - Loot randomization is **expansion-based, not zone-based**
-- There is a chance at **extra drops** beyond the normal loot table
-- Loot tiers depend on **mob's actual level at time of spawning**, not its max level
+- For raid planning, treat loot sharing as **same expansion + observed bucket**
+- See [Research: Frostreaver Loot Tier Optimization](Research-Frostreaver-Loot-Tier-Optimization.md) for the current Velious bucket map and farm recommendations
 
 ### How This Changes Camp Selection
 
@@ -331,26 +458,22 @@ From easiest to hardest within NToV:
 
 ### Optimal Zone Assignments by Group Strength
 
-| Group                        | Best Role                    | Ideal Zones                                                |
-| ---------------------------- | ---------------------------- | ---------------------------------------------------------- |
-| G1 (WAR/SHM/CLR/CLR/WIZ/BRD) | Main tank group, slow debuff | Raids, Kael named, NToV                                    |
-| G2 (PAL/ENC/CLR/CLR/WIZ/BRD) | CC-heavy group, haste        | Zones with mez-needed pulls (Seb, Chardok), charm camps    |
-| G3 (SK/WIZ/CLR/CLR/WIZ/BRD)  | FD pulling, double WIZ burst | Dungeon crawling (Howling Stones, Chardok), FD split camps |
-| G4 (MAG/WIZ/CLR/CLR/WIZ/BRD) | Pet tank + triple caster DPS | AoE farming (Velks), outdoor camps where pet can tank      |
-| G5 (RNG/BST/CLR/CLR/WIZ/BRD) | Ranged DPS, BST slow backup  | Outdoor zones (Western Wastes, Cobalt Scar), kiting camps  |
-| G6 (DRU/NEC/CLR/CLR/WIZ/BRD) | Evac safety, NEC dots/twitch | Dangerous zones (Dragon Necropolis), DRU port hub          |
+| Group | Best Role | Ideal Zones |
+| ----- | --------- | ----------- |
+| G1 (SK/CLR/BRD/SHM/MNK/MNK) | Driver group, FD pulls, controlled named farming | Howling Stones, Chardok, Sebilis camps that need precise pulls |
+| G2-G4 (WAR/CLR/BRD/SHM/MNK/MNK) | Interchangeable melee grind teams | Old Sebilis, Kael Drakkel, Crystal Caverns, Tower of Frozen Shadow |
+| G5 (PAL/CLR/BRD/DRU/BST/RNG) | Outdoor utility, evac insurance, tracking | Western Wastes, Cobalt Scar, Great Divide, open-world named routes |
+| G6 (PAL/CLR/BRD/ENC/WIZ/MAG) | Caster utility, CC, summon/vendor support | Velketor's, Siren's Grotto, support duty for contested named or recovery pulls |
 
 ### Raid Formation
 
 For raids, combine all 6 groups into a single raid:
 
-- G1 WAR = Main Tank, G2 PAL and G3 SK = Offtanks
-- 12 CLR in CH rotation = nearly unlimited healing throughput
-- SHM slow + ENC haste on MT
-- 6 BRD running resist songs, mana regen, haste
-- Stack all WIZ for coordinated burst (6+ wizards nuking simultaneously)
-- NEC twitch feeds mana to CLR chain
-- DRU/MAG DS stacking on tanks
+- 3 WAR handle the main tank rotation; the SK is the driver/pull tank and the 2 PAL handle off-tank and utility assignments.
+- 6 CLR form the Complete Heal chain, while 4 SHM + 1 DRU cover slows, buffs, and spot-heal cleanup.
+- 6 BRD remain one-per-group so every raid group keeps movement, resist songs, and ADPS online.
+- 8 MNK are the default launch-era DPS stack because they are immediately effective before weapon supply stabilizes.
+- MAG and BST pets add damage, but raid survival is built around real tanks and healers rather than pet tanking.
 
 ---
 
@@ -391,6 +514,7 @@ See [P99 Wiki Zone Guide](P99-Zone-Guide.md) for the full P99 wiki-sourced zone 
 - [EQProgression TLP Server Rules and Info](https://www.eqprogression.com/tlp-server-rules-and-info/)
 - [Temple of Veeshan (Project 1999 Wiki)](https://wiki.project1999.com/Temple_of_Veeshan)
 - [Velious Raiding Gear (Project 1999 Wiki)](https://wiki.project1999.com/Players:Velious_Raiding_Gear)
+- [Votes are in! (EverQuest 2026 TLP poll outcome)](https://www.everquest.com/news/eq-2026-tlp-polls-outcome)
 - [Fangbreaker Rulesets FAQ (EverQuest Official)](https://www.everquest.com/guides/eq-2025-tlp-ruleset-faq)
 - [Mischief TLP Discussion (Fires of Heaven)](https://www.firesofheaven.org/threads/eq-tlp-mischief-free-trade-random-loot.12847/)
 - [Dynamic Loot Tiers (RedGuides)](https://www.redguides.com/community/threads/info-random-loot-server-dynamic-loot-tiers.91960/)

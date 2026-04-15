@@ -1,13 +1,16 @@
 //! Shared memory READER (orchestrator side).
 //!
 //! Reads game state published by the injected DLL via a named shared memory
-//! region. Uses `OpenFileMappingW` with `FILE_MAP_READ` (read-only, least privilege).
-//! On non-Windows platforms it returns an empty stub so the project compiles.
+//! region. Uses `OpenFileMappingW` with `FILE_MAP_READ` (read-only, least
+//! privilege). On non-Windows platforms it returns an empty stub so the project
+//! compiles.
 
 use anyhow::Result;
 use std::sync::LazyLock;
-use textquest_common::nav::NavStatus;
-use textquest_common::types::{ClientId, GameState, SharedStateFrame, SpawnData};
+use textquest_common::{
+    nav::NavStatus,
+    types::{ClientId, GameState, SharedStateFrame, SpawnData},
+};
 
 static PERF_TRACE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
     std::env::var(textquest_common::ipc::PERF_TRACE_ENV)
@@ -40,9 +43,10 @@ pub struct SharedNavSnapshot {
     pub nav_status: NavStatus,
 }
 
-// SAFETY: SharedStateReader is only accessed from the orchestrator's poll thread (single reader).
-// The sequence number uses AtomicU64 with Acquire ordering as a read fence.
-// The writer side uses Release ordering to ensure the complete payload is visible.
+// SAFETY: SharedStateReader is only accessed from the orchestrator's poll
+// thread (single reader). The sequence number uses AtomicU64 with Acquire
+// ordering as a read fence. The writer side uses Release ordering to ensure the
+// complete payload is visible.
 #[cfg(windows)]
 unsafe impl Send for SharedStateReader {}
 #[cfg(windows)]
@@ -67,8 +71,10 @@ impl SharedStateReader {
         #[cfg(windows)]
         {
             use textquest_common::ipc::SHARED_MEMORY_SIZE;
-            use windows::Win32::System::Memory::{FILE_MAP_READ, MapViewOfFile, OpenFileMappingW};
-            use windows::core::PCWSTR;
+            use windows::{
+                Win32::System::Memory::{FILE_MAP_READ, MapViewOfFile, OpenFileMappingW},
+                core::PCWSTR,
+            };
 
             let name: Vec<u16> = format!(
                 "{}\0",
@@ -132,8 +138,10 @@ impl SharedStateReader {
     fn read_frame(&mut self) -> Option<SharedStateFrame> {
         #[cfg(windows)]
         {
-            use std::sync::atomic::{AtomicU64, Ordering};
-            use std::time::Instant;
+            use std::{
+                sync::atomic::{AtomicU64, Ordering},
+                time::Instant,
+            };
 
             let perf_start = if *PERF_TRACE_ENABLED {
                 Some(Instant::now())
@@ -160,7 +168,8 @@ impl SharedStateReader {
                 return None;
             }
 
-            // 4. Copy payload into a local buffer to avoid referencing shared memory during decode
+            // 4. Copy payload into a local buffer to avoid referencing shared memory during
+            //    decode
             let mut payload_copy = vec![0u8; payload_len];
             unsafe {
                 std::ptr::copy_nonoverlapping(base.add(12), payload_copy.as_mut_ptr(), payload_len);
@@ -223,8 +232,7 @@ impl Drop for SharedStateReader {
     fn drop(&mut self) {
         #[cfg(windows)]
         {
-            use windows::Win32::Foundation::CloseHandle;
-            use windows::Win32::System::Memory::UnmapViewOfFile;
+            use windows::Win32::{Foundation::CloseHandle, System::Memory::UnmapViewOfFile};
 
             unsafe {
                 let view = windows::Win32::System::Memory::MEMORY_MAPPED_VIEW_ADDRESS {

@@ -15,17 +15,18 @@
 //! ```
 
 use core::sync::atomic::Ordering;
-use std::sync::{OnceLock, RwLock};
-use std::{fmt, sync::atomic::AtomicBool};
+use std::{
+    fmt,
+    sync::{OnceLock, RwLock, atomic::AtomicBool},
+};
 
-use crate::offset_db::OffsetDatabase;
-use crate::offsets;
+use crate::{offset_db::OffsetDatabase, offsets};
 
 static FALLBACK_DB: OnceLock<RwLock<Option<OffsetDatabase>>> = OnceLock::new();
 static BINDING_LOG_ENABLED: AtomicBool = AtomicBool::new(false);
 
-/// Install a runtime function-offset database used when a preferred-base constant appears
-/// to be stale.
+/// Install a runtime function-offset database used when a preferred-base
+/// constant appears to be stale.
 pub fn install_fallback_database(db: OffsetDatabase) {
     let lock = FALLBACK_DB.get_or_init(|| RwLock::new(None));
     let mut guard = lock.write().expect("fallback database lock poisoned");
@@ -179,8 +180,7 @@ macro_rules! eq_fn {
 mod tests {
     use std::sync::{Mutex, OnceLock};
 
-    use crate::offset_db::OffsetDatabase;
-    use crate::offsets;
+    use crate::{offset_db::OffsetDatabase, offsets};
 
     eq_fn!(test_eq_binding_binding(a: u32, ptr: *const u8) -> u64 = offsets::CAST_SPELL);
 

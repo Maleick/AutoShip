@@ -1,9 +1,10 @@
-use std::collections::BTreeMap;
-use std::fs;
-use std::io::Write;
-use std::path::Path;
-use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::{
+    collections::BTreeMap,
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
+};
 
 use textquest_common::nav::{NamedWaypoint, Waypoint};
 
@@ -43,7 +44,8 @@ fn verify_not_symlink_path(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// RAII guard that removes a temp file on drop unless `commit()` has been called.
+/// RAII guard that removes a temp file on drop unless `commit()` has been
+/// called.
 struct TempFileGuard {
     path: PathBuf,
     committed: bool,
