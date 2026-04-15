@@ -133,7 +133,6 @@ struct DashboardTelemetry {
 struct ClientTelemetry {
     pid: u32,
     name: String,
-    estimated_dps: u64,
     current_spell: Option<String>,
     is_present: bool,
     is_dead: bool,
@@ -254,10 +253,11 @@ impl OrchestratorDashboardState {
                 );
             }
 
-            if let Some(error) = client.error {
-                if current_errors.insert(error.clone()) && !self.active_errors.contains(&error) {
-                    new_errors.push(error);
-                }
+            if let Some(error) = client.error
+                && current_errors.insert(error.clone())
+                && !self.active_errors.contains(&error)
+            {
+                new_errors.push(error);
             }
         }
 
@@ -1389,7 +1389,6 @@ fn capture_dashboard_telemetry(app: &App) -> DashboardTelemetry {
         .map(|client| ClientTelemetry {
             pid: client.pid,
             name: app.client_command_target(client),
-            estimated_dps: estimated_client_dps(client, app),
             current_spell: current_spell_name(client),
             is_present: client.local_player.is_some(),
             is_dead: client.local_player.as_ref().is_some_and(|player| {
@@ -1535,15 +1534,15 @@ fn client_location_label(app: &App, client: &ClientState) -> String {
 }
 
 fn recovery_status_label(app: &App, client: &ClientState) -> String {
-    if let Some(zone) = app.zone_status_state.zone_statuses.get(&client.pid) {
-        if zone.stuck {
-            return format!("{} recovery", zone.fsm_state.label());
-        }
+    if let Some(zone) = app.zone_status_state.zone_statuses.get(&client.pid)
+        && zone.stuck
+    {
+        return format!("{} recovery", zone.fsm_state.label());
     }
-    if let Some(nav) = app.nav_state.nav_statuses.get(&client.pid) {
-        if let Some(recovery) = &nav.recovery_state {
-            return recovery.clone();
-        }
+    if let Some(nav) = app.nav_state.nav_statuses.get(&client.pid)
+        && let Some(recovery) = &nav.recovery_state
+    {
+        return recovery.clone();
     }
     String::from("no recovery")
 }
@@ -1883,7 +1882,6 @@ mod tests {
                 ClientTelemetry {
                     pid: 1,
                     name: String::from("Alpha"),
-                    estimated_dps: 0,
                     current_spell: None,
                     is_present: true,
                     is_dead: false,
@@ -1893,7 +1891,6 @@ mod tests {
                 ClientTelemetry {
                     pid: 2,
                     name: String::from("Beta"),
-                    estimated_dps: 0,
                     current_spell: None,
                     is_present: true,
                     is_dead: false,
@@ -1921,7 +1918,6 @@ mod tests {
             clients: vec![ClientTelemetry {
                 pid: 7,
                 name: String::from("Cleric"),
-                estimated_dps: 0,
                 current_spell: None,
                 is_present: true,
                 is_dead: true,
@@ -1937,7 +1933,6 @@ mod tests {
             clients: vec![ClientTelemetry {
                 pid: 7,
                 name: String::from("Cleric"),
-                estimated_dps: 0,
                 current_spell: None,
                 is_present: false,
                 is_dead: false,
@@ -1956,7 +1951,6 @@ mod tests {
             clients: vec![ClientTelemetry {
                 pid: 7,
                 name: String::from("Cleric"),
-                estimated_dps: 0,
                 current_spell: None,
                 is_present: true,
                 is_dead: false,
