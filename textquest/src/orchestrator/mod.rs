@@ -16,12 +16,17 @@ use crate::{
         vendor::{SellCycle, SellState, VendorConfig},
     },
     combat::coordinator::CombatCoordinator,
+    economy::price_monitor::TradePriceMonitor,
     ipc::{pipe::CommandPipe, shared::SharedStateReader},
 };
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    path::Path,
+    time::{Duration, Instant},
+};
 use textquest_common::{
     combat::HateTargetCategory,
-    ipc::{Command, Response, SessionControlCommand, SessionToken},
+    ipc::{ChatMessageInfo, Command, Response, SessionControlCommand, SessionToken},
     routing::RoutingScope,
     types::GameState,
 };
@@ -41,6 +46,9 @@ const PROGRESSION_CHECK_INTERVAL: u64 = 50;
 
 /// Ticks before CC expiry to push a `CcExpiring` event.
 const CC_EXPIRY_BUFFER: u64 = 3;
+
+/// Poll interval for passive trade-chat capture.
+const TRADE_CHAT_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 /// Top-level orchestrator that ticks the camp loop and dispatches commands.
 pub struct Orchestrator {
@@ -90,6 +98,13 @@ pub struct Orchestrator {
     prev_cc_state: HashMap<u32, CcType>,
     /// Previous nearby spawn IDs for add detection.
     prev_nearby_spawns: HashMap<u32, String>,
+    /// Lazy-initialized passive trade-price monitor.
+    trade_price_monitor: Option<TradePriceMonitor>,
+    /// Prevent repeated warning spam when the local trade-price DB cannot be
+    /// opened.
+    trade_price_monitor_open_failed: bool,
+    /// Last time passive trade chat was polled from the DLL.
+    last_trade_chat_poll: Option<Instant>,
 
     // --- M8 Orchestrator routing ---
     /// Active routing scope (synced from TUI `App::routing_scope` each tick).
@@ -131,6 +146,9 @@ impl Orchestrator {
             suggested_camp: None,
             prev_cc_state: HashMap::new(),
             prev_nearby_spawns: HashMap::new(),
+            trade_price_monitor: None,
+            trade_price_monitor_open_failed: false,
+            last_trade_chat_poll: None,
             routing_scope: RoutingScope::AllSession,
             scope_pids: Vec::new(),
         }
@@ -267,6 +285,7 @@ impl Orchestrator {
         self.last_dispatched.clear();
 
         self.poll_game_states();
+        self.poll_trade_chat_if_due();
 
         let commands = match self.operating_mode {
             OperatingMode::Camp => self.tick_camp(),
@@ -868,6 +887,21 @@ impl Orchestrator {
         }
     }
 
+    /// Poll a client for accumulated chat messages captured by the DLL.
+    pub fn poll_chat(&mut self, pid: u32) -> Vec<ChatMessageInfo> {
+        let Some(pipe) = self.get_pipe(pid) else {
+            return Vec::new();
+        };
+        match pipe.send(&Command::PollChat) {
+            Ok(Response::ChatBatch { messages }) => messages,
+            Ok(_) => Vec::new(),
+            Err(e) => {
+                tracing::debug!(pid, error = %e, "Failed to poll chat");
+                Vec::new()
+            }
+        }
+    }
+
     /// Read raw bytes from the EQ process address space via IPC.
     /// Sends `ReadMemory` and returns `(address, bytes)` on success, or `None`
     /// if the pipe is unavailable or the DLL returns an unexpected response.
@@ -914,6 +948,104 @@ impl Orchestrator {
         self.session_controls.remove(&pid);
         self.client_class_names.remove(&pid);
         tracing::info!(pid, "Client removed from orchestrator");
+    }
+
+    fn poll_trade_chat_if_due(&mut self) {
+        if self
+            .last_trade_chat_poll
+            .is_some_and(|last| last.elapsed() < TRADE_CHAT_POLL_INTERVAL)
+        {
+            return;
+        }
+
+        let pids = self.client_pids.clone();
+        if pids.is_empty() {
+            return;
+        }
+        self.last_trade_chat_poll = Some(Instant::now());
+
+        let mut recorded = 0usize;
+        let mut monitor_available = self.trade_price_monitor.is_some();
+        for pid in pids {
+            let Some((zone, local_character_name)) = self.game_states.get(&pid).map(|state| {
+                let zone = if !state.zone_short_name.is_empty() {
+                    state.zone_short_name.clone()
+                } else {
+                    state.zone_long_name.clone()
+                };
+                let local_character_name = state
+                    .local_player
+                    .as_ref()
+                    .map(|player| player.displayed_name.clone())
+                    .or_else(|| self.client_names.get(&pid).cloned());
+                (zone, local_character_name)
+            }) else {
+                continue;
+            };
+
+            let messages = self.poll_chat(pid);
+            if messages.is_empty() {
+                continue;
+            }
+
+            if !monitor_available {
+                monitor_available = self.ensure_trade_price_monitor().is_some();
+            }
+            let Some(monitor) = self.trade_price_monitor.as_mut() else {
+                continue;
+            };
+
+            for message in messages {
+                let Some(chat) = textquest_common::chat::parse_chat_text(&message.text) else {
+                    continue;
+                };
+
+                match monitor.record_chat(
+                    pid,
+                    &zone,
+                    local_character_name.as_deref(),
+                    &chat,
+                    message.timestamp_ms as i64,
+                ) {
+                    Ok(true) => recorded += 1,
+                    Ok(false) => {}
+                    Err(error) => tracing::warn!(
+                        pid,
+                        zone = zone.as_str(),
+                        error = %error,
+                        "Failed to record passive trade chat"
+                    ),
+                }
+            }
+        }
+
+        if recorded > 0 {
+            tracing::info!(recorded, "Recorded passive trade-price observations");
+        }
+    }
+
+    fn ensure_trade_price_monitor(&mut self) -> Option<&mut TradePriceMonitor> {
+        if self.trade_price_monitor.is_none() {
+            match TradePriceMonitor::open(Path::new(crate::TRADE_PRICE_DB_PATH)) {
+                Ok(monitor) => {
+                    self.trade_price_monitor = Some(monitor);
+                    self.trade_price_monitor_open_failed = false;
+                }
+                Err(error) => {
+                    if !self.trade_price_monitor_open_failed {
+                        tracing::warn!(
+                            error = %error,
+                            path = crate::TRADE_PRICE_DB_PATH,
+                            "Passive trade-price monitor disabled"
+                        );
+                    }
+                    self.trade_price_monitor_open_failed = true;
+                    return None;
+                }
+            }
+        }
+
+        self.trade_price_monitor.as_mut()
     }
 
     /// Send a single slash command to a client via named pipe.
