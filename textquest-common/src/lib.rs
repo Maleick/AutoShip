@@ -56,6 +56,8 @@ pub mod safe_coords;
 pub mod scan_engine;
 /// Byte-pattern signature scanner for offset resolution across EQ patches.
 pub mod scanner;
+/// NetBots-style cross-client roster summaries shared across runtimes.
+pub mod shared_client_state;
 /// Soul Engine shared types (LLM personalities, memory, social dynamics).
 pub mod soul;
 /// Common type aliases and utility structures.

@@ -1,4 +1,4 @@
-use crate::types::ClientId;
+use crate::{shared_client_state::SharedClientState, types::ClientId};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Generates monotonically increasing correlation IDs for IPC request-response
@@ -554,6 +554,11 @@ pub enum Command {
     CombatSetAssistTarget {
         /// Spawn ID of the assist target.
         spawn_id: u32,
+    },
+    /// Broadcast a cross-client roster snapshot to this client.
+    UpdateSharedClientStates {
+        /// Latest visible state for all connected clients.
+        states: Vec<SharedClientState>,
     },
     /// Force-use a specific combat ability.
     CombatForceAbility {

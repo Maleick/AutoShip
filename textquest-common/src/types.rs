@@ -22,6 +22,12 @@ pub struct GameState {
     pub zone_short_name: String,
     /// Zone long name (e.g. "Queynos Hills").
     pub zone_long_name: String,
+    /// Active buffs on the local player.
+    #[serde(default)]
+    pub active_buffs: Vec<crate::combat::BuffInfo>,
+    /// Current pet summary, if one is active.
+    #[serde(default)]
+    pub pet: Option<PetData>,
     /// Detected EQ patch date from `__ActualVersionDate` if available.
     #[serde(default)]
     pub actual_version: Option<String>,
@@ -41,6 +47,8 @@ impl GameState {
             combat_status: self.combat_status,
             zone_short_name: self.zone_short_name.clone(),
             zone_long_name: self.zone_long_name.clone(),
+            active_buffs: self.active_buffs.clone(),
+            pet: self.pet.clone(),
             spawn_epoch,
             actual_version: self.actual_version.clone(),
         }
@@ -73,6 +81,12 @@ pub struct SharedStateFrame {
     pub zone_short_name: String,
     /// Zone long name (e.g. "Queynos Hills").
     pub zone_long_name: String,
+    /// Active buffs on the local player.
+    #[serde(default)]
+    pub active_buffs: Vec<crate::combat::BuffInfo>,
+    /// Current pet summary, if one is active.
+    #[serde(default)]
+    pub pet: Option<PetData>,
     /// Monotonic spawn snapshot version. Increments only when `nearby_spawns`
     /// is present.
     pub spawn_epoch: u64,
@@ -96,9 +110,27 @@ impl SharedStateFrame {
             combat_status: self.combat_status,
             zone_short_name: self.zone_short_name,
             zone_long_name: self.zone_long_name,
+            active_buffs: self.active_buffs,
+            pet: self.pet,
             actual_version: self.actual_version,
         }
     }
+}
+
+/// Minimal pet state captured from the local client.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PetData {
+    /// EQ spawn ID for the pet.
+    pub spawn_id: u32,
+    /// Display name of the pet.
+    pub name: String,
+    /// Spawn ID of the pet's current target, if any.
+    pub target_id: Option<u32>,
+    /// Display name of the pet's current target, if any.
+    pub target_name: Option<String>,
+    /// Active buffs on the pet when available.
+    #[serde(default)]
+    pub buffs: Vec<crate::combat::BuffInfo>,
 }
 
 /// Serializable representation of an EQ spawn (player, NPC, corpse, etc.)
@@ -166,6 +198,17 @@ impl SpawnData {
     pub fn mana_pct(&self) -> f32 {
         if self.mana_max > 0 {
             (self.mana_current as f32 / self.mana_max as f32) * 100.0
+        } else {
+            100.0
+        }
+    }
+
+    /// Returns current endurance as a percentage (0.0 - 100.0). Returns 100.0
+    /// if max endurance is zero.
+    #[must_use]
+    pub fn endurance_pct(&self) -> f32 {
+        if self.endurance_max > 0 {
+            (self.endurance_current as f32 / self.endurance_max as f32) * 100.0
         } else {
             100.0
         }
@@ -458,6 +501,8 @@ mod tests {
             combat_status: crate::combat::CombatStatus::Idle,
             zone_short_name: "qey2hh1".into(),
             zone_long_name: "Queynos Hills".into(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         };
         let json = serde_json::to_string(&gs).expect("serialize");
@@ -477,6 +522,8 @@ mod tests {
             combat_status: crate::combat::CombatStatus::Idle,
             zone_short_name: "soldunga".into(),
             zone_long_name: "Solusek's Eye".into(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         };
 
@@ -498,6 +545,8 @@ mod tests {
             combat_status: crate::combat::CombatStatus::Idle,
             zone_short_name: "soldunga".into(),
             zone_long_name: "Solusek's Eye".into(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         };
 
@@ -520,6 +569,8 @@ mod tests {
             combat_status: crate::combat::CombatStatus::Idle,
             zone_short_name: "qcat".into(),
             zone_long_name: "Qeynos Catacombs".into(),
+            active_buffs: vec![],
+            pet: None,
             spawn_epoch: 9,
             actual_version: None,
         };
@@ -540,6 +591,16 @@ mod tests {
         };
         assert_eq!(spawn.endurance_current, -50);
         assert_eq!(spawn.endurance_max, 100);
+    }
+
+    #[test]
+    fn endurance_pct_returns_correct_percentage() {
+        let spawn = SpawnData {
+            endurance_current: 250,
+            endurance_max: 500,
+            ..SpawnData::default()
+        };
+        assert!((spawn.endurance_pct() - 50.0).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -668,6 +729,8 @@ mod tests {
             combat_status: crate::combat::CombatStatus::Idle,
             zone_short_name: String::new(),
             zone_long_name: String::new(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         };
         assert_eq!(gs.nearby_spawns.len(), 2);

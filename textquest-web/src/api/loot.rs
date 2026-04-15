@@ -449,6 +449,8 @@ mod tests {
             dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
+            live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../data/runtime/loot-test-live-sessions.json"),
         })
     }
 

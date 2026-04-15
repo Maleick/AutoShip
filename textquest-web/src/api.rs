@@ -2,7 +2,6 @@
 
 #![allow(dead_code)] // Demo shapes and placeholder handlers stay in this module before router wiring.
 
-pub mod dashboard;
 pub mod economy;
 pub mod loot;
 pub mod soul;
@@ -13,12 +12,10 @@ use axum::{
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
-use textquest_common::box_chat::BoxChatConfig;
-use textquest_common::ipc::AutoRezConfig;
-use toml_edit::{DocumentMut, Item, Table, value};
+use std::{collections::HashMap, path::Path as StdPath, sync::Arc};
 
 use crate::AppState;
+use textquest_common::shared_client_state::SharedClientState;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ErrorResponse {
@@ -68,57 +65,8 @@ pub async fn character_config_unavailable(Path(character): Path<String>) -> impl
     )
 }
 
-// ─── Player Watch Config ────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PlayerWatchConfig {
-    pub filter_mode: String,
-    pub sound_on_zone_in: bool,
-    pub friends: Vec<String>,
-}
-
-impl Default for PlayerWatchConfig {
-    fn default() -> Self {
-        Self {
-            filter_mode: "all".to_string(),
-            sound_on_zone_in: false,
-            friends: Vec::new(),
-        }
-    }
-}
-
-pub async fn get_player_watch_config(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
-    let cfg = state.player_watch_config.read().await.clone();
-    (StatusCode::OK, Json(cfg))
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdatePlayerWatchConfig {
-    pub filter_mode: Option<String>,
-    pub sound_on_zone_in: Option<bool>,
-    pub friends: Option<Vec<String>>,
-}
-
-pub async fn put_player_watch_config(
-    State(state): State<Arc<AppState>>,
-    Json(input): Json<UpdatePlayerWatchConfig>,
-) -> impl IntoResponse {
-    let mut cfg = state.player_watch_config.write().await;
-    if let Some(filter_mode) = input.filter_mode {
-        cfg.filter_mode = filter_mode;
-    }
-    if let Some(sound) = input.sound_on_zone_in {
-        cfg.sound_on_zone_in = sound;
-    }
-    if let Some(friends) = input.friends {
-        cfg.friends = friends;
-    }
-    (StatusCode::OK, Json(cfg.clone()))
-}
-
-// ─── Health ───────────────────────────────────────────────────────────────────
+// ─── Health
+// ───────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct HealthResponse {
@@ -134,120 +82,6 @@ pub async fn health() -> Json<HealthResponse> {
     })
 }
 
-// ─── Box Chat Settings ──────────────────────────────────────────────────────
-
-fn textquest_config_path() -> PathBuf {
-    std::env::var("TEXTQUEST_CONFIG_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
-}
-
-fn read_box_chat_settings_from_disk() -> Result<BoxChatConfig, String> {
-    let path = textquest_config_path();
-    if !path.exists() {
-        return Ok(BoxChatConfig::default());
-    }
-
-    let content = std::fs::read_to_string(&path)
-        .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
-    let doc = content
-        .parse::<DocumentMut>()
-        .map_err(|error| format!("Failed to parse {}: {error}", path.display()))?;
-
-    let Some(item) = doc.get("box_chat") else {
-        return Ok(BoxChatConfig::default());
-    };
-    let settings = toml_edit::de::from_str::<BoxChatConfig>(&item.to_string())
-        .map_err(|error| format!("Failed to decode [box_chat]: {error}"))?;
-    Ok(settings)
-}
-
-fn write_box_chat_settings_to_disk(settings: &BoxChatConfig) -> Result<(), String> {
-    if settings.host.trim().is_empty() {
-        return Err("Box chat host must not be empty".to_string());
-    }
-    if settings.port == 0 {
-        return Err("Box chat port must be between 1 and 65535".to_string());
-    }
-
-    let path = textquest_config_path();
-    let mut doc = if path.exists() {
-        let content = std::fs::read_to_string(&path)
-            .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
-        content
-            .parse::<DocumentMut>()
-            .map_err(|error| format!("Failed to parse {}: {error}", path.display()))?
-    } else {
-        DocumentMut::new()
-    };
-
-    let mut table = Table::new();
-    table["enabled"] = value(settings.enabled);
-    table["host"] = value(settings.host.clone());
-    table["port"] = value(i64::from(settings.port));
-    table["auto_connect"] = value(settings.auto_connect);
-    doc["box_chat"] = Item::Table(table);
-
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("Failed to create {}: {error}", parent.display()))?;
-    }
-
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| format!("Failed to determine file name for {}", path.display()))?;
-    let temp_path = path.with_file_name(format!(
-        ".{file_name}.tmp.{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|error| format!("Failed to build temp path for {}: {error}", path.display()))?
-            .as_nanos()
-    ));
-
-    let mut temp_file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temp_path)
-        .map_err(|error| {
-            format!(
-                "Failed to create temp file {}: {error}",
-                temp_path.display()
-            )
-        })?;
-    std::io::Write::write_all(&mut temp_file, doc.to_string().as_bytes())
-        .map_err(|error| format!("Failed to write temp file {}: {error}", temp_path.display()))?;
-    temp_file
-        .sync_all()
-        .map_err(|error| format!("Failed to sync temp file {}: {error}", temp_path.display()))?;
-    drop(temp_file);
-
-    std::fs::rename(&temp_path, &path).map_err(|error| {
-        let _ = std::fs::remove_file(&temp_path);
-        format!(
-            "Failed to replace {} with {}: {error}",
-            path.display(),
-            temp_path.display()
-        )
-    })?;
-    Ok(())
-}
-
-/// GET /api/box-chat/settings — read persisted EQBC-style relay settings.
-pub async fn get_box_chat_settings() -> impl IntoResponse {
-    match read_box_chat_settings_from_disk() {
-        Ok(settings) => (StatusCode::OK, Json(settings)).into_response(),
-        Err(error) => json_error(StatusCode::INTERNAL_SERVER_ERROR, error).into_response(),
-    }
-}
-
-/// PUT /api/box-chat/settings — persist EQBC-style relay settings.
-pub async fn put_box_chat_settings(Json(settings): Json<BoxChatConfig>) -> impl IntoResponse {
-    match write_box_chat_settings_to_disk(&settings) {
-        Ok(()) => (StatusCode::OK, Json(settings)).into_response(),
-        Err(error) => json_error(StatusCode::BAD_REQUEST, error).into_response(),
-    }
-}
 // ─── Sessions
 // ─────────────────────────────────────────────────────────────────
 
@@ -259,28 +93,80 @@ pub struct SessionInfo {
     pub level: u8,
     pub hp_pct: f32,
     pub mana_pct: f32,
+    pub endurance_pct: f32,
     pub status: String,
+    pub buff_count: usize,
+    pub target_name: Option<String>,
+    pub target_hp_pct: Option<f32>,
+    pub pet_name: Option<String>,
+}
+
+fn read_live_sessions(path: &StdPath) -> anyhow::Result<Vec<SharedClientState>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let payload = std::fs::read(path)?;
+    let sessions = serde_json::from_slice::<Vec<SharedClientState>>(&payload)?;
+    Ok(sessions)
 }
 
 /// List active sessions.
 pub async fn list_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    // Build a list of sessions from character configs.
-    // In a production system, this would read from IPC shared memory or a session
-    // registry.
-    let configs = state.character_configs.read().await;
-    let sessions: Vec<SessionInfo> = configs
-        .values()
-        .enumerate()
-        .map(|(idx, cfg)| SessionInfo {
-            client_id: idx as u32 + 1,
-            character_name: cfg.character_name.clone(),
-            zone: "Unknown".to_string(), // Would come from game state
-            level: 50,                   // Would come from game state
-            hp_pct: 100.0,               // Would come from game state
-            mana_pct: 100.0,             // Would come from game state
-            status: "idle".to_string(),  // Would come from game state
-        })
-        .collect();
+    let live_sessions = match read_live_sessions(&state.live_session_snapshot_path) {
+        Ok(sessions) => sessions,
+        Err(error) => {
+            return json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to read live session snapshot: {error}"),
+            )
+            .into_response();
+        }
+    };
+
+    let sessions: Vec<SessionInfo> = if live_sessions.is_empty() {
+        let configs = state.character_configs.read().await;
+        configs
+            .values()
+            .enumerate()
+            .map(|(idx, cfg)| SessionInfo {
+                client_id: idx as u32 + 1,
+                character_name: cfg.character_name.clone(),
+                zone: "Unknown".to_string(),
+                level: 50,
+                hp_pct: 100.0,
+                mana_pct: 100.0,
+                endurance_pct: 100.0,
+                status: "idle".to_string(),
+                buff_count: 0,
+                target_name: None,
+                target_hp_pct: None,
+                pet_name: None,
+            })
+            .collect()
+    } else {
+        live_sessions
+            .into_iter()
+            .map(|session| SessionInfo {
+                client_id: session.client_id,
+                character_name: session.character_name,
+                zone: if session.zone_long_name.is_empty() {
+                    session.zone_short_name
+                } else {
+                    session.zone_long_name
+                },
+                level: session.level,
+                hp_pct: session.hp_pct,
+                mana_pct: session.mana_pct,
+                endurance_pct: session.endurance_pct,
+                status: session.status,
+                buff_count: session.buffs.len(),
+                target_name: session.target.as_ref().map(|target| target.name.clone()),
+                target_hp_pct: session.target.as_ref().map(|target| target.hp_pct),
+                pet_name: session.pet.as_ref().map(|pet| pet.name.clone()),
+            })
+            .collect()
+    };
 
     (StatusCode::OK, Json(sessions)).into_response()
 }
@@ -298,76 +184,9 @@ pub struct RotationEntry {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ClassParams {
     pub ch_chain_timing_ms: Option<u32>,
-    pub cross_client_heal_enabled: Option<bool>,
-    pub cross_client_heal_threshold_pct: Option<u8>,
-    pub cross_client_heal_priority: Option<u8>,
-    pub cross_client_claim_timeout_ms: Option<u32>,
     pub dot_overlap_pct: Option<u8>,
     pub burn_at_hp_pct: Option<u8>,
     pub slow_at_hp_pct: Option<u8>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AutoCampOnDeathConfig {
-    pub enabled: bool,
-    pub camp_delay_secs: u64,
-    pub relog_wait_secs: u64,
-}
-
-impl Default for AutoCampOnDeathConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            camp_delay_secs: 30,
-            relog_wait_secs: 900,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum TributeAlertState {
-    Ok,
-    Expiring,
-    Expired,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct TributePreferences {
-    pub auto_activate: bool,
-    pub warning_threshold_secs: u64,
-    pub preferred_tributes: Vec<String>,
-}
-
-impl Default for TributePreferences {
-    fn default() -> Self {
-        Self {
-            auto_activate: false,
-            warning_threshold_secs: 300,
-            preferred_tributes: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct TributeStatus {
-    pub active: bool,
-    pub remaining_secs: u64,
-    pub point_balance: u32,
-    pub active_tributes: Vec<String>,
-    pub alert_state: TributeAlertState,
-}
-
-impl Default for TributeStatus {
-    fn default() -> Self {
-        Self {
-            active: false,
-            remaining_secs: 0,
-            point_balance: 0,
-            active_tributes: Vec::new(),
-            alert_state: TributeAlertState::Expired,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -380,68 +199,8 @@ pub struct CharacterConfig {
     pub nuke_at_pct: u8,
     pub rotation: Vec<RotationEntry>,
     pub class_params: ClassParams,
-    #[serde(default)]
-    pub auto_rez: AutoRezConfig,
     pub group_override: bool,
     pub group_name: Option<String>,
-    #[serde(default)]
-    pub auto_camp_on_death: AutoCampOnDeathConfig,
-    #[serde(default)]
-    pub tribute_preferences: TributePreferences,
-    #[serde(default)]
-    pub tribute_status: TributeStatus,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CharacterConfigUpdate {
-    pub character_name: String,
-    pub class: String,
-    pub role: String,
-    pub heal_at_pct: u8,
-    pub mana_sit_pct: u8,
-    pub nuke_at_pct: u8,
-    pub rotation: Vec<RotationEntry>,
-    pub class_params: ClassParams,
-    #[serde(default)]
-    pub auto_rez: AutoRezConfig,
-    pub group_override: bool,
-    pub group_name: Option<String>,
-    #[serde(default)]
-    pub auto_camp_on_death: AutoCampOnDeathConfig,
-    pub tribute_preferences: TributePreferences,
-}
-
-fn tribute_preferences(
-    preferred_tributes: &[&str],
-    warning_threshold_secs: u64,
-) -> TributePreferences {
-    TributePreferences {
-        auto_activate: true,
-        warning_threshold_secs,
-        preferred_tributes: preferred_tributes
-            .iter()
-            .map(|name| (*name).to_string())
-            .collect(),
-    }
-}
-
-fn tribute_status(
-    active: bool,
-    remaining_secs: u64,
-    point_balance: u32,
-    active_tributes: &[&str],
-    alert_state: TributeAlertState,
-) -> TributeStatus {
-    TributeStatus {
-        active,
-        remaining_secs,
-        point_balance,
-        active_tributes: active_tributes
-            .iter()
-            .map(|name| (*name).to_string())
-            .collect(),
-        alert_state,
-    }
 }
 
 pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
@@ -470,34 +229,10 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             ],
             class_params: ClassParams {
                 ch_chain_timing_ms: Some(2500),
-                cross_client_heal_enabled: Some(true),
-                cross_client_heal_threshold_pct: Some(85),
-                cross_client_heal_priority: Some(10),
-                cross_client_claim_timeout_ms: Some(3000),
                 ..ClassParams::default()
-            },
-            auto_rez: AutoRezConfig {
-                enabled: true,
-                min_xp_pct: 96,
-                trusted_casters: vec!["Highclerk".into(), "Leafbinder".into()],
-                decline_if_untrusted: true,
-                delay_ms: 5_000,
             },
             group_override: false,
             group_name: Some("Group 1".into()),
-            auto_camp_on_death: AutoCampOnDeathConfig {
-                enabled: true,
-                camp_delay_secs: 30,
-                relog_wait_secs: 900,
-            },
-            tribute_preferences: tribute_preferences(&["Marr's Gift", "Champion's Aura"], 300),
-            tribute_status: tribute_status(
-                true,
-                240,
-                3_200,
-                &["Marr's Gift"],
-                TributeAlertState::Expiring,
-            ),
         },
         CharacterConfig {
             character_name: "Noxus".into(),
@@ -513,28 +248,8 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 enabled: true,
             }],
             class_params: ClassParams::default(),
-            auto_rez: AutoRezConfig {
-                enabled: false,
-                min_xp_pct: 90,
-                trusted_casters: vec!["Frostreaver".into()],
-                decline_if_untrusted: false,
-                delay_ms: 3_000,
-            },
             group_override: false,
             group_name: Some("Group 1".into()),
-            auto_camp_on_death: AutoCampOnDeathConfig {
-                enabled: false,
-                camp_delay_secs: 30,
-                relog_wait_secs: 900,
-            },
-            tribute_preferences: tribute_preferences(&["Stalwart Ward", "Champion's Aura"], 420),
-            tribute_status: tribute_status(
-                true,
-                3_600,
-                1_950,
-                &["Stalwart Ward", "Champion's Aura"],
-                TributeAlertState::Ok,
-            ),
         },
         CharacterConfig {
             character_name: "Aelrindel".into(),
@@ -553,22 +268,8 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 burn_at_hp_pct: Some(30),
                 ..ClassParams::default()
             },
-            auto_rez: AutoRezConfig {
-                enabled: true,
-                min_xp_pct: 90,
-                trusted_casters: vec!["Frostreaver".into(), "Oakmantle".into()],
-                decline_if_untrusted: false,
-                delay_ms: 2_500,
-            },
             group_override: false,
             group_name: Some("Group 2".into()),
-            auto_camp_on_death: AutoCampOnDeathConfig {
-                enabled: true,
-                camp_delay_secs: 45,
-                relog_wait_secs: 1200,
-            },
-            tribute_preferences: tribute_preferences(&["Arcane Fury", "Hero's Fortitude"], 180),
-            tribute_status: tribute_status(false, 0, 875, &[], TributeAlertState::Expired),
         },
         CharacterConfig {
             character_name: "Grok".into(),
@@ -587,28 +288,8 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 slow_at_hp_pct: Some(95),
                 ..ClassParams::default()
             },
-            auto_rez: AutoRezConfig {
-                enabled: true,
-                min_xp_pct: 96,
-                trusted_casters: vec!["Frostreaver".into()],
-                decline_if_untrusted: true,
-                delay_ms: 4_000,
-            },
             group_override: false,
             group_name: Some("Group 2".into()),
-            auto_camp_on_death: AutoCampOnDeathConfig {
-                enabled: false,
-                camp_delay_secs: 30,
-                relog_wait_secs: 900,
-            },
-            tribute_preferences: tribute_preferences(&["Ancient Bulwark", "Spirit's Resolve"], 300),
-            tribute_status: tribute_status(
-                true,
-                1_020,
-                1_480,
-                &["Ancient Bulwark"],
-                TributeAlertState::Ok,
-            ),
         },
         CharacterConfig {
             character_name: "Valerius".into(),
@@ -627,31 +308,8 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 dot_overlap_pct: Some(10),
                 ..ClassParams::default()
             },
-            auto_rez: AutoRezConfig {
-                enabled: true,
-                min_xp_pct: 90,
-                trusted_casters: vec!["Frostreaver".into(), "Highclerk".into()],
-                decline_if_untrusted: true,
-                delay_ms: 3_500,
-            },
             group_override: false,
             group_name: Some("Group 3".into()),
-            auto_camp_on_death: AutoCampOnDeathConfig {
-                enabled: false,
-                camp_delay_secs: 30,
-                relog_wait_secs: 900,
-            },
-            tribute_preferences: tribute_preferences(
-                &["Fervor of Shadows", "Hero's Vitality"],
-                240,
-            ),
-            tribute_status: tribute_status(
-                true,
-                150,
-                2_250,
-                &["Fervor of Shadows"],
-                TributeAlertState::Expiring,
-            ),
         },
     ] {
         configs.insert(cfg.character_name.clone(), cfg);
@@ -660,6 +318,9 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
 }
 
 /// GET /api/config/characters — list all character tuning configs.
+/// Not yet mounted in the live API router (returns 501 via placeholder); kept
+/// for future use.
+#[allow(dead_code)]
 pub async fn list_character_configs(
     State(state): State<Arc<AppState>>,
 ) -> Json<Vec<CharacterConfig>> {
@@ -672,37 +333,23 @@ pub async fn list_character_configs(
 }
 
 /// PUT /api/config/characters/:name — upsert per-character tuning config.
+/// Not yet mounted in the live API router (returns 501 via placeholder); kept
+/// for future use.
+#[allow(dead_code)]
 pub async fn put_character_config(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
-    Json(config): Json<CharacterConfigUpdate>,
+    Json(mut config): Json<CharacterConfig>,
 ) -> Result<Json<CharacterConfig>, StatusCode> {
     if name.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    let mut configs_map = state.character_configs.write().await;
-    let tribute_status = configs_map
-        .get(&name)
-        .map(|existing| existing.tribute_status.clone())
-        .unwrap_or_default();
-    let saved = CharacterConfig {
-        character_name: name,
-        class: config.class,
-        role: config.role,
-        heal_at_pct: config.heal_at_pct,
-        mana_sit_pct: config.mana_sit_pct,
-        nuke_at_pct: config.nuke_at_pct,
-        rotation: config.rotation,
-        class_params: config.class_params,
-        auto_rez: config.auto_rez,
-        group_override: config.group_override,
-        group_name: config.group_name,
-        auto_camp_on_death: config.auto_camp_on_death,
-        tribute_preferences: config.tribute_preferences,
-        tribute_status,
-    };
-    configs_map.insert(saved.character_name.clone(), saved.clone());
-    Ok(Json(saved))
+    config.character_name = name;
+    {
+        let mut configs_map = state.character_configs.write().await;
+        configs_map.insert(config.character_name.clone(), config.clone());
+    }
+    Ok(Json(config))
 }
 
 // ── Economy types
@@ -900,31 +547,10 @@ mod tests {
     use axum::response::IntoResponse;
     use http_body_util::BodyExt;
     use serde_json::Value;
-    use tempfile::tempdir;
+    use std::path::PathBuf;
 
-    struct ConfigPathGuard {
-        original: Option<String>,
-    }
-
-    impl ConfigPathGuard {
-        fn set(path: &std::path::Path) -> Self {
-            let original = std::env::var("TEXTQUEST_CONFIG_PATH").ok();
-            unsafe {
-                std::env::set_var("TEXTQUEST_CONFIG_PATH", path);
-            }
-            Self { original }
-        }
-    }
-
-    impl Drop for ConfigPathGuard {
-        fn drop(&mut self) {
-            unsafe {
-                match &self.original {
-                    Some(value) => std::env::set_var("TEXTQUEST_CONFIG_PATH", value),
-                    None => std::env::remove_var("TEXTQUEST_CONFIG_PATH"),
-                }
-            }
-        }
+    fn test_live_session_snapshot_path(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../data/runtime/{name}"))
     }
 
     async fn error_response_json(response: axum::response::Response) -> (StatusCode, Value) {
@@ -946,88 +572,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn box_chat_settings_default_when_config_missing() {
-        let dir = tempdir().expect("tempdir should exist");
-        let config_path = dir.path().join("textquest.toml");
-        let _guard = ConfigPathGuard::set(&config_path);
-
-        let response = get_box_chat_settings().await.into_response();
-        let body = response
-            .into_body()
-            .collect()
-            .await
-            .expect("body should collect")
-            .to_bytes();
-        let settings: BoxChatConfig =
-            serde_json::from_slice(&body).expect("settings response should parse");
-
-        assert_eq!(settings, BoxChatConfig::default());
-    }
-
-    #[tokio::test]
-    async fn put_box_chat_settings_writes_config_section() {
-        let dir = tempdir().expect("tempdir should exist");
-        let config_path = dir.path().join("textquest.toml");
-        std::fs::write(
-            &config_path,
-            "process_name = \"eqgame.exe\"\n[launch]\neq_path = \"C:/EQ\"\n",
-        )
-        .expect("seed config should write");
-        let _guard = ConfigPathGuard::set(&config_path);
-
-        let settings = BoxChatConfig {
-            enabled: true,
-            host: "192.168.1.25".to_string(),
-            port: 3002,
-            auto_connect: true,
-        };
-
-        let response = put_box_chat_settings(Json(settings.clone()))
-            .await
-            .into_response();
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let written = std::fs::read_to_string(&config_path).expect("config should exist");
-        assert!(written.contains("process_name = \"eqgame.exe\""));
-        assert!(written.contains("[box_chat]"));
-        assert!(written.contains("host = \"192.168.1.25\""));
-
-        let response = get_box_chat_settings().await.into_response();
-        let body = response
-            .into_body()
-            .collect()
-            .await
-            .expect("body should collect")
-            .to_bytes();
-        let reloaded: BoxChatConfig =
-            serde_json::from_slice(&body).expect("settings response should parse");
-        assert_eq!(reloaded, settings);
-    }
-
-    #[tokio::test]
-    async fn put_box_chat_settings_rejects_zero_port() {
-        let dir = tempdir().expect("tempdir should exist");
-        let config_path = dir.path().join("textquest.toml");
-        let _guard = ConfigPathGuard::set(&config_path);
-
-        let response = put_box_chat_settings(Json(BoxChatConfig {
-            enabled: true,
-            host: "127.0.0.1".to_string(),
-            port: 0,
-            auto_connect: true,
-        }))
-        .await
-        .into_response();
-
-        let (status, body) = error_response_json(response).await;
-        assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(
-            body,
-            serde_json::json!({ "error": "Box chat port must be between 1 and 65535" })
-        );
-    }
-
-    #[tokio::test]
     async fn sessions_returns_ok() {
         let state = Arc::new(AppState {
             event_tx: tokio::sync::broadcast::channel::<String>(8).0,
@@ -1036,9 +580,9 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
-            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             api_token: None,
+            live_session_snapshot_path: test_live_session_snapshot_path("api-sessions-ok.json"),
         });
         let response = list_sessions(State(state)).await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
@@ -1126,33 +670,15 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
-            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
             api_token: None,
+            live_session_snapshot_path: test_live_session_snapshot_path(
+                "api-character-configs-demo.json",
+            ),
         });
         let Json(configs) = list_character_configs(State(state)).await;
         assert!(!configs.is_empty());
         assert!(configs.iter().any(|c| c.character_name == "Frostreaver"));
-        assert!(
-            configs
-                .iter()
-                .any(|c| c.auto_camp_on_death.enabled && c.auto_camp_on_death.camp_delay_secs == 30)
-        );
-        let frostreaver = configs
-            .into_iter()
-            .find(|c| c.character_name == "Frostreaver")
-            .expect("demo config should exist");
-        let json = serde_json::to_value(frostreaver).expect("config should serialize");
-        assert_eq!(json["tribute_preferences"]["auto_activate"], true);
-        assert_eq!(
-            json["tribute_status"]["point_balance"],
-            serde_json::json!(3_200)
-        );
-        assert_eq!(
-            json["tribute_status"]["alert_state"],
-            serde_json::json!("expiring")
-        );
     }
 
     #[tokio::test]
@@ -1164,12 +690,13 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
-            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
             api_token: None,
+            live_session_snapshot_path: test_live_session_snapshot_path(
+                "api-put-character-config.json",
+            ),
         });
-        let input = CharacterConfigUpdate {
+        let input = CharacterConfig {
             character_name: "IgnoredName".into(),
             class: "Wizard".into(),
             role: "DPS".into(),
@@ -1177,52 +704,15 @@ mod tests {
             mana_sit_pct: 15,
             nuke_at_pct: 70,
             rotation: vec![],
-            class_params: ClassParams {
-                cross_client_heal_enabled: Some(true),
-                cross_client_heal_threshold_pct: Some(72),
-                cross_client_heal_priority: Some(33),
-                cross_client_claim_timeout_ms: Some(4200),
-                ..ClassParams::default()
-            },
-            auto_rez: AutoRezConfig {
-                enabled: true,
-                min_xp_pct: 96,
-                trusted_casters: vec!["Frostreaver".into()],
-                decline_if_untrusted: true,
-                delay_ms: 5_100,
-            },
+            class_params: ClassParams::default(),
             group_override: false,
             group_name: None,
-            auto_camp_on_death: AutoCampOnDeathConfig {
-                enabled: true,
-                camp_delay_secs: 75,
-                relog_wait_secs: 1800,
-            },
-            tribute_preferences: tribute_preferences(&["Arcane Fury", "Hero's Fortitude"], 180),
         };
         let Json(saved) =
             put_character_config(State(state.clone()), Path("Aelrindel".into()), Json(input))
                 .await
                 .expect("put character config should succeed");
         assert_eq!(saved.character_name, "Aelrindel");
-        assert_eq!(
-            saved.auto_camp_on_death,
-            AutoCampOnDeathConfig {
-                enabled: true,
-                camp_delay_secs: 75,
-                relog_wait_secs: 1800,
-            }
-        );
-        let saved_json = serde_json::to_value(&saved).expect("saved config should serialize");
-        assert_eq!(
-            saved_json["tribute_preferences"]["preferred_tributes"],
-            serde_json::json!(["Arcane Fury", "Hero's Fortitude"])
-        );
-        assert_eq!(
-            saved_json["tribute_status"]["alert_state"],
-            serde_json::json!("expired")
-        );
-        assert_eq!(saved_json["tribute_status"]["point_balance"], serde_json::json!(875));
 
         let Json(configs) = list_character_configs(State(state)).await;
         let updated = configs
@@ -1230,95 +720,5 @@ mod tests {
             .find(|c| c.character_name == "Aelrindel")
             .expect("updated config should exist");
         assert_eq!(updated.heal_at_pct, 50);
-        assert_eq!(updated.class_params.cross_client_heal_enabled, Some(true));
-        assert_eq!(
-            updated.class_params.cross_client_heal_threshold_pct,
-            Some(72)
-        );
-        assert_eq!(updated.class_params.cross_client_heal_priority, Some(33));
-        assert_eq!(
-            updated.class_params.cross_client_claim_timeout_ms,
-            Some(4200)
-        );
-        assert_eq!(updated.auto_rez.min_xp_pct, 96);
-        assert_eq!(updated.auto_rez.trusted_casters, vec!["Frostreaver"]);
-        assert!(updated.auto_camp_on_death.enabled);
-    }
-
-    #[test]
-    fn character_config_defaults_missing_death_config() {
-        let config: CharacterConfig = serde_json::from_value(serde_json::json!({
-            "character_name": "Aelrindel",
-            "class": "Wizard",
-            "role": "DPS",
-            "heal_at_pct": 45,
-            "mana_sit_pct": 20,
-            "nuke_at_pct": 80,
-            "rotation": [],
-            "class_params": {},
-            "auto_rez": {
-                "enabled": true,
-                "min_xp_pct": 96,
-                "trusted_casters": ["Frostreaver"],
-                "decline_if_untrusted": true,
-                "delay_ms": 5100
-            },
-            "group_override": false,
-            "group_name": null
-        }))
-        .expect("legacy payload should deserialize");
-
-        assert_eq!(config.auto_camp_on_death, AutoCampOnDeathConfig::default());
-    }
-
-    #[tokio::test]
-    async fn player_watch_config_returns_defaults() {
-        let state = Arc::new(AppState {
-            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
-            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
-            loot_state: crate::api::loot::LootState::new_demo(),
-            economy_state: crate::api::economy::EconomyState::new_demo(),
-            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
-            api_token: None,
-        });
-        let response = get_player_watch_config(State(state)).await.into_response();
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        let cfg: PlayerWatchConfig = serde_json::from_slice(&body).unwrap();
-        assert_eq!(cfg.filter_mode, "all");
-        assert!(!cfg.sound_on_zone_in);
-        assert!(cfg.friends.is_empty());
-    }
-
-    #[tokio::test]
-    async fn player_watch_config_put_updates_state() {
-        let state = Arc::new(AppState {
-            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
-            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
-            loot_state: crate::api::loot::LootState::new_demo(),
-            economy_state: crate::api::economy::EconomyState::new_demo(),
-            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
-            api_token: None,
-        });
-        let input = UpdatePlayerWatchConfig {
-            filter_mode: Some("friends_only".to_string()),
-            sound_on_zone_in: Some(true),
-            friends: Some(vec!["FriendOne".to_string(), "FriendTwo".to_string()]),
-        };
-        let response = put_player_watch_config(State(state.clone()), Json(input))
-            .await
-            .into_response();
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let cfg = state.player_watch_config.read().await;
-        assert_eq!(cfg.filter_mode, "friends_only");
-        assert!(cfg.sound_on_zone_in);
-        assert_eq!(cfg.friends.len(), 2);
     }
 }

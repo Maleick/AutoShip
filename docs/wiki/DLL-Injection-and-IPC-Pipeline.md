@@ -75,6 +75,15 @@ Behavior:
 
 The orchestrator-side reader in `textquest/src/ipc/shared.rs` checks the sequence before and after copying the payload so it can reject torn reads.
 
+The published `GameState` now includes:
+
+- local player vitals
+- current target snapshot
+- active buffs
+- optional pet snapshot
+
+That gives the orchestrator enough state to build a cross-client roster without polling a second IPC path.
+
 ## Named Pipe Path
 
 Command delivery is handled by:
@@ -113,29 +122,24 @@ Responses include:
 
 - `Pong`
 - `CommandResult`
-- `ChatBatch`
 - `NavUpdate`
 - `LoginPhaseUpdate`
 - `CombatUpdate`
 - `ZoneGraph`
 
-## Passive Chat Capture for Krono Monitoring
+The command surface also includes `UpdateSharedClientStates`, which the orchestrator uses to rebroadcast the normalized roster back to every injected client after each state poll.
 
-The DLL already captures rendered chat lines at the `CEverQuest::dsp_chat` boundary and buffers them for later IPC polling. The trade-price monitor builds on that existing path instead of adding packet hooks or any outbound network traffic.
+## Cross-Client Roster Broadcast
 
-Current passive capture flow:
+TextQuest now has a NetBots-style shared roster layer on top of the per-client shared-memory snapshots:
 
-1. `textquest-dll` intercepts client-rendered chat and queues raw lines in its in-process chat buffer.
-2. The orchestrator polls `Command::PollChat` on a short interval and drains buffered `ChatBatch` messages.
-3. `textquest_common::chat::parse_chat_text()` normalizes the lines into structured chat events.
-4. `textquest::economy::price_monitor` keeps only `/ooc` and `/auction` traffic from trade hub zones such as Nexus and Plane of Knowledge.
-5. Krono-denominated buy/sell/trade messages are parsed into item-plus-price observations and written to `data/trade_prices.db`.
+1. Each DLL publishes `GameState` to its authenticated shared-memory segment.
+2. The orchestrator reads those snapshots and normalizes them into `SharedClientState` records.
+3. The orchestrator broadcasts the full roster back to every client with `Command::UpdateSharedClientStates`.
+4. The orchestrator also writes the latest roster snapshot to `data/runtime/live_sessions.json`.
+5. The TUI group panel and web dashboard both read from that normalized roster instead of reconstructing state independently.
 
-The monitor intentionally stays passive:
-
-- no extra EQ network traffic is generated
-- duplicate observations from multiple watching clients are suppressed in-memory before persistence
-- non-hub-zone and non-Krono chatter is ignored before it reaches the SQLite store
+The JSON snapshot is mutable runtime state, not canonical evidence. It exists so the web process can render live session status without attaching directly to each client pipe.
 
 ## Current Behavior vs Roadmap
 

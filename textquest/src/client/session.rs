@@ -265,6 +265,8 @@ mod tests {
             combat_status: textquest_common::combat::CombatStatus::Idle,
             zone_short_name: "test".into(),
             zone_long_name: "Test Zone".into(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         }
     }
@@ -333,6 +335,8 @@ mod tests {
             combat_status: textquest_common::combat::CombatStatus::Idle,
             zone_short_name: String::new(),
             zone_long_name: String::new(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         };
         s.update_state(state);
@@ -366,6 +370,8 @@ mod tests {
             combat_status: textquest_common::combat::CombatStatus::Idle,
             zone_short_name: "zone1".into(),
             zone_long_name: "Zone One".into(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         };
         let state2 = GameState {
@@ -378,6 +384,8 @@ mod tests {
             combat_status: textquest_common::combat::CombatStatus::Idle,
             zone_short_name: "zone2".into(),
             zone_long_name: "Zone Two".into(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         };
         s.update_state(state1);

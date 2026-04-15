@@ -64,6 +64,9 @@ pub struct AppState {
     /// When `None`, API endpoints are unauthenticated (localhost-only
     /// deployment).
     pub api_token: Option<String>,
+    /// Mutable runtime snapshot written by the orchestrator for live session
+    /// monitoring.
+    pub live_session_snapshot_path: PathBuf,
 }
 
 /// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is
@@ -115,6 +118,10 @@ fn credentials_db_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/credentials.db")
 }
 
+fn live_session_snapshot_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/runtime/live_sessions.json")
+}
+
 /// Build the initial application state for production use.
 ///
 /// - `event_tx` and `account_store` are always initialised empty.
@@ -162,6 +169,7 @@ fn build_state() -> Arc<AppState> {
         player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         api_token,
+        live_session_snapshot_path: live_session_snapshot_path(),
     })
 }
 
@@ -311,6 +319,7 @@ mod tests {
     };
     use http_body_util::BodyExt;
     use serde_json::{Value, json};
+    use textquest_common::shared_client_state::SharedClientState;
     use tower::ServiceExt;
 
     async fn json_response(app: Router, request: Request<Body>) -> (StatusCode, Value) {
@@ -342,6 +351,7 @@ mod tests {
             player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             api_token: None, // No auth in tests — auth middleware is a no-op when None
+            live_session_snapshot_path: path.with_file_name("live_sessions.json"),
         })
     }
 
@@ -496,6 +506,51 @@ mod tests {
                 .iter()
                 .any(|session| session["characterName"] == "Newpuller")
         );
+    }
+
+    #[tokio::test]
+    async fn sessions_endpoint_prefers_live_snapshot_when_present() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let state = test_state_with_credentials(&tempdir.path().join("creds.db"));
+        std::fs::write(
+            &state.live_session_snapshot_path,
+            serde_json::to_vec(&vec![SharedClientState {
+                client_id: 77,
+                spawn_id: 42,
+                character_name: "Frostreaver".into(),
+                class_id: 2,
+                level: 60,
+                zone_short_name: "kael".into(),
+                zone_long_name: "Kael Drakkel".into(),
+                hp_pct: 72.5,
+                mana_pct: 81.0,
+                endurance_pct: 49.0,
+                is_dead: false,
+                status: "active".into(),
+                target: None,
+                buffs: Vec::new(),
+                pet: None,
+            }])
+            .expect("snapshot json"),
+        )
+        .expect("write snapshot");
+
+        let app = build_app(state);
+        let (status, body) = json_response(
+            app,
+            Request::builder()
+                .uri("/api/sessions")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let sessions = body.as_array().expect("sessions array");
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0]["character_name"], "Frostreaver");
+        assert_eq!(sessions[0]["zone"], "Kael Drakkel");
+        assert_eq!(sessions[0]["endurance_pct"], 49.0);
     }
 
     #[tokio::test]

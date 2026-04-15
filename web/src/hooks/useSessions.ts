@@ -21,7 +21,7 @@ export function useSessions() {
       }
     };
     fetchSessions();
-    const interval = setInterval(fetchSessions, 5000);
+    const interval = setInterval(fetchSessions, 250);
     return () => clearInterval(interval);
   }, []);
 

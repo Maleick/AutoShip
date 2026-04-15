@@ -84,6 +84,7 @@ Retrieve all active character sessions currently under orchestration.
     "level": 60,
     "hp_pct": 95.5,
     "mana_pct": 87.0,
+    "endurance_pct": 100.0,
     "status": "idle"
   },
   {
@@ -93,6 +94,11 @@ Retrieve all active character sessions currently under orchestration.
     "level": 58,
     "hp_pct": 100.0,
     "mana_pct": 0.0,
+    "endurance_pct": 77.5,
+    "buff_count": 12,
+    "target_name": "A drake",
+    "target_hp_pct": 48.0,
+    "pet_name": "Greater Vocarate: Water",
     "status": "combat"
   }
 ]
@@ -106,12 +112,17 @@ Retrieve all active character sessions currently under orchestration.
 - `level: u8` — Character level
 - `hp_pct: f32` — HP percentage (0-100)
 - `mana_pct: f32` — Mana percentage (0-100)
+- `endurance_pct: f32` — Endurance percentage (0-100)
 - `status: String` — Current status (idle, combat, moving, dead, etc.)
+- `buff_count: usize` — Number of active buffs in the shared roster snapshot
+- `target_name: Option<String>` — Current target name when available
+- `target_hp_pct: Option<f32>` — Current target HP percentage when available
+- `pet_name: Option<String>` — Current pet name when available
 
 **Notes**:
 
-- In current implementation, zone/level/hp/mana/status are filled from character configs (demo data).
-- Future: Pull live state from shared memory or IPC.
+- The endpoint prefers the orchestrator's runtime roster snapshot at `data/runtime/live_sessions.json`.
+- If no live roster snapshot exists yet, the endpoint falls back to character-config-backed demo rows so the dashboard still renders in demo mode.
 
 ---
 

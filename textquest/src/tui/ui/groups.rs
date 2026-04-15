@@ -22,6 +22,7 @@ use crate::tui::{
 struct MemberRenderEntry<'a> {
     primary: Line<'a>,
     cast: Option<Line<'a>>,
+    target: Option<Line<'a>>,
     buff: Option<Line<'a>>,
 }
 
@@ -119,6 +120,23 @@ fn member_cast_line<'a>(
     })
 }
 
+fn member_target_line<'a>(app: &App, client: &ClientState, t: &Theme) -> Option<Line<'a>> {
+    let target = client.target.as_ref()?;
+    let target_name = app.redact_name(&target.displayed_name).into_owned();
+    Some(Line::from(vec![
+        Span::raw("  "),
+        Span::styled("-> ", Style::default().fg(t.text_muted)),
+        Span::styled(
+            truncate_inline(&target_name, 18),
+            Style::default().fg(t.text_highlight),
+        ),
+        Span::styled(
+            format!(" {:>3.0}%", target.hp_pct()),
+            Style::default().fg(hp_color(target.hp_pct(), t)),
+        ),
+    ]))
+}
+
 /// Build the operating mode indicator line.
 fn mode_line<'a>(app: &App) -> Line<'a> {
     let t = &app.theme;
@@ -155,16 +173,25 @@ fn assemble_member_lines<'a>(
         .take(visible_count)
         .filter(|entry| entry.cast.is_some())
         .count();
+    let active_target_total = entries
+        .iter()
+        .take(visible_count)
+        .filter(|entry| entry.target.is_some())
+        .count();
     let cast_budget = detail_capacity.min(active_cast_total);
-    let buff_budget =
-        if width_class == WidthClass::Wide && cast_budget > 0 && detail_capacity > cast_budget {
-            detail_capacity - cast_budget
-        } else {
-            0
-        };
+    let remaining_after_cast = detail_capacity.saturating_sub(cast_budget);
+    let target_budget = remaining_after_cast.min(active_target_total);
+    let buff_budget = if width_class == WidthClass::Wide {
+        detail_capacity
+            .saturating_sub(cast_budget)
+            .saturating_sub(target_budget)
+    } else {
+        0
+    };
 
     let mut lines = Vec::with_capacity(max_lines);
     let mut remaining_cast = cast_budget;
+    let mut remaining_target = target_budget;
     let mut remaining_buff = buff_budget;
 
     for entry in entries.into_iter().take(visible_count) {
@@ -179,6 +206,14 @@ fn assemble_member_lines<'a>(
         {
             lines.push(detail);
             remaining_cast -= 1;
+        }
+
+        if remaining_target > 0
+            && lines.len() < max_lines
+            && let Some(detail) = entry.target
+        {
+            lines.push(detail);
+            remaining_target -= 1;
         }
 
         if remaining_buff > 0
@@ -314,6 +349,7 @@ fn draw_live_group_panel(
                 entries.push(MemberRenderEntry {
                     primary: member_line(player, is_leader, display_name, t),
                     cast: member_cast_line(app, client, inner.width as usize, t),
+                    target: member_target_line(app, client, t),
                     buff: buff_line(player, t),
                 });
             } else {
@@ -323,6 +359,7 @@ fn draw_live_group_panel(
                         Style::default().fg(t.text_muted),
                     )),
                     cast: None,
+                    target: None,
                     buff: None,
                 });
             }
@@ -335,6 +372,7 @@ fn draw_live_group_panel(
                     Style::default().fg(t.text_muted),
                 )]),
                 cast: None,
+                target: None,
                 buff: None,
             });
         }
@@ -546,6 +584,7 @@ fn draw_config_group_panel(
                 entries.push(MemberRenderEntry {
                     primary: member_line(player, false, name, t),
                     cast: member_cast_line(app, client, inner.width as usize, t),
+                    target: member_target_line(app, client, t),
                     buff: buff_line(player, t),
                 });
             } else {
@@ -555,6 +594,7 @@ fn draw_config_group_panel(
                         Style::default().fg(t.text_muted),
                     )),
                     cast: None,
+                    target: None,
                     buff: None,
                 });
             }
@@ -565,6 +605,7 @@ fn draw_config_group_panel(
                     Style::default().fg(t.text_muted),
                 )]),
                 cast: None,
+                target: None,
                 buff: None,
             });
         } else {
@@ -574,6 +615,7 @@ fn draw_config_group_panel(
                     Style::default().fg(t.text_muted),
                 )),
                 cast: None,
+                target: None,
                 buff: None,
             });
         }
@@ -655,16 +697,19 @@ mod tests {
             MemberRenderEntry {
                 primary: Line::from("member-1"),
                 cast: None,
+                target: Some(Line::from("target-1")),
                 buff: Some(Line::from("buff-1")),
             },
             MemberRenderEntry {
                 primary: Line::from("member-2"),
                 cast: None,
+                target: Some(Line::from("target-2")),
                 buff: Some(Line::from("buff-2")),
             },
             MemberRenderEntry {
                 primary: Line::from("member-3"),
                 cast: None,
+                target: None,
                 buff: None,
             },
         ];
@@ -680,7 +725,10 @@ mod tests {
             })
             .collect();
 
-        assert_eq!(rendered, vec!["member-1", "member-2", "member-3", "mode"]);
+        assert_eq!(
+            rendered,
+            vec!["member-1", "target-1", "member-2", "target-2"]
+        );
     }
 
     #[test]
@@ -689,16 +737,19 @@ mod tests {
             MemberRenderEntry {
                 primary: Line::from("member-1"),
                 cast: Some(Line::from("cast-1")),
+                target: Some(Line::from("target-1")),
                 buff: Some(Line::from("buff-1")),
             },
             MemberRenderEntry {
                 primary: Line::from("member-2"),
                 cast: None,
+                target: Some(Line::from("target-2")),
                 buff: Some(Line::from("buff-2")),
             },
             MemberRenderEntry {
                 primary: Line::from("member-3"),
                 cast: None,
+                target: None,
                 buff: None,
             },
         ];
@@ -714,7 +765,7 @@ mod tests {
             })
             .collect();
 
-        assert_eq!(rendered, vec!["member-1", "cast-1", "member-2", "member-3"]);
+        assert_eq!(rendered, vec!["member-1", "cast-1", "target-1", "member-2"]);
         assert!(!rendered.iter().any(|line| line.contains("buff")));
         assert!(!rendered.iter().any(|line| line == "mode"));
     }

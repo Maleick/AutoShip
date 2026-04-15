@@ -2,7 +2,7 @@
 
 ## Current Operator Workflow
 
-TextQuest's default interface is a ratatui-based dashboard with seven top-level screens:
+TextQuest's default interface is a ratatui-based dashboard with five main screens:
 
 | Screen | Key | Main purpose |
 | --- | --- | --- |
@@ -11,14 +11,12 @@ TextQuest's default interface is a ratatui-based dashboard with seven top-level 
 | Navigation | `3` | Per-character route status, selected-route detail, blockers, recovery state, and command reference |
 | Debug | `4` | Raw spawn table, filters, target detail, hex dump, explorer, and EQ internals |
 | Packets | `5` | Live packet monitor with pause state, filtering, opcode decode, and send/receive separation |
-| Economy | `6` | Vendor cadence, loot queue, banking consolidation, and profit/watchlist metrics |
-| Orchestrator | `7` | Consolidated session, group, navigation, economy, combat, and system operator dashboard |
 
 ### Core keys
 
 | Key | Action |
 | --- | --- |
-| `1-7` | Switch screens directly |
+| `1-5` | Switch screens |
 | `Shift+1-6` | Focus group G1-G6 |
 | `Shift+0` | Clear group focus |
 | `Tab` | Cycle focused pane |
@@ -62,6 +60,8 @@ Use this for:
 - roster health and mana checks
 - group focus and scope filtering
 - seeing selected-character status at a glance
+- seeing cross-client vitals in the group panel even when the EQ group window is incomplete
+- reading target detail lines, buff counts, and pet presence from the shared roster feed
 
 ### Map
 
@@ -69,7 +69,6 @@ Use this for:
 
 - zone geometry from `config/maps`
 - spawn overlays
-- compact `OTD` heading/range overlay for the current target
 - navmesh overlay when available
 - named tracking with timers
 
@@ -80,35 +79,6 @@ Use this for:
 - route status across focused characters
 - current destination and waypoint counts
 - quickly spotting stuck or arrived states
-
-### Economy
-
-Use this for:
-
-- vendor cycle timing and abort state
-- loot queue depth and distribution backlog
-- banking progress and consolidated plat totals
-- recent loot-watch and wishlist activity
-
-### Orchestrator
-
-Use this for:
-
-- live per-client session status, mana/endurance, DPS estimate, and location
-- group readiness, formation spread, and spell-sync visibility
-- route state, zoning FSM, blocker, and recovery summaries
-- combat trend, spell frequency, death/recovery log, and system health
-
-The Orchestrator dashboard is a tabbed surface inside screen `7` with:
-
-- `←` / `→` or `h` / `l` to cycle dashboard tabs
-- `↑` / `↓` or `j` / `k` to change the selected client
-- `Space` to pause or resume automation
-- `E` to dispatch `engage`
-- `D` to dispatch `disengage`
-- `C` to dispatch `camp status`
-- `N` to dispatch `nav ui`
-- `X` or `Delete` to eject the selected client from the orchestrator
 
 ### Debug
 
@@ -149,9 +119,11 @@ Use this for:
 
 ### Current behavior
 
-- The seven-screen layout is real and current.
+- The five-screen layout is real and current.
 - The Characters screen is still rendered by `textquest/src/tui/ui/dashboard.rs` via the `ActiveScreen::Overview` dispatch in `textquest/src/tui/ui/mod.rs`; the old PR #507 handoff note about a missing dashboard renderer is historical only.
-- Help, config, CH panel, command history, search, filters, themes, privacy mode, economy controls, and the Orchestrator operator dashboard all exist in the codebase now.
+- Help, config, CH panel, command history, search, filters, themes, and privacy mode all exist in the codebase now.
+- The Characters screen group panel consumes the orchestrator's shared roster feed, so HP, mana, endurance, target, and buff context can come from any connected client rather than only the locally selected one.
+- When target data is available, member rows render a compact target line with target name plus HP percent so heal or burn decisions are visible without leaving the Characters screen.
 
 ### Roadmap or partial wiring
 

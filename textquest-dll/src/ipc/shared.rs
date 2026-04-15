@@ -385,6 +385,8 @@ mod tests {
             local_player: Some(make_spawn(1)),
             target: Some(make_spawn(2)),
             nearby_spawns: with_spawns.then(|| (0..32).map(make_spawn).collect()),
+            active_buffs: vec![],
+            pet: None,
             timestamp_ms: 1234,
             nav_status: textquest_common::nav::NavStatus::Idle,
             combat_status: textquest_common::combat::CombatStatus::Idle,

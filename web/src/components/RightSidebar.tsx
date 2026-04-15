@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { User, Funnel, Terminal, Warning } from "@phosphor-icons/react";
-import { players, combatLog } from "../data/demo";
-import type { Player } from "../types";
+import { combatLog } from "../data/demo";
+import { useSessions } from "../hooks/useSessions";
+import type { Session } from "../types";
 
-function PlayerRow({ player }: { player: Player }) {
-  const isDead = player.status === "dead";
+function PlayerRow({ session }: { session: Session }) {
+  const isDead = session.status === "dead";
+  const targetLabel = session.target_name
+    ? `Target: ${session.target_name}${session.target_hp_pct != null ? ` ${Math.round(session.target_hp_pct)}%` : ""}`
+    : "Target: none";
   return (
     <div
       className={`flex items-center gap-3 p-2 hover:bg-white/5 transition-colors cursor-pointer group ${isDead ? "bg-red-900/10 border border-red-900/30" : ""}`}
@@ -19,12 +23,12 @@ function PlayerRow({ player }: { player: Player }) {
           <span
             className={`text-sm font-bold truncate ${isDead ? "text-red-400 line-through" : "text-white"}`}
           >
-            {player.name}
+            {session.character_name}
           </span>
           <span
             className={`text-[10px] font-rune ${isDead ? "text-red-500" : "text-spectral"}`}
           >
-            {isDead ? "DEAD" : `HP: ${player.hp_pct}%`}
+            {isDead ? "DEAD" : `HP: ${Math.round(session.hp_pct)}%`}
           </span>
         </div>
         <div
@@ -32,10 +36,17 @@ function PlayerRow({ player }: { player: Player }) {
         >
           {!isDead && (
             <div
-              className={`w-1.5 h-1.5 rounded-full ${player.hp_pct > 50 ? "bg-green-500" : "bg-yellow-500"}`}
+              className={`w-1.5 h-1.5 rounded-full ${session.hp_pct > 50 ? "bg-green-500" : "bg-yellow-500"}`}
             />
           )}
-          {player.zone}
+          {session.zone}
+        </div>
+        <div className="text-[10px] text-white/40 font-rune truncate">
+          {targetLabel}
+        </div>
+        <div className="text-[10px] text-white/30 font-rune truncate">
+          MP {Math.round(session.mana_pct)}% | END {Math.round(session.endurance_pct)}% | Buffs {session.buff_count}
+          {session.pet_name ? ` | Pet ${session.pet_name}` : ""}
         </div>
       </div>
     </div>
@@ -44,6 +55,7 @@ function PlayerRow({ player }: { player: Player }) {
 
 export default function RightSidebar() {
   const [unsafeHacksEnabled, setUnsafeHacksEnabled] = useState(false);
+  const { sessions, loading, error } = useSessions();
 
   return (
     <aside className="stone-pillar w-[380px] h-full flex flex-col relative z-20 overflow-hidden bg-void/80 backdrop-blur-sm">
@@ -66,9 +78,19 @@ export default function RightSidebar() {
           </button>
         </div>
         <div className="space-y-2 h-[200px] overflow-y-auto pr-1">
-          {players.map((p) => (
-            <PlayerRow key={p.name} player={p} />
+          {sessions.map((session) => (
+            <PlayerRow key={session.client_id} session={session} />
           ))}
+          {!loading && sessions.length === 0 && !error && (
+            <div className="text-[11px] text-white/40 font-rune px-2 py-4">
+              No live sessions available.
+            </div>
+          )}
+          {error && (
+            <div className="text-[11px] text-red-300 font-rune px-2 py-4">
+              Session feed error: {error}
+            </div>
+          )}
         </div>
       </div>
 

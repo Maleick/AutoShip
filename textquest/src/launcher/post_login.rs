@@ -168,6 +168,8 @@ mod tests {
             combat_status: textquest_common::combat::CombatStatus::Idle,
             zone_short_name: String::new(),
             zone_long_name: String::new(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         }
     }

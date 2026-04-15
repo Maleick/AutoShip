@@ -5,7 +5,12 @@ export interface Session {
   level: number;
   hp_pct: number;
   mana_pct: number;
+  endurance_pct: number;
   status: "active" | "idle" | "dead" | "camping" | "zoning";
+  buff_count: number;
+  target_name?: string | null;
+  target_hp_pct?: number | null;
+  pet_name?: string | null;
 }
 
 export interface Assault {

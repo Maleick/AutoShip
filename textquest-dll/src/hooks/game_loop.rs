@@ -314,9 +314,9 @@ pub fn queue_slash_command(command: String) {
 //               `CancelCastLoop` command.
 //
 // `recast` mode: cast N+1 times total with exponential backoff between
-//                attempts. The backoff starts at
-//                `CAST_LOOP_BASE_BACKOFF_TICKS` and doubles each attempt,
-//                capped at `CAST_LOOP_MAX_BACKOFF_TICKS`.
+//                attempts.  The backoff starts at
+// `CAST_LOOP_BASE_BACKOFF_TICKS`                and doubles each attempt,
+// capped at `CAST_LOOP_MAX_BACKOFF_TICKS`.
 
 /// Base backoff between recast attempts (~0.4 s at 20 ticks/sec).
 const CAST_LOOP_BASE_BACKOFF_TICKS: u64 = 8;
@@ -1574,11 +1574,11 @@ fn on_game_tick() {
     read_and_publish_state(tick);
 
     let overhead = tick_start.elapsed();
-    let overhead = tick_start.elapsed();
+    let overhead_nanos = overhead.as_nanos();
     crate::hooks::timing::record_game_loop_hook_overhead(overhead);
     #[cfg(debug_assertions)]
     tracing::debug!(
-        elapsed_ns = overhead.as_nanos(),
+        elapsed_ns = overhead_nanos,
         tick = tick,
         "ProcessGameEvents hook overhead recorded"
     );
@@ -1668,6 +1668,8 @@ fn read_and_publish_state(tick: u64) {
 
     // Read target (every tick).
     let target = read_target_state(eq_base);
+    let active_buffs = crate::combat::buffs::read_active_buffs(eq_base);
+    let pet = read_pet_state(eq_base);
 
     // Cache the entire GameState to avoid cloning the spawn Vec on non-refresh
     // ticks. On refresh ticks (every 30): rebuild spawns + all fields.
@@ -1722,6 +1724,8 @@ fn read_and_publish_state(tick: u64) {
             combat_status: crate::combat::status(),
             zone_short_name: zone_short,
             zone_long_name: zone_long,
+            active_buffs,
+            pet,
             actual_version: crate::eq_actual_version(),
         });
     } else if let Some(ref mut state) = *cached {
@@ -1730,6 +1734,8 @@ fn read_and_publish_state(tick: u64) {
         state.timestamp_ms = current_time_ms();
         state.nav_status = crate::nav::status();
         state.combat_status = crate::combat::status();
+        state.active_buffs = active_buffs;
+        state.pet = pet;
     } else {
         return;
     }
@@ -1746,12 +1752,12 @@ fn read_and_publish_state(tick: u64) {
 }
 
 fn compute_spawn_delta_events(
-    previous: &std::collections::HashMap<u32, (String, u8)>,
+    previous: &std::collections::HashMap<u32, String>,
     current: &[textquest_common::types::SpawnData],
     zone: String,
     timestamp_ms: u64,
 ) -> (
-    std::collections::HashMap<u32, (String, u8)>,
+    std::collections::HashMap<u32, String>,
     Vec<textquest_common::ipc::SpawnEvent>,
 ) {
     let mut next = std::collections::HashMap::new();
@@ -1760,33 +1766,31 @@ fn compute_spawn_delta_events(
         if spawn.spawn_id == 0 {
             continue;
         }
-        next.insert(spawn.spawn_id, (spawn.displayed_name.clone(), spawn.spawn_type));
+        next.insert(spawn.spawn_id, spawn.displayed_name.clone());
     }
 
     if previous.is_empty() {
         return (next, events);
     }
 
-    for (spawn_id, (name, spawn_type)) in &next {
+    for (spawn_id, name) in &next {
         if !previous.contains_key(spawn_id) {
             events.push(textquest_common::ipc::SpawnEvent {
                 client_id: std::process::id(),
                 zone: zone.clone(),
                 spawn_name: name.clone(),
-                spawn_type: *spawn_type,
                 kind: textquest_common::ipc::SpawnEventKind::Created,
                 timestamp_ms,
             });
         }
     }
 
-    for (spawn_id, (name, spawn_type)) in previous {
+    for (spawn_id, name) in previous {
         if !next.contains_key(spawn_id) {
             events.push(textquest_common::ipc::SpawnEvent {
                 client_id: std::process::id(),
                 zone: zone.clone(),
                 spawn_name: name.clone(),
-                spawn_type: *spawn_type,
                 kind: textquest_common::ipc::SpawnEventKind::Destroyed,
                 timestamp_ms,
             });
@@ -2051,6 +2055,25 @@ fn read_target_state(eq_base: u64) -> Option<textquest_common::types::SpawnData>
         return None;
     }
     Some(unsafe { read_spawn_data(target_ptr) })
+}
+
+#[cfg(windows)]
+fn read_pet_state(eq_base: u64) -> Option<textquest_common::types::PetData> {
+    let xtargets = unsafe { crate::combat::xtarget::read_extended_targets(eq_base) }?;
+    let pet = xtargets.pet()?;
+    let pet_target = xtargets.pet_target();
+    Some(textquest_common::types::PetData {
+        spawn_id: pet.spawn_id,
+        name: pet.name.clone(),
+        target_id: pet_target.map(|target| target.spawn_id),
+        target_name: pet_target.map(|target| target.name.clone()),
+        buffs: Vec::new(),
+    })
+}
+
+#[cfg(not(windows))]
+fn read_pet_state(_eq_base: u64) -> Option<textquest_common::types::PetData> {
+    None
 }
 
 /// Walk the spawn linked list and collect spawns within `max_distance` units
@@ -2781,12 +2804,6 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             let slots = crate::eq::inventory::query_open_container_slots(eq_base, &filter);
             crate::ipc::send_response(textquest_common::ipc::Response::ContainerSlots { slots });
         }
-        Command::QueryBazaarResults { filter } => {
-            tracing::info!(?filter, "QueryBazaarResults received");
-            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
-            let windows = crate::eq::bazaar::query_bazaar_results(eq_base, &filter);
-            crate::ipc::send_response(textquest_common::ipc::Response::BazaarResults { windows });
-        }
         Command::QueryContextMenu => {
             tracing::info!("QueryContextMenu received");
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
@@ -2872,11 +2889,9 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 spawn_id,
             });
         }
-        Command::CombatEmergencyHeal { target_id } => {
-            tracing::info!(target_id, "CombatEmergencyHeal received");
-            crate::combat::handle_command(crate::combat::CombatCommand::EmergencyHeal {
-                target_id,
-            });
+        Command::UpdateSharedClientStates { states } => {
+            tracing::debug!(count = states.len(), "UpdateSharedClientStates received");
+            crate::combat::set_shared_client_states(states);
         }
         Command::LootCorpse => {
             tracing::info!("LootCorpse received");
@@ -2889,10 +2904,6 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         Command::SetAutoAccept { enabled } => {
             tracing::info!(enabled, "SetAutoAccept received");
             crate::dialog::set_enabled(enabled);
-        }
-        Command::SetAutoRezConfig { config } => {
-            tracing::info!("SetAutoRezConfig received");
-            crate::dialog::set_rez_config(config);
         }
         Command::SetRenderMode { mode } => {
             tracing::info!(%mode, "SetRenderMode received");

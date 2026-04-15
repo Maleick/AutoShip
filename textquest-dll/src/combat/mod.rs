@@ -22,6 +22,7 @@ use std::sync::Mutex;
 
 use textquest_common::{
     combat::{CastResult, CombatConfig, CombatStatus},
+    shared_client_state::SharedClientState,
     types::SpawnData,
 };
 
@@ -39,9 +40,6 @@ pub enum CombatCommand {
     Disengage,
     /// Set the main-assist target for assist-train behavior.
     SetAssistTarget { spawn_id: u32 },
-    /// Force the combat FSM to execute a single-target heal on a specific
-    /// spawn.
-    EmergencyHeal { target_id: u32 },
 }
 
 /// Initialize the combat system for this client.
@@ -100,8 +98,19 @@ pub fn handle_command(cmd: CombatCommand) {
         CombatCommand::Engage { target_id } => combatant.engage(target_id),
         CombatCommand::Disengage => combatant.disengage(),
         CombatCommand::SetAssistTarget { spawn_id } => combatant.set_assist_target(spawn_id),
-        CombatCommand::EmergencyHeal { target_id } => combatant.request_emergency_heal(target_id),
     }
+}
+
+/// Replace the full shared client roster received from the orchestrator.
+pub fn set_shared_client_states(states: Vec<SharedClientState>) {
+    let mut guard = COMBATANT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Some(combatant) = guard.as_mut() else {
+        tracing::warn!("Shared client roster received but combatant not initialized");
+        return;
+    };
+    combatant.set_shared_client_states(states);
 }
 
 #[cfg(test)]
