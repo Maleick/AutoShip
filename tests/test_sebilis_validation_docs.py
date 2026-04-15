@@ -138,6 +138,47 @@ class SebilisValidationDocsTests(unittest.TestCase):
             text,
         )
 
+    def test_validation_doc_records_current_pull_controls_as_planning_inputs(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        camp_config = tomllib.loads(
+            (REPO_ROOT / "config" / "camps" / "sebilis_disco.toml").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        self.assertIn(f"`leash_radius = {camp_config['leash_radius']}`", text)
+        self.assertIn(f"`rest_mana_pct = {camp_config['rest_mana_pct']}`", text)
+        self.assertIn(f"`pull_mana_pct = {camp_config['pull_mana_pct']}`", text)
+        for mob_name in camp_config["pull_mob_names"]:
+            self.assertIn(f"`{mob_name}`", text)
+        for mob_name in camp_config["ignore_mob_names"]:
+            self.assertIn(f"`{mob_name}`", text)
+        for mob_name in camp_config["burn_mob_names"]:
+            self.assertIn(f"`{mob_name}`", text)
+        self.assertIn(
+            "These pull-control defaults describe current camp intent only; they do not prove live camp-rotation efficiency or safe overlap.",
+            text,
+        )
+
+    def test_validation_doc_records_repo_antidetection_confidence_as_non_guarantee(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        security_text = (
+            REPO_ROOT / "docs" / "wiki" / "Security-and-Anti-Detection-Notes.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("| Timing variation", security_text)
+        self.assertIn("| Operator environment", security_text)
+        self.assertIn("`Timing variation` as `Medium` confidence", text)
+        self.assertIn("`Operator environment` as `High` confidence", text)
+        self.assertIn(
+            "These repo-grounded exposure labels do not make unattended Sebilis macroing safe.",
+            text,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

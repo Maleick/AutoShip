@@ -24,6 +24,12 @@ automation claims beyond the evidence state recorded here.
   `camp_radius = 30`, `level_range = [45, 55]`, and
   `prev_camp = "lguk_dead_side"`.
 - These defaults are planning inputs only, not live-validated route or spawn proof.
+- Current pull-control defaults are `leash_radius = 110`,
+  `rest_mana_pct = 70`, and `pull_mana_pct = 40`.
+- Current mob filters are `a sebilite guardian`, `a sebilite protector`, and
+  `a crypt caretaker` in `pull_mob_names`, `Trakanon` in
+  `ignore_mob_names`, and `a sebilite juggernaut` in `burn_mob_names`.
+- These pull-control defaults describe current camp intent only; they do not prove live camp-rotation efficiency or safe overlap.
 - `config/camps/lguk_dead_side.toml` currently links forward with
   `next_camp = "sebilis_disco"`.
 - `scripts/generate_maps.py` currently labels Sebilis with
@@ -48,6 +54,8 @@ automation claims beyond the evidence state recorded here.
 - `docs/wiki/Security-and-Anti-Detection-Notes.md` says timing variation is a
   practical hardening measure, not evidence of safety against a specific
   Daybreak detection path.
+- Current repo anti-detection docs classify `Timing variation` as `Medium` confidence and `Operator environment` as `High` confidence.
+- These repo-grounded exposure labels do not make unattended Sebilis macroing safe.
 
 ## Needs live proof before this issue can close
 
