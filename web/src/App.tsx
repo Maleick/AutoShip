@@ -5,6 +5,7 @@ import RightSidebar from "./components/RightSidebar";
 import GroupBuilder from "./components/GroupBuilder";
 import LootConfig from "./components/LootConfig";
 import SoulPanel from "./components/SoulPanel";
+import BoxChatPanel from "./components/BoxChatPanel";
 
 function App() {
   const [activeView, setActiveView] = useState<ActiveView>("engagements");
@@ -24,6 +25,8 @@ function App() {
           <LootConfig />
         ) : activeView === "soul" ? (
           <SoulPanel />
+        ) : activeView === "boxchat" ? (
+          <BoxChatPanel />
         ) : (
           <>
             <CenterContent />

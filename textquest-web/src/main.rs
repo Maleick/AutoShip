@@ -10,20 +10,26 @@
 //!   configuration APIs
 //! - a WebSocket endpoint for live session monitoring
 
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
-use axum::Router;
-use axum::extract::Request;
-use axum::http::{HeaderValue, Method, StatusCode};
-use axum::middleware::{self, Next};
-use axum::response::Response;
-use axum::routing::{get, put};
+use axum::{
+    Router,
+    extract::Request,
+    http::{HeaderValue, Method, StatusCode},
+    middleware::{self, Next},
+    response::Response,
+    routing::{get, put},
+};
 use tokio::sync::broadcast;
-use tower_http::cors::CorsLayer;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::{
+    cors::CorsLayer,
+    services::{ServeDir, ServeFile},
+};
 
 mod accounts;
 mod api;
@@ -35,7 +41,8 @@ pub struct AppState {
     pub event_tx: broadcast::Sender<String>,
     /// In-memory account registry.
     pub account_store: Mutex<accounts::AccountStore>,
-    /// Optional encrypted password store, enabled by `TEXTQUEST_MASTER_PASSWORD`.
+    /// Optional encrypted password store, enabled by
+    /// `TEXTQUEST_MASTER_PASSWORD`.
     pub credential_store: Option<accounts::CredentialStore>,
     /// In-memory character tuning config store for the strategy tuning panel.
     pub character_configs: tokio::sync::RwLock<HashMap<String, api::CharacterConfig>>,
@@ -47,14 +54,17 @@ pub struct AppState {
     pub soul_audit: Arc<api::soul::SoulAuditState>,
     /// Optional static API token for protecting all `/api` endpoints.
     /// Set via `TEXTQUEST_API_TOKEN` environment variable.
-    /// When `None`, API endpoints are unauthenticated (localhost-only deployment).
+    /// When `None`, API endpoints are unauthenticated (localhost-only
+    /// deployment).
     pub api_token: Option<String>,
 }
 
-/// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is set.
+/// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is
+/// set.
 ///
-/// If the env var is unset, all requests pass through (backward-compatible default).
-/// When set, requests without a matching token receive `401 Unauthorized`.
+/// If the env var is unset, all requests pass through (backward-compatible
+/// default). When set, requests without a matching token receive `401
+/// Unauthorized`.
 async fn api_token_auth(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
     req: Request,
@@ -80,7 +90,8 @@ async fn api_token_auth(
     Ok(next.run(req).await)
 }
 
-/// Constant-time string comparison to prevent timing oracle attacks on the API token.
+/// Constant-time string comparison to prevent timing oracle attacks on the API
+/// token.
 fn constant_time_eq_str(a: &str, b: &str) -> bool {
     let ab = a.as_bytes();
     let bb = b.as_bytes();
@@ -126,8 +137,8 @@ fn build_state() -> Arc<AppState> {
 
     if api_token.is_none() {
         tracing::warn!(
-            "TEXTQUEST_API_TOKEN is not set — API endpoints are unauthenticated. \
-             Set this env var to enable token-based authentication."
+            "TEXTQUEST_API_TOKEN is not set — API endpoints are unauthenticated. Set this env var \
+             to enable token-based authentication."
         );
     }
 
@@ -181,6 +192,10 @@ fn build_loot_router() -> Router<Arc<AppState>> {
 fn build_api_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(api::health))
+        .route(
+            "/box-chat/settings",
+            get(api::get_box_chat_settings).put(api::put_box_chat_settings),
+        )
         .route("/sessions", get(api::list_sessions))
         .nest("/accounts", accounts::router())
         .route(
@@ -275,8 +290,10 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::Body;
-    use axum::http::{Request, StatusCode};
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
     use http_body_util::BodyExt;
     use serde_json::{Value, json};
     use tower::ServiceExt;

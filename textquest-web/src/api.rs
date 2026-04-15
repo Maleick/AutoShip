@@ -5,13 +5,16 @@
 pub mod economy;
 pub mod loot;
 pub mod soul;
-use axum::Json;
-use axum::extract::{Path, State};
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use textquest_common::box_chat::BoxChatConfig;
+use toml_edit::{DocumentMut, Item, Table, value};
 
 use crate::AppState;
 
@@ -38,7 +41,8 @@ pub async fn api_not_found() -> impl IntoResponse {
     json_error(StatusCode::NOT_FOUND, "API route not found")
 }
 
-/// Placeholder response for known raid-config endpoints that are not implemented on this build.
+/// Placeholder response for known raid-config endpoints that are not
+/// implemented on this build.
 pub async fn raid_config_unavailable() -> impl IntoResponse {
     json_error(
         StatusCode::NOT_IMPLEMENTED,
@@ -62,7 +66,8 @@ pub async fn character_config_unavailable(Path(character): Path<String>) -> impl
     )
 }
 
-// ─── Health ───────────────────────────────────────────────────────────────────
+// ─── Health
+// ───────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct HealthResponse {
@@ -78,7 +83,86 @@ pub async fn health() -> Json<HealthResponse> {
     })
 }
 
-// ─── Sessions ─────────────────────────────────────────────────────────────────
+// ─── Box Chat Settings ──────────────────────────────────────────────────────
+
+fn textquest_config_path() -> PathBuf {
+    std::env::var("TEXTQUEST_CONFIG_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/textquest.toml")
+        })
+}
+
+fn read_box_chat_settings_from_disk() -> Result<BoxChatConfig, String> {
+    let path = textquest_config_path();
+    if !path.exists() {
+        return Ok(BoxChatConfig::default());
+    }
+
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
+    let doc = content
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("Failed to parse {}: {error}", path.display()))?;
+
+    let Some(item) = doc.get("box_chat") else {
+        return Ok(BoxChatConfig::default());
+    };
+    let settings = toml_edit::de::from_str::<BoxChatConfig>(&item.to_string())
+        .map_err(|error| format!("Failed to decode [box_chat]: {error}"))?;
+    Ok(settings)
+}
+
+fn write_box_chat_settings_to_disk(settings: &BoxChatConfig) -> Result<(), String> {
+    if settings.host.trim().is_empty() {
+        return Err("Box chat host must not be empty".to_string());
+    }
+
+    let path = textquest_config_path();
+    let mut doc = if path.exists() {
+        let content = std::fs::read_to_string(&path)
+            .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
+        content
+            .parse::<DocumentMut>()
+            .map_err(|error| format!("Failed to parse {}: {error}", path.display()))?
+    } else {
+        DocumentMut::new()
+    };
+
+    let mut table = Table::new();
+    table["enabled"] = value(settings.enabled);
+    table["host"] = value(settings.host.clone());
+    table["port"] = value(i64::from(settings.port));
+    table["auto_connect"] = value(settings.auto_connect);
+    doc["box_chat"] = Item::Table(table);
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create {}: {error}", parent.display()))?;
+    }
+    std::fs::write(&path, doc.to_string())
+        .map_err(|error| format!("Failed to write {}: {error}", path.display()))?;
+    Ok(())
+}
+
+/// GET /api/box-chat/settings — read persisted EQBC-style relay settings.
+pub async fn get_box_chat_settings() -> impl IntoResponse {
+    match read_box_chat_settings_from_disk() {
+        Ok(settings) => (StatusCode::OK, Json(settings)).into_response(),
+        Err(error) => json_error(StatusCode::INTERNAL_SERVER_ERROR, error).into_response(),
+    }
+}
+
+/// PUT /api/box-chat/settings — persist EQBC-style relay settings.
+pub async fn put_box_chat_settings(Json(settings): Json<BoxChatConfig>) -> impl IntoResponse {
+    match write_box_chat_settings_to_disk(&settings) {
+        Ok(()) => (StatusCode::OK, Json(settings)).into_response(),
+        Err(error) => json_error(StatusCode::BAD_REQUEST, error).into_response(),
+    }
+}
+
+// ─── Sessions
+// ─────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 pub struct SessionInfo {
@@ -94,7 +178,8 @@ pub struct SessionInfo {
 /// List active sessions.
 pub async fn list_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     // Build a list of sessions from character configs.
-    // In a production system, this would read from IPC shared memory or a session registry.
+    // In a production system, this would read from IPC shared memory or a session
+    // registry.
     let configs = state.character_configs.read().await;
     let sessions: Vec<SessionInfo> = configs
         .values()
@@ -260,7 +345,8 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
 }
 
 /// GET /api/config/characters — list all character tuning configs.
-/// Not yet mounted in the live API router (returns 501 via placeholder); kept for future use.
+/// Not yet mounted in the live API router (returns 501 via placeholder); kept
+/// for future use.
 #[allow(dead_code)]
 pub async fn list_character_configs(
     State(state): State<Arc<AppState>>,
@@ -274,7 +360,8 @@ pub async fn list_character_configs(
 }
 
 /// PUT /api/config/characters/:name — upsert per-character tuning config.
-/// Not yet mounted in the live API router (returns 501 via placeholder); kept for future use.
+/// Not yet mounted in the live API router (returns 501 via placeholder); kept
+/// for future use.
 #[allow(dead_code)]
 pub async fn put_character_config(
     State(state): State<Arc<AppState>>,
@@ -292,7 +379,8 @@ pub async fn put_character_config(
     Ok(Json(config))
 }
 
-// ── Economy types ─────────────────────────────────────────────────────────────
+// ── Economy types
+// ─────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KronoSettings {
@@ -353,7 +441,8 @@ pub struct EconomySettings {
     pub tradeskill_supplies: Vec<TradeskillSupply>,
 }
 
-// ── Economy handlers ──────────────────────────────────────────────────────────
+// ── Economy handlers
+// ──────────────────────────────────────────────────────────
 
 /// GET /api/economy/settings — return full economy configuration.
 pub async fn get_economy_settings() -> impl IntoResponse {
@@ -485,6 +574,32 @@ mod tests {
     use axum::response::IntoResponse;
     use http_body_util::BodyExt;
     use serde_json::Value;
+    use tempfile::tempdir;
+
+    struct ConfigPathGuard {
+        original: Option<String>,
+    }
+
+    impl ConfigPathGuard {
+        fn set(path: &std::path::Path) -> Self {
+            let original = std::env::var("TEXTQUEST_CONFIG_PATH").ok();
+            unsafe {
+                std::env::set_var("TEXTQUEST_CONFIG_PATH", path);
+            }
+            Self { original }
+        }
+    }
+
+    impl Drop for ConfigPathGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match &self.original {
+                    Some(value) => std::env::set_var("TEXTQUEST_CONFIG_PATH", value),
+                    None => std::env::remove_var("TEXTQUEST_CONFIG_PATH"),
+                }
+            }
+        }
+    }
 
     async fn error_response_json(response: axum::response::Response) -> (StatusCode, Value) {
         let status = response.status();
@@ -502,6 +617,65 @@ mod tests {
     async fn health_returns_ok() {
         let Json(resp) = health().await;
         assert_eq!(resp.status, "ok");
+    }
+
+    #[tokio::test]
+    async fn box_chat_settings_default_when_config_missing() {
+        let dir = tempdir().expect("tempdir should exist");
+        let config_path = dir.path().join("textquest.toml");
+        let _guard = ConfigPathGuard::set(&config_path);
+
+        let response = get_box_chat_settings().await.into_response();
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body should collect")
+            .to_bytes();
+        let settings: BoxChatConfig =
+            serde_json::from_slice(&body).expect("settings response should parse");
+
+        assert_eq!(settings, BoxChatConfig::default());
+    }
+
+    #[tokio::test]
+    async fn put_box_chat_settings_writes_config_section() {
+        let dir = tempdir().expect("tempdir should exist");
+        let config_path = dir.path().join("textquest.toml");
+        std::fs::write(
+            &config_path,
+            "process_name = \"eqgame.exe\"\n[launch]\neq_path = \"C:/EQ\"\n",
+        )
+        .expect("seed config should write");
+        let _guard = ConfigPathGuard::set(&config_path);
+
+        let settings = BoxChatConfig {
+            enabled: true,
+            host: "192.168.1.25".to_string(),
+            port: 3002,
+            auto_connect: true,
+        };
+
+        let response = put_box_chat_settings(Json(settings.clone()))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let written = std::fs::read_to_string(&config_path).expect("config should exist");
+        assert!(written.contains("process_name = \"eqgame.exe\""));
+        assert!(written.contains("[box_chat]"));
+        assert!(written.contains("host = \"192.168.1.25\""));
+
+        let response = get_box_chat_settings().await.into_response();
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body should collect")
+            .to_bytes();
+        let reloaded: BoxChatConfig =
+            serde_json::from_slice(&body).expect("settings response should parse");
+        assert_eq!(reloaded, settings);
     }
 
     #[tokio::test]

@@ -2,17 +2,20 @@
 //! and Orchestrator into a single async tick loop with health checks, crash
 //! recovery, and graceful shutdown.
 
-use crate::client::discovery::PeerDiscoveryEvent;
-use crate::client::healing::ClientHealth;
-use crate::client::manager::ClientManager;
-use crate::client::session::SlotLifecycle;
-use crate::config::{AppConfig, OrchestratorConfig};
-use crate::launcher::coordinator::{CoordinatorEvent, LaunchCoordinator};
-use crate::orchestrator::Orchestrator;
+use crate::{
+    client::{
+        discovery::PeerDiscoveryEvent, healing::ClientHealth, manager::ClientManager,
+        session::SlotLifecycle,
+    },
+    config::{AppConfig, OrchestratorConfig},
+    launcher::coordinator::{CoordinatorEvent, LaunchCoordinator},
+    orchestrator::Orchestrator,
+};
 use std::time::Duration;
 use tokio::sync::watch;
 
-/// Events emitted by the orchestrator loop for external consumers (TUI, logging).
+/// Events emitted by the orchestrator loop for external consumers (TUI,
+/// logging).
 #[derive(Debug, Clone)]
 pub enum LoopEvent {
     /// A client was detected as unhealthy and sent `/camp desktop`.
@@ -86,7 +89,8 @@ impl OrchestratorLoop {
 
     /// Run the event loop until shutdown is signaled.
     ///
-    /// Returns accumulated events from the final tick (or empty on clean shutdown).
+    /// Returns accumulated events from the final tick (or empty on clean
+    /// shutdown).
     pub async fn run(&mut self) -> Vec<LoopEvent> {
         tracing::info!(
             health_check_ms = self.config.health_check_interval_ms,
@@ -115,12 +119,14 @@ impl OrchestratorLoop {
                     for event in &events {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
+                    self.sync_box_chat_runtime();
                 }
                 _ = launch_interval.tick() => {
                     let events = self.tick_launch_coordinator();
                     for event in &events {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
+                    self.sync_box_chat_runtime();
                 }
                 _ = orch_interval.tick() => {
                     let events = self.tick_peer_discovery();
@@ -128,6 +134,7 @@ impl OrchestratorLoop {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
                     self.orchestrator.tick();
+                    self.sync_box_chat_runtime();
                 }
                 Ok(()) = self.shutdown_rx.changed() => {
                     if *self.shutdown_rx.borrow() {
@@ -157,6 +164,18 @@ impl OrchestratorLoop {
                 }
             })
             .collect()
+    }
+
+    fn sync_box_chat_runtime(&self) {
+        crate::box_chat::update_local_clients(
+            self.orchestrator
+                .client_names
+                .iter()
+                .map(|(pid, name)| (*pid, name.clone())),
+        );
+        if let Ok(Some(config)) = crate::box_chat::reload_from_disk() {
+            tracing::info!(?config, "Reloaded box-chat config from disk");
+        }
     }
 
     /// Run health checks on all managed clients.

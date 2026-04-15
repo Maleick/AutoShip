@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::Path;
 
+use textquest_common::box_chat::BoxChatConfig;
 use textquest_soul::config::SoulConfig;
 
 // ─── Account Configuration ───────────────────────────────────────────────
@@ -31,10 +32,11 @@ fn default_group() -> u32 {
     0
 }
 
-/// A named profile group mapping a human-readable name and optional hotkey to a group ID.
+/// A named profile group mapping a human-readable name and optional hotkey to a
+/// group ID.
 ///
-/// Profile groups allow launching all accounts in a numeric group with a single name or
-/// keyboard hotkey, matching the MQ2 AutoLogin profile group concept.
+/// Profile groups allow launching all accounts in a numeric group with a single
+/// name or keyboard hotkey, matching the MQ2 AutoLogin profile group concept.
 ///
 /// # TOML example
 ///
@@ -55,7 +57,8 @@ pub struct ProfileGroup {
     pub id: u32,
     /// Human-readable profile name (e.g., "MainRaid").
     pub name: String,
-    /// Optional function key hotkey to launch this profile from the TUI (e.g., `"F1"`–`"F9"`).
+    /// Optional function key hotkey to launch this profile from the TUI (e.g.,
+    /// `"F1"`–`"F9"`).
     #[serde(default)]
     pub hotkey: Option<String>,
 }
@@ -66,7 +69,8 @@ pub struct AccountsConfig {
     /// List of account entries defined in the config file.
     #[serde(default)]
     pub accounts: Vec<AccountEntry>,
-    /// Named profile groups with optional hotkeys for one-action multi-character launches.
+    /// Named profile groups with optional hotkeys for one-action
+    /// multi-character launches.
     #[serde(default)]
     pub profile_groups: Vec<ProfileGroup>,
 }
@@ -132,7 +136,8 @@ impl AccountsConfig {
             .find(|a| a.name.to_lowercase() == lower)
     }
 
-    /// Convert an `AccountEntry` into the `AccountInfo` used by the launch system.
+    /// Convert an `AccountEntry` into the `AccountInfo` used by the launch
+    /// system.
     #[must_use]
     pub fn to_account_info(entry: &AccountEntry) -> textquest_common::login::AccountInfo {
         textquest_common::login::AccountInfo {
@@ -192,7 +197,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub spawn_watch: SpawnWatchConfig,
 
-    /// Enable periodic hook unhook/rehook rotation to evade point-in-time scans.
+    /// Enable periodic hook unhook/rehook rotation to evade point-in-time
+    /// scans.
     #[serde(default)]
     pub hook_rotation_enabled: bool,
 
@@ -204,10 +210,15 @@ pub struct AppConfig {
     #[serde(default)]
     pub discovery: PeerDiscoveryConfig,
 
+    /// TCP relay settings for EQBC-style cross-machine box-chat commands.
+    #[serde(default)]
+    pub box_chat: BoxChatConfig,
+
     /// Enable timing-based anti-debug evasion correction.
     ///
     /// When enabled, hooks correct timing APIs (`GetTickCount` and
-    /// `QueryPerformanceCounter`) by subtracting hook overhead from observed values.
+    /// `QueryPerformanceCounter`) by subtracting hook overhead from observed
+    /// values.
     #[serde(default)]
     pub timing_correction: bool,
 }
@@ -308,7 +319,8 @@ pub struct ToonConfig {
     pub account: Option<String>,
 }
 
-/// Configuration for EQ client launching — paths, stagger timing, and resource limits.
+/// Configuration for EQ client launching — paths, stagger timing, and resource
+/// limits.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct LaunchConfig {
@@ -411,7 +423,8 @@ impl Default for OrchestratorConfig {
     }
 }
 
-/// Configuration for optional UDP multicast peer discovery between orchestrators.
+/// Configuration for optional UDP multicast peer discovery between
+/// orchestrators.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct PeerDiscoveryConfig {
@@ -491,6 +504,7 @@ impl AppConfig {
             hook_rotation_enabled: false,
             hook_rotation_interval_ms: default_hook_rotation_interval_ms(),
             discovery: PeerDiscoveryConfig::default(),
+            box_chat: BoxChatConfig::default(),
             timing_correction: false,
         }
     }
@@ -622,6 +636,7 @@ character = "Foo"
         assert_eq!(cfg.max_spawns, 2048);
         assert!(cfg.group.is_empty());
         assert!(!cfg.discovery.multicast_enabled);
+        assert_eq!(cfg.box_chat, BoxChatConfig::default());
         assert!(!cfg.timing_correction);
         assert!(!cfg.hook_rotation_enabled);
         assert_eq!(cfg.hook_rotation_interval_ms, 30_000);
@@ -708,6 +723,7 @@ timing_correction = true
         // Defaults for nested configs
         assert!(cfg.group.is_empty());
         assert_eq!(cfg.server.name, "Firiona Vie");
+        assert_eq!(cfg.box_chat, BoxChatConfig::default());
     }
 
     #[test]
@@ -835,6 +851,12 @@ timing_correction = true
             peer_ttl_ms = 9000
             node_name = "basement-rig"
             multicast_ttl = 2
+
+            [box_chat]
+            enabled = true
+            host = "192.168.1.25"
+            port = 3002
+            auto_connect = true
         "#;
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.process_name, "custom.exe");
@@ -865,6 +887,10 @@ timing_correction = true
         assert_eq!(cfg.discovery.peer_ttl_ms, 9000);
         assert_eq!(cfg.discovery.node_name, "basement-rig");
         assert_eq!(cfg.discovery.multicast_ttl, 2);
+        assert!(cfg.box_chat.enabled);
+        assert_eq!(cfg.box_chat.host, "192.168.1.25");
+        assert_eq!(cfg.box_chat.port, 3002);
+        assert!(cfg.box_chat.auto_connect);
     }
 
     #[test]

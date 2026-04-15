@@ -1,44 +1,53 @@
-use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque, hash_map::DefaultHasher};
-use std::hash::{Hash, Hasher};
-
-use super::cast::{CastDisplay, live_cast_display, short_cast_label};
-use super::command::{self, HelpSection};
-use super::config_panel::ConfigPanelState;
-use super::demo_data::{DemoRole, demo_client_cast_info, demo_client_profile};
-use super::menu::MenuState;
-use super::theme::{Theme, ThemeKind};
-use super::ui::ch_chain::{
-    CastState as ChPanelCastState, ChChainPanelState, ChainCleric, ChainStats,
+use std::{
+    cell::RefCell,
+    collections::{HashMap, VecDeque, hash_map::DefaultHasher},
+    hash::{Hash, Hasher},
 };
-use super::wizard::WizardState;
-use crate::camp::config::CampConfig;
-use crate::camp::state::{CampMember, Role};
-use crate::config::AccountsConfig;
-use crate::eq::log_parser::{ChatEvent, LootDatabase};
-use crate::eq::log_watcher::LogWatcher;
-use crate::eq::named_db::NamedMobDatabase;
-use crate::eq::named_tracker::{NamedAlert, NamedTracker};
-use crate::eq::spawn_alert::{MatchSource, SpawnAlertEvent, SpawnAlertFeed};
-use crate::eq::structs::{SpawnInfo, SpawnType};
-use crate::orchestrator::Orchestrator;
+
+use super::{
+    cast::{CastDisplay, live_cast_display, short_cast_label},
+    command::{self, HelpSection},
+    config_panel::ConfigPanelState,
+    demo_data::{DemoRole, demo_client_cast_info, demo_client_profile},
+    menu::MenuState,
+    theme::{Theme, ThemeKind},
+    ui::ch_chain::{CastState as ChPanelCastState, ChChainPanelState, ChainCleric, ChainStats},
+    wizard::WizardState,
+};
+use crate::{
+    camp::{
+        config::CampConfig,
+        state::{CampMember, Role},
+    },
+    config::AccountsConfig,
+    eq::{
+        log_parser::{ChatEvent, LootDatabase},
+        log_watcher::LogWatcher,
+        named_db::NamedMobDatabase,
+        named_tracker::{NamedAlert, NamedTracker},
+        spawn_alert::{MatchSource, SpawnAlertEvent, SpawnAlertFeed},
+        structs::{SpawnInfo, SpawnType},
+    },
+    orchestrator::Orchestrator,
+};
 use anyhow::Context;
 use ratatui::style::Color;
 use textquest_soul::coordinator::SoulCoordinator;
 
 // Re-export extracted types so existing `use tui::app::*` paths still work.
-pub use super::client::ClientState;
 use super::state::{
     CampOverlay, FilteredSpawnCache, FilteredSpawnCacheKey, MapClickAction, MapFilterKind,
     MapHighlight, MapLocMarker, MapNameStyle, MapRadiusOverlay, MapSpawnPresentationCache,
-    MapVisibilityPreset, NamedMapMarker,
+    MapVisibilityPreset, NamedMapMarker, load_named_markers_pub, save_named_markers,
 };
-pub use super::state::{
-    CommandBarState, HexDumpState, HookRotationState, HookSlotState, MapScreenState,
-    MapViewportMode, NavigationScreenState, OverviewScreenState, PacketMonitorState,
-    SpawnsScreenState, TacticalScreenState,
+pub use super::{
+    client::ClientState,
+    state::{
+        CommandBarState, HexDumpState, HookRotationState, HookSlotState, MapScreenState,
+        MapViewportMode, NavigationScreenState, OverviewScreenState, PacketMonitorState,
+        SpawnsScreenState, TacticalScreenState,
+    },
 };
-use super::state::{load_named_markers_pub, save_named_markers};
 
 /// Which screen is currently displayed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -421,7 +430,8 @@ pub struct App {
     /// EQ server name from config.
     pub server_name: String,
 
-    /// Legacy: local player from the selected client (kept for backward compat).
+    /// Legacy: local player from the selected client (kept for backward
+    /// compat).
     pub local_player: Option<SpawnInfo>,
     /// Legacy: target of the selected client.
     pub target: Option<SpawnInfo>,
@@ -560,7 +570,8 @@ pub struct App {
     /// Transient toast feedback shown above the main chrome.
     pub toast: Option<Toast>,
 
-    /// Whether operator has paused all automation (HOME to pause, END to resume).
+    /// Whether operator has paused all automation (HOME to pause, END to
+    /// resume).
     pub automation_paused: bool,
 
     /// Live priority queue snapshots per character (updated each tick).
@@ -592,7 +603,8 @@ pub struct NavClientStatus {
     pub route_state: String,
     /// Human-readable recovery state when navigation is blocked or stuck.
     pub recovery_state: Option<String>,
-    /// Operator-visible blockers that explain why travel is waiting or degraded.
+    /// Operator-visible blockers that explain why travel is waiting or
+    /// degraded.
     pub blockers: Vec<String>,
     /// Whether this status was injected by the deterministic demo script.
     pub is_demo_scripted: bool,
@@ -840,7 +852,8 @@ impl App {
         });
     }
 
-    /// Update the status line and optionally elevate the same message to a toast.
+    /// Update the status line and optionally elevate the same message to a
+    /// toast.
     pub fn set_feedback(&mut self, level: ToastLevel, msg: impl Into<String>, show_toast: bool) {
         let message = msg.into();
         self.status_message = message.clone();
@@ -1281,8 +1294,9 @@ impl App {
         self.ensure_panel_focus();
     }
 
-    /// Build default group definitions. If accounts config exists, derives groups
-    /// from the configured group IDs. Otherwise falls back to 6 default groups.
+    /// Build default group definitions. If accounts config exists, derives
+    /// groups from the configured group IDs. Otherwise falls back to 6
+    /// default groups.
     fn build_default_groups() -> Vec<GroupDef> {
         let default_names = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"];
 
@@ -1398,7 +1412,8 @@ impl App {
     }
 
     /// Sync the legacy single-client fields from the selected client.
-    /// This keeps backward compatibility with code that reads `app.local_player`, etc.
+    /// This keeps backward compatibility with code that reads
+    /// `app.local_player`, etc.
     pub fn sync_from_selected_client(&mut self) {
         if let Some(client) = self.clients.get(self.selected_client) {
             let revision_key = (client.pid, client.spawn_revision);
@@ -1544,9 +1559,9 @@ impl App {
         }
     }
 
-    /// Focus on a specific group (0-indexed). Pass None to return to aggregate view.
-    /// When live group data is available, validates against live group count;
-    /// otherwise validates against config group count.
+    /// Focus on a specific group (0-indexed). Pass None to return to aggregate
+    /// view. When live group data is available, validates against live
+    /// group count; otherwise validates against config group count.
     pub fn set_active_group(&mut self, group: Option<usize>) {
         if let Some(idx) = group {
             if self.has_live_group_data() {
@@ -1604,7 +1619,8 @@ impl App {
         let ma = self.main_assist.as_deref().unwrap_or("—");
         let mt = self.main_tank.as_deref().unwrap_or("—");
         format!(
-            "Combat: mode={mode} | scope={scope} | focused={focused}/{visible} clients | MA={ma} | MT={mt}"
+            "Combat: mode={mode} | scope={scope} | focused={focused}/{visible} clients | MA={ma} \
+             | MT={mt}"
         )
     }
 
@@ -1657,8 +1673,9 @@ impl App {
     }
 
     /// Get clients visible under the current group focus.
-    /// Returns all clients if aggregate view, or only the focused group's clients.
-    /// When live group data is available, filters by live group membership.
+    /// Returns all clients if aggregate view, or only the focused group's
+    /// clients. When live group data is available, filters by live group
+    /// membership.
     pub fn visible_clients(&self) -> Vec<&ClientState> {
         match self.active_group {
             None => self.clients.iter().collect(),
@@ -1771,7 +1788,8 @@ impl App {
 
     /// Build dynamic group list from live EQ group membership.
     /// Groups clients by `leader_name` — same leader means same group.
-    /// Returns an ordered list of `LiveGroup` plus a list of ungrouped client indices.
+    /// Returns an ordered list of `LiveGroup` plus a list of ungrouped client
+    /// indices.
     pub fn build_live_groups(&self) -> (Vec<LiveGroup>, Vec<usize>) {
         let revision = self.live_group_revision_key();
         if self
@@ -2130,7 +2148,8 @@ impl App {
         self.spawns_state.table_state.select(Some(0));
         self.status_message = format!("Filter: {}", self.spawns_state.spawn_type_filter.label());
     }
-    /// Cycles the spawn sort column (Default -> Name -> Class -> Level -> Distance).
+    /// Cycles the spawn sort column (Default -> Name -> Class -> Level ->
+    /// Distance).
     pub fn cycle_spawn_sort(&mut self) {
         let next = self.spawns_state.sort_column.next();
         if next == SpawnSort::Default {
@@ -2203,8 +2222,9 @@ impl App {
     }
 
     /// Compute page size from terminal height. Uses the spawn table area
-    /// (terminal height minus chrome: header, status bar, column headers, borders).
-    /// Falls back to 25 rows if terminal size cannot be determined.
+    /// (terminal height minus chrome: header, status bar, column headers,
+    /// borders). Falls back to 25 rows if terminal size cannot be
+    /// determined.
     fn dynamic_page_size() -> usize {
         const CHROME_ROWS: u16 = 8; // header + tabs + column header + borders + status bar
         const FALLBACK: usize = 25;
@@ -2219,11 +2239,13 @@ impl App {
         self.spawns_state.table_state.selected().unwrap_or(0)
     }
 
-    /// Select an EQ internals offset and auto-scroll the hex dump to its address.
+    /// Select an EQ internals offset and auto-scroll the hex dump to its
+    /// address.
     ///
-    /// For globals/functions (absolute preferred-base addresses), sets the hex dump
-    /// address directly. For struct field offsets (PlayerBase, PlayerZone, SpawnManager),
-    /// shows the offset value. On macOS, generates demo data at the address.
+    /// For globals/functions (absolute preferred-base addresses), sets the hex
+    /// dump address directly. For struct field offsets (PlayerBase,
+    /// PlayerZone, SpawnManager), shows the offset value. On macOS,
+    /// generates demo data at the address.
     pub fn internals_select_offset(&mut self) {
         let entry = self.eq_internals_state.selected_entry().cloned();
         if let Some(entry) = entry {
@@ -2326,7 +2348,8 @@ impl App {
     }
 
     /// Navigate clients to the currently selected spawn's location.
-    /// Respects `nav_scope`: Active sends to selected client, Group to focused group, All to everyone.
+    /// Respects `nav_scope`: Active sends to selected client, Group to focused
+    /// group, All to everyone.
     pub fn navigate_to_selected_spawn(&mut self) {
         let info = self.selected_filtered_spawn().map(|s| {
             (
@@ -2699,7 +2722,8 @@ impl App {
     }
 
     /// Generic tab-completion helper. Given a command prefix (e.g. "camp "),
-    /// the user's partial input, and a list of candidates, complete or show options.
+    /// the user's partial input, and a list of candidates, complete or show
+    /// options.
     fn complete_with_candidates(&mut self, cmd_prefix: &str, input: &str, candidates: &[String]) {
         // For multi-word matching, strip leading quote
         let search = input.trim_start_matches('"').to_lowercase();
@@ -3513,7 +3537,8 @@ impl App {
                         let failure_label =
                             failure_kind.map(|kind| kind.label()).unwrap_or("data gap");
                         vec![format!(
-                            "Navmesh {failure_label} for {}; using deterministic straight-line fallback.",
+                            "Navmesh {failure_label} for {}; using deterministic straight-line \
+                             fallback.",
                             focused_client.zone_short
                         )]
                     }
@@ -3522,7 +3547,8 @@ impl App {
                             .map(|kind| kind.label())
                             .unwrap_or("transient blockage");
                         let mut blockers = vec![format!(
-                            "Navmesh {failure_label} for {}; holding position instead of taking a straight-line shortcut.",
+                            "Navmesh {failure_label} for {}; holding position instead of taking a \
+                             straight-line shortcut.",
                             focused_client.zone_short
                         )];
                         if let Some(reason) = route.metrics.failure_reason.as_ref() {
@@ -3695,6 +3721,18 @@ impl App {
         scope: textquest_common::routing::RoutingScope,
         slash_cmd: &str,
     ) {
+        match crate::box_chat::dispatch_if_box_chat(slash_cmd) {
+            Ok(Some(report)) => {
+                self.set_feedback(ToastLevel::Success, report.summary(), true);
+                return;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                self.set_feedback(ToastLevel::Error, format!("Box chat failed: {error}"), true);
+                return;
+            }
+        }
+
         let pids = self.routed_pids_for_scope(&scope);
 
         if pids.is_empty() {
@@ -3737,8 +3775,8 @@ impl App {
         }
     }
 
-    /// Toggle the `/nav ui` debug diagnostics overlay and refresh diagnostics from the
-    /// focused client when turning on.
+    /// Toggle the `/nav ui` debug diagnostics overlay and refresh diagnostics
+    /// from the focused client when turning on.
     fn handle_nav_ui_command(&mut self) {
         let was_on = self.nav_state.show_nav_debug;
         self.nav_state.show_nav_debug = !was_on;
@@ -3872,7 +3910,8 @@ impl App {
             self.set_feedback(
                 ToastLevel::Warning,
                 format!(
-                    "Unknown command: '{input}'. Use :help for workflows or :commands for the reference."
+                    "Unknown command: '{input}'. Use :help for workflows or :commands for the \
+                     reference."
                 ),
                 true,
             );
@@ -3974,6 +4013,42 @@ impl App {
         let parts: Vec<&str> = input.split_whitespace().collect();
         let (command_name, rest) = self.split_command(&input);
         match command_name {
+            "bc" | "bca" | "bcaa" => {
+                let slash = format!("/{command_name} {rest}").trim().to_string();
+                match crate::box_chat::dispatch_if_box_chat(&slash) {
+                    Ok(Some(report)) => {
+                        self.set_feedback(ToastLevel::Success, report.summary(), true);
+                    }
+                    Ok(None) => {
+                        self.usage_feedback(command_name, "Missing box-chat payload.");
+                    }
+                    Err(error) => {
+                        self.set_feedback(
+                            ToastLevel::Error,
+                            format!("Box chat failed: {error}"),
+                            true,
+                        );
+                    }
+                }
+            }
+            "bct" => {
+                let slash = format!("/bct {rest}").trim().to_string();
+                match crate::box_chat::dispatch_if_box_chat(&slash) {
+                    Ok(Some(report)) => {
+                        self.set_feedback(ToastLevel::Success, report.summary(), true);
+                    }
+                    Ok(None) => {
+                        self.usage_feedback("bct", "Missing target or slash command.");
+                    }
+                    Err(error) => {
+                        self.set_feedback(
+                            ToastLevel::Error,
+                            format!("Box chat failed: {error}"),
+                            true,
+                        );
+                    }
+                }
+            }
             "help" => {
                 if rest.is_empty() {
                     self.help_scroll = 0;
@@ -4033,7 +4108,8 @@ impl App {
                         self.set_feedback(
                             ToastLevel::Warning,
                             String::from(
-                                "No clients connected for navigation. Use :status to confirm scope.",
+                                "No clients connected for navigation. Use :status to confirm \
+                                 scope.",
                             ),
                             true,
                         );
@@ -4108,7 +4184,10 @@ impl App {
                 if ok == 0 {
                     self.set_feedback(
                         ToastLevel::Warning,
-                        format!("Click {label}: no clients received command. Check connection with :status"),
+                        format!(
+                            "Click {label}: no clients received command. Check connection with \
+                             :status"
+                        ),
                         true,
                     );
                 } else {
@@ -4139,7 +4218,9 @@ impl App {
                         self.set_feedback(
                             ToastLevel::Info,
                             format!(
-                            "Overview: {client_count} connected, {clients_in_filter} visible | zone={zone} | mode={active_mode:?} | screen={active_screen} | map={map_zone}",
+                                "Overview: {client_count} connected, {clients_in_filter} visible \
+                                 | zone={zone} | mode={active_mode:?} | screen={active_screen} | \
+                                 map={map_zone}",
                             ),
                             false,
                         );
@@ -4155,7 +4236,8 @@ impl App {
                             self.set_feedback(
                                 ToastLevel::Info,
                                 format!(
-                                "{visible_count} visible / {client_count} total client(s) connected"
+                                    "{visible_count} visible / {client_count} total client(s) \
+                                     connected"
                                 ),
                                 false,
                             );
@@ -4465,7 +4547,8 @@ impl App {
                 } else {
                     self.set_feedback(
                         ToastLevel::Info,
-                        "Inject: DLL injection placeholder (not yet wired). Will inject into active client.",
+                        "Inject: DLL injection placeholder (not yet wired). Will inject into \
+                         active client.",
                         true,
                     );
                 }
@@ -4686,7 +4769,10 @@ impl App {
                     if rest.is_empty() || !rest.starts_with('/') {
                         self.set_feedback(
                             ToastLevel::Warning,
-                            format!("PID targets expect a slash command. Example: :{pid} /assist Warrior"),
+                            format!(
+                                "PID targets expect a slash command. Example: :{pid} /assist \
+                                 Warrior"
+                            ),
                             true,
                         );
                     } else {
@@ -4835,7 +4921,8 @@ impl App {
                 // bare names are also checked as subcommands.
                 if self.status_message.starts_with("Failed to load camp") {
                     self.status_message = format!(
-                        "Unknown camp subcommand or config: '{name}'. Try: start|stop|status|list|add|remove|next|prev"
+                        "Unknown camp subcommand or config: '{name}'. Try: \
+                         start|stop|status|list|add|remove|next|prev"
                     );
                 }
             }
@@ -4898,9 +4985,9 @@ impl App {
     ///   ch start <pid1,pid2,...> <interval> <`target_id`> [`spell_slot`]
     ///   ch stop                  — Stop the running CH chain
     ///   ch add <pid>             — Add a cleric to the chain
-    ///   ch remove <pid>          — Remove a cleric from the chain (`rm` alias supported)
-    ///   ch interval <seconds>    — Set the interval between casts
-    ///   ch adaptive on|off       — Toggle adaptive timing mode
+    ///   ch remove <pid>          — Remove a cleric from the chain (`rm` alias
+    /// supported)   ch interval <seconds>    — Set the interval between
+    /// casts   ch adaptive on|off       — Toggle adaptive timing mode
     ///   ch status                — Show current chain status
     fn execute_ch_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
         match args.first().copied() {
@@ -4922,7 +5009,8 @@ impl App {
                     self.set_feedback(
                         ToastLevel::Info,
                         format!(
-                            "CH chain: {members} clerics, {interval:.1}s interval ({adaptive}), target={target}"
+                            "CH chain: {members} clerics, {interval:.1}s interval ({adaptive}), \
+                             target={target}"
                         ),
                         false,
                     );
@@ -4930,7 +5018,8 @@ impl App {
                     self.set_feedback(
                         ToastLevel::Info,
                         String::from(
-                            "CH chain inactive. Start one with :ch start <pid1,pid2,...> <interval_secs> <target_id> [spell_slot].",
+                            "CH chain inactive. Start one with :ch start <pid1,pid2,...> \
+                             <interval_secs> <target_id> [spell_slot].",
                         ),
                         false,
                     );
@@ -5208,7 +5297,8 @@ impl App {
     /// Subcommands:
     ///   profile             — list all configured profile groups
     ///   profile list        — list all configured profile groups
-    ///   profile launch <name> — queue all accounts in the named profile for launch
+    ///   profile launch <name> — queue all accounts in the named profile for
+    /// launch
     fn execute_profile_command(&mut self, args: &[&str]) {
         let accounts = if let Some(cfg) = &self.accounts_config {
             cfg.clone()
@@ -5298,9 +5388,11 @@ impl App {
         }
     }
 
-    /// Launch the profile group assigned to the given hotkey string (e.g., `"F1"`).
+    /// Launch the profile group assigned to the given hotkey string (e.g.,
+    /// `"F1"`).
     ///
-    /// Called directly from the TUI event handler for `Ctrl+F1`–`Ctrl+F9` keypresses.
+    /// Called directly from the TUI event handler for `Ctrl+F1`–`Ctrl+F9`
+    /// keypresses.
     pub fn launch_profile_hotkey(&mut self, hotkey: &str) {
         let Some(accounts) = self.accounts_config.clone() else {
             self.status_message = String::from("No accounts config — create config/accounts.toml");
@@ -5494,7 +5586,10 @@ impl App {
                 } else {
                     self.usage_feedback(
                         "scope",
-                        format!("'{arg}' is not a connected client. Use :scope all, :scope G1, or :scope <character>."),
+                        format!(
+                            "'{arg}' is not a connected client. Use :scope all, :scope G1, or \
+                             :scope <character>."
+                        ),
                     );
                 }
             }
@@ -5619,8 +5714,10 @@ impl App {
                     );
                     launched += 1;
                     // Post-launch automation (M2.5 roadmap):
-                    // 1. Wire into LaunchCoordinator for staggered launch + state tracking
-                    // 2. After window title shows "[TQ] EQ - <CharName>", auto-inject DLL
+                    // 1. Wire into LaunchCoordinator for staggered launch +
+                    //    state tracking
+                    // 2. After window title shows "[TQ] EQ - <CharName>",
+                    //    auto-inject DLL
                     // 3. After DLL injection, auto-form groups + set camp
                 }
                 Err(e) => {
@@ -5660,8 +5757,10 @@ impl App {
     // ─── Map parity command handlers ─────────────────────────────────────
 
     fn handle_circle_command(&mut self, parts: &[&str], orchestrator: &mut Orchestrator) {
-        use textquest_common::ipc::Command;
-        use textquest_common::nav::{CircleConfig, CircleMode, Waypoint};
+        use textquest_common::{
+            ipc::Command,
+            nav::{CircleConfig, CircleMode, Waypoint},
+        };
 
         let sub = parts.get(1).map(|s| s.to_ascii_lowercase());
         match sub.as_deref() {
@@ -5719,7 +5818,8 @@ impl App {
                     self.set_feedback(
                         ToastLevel::Success,
                         format!(
-                            "Circle kite started — radius={:.0} mode={mode_label} (sent to {ok} clients)",
+                            "Circle kite started — radius={:.0} mode={mode_label} (sent to {ok} \
+                             clients)",
                             config.radius
                         ),
                         true,
@@ -5768,7 +5868,8 @@ impl App {
             _ => {
                 self.usage_feedback(
                     "circle",
-                    "Usage: circle on [radius] [cw|ccw|drunken|backward] | circle off | circle loc Y X [radius]",
+                    "Usage: circle on [radius] [cw|ccw|drunken|backward] | circle off | circle \
+                     loc Y X [radius]",
                 );
             }
         }
@@ -6657,19 +6758,7 @@ fn command_help_detail(command: &str) -> Option<&'static str> {
 
 /// Send a slash command to a specific PID via named pipe.
 fn send_slash_command(pid: u32, command: &str) -> anyhow::Result<()> {
-    use textquest_common::ipc::Command;
-
-    if let Some(message) = crate::nav::try_handle_local_slash_command(pid, command)? {
-        tracing::info!(pid, %message, "Handled local slash command");
-        return Ok(());
-    }
-
-    send_ipc_command(
-        pid,
-        &Command::SlashCommand {
-            command: command.to_string(),
-        },
-    )
+    crate::command_dispatch::dispatch_local_command(pid, command)
 }
 
 fn send_ipc_command(pid: u32, cmd: &textquest_common::ipc::Command) -> anyhow::Result<()> {
@@ -6766,8 +6855,8 @@ fn spawn_matches_filter(spawn: &SpawnInfo, spawn_filter: SpawnFilter, text_filte
         || ascii_icontains(spawn.spawn_type.as_str(), text_filter)
 }
 
-/// Case-insensitive substring search for ASCII strings, without heap allocation.
-/// `needle` is expected to be already lowercased.
+/// Case-insensitive substring search for ASCII strings, without heap
+/// allocation. `needle` is expected to be already lowercased.
 fn ascii_icontains(haystack: &str, needle: &str) -> bool {
     if needle.is_empty() {
         return true;
@@ -6782,8 +6871,10 @@ fn ascii_icontains(haystack: &str, needle: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eq::structs::{GroupInfo, SpawnInfo, SpawnType, StandState};
-    use crate::orchestrator::Orchestrator;
+    use crate::{
+        eq::structs::{GroupInfo, SpawnInfo, SpawnType, StandState},
+        orchestrator::Orchestrator,
+    };
 
     fn test_spawn(name: &str) -> SpawnInfo {
         SpawnInfo {
