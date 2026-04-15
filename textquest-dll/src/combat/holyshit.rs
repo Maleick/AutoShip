@@ -15,7 +15,8 @@ impl HolyShitEvaluator {
         Self { rules }
     }
 
-    /// Evaluate all rules against current context. Returns the first matching action.
+    /// Evaluate all rules against current context. Returns the first matching
+    /// action.
     #[inline]
     pub fn evaluate(&self, ctx: &CombatContext) -> Option<&HolyShitAction> {
         for rule in &self.rules {
@@ -42,10 +43,10 @@ impl HolyShitEvaluator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use textquest_common::combat::{
-        CombatConfig, ConditionExpr, HolyShitAction, HolyShitCondition,
+    use textquest_common::{
+        combat::{CombatConfig, ConditionExpr, HolyShitAction, HolyShitCondition},
+        types::SpawnData,
     };
-    use textquest_common::types::SpawnData;
 
     fn make_player(hp_pct_target: f32, mana_pct_target: f32) -> SpawnData {
         SpawnData {

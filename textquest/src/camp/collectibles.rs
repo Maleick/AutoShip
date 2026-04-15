@@ -1,4 +1,5 @@
-//! Collectible and tribute management — OpenVanilla MQ2Collectible / MQ2TributeManager parity.
+//! Collectible and tribute management — OpenVanilla MQ2Collectible /
+//! MQ2TributeManager parity.
 //!
 //! Tracks collection quest progress and automates tribute system interactions.
 
@@ -76,7 +77,8 @@ impl CollectibleTracker {
         changed
     }
 
-    /// Return the fraction of all items collected across all sets, in `[0.0, 1.0]`.
+    /// Return the fraction of all items collected across all sets, in `[0.0,
+    /// 1.0]`.
     ///
     /// Returns `0.0` if there are no items.
     #[must_use]
@@ -136,7 +138,8 @@ impl TributeTracker {
 
     /// Add a tribute item and its point value.
     ///
-    /// Duplicate `item_id` entries are allowed (each add accumulates points independently).
+    /// Duplicate `item_id` entries are allowed (each add accumulates points
+    /// independently).
     pub fn add_tribute(&mut self, item_id: u32, points: u32) {
         self.active_tribute_items.push(item_id);
         self.tribute_points += points;

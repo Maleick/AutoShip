@@ -217,8 +217,9 @@ mod tests {
         buf[num_rva_off] = 16;
 
         // Section table starts at 0x58 + 0xf0 = 0x148
-        // But SizeOfOptionalHeader is 0xf0 which puts section table at 0x44 + 20 + 0xf0 = 0x148
-        // Actually: section table = PE sig (0x40) + 4 + COFF (20) + OptHdr (0xf0) = 0x148
+        // But SizeOfOptionalHeader is 0xf0 which puts section table at 0x44 + 20 + 0xf0
+        // = 0x148 Actually: section table = PE sig (0x40) + 4 + COFF (20) +
+        // OptHdr (0xf0) = 0x148
         let sec_table = 0x40 + 4 + 20 + 0xf0; // = 0x148
 
         // .rdata section at sec_table

@@ -1,30 +1,24 @@
-use textquest_common::combat::{
-    AbilitySet, BuffInfo, CastResult, CombatConfig, CombatRole, ExtendedTargetList, HpPreference,
-    NamedPreference, SpellEntry, TargetScanConfig,
+use textquest_common::{
+    combat::{
+        AbilitySet, BuffInfo, CastResult, CombatConfig, CombatRole, ExtendedTargetList,
+        HpPreference, NamedPreference, SpellEntry, TargetScanConfig,
+    },
+    types::SpawnData,
 };
-use textquest_common::types::SpawnData;
 
 use super::rotation::RotationGroup;
 
-// ─── Pet action / status types ────────────────────────────────────────────────
+// ─── Pet action / status types
+// ────────────────────────────────────────────────
 
-use super::classes::bard::BardStrategy;
-use super::classes::beastlord::BeastlordStrategy;
-use super::classes::berserker::BerserkerStrategy;
-use super::classes::cleric::ClericStrategy;
-use super::classes::druid::DruidStrategy;
-use super::classes::enchanter::EnchanterStrategy;
-use super::classes::generic_dps::GenericDpsStrategy;
-use super::classes::magician::MagicianStrategy;
-use super::classes::monk::MonkStrategy;
-use super::classes::necromancer::NecromancerStrategy;
-use super::classes::paladin::PaladinStrategy;
-use super::classes::ranger::RangerStrategy;
-use super::classes::rogue::RogueStrategy;
-use super::classes::shadow_knight::ShadowKnightStrategy;
-use super::classes::shaman::ShamanStrategy;
-use super::classes::warrior::WarriorStrategy;
-use super::classes::wizard::WizardStrategy;
+use super::classes::{
+    bard::BardStrategy, beastlord::BeastlordStrategy, berserker::BerserkerStrategy,
+    cleric::ClericStrategy, druid::DruidStrategy, enchanter::EnchanterStrategy,
+    generic_dps::GenericDpsStrategy, magician::MagicianStrategy, monk::MonkStrategy,
+    necromancer::NecromancerStrategy, paladin::PaladinStrategy, ranger::RangerStrategy,
+    rogue::RogueStrategy, shadow_knight::ShadowKnightStrategy, shaman::ShamanStrategy,
+    warrior::WarriorStrategy, wizard::WizardStrategy,
+};
 
 /// Snapshot of a summoned pet's current state for pet-management decisions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -59,7 +53,8 @@ pub enum PetAction {
     },
 }
 
-/// Read-only snapshot of combat-relevant state, passed to strategy methods each frame.
+/// Read-only snapshot of combat-relevant state, passed to strategy methods each
+/// frame.
 pub struct CombatContext<'a> {
     pub player: &'a SpawnData,
     pub target: Option<&'a SpawnData>,
@@ -68,9 +63,10 @@ pub struct CombatContext<'a> {
     pub config: &'a CombatConfig,
     pub tick: u32,
     pub in_combat: bool,
-    /// When a CH chain is active, this is the spell slot the cleric should cast.
-    /// The cleric strategy defers its normal priority cascade and casts CH instead
-    /// when this is `Some`. Set by the orchestrator when it's this cleric's turn.
+    /// When a CH chain is active, this is the spell slot the cleric should
+    /// cast. The cleric strategy defers its normal priority cascade and
+    /// casts CH instead when this is `Some`. Set by the orchestrator when
+    /// it's this cleric's turn.
     pub ch_chain_slot: Option<u8>,
     /// Active buff spell IDs on the player (populated from buff window scan).
     pub active_buffs: &'a [i32],
@@ -146,7 +142,8 @@ pub trait ClassStrategy: Send {
     /// Optional pet-management action for this frame.
     ///
     /// Strategies can inspect `ctx.pet_status()` and request an explicit pet
-    /// command or pet-targeted buff without hardcoding pet logic in the combat FSM.
+    /// command or pet-targeted buff without hardcoding pet logic in the combat
+    /// FSM.
     fn pet_action(&self, _ctx: &CombatContext) -> Option<PetAction> {
         None
     }
@@ -156,13 +153,15 @@ pub trait ClassStrategy: Send {
     fn on_engage(&mut self, _ctx: &CombatContext) {}
 
     /// Called after an action completes (spell cast, ability use, song twist).
-    /// Override to advance internal state (e.g., bard twist index, auto-attack toggle).
+    /// Override to advance internal state (e.g., bard twist index, auto-attack
+    /// toggle).
     fn on_action_complete(&mut self, _ctx: &CombatContext) {}
 
     /// Called when a cast is interrupted before completion (HolyShit preempt,
     /// target lost mid-cast, or external interrupt like "You miss a note").
     /// `gem` is the spell slot that was being cast when the interrupt occurred.
-    /// Default is a no-op; bards override this to re-queue the interrupted song.
+    /// Default is a no-op; bards override this to re-queue the interrupted
+    /// song.
     fn on_cast_interrupted(&mut self, _ctx: &CombatContext, _gem: u8) {}
 
     /// Called when a cast attempt resolves to a concrete MQ2Cast-style outcome.
@@ -212,8 +211,9 @@ pub trait ClassStrategy: Send {
 // berserker, beastlord to eliminate duplicated code across class strategies.
 // ---------------------------------------------------------------------------
 
-/// Find the nearest NPC from the nearby enemies list based on 2D distance to player.
-/// Used by tank/pull-capable classes (warrior, berserker, beastlord) for target selection.
+/// Find the nearest NPC from the nearby enemies list based on 2D distance to
+/// player. Used by tank/pull-capable classes (warrior, berserker, beastlord)
+/// for target selection.
 #[inline]
 pub fn nearest_enemy<'a>(player: &SpawnData, enemies: &'a [SpawnData]) -> Option<&'a SpawnData> {
     let px = player.x;
@@ -259,7 +259,8 @@ pub fn melee_on_engage(ctx: &CombatContext, class_label: &str) {
 }
 
 /// Common disengage for melee classes: disable auto-attack.
-/// Only call when `!ctx.in_combat` — mid-combat spell completions should NOT disable auto-attack.
+/// Only call when `!ctx.in_combat` — mid-combat spell completions should NOT
+/// disable auto-attack.
 pub fn melee_on_disengage() {
     crate::eq::toggle_auto_attack(false);
 }
@@ -286,7 +287,8 @@ pub fn pet_back_off() {
 }
 
 /// Find the group member with the lowest HP percentage (alive only).
-/// Used by healer and hybrid classes (cleric, druid, paladin, shaman) for heal targeting.
+/// Used by healer and hybrid classes (cleric, druid, paladin, shaman) for heal
+/// targeting.
 #[inline]
 pub fn lowest_hp_member(ctx: &CombatContext) -> Option<(u32, f32)> {
     lowest_hp_member_in(
@@ -388,7 +390,8 @@ pub fn is_named_mob(name: &str) -> bool {
 ///
 /// Since we don't have the mob's target info in `SpawnData`, we approximate:
 /// a moving mob with non-zero speed that is far from the player is likely
-/// fighting something else. This is a heuristic — XTarget would be authoritative.
+/// fighting something else. This is a heuristic — XTarget would be
+/// authoritative.
 #[inline]
 pub fn is_safe_target(
     spawn: &SpawnData,
@@ -420,7 +423,8 @@ pub fn is_safe_target(
 /// MA target scan — scans nearby enemies and returns the best target based on
 /// named priority, HP preference, mez skip, and safe targeting rules.
 ///
-/// This implements rgmercs-style `MATargetScan()` logic using available spawn data.
+/// This implements rgmercs-style `MATargetScan()` logic using available spawn
+/// data.
 pub fn ma_target_scan<'a>(
     player: &SpawnData,
     enemies: &'a [SpawnData],

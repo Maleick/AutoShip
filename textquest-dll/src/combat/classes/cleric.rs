@@ -2,17 +2,20 @@ use textquest_common::combat::{AbilityCandidate, AbilitySet, CombatRole, SpellEn
 
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
-/// HP threshold above which clerics should cancel current heal (duck to interrupt).
-/// Prevents wasting mana on a heal when the target is already healthy.
+/// HP threshold above which clerics should cancel current heal (duck to
+/// interrupt). Prevents wasting mana on a heal when the target is already
+/// healthy.
 const HEAL_CANCEL_THRESHOLD: f32 = 85.0;
 
-/// HP threshold for emergency heals — anyone below this gets top-priority healing.
+/// HP threshold for emergency heals — anyone below this gets top-priority
+/// healing.
 const EMERGENCY_HP: f32 = 30.0;
 
 /// HP threshold for moderate heals — below this, cast a standard heal.
 const MODERATE_HP: f32 = 65.0;
 
-/// Cleric strategy: healer with resurrection, prioritized heal tiers, buff support.
+/// Cleric strategy: healer with resurrection, prioritized heal tiers, buff
+/// support.
 ///
 /// Priority order (MQ2-style cascade):
 /// 0. CH chain override (when active, cast Complete Heal on chain target)
@@ -247,7 +250,8 @@ impl ClericStrategy {
         cures.into_iter().max_by_key(|s| s.priority).cloned()
     }
 
-    /// Find the highest-priority group member who should receive a single-target cure.
+    /// Find the highest-priority group member who should receive a
+    /// single-target cure.
     fn afflicted_member(&self, ctx: &CombatContext) -> Option<u32> {
         strategy::prioritized_afflicted_member(ctx).map(|(spawn_id, _)| spawn_id)
     }
@@ -264,7 +268,8 @@ impl ClericStrategy {
     }
 
     /// Check if the cleric should cancel an in-progress heal because the target
-    /// has recovered above threshold. Called from the combat FSM during Casting state.
+    /// has recovered above threshold. Called from the combat FSM during Casting
+    /// state.
     pub fn should_cancel_heal(&self, ctx: &CombatContext) -> bool {
         let Some((_, lowest_hp)) = strategy::lowest_hp_member(ctx) else {
             return true; // no one to heal, cancel

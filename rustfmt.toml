@@ -1,3 +1,5 @@
-# Pin the edition so stable and nightly rustfmt produce identical output.
-# All workspace crates use edition 2024.
+# Keep this as the single repo-root rustfmt config.
+# A duplicate `.rustfmt.toml` takes precedence and can silently change CI output.
+# All workspace crates use edition 2024, so pinning the edition keeps stable and
+# nightly rustfmt aligned.
 edition = "2024"

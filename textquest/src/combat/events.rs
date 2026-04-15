@@ -1,10 +1,14 @@
-//! Structured combat event tracking — DPS meters, kill counts, damage aggregation.
+//! Structured combat event tracking — DPS meters, kill counts, damage
+//! aggregation.
 //!
-//! Captures individual combat events (melee, spell, DoT, etc.) into a bounded ring
-//! buffer and provides time-windowed queries for per-source DPS and kill tracking.
+//! Captures individual combat events (melee, spell, DoT, etc.) into a bounded
+//! ring buffer and provides time-windowed queries for per-source DPS and kill
+//! tracking.
 
-use std::collections::{HashMap, VecDeque};
-use std::time::{Duration, Instant};
+use std::{
+    collections::{HashMap, VecDeque},
+    time::{Duration, Instant},
+};
 
 use serde::{Deserialize, Serialize};
 

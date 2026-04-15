@@ -3,12 +3,14 @@
 //! Scans a limited allowlist of EQ dialog windows (trade, task, resurrect)
 //! and automatically clicks the accept/yes button. Similar to `MQ2AutoAccept`.
 //!
-//! Only active when in-world (local player != null) and enabled via IPC command.
-//! Called from the game loop tick every 30 ticks (~1 second) to avoid spam.
+//! Only active when in-world (local player != null) and enabled via IPC
+//! command. Called from the game loop tick every 30 ticks (~1 second) to avoid
+//! spam.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Whether auto-accept is enabled. Disabled by default; toggled via IPC `SetAutoAccept`.
+/// Whether auto-accept is enabled. Disabled by default; toggled via IPC
+/// `SetAutoAccept`.
 static AUTO_ACCEPT_ENABLED: AtomicBool = AtomicBool::new(false);
 
 /// Enable or disable auto-accept.
@@ -42,7 +44,8 @@ const DIALOG_ACCEPT_PAIRS: &[(&str, &str)] = &[
 /// Only scans when in-world and auto-accept is enabled.
 ///
 /// # Safety
-/// Requires valid eqgame `CXWndManager` pointer. Must be called from game loop thread.
+/// Requires valid eqgame `CXWndManager` pointer. Must be called from game loop
+/// thread.
 #[cfg(windows)]
 #[allow(unsafe_op_in_unsafe_fn)]
 pub unsafe fn check_dialogs() {

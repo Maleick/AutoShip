@@ -1,4 +1,5 @@
-//! Achievement system — tracks milestones, raid firsts, and progression unlocks.
+//! Achievement system — tracks milestones, raid firsts, and progression
+//! unlocks.
 
 use std::time::Duration;
 
@@ -17,7 +18,8 @@ pub enum AchievementKind {
     ZeroDeathRaid,
     /// Cleared a zone/event under a target time (zone name, target duration).
     SpeedRun(String, Duration),
-    /// Every character in the group is wearing a full set of plate (or equivalent).
+    /// Every character in the group is wearing a full set of plate (or
+    /// equivalent).
     FullPlate,
     /// Completed all content in an expansion tier.
     ExpansionComplete,
@@ -113,13 +115,15 @@ impl AchievementTracker {
             .collect()
     }
 
-    /// Finds a mutable reference to the first achievement matching the given kind.
+    /// Finds a mutable reference to the first achievement matching the given
+    /// kind.
     pub fn find_mut(&mut self, kind: &AchievementKind) -> Option<&mut Achievement> {
         self.achievements.iter_mut().find(|a| &a.kind == kind)
     }
 
-    /// Unlocks the first achievement matching the given kind, setting its timestamp.
-    /// Returns `true` if an achievement was found and unlocked, `false` otherwise.
+    /// Unlocks the first achievement matching the given kind, setting its
+    /// timestamp. Returns `true` if an achievement was found and unlocked,
+    /// `false` otherwise.
     pub fn unlock(&mut self, kind: &AchievementKind, timestamp: impl Into<String>) -> bool {
         if let Some(achievement) = self.find_mut(kind)
             && achievement.unlocked_at.is_none()

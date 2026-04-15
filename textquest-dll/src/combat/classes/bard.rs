@@ -1,10 +1,12 @@
 use textquest_common::combat::{CombatRole, SpellEntry};
 
-use crate::combat::mez_queue::MezQueue;
-use crate::combat::strategy::{ClassStrategy, CombatContext};
-use crate::combat::twist::{
-    DEFAULT_SONG_DURATION_TICKS, DEFAULT_TWIST_DELAY_TICKS, SongCategory, SongSlot, TwistAction,
-    TwistEngine,
+use crate::combat::{
+    mez_queue::MezQueue,
+    strategy::{ClassStrategy, CombatContext},
+    twist::{
+        DEFAULT_SONG_DURATION_TICKS, DEFAULT_TWIST_DELAY_TICKS, SongCategory, SongSlot,
+        TwistAction, TwistEngine,
+    },
 };
 
 /// Mez song duration in ticks (~18 seconds at 20 ticks/sec = 360 ticks).

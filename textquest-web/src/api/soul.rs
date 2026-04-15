@@ -1,9 +1,11 @@
 //! REST API handlers for Soul Engine audit log.
 
-use axum::Json;
-use axum::extract::{Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
-use axum::response::IntoResponse;
+use axum::{
+    Json,
+    extract::{Path, Query, State},
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -325,7 +327,8 @@ pub async fn export_all_audit_csv(State(state): State<Arc<AppState>>) -> impl In
     (StatusCode::OK, headers, csv)
 }
 
-// ── CSV helpers ───────────────────────────────────────────────────────────────
+// ── CSV helpers
+// ───────────────────────────────────────────────────────────────
 
 fn csv_field(s: &str) -> String {
     let formula_safe = if matches!(s.trim_start().chars().next(), Some('=' | '+' | '-' | '@')) {

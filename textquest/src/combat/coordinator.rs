@@ -1,14 +1,19 @@
 use std::collections::HashMap;
-use textquest_common::combat::CombatStatus;
-use textquest_common::ipc::Command;
-use textquest_common::soul::SoulEvent;
-use textquest_common::types::{ClientId, GameState};
+use textquest_common::{
+    combat::CombatStatus,
+    ipc::Command,
+    soul::SoulEvent,
+    types::{ClientId, GameState},
+};
 
-use super::camp_loop::{CampEvent, CampLoop, CampState};
-use super::ch_chain::ChChain;
-use super::heal_coordinator::{CureCoordinator, HealCoordinator};
+use super::{
+    camp_loop::{CampEvent, CampLoop, CampState},
+    ch_chain::ChChain,
+    heal_coordinator::{CureCoordinator, HealCoordinator},
+};
 
-/// Coordinates group combat — assist targeting, CC assignments, and camp loop FSM.
+/// Coordinates group combat — assist targeting, CC assignments, and camp loop
+/// FSM.
 pub struct CombatCoordinator {
     assist_target: Option<u32>,
     main_tank_id: Option<ClientId>,
@@ -49,7 +54,8 @@ impl CombatCoordinator {
         }
     }
 
-    /// Drain and return all pending soul events accumulated since the last call.
+    /// Drain and return all pending soul events accumulated since the last
+    /// call.
     ///
     /// The orchestrator should call this after `tick()` and forward events to
     /// `SoulCoordinator::emit_soul_event`.
@@ -165,7 +171,8 @@ impl CombatCoordinator {
         commands
     }
 
-    /// Detect combat state changes from `GameState` and convert to `CampEvents`.
+    /// Detect combat state changes from `GameState` and convert to
+    /// `CampEvents`.
     fn detect_camp_events(&mut self, states: &HashMap<ClientId, GameState>) -> Vec<CampEvent> {
         let mut events = Vec::new();
 
@@ -376,9 +383,7 @@ impl CombatCoordinator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use textquest_common::combat::CombatStatus;
-    use textquest_common::nav::NavStatus;
-    use textquest_common::types::SpawnData;
+    use textquest_common::{combat::CombatStatus, nav::NavStatus, types::SpawnData};
 
     fn make_spawn(spawn_id: u32, spawn_type: u8) -> SpawnData {
         SpawnData {

@@ -1,5 +1,7 @@
-use std::fs::OpenOptions;
-use std::path::{Path, PathBuf};
+use std::{
+    fs::OpenOptions,
+    path::{Path, PathBuf},
+};
 
 const LOG_WRITE_PROBE: &str = ".textquest-log-write-test";
 

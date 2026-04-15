@@ -72,11 +72,13 @@ static VEH_HANDLE: AtomicUsize = AtomicUsize::new(0);
 mod platform {
     use super::*;
     use std::sync::atomic::AtomicU32;
-    use windows::Win32::System::Diagnostics::Debug::{
-        AddVectoredExceptionHandler, CONTEXT, CONTEXT_FLAGS, EXCEPTION_POINTERS, GetThreadContext,
-        RemoveVectoredExceptionHandler, SetThreadContext,
+    use windows::Win32::System::{
+        Diagnostics::Debug::{
+            AddVectoredExceptionHandler, CONTEXT, CONTEXT_FLAGS, EXCEPTION_POINTERS,
+            GetThreadContext, RemoveVectoredExceptionHandler, SetThreadContext,
+        },
+        Threading::GetCurrentThread,
     };
-    use windows::Win32::System::Threading::GetCurrentThread;
 
     const DR7_LOCAL_ENABLE: [u64; 4] = [1 << 0, 1 << 2, 1 << 4, 1 << 6];
     const DR7_COND_LEN_CLEAR: [u64; 4] = [0xF << 16, 0xF << 20, 0xF << 24, 0xF << 28];
@@ -85,13 +87,17 @@ mod platform {
     const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
 
     /// Thread ID of EQ's main thread (the window message pump).
-    /// Set once by `find_main_thread_id`, read by `set_breakpoint_on_main_thread`.
+    /// Set once by `find_main_thread_id`, read by
+    /// `set_breakpoint_on_main_thread`.
     static MAIN_THREAD_ID: AtomicU32 = AtomicU32::new(0);
 
-    /// Find EQ's main thread by locating the thread that owns the "EverQuest" window.
+    /// Find EQ's main thread by locating the thread that owns the "EverQuest"
+    /// window.
     pub fn find_main_thread_id() -> Result<u32, String> {
-        use windows::Win32::UI::WindowsAndMessaging::{FindWindowA, GetWindowThreadProcessId};
-        use windows::core::s;
+        use windows::{
+            Win32::UI::WindowsAndMessaging::{FindWindowA, GetWindowThreadProcessId},
+            core::s,
+        };
 
         let cached = MAIN_THREAD_ID.load(Ordering::Acquire);
         if cached != 0 {

@@ -1,9 +1,9 @@
-//! Soul Engine error handling and recovery — retry, fallback, reload, restart strategies.
+//! Soul Engine error handling and recovery — retry, fallback, reload, restart
+//! strategies.
 
 use std::time::Duration;
 
-use super::config::SoulConfig;
-use super::llm::LlmResponse;
+use super::{config::SoulConfig, llm::LlmResponse};
 
 /// Errors that can occur within the Soul Engine subsystems.
 #[derive(Debug)]
@@ -12,7 +12,8 @@ pub enum SoulError {
     DbConnectionLoss(String),
     /// LLM provider timed out or returned no response.
     LlmTimeout(String),
-    /// In-memory state appears corrupted (out-of-range values, invalid IDs, etc.).
+    /// In-memory state appears corrupted (out-of-range values, invalid IDs,
+    /// etc.).
     MemoryCorruption(String),
     /// The coordinator task panicked or entered an unrecoverable state.
     CoordinatorPanic(String),
@@ -60,19 +61,22 @@ impl SoulState {
 pub enum RecoveryAction {
     /// Retry the failed operation after the given delay (exponential backoff).
     Retry(Duration),
-    /// Use a cached LLM response as a stand-in while the real provider is unavailable.
+    /// Use a cached LLM response as a stand-in while the real provider is
+    /// unavailable.
     Fallback(LlmResponse),
     /// Discard in-memory state and reload from the database.
     Reload,
-    /// Tear down the coordinator entirely and restart with the given default state.
+    /// Tear down the coordinator entirely and restart with the given default
+    /// state.
     Restart(SoulState),
 }
 
 /// Manages error recovery for the Soul Engine.
 ///
-/// `RecoveryManager` is stateful: it tracks consecutive failure counts so it can
-/// apply exponential backoff for transient errors (e.g., DB blips) and escalate
-/// to harder recovery actions when a subsystem is persistently failing.
+/// `RecoveryManager` is stateful: it tracks consecutive failure counts so it
+/// can apply exponential backoff for transient errors (e.g., DB blips) and
+/// escalate to harder recovery actions when a subsystem is persistently
+/// failing.
 pub struct RecoveryManager {
     /// Consecutive DB errors seen without a successful operation in between.
     db_failures: u32,
@@ -94,8 +98,9 @@ const ESCALATION_THRESHOLD: u32 = 5;
 impl RecoveryManager {
     /// Construct a new `RecoveryManager`.
     ///
-    /// `default_state` is the `SoulState` used when a `Restart` action is issued.
-    /// `cached_response` is the `LlmResponse` returned during `Fallback` actions.
+    /// `default_state` is the `SoulState` used when a `Restart` action is
+    /// issued. `cached_response` is the `LlmResponse` returned during
+    /// `Fallback` actions.
     pub fn new(default_state: SoulState, cached_response: LlmResponse) -> Self {
         Self {
             db_failures: 0,
@@ -140,12 +145,14 @@ impl RecoveryManager {
         }
     }
 
-    /// Notify the manager that a DB operation succeeded, resetting the failure counter.
+    /// Notify the manager that a DB operation succeeded, resetting the failure
+    /// counter.
     pub fn reset_db_failures(&mut self) {
         self.db_failures = 0;
     }
 
-    /// Notify the manager that an LLM call succeeded, resetting the failure counter.
+    /// Notify the manager that an LLM call succeeded, resetting the failure
+    /// counter.
     pub fn reset_llm_failures(&mut self) {
         self.llm_failures = 0;
     }

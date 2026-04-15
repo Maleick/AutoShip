@@ -1,10 +1,13 @@
 //! Stealth memory allocator — uses NT heap and section APIs instead of
 //! `VirtualAlloc`, which is a common detection signature for injected code.
 //!
-//! - **Heap**: `RtlAllocateHeap` / `RtlFreeHeap` via the process default heap (PEB).
-//! - **Section**: `NtCreateSection` + `NtMapViewOfSection` backed by the pagefile.
+//! - **Heap**: `RtlAllocateHeap` / `RtlFreeHeap` via the process default heap
+//!   (PEB).
+//! - **Section**: `NtCreateSection` + `NtMapViewOfSection` backed by the
+//!   pagefile.
 //!
-//! On non-Windows platforms, all functions delegate to `std::alloc` for stub builds.
+//! On non-Windows platforms, all functions delegate to `std::alloc` for stub
+//! builds.
 
 /// Stealth allocator that avoids `VirtualAlloc` detection signatures.
 ///
@@ -18,8 +21,7 @@ pub struct StealthAllocator;
 // ---------------------------------------------------------------------------
 #[cfg(windows)]
 mod platform {
-    use std::ffi::c_void;
-    use std::ptr;
+    use std::{ffi::c_void, ptr};
 
     type NtStatus = i32;
     const STATUS_SUCCESS: NtStatus = 0;
@@ -182,9 +184,11 @@ mod platform {
 // ---------------------------------------------------------------------------
 #[cfg(not(windows))]
 mod platform {
-    use std::alloc::{self, Layout};
-    use std::ffi::c_void;
-    use std::ptr;
+    use std::{
+        alloc::{self, Layout},
+        ffi::c_void,
+        ptr,
+    };
 
     /// Header size prepended to heap allocations so `heap_free` can recover the
     /// original layout without the caller passing the size.
@@ -266,30 +270,33 @@ impl StealthAllocator {
     /// Free memory previously allocated with [`heap_alloc`](Self::heap_alloc).
     ///
     /// # Safety
-    /// `ptr` must have been returned by `heap_alloc` and must not be freed twice.
+    /// `ptr` must have been returned by `heap_alloc` and must not be freed
+    /// twice.
     pub unsafe fn heap_free(ptr: *mut u8) {
         tracing::trace!(addr = ?ptr, "stealth heap_free");
         unsafe { platform::heap_free(ptr) }
     }
 
-    /// Allocate memory via `NtCreateSection` + `NtMapViewOfSection` (pagefile-backed).
+    /// Allocate memory via `NtCreateSection` + `NtMapViewOfSection`
+    /// (pagefile-backed).
     ///
     /// Returns a null pointer on failure.
     ///
     /// # Safety
-    /// The returned pointer must be freed with [`section_free`](Self::section_free)
-    /// using the same `size`.
+    /// The returned pointer must be freed with
+    /// [`section_free`](Self::section_free) using the same `size`.
     pub unsafe fn section_alloc(size: usize) -> *mut u8 {
         let ptr = unsafe { platform::section_alloc(size) };
         tracing::trace!(addr = ?ptr, size, "stealth section_alloc");
         ptr
     }
 
-    /// Free memory previously allocated with [`section_alloc`](Self::section_alloc).
+    /// Free memory previously allocated with
+    /// [`section_alloc`](Self::section_alloc).
     ///
     /// # Safety
-    /// `ptr` must have been returned by `section_alloc` with the matching `size`,
-    /// and must not be freed twice.
+    /// `ptr` must have been returned by `section_alloc` with the matching
+    /// `size`, and must not be freed twice.
     pub unsafe fn section_free(ptr: *mut u8, size: usize) {
         tracing::trace!(addr = ?ptr, size, "stealth section_free");
         unsafe { platform::section_free(ptr, size) }

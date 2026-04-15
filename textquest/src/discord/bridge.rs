@@ -1,14 +1,15 @@
 //! Command bridge — channel-based interface between Discord bot and TUI.
 //!
 //! The bridge provides two channels:
-//! - **Inbound** (Discord → TUI): Commands typed in Discord (e.g., "!login all")
-//!   arrive as `BridgeCommand` structs that the TUI polls each tick.
+//! - **Inbound** (Discord → TUI): Commands typed in Discord (e.g., "!login
+//!   all") arrive as `BridgeCommand` structs that the TUI polls each tick.
 //! - **Outbound** (TUI → Discord): Responses and status updates flow back to
 //!   Discord for display in the channel.
 //!
 //! The bridge itself is transport-agnostic — it just moves messages between
 //! two endpoints via `std::sync::mpsc`. A Discord bot (serenity, twilight, or
-//! even a simple REST poller) connects to one end; the TUI connects to the other.
+//! even a simple REST poller) connects to one end; the TUI connects to the
+//! other.
 
 use std::sync::mpsc;
 
@@ -36,8 +37,8 @@ pub struct BridgeResponse {
 
 /// The TUI side of the Discord bridge.
 ///
-/// The TUI holds this and calls `poll()` each tick to check for inbound commands,
-/// and `respond()` to send results back to Discord.
+/// The TUI holds this and calls `poll()` each tick to check for inbound
+/// commands, and `respond()` to send results back to Discord.
 pub struct TuiBridge {
     /// Receive commands from Discord.
     cmd_rx: mpsc::Receiver<BridgeCommand>,

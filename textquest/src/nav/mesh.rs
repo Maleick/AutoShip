@@ -1,13 +1,15 @@
-//! Navmesh loading pipeline — download from mqmesh.com, parse `MQ2Nav` binary format,
-//! load into Detour for pathfinding.
+//! Navmesh loading pipeline — download from mqmesh.com, parse `MQ2Nav` binary
+//! format, load into Detour for pathfinding.
 
 use anyhow::{Context, Result, bail};
 use flate2::read::ZlibDecoder;
 use prost::Message;
-use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap};
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::{
+    cmp::Ordering,
+    collections::{BinaryHeap, HashMap},
+    io::Read,
+    path::{Path, PathBuf},
+};
 use textquest_common::nav::{NavPathFailureKind, NavPathMetrics, Waypoint};
 
 // ---------------------------------------------------------------------------
@@ -117,8 +119,9 @@ pub struct ProtoNavMeshFile {
 // Binary file header (matches MQ2Nav's NavMeshData.h)
 // ---------------------------------------------------------------------------
 
-/// Magic bytes: file starts with 'TESM' (ASCII), which is 'MSET' as a MSVC multi-char literal.
-/// As a little-endian u32, the bytes [T, E, S, M] = 0x4D534554.
+/// Magic bytes: file starts with 'TESM' (ASCII), which is 'MSET' as a MSVC
+/// multi-char literal. As a little-endian u32, the bytes [T, E, S, M] =
+/// 0x4D534554.
 const NAVMESH_FILE_MAGIC: u32 = u32::from_le_bytes([b'T', b'E', b'S', b'M']);
 const FLAG_COMPRESSED: u16 = 0x0001;
 const NAVMESH_QUERY_MAX_NODES: i32 = 16384;
@@ -270,7 +273,8 @@ impl DetourNavMesh {
             );
             if !dt_success(status) {
                 bail!(
-                    "getOffMeshConnectionPolyEndPoints failed for prev_ref={prev_ref}, poly_ref={poly_ref}: status=0x{status:08X}"
+                    "getOffMeshConnectionPolyEndPoints failed for prev_ref={prev_ref}, \
+                     poly_ref={poly_ref}: status=0x{status:08X}"
                 );
             }
             Ok((start_pos, end_pos))
@@ -415,7 +419,8 @@ impl Drop for DetourNavMeshQuery {
 }
 
 /// Create a default dtQueryFilter with standard walk flags.
-/// Matches Detour's default constructor: includeFlags=0xFFFF, excludeFlags=0, area costs=1.0.
+/// Matches Detour's default constructor: includeFlags=0xFFFF, excludeFlags=0,
+/// area costs=1.0.
 fn default_query_filter() -> recastnavigation_sys::dtQueryFilter {
     let mut filter = unsafe { std::mem::zeroed::<recastnavigation_sys::dtQueryFilter>() };
     filter.m_includeFlags = 0xFFFF;
@@ -513,7 +518,8 @@ pub fn parse_navmesh(data: &[u8]) -> Result<ProtoNavMeshFile> {
     let magic = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
     if magic != NAVMESH_FILE_MAGIC {
         bail!(
-            "Invalid navmesh magic: expected 0x{NAVMESH_FILE_MAGIC:08X} ('MSET'), got 0x{magic:08X}"
+            "Invalid navmesh magic: expected 0x{NAVMESH_FILE_MAGIC:08X} ('MSET'), got \
+             0x{magic:08X}"
         );
     }
 
@@ -856,8 +862,9 @@ pub fn load_navmesh(proto: &ProtoNavMeshFile) -> Result<LoadedNavMesh> {
     })
 }
 
-/// Convert EQ coordinates (x, y, z where Z=up) to Detour coordinates (x, z, y where Y=up).
-/// `MQ2Nav` stores meshes in Detour's native coordinate space: (`eq_x`, `eq_z`, `eq_y`).
+/// Convert EQ coordinates (x, y, z where Z=up) to Detour coordinates (x, z, y
+/// where Y=up). `MQ2Nav` stores meshes in Detour's native coordinate space:
+/// (`eq_x`, `eq_z`, `eq_y`).
 fn eq_to_detour(eq_x: f32, eq_y: f32, eq_z: f32) -> [f32; 3] {
     [eq_x, eq_z, eq_y]
 }
@@ -1390,14 +1397,16 @@ pub fn find_path(loaded: &LoadedNavMesh, from: EqPoint, to: EqPoint) -> Result<V
             })
             .map_err(|stitch_error| {
                 anyhow::anyhow!(
-                    "Direct navmesh path failed: {error}; off-mesh traversal failed: {stitch_error}"
+                    "Direct navmesh path failed: {error}; off-mesh traversal failed: \
+                     {stitch_error}"
                 )
             })
         }
     }
 }
 
-/// End-to-end convenience: download (or load from cache), parse, and load a zone mesh.
+/// End-to-end convenience: download (or load from cache), parse, and load a
+/// zone mesh.
 ///
 /// # Errors
 ///
@@ -1595,8 +1604,7 @@ fn sanitize_zone_short_name(zone_short_name: &str) -> Result<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flate2::Compression;
-    use flate2::write::ZlibEncoder;
+    use flate2::{Compression, write::ZlibEncoder};
     use std::io::Write;
 
     #[test]

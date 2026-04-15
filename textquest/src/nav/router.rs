@@ -1,8 +1,11 @@
-//! High-level zone routing — plans multi-zone travel and coordinates group transitions.
+//! High-level zone routing — plans multi-zone travel and coordinates group
+//! transitions.
 
 use std::collections::HashMap;
-use textquest_common::nav::{IndexedQueue, Waypoint};
-use textquest_common::types::ClientId;
+use textquest_common::{
+    nav::{IndexedQueue, Waypoint},
+    types::ClientId,
+};
 
 /// A step in a multi-zone travel plan.
 #[derive(Debug, Clone)]
@@ -132,9 +135,9 @@ impl GroupRouter {
     /// Plan travel for a group of characters.
     ///
     /// When porters are available and the route is long-distance (multiple zone
-    /// transitions), the planner would prefer `PortTo` steps over walking. For now,
-    /// port-based routing is a future enhancement — all travel uses staggered
-    /// zone transitions.
+    /// transitions), the planner would prefer `PortTo` steps over walking. For
+    /// now, port-based routing is a future enhancement — all travel uses
+    /// staggered zone transitions.
     #[must_use]
     pub fn plan_travel(
         &self,
@@ -164,7 +167,8 @@ impl GroupRouter {
     }
 }
 
-/// Convenience wrapper that creates a one-shot travel plan without porter awareness.
+/// Convenience wrapper that creates a one-shot travel plan without porter
+/// awareness.
 #[must_use]
 pub fn plan_group_travel(
     client_ids: &[ClientId],

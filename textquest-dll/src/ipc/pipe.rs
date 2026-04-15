@@ -4,10 +4,12 @@
 //! On non-Windows platforms this is a compile-only stub.
 
 use anyhow::Result;
-use textquest_common::ipc::{Command, IpcCommand, IpcResponse, SessionToken};
 #[cfg(windows)]
 use textquest_common::protocol;
-use textquest_common::types::ClientId;
+use textquest_common::{
+    ipc::{Command, IpcCommand, IpcResponse, SessionToken},
+    types::ClientId,
+};
 
 /// Listens for commands from the orchestrator via named pipe.
 ///
@@ -17,7 +19,8 @@ use textquest_common::types::ClientId;
 pub struct CommandListener {
     client_id: ClientId,
     /// Session token set at injection time. The orchestrator must present this
-    /// token as the first message after connecting before any commands are accepted.
+    /// token as the first message after connecting before any commands are
+    /// accepted.
     expected_token: SessionToken,
     /// Whether the current connection has been authenticated.
     connected: bool,
@@ -28,18 +31,23 @@ pub struct CommandListener {
 impl CommandListener {
     /// Create a named pipe server for `client_id`.
     ///
-    /// `token` is the session token generated at injection time. The orchestrator
-    /// must send this token as the first 32 bytes after connecting; connections
-    /// that fail the handshake are dropped.
+    /// `token` is the session token generated at injection time. The
+    /// orchestrator must send this token as the first 32 bytes after
+    /// connecting; connections that fail the handshake are dropped.
     ///
     /// Pipe name: `\\.\pipe\textquest_cmd_{client_id}`
     pub fn new(client_id: ClientId, token: SessionToken) -> Result<Self> {
         #[cfg(windows)]
         {
-            use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
-            use windows::Win32::System::Pipes::CreateNamedPipeA;
-            use windows::Win32::System::Pipes::{PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT};
-            use windows::core::PCSTR;
+            use windows::{
+                Win32::{
+                    Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES,
+                    System::Pipes::{
+                        CreateNamedPipeA, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT,
+                    },
+                },
+                core::PCSTR,
+            };
             const PIPE_ACCESS_DUPLEX: FILE_FLAGS_AND_ATTRIBUTES =
                 FILE_FLAGS_AND_ATTRIBUTES(0x0000_0003);
 
@@ -51,7 +59,8 @@ impl CommandListener {
 
             let security_setup = build_restrictive_security_attributes().map_err(|e| {
                 anyhow::anyhow!(
-                    "Pipe DACL creation failed — refusing to create pipe with default security: {e}"
+                    "Pipe DACL creation failed — refusing to create pipe with default security: \
+                     {e}"
                 )
             })?;
 
@@ -103,14 +112,16 @@ impl CommandListener {
     /// next call will wait for a new connection.
     ///
     /// The returned `IpcCommand` contains both the command payload and the
-    /// optional correlation ID sent by the orchestrator. Callers should echo the
-    /// correlation ID back in the corresponding `IpcResponse`.
+    /// optional correlation ID sent by the orchestrator. Callers should echo
+    /// the correlation ID back in the corresponding `IpcResponse`.
     pub fn receive(&mut self) -> Result<IpcCommand> {
         #[cfg(windows)]
         {
-            use windows::Win32::Foundation::ERROR_PIPE_CONNECTED;
-            use windows::Win32::Storage::FileSystem::ReadFile;
-            use windows::Win32::System::Pipes::{ConnectNamedPipe, DisconnectNamedPipe};
+            use windows::Win32::{
+                Foundation::ERROR_PIPE_CONNECTED,
+                Storage::FileSystem::ReadFile,
+                System::Pipes::{ConnectNamedPipe, DisconnectNamedPipe},
+            };
 
             // If not connected, wait for a new connection + authenticate.
             if !self.connected {
@@ -281,6 +292,15 @@ pub fn validate_command(cmd: &Command) -> bool {
                     .as_ref()
                     .is_none_or(|value| !value.is_empty() && value.len() <= 128)
         }
+        Command::QueryBazaarResults { filter } => {
+            filter
+                .text_contains
+                .as_ref()
+                .is_none_or(|value| !value.is_empty() && value.len() <= 128)
+                && filter
+                    .max_rows
+                    .is_none_or(|value| value > 0 && value <= 2000)
+        }
         Command::StartLogin {
             account_name,
             password,
@@ -296,7 +316,8 @@ pub fn validate_command(cmd: &Command) -> bool {
     }
 }
 
-/// Constant-time comparison to prevent timing side-channels on token validation.
+/// Constant-time comparison to prevent timing side-channels on token
+/// validation.
 fn constant_time_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
     let mut diff: u8 = 0;
     for i in 0..32 {
@@ -323,13 +344,15 @@ struct PipeSecuritySetup {
 #[cfg(windows)]
 fn build_restrictive_security_attributes() -> Result<PipeSecuritySetup> {
     use std::mem;
-    use windows::Win32::Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE};
-    use windows::Win32::Security::{
-        ACE_REVISION, ACL, AddAccessAllowedAce, GetLengthSid, GetTokenInformation, InitializeAcl,
-        InitializeSecurityDescriptor, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
-        SECURITY_DESCRIPTOR, SetSecurityDescriptorDacl, TOKEN_QUERY, TOKEN_USER, TokenUser,
+    use windows::Win32::{
+        Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE},
+        Security::{
+            ACE_REVISION, ACL, AddAccessAllowedAce, GetLengthSid, GetTokenInformation,
+            InitializeAcl, InitializeSecurityDescriptor, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
+            SECURITY_DESCRIPTOR, SetSecurityDescriptorDacl, TOKEN_QUERY, TOKEN_USER, TokenUser,
+        },
+        System::Threading::{GetCurrentProcess, OpenProcessToken},
     };
-    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
     unsafe {
         // 1. Open the current process token.
@@ -407,8 +430,7 @@ impl Drop for CommandListener {
     fn drop(&mut self) {
         #[cfg(windows)]
         {
-            use windows::Win32::Foundation::CloseHandle;
-            use windows::Win32::System::Pipes::DisconnectNamedPipe;
+            use windows::Win32::{Foundation::CloseHandle, System::Pipes::DisconnectNamedPipe};
             // SAFETY: self.handle is a valid pipe handle created in new().
             // DisconnectNamedPipe + CloseHandle are called exactly once in Drop.
             // After this, the handle is invalid and must not be used.
@@ -423,7 +445,7 @@ impl Drop for CommandListener {
 #[cfg(test)]
 mod tests {
     use super::validate_command;
-    use textquest_common::ipc::Command;
+    use textquest_common::ipc::{BazaarQuery, Command};
 
     #[test]
     fn validate_cast_spell_valid_slot() {
@@ -496,5 +518,48 @@ mod tests {
     #[test]
     fn validate_cancel_cast_loop_always_valid() {
         assert!(validate_command(&Command::CancelCastLoop));
+    }
+
+    #[test]
+    fn validate_query_bazaar_results_accepts_default_filter() {
+        assert!(validate_command(&Command::QueryBazaarResults {
+            filter: BazaarQuery::default(),
+        }));
+    }
+
+    #[test]
+    fn validate_query_bazaar_results_rejects_empty_text_filter() {
+        assert!(!validate_command(&Command::QueryBazaarResults {
+            filter: BazaarQuery {
+                text_contains: Some(String::new()),
+                max_rows: None,
+            },
+        }));
+    }
+
+    #[test]
+    fn validate_query_bazaar_results_rejects_oversized_text_filter() {
+        assert!(!validate_command(&Command::QueryBazaarResults {
+            filter: BazaarQuery {
+                text_contains: Some("x".repeat(129)),
+                max_rows: None,
+            },
+        }));
+    }
+
+    #[test]
+    fn validate_query_bazaar_results_rejects_zero_or_large_row_limits() {
+        assert!(!validate_command(&Command::QueryBazaarResults {
+            filter: BazaarQuery {
+                text_contains: None,
+                max_rows: Some(0),
+            },
+        }));
+        assert!(!validate_command(&Command::QueryBazaarResults {
+            filter: BazaarQuery {
+                text_contains: None,
+                max_rows: Some(2001),
+            },
+        }));
     }
 }

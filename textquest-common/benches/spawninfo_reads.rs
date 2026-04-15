@@ -2,8 +2,9 @@ use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 /// Simulated benchmark for SpawnInfo field-by-field reads.
 ///
-/// In the actual implementation, SpawnInfo is read field-by-field via `proc.read::<T>(addr + OFFSET)`.
-/// This benchmark simulates the overhead of multiple sequential reads with type conversions.
+/// In the actual implementation, SpawnInfo is read field-by-field via
+/// `proc.read::<T>(addr + OFFSET)`. This benchmark simulates the overhead of
+/// multiple sequential reads with type conversions.
 fn bench_spawninfo_field_reads(c: &mut Criterion) {
     c.bench_function("spawninfo_field_reads_simulation", |b| {
         b.iter(|| {

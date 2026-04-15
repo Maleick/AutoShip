@@ -143,7 +143,8 @@ fn read_spawn_list_from_first(
     Ok(spawns)
 }
 
-/// Read a single spawn's data from the process at the given `PlayerClient` address.
+/// Read a single spawn's data from the process at the given `PlayerClient`
+/// address.
 ///
 /// # Errors
 ///
@@ -156,7 +157,8 @@ pub fn read_spawn(
 ) -> Result<SpawnInfo> {
     ensure_valid_process_ptr(addr, "spawn pointer")?;
 
-    // Critical fields — hard fail if any are unreadable (corrupt memory → skip spawn)
+    // Critical fields — hard fail if any are unreadable (corrupt memory → skip
+    // spawn)
     let name = proc
         .read_string(addr + player_base::NAME, 64)
         .context("critical field: name")?;
@@ -201,8 +203,9 @@ pub fn read_spawn(
     let level = proc
         .read::<u8>(addr + player_zone::LEVEL)
         .context("critical field: level")?;
-    // Use ActorClient::Class (int32_t at 0x0FDC) — the reliable field for all spawn types.
-    // PlayerZoneClient::CharClass (uint8_t at 0x0420) is often zero for NPCs/mercs/pets.
+    // Use ActorClient::Class (int32_t at 0x0FDC) — the reliable field for all spawn
+    // types. PlayerZoneClient::CharClass (uint8_t at 0x0420) is often zero for
+    // NPCs/mercs/pets.
     let class_id = proc
         .read::<i32>(addr + actor_client::CHAR_CLASS)
         .unwrap_or(0) as u8;
@@ -388,8 +391,8 @@ pub fn read_memorized_spells(proc: &ProcessHandle, eq_base: u64) -> Vec<SpellSlo
     }
 }
 
-/// Read cast state for the local player via `PINST_LOCAL_PC -> CharacterZoneClient::me`.
-/// On non-Windows builds returns None (stub).
+/// Read cast state for the local player via `PINST_LOCAL_PC ->
+/// CharacterZoneClient::me`. On non-Windows builds returns None (stub).
 #[must_use]
 pub fn read_cast_state(proc: &ProcessHandle, eq_base: u64) -> Option<CastState> {
     #[cfg(not(windows))]
@@ -466,7 +469,8 @@ pub fn read_all_spawns(
                 tracing::debug!(
                     mgr_addr = format!("{:#x}", mgr_addr),
                     offset = format!("{:#x}", spawn_manager::PLAYER_LIST),
-                    "SpawnManager player list address overflowed, falling back to local-player links"
+                    "SpawnManager player list address overflowed, falling back to local-player \
+                     links"
                 );
                 break 'get_first first_spawn_from_local_player_links(proc, eq_base)?;
             };
@@ -844,7 +848,8 @@ pub fn read_group_info(proc: &ProcessHandle, eq_base: u64) -> Result<Option<Grou
 }
 
 /// Read the current zone's long name from the zoneHeader struct in memory.
-/// Returns the display name (e.g., "Queynos Hills") or an error if not zoned in.
+/// Returns the display name (e.g., "Queynos Hills") or an error if not zoned
+/// in.
 ///
 /// # Errors
 ///

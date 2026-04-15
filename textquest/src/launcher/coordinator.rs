@@ -1,11 +1,19 @@
-use crate::config::{LaunchConfig, RetryConfig, ServerConfig};
-use crate::launcher::login_sm::{LoginAction, LoginEvent, LoginStateMachine};
-use crate::launcher::spawner;
-use std::collections::{HashMap, VecDeque};
-use std::path::Path;
-use std::time::{Duration, Instant};
-use textquest_common::login::{AccountInfo, LoginError};
-use textquest_common::types::ClientId;
+use crate::{
+    config::{LaunchConfig, RetryConfig, ServerConfig},
+    launcher::{
+        login_sm::{LoginAction, LoginEvent, LoginStateMachine},
+        spawner,
+    },
+};
+use std::{
+    collections::{HashMap, VecDeque},
+    path::Path,
+    time::{Duration, Instant},
+};
+use textquest_common::{
+    login::{AccountInfo, LoginError},
+    types::ClientId,
+};
 
 /// Coordinates staggered launching and login of multiple EQ clients.
 pub struct LaunchCoordinator {
@@ -15,7 +23,8 @@ pub struct LaunchCoordinator {
     launch_queue: VecDeque<(ClientId, AccountInfo)>,
     active_logins: Vec<LoginStateMachine>,
     failure_window: VecDeque<(Instant, ClientId)>,
-    /// Per-client earliest retry time, honoring backoff from `LoginAction::Retry`.
+    /// Per-client earliest retry time, honoring backoff from
+    /// `LoginAction::Retry`.
     retry_not_before: HashMap<ClientId, Instant>,
     paused: bool,
     last_launch: Option<Instant>,

@@ -217,7 +217,9 @@ Crowd control is the #1 priority. One missed mez can wipe the group. Secondary: 
 - Tash > Mez sequence should be atomic
 - Haste buff tracking per group member
 - Clarity buff tracking per caster
-- Charm pet management: re-charm on break, haste the pet, send pet in
+- The DLL now tracks successful **Enchanter** charm casts, detects a break when the former pet drops out of `MyPet` and shows back up as hostile, and immediately re-casts the resolved charm spell.
+- Retryable re-charm failures (for example cooldown/pending-style outcomes) still use the normal cast retry policy; terminal failures such as resists/immunity are counted separately and stop after 3 attempts so the group can fall back to killing the mob.
+- Current scope is the resolved `Charm` line in the DLL combat FSM; Druid/Necromancer animal/undead charm extensions still need explicit spell-line support before they get the same automation path.
 - Color Flux (PBAE stun) is the emergency "everything broke" button
 
 ---

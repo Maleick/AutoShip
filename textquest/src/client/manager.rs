@@ -1,11 +1,12 @@
 //! `ClientManager` — discovers, tracks, and manages all EQ client sessions.
 
-use super::discovery::{MulticastPeerDiscovery, PeerDiscoveryEvent, RemotePeer};
-use super::session::{EqSession, SlotLifecycle};
+use super::{
+    discovery::{MulticastPeerDiscovery, PeerDiscoveryEvent, RemotePeer},
+    session::{EqSession, SlotLifecycle},
+};
 use crate::config::PeerDiscoveryConfig;
 use anyhow::Result;
-use std::collections::HashMap;
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 use textquest_common::types::ClientId;
 
 /// Manages all EQ client sessions.
@@ -76,7 +77,8 @@ impl ClientManager {
         Ok(new_clients)
     }
 
-    /// Track a client ID / PID pair produced by the launch coordinator or discovery.
+    /// Track a client ID / PID pair produced by the launch coordinator or
+    /// discovery.
     pub fn track_client(&mut self, client_id: ClientId, pid: u32) {
         if let Some(session) = self.sessions.get_mut(&client_id) {
             self.sessions_by_pid.remove(&session.pid);

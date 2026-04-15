@@ -2,33 +2,40 @@
 //!
 //! Each injected DLL runs one `Combatant` that drives a single EQ character
 //! through the Idle → Engaging → Casting → `OnGcd` → Engaging loop, with
-//! `HolyShit` emergency overrides evaluated every tick before the normal rotation.
+//! `HolyShit` emergency overrides evaluated every tick before the normal
+//! rotation.
 
-use std::collections::HashMap;
-use std::sync::atomic::Ordering;
+use std::{collections::HashMap, sync::atomic::Ordering};
 
-use textquest_common::combat::{
-    ActionType, CastResult, CombatConfig, CombatRole, CombatStatus, HolyShitAction, ResolvedAbility,
+use textquest_common::{
+    combat::{
+        ActionType, CastResult, CombatConfig, CombatRole, CombatStatus, ExtendedTargetList,
+        HolyShitAction, ResolvedAbility,
+    },
+    nav::Waypoint,
+    types::SpawnData,
 };
-use textquest_common::nav::Waypoint;
-use textquest_common::types::SpawnData;
 
-use super::ability_cooldowns::AbilityCooldownTracker;
-use super::dot_tracker::DotTracker;
-use super::gcd::GcdTracker;
-use super::holyshit::HolyShitEvaluator;
-use super::humanize::CombatPersonality;
-use super::mana::ManaGovernor;
-use super::rotation::{self, RotationGroup};
-use super::skill_cooldowns::{SkillCooldownTracker, default_cooldown};
-use super::strategy::{
-    ClassStrategy, CombatContext, GroupMemberState, PetAction, PetStatus, build_strategy,
-    pet_attack_focused, pet_back_off,
+use super::{
+    ability_cooldowns::AbilityCooldownTracker,
+    dot_tracker::DotTracker,
+    gcd::GcdTracker,
+    holyshit::HolyShitEvaluator,
+    humanize::CombatPersonality,
+    mana::ManaGovernor,
+    rotation::{self, RotationGroup},
+    skill_cooldowns::{SkillCooldownTracker, default_cooldown},
+    strategy::{
+        ClassStrategy, CombatContext, GroupMemberState, PetAction, PetStatus, build_strategy,
+        pet_attack_focused, pet_back_off,
+    },
+    toon_config,
 };
-use super::toon_config;
 
 /// Maximum spell range in EQ units. Spells beyond this distance will not fire.
 const MAX_SPELL_RANGE: f32 = 200.0;
+/// Stop automatic re-charm after this many terminal failures.
+const MAX_TERMINAL_CHARM_FAILURES: u8 = 3;
 
 /// Pet classes that should issue `/pet attack` on engage.
 const PET_CLASSES: &[u8] = &[5, 10, 11, 13, 15]; // SK, Shaman, Necro, Mage, Beastlord
@@ -70,6 +77,33 @@ struct PlannedSpellCast {
     gem_id: u8,
     spell_id: i32,
     source: SpellCastSource,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct CharmTracker {
+    active_target_id: Option<u32>,
+    terminal_failures: u8,
+}
+
+impl CharmTracker {
+    fn clear(&mut self) {
+        self.active_target_id = None;
+        self.terminal_failures = 0;
+    }
+
+    fn arm(&mut self, target_id: u32) {
+        self.active_target_id = Some(target_id);
+        self.terminal_failures = 0;
+    }
+
+    fn record_terminal_failure(&mut self) -> u8 {
+        self.terminal_failures = self.terminal_failures.saturating_add(1);
+        self.terminal_failures
+    }
+
+    fn should_fallback(self) -> bool {
+        self.terminal_failures >= MAX_TERMINAL_CHARM_FAILURES
+    }
 }
 
 /// Normalize a user/config spell slot into a safe EQ gem index.
@@ -137,8 +171,9 @@ fn plan_spell_cast(
 
 /// Build a safe `/useitem` slash command for an item name.
 ///
-/// EQ item names commonly contain spaces, so they are quoted. Quotes and control
-/// characters are stripped to avoid malformed commands or command injection.
+/// EQ item names commonly contain spaces, so they are quoted. Quotes and
+/// control characters are stripped to avoid malformed commands or command
+/// injection.
 fn use_item_command(item_name: &str) -> Option<String> {
     let sanitized = item_name
         .chars()
@@ -152,7 +187,8 @@ fn use_item_command(item_name: &str) -> Option<String> {
     }
 }
 
-/// Stable key for tracking item-action retry windows in the ability cooldown map.
+/// Stable key for tracking item-action retry windows in the ability cooldown
+/// map.
 ///
 /// `ActionType::Item` currently carries only a display string, so the runtime
 /// needs a deterministic surrogate key to reuse the existing integer-keyed
@@ -243,7 +279,8 @@ pub struct Combatant {
     /// via `status()` (which returns `CombatStatus::Fleeing`) to know it
     /// should send a flee waypoint to the navigator.
     flee_requested: bool,
-    /// True when we just entered Engaging state — triggers `on_engage` callback.
+    /// True when we just entered Engaging state — triggers `on_engage`
+    /// callback.
     needs_on_engage: bool,
     /// Group member snapshots, populated by the orchestrator via IPC.
     /// Required for healer strategies (cleric, druid, shaman) to select
@@ -264,6 +301,7 @@ pub struct Combatant {
     config: CombatConfig,
     pending_cast_result: Option<CastResult>,
     last_cast_result: Option<CastResult>,
+    charm: CharmTracker,
     toon_actions_loaded: bool,
 }
 
@@ -314,6 +352,7 @@ impl Combatant {
             config,
             pending_cast_result: None,
             last_cast_result: None,
+            charm: CharmTracker::default(),
             toon_actions_loaded: false,
         }
     }
@@ -363,8 +402,8 @@ impl Combatant {
 
     /// Resolve ability sets for this character's known spells and level.
     ///
-    /// Called by the orchestrator when the spell book scan completes (post-login
-    /// or on level-up).
+    /// Called by the orchestrator when the spell book scan completes
+    /// (post-login or on level-up).
     pub fn resolve_abilities(
         &mut self,
         known: &[textquest_common::combat::KnownAbility],
@@ -393,8 +432,25 @@ impl Combatant {
     }
 
     /// Advance the combat FSM by one frame (~50ms, ~20/sec).
-    /// Note: an EQ "game tick" is 6 seconds (~120 frames); this runs every frame.
+    /// Note: an EQ "game tick" is 6 seconds (~120 frames); this runs every
+    /// frame.
     pub fn tick(&mut self, player: &SpawnData, target: Option<&SpawnData>, nearby: &[SpawnData]) {
+        let eq_base = crate::EQ_BASE.load(Ordering::Acquire);
+        let extended_targets = if eq_base == 0 {
+            None
+        } else {
+            unsafe { super::xtarget::read_extended_targets(eq_base) }
+        };
+        self.tick_inner(player, target, nearby, extended_targets.as_ref());
+    }
+
+    fn tick_inner(
+        &mut self,
+        player: &SpawnData,
+        target: Option<&SpawnData>,
+        nearby: &[SpawnData],
+        extended_targets: Option<&ExtendedTargetList>,
+    ) {
         self.try_load_toon_actions(player);
         self.tick_count += 1;
         self.gcd.tick();
@@ -421,7 +477,8 @@ impl Combatant {
         ) && target.is_none()
         {
             tracing::warn!("Combat target lost (zone/despawn/disconnect) — auto-disengaging");
-            // If we were mid-cast, notify the strategy this was an interrupt (not completion)
+            // If we were mid-cast, notify the strategy this was an interrupt (not
+            // completion)
             if let CombatState::Casting {
                 spell_slot,
                 spell_id,
@@ -478,13 +535,6 @@ impl Combatant {
             self.tick_disciplines(player);
         }
 
-        let eq_base = crate::EQ_BASE.load(Ordering::Acquire);
-        let extended_targets = if eq_base == 0 {
-            None
-        } else {
-            unsafe { super::xtarget::read_extended_targets(eq_base) }
-        };
-
         let (current_target_id, pet_status, pet_action) = {
             // Build context snapshot for this tick.
             let ctx = CombatContext {
@@ -499,7 +549,7 @@ impl Combatant {
                 active_buffs: &[],
                 buff_info: &[],
                 target_is_mezzed: false,
-                extended_targets: extended_targets.as_ref(),
+                extended_targets,
             };
 
             // --- Call on_engage when first entering Engaging state ---
@@ -520,6 +570,10 @@ impl Combatant {
             }
         }
 
+        if self.maybe_recharm(player, target, nearby, current_target_id, extended_targets) {
+            return;
+        }
+
         let ctx = CombatContext {
             player,
             target,
@@ -532,7 +586,7 @@ impl Combatant {
             active_buffs: &[],
             buff_info: &[],
             target_is_mezzed: false,
-            extended_targets: extended_targets.as_ref(),
+            extended_targets,
         };
 
         // --- HolyShit evaluation (always runs first) ---
@@ -1013,7 +1067,8 @@ impl Combatant {
 
     /// Begin combat against a specific target.
     /// Issues `/face` to turn toward the target (melee misses without facing),
-    /// `/pet attack` for pet classes, and immediate taunt for tanks without aggro.
+    /// `/pet attack` for pet classes, and immediate taunt for tanks without
+    /// aggro.
     pub fn engage(&mut self, target_id: u32) {
         tracing::info!(target_id, "Engaging target");
 
@@ -1083,9 +1138,9 @@ impl Combatant {
         self.state = CombatState::Idle;
     }
 
-    /// Update group member snapshots (called when the orchestrator sends group state).
-    /// Required for healer strategies to function — without this, healers have no
-    /// targets to evaluate.
+    /// Update group member snapshots (called when the orchestrator sends group
+    /// state). Required for healer strategies to function — without this,
+    /// healers have no targets to evaluate.
     pub fn set_group_members(&mut self, members: Vec<GroupMemberState>) {
         self.group_members = members;
     }
@@ -1095,12 +1150,14 @@ impl Combatant {
         self.flee_requested
     }
 
-    /// Clear the flee flag after the orchestrator has dispatched a flee waypoint.
+    /// Clear the flee flag after the orchestrator has dispatched a flee
+    /// waypoint.
     pub fn clear_flee_requested(&mut self) {
         self.flee_requested = false;
     }
 
-    /// Queue a cast outcome parsed from chat/system feedback for the current cast.
+    /// Queue a cast outcome parsed from chat/system feedback for the current
+    /// cast.
     pub fn observe_chat_message(&mut self, text: &str) -> Option<CastResult> {
         let result = CastResult::from_feedback_message(text)?;
         if matches!(self.state, CombatState::Casting { .. }) {
@@ -1146,6 +1203,41 @@ impl Combatant {
         // Attempts so far = retry_count + 1 (the initial cast).
         let attempts_so_far = retry_count.saturating_add(1);
         let policy = self.config.cast_retry_policy;
+
+        if self.is_charm_cast(spell_slot, spell_id) && target_id != 0 {
+            if result.landed() {
+                self.charm.arm(target_id);
+                tracing::info!(
+                    target_id,
+                    spell_id,
+                    "Charm landed — tracking pet for break detection"
+                );
+            } else if result.is_retryable() && policy.retry_allowed(attempts_so_far) {
+                tracing::debug!(
+                    target_id,
+                    spell_id,
+                    result = %result,
+                    "Charm retryable outcome will use generic cast retry policy"
+                );
+            } else {
+                let failures = self.charm.record_terminal_failure();
+                tracing::warn!(
+                    target_id,
+                    spell_id,
+                    result = %result,
+                    terminal_failures = failures,
+                    "Charm attempt ended with terminal failure"
+                );
+                if self.charm.should_fallback() {
+                    tracing::warn!(
+                        target_id,
+                        terminal_failures = failures,
+                        "Charm retry ceiling reached — falling back to kill mode"
+                    );
+                    self.charm.clear();
+                }
+            }
+        }
 
         if result.is_retryable() && policy.retry_allowed(attempts_so_far) {
             let new_retry_count = attempts_so_far;
@@ -1213,10 +1305,11 @@ impl Combatant {
             1 => WARRIOR_MELEE_SKILLS,       // Warrior: taunt, kick
             3 => PALADIN_MELEE_SKILLS,       // Paladin: taunt, bash, kick
             5 => SHADOW_KNIGHT_MELEE_SKILLS, // Shadow Knight: taunt, bash, kick
-            7 => MONK_MELEE_SKILLS, // Monk: flying kick, round kick, tiger claw, eagle strike
-            9 => ROGUE_MELEE_SKILLS, // Rogue: backstab
+            7 => MONK_MELEE_SKILLS,          // Monk: flying kick, round kick, tiger claw, eagle
+            // strike
+            9 => ROGUE_MELEE_SKILLS,      // Rogue: backstab
             15 => BEASTLORD_MELEE_SKILLS, // Beastlord: kick, flying kick
-            _ => DEFAULT_MELEE_SKILLS, // Berserker / Generic: kick
+            _ => DEFAULT_MELEE_SKILLS,    // Berserker / Generic: kick
         };
 
         // Fire each skill independently when its cooldown is ready
@@ -1348,15 +1441,196 @@ impl Combatant {
             }
         }
     }
+
+    fn charm_spell(&self) -> Option<(Option<u8>, i32, String)> {
+        if let Some(resolved) = self.resolved_abilities.get("Charm") {
+            let preferred_slot = self
+                .config
+                .spells
+                .iter()
+                .find(|spell| spell.spell_id == resolved.spell_id)
+                .map(|spell| spell.slot);
+            return Some((
+                preferred_slot,
+                resolved.spell_id,
+                resolved.ability_name.clone(),
+            ));
+        }
+
+        self.config
+            .spells
+            .iter()
+            .filter(|spell| is_charm_spell_name(&spell.name))
+            .max_by_key(|spell| spell.priority)
+            .map(|spell| (Some(spell.slot), spell.spell_id, spell.name.clone()))
+    }
+
+    fn is_charm_spell_id(&self, spell_id: i32) -> bool {
+        spell_id > 0
+            && (self
+                .resolved_abilities
+                .get("Charm")
+                .is_some_and(|resolved| resolved.spell_id == spell_id)
+                || self
+                    .config
+                    .spells
+                    .iter()
+                    .any(|spell| spell.spell_id == spell_id && is_charm_spell_name(&spell.name)))
+    }
+
+    fn is_charm_cast(&self, spell_slot: u8, spell_id: i32) -> bool {
+        self.is_charm_spell_id(spell_id)
+            || self.config.spells.iter().any(|spell| {
+                normalize_gem_id(spell.slot) == Some(spell_slot) && is_charm_spell_name(&spell.name)
+            })
+    }
+
+    fn detect_charm_break(
+        &mut self,
+        current_target_id: Option<u32>,
+        nearby: &[SpawnData],
+        extended_targets: Option<&ExtendedTargetList>,
+    ) -> Option<u32> {
+        let tracked_target_id = self.charm.active_target_id?;
+
+        let target_still_exists = nearby
+            .iter()
+            .any(|spawn| spawn.spawn_id == tracked_target_id && spawn.hp_current > 0);
+        if !target_still_exists {
+            self.charm.clear();
+            return None;
+        }
+
+        if extended_targets
+            .is_some_and(|xtargets| xtargets.pet_spawn_id() == Some(tracked_target_id))
+        {
+            self.charm.terminal_failures = 0;
+            return None;
+        }
+
+        let former_pet_is_hostile = extended_targets.is_some_and(|xtargets| {
+            xtargets.is_hater(tracked_target_id)
+                || (!xtargets.active_slots().is_empty()
+                    && current_target_id == Some(tracked_target_id))
+        });
+        former_pet_is_hostile.then_some(tracked_target_id)
+    }
+
+    fn maybe_recharm(
+        &mut self,
+        player: &SpawnData,
+        target: Option<&SpawnData>,
+        nearby: &[SpawnData],
+        current_target_id: Option<u32>,
+        extended_targets: Option<&ExtendedTargetList>,
+    ) -> bool {
+        let Some(charm_target_id) =
+            self.detect_charm_break(current_target_id, nearby, extended_targets)
+        else {
+            return false;
+        };
+
+        if self.charm.should_fallback() {
+            return false;
+        }
+
+        if matches!(
+            self.state,
+            CombatState::Casting {
+                spell_slot,
+                spell_id,
+                target_id,
+                ..
+            } if self.is_charm_cast(spell_slot, spell_id) && target_id == charm_target_id
+        ) {
+            return false;
+        }
+
+        let Some((preferred_slot, spell_id, spell_name)) = self.charm_spell() else {
+            tracing::warn!(
+                target_id = charm_target_id,
+                "Charm break detected but no resolved charm spell is available; falling back"
+            );
+            self.charm.clear();
+            return false;
+        };
+
+        if let CombatState::Casting {
+            spell_slot,
+            spell_id,
+            target_id,
+            ..
+        } = self.state
+        {
+            self.finish_cast(
+                player,
+                target,
+                nearby,
+                true,
+                spell_slot,
+                spell_id,
+                target_id,
+                0,
+                CastResult::Aborted,
+            );
+        }
+
+        if current_target_id != Some(charm_target_id) {
+            crate::eq::slash_command(&format!("/target id {charm_target_id}"));
+        }
+
+        let memorized_spells = crate::eq::read_memorized_spells();
+        let Some(cast_plan) = plan_spell_cast(preferred_slot, spell_id, &memorized_spells) else {
+            tracing::warn!(
+                target_id = charm_target_id,
+                spell_id,
+                "Charm break detected but no valid cast plan was found; falling back"
+            );
+            self.charm.clear();
+            return false;
+        };
+
+        tracing::warn!(
+            target_id = charm_target_id,
+            spell_id = cast_plan.spell_id,
+            spell = %spell_name,
+            terminal_failures = self.charm.terminal_failures,
+            "Charm break detected — attempting immediate re-charm"
+        );
+        crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
+        let cast_delay = u32::from(self.personality.next_cast_delay());
+        self.gcd.consume();
+        self.state = CombatState::Casting {
+            spell_slot: cast_plan.gem_id,
+            spell_id: cast_plan.spell_id,
+            target_id: charm_target_id,
+            ticks_remaining: 20 + cast_delay,
+            retry_count: 0,
+            backoff_ticks: 0,
+        };
+        true
+    }
+}
+
+fn is_charm_spell_name(name: &str) -> bool {
+    let normalized = name.to_ascii_lowercase();
+    normalized.contains("charm")
+        || normalized.contains("allure")
+        || normalized.contains("beguile")
+        || normalized.contains("cajoling")
+        || normalized.contains("agacerie")
+        || normalized.contains("druzzil")
 }
 
 #[cfg(test)]
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use crate::combat::ability_cooldowns::AbilityAvailability;
-    use crate::combat::rotation;
-    use textquest_common::combat::{ActionType, CastRetryPolicy, CombatConfig};
+    use crate::combat::{ability_cooldowns::AbilityAvailability, rotation};
+    use textquest_common::combat::{
+        ActionType, CastRetryPolicy, CombatConfig, ExtendedTargetList, ExtendedTargetSlot,
+        ResolvedAbility, XTargetSlotStatus, XTargetType,
+    };
 
     fn test_config() -> CombatConfig {
         CombatConfig {
@@ -2161,7 +2435,8 @@ mod tests {
 
     /// Verify that a retry attempt (retry_count > 0, ticks_remaining == 20,
     /// no pending result) consumes the GCD — confirming the re-issue path runs.
-    /// Also verifies that the spell_id stored in Casting state is preserved on retry.
+    /// Also verifies that the spell_id stored in Casting state is preserved on
+    /// retry.
     #[test]
     fn recast_retry_reissue_consumes_gcd_and_preserves_spell_id() {
         // max_tries=3 so retry is allowed, no backoff needed.
@@ -2202,5 +2477,238 @@ mod tests {
         } else {
             panic!("Expected CombatState::Casting after retry tick");
         }
+    }
+
+    fn charm_resolved_ability(spell_id: i32) -> ResolvedAbility {
+        ResolvedAbility {
+            set_name: "Charm".into(),
+            ability_name: "Charm".into(),
+            spell_id,
+            min_level: 11,
+        }
+    }
+
+    fn charm_xtargets_pet(spawn_id: u32) -> ExtendedTargetList {
+        ExtendedTargetList {
+            slots: vec![ExtendedTargetSlot {
+                slot_type: XTargetType::MyPet,
+                status: XTargetSlotStatus::CurrentZone,
+                spawn_id,
+                name: "Charmed Pet".into(),
+            }],
+            auto_add_haters: true,
+        }
+    }
+
+    fn charm_xtargets_broken(spawn_id: u32) -> ExtendedTargetList {
+        ExtendedTargetList {
+            slots: vec![ExtendedTargetSlot {
+                slot_type: XTargetType::AutoHater,
+                status: XTargetSlotStatus::CurrentZone,
+                spawn_id,
+                name: "Former Pet".into(),
+            }],
+            auto_add_haters: true,
+        }
+    }
+
+    #[test]
+    fn charm_break_recasts_charm_when_former_pet_turns_hostile() {
+        const CHARM_SPELL_ID: i32 = 193;
+        const CHARM_TARGET_ID: u32 = 777;
+
+        let mut c = Combatant::new(14, 0, config_with_retry(3, 0));
+        c.gcd = GcdTracker::new(0);
+        c.resolved_abilities
+            .insert("Charm".into(), charm_resolved_ability(CHARM_SPELL_ID));
+
+        let player = test_player();
+        let mut target = test_target();
+        target.spawn_id = CHARM_TARGET_ID;
+        target.hp_current = 100;
+        target.hp_max = 100;
+
+        c.state = CombatState::Casting {
+            spell_slot: 0,
+            spell_id: CHARM_SPELL_ID,
+            target_id: CHARM_TARGET_ID,
+            ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
+        };
+        c.observe_chat_message("Your spell cast");
+        c.tick_inner(
+            &player,
+            Some(&target),
+            &[target.clone()],
+            Some(&charm_xtargets_pet(CHARM_TARGET_ID)),
+        );
+
+        c.tick_inner(
+            &player,
+            Some(&target),
+            &[target.clone()],
+            Some(&charm_xtargets_broken(CHARM_TARGET_ID)),
+        );
+
+        assert!(
+            matches!(
+                c.state,
+                CombatState::Casting {
+                    spell_id: CHARM_SPELL_ID,
+                    target_id: CHARM_TARGET_ID,
+                    ..
+                }
+            ),
+            "expected immediate re-charm cast after break, got {:?}",
+            c.status()
+        );
+    }
+
+    #[test]
+    fn charm_tracking_does_not_false_positive_while_target_is_still_my_pet() {
+        const CHARM_SPELL_ID: i32 = 193;
+        const CHARM_TARGET_ID: u32 = 888;
+
+        let mut c = Combatant::new(14, 0, config_with_retry(3, 0));
+        c.gcd = GcdTracker::new(0);
+        c.resolved_abilities
+            .insert("Charm".into(), charm_resolved_ability(CHARM_SPELL_ID));
+
+        let player = test_player();
+        let mut target = test_target();
+        target.spawn_id = CHARM_TARGET_ID;
+        target.hp_current = 100;
+        target.hp_max = 100;
+
+        c.state = CombatState::Casting {
+            spell_slot: 0,
+            spell_id: CHARM_SPELL_ID,
+            target_id: CHARM_TARGET_ID,
+            ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
+        };
+        c.observe_chat_message("Your spell cast");
+        c.tick_inner(
+            &player,
+            Some(&target),
+            &[target.clone()],
+            Some(&charm_xtargets_pet(CHARM_TARGET_ID)),
+        );
+
+        c.tick_inner(
+            &player,
+            Some(&target),
+            &[target.clone()],
+            Some(&charm_xtargets_pet(CHARM_TARGET_ID)),
+        );
+
+        assert!(
+            !matches!(
+                c.state,
+                CombatState::Casting {
+                    spell_id: CHARM_SPELL_ID,
+                    target_id: CHARM_TARGET_ID,
+                    ..
+                }
+            ),
+            "tracked pet should not trigger a false break while still in MyPet"
+        );
+    }
+
+    #[test]
+    fn charm_break_falls_back_after_three_terminal_recharm_failures() {
+        const CHARM_SPELL_ID: i32 = 193;
+        const CHARM_TARGET_ID: u32 = 999;
+
+        let mut c = Combatant::new(14, 0, config_with_retry(3, 0));
+        c.gcd = GcdTracker::new(0);
+        c.resolved_abilities
+            .insert("Charm".into(), charm_resolved_ability(CHARM_SPELL_ID));
+
+        let player = test_player();
+        let mut target = test_target();
+        target.spawn_id = CHARM_TARGET_ID;
+        target.hp_current = 100;
+        target.hp_max = 100;
+        let broken_xtargets = charm_xtargets_broken(CHARM_TARGET_ID);
+
+        c.state = CombatState::Casting {
+            spell_slot: 0,
+            spell_id: CHARM_SPELL_ID,
+            target_id: CHARM_TARGET_ID,
+            ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
+        };
+        c.observe_chat_message("Your spell cast");
+        c.tick_inner(
+            &player,
+            Some(&target),
+            &[target.clone()],
+            Some(&charm_xtargets_pet(CHARM_TARGET_ID)),
+        );
+
+        for attempt in 1..=3 {
+            c.tick_inner(
+                &player,
+                Some(&target),
+                &[target.clone()],
+                Some(&broken_xtargets),
+            );
+            assert!(
+                matches!(
+                    c.state,
+                    CombatState::Casting {
+                        spell_id: CHARM_SPELL_ID,
+                        target_id: CHARM_TARGET_ID,
+                        ..
+                    }
+                ),
+                "attempt {attempt}: expected re-charm cast to start"
+            );
+
+            c.observe_chat_message("Your target resisted your spell!");
+            c.tick_inner(
+                &player,
+                Some(&target),
+                &[target.clone()],
+                Some(&broken_xtargets),
+            );
+
+            c.tick_inner(
+                &player,
+                Some(&target),
+                &[target.clone()],
+                Some(&broken_xtargets),
+            );
+
+            if attempt < 3 {
+                assert!(
+                    matches!(
+                        c.state,
+                        CombatState::Casting {
+                            spell_id: CHARM_SPELL_ID,
+                            target_id: CHARM_TARGET_ID,
+                            ..
+                        }
+                    ),
+                    "attempt {attempt}: expected another re-charm attempt before fallback"
+                );
+            }
+        }
+
+        assert!(
+            !matches!(
+                c.state,
+                CombatState::Casting {
+                    spell_id: CHARM_SPELL_ID,
+                    target_id: CHARM_TARGET_ID,
+                    ..
+                }
+            ),
+            "expected charm automation to stop re-casting after three terminal failures"
+        );
     }
 }

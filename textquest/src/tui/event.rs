@@ -1,11 +1,12 @@
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::app::{ActivePanel, ActiveScreen, App};
-use crate::orchestrator::Orchestrator;
-use crate::tui::state::MapFilterKind;
-use crate::tui::ui::ch_chain::ChPanelFocus;
+use crate::{
+    orchestrator::Orchestrator,
+    tui::{state::MapFilterKind, ui::ch_chain::ChPanelFocus},
+};
 
 fn toggle_tactical_map_layer(app: &mut App, layer: u8) {
     let status = app.map_state.toggle_layer(layer);
@@ -91,6 +92,95 @@ fn handle_tactical_map_panel_toggle(app: &mut App, key: KeyCode) -> bool {
     }
 
     true
+}
+
+fn execute_dashboard_command(app: &mut App, orchestrator: &mut Orchestrator, command: &str) {
+    let started_at = Instant::now();
+    let session_id = app.routing_scope.label();
+    app.cmd_state.command_buffer = command.to_string();
+    app.execute_command(orchestrator);
+    app.cmd_state.command_buffer.clear();
+    app.orchestrator_state
+        .push_command(super::ui::orchestrator_panel::RelayCommandEntry {
+            session_id,
+            command: command.to_string(),
+            success: true,
+            latency_ms: started_at.elapsed().as_millis().max(1) as u64,
+        });
+}
+
+fn handle_orchestrator_dashboard_shortcut(
+    app: &mut App,
+    orchestrator: &mut Orchestrator,
+    key: KeyEvent,
+) -> bool {
+    if app.active_screen != ActiveScreen::Orchestrator {
+        return false;
+    }
+
+    match key.code {
+        KeyCode::Right | KeyCode::Char('l') => {
+            app.orchestrator_state.next_tab();
+            app.status_message = format!(
+                "Dashboard tab: {}",
+                app.orchestrator_state.active_tab.label()
+            );
+            true
+        }
+        KeyCode::Left | KeyCode::Char('h') => {
+            app.orchestrator_state.prev_tab();
+            app.status_message = format!(
+                "Dashboard tab: {}",
+                app.orchestrator_state.active_tab.label()
+            );
+            true
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            app.next_client();
+            true
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            app.prev_client();
+            true
+        }
+        KeyCode::Char(' ') => {
+            app.automation_paused = !app.automation_paused;
+            app.status_message = if app.automation_paused {
+                String::from("Automation PAUSED")
+            } else {
+                String::from("Automation RESUMED")
+            };
+            true
+        }
+        KeyCode::Char('e') | KeyCode::Char('E') => {
+            execute_dashboard_command(app, orchestrator, "engage");
+            true
+        }
+        KeyCode::Char('d') | KeyCode::Char('D') => {
+            execute_dashboard_command(app, orchestrator, "disengage");
+            true
+        }
+        KeyCode::Char('c') | KeyCode::Char('C') => {
+            execute_dashboard_command(app, orchestrator, "camp status");
+            true
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') => {
+            execute_dashboard_command(app, orchestrator, "nav ui");
+            true
+        }
+        KeyCode::Char('x') | KeyCode::Delete => {
+            if let Some(client) = app.active_client() {
+                let pid = client.pid;
+                let name = app.client_command_target(client);
+                orchestrator.eject_client(pid);
+                app.status_message = format!("Terminated {name} (PID {pid})");
+            } else {
+                app.status_message = String::from("No active client to terminate");
+            }
+            true
+        }
+        _ => false,
+    }
 }
 
 /// Poll for keyboard events and update app state.
@@ -532,6 +622,10 @@ pub fn handle_events(
             return Ok(true);
         }
 
+        if handle_orchestrator_dashboard_shortcut(app, orchestrator, key) {
+            return Ok(true);
+        }
+
         match (key.code, key.modifiers) {
             (KeyCode::Char('c'), KeyModifiers::CONTROL) | (KeyCode::Char('q'), _) => {
                 app.running = false;
@@ -588,6 +682,10 @@ pub fn handle_events(
             }
             (KeyCode::Char('6'), _) => {
                 app.set_active_screen(ActiveScreen::Economy);
+                return Ok(true);
+            }
+            (KeyCode::Char('7'), _) => {
+                app.set_active_screen(ActiveScreen::Orchestrator);
                 return Ok(true);
             }
             (KeyCode::Tab, _) => {
@@ -985,5 +1083,48 @@ mod tests {
         ));
         assert_eq!(app.status_message, "PC filter OFF");
         assert!(!app.map_state.filters.show_pc);
+    }
+
+    #[test]
+    fn orchestrator_dashboard_shortcut_cycles_tabs() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.set_active_screen(ActiveScreen::Orchestrator);
+
+        assert!(handle_orchestrator_dashboard_shortcut(
+            &mut app,
+            &mut orchestrator,
+            KeyEvent::new(KeyCode::Right, KeyModifiers::NONE),
+        ));
+        assert_eq!(app.orchestrator_state.active_tab.label(), "Group");
+    }
+
+    #[test]
+    fn orchestrator_dashboard_shortcut_toggles_pause() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.set_active_screen(ActiveScreen::Orchestrator);
+
+        assert!(handle_orchestrator_dashboard_shortcut(
+            &mut app,
+            &mut orchestrator,
+            KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE),
+        ));
+        assert!(app.automation_paused);
+        assert_eq!(app.status_message, "Automation PAUSED");
+    }
+
+    #[test]
+    fn orchestrator_dashboard_shortcut_does_not_override_tab_key() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+        app.set_active_screen(ActiveScreen::Orchestrator);
+
+        assert!(!handle_orchestrator_dashboard_shortcut(
+            &mut app,
+            &mut orchestrator,
+            KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE),
+        ));
+        assert_eq!(app.orchestrator_state.active_tab.label(), "Session");
     }
 }

@@ -13,20 +13,23 @@
 //!
 //! ## Hook strategy (DXGI vtable approach)
 //!
-//! Instead of walking EQ's internal pointer chain (which breaks on live builds),
-//! we use MQ2's proven approach:
+//! Instead of walking EQ's internal pointer chain (which breaks on live
+//! builds), we use MQ2's proven approach:
 //!
-//! 1. Create a temporary D3D11 device + swap chain via `D3D11CreateDeviceAndSwapChain`
-//!    to get a real `IDXGISwapChain` vtable.
+//! 1. Create a temporary D3D11 device + swap chain via
+//!    `D3D11CreateDeviceAndSwapChain` to get a real `IDXGISwapChain` vtable.
 //! 2. Read `Present` (vtable index 8) and hook it.
 //! 3. On the first `Present` call, use `swapChain->GetDevice()` to get the real
-//!    `ID3D11Device*`, then hook `CreateTexture2D` (index 5) and `CreateBuffer` (index 3).
-//! 4. From the device, call `GetImmediateContext` to get the `ID3D11DeviceContext*`
-//!    and hook draw calls (indices 12, 13, 19, 20, 38).
+//!    `ID3D11Device*`, then hook `CreateTexture2D` (index 5) and `CreateBuffer`
+//!    (index 3).
+//! 4. From the device, call `GetImmediateContext` to get the
+//!    `ID3D11DeviceContext*` and hook draw calls (indices 12, 13, 19, 20, 38).
 //! 5. Clean up the temporary device/swap chain.
 
-use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{
+    Mutex, OnceLock,
+    atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering},
+};
 
 /// Result of a screenshot capture attempt, stored after Present completes.
 /// Consumed by the game loop tick that originally requested the capture.
@@ -62,7 +65,8 @@ static ORIG_CREATE_BUFFER: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::p
 /// Whether the Present hook has been installed.
 static PRESENT_HOOKED: AtomicBool = AtomicBool::new(false);
 
-/// Whether the device hooks (CreateTexture2D + CreateBuffer) have been installed.
+/// Whether the device hooks (CreateTexture2D + CreateBuffer) have been
+/// installed.
 static DEVICE_HOOKED: AtomicBool = AtomicBool::new(false);
 
 /// Whether the context draw-call hooks have been installed.
@@ -88,8 +92,8 @@ static ORIG_DRAW_AUTO: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(core::ptr::
 /// Cleared by `hooked_present` after the frame completes.
 static SCREENSHOT_FRAME: AtomicBool = AtomicBool::new(false);
 
-/// Per-frame cached draw suppression decision — avoids two atomic loads per draw call.
-/// Updated by `hooked_present` and `allow_draws_for_screenshot`.
+/// Per-frame cached draw suppression decision — avoids two atomic loads per
+/// draw call. Updated by `hooked_present` and `allow_draws_for_screenshot`.
 static SUPPRESS_DRAWS: AtomicBool = AtomicBool::new(false);
 
 /// Cached EQ base address for deferred installation.
@@ -207,8 +211,8 @@ type DrawAutoFn = unsafe extern "system" fn(this: *mut core::ffi::c_void);
 
 // ─── Hook implementations ───
 
-/// Returns true if draw calls should be suppressed. Uses a per-frame cached value
-/// to avoid two atomic loads on every draw call (thousands per frame).
+/// Returns true if draw calls should be suppressed. Uses a per-frame cached
+/// value to avoid two atomic loads on every draw call (thousands per frame).
 fn should_suppress_draw() -> bool {
     SUPPRESS_DRAWS.load(Ordering::Relaxed)
 }
@@ -498,8 +502,7 @@ mod inner {
 
     /// Find EQ's main window handle. Looks for the "EverQuest" window class.
     fn find_eq_hwnd() -> Option<windows::Win32::Foundation::HWND> {
-        use windows::Win32::UI::WindowsAndMessaging::FindWindowA;
-        use windows::core::s;
+        use windows::{Win32::UI::WindowsAndMessaging::FindWindowA, core::s};
 
         let hwnd = unsafe { FindWindowA(s!("_EverQuestwndclass"), None) };
         if hwnd.0 == 0 { None } else { Some(hwnd) }
@@ -510,15 +513,18 @@ mod inner {
     fn hook_present_via_dummy_device(
         hwnd: windows::Win32::Foundation::HWND,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
-        use windows::Win32::Graphics::Direct3D11::D3D11CreateDeviceAndSwapChain;
-        use windows::Win32::Graphics::Dxgi::Common::{
-            DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC, DXGI_SAMPLE_DESC,
+        use windows::{
+            Win32::Graphics::{
+                Direct3D::D3D_DRIVER_TYPE_HARDWARE,
+                Direct3D11::D3D11CreateDeviceAndSwapChain,
+                Dxgi::{
+                    Common::{DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC, DXGI_SAMPLE_DESC},
+                    DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_EFFECT_DISCARD,
+                    DXGI_USAGE_RENDER_TARGET_OUTPUT,
+                },
+            },
+            core::Interface,
         };
-        use windows::Win32::Graphics::Dxgi::{
-            DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_EFFECT_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT,
-        };
-        use windows::core::Interface;
 
         let swap_chain_desc = DXGI_SWAP_CHAIN_DESC {
             BufferDesc: DXGI_MODE_DESC {
@@ -754,16 +760,22 @@ mod inner {
     pub(super) unsafe fn capture_backbuffer(
         swap_chain: *mut core::ffi::c_void,
     ) -> Result<String, String> {
-        use windows::Win32::Graphics::Direct3D11::{
-            D3D11_CPU_ACCESS_READ, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE,
-            D3D11_TEXTURE2D_DESC as WinTexDesc, D3D11_USAGE_STAGING,
+        use windows::{
+            Win32::Graphics::{
+                Direct3D11::{
+                    D3D11_CPU_ACCESS_READ, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE,
+                    D3D11_TEXTURE2D_DESC as WinTexDesc, D3D11_USAGE_STAGING,
+                },
+                Dxgi::{
+                    Common::{
+                        DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
+                        DXGI_FORMAT_B8G8R8X8_UNORM, DXGI_FORMAT_B8G8R8X8_UNORM_SRGB,
+                    },
+                    IDXGISwapChain,
+                },
+            },
+            core::Interface,
         };
-        use windows::Win32::Graphics::Dxgi::Common::{
-            DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
-            DXGI_FORMAT_B8G8R8X8_UNORM, DXGI_FORMAT_B8G8R8X8_UNORM_SRGB,
-        };
-        use windows::Win32::Graphics::Dxgi::IDXGISwapChain;
-        use windows::core::Interface;
 
         let sc: IDXGISwapChain = unsafe {
             IDXGISwapChain::from_raw_borrowed(&swap_chain)
@@ -817,7 +829,8 @@ mod inner {
             MiscFlags: Default::default(),
         };
 
-        // windows 0.54: CreateTexture2D uses 3-arg out-param pattern, returns Result<()>.
+        // windows 0.54: CreateTexture2D uses 3-arg out-param pattern, returns
+        // Result<()>.
         let mut staging: Option<windows::Win32::Graphics::Direct3D11::ID3D11Texture2D> = None;
         unsafe {
             device
@@ -887,7 +900,8 @@ mod inner {
     /// Write BGRA pixel data to a 24-bit BMP file.
     ///
     /// # Safety
-    /// `data` must point to a valid pixel buffer with at least `height * row_pitch` bytes.
+    /// `data` must point to a valid pixel buffer with at least `height *
+    /// row_pitch` bytes.
     unsafe fn write_bmp(
         path: &std::path::Path,
         width: u32,
@@ -1034,7 +1048,8 @@ mod inner {
         }
         if DEVICE_HOOKED.load(Ordering::Acquire) {
             tracing::info!(
-                "DX11 device hooks (CreateTexture2D + CreateBuffer) will be released on process exit."
+                "DX11 device hooks (CreateTexture2D + CreateBuffer) will be released on process \
+                 exit."
             );
         }
         if CONTEXT_HOOKED.load(Ordering::Acquire) {
