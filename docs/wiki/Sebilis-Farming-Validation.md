@@ -15,6 +15,7 @@ automation claims beyond the evidence state recorded here.
 | TextQuest already has Sebilis-specific camp and named configuration. | Research-backed | `config/camps/sebilis_disco.toml`, `config/named_mobs/sebilis.toml` | The repo knows about Disco, named placeholders, and a bounded pull/camp radius. |
 | TextQuest has a forage automation surface that can drive `/forage` on an interval. | Research-backed | `textquest/src/camp/forage.rs` | The manager tracks attempts and result strings, but no Sebilis-specific Nodding Blue Lily baseline is captured in-repo. |
 | Timing variation and operator hardening reduce visibility. | Research-backed | `docs/wiki/Security-and-Anti-Detection-Notes.md`, `docs/wiki/Research-Anti-Detection.md` | The repo explicitly treats anti-detection value as bounded guidance rather than proof of safety. |
+| The repo already tracks missing unattended-session safeguards and telemetry as overnight requirements or gaps. | Research-backed blocker | `docs/MQ2_COVERAGE_GAP_ANALYSIS.md`, `docs/OVERNIGHT-ISSUE-SUMMARY.md` | GM alerts, auto-camp-on-death, kill or plat tracking, and session logs are documented as required or gap-tracked overnight tooling, not validated Sebilis-safe automation. |
 
 ## Research-backed inputs already in repo
 
@@ -55,6 +56,12 @@ automation claims beyond the evidence state recorded here.
   practical hardening measure, not evidence of safety against a specific
   Daybreak detection path.
 - Current repo anti-detection docs classify `Timing variation` as `Medium` confidence and `Operator environment` as `High` confidence.
+- `docs/MQ2_COVERAGE_GAP_ANALYSIS.md` and `docs/OVERNIGHT-ISSUE-SUMMARY.md`
+  document GM alerts, auto-camp-on-death, kill or plat tracking, and
+  per-character logs as important overnight-session safeguards or gaps.
+- Those overnight safety docs describe required or proposed operator tooling;
+  they do not prove that unattended Sebilis macroing is currently safe or fully
+  instrumented in TextQuest.
 - These repo-grounded exposure labels do not make unattended Sebilis macroing safe.
 
 ## Needs live proof before this issue can close

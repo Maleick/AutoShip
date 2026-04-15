@@ -179,6 +179,41 @@ class SebilisValidationDocsTests(unittest.TestCase):
             text,
         )
 
+    def test_validation_doc_records_overnight_safety_docs_as_gap_tracking_not_safe_automation(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        coverage_text = (
+            REPO_ROOT / "docs" / "MQ2_COVERAGE_GAP_ANALYSIS.md"
+        ).read_text(encoding="utf-8")
+        overnight_summary_text = (
+            REPO_ROOT / "docs" / "OVERNIGHT-ISSUE-SUMMARY.md"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("MQ2AutoCamp", coverage_text)
+        self.assertIn("MQ2GMCheck", coverage_text)
+        self.assertIn("MQ2KillTracker", coverage_text)
+        self.assertIn("MQ2PlatTracker", coverage_text)
+        self.assertIn("MQ2Log", coverage_text)
+        self.assertIn("Protects accounts from bans, detection, and suspension during overnight testing.", overnight_summary_text)
+
+        self.assertIn("Research-backed blocker", text)
+        self.assertIn("`docs/MQ2_COVERAGE_GAP_ANALYSIS.md`", text)
+        self.assertIn("`docs/OVERNIGHT-ISSUE-SUMMARY.md`", text)
+        self.assertIn(
+            "GM alerts, auto-camp-on-death, kill or plat tracking, and session logs are documented as required or gap-tracked overnight tooling, not validated Sebilis-safe automation.",
+            text,
+        )
+        self.assertIn(
+            "Those overnight safety docs describe required or proposed operator tooling;",
+            text,
+        )
+        self.assertIn(
+            "they do not prove that unattended Sebilis macroing is currently safe or fully",
+            text,
+        )
+        self.assertIn("instrumented in TextQuest.", text)
+
     def test_validation_doc_and_template_record_theorized_items_without_promoting_them_to_validated_outputs(self) -> None:
         text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
             encoding="utf-8"
