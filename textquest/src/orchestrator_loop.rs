@@ -77,6 +77,7 @@ impl OrchestratorLoop {
     /// Create a new orchestrator loop.
     ///
     /// `shutdown_rx` receives `true` when the loop should stop.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         client_manager: ClientManager,
         launch_coordinator: LaunchCoordinator,
