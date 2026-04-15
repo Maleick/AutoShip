@@ -173,6 +173,13 @@ export interface WealthHistory {
   snapshots: WealthSnapshot[];
 }
 
+export interface BoxChatSettings {
+  enabled: boolean;
+  host: string;
+  port: number;
+  auto_connect: boolean;
+}
+
 // ── Group Builder types ────────────────────────────────────────────────────
 
 export type EQClass =

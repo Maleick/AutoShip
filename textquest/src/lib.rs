@@ -6,6 +6,8 @@
 
 #![allow(clippy::new_without_default)]
 
+/// EQBC-style cross-machine TCP relay and dispatch manager.
+pub mod box_chat;
 /// Camp loop state machine — pulls, fights, loots, meds, buffs.
 #[allow(dead_code)]
 pub mod camp;
@@ -61,6 +63,9 @@ pub mod tui;
 
 /// CLI subcommands (dump, inject, navigate, login, etc.).
 pub mod cli;
+/// Shared local slash-command dispatch path used by direct sends and box-chat
+/// replay.
+pub mod command_dispatch;
 /// Testing utilities — scenario harness, metric types, and result types.
 #[allow(dead_code)]
 pub mod testing;

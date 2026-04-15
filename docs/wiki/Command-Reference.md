@@ -12,6 +12,7 @@ Defined in `textquest/src/main.rs` and implemented in `textquest/src/cli.rs`.
 | `textquest.exe inject [--pid <pid>]` | Inject the DLL into one or all EQ clients |
 | `textquest.exe login <account> [--server <name>] [--character <name>] [--pid <pid>]` | Start automated login |
 | `textquest.exe cmd <pid> "/slash command"` | Send a slash command through authenticated IPC |
+| `textquest.exe cmd <pid> "/bc ..."` | Relay a box-chat command through the EQBC-style network runtime |
 | `textquest.exe nav <pid> <x> <y> <z>` | Navigate one client to coordinates |
 | `textquest.exe nav-all <x> <y> <z>` | Navigate all connected clients |
 | `textquest.exe nav-path <zone> <x1> <y1> <z1> <x2> <y2> <z2>` | Compute or test a route in one zone |
@@ -103,6 +104,10 @@ Top-level commands come from `KNOWN_COMMANDS` and the parser in `textquest/src/t
 - `:track list`
 - `:untrack <spawn name>`
 - `:all /slash command`
+- `:bc /slash command`
+- `:bca //slash command`
+- `:bcaa //slash command`
+- `:bct <character_name> //slash command`
 - `:config`
 - `:cfg`
 - `:wizard`
@@ -118,6 +123,7 @@ Top-level commands come from `KNOWN_COMMANDS` and the parser in `textquest/src/t
 - `:cfg` is normalized to `:config`
 - `:cmds` is normalized to `:commands`
 - `:launch` routes to the login flow
+- `:bc`, `:bca`, `:bcaa`, and `:bct` use the `[box_chat]` relay in `config/textquest.toml`
 
 Important current caveat:
 

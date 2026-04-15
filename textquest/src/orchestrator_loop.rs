@@ -119,12 +119,14 @@ impl OrchestratorLoop {
                     for event in &events {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
+                    self.sync_box_chat_runtime();
                 }
                 _ = launch_interval.tick() => {
                     let events = self.tick_launch_coordinator();
                     for event in &events {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
+                    self.sync_box_chat_runtime();
                 }
                 _ = orch_interval.tick() => {
                     let events = self.tick_peer_discovery();
@@ -132,6 +134,7 @@ impl OrchestratorLoop {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
                     self.orchestrator.tick();
+                    self.sync_box_chat_runtime();
                 }
                 Ok(()) = self.shutdown_rx.changed() => {
                     if *self.shutdown_rx.borrow() {
@@ -161,6 +164,24 @@ impl OrchestratorLoop {
                 }
             })
             .collect()
+    }
+
+    fn sync_box_chat_runtime(&self) {
+        crate::box_chat::update_local_clients(
+            self.orchestrator
+                .client_names
+                .iter()
+                .map(|(pid, name)| (*pid, name.clone())),
+        );
+        match crate::box_chat::reload_from_disk() {
+            Ok(Some(config)) => {
+                tracing::info!(?config, "Reloaded box-chat config from disk");
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(%error, "Failed to reload box-chat config from disk");
+            }
+        }
     }
 
     /// Run health checks on all managed clients.

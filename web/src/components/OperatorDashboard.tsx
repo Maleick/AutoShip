@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   ArrowsClockwise,
+  Broadcast,
   Coins,
   CompassTool,
   Cpu,
@@ -16,6 +17,7 @@ import {
   WarningDiamond,
 } from "@phosphor-icons/react";
 
+import BoxChatPanel from "./BoxChatPanel";
 import type {
   DashboardActionRequest,
   DashboardSnapshot,
@@ -291,6 +293,7 @@ function titleCase(raw: string) {
 
 export default function OperatorDashboard() {
   const { snapshot, loading, error, connected, refresh, submitAction } = useDashboard();
+  const [boxChatOpen, setBoxChatOpen] = useState(false);
   const [sessionWizardOpen, setSessionWizardOpen] = useState(false);
   const [sessionProfile, setSessionProfile] = useState("");
   const [sessionCharacterName, setSessionCharacterName] = useState("");
@@ -465,22 +468,36 @@ export default function OperatorDashboard() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-4">
-              <StatChip label="Shard" value={snapshot.environment.shard} />
-              <StatChip
-                label="Zone"
-                value={snapshot.environment.zone}
-                tone="good"
-              />
-              <StatChip
-                label="Alerts"
-                value={String(snapshot.environment.alerts)}
-                tone={snapshot.environment.alerts > 2 ? "critical" : "warning"}
-              />
-              <StatChip
-                label="Updated"
-                value={new Date(snapshot.generatedAt).toLocaleTimeString()}
-              />
+            <div className="flex flex-col gap-3 xl:items-end">
+              <div className="grid gap-3 sm:grid-cols-4">
+                <StatChip label="Shard" value={snapshot.environment.shard} />
+                <StatChip
+                  label="Zone"
+                  value={snapshot.environment.zone}
+                  tone="good"
+                />
+                <StatChip
+                  label="Alerts"
+                  value={String(snapshot.environment.alerts)}
+                  tone={snapshot.environment.alerts > 2 ? "critical" : "warning"}
+                />
+                <StatChip
+                  label="Updated"
+                  value={new Date(snapshot.generatedAt).toLocaleTimeString()}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setBoxChatOpen((current) => !current)}
+                className={`inline-flex items-center gap-2 self-start rounded-full border px-4 py-2 text-sm transition xl:self-end ${
+                  boxChatOpen
+                    ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"
+                    : "border-white/10 bg-white/5 text-white/70 hover:border-white/25 hover:bg-white/10"
+                }`}
+              >
+                <Broadcast size={16} />
+                {boxChatOpen ? "Hide Network Box Chat" : "Network Box Chat"}
+              </button>
             </div>
           </div>
 
@@ -490,6 +507,8 @@ export default function OperatorDashboard() {
             </div>
           )}
         </header>
+
+        {boxChatOpen && <BoxChatPanel />}
 
         <div className="grid gap-6 xl:grid-cols-[1.2fr_0.9fr]">
           <div className="grid gap-6">

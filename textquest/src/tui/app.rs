@@ -3727,6 +3727,18 @@ impl App {
         scope: textquest_common::routing::RoutingScope,
         slash_cmd: &str,
     ) {
+        match crate::box_chat::dispatch_if_box_chat(slash_cmd) {
+            Ok(Some(report)) => {
+                self.set_feedback(ToastLevel::Success, report.summary(), true);
+                return;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                self.set_feedback(ToastLevel::Error, format!("Box chat failed: {error}"), true);
+                return;
+            }
+        }
+
         let pids = self.routed_pids_for_scope(&scope);
 
         if pids.is_empty() {
@@ -4007,6 +4019,50 @@ impl App {
         let parts: Vec<&str> = input.split_whitespace().collect();
         let (command_name, rest) = self.split_command(&input);
         match command_name {
+            "bc" | "bca" | "bcaa" => {
+                if rest.trim().is_empty() {
+                    self.usage_feedback(command_name, "Missing box-chat payload.");
+                } else {
+                    let slash = format!("/{command_name} {rest}").trim().to_string();
+                    match crate::box_chat::dispatch_if_box_chat(&slash) {
+                        Ok(Some(report)) => {
+                            self.set_feedback(ToastLevel::Success, report.summary(), true);
+                        }
+                        Ok(None) => {
+                            self.usage_feedback(command_name, "Missing box-chat payload.");
+                        }
+                        Err(error) => {
+                            self.set_feedback(
+                                ToastLevel::Error,
+                                format!("Box chat failed: {error}"),
+                                true,
+                            );
+                        }
+                    }
+                }
+            }
+            "bct" => {
+                if rest.split_whitespace().count() < 2 {
+                    self.usage_feedback("bct", "Missing target or slash command.");
+                } else {
+                    let slash = format!("/bct {rest}").trim().to_string();
+                    match crate::box_chat::dispatch_if_box_chat(&slash) {
+                        Ok(Some(report)) => {
+                            self.set_feedback(ToastLevel::Success, report.summary(), true);
+                        }
+                        Ok(None) => {
+                            self.usage_feedback("bct", "Missing target or slash command.");
+                        }
+                        Err(error) => {
+                            self.set_feedback(
+                                ToastLevel::Error,
+                                format!("Box chat failed: {error}"),
+                                true,
+                            );
+                        }
+                    }
+                }
+            }
             "help" => {
                 if rest.is_empty() {
                     self.help_scroll = 0;
@@ -6718,19 +6774,7 @@ fn command_help_detail(command: &str) -> Option<&'static str> {
 
 /// Send a slash command to a specific PID via named pipe.
 fn send_slash_command(pid: u32, command: &str) -> anyhow::Result<()> {
-    use textquest_common::ipc::Command;
-
-    if let Some(message) = crate::nav::try_handle_local_slash_command(pid, command)? {
-        tracing::info!(pid, %message, "Handled local slash command");
-        return Ok(());
-    }
-
-    send_ipc_command(
-        pid,
-        &Command::SlashCommand {
-            command: command.to_string(),
-        },
-    )
+    crate::command_dispatch::dispatch_local_command(pid, command)
 }
 
 fn send_ipc_command(pid: u32, cmd: &textquest_common::ipc::Command) -> anyhow::Result<()> {

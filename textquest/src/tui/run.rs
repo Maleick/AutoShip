@@ -171,6 +171,20 @@ fn run_loop(
                 .collect();
             orchestrator.routing_scope = app.routing_scope.clone();
             orchestrator.scope_pids = app.focused_pids();
+            crate::box_chat::update_local_clients(
+                app.clients
+                    .iter()
+                    .map(|client| (client.pid, client.character_name.clone())),
+            );
+            match crate::box_chat::reload_from_disk() {
+                Ok(Some(config)) => {
+                    tracing::info!(?config, "Reloaded box-chat config from disk");
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    tracing::warn!(%error, "Failed to reload box-chat config from disk");
+                }
+            }
             last_process_scan = Instant::now();
         }
 

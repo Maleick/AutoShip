@@ -196,6 +196,10 @@ fn build_loot_router() -> Router<Arc<AppState>> {
 fn build_api_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(api::health))
+        .route(
+            "/box-chat/settings",
+            get(api::get_box_chat_settings).put(api::put_box_chat_settings),
+        )
         .route("/sessions", get(api::list_sessions))
         .nest("/dashboard", api::dashboard::router())
         .nest("/accounts", accounts::router())

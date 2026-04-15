@@ -31,9 +31,42 @@ Current sections include:
 - `[launch]`
 - `[server]`
 - `[retry]`
+- `[discovery]`
+- `[box_chat]`
 - `[soul]`
 - `[[group]]`
 - Discord-related options
+
+### `[box_chat]`
+
+`[box_chat]` enables the EQBC-style TCP relay used for cross-machine `/bc`,
+`/bca`, `/bcaa`, and `/bct` command delivery.
+
+Example:
+
+```toml
+[box_chat]
+enabled = true
+host = "192.168.1.25"
+port = 2112
+auto_connect = true
+```
+
+Fields:
+
+- `enabled`: start the local box-chat runtime and listen on `port`
+- `host`: relay server host to connect to when `auto_connect = true`
+- `port`: shared TCP port used by the listener and connector
+- `auto_connect`: maintain an outbound connection to `host:port`
+
+Runtime behavior:
+
+- TextQuest long-lived processes poll `config/textquest.toml` and apply
+  `[box_chat]` changes without restart.
+- One machine can run as the relay server with `enabled = true` and
+  `auto_connect = false`.
+- Other machines can point `host` at that relay server and set
+  `auto_connect = true`.
 
 ## Accounts
 

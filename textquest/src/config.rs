@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::Path;
 
+use textquest_common::box_chat::BoxChatConfig;
 use textquest_soul::config::SoulConfig;
 
 // ─── Account Configuration ───────────────────────────────────────────────
@@ -208,6 +209,10 @@ pub struct AppConfig {
     /// Optional decentralized UDP multicast peer discovery.
     #[serde(default)]
     pub discovery: PeerDiscoveryConfig,
+
+    /// TCP relay settings for EQBC-style cross-machine box-chat commands.
+    #[serde(default)]
+    pub box_chat: BoxChatConfig,
 
     /// Enable timing-based anti-debug evasion correction.
     ///
@@ -499,6 +504,7 @@ impl AppConfig {
             hook_rotation_enabled: false,
             hook_rotation_interval_ms: default_hook_rotation_interval_ms(),
             discovery: PeerDiscoveryConfig::default(),
+            box_chat: BoxChatConfig::default(),
             timing_correction: false,
         }
     }
@@ -630,6 +636,7 @@ character = "Foo"
         assert_eq!(cfg.max_spawns, 2048);
         assert!(cfg.group.is_empty());
         assert!(!cfg.discovery.multicast_enabled);
+        assert_eq!(cfg.box_chat, BoxChatConfig::default());
         assert!(!cfg.timing_correction);
         assert!(!cfg.hook_rotation_enabled);
         assert_eq!(cfg.hook_rotation_interval_ms, 30_000);
@@ -716,6 +723,7 @@ timing_correction = true
         // Defaults for nested configs
         assert!(cfg.group.is_empty());
         assert_eq!(cfg.server.name, "Firiona Vie");
+        assert_eq!(cfg.box_chat, BoxChatConfig::default());
     }
 
     #[test]
@@ -843,6 +851,12 @@ timing_correction = true
             peer_ttl_ms = 9000
             node_name = "basement-rig"
             multicast_ttl = 2
+
+            [box_chat]
+            enabled = true
+            host = "192.168.1.25"
+            port = 3002
+            auto_connect = true
         "#;
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.process_name, "custom.exe");
@@ -873,6 +887,10 @@ timing_correction = true
         assert_eq!(cfg.discovery.peer_ttl_ms, 9000);
         assert_eq!(cfg.discovery.node_name, "basement-rig");
         assert_eq!(cfg.discovery.multicast_ttl, 2);
+        assert!(cfg.box_chat.enabled);
+        assert_eq!(cfg.box_chat.host, "192.168.1.25");
+        assert_eq!(cfg.box_chat.port, 3002);
+        assert!(cfg.box_chat.auto_connect);
     }
 
     #[test]
