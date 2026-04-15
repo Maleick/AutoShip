@@ -129,6 +129,13 @@ Use [sebilis-validation-template.csv](assets/sebilis-validation-template.csv)
 for live sampling. It is intentionally blank so the repo does not invent spawn,
 route, or forage numbers that were never observed.
 
+The checked-in template now includes explicit columns for
+`launch_staging_point`, `required_keying`, `travel_time_minutes`,
+`placeholder_count`, `named_count`, `mean_respawn_minutes`,
+`wait_time_minutes`, and `operator_mode` so the eventual spreadsheet can
+capture routing access, spawn cadence, camp overlap, and attended versus
+unattended posture without inventing values ahead of live testing.
+
 Record theorized Sebilis outputs as hypotheses only until a live sample observes them.
 Current theory items worth capturing explicitly in the template include
 `Nodding Blue Lily`, `Runebranded Girdle`, `Fungi Tunic`, and

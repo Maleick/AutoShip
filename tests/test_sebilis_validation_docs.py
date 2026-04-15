@@ -30,7 +30,7 @@ class SebilisValidationDocsTests(unittest.TestCase):
         header = template.read_text(encoding="utf-8").splitlines()[0]
         self.assertEqual(
             header,
-            "sample_id,validated_at_utc,character,zone_path,camp_name,camp_area,target_metric,target_name,measurement_window_minutes,attempts,successes,observed_item,observed_item_count,result_per_hour,notes,evidence_state",
+            "sample_id,validated_at_utc,character,launch_staging_point,zone_path,required_keying,camp_name,camp_area,target_metric,target_name,measurement_window_minutes,travel_time_minutes,placeholder_count,named_count,mean_respawn_minutes,wait_time_minutes,attempts,successes,observed_item,observed_item_count,result_per_hour,operator_mode,notes,evidence_state",
         )
 
     def test_farming_guide_links_to_validation_doc_and_marks_sebilis_as_unproven(self) -> None:
@@ -247,12 +247,32 @@ class SebilisValidationDocsTests(unittest.TestCase):
             self.assertIn(f"`{item_name}`", text)
 
         self.assertIn("target_name", template_header)
+        self.assertIn("launch_staging_point", template_header)
+        self.assertIn("required_keying", template_header)
+        self.assertIn("travel_time_minutes", template_header)
+        self.assertIn("placeholder_count", template_header)
+        self.assertIn("named_count", template_header)
+        self.assertIn("mean_respawn_minutes", template_header)
+        self.assertIn("wait_time_minutes", template_header)
         self.assertIn("observed_item", template_header)
         self.assertIn("observed_item_count", template_header)
+        self.assertIn("operator_mode", template_header)
         self.assertIn(
             "Record theorized Sebilis outputs as hypotheses only until a live sample observes them.",
             text,
         )
+        self.assertIn(
+            "The checked-in template now includes explicit columns for",
+            text,
+        )
+        self.assertIn("`launch_staging_point`", text)
+        self.assertIn("`required_keying`", text)
+        self.assertIn("`travel_time_minutes`", text)
+        self.assertIn("`placeholder_count`", text)
+        self.assertIn("`named_count`", text)
+        self.assertIn("`mean_respawn_minutes`", text)
+        self.assertIn("`wait_time_minutes`", text)
+        self.assertIn("`operator_mode`", text)
 
     def test_validation_doc_distinguishes_research_backed_sebilis_loot_from_unsourced_theory(self) -> None:
         text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
