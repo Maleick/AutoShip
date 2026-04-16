@@ -6,9 +6,11 @@ pub mod chat_log;
 pub mod dashboard;
 pub mod discord;
 pub mod economy;
+pub mod gm_alerts;
 pub mod kill_tracker;
 pub mod loot;
 pub mod soul;
+pub mod spawn_alerts;
 pub mod xassist;
 use axum::{
     Json,

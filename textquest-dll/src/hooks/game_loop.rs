@@ -1723,6 +1723,8 @@ fn read_and_publish_state(tick: u64) {
             zone_short_name: zone_short,
             zone_long_name: zone_long,
             actual_version: crate::eq_actual_version(),
+            active_buffs: Vec::new(),
+            pet: None,
         });
     } else if let Some(ref mut state) = *cached {
         state.local_player = local_player;
@@ -1746,12 +1748,12 @@ fn read_and_publish_state(tick: u64) {
 }
 
 fn compute_spawn_delta_events(
-    previous: &std::collections::HashMap<u32, String>,
+    previous: &std::collections::HashMap<u32, (String, u8)>,
     current: &[textquest_common::types::SpawnData],
     zone: String,
     timestamp_ms: u64,
 ) -> (
-    std::collections::HashMap<u32, String>,
+    std::collections::HashMap<u32, (String, u8)>,
     Vec<textquest_common::ipc::SpawnEvent>,
 ) {
     let mut next = std::collections::HashMap::new();
@@ -1770,24 +1772,26 @@ fn compute_spawn_delta_events(
         return (next, events);
     }
 
-    for (spawn_id, name) in &next {
+    for (spawn_id, (name, spawn_type)) in &next {
         if !previous.contains_key(spawn_id) {
             events.push(textquest_common::ipc::SpawnEvent {
                 client_id: std::process::id(),
                 zone: zone.clone(),
                 spawn_name: name.clone(),
+                spawn_type: *spawn_type,
                 kind: textquest_common::ipc::SpawnEventKind::Created,
                 timestamp_ms,
             });
         }
     }
 
-    for (spawn_id, name) in previous {
+    for (spawn_id, (name, _)) in previous {
         if !next.contains_key(spawn_id) {
             events.push(textquest_common::ipc::SpawnEvent {
                 client_id: std::process::id(),
                 zone: zone.clone(),
                 spawn_name: name.clone(),
+                spawn_type: 0,
                 kind: textquest_common::ipc::SpawnEventKind::Destroyed,
                 timestamp_ms,
             });
