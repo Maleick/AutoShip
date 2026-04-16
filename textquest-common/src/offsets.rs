@@ -4,7 +4,7 @@
 // (obtained via GetModuleInformation or EnumProcessModules).
 //
 // Source: local eqlib offset header (eqgame.h)
-// Client date: 20260310 (March 10, 2026)
+// Client date: 20260415 (April 15, 2026)
 
 /// Preferred base address of eqgame.exe (64-bit)
 pub const EQ_PREFERRED_BASE: u64 = 0x0001_4000_0000;
@@ -15,7 +15,7 @@ pub const EQ_PREFERRED_BASE: u64 = 0x0001_4000_0000;
 /// `scan_engine::EXPECTED_CLIENT_DATE` and
 /// `OffsetDatabase::from_compiled_offsets()`. Update this value when importing
 /// new offsets on patch day.
-pub const CLIENT_DATE: &str = "20260310";
+pub const CLIENT_DATE: &str = "20260415";
 
 /// Address in EQ memory holding the current runtime date/version string.
 ///
@@ -23,7 +23,7 @@ pub const CLIENT_DATE: &str = "20260310";
 pub const ACTUAL_VERSION_DATE: u64 = 0x140B38830;
 
 /// Expected string to validate compatibility with the current EQ patch.
-pub const EXPECTED_VERSION_DATE: &str = "Mar 10 2026";
+pub const EXPECTED_VERSION_DATE: &str = "Apr 15 2026";
 
 /// Pointer to local player (`PlayerClient`*)
 pub const PINST_LOCAL_PLAYER: u64 = 0x0001_40E8_E380;
