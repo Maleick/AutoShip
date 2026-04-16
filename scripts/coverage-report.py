@@ -84,11 +84,11 @@ def generate_coverage_report(html: bool = False) -> Tuple[int, Optional[float]]:
     match = re.search(r'(\d+\.\d+)%\s+coverage', stdout)
     coverage_percent = None
 
+    print(stdout)
+
     if match:
         coverage_percent = float(match.group(1))
-        print(stdout)
     else:
-        print(stdout)
         print("\nWARNING: Could not parse coverage percentage from output")
 
     if html:
@@ -116,6 +116,7 @@ def main():
     )
 
     args = parser.parse_args()
+    threshold_explicit = any(arg.startswith("--threshold") for arg in sys.argv[1:])
 
     exit_code, coverage_percent = generate_coverage_report(html=args.html)
 
@@ -128,12 +129,18 @@ def main():
         print(f"Target Threshold: {args.threshold}%")
 
         if coverage_percent < args.threshold:
-            print(f"❌ COVERAGE BELOW THRESHOLD ({coverage_percent:.2f}% < {args.threshold}%)")
+            print(f"COVERAGE BELOW THRESHOLD ({coverage_percent:.2f}% < {args.threshold}%)")
             return 1
-        else:
-            print(f"✓ Coverage meets threshold ({coverage_percent:.2f}% >= {args.threshold}%)")
-            return 0
+        print(f"Coverage meets threshold ({coverage_percent:.2f}% >= {args.threshold}%)")
+        return 0
 
+    if threshold_explicit:
+        print(
+            "ERROR: Coverage threshold enforcement requested but coverage "
+            "percentage could not be parsed from tarpaulin output.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 if __name__ == "__main__":

@@ -190,14 +190,24 @@ class MainThresholdTests(unittest.TestCase):
         self.assertEqual(result, 1)
 
     def test_main_returns_zero_when_percentage_is_none_but_command_succeeded(self) -> None:
-        # If tarpaulin ran OK but the output had no parseable percentage, we
-        # still treat it as a non-blocking warning (return 0).
+        # If tarpaulin ran OK but the output had no parseable percentage, and
+        # no --threshold was passed, treat it as a non-blocking warning.
         with mock.patch("sys.argv", ["coverage-report.py"]):
             with mock.patch.object(
                 self.module, "generate_coverage_report", return_value=(0, None)
             ):
                 result = self.module.main()
         self.assertEqual(result, 0)
+
+    def test_main_returns_error_when_threshold_explicit_but_percentage_unparseable(self) -> None:
+        # When --threshold is passed explicitly, we must not silently pass
+        # just because tarpaulin's stdout format drifted.
+        with mock.patch("sys.argv", ["coverage-report.py", "--threshold", "75"]):
+            with mock.patch.object(
+                self.module, "generate_coverage_report", return_value=(0, None)
+            ):
+                result = self.module.main()
+        self.assertEqual(result, 1)
 
     def test_default_threshold_is_60(self) -> None:
         # Default threshold is 60: 59.9% should fail, 60.0% should pass.

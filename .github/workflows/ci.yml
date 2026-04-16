@@ -95,7 +95,7 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         uses: dtolnay/rust-toolchain@nightly
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - name: Cache cargo registry
         if: steps.scope.outputs.docs_only != 'true'
@@ -149,6 +149,10 @@ jobs:
         continue-on-error: true
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Check rustfmt
+        if: steps.scope.outputs.docs_only != 'true'
+        run: cargo fmt --all --check
+
       - name: Run clippy
         if: steps.scope.outputs.docs_only != 'true'
         run: cargo clippy --all-targets --all-features -- -D warnings
@@ -157,9 +161,21 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         run: cargo test --all --all-features
 
-      - name: Skip code gate for docs-only changes
-        if: steps.scope.outputs.docs_only == 'true'
-        run: echo "Docs-only change set detected; skipped Rust and advisory Python gate steps."
+      - name: Cache cargo-tarpaulin binary
+        if: steps.scope.outputs.docs_only != 'true'
+        id: cache-tarpaulin
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-tarpaulin
+          key: cargo-tarpaulin-${{ runner.os }}-v0.31
+
+      - name: Install cargo-tarpaulin
+        if: steps.scope.outputs.docs_only != 'true' && steps.cache-tarpaulin.outputs.cache-hit != 'true'
+        run: cargo install cargo-tarpaulin --locked --version ^0.31
+
+      - name: Run coverage (threshold 75%)
+        if: steps.scope.outputs.docs_only != 'true'
+        run: python3 scripts/coverage-report.py --threshold 75
 
   secrets_scan:
     name: Secret scan

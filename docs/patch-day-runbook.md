@@ -29,16 +29,30 @@ python3 scripts/import_mq_offsets.py --dry-run /tmp/eqgame.h
 # 4. Apply changes
 python3 scripts/import_mq_offsets.py --eqmain /tmp/eqmain.h /tmp/eqgame.h
 
-# 5. Update version stamp manually:
+# 5. Update version stamps manually (all three must move together):
 #    - textquest-common/src/offsets.rs: CLIENT_DATE
+#    - textquest-common/src/offsets.rs: ACTUAL_VERSION_DATE (address)
+#    - textquest-common/src/offsets.rs: EXPECTED_VERSION_DATE (string)
+#
+#    CLIENT_DATE promotion gate: do not bump CLIENT_DATE from upstream MQ
+#    headers alone. Bump it only after a local Ghidra or GhidraMCP run has
+#    proven the new ACTUAL_VERSION_DATE address points at the expected
+#    EXPECTED_VERSION_DATE string in the binary. See
+#    docs/wiki/Research-Test-Offset-Reconciliation.md for the exact
+#    verification commands and the ZoneGuideManagerClient false-promotion
+#    incident from 2026-04-09 that motivates this gate.
 
 # 6. Validate
 cargo test -p textquest-common
 cargo clippy --all-targets --all-features -- -D warnings
+python3 scripts/validate_offsets_sync.py
 
 # 7. Full preflight
 python3 scripts/dev-preflight.py
 ```
+
+See `docs/wiki/Offset-Placeholder-Audit.md` for the current list of
+`0x0` placeholder constants that still need Ghidra-backed values.
 
 ## Manual Path (If MQ Hasn't Published Yet)
 
