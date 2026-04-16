@@ -308,6 +308,25 @@ name = "Lady Vox"
 zone = "karnor"
 ```
 
+### Discord Routing: `config/textquest.toml` or Web Dashboard
+
+Discord alert routing now has two operator surfaces:
+
+- static config in `config/textquest.toml`
+- the web dashboard `Security Wards` panel for live webhook URL and policy edits
+
+Use `[discord.channels]` for category feeds (`kills`, `loot`, `timers`,
+`feats`, `status`) and `[discord.notification_routes.<route>]` for operational
+alert policy (`death`, `status`, `hvt`, `crash`, `mass_failure`).
+
+Important defaults:
+
+- `death` uses `CRITICAL` severity with `mention_policy = "everyone"`
+- `status` uses `INFO` severity with no mention
+- route webhook overrides can be left blank to fall back to the category or
+  default webhook
+- Discord delivery is rate-limited to 30 requests per minute per webhook URL
+
 ### Named Mobs: `config/named_mobs/<zone>.toml`
 
 Define zone-specific named mobs for tracking:

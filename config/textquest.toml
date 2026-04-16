@@ -84,6 +84,55 @@ eq_path = "C:\\Path\\To\\EverQuest"
 # tags = ["Friend", "Mentor"]
 # trust = 0.8
 
+# ─── Discord Webhook Routing ───
+# Configure fallback and per-alert Discord delivery.
+# [discord]
+# webhook_url = "https://discord.com/api/webhooks/__SET_DEFAULT_ID__/__SET_DEFAULT_TOKEN__"
+# alert_hvt = true
+# alert_crashes = true
+# alert_mass_failures = true
+# alert_status = false
+# command_allowed_senders = ["RaidLead", "OpsMage"]
+#
+# # Category feeds for kill reports, loot drops, timer warnings, feats, and
+# # status messages. Blank values fall back to `discord.webhook_url`.
+# [discord.channels]
+# kills = "https://discord.com/api/webhooks/__SET_KILLS_ID__/__SET_KILLS_TOKEN__"
+# loot = ""
+# timers = ""
+# feats = ""
+# status = ""
+#
+# # Stable per-event route keys: death, status, hvt, crash, mass_failure.
+# # Route webhook overrides are optional; leave blank to use the category or
+# # fallback webhook. Discord levels must be INFO, WARNING, ERROR, or CRITICAL.
+# [discord.notification_routes.death]
+# enabled = true
+# webhook_url = ""
+# level = "CRITICAL"
+# message_mode = "rich_embed"      # rich_embed | plain_text
+# mention_policy = "everyone"      # none | everyone
+#
+# [discord.notification_routes.status]
+# enabled = true
+# webhook_url = ""
+# level = "INFO"
+# message_mode = "rich_embed"
+# mention_policy = "none"
+#
+# [discord.notification_routes.hvt]
+# enabled = true
+# webhook_url = "https://discord.com/api/webhooks/__SET_HVT_ID__/__SET_HVT_TOKEN__"
+# level = "CRITICAL"
+# message_mode = "rich_embed"
+# mention_policy = "none"
+#
+# # Optional in-game chat relay webhooks.
+# [discord.chat_channels]
+# group = ""
+# raid = ""
+# guild = ""
+
 # ─── Group Definitions ───
 # Machine-to-group mapping is flexible — assign groups to machines at deploy time.
 # These are template role layouts for the 36-box TextQuest setup.

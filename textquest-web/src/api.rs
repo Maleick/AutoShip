@@ -1,7 +1,7 @@
 //! REST API handlers for the web dashboard.
 
-#![allow(dead_code)] // Demo shapes and placeholder handlers stay in this module before router wiring.
-
+pub mod dashboard;
+pub mod discord;
 pub mod economy;
 pub mod loot;
 pub mod soul;
@@ -38,10 +38,6 @@ fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Js
     )
 }
 
-fn live_state_unavailable(message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
-    json_error(StatusCode::NOT_IMPLEMENTED, message)
-}
-
 /// Catch-all for unknown API routes so they do not fall through to the SPA.
 pub async fn api_not_found() -> impl IntoResponse {
     json_error(StatusCode::NOT_FOUND, "API route not found")
@@ -53,22 +49,6 @@ pub async fn raid_config_unavailable() -> impl IntoResponse {
     json_error(
         StatusCode::NOT_IMPLEMENTED,
         "Raid configuration API is not implemented in this build",
-    )
-}
-
-/// Placeholder response for known character-config list endpoint.
-pub async fn character_configs_unavailable() -> impl IntoResponse {
-    json_error(
-        StatusCode::NOT_IMPLEMENTED,
-        "Character configuration API is not implemented in this build",
-    )
-}
-
-/// Placeholder response for known per-character config mutation endpoint.
-pub async fn character_config_unavailable(Path(character): Path<String>) -> impl IntoResponse {
-    json_error(
-        StatusCode::NOT_IMPLEMENTED,
-        format!("Character configuration API is not implemented for '{character}'"),
     )
 }
 
@@ -634,6 +614,7 @@ use std::path::PathBuf;
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            discord_state: crate::api::discord::DiscordState::new_demo(),
             player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
             api_token: None,
             live_session_snapshot_path: test_live_session_snapshot_path("api-sessions-ok.json"),
@@ -726,6 +707,7 @@ use std::path::PathBuf;
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            discord_state: crate::api::discord::DiscordState::new_demo(),
             api_token: None,
             live_session_snapshot_path: test_live_session_snapshot_path(
                 "api-character-configs-demo.json",
@@ -747,6 +729,7 @@ use std::path::PathBuf;
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            discord_state: crate::api::discord::DiscordState::new_demo(),
             api_token: None,
             live_session_snapshot_path: test_live_session_snapshot_path(
                 "api-put-character-config.json",

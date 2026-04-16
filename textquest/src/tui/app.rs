@@ -948,11 +948,18 @@ impl App {
             .map(|sender| sender.trim().to_ascii_lowercase())
             .filter(|sender| !sender.is_empty())
             .collect();
-        if !config.webhook_url.is_empty() || !config.channels.is_empty() {
+        let has_default_webhook = !config.webhook_url.trim().is_empty();
+        let has_category_webhook = config.channels.values().any(|url| !url.trim().is_empty());
+        let has_route_webhook = config
+            .notification_routes
+            .values()
+            .any(|route| route.enabled && !route.webhook_url.trim().is_empty());
+        if has_default_webhook || has_category_webhook || has_route_webhook {
             tracing::info!("Discord webhook enabled");
-            self.discord_webhook = Some(crate::discord::webhook::WebhookSender::with_channels(
+            self.discord_webhook = Some(crate::discord::webhook::WebhookSender::with_routes(
                 config.webhook_url.clone(),
                 config.channels.clone(),
+                config.notification_routes.clone(),
             ));
         }
     }
@@ -966,12 +973,15 @@ impl App {
         level: crate::discord::webhook::AlertLevel,
     ) {
         if let Some(ref webhook) = self.discord_webhook {
-            webhook.send(crate::discord::webhook::DiscordAlert::simple(
-                title,
-                message,
-                level,
-                crate::discord::webhook::EventCategory::Status,
-            ));
+            webhook.send(
+                crate::discord::webhook::DiscordAlert::simple(
+                    title,
+                    message,
+                    level,
+                    crate::discord::webhook::EventCategory::Status,
+                )
+                .with_route_key("status"),
+            );
         }
     }
 
@@ -7305,9 +7315,11 @@ fn ascii_icontains(haystack: &str, needle: &str) -> bool {
 mod tests {
     use super::*;
     use crate::{
+        config::DiscordConfig,
         eq::structs::{GroupInfo, SpawnInfo, SpawnType, StandState},
         orchestrator::Orchestrator,
     };
+    use textquest_common::integrations::DiscordRouteConfig;
 
     fn test_spawn(name: &str) -> SpawnInfo {
         SpawnInfo {
@@ -8221,5 +8233,32 @@ mod tests {
     fn hex_dump_state_pending_memory_poll_starts_false() {
         let state = crate::tui::state::HexDumpState::new();
         assert!(!state.pending_memory_poll);
+    }
+
+    #[test]
+    fn init_discord_enables_route_only_webhook_config() {
+        let mut app = App::new();
+        let mut config = DiscordConfig::default();
+        config.notification_routes.insert(
+            "death".into(),
+            DiscordRouteConfig {
+                webhook_url: "https://discord.example.com/death".into(),
+                ..DiscordRouteConfig::default()
+            },
+        );
+
+        app.init_discord(&config);
+
+        assert!(app.discord_webhook.is_some());
+    }
+
+    #[test]
+    fn init_discord_skips_empty_default_routes_without_targets() {
+        let mut app = App::new();
+        let config = DiscordConfig::default();
+
+        app.init_discord(&config);
+
+        assert!(app.discord_webhook.is_none());
     }
 }

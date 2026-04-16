@@ -124,6 +124,7 @@ mod tests {
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: api::dashboard::DashboardState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
+            discord_state: api::discord::DiscordState::new_demo(),
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             api_token: None,
             live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -280,6 +281,7 @@ mod tests {
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: api::dashboard::DashboardState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
+            discord_state: api::discord::DiscordState::new_demo(),
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             api_token: Some("secret-token".to_string()),
             live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))

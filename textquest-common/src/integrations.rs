@@ -109,6 +109,66 @@ impl NotificationChannel {
     }
 }
 
+/// Discord payload format to emit for a notification route.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum DiscordMessageMode {
+    /// Plain text content-only Discord message.
+    PlainText,
+    /// Rich embed with title, color, footer, and optional fields.
+    #[default]
+    RichEmbed,
+}
+
+/// Mention policy applied to a Discord notification route.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum DiscordMentionPolicy {
+    /// No explicit mention is prepended to the payload.
+    #[default]
+    None,
+    /// Prepend an `@everyone` mention to the payload.
+    Everyone,
+}
+
+/// Per-event Discord notification route configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiscordRouteConfig {
+    /// Enable or disable this route without deleting its settings.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Optional route-specific webhook override.
+    /// Empty strings fall back to the sender's category/default webhook
+    /// routing.
+    #[serde(default)]
+    pub webhook_url: String,
+    /// Override severity/level for this event's Discord formatting.
+    #[serde(default = "default_critical_severity")]
+    pub level: Severity,
+    /// Payload format to emit for this route.
+    #[serde(default)]
+    pub message_mode: DiscordMessageMode,
+    /// Mention policy for this route.
+    #[serde(default)]
+    pub mention_policy: DiscordMentionPolicy,
+}
+
+impl Default for DiscordRouteConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            webhook_url: String::new(),
+            level: default_critical_severity(),
+            message_mode: DiscordMessageMode::default(),
+            mention_policy: DiscordMentionPolicy::default(),
+        }
+    }
+}
+
+fn default_critical_severity() -> Severity {
+    Severity::Critical
+}
+
 /// A single notification message to be sent to external systems.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotificationMessage {
@@ -744,6 +804,16 @@ min_severity = "CRITICAL"
             headers: None,
         };
         assert_eq!(webhook.name(), "Webhook");
+    }
+
+    #[test]
+    fn test_discord_route_config_defaults() {
+        let route = DiscordRouteConfig::default();
+        assert!(route.enabled);
+        assert!(route.webhook_url.is_empty());
+        assert_eq!(route.level, Severity::Critical);
+        assert_eq!(route.message_mode, DiscordMessageMode::RichEmbed);
+        assert_eq!(route.mention_policy, DiscordMentionPolicy::None);
     }
 
     #[test]

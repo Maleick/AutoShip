@@ -449,6 +449,7 @@ mod tests {
             economy_state: crate::api::economy::EconomyState::new_demo(),
             dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            discord_state: crate::api::discord::DiscordState::new_demo(),
             api_token: None,
             live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../data/runtime/loot-test-live-sessions.json"),

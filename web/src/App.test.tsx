@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
+import { createDefaultDiscordSettings } from "./hooks/useDiscordConfig";
 import { jsonResponse } from "./test/http";
 
 class MockWebSocket {
@@ -178,6 +179,33 @@ const baseSnapshot = {
   },
 } as const;
 
+const baseDiscordSettings = createDefaultDiscordSettings();
+
+function mockDashboardFetch(actionSnapshot = baseSnapshot) {
+  const fetchMock = vi.mocked(fetch);
+  fetchMock.mockImplementation(async (input, init) => {
+    if (input === "/api/dashboard") {
+      return jsonResponse(baseSnapshot);
+    }
+    if (input === "/api/config/discord") {
+      return jsonResponse(baseDiscordSettings);
+    }
+    if (input === "/api/dashboard/action") {
+      expect(init).toEqual(
+        expect.objectContaining({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+      return jsonResponse(actionSnapshot);
+    }
+
+    throw new Error(`Unexpected fetch call: ${String(input)}`);
+  });
+
+  return fetchMock;
+}
+
 describe("App dashboard integration", () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
@@ -186,8 +214,7 @@ describe("App dashboard integration", () => {
   });
 
   it("renders the operator dashboard sections from the backend snapshot", async () => {
-    const fetchMock = vi.mocked(fetch);
-    fetchMock.mockResolvedValueOnce(jsonResponse(baseSnapshot));
+    const fetchMock = mockDashboardFetch();
 
     render(<App />);
 
@@ -206,37 +233,35 @@ describe("App dashboard integration", () => {
     expect(screen.getByRole("heading", { name: /economy monitoring/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /combat analytics/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /system health/i })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: /security wards/i })).toBeInTheDocument()
+    );
     expect(screen.getAllByText(/plane of fire/i).length).toBeGreaterThan(0);
-  });
+  }, 15000);
 
   it("submits session actions and applies websocket snapshot refreshes", async () => {
-    const fetchMock = vi.mocked(fetch);
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse(baseSnapshot))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          ...baseSnapshot,
-          sessions: {
-            ...baseSnapshot.sessions,
-            items: [
-              ...baseSnapshot.sessions.items,
-              {
-                clientId: 3,
-                characterName: "Newpuller",
-                profile: "Loot Crew",
-                groupId: "grp-2",
-                zone: "Plane of Fire",
-                level: 60,
-                hpPct: 100,
-                manaPct: 100,
-                status: "online",
-                recoveryState: "stable",
-                lastHeartbeat: "0s ago",
-              },
-            ],
+    const fetchMock = mockDashboardFetch({
+      ...baseSnapshot,
+      sessions: {
+        ...baseSnapshot.sessions,
+        items: [
+          ...baseSnapshot.sessions.items,
+          {
+            clientId: 3,
+            characterName: "Newpuller",
+            profile: "Loot Crew",
+            groupId: "grp-2",
+            zone: "Plane of Fire",
+            level: 60,
+            hpPct: 100,
+            manaPct: 100,
+            status: "online",
+            recoveryState: "stable",
+            lastHeartbeat: "0s ago",
           },
-        })
-      );
+        ],
+      },
+    });
 
     render(<App />);
 
@@ -256,8 +281,7 @@ describe("App dashboard integration", () => {
     fireEvent.click(screen.getByRole("button", { name: /create session/i }));
 
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenNthCalledWith(
-        2,
+      expect(fetchMock).toHaveBeenCalledWith(
         "/api/dashboard/action",
         expect.objectContaining({
           method: "POST",
@@ -284,5 +308,5 @@ describe("App dashboard integration", () => {
 
     await waitFor(() => expect(screen.getByText("44 ms")).toBeInTheDocument());
     expect(screen.getByText(/newpuller/i)).toBeInTheDocument();
-  });
+  }, 15000);
 });

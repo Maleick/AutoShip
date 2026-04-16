@@ -29,6 +29,7 @@ import type {
 } from "../dashboard";
 import AutoAcceptPanel from "./AutoAcceptPanel";
 import { useDashboard } from "../hooks/useDashboard";
+import DiscordConfigPanel from "./DiscordConfigPanel";
 
 function panelClasses(accent: "magenta" | "cyan" | "amber" = "magenta") {
   const accentClass =
@@ -1240,6 +1241,8 @@ export default function OperatorDashboard() {
             </Panel>
           </div>
         </div>
+
+        <DiscordConfigPanel />
       </main>
     </div>
   );

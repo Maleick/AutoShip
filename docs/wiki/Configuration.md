@@ -37,6 +37,51 @@ Current sections include:
 - `[[group]]`
 - Discord-related options
 
+## Discord Webhooks
+
+TextQuest supports Discord webhook delivery for both category feeds and
+operational alert routes.
+
+The canonical operator surface is:
+
+- `config/textquest.toml` for static config
+- the web dashboard `Security Wards` view for webhook URL management and
+  per-event delivery policy
+
+The Discord config model is split into three parts:
+
+- `[discord]`
+  - `webhook_url` is the fallback webhook used when no more specific route is set
+  - `alert_hvt`, `alert_crashes`, `alert_mass_failures`, and `alert_status`
+    gate whether those alert families are emitted at all
+- `[discord.channels]`
+  - category feeds keyed by `kills`, `loot`, `timers`, `feats`, and `status`
+  - blank values fall back to `discord.webhook_url`
+- `[discord.notification_routes.<route>]`
+  - stable route keys: `death`, `status`, `hvt`, `crash`, `mass_failure`
+  - each route can override:
+    - `enabled`
+    - `webhook_url`
+    - `level`
+    - `message_mode`
+    - `mention_policy`
+
+Accepted route values are:
+
+- `level`: `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+- `message_mode`: `rich_embed`, `plain_text`
+- `mention_policy`: `none`, `everyone`
+
+Current defaults are intentionally opinionated:
+
+- `death` defaults to `CRITICAL` with `mention_policy = "everyone"`
+- `status` defaults to `INFO` with `mention_policy = "none"`
+- all other operational routes default to `CRITICAL`
+
+The webhook sender enforces Discord's per-webhook delivery ceiling of 30
+requests per minute, so splitting high-volume feeds across different webhook
+URLs also increases available throughput.
+
 ### `[box_chat]`
 
 `[box_chat]` enables the EQBC-style TCP relay used for cross-machine `/bc`,

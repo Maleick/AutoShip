@@ -278,6 +278,17 @@ pub struct DiscordConfig {
     /// ```
     #[serde(default)]
     pub chat_channels: std::collections::HashMap<String, String>,
+    /// Per-alert-type Discord routing overrides.
+    ///
+    /// Keys are stable route names such as `"death"`, `"status"`, `"hvt"`,
+    /// `"crash"`, and `"mass_failure"`.
+    ///
+    /// A route can override the webhook URL, delivery level, message mode,
+    /// and mention policy for that alert type while falling back to the
+    /// default/category webhook URL when `webhook_url` is empty.
+    #[serde(default = "default_discord_notification_routes")]
+    pub notification_routes:
+        std::collections::HashMap<String, textquest_common::integrations::DiscordRouteConfig>,
 }
 
 impl Default for DiscordConfig {
@@ -293,8 +304,53 @@ impl Default for DiscordConfig {
             alert_status: false,
             command_allowed_senders: Vec::new(),
             chat_channels: std::collections::HashMap::new(),
+            notification_routes: default_discord_notification_routes(),
         }
     }
+}
+
+fn default_discord_notification_routes()
+-> std::collections::HashMap<String, textquest_common::integrations::DiscordRouteConfig> {
+    use textquest_common::integrations::{DiscordMentionPolicy, DiscordRouteConfig, Severity};
+
+    let mut routes = std::collections::HashMap::new();
+    routes.insert(
+        "death".to_string(),
+        DiscordRouteConfig {
+            level: Severity::Critical,
+            mention_policy: DiscordMentionPolicy::Everyone,
+            ..DiscordRouteConfig::default()
+        },
+    );
+    routes.insert(
+        "status".to_string(),
+        DiscordRouteConfig {
+            level: Severity::Info,
+            ..DiscordRouteConfig::default()
+        },
+    );
+    routes.insert(
+        "hvt".to_string(),
+        DiscordRouteConfig {
+            level: Severity::Critical,
+            ..DiscordRouteConfig::default()
+        },
+    );
+    routes.insert(
+        "crash".to_string(),
+        DiscordRouteConfig {
+            level: Severity::Critical,
+            ..DiscordRouteConfig::default()
+        },
+    );
+    routes.insert(
+        "mass_failure".to_string(),
+        DiscordRouteConfig {
+            level: Severity::Critical,
+            ..DiscordRouteConfig::default()
+        },
+    );
+    routes
 }
 
 /// Configuration for a group of characters that play together.
@@ -839,6 +895,14 @@ timing_correction = true
         assert!(!cfg.alert_status);
         assert!(cfg.command_allowed_senders.is_empty());
         assert!(cfg.chat_channels.is_empty());
+        assert_eq!(cfg.notification_routes.len(), 5);
+        assert_eq!(
+            cfg.notification_routes
+                .get("death")
+                .expect("death route")
+                .mention_policy,
+            textquest_common::integrations::DiscordMentionPolicy::Everyone
+        );
     }
 
     #[test]
@@ -862,6 +926,40 @@ timing_correction = true
             "https://example.com/raid"
         );
         assert!(!cfg.discord.chat_channels.contains_key("guild"));
+    }
+
+    #[test]
+    fn discord_config_notification_routes_parsed() {
+        let toml_str = r#"
+            [discord]
+            webhook_url = "https://example.com/default"
+
+            [discord.notification_routes.death]
+            webhook_url = "https://example.com/death"
+            level = "CRITICAL"
+            message_mode = "plain_text"
+            mention_policy = "everyone"
+
+            [discord.notification_routes.status]
+            enabled = false
+            level = "INFO"
+        "#;
+
+        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
+        let death = cfg.discord.notification_routes.get("death").unwrap();
+        assert_eq!(death.webhook_url, "https://example.com/death");
+        assert_eq!(
+            death.message_mode,
+            textquest_common::integrations::DiscordMessageMode::PlainText
+        );
+        assert_eq!(
+            death.mention_policy,
+            textquest_common::integrations::DiscordMentionPolicy::Everyone
+        );
+
+        let status = cfg.discord.notification_routes.get("status").unwrap();
+        assert!(!status.enabled);
+        assert_eq!(status.level, textquest_common::integrations::Severity::Info);
     }
 
     #[test]
@@ -930,6 +1028,12 @@ timing_correction = true
             timers = "https://example.com/timers"
             feats = "https://example.com/feats"
 
+            [discord.notification_routes.death]
+            webhook_url = "https://example.com/death"
+            level = "CRITICAL"
+            message_mode = "plain_text"
+            mention_policy = "everyone"
+
             [discovery]
             multicast_enabled = true
             bind_addr = "0.0.0.0"
@@ -967,6 +1071,12 @@ timing_correction = true
         assert_eq!(
             cfg.discord.channels.get("kills").unwrap(),
             "https://example.com/kills"
+        );
+        let death = cfg.discord.notification_routes.get("death").unwrap();
+        assert_eq!(death.webhook_url, "https://example.com/death");
+        assert_eq!(
+            death.message_mode,
+            textquest_common::integrations::DiscordMessageMode::PlainText
         );
         assert!(cfg.discovery.multicast_enabled);
         assert_eq!(cfg.discovery.multicast_addr, "239.255.42.123");

@@ -1040,6 +1040,7 @@ mod tests {
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: DashboardState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
+            discord_state: api::discord::DiscordState::new_demo(),
             api_token: None,
         })
     }

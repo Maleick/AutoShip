@@ -25,7 +25,8 @@
 //! - `FleetEvent::Kill`         → `EventCategory::Kills`
 //! - `FleetEvent::LootDrop`     → `EventCategory::Loot`
 //! - `FleetEvent::LevelUp`      → `EventCategory::Feats`
-//! - `FleetEvent::Death`        → `EventCategory::Status`
+//! - `FleetEvent::Death`        → `EventCategory::Status` via the `"death"`
+//!   route
 //! - `FleetEvent::CombatRound`  → buffered; call [`EventRelay::flush_dps`] to
 //!   post a DPS summary
 //! - `FleetEvent::ZoneChange`   → `EventCategory::Status`
@@ -347,10 +348,14 @@ impl EventRelay {
                 } else {
                     character_name.clone()
                 };
-                self.sender.warn(
-                    &format!("Death — {name}"),
-                    &format!("**{name}** died in _{zone}_"),
-                );
+                let alert = DiscordAlert::simple(
+                    format!("Death — {name}"),
+                    format!("**{name}** died in _{zone}_"),
+                    AlertLevel::Critical,
+                    EventCategory::Status,
+                )
+                .with_route_key("death");
+                self.sender.send(alert);
             }
 
             FleetEvent::ZoneChange {
