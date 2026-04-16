@@ -12,8 +12,8 @@ TextQuest uses a layered test strategy:
 |---|---|---|---|
 | Unit tests | Inline `#[cfg(test)]` blocks in source files | `cargo test` | Every PR |
 | Integration tests | `textquest/tests/*.rs` | `cargo test -p textquest --test <name>` | Every PR |
-| Scenario tests | `textquest/tests/scenarios/` (test cases inside the `integration` test binary) | `cargo test -p textquest --test integration scenario_` | Every PR |
-| Coverage gate | `scripts/coverage-report.py` | cargo-tarpaulin | Every non-docs-only PR (75% threshold) |
+| Scenario tests | `textquest/tests/scenarios/` | `cargo test scenario_` | Every PR |
+| Coverage gate | `scripts/coverage-report.py` | cargo-tarpaulin | Every PR (75% threshold) |
 | Python tests | `tests/test_*.py` | `python3 -m unittest` | Advisory only |
 
 ---
@@ -138,7 +138,7 @@ Coverage targets by layer:
 |---|---|---|
 | Pure logic (FSMs, parsers, data structures) | 90%+ | Highest value, runs everywhere |
 | Platform-independent orchestration | 80%+ | Decision logic; OS calls in `#[cfg(windows)]` |
-| Windows-only paths | Best-effort | Not covered by the `ubuntu-latest` tarpaulin gate; validate separately on Windows |
+| Windows-only paths | Best-effort | Runs on Frostreaver self-hosted runner |
 | TUI rendering | Smoke-only | Pixel-exact output is fragile |
 
 ---
@@ -228,7 +228,7 @@ mod tests {
 }
 ```
 
-See [Unit Test Template](../testing/unit-test-template.md) for patterns.
+See [Unit Test Template](../dev/unit-test-template.md) for patterns.
 
 ### Integration test
 
@@ -297,5 +297,5 @@ The script parses tarpaulin output and exits with code 1 if coverage falls below
 ## Related Documentation
 
 - [Testing Best Practices](../dev/testing-scenarios.md)
-- [Unit Test Template](../testing/unit-test-template.md)
+- [Unit Test Template](../dev/unit-test-template.md)
 - [Coverage Policy](../dev/coverage-policy.md)
