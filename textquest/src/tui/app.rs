@@ -3063,9 +3063,8 @@ impl App {
                 // Fire sound alert for spawn events
                 let sound_event = format!("named_spawn_{}", if is_up { "up" } else { "down" });
                 if let Some(trigger) = self.sound_alert_manager.check_event(&sound_event).first() {
-                    if let Some(sound_file) = &trigger.sound_file {
-                        tracing::info!(sound_file = %sound_file, spawn = %name, "Playing sound alert for named spawn");
-                        // Sound playback would be handled by the sound system
+                    if trigger.sound_file.is_some() {
+                        self.play_spawn_alert_sound(trigger.sound_file.as_deref());
                     }
                 }
 
@@ -3122,9 +3121,7 @@ impl App {
                     label,
                     &format!(
                         "{} detected in {} by {}",
-                        event.gm_name,
-                        event.zone,
-                        self.server_name
+                        event.gm_name, event.zone, self.server_name
                     ),
                     crate::discord::webhook::AlertLevel::Critical,
                 );
@@ -3134,19 +3131,11 @@ impl App {
         if self.gm_detector.should_pause_automation() && !self.gm_auto_paused {
             self.automation_paused = true;
             self.gm_auto_paused = true;
-            self.set_feedback(
-                ToastLevel::Warning,
-                "Automation paused: GM in zone",
-                true,
-            );
+            self.set_feedback(ToastLevel::Warning, "Automation paused: GM in zone", true);
         } else if !self.gm_detector.should_pause_automation() && self.gm_auto_paused {
             self.automation_paused = false;
             self.gm_auto_paused = false;
-            self.set_feedback(
-                ToastLevel::Info,
-                "Automation resumed: Zone clear",
-                true,
-            );
+            self.set_feedback(ToastLevel::Info, "Automation resumed: Zone clear", true);
         }
 
         self.sync_gm_state_to_web();
@@ -3209,6 +3198,59 @@ impl App {
         if self.gm_detector.config().sound_enabled {
             tracing::debug!("GM alert sound playback not supported on this platform");
         }
+    }
+
+    #[cfg(windows)]
+    fn play_spawn_alert_sound(&self, sound_file: Option<&str>) {
+        let sound_file = match sound_file {
+            Some(f) => f,
+            None => return,
+        };
+
+        let base_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let config_dir = base_path.join("config");
+        let sounds_dir = config_dir.join("sounds");
+        let sound_path = sounds_dir.join(sound_file);
+
+        if !sound_path.exists() {
+            tracing::warn!(
+                path = %sound_path.display(),
+                "Spawn alert sound file not found"
+            );
+            return;
+        }
+
+        tracing::info!(path = %sound_path.display(), "Playing spawn alert sound");
+
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+
+        let wide_path: Vec<u16> = OsStr::new(sound_path.to_str().unwrap_or_default())
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        #[link(name = "winmm")]
+        extern "system" {
+            fn PlaySoundW(pszSound: *const u16, hmod: *mut std::ffi::c_void, fdwSound: u32) -> i32;
+        }
+
+        const SND_FILENAME: u32 = 0x00020000;
+        const SND_ASYNC: u32 = 0x0001;
+        const SND_NODEFAULT: u32 = 0x0002;
+
+        unsafe {
+            let _ = PlaySoundW(
+                wide_path.as_ptr(),
+                std::ptr::null_mut(),
+                SND_FILENAME | SND_ASYNC | SND_NODEFAULT,
+            );
+        }
+    }
+
+    #[cfg(not(windows))]
+    fn play_spawn_alert_sound(&self, _sound_file: Option<&str>) {
+        tracing::debug!("Spawn alert sound playback not supported on this platform");
     }
 
     pub fn sync_gm_state_to_web(&self) {
@@ -3351,7 +3393,8 @@ impl App {
     pub fn set_player_notification_friends(&mut self, friends: impl IntoIterator<Item = String>) {
         self.player_notification_friends.clear();
         for name in friends {
-            self.player_notification_friends.insert(name.to_ascii_lowercase());
+            self.player_notification_friends
+                .insert(name.to_ascii_lowercase());
         }
     }
 
@@ -3401,10 +3444,7 @@ impl App {
                     } else {
                         ToastLevel::Info
                     },
-                    format!(
-                        "[Player] {} {verb} {}",
-                        event.spawn_name, event.zone
-                    ),
+                    format!("[Player] {} {verb} {}", event.spawn_name, event.zone),
                     true,
                 );
                 if is_up && self.sound_on_player_zone_in {
@@ -3519,7 +3559,10 @@ impl App {
                 };
                 self.set_feedback(
                     ToastLevel::Info,
-                    format!("Player filter: {} (use pf [all|strangers|friends])", current),
+                    format!(
+                        "Player filter: {} (use pf [all|strangers|friends])",
+                        current
+                    ),
                     false,
                 );
             }
@@ -3548,7 +3591,10 @@ impl App {
                 );
             }
             Some(other) => {
-                self.usage_feedback("pf", format!("Unknown filter mode: {other} (use all/strangers/friends)"));
+                self.usage_feedback(
+                    "pf",
+                    format!("Unknown filter mode: {other} (use all/strangers/friends)"),
+                );
             }
         }
     }
@@ -3556,7 +3602,11 @@ impl App {
     fn execute_sound_command(&mut self, args: &[&str]) {
         match args.first().copied() {
             None => {
-                let state = if self.sound_on_player_zone_in { "ON" } else { "OFF" };
+                let state = if self.sound_on_player_zone_in {
+                    "ON"
+                } else {
+                    "OFF"
+                };
                 self.set_feedback(
                     ToastLevel::Info,
                     format!("Sound on zone-in: {} (use sound [on|off])", state),
@@ -3614,7 +3664,11 @@ impl App {
                     .cloned()
                     .collect();
                 if friends.is_empty() {
-                    self.set_feedback(ToastLevel::Info, String::from("Friends list is empty"), false);
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        String::from("Friends list is empty"),
+                        false,
+                    );
                 } else {
                     self.set_feedback(
                         ToastLevel::Info,
@@ -3668,7 +3722,10 @@ impl App {
                         );
                     }
                 } else {
-                    self.usage_feedback("friends remove", "Missing friend name: friends remove <name>");
+                    self.usage_feedback(
+                        "friends remove",
+                        "Missing friend name: friends remove <name>",
+                    );
                 }
             }
             Some(other) => {
