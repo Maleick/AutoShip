@@ -1255,6 +1255,9 @@ pub enum Response {
         is_up: bool,
         /// Timestamp in milliseconds when the alert was generated.
         timestamp_ms: u64,
+        /// Duration in milliseconds since the last time this spawn was seen.
+        /// `None` if this is the first time seeing this spawn.
+        time_since_last_pop_ms: Option<u64>,
     },
     /// An intercepted chat message from the game's `dsp_chat` function.
     ChatMessage {

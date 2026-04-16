@@ -126,6 +126,7 @@ mod tests {
             soul_audit: api::soul::SoulAuditState::new_demo(),
             discord_state: api::discord::DiscordState::new_demo(),
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
+            spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
             api_token: None,
             live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../data/runtime/ws-test-live-sessions.json"),
@@ -283,6 +284,7 @@ mod tests {
             soul_audit: api::soul::SoulAuditState::new_demo(),
             discord_state: api::discord::DiscordState::new_demo(),
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
+            spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
             api_token: Some("secret-token".to_string()),
             live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../data/runtime/ws-auth-test-live-sessions.json"),

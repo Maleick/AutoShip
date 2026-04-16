@@ -26,11 +26,12 @@ use crate::{
         log_watcher::LogWatcher,
         named_db::NamedMobDatabase,
         named_tracker::{NamedAlert, NamedTracker},
-        spawn_alert::{MatchSource, SpawnAlertEvent, SpawnAlertFeed},
+        spawn_alert::{MatchSource, RareSpawnTracker, SpawnAlertEvent, SpawnAlertFeed},
         structs::{SpawnInfo, SpawnType},
     },
     orchestrator::Orchestrator,
 };
+
 use anyhow::Context;
 use ratatui::style::Color;
 use textquest_soul::coordinator::SoulCoordinator;
@@ -501,6 +502,10 @@ pub struct App {
     pub spawn_alert_feed: SpawnAlertFeed,
     /// Whether to auto-alert on named NPC spawns.
     pub spawn_watch_named: bool,
+    /// Rare spawn tracker for time-since-last-pop tracking.
+    pub rare_spawn_tracker: crate::eq::spawn_alert::RareSpawnTracker,
+    /// Sound alert manager for spawn events.
+    pub sound_alert_manager: crate::tui::sound::SoundAlertManager,
 
     /// Player zone notification filter mode (all, strangers only, friends only).
     pub player_notification_filter: crate::config::PlayerFilterMode,
@@ -791,6 +796,8 @@ impl App {
             sound_on_player_zone_in: false,
             player_notification_friends: std::collections::HashSet::new(),
             pending_terminal_bells: 0,
+            rare_spawn_tracker: RareSpawnTracker::new(),
+            sound_alert_manager: crate::tui::sound::SoundAlertManager::new(),
             tracked_spawns: HashMap::new(),
 
             help_visible: false,
@@ -3035,6 +3042,14 @@ impl App {
                     NamedAlert::SpawnUp { name, .. } => (name.clone(), true),
                     NamedAlert::SpawnDown { name, .. } => (name.clone(), false),
                 };
+
+                // Calculate time since last pop for UP events
+                let time_since_last_pop = if is_up {
+                    self.rare_spawn_tracker.record_spawn(&name)
+                } else {
+                    None
+                };
+
                 self.spawn_alert_feed.push(SpawnAlertEvent {
                     spawn_name: name.clone(),
                     zone: zone.clone(),
@@ -3042,14 +3057,33 @@ impl App {
                     timestamp: std::time::SystemTime::now(),
                     tick,
                     match_source: MatchSource::Named,
+                    time_since_last_pop,
                 });
+
+                // Fire sound alert for spawn events
+                let sound_event = format!("named_spawn_{}", if is_up { "up" } else { "down" });
+                if let Some(trigger) = self.sound_alert_manager.check_event(&sound_event).first() {
+                    if trigger.sound_file.is_some() {
+                        self.play_spawn_alert_sound(trigger.sound_file.as_deref());
+                    }
+                }
+
                 let label = if is_up { "UP" } else { "DOWN" };
                 let level = if is_up {
                     ToastLevel::Success
                 } else {
                     ToastLevel::Warning
                 };
-                self.set_feedback(level, format!("[Named] {name} {label} in {zone}"), true);
+
+                // Include time since last pop in the alert message if available
+                let message = if let Some(duration) = time_since_last_pop {
+                    let minutes = duration.as_secs() / 60;
+                    let seconds = duration.as_secs() % 60;
+                    format!("[Named] {name} {label} in {zone} (last: {minutes}m {seconds}s ago)")
+                } else {
+                    format!("[Named] {name} {label} in {zone}")
+                };
+                self.set_feedback(level, message, true);
             }
         }
         self.check_watched_spawn_changes();
@@ -3087,9 +3121,7 @@ impl App {
                     label,
                     &format!(
                         "{} detected in {} by {}",
-                        event.gm_name,
-                        event.zone,
-                        self.server_name
+                        event.gm_name, event.zone, self.server_name
                     ),
                     crate::discord::webhook::AlertLevel::Critical,
                 );
@@ -3099,19 +3131,11 @@ impl App {
         if self.gm_detector.should_pause_automation() && !self.gm_auto_paused {
             self.automation_paused = true;
             self.gm_auto_paused = true;
-            self.set_feedback(
-                ToastLevel::Warning,
-                "Automation paused: GM in zone",
-                true,
-            );
+            self.set_feedback(ToastLevel::Warning, "Automation paused: GM in zone", true);
         } else if !self.gm_detector.should_pause_automation() && self.gm_auto_paused {
             self.automation_paused = false;
             self.gm_auto_paused = false;
-            self.set_feedback(
-                ToastLevel::Info,
-                "Automation resumed: Zone clear",
-                true,
-            );
+            self.set_feedback(ToastLevel::Info, "Automation resumed: Zone clear", true);
         }
 
         self.sync_gm_state_to_web();
@@ -3174,6 +3198,59 @@ impl App {
         if self.gm_detector.config().sound_enabled {
             tracing::debug!("GM alert sound playback not supported on this platform");
         }
+    }
+
+    #[cfg(windows)]
+    fn play_spawn_alert_sound(&self, sound_file: Option<&str>) {
+        let sound_file = match sound_file {
+            Some(f) => f,
+            None => return,
+        };
+
+        let base_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let config_dir = base_path.join("config");
+        let sounds_dir = config_dir.join("sounds");
+        let sound_path = sounds_dir.join(sound_file);
+
+        if !sound_path.exists() {
+            tracing::warn!(
+                path = %sound_path.display(),
+                "Spawn alert sound file not found"
+            );
+            return;
+        }
+
+        tracing::info!(path = %sound_path.display(), "Playing spawn alert sound");
+
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+
+        let wide_path: Vec<u16> = OsStr::new(sound_path.to_str().unwrap_or_default())
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        #[link(name = "winmm")]
+        extern "system" {
+            fn PlaySoundW(pszSound: *const u16, hmod: *mut std::ffi::c_void, fdwSound: u32) -> i32;
+        }
+
+        const SND_FILENAME: u32 = 0x00020000;
+        const SND_ASYNC: u32 = 0x0001;
+        const SND_NODEFAULT: u32 = 0x0002;
+
+        unsafe {
+            let _ = PlaySoundW(
+                wide_path.as_ptr(),
+                std::ptr::null_mut(),
+                SND_FILENAME | SND_ASYNC | SND_NODEFAULT,
+            );
+        }
+    }
+
+    #[cfg(not(windows))]
+    fn play_spawn_alert_sound(&self, _sound_file: Option<&str>) {
+        tracing::debug!("Spawn alert sound playback not supported on this platform");
     }
 
     pub fn sync_gm_state_to_web(&self) {
@@ -3255,6 +3332,7 @@ impl App {
                         timestamp: std::time::SystemTime::now(),
                         tick,
                         match_source: MatchSource::WatchPattern(pattern.to_string()),
+                        time_since_last_pop: None,
                     });
                 }
             }
@@ -3277,6 +3355,7 @@ impl App {
                 timestamp: std::time::SystemTime::now(),
                 tick,
                 match_source: MatchSource::WatchPattern(String::new()),
+                time_since_last_pop: None,
             };
             self.spawn_alert_feed.push(event);
             self.set_feedback(
@@ -3314,7 +3393,8 @@ impl App {
     pub fn set_player_notification_friends(&mut self, friends: impl IntoIterator<Item = String>) {
         self.player_notification_friends.clear();
         for name in friends {
-            self.player_notification_friends.insert(name.to_ascii_lowercase());
+            self.player_notification_friends
+                .insert(name.to_ascii_lowercase());
         }
     }
 
@@ -3347,6 +3427,7 @@ impl App {
                 timestamp: std::time::SystemTime::now(),
                 tick,
                 match_source: MatchSource::WatchPattern("spawn-delta".to_string()),
+                time_since_last_pop: None,
             });
             self.set_feedback(
                 level,
@@ -3363,10 +3444,7 @@ impl App {
                     } else {
                         ToastLevel::Info
                     },
-                    format!(
-                        "[Player] {} {verb} {}",
-                        event.spawn_name, event.zone
-                    ),
+                    format!("[Player] {} {verb} {}", event.spawn_name, event.zone),
                     true,
                 );
                 if is_up && self.sound_on_player_zone_in {
@@ -3481,7 +3559,10 @@ impl App {
                 };
                 self.set_feedback(
                     ToastLevel::Info,
-                    format!("Player filter: {} (use pf [all|strangers|friends])", current),
+                    format!(
+                        "Player filter: {} (use pf [all|strangers|friends])",
+                        current
+                    ),
                     false,
                 );
             }
@@ -3510,7 +3591,10 @@ impl App {
                 );
             }
             Some(other) => {
-                self.usage_feedback("pf", format!("Unknown filter mode: {other} (use all/strangers/friends)"));
+                self.usage_feedback(
+                    "pf",
+                    format!("Unknown filter mode: {other} (use all/strangers/friends)"),
+                );
             }
         }
     }
@@ -3518,7 +3602,11 @@ impl App {
     fn execute_sound_command(&mut self, args: &[&str]) {
         match args.first().copied() {
             None => {
-                let state = if self.sound_on_player_zone_in { "ON" } else { "OFF" };
+                let state = if self.sound_on_player_zone_in {
+                    "ON"
+                } else {
+                    "OFF"
+                };
                 self.set_feedback(
                     ToastLevel::Info,
                     format!("Sound on zone-in: {} (use sound [on|off])", state),
@@ -3576,7 +3664,11 @@ impl App {
                     .cloned()
                     .collect();
                 if friends.is_empty() {
-                    self.set_feedback(ToastLevel::Info, String::from("Friends list is empty"), false);
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        String::from("Friends list is empty"),
+                        false,
+                    );
                 } else {
                     self.set_feedback(
                         ToastLevel::Info,
@@ -3630,7 +3722,10 @@ impl App {
                         );
                     }
                 } else {
-                    self.usage_feedback("friends remove", "Missing friend name: friends remove <name>");
+                    self.usage_feedback(
+                        "friends remove",
+                        "Missing friend name: friends remove <name>",
+                    );
                 }
             }
             Some(other) => {

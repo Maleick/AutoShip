@@ -25,6 +25,10 @@ import type {
   LootRule,
   LootPolicy,
   LootFilterAction,
+  SpawnAlertEntry,
+  WatchPattern,
+  SpawnAlertConfig,
+  SpawnAlertStats,
 } from "../types";
 
 export const assaults: Assault[] = [
@@ -753,5 +757,101 @@ export const lootHistory: LootHistoryEntry[] = [
     source: "Lendiniara the Keeper",
     policy: "round-robin",
     estimated_value: 30_000,
+  },
+];
+
+// ── Spawn Alerts demo data ──────────────────────────────────────────────────────
+
+export const spawnAlertStats: SpawnAlertStats = {
+  total_alerts: 47,
+  spawns_up: 3,
+  spawns_down: 44,
+};
+
+export const spawnAlertConfig: SpawnAlertConfig = {
+  watch_named_enabled: true,
+  watch_patterns: [
+    { pattern: "*Maestro*", enabled: true },
+    { pattern: "Emperor Crush", enabled: true },
+    { pattern: "*Rancor*", enabled: false },
+    { pattern: "Lord Nagafen", enabled: true },
+    { pattern: "*Innoruuk*", enabled: false },
+  ],
+  broadcast_to_web: true,
+  broadcast_to_clients: false,
+};
+
+export const spawnAlerts: SpawnAlertEntry[] = [
+  {
+    id: 1,
+    spawn_name: "Maestro of Rancor",
+    zone: "Plane of Hate",
+    is_up: true,
+    timestamp: "2026-04-15T10:30:00Z",
+    time_since_last_pop_ms: 3600000,
+    match_source: "*Maestro*",
+  },
+  {
+    id: 2,
+    spawn_name: "Maestro of Rancor",
+    zone: "Plane of Hate",
+    is_up: false,
+    timestamp: "2026-04-15T09:30:00Z",
+    time_since_last_pop_ms: null,
+    match_source: "*Maestro*",
+  },
+  {
+    id: 3,
+    spawn_name: "Emperor Crush",
+    zone: "Crushbone",
+    is_up: true,
+    timestamp: "2026-04-15T08:00:00Z",
+    time_since_last_pop_ms: 7200000,
+    match_source: "Named",
+  },
+  {
+    id: 4,
+    spawn_name: "Lord Nagafen",
+    zone: "Nagafen",
+    is_up: false,
+    timestamp: "2026-04-15T06:00:00Z",
+    time_since_last_pop_ms: null,
+    match_source: "Named",
+  },
+  {
+    id: 5,
+    spawn_name: "Phinigel Autropos",
+    zone: "Kedge Keep",
+    is_up: true,
+    timestamp: "2026-04-15T05:30:00Z",
+    time_since_last_pop_ms: 14400000,
+    match_source: "Named",
+  },
+  {
+    id: 6,
+    spawn_name: "Innoruuk Prince",
+    zone: "Plane of Hate",
+    is_up: false,
+    timestamp: "2026-04-14T22:00:00Z",
+    time_since_last_pop_ms: null,
+    match_source: "*Innoruuk*",
+  },
+  {
+    id: 7,
+    spawn_name: "Tallon Zek",
+    zone: "Plane of Sky",
+    is_up: false,
+    timestamp: "2026-04-14T20:00:00Z",
+    time_since_last_pop_ms: null,
+    match_source: "Named",
+  },
+  {
+    id: 8,
+    spawn_name: "Vallon Zek",
+    zone: "Plane of Sky",
+    is_up: true,
+    timestamp: "2026-04-14T18:00:00Z",
+    time_since_last_pop_ms: 28800000,
+    match_source: "Named",
   },
 ];

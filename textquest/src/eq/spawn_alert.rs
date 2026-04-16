@@ -3,8 +3,12 @@
 //! Provides a ring buffer of `SpawnAlertEvent`s generated from two sources:
 //! 1. **Named tracker** — automatic alerts for named NPCs (via `NamedTracker`)
 //! 2. **Watch patterns** — user-defined glob-style patterns (`:watch *moss*`)
+//!
+//! Also provides `RareSpawnTracker` for tracking spawn times and calculating
+//! time since last pop.
 
-use std::{collections::VecDeque, time::SystemTime};
+use std::collections::{HashMap, VecDeque};
+use std::time::{Duration, SystemTime};
 
 /// How a spawn alert was triggered.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,6 +34,9 @@ pub struct SpawnAlertEvent {
     pub tick: u64,
     /// What triggered this alert.
     pub match_source: MatchSource,
+    /// Duration since the last time this spawn was seen (for UP events).
+    /// `None` if this is the first time seeing this spawn.
+    pub time_since_last_pop: Option<Duration>,
 }
 
 /// Pattern mode for spawn watch matching.
@@ -192,6 +199,71 @@ impl SpawnAlertFeed {
     }
 }
 
+// ─── RareSpawnTracker ───────────────────────────────────────────────────────────
+
+/// Tracks rare spawn spawn times and calculates time since last pop.
+///
+/// This allows tracking when a rare spawn was last seen and how long it's been
+/// since it appeared. Useful for farming efficiency and respawn timing.
+#[derive(Debug, Clone)]
+pub struct RareSpawnTracker {
+    /// Last seen time for each spawn (keyed by lowercase name).
+    last_seen: HashMap<String, SystemTime>,
+}
+
+impl RareSpawnTracker {
+    /// Create a new rare spawn tracker.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            last_seen: HashMap::new(),
+        }
+    }
+
+    /// Record a spawn as being seen now and return the time since last pop.
+    ///
+    /// Returns `None` if this is the first time seeing this spawn.
+    pub fn record_spawn(&mut self, name: &str) -> Option<Duration> {
+        let key = name.to_lowercase();
+        let now = SystemTime::now();
+        let result = self.last_seen.get(&key).and_then(|last| now.duration_since(*last).ok());
+        self.last_seen.insert(key, now);
+        result
+    }
+
+    /// Get the time since the last pop for a spawn.
+    ///
+    /// Returns `None` if the spawn has never been recorded.
+    #[must_use]
+    pub fn time_since_last_pop(&self, name: &str) -> Option<Duration> {
+        let key = name.to_lowercase();
+        self.last_seen.get(&key).and_then(|last| SystemTime::now().duration_since(*last).ok())
+    }
+
+    /// Clear all tracked spawn times (e.g., on zone change).
+    pub fn clear(&mut self) {
+        self.last_seen.clear();
+    }
+
+    /// Number of tracked spawns.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.last_seen.len()
+    }
+
+    /// Whether no spawns are tracked.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.last_seen.is_empty()
+    }
+}
+
+impl Default for RareSpawnTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,6 +311,7 @@ mod tests {
                 timestamp: SystemTime::now(),
                 tick: i,
                 match_source: MatchSource::Named,
+                time_since_last_pop: None,
             });
         }
         assert_eq!(feed.len(), 3);
@@ -270,5 +343,53 @@ mod tests {
             Some("Emperor Crush")
         );
         assert_eq!(feed.matches_any_pattern("a bear"), None);
+    }
+
+    // ─── RareSpawnTracker tests ───────────────────────────────────────────────
+
+    #[test]
+    fn test_rare_spawn_tracker_first_spawn_returns_none() {
+        let mut tracker = RareSpawnTracker::new();
+        let result = tracker.record_spawn("Emperor Crush");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_rare_spawn_tracker_second_spawn_returns_duration() {
+        let mut tracker = RareSpawnTracker::new();
+        tracker.record_spawn("Emperor Crush");
+        // Small delay
+        std::thread::sleep(Duration::from_millis(10));
+        let result = tracker.record_spawn("Emperor Crush");
+        assert!(result.is_some());
+        assert!(result.unwrap() >= Duration::from_millis(10));
+    }
+
+    #[test]
+    fn test_rare_spawn_tracker_case_insensitive() {
+        let mut tracker = RareSpawnTracker::new();
+        tracker.record_spawn("Emperor Crush");
+        let result = tracker.time_since_last_pop("EMPEROR CRUSH");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_rare_spawn_tracker_clear() {
+        let mut tracker = RareSpawnTracker::new();
+        tracker.record_spawn("Emperor Crush");
+        assert!(!tracker.is_empty());
+        tracker.clear();
+        assert!(tracker.is_empty());
+        assert!(tracker.time_since_last_pop("Emperor Crush").is_none());
+    }
+
+    #[test]
+    fn test_rare_spawn_tracker_len() {
+        let mut tracker = RareSpawnTracker::new();
+        assert_eq!(tracker.len(), 0);
+        tracker.record_spawn("Emperor Crush");
+        assert_eq!(tracker.len(), 1);
+        tracker.record_spawn("Lord Nagafen");
+        assert_eq!(tracker.len(), 2);
     }
 }
