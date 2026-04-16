@@ -293,6 +293,26 @@ name = "Holy Aura"
 cooldown_secs = 300
 ```
 
+### Web Strategy Tuning: Resurrection Offers
+
+The web strategy tuning panel includes a per-character **Resurrection Offers**
+section for MQ2Rez-style popup handling. Each character can store:
+
+- `enabled` — turn automatic resurrection handling on or off
+- `min_xp_pct` — minimum resurrection percentage required before TextQuest accepts
+- `trusted_casters` — explicit character names allowed to offer a resurrection
+- `decline_if_untrusted` — automatically decline offers that fail the policy
+- `delay_ms` — wait window before acting so an operator can manually override the popup
+
+TextQuest only auto-accepts a resurrection offer when both checks pass:
+
+1. the offer meets or exceeds the configured XP percentage
+2. the caster appears in the trusted-caster list
+
+If auto-decline is enabled, offers that fail either check are declined after the
+configured delay. If auto-decline is disabled, TextQuest leaves the popup open
+for manual handling when the policy does not match.
+
 ### HVT Watchlist: `config/hvt_watchlist.toml`
 
 Define high-value target mobs for named tracking and alerts:

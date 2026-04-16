@@ -8,7 +8,6 @@ import {
   CheckSquare,
   Square,
   UsersThree,
-  MusicNotes,
 } from "@phosphor-icons/react";
 import type {
   AutoRezConfig,
@@ -19,7 +18,6 @@ import type {
 } from "../types";
 import { useCharacterConfigs } from "../hooks/useTuning";
 import { formatDuration } from "../utils/time";
-import BardSongPanel, { makeDefaultConfig } from "./BardSongPanel";
 
 const DEFAULT_AUTO_REZ_CONFIG: AutoRezConfig = {
   enabled: false,
@@ -38,6 +36,25 @@ function parseTrustedCasters(value: string): string[] {
         .filter(Boolean),
     ),
   );
+}
+
+function normalizeAutoRezConfig(
+  config?: Partial<AutoRezConfig> | null,
+): AutoRezConfig {
+  return {
+    ...DEFAULT_AUTO_REZ_CONFIG,
+    ...config,
+    trusted_casters: Array.isArray(config?.trusted_casters)
+      ? parseTrustedCasters(config.trusted_casters.join("\n"))
+      : DEFAULT_AUTO_REZ_CONFIG.trusted_casters,
+  };
+}
+
+function normalizeCharacterConfig(config: CharacterConfig): CharacterConfig {
+  return {
+    ...config,
+    auto_rez: normalizeAutoRezConfig(config.auto_rez),
+  };
 }
 
 // ─── Slider ──────────────────────────────────────────────────────────────────
@@ -184,8 +201,6 @@ function ClassParamsEditor({
 }: ClassParamsEditorProps) {
   const cls = charClass.toLowerCase();
   const hasClericParams = cls === "cleric";
-  const hasCrossClientHealParams =
-    cls === "cleric" || cls === "druid" || cls === "shaman" || cls === "paladin";
   const hasNecroParams = cls === "necromancer";
   const hasBurnParam =
     cls === "warrior" ||
@@ -196,13 +211,7 @@ function ClassParamsEditor({
   const hasSlowParam =
     cls === "warrior" || cls === "shaman" || cls === "enchanter";
 
-  if (
-    !hasClericParams &&
-    !hasCrossClientHealParams &&
-    !hasNecroParams &&
-    !hasBurnParam &&
-    !hasSlowParam
-  ) {
+  if (!hasClericParams && !hasNecroParams && !hasBurnParam && !hasSlowParam) {
     return (
       <p className="text-xs text-white/30 font-rune italic">
         No class-specific parameters for {charClass}.
@@ -243,115 +252,6 @@ function ClassParamsEditor({
           <div className="flex justify-between text-[9px] text-white/30 font-rune">
             <span>50 ms</span>
             <span>1000 ms</span>
-          </div>
-        </div>
-      )}
-
-      {hasCrossClientHealParams && (
-        <div className="flex flex-col gap-4 border border-white/5 bg-void/40 p-3">
-          <button
-            onClick={() =>
-              onChange({
-                ...params,
-                cross_client_heal_enabled: !(params.cross_client_heal_enabled ?? false),
-              })
-            }
-            className="flex items-center gap-2 text-sm font-tech transition-colors hover:text-magentaglow"
-          >
-            {params.cross_client_heal_enabled ? (
-              <CheckSquare weight="fill" size={16} className="text-magentaglow" />
-            ) : (
-              <Square size={16} className="text-white/40" />
-            )}
-            <span className="text-white/70">Cross-Client Heal</span>
-          </button>
-
-          <div className="flex flex-col gap-1">
-            <div className="flex justify-between text-xs font-tech">
-              <span className="text-white/70">Cross-Client Heal At %</span>
-              <span className="font-bold text-green-400">
-                {params.cross_client_heal_threshold_pct ?? 85}%
-              </span>
-            </div>
-            <input
-              type="range"
-              min={10}
-              max={95}
-              value={params.cross_client_heal_threshold_pct ?? 85}
-              onChange={(e) =>
-                onChange({
-                  ...params,
-                  cross_client_heal_threshold_pct: Number(e.target.value),
-                })
-              }
-              className="w-full h-1.5 appearance-none cursor-pointer bg-void border border-white/10
-                [&::-webkit-slider-thumb]:appearance-none
-                [&::-webkit-slider-thumb]:w-3
-                [&::-webkit-slider-thumb]:h-3
-                [&::-webkit-slider-thumb]:rotate-45
-                [&::-webkit-slider-thumb]:bg-green-400
-                [&::-webkit-slider-thumb]:cursor-pointer"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <div className="flex justify-between text-xs font-tech">
-              <span className="text-white/70">Response Priority</span>
-              <span className="font-bold text-spectral">
-                {params.cross_client_heal_priority ?? 10}
-              </span>
-            </div>
-            <input
-              type="range"
-              min={1}
-              max={100}
-              value={params.cross_client_heal_priority ?? 10}
-              onChange={(e) =>
-                onChange({
-                  ...params,
-                  cross_client_heal_priority: Number(e.target.value),
-                })
-              }
-              className="w-full h-1.5 appearance-none cursor-pointer bg-void border border-white/10
-                [&::-webkit-slider-thumb]:appearance-none
-                [&::-webkit-slider-thumb]:w-3
-                [&::-webkit-slider-thumb]:h-3
-                [&::-webkit-slider-thumb]:rotate-45
-                [&::-webkit-slider-thumb]:bg-spectral
-                [&::-webkit-slider-thumb]:cursor-pointer"
-            />
-            <p className="text-[10px] text-white/30 font-rune">
-              Lower numbers claim first.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <div className="flex justify-between text-xs font-tech">
-              <span className="text-white/70">Claim Timeout (ms)</span>
-              <span className="font-bold text-yellow-400">
-                {params.cross_client_claim_timeout_ms ?? 3000} ms
-              </span>
-            </div>
-            <input
-              type="range"
-              min={500}
-              max={8000}
-              step={250}
-              value={params.cross_client_claim_timeout_ms ?? 3000}
-              onChange={(e) =>
-                onChange({
-                  ...params,
-                  cross_client_claim_timeout_ms: Number(e.target.value),
-                })
-              }
-              className="w-full h-1.5 appearance-none cursor-pointer bg-void border border-white/10
-                [&::-webkit-slider-thumb]:appearance-none
-                [&::-webkit-slider-thumb]:w-3
-                [&::-webkit-slider-thumb]:h-3
-                [&::-webkit-slider-thumb]:rotate-45
-                [&::-webkit-slider-thumb]:bg-yellow-400
-                [&::-webkit-slider-thumb]:cursor-pointer"
-            />
           </div>
         </div>
       )}
@@ -447,30 +347,19 @@ interface CharacterEditorProps {
   onSave: (cfg: CharacterConfig) => Promise<void>;
 }
 
-const DEFAULT_AUTO_CAMP_ON_DEATH = {
-  enabled: false,
-  camp_delay_secs: 30,
-  relog_wait_secs: 900,
-};
-
 function CharacterEditor({ config, onSave }: CharacterEditorProps) {
-  const [draft, setDraft] = useState<CharacterConfig>({
-    ...config,
-    auto_rez: config.auto_rez ?? DEFAULT_AUTO_REZ_CONFIG,
-  });
+  const normalizedConfig = normalizeCharacterConfig(config);
+  const [draft, setDraft] = useState<CharacterConfig>(normalizedConfig);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
   // Reset draft when selected character changes.
   useEffect(() => {
-    setDraft({
-      ...config,
-      auto_rez: config.auto_rez ?? DEFAULT_AUTO_REZ_CONFIG,
-    });
+    setDraft(normalizedConfig);
     setSaveMsg(null);
   }, [config]);
 
-  const isDirty = JSON.stringify(draft) !== JSON.stringify(config);
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(normalizedConfig);
 
   const moveRotation = (index: number, dir: -1 | 1) => {
     const rot = [...draft.rotation];
@@ -489,8 +378,7 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
     setDraft({ ...draft, rotation: rot });
   };
 
-  const autoRez = draft.auto_rez ?? DEFAULT_AUTO_REZ_CONFIG;
-  const deathRecovery = draft.auto_camp_on_death ?? DEFAULT_AUTO_CAMP_ON_DEATH;
+  const autoRez = normalizeAutoRezConfig(draft.auto_rez);
 
   const handleSave = async () => {
     setSaving(true);
@@ -539,7 +427,7 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
           )}
           {isDirty && !saving && (
             <button
-              onClick={() => setDraft(config)}
+              onClick={() => setDraft(normalizedConfig)}
               className="p-2 text-white/40 hover:text-spectral transition-colors"
               title="Discard changes"
             >
@@ -587,86 +475,6 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
           />
         </div>
       </section>
-
-      {/* Death auto-camp */}
-      {(() => {
-        const deathCfg =
-          draft.auto_camp_on_death ?? DEFAULT_AUTO_CAMP_ON_DEATH;
-
-        return (
-          <section>
-            <h4 className="font-archaic text-xs uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
-              <Faders size={12} className="text-red-400" />
-              Death Recovery
-            </h4>
-            <div className="bg-violet/20 border border-white/5 p-4 flex flex-col gap-4">
-              <button
-                onClick={() =>
-                  setDraft({
-                    ...draft,
-                    auto_camp_on_death: {
-                      ...deathCfg,
-                      enabled: !deathCfg.enabled,
-                    },
-                  })
-                }
-                className="flex items-center gap-2 text-sm font-tech transition-colors hover:text-red-300"
-              >
-                {deathCfg.enabled ? (
-                  <CheckSquare weight="fill" size={16} className="text-red-300" />
-                ) : (
-                  <Square size={16} className="text-white/40" />
-                )}
-                <span className="text-white/70">
-                  Auto-camp to desktop after death
-                </span>
-              </button>
-              <p className="text-[10px] font-rune text-white/35">
-                Wait for a rez window, then camp out and hand off to AutoLogin for
-                a delayed return.
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="flex flex-col gap-1 text-[10px] font-rune uppercase tracking-widest text-white/45">
-                  Camp Delay (s)
-                  <input
-                    type="number"
-                    min={0}
-                    value={deathCfg.camp_delay_secs}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        auto_camp_on_death: {
-                          ...deathCfg,
-                          camp_delay_secs: Math.max(0, Number(e.target.value) || 0),
-                        },
-                      })
-                    }
-                    className="bg-void border border-white/20 text-white text-sm px-3 py-2 focus:outline-none focus:border-red-300"
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-[10px] font-rune uppercase tracking-widest text-white/45">
-                  Relog Wait (s)
-                  <input
-                    type="number"
-                    min={0}
-                    value={deathCfg.relog_wait_secs}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        auto_camp_on_death: {
-                          ...deathCfg,
-                          relog_wait_secs: Math.max(0, Number(e.target.value) || 0),
-                        },
-                      })
-                    }
-                    className="bg-void border border-white/20 text-white text-sm px-3 py-2 focus:outline-none focus:border-red-300"
-                  />
-                </label>
-              </div>
-            </div>
-          </section>
-        );
-      })()}
 
       {/* Rotation priority */}
       <section>
@@ -745,7 +553,7 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
             }
           />
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
             <button
               onClick={() =>
                 setDraft({
@@ -768,8 +576,8 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
               </span>
             </button>
 
-            <label className="ml-auto flex items-center gap-2 text-xs font-tech text-white/70">
-              Delay
+            <label className="flex items-center gap-2 text-xs font-tech text-white/70 lg:ml-auto">
+              <span>Delay Before Action</span>
               <input
                 type="number"
                 min={0}
@@ -796,7 +604,7 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
           </div>
 
           <label className="flex flex-col gap-2 text-xs font-tech text-white/70">
-            Trusted Casters
+            <span>Trusted Casters</span>
             <textarea
               rows={4}
               value={autoRez.trusted_casters.join("\n")}
@@ -817,9 +625,9 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
           </label>
 
           <p className="text-[10px] text-white/35 font-rune">
-            Offers are only accepted when the rez percent meets the threshold
-            and the caster appears in the trust list. The delay leaves a manual
-            override window before TextQuest clicks the popup.
+            TextQuest only accepts an offer when the resurrection percent meets
+            the threshold and the caster appears in this trust list. The delay
+            leaves a manual override window before the dialog is clicked.
           </p>
         </div>
       </section>
@@ -993,24 +801,6 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
           )}
         </div>
       </section>
-
-      {/* Bard song configuration */}
-      {draft.class === "Bard" && (
-        <section>
-          <h4 className="font-archaic text-xs uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
-            <MusicNotes size={12} className="text-magentaglow" />
-            Bard Song Automation
-          </h4>
-          <div className="bg-violet/20 border border-white/5 p-4">
-            <BardSongPanel
-              config={draft.bard ?? makeDefaultConfig(draft.character_name)}
-              onSave={async (bardConfig) => {
-                setDraft({ ...draft, bard: bardConfig });
-              }}
-            />
-          </div>
-        </section>
-      )}
     </div>
   );
 }
@@ -1031,13 +821,7 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       { id: "2", name: "Light Healing", priority: 2, enabled: true },
       { id: "3", name: "Minor Healing", priority: 3, enabled: true },
     ],
-    class_params: {
-      ch_chain_timing_ms: 200,
-      cross_client_heal_enabled: true,
-      cross_client_heal_threshold_pct: 85,
-      cross_client_heal_priority: 10,
-      cross_client_claim_timeout_ms: 3000,
-    },
+    class_params: { ch_chain_timing_ms: 200 },
     auto_rez: {
       enabled: true,
       min_xp_pct: 96,
@@ -1046,11 +830,6 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       delay_ms: 5000,
     },
     group_override: false,
-    auto_camp_on_death: {
-      enabled: true,
-      camp_delay_secs: 30,
-      relog_wait_secs: 900,
-    },
     tribute_preferences: {
       auto_activate: true,
       warning_threshold_secs: 300,
@@ -1085,11 +864,6 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       delay_ms: 3000,
     },
     group_override: false,
-    auto_camp_on_death: {
-      enabled: false,
-      camp_delay_secs: 30,
-      relog_wait_secs: 900,
-    },
     tribute_preferences: {
       auto_activate: true,
       warning_threshold_secs: 420,
@@ -1102,43 +876,6 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       active_tributes: ["Stalwart Ward", "Champion's Aura"],
       alert_state: "ok",
     },
-  },
-  {
-    character_name: "Melodica",
-    class: "Bard",
-    role: "Support",
-    heal_at_pct: 60,
-    mana_sit_pct: 25,
-    nuke_at_pct: 90,
-    rotation: [
-      { id: "b1", name: "Celestial Clarity", priority: 1, enabled: true },
-      { id: "b2", name: "Aeon's Harmony", priority: 2, enabled: true },
-      { id: "b3", name: "Blade Chords", priority: 3, enabled: true },
-      { id: "b4", name: "Crescendo of the Siren", priority: 4, enabled: true },
-      { id: "b5", name: "Warless Superbia", priority: 5, enabled: false },
-    ],
-    class_params: {},
-    auto_rez: {
-      enabled: false,
-      min_xp_pct: 90,
-      trusted_casters: [],
-      decline_if_untrusted: false,
-      delay_ms: 3000,
-    },
-    group_override: false,
-    tribute_preferences: {
-      auto_activate: true,
-      warning_threshold_secs: 300,
-      preferred_tributes: [],
-    },
-    tribute_status: {
-      active: false,
-      remaining_secs: 0,
-      point_balance: 0,
-      active_tributes: [],
-      alert_state: "ok",
-    },
-    bard: makeDefaultConfig("Melodica"),
   },
 ];
 

@@ -832,9 +832,9 @@ pub enum Command {
         /// Whether auto-accept is enabled.
         enabled: bool,
     },
-    /// Configure automatic resurrection-offer handling for this client.
+    /// Update the resurrection-offer policy for the current character.
     SetAutoRezConfig {
-        /// Policy and timing for auto-accepting or declining rez offers.
+        /// Per-character auto-rez trust, threshold, and delay settings.
         config: AutoRezConfig,
     },
     /// Replace the full auto-accept policy (trust list + per-type toggles).
@@ -3064,5 +3064,37 @@ mod tests {
         } else {
             panic!("expected MovementQueueFlushed");
         }
+    }
+
+    #[test]
+    fn command_roundtrip_set_auto_rez_config() {
+        use crate::protocol::{decode, encode};
+
+        let cmd = Command::SetAutoRezConfig {
+            config: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 96,
+                trusted_casters: vec!["Frostreaver".into(), "Leafbinder".into()],
+                decline_if_untrusted: true,
+                delay_ms: 5_100,
+            },
+        };
+        let encoded = encode(&cmd).expect("encode SetAutoRezConfig");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode SetAutoRezConfig");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn auto_rez_config_default_values() {
+        assert_eq!(
+            AutoRezConfig::default(),
+            AutoRezConfig {
+                enabled: false,
+                min_xp_pct: 90,
+                trusted_casters: Vec::new(),
+                decline_if_untrusted: false,
+                delay_ms: 3_000,
+            }
+        );
     }
 }
