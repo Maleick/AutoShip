@@ -21,6 +21,7 @@ use crate::{
         state::{CampAction, CampEvent, CampLoop, CampMember, CampSnapshot, CampState, Role},
         vendor::{SellCycle, SellState, VendorConfig},
     },
+    chat_log::ChatLogWriter,
     combat::coordinator::CombatCoordinator,
     ipc::{pipe::CommandPipe, shared::SharedStateReader},
 };
@@ -122,6 +123,17 @@ pub struct Orchestrator {
     prev_cc_state: HashMap<u32, CcType>,
     /// Previous nearby spawn IDs for add detection.
     prev_nearby_spawns: HashMap<u32, String>,
+    /// Lazy-initialized passive trade-price monitor.
+    trade_price_monitor: Option<TradePriceMonitor>,
+    /// Prevent repeated warning spam when the local trade-price DB cannot be
+    /// opened.
+    trade_price_monitor_open_failed: bool,
+    /// Last time passive trade chat was polled from the DLL.
+    last_trade_chat_poll: Option<Instant>,
+    /// MQ2Log-style per-character chat output writer.
+    chat_log_writer: Option<ChatLogWriter>,
+    /// Server name for chat log file naming (server_charname.log format).
+    server_name: String,
 
     // --- M8 Orchestrator routing ---
     /// Active routing scope (synced from TUI `App::routing_scope` each tick).
@@ -165,6 +177,11 @@ impl Orchestrator {
             suggested_camp: None,
             prev_cc_state: HashMap::new(),
             prev_nearby_spawns: HashMap::new(),
+            trade_price_monitor: None,
+            trade_price_monitor_open_failed: false,
+            last_trade_chat_poll: None,
+            chat_log_writer: None,
+            server_name: String::new(),
             routing_scope: RoutingScope::AllSession,
             scope_pids: Vec::new(),
         }
@@ -1005,6 +1022,163 @@ impl Orchestrator {
         self.client_class_names.remove(&pid);
         self.xassist.remove_client(pid);
         tracing::info!(pid, "Client removed from orchestrator");
+    }
+
+    fn poll_trade_chat_if_due(&mut self) {
+        if self
+            .last_trade_chat_poll
+            .is_some_and(|last| last.elapsed() < TRADE_CHAT_POLL_INTERVAL)
+        {
+            return;
+        }
+
+        let pids = self.client_pids.clone();
+        if pids.is_empty() {
+            return;
+        }
+        self.last_trade_chat_poll = Some(Instant::now());
+
+        let mut recorded = 0usize;
+        let mut monitor_available = self.trade_price_monitor.is_some();
+        for pid in pids {
+            let Some((zone, local_character_name)) = self.game_states.get(&pid).map(|state| {
+                let zone = if !state.zone_short_name.is_empty() {
+                    state.zone_short_name.clone()
+                } else {
+                    state.zone_long_name.clone()
+                };
+                let local_character_name = state
+                    .local_player
+                    .as_ref()
+                    .map(|player| player.displayed_name.clone())
+                    .or_else(|| self.client_names.get(&pid).cloned());
+                (zone, local_character_name)
+            }) else {
+                continue;
+            };
+
+            let messages = self.poll_chat(pid);
+            if messages.is_empty() {
+                continue;
+            }
+
+            if !monitor_available {
+                monitor_available = self.ensure_trade_price_monitor().is_some();
+            }
+            let Some(monitor) = self.trade_price_monitor.as_mut() else {
+                continue;
+            };
+
+            for message in messages {
+                let Some(chat) = textquest_common::chat::parse_chat_text(&message.text) else {
+                    continue;
+                };
+
+                match monitor.record_chat(
+                    pid,
+                    &zone,
+                    local_character_name.as_deref(),
+                    &chat,
+                    message.timestamp_ms as i64,
+                ) {
+                    Ok(true) => recorded += 1,
+                    Ok(false) => {}
+                    Err(error) => tracing::warn!(
+                        pid,
+                        zone = zone.as_str(),
+                        error = %error,
+                        "Failed to record passive trade chat"
+                    ),
+                }
+            }
+        }
+
+        if recorded > 0 {
+            tracing::info!(recorded, "Recorded passive trade-price observations");
+        }
+    }
+
+    fn ensure_trade_price_monitor(&mut self) -> Option<&mut TradePriceMonitor> {
+        if self.trade_price_monitor.is_none() {
+            match TradePriceMonitor::open(Path::new(crate::TRADE_PRICE_DB_PATH)) {
+                Ok(monitor) => {
+                    self.trade_price_monitor = Some(monitor);
+                    self.trade_price_monitor_open_failed = false;
+                }
+                Err(error) => {
+                    if !self.trade_price_monitor_open_failed {
+                        tracing::warn!(
+                            error = %error,
+                            path = crate::TRADE_PRICE_DB_PATH,
+                            "Passive trade-price monitor disabled"
+                        );
+                    }
+                    self.trade_price_monitor_open_failed = true;
+                    return None;
+                }
+            }
+        }
+
+        self.trade_price_monitor.as_mut()
+    }
+
+    /// Set the server name for chat log file naming.
+    pub fn set_server_name(&mut self, server_name: impl Into<String>) {
+        self.server_name = server_name.into();
+    }
+
+    /// Configure the MQ2Log-style chat output writer.
+    ///
+    /// When `config.enabled` is `false`, the writer is dropped. When `enabled` is
+    /// `true`, a writer is created (or reconfigured) with the provided settings.
+    pub fn configure_chat_log(&mut self, config: textquest_common::chat::ChatLogConfig) {
+        use std::path::PathBuf;
+
+        if !config.enabled {
+            self.chat_log_writer = None;
+            tracing::info!("Chat logging disabled");
+            return;
+        }
+
+        let log_dir = crate::paths::resolve_log_dir().join("chat");
+        let writer = match ChatLogWriter::new(PathBuf::from(&log_dir), config) {
+            Ok(w) => w,
+            Err(e) => {
+                tracing::warn!(error = %e, path = %log_dir.display(), "Failed to create chat log writer");
+                return;
+            }
+        };
+        self.chat_log_writer = Some(writer);
+        tracing::info!(path = %log_dir.display(), "Chat logging enabled");
+    }
+
+    /// Poll chat from all clients and write to log files.
+    fn poll_and_log_chat(&mut self) {
+        let writer = match &self.chat_log_writer {
+            Some(w) => w,
+            None => return,
+        };
+
+        let server = &self.server_name;
+        if server.is_empty() {
+            return;
+        }
+
+        for &pid in &self.client_pids {
+            let character_name = match self.client_names.get(&pid) {
+                Some(name) => name.as_str(),
+                None => continue,
+            };
+
+            let messages = self.poll_chat(pid);
+            for msg in messages {
+                if let Some(event) = textquest_common::chat::parse_chat_text(&msg.text) {
+                    if let Err(e) = writer.write_event(character_name, server, &event) {
+                        tracing::warn!(error = %e, pid, character = character_name, "Failed to write chat to log");
+                    }
+                }
+            }
+        }
     }
 
     /// Send a single slash command to a client via named pipe.

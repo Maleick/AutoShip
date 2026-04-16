@@ -225,6 +225,10 @@ fn build_api_router() -> Router<Arc<AppState>> {
             "/box-chat/settings",
             get(api::get_box_chat_settings).put(api::put_box_chat_settings),
         )
+        .route(
+            "/chat-log/settings",
+            get(api::chat_log::get_chat_log_settings).put(api::chat_log::put_chat_log_settings),
+        )
         .route("/sessions", get(api::list_sessions))
         .nest("/dashboard", api::dashboard::router())
         .nest("/accounts", accounts::router())

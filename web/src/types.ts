@@ -185,6 +185,31 @@ export interface BoxChatSettings {
   auto_connect: boolean;
 }
 
+export type ChatChannel =
+  | "say"
+  | "tell"
+  | "tell_out"
+  | "group"
+  | "guild"
+  | "raid"
+  | "shout"
+  | "ooc"
+  | "auction";
+
+export type LogRotation =
+  | { type: "none" }
+  | { type: "daily" }
+  | { type: "by_size"; size: number };
+
+export type LogLevel = "info" | "debug";
+
+export interface ChatLogSettings {
+  enabled: boolean;
+  rotation: LogRotation;
+  level: LogLevel;
+  channels: ChatChannel[];
+}
+
 // ── GM Alert types ───────────────────────────────────────────────────────────
 
 export interface GmAlertConfig {

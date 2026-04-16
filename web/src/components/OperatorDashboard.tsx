@@ -6,6 +6,7 @@ import {
   CompassTool,
   Cpu,
   Heartbeat,
+  Notepad,
   Plus,
   Pulse,
   ShieldChevron,
@@ -19,6 +20,7 @@ import {
 } from "@phosphor-icons/react";
 
 import BoxChatPanel from "./BoxChatPanel";
+import ChatLogPanel from "./ChatLogPanel";
 import GmAlertPanel from "./GmAlertPanel";
 import type {
   DashboardActionRequest,
@@ -298,7 +300,11 @@ function titleCase(raw: string) {
 export default function OperatorDashboard() {
   const { snapshot, loading, error, connected, refresh, submitAction } = useDashboard();
   const [boxChatOpen, setBoxChatOpen] = useState(false);
+<<<<<<< HEAD
+  const [chatLogOpen, setChatLogOpen] = useState(false);
+=======
   const [gmAlertOpen, setGmAlertOpen] = useState(false);
+>>>>>>> origin/master
   const [sessionWizardOpen, setSessionWizardOpen] = useState(false);
   const [sessionProfile, setSessionProfile] = useState("");
   const [sessionCharacterName, setSessionCharacterName] = useState("");
@@ -493,6 +499,18 @@ export default function OperatorDashboard() {
               </div>
               <button
                 type="button"
+                onClick={() => setChatLogOpen((current) => !current)}
+                className={`inline-flex items-center gap-2 self-start rounded-full border px-4 py-2 text-sm transition xl:self-end ${
+                  chatLogOpen
+                    ? "border-fuchsia-300/30 bg-fuchsia-300/10 text-fuchsia-100"
+                    : "border-white/10 bg-white/5 text-white/70 hover:border-white/25 hover:bg-white/10"
+                }`}
+              >
+                <Notepad size={16} />
+                {chatLogOpen ? "Hide Chat Logging" : "Chat Logging"}
+              </button>
+              <button
+                type="button"
                 onClick={() => setBoxChatOpen((current) => !current)}
                 className={`inline-flex items-center gap-2 self-start rounded-full border px-4 py-2 text-sm transition xl:self-end ${
                   boxChatOpen
@@ -525,6 +543,7 @@ export default function OperatorDashboard() {
           )}
         </header>
 
+        {chatLogOpen && <ChatLogPanel />}
         {boxChatOpen && <BoxChatPanel />}
         {gmAlertOpen && <GmAlertPanel />}
 

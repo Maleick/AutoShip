@@ -17,6 +17,13 @@
 //! [`parse_chat_text`] accepts a raw `dsp_chat` string (with or without STML
 //! tags), strips markup, and pattern-matches the EQ verb syntax to produce a
 //! [`ChatEvent`].
+//!
+//! # Chat output logging
+//!
+//! MQ2Log-style per-character chat output logging is configured via
+//! [`ChatLogConfig`].
+
+use serde::{Deserialize, Serialize};
 
 /// EQ chat channel.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -51,6 +58,67 @@ pub struct ChatEvent {
     pub sender: String,
     /// The plain-text message content (STML tags already stripped).
     pub message: String,
+}
+
+/// Log rotation strategy for per-character chat log files.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogRotation {
+    /// No rotation — append to a single log file indefinitely.
+    None,
+    /// Rotate daily at midnight.
+    Daily,
+    /// Rotate when the file exceeds the specified size in bytes.
+    BySize(u64),
+}
+
+impl Default for LogRotation {
+    fn default() -> Self {
+        Self::Daily
+    }
+}
+
+/// Log level filter for chat output logging.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogLevel {
+    /// Log all captured chat output.
+    Info,
+    /// Log all captured chat output with additional debug metadata.
+    Debug,
+}
+
+impl Default for LogLevel {
+    fn default() -> Self {
+        Self::Info
+    }
+}
+
+/// Configuration for per-character MQ2Log-style chat output logging.
+///
+/// When enabled, all MQ2 output is written to `logs/server_charname.log`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChatLogConfig {
+    /// Enable per-character chat output logging.
+    pub enabled: bool,
+    /// Log rotation strategy.
+    pub rotation: LogRotation,
+    /// Log level filter.
+    pub level: LogLevel,
+    /// EQ chat channels to log. If empty, all channels are logged.
+    pub channels: Vec<ChatChannel>,
+}
+
+impl Default for ChatLogConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            rotation: LogRotation::default(),
+            level: LogLevel::default(),
+            channels: Vec::new(),
+        }
+    }
 }
 
 /// Strip STML/HTML-like markup tags from EQ text.
