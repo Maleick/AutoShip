@@ -3543,7 +3543,7 @@ impl App {
                 let friends: Vec<String> = self
                     .player_notification_friends
                     .iter()
-                    .map(|s| s.clone())
+                    .cloned()
                     .collect();
                 if friends.is_empty() {
                     self.set_feedback(
@@ -3563,7 +3563,7 @@ impl App {
                 let friends: Vec<String> = self
                     .player_notification_friends
                     .iter()
-                    .map(|s| s.clone())
+                    .cloned()
                     .collect();
                 if friends.is_empty() {
                     self.set_feedback(ToastLevel::Info, String::from("Friends list is empty"), false);

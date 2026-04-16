@@ -25,7 +25,7 @@
 //! ```
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 
@@ -299,7 +299,6 @@ impl GmDetector {
     }
 
     /// Peek at pending events without consuming them.
-    #[must_use]
     pub fn peek_events(&self) -> impl Iterator<Item = &GmAlertEvent> {
         self.events.iter()
     }

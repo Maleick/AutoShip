@@ -12,7 +12,14 @@ use axum::{
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::Path as StdPath, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::{Path as StdPath, PathBuf},
+    sync::Arc,
+};
+use textquest_common::box_chat::BoxChatConfig;
+use textquest_common::ipc::{AutoAcceptSettings, AutoRezConfig};
+use toml_edit::{DocumentMut, Item, Table, value};
 
 use crate::AppState;
 use textquest_common::shared_client_state::SharedClientState;
@@ -352,6 +359,49 @@ pub async fn put_character_config(
     Ok(Json(config))
 }
 
+/// GET /api/config/auto-accept — return the current auto-accept policy.
+pub async fn get_auto_accept_settings(
+    State(state): State<Arc<AppState>>,
+) -> Json<AutoAcceptSettings> {
+    Json(state.auto_accept_settings.read().await.clone())
+}
+
+/// PUT /api/config/auto-accept — replace the current auto-accept policy.
+pub async fn put_auto_accept_settings(
+    State(state): State<Arc<AppState>>,
+    Json(mut settings): Json<AutoAcceptSettings>,
+) -> Result<Json<AutoAcceptSettings>, (StatusCode, Json<ErrorResponse>)> {
+    let mut trusted_players = Vec::new();
+    for player in settings.trusted_players {
+        let trimmed = player.trim();
+        if trimmed.is_empty() {
+            return Err(json_error(
+                StatusCode::BAD_REQUEST,
+                "Trusted player names must not be blank",
+            ));
+        }
+        if trusted_players
+            .iter()
+            .all(|existing: &String| !existing.eq_ignore_ascii_case(trimmed))
+        {
+            trusted_players.push(trimmed.to_string());
+        }
+    }
+    settings.trusted_players = trusted_players;
+
+    *state.auto_accept_settings.write().await = settings.clone();
+    let applied = crate::live_ipc::apply_auto_accept_settings(&settings);
+    tracing::info!(
+        attempted_clients = applied.attempted,
+        applied_clients = applied.applied,
+        failed_clients = applied.failures.len(),
+        "Updated auto-accept settings"
+    );
+    for (pid, error) in applied.failures {
+        tracing::warn!(pid, %error, "Failed to apply auto-accept settings to live client");
+    }
+    Ok(Json(settings))
+}
 // ── Economy types
 // ─────────────────────────────────────────────────────────────
 
@@ -547,7 +597,9 @@ mod tests {
     use axum::response::IntoResponse;
     use http_body_util::BodyExt;
     use serde_json::Value;
-    use std::path::PathBuf;
+use std::path::PathBuf;
+    use tempfile::tempdir;
+    use textquest_common::ipc::{AutoAcceptSettings, AutoAcceptTrustMode};
 
     fn test_live_session_snapshot_path(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../data/runtime/{name}"))
@@ -578,9 +630,11 @@ mod tests {
             account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
+            auto_accept_settings: tokio::sync::RwLock::new(AutoAcceptSettings::default()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
             api_token: None,
             live_session_snapshot_path: test_live_session_snapshot_path("api-sessions-ok.json"),
         });
@@ -668,6 +722,7 @@ mod tests {
             account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
+            auto_accept_settings: tokio::sync::RwLock::new(AutoAcceptSettings::default()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
@@ -688,6 +743,7 @@ mod tests {
             account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
+            auto_accept_settings: tokio::sync::RwLock::new(AutoAcceptSettings::default()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
@@ -720,5 +776,71 @@ mod tests {
             .find(|c| c.character_name == "Aelrindel")
             .expect("updated config should exist");
         assert_eq!(updated.heal_at_pct, 50);
+    }
+
+    #[tokio::test]
+    async fn auto_accept_settings_round_trip() {
+        let state = Arc::new(AppState {
+            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
+            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
+            auto_accept_settings: tokio::sync::RwLock::new(AutoAcceptSettings::default()),
+            loot_state: crate::api::loot::LootState::new_demo(),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
+            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            api_token: None,
+        });
+        let update = AutoAcceptSettings {
+            enabled: true,
+            accept_trades: false,
+            trust_mode: AutoAcceptTrustMode::TrustList,
+            trusted_players: vec!["Leaderone".into(), "Clericone".into()],
+            ..AutoAcceptSettings::default()
+        };
+
+        let Json(saved) = put_auto_accept_settings(State(state.clone()), Json(update.clone()))
+            .await
+            .expect("put auto-accept settings should succeed");
+        assert_eq!(saved, update);
+
+        let Json(loaded) = get_auto_accept_settings(State(state)).await;
+        assert_eq!(loaded, update);
+    }
+
+    #[tokio::test]
+    async fn put_auto_accept_settings_rejects_blank_trusted_names() {
+        let state = Arc::new(AppState {
+            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
+            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
+            auto_accept_settings: tokio::sync::RwLock::new(AutoAcceptSettings::default()),
+            loot_state: crate::api::loot::LootState::new_demo(),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
+            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            api_token: None,
+        });
+        let invalid = AutoAcceptSettings {
+            enabled: true,
+            trust_mode: AutoAcceptTrustMode::TrustList,
+            trusted_players: vec!["".into(), "   ".into()],
+            ..AutoAcceptSettings::default()
+        };
+
+        let response = put_auto_accept_settings(State(state), Json(invalid))
+            .await
+            .expect_err("blank names should be rejected")
+            .into_response();
+        let (status, body) = error_response_json(response).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            body,
+            serde_json::json!({ "error": "Trusted player names must not be blank" })
+        );
     }
 }

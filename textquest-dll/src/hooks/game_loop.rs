@@ -2905,6 +2905,14 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             tracing::info!(enabled, "SetAutoAccept received");
             crate::dialog::set_enabled(enabled);
         }
+Command::SetAutoRezConfig { config } => {
+            tracing::info!("SetAutoRezConfig received");
+            crate::dialog::set_rez_config(config);
+        }
+        Command::SetAutoAcceptSettings { settings } => {
+            tracing::info!(enabled = settings.enabled, "SetAutoAcceptSettings received");
+            crate::dialog::set_settings(settings);
+        }
         Command::SetRenderMode { mode } => {
             tracing::info!(%mode, "SetRenderMode received");
             crate::hooks::render::set_mode(mode);

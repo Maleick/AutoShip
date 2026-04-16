@@ -2,10 +2,10 @@
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Paragraph, Row, Table, Wrap},
+    layout::{Constraint, Rect},
+    style::{Color, Style},
+    text::Span,
+    widgets::{Cell, Paragraph, Row, Table, Wrap},
 };
 
 use crate::eq::spawn_alert::{MatchSource, SpawnAlertEvent};
@@ -68,7 +68,7 @@ pub fn draw_spawn_events_panel(frame: &mut Frame, area: Rect, app: &mut App) {
             let name = truncate(&event.spawn_name, 20);
             let event_label = if event.is_up { "UP" } else { "DOWN" };
 
-            let source_style = match &event.match_source {
+            let _source_style = match &event.match_source {
                 MatchSource::Named => Style::default().fg(Color::Yellow),
                 MatchSource::WatchPattern(_) => Style::default().fg(t.text_accent),
             };
@@ -83,10 +83,10 @@ pub fn draw_spawn_events_panel(frame: &mut Frame, area: Rect, app: &mut App) {
             let zone_style = Style::default().fg(t.text_secondary);
 
             Row::new(vec![
-                crate::tui::widgets::Cell::from(Span::styled(timestamp, time_style)),
-                crate::tui::widgets::Cell::from(Span::styled(zone, zone_style)),
-                crate::tui::widgets::Cell::from(Span::styled(name, t.text_bright)),
-                crate::tui::widgets::Cell::from(Span::styled(event_label, event_style)),
+                Cell::from(Span::styled(timestamp, time_style)),
+                Cell::from(Span::styled(zone, zone_style)),
+                Cell::from(Span::styled(name, t.text_bright)),
+                Cell::from(Span::styled(event_label, event_style)),
             ])
         })
         .collect();

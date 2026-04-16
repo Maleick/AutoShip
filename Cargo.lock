@@ -3633,6 +3633,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "windows",
  "zeroize",
 ]
 

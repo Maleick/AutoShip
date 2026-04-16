@@ -34,6 +34,7 @@ use tower_http::{
 
 mod accounts;
 mod api;
+mod live_ipc;
 mod ws;
 
 /// Shared application state accessible from all handlers.
@@ -47,6 +48,8 @@ pub struct AppState {
     pub credential_store: Option<accounts::CredentialStore>,
     /// In-memory character tuning config store for the strategy tuning panel.
     pub character_configs: tokio::sync::RwLock<HashMap<String, api::CharacterConfig>>,
+    /// In-memory auto-accept policy store for the dashboard controls.
+    pub auto_accept_settings: tokio::sync::RwLock<textquest_common::ipc::AutoAcceptSettings>,
     /// In-memory loot configuration state.
     pub loot_state: Arc<api::loot::LootState>,
     /// In-memory economy cycle state.
@@ -162,6 +165,7 @@ fn build_state() -> Arc<AppState> {
         account_store: Mutex::new(accounts::AccountStore::default()),
         credential_store,
         character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
+        auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
         loot_state: api::loot::LootState::new_demo(),
         economy_state: api::economy::EconomyState::new_demo(),
         dashboard_state: api::dashboard::DashboardState::new_demo(),
@@ -241,6 +245,10 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .route(
             "/config/characters/{character}",
             put(api::put_character_config),
+        )
+        .route(
+            "/config/auto-accept",
+            get(api::get_auto_accept_settings).put(api::put_auto_accept_settings),
         )
         .route(
             "/config/player-watch",
@@ -344,6 +352,7 @@ mod tests {
                 accounts::CredentialStore::open(path, "test_master_pw").expect("credential store"),
             ),
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
+            auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
             loot_state: api::loot::LootState::new_demo(),
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: api::dashboard::DashboardState::new_demo(),

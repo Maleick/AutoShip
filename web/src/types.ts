@@ -368,6 +368,22 @@ export interface CharacterConfig {
   bard?: BardConfig;
 }
 
+// ── Auto-accept configuration types ─────────────────────────────────────────
+
+export type AutoAcceptTrustMode = "anyone" | "trust_list";
+
+export interface AutoAcceptSettings {
+  enabled: boolean;
+  accept_group_invites: boolean;
+  accept_trades: boolean;
+  accept_task_adds: boolean;
+  accept_dz_adds: boolean;
+  accept_translocates: boolean;
+  accept_anchors: boolean;
+  trust_mode: AutoAcceptTrustMode;
+  trusted_players: string[];
+}
+
 // ── Loot configuration types ─────────────────────────────────────────────────
 
 export interface LootRules {

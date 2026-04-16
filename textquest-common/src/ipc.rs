@@ -162,6 +162,98 @@ impl std::fmt::Display for RenderMode {
     }
 }
 
+/// Auto-accept request types supported by the DLL dialog handler.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoAcceptRequestKind {
+    /// Group invitation prompt.
+    GroupInvite,
+    /// Trade confirmation window.
+    Trade,
+    /// Task offer or task add prompt.
+    TaskAdd,
+    /// Dynamic zone / expedition offer prompt.
+    DzAdd,
+    /// Wizard or druid translocate prompt.
+    Translocate,
+    /// Primary/secondary anchor teleport prompt.
+    Anchor,
+}
+
+/// Trust policy for incoming auto-accept requests.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoAcceptTrustMode {
+    /// Accept configured request kinds from anyone.
+    #[default]
+    Anyone,
+    /// Require the sender to be present in `trusted_players`.
+    TrustList,
+}
+
+/// Shared auto-accept policy used by the DLL, orchestrator, and web dashboard.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AutoAcceptSettings {
+    /// Master enable/disable for the entire feature.
+    pub enabled: bool,
+    /// Whether to auto-accept group invites.
+    pub accept_group_invites: bool,
+    /// Whether to auto-accept trade confirmations.
+    pub accept_trades: bool,
+    /// Whether to auto-accept task offers or task adds.
+    pub accept_task_adds: bool,
+    /// Whether to auto-accept DZ / expedition offers.
+    pub accept_dz_adds: bool,
+    /// Whether to auto-accept translocate prompts.
+    pub accept_translocates: bool,
+    /// Whether to auto-accept anchor teleport prompts.
+    pub accept_anchors: bool,
+    /// Whether trust enforcement is disabled or requires a trusted sender.
+    pub trust_mode: AutoAcceptTrustMode,
+    /// Case-insensitive character allowlist used when `trust_mode = TrustList`.
+    pub trusted_players: Vec<String>,
+}
+
+impl AutoAcceptSettings {
+    /// Preserve the legacy `SetAutoAccept { enabled }` behavior.
+    #[must_use]
+    pub fn legacy(enabled: bool) -> Self {
+        Self {
+            enabled,
+            ..Self::default()
+        }
+    }
+
+    /// Check whether the specific request kind is enabled by this policy.
+    #[must_use]
+    pub fn is_kind_enabled(&self, kind: AutoAcceptRequestKind) -> bool {
+        match kind {
+            AutoAcceptRequestKind::GroupInvite => self.accept_group_invites,
+            AutoAcceptRequestKind::Trade => self.accept_trades,
+            AutoAcceptRequestKind::TaskAdd => self.accept_task_adds,
+            AutoAcceptRequestKind::DzAdd => self.accept_dz_adds,
+            AutoAcceptRequestKind::Translocate => self.accept_translocates,
+            AutoAcceptRequestKind::Anchor => self.accept_anchors,
+        }
+    }
+}
+
+impl Default for AutoAcceptSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            accept_group_invites: true,
+            accept_trades: true,
+            accept_task_adds: true,
+            accept_dz_adds: true,
+            accept_translocates: true,
+            accept_anchors: true,
+            trust_mode: AutoAcceptTrustMode::Anyone,
+            trusted_players: Vec::new(),
+        }
+    }
+}
+
 /// Filter for querying open inventory container slots from the injected client.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ContainerSlotQuery {
@@ -744,6 +836,11 @@ pub enum Command {
     SetAutoRezConfig {
         /// Policy and timing for auto-accepting or declining rez offers.
         config: AutoRezConfig,
+    },
+    /// Replace the full auto-accept policy (trust list + per-type toggles).
+    SetAutoAcceptSettings {
+        /// Auto-accept settings to apply in the DLL.
+        settings: AutoAcceptSettings,
     },
     /// Set the rendering mode for this client.
     ///
@@ -1771,6 +1868,7 @@ mod tests {
                         client_id: 42,
                         zone: "freportw".into(),
                         spawn_name: "a beetle".into(),
+                        spawn_type: 1,
                         kind: SpawnEventKind::Created,
                         timestamp_ms: 1,
                     },
@@ -1778,6 +1876,7 @@ mod tests {
                         client_id: 42,
                         zone: "freportw".into(),
                         spawn_name: "a spider".into(),
+                        spawn_type: 1,
                         kind: SpawnEventKind::Destroyed,
                         timestamp_ms: 2,
                     },

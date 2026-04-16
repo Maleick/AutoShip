@@ -8,15 +8,10 @@ use textquest_soul::config::SoulConfig;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlayerFilterMode {
+    #[default]
     All,
     StrangersOnly,
     FriendsOnly,
-}
-
-impl Default for PlayerFilterMode {
-    fn default() -> Self {
-        Self::All
-    }
 }
 
 // ─── Account Configuration ───────────────────────────────────────────────

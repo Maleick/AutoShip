@@ -27,6 +27,7 @@ import type {
   RouteCard,
   Waypoint,
 } from "../dashboard";
+import AutoAcceptPanel from "./AutoAcceptPanel";
 import { useDashboard } from "../hooks/useDashboard";
 
 function panelClasses(accent: "magenta" | "cyan" | "amber" = "magenta") {
@@ -984,6 +985,8 @@ export default function OperatorDashboard() {
           </div>
 
           <div className="grid gap-6">
+            <AutoAcceptPanel embedded />
+
             <Panel
               title="Economy Monitoring"
               subtitle="Loot intake, vendor cadence, profit trend, and wishlist"

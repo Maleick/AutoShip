@@ -27,7 +27,7 @@ const navItems: {
   { icon: Sword, label: "Active Engagements", id: "engagements", pulse: true },
   { icon: UsersThree, label: "Fleet Formations", id: "formations" },
   { icon: Globe, label: "Realm Map (Norrath)", id: "map" },
-  { icon: ShieldWarning, label: "Security Wards", id: "security" },
+  { icon: ShieldWarning, label: "Auto-Accept Wards", id: "security" },
   { icon: Bag, label: "Loot Configuration", id: "loot" },
   { icon: Brain, label: "Soul Engine", id: "soul" },
   { icon: Broadcast, label: "Network Box Chat", id: "boxchat" },

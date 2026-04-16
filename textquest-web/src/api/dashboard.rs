@@ -1035,6 +1035,7 @@ mod tests {
             account_store: Mutex::new(accounts::AccountStore::default()),
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
+            auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
             loot_state: api::loot::LootState::new_demo(),
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: DashboardState::new_demo(),

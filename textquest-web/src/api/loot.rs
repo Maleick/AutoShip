@@ -444,6 +444,7 @@ mod tests {
             account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
             loot_state: LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
             dashboard_state: crate::api::dashboard::DashboardState::new_demo(),

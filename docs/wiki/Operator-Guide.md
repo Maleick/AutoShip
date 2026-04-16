@@ -218,6 +218,35 @@ prev_camp = "qey2hh1_camp"
 :camp list
 ```
 
+### Auto-Accept Wards (Web Dashboard)
+
+The web dashboard now exposes an **Auto-Accept Wards** view for unattended multibox prompts that otherwise block automation.
+
+What it controls:
+
+- Group invites
+- Trade confirmations
+- Task adds
+- Dynamic-zone or expedition adds
+- Translocate prompts
+- Primary or secondary anchor teleports
+- Respawn prompts (auto-accepted whenever the master ward is on; not currently configurable per-type)
+
+How to configure it:
+
+1. Open the dashboard and switch to **Auto-Accept Wards** from the left sidebar.
+2. Toggle the **Master Ward** on to arm the feature.
+3. Enable or disable each prompt type independently.
+4. Choose **Anyone** to accept enabled prompts from all senders, or **Trust List** to restrict acceptance to named characters only.
+5. When using **Trust List**, enter one player name per line or separate names with commas.
+6. Save the ward profile.
+
+Operational notes:
+
+- Trust-list matching is case-insensitive.
+- In trust-list mode, requests without a detected sender are rejected instead of being auto-accepted.
+- Turning the master toggle off disables all auto-accept behavior without clearing the saved per-type settings.
+
 ### Classes: `config/classes/*.toml`
 
 Define combat ability rotations for each class. TextQuest includes pre-configured rotations for all 16 classes (Bard, Beastlord, Berserker, Cleric, Druid, Enchanter, Magician, Monk, Necromancer, Paladin, Ranger, Rogue, Shadowknight, Shaman, Warrior, Wizard).
