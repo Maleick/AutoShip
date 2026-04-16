@@ -230,6 +230,10 @@ pub struct AppConfig {
     /// values.
     #[serde(default)]
     pub timing_correction: bool,
+
+    /// Kill tracker configuration for auto-reporting and session tracking.
+    #[serde(default)]
+    pub kill_tracker: KillTrackerConfig,
 }
 
 /// Discord webhook and bot configuration.
@@ -596,6 +600,7 @@ impl AppConfig {
             discovery: PeerDiscoveryConfig::default(),
             box_chat: BoxChatConfig::default(),
             timing_correction: false,
+            kill_tracker: KillTrackerConfig::default(),
         }
     }
 
@@ -632,6 +637,41 @@ impl Default for SpawnWatchConfig {
             player_filter_mode: PlayerFilterMode::default(),
             sound_on_player_zone_in: false,
             friends: Vec::new(),
+        }
+    }
+}
+
+/// Configuration for kill count tracking and auto-reporting (MQ2KillTracker parity).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct KillTrackerConfig {
+    /// Enable kill count tracking and recording.
+    pub enabled: bool,
+    /// Auto-report kill stats to the specified chat channel every N minutes.
+    /// 0 = disabled.
+    pub auto_report_interval_minutes: u32,
+    /// Chat channel to report to: "group", "raid", "guild", "say", "shout", "ooc".
+    pub auto_report_channel: String,
+    /// Include per-mob breakdown in auto-reports.
+    pub auto_report_include_mobs: bool,
+    /// Include kills-per-hour in auto-reports.
+    pub auto_report_include_kph: bool,
+    /// Enable per-character session tracking.
+    pub track_per_character: bool,
+    /// Maximum number of historical sessions to retain per character.
+    pub max_session_history: usize,
+}
+
+impl Default for KillTrackerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            auto_report_interval_minutes: 10,
+            auto_report_channel: String::from("group"),
+            auto_report_include_mobs: true,
+            auto_report_include_kph: true,
+            track_per_character: true,
+            max_session_history: 100,
         }
     }
 }
@@ -1292,5 +1332,34 @@ name = "AltGroup"
         // AltGroup (id=3) exists but no accounts have group=3
         let accts = cfg.accounts_for_profile_name("AltGroup").unwrap();
         assert!(accts.is_empty());
+    }
+
+    #[test]
+    fn kill_tracker_config_defaults() {
+        let cfg = KillTrackerConfig::default();
+        assert!(cfg.enabled);
+        assert_eq!(cfg.auto_report_interval_minutes, 10);
+        assert_eq!(cfg.auto_report_channel, "group");
+        assert!(cfg.auto_report_include_mobs);
+        assert!(cfg.auto_report_include_kph);
+        assert!(cfg.track_per_character);
+        assert_eq!(cfg.max_session_history, 100);
+    }
+
+    #[test]
+    fn kill_tracker_config_toml_parse() {
+        let toml_str = r#"
+            auto_report_interval_minutes = 5
+            auto_report_channel = "raid"
+            auto_report_include_mobs = false
+            auto_report_include_kph = false
+            max_session_history = 50
+        "#;
+        let cfg: KillTrackerConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(cfg.auto_report_interval_minutes, 5);
+        assert_eq!(cfg.auto_report_channel, "raid");
+        assert!(!cfg.auto_report_include_mobs);
+        assert!(!cfg.auto_report_include_kph);
+        assert_eq!(cfg.max_session_history, 50);
     }
 }

@@ -6,6 +6,7 @@ pub mod chat_log;
 pub mod dashboard;
 pub mod discord;
 pub mod economy;
+pub mod kill_tracker;
 pub mod loot;
 pub mod soul;
 pub mod xassist;

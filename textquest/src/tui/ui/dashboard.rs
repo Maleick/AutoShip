@@ -2,6 +2,7 @@
 //! detail.
 
 use ratatui::{
+    style::Color,
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
@@ -561,6 +562,8 @@ enum OverviewSectionKind {
     /// Launch profile, session preset, and slot lifecycle for the selected
     /// client.
     SlotProfile,
+    /// Kill tracker stats — kills, KPH, top mobs.
+    Kills,
 }
 
 #[derive(Clone, Copy)]
@@ -608,6 +611,9 @@ fn draw_dashboard_sidebar(
             }
             OverviewSectionKind::SlotProfile => {
                 draw_slot_profile(frame, *chunk, app, section.collapsed);
+            }
+            OverviewSectionKind::Kills => {
+                draw_kill_stats(frame, *chunk, app, section.collapsed);
             }
         }
     }
@@ -681,6 +687,18 @@ fn overview_sections(app: &App, area: Rect, stacked: bool) -> Vec<OverviewSectio
                 6
             },
             collapsed: app.overview_state.profile_collapsed,
+        });
+    }
+
+    if app.overview_state.show_kills {
+        sections.push(OverviewSectionLayout {
+            kind: OverviewSectionKind::Kills,
+            height: if app.overview_state.kills_collapsed {
+                3
+            } else {
+                8
+            },
+            collapsed: app.overview_state.kills_collapsed,
         });
     }
 
@@ -764,6 +782,7 @@ fn stacked_priority(app: &App, kind: OverviewSectionKind, order: usize) -> (u8, 
         OverviewSectionKind::Filters => 4,
         OverviewSectionKind::Combat => 5,
         OverviewSectionKind::Session => 6,
+        OverviewSectionKind::Kills => 7,
     };
     (priority, order)
 }
@@ -776,6 +795,7 @@ fn natural_section_order(kind: OverviewSectionKind) -> u8 {
         OverviewSectionKind::Filters => 3,
         OverviewSectionKind::Combat => 4,
         OverviewSectionKind::Session => 5,
+        OverviewSectionKind::Kills => 6,
     }
 }
 
@@ -1418,6 +1438,116 @@ fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
     );
 }
 
+// ─── Kill tracker panel
+// ───────────────────────────────────────────────────────
+
+fn draw_kill_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
+    let t = &app.theme;
+    let border_style = if app.is_panel_focused(ActivePanel::OverviewSession) {
+        t.border_active
+    } else {
+        t.border_primary
+    };
+    let title = section_title("Kill Tracker", None, collapsed);
+
+    let elapsed = app.session_start.elapsed();
+    let hours = elapsed.as_secs() as f64 / 3600.0;
+    let total_kills: u32 = app.loot_database.kills.values().sum();
+    let kills_per_hour = if hours > 0.01 {
+        total_kills as f64 / hours
+    } else {
+        0.0
+    };
+
+    let top_mobs = {
+        let mut mobs: Vec<(&String, &u32)> = app.loot_database.kills.iter().collect();
+        mobs.sort_by(|a, b| b.1.cmp(a.1));
+        mobs.truncate(5);
+        mobs
+    };
+
+    let lines = if collapsed {
+        vec![Line::from(vec![
+            Span::styled(
+                total_kills.to_string(),
+                Style::default().fg(t.hp_low),
+            ),
+            Span::styled(" kills", Style::default().fg(t.text_muted)),
+            Span::styled(" | ", Style::default().fg(t.border_dim.fg.unwrap_or(Color::DarkGray))),
+            Span::styled(
+                format!("{:.1} KPH", kills_per_hour),
+                Style::default().fg(t.text_accent),
+            ),
+        ])]
+    } else {
+        let mut lines = vec![
+            Line::from(vec![
+                Span::styled("Total  ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    total_kills.to_string(),
+                    Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" kills", Style::default().fg(t.text_secondary)),
+            ]),
+            Line::from(vec![
+                Span::styled("KPH    ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!("{:.1}", kills_per_hour),
+                    Style::default().fg(t.text_accent),
+                ),
+                Span::styled(" /hr", Style::default().fg(t.text_secondary)),
+            ]),
+            Line::from(vec![
+                Span::styled("Deaths ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    app.loot_database.deaths.to_string(),
+                    Style::default().fg(if app.loot_database.deaths > 0 {
+                        t.hp_low
+                    } else {
+                        t.text_secondary
+                    }),
+                ),
+            ]),
+        ];
+
+        if !top_mobs.is_empty() {
+            lines.push(Line::from(Span::styled(
+                "── Top Mobs ──",
+                Style::default().fg(t.text_muted),
+            )));
+            for (name, count) in &top_mobs {
+                let label: String = name.chars().take(18).collect();
+                let pct = if total_kills > 0 {
+                    (*count as f64 / total_kills as f64 * 100.0) as u32
+                } else {
+                    0
+                };
+                lines.push(Line::from(vec![
+                    Span::raw(" "),
+                    Span::styled(
+                        format!("{}× ", count),
+                        Style::default().fg(t.text_highlight),
+                    ),
+                    Span::styled(label, Style::default().fg(t.text_secondary)),
+                    Span::styled(
+                        format!(" ({}%)", pct),
+                        Style::default().fg(t.text_muted),
+                    ),
+                ]));
+            }
+        }
+
+        lines
+    };
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(panel(title.as_str(), border_style, t))
+            .wrap(Wrap { trim: true }),
+        area,
+    );
+}
+
 // ─── Slot profile panel
 // ───────────────────────────────────────────────────────
 
@@ -1691,6 +1821,10 @@ mod tests {
             natural_section_order(OverviewSectionKind::Combat)
                 < natural_section_order(OverviewSectionKind::Session)
         );
+        assert!(
+            natural_section_order(OverviewSectionKind::Session)
+                < natural_section_order(OverviewSectionKind::Kills)
+        );
     }
 
     #[test]
@@ -1702,6 +1836,7 @@ mod tests {
             OverviewSectionKind::Filters,
             OverviewSectionKind::Combat,
             OverviewSectionKind::Session,
+            OverviewSectionKind::Kills,
         ]
         .iter()
         .map(|k| natural_section_order(*k))

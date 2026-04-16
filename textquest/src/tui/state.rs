@@ -1218,6 +1218,10 @@ pub struct OverviewScreenState {
     pub priorities_collapsed: bool,
     /// Whether the live map is shown in split-screen dashboard.
     pub show_map: bool,
+    /// Whether the kill tracker panel is visible.
+    pub show_kills: bool,
+    /// Whether the kill tracker panel is collapsed.
+    pub kills_collapsed: bool,
 }
 
 impl OverviewScreenState {
@@ -1236,6 +1240,8 @@ impl OverviewScreenState {
             profile_collapsed: false,
             priorities_collapsed: false,
             show_map: false,
+            show_kills: true,
+            kills_collapsed: false,
         }
     }
 }

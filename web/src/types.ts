@@ -5,12 +5,7 @@ export interface Session {
   level: number;
   hp_pct: number;
   mana_pct: number;
-  endurance_pct: number;
   status: "active" | "idle" | "dead" | "camping" | "zoning";
-  buff_count: number;
-  target_name?: string | null;
-  target_hp_pct?: number | null;
-  pet_name?: string | null;
 }
 
 export interface Assault {
@@ -185,55 +180,6 @@ export interface BoxChatSettings {
   auto_connect: boolean;
 }
 
-export type ChatChannel =
-  | "say"
-  | "tell"
-  | "tell_out"
-  | "group"
-  | "guild"
-  | "raid"
-  | "shout"
-  | "ooc"
-  | "auction";
-
-export type LogRotation =
-  | { type: "none" }
-  | { type: "daily" }
-  | { type: "by_size"; size: number };
-
-export type LogLevel = "info" | "debug";
-
-export interface ChatLogSettings {
-  enabled: boolean;
-  rotation: LogRotation;
-  level: LogLevel;
-  channels: ChatChannel[];
-}
-
-// ── GM Alert types ───────────────────────────────────────────────────────────
-
-export interface GmAlertConfig {
-  enabled: boolean;
-  soundEnabled: boolean;
-  soundFile: string | null;
-  toastEnabled: boolean;
-  autoPauseEnabled: boolean;
-  discordWebhookUrl: string | null;
-  broadcastAllClients: boolean;
-}
-
-export interface GmPresenceStatus {
-  isGmInZone: boolean;
-  gmCount: number;
-  gmNames: string[];
-}
-
-export interface GmAlertStatus {
-  config: GmAlertConfig;
-  presence: GmPresenceStatus;
-  automationPaused: boolean;
-}
-
 // ── Group Builder types ────────────────────────────────────────────────────
 
 export type EQClass =
@@ -323,41 +269,6 @@ export interface RaidConfig {
   members: RaidMember[];
 }
 
-// ── Discord configuration types ─────────────────────────────────────────────
-
-export type DiscordSeverity = "INFO" | "WARNING" | "ERROR" | "CRITICAL";
-
-export type DiscordMessageMode = "plain_text" | "rich_embed";
-
-export type DiscordMentionPolicy = "none" | "everyone";
-
-export interface DiscordRouteConfig {
-  enabled: boolean;
-  webhook_url: string;
-  level: DiscordSeverity;
-  message_mode: DiscordMessageMode;
-  mention_policy: DiscordMentionPolicy;
-}
-
-export interface DiscordSettings {
-  webhook_url: string;
-  channels: Record<string, string>;
-  notification_routes: Record<string, DiscordRouteConfig>;
-}
-
-// ── XAssist (Cross-Group Outside-Group Assist) types ─────────────────────────
-
-export interface XAssistCharacterConfig {
-  character_name: string;
-  ma_name: string | null;
-  enabled: boolean;
-}
-
-export interface XAssistConfigUpdate {
-  ma_name: string | null;
-  enabled: boolean;
-}
-
 // ── Strategy tuning types ───────────────────────────────────────────────────
 
 export type CharacterRole = "Tank" | "Healer" | "Support" | "DPS";
@@ -371,10 +282,6 @@ export interface RotationEntry {
 
 export interface ClassParams {
   ch_chain_timing_ms?: number;
-  cross_client_heal_enabled?: boolean;
-  cross_client_heal_threshold_pct?: number;
-  cross_client_heal_priority?: number;
-  cross_client_claim_timeout_ms?: number;
   dot_overlap_pct?: number;
   burn_at_hp_pct?: number;
   slow_at_hp_pct?: number;
@@ -404,12 +311,6 @@ export interface AutoRezConfig {
   delay_ms: number;
 }
 
-export interface AutoCampOnDeathConfig {
-  enabled: boolean;
-  camp_delay_secs: number;
-  relog_wait_secs: number;
-}
-
 export interface CharacterConfig {
   character_name: string;
   class: string;
@@ -422,26 +323,8 @@ export interface CharacterConfig {
   auto_rez: AutoRezConfig;
   group_override: boolean;
   group_name?: string;
-  auto_camp_on_death: AutoCampOnDeathConfig;
   tribute_preferences: TributePreferences;
   tribute_status: TributeStatus;
-  bard?: BardConfig;
-}
-
-// ── Auto-accept configuration types ─────────────────────────────────────────
-
-export type AutoAcceptTrustMode = "anyone" | "trust_list";
-
-export interface AutoAcceptSettings {
-  enabled: boolean;
-  accept_group_invites: boolean;
-  accept_trades: boolean;
-  accept_task_adds: boolean;
-  accept_dz_adds: boolean;
-  accept_translocates: boolean;
-  accept_anchors: boolean;
-  trust_mode: AutoAcceptTrustMode;
-  trusted_players: string[];
 }
 
 // ── Loot configuration types ─────────────────────────────────────────────────
@@ -512,66 +395,15 @@ export interface MasterLooter {
   character: string | null;
 }
 
-// ── Bard song configuration types ────────────────────────────────────────────
+// ── Soul Engine types ─────────────────────────────────────────────────────────
 
-export type InstrumentType = "None" | "String" | "Brass" | "Wind" | "Percussion";
-
-export type InstrumentSlot = "Primary" | "Secondary";
-
-export type SongCategory =
-  | "Haste"
-  | "SpellFocus"
-  | "MeleeProc"
-  | "Crescendo"
-  | "Insult"
-  | "RunSpeed"
-  | "Regen"
-  | "Tank"
-  | "Slow"
-  | "Accelerando"
-  | "Mez"
-  | "Dot"
-  | "Arcane"
-  | "Other";
-
-export interface SongSlotConfig {
-  id: string;
-  gem: number;
-  name: string;
-  priority: number;
-  enabled: boolean;
-  min_recast_ticks: number;
-  buff_duration_ticks: number | null;
-  category: SongCategory;
-  instrument_type: InstrumentType;
-  instrument_slot: InstrumentSlot;
-}
-
-export interface InstrumentSet {
-  string_item_id: number | null;
-  brass_item_id: number | null;
-  wind_item_id: number | null;
-  percussion_item_id: number | null;
-}
-
-export interface BardConfig {
-  character_name: string;
-  twist_enabled: boolean;
-  full_rotation_enabled: boolean;
-  instrument_swap_enabled: boolean;
-  songs: SongSlotConfig[];
-  instruments: InstrumentSet[];
-}
-
-export interface BardStatus {
-  character_name: string;
-  active_songs: string[];
-  current_twist_index: number;
-  twist_active: boolean;
-  equipped_instrument: InstrumentType;
-  next_cast_gem: number | null;
-  mez_queue_size: number;
-}
+export type SoulMood =
+  | "content"
+  | "anxious"
+  | "focused"
+  | "bored"
+  | "excited"
+  | "melancholic";
 
 export interface SoulState {
   character_id: string;
@@ -599,63 +431,61 @@ export interface LootHistoryEntry {
   estimated_value: number;
 }
 
-// ── Player Watch types ─────────────────────────────────────────────────────────
+// ── Kill Tracker types ────────────────────────────────────────────────────────
 
-export type PlayerFilterMode = "all" | "strangers_only" | "friends_only";
-
-export interface PlayerWatchConfig {
-  filter_mode: PlayerFilterMode;
-  sound_on_zone_in: boolean;
-  friends: string[];
+export interface KillTrackerSettings {
+  enabled: boolean;
+  autoReportIntervalMinutes: number;
+  autoReportChannel: string;
+  autoReportIncludeMobs: boolean;
+  autoReportIncludeKph: boolean;
+  trackPerCharacter: boolean;
+  maxSessionHistory: number;
 }
 
-// ── Spawn Alert types ──────────────────────────────────────────────────────────
-
-export interface SpawnAlertEntry {
-  id: number;
-  spawn_name: string;
+export interface KillRecord {
+  mobName: string;
+  mobLevel: number;
   zone: string;
-  is_up: boolean;
   timestamp: string;
-  time_since_last_pop_ms: number | null;
-  match_source: string;
+  killTimeMs: number;
+  totalDamage: number;
 }
 
-export interface WatchPattern {
-  pattern: string;
-  enabled: boolean;
+export interface MobStats {
+  mobName: string;
+  killCount: number;
+  bestTimeMs: number;
+  avgTimeMs: number;
+  avgDps: number;
 }
 
-export interface SpawnAlertConfig {
-  watch_named_enabled: boolean;
-  watch_patterns: WatchPattern[];
-  broadcast_to_web: boolean;
-  broadcast_to_clients: boolean;
+export interface EfficiencyScore {
+  killsPerHour: number;
+  avgKillTimeSecs: number;
+  deathRatio: number;
+  score: number;
 }
 
-export interface SpawnAlertStats {
-  total_alerts: number;
-  spawns_up: number;
-  spawns_down: number;
+export interface SessionStats {
+  character: string;
+  sessionStart: string;
+  totalKills: number;
+  totalDeaths: number;
+  killsPerHour: number;
+  efficiency: EfficiencyScore;
+  mobStats: MobStats[];
+  topMobs: [string, number][];
+  zone: string;
 }
 
-export interface SpawnAlertPage {
-  total: number;
-  offset: number;
-  limit: number;
-  entries: SpawnAlertEntry[];
+export interface CharacterHistory {
+  character: string;
+  sessions: SessionStats[];
 }
 
-export interface WatchListResponse {
-  watch_named_enabled: boolean;
-  patterns: WatchPattern[];
-}
-
-// ── Timestamp configuration types ─────────────────────────────────────────────
-
-export type TimestampFormat = "date_time_24" | "time_24" | "date_time_12" | "time_12";
-
-export interface TimestampConfig {
-  enabled: boolean;
-  format: TimestampFormat;
+export interface KillTrackerDashboard {
+  currentSession: SessionStats | null;
+  characterHistory: CharacterHistory[];
+  settings: KillTrackerSettings;
 }

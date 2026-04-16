@@ -606,6 +606,12 @@ pub struct App {
     pub gm_detector: GmDetector,
     /// Whether automation was auto-paused due to GM presence.
     pub gm_auto_paused: bool,
+    /// Kill tracker reporter for auto-reporting kill statistics to chat channels.
+    pub kill_reporter: crate::metrics::KillReporter,
+    /// Session kill tracker for the current session.
+    pub kill_tracker: crate::metrics::KillTracker,
+    /// Multi-session store for per-character kill history.
+    pub kill_session_store: crate::metrics::KillSessionStore,
 }
 
 /// Navigation status for a single client.
@@ -846,6 +852,9 @@ impl App {
             orchestrator_state: super::ui::orchestrator_panel::OrchestratorDashboardState::new(),
             gm_detector: GmDetector::new(GmAlertConfig::default()),
             gm_auto_paused: false,
+            kill_reporter: crate::metrics::KillReporter::default(),
+            kill_tracker: crate::metrics::KillTracker::new(chrono::Utc::now().timestamp()),
+            kill_session_store: crate::metrics::KillSessionStore::new(),
         };
         app.cmd_state.load_history_from_disk();
         app

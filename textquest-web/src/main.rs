@@ -68,6 +68,8 @@ pub struct AppState {
     pub spawn_alerts: Arc<api::spawn_alerts::SpawnAlertState>,
     /// In-memory timestamp config store per character.
     pub timestamp_configs: tokio::sync::RwLock<HashMap<String, api::TimestampConfig>>,
+    /// Kill tracker state for session tracking and auto-reporting.
+    pub kill_tracker_state: Arc<api::kill_tracker::KillTrackerState>,
     /// Optional static API token for protecting all `/api` endpoints.
     /// Set via `TEXTQUEST_API_TOKEN` environment variable.
     /// When `None`, API endpoints are unauthenticated (localhost-only
@@ -183,6 +185,7 @@ fn build_state() -> Arc<AppState> {
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
         timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
+        kill_tracker_state: api::kill_tracker::KillTrackerState::new_demo(),
         api_token,
         live_session_snapshot_path: live_session_snapshot_path(),
         xassist_configs: api::xassist::demo_xassist_configs(),
@@ -295,6 +298,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
             "/timestamp-config/{character}",
             get(api::get_timestamp_config).put(api::put_timestamp_config),
         )
+        .nest("/kill-tracker", api::kill_tracker::router())
         .nest("/loot", build_loot_router())
         .nest("/soul", build_soul_router())
         .nest("/gm-alerts", api::gm_alerts::router())
@@ -410,6 +414,7 @@ mod tests {
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
             timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
+            kill_tracker_state: api::kill_tracker::KillTrackerState::new_demo(),
             api_token: None, // No auth in tests — auth middleware is a no-op when None
             live_session_snapshot_path: path.with_file_name("live_sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),

@@ -22,6 +22,7 @@ import {
 import BoxChatPanel from "./BoxChatPanel";
 import ChatLogPanel from "./ChatLogPanel";
 import GmAlertPanel from "./GmAlertPanel";
+import KillTrackerPanel from "./KillTrackerPanel";
 import type {
   DashboardActionRequest,
   DashboardSnapshot,
@@ -300,11 +301,8 @@ function titleCase(raw: string) {
 export default function OperatorDashboard() {
   const { snapshot, loading, error, connected, refresh, submitAction } = useDashboard();
   const [boxChatOpen, setBoxChatOpen] = useState(false);
-<<<<<<< HEAD
   const [chatLogOpen, setChatLogOpen] = useState(false);
-=======
   const [gmAlertOpen, setGmAlertOpen] = useState(false);
->>>>>>> origin/master
   const [sessionWizardOpen, setSessionWizardOpen] = useState(false);
   const [sessionProfile, setSessionProfile] = useState("");
   const [sessionCharacterName, setSessionCharacterName] = useState("");
@@ -1258,6 +1256,8 @@ export default function OperatorDashboard() {
                 </div>
               </div>
             </Panel>
+
+            <KillTrackerPanel />
           </div>
         </div>
 
