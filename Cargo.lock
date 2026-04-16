@@ -3650,6 +3650,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "getrandom 0.2.17",
+ "once_cell",
  "retour",
  "serde",
  "serde_json",

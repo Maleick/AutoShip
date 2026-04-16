@@ -75,6 +75,15 @@ fn chat_callback(exception_info: *mut ()) -> bool {
                 .map(|d| d.as_millis() as u64)
                 .unwrap_or(0);
 
+            let text = match crate::timestamp::get() {
+                ts_state if ts_state.enabled => {
+                    let now = std::time::SystemTime::now();
+                    let ts = textquest_common::chat::format_chat_timestamp(now, ts_state.format);
+                    format!("[{}] {}", ts, text)
+                }
+                _ => text,
+            };
+
             // Push into the dedicated chat buffer so it can be retrieved via
             // Command::PollChat / Response::ChatBatch without affecting the
             // packet-event pipeline.

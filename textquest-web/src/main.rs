@@ -66,6 +66,8 @@ pub struct AppState {
     pub gm_alert_state: Arc<api::gm_alerts::GmAlertState>,
     /// In-memory spawn alert state for rare spawn monitoring.
     pub spawn_alerts: Arc<api::spawn_alerts::SpawnAlertState>,
+    /// In-memory timestamp config store per character.
+    pub timestamp_configs: tokio::sync::RwLock<HashMap<String, api::TimestampConfig>>,
     /// Optional static API token for protecting all `/api` endpoints.
     /// Set via `TEXTQUEST_API_TOKEN` environment variable.
     /// When `None`, API endpoints are unauthenticated (localhost-only
@@ -180,6 +182,7 @@ fn build_state() -> Arc<AppState> {
         player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
+        timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
         api_token,
         live_session_snapshot_path: live_session_snapshot_path(),
         xassist_configs: api::xassist::demo_xassist_configs(),
@@ -282,6 +285,15 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .route(
             "/spawn-alerts/watch-list/{pattern}",
             put(api::spawn_alerts::put_watch_pattern).delete(api::spawn_alerts::delete_watch_pattern),
+        )
+        // Timestamp Config API
+        .route(
+            "/timestamp-config",
+            get(api::list_timestamp_configs),
+        )
+        .route(
+            "/timestamp-config/{character}",
+            get(api::get_timestamp_config).put(api::put_timestamp_config),
         )
         .nest("/loot", build_loot_router())
         .nest("/soul", build_soul_router())
@@ -397,6 +409,7 @@ mod tests {
             player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
             api_token: None, // No auth in tests — auth middleware is a no-op when None
             live_session_snapshot_path: path.with_file_name("live_sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),

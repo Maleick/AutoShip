@@ -65,6 +65,7 @@ pub struct OrchestratorLoop {
     status_webhook: Option<WebhookSender>,
     timing_correction_enabled: bool,
     shutdown_rx: watch::Receiver<bool>,
+    timestamp_runtime: crate::timestamp_runtime::TimestampRuntime,
 }
 
 impl OrchestratorLoop {
@@ -104,6 +105,7 @@ impl OrchestratorLoop {
             status_webhook,
             timing_correction_enabled,
             shutdown_rx,
+            timestamp_runtime: crate::timestamp_runtime::TimestampRuntime::new(),
         }
     }
 
@@ -206,6 +208,7 @@ impl OrchestratorLoop {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
                     self.sync_box_chat_runtime();
+                    self.sync_timestamp_runtime();
                 }
                 _ = launch_interval.tick() => {
                     let events = self.tick_launch_coordinator();
@@ -213,6 +216,7 @@ impl OrchestratorLoop {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
                     self.sync_box_chat_runtime();
+                    self.sync_timestamp_runtime();
                 }
                 _ = orch_interval.tick() => {
                     let events = self.tick_peer_discovery();
@@ -222,6 +226,7 @@ impl OrchestratorLoop {
                     self.orchestrator.tick();
                     self.tick_death_camp();
                     self.sync_box_chat_runtime();
+                    self.sync_timestamp_runtime();
                 }
                 Ok(()) = self.shutdown_rx.changed() => {
                     if *self.shutdown_rx.borrow() {
@@ -491,6 +496,16 @@ impl OrchestratorLoop {
         self.shared_password
             .as_ref()
             .map(|p| p.as_str().to_string())
+    }
+
+    fn sync_timestamp_runtime(&mut self) {
+        let updated_configs = self.timestamp_runtime.tick();
+        if updated_configs.is_some() {
+            tracing::debug!("Timestamp config changed, applying to clients");
+        }
+        for (&pid, name) in &self.orchestrator.client_names {
+            self.timestamp_runtime.apply_to_client(&mut self.orchestrator, pid, name);
+        }
     }
 
     /// Run health checks on all managed clients.

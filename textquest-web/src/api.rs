@@ -192,6 +192,106 @@ pub struct CharacterConfig {
     pub class_params: ClassParams,
     pub group_override: bool,
     pub group_name: Option<String>,
+    pub tribute_preferences: TributePreferences,
+    pub tribute_status: TributeStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimestampFormat {
+    #[default]
+    DateTime24,
+    Time24,
+    DateTime12,
+    Time12,
+}
+
+impl From<textquest_common::chat::TimestampFormat> for TimestampFormat {
+    fn from(f: textquest_common::chat::TimestampFormat) -> Self {
+        match f {
+            textquest_common::chat::TimestampFormat::DateTime24 => TimestampFormat::DateTime24,
+            textquest_common::chat::TimestampFormat::Time24 => TimestampFormat::Time24,
+            textquest_common::chat::TimestampFormat::DateTime12 => TimestampFormat::DateTime12,
+            textquest_common::chat::TimestampFormat::Time12 => TimestampFormat::Time12,
+        }
+    }
+}
+
+impl From<TimestampFormat> for textquest_common::chat::TimestampFormat {
+    fn from(f: TimestampFormat) -> Self {
+        match f {
+            TimestampFormat::DateTime24 => textquest_common::chat::TimestampFormat::DateTime24,
+            TimestampFormat::Time24 => textquest_common::chat::TimestampFormat::Time24,
+            TimestampFormat::DateTime12 => textquest_common::chat::TimestampFormat::DateTime12,
+            TimestampFormat::Time12 => textquest_common::chat::TimestampFormat::Time12,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimestampConfig {
+    pub enabled: bool,
+    pub format: TimestampFormat,
+}
+
+impl Default for TimestampConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            format: TimestampFormat::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterConfigUpdate {
+    pub character_name: String,
+    pub class: String,
+    pub role: String,
+    pub heal_at_pct: u8,
+    pub mana_sit_pct: u8,
+    pub nuke_at_pct: u8,
+    pub rotation: Vec<RotationEntry>,
+    pub class_params: ClassParams,
+    #[serde(default)]
+    pub auto_rez: AutoRezConfig,
+    pub group_override: bool,
+    pub group_name: Option<String>,
+    pub tribute_preferences: TributePreferences,
+}
+
+fn tribute_preferences(
+    preferred_tributes: &[&str],
+    warning_threshold_secs: u64,
+) -> TributePreferences {
+    TributePreferences {
+        auto_activate: true,
+        warning_threshold_secs,
+        preferred_tributes: preferred_tributes
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect(),
+    }
+}
+
+fn tribute_status(
+    active: bool,
+    remaining_secs: u64,
+    point_balance: u32,
+    active_tributes: &[&str],
+    alert_state: TributeAlertState,
+) -> TributeStatus {
+    TributeStatus {
+        active,
+        remaining_secs,
+        point_balance,
+        active_tributes: active_tributes
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect(),
+        alert_state,
+    }
+>>>>>>> a5b7da1b (feat: Add MQ2Timestamp parity - chat message timestamps)
 }
 
 pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
@@ -575,6 +675,95 @@ pub async fn get_wealth() -> impl IntoResponse {
     (StatusCode::OK, Json(history)).into_response()
 }
 
+// ─── Timestamp Config ─────────────────────────────────────────────────────────
+
+/// GET /api/timestamp-config — list all timestamp configs.
+pub async fn list_timestamp_configs(
+    State(state): State<Arc<AppState>>,
+) -> Json<Vec<TimestampConfig>> {
+    let configs = state.timestamp_configs.read().await;
+    let list: Vec<TimestampConfig> = configs.values().cloned().collect();
+    Json(list)
+}
+
+/// GET /api/timestamp-config/{character} — get timestamp config for a character.
+pub async fn get_timestamp_config(
+    State(state): State<Arc<AppState>>,
+    Path(character): Path<String>,
+) -> impl IntoResponse {
+    let configs = state.timestamp_configs.read().await;
+    match configs.get(&character) {
+        Some(config) => (StatusCode::OK, Json(config.clone())).into_response(),
+        None => (
+            StatusCode::OK,
+            Json(TimestampConfig::default()),
+        )
+            .into_response(),
+    }
+}
+
+fn timestamp_config_path() -> PathBuf {
+    std::env::var("TEXTQUEST_CONFIG_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
+        .parent()
+        .map(|p| p.join("timestamp.toml"))
+        .unwrap_or_else(|| PathBuf::from("config/timestamp.toml"))
+}
+
+fn load_timestamp_configs_from_disk() -> Result<HashMap<String, TimestampConfig>, String> {
+    let path = timestamp_config_path();
+    if !path.exists() {
+        return Ok(HashMap::new());
+    }
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
+    let configs: HashMap<String, TimestampConfig> =
+        toml::from_str(&content).map_err(|error| format!("Failed to parse {}: {error}", path.display()))?;
+    Ok(configs)
+}
+
+fn write_timestamp_configs_to_disk(configs: &HashMap<String, TimestampConfig>) -> Result<(), String> {
+    let path = timestamp_config_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create {}: {error}", parent.display()))?;
+    }
+    let content = toml::to_string_pretty(configs)
+        .map_err(|error| format!("Failed to serialize timestamp config: {error}"))?;
+    let temp_path = path.with_extension("toml.tmp");
+    std::fs::write(&temp_path, &content)
+        .map_err(|error| format!("Failed to write temp file: {error}"))?;
+    std::fs::rename(&temp_path, &path)
+        .map_err(|error| format!("Failed to rename temp file: {error}"))?;
+    Ok(())
+}
+
+/// PUT /api/timestamp-config/{character} — update timestamp config for a character.
+pub async fn put_timestamp_config(
+    State(state): State<Arc<AppState>>,
+    Path(character): Path<String>,
+    Json(config): Json<TimestampConfig>,
+) -> impl IntoResponse {
+    if character.trim().is_empty() {
+        return json_error(StatusCode::BAD_REQUEST, "Character name must not be empty");
+    }
+    let mut configs = state.timestamp_configs.write().await;
+    configs.insert(character.clone(), config.clone());
+
+    if let Err(error) = write_timestamp_configs_to_disk(&*configs) {
+        tracing::warn!(%error, "Failed to persist timestamp config to disk");
+    }
+
+    tracing::debug!(
+        character,
+        enabled = config.enabled,
+        format = ?config.format,
+        "Timestamp config updated"
+    );
+    (StatusCode::OK, Json(config)).into_response()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -621,6 +810,7 @@ use std::path::PathBuf;
             discord_state: crate::api::discord::DiscordState::new_demo(),
             player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
             spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
             api_token: None,
             live_session_snapshot_path: test_live_session_snapshot_path("api-sessions-ok.json"),
         });
@@ -715,6 +905,7 @@ use std::path::PathBuf;
             discord_state: crate::api::discord::DiscordState::new_demo(),
             player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
             spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
             api_token: None,
             live_session_snapshot_path: test_live_session_snapshot_path(
                 "api-character-configs-demo.json",
@@ -739,6 +930,7 @@ use std::path::PathBuf;
             discord_state: crate::api::discord::DiscordState::new_demo(),
             player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
             spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
             api_token: None,
             live_session_snapshot_path: test_live_session_snapshot_path(
                 "api-put-character-config.json",
@@ -834,5 +1026,98 @@ use std::path::PathBuf;
             body,
             serde_json::json!({ "error": "Trusted player names must not be blank" })
         );
+    }
+
+    #[tokio::test]
+    async fn get_timestamp_config_returns_default_when_not_set() {
+        let state = Arc::new(AppState {
+            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
+            character_configs: tokio::sync::RwLock::new(HashMap::new()),
+            loot_state: crate::api::loot::LootState::new_demo(),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
+            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
+            api_token: None,
+        });
+        let response = get_timestamp_config(State(state), Path("Frostreaver".into()))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.expect("body should collect");
+        let body_bytes = body.to_bytes();
+        let config: TimestampConfig =
+            serde_json::from_slice(&body_bytes).expect("response should parse");
+        assert!(!config.enabled);
+        assert_eq!(config.format, TimestampFormat::default());
+    }
+
+    #[tokio::test]
+    async fn put_timestamp_config_stores_config() {
+        let state = Arc::new(AppState {
+            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
+            character_configs: tokio::sync::RwLock::new(HashMap::new()),
+            loot_state: crate::api::loot::LootState::new_demo(),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
+            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
+            api_token: None,
+        });
+        let input = TimestampConfig {
+            enabled: true,
+            format: TimestampFormat::Time24,
+        };
+        let response = put_timestamp_config(State(state), Path("Frostreaver".into()), Json(input))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn put_timestamp_config_rejects_empty_character() {
+        let state = Arc::new(AppState {
+            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
+            character_configs: tokio::sync::RwLock::new(HashMap::new()),
+            loot_state: crate::api::loot::LootState::new_demo(),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
+            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
+            api_token: None,
+        });
+        let input = TimestampConfig {
+            enabled: true,
+            format: TimestampFormat::DateTime12,
+        };
+        let response =
+            put_timestamp_config(State(state), Path("".into()), Json(input))
+                .await
+                .into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn list_timestamp_configs_returns_all() {
+        let state = Arc::new(AppState {
+            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
+            character_configs: tokio::sync::RwLock::new(HashMap::new()),
+            loot_state: crate::api::loot::LootState::new_demo(),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
+            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
+            api_token: None,
+        });
+        let Json(configs) = list_timestamp_configs(State(state)).await;
+        assert!(configs.is_empty());
     }
 }

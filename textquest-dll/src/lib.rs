@@ -37,6 +37,8 @@ mod nav;
 mod stealth;
 #[allow(dead_code)]
 mod syscall;
+#[allow(dead_code)]
+pub mod timestamp;
 
 use std::{
     path::PathBuf,

@@ -3121,6 +3121,10 @@ Command::SetAutoRezConfig { config } => {
                 bytes: buf,
             });
         }
+        Command::SetChatTimestampConfig { enabled, format } => {
+            tracing::info!(enabled, format = ?format, "SetChatTimestampConfig received");
+            crate::timestamp::apply(enabled, format);
+        }
         other => {
             tracing::debug!(?other, "Unhandled command");
         }

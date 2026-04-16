@@ -22,8 +22,15 @@
 //!
 //! MQ2Log-style per-character chat output logging is configured via
 //! [`ChatLogConfig`].
+//!
+//! # Timestamps
+//!
+//! MQ2Timestamp-style timestamps can be prepended to chat messages using the
+//! [`TimestampFormat`] enum and [`format_chat_timestamp`] function.
 
 use serde::{Deserialize, Serialize};
+
+use std::time::SystemTime;
 
 /// EQ chat channel.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -46,6 +53,105 @@ pub enum ChatChannel {
     Ooc,
     /// /auction channel.
     Auction,
+}
+
+/// Configurable timestamp format for chat messages (MQ2Timestamp parity).
+///
+/// These formats prepend timestamps to all MQ2 chat messages, enabling
+/// correlation of game events with log entries and session reviews.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimestampFormat {
+    /// 24-hour format with date: `2026-04-15 14:30:45`
+    #[default]
+    DateTime24,
+    /// 24-hour format without date: `14:30:45`
+    Time24,
+    /// 12-hour format with date: `2026-04-15 02:30:45 PM`
+    DateTime12,
+    /// 12-hour format without date: `02:30:45 PM`
+    Time12,
+}
+
+/// Format a timestamp for chat messages based on the configured format.
+#[must_use]
+pub fn format_chat_timestamp(time: SystemTime, format: TimestampFormat) -> String {
+    let offset = time
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = offset.as_secs();
+
+    let days_since_epoch = secs / 86400;
+    let seconds_in_day = secs % 86400;
+    let hours = seconds_in_day / 3600;
+    let minutes = (seconds_in_day % 3600) / 60;
+    let seconds = seconds_in_day % 60;
+
+    // Calculate year, month, day from days since epoch
+    let mut year: u64 = 1970;
+    let mut remaining_days = days_since_epoch;
+
+    loop {
+        let days_in_year = if is_leap_year(year) { 366 } else { 365 };
+        if remaining_days < days_in_year {
+            break;
+        }
+        remaining_days -= days_in_year;
+        year += 1;
+    }
+
+    let days_in_months: [u64; 12] = if is_leap_year(year) {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+
+    let mut month: u64 = 1;
+    for days in days_in_months {
+        if remaining_days < days {
+            break;
+        }
+        remaining_days -= days;
+        month += 1;
+    }
+    let day = remaining_days + 1;
+
+    match format {
+        TimestampFormat::DateTime24 => {
+            format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", year, month, day, hours, minutes, seconds)
+        }
+        TimestampFormat::Time24 => {
+            format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
+        }
+        TimestampFormat::DateTime12 => {
+            let (hour12, am_pm) = if hours == 0 {
+                (12, "AM")
+            } else if hours < 12 {
+                (hours, "AM")
+            } else if hours == 12 {
+                (12, "PM")
+            } else {
+                (hours - 12, "PM")
+            };
+            format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02} {}", year, month, day, hour12, minutes, seconds, am_pm)
+        }
+        TimestampFormat::Time12 => {
+            let (hour12, am_pm) = if hours == 0 {
+                (12, "AM")
+            } else if hours < 12 {
+                (hours, "AM")
+            } else if hours == 12 {
+                (12, "PM")
+            } else {
+                (hours - 12, "PM")
+            };
+            format!("{:02}:{:02}:{:02} {}", hour12, minutes, seconds, am_pm)
+        }
+    }
+}
+
+const fn is_leap_year(year: u64) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
 }
 
 /// A structured chat message extracted from EQ `dsp_chat` output or a log file
@@ -533,5 +639,59 @@ mod tests {
         assert_eq!(ev.channel, ChatChannel::Group);
         assert_eq!(ev.sender, "Healer");
         assert_eq!(ev.message, "CH chain go!");
+    }
+
+    // ── format_chat_timestamp ──────────────────────────────────────────────
+
+    #[test]
+    fn timestamp_datetime24_format() {
+        let time = SystemTime::UNIX_EPOCH;
+        let ts = format_chat_timestamp(time, TimestampFormat::DateTime24);
+        assert_eq!(ts, "1970-01-01 00:00:00");
+    }
+
+    #[test]
+    fn timestamp_time24_format() {
+        let time = SystemTime::UNIX_EPOCH;
+        let ts = format_chat_timestamp(time, TimestampFormat::Time24);
+        assert_eq!(ts, "00:00:00");
+    }
+
+    #[test]
+    fn timestamp_datetime12_am() {
+        let time = SystemTime::UNIX_EPOCH;
+        let ts = format_chat_timestamp(time, TimestampFormat::DateTime12);
+        assert_eq!(ts, "1970-01-01 12:00:00 AM");
+    }
+
+    #[test]
+    fn timestamp_datetime12_pm() {
+        // 43200 seconds = 12:00 PM
+        let time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(43200);
+        let ts = format_chat_timestamp(time, TimestampFormat::DateTime12);
+        assert_eq!(ts, "1970-01-01 12:00:00 PM");
+    }
+
+    #[test]
+    fn timestamp_time12_format() {
+        let time = SystemTime::UNIX_EPOCH;
+        let ts = format_chat_timestamp(time, TimestampFormat::Time12);
+        assert_eq!(ts, "12:00:00 AM");
+    }
+
+    #[test]
+    fn timestamp_leap_year() {
+        // 2024 is a leap year
+        // Jan 1, 2024 = 1704067200 (days since epoch = 19722)
+        let time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1704067200);
+        let ts = format_chat_timestamp(time, TimestampFormat::DateTime24);
+        assert!(ts.starts_with("2024-01-01"));
+    }
+
+    #[test]
+    fn timestamp_default_is_datetime24() {
+        let time = SystemTime::UNIX_EPOCH;
+        let ts = format_chat_timestamp(time, TimestampFormat::default());
+        assert_eq!(ts, "1970-01-01 00:00:00");
     }
 }

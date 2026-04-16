@@ -650,3 +650,12 @@ export interface WatchListResponse {
   watch_named_enabled: boolean;
   patterns: WatchPattern[];
 }
+
+// ── Timestamp configuration types ─────────────────────────────────────────────
+
+export type TimestampFormat = "date_time_24" | "time_24" | "date_time_12" | "time_12";
+
+export interface TimestampConfig {
+  enabled: boolean;
+  format: TimestampFormat;
+}

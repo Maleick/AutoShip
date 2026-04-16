@@ -949,6 +949,17 @@ pub enum Command {
         /// Filters applied before returning bazaar list snapshots.
         filter: BazaarQuery,
     },
+    /// Configure chat message timestamps (MQ2Timestamp parity).
+    ///
+    /// Enables or disables timestamp prepending and sets the timestamp format
+    /// for all MQ2 chat messages. Changes take effect immediately without
+    /// requiring a restart.
+    SetChatTimestampConfig {
+        /// Whether timestamps should be prepended to chat messages.
+        enabled: bool,
+        /// The timestamp format to use.
+        format: crate::chat::TimestampFormat,
+    },
 }
 
 impl std::fmt::Debug for Command {

@@ -80,6 +80,10 @@ pub mod economy;
 /// logic.
 pub mod zoning;
 
+/// Timestamp config runtime — loads per-character timestamp settings from disk
+/// and dispatches IPC commands to DLL clients.
+pub mod timestamp_runtime;
+
 #[cfg(windows)]
 use anyhow::Context;
 use anyhow::Result;
