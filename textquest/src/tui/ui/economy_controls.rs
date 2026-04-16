@@ -102,13 +102,15 @@ pub fn draw_economy_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: 
         .constraints([
             Constraint::Length(10), // vendor cycle
             Constraint::Length(8),  // banking
+            Constraint::Length(9),  // session tracker
             Constraint::Min(4),     // loot queue
         ])
         .split(cols[0]);
 
     draw_vendor_cycle_panel(frame, rows[0], app);
     draw_banking_panel(frame, rows[1], app);
-    draw_loot_queue_panel(frame, rows[2], app);
+    draw_session_tracker_panel(frame, rows[2], app);
+    draw_loot_queue_panel(frame, rows[3], app);
 
     // ── Right: controls reference ──────────────────────────────────────
     draw_controls_panel(frame, cols[1], app);
@@ -221,6 +223,74 @@ fn draw_banking_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
             Span::styled("  Last Bank Run:   ", Style::default().fg(t.text_muted)),
             Span::styled(
                 econ.banking_last_run.as_deref().unwrap_or("\u{2014}"),
+                Style::default().fg(t.text_normal),
+            ),
+        ]),
+    ];
+
+    frame.render_widget(Paragraph::new(lines).block(blk), area);
+}
+
+/// Render the session plat tracker panel (MQ2PlatTracker parity).
+fn draw_session_tracker_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let t = &app.theme;
+    let summary = app.economy_state.plat_tracker.summary();
+
+    let net_plat = summary.net_change.plat;
+    let net_color = if net_plat >= 0 { t.hp_high } else { t.hp_low };
+
+    let rate = summary.plat_per_hour();
+    let rate_color = if rate >= 0.0 { t.hp_high } else { t.hp_low };
+
+    let gained = summary.total_gained.plat;
+    let spent = summary.total_spent.plat.abs();
+
+    let blk = panel(" Session Economy ", t.border_primary, t);
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled("  Net:           ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("{}p", net_plat),
+                Style::default()
+                    .fg(net_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Rate:          ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("{:.1}p/h", rate),
+                Style::default()
+                    .fg(rate_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Gained:        ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("{}p", gained),
+                Style::default().fg(t.hp_high),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Spent:         ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("{}p", spent),
+                Style::default().fg(t.hp_low),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Duration:      ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                summary.format_duration(),
+                Style::default().fg(t.text_secondary),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Transactions:  ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                summary.transaction_count.to_string(),
                 Style::default().fg(t.text_normal),
             ),
         ]),

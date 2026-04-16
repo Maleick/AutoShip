@@ -4,6 +4,7 @@
 //! for the economy loop (M10).
 
 pub mod failure_handling;
+pub mod plat_tracker;
 pub mod price_monitor;
 
 pub use failure_handling::{

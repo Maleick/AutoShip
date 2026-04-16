@@ -1980,6 +1980,9 @@ pub struct EconomyState {
 
     /// Whether economy automation is currently paused.
     pub automation_paused: bool,
+
+    /// Session plat tracker (MQ2PlatTracker parity).
+    pub plat_tracker: crate::economy::plat_tracker::PlatTracker,
 }
 
 impl Default for EconomyState {
@@ -2004,6 +2007,8 @@ impl Default for EconomyState {
             loot_recent_items: Vec::new(),
 
             automation_paused: false,
+
+            plat_tracker: crate::economy::plat_tracker::PlatTracker::new(),
         }
     }
 }
