@@ -348,6 +348,64 @@ mod tests {
     }
 
     #[test]
+    fn missing_column_detected() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE memories (
+                id INTEGER PRIMARY KEY,
+                character_id INTEGER,
+                event_type TEXT,
+                event_json TEXT,
+                zone TEXT,
+                mood_at_time TEXT,
+                importance REAL,
+                decayed INTEGER,
+                created_at TEXT
+             );
+             CREATE TABLE conversations (
+                id INTEGER PRIMARY KEY,
+                character_id INTEGER,
+                speaker TEXT,
+                is_player INTEGER,
+                channel TEXT,
+                sentiment REAL,
+                created_at TEXT
+             );
+             CREATE TABLE memory_summaries (
+                id INTEGER PRIMARY KEY,
+                character_id INTEGER,
+                period_start TEXT,
+                period_end TEXT,
+                summary TEXT,
+                mood_trend TEXT,
+                created_at TEXT
+             );
+             CREATE TABLE shared_references (
+                id INTEGER PRIMARY KEY,
+                memory_id INTEGER,
+                description TEXT
+             );
+             CREATE TABLE speech_patterns (character_id INTEGER PRIMARY KEY);
+             CREATE INDEX idx_memories_character ON memories(character_id, created_at DESC);
+             CREATE INDEX idx_memories_zone ON memories(character_id, zone);
+             CREATE INDEX idx_conversations_character ON conversations(character_id, created_at DESC);
+             CREATE INDEX idx_conversations_speaker ON conversations(character_id, speaker);
+             CREATE INDEX idx_summaries_character ON memory_summaries(character_id, period_start DESC);
+             CREATE INDEX idx_shared_refs ON shared_references(memory_id, description);",
+        )
+        .unwrap();
+
+        let err = validate_schema(&conn).unwrap_err();
+        assert_eq!(
+            err,
+            SchemaError::MissingColumn {
+                table: "conversations".to_string(),
+                column: "message".to_string(),
+            }
+        );
+    }
+
+    #[test]
     fn migration_v1_applies() {
         let conn = Connection::open_in_memory().unwrap();
         let applied = run_migrations(&conn).unwrap();
@@ -372,6 +430,97 @@ mod tests {
             })
             .unwrap();
         assert_eq!(version, 1);
+    }
+
+    #[test]
+    fn migration_creates_single_schema_migration_entry() {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+        run_migrations(&conn).unwrap();
+
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM schema_migrations", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(rows, 1);
+    }
+
+    #[test]
+    fn migration_meta_table_error_is_reported() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE schema_migrations (
+                version INTEGER PRIMARY KEY CHECK(version < 0),
+                applied_at TEXT NOT NULL
+             )",
+        )
+        .unwrap();
+
+        let err = run_migrations(&conn).unwrap_err();
+        assert!(matches!(err, MigrationError::MetaTable(_)));
+    }
+
+    #[test]
+    fn migration_database_error_is_reported_for_invalid_meta_schema() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE schema_migrations (
+                applied_at TEXT NOT NULL
+             )",
+        )
+        .unwrap();
+
+        let err = run_migrations(&conn).unwrap_err();
+        assert!(matches!(err, MigrationError::Database(_)));
+    }
+
+    #[test]
+    fn migration_execution_failure_is_reported() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE memories (
+                id INTEGER PRIMARY KEY
+             )",
+        )
+        .unwrap();
+
+        let err = run_migrations(&conn).unwrap_err();
+        assert!(matches!(err, MigrationError::ExecutionFailed(msg) if msg.contains("v1")));
+    }
+
+    #[test]
+    fn schema_error_display_messages_are_human_readable() {
+        assert_eq!(
+            SchemaError::MissingTable("memories".to_string()).to_string(),
+            "Missing table: memories"
+        );
+        assert_eq!(
+            SchemaError::MissingColumn {
+                table: "memories".to_string(),
+                column: "zone".to_string(),
+            }
+            .to_string(),
+            "Missing column zone in table memories"
+        );
+        assert_eq!(
+            SchemaError::MissingIndex("idx_memories_character".to_string()).to_string(),
+            "Missing index: idx_memories_character"
+        );
+    }
+
+    #[test]
+    fn migration_error_display_messages_are_human_readable() {
+        assert_eq!(
+            MigrationError::ExecutionFailed("boom".to_string()).to_string(),
+            "Migration failed: boom"
+        );
+        assert_eq!(
+            MigrationError::MetaTable("bad table".to_string()).to_string(),
+            "Meta table error: bad table"
+        );
+        assert_eq!(
+            MigrationError::Database("bad db".to_string()).to_string(),
+            "Database error: bad db"
+        );
     }
 
     #[test]

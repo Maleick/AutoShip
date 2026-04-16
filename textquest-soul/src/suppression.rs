@@ -300,6 +300,72 @@ mod tests {
     }
 
     #[test]
+    fn suppress_vendor_browse_during_casting() {
+        let rules = SuppressionRules::default();
+        let mut state = make_game_state(1);
+        state.combat_status = CombatStatus::Casting {
+            spell_slot: 0,
+            target_id: 42,
+        };
+
+        let ctx = GameStateContext::from_game_state(&state);
+        assert!(rules.should_suppress_behavior_for_casting(&IdleBehaviorType::VendorBrowse, ctx));
+    }
+
+    #[test]
+    fn dont_suppress_movement_behavior_when_casting_suppression_disabled() {
+        let rules = SuppressionRules {
+            suppress_movement_idle_during_casting: false,
+            ..SuppressionRules::default()
+        };
+        let mut state = make_game_state(1);
+        state.combat_status = CombatStatus::Casting {
+            spell_slot: 0,
+            target_id: 42,
+        };
+
+        let ctx = GameStateContext::from_game_state(&state);
+        assert!(!rules.should_suppress_behavior_for_casting(&IdleBehaviorType::Wander, ctx));
+    }
+
+    #[test]
+    fn suppress_idle_for_zone_change_and_looting() {
+        let rules = SuppressionRules::default();
+        let ctx = GameStateContext {
+            in_combat: false,
+            is_engaging: false,
+            is_casting: false,
+            is_navigating: false,
+            is_looting: true,
+            is_zone_changing: true,
+        };
+
+        assert!(rules.should_suppress_idle(ctx));
+        assert!(rules.should_suppress_chat(ctx));
+    }
+
+    #[test]
+    fn dont_suppress_idle_when_all_matching_flags_are_disabled() {
+        let rules = SuppressionRules {
+            suppress_idle_during_combat: false,
+            suppress_idle_during_navigation: false,
+            suppress_idle_during_zone_change: false,
+            suppress_idle_during_looting: false,
+            ..SuppressionRules::default()
+        };
+        let ctx = GameStateContext {
+            in_combat: true,
+            is_engaging: false,
+            is_casting: false,
+            is_navigating: true,
+            is_looting: true,
+            is_zone_changing: true,
+        };
+
+        assert!(!rules.should_suppress_idle(ctx));
+    }
+
+    #[test]
     fn restrict_combat_reactions_when_not_engaging() {
         let rules = SuppressionRules::default();
         let mut state = make_game_state(1);
@@ -314,6 +380,15 @@ mod tests {
         let rules = SuppressionRules::default();
         let mut state = make_game_state(1);
         state.combat_status = CombatStatus::Engaging { target_id: 42 };
+
+        let ctx = GameStateContext::from_game_state(&state);
+        assert!(!rules.should_restrict_combat_reactions(ctx));
+    }
+
+    #[test]
+    fn dont_restrict_combat_reactions_outside_combat() {
+        let rules = SuppressionRules::default();
+        let state = make_game_state(1);
 
         let ctx = GameStateContext::from_game_state(&state);
         assert!(!rules.should_restrict_combat_reactions(ctx));

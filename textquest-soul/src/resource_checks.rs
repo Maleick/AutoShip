@@ -280,4 +280,63 @@ mod tests {
         assert_eq!(leak.current_count, 5);
         assert!(!leak.description.is_empty());
     }
+
+    #[test]
+    fn test_partial_cleanup_reports_only_remaining_resources() {
+        let guard = ResourceGuard::new(ResourceState {
+            db_connection_count: 2,
+            personality_cache_size: 4,
+            event_queue_depth: 3,
+            registered_character_count: 4,
+        });
+        let after = ResourceState {
+            db_connection_count: 0,
+            personality_cache_size: 1,
+            event_queue_depth: 0,
+            registered_character_count: 2,
+        };
+
+        let leaks = guard.check_leaks(&after);
+        assert_eq!(leaks.len(), 2, "expected only uncleared resources");
+        assert_eq!(
+            leaks,
+            vec![
+                ResourceLeak {
+                    resource: "personality_cache".to_string(),
+                    initial_count: 4,
+                    current_count: 1,
+                    description: "Personality cache was not cleared during shutdown".to_string(),
+                },
+                ResourceLeak {
+                    resource: "registered_characters".to_string(),
+                    initial_count: 4,
+                    current_count: 2,
+                    description: "Character registrations were not removed during shutdown"
+                        .to_string(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn test_check_leaks_is_repeatable() {
+        let guard = ResourceGuard::new(running_state(2));
+        let after = ResourceState {
+            event_queue_depth: 1,
+            ..ResourceState::zeroed()
+        };
+
+        let first = guard.check_leaks(&after);
+        let second = guard.check_leaks(&after);
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn test_zeroed_initial_state_has_zero_snapshot_and_no_leaks() {
+        let guard = ResourceGuard::new(ResourceState::zeroed());
+        assert_eq!(guard.initial_snapshot(), (0, 0, 0, 0));
+
+        let leaks = guard.check_leaks(&ResourceState::zeroed());
+        assert!(leaks.is_empty());
+    }
 }
