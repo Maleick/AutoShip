@@ -23,9 +23,6 @@ Detailed early-planar raid research now lives in [Research: Plane of Hate and Pl
 ## Finalized 36-Box Roster Reference
 
 > Finalized from the `TextQuest#1521` owner decision recorded on 2026-04-14. The farm roster and the raid roster are intentionally the same 36-character stable, so leveling, gearing, and AA time spent farming flows directly into raid readiness.
->
-> Independent source-backed validation of the roster's class-synergy tradeoffs lives in [Research - Velious Class Synergy Validation](Research-Velious-Class-Synergy.md).
-> Launch-day city split, convergence routing, gear handoffs, and Legacy XP sequencing are documented separately in [Frostreaver Starting City Logistics](Frostreaver-Starting-City-Logistics.md).
 
 | Group      | Tank | Healer | Support 1 | Support 2 | DPS 1 | DPS 2 |
 | ---------- | ---- | ------ | --------- | --------- | ----- | ----- |
@@ -115,6 +112,8 @@ Applied to the locked roster:
 ---
 
 ## Leveling Zones by Level Range
+
+For pre-launch rehearsal routes that intentionally avoid the most-camped mainstream hotspots, see [Research: Test-Server Leveling Paths and Overlooked Zones](Research-Test-Server-Leveling-Paths.md).
 
 ### Level 1-10: Starter Zones (1-3 hours at fastest XP rate)
 
@@ -244,7 +243,6 @@ On a free trade server like Frostreaver, every item is tradeable. This means:
 - Gear cascades down as guilds upgrade, creating a healthy economy
 - Even "bad" random loot rolls produce tradeable items worth selling
 - Focus on volume of named kills rather than specific camps
-- Epic monetization behaves differently from generic loot farming; see [Research: Epic Character Sales](Research-Epic-Character-Sales) for the MQ-vs-character-sale pipeline and pricing model.
 
 ---
 
@@ -292,13 +290,11 @@ With 36 characters (6 full groups), you have a significant force. Here is what i
 | **King Tormax**            | Kael Drakkel      | Moderate-Hard  | King Tormax loot                                              | Requires clearing to throne room                         |
 | **Lord Yelinak**           | Skyshrine         | Moderate       | Yelinak loot                                                  | Dragon lord                                              |
 | **Tunare**                 | Plane of Growth   | Moderate-Hard  | Nature-themed raid loot                                       | Full raid clear needed                                   |
-| **ToV Halls of Testing**   | Temple of Veeshan | Moderate       | HoT dragon drops, Dozekar quest items                         | Mid-tier ToV content; doable with 36. See [Research: Dozekar Tear Quest Items](Research-Dozekar-Tear-Quest-Items.md) for reward mapping and price strategy. |
+| **ToV Halls of Testing**   | Temple of Veeshan | Moderate       | HoT dragon drops, Dozekar quest items                         | Mid-tier ToV content; doable with 36                     |
 | **ToV West Wing**          | Temple of Veeshan | Moderate       | Kael quest armor (unmade pieces)                              | CoV-faction aligned; safe if ally faction                |
 | **ToV North Wing (NToV)**  | Temple of Veeshan | Hard           | Best loot in Velious era                                      | See NToV section below                                   |
 | **Vulak'Aerr**             | NToV              | Very Hard      | Abashi's Rod, Do'Vassir's Gauntlets, Crystasia's Ring (AC 30) | Final boss of Velious; 36 well-geared chars may be tight |
 | **Sleeper's Tomb**         | Sleeper's Tomb    | Hard-Very Hard | ST-specific loot, warders                                     | Ancient dragons; significant challenge                   |
-
-For the key quest, tradeability assumptions, 36-account keying order, and the expected seller window, see [Research: Sleeper's Tomb Keying Opportunity Window](Research-Sleepers-Tomb-Keying).
 
 ### NToV Dragon Difficulty Ranking (for your 36-box)
 
@@ -319,8 +315,6 @@ From easiest to hardest within NToV:
 13. **Vulak'Aerr** (Level 70, final boss) - Reigning lord of ToV, premium loot
 
 **36-Box Feasibility:** With 6 CLR, 6 BRD, 4 SHM, a dedicated ENC, and a real tank core of 3 WAR + 1 SK + 2 PAL, your force can handle most NToV content. Lord Vyemm and Vulak'Aerr will still require strong Kael/Kunark gear and disciplined healing rotations, but the roster has enough real tanks, healers, and monk DPS to clear the zone without leaning on pet tanking.
-
-For breakeven math, farming opportunity-cost thresholds, and a recommended early-phase loot policy for NToV, see [Research: Frostreaver Raid Economics](Research-Raid-Economics.md).
 
 ---
 
@@ -353,44 +347,11 @@ For breakeven math, farming opportunity-cost thresholds, and a recommended early
 4. **Split camps across groups:** Each group locks its own camp. 6 groups = 6 simultaneously locked camp areas in a dungeon
 5. **Raid formation for bosses:** Combine all 6 groups into a raid; one person tags the boss, entire raid can engage
 
-### FTE Powerleveling Status (`TextQuest#1580`)
+**Power Leveling with Encounter Locking:**
 
-This subsection separates official rules, community workarounds, and repo-observed automation support so launch planning does not assume an exploit still works.
-
-**Evidence anchors used here:**
-
-- `Research-backed`: public EverQuest ruleset text or checked-in TextQuest code supports the claim.
-- `Provisional`: community-reported workaround with no current Frostreaver live proof in this repo.
-- `Needs Live Proof`: plausible on paper, but not validated on a current live client in this workspace.
-
-| Method | Evidence state | What we know | Launch recommendation |
-| ------ | -------------- | ------------ | --------------------- |
-| Traditional DS PL (high-level tagger or outside killer does the damage) | `Research-backed` for the rule conflict, `Needs Live Proof` for current-patch reproduction | Official encounter-locking rules still say the lock follows the first hate-list owner, outside players cannot damage the mob unless it is semi-unlocked with `/yell`, and XP goes to the player/group/raid that does the most damage. That combination implies the old "tag once, let a DS or outside killer do the work" pattern is no longer a safe default. Oakwynd community reports also described the classic DS flow as effectively dead under FTE. | Treat as broken for Frostreaver planning. Do not build leveling throughput assumptions around it. |
-| Group the lowbies with the puller, make every alt get hit once, then drop the puller and finish with DS | `Provisional` | Oakwynd-era community reports say this can work for up to five alts if the puller has no riposte or DS and every target gets each mob on its hate list before the puller drops group. The same discussion also describes the flow as timing-sensitive and bug-prone. | Keep as a manual fallback only. Not stable enough to be baseline process or automation target. |
-| `/yell` every mob to semi-unlock it, then kill with an AE/DS finisher | `Research-backed` for `/yell` mechanics, `Provisional` for PL viability | Official FAQ text confirms `/yell` semi-unlocks a targeted encounter-locked NPC. Community reports say using it mob-by-mob for powerleveling was "still very buggy." | Use only as an emergency/manual experiment, not as the planned leveling path. |
-| Charm-based leveling group | `Research-backed` for FTE compatibility, `Needs Live Proof` for XP/hour | Charm DPS stays inside the lock-owning group and does not depend on broken DS credit tricks. That makes it mechanically compatible with encounter locking. What is still missing here is measured Frostreaver XP/hour versus a normal dungeon group. | This is the best advanced alternative on paper, but treat the throughput claim as unproven until live launch testing exists. |
-
-### What TextQuest Can Actually Automate Today
-
-TextQuest currently covers only the first half of the charm-recovery loop:
-
-- `textquest/src/orchestrator/mod.rs` detects `CharmBreak` events while a camp is in active combat.
-- `textquest/src/camp/cc.rs` converts that event into an emergency stun/mez response so the group has a chance to recover safely.
-- The repo does **not** currently implement the full "re-charm, re-haste, re-send pet" loop described by mature EQ automation stacks.
-
-That means charm-heavy leveling is an operator-assisted path today, not a fire-and-forget replacement for normal XP groups.
-
-Candidate shells worth testing once Frostreaver is live:
-
-- Option A: 2 Enchanter / Bard / Cleric / Druid / Necromancer
-- Option B: 3 Enchanter / Bard / Cleric / Druid
-
-### Practical Launch Stance
-
-1. Assume traditional DS PL is off the table until a live Frostreaver pass disproves it.
-2. Treat the drop-group workaround and per-target `/yell` unlock flow as `Provisional` bug workarounds, not production doctrine.
-3. Use normal dungeon groups as the planning baseline for replacement-character catch-up.
-4. If you want a higher-upside FTE-compatible alternative, test one charm-centric group first instead of converting the entire roster around an unvalidated XP/hour assumption.
+- Put lower-level alts in the group with a high-level tagger
+- The tagger hits every mob (locking to the group), then you can kill with lower-level characters getting XP
+- Works for catch-up leveling of replacement characters
 
 ---
 
@@ -398,12 +359,11 @@ Candidate shells worth testing once Frostreaver is live:
 
 ### How Randomized Loot Works (Learned from Mischief/Teek)
 
-- Frostreaver is confirmed to launch with **Randomized Loot**, **Free Trade**, and **Encounter Locking**
-- Public Mischief/Teek raid data shows Velious raid loot is **bucketed**, not strict same-level matching
-- The observed Velious raid implementation resolves into **four raid pools**, and the widest one spans **level 55 through level 70**
+- **Rare NPCs** drop loot from other rare NPCs of a **similar level within the same expansion**
+- **Raid NPCs** drop loot from other raid NPCs of a **similar level within the same expansion**
 - Loot randomization is **expansion-based, not zone-based**
-- For raid planning, treat loot sharing as **same expansion + observed bucket**
-- See [Research: Frostreaver Loot Tier Optimization](Research-Frostreaver-Loot-Tier-Optimization.md) for the current Velious bucket map and farm recommendations
+- There is a chance at **extra drops** beyond the normal loot table
+- Loot tiers depend on **mob's actual level at time of spawning**, not its max level
 
 ### How This Changes Camp Selection
 
@@ -514,7 +474,6 @@ See [P99 Wiki Zone Guide](P99-Zone-Guide.md) for the full P99 wiki-sourced zone 
 - [EQProgression TLP Server Rules and Info](https://www.eqprogression.com/tlp-server-rules-and-info/)
 - [Temple of Veeshan (Project 1999 Wiki)](https://wiki.project1999.com/Temple_of_Veeshan)
 - [Velious Raiding Gear (Project 1999 Wiki)](https://wiki.project1999.com/Players:Velious_Raiding_Gear)
-- [Votes are in! (EverQuest 2026 TLP poll outcome)](https://www.everquest.com/news/eq-2026-tlp-polls-outcome)
 - [Fangbreaker Rulesets FAQ (EverQuest Official)](https://www.everquest.com/guides/eq-2025-tlp-ruleset-faq)
 - [Mischief TLP Discussion (Fires of Heaven)](https://www.firesofheaven.org/threads/eq-tlp-mischief-free-trade-random-loot.12847/)
 - [Dynamic Loot Tiers (RedGuides)](https://www.redguides.com/community/threads/info-random-loot-server-dynamic-loot-tiers.91960/)

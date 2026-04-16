@@ -66,6 +66,7 @@
 - [RunEQ Headless](Research-RunEQ-Headless)
 - [Sleeper's Tomb Keying](Research-Sleepers-Tomb-Keying)
 - [Syscall Evasion](Research-Syscall-Evasion)
+- [Test Server Leveling Paths](Research-Test-Server-Leveling-Paths)
 - [TUI Map Navmesh Audit](Research-TUI-Map-Navmesh-Audit)
 - [TUI Map Polish](Research-TUI-Map-Polish)
 - [Velious Class Synergy](Research-Velious-Class-Synergy)

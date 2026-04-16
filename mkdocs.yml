@@ -83,7 +83,6 @@ nav:
       - Command Reference: Command-Reference.md
       - Configuration: Configuration.md
       - Login Automation: Login-Automation.md
-      - Epic Quest Sequencing: Epic-Quest-Sequencing.md
       - Combat and Camp Loop: Combat-and-Camp-Loop.md
       - Navigation and Maps: Navigation-and-Maps.md
       - Soul Engine: Soul-Engine.md
@@ -100,4 +99,5 @@ nav:
       - Soul Engine Definition: Soul-Engine-Definition.md
       - Soul Engine M11 Roadmap: Soul-Engine-M11-Roadmap.md
       - Soul Engine Test Strategy: Soul-Engine-Test-Strategy.md
+      - Test Server Leveling Paths: Research-Test-Server-Leveling-Paths.md
       - Test Map Verification Runbook: Test-Map-Verification-Runbook.md
