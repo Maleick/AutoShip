@@ -6,8 +6,10 @@
 //! - [`SongCategory`]: Categorization for song rotation decisions
 //! - [`InstrumentType`]: Instrument type mapping (string, brass, wind, percussion)
 
+use serde::{Deserialize, Serialize};
+
 /// Song category for bard rotation decisions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SongCategory {
     /// Melee haste / ATK / STR (War March, etc.)
     Haste,
@@ -67,7 +69,7 @@ impl SongCategory {
 /// - **Brass**: String instruments (lutes, bards) — commonly used for mana/end regen
 /// - **Wind**: Wind instruments (drums, percs) — commonly used for spell damage/buffs
 /// - **Percussion**: Percussion instruments (cymbals, bells) — rare, for specific songs
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum InstrumentType {
     #[default]
     None,
@@ -86,14 +88,14 @@ impl InstrumentType {
 /// Which equipment slot holds the instrument.
 ///
 /// Bard instruments can be in Primary (most common) or Secondary (offhand) slots.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum InstrumentSlot {
     #[default]
     Primary,
     Secondary,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SongSlot {
     pub gem: u8,
     pub priority: u8,
@@ -120,7 +122,8 @@ impl SongSlot {
     }
 
     pub fn effective_instrument(&self) -> InstrumentType {
-        self.instrument_type.unwrap_or_else(|| self.category.default_instrument())
+        self.instrument_type
+            .unwrap_or_else(|| self.category.default_instrument())
     }
 }
 
@@ -604,10 +607,7 @@ pub enum InstrumentSwapAction {
         instrument_type: InstrumentType,
     },
     /// Restore the previously equipped item.
-    Restore {
-        slot: InstrumentSlot,
-        item_id: u32,
-    },
+    Restore { slot: InstrumentSlot, item_id: u32 },
 }
 
 impl Default for InstrumentSwapAction {

@@ -83,7 +83,7 @@ static CACHED_NEARBY_FOR_STICK: std::sync::Mutex<Vec<textquest_common::types::Sp
 /// Previous nearby-spawn snapshot used for delta detection and spawn event
 /// emission.
 static PREV_NEARBY_SPAWNS: std::sync::OnceLock<
-    std::sync::Mutex<std::collections::HashMap<u32, String>>,
+    std::sync::Mutex<std::collections::HashMap<u32, (String, u8)>>,
 > = std::sync::OnceLock::new();
 
 /// Set a button widget address to be clicked on the next game loop tick.
@@ -1760,7 +1760,10 @@ fn compute_spawn_delta_events(
         if spawn.spawn_id == 0 {
             continue;
         }
-        next.insert(spawn.spawn_id, spawn.displayed_name.clone());
+        next.insert(
+            spawn.spawn_id,
+            (spawn.displayed_name.clone(), spawn.spawn_type),
+        );
     }
 
     if previous.is_empty() {
@@ -3745,9 +3748,10 @@ mod tests {
 
     #[test]
     fn spawn_delta_events_report_created_and_destroyed() {
-        let previous: HashMap<u32, String> = [(1u32, "a_wolf".into()), (2, "a_bear".into())]
-            .into_iter()
-            .collect();
+        let previous: HashMap<u32, (String, u8)> =
+            [(1u32, ("a_wolf".into(), 1)), (2, ("a_bear".into(), 1))]
+                .into_iter()
+                .collect();
 
         let current = vec![fake_spawn(2, "a_bear"), fake_spawn(3, "a_ox")];
         let (next, events) =
@@ -3755,9 +3759,12 @@ mod tests {
 
         assert_eq!(
             next,
-            [(2u32, "a_bear".to_string()), (3u32, "a_ox".to_string())]
-                .into_iter()
-                .collect()
+            [
+                (2u32, ("a_bear".to_string(), 1)),
+                (3u32, ("a_ox".to_string(), 1))
+            ]
+            .into_iter()
+            .collect()
         );
         assert_eq!(events.len(), 2);
         assert_eq!(
@@ -3774,13 +3781,13 @@ mod tests {
 
     #[test]
     fn spawn_delta_events_with_empty_previous_emits_none() {
-        let previous: HashMap<u32, String> = HashMap::new();
+        let previous: HashMap<u32, (String, u8)> = HashMap::new();
         let current = vec![fake_spawn(10, "a_goblin")];
         let (next, events) = compute_spawn_delta_events(&previous, &current, "freportw".into(), 1);
 
         assert_eq!(
             next,
-            [(10u32, "a_goblin".to_string())].into_iter().collect()
+            [(10u32, ("a_goblin".to_string(), 1))].into_iter().collect()
         );
         assert!(
             events.is_empty(),

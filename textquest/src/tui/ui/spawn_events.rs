@@ -2,9 +2,9 @@
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Rect},
-    style::{Color, Style},
-    text::Span,
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
     widgets::{Cell, Paragraph, Row, Table, Wrap},
 };
 
@@ -14,7 +14,11 @@ use crate::tui::app::App;
 pub fn draw_spawn_events_panel(frame: &mut Frame, area: Rect, app: &mut App) {
     let t = &app.theme;
     let is_active = app.active_panel == crate::tui::app::ActivePanel::SpawnEvents;
-    let border_style = if is_active { t.border_active } else { t.border_dim };
+    let border_style = if is_active {
+        t.border_active
+    } else {
+        t.border_dim
+    };
 
     let filter_label = match app.player_notification_filter {
         crate::config::PlayerFilterMode::All => "all",
@@ -31,7 +35,11 @@ pub fn draw_spawn_events_panel(frame: &mut Frame, area: Rect, app: &mut App) {
     let title = format!(
         " Spawn Events [pf:{} sound:{}{}] ",
         filter_label,
-        if app.sound_on_player_zone_in { "ON" } else { "OFF" },
+        if app.sound_on_player_zone_in {
+            "ON"
+        } else {
+            "OFF"
+        },
         sound_ind
     );
 
@@ -51,10 +59,7 @@ pub fn draw_spawn_events_panel(frame: &mut Frame, area: Rect, app: &mut App) {
         return;
     }
 
-    let header = crate::tui::ui::widgets::themed_header_row(
-        &["Time", "Zone", "Name", "Event"],
-        t,
-    );
+    let header = crate::tui::ui::widgets::themed_header_row(&["Time", "Zone", "Name", "Event"], t);
 
     let visible_rows = (area.height.saturating_sub(2) as usize).min(feed_len);
 
