@@ -72,6 +72,8 @@ pub struct AppState {
     /// Mutable runtime snapshot written by the orchestrator for live session
     /// monitoring.
     pub live_session_snapshot_path: PathBuf,
+    /// In-memory XAssist configuration per character.
+    pub xassist_configs: api::xassist::XAssistConfigs,
 }
 
 /// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is
@@ -177,6 +179,7 @@ fn build_state() -> Arc<AppState> {
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         api_token,
         live_session_snapshot_path: live_session_snapshot_path(),
+        xassist_configs: api::xassist::demo_xassist_configs(),
     })
 }
 
@@ -264,6 +267,13 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .nest("/loot", build_loot_router())
         .nest("/soul", build_soul_router())
         .nest("/gm-alerts", api::gm_alerts::router())
+        .route("/xassist/configs", get(api::xassist::list_xassist_configs))
+        .route(
+            "/xassist/config/{character}",
+            get(api::xassist::get_xassist_config)
+                .put(api::xassist::put_xassist_config)
+                .delete(api::xassist::delete_xassist_config),
+        )
         .fallback(api::api_not_found)
 }
 
@@ -369,6 +379,7 @@ mod tests {
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             api_token: None, // No auth in tests — auth middleware is a no-op when None
             live_session_snapshot_path: path.with_file_name("live_sessions.json"),
+            xassist_configs: api::xassist::demo_xassist_configs(),
         })
     }
 

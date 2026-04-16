@@ -320,6 +320,19 @@ export interface DiscordSettings {
   notification_routes: Record<string, DiscordRouteConfig>;
 }
 
+// ── XAssist (Cross-Group Outside-Group Assist) types ─────────────────────────
+
+export interface XAssistCharacterConfig {
+  character_name: string;
+  ma_name: string | null;
+  enabled: boolean;
+}
+
+export interface XAssistConfigUpdate {
+  ma_name: string | null;
+  enabled: boolean;
+}
+
 // ── Strategy tuning types ───────────────────────────────────────────────────
 
 export type CharacterRole = "Tank" | "Healer" | "Support" | "DPS";

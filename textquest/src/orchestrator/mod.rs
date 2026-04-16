@@ -1,8 +1,17 @@
 //! Orchestrator — wires the camp loop state machine to IPC command delivery.
 
+/// Cross-group emergency coordination for same-zone rez and assist flows.
+pub mod cross_group;
+/// Cross-group outside-group assist — MQ2XAssist parity.
+pub mod xassist;
 /// Session and group control model for the orchestrator.
 pub mod session_control;
 
+use self::{
+    cross_group::CrossGroupCoordinator,
+    session_control::SessionControl,
+    xassist::{XAssist, XAssistConfig},
+};
 use crate::{
     camp::{
         cc::CcType,
@@ -85,6 +94,14 @@ pub struct Orchestrator {
     state_timestamps: HashMap<u32, u64>,
     /// Last broadcast cross-client roster snapshot.
     last_shared_client_states: Vec<SharedClientState>,
+    /// Per-client coordination state, including group membership.
+    session_controls: HashMap<u32, SessionControl>,
+    /// Cached class names for clients registered through the launcher flow.
+    client_class_names: HashMap<u32, String>,
+    /// Same-zone cross-group rez and assist coordinator.
+    cross_group: CrossGroupCoordinator,
+    /// Cross-group outside-group assist (MQ2XAssist parity).
+    xassist: XAssist,
     // Pipe connections are created per-command (connect → token → command → drop).
     // The DLL's pipe server disconnects after each command, so persistent
     // connections would fail on the second write.
@@ -137,6 +154,10 @@ impl Orchestrator {
             session_tokens: HashMap::new(),
             state_timestamps: HashMap::new(),
             last_shared_client_states: Vec::new(),
+            session_controls: HashMap::new(),
+            client_class_names: HashMap::new(),
+            cross_group: CrossGroupCoordinator::new(),
+            xassist: XAssist::new(),
             operating_mode: OperatingMode::Camp,
             active_hunt: None,
             sell_cycle: None,
@@ -335,11 +356,26 @@ impl Orchestrator {
             .filter(|(pid, _)| in_scope.is_empty() || in_scope.contains(pid))
             .collect();
 
-        let count = scoped.len();
+        let xassist_commands = self.xassist.tick(&self.game_states);
+
+        let count = scoped.len() + xassist_commands.len();
         for (pid, action) in &scoped {
             self.dispatch_action(*pid, action);
         }
+        for (pid, cmd) in &xassist_commands {
+            if let xassist::AssistCommand::Target(spawn_id) = cmd {
+                self.send_ipc_command(*pid, Command::SetTarget { spawn_id: *spawn_id });
+            }
+        }
         self.last_dispatched = scoped;
+        self.last_dispatched
+            .extend(xassist_commands.iter().filter_map(|(pid, cmd)| {
+                if let xassist::AssistCommand::Target(spawn_id) = cmd {
+                    Some((*pid, CampAction::Slash(format!("/target spawn:{spawn_id}"))))
+                } else {
+                    None
+                }
+            }));
         count
     }
 
@@ -765,6 +801,51 @@ impl Orchestrator {
         token
     }
 
+    /// Assign a client to a logical orchestration group for cross-group
+    /// coordination.
+    pub fn set_client_group(&mut self, pid: u32, group_id: u8) {
+        let control = self
+            .session_controls
+            .entry(pid)
+            .or_insert_with(|| SessionControl::new(pid));
+        control.apply_command(&SessionControlCommand::SetGroup { group_id });
+    }
+
+    /// Return the configured orchestration group for a client, if known.
+    #[must_use]
+    pub fn client_group(&self, pid: u32) -> Option<u8> {
+        self.session_controls
+            .get(&pid)
+            .map(|control| control.group_id)
+    }
+
+    /// Cache a class name for a client so coordination logic can make
+    /// class-aware decisions.
+    pub fn set_client_class_name(&mut self, pid: u32, class_name: impl Into<String>) {
+        self.client_class_names.insert(pid, class_name.into());
+    }
+
+    /// Return the cached class name for a client, if one is known.
+    #[must_use]
+    pub fn client_class_name(&self, pid: u32) -> Option<&str> {
+        self.client_class_names.get(&pid).map(String::as_str)
+    }
+
+    /// Set the cross-group assist configuration for a client.
+    pub fn set_xassist_config(&mut self, pid: u32, config: xassist::XAssistConfig) {
+        self.xassist.set_config(pid, config);
+    }
+
+    /// Get the cross-group assist configuration for a client.
+    #[must_use]
+    pub fn get_xassist_config(&self, pid: u32) -> Option<xassist::XAssistConfig> {
+        self.xassist.get_config(pid).cloned()
+    }
+
+    /// Remove client from XAssist tracking.
+    pub fn remove_client_from_xassist(&mut self, pid: u32) {
+        self.xassist.remove_client(pid);
+    }
     /// Dispatch a `CampAction` to the appropriate client via IPC.
     fn dispatch_action(&mut self, pid: u32, action: &CampAction) {
         match action {
@@ -920,6 +1001,9 @@ impl Orchestrator {
         self.state_readers.remove(&pid);
         self.session_tokens.remove(&pid);
         self.state_timestamps.remove(&pid);
+        self.session_controls.remove(&pid);
+        self.client_class_names.remove(&pid);
+        self.xassist.remove_client(pid);
         tracing::info!(pid, "Client removed from orchestrator");
     }
 

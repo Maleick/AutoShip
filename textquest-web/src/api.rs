@@ -5,6 +5,7 @@ pub mod discord;
 pub mod economy;
 pub mod loot;
 pub mod soul;
+pub mod xassist;
 use axum::{
     Json,
     extract::{Path, State},
