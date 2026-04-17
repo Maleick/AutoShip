@@ -15,6 +15,7 @@
 - [Login Automation](Login-Automation)
 - [Soul Engine](Soul-Engine)
 - [Configuration](Configuration)
+- [Say Detection and Alerting](Say-Detection-and-Alerting)
 - [Security and Anti-Detection Notes](Security-and-Anti-Detection-Notes)
 
 ## Development

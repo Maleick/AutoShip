@@ -19,6 +19,7 @@ use crate::{
     chat_log::{ChatChannel, ChatLogConfig, ChatLogManager},
     combat::coordinator::CombatCoordinator,
     ipc::{pipe::CommandPipe, shared::SharedStateReader},
+    say_detection::{SayAction, SayDetector, SayPattern, SayRule},
 };
 use std::{
     collections::HashMap,
@@ -123,6 +124,12 @@ pub struct Orchestrator {
     last_chat_log_poll: Option<Instant>,
     /// Poll interval for chat logging.
     chat_log_poll_interval: Duration,
+    /// Say channel detection and alerting (MQ2Say parity).
+    say_detector: SayDetector,
+    /// Alert routing and delivery configuration for say detection.
+    say_detection_config: crate::config::SayDetectionConfig,
+    /// Optional Discord webhook sender for say alerts.
+    say_detection_webhook: Option<crate::discord::webhook::WebhookSender>,
 
     // --- M8 Orchestrator routing ---
     /// Active routing scope (synced from TUI `App::routing_scope` each tick).
@@ -168,6 +175,9 @@ impl Orchestrator {
             chat_log_manager: None,
             last_chat_log_poll: None,
             chat_log_poll_interval: Duration::from_secs(1),
+            say_detector: SayDetector::new(),
+            say_detection_config: crate::config::SayDetectionConfig::default(),
+            say_detection_webhook: None,
             routing_scope: RoutingScope::AllSession,
             scope_pids: Vec::new(),
         }
@@ -347,6 +357,7 @@ impl Orchestrator {
         self.sync_shared_client_states();
         self.poll_trade_chat_if_due();
         self.poll_chat_log_if_due();
+        let say_matches = self.poll_and_evaluate_say_detection();
 
         let commands = match self.operating_mode {
             OperatingMode::Camp => self.tick_camp(),
@@ -376,7 +387,15 @@ impl Orchestrator {
             }
         }
         self.last_dispatched = scoped;
-        count
+        self.last_dispatched
+            .extend(xassist_commands.iter().filter_map(|(pid, cmd)| {
+                if let xassist::AssistCommand::Target(spawn_id) = cmd {
+                    Some((*pid, CampAction::Slash(format!("/target spawn:{spawn_id}"))))
+                } else {
+                    None
+                }
+            }));
+        count + say_matches
     }
 
     /// Returns the PIDs that should receive camp/hunt loop dispatches under the
@@ -1146,6 +1165,175 @@ impl Orchestrator {
     pub fn update_chat_log_config(&mut self, config: ChatLogConfig) {
         if let Some(manager) = self.chat_log_manager.as_mut() {
             manager.update_config(config);
+        }
+    }
+
+    /// Configure say channel detection and alerting from application config.
+    ///
+    /// When `config.enabled` is `false`, the detector is cleared. When `enabled`
+    /// is `true`, rules are loaded from the config.
+    pub fn configure_say_detection(&mut self, config: &crate::config::SayDetectionConfig) {
+        self.say_detection_config = config.clone();
+        self.say_detector.clear_rules();
+        self.say_detection_webhook = config
+            .discord_webhook_url
+            .clone()
+            .filter(|url| !url.trim().is_empty())
+            .map(crate::discord::webhook::WebhookSender::new);
+
+        if !config.enabled {
+            tracing::info!("Say detection disabled");
+            return;
+        }
+
+        for rule_config in &config.rules {
+            let pattern_type = match rule_config.pattern_type {
+                crate::config::SayPatternType::Substring => SayPattern::Substring,
+                crate::config::SayPatternType::Exact => SayPattern::Exact,
+                crate::config::SayPatternType::Regex => SayPattern::Regex,
+            };
+
+            let action = match rule_config.action_type {
+                crate::config::SayRuleAction::Alert => SayAction::Alert,
+                crate::config::SayRuleAction::Broadcast => {
+                    let Some(command) = rule_config
+                        .action_value
+                        .as_ref()
+                        .map(String::trim)
+                        .filter(|value| !value.is_empty())
+                    else {
+                        tracing::warn!(
+                            rule = %rule_config.name,
+                            "Skipping say-detection rule with empty broadcast command"
+                        );
+                        continue;
+                    };
+                    SayAction::Broadcast(command.to_string())
+                }
+                crate::config::SayRuleAction::Command => {
+                    let Some(command) = rule_config
+                        .action_value
+                        .as_ref()
+                        .map(String::trim)
+                        .filter(|value| !value.is_empty())
+                    else {
+                        tracing::warn!(
+                            rule = %rule_config.name,
+                            "Skipping say-detection rule with empty local command"
+                        );
+                        continue;
+                    };
+                    SayAction::Command(command.to_string())
+                }
+            };
+
+            let mut rule = SayRule::new(
+                &rule_config.name,
+                &rule_config.pattern,
+                pattern_type,
+                action,
+            );
+            rule.enabled = rule_config.enabled;
+            self.say_detector.add_rule(rule);
+        }
+
+        tracing::info!(
+            rules = self.say_detector.enabled_count(),
+            "Say detection configured"
+        );
+    }
+
+    /// Poll say-channel chat events and evaluate detection rules.
+    ///
+    /// Returns the number of matched rules (for telemetry).
+    fn poll_and_evaluate_say_detection(&mut self) -> usize {
+        if self.say_detector.enabled_count() == 0 {
+            return 0;
+        }
+
+        let mut match_count = 0;
+
+        for &pid in &self.client_pids {
+            let messages = self.poll_chat(pid);
+            for msg in messages {
+                if let Some(event) = textquest_common::chat::parse_chat_text(&msg.text) {
+                    if event.channel != textquest_common::chat::ChatChannel::Say {
+                        continue;
+                    }
+
+                    let matches = self.say_detector.evaluate(&event);
+                    if matches.is_empty() {
+                        continue;
+                    }
+
+                    match_count += matches.len();
+                    for matched in matches {
+                        match matched.action {
+                            SayAction::Alert => {
+                                self.emit_say_alert(&matched.rule_name, &event);
+                            }
+                            SayAction::Broadcast(cmd) => {
+                                self.broadcast_command(&cmd);
+                                tracing::info!(
+                                    rule = %matched.rule_name,
+                                    cmd = %cmd,
+                                    sender = %event.sender,
+                                    "Say detection broadcast executed"
+                                );
+                            }
+                            SayAction::Command(cmd) => {
+                                self.send_slash_command(pid, &cmd);
+                                tracing::info!(
+                                    rule = %matched.rule_name,
+                                    cmd = %cmd,
+                                    sender = %event.sender,
+                                    "Say detection command executed"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        match_count
+    }
+
+    fn emit_say_alert(&mut self, rule_name: &str, event: &textquest_common::chat::ChatEvent) {
+        tracing::warn!(
+            rule = rule_name,
+            sender = %event.sender,
+            message = %event.message,
+            sound_enabled = self.say_detection_config.sound_enabled,
+            toast_enabled = self.say_detection_config.toast_enabled,
+            "Say detection alert triggered"
+        );
+
+        if self.say_detection_config.broadcast_all_clients {
+            self.broadcast_command(&format!(
+                "/echo [Say Alert] {} :: {}",
+                event.sender, event.message
+            ));
+        }
+
+        if let Some(webhook) = &self.say_detection_webhook {
+            webhook.send(
+                crate::discord::webhook::DiscordAlert::simple(
+                    format!("Say Alert: {rule_name}"),
+                    format!("{} says: {}", event.sender, event.message),
+                    crate::discord::webhook::AlertLevel::Warning,
+                    crate::discord::webhook::EventCategory::Status,
+                )
+                .with_field("Rule", rule_name, true)
+                .with_field("Speaker", &event.sender, true),
+            );
+        }
+    }
+
+    /// Send a slash command to all registered clients.
+    fn broadcast_command(&mut self, command: &str) {
+        for &pid in &self.client_pids {
+            self.send_slash_command(pid, command);
         }
     }
 

@@ -6,6 +6,7 @@ pub mod dashboard;
 pub mod discord;
 pub mod economy;
 pub mod loot;
+pub mod say_detection;
 pub mod soul;
 use axum::{
     Json,

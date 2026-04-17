@@ -228,6 +228,110 @@ pub struct AppConfig {
     /// values.
     #[serde(default)]
     pub timing_correction: bool,
+
+    /// Kill tracker configuration for auto-reporting and session tracking.
+    #[serde(default)]
+    pub kill_tracker: KillTrackerConfig,
+
+    /// Say detection and alerting configuration.
+    #[serde(default)]
+    pub say_detection: SayDetectionConfig,
+}
+
+/// Say detection rule actions.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SayRuleAction {
+    /// Fire an alert through the configured notification channels.
+    #[default]
+    Alert,
+    /// Send a slash command string via IPC to all clients.
+    Broadcast,
+    /// Run a command on the client that saw the `/say` line.
+    Command,
+}
+
+/// Say pattern matching mode.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SayPatternType {
+    /// Exact substring match (case-insensitive).
+    #[default]
+    Substring,
+    /// Case-insensitive exact string match.
+    Exact,
+    /// Regular expression pattern.
+    Regex,
+}
+
+/// A single say detection rule (persisted to config file).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SayRuleConfig {
+    /// Human-readable name for this rule.
+    pub name: String,
+    /// Pattern text to match against say messages.
+    pub pattern: String,
+    /// Pattern matching mode.
+    #[serde(default)]
+    pub pattern_type: SayPatternType,
+    /// Action to take when matched.
+    #[serde(default)]
+    pub action_type: SayRuleAction,
+    /// Optional action payload used by command and broadcast rules.
+    #[serde(default)]
+    pub action_value: Option<String>,
+    /// Whether this rule is active.
+    #[serde(default = "default_rule_enabled")]
+    pub enabled: bool,
+}
+
+fn default_rule_enabled() -> bool {
+    true
+}
+
+/// Top-level say detection configuration.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SayDetectionConfig {
+    /// Enable the say detection engine.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Enable audio alert delivery for alert rules.
+    #[serde(default = "default_rule_enabled")]
+    pub sound_enabled: bool,
+    /// Optional sound file name for alert rules.
+    #[serde(default = "default_say_sound_file")]
+    pub sound_file: Option<String>,
+    /// Enable toast-style operator notifications for alert rules.
+    #[serde(default = "default_rule_enabled")]
+    pub toast_enabled: bool,
+    /// Optional Discord webhook for alert rules.
+    #[serde(default)]
+    pub discord_webhook_url: Option<String>,
+    /// Mirror alert notifications to all clients via `/echo`.
+    #[serde(default)]
+    pub broadcast_all_clients: bool,
+    /// List of detection rules.
+    #[serde(default)]
+    pub rules: Vec<SayRuleConfig>,
+}
+
+fn default_say_sound_file() -> Option<String> {
+    Some("say_alert.wav".to_string())
+}
+
+impl Default for SayDetectionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            sound_enabled: true,
+            sound_file: default_say_sound_file(),
+            toast_enabled: true,
+            discord_webhook_url: None,
+            broadcast_all_clients: false,
+            rules: Vec::new(),
+        }
+    }
 }
 
 /// Discord webhook and bot configuration.
@@ -579,6 +683,8 @@ impl AppConfig {
             box_chat: BoxChatConfig::default(),
             chat_log: crate::chat_log::ChatLogConfig::default(),
             timing_correction: false,
+            kill_tracker: KillTrackerConfig::default(),
+            say_detection: SayDetectionConfig::default(),
         }
     }
 }

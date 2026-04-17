@@ -121,7 +121,7 @@ impl OrchestratorLoop {
         let mut orchestrator = Orchestrator::new();
         let log_dir = crate::paths::resolve_log_dir().join("chat");
         orchestrator.init_chat_log_manager(app_config.chat_log.clone(), log_dir);
-
+        orchestrator.configure_say_detection(&app_config.say_detection);
         let auto_camp_settings = app_config
             .group
             .iter()

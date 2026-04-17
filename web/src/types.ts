@@ -226,6 +226,104 @@ export interface BoxChatSettings {
   auto_connect: boolean;
 }
 
+// ── GM alert types ───────────────────────────────────────────────────────────
+
+export interface GmAlertConfig {
+  enabled: boolean;
+  soundEnabled: boolean;
+  soundFile: string | null;
+  toastEnabled: boolean;
+  autoPauseEnabled: boolean;
+  discordWebhookUrl: string | null;
+  broadcastAllClients: boolean;
+}
+
+export interface GmPresenceStatus {
+  isGmInZone: boolean;
+  gmCount: number;
+  gmNames: string[];
+}
+
+export interface GmAlertStatus {
+  config: GmAlertConfig;
+  presence: GmPresenceStatus;
+  automationPaused: boolean;
+}
+
+// ── Spawn alert types ────────────────────────────────────────────────────────
+
+export interface SpawnAlertEntry {
+  id: number;
+  spawn_name: string;
+  zone: string;
+  is_up: boolean;
+  timestamp: string;
+  time_since_last_pop_ms: number | null;
+  match_source: string;
+}
+
+export interface WatchPattern {
+  pattern: string;
+  enabled: boolean;
+}
+
+export interface SpawnAlertConfig {
+  watch_named_enabled: boolean;
+  watch_patterns: WatchPattern[];
+  broadcast_to_web: boolean;
+  broadcast_to_clients: boolean;
+}
+
+export interface SpawnAlertStats {
+  total_alerts: number;
+  spawns_up: number;
+  spawns_down: number;
+}
+
+export interface SpawnAlertPage {
+  total: number;
+  offset: number;
+  limit: number;
+  entries: SpawnAlertEntry[];
+}
+
+// ── Say detection types ──────────────────────────────────────────────────────
+
+export type SayPatternType = "substring" | "exact" | "regex";
+export type SayRuleAction = "alert" | "broadcast" | "command";
+
+export interface SayDetectionRule {
+  name: string;
+  pattern: string;
+  patternType: SayPatternType;
+  actionType: SayRuleAction;
+  actionValue: string | null;
+  enabled: boolean;
+}
+
+export interface SayDetectionConfig {
+  enabled: boolean;
+  soundEnabled: boolean;
+  soundFile: string | null;
+  toastEnabled: boolean;
+  discordWebhookUrl: string | null;
+  broadcastAllClients: boolean;
+  rules: SayDetectionRule[];
+}
+
+export interface SayDetectionMatchSummary {
+  ruleName: string;
+  sender: string;
+  message: string;
+  timestamp: number;
+}
+
+export interface SayDetectionStatus {
+  config: SayDetectionConfig;
+  totalMatches: number;
+  lastMatch: SayDetectionMatchSummary | null;
+}
+
 // ── Group Builder types ────────────────────────────────────────────────────
 
 export type EQClass =

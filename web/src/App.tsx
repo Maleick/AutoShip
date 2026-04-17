@@ -4,6 +4,7 @@ import CenterContent from "./components/CenterContent";
 import RightSidebar from "./components/RightSidebar";
 import GroupBuilder from "./components/GroupBuilder";
 import LootConfig from "./components/LootConfig";
+import SayDetectionPanel from "./components/SayDetectionPanel";
 import SoulPanel from "./components/SoulPanel";
 import AlertsPanel from "./components/AlertsPanel";
 import SpawnAlerts from "./components/SpawnAlerts";
@@ -33,6 +34,8 @@ function App() {
           <SpawnAlerts />
         ) : activeView === "chat_pattern_rules" ? (
           <ChatPatternRules />
+        ) : activeView === "say" ? (
+          <SayDetectionPanel />
         ) : (
           <>
             <CenterContent />

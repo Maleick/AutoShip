@@ -3,6 +3,7 @@ import {
   Sword,
   UsersThree,
   Globe,
+  ChatTeardropText,
   ShieldWarning,
   BellRinging,
   Bag,
@@ -22,6 +23,7 @@ export type ActiveView =
   | "soul"
   | "boxchat"
   | "spawns"
+  | "say"
   | "chat_pattern_rules";
 
 const navItems: {
@@ -35,6 +37,8 @@ const navItems: {
   { icon: Globe, label: "Realm Map (Norrath)", id: "map" },
   { icon: ShieldWarning, label: "Security Wards", id: "security" },
   { icon: BellRinging, label: "Alert Routing", id: "alerts", pulse: true },
+  { icon: Skull, label: "Rare Spawn Alerts", id: "spawns", pulse: true },
+  { icon: ChatTeardropText, label: "Say Detection", id: "say", pulse: true },
   { icon: Bag, label: "Loot Configuration", id: "loot" },
   { icon: Brain, label: "Soul Engine", id: "soul" },
   { icon: Broadcast, label: "Network Box Chat", id: "boxchat" },

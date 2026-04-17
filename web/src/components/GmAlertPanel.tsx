@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { FloppyDisk, ShieldWarning, Warning } from "@phosphor-icons/react";
 import type { GmAlertConfig } from "../types";
 import { useGmAlerts } from "../hooks/useGmAlerts";
@@ -8,7 +8,7 @@ function StatusBanner({
   text,
 }: {
   tone: "neutral" | "success" | "warning" | "error";
-  text: string;
+  text: ReactNode;
 }) {
   const className =
     tone === "success"

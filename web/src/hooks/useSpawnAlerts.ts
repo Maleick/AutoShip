@@ -3,7 +3,6 @@ import type {
   SpawnAlertConfig,
   SpawnAlertEntry,
   SpawnAlertStats,
-  WatchPattern,
   SpawnAlertPage,
 } from "../types";
 

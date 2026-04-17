@@ -97,6 +97,8 @@ pub struct AppState {
     pub xassist_configs: api::xassist::XAssistConfigs,
     /// In-memory chat pattern rules engine for MQ2Events/MQ2React parity.
     pub chat_pattern_rules: tokio::sync::RwLock<ChatPatternRuleEngine>,
+    /// Say detection state for /say channel pattern matching.
+    pub say_detection: Option<Arc<api::say_detection::SayDetectionState>>,
 }
 
 /// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is
@@ -310,6 +312,7 @@ fn build_state() -> Arc<AppState> {
         live_session_snapshot_path: live_session_snapshot_path(),
         xassist_configs: api::xassist::demo_xassist_configs(),
         chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
+        say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
     })
 }
 
@@ -426,6 +429,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .nest("/loot", build_loot_router())
         .nest("/soul", build_soul_router())
         .nest("/gm-alerts", api::gm_alerts::router())
+        .nest("/say-detection", api::say_detection::router())
         .route("/xassist/configs", get(api::xassist::list_xassist_configs))
         .route(
             "/xassist/config/{character}",
@@ -583,6 +587,7 @@ mod tests {
             live_session_snapshot_path: path.with_file_name("live_sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),
             chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
+            say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
         })
     }
 

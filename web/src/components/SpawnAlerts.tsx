@@ -10,7 +10,6 @@ import {
   Skull,
   Trash,
   WifiHigh,
-  WifiSlash,
 } from "@phosphor-icons/react";
 import {
   spawnAlerts as initialSpawnAlerts,
@@ -19,7 +18,6 @@ import {
 } from "../data/demo";
 import type {
   SpawnAlertEntry,
-  WatchPattern,
   SpawnAlertConfig,
   SpawnAlertStats,
 } from "../types";
@@ -78,7 +76,7 @@ function formatTimestamp(ts: string): string {
 }
 
 export default function SpawnAlerts() {
-  const [alerts, setAlerts] = useState<SpawnAlertEntry[]>(initialSpawnAlerts);
+  const [alerts] = useState<SpawnAlertEntry[]>(initialSpawnAlerts);
   const [config, setConfig] = useState<SpawnAlertConfig>(initialConfig);
   const [stats] = useState<SpawnAlertStats>(initialStats);
   const [search, setSearch] = useState("");
@@ -116,7 +114,7 @@ export default function SpawnAlerts() {
       watch_patterns: prev.watch_patterns.map((p) =>
         p.pattern === pattern ? { ...p, enabled: !p.enabled } : p,
       ),
-    ));
+    }));
   }
 
   function addPattern() {

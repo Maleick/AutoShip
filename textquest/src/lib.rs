@@ -79,6 +79,12 @@ pub mod economy;
 /// logic.
 pub mod zoning;
 
+/// Timestamp config runtime — loads per-character timestamp settings from disk
+/// and dispatches IPC commands to DLL clients.
+pub mod timestamp_runtime;
+
+/// Say channel detection and alerting — MQ2Say parity.
+pub mod say_detection;
 #[cfg(windows)]
 use anyhow::Context;
 use anyhow::Result;

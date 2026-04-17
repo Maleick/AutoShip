@@ -132,6 +132,7 @@ mod tests {
                 .join("../data/runtime/ws-test-live-sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),
             chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
+            say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
         })
     }
 
@@ -291,6 +292,7 @@ mod tests {
                 .join("../data/runtime/ws-auth-test-live-sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),
             chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
+            say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
         });
 
         // Spawn server with authenticated state
