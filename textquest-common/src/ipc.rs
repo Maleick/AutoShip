@@ -960,6 +960,17 @@ pub enum Command {
         /// The timestamp format to use.
         format: crate::chat::TimestampFormat,
     },
+    /// Configure the EverQuest top-level window title (MQ2WinTitle parity).
+    ///
+    /// The DLL renders this template using live character data such as the
+    /// current character name, level, class, and zone. Changes take effect
+    /// without restarting the client.
+    SetWindowTitleConfig {
+        /// Per-character title template to render while in game.
+        format: String,
+        /// Server name used for `{server}` substitutions.
+        server_name: String,
+    },
 }
 
 impl std::fmt::Debug for Command {

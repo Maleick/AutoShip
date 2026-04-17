@@ -10,23 +10,15 @@ use std::{
 };
 
 use textquest_common::chat::TimestampFormat as CommonTimestampFormat;
+#[cfg(windows)]
 use textquest_common::ipc::Command;
 
 const CONFIG_RELOAD_INTERVAL: Duration = Duration::from_secs(2);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TimestampConfig {
     pub enabled: bool,
     pub format: CommonTimestampFormat,
-}
-
-impl Default for TimestampConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            format: CommonTimestampFormat::default(),
-        }
-    }
 }
 
 pub fn default_config_path() -> PathBuf {
@@ -99,6 +91,7 @@ impl TimestampRuntime {
             .unwrap_or_default()
     }
 
+    #[cfg(windows)]
     pub fn apply_to_client(
         &self,
         orchestrator: &mut crate::orchestrator::Orchestrator,

@@ -18,7 +18,6 @@ anyhow.workspace = true
 ratatui = "0.30"
 crossterm = "0.28"
 rusqlite = { version = "0.32", features = ["bundled"] }
-rodio = { version = "0.19", default-features = false, features = ["wav", "mp3"] }
 aes-gcm = "0.10"
 argon2 = "0.5"
 rpassword = "7"
@@ -49,6 +48,7 @@ cc = "1"
 
 [target.'cfg(windows)'.dependencies]
 recastnavigation-sys = { version = "1.0.3", features = ["detour_large_nav_meshes"] }
+rodio = { version = "0.19", default-features = false, features = ["wav", "mp3"] }
 windows = { version = "0.54", features = [
     "Win32_Foundation",
     "Win32_Security",

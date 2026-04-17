@@ -1,3 +1,5 @@
+#![cfg(windows)]
+
 //! Platform-independent integration tests for the Login -> Enter World ->
 //! Navigate pipeline. Uses the pure FSM APIs directly — no live EQ process, no
 //! mocks, no trait abstractions.

@@ -37,7 +37,7 @@ pub enum ChatChannel {
 }
 
 impl ChatChannel {
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "say" => Some(Self::Say),
             "tell" => Some(Self::Tell),
@@ -92,7 +92,7 @@ pub enum LogLevel {
 }
 
 impl LogLevel {
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "trace" => Some(Self::Trace),
             "debug" => Some(Self::Debug),
@@ -158,22 +158,12 @@ impl Default for ChatLogConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PerCharacterChatLogConfig {
     pub character_name: String,
     pub enabled: bool,
     pub channels: Vec<ChatChannel>,
-}
-
-impl Default for PerCharacterChatLogConfig {
-    fn default() -> Self {
-        Self {
-            character_name: String::new(),
-            enabled: false,
-            channels: Vec::new(),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -182,10 +172,10 @@ mod tests {
 
     #[test]
     fn chat_channel_from_str() {
-        assert_eq!(ChatChannel::from_str("say"), Some(ChatChannel::Say));
-        assert_eq!(ChatChannel::from_str("SAY"), Some(ChatChannel::Say));
-        assert_eq!(ChatChannel::from_str("guild"), Some(ChatChannel::Guild));
-        assert_eq!(ChatChannel::from_str("unknown"), None);
+        assert_eq!(ChatChannel::parse("say"), Some(ChatChannel::Say));
+        assert_eq!(ChatChannel::parse("SAY"), Some(ChatChannel::Say));
+        assert_eq!(ChatChannel::parse("guild"), Some(ChatChannel::Guild));
+        assert_eq!(ChatChannel::parse("unknown"), None);
     }
 
     #[test]
@@ -204,9 +194,9 @@ mod tests {
 
     #[test]
     fn log_level_from_str() {
-        assert_eq!(LogLevel::from_str("debug"), Some(LogLevel::Debug));
-        assert_eq!(LogLevel::from_str("INFO"), Some(LogLevel::Info));
-        assert_eq!(LogLevel::from_str("invalid"), None);
+        assert_eq!(LogLevel::parse("debug"), Some(LogLevel::Debug));
+        assert_eq!(LogLevel::parse("INFO"), Some(LogLevel::Info));
+        assert_eq!(LogLevel::parse("invalid"), None);
     }
 
     #[test]

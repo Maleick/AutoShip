@@ -1,10 +1,8 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     Json,
     extract::{Path, State},
-    http::StatusCode,
-    response::IntoResponse,
     routing::get,
 };
 use chrono::Utc;
@@ -141,12 +139,12 @@ async fn get_settings(State(state): State<Arc<AppState>>) -> Json<KillTrackerSet
 async fn put_settings(
     State(state): State<Arc<AppState>>,
     Json(settings): Json<KillTrackerSettings>,
-) -> impl IntoResponse {
+) -> Json<KillTrackerSettings> {
     state
         .kill_tracker_state
         .update_settings(settings.clone())
         .await;
-    (StatusCode::OK, Json(settings)).into_response()
+    Json(settings)
 }
 
 async fn get_sessions(State(state): State<Arc<AppState>>) -> Json<Vec<SessionStats>> {
@@ -165,7 +163,10 @@ async fn get_character_sessions(
     Path(character): Path<String>,
 ) -> Json<Vec<SessionStats>> {
     let sessions = state.kill_tracker_state.sessions.read().await;
-    Json(sessions.get(&character).cloned().unwrap_or_else(Vec::new))
+    match sessions.get(&character) {
+        Some(char_sessions) => Json(char_sessions.clone()),
+        None => Json(Vec::<SessionStats>::new()),
+    }
 }
 
 async fn get_history(State(state): State<Arc<AppState>>) -> Json<Vec<CharacterHistory>> {
@@ -228,31 +229,13 @@ pub fn demo_session() -> SessionStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::StatusCode;
+    use crate::AppState;
     use std::sync::Arc;
-    use tokio::sync::RwLock;
 
     fn test_state() -> Arc<AppState> {
-        Arc::new(AppState {
-            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
-            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(HashMap::new()),
-            auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
-            loot_state: crate::api::loot::LootState::new_demo(),
-            economy_state: crate::api::economy::EconomyState::new_demo(),
-            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
-            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            discord_state: crate::api::discord::DiscordState::new_demo(),
-            player_watch_config: tokio::sync::RwLock::new(Default::default()),
-            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
-            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
-            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
-            api_token: None,
-            kill_tracker_state: KillTrackerState::new_demo(),
-            live_session_snapshot_path: PathBuf::from("/tmp/test_live_sessions.json"),
-            xassist_configs: crate::api::xassist::demo_xassist_configs(),
-        })
+        let mut state = crate::test_app_state();
+        state.kill_tracker_state = KillTrackerState::new_demo();
+        Arc::new(state)
     }
 
     #[tokio::test]
@@ -277,10 +260,8 @@ mod tests {
             max_session_history: 50,
         };
 
-        let response = put_settings(State(state.clone()), Json(new_settings.clone()))
-            .await
-            .into_response();
-        assert_eq!(response.status(), StatusCode::OK);
+        let Json(saved) = put_settings(State(state.clone()), Json(new_settings.clone())).await;
+        assert_eq!(saved.auto_report_interval_minutes, 5);
 
         let Json(updated) = get_settings(State(state)).await;
         assert!(!updated.enabled);

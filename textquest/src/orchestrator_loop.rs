@@ -66,6 +66,7 @@ pub struct OrchestratorLoop {
     timing_correction_enabled: bool,
     shutdown_rx: watch::Receiver<bool>,
     timestamp_runtime: crate::timestamp_runtime::TimestampRuntime,
+    window_title_runtime: crate::window_title_runtime::WindowTitleRuntime,
 }
 
 impl OrchestratorLoop {
@@ -106,6 +107,7 @@ impl OrchestratorLoop {
             timing_correction_enabled,
             shutdown_rx,
             timestamp_runtime: crate::timestamp_runtime::TimestampRuntime::new(),
+            window_title_runtime: crate::window_title_runtime::WindowTitleRuntime::new(),
         }
     }
 
@@ -212,6 +214,7 @@ impl OrchestratorLoop {
                     }
                     self.sync_box_chat_runtime();
                     self.sync_timestamp_runtime();
+                    self.sync_window_title_runtime();
                 }
                 _ = launch_interval.tick() => {
                     let events = self.tick_launch_coordinator();
@@ -220,6 +223,7 @@ impl OrchestratorLoop {
                     }
                     self.sync_box_chat_runtime();
                     self.sync_timestamp_runtime();
+                    self.sync_window_title_runtime();
                 }
                 _ = orch_interval.tick() => {
                     let events = self.tick_peer_discovery();
@@ -230,6 +234,7 @@ impl OrchestratorLoop {
                     self.tick_death_camp();
                     self.sync_box_chat_runtime();
                     self.sync_timestamp_runtime();
+                    self.sync_window_title_runtime();
                 }
                 Ok(()) = self.shutdown_rx.changed() => {
                     if *self.shutdown_rx.borrow() {
@@ -506,9 +511,50 @@ impl OrchestratorLoop {
         if updated_configs.is_some() {
             tracing::debug!("Timestamp config changed, applying to clients");
         }
-        for (&pid, name) in &self.orchestrator.client_names {
+        let clients = self
+            .orchestrator
+            .client_names
+            .iter()
+            .map(|(&pid, name)| (pid, name.clone()))
+            .collect::<Vec<_>>();
+        for (pid, name) in clients {
             self.timestamp_runtime
-                .apply_to_client(&mut self.orchestrator, pid, name);
+                .apply_to_client(&mut self.orchestrator, pid, &name);
+        }
+    }
+
+    fn sync_window_title_runtime(&mut self) {
+        let updated_configs = self.window_title_runtime.tick();
+        if updated_configs.is_some() {
+            tracing::debug!("Window title config changed, applying to clients");
+        }
+
+        let clients = self
+            .client_manager
+            .all_sessions()
+            .filter_map(|session| {
+                let character_name = session.character_name.clone().or_else(|| {
+                    session
+                        .bound_toon
+                        .as_ref()
+                        .map(|toon| toon.character_name.clone())
+                })?;
+                let server_name = session
+                    .bound_toon
+                    .as_ref()
+                    .map(|toon| toon.server_name.clone())
+                    .unwrap_or_else(|| self.default_server_name.clone());
+                Some((session.pid, character_name, server_name))
+            })
+            .collect::<Vec<_>>();
+
+        for (pid, character_name, server_name) in clients {
+            self.window_title_runtime.apply_to_client(
+                &mut self.orchestrator,
+                pid,
+                &character_name,
+                &server_name,
+            );
         }
     }
 

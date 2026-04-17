@@ -152,6 +152,37 @@ Supported sections are:
 
 These files are optional. When no per-toon file exists, TextQuest keeps using the existing built-in class strategy and any already-supplied combat config data.
 
+## Web Character Configs
+
+`config/character-configs.json` stores the per-character settings edited from the
+web dashboard strategy tuning panel.
+
+Current operator-facing fields include:
+
+- combat thresholds such as `heal_at_pct`, `mana_sit_pct`, and `nuke_at_pct`
+- resurrection-offer policy under `auto_rez`
+- task reward automation rules under `reward_automation`
+- tribute automation preferences and live tribute status
+- `window_title_format` for EQ window title customization
+
+`window_title_format` accepts MQ2WinTitle-style tokens, including:
+
+- `{server}`
+- `{character}`
+- `{level}`
+- `{class}`
+- `{class_short}`
+- `{zone}`
+- `{zone_long}`
+- `{zone_short}`
+
+The DLL refreshes the configured title when the character finishes loading and
+again after each zone change. A typical format looks like:
+
+```text
+[{server}] {character} ({level} {class_short})
+```
+
 ## Maps and Offsets
 
 - `config/maps/*.txt` supplies zone linework and labels for the TUI map.

@@ -1,9 +1,14 @@
+#[cfg(windows)]
 use textquest::{cli, paths};
 
+#[cfg(windows)]
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+#[cfg(windows)]
 use std::path::Path;
+#[cfg(windows)]
 use tracing_appender::rolling;
+#[cfg(windows)]
 use tracing_subscriber::{EnvFilter, fmt};
 
 #[derive(Parser, Debug)]
@@ -262,6 +267,12 @@ enum CredentialAction {
     },
 }
 
+#[cfg(not(windows))]
+fn main() {
+    eprintln!("textquest is only supported on Windows");
+}
+
+#[cfg(windows)]
 fn main() -> Result<()> {
     let args = Args::parse();
     let (log_prefix, default_filter) = if args.dump {
@@ -416,6 +427,7 @@ fn main() -> Result<()> {
     }
 }
 
+#[cfg(windows)]
 fn init_tracing(
     log_dir: &Path,
     filename_prefix: &str,

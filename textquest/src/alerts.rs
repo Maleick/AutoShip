@@ -35,10 +35,10 @@ pub const ALERT_DB_PATH: &str = "data/alerts.db";
 /// (`textquest-web::open_alert_store`) call this helper so a mis-aligned
 /// working directory between the two processes cannot split alert history.
 pub fn resolve_alert_db_path() -> PathBuf {
-    if let Ok(override_path) = std::env::var("TEXTQUEST_ALERT_DB_PATH") {
-        if !override_path.is_empty() {
-            return PathBuf::from(override_path);
-        }
+    if let Ok(override_path) = std::env::var("TEXTQUEST_ALERT_DB_PATH")
+        && !override_path.is_empty()
+    {
+        return PathBuf::from(override_path);
     }
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

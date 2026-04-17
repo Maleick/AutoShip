@@ -1,24 +1,26 @@
 //! REST API handlers for the web dashboard.
 
+pub mod alerts;
 pub mod chat_log;
 pub mod chat_pattern_rules;
 pub mod dashboard;
+pub mod discord;
 pub mod economy;
 pub mod gm_alerts;
 pub mod kill_tracker;
 pub mod loot;
+pub mod player_watch;
 pub mod say_detection;
 pub mod soul;
 pub mod spawn_alerts;
 pub mod xassist;
-
-pub use player_watch::PlayerWatchConfig;
 use axum::{
     Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
 };
+pub use player_watch::PlayerWatchConfig;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -26,7 +28,8 @@ use std::{
     sync::Arc,
 };
 use textquest_common::box_chat::BoxChatConfig;
-use textquest_common::ipc::AutoAcceptSettings;
+use textquest_common::character_config as shared_character_config;
+use textquest_common::ipc::{AutoAcceptSettings, AutoRezConfig};
 use toml_edit::{DocumentMut, Item, Table, value};
 
 use crate::AppState;
@@ -255,36 +258,36 @@ fn read_chat_log_settings_from_disk() -> Result<ChatLogSettings, String> {
 
     let mut settings = ChatLogSettings::default();
 
-    if let Some(enabled) = item.get("enabled") {
-        if let Some(val) = enabled.as_bool() {
-            settings.enabled = val;
-        }
+    if let Some(enabled) = item.get("enabled")
+        && let Some(val) = enabled.as_bool()
+    {
+        settings.enabled = val;
     }
 
-    if let Some(channels) = item.get("channels") {
-        if let Ok(ch) = toml_edit::de::from_str::<Vec<String>>(&channels.to_string()) {
-            settings.channels = ch;
-        }
+    if let Some(channels) = item.get("channels")
+        && let Ok(ch) = toml_edit::de::from_str::<Vec<String>>(&channels.to_string())
+    {
+        settings.channels = ch;
     }
 
     if let Some(rotation) = item.get("rotation_strategy") {
         settings.rotation_strategy = rotation.to_string().trim_matches('"').to_string();
     }
 
-    if let Some(size) = item.get("max_file_size_bytes") {
-        if let Some(val) = size.as_integer() {
-            settings.max_file_size_bytes = val as u64;
-        }
+    if let Some(size) = item.get("max_file_size_bytes")
+        && let Some(val) = size.as_integer()
+    {
+        settings.max_file_size_bytes = val as u64;
     }
 
     if let Some(level) = item.get("min_level") {
         settings.min_level = level.to_string().trim_matches('"').to_string();
     }
 
-    if let Some(eq_chat) = item.get("log_eq_chat") {
-        if let Some(val) = eq_chat.as_bool() {
-            settings.log_eq_chat = val;
-        }
+    if let Some(eq_chat) = item.get("log_eq_chat")
+        && let Some(val) = eq_chat.as_bool()
+    {
+        settings.log_eq_chat = val;
     }
 
     Ok(settings)
@@ -304,11 +307,11 @@ fn write_chat_log_settings_to_disk(settings: &ChatLogSettings) -> Result<(), Str
 
     let mut table = Table::new();
     table["enabled"] = value(settings.enabled);
-    let mut channels_array = toml_edit::Array::default();
+    let mut channels = toml_edit::Array::new();
     for channel in &settings.channels {
-        channels_array.push(channel.as_str());
+        channels.push(channel.as_str());
     }
-    table["channels"] = Item::Value(toml_edit::Value::Array(channels_array));
+    table["channels"] = Item::Value(toml_edit::Value::Array(channels));
     table["rotation_strategy"] = value(settings.rotation_strategy.clone());
     table["max_file_size_bytes"] = value(settings.max_file_size_bytes as i64);
     table["min_level"] = value(settings.min_level.clone());
@@ -374,51 +377,6 @@ pub async fn put_chat_log_settings(Json(settings): Json<ChatLogSettings>) -> imp
         Ok(()) => (StatusCode::OK, Json(settings)).into_response(),
         Err(error) => json_error(StatusCode::BAD_REQUEST, error).into_response(),
     }
-}
-
-// ─── Timestamp Config ──────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TimestampConfig {
-    pub character: String,
-    pub enabled: bool,
-}
-
-/// GET /api/timestamp-config — list all timestamp configs.
-pub async fn list_timestamp_configs(
-    State(state): State<Arc<AppState>>,
-) -> Json<Vec<TimestampConfig>> {
-    let configs = state.timestamp_configs.read().await;
-    Json(configs.values().cloned().collect())
-}
-
-/// GET /api/timestamp-config/:character — get timestamp config for a character.
-pub async fn get_timestamp_config(
-    State(state): State<Arc<AppState>>,
-    Path(character): Path<String>,
-) -> impl IntoResponse {
-    let configs = state.timestamp_configs.read().await;
-    match configs.get(&character).cloned() {
-        Some(config) => (StatusCode::OK, Json(config)).into_response(),
-        None => json_error(StatusCode::NOT_FOUND, "Character not found").into_response(),
-    }
-}
-
-/// PUT /api/timestamp-config/:character — upsert timestamp config.
-pub async fn put_timestamp_config(
-    State(state): State<Arc<AppState>>,
-    Path(character): Path<String>,
-    Json(mut config): Json<TimestampConfig>,
-) -> Result<Json<TimestampConfig>, StatusCode> {
-    if character.trim().is_empty() {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-    config.character = character;
-    {
-        let mut configs = state.timestamp_configs.write().await;
-        configs.insert(config.character.clone(), config.clone());
-    }
-    Ok(Json(config))
 }
 
 // ─── Player Watch API ───────────────────────────────────────────────────────────
@@ -546,6 +504,42 @@ pub struct ClassParams {
     pub slow_at_hp_pct: Option<u8>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TributeAlertState {
+    Ok,
+    Expiring,
+    Expired,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TributePreferences {
+    pub auto_activate: bool,
+    pub warning_threshold_secs: u64,
+    pub preferred_tributes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TributeStatus {
+    pub active: bool,
+    pub remaining_secs: u64,
+    pub point_balance: u32,
+    pub active_tributes: Vec<String>,
+    pub alert_state: TributeAlertState,
+}
+
+impl Default for TributeStatus {
+    fn default() -> Self {
+        Self {
+            active: false,
+            remaining_secs: 0,
+            point_balance: 0,
+            active_tributes: Vec::new(),
+            alert_state: TributeAlertState::Expired,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CharacterConfig {
     pub character_name: String,
@@ -556,8 +550,283 @@ pub struct CharacterConfig {
     pub nuke_at_pct: u8,
     pub rotation: Vec<RotationEntry>,
     pub class_params: ClassParams,
+    #[serde(default)]
+    pub auto_rez: AutoRezConfig,
     pub group_override: bool,
     pub group_name: Option<String>,
+    #[serde(default = "textquest_common::window_title::default_window_title_format")]
+    pub window_title_format: String,
+    #[serde(default)]
+    pub reward_automation: shared_character_config::RewardAutomationConfig,
+    #[serde(default)]
+    pub tribute_preferences: TributePreferences,
+    #[serde(default)]
+    pub tribute_status: TributeStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimestampFormat {
+    #[default]
+    DateTime24,
+    Time24,
+    DateTime12,
+    Time12,
+}
+
+impl From<textquest_common::chat::TimestampFormat> for TimestampFormat {
+    fn from(f: textquest_common::chat::TimestampFormat) -> Self {
+        match f {
+            textquest_common::chat::TimestampFormat::DateTime24 => TimestampFormat::DateTime24,
+            textquest_common::chat::TimestampFormat::Time24 => TimestampFormat::Time24,
+            textquest_common::chat::TimestampFormat::DateTime12 => TimestampFormat::DateTime12,
+            textquest_common::chat::TimestampFormat::Time12 => TimestampFormat::Time12,
+        }
+    }
+}
+
+impl From<TimestampFormat> for textquest_common::chat::TimestampFormat {
+    fn from(f: TimestampFormat) -> Self {
+        match f {
+            TimestampFormat::DateTime24 => textquest_common::chat::TimestampFormat::DateTime24,
+            TimestampFormat::Time24 => textquest_common::chat::TimestampFormat::Time24,
+            TimestampFormat::DateTime12 => textquest_common::chat::TimestampFormat::DateTime12,
+            TimestampFormat::Time12 => textquest_common::chat::TimestampFormat::Time12,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TimestampConfig {
+    pub enabled: bool,
+    pub format: TimestampFormat,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterConfigUpdate {
+    pub character_name: String,
+    pub class: String,
+    pub role: String,
+    pub heal_at_pct: u8,
+    pub mana_sit_pct: u8,
+    pub nuke_at_pct: u8,
+    pub rotation: Vec<RotationEntry>,
+    pub class_params: ClassParams,
+    pub auto_rez: Option<AutoRezConfig>,
+    pub group_override: bool,
+    pub group_name: Option<String>,
+    pub window_title_format: Option<String>,
+    pub reward_automation: Option<shared_character_config::RewardAutomationConfig>,
+    pub tribute_preferences: Option<TributePreferences>,
+}
+
+fn tribute_preferences(
+    preferred_tributes: &[&str],
+    warning_threshold_secs: u64,
+) -> TributePreferences {
+    TributePreferences {
+        auto_activate: true,
+        warning_threshold_secs,
+        preferred_tributes: preferred_tributes
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect(),
+    }
+}
+
+fn tribute_status(
+    active: bool,
+    remaining_secs: u64,
+    point_balance: u32,
+    active_tributes: &[&str],
+    alert_state: TributeAlertState,
+) -> TributeStatus {
+    TributeStatus {
+        active,
+        remaining_secs,
+        point_balance,
+        active_tributes: active_tributes
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect(),
+        alert_state,
+    }
+}
+
+fn character_configs_path() -> PathBuf {
+    textquest_config_path()
+        .parent()
+        .map(|parent| parent.join("character-configs.json"))
+        .unwrap_or_else(|| PathBuf::from("config/character-configs.json"))
+}
+
+fn from_shared_tribute_alert_state(
+    value: shared_character_config::TributeAlertState,
+) -> TributeAlertState {
+    match value {
+        shared_character_config::TributeAlertState::Ok => TributeAlertState::Ok,
+        shared_character_config::TributeAlertState::Expiring => TributeAlertState::Expiring,
+        shared_character_config::TributeAlertState::Expired => TributeAlertState::Expired,
+    }
+}
+
+fn to_shared_tribute_alert_state(
+    value: TributeAlertState,
+) -> shared_character_config::TributeAlertState {
+    match value {
+        TributeAlertState::Ok => shared_character_config::TributeAlertState::Ok,
+        TributeAlertState::Expiring => shared_character_config::TributeAlertState::Expiring,
+        TributeAlertState::Expired => shared_character_config::TributeAlertState::Expired,
+    }
+}
+
+fn from_shared_character_config(
+    config: shared_character_config::CharacterConfig,
+) -> CharacterConfig {
+    CharacterConfig {
+        character_name: config.character_name,
+        class: config.class,
+        role: config.role,
+        heal_at_pct: config.heal_at_pct,
+        mana_sit_pct: config.mana_sit_pct,
+        nuke_at_pct: config.nuke_at_pct,
+        rotation: config
+            .rotation
+            .into_iter()
+            .map(|entry| RotationEntry {
+                id: entry.id,
+                name: entry.name,
+                priority: entry.priority,
+                enabled: entry.enabled,
+            })
+            .collect(),
+        class_params: ClassParams {
+            ch_chain_timing_ms: config.class_params.ch_chain_timing_ms,
+            dot_overlap_pct: config.class_params.dot_overlap_pct,
+            burn_at_hp_pct: config.class_params.burn_at_hp_pct,
+            slow_at_hp_pct: config.class_params.slow_at_hp_pct,
+        },
+        auto_rez: config.auto_rez,
+        group_override: config.group_override,
+        group_name: config.group_name,
+        window_title_format: config.window_title_format,
+        reward_automation: config.reward_automation,
+        tribute_preferences: TributePreferences {
+            auto_activate: config.tribute_preferences.auto_activate,
+            warning_threshold_secs: config.tribute_preferences.warning_threshold_secs,
+            preferred_tributes: config.tribute_preferences.preferred_tributes,
+        },
+        tribute_status: TributeStatus {
+            active: config.tribute_status.active,
+            remaining_secs: config.tribute_status.remaining_secs,
+            point_balance: config.tribute_status.point_balance,
+            active_tributes: config.tribute_status.active_tributes,
+            alert_state: from_shared_tribute_alert_state(config.tribute_status.alert_state),
+        },
+    }
+}
+
+fn to_shared_character_config(config: CharacterConfig) -> shared_character_config::CharacterConfig {
+    shared_character_config::CharacterConfig {
+        character_name: config.character_name,
+        class: config.class,
+        role: config.role,
+        heal_at_pct: config.heal_at_pct,
+        mana_sit_pct: config.mana_sit_pct,
+        nuke_at_pct: config.nuke_at_pct,
+        rotation: config
+            .rotation
+            .into_iter()
+            .map(|entry| shared_character_config::RotationEntry {
+                id: entry.id,
+                name: entry.name,
+                priority: entry.priority,
+                enabled: entry.enabled,
+            })
+            .collect(),
+        class_params: shared_character_config::ClassParams {
+            ch_chain_timing_ms: config.class_params.ch_chain_timing_ms,
+            dot_overlap_pct: config.class_params.dot_overlap_pct,
+            burn_at_hp_pct: config.class_params.burn_at_hp_pct,
+            slow_at_hp_pct: config.class_params.slow_at_hp_pct,
+        },
+        auto_rez: config.auto_rez,
+        group_override: config.group_override,
+        group_name: config.group_name,
+        window_title_format: config.window_title_format,
+        reward_automation: config.reward_automation,
+        tribute_preferences: shared_character_config::TributePreferences {
+            auto_activate: config.tribute_preferences.auto_activate,
+            warning_threshold_secs: config.tribute_preferences.warning_threshold_secs,
+            preferred_tributes: config.tribute_preferences.preferred_tributes,
+        },
+        tribute_status: shared_character_config::TributeStatus {
+            active: config.tribute_status.active,
+            remaining_secs: config.tribute_status.remaining_secs,
+            point_balance: config.tribute_status.point_balance,
+            active_tributes: config.tribute_status.active_tributes,
+            alert_state: to_shared_tribute_alert_state(config.tribute_status.alert_state),
+        },
+    }
+}
+
+pub(crate) fn load_character_configs_from_path(
+    path: &std::path::Path,
+) -> Result<HashMap<String, CharacterConfig>, String> {
+    shared_character_config::load_character_configs(path)
+        .map(|configs| {
+            configs
+                .into_iter()
+                .map(|(name, config)| (name, from_shared_character_config(config)))
+                .collect()
+        })
+        .map_err(|error| format!("Failed to load {}: {error}", path.display()))
+}
+
+fn load_character_configs_from_disk() -> Result<HashMap<String, CharacterConfig>, String> {
+    load_character_configs_from_path(&character_configs_path())
+}
+
+fn write_character_configs_to_path(
+    path: &std::path::Path,
+    configs: &HashMap<String, CharacterConfig>,
+) -> Result<(), String> {
+    let shared = configs
+        .iter()
+        .map(|(name, config)| (name.clone(), to_shared_character_config(config.clone())))
+        .collect::<HashMap<_, _>>();
+    shared_character_config::save_character_configs(path, &shared)
+        .map_err(|error| format!("Failed to save {}: {error}", path.display()))
+}
+
+fn write_character_configs_to_disk(
+    configs: &HashMap<String, CharacterConfig>,
+) -> Result<(), String> {
+    write_character_configs_to_path(&character_configs_path(), configs)
+}
+
+pub fn initial_character_configs() -> HashMap<String, CharacterConfig> {
+    let mut configs = demo_character_configs();
+    match load_character_configs_from_disk() {
+        Ok(persisted) => {
+            for (name, config) in persisted {
+                let demo_status = configs
+                    .get(&name)
+                    .map(|existing| existing.tribute_status.clone());
+                let mut merged = config;
+                if merged.tribute_status == TributeStatus::default()
+                    && let Some(status) = demo_status
+                {
+                    merged.tribute_status = status;
+                }
+                configs.insert(name, merged);
+            }
+        }
+        Err(error) => {
+            tracing::warn!(%error, "Failed to load character configs from disk");
+        }
+    }
+    configs
 }
 
 pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
@@ -588,8 +857,25 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 ch_chain_timing_ms: Some(2500),
                 ..ClassParams::default()
             },
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 96,
+                trusted_casters: vec!["Highclerk".into(), "Leafbinder".into()],
+                decline_if_untrusted: true,
+                delay_ms: 5_000,
+            },
             group_override: false,
             group_name: Some("Group 1".into()),
+            window_title_format: textquest_common::window_title::default_window_title_format(),
+            reward_automation: shared_character_config::RewardAutomationConfig::default(),
+            tribute_preferences: tribute_preferences(&["Marr's Gift", "Champion's Aura"], 300),
+            tribute_status: tribute_status(
+                true,
+                240,
+                3_200,
+                &["Marr's Gift"],
+                TributeAlertState::Expiring,
+            ),
         },
         CharacterConfig {
             character_name: "Noxus".into(),
@@ -605,8 +891,25 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 enabled: true,
             }],
             class_params: ClassParams::default(),
+            auto_rez: AutoRezConfig {
+                enabled: false,
+                min_xp_pct: 90,
+                trusted_casters: vec!["Frostreaver".into()],
+                decline_if_untrusted: false,
+                delay_ms: 3_000,
+            },
             group_override: false,
             group_name: Some("Group 1".into()),
+            window_title_format: textquest_common::window_title::default_window_title_format(),
+            reward_automation: shared_character_config::RewardAutomationConfig::default(),
+            tribute_preferences: tribute_preferences(&["Stalwart Ward", "Champion's Aura"], 420),
+            tribute_status: tribute_status(
+                true,
+                3_600,
+                1_950,
+                &["Stalwart Ward", "Champion's Aura"],
+                TributeAlertState::Ok,
+            ),
         },
         CharacterConfig {
             character_name: "Aelrindel".into(),
@@ -625,8 +928,19 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 burn_at_hp_pct: Some(30),
                 ..ClassParams::default()
             },
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 90,
+                trusted_casters: vec!["Frostreaver".into(), "Oakmantle".into()],
+                decline_if_untrusted: false,
+                delay_ms: 2_500,
+            },
             group_override: false,
             group_name: Some("Group 2".into()),
+            window_title_format: textquest_common::window_title::default_window_title_format(),
+            reward_automation: shared_character_config::RewardAutomationConfig::default(),
+            tribute_preferences: tribute_preferences(&["Arcane Fury", "Hero's Fortitude"], 180),
+            tribute_status: tribute_status(false, 0, 875, &[], TributeAlertState::Expired),
         },
         CharacterConfig {
             character_name: "Grok".into(),
@@ -645,8 +959,25 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 slow_at_hp_pct: Some(95),
                 ..ClassParams::default()
             },
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 96,
+                trusted_casters: vec!["Frostreaver".into()],
+                decline_if_untrusted: true,
+                delay_ms: 4_000,
+            },
             group_override: false,
             group_name: Some("Group 2".into()),
+            window_title_format: textquest_common::window_title::default_window_title_format(),
+            reward_automation: shared_character_config::RewardAutomationConfig::default(),
+            tribute_preferences: tribute_preferences(&["Ancient Bulwark", "Spirit's Resolve"], 300),
+            tribute_status: tribute_status(
+                true,
+                1_020,
+                1_480,
+                &["Ancient Bulwark"],
+                TributeAlertState::Ok,
+            ),
         },
         CharacterConfig {
             character_name: "Valerius".into(),
@@ -665,8 +996,28 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 dot_overlap_pct: Some(10),
                 ..ClassParams::default()
             },
+            auto_rez: AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 96,
+                trusted_casters: vec!["Frostreaver".into()],
+                decline_if_untrusted: true,
+                delay_ms: 4_000,
+            },
             group_override: false,
             group_name: Some("Group 3".into()),
+            window_title_format: textquest_common::window_title::default_window_title_format(),
+            reward_automation: shared_character_config::RewardAutomationConfig::default(),
+            tribute_preferences: tribute_preferences(
+                &["Fervor of Shadows", "Hero's Vitality"],
+                240,
+            ),
+            tribute_status: tribute_status(
+                true,
+                150,
+                2_250,
+                &["Fervor of Shadows"],
+                TributeAlertState::Expiring,
+            ),
         },
     ] {
         configs.insert(cfg.character_name.clone(), cfg);
@@ -696,17 +1047,61 @@ pub async fn list_character_configs(
 pub async fn put_character_config(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
-    Json(mut config): Json<CharacterConfig>,
+    Json(config): Json<CharacterConfigUpdate>,
 ) -> Result<Json<CharacterConfig>, StatusCode> {
     if name.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    config.character_name = name;
+    let _write_guard = state.character_config_write_lock.lock().await;
+    let mut configs_map = state.character_configs.write().await;
+    let existing = configs_map.get(&name).cloned();
+    let saved = CharacterConfig {
+        character_name: name,
+        class: config.class,
+        role: config.role,
+        heal_at_pct: config.heal_at_pct,
+        mana_sit_pct: config.mana_sit_pct,
+        nuke_at_pct: config.nuke_at_pct,
+        rotation: config.rotation,
+        class_params: config.class_params,
+        auto_rez: config.auto_rez.unwrap_or_else(|| {
+            existing
+                .as_ref()
+                .map(|cfg| cfg.auto_rez.clone())
+                .unwrap_or_default()
+        }),
+        group_override: config.group_override,
+        group_name: config.group_name,
+        window_title_format: config
+            .window_title_format
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| existing.as_ref().map(|cfg| cfg.window_title_format.clone()))
+            .unwrap_or_else(textquest_common::window_title::default_window_title_format),
+        reward_automation: config
+            .reward_automation
+            .or_else(|| existing.as_ref().map(|cfg| cfg.reward_automation.clone()))
+            .unwrap_or_default(),
+        tribute_preferences: config
+            .tribute_preferences
+            .or_else(|| existing.as_ref().map(|cfg| cfg.tribute_preferences.clone()))
+            .unwrap_or_default(),
+        tribute_status: existing
+            .as_ref()
+            .map(|cfg| cfg.tribute_status.clone())
+            .unwrap_or_default(),
+    };
+    let previous = configs_map.insert(saved.character_name.clone(), saved.clone());
+    if let Err(error) = write_character_configs_to_path(&state.character_config_path, &configs_map)
     {
-        let mut configs_map = state.character_configs.write().await;
-        configs_map.insert(config.character_name.clone(), config.clone());
+        if let Some(previous) = previous {
+            configs_map.insert(saved.character_name.clone(), previous);
+        } else {
+            configs_map.remove(&saved.character_name);
+        }
+        tracing::error!(%error, "Failed to persist character config update");
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
-    Ok(Json(config))
+    Ok(Json(saved))
 }
 
 /// GET /api/config/auto-accept — return the current auto-accept policy.
@@ -941,51 +1336,122 @@ pub async fn get_wealth() -> impl IntoResponse {
     (StatusCode::OK, Json(history)).into_response()
 }
 
+// ─── Timestamp Config ───────────────────────────────────────────────────────
+
+pub async fn list_timestamp_configs(
+    State(state): State<Arc<AppState>>,
+) -> Json<HashMap<String, TimestampConfig>> {
+    if let Ok(from_disk) = load_timestamp_configs_from_disk() {
+        let mut configs = state.timestamp_configs.write().await;
+        *configs = from_disk;
+    }
+    let configs = state.timestamp_configs.read().await;
+    Json(configs.clone())
+}
+
+pub async fn get_timestamp_config(
+    State(state): State<Arc<AppState>>,
+    Path(character): Path<String>,
+) -> impl IntoResponse {
+    if let Ok(from_disk) = load_timestamp_configs_from_disk() {
+        let mut configs = state.timestamp_configs.write().await;
+        *configs = from_disk;
+    }
+
+    let configs = state.timestamp_configs.read().await;
+    let config = configs.get(&character).cloned().unwrap_or_default();
+    (StatusCode::OK, Json(config)).into_response()
+}
+
+fn timestamp_config_path() -> PathBuf {
+    std::env::var("TEXTQUEST_CONFIG_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
+        .parent()
+        .map(|parent| parent.join("timestamp.toml"))
+        .unwrap_or_else(|| PathBuf::from("config/timestamp.toml"))
+}
+
+fn load_timestamp_configs_from_disk() -> Result<HashMap<String, TimestampConfig>, String> {
+    let path = timestamp_config_path();
+    if !path.exists() {
+        return Ok(HashMap::new());
+    }
+
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
+    toml::from_str(&content).map_err(|error| format!("Failed to parse {}: {error}", path.display()))
+}
+
+fn write_timestamp_configs_to_disk(
+    configs: &HashMap<String, TimestampConfig>,
+) -> Result<(), String> {
+    let path = timestamp_config_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create {}: {error}", parent.display()))?;
+    }
+
+    let content = toml::to_string_pretty(configs)
+        .map_err(|error| format!("Failed to serialize timestamp configs: {error}"))?;
+    let temp_path = path.with_extension("toml.tmp");
+    std::fs::write(&temp_path, content)
+        .map_err(|error| format!("Failed to write temp file {}: {error}", temp_path.display()))?;
+    std::fs::rename(&temp_path, &path).map_err(|error| {
+        format!(
+            "Failed to replace {} with {}: {error}",
+            path.display(),
+            temp_path.display()
+        )
+    })
+}
+
+pub async fn put_timestamp_config(
+    State(state): State<Arc<AppState>>,
+    Path(character): Path<String>,
+    Json(config): Json<TimestampConfig>,
+) -> Result<Json<TimestampConfig>, (StatusCode, Json<ErrorResponse>)> {
+    if character.trim().is_empty() {
+        return Err(json_error(
+            StatusCode::BAD_REQUEST,
+            "Character name must not be empty",
+        ));
+    }
+
+    let mut configs = state.timestamp_configs.write().await;
+    configs.insert(character.clone(), config.clone());
+    if let Err(error) = write_timestamp_configs_to_disk(&configs) {
+        return Err(json_error(StatusCode::INTERNAL_SERVER_ERROR, error));
+    }
+
+    tracing::debug!(
+        %character,
+        enabled = config.enabled,
+        format = ?config.format,
+        "Updated timestamp config"
+    );
+    Ok(Json(config))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::response::IntoResponse;
     use http_body_util::BodyExt;
     use serde_json::Value;
-    use std::collections::HashMap;
     use std::path::PathBuf;
+    use tempfile::tempdir;
     use textquest_common::ipc::{AutoAcceptSettings, AutoAcceptTrustMode};
 
     fn test_live_session_snapshot_path(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../data/runtime/{name}"))
     }
 
-    fn test_app_state(snapshot_path: Option<PathBuf>) -> Arc<AppState> {
-        use textquest::alerts::AlertStore;
-        use textquest::config::AlertingConfig;
-
-        Arc::new(AppState {
-            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
-            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
-            character_config_path: std::env::temp_dir().join("test-character-configs.json"),
-            character_config_write_lock: tokio::sync::Mutex::new(()),
-            loot_state: Arc::new(crate::api::loot::LootState::new_demo()),
-            economy_state: Arc::new(crate::api::economy::EconomyState::new_demo()),
-            dashboard_state: Arc::new(crate::api::dashboard::DashboardState::new_demo()),
-            soul_audit: Arc::new(crate::api::soul::SoulAuditState::new_demo()),
-            discord_state: Arc::new(crate::api::discord::DiscordState::new_demo()),
-            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
-            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
-            spawn_alerts: Arc::new(crate::api::spawn_alerts::SpawnAlertState::new_demo()),
-            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
-            kill_tracker_state: Arc::new(crate::api::kill_tracker::KillTrackerState::new_demo()),
-            alert_store: AlertStore::open_memory().expect("alert store"),
-            alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
-            alerting_config_path: std::env::temp_dir().join(format!("test-alerting-{}.toml", uuid::Uuid::new_v4())),
-            xassist_configs: crate::api::xassist::demo_xassist_configs(),
-            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
-            say_detection: Some(Arc::new(crate::api::say_detection::SayDetectionState::new_demo())),
-            api_token: None,
-            live_session_snapshot_path: snapshot_path
-                .unwrap_or_else(|| PathBuf::from("/tmp/test.json")),
-        })
+    fn test_state(snapshot_name: &str) -> AppState {
+        let mut state = crate::test_app_state();
+        state.live_session_snapshot_path = test_live_session_snapshot_path(snapshot_name);
+        state.character_configs = tokio::sync::RwLock::new(demo_character_configs());
+        state
     }
 
     async fn error_response_json(response: axum::response::Response) -> (StatusCode, Value) {
@@ -1008,27 +1474,7 @@ mod tests {
 
     #[tokio::test]
     async fn sessions_returns_ok() {
-        let state = Arc::new(AppState {
-            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
-            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
-            auto_accept_settings: tokio::sync::RwLock::new(AutoAcceptSettings::default()),
-            loot_state: crate::api::loot::LootState::new_demo(),
-            economy_state: crate::api::economy::EconomyState::new_demo(),
-            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
-            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            discord_state: crate::api::discord::DiscordState::new_demo(),
-            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
-            gm_alert_state: std::sync::Arc::new(crate::api::gm_alerts::GmAlertState::default()),
-            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
-            timestamp_configs: tokio::sync::RwLock::new(Default::default()),
-            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_demo(),
-            api_token: None,
-            live_session_snapshot_path: test_live_session_snapshot_path("api-sessions-ok.json"),
-            xassist_configs: crate::api::xassist::demo_xassist_configs(),
-            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
-        });
+        let state = Arc::new(test_state("api-sessions-ok.json"));
         let response = list_sessions(State(state)).await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -1108,29 +1554,7 @@ mod tests {
 
     #[tokio::test]
     async fn character_configs_returns_demo_data() {
-        let state = Arc::new(AppState {
-            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
-            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
-            auto_accept_settings: tokio::sync::RwLock::new(AutoAcceptSettings::default()),
-            loot_state: crate::api::loot::LootState::new_demo(),
-            economy_state: crate::api::economy::EconomyState::new_demo(),
-            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
-            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            discord_state: crate::api::discord::DiscordState::new_demo(),
-            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
-            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
-            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
-            timestamp_configs: tokio::sync::RwLock::new(Default::default()),
-            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_demo(),
-            api_token: None,
-            live_session_snapshot_path: test_live_session_snapshot_path(
-                "api-character-configs-demo.json",
-            ),
-            xassist_configs: crate::api::xassist::demo_xassist_configs(),
-            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
-        });
+        let state = Arc::new(test_state("api-character-configs-demo.json"));
         let Json(configs) = list_character_configs(State(state)).await;
         assert!(!configs.is_empty());
         assert!(configs.iter().any(|c| c.character_name == "Frostreaver"));
@@ -1138,30 +1562,25 @@ mod tests {
 
     #[tokio::test]
     async fn put_character_config_upserts() {
-        let state = Arc::new(AppState {
-            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
-            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
-            auto_accept_settings: tokio::sync::RwLock::new(AutoAcceptSettings::default()),
-            loot_state: crate::api::loot::LootState::new_demo(),
-            economy_state: crate::api::economy::EconomyState::new_demo(),
-            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
-            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            discord_state: crate::api::discord::DiscordState::new_demo(),
-            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
-            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
-            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
-            timestamp_configs: tokio::sync::RwLock::new(Default::default()),
-            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_demo(),
-            api_token: None,
-            live_session_snapshot_path: test_live_session_snapshot_path(
-                "api-put-character-config.json",
-            ),
-            xassist_configs: crate::api::xassist::demo_xassist_configs(),
-            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
-        });
-        let input = CharacterConfig {
+        let dir = tempdir().expect("tempdir should exist");
+        let mut state = test_state("api-put-character-config.json");
+        state.character_config_path = dir.path().join("character-configs.json");
+        let state = Arc::new(state);
+        {
+            let mut configs = state.character_configs.write().await;
+            configs
+                .get_mut("Aelrindel")
+                .expect("demo config should exist")
+                .reward_automation = shared_character_config::RewardAutomationConfig {
+                rules: vec![shared_character_config::TaskRewardPreference {
+                    task_matcher: "orc mission".into(),
+                    preference: shared_character_config::RewardPreference::ByPosition {
+                        reward_position: 2,
+                    },
+                }],
+            };
+        }
+        let input = CharacterConfigUpdate {
             character_name: "IgnoredName".into(),
             class: "Wizard".into(),
             role: "DPS".into(),
@@ -1170,14 +1589,63 @@ mod tests {
             nuke_at_pct: 70,
             rotation: vec![],
             class_params: ClassParams::default(),
+            auto_rez: Some(AutoRezConfig {
+                enabled: true,
+                min_xp_pct: 96,
+                trusted_casters: vec!["Frostreaver".into()],
+                decline_if_untrusted: true,
+                delay_ms: 5_100,
+            }),
             group_override: false,
             group_name: None,
+            window_title_format: Some("[{server}] {character} ({level} {class_short})".into()),
+            reward_automation: None,
+            tribute_preferences: Some(tribute_preferences(
+                &["Arcane Fury", "Hero's Fortitude"],
+                180,
+            )),
         };
         let Json(saved) =
             put_character_config(State(state.clone()), Path("Aelrindel".into()), Json(input))
                 .await
                 .expect("put character config should succeed");
         assert_eq!(saved.character_name, "Aelrindel");
+        assert!(saved.auto_rez.enabled);
+        let saved_json = serde_json::to_value(&saved).expect("saved config should serialize");
+        assert_eq!(
+            saved_json["tribute_preferences"]["preferred_tributes"],
+            serde_json::json!(["Arcane Fury", "Hero's Fortitude"])
+        );
+        assert_eq!(
+            saved_json["tribute_status"]["alert_state"],
+            serde_json::json!("expired")
+        );
+        assert_eq!(
+            saved_json["tribute_status"]["point_balance"],
+            serde_json::json!(875)
+        );
+        assert_eq!(
+            saved_json["window_title_format"],
+            serde_json::json!("[{server}] {character} ({level} {class_short})")
+        );
+        assert_eq!(
+            saved_json["reward_automation"]["rules"][0]["task_matcher"],
+            serde_json::json!("orc mission")
+        );
+
+        let persisted_path = dir.path().join("character-configs.json");
+        let persisted = std::fs::read_to_string(&persisted_path)
+            .expect("character config snapshot should be written");
+        let persisted_json: serde_json::Value =
+            serde_json::from_str(&persisted).expect("snapshot should parse");
+        assert_eq!(
+            persisted_json["Aelrindel"]["window_title_format"],
+            serde_json::json!("[{server}] {character} ({level} {class_short})")
+        );
+        assert_eq!(
+            persisted_json["Aelrindel"]["reward_automation"]["rules"][0]["task_matcher"],
+            serde_json::json!("orc mission")
+        );
 
         let Json(configs) = list_character_configs(State(state)).await;
         let updated = configs
@@ -1185,33 +1653,18 @@ mod tests {
             .find(|c| c.character_name == "Aelrindel")
             .expect("updated config should exist");
         assert_eq!(updated.heal_at_pct, 50);
+        assert_eq!(updated.auto_rez.min_xp_pct, 96);
+        assert_eq!(updated.auto_rez.trusted_casters, vec!["Frostreaver"]);
+        assert_eq!(updated.reward_automation.rules.len(), 1);
+        assert_eq!(
+            updated.window_title_format,
+            "[{server}] {character} ({level} {class_short})"
+        );
     }
 
     #[tokio::test]
     async fn auto_accept_settings_round_trip() {
-        let state = Arc::new(AppState {
-            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
-            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
-            auto_accept_settings: tokio::sync::RwLock::new(AutoAcceptSettings::default()),
-            loot_state: crate::api::loot::LootState::new_demo(),
-            economy_state: crate::api::economy::EconomyState::new_demo(),
-            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
-            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            discord_state: crate::api::discord::DiscordState::new_demo(),
-            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
-            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
-            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
-            timestamp_configs: tokio::sync::RwLock::new(Default::default()),
-            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_demo(),
-            api_token: None,
-            live_session_snapshot_path: test_live_session_snapshot_path(
-                "api-auto-accept-round-trip.json",
-            ),
-            xassist_configs: crate::api::xassist::demo_xassist_configs(),
-            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
-        });
+        let state = Arc::new(test_state("api-auto-accept-round-trip.json"));
         let update = AutoAcceptSettings {
             enabled: true,
             accept_trades: false,
@@ -1231,29 +1684,7 @@ mod tests {
 
     #[tokio::test]
     async fn put_auto_accept_settings_rejects_blank_trusted_names() {
-        let state = Arc::new(AppState {
-            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
-            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
-            auto_accept_settings: tokio::sync::RwLock::new(AutoAcceptSettings::default()),
-            loot_state: crate::api::loot::LootState::new_demo(),
-            economy_state: crate::api::economy::EconomyState::new_demo(),
-            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
-            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            discord_state: crate::api::discord::DiscordState::new_demo(),
-            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
-            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
-            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
-            timestamp_configs: tokio::sync::RwLock::new(Default::default()),
-            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_demo(),
-            api_token: None,
-            live_session_snapshot_path: test_live_session_snapshot_path(
-                "api-put-auto-accept-blank-reject.json",
-            ),
-            xassist_configs: crate::api::xassist::demo_xassist_configs(),
-            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
-        });
+        let state = Arc::new(test_state("api-put-auto-accept-blank-reject.json"));
         let invalid = AutoAcceptSettings {
             enabled: true,
             trust_mode: AutoAcceptTrustMode::TrustList,

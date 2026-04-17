@@ -133,31 +133,13 @@ use axum::response::IntoResponse;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AppState;
     use textquest_common::integrations::DiscordMessageMode;
 
     fn demo_state() -> Arc<AppState> {
-        let (event_tx, _) = tokio::sync::broadcast::channel(1);
-        Arc::new(AppState {
-            event_tx,
-            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
-            auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
-            loot_state: crate::api::loot::LootState::new_demo(),
-            economy_state: crate::api::economy::EconomyState::new_demo(),
-            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
-            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            discord_state: DiscordState::new_demo(),
-            player_watch_config: tokio::sync::RwLock::new(Default::default()),
-            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
-            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
-            timestamp_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
-            api_token: None,
-            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_demo(),
-            live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../data/runtime/discord-test-live-sessions.json"),
-            xassist_configs: crate::api::xassist::demo_xassist_configs(),
-        })
+        let mut state = crate::test_app_state();
+        state.discord_state = DiscordState::new_demo();
+        Arc::new(state)
     }
 
     #[tokio::test]

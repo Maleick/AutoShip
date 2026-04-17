@@ -102,6 +102,15 @@ impl ChatPatternRule {
         self
     }
 
+    pub fn with_fire_count(mut self, fire_count: u64) -> Self {
+        self.fire_count = fire_count;
+        self
+    }
+
+    pub fn fire_count(&self) -> u64 {
+        self.fire_count
+    }
+
     pub fn matches_channel(&self, channel: &ChatChannel) -> bool {
         self.channels.is_empty() || self.channels.contains(channel)
     }
@@ -750,12 +759,8 @@ mod tests {
     #[test]
     fn reset_all_cooldowns_re_enables_all_rules() {
         let mut engine = ChatPatternRuleEngine::new();
-        engine.add_rule(
-            make_rule("r1", "hello", PatternType::Literal).with_cooldown(60),
-        );
-        engine.add_rule(
-            make_rule("r2", "world", PatternType::Literal).with_cooldown(60),
-        );
+        engine.add_rule(make_rule("r1", "hello", PatternType::Literal).with_cooldown(60));
+        engine.add_rule(make_rule("r2", "world", PatternType::Literal).with_cooldown(60));
 
         // Fire both rules to put them in cooldown
         engine.evaluate(&ChatChannel::Say, "s", "hello");
@@ -768,16 +773,10 @@ mod tests {
         engine.reset_all_cooldowns();
 
         // Both should fire again after reset
-        assert_eq!(
-            engine.evaluate(&ChatChannel::Say, "s", "hello").len(),
-            1
-        );
+        assert_eq!(engine.evaluate(&ChatChannel::Say, "s", "hello").len(), 1);
         // r1 is in cooldown again; r2 was not triggered this round so it fires
         engine.reset_all_cooldowns();
-        assert_eq!(
-            engine.evaluate(&ChatChannel::Say, "s", "world").len(),
-            1
-        );
+        assert_eq!(engine.evaluate(&ChatChannel::Say, "s", "world").len(), 1);
     }
 
     // ── with_rules constructor ───────────────────────────────────────────────
@@ -832,16 +831,22 @@ mod tests {
     #[test]
     fn engine_with_no_rules_returns_empty() {
         let mut engine = ChatPatternRuleEngine::new();
-        assert!(engine.evaluate(&ChatChannel::Say, "s", "anything").is_empty());
+        assert!(
+            engine
+                .evaluate(&ChatChannel::Say, "s", "anything")
+                .is_empty()
+        );
     }
 
     #[test]
     fn engine_returns_empty_when_no_pattern_matches() {
         let mut engine = ChatPatternRuleEngine::new();
         engine.add_rule(make_rule("r", "specific_keyword", PatternType::Literal));
-        assert!(engine
-            .evaluate(&ChatChannel::Say, "s", "unrelated message")
-            .is_empty());
+        assert!(
+            engine
+                .evaluate(&ChatChannel::Say, "s", "unrelated message")
+                .is_empty()
+        );
     }
 
     // ── evaluate: sender included in match ───────────────────────────────────

@@ -9,53 +9,66 @@
 /// Operational alerting — persistence, routing, Discord/email delivery.
 pub mod alerts;
 /// EQBC-style cross-machine TCP relay and dispatch manager.
+#[cfg(windows)]
 pub mod box_chat;
 /// Camp loop state machine — pulls, fights, loots, meds, buffs.
+#[cfg(windows)]
 #[allow(dead_code)]
 pub mod camp;
 /// MQ2Log-style per-character chat output logging.
 pub mod chat_log;
 /// Multi-client session management and self-healing monitor.
+#[cfg(windows)]
 #[allow(dead_code)]
 pub mod client;
 /// Combat automation — assist broadcasting, CC assignment, spell database.
+#[cfg(windows)]
 #[allow(dead_code)]
 pub mod combat;
 /// TOML configuration loading.
 pub mod config;
 /// Crash reporting and session recovery — per-character context snapshots and
 /// recovery commands.
+#[cfg(windows)]
 pub mod crash_reporter;
 /// Encrypted credential store (Argon2id + AES-256-GCM).
+#[cfg(windows)]
 #[allow(dead_code)]
 pub mod credentials;
 /// Login automation — per-client FSM, staggered launch, process spawner.
+#[cfg(windows)]
 #[allow(dead_code)]
 pub mod launcher;
 
 /// Discord webhook and bridge integration.
-#[allow(dead_code)]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub mod discord;
 /// EverQuest data layer — spawn structs, memory reading, log parsing.
+#[cfg(windows)]
 #[allow(dead_code)]
 pub mod eq;
 /// DLL injection and staging.
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg(windows)]
 pub mod inject;
 /// Named pipe server and shared memory IPC.
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg(windows)]
 pub mod ipc;
 /// EQ item database, TLP loot tables, wishlists, and loot history.
+#[cfg(windows)]
 pub mod loot;
 /// Fleet metrics — SQLite-backed storage for events, DPS, loot, lockouts, plat.
+#[cfg(windows)]
 pub mod metrics;
 /// Navigation — waypoint recording, zone routing, navmesh integration.
+#[cfg(windows)]
 #[allow(dead_code)]
 pub mod nav;
 /// Orchestrator — wires camp loop state machine to IPC command delivery.
+#[cfg(windows)]
 pub mod orchestrator;
 /// Orchestrator event loop — async tick loop wiring ClientManager,
 /// LaunchCoordinator, and Orchestrator.
+#[cfg(windows)]
 pub mod orchestrator_loop;
 /// Shared runtime paths for logs and local state.
 pub mod paths;
@@ -63,27 +76,36 @@ pub mod paths;
 #[cfg_attr(not(windows), allow(dead_code))]
 pub mod process;
 /// Terminal UI — app state, event handling, theme, renderers.
+#[cfg(windows)]
 pub mod tui;
 
 /// CLI subcommands (dump, inject, navigate, login, etc.).
+#[cfg(windows)]
 pub mod cli;
 /// Testing utilities — scenario harness, metric types, and result types.
+#[cfg(windows)]
 #[allow(dead_code)]
 pub mod testing;
 
 /// Economy system — failure routing and recovery for Krono farm / vendor loops.
+#[cfg(windows)]
 #[allow(dead_code)]
 pub mod economy;
 
 /// Zone transition management — failure codes, recovery actions, and retry
 /// logic.
+#[cfg(windows)]
 pub mod zoning;
 
 /// Timestamp config runtime — loads per-character timestamp settings from disk
 /// and dispatches IPC commands to DLL clients.
 pub mod timestamp_runtime;
+/// Window title config runtime — loads per-character title formats and
+/// dispatches IPC commands to DLL clients.
+pub mod window_title_runtime;
 
 /// Say channel detection and alerting — MQ2Say parity.
+#[cfg(windows)]
 pub mod say_detection;
 #[cfg(windows)]
 use anyhow::Context;

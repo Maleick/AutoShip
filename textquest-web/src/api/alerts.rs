@@ -247,16 +247,12 @@ pub async fn ack_all_alerts(State(state): State<Arc<AppState>>) -> impl IntoResp
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
-
     use super::*;
-    use crate::{accounts, api};
+    use crate::AppState;
     use axum::response::Response;
     use http_body_util::BodyExt;
     use serde_json::Value;
-    use tokio::sync::broadcast;
-
-    use textquest::alerts::{AlertSeverity, AlertStore};
+    use textquest::alerts::AlertSeverity;
 
     async fn response_json(response: Response) -> Value {
         let body = response
@@ -269,21 +265,7 @@ mod tests {
     }
 
     fn test_state() -> Arc<AppState> {
-        let (event_tx, _) = broadcast::channel::<String>(8);
-        Arc::new(AppState {
-            event_tx,
-            account_store: Mutex::new(accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
-            loot_state: api::loot::LootState::new_demo(),
-            economy_state: api::economy::EconomyState::new_demo(),
-            soul_audit: api::soul::SoulAuditState::new_demo(),
-            alert_store: AlertStore::open_memory().expect("alert store"),
-            alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
-            alerting_config_path: std::env::temp_dir()
-                .join(format!("textquest-alerts-test-alerting-{}.toml", uuid::Uuid::new_v4())),
-            api_token: None,
-        })
+        Arc::new(crate::test_app_state())
     }
 
     #[tokio::test]
@@ -383,23 +365,28 @@ mod tests {
         let state = test_state();
         let persist_path = state.alerting_config_path.clone();
 
-        let mut config = AlertingConfig::default();
-        config.enable_discord = true;
-        config.discord_webhook_url = "https://discord.example/webhook".into();
-        config.warning_batch_window_secs = 45;
+        let config = AlertingConfig {
+            enable_discord: true,
+            discord_webhook_url: "https://discord.example/webhook".into(),
+            warning_batch_window_secs: 45,
+            ..AlertingConfig::default()
+        };
 
         let response = put_alert_config(State(state.clone()), Json(config.clone()))
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-        let contents = std::fs::read_to_string(&persist_path)
-            .expect("alerting config persisted to disk");
+        let contents =
+            std::fs::read_to_string(&persist_path).expect("alerting config persisted to disk");
         let parsed: AlertingConfig =
             toml::from_str(&contents).expect("persisted config round-trips");
-        assert_eq!(parsed.enable_discord, true);
+        assert!(parsed.enable_discord);
         assert_eq!(parsed.warning_batch_window_secs, 45);
-        assert_eq!(parsed.discord_webhook_url, "https://discord.example/webhook");
+        assert_eq!(
+            parsed.discord_webhook_url,
+            "https://discord.example/webhook"
+        );
 
         std::fs::remove_file(&persist_path).ok();
     }

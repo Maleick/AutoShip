@@ -13,19 +13,10 @@ use tokio::sync::RwLock;
 
 use crate::AppState;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct XAssistConfig {
     pub ma_name: Option<String>,
     pub enabled: bool,
-}
-
-impl Default for XAssistConfig {
-    fn default() -> Self {
-        Self {
-            ma_name: None,
-            enabled: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

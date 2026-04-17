@@ -1,13 +1,55 @@
 import { useState, useEffect, useCallback } from "react";
 import type { CharacterConfig } from "../types";
 
+const DEFAULT_AUTO_REZ_CONFIG = {
+  enabled: false,
+  min_xp_pct: 90,
+  trusted_casters: [],
+  decline_if_untrusted: false,
+  delay_ms: 3000,
+};
+
+const DEFAULT_REWARD_AUTOMATION = { rules: [] };
+
+const DEFAULT_TRIBUTE_PREFERENCES = {
+  auto_activate: false,
+  warning_threshold_secs: 300,
+  preferred_tributes: [],
+};
+
+const DEFAULT_TRIBUTE_STATUS = {
+  active: false,
+  remaining_secs: 0,
+  point_balance: 0,
+  active_tributes: [],
+  alert_state: "expired" as const,
+};
+
+const DEFAULT_WINDOW_TITLE_FORMAT =
+  "[{server}] {character} ({level} {class_short})";
+
 function normalizeConfig(config: CharacterConfig): CharacterConfig {
   return {
     ...config,
-    auto_camp_on_death: config.auto_camp_on_death ?? {
-      enabled: false,
-      camp_delay_secs: 30,
-      relog_wait_secs: 900,
+    auto_rez: {
+      ...DEFAULT_AUTO_REZ_CONFIG,
+      ...config.auto_rez,
+      trusted_casters: config.auto_rez?.trusted_casters ?? [],
+    },
+    reward_automation: {
+      rules: config.reward_automation?.rules ?? [],
+    },
+    window_title_format:
+      config.window_title_format?.trim() || DEFAULT_WINDOW_TITLE_FORMAT,
+    tribute_preferences: {
+      ...DEFAULT_TRIBUTE_PREFERENCES,
+      ...config.tribute_preferences,
+      preferred_tributes: config.tribute_preferences?.preferred_tributes ?? [],
+    },
+    tribute_status: {
+      ...DEFAULT_TRIBUTE_STATUS,
+      ...config.tribute_status,
+      active_tributes: config.tribute_status?.active_tributes ?? [],
     },
   };
 }
@@ -46,7 +88,8 @@ export function useCharacterConfigs() {
 
   const saveConfig = useCallback(
     async (config: CharacterConfig): Promise<void> => {
-      const { tribute_status: _tributeStatus, ...updatePayload } = config;
+      const normalized = normalizeConfig(config);
+      const { tribute_status: _tributeStatus, ...updatePayload } = normalized;
       const res = await fetch(
         `/api/config/characters/${encodeURIComponent(config.character_name)}`,
         {

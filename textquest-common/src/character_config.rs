@@ -3,6 +3,7 @@ use std::{collections::HashMap, fs, path::Path};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::{ipc::AutoRezConfig, window_title::default_window_title_format};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RotationEntry {
     pub id: String,
@@ -41,6 +42,43 @@ pub struct RewardAutomationConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TributeAlertState {
+    Ok,
+    Expiring,
+    Expired,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct TributePreferences {
+    pub auto_activate: bool,
+    pub warning_threshold_secs: u64,
+    #[serde(default)]
+    pub preferred_tributes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TributeStatus {
+    pub active: bool,
+    pub remaining_secs: u64,
+    pub point_balance: u32,
+    #[serde(default)]
+    pub active_tributes: Vec<String>,
+    pub alert_state: TributeAlertState,
+}
+
+impl Default for TributeStatus {
+    fn default() -> Self {
+        Self {
+            active: false,
+            remaining_secs: 0,
+            point_balance: 0,
+            active_tributes: Vec::new(),
+            alert_state: TributeAlertState::Expired,
+        }
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CharacterConfig {
     pub character_name: String,
     pub class: String,
@@ -50,10 +88,18 @@ pub struct CharacterConfig {
     pub nuke_at_pct: u8,
     pub rotation: Vec<RotationEntry>,
     pub class_params: ClassParams,
+    #[serde(default)]
+    pub auto_rez: AutoRezConfig,
     pub group_override: bool,
     pub group_name: Option<String>,
+    #[serde(default = "default_window_title_format")]
+    pub window_title_format: String,
     #[serde(default)]
     pub reward_automation: RewardAutomationConfig,
+    #[serde(default)]
+    pub tribute_preferences: TributePreferences,
+    #[serde(default)]
+    pub tribute_status: TributeStatus,
 }
 
 pub type CharacterConfigMap = HashMap<String, CharacterConfig>;
@@ -150,9 +196,13 @@ mod tests {
             nuke_at_pct: 90,
             rotation: vec![],
             class_params: ClassParams::default(),
+            auto_rez: AutoRezConfig::default(),
             group_override: false,
             group_name: None,
+            window_title_format: default_window_title_format(),
             reward_automation: RewardAutomationConfig::default(),
+            tribute_preferences: TributePreferences::default(),
+            tribute_status: TributeStatus::default(),
         }
     }
 

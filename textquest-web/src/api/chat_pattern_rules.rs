@@ -5,7 +5,7 @@ use axum::{
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 
 use crate::AppState;
@@ -155,7 +155,7 @@ fn rule_to_dto(rule: &textquest_common::chat_pattern_rules::ChatPatternRule) -> 
         priority: rule.priority,
         enabled: rule.enabled,
         cooldown_secs: rule.cooldown_secs,
-        fire_count: rule.fire_count,
+        fire_count: rule.fire_count(),
     }
 }
 
@@ -192,18 +192,19 @@ fn dto_to_rule(dto: ChatPatternRuleDto) -> textquest_common::chat_pattern_rules:
         _ => textquest_common::chat_pattern_rules::RuleAction::ExecuteCommand(dto.action.payload),
     };
 
-    textquest_common::chat_pattern_rules::ChatPatternRule {
-        id: dto.id,
-        name: dto.name,
-        pattern: dto.pattern,
+    let mut rule = textquest_common::chat_pattern_rules::ChatPatternRule::new(
+        dto.name,
+        dto.pattern,
         pattern_type,
-        channels,
         action,
-        priority: dto.priority,
-        enabled: dto.enabled,
-        cooldown_secs: dto.cooldown_secs,
-        fire_count: dto.fire_count,
-    }
+    )
+    .with_channels(channels)
+    .with_priority(dto.priority)
+    .with_cooldown(dto.cooldown_secs)
+    .with_fire_count(dto.fire_count);
+    rule.id = dto.id;
+    rule.enabled = dto.enabled;
+    rule
 }
 
 pub async fn list_rules(State(state): State<Arc<AppState>>) -> Json<Vec<ChatPatternRuleDto>> {
@@ -441,9 +442,10 @@ pub async fn import_rules(
     State(state): State<Arc<AppState>>,
     Json(rules): Json<Vec<ChatPatternRuleDto>>,
 ) -> impl IntoResponse {
+    let imported_count = rules.len();
     let mut engine = state.chat_pattern_rules.write().await;
     let imported: Vec<textquest_common::chat_pattern_rules::ChatPatternRule> =
-        rules.iter().map(dto_to_rule).collect();
+        rules.into_iter().map(dto_to_rule).collect();
 
     for rule in imported {
         engine.add_rule(rule);
@@ -459,7 +461,7 @@ pub async fn import_rules(
 
     (
         StatusCode::OK,
-        Json(serde_json::json!({ "imported": rules.len() })),
+        Json(serde_json::json!({ "imported": imported_count })),
     )
         .into_response()
 }

@@ -556,6 +556,8 @@ mod tests {
                         min_recast_ticks: 66,
                         buff_duration_ticks: None,
                         category: SongCategory::Other,
+                        instrument_type: None,
+                        instrument_slot: InstrumentSlot::Primary,
                     },
                     SongSlot {
                         gem: 1,
@@ -563,6 +565,8 @@ mod tests {
                         min_recast_ticks: 66,
                         buff_duration_ticks: None,
                         category: SongCategory::Other,
+                        instrument_type: None,
+                        instrument_slot: InstrumentSlot::Primary,
                     }
                 ]
             )

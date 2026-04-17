@@ -11,6 +11,8 @@ pub use paste;
 pub mod bindings;
 /// Box-chat config, slash-route parsing, and TCP relay wire types.
 pub mod box_chat;
+/// Shared per-character tuning config persisted to JSON.
+pub mod character_config;
 /// Chat channel types, STML stripping, and structured chat event parsing.
 pub mod chat;
 /// User-defined chat pattern rule engine (MQ2Events/MQ2React parity).
@@ -66,5 +68,7 @@ pub mod soul;
 pub mod types;
 /// Struct size/range validation helpers.
 pub mod validation;
+/// EQ window title formatting helpers shared by the orchestrator and DLL.
+pub mod window_title;
 /// Zone transition retry logic with exponential backoff.
 pub mod zone_transition;

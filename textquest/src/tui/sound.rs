@@ -2,8 +2,8 @@
 //! notifications.
 
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 // ─── Event Types ────────────────────────────────────────────────────────────
 
@@ -206,12 +206,12 @@ impl Default for SoundConfig {
 
 // ─── Sound Player ───────────────────────────────────────────────────────────
 
+#[cfg(windows)]
+type AudioOutput = (rodio::OutputStream, rodio::OutputStreamHandle);
+
 struct SoundPlayerInner {
-    #[cfg(not(windows))]
-    device: Option<rodio::Device>,
     #[cfg(windows)]
-    _device: Option<()>,
-    output: Option<rodio::OutputStream>,
+    output: Option<AudioOutput>,
     volume: f32,
 }
 
@@ -223,35 +223,22 @@ impl Default for SoundPlayerInner {
 
 impl SoundPlayerInner {
     fn new() -> Self {
-        #[cfg(not(windows))]
-        let device = match rodio::default_output_device() {
-            Some(d) => Some(d),
-            None => {
-                tracing::warn!("No audio output device available");
-                None
-            }
-        };
-        #[cfg(windows)]
-        let device = Some(());
-
-        let output = device.as_ref().and_then(|_| {
-            rodio::OutputStream::try_default()
-                .ok()
-                .map(|(stream, _)| stream)
-        });
-
         Self {
-            #[cfg(not(windows))]
-            device,
             #[cfg(windows)]
-            _device: device,
-            output,
+            output: match rodio::OutputStream::try_default() {
+                Ok((stream, handle)) => Some((stream, handle)),
+                Err(error) => {
+                    tracing::warn!(%error, "No audio output device available");
+                    None
+                }
+            },
             volume: 0.75,
         }
     }
 
+    #[cfg(windows)]
     fn play_file(&self, path: &str, volume: f32) -> Result<(), String> {
-        let Some((stream, stream_handle)) = &self.output else {
+        let Some((_stream, stream_handle)) = &self.output else {
             return Err("No audio output available".to_string());
         };
 
@@ -260,9 +247,9 @@ impl SoundPlayerInner {
             return Err(format!("Sound file not found: {}", path.display()));
         }
 
-        let file = rodio::Decoder::new(
+        let file = rodio::Decoder::new(std::io::BufReader::new(
             std::fs::File::open(&path).map_err(|e| format!("Failed to open file: {e}"))?,
-        )
+        ))
         .map_err(|e| format!("Failed to decode audio: {e}"))?;
 
         let sink = rodio::Sink::try_new(stream_handle)
@@ -272,6 +259,13 @@ impl SoundPlayerInner {
         sink.sleep_until_end();
 
         Ok(())
+    }
+
+    #[cfg(not(windows))]
+    fn play_file(&self, path: &str, _volume: f32) -> Result<(), String> {
+        Err(format!(
+            "Sound file playback is not supported on this platform: {path}"
+        ))
     }
 
     fn play_beep(&self, volume: f32) -> Result<(), String> {

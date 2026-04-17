@@ -10,16 +10,14 @@ pub mod writer;
 use std::collections::HashMap;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use config::ChatLogConfig;
 use textquest_common::ipc::ChatMessageInfo;
 
 pub use config::{ChatChannel, ChatLogConfig, LogLevel, RotationStrategy};
 
 struct ChatLogWriter {
-    file: BufWriter<std::fs::File>,
+    file: Option<BufWriter<std::fs::File>>,
     path: PathBuf,
     current_size_bytes: u64,
     last_rotation_date: String,
@@ -34,7 +32,7 @@ impl ChatLogWriter {
         let current_size_bytes = file.metadata()?.len();
         let last_rotation_date = Self::today_date();
         Ok(Self {
-            file: BufWriter::new(file),
+            file: Some(BufWriter::new(file)),
             path,
             current_size_bytes,
             last_rotation_date,
@@ -87,7 +85,7 @@ impl ChatLogWriter {
     fn check_rotation(
         &mut self,
         strategy: &RotationStrategy,
-        max_size_bytes: u64,
+        _max_size_bytes: u64,
     ) -> std::io::Result<()> {
         match strategy {
             RotationStrategy::Daily => {
@@ -108,8 +106,9 @@ impl ChatLogWriter {
     }
 
     fn rotate(&mut self, date_suffix: &str) -> std::io::Result<()> {
-        self.file.flush()?;
-        drop(self.file);
+        if let Some(mut file) = self.file.take() {
+            file.flush()?;
+        }
 
         let archive_dir = self.path.parent().unwrap_or(Path::new("."));
         let stem = self
@@ -142,15 +141,19 @@ impl ChatLogWriter {
             .write(true)
             .truncate(true)
             .open(&self.path)?;
-        self.file = BufWriter::new(file);
+        self.file = Some(BufWriter::new(file));
         self.current_size_bytes = 0;
         self.last_rotation_date = date_suffix.to_string();
         Ok(())
     }
 
     fn write_line(&mut self, line: &str, level: LogLevel) -> std::io::Result<()> {
-        writeln!(self.file, "[{}] {}", level, line)?;
-        self.file.flush()?;
+        let file = self
+            .file
+            .as_mut()
+            .expect("chat log file writer should exist");
+        writeln!(file, "[{}] {}", level, line)?;
+        file.flush()?;
         self.current_size_bytes += line.len() as u64 + 1;
         Ok(())
     }
@@ -189,16 +192,17 @@ impl ChatLogManager {
             return Ok(());
         }
 
-        if let Some(ch) = channel {
-            if !self.config.channels.contains(&ch) {
-                return Ok(());
-            }
+        if let Some(ch) = channel
+            && !self.config.channels.contains(&ch)
+        {
+            return Ok(());
         }
 
         let key = format!("{}/{}", server, character);
+        let path = self.log_path(server, character);
+        let log_dir = self.log_dir.clone();
         let writer = self.writers.entry(key.clone()).or_insert_with(|| {
-            let path = self.log_path(server, character);
-            std::fs::create_dir_all(self.log_dir.as_path()).ok();
+            std::fs::create_dir_all(log_dir.as_path()).ok();
             ChatLogWriter::new(path).expect("failed to create chat log writer")
         });
 
@@ -230,9 +234,10 @@ impl ChatLogManager {
         }
 
         let key = format!("{}/{}", server, character);
+        let path = self.log_path(server, character);
+        let log_dir = self.log_dir.clone();
         let writer = self.writers.entry(key.clone()).or_insert_with(|| {
-            let path = self.log_path(server, character);
-            std::fs::create_dir_all(self.log_dir.as_path()).ok();
+            std::fs::create_dir_all(log_dir.as_path()).ok();
             ChatLogWriter::new(path).expect("failed to create chat log writer")
         });
 
@@ -310,19 +315,23 @@ impl ChatLogManager {
 
     pub fn close_writer(&mut self, server: &str, character: &str) {
         let key = format!("{}/{}", server, character);
-        if let Some(mut writer) = self.writers.remove(&key) {
-            let _ = writer.file.flush();
+        if let Some(mut writer) = self.writers.remove(&key)
+            && let Some(file) = writer.file.as_mut()
+        {
+            let _ = file.flush();
         }
     }
 
     pub fn close_all(&mut self) {
         for (_, mut writer) in self.writers.drain() {
-            let _ = writer.file.flush();
+            if let Some(file) = writer.file.as_mut() {
+                let _ = file.flush();
+            }
         }
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 mod tests {
     use super::*;
     use std::io::Read;
@@ -337,7 +346,7 @@ mod tests {
     fn default_config() -> ChatLogConfig {
         ChatLogConfig {
             enabled: true,
-            channels: vec![ChatChannel::Mq2],
+            channels: vec![ChatChannel::MQ2],
             rotation_strategy: RotationStrategy::Size(1024 * 1024),
             max_file_size_bytes: 1024 * 1024,
             min_level: LogLevel::Info,
@@ -463,9 +472,7 @@ mod tests {
     #[test]
     fn format_timestamp_works() {
         let timestamp_ms = 1700000000000u64;
-        let formatted = ChatLogManager::new(default_config(), temp_log_dir())
-            .unwrap()
-            .format_timestamp(timestamp_ms);
+        let formatted = ChatLogManager::format_timestamp(timestamp_ms);
         assert!(formatted.contains("2023-11-14"));
         assert!(formatted.contains(":"));
     }

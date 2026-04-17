@@ -899,6 +899,8 @@ mod tests {
             combat_status: CombatStatus::Idle,
             zone_short_name: "test".into(),
             zone_long_name: "Test Zone".into(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         }
     }

@@ -46,6 +46,10 @@ static WINDOW_IS_FOREGROUND: std::sync::atomic::AtomicBool =
 /// Track tick count for throttling background checks.
 static TICK_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// Active per-client window title configuration pushed by the orchestrator.
+static WINDOW_TITLE_CONFIG: std::sync::OnceLock<Mutex<WindowTitleConfigState>> =
+    std::sync::OnceLock::new();
+
 /// Pending login button click — set by IPC thread, executed on game loop
 /// thread. Contains the `CXWnd`* address of the button to click, or 0 if none
 /// pending.
@@ -83,7 +87,7 @@ static CACHED_NEARBY_FOR_STICK: std::sync::Mutex<Vec<textquest_common::types::Sp
 /// Previous nearby-spawn snapshot used for delta detection and spawn event
 /// emission.
 static PREV_NEARBY_SPAWNS: std::sync::OnceLock<
-    std::sync::Mutex<std::collections::HashMap<u32, String>>,
+    std::sync::Mutex<std::collections::HashMap<u32, (String, u8)>>,
 > = std::sync::OnceLock::new();
 
 /// Set a button widget address to be clicked on the next game loop tick.
@@ -247,6 +251,29 @@ use std::sync::Mutex;
 struct PendingCommand {
     command: textquest_common::ipc::Command,
     execute_at_tick: u64,
+}
+
+#[derive(Debug, Clone)]
+struct WindowTitleConfigState {
+    format: String,
+    server_name: String,
+    configured: bool,
+    last_applied_title: Option<String>,
+}
+
+impl Default for WindowTitleConfigState {
+    fn default() -> Self {
+        Self {
+            format: textquest_common::window_title::default_window_title_format(),
+            server_name: String::new(),
+            configured: false,
+            last_applied_title: None,
+        }
+    }
+}
+
+fn window_title_config() -> &'static Mutex<WindowTitleConfigState> {
+    WINDOW_TITLE_CONFIG.get_or_init(|| Mutex::new(WindowTitleConfigState::default()))
 }
 
 static PENDING_COMMANDS: Mutex<Vec<PendingCommand>> = Mutex::new(Vec::new());
@@ -1326,9 +1353,9 @@ fn on_game_tick() {
         }
     }
 
-    // Rename window every 100 frames (~5 seconds) to "[TQ] EQ - CharName
-    // (ZoneName)".
-    if tick % 100 == 5 {
+    // Refresh the title frequently enough that zoning/login transitions feel
+    // immediate without touching Win32 every frame.
+    if tick % 10 == 5 {
         update_window_title();
     }
 
@@ -1691,8 +1718,9 @@ fn read_and_publish_state(tick: u64) {
         let spawns = read_nearby_spawns(eq_base, player.x, player.y, player.z);
         let (zone_short, zone_long) = read_zone_names(eq_base);
 
-        let prev_cache = PREV_NEARBY_SPAWNS
-            .get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+        let prev_cache = PREV_NEARBY_SPAWNS.get_or_init(|| {
+            std::sync::Mutex::new(std::collections::HashMap::<u32, (String, u8)>::new())
+        });
         if let Ok(mut previous) = prev_cache.lock() {
             let (next_previous, spawn_events) = compute_spawn_delta_events(
                 &previous,
@@ -1752,12 +1780,12 @@ fn read_and_publish_state(tick: u64) {
 }
 
 fn compute_spawn_delta_events(
-    previous: &std::collections::HashMap<u32, String>,
+    previous: &std::collections::HashMap<u32, (String, u8)>,
     current: &[textquest_common::types::SpawnData],
     zone: String,
     timestamp_ms: u64,
 ) -> (
-    std::collections::HashMap<u32, String>,
+    std::collections::HashMap<u32, (String, u8)>,
     Vec<textquest_common::ipc::SpawnEvent>,
 ) {
     let mut next = std::collections::HashMap::new();
@@ -1766,31 +1794,36 @@ fn compute_spawn_delta_events(
         if spawn.spawn_id == 0 {
             continue;
         }
-        next.insert(spawn.spawn_id, spawn.displayed_name.clone());
+        next.insert(
+            spawn.spawn_id,
+            (spawn.displayed_name.clone(), spawn.spawn_type),
+        );
     }
 
     if previous.is_empty() {
         return (next, events);
     }
 
-    for (spawn_id, name) in &next {
+    for (spawn_id, (name, spawn_type)) in &next {
         if !previous.contains_key(spawn_id) {
             events.push(textquest_common::ipc::SpawnEvent {
                 client_id: std::process::id(),
                 zone: zone.clone(),
                 spawn_name: name.clone(),
+                spawn_type: *spawn_type,
                 kind: textquest_common::ipc::SpawnEventKind::Created,
                 timestamp_ms,
             });
         }
     }
 
-    for (spawn_id, name) in previous {
+    for (spawn_id, (name, spawn_type)) in previous {
         if !next.contains_key(spawn_id) {
             events.push(textquest_common::ipc::SpawnEvent {
                 client_id: std::process::id(),
                 zone: zone.clone(),
                 spawn_name: name.clone(),
+                spawn_type: *spawn_type,
                 kind: textquest_common::ipc::SpawnEventKind::Destroyed,
                 timestamp_ms,
             });
@@ -2223,9 +2256,71 @@ pub fn is_foreground() -> bool {
     WINDOW_IS_FOREGROUND.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// Read character name + zone name from EQ memory and set the window title
-/// to "[TQ] EQ - `CharName` (`ZoneName`)" so the orchestrator can identify
-/// clients by PID.
+fn legacy_window_title(character_name: &str, zone_name: &str) -> String {
+    if zone_name.is_empty() {
+        format!("[TQ] EQ - {character_name}")
+    } else {
+        format!("[TQ] EQ - {character_name} ({zone_name})")
+    }
+}
+
+fn configure_window_title(format: String, server_name: String) {
+    let mut state = window_title_config()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    state.format = if format.trim().is_empty() {
+        textquest_common::window_title::default_window_title_format()
+    } else {
+        format
+    };
+    state.server_name = server_name;
+    state.configured = true;
+    state.last_applied_title = None;
+}
+
+fn rendered_window_title(
+    state: &WindowTitleConfigState,
+    player: &textquest_common::types::SpawnData,
+    character_name: &str,
+    zone_long_name: Option<&str>,
+    zone_short_name: Option<&str>,
+) -> String {
+    if !state.configured {
+        return legacy_window_title(
+            character_name,
+            zone_long_name.or(zone_short_name).unwrap_or_default(),
+        );
+    }
+
+    let player_name = if player.displayed_name.is_empty() {
+        character_name
+    } else {
+        player.displayed_name.as_str()
+    };
+    let title = textquest_common::window_title::render_window_title(
+        state.format.as_str(),
+        &textquest_common::window_title::WindowTitleContext {
+            server: (!state.server_name.trim().is_empty()).then_some(state.server_name.as_str()),
+            character: Some(player_name),
+            level: Some(player.level),
+            class_id: Some(player.class_id),
+            zone_long_name,
+            zone_short_name,
+        },
+    );
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        legacy_window_title(
+            character_name,
+            zone_long_name.or(zone_short_name).unwrap_or_default(),
+        )
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Read character and zone data from EQ memory and update the top-level window
+/// title.
 fn update_window_title() {
     #[cfg(windows)]
     {
@@ -2234,30 +2329,43 @@ fn update_window_title() {
             return;
         }
 
-        // Read local player name from PlayerClient->Name (char[64] at offset 0xb4).
         let char_name = match read_char_name(eq_base) {
             Some(n) if !n.is_empty() => n,
             _ => return, // Not logged in yet — skip.
         };
+        let zone_long_name = read_zone_long_name(eq_base).filter(|value| !value.is_empty());
+        let zone_short_name = read_zone_short_name(eq_base).filter(|value| !value.is_empty());
+        let local_player = read_local_player_state(eq_base);
 
-        // Read zone name from zoneHeader struct. Prefer long name (display name like
-        // "West Freeport") for readability, fall back to short name ("freportw").
-        let zone_name = read_zone_long_name(eq_base)
-            .or_else(|| read_zone_short_name(eq_base))
-            .unwrap_or_default();
-
-        // Build title: "[TQ] EQ - CharName (ZoneName)" or "[TQ] EQ - CharName" if no
-        // zone.
-        let title = if zone_name.is_empty() {
-            tracing::trace!(char_name = %char_name, "Zone name empty — title without zone");
-            format!("[TQ] EQ - {char_name}\0")
-        } else {
-            format!("[TQ] EQ - {char_name} ({zone_name})\0")
+        let desired_title = {
+            let mut state = window_title_config()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let desired = match local_player.as_ref() {
+                Some(player) => rendered_window_title(
+                    &state,
+                    player,
+                    &char_name,
+                    zone_long_name.as_deref(),
+                    zone_short_name.as_deref(),
+                ),
+                None => legacy_window_title(
+                    &char_name,
+                    zone_long_name
+                        .as_deref()
+                        .or(zone_short_name.as_deref())
+                        .unwrap_or_default(),
+                ),
+            };
+            if state.last_applied_title.as_deref() == Some(desired.as_str()) {
+                return;
+            }
+            state.last_applied_title = Some(desired.clone());
+            desired
         };
 
-        // Find our window by enumerating windows for this PID.
         let our_pid = std::process::id();
-        set_window_title_for_pid(our_pid, &title);
+        set_window_title_for_pid(our_pid, &format!("{desired_title}\0"));
     }
 
     #[cfg(not(windows))]
@@ -3121,6 +3229,22 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 bytes: buf,
             });
         }
+        Command::SetChatTimestampConfig { enabled, format } => {
+            tracing::info!(enabled, format = ?format, "SetChatTimestampConfig received");
+            crate::timestamp::apply(enabled, format);
+        }
+        Command::SetWindowTitleConfig {
+            format,
+            server_name,
+        } => {
+            tracing::info!(
+                format = %format,
+                server = server_name,
+                "SetWindowTitleConfig received"
+            );
+            configure_window_title(format, server_name);
+            update_window_title();
+        }
         other => {
             tracing::debug!(?other, "Unhandled command");
         }
@@ -3762,15 +3886,17 @@ mod tests {
             spawn_id: id,
             displayed_name: display.to_string(),
             name: display.to_string(),
+            spawn_type: 1,
             ..Default::default()
         }
     }
 
     #[test]
     fn spawn_delta_events_report_created_and_destroyed() {
-        let previous: HashMap<u32, String> = [(1u32, "a_wolf".into()), (2, "a_bear".into())]
-            .into_iter()
-            .collect();
+        let previous: HashMap<u32, (String, u8)> =
+            [(1u32, ("a_wolf".into(), 1)), (2, ("a_bear".into(), 1))]
+                .into_iter()
+                .collect();
 
         let current = vec![fake_spawn(2, "a_bear"), fake_spawn(3, "a_ox")];
         let (next, events) =
@@ -3778,32 +3904,37 @@ mod tests {
 
         assert_eq!(
             next,
-            [(2u32, "a_bear".to_string()), (3u32, "a_ox".to_string())]
-                .into_iter()
-                .collect()
+            [
+                (2u32, ("a_bear".to_string(), 1)),
+                (3u32, ("a_ox".to_string(), 1))
+            ]
+            .into_iter()
+            .collect()
         );
         assert_eq!(events.len(), 2);
-        assert_eq!(
-            events.first().unwrap().kind,
-            textquest_common::ipc::SpawnEventKind::Created
-        );
-        assert_eq!(events.first().unwrap().spawn_name, "a_ox");
-        assert_eq!(
-            events.get(1).unwrap().kind,
-            textquest_common::ipc::SpawnEventKind::Destroyed
-        );
-        assert_eq!(events.get(1).unwrap().spawn_name, "a_wolf");
+        let created = events
+            .iter()
+            .find(|event| event.kind == textquest_common::ipc::SpawnEventKind::Created)
+            .expect("created event should exist");
+        assert_eq!(created.spawn_name, "a_ox");
+        assert_eq!(created.spawn_type, 1);
+        let destroyed = events
+            .iter()
+            .find(|event| event.kind == textquest_common::ipc::SpawnEventKind::Destroyed)
+            .expect("destroyed event should exist");
+        assert_eq!(destroyed.spawn_name, "a_wolf");
+        assert_eq!(destroyed.spawn_type, 1);
     }
 
     #[test]
     fn spawn_delta_events_with_empty_previous_emits_none() {
-        let previous: HashMap<u32, String> = HashMap::new();
+        let previous: HashMap<u32, (String, u8)> = HashMap::new();
         let current = vec![fake_spawn(10, "a_goblin")];
         let (next, events) = compute_spawn_delta_events(&previous, &current, "freportw".into(), 1);
 
         assert_eq!(
             next,
-            [(10u32, "a_goblin".to_string())].into_iter().collect()
+            [(10u32, ("a_goblin".to_string(), 1))].into_iter().collect()
         );
         assert!(
             events.is_empty(),

@@ -436,24 +436,12 @@ pub async fn get_history(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use textquest::{alerts::AlertStore, config::AlertingConfig};
+    use crate::AppState;
 
     fn demo_state() -> Arc<AppState> {
-        let (event_tx, _) = tokio::sync::broadcast::channel(1);
-        Arc::new(AppState {
-            event_tx,
-            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
-            loot_state: LootState::new_demo(),
-            economy_state: crate::api::economy::EconomyState::new_demo(),
-            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            alert_store: AlertStore::open_memory().expect("alert store"),
-            alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
-            alerting_config_path: std::env::temp_dir()
-                .join(format!("textquest-loot-test-alerting-{}.toml", uuid::Uuid::new_v4())),
-            api_token: None,
-        })
+        let mut state = crate::test_app_state();
+        state.loot_state = LootState::new_demo();
+        Arc::new(state)
     }
 
     #[tokio::test]

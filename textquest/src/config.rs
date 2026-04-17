@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+use textquest_common::box_chat::BoxChatConfig;
 use textquest_soul::config::SoulConfig;
 
 // ─── Account Configuration ───────────────────────────────────────────────
@@ -710,6 +711,33 @@ impl Default for SpawnWatchConfig {
     }
 }
 
+/// Kill tracker auto-reporting configuration.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct KillTrackerConfig {
+    pub enabled: bool,
+    pub auto_report_interval_minutes: u32,
+    pub auto_report_channel: String,
+    pub auto_report_include_mobs: bool,
+    pub auto_report_include_kph: bool,
+    pub track_per_character: bool,
+    pub max_session_history: usize,
+}
+
+impl Default for KillTrackerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            auto_report_interval_minutes: 30,
+            auto_report_channel: "group".to_string(),
+            auto_report_include_mobs: true,
+            auto_report_include_kph: true,
+            track_per_character: true,
+            max_session_history: 100,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -823,45 +851,42 @@ character = "Foo"
     }
 
     #[test]
-    fn spawn_watch_defaults_include_player_notifications() {
+    fn spawn_watch_defaults_are_sensible() {
         let cfg = AppConfig::default_config();
-        assert_eq!(cfg.spawn_watch.player_filter_mode, PlayerFilterMode::All);
-        assert!(!cfg.spawn_watch.sound_on_player_zone_in);
-        assert!(cfg.spawn_watch.friends.is_empty());
+        assert!(cfg.spawn_watch.enabled);
+        assert!(cfg.spawn_watch.watch_names.is_empty());
+        assert!(cfg.spawn_watch.alert_named);
+        assert_eq!(cfg.spawn_watch.max_feed_entries, 200);
     }
 
     #[test]
-    fn player_filter_mode_default_is_all() {
-        assert_eq!(PlayerFilterMode::default(), PlayerFilterMode::All);
-    }
-
-    #[test]
-    fn spawn_watch_player_filter_mode_parses_from_toml() {
+    fn spawn_watch_watch_names_parse_from_toml() {
         let cfg: AppConfig = toml::from_str(
             r#"
 [spawn_watch]
-player_filter_mode = "strangers_only"
+watch_names = ["Quillmane", "Raster of Guk"]
 "#,
         )
         .unwrap();
-        assert_eq!(
-            cfg.spawn_watch.player_filter_mode,
-            PlayerFilterMode::StrangersOnly
-        );
+        assert_eq!(cfg.spawn_watch.watch_names.len(), 2);
+        assert_eq!(cfg.spawn_watch.watch_names[0], "Quillmane");
+        assert_eq!(cfg.spawn_watch.watch_names[1], "Raster of Guk");
     }
 
     #[test]
-    fn spawn_watch_friends_parses_from_toml() {
+    fn spawn_watch_custom_values_parse_from_toml() {
         let cfg: AppConfig = toml::from_str(
             r#"
 [spawn_watch]
-friends = ["Camrene", "Zisdarenu"]
+enabled = false
+alert_named = false
+max_feed_entries = 42
 "#,
         )
         .unwrap();
-        assert_eq!(cfg.spawn_watch.friends.len(), 2);
-        assert!(cfg.spawn_watch.friends.contains(&"Camrene".to_string()));
-        assert!(cfg.spawn_watch.friends.contains(&"Zisdarenu".to_string()));
+        assert!(!cfg.spawn_watch.enabled);
+        assert!(!cfg.spawn_watch.alert_named);
+        assert_eq!(cfg.spawn_watch.max_feed_entries, 42);
     }
 
     #[test]

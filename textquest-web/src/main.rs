@@ -9,6 +9,8 @@
 //! - raid configuration placeholders plus live character configuration APIs
 //! - a WebSocket endpoint for live session monitoring
 
+#![allow(dead_code)]
+
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -32,14 +34,11 @@ use tower_http::{
     services::{ServeDir, ServeFile},
 };
 
-use textquest::{
-    alerts::AlertStore,
-    config::AlertingConfig,
-};
+use textquest::{alerts::AlertStore, config::AlertingConfig};
 
 mod accounts;
-mod accounts;
 mod api;
+mod live_ipc;
 mod ws;
 
 /// Shared application state accessible from all handlers.
@@ -60,6 +59,8 @@ pub struct AppState {
     /// Reads are unaffected — they still go through the `character_configs`
     /// RwLock.
     pub character_config_write_lock: tokio::sync::Mutex<()>,
+    /// Shared auto-accept policy for live IPC application.
+    pub auto_accept_settings: tokio::sync::RwLock<textquest_common::ipc::AutoAcceptSettings>,
     /// In-memory loot configuration state.
     pub loot_state: Arc<api::loot::LootState>,
     /// In-memory economy cycle state.
@@ -153,6 +154,10 @@ fn credentials_db_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/credentials.db")
 }
 
+fn live_session_snapshot_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/runtime/live_sessions.json")
+}
+
 fn character_config_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/character-configs.json")
 }
@@ -168,13 +173,12 @@ fn alerts_db_path() -> PathBuf {
 /// dashboard can re-save alert config without touching operator-managed
 /// TUI configuration.
 fn alerting_config_path() -> PathBuf {
-    if let Ok(override_path) = std::env::var("TEXTQUEST_ALERTING_CONFIG_PATH") {
-        if !override_path.is_empty() {
-            return PathBuf::from(override_path);
-        }
+    if let Ok(override_path) = std::env::var("TEXTQUEST_ALERTING_CONFIG_PATH")
+        && !override_path.is_empty()
+    {
+        return PathBuf::from(override_path);
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../config/alerting.toml")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/alerting.toml")
 }
 
 fn load_alerting_config_from(path: &std::path::Path) -> AlertingConfig {
@@ -221,9 +225,8 @@ pub fn persist_alerting_config(
             )
         })?;
     }
-    let contents = toml::to_string_pretty(config).map_err(|error| {
-        anyhow::anyhow!("Failed to serialize alerting config: {error}")
-    })?;
+    let contents = toml::to_string_pretty(config)
+        .map_err(|error| anyhow::anyhow!("Failed to serialize alerting config: {error}"))?;
     std::fs::write(path, contents).map_err(|error| {
         anyhow::anyhow!(
             "Failed to write alerting config to {}: {error}",
@@ -297,7 +300,7 @@ fn build_state() -> Arc<AppState> {
     // empty file ({}) is an explicit operator choice — restoring demo entries
     // would pollute their config on the next save.
     let character_configs = if character_config_path.exists() {
-        match textquest_common::character_config::load_character_configs(&character_config_path) {
+        match api::load_character_configs_from_path(&character_config_path) {
             Ok(configs) => configs,
             Err(error) => {
                 tracing::error!(
@@ -323,6 +326,7 @@ fn build_state() -> Arc<AppState> {
         character_configs: tokio::sync::RwLock::new(character_configs),
         character_config_path,
         character_config_write_lock: tokio::sync::Mutex::new(()),
+        auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
         loot_state: api::loot::LootState::new_demo(),
         economy_state: api::economy::EconomyState::new_demo(),
         dashboard_state: api::dashboard::DashboardState::new_demo(),
@@ -342,6 +346,47 @@ fn build_state() -> Arc<AppState> {
         chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
     })
+}
+
+#[cfg(test)]
+pub(crate) fn test_app_state() -> AppState {
+    let (event_tx, _) = broadcast::channel::<String>(8);
+    AppState {
+        event_tx,
+        account_store: Mutex::new(accounts::AccountStore::default()),
+        credential_store: None,
+        character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
+        character_config_path: std::env::temp_dir().join(format!(
+            "textquest-web-test-character-configs-{}.json",
+            uuid::Uuid::new_v4()
+        )),
+        character_config_write_lock: tokio::sync::Mutex::new(()),
+        auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
+        loot_state: api::loot::LootState::new_demo(),
+        economy_state: api::economy::EconomyState::new_demo(),
+        dashboard_state: api::dashboard::DashboardState::new_demo(),
+        soul_audit: api::soul::SoulAuditState::new_demo(),
+        discord_state: api::discord::DiscordState::new_demo(),
+        player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
+        gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
+        spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
+        timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
+        kill_tracker_state: api::kill_tracker::KillTrackerState::new_demo(),
+        alert_store: AlertStore::open_memory().expect("alert store"),
+        alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
+        alerting_config_path: std::env::temp_dir().join(format!(
+            "textquest-web-test-alerting-{}.toml",
+            uuid::Uuid::new_v4()
+        )),
+        api_token: None,
+        live_session_snapshot_path: std::env::temp_dir().join(format!(
+            "textquest-web-test-live-sessions-{}.json",
+            uuid::Uuid::new_v4()
+        )),
+        xassist_configs: api::xassist::demo_xassist_configs(),
+        chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
+        say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
+    }
 }
 
 /// Build the soul audit sub-router.
@@ -431,13 +476,6 @@ fn build_api_router() -> Router<Arc<AppState>> {
             "/spawn-alerts/watch-list",
             get(api::spawn_alerts::get_watch_list),
         )
-        .route(
-            "/spawn-alerts/watch-list/{pattern}",
-            put(api::spawn_alerts::put_watch_pattern)
-                .delete(api::spawn_alerts::delete_watch_pattern),
-        )
-        // Timestamp Config API
-        .route("/timestamp-config", get(api::list_timestamp_configs))
         .route(
             "/spawn-alerts/watch-list/{pattern}",
             put(api::spawn_alerts::put_watch_pattern)
@@ -593,6 +631,9 @@ mod tests {
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
             character_config_path: path.with_file_name("character-configs.json"),
             character_config_write_lock: tokio::sync::Mutex::new(()),
+            auto_accept_settings: tokio::sync::RwLock::new(
+                textquest_common::ipc::AutoAcceptSettings::default(),
+            ),
             loot_state: api::loot::LootState::new_demo(),
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: api::dashboard::DashboardState::new_demo(),
@@ -605,8 +646,10 @@ mod tests {
             kill_tracker_state: api::kill_tracker::KillTrackerState::new_demo(),
             alert_store: AlertStore::open_memory().expect("alert store"),
             alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
-            alerting_config_path: std::env::temp_dir()
-                .join(format!("textquest-main-test-alerting-{}.toml", uuid::Uuid::new_v4())),
+            alerting_config_path: std::env::temp_dir().join(format!(
+                "textquest-main-test-alerting-{}.toml",
+                uuid::Uuid::new_v4()
+            )),
             api_token: None, // No auth in tests — auth middleware is a no-op when None
             live_session_snapshot_path: path.with_file_name("live_sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),
@@ -658,13 +701,8 @@ mod tests {
                 .expect("request"),
         )
         .await;
-        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
-        assert!(
-            body["error"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("not implemented")
-        );
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.is_array());
     }
 
     #[tokio::test]

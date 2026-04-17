@@ -344,6 +344,35 @@ If auto-decline is enabled, offers that fail either check are declined after the
 configured delay. If auto-decline is disabled, TextQuest leaves the popup open
 for manual handling when the policy does not match.
 
+### Web Strategy Tuning: Window Identity
+
+The same per-character tuning panel now includes a **Window Identity** field
+that controls the EverQuest window title shown to the operating system.
+
+This is intended for multi-box operators who need to distinguish many EQ
+clients from the taskbar or Alt-Tab list. The value is stored in
+`config/character-configs.json` as `window_title_format`.
+
+Supported tokens include:
+
+- `{server}`
+- `{character}`
+- `{level}`
+- `{class}`
+- `{class_short}`
+- `{zone}`
+- `{zone_long}`
+- `{zone_short}`
+
+Recommended starting format:
+
+```text
+[{server}] {character} ({level} {class_short})
+```
+
+TextQuest reapplies the title when the character finishes loading and after a
+zone transition so the window stays identifiable without manual renaming.
+
 ### HVT Watchlist: `config/hvt_watchlist.toml`
 
 Define high-value target mobs for named tracking and alerts:

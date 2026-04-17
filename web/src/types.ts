@@ -453,6 +453,19 @@ export interface ClassParams {
   slow_at_hp_pct?: number;
 }
 
+export type RewardPreference =
+  | { kind: "by_name"; reward_name: string }
+  | { kind: "by_position"; reward_position: number };
+
+export interface TaskRewardPreference {
+  task_matcher: string;
+  preference: RewardPreference;
+}
+
+export interface RewardAutomationConfig {
+  rules: TaskRewardPreference[];
+}
+
 export type TributeAlertState = "ok" | "expiring" | "expired";
 
 export interface TributePreferences {
@@ -486,11 +499,13 @@ export interface CharacterConfig {
   nuke_at_pct: number;
   rotation: RotationEntry[];
   class_params: ClassParams;
-  auto_rez: AutoRezConfig;
+  auto_rez?: AutoRezConfig;
   group_override: boolean;
   group_name?: string;
-  tribute_preferences: TributePreferences;
-  tribute_status: TributeStatus;
+  reward_automation?: RewardAutomationConfig;
+  window_title_format?: string;
+  tribute_preferences?: TributePreferences;
+  tribute_status?: TributeStatus;
 }
 
 // ── Loot configuration types ─────────────────────────────────────────────────
@@ -693,5 +708,4 @@ export interface PerCharacterChatLogConfig {
   character_name: string;
   enabled: boolean;
   channels: ChatChannel[];
-}
 }

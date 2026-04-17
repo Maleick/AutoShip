@@ -1,6 +1,6 @@
 //! Chat log settings API handlers.
 
-use axum::{Json, http::StatusCode, response::IntoResponse};
+use axum::{Json, response::IntoResponse};
 use std::path::PathBuf;
 use textquest_common::chat::{ChatChannel, ChatLogConfig, LogLevel, LogRotation};
 

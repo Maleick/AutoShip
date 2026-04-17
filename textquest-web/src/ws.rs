@@ -103,38 +103,17 @@ async fn receive_message(socket: &mut WebSocket) -> Option<Message> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{AppState, accounts, api, build_app};
+    use crate::{AppState, build_app};
     use futures_util::{SinkExt, StreamExt};
-    use std::{
-        collections::HashMap,
-        sync::{Arc, Mutex},
-        time::Duration,
-    };
-    use textquest::{alerts::AlertStore, config::AlertingConfig};
+    use std::{sync::Arc, time::Duration};
     use tokio::{net::TcpListener, task::JoinHandle, time::timeout};
     use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage};
 
     fn test_state() -> Arc<AppState> {
-        let (event_tx, _) = tokio::sync::broadcast::channel::<String>(8);
-        Arc::new(AppState {
-            event_tx,
-            account_store: Mutex::new(accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
-            loot_state: api::loot::LootState::new_demo(),
-            economy_state: api::economy::EconomyState::new_demo(),
-            soul_audit: api::soul::SoulAuditState::new_demo(),
-            alert_store: AlertStore::open_memory().expect("alert store"),
-            alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
-            alerting_config_path: std::env::temp_dir()
-                .join(format!("textquest-ws-test-alerting-{}.toml", uuid::Uuid::new_v4())),
-            api_token: None,
-            live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../data/runtime/ws-test-live-sessions.json"),
-            xassist_configs: api::xassist::demo_xassist_configs(),
-            chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
-            say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
-        })
+        let mut state = crate::test_app_state();
+        state.live_session_snapshot_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../data/runtime/ws-test-live-sessions.json");
+        Arc::new(state)
     }
 
     async fn spawn_test_server(state: Arc<AppState>) -> (Arc<AppState>, JoinHandle<()>, String) {
@@ -275,26 +254,11 @@ mod tests {
     #[tokio::test]
     async fn websocket_requires_valid_token_when_api_token_is_set() {
         // Create state with a token set
-        let (event_tx, _) = tokio::sync::broadcast::channel::<String>(8);
-        let state_with_token = Arc::new(AppState {
-            event_tx,
-            account_store: Mutex::new(accounts::AccountStore::default()),
-            credential_store: None,
-            character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
-            loot_state: api::loot::LootState::new_demo(),
-            economy_state: api::economy::EconomyState::new_demo(),
-            soul_audit: api::soul::SoulAuditState::new_demo(),
-            alert_store: AlertStore::open_memory().expect("alert store"),
-            alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
-            alerting_config_path: std::env::temp_dir()
-                .join(format!("textquest-ws-auth-alerting-{}.toml", uuid::Uuid::new_v4())),
-            api_token: Some("secret-token".to_string()),
-            live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../data/runtime/ws-auth-test-live-sessions.json"),
-            xassist_configs: api::xassist::demo_xassist_configs(),
-            chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
-            say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
-        });
+        let mut state = crate::test_app_state();
+        state.api_token = Some("secret-token".to_string());
+        state.live_session_snapshot_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../data/runtime/ws-auth-test-live-sessions.json");
+        let state_with_token = Arc::new(state);
 
         // Spawn server with authenticated state
         let listener = TcpListener::bind("127.0.0.1:0")

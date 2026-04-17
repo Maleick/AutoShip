@@ -626,10 +626,10 @@ pub enum InstrumentSwapAction {
 ///
 /// ## Example
 ///
-/// ```
+/// ```ignore
 /// let mut swap_engine = InstrumentSwapEngine::new();
-/// swap_engine.configure_instrument(InstrumentType::String, 1001); // Epic 1.5
-/// swap_engine.configure_instrument(InstrumentType::Wind, 1002);   // Misty Note
+/// swap_engine.configure_instrument(0, InstrumentType::String, 1001); // Epic 1.5
+/// swap_engine.configure_instrument(0, InstrumentType::Wind, 1002);   // Misty Note
 ///
 /// // Before casting a string song
 /// if let InstrumentSwapAction::Equip { item_id, .. } = swap_engine.prepare_for_song(

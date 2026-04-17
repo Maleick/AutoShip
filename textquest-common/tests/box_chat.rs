@@ -92,8 +92,7 @@ fn bct_double_slash_payload() {
 
 #[test]
 fn parse_bct_missing_character_is_error() {
-    let result = parse_slash_route("/bct //cast 1")
-        .expect("bct should be recognized");
+    let result = parse_slash_route("/bct //cast 1").expect("bct should be recognized");
     // "/bct //cast 1" → character = "//cast", payload = "1" which doesn't start with /
     // actually this splits on whitespace: character="//cast", rest="1"
     // normalize_payload("1") → Err (no leading / or //)
@@ -102,16 +101,14 @@ fn parse_bct_missing_character_is_error() {
 
 #[test]
 fn parse_bc_empty_payload_is_error() {
-    let result = parse_slash_route("/bc   ")
-        .expect("bc should be recognized");
+    let result = parse_slash_route("/bc   ").expect("bc should be recognized");
     assert!(result.is_err());
 }
 
 #[test]
 fn parse_double_slash_only_is_error() {
     // "/bc //" → normalize_payload("//") → stripped = "", which is empty → Err
-    let result = parse_slash_route("/bc //")
-        .expect("bc should be recognized");
+    let result = parse_slash_route("/bc //").expect("bc should be recognized");
     assert!(result.is_err());
 }
 

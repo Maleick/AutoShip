@@ -160,4 +160,107 @@ describe("TuningPanel", () => {
       "Hero's Fortitude",
     ]);
   });
+
+  it("renders and saves the per-character window title format", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse([
+          {
+            character_name: "Alpha",
+            class: "Wizard",
+            role: "DPS",
+            heal_at_pct: 70,
+            mana_sit_pct: 25,
+            nuke_at_pct: 90,
+            rotation: [],
+            class_params: {},
+            auto_rez: {
+              enabled: false,
+              min_xp_pct: 90,
+              trusted_casters: [],
+              decline_if_untrusted: false,
+              delay_ms: 3000,
+            },
+            group_override: false,
+            window_title_format: "[{server}] {character}",
+            tribute_preferences: {
+              auto_activate: true,
+              warning_threshold_secs: 300,
+              preferred_tributes: [],
+            },
+            tribute_status: {
+              active: false,
+              remaining_secs: 0,
+              point_balance: 0,
+              active_tributes: [],
+              alert_state: "expired",
+            },
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse({ updated: true }))
+      .mockResolvedValueOnce(
+        jsonResponse([
+          {
+            character_name: "Alpha",
+            class: "Wizard",
+            role: "DPS",
+            heal_at_pct: 70,
+            mana_sit_pct: 25,
+            nuke_at_pct: 90,
+            rotation: [],
+            class_params: {},
+            auto_rez: {
+              enabled: false,
+              min_xp_pct: 90,
+              trusted_casters: [],
+              decline_if_untrusted: false,
+              delay_ms: 3000,
+            },
+            group_override: false,
+            window_title_format: "[{server}] {character} ({level} {class_short})",
+            tribute_preferences: {
+              auto_activate: true,
+              warning_threshold_secs: 300,
+              preferred_tributes: [],
+            },
+            tribute_status: {
+              active: false,
+              remaining_secs: 0,
+              point_balance: 0,
+              active_tributes: [],
+              alert_state: "expired",
+            },
+          },
+        ]),
+      );
+
+    render(<TuningPanel />);
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Window Title Format/i)).toHaveValue(
+        "[{server}] {character}",
+      ),
+    );
+    const input = screen.getByLabelText(/Window Title Format/i);
+
+    await act(async () => {
+      fireEvent.change(input, {
+        target: {
+          value: "[{server}] {character} ({level} {class_short})",
+        },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Commit/i }));
+    });
+
+    const saveCall = fetchMock.mock.calls[1];
+    const body = JSON.parse(String(saveCall[1]?.body));
+    expect(body.window_title_format).toBe(
+      "[{server}] {character} ({level} {class_short})",
+    );
+  });
 });

@@ -887,9 +887,9 @@ mod tests {
     #[test]
     fn check_version_matches_expected() {
         let mut data = vec![0x00u8; 512];
-        data[0x100..0x100 + 11].copy_from_slice(b"Mar 10 2026");
+        data[0x100..0x100 + 11].copy_from_slice(b"Apr 15 2026");
         let (date, matches) = check_version(&data);
-        assert_eq!(date, Some("20260310".to_string()));
+        assert_eq!(date, Some("20260415".to_string()));
         assert!(matches);
     }
 

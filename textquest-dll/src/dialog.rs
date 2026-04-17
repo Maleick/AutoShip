@@ -16,7 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use textquest_common::ipc::AutoRezConfig;
+use textquest_common::ipc::{AutoAcceptSettings, AutoRezConfig};
 
 /// Whether auto-accept is enabled. Disabled by default; toggled via IPC
 /// `SetAutoAccept`.
@@ -95,6 +95,11 @@ pub fn set_rez_config(config: AutoRezConfig) {
         decline_if_untrusted,
         "Auto-rez configuration updated"
     );
+}
+
+/// Apply the broader auto-accept dashboard settings.
+pub fn set_settings(settings: AutoAcceptSettings) {
+    set_enabled(settings.enabled);
 }
 
 fn current_rez_config() -> AutoRezConfig {
@@ -532,9 +537,12 @@ mod tests {
 
     #[test]
     fn respawn_window_handled_via_recent_rez_context() {
+        let has_respawn = GENERIC_DIALOG_ACCEPT_PAIRS
+            .iter()
+            .any(|(parent, _)| *parent == "RespawnWnd");
         assert!(
-            true,
-            "RespawnWnd is handled via handle_recent_rez_respawn() which uses recent-rez context"
+            !has_respawn,
+            "RespawnWnd must stay on the dedicated recent-rez handling path"
         );
     }
 

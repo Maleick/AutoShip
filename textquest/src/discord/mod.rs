@@ -10,7 +10,10 @@
 //!    orchestrator. DZ lockout tracking, contested mob spawn announcements,
 //!    slash commands.
 
+#[cfg(windows)]
 pub mod bot;
+#[cfg(windows)]
 pub mod bridge;
+#[cfg(windows)]
 pub mod relay;
 pub mod webhook;

@@ -18,8 +18,8 @@ use super::{
 };
 use crate::{
     alerts::{
-        AlertManager, AlertRecord, AlertStore, DailySummary, DiscordAlertClient,
-        EmailAlertClient, NewAlert,
+        AlertManager, AlertRecord, AlertStore, DailySummary, DiscordAlertClient, EmailAlertClient,
+        NewAlert,
     },
     camp::{
         config::CampConfig,
