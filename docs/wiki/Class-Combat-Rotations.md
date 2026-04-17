@@ -562,105 +562,52 @@ Primary puller. Use FD to split camps and deliver single mobs. Secondary: melee 
 
 ---
 
-## 8. Bard (Buffs / Puller / CC / Jack-of-All-Trades)
+## 8. Bard (Live-Safe Pure DPS Rotation)
 
-### Key Songs
+The Live-safe Bard automation now uses resolved song lines plus a round-robin combat rotation instead of relying on a single hard-coded `/melody` string.
+The operator-facing source of truth is `config/classes/bard.toml`, and the runtime parity is enforced by Bard unit tests.
 
-**Haste:**
+### Level Overrides
 
-| Song                          | Level | Haste%    | Notes                           |
-| ----------------------------- | ----- | --------- | ------------------------------- |
-| Anthem de Arms                | 10    | 10%       | First haste song                |
-| McVaxius' Berserker Crescendo | 40    | 33%       | Primary melee haste             |
-| Vilia's Verses of Celerity    | 49    | 40%       | Classic best haste              |
-| Battlecry of the Vah Shir     | 55    | Overhaste | Breaks 100% haste cap (Velious) |
+| Line             | Level 60                    | Level 61                    | Level 62                     | Level 65                     |
+| ---------------- | --------------------------- | --------------------------- | ---------------------------- | ---------------------------- |
+| BattleSong       | Warsong of the Vah Shir     | Warsong of the Vah Shir     | Warsong of Zek               | War March of the Mastruq     |
+| ManaSong         | Composition of Ervaj        | Composition of Ervaj        | Wind of Marr                 | Echo of the Trusik           |
+| FocusSong        | Aura of Insight             | Aura of Insight             | Druzzil's Disillusionment    | Harmony of Sound             |
+| ProcSong         | Ervaj's Lost Composition    | Ervaj's Lost Composition    | Melody of Mischief           | Call of the Muse             |
+| DebuffSong       | Fufil's Diminishing Dirge   | Fufil's Diminishing Dirge   | Dreams of Thule              | Requiem of Time              |
+| InsultSong       | Brusco's Bombastic Bellow   | Saryrn's Scream of Pain     | Saryrn's Scream of Pain      | Dark Echo                    |
+| CrowdControlSong | Kelin's Lugubrious Lament   | Silent Song of Quellious    | Silent Song of Quellious     | Lullaby of Morell            |
 
-**Mana Regen:**
+### Combat Priority
 
-| Song                          | Level | Regen  | Notes                  |
-| ----------------------------- | ----- | ------ | ---------------------- |
-| Cassindra's Chorus of Clarity | 33    | 3/tick | Mana regen for casters |
-| Cassindra's Chant of Clarity  | 47    | 5/tick | Upgrade                |
+1. `BattleSong` always stays at the top of the round-robin.
+2. `ManaSong` stays in the core loop so Bard does not starve sustained group output.
+3. `FocusSong` remains a fixed core buff slot.
+4. `ProcSong` is only attempted when mana is above 15%.
+5. `DebuffSong` is only attempted when mana is above 25% and the target is above 60% HP, so it is not wasted on short-lived kills.
+6. `InsultSong` is only attempted when mana is above 35%, making it the first low-value DPS song to drop under pressure.
+7. `Kick` runs through the shared melee cooldown tracker and is suppressed below 10% endurance.
 
-**Damage (Chants/DOTs):**
+### Downtime / Utility
 
-| Song             | Level | Notes                         |
-| ---------------- | ----- | ----------------------------- |
-| Chant of Battle  | 6     | DD proc on melee (group buff) |
-| Chant of Flame   | 16    | Fire DOT on target            |
-| Chant of Frost   | 26    | Cold DOT on target            |
-| Chant of Disease | 36    | Disease DOT on target         |
-| Chant of Poison  | 46    | Poison DOT on target          |
+1. `TravelSong` uses Selo's Song of Travel out of combat.
+2. `ManaSong` remains the out-of-combat fallback when no travel pulse is needed.
+3. `CrowdControlSong` is exposed for manual or higher-level CC flows, but the Live-safe combat loop does not auto-mez the kill target.
 
-**Movement:**
+### Resource Thresholds
 
-| Song               | Level | Notes                                       |
-| ------------------ | ----- | ------------------------------------------- |
-| Selo's Accelerando | 5     | Run speed buff (fastest in game with drums) |
-
-**Crowd Control:**
-
-| Song                       | Level | Notes             |
-| -------------------------- | ----- | ----------------- |
-| Kelin's Lucid Lullaby      | 15    | Single target mez |
-| Solon's Song of the Sirens | 30    | AoE mez           |
-
-**Slow:**
-
-| Song                    | Level | Slow% | Notes                 |
-| ----------------------- | ----- | ----- | --------------------- |
-| Largo's Melodic Binding | 20    | 25%   | Weak slow, but stacks |
-
-**Resist Debuffs:**
-
-| Song                   | Level | Notes                            |
-| ---------------------- | ----- | -------------------------------- |
-| Selo's Consonant Chain | 20    | -MR debuff (like Tash for bards) |
-
-### Song Twisting Mechanics
-
-- Bard songs have a 12-second duration and 3-second casting time
-- You can maintain **4 songs** simultaneously by constantly cycling through them
-- The `/melody` command automates this: `/melody 1 2 3 4` plays gems 1-2-3-4 in rotation
-- DOT songs last 18 seconds (3 ticks), so you can twist **5 DOTs** if only running DOTs
-- Songs are instant-on when recast before expiration (no gap in effect)
-
-### Standard Twist Rotations
-
-**Melee Group (default):**
-
-1. Haste song (McVaxius/Vilia's/Battlecry)
-2. Mana regen (Cassindra's Chant of Clarity)
-3. HP regen or resist song
-4. Chant of Battle (melee DD proc) or Selo's for movement
-
-**Caster Group:**
-
-1. Mana regen (Cassindra's)
-2. Resist debuff on mob (Selo's Consonant Chain)
-3. Damage DOT chant
-4. HP regen or haste (some casters benefit from haste for procs)
-
-**Pulling Twist:**
-
-1. Selo's Accelerando (run speed to outrun mobs)
-2. Snare song (if available; prevents runners)
-3. Mez (Kelin's Lucid Lullaby for splitting)
-
-### Mana Management
-
-Bards use mana for songs but regenerate it while singing (unlike casters who must sit). Bard mana management is largely trivial -- songs cost little mana and regen is constant. The real "resource" is song slots and twist timing.
-
-### Group Role
-
-Force multiplier. Bard makes every group member better. Haste for melee, mana regen for casters, resist debuffs for nuke-heavy groups. Can off-tank, off-pull, mez adds in emergencies. Best puller in open zones (SoW speed + mez).
+- `mana_floor_pct = 20` remains the global stop-casting floor for Bard combat.
+- `proc_mana_pct = 15` preserves the core battle, mana, and focus songs before proc filler.
+- `debuff_mana_pct = 25` prevents slow or utility songs from displacing the core melody on low mana.
+- `insult_mana_pct = 35` keeps direct damage from starving higher-priority support songs.
+- `melee_endurance_pct = 10` prevents Kick from draining endurance below the shared melee floor.
 
 ### Automation Notes
 
-- `/melody` command is the automation foundation -- set it and forget it
-- Swap songs based on group composition (melee vs. caster heavy)
-- Pulling: automate Selo's + tag + run + mez add sequence
-- Bard is one of the easiest classes to automate due to `/melody`
+- The runtime Bard strategy resolves song lines by level at 60, 61, 62, and 65, then feeds the resolved names into the combat rotation engine.
+- Legacy twist or weaving helpers still exist for manual or test coverage, but `build_strategy()` now instantiates the Live-safe rotation path by default.
+- Shared melee cooldown handling is in `state.rs`; Bard uses the same Kick timer behavior as other melee classes.
 
 ---
 

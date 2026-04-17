@@ -1,7 +1,11 @@
-use textquest_common::combat::{CombatRole, SpellEntry};
+use textquest_common::combat::{
+    AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+    SpellEntry, TargetSelector,
+};
 
 use crate::combat::{
     mez_queue::MezQueue,
+    rotation::{self, RotationGroup},
     strategy::{ClassStrategy, CombatContext},
     twist::{
         DEFAULT_SONG_DURATION_TICKS, DEFAULT_TWIST_DELAY_TICKS, InstrumentSlot,
@@ -15,9 +19,16 @@ const MEZ_DURATION_TICKS: u32 = 360;
 
 /// Default twist timing: cast takes 6 ticks to establish.
 const WEAVE_CAST_DURATION: u32 = 6;
+const BARD_MANA_FLOOR_PCT: f32 = 20.0;
+const BARD_PROC_MANA_PCT: f32 = 15.0;
+const BARD_DEBUFF_MANA_PCT: f32 = 25.0;
+const BARD_INSULT_MANA_PCT: f32 = 35.0;
+const BARD_DEBUFF_TARGET_HP_PCT: f32 = 60.0;
+const BARD_MELEE_ENDURANCE_PCT: f32 = 10.0;
 
 pub struct BardStrategy {
     class_id: u8,
+    live_safe_mode: bool,
     twist: TwistEngine,
     melody_fallback_active: bool,
     tick: u32,
@@ -32,6 +43,22 @@ impl BardStrategy {
     pub fn new(class_id: u8) -> Self {
         Self {
             class_id,
+            live_safe_mode: false,
+            twist: TwistEngine::new(vec![]),
+            melody_fallback_active: false,
+            tick: 0,
+            mez_queue: MezQueue::new(4),
+            mez_gem: None,
+            full_rotation_enabled: false,
+            instrument_swap: InstrumentSwapEngine::new(),
+            instrument_swap_enabled: true,
+        }
+    }
+
+    pub fn live_safe(class_id: u8) -> Self {
+        Self {
+            class_id,
+            live_safe_mode: true,
             twist: TwistEngine::new(vec![]),
             melody_fallback_active: false,
             tick: 0,
@@ -46,6 +73,7 @@ impl BardStrategy {
     pub fn with_twist(class_id: u8, songs: Vec<SongSlot>) -> Self {
         Self {
             class_id,
+            live_safe_mode: false,
             twist: TwistEngine::new(songs),
             melody_fallback_active: false,
             tick: 0,
@@ -60,6 +88,7 @@ impl BardStrategy {
     pub fn with_weaving(class_id: u8, songs: Vec<SongSlot>) -> Self {
         Self {
             class_id,
+            live_safe_mode: false,
             twist: TwistEngine::with_full_rotation(
                 songs,
                 DEFAULT_TWIST_DELAY_TICKS,
@@ -271,6 +300,214 @@ impl BardStrategy {
     pub fn instrument_swap_mut(&mut self) -> &mut InstrumentSwapEngine {
         &mut self.instrument_swap
     }
+
+    fn build_ability_sets() -> Vec<AbilitySet> {
+        vec![
+            AbilitySet {
+                name: "BattleSong".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "War March of the Mastruq".into(),
+                        min_level: 65,
+                        spell_id: 4871,
+                    },
+                    AbilityCandidate {
+                        name: "Warsong of Zek".into(),
+                        min_level: 62,
+                        spell_id: 3374,
+                    },
+                    AbilityCandidate {
+                        name: "Warsong of the Vah Shir".into(),
+                        min_level: 60,
+                        spell_id: 2610,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "ManaSong".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Echo of the Trusik".into(),
+                        min_level: 65,
+                        spell_id: 4872,
+                    },
+                    AbilityCandidate {
+                        name: "Chorus of Marr".into(),
+                        min_level: 64,
+                        spell_id: 3372,
+                    },
+                    AbilityCandidate {
+                        name: "Wind of Marr".into(),
+                        min_level: 62,
+                        spell_id: 3651,
+                    },
+                    AbilityCandidate {
+                        name: "Composition of Ervaj".into(),
+                        min_level: 60,
+                        spell_id: 1452,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "FocusSong".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Harmony of Sound".into(),
+                        min_level: 65,
+                        spell_id: 3375,
+                    },
+                    AbilityCandidate {
+                        name: "Druzzil's Disillusionment".into(),
+                        min_level: 62,
+                        spell_id: 3364,
+                    },
+                    AbilityCandidate {
+                        name: "Aura of Insight".into(),
+                        min_level: 55,
+                        spell_id: 8926,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "ProcSong".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Call of the Muse".into(),
+                        min_level: 65,
+                        spell_id: 4112,
+                    },
+                    AbilityCandidate {
+                        name: "Melody of Mischief".into(),
+                        min_level: 62,
+                        spell_id: 3365,
+                    },
+                    AbilityCandidate {
+                        name: "Ervaj's Lost Composition".into(),
+                        min_level: 60,
+                        spell_id: 2936,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "DebuffSong".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Requiem of Time".into(),
+                        min_level: 64,
+                        spell_id: 3066,
+                    },
+                    AbilityCandidate {
+                        name: "Dreams of Thule".into(),
+                        min_level: 62,
+                        spell_id: 3030,
+                    },
+                    AbilityCandidate {
+                        name: "Fufil's Diminishing Dirge".into(),
+                        min_level: 60,
+                        spell_id: 4210,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "InsultSong".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Dark Echo".into(),
+                        min_level: 65,
+                        spell_id: 4873,
+                    },
+                    AbilityCandidate {
+                        name: "Saryrn's Scream of Pain".into(),
+                        min_level: 61,
+                        spell_id: 3366,
+                    },
+                    AbilityCandidate {
+                        name: "Brusco's Bombastic Bellow".into(),
+                        min_level: 55,
+                        spell_id: 1747,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "CrowdControlSong".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Lullaby of Morell".into(),
+                        min_level: 65,
+                        spell_id: 3376,
+                    },
+                    AbilityCandidate {
+                        name: "Silent Song of Quellious".into(),
+                        min_level: 61,
+                        spell_id: 3361,
+                    },
+                    AbilityCandidate {
+                        name: "Kelin's Lugubrious Lament".into(),
+                        min_level: 12,
+                        spell_id: 728,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "TravelSong".into(),
+                candidates: vec![AbilityCandidate {
+                    name: "Selo's Song of Travel".into(),
+                    min_level: 51,
+                    spell_id: 1750,
+                }],
+            },
+        ]
+    }
+
+    fn build_rotations() -> Vec<RotationGroup> {
+        vec![
+            {
+                let mut group = rotation::group(
+                    "Downtime",
+                    TargetSelector::SelfOnly,
+                    CombatStateReq::Downtime,
+                );
+                group.steps_per_frame = 1;
+                group.entries = vec![
+                    rotation::entry("TravelSong", ActionType::Song("TravelSong".into())),
+                    rotation::entry("ManaSong", ActionType::Song("ManaSong".into())),
+                ];
+                group
+            },
+            {
+                let mut group = rotation::group(
+                    "CombatSongs",
+                    TargetSelector::AutoTarget,
+                    CombatStateReq::Combat,
+                );
+                group.steps_per_frame = 1;
+                group.entries = vec![
+                    rotation::entry("BattleSong", ActionType::Song("BattleSong".into())),
+                    rotation::entry("ManaSong", ActionType::Song("ManaSong".into())),
+                    rotation::entry("FocusSong", ActionType::Song("FocusSong".into())),
+                    rotation::entry_if(
+                        "ProcSong",
+                        ActionType::Song("ProcSong".into()),
+                        ConditionExpr::ManaAbove(BARD_PROC_MANA_PCT),
+                    ),
+                    rotation::entry_if(
+                        "DebuffSong",
+                        ActionType::Song("DebuffSong".into()),
+                        ConditionExpr::And(vec![
+                            ConditionExpr::ManaAbove(BARD_DEBUFF_MANA_PCT),
+                            ConditionExpr::TargetHpAbove(BARD_DEBUFF_TARGET_HP_PCT),
+                        ]),
+                    ),
+                    rotation::entry_if(
+                        "InsultSong",
+                        ActionType::Song("InsultSong".into()),
+                        ConditionExpr::ManaAbove(BARD_INSULT_MANA_PCT),
+                    ),
+                ];
+                group
+            },
+        ]
+    }
 }
 
 impl ClassStrategy for BardStrategy {
@@ -296,6 +533,10 @@ impl ClassStrategy for BardStrategy {
 
     fn on_engage(&mut self, ctx: &CombatContext) {
         self.tick = ctx.tick;
+        if self.live_safe_mode {
+            self.melody_fallback_active = false;
+            return;
+        }
         if !ctx.config.spells.is_empty() {
             let songs = Self::spells_to_songs(&ctx.config.spells);
             if songs.len() >= 2 {
@@ -317,6 +558,10 @@ impl ClassStrategy for BardStrategy {
 
     fn on_action_complete(&mut self, ctx: &CombatContext) {
         self.tick = ctx.tick;
+        if self.live_safe_mode {
+            self.mez_queue.prune_expired(ctx.tick);
+            return;
+        }
         if !ctx.in_combat {
             if self.twist.is_active() {
                 self.twist.stop();
@@ -361,6 +606,9 @@ impl ClassStrategy for BardStrategy {
 
     fn on_cast_interrupted(&mut self, ctx: &CombatContext, gem: u8) {
         self.tick = ctx.tick;
+        if self.live_safe_mode {
+            return;
+        }
         if self.twist.is_active() {
             self.twist.on_interrupt(gem);
             tracing::info!(gem, "Bard: song interrupted, re-queuing via TwistEngine");
@@ -375,6 +623,18 @@ impl ClassStrategy for BardStrategy {
 
     fn role(&self) -> CombatRole {
         CombatRole::Support
+    }
+
+    fn rotation_groups(&self) -> Option<Vec<RotationGroup>> {
+        if self.live_safe_mode {
+            Some(Self::build_rotations())
+        } else {
+            None
+        }
+    }
+
+    fn ability_sets(&self) -> Vec<AbilitySet> {
+        Self::build_ability_sets()
     }
 }
 
@@ -826,5 +1086,255 @@ mod tests {
                 "Songs should be in priority order"
             );
         }
+    }
+
+    fn bard_known_spells() -> Vec<textquest_common::combat::KnownAbility> {
+        BardStrategy::build_ability_sets()
+            .iter()
+            .flat_map(|set| set.candidates.iter())
+            .map(|candidate| textquest_common::combat::KnownAbility {
+                name: candidate.name.clone(),
+                spell_id: candidate.spell_id,
+                level: candidate.min_level,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn live_safe_bard_exposes_rotation_groups() {
+        let bard = BardStrategy::live_safe(8);
+        let groups = bard.rotation_groups().expect("bard rotation groups");
+        let names: Vec<&str> = groups.iter().map(|group| group.name.as_str()).collect();
+        assert_eq!(names, vec!["Downtime", "CombatSongs"]);
+    }
+
+    #[test]
+    fn live_safe_bard_ability_lines_resolve_at_60() {
+        let resolved = textquest_common::combat::resolve_abilities(
+            &BardStrategy::build_ability_sets(),
+            &bard_known_spells(),
+            60,
+        );
+        assert_eq!(
+            resolved.get("BattleSong").unwrap().ability_name,
+            "Warsong of the Vah Shir"
+        );
+        assert_eq!(
+            resolved.get("ManaSong").unwrap().ability_name,
+            "Composition of Ervaj"
+        );
+        assert_eq!(
+            resolved.get("ProcSong").unwrap().ability_name,
+            "Ervaj's Lost Composition"
+        );
+        assert_eq!(
+            resolved.get("DebuffSong").unwrap().ability_name,
+            "Fufil's Diminishing Dirge"
+        );
+    }
+
+    #[test]
+    fn live_safe_bard_ability_lines_resolve_at_61() {
+        let resolved = textquest_common::combat::resolve_abilities(
+            &BardStrategy::build_ability_sets(),
+            &bard_known_spells(),
+            61,
+        );
+        assert_eq!(
+            resolved.get("InsultSong").unwrap().ability_name,
+            "Saryrn's Scream of Pain"
+        );
+        assert_eq!(
+            resolved.get("CrowdControlSong").unwrap().ability_name,
+            "Silent Song of Quellious"
+        );
+    }
+
+    #[test]
+    fn live_safe_bard_ability_lines_resolve_at_62() {
+        let resolved = textquest_common::combat::resolve_abilities(
+            &BardStrategy::build_ability_sets(),
+            &bard_known_spells(),
+            62,
+        );
+        assert_eq!(
+            resolved.get("BattleSong").unwrap().ability_name,
+            "Warsong of Zek"
+        );
+        assert_eq!(
+            resolved.get("ManaSong").unwrap().ability_name,
+            "Wind of Marr"
+        );
+        assert_eq!(
+            resolved.get("FocusSong").unwrap().ability_name,
+            "Druzzil's Disillusionment"
+        );
+        assert_eq!(
+            resolved.get("ProcSong").unwrap().ability_name,
+            "Melody of Mischief"
+        );
+        assert_eq!(
+            resolved.get("DebuffSong").unwrap().ability_name,
+            "Dreams of Thule"
+        );
+    }
+
+    #[test]
+    fn live_safe_bard_ability_lines_resolve_at_65() {
+        let resolved = textquest_common::combat::resolve_abilities(
+            &BardStrategy::build_ability_sets(),
+            &bard_known_spells(),
+            65,
+        );
+        assert_eq!(
+            resolved.get("BattleSong").unwrap().ability_name,
+            "War March of the Mastruq"
+        );
+        assert_eq!(
+            resolved.get("ManaSong").unwrap().ability_name,
+            "Echo of the Trusik"
+        );
+        assert_eq!(
+            resolved.get("FocusSong").unwrap().ability_name,
+            "Harmony of Sound"
+        );
+        assert_eq!(
+            resolved.get("ProcSong").unwrap().ability_name,
+            "Call of the Muse"
+        );
+        assert_eq!(
+            resolved.get("InsultSong").unwrap().ability_name,
+            "Dark Echo"
+        );
+        assert_eq!(
+            resolved.get("CrowdControlSong").unwrap().ability_name,
+            "Lullaby of Morell"
+        );
+    }
+
+    #[test]
+    fn live_safe_bard_rotation_orders_core_songs_before_low_value_dps() {
+        let bard = BardStrategy::live_safe(8);
+        let combat = bard
+            .rotation_groups()
+            .unwrap()
+            .into_iter()
+            .find(|group| group.name == "CombatSongs")
+            .expect("combat group");
+        let names: Vec<String> = combat.entries.into_iter().map(|entry| entry.name).collect();
+        assert_eq!(
+            names,
+            vec![
+                "BattleSong",
+                "ManaSong",
+                "FocusSong",
+                "ProcSong",
+                "DebuffSong",
+                "InsultSong",
+            ]
+        );
+    }
+
+    #[test]
+    fn live_safe_bard_config_matches_runtime_profiles() {
+        #[derive(serde::Deserialize)]
+        struct ResourceThresholds {
+            mana_floor_pct: f32,
+            proc_mana_pct: f32,
+            debuff_mana_pct: f32,
+            insult_mana_pct: f32,
+            melee_endurance_pct: f32,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct ConfiguredAbility {
+            line: String,
+            name: String,
+            min_level: u8,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct BardClassConfig {
+            resource_thresholds: ResourceThresholds,
+            combat_abilities: Vec<ConfiguredAbility>,
+            cc_abilities: Vec<ConfiguredAbility>,
+            buff_abilities: Vec<ConfiguredAbility>,
+        }
+
+        let config: BardClassConfig =
+            toml::from_str(include_str!("../../../../config/classes/bard.toml"))
+                .expect("parse bard config");
+
+        assert_eq!(
+            config.resource_thresholds.mana_floor_pct,
+            BARD_MANA_FLOOR_PCT
+        );
+        assert_eq!(config.resource_thresholds.proc_mana_pct, BARD_PROC_MANA_PCT);
+        assert_eq!(
+            config.resource_thresholds.debuff_mana_pct,
+            BARD_DEBUFF_MANA_PCT
+        );
+        assert_eq!(
+            config.resource_thresholds.insult_mana_pct,
+            BARD_INSULT_MANA_PCT
+        );
+        assert_eq!(
+            config.resource_thresholds.melee_endurance_pct,
+            BARD_MELEE_ENDURANCE_PCT
+        );
+
+        let runtime_lines: std::collections::HashMap<String, Vec<(String, u8)>> =
+            BardStrategy::build_ability_sets()
+                .into_iter()
+                .map(|set| {
+                    (
+                        set.name,
+                        set.candidates
+                            .into_iter()
+                            .map(|candidate| (candidate.name, candidate.min_level))
+                            .collect(),
+                    )
+                })
+                .collect();
+
+        let combat_lines: std::collections::HashMap<String, Vec<(String, u8)>> = config
+            .combat_abilities
+            .into_iter()
+            .fold(std::collections::HashMap::new(), |mut lines, ability| {
+                lines
+                    .entry(ability.line)
+                    .or_insert_with(Vec::new)
+                    .push((ability.name, ability.min_level));
+                lines
+            });
+
+        for line in [
+            "BattleSong",
+            "ManaSong",
+            "FocusSong",
+            "ProcSong",
+            "DebuffSong",
+            "InsultSong",
+        ] {
+            assert_eq!(
+                combat_lines.get(line),
+                runtime_lines.get(line),
+                "{line} parity"
+            );
+        }
+
+        let cc_names: Vec<String> = config
+            .cc_abilities
+            .into_iter()
+            .map(|ability| ability.line)
+            .collect();
+        assert!(cc_names.contains(&"CrowdControlSong".to_string()));
+
+        let buff_names: Vec<String> = config
+            .buff_abilities
+            .into_iter()
+            .map(|ability| ability.line)
+            .collect();
+        assert!(buff_names.contains(&"TravelSong".to_string()));
     }
 }

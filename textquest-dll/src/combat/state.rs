@@ -207,6 +207,7 @@ const COMBAT_SKILL_IDS: &[(&str, u32)] = &[
 ];
 
 const WARRIOR_MELEE_SKILLS: &[u32] = &[COMBAT_SKILL_ID_TAUNT, COMBAT_SKILL_ID_KICK];
+const BARD_MELEE_SKILLS: &[u32] = &[COMBAT_SKILL_ID_KICK];
 const PALADIN_MELEE_SKILLS: &[u32] = &[
     COMBAT_SKILL_ID_TAUNT,
     COMBAT_SKILL_ID_BASH,
@@ -1247,6 +1248,7 @@ impl Combatant {
         // Build the skill list for this class
         let skills: &[u32] = match class_id {
             1 => WARRIOR_MELEE_SKILLS,       // Warrior: taunt, kick
+            8 => BARD_MELEE_SKILLS,          // Bard: kick
             3 => PALADIN_MELEE_SKILLS,       // Paladin: taunt, bash, kick
             5 => SHADOW_KNIGHT_MELEE_SKILLS, // Shadow Knight: taunt, bash, kick
             7 => MONK_MELEE_SKILLS,          /* Monk: flying kick, round kick, tiger claw, eagle
@@ -1709,6 +1711,40 @@ mod tests {
                 AbilityAvailability::Ready
             ),
             "Should not fire with low endurance"
+        );
+    }
+
+    #[test]
+    fn bard_melee_skill_enters_shared_kick_cooldown() {
+        let mut c = Combatant::new(8, 0, CombatConfig::default());
+        let mut player = player_with_hp_end(1000, 1000, 100, 100);
+        player.mana_current = 100;
+        player.mana_max = 100;
+        let target = test_target();
+
+        c.state = CombatState::Engaging { target_id: 100 };
+        c.tick(&player, Some(&target), &[]);
+
+        assert!(
+            !c.skill_cooldowns.is_ready(COMBAT_SKILL_ID_KICK),
+            "Bard kick should enter the shared melee cooldown tracker"
+        );
+    }
+
+    #[test]
+    fn bard_melee_skill_respects_endurance_floor() {
+        let mut c = Combatant::new(8, 0, CombatConfig::default());
+        let mut player = player_with_hp_end(1000, 1000, 5, 100);
+        player.mana_current = 100;
+        player.mana_max = 100;
+        let target = test_target();
+
+        c.state = CombatState::Engaging { target_id: 100 };
+        c.tick(&player, Some(&target), &[]);
+
+        assert!(
+            c.skill_cooldowns.is_ready(COMBAT_SKILL_ID_KICK),
+            "Bard kick should not fire below the endurance floor"
         );
     }
 

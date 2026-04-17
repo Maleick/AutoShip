@@ -1,24 +1,252 @@
 class_name = "bard"
-role = "bard"
+role = "support"
 rest_command = "/sit"
 
+[resource_thresholds]
+mana_floor_pct = 20.0
+proc_mana_pct = 15.0
+debuff_mana_pct = 25.0
+insult_mana_pct = 35.0
+melee_endurance_pct = 10.0
+
 [[combat_abilities]]
-name = "Melody"
-command = "/melody 1 2 3 4"
-cooldown_secs = 0.0
+line = "BattleSong"
+name = "War March of the Mastruq"
+surface = "song"
+category = "haste"
+command = "/cast 1"
+cooldown_secs = 3.3
 priority = 1
+min_level = 65
+
+[[combat_abilities]]
+line = "BattleSong"
+name = "Warsong of Zek"
+surface = "song"
+category = "haste"
+command = "/cast 1"
+cooldown_secs = 3.3
+priority = 1
+min_level = 62
+
+[[combat_abilities]]
+line = "BattleSong"
+name = "Warsong of the Vah Shir"
+surface = "song"
+category = "haste"
+command = "/cast 1"
+cooldown_secs = 3.3
+priority = 1
+min_level = 60
+
+[[combat_abilities]]
+line = "ManaSong"
+name = "Echo of the Trusik"
+surface = "song"
+category = "crescendo"
+command = "/cast 2"
+cooldown_secs = 3.3
+priority = 2
+min_level = 65
+
+[[combat_abilities]]
+line = "ManaSong"
+name = "Chorus of Marr"
+surface = "song"
+category = "crescendo"
+command = "/cast 2"
+cooldown_secs = 3.3
+priority = 2
+min_level = 64
+
+[[combat_abilities]]
+line = "ManaSong"
+name = "Wind of Marr"
+surface = "song"
+category = "crescendo"
+command = "/cast 2"
+cooldown_secs = 3.3
+priority = 2
+min_level = 62
+
+[[combat_abilities]]
+line = "ManaSong"
+name = "Composition of Ervaj"
+surface = "song"
+category = "crescendo"
+command = "/cast 2"
+cooldown_secs = 3.3
+priority = 2
+min_level = 60
+
+[[combat_abilities]]
+line = "FocusSong"
+name = "Harmony of Sound"
+surface = "song"
+category = "spell_focus"
+command = "/cast 3"
+cooldown_secs = 3.3
+priority = 3
+min_level = 65
+
+[[combat_abilities]]
+line = "FocusSong"
+name = "Druzzil's Disillusionment"
+surface = "song"
+category = "spell_focus"
+command = "/cast 3"
+cooldown_secs = 3.3
+priority = 3
+min_level = 62
+
+[[combat_abilities]]
+line = "FocusSong"
+name = "Aura of Insight"
+surface = "song"
+category = "spell_focus"
+command = "/cast 3"
+cooldown_secs = 3.3
+priority = 3
+min_level = 55
+
+[[combat_abilities]]
+line = "ProcSong"
+name = "Call of the Muse"
+surface = "song"
+category = "melee_proc"
+command = "/cast 4"
+cooldown_secs = 3.3
+priority = 4
+min_level = 65
+condition = "mana_above_15"
+
+[[combat_abilities]]
+line = "ProcSong"
+name = "Melody of Mischief"
+surface = "song"
+category = "melee_proc"
+command = "/cast 4"
+cooldown_secs = 3.3
+priority = 4
+min_level = 62
+condition = "mana_above_15"
+
+[[combat_abilities]]
+line = "ProcSong"
+name = "Ervaj's Lost Composition"
+surface = "song"
+category = "melee_proc"
+command = "/cast 4"
+cooldown_secs = 3.3
+priority = 4
+min_level = 60
+condition = "mana_above_15"
+
+[[combat_abilities]]
+line = "DebuffSong"
+name = "Requiem of Time"
+surface = "song"
+category = "slow"
+command = "/cast 5"
+cooldown_secs = 3.3
+priority = 5
+min_level = 64
+condition = "mana_above_25,target_hp_above_60"
+
+[[combat_abilities]]
+line = "DebuffSong"
+name = "Dreams of Thule"
+surface = "song"
+category = "slow"
+command = "/cast 5"
+cooldown_secs = 3.3
+priority = 5
+min_level = 62
+condition = "mana_above_25,target_hp_above_60"
+
+[[combat_abilities]]
+line = "DebuffSong"
+name = "Fufil's Diminishing Dirge"
+surface = "song"
+category = "slow"
+command = "/cast 5"
+cooldown_secs = 3.3
+priority = 5
+min_level = 60
+condition = "mana_above_25,target_hp_above_60"
+
+[[combat_abilities]]
+line = "InsultSong"
+name = "Dark Echo"
+surface = "song"
+category = "insult"
+command = "/cast 6"
+cooldown_secs = 3.3
+priority = 6
+min_level = 65
+condition = "mana_above_35"
+
+[[combat_abilities]]
+line = "InsultSong"
+name = "Saryrn's Scream of Pain"
+surface = "song"
+category = "insult"
+command = "/cast 6"
+cooldown_secs = 3.3
+priority = 6
+min_level = 61
+condition = "mana_above_35"
+
+[[combat_abilities]]
+line = "InsultSong"
+name = "Brusco's Bombastic Bellow"
+surface = "song"
+category = "insult"
+command = "/cast 6"
+cooldown_secs = 3.3
+priority = 6
+min_level = 55
+condition = "mana_above_35"
 
 [[cc_abilities]]
-name = "Lullaby"
+line = "CrowdControlSong"
+name = "Lullaby of Morell"
+surface = "song"
 cc_type = "mez"
-command = "/cast 4"
-cooldown_secs = 3.0
-duration_secs = 12.0
-priority = 2
+command = "/cast 7"
+cooldown_secs = 3.3
+duration_secs = 18.0
+priority = 1
+min_level = 65
+
+[[cc_abilities]]
+line = "CrowdControlSong"
+name = "Silent Song of Quellious"
+surface = "song"
+cc_type = "mez"
+command = "/cast 7"
+cooldown_secs = 3.3
+duration_secs = 18.0
+priority = 1
+min_level = 61
+
+[[cc_abilities]]
+line = "CrowdControlSong"
+name = "Kelin's Lugubrious Lament"
+surface = "song"
+cc_type = "mez"
+command = "/cast 7"
+cooldown_secs = 3.3
+duration_secs = 18.0
+priority = 1
+min_level = 12
 
 [[buff_abilities]]
-name = "Selos"
-command = "/cast 5"
-cooldown_secs = 600.0
+line = "TravelSong"
+name = "Selo's Song of Travel"
+surface = "song"
+command = "/cast 8"
+cooldown_secs = 3.3
 priority = 1
+min_level = 51
 condition = "out_of_combat"

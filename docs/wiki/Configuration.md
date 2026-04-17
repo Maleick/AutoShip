@@ -9,7 +9,7 @@
 | `config/character-configs.json` | Web UI character tuning and task reward automation rules |
 | `data/credentials.db` | Encrypted account password store used by `textquest autologin` |
 | `config/camps/*.toml` | Saved camp locations and thresholds |
-| `config/classes/*.toml` | Per-class combat and ability config |
+| `config/classes/*.toml` | Per-class combat reference and parity config |
 | `config/toons/*.toml` | Per-toon combat action overrides for the injected DLL |
 | `config/hvt_watchlist.toml` | High-value target watchlist |
 | `config/named_mobs/*.toml` | Named spawn definitions by zone |
@@ -154,7 +154,11 @@ These files drive `:camp start`, `:camp next`, and `:camp prev`.
 
 ## Class Configs
 
-`config/classes/*.toml` holds class-specific combat behavior and ability choices.
+`config/classes/*.toml` documents class-specific combat behavior and operator-facing default ability choices.
+
+Runtime loading still happens through `config/toons/*.toml` overrides plus the built-in class strategies in `textquest-dll/src/combat/classes/`.
+The class TOML files are the reference surface for those built-in defaults.
+For Bard, unit tests keep the live-safe runtime rotation data synchronized with `config/classes/bard.toml`.
 
 Current repo coverage includes classes such as:
 

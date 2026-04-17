@@ -525,7 +525,7 @@ pub fn build_strategy(class_id: u8, config: &CombatConfig) -> Box<dyn ClassStrat
         5 => Box::new(ShadowKnightStrategy::new(class_id)), // Shadow Knight
         6 => Box::new(DruidStrategy::new(class_id)),   // Druid
         7 => Box::new(MonkStrategy::new(class_id)),    // Monk
-        8 => Box::new(BardStrategy::new(class_id)),    // Bard
+        8 => Box::new(BardStrategy::live_safe(class_id)), // Bard
         9 => Box::new(RogueStrategy::new(class_id)),   // Rogue
         10 => Box::new(ShamanStrategy::new(class_id)), // Shaman
         11 => Box::new(NecromancerStrategy::new(class_id)), // Necromancer
