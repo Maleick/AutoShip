@@ -510,6 +510,46 @@ pub unsafe fn click_button_via_vtable(button_wnd: usize) {
 #[cfg(not(windows))]
 pub unsafe fn click_button_via_vtable(_button_wnd: usize) {}
 
+#[repr(C)]
+struct EqPoint {
+    x: i32,
+    y: i32,
+}
+
+/// Click a window at a specific local point using `HandleLButtonDown/Up`.
+///
+/// This is used for widgets like `CTabWnd` that do not expose simple button
+/// children for each selectable target. Coordinates are relative to the target
+/// window's local client area.
+#[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
+pub unsafe fn click_window_point_via_vtable(wnd: usize, x: i32, y: i32) {
+    use textquest_common::offsets::eqgame as eqg;
+
+    let vtable = *(wnd as *const usize);
+    if vtable == 0 {
+        tracing::warn!("Window vtable is null");
+        return;
+    }
+
+    let down_ptr = *((vtable + eqg::CXWND_VTABLE_HANDLE_LBUTTON_DOWN) as *const usize);
+    let up_ptr = *((vtable + eqg::CXWND_VTABLE_HANDLE_LBUTTON_UP) as *const usize);
+    if down_ptr == 0 || up_ptr == 0 {
+        tracing::warn!("HandleLButtonDown/Up function pointer is null");
+        return;
+    }
+
+    type HandleLButtonFn = unsafe extern "C" fn(usize, *const EqPoint, u32) -> i32;
+    let handle_down: HandleLButtonFn = std::mem::transmute(down_ptr);
+    let handle_up: HandleLButtonFn = std::mem::transmute(up_ptr);
+    let point = EqPoint { x, y };
+    handle_down(wnd, &point, 0);
+    handle_up(wnd, &point, 0);
+}
+
+#[cfg(not(windows))]
+pub unsafe fn click_window_point_via_vtable(_wnd: usize, _x: i32, _y: i32) {}
+
 /// Click a button, choosing the correct mechanism for the current EQ phase.
 ///
 /// During eqmain (login, server select): calls `click_button_via_vtable()`
@@ -954,6 +994,13 @@ mod tests {
     fn click_button_via_vtable_noop_on_non_windows() {
         unsafe {
             click_button_via_vtable(0);
+        } // should not panic
+    }
+
+    #[test]
+    fn click_window_point_via_vtable_noop_on_non_windows() {
+        unsafe {
+            click_window_point_via_vtable(0, 10, 10);
         } // should not panic
     }
 

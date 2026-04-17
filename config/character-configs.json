@@ -1,0 +1,262 @@
+{
+  "Noxus": {
+    "character_name": "Noxus",
+    "class": "Warrior",
+    "role": "Tank",
+    "heal_at_pct": 35,
+    "mana_sit_pct": 0,
+    "nuke_at_pct": 100,
+    "rotation": [
+      {
+        "id": "taunt",
+        "name": "Taunt",
+        "priority": 1,
+        "enabled": true
+      }
+    ],
+    "class_params": {
+      "ch_chain_timing_ms": null,
+      "dot_overlap_pct": null,
+      "burn_at_hp_pct": null,
+      "slow_at_hp_pct": null
+    },
+    "auto_rez": {
+      "enabled": false,
+      "min_xp_pct": 90,
+      "trusted_casters": [
+        "Frostreaver"
+      ],
+      "decline_if_untrusted": false,
+      "delay_ms": 3000
+    },
+    "group_override": false,
+    "group_name": "Group 1",
+    "tribute_preferences": {
+      "auto_activate": true,
+      "warning_threshold_secs": 420,
+      "preferred_tributes": [
+        "Stalwart Ward",
+        "Champion's Aura"
+      ]
+    },
+    "tribute_status": {
+      "active": true,
+      "remaining_secs": 3600,
+      "point_balance": 1950,
+      "active_tributes": [
+        "Stalwart Ward",
+        "Champion's Aura"
+      ],
+      "alert_state": "ok"
+    },
+    "reward_automation": {
+      "rules": []
+    }
+  },
+  "Aelrindel": {
+    "character_name": "Aelrindel",
+    "class": "Wizard",
+    "role": "DPS",
+    "heal_at_pct": 45,
+    "mana_sit_pct": 20,
+    "nuke_at_pct": 80,
+    "rotation": [
+      {
+        "id": "ice_comet",
+        "name": "Ice Comet",
+        "priority": 1,
+        "enabled": true
+      }
+    ],
+    "class_params": {
+      "ch_chain_timing_ms": null,
+      "dot_overlap_pct": null,
+      "burn_at_hp_pct": 30,
+      "slow_at_hp_pct": null
+    },
+    "auto_rez": {
+      "enabled": true,
+      "min_xp_pct": 90,
+      "trusted_casters": [
+        "Frostreaver",
+        "Oakmantle"
+      ],
+      "decline_if_untrusted": false,
+      "delay_ms": 2500
+    },
+    "group_override": false,
+    "group_name": "Group 2",
+    "tribute_preferences": {
+      "auto_activate": true,
+      "warning_threshold_secs": 180,
+      "preferred_tributes": [
+        "Arcane Fury",
+        "Hero's Fortitude"
+      ]
+    },
+    "tribute_status": {
+      "active": false,
+      "remaining_secs": 0,
+      "point_balance": 875,
+      "active_tributes": [],
+      "alert_state": "expired"
+    },
+    "reward_automation": {
+      "rules": []
+    }
+  },
+  "Grok": {
+    "character_name": "Grok",
+    "class": "Shaman",
+    "role": "Support",
+    "heal_at_pct": 60,
+    "mana_sit_pct": 30,
+    "nuke_at_pct": 85,
+    "rotation": [
+      {
+        "id": "turgurs_insects",
+        "name": "Turgur's Insects",
+        "priority": 1,
+        "enabled": true
+      }
+    ],
+    "class_params": {
+      "ch_chain_timing_ms": null,
+      "dot_overlap_pct": null,
+      "burn_at_hp_pct": null,
+      "slow_at_hp_pct": 95
+    },
+    "auto_rez": {
+      "enabled": true,
+      "min_xp_pct": 96,
+      "trusted_casters": [
+        "Frostreaver"
+      ],
+      "decline_if_untrusted": true,
+      "delay_ms": 4000
+    },
+    "group_override": false,
+    "group_name": "Group 2",
+    "tribute_preferences": {
+      "auto_activate": true,
+      "warning_threshold_secs": 300,
+      "preferred_tributes": [
+        "Ancient Bulwark",
+        "Spirit's Resolve"
+      ]
+    },
+    "tribute_status": {
+      "active": true,
+      "remaining_secs": 1020,
+      "point_balance": 1480,
+      "active_tributes": [
+        "Ancient Bulwark"
+      ],
+      "alert_state": "ok"
+    },
+    "reward_automation": {
+      "rules": []
+    }
+  },
+  "Valerius": {
+    "character_name": "Valerius",
+    "class": "Necromancer",
+    "role": "DPS",
+    "heal_at_pct": 40,
+    "mana_sit_pct": 15,
+    "nuke_at_pct": 75,
+    "rotation": [
+      {
+        "id": "ignite_blood",
+        "name": "Ignite Blood",
+        "priority": 1,
+        "enabled": true
+      }
+    ],
+    "class_params": {
+      "ch_chain_timing_ms": null,
+      "dot_overlap_pct": 10,
+      "burn_at_hp_pct": null,
+      "slow_at_hp_pct": null
+    },
+    "auto_rez": {
+      "enabled": true,
+      "min_xp_pct": 90,
+      "trusted_casters": [
+        "Frostreaver",
+        "Highclerk"
+      ],
+      "decline_if_untrusted": true,
+      "delay_ms": 3500
+    },
+    "group_override": false,
+    "group_name": "Group 3",
+    "tribute_preferences": {
+      "auto_activate": true,
+      "warning_threshold_secs": 240,
+      "preferred_tributes": [
+        "Fervor of Shadows",
+        "Hero's Vitality"
+      ]
+    },
+    "tribute_status": {
+      "active": true,
+      "remaining_secs": 150,
+      "point_balance": 2250,
+      "active_tributes": [
+        "Fervor of Shadows"
+      ],
+      "alert_state": "expiring"
+    },
+    "reward_automation": {
+      "rules": []
+    }
+  },
+  "Frostreaver": {
+    "character_name": "Frostreaver",
+    "class": "Cleric",
+    "role": "Healer",
+    "heal_at_pct": 72,
+    "mana_sit_pct": 28,
+    "nuke_at_pct": 95,
+    "rotation": [],
+    "class_params": {
+      "ch_chain_timing_ms": null,
+      "dot_overlap_pct": null,
+      "burn_at_hp_pct": null,
+      "slow_at_hp_pct": null
+    },
+    "auto_rez": {
+      "enabled": true,
+      "min_xp_pct": 96,
+      "trusted_casters": [
+        "Highclerk",
+        "Leafbinder"
+      ],
+      "decline_if_untrusted": true,
+      "delay_ms": 5100
+    },
+    "group_override": false,
+    "group_name": "Group 1",
+    "tribute_preferences": {
+      "auto_activate": true,
+      "warning_threshold_secs": 180,
+      "preferred_tributes": [
+        "Marr's Gift",
+        "Champion's Aura"
+      ]
+    },
+    "tribute_status": {
+      "active": true,
+      "remaining_secs": 240,
+      "point_balance": 3200,
+      "active_tributes": [
+        "Marr's Gift"
+      ],
+      "alert_state": "expiring"
+    },
+    "reward_automation": {
+      "rules": []
+    }
+  }
+}

@@ -6,9 +6,7 @@
 //! - loot APIs
 //! - account-management APIs backed by an in-memory registry plus optional
 //!   credential storage
-//! - explicit `501` placeholders for not-yet-implemented raid configuration
-//!   APIs
-//! - live character-configuration APIs backed by in-memory dashboard state
+//! - raid configuration placeholders plus live character configuration APIs
 //! - a WebSocket endpoint for live session monitoring
 
 use std::{
@@ -55,8 +53,13 @@ pub struct AppState {
     pub credential_store: Option<accounts::CredentialStore>,
     /// In-memory character tuning config store for the strategy tuning panel.
     pub character_configs: tokio::sync::RwLock<HashMap<String, api::CharacterConfig>>,
-    /// In-memory auto-accept policy store for the dashboard controls.
-    pub auto_accept_settings: tokio::sync::RwLock<textquest_common::ipc::AutoAcceptSettings>,
+    /// On-disk JSON store for character tuning and reward automation settings.
+    pub character_config_path: PathBuf,
+    /// Serializes PUT-driven writes to [`character_config_path`] so concurrent
+    /// updates can't interleave snapshot writes and drop acknowledged edits.
+    /// Reads are unaffected — they still go through the `character_configs`
+    /// RwLock.
+    pub character_config_write_lock: tokio::sync::Mutex<()>,
     /// In-memory loot configuration state.
     pub loot_state: Arc<api::loot::LootState>,
     /// In-memory economy cycle state.
@@ -150,8 +153,8 @@ fn credentials_db_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/credentials.db")
 }
 
-fn live_session_snapshot_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/runtime/live_sessions.json")
+fn character_config_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/character-configs.json")
 }
 
 fn alerts_db_path() -> PathBuf {
@@ -289,12 +292,37 @@ fn build_state() -> Arc<AppState> {
         );
     }
 
+    let character_config_path = character_config_path();
+    // Demo-default seeding only runs when the file is absent. A present-but-
+    // empty file ({}) is an explicit operator choice — restoring demo entries
+    // would pollute their config on the next save.
+    let character_configs = if character_config_path.exists() {
+        match textquest_common::character_config::load_character_configs(&character_config_path) {
+            Ok(configs) => configs,
+            Err(error) => {
+                tracing::error!(
+                    %error,
+                    path = %character_config_path.display(),
+                    "Failed to load persisted character configs; falling back to demo defaults"
+                );
+                api::demo_character_configs()
+            }
+        }
+    } else {
+        tracing::info!(
+            path = %character_config_path.display(),
+            "No persisted character configs found; seeding demo defaults"
+        );
+        api::demo_character_configs()
+    };
+
     Arc::new(AppState {
         event_tx,
         account_store: Mutex::new(accounts::AccountStore::default()),
         credential_store,
-        character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
-        auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
+        character_configs: tokio::sync::RwLock::new(character_configs),
+        character_config_path,
+        character_config_write_lock: tokio::sync::Mutex::new(()),
         loot_state: api::loot::LootState::new_demo(),
         economy_state: api::economy::EconomyState::new_demo(),
         dashboard_state: api::dashboard::DashboardState::new_demo(),
@@ -377,10 +405,6 @@ fn build_api_router() -> Router<Arc<AppState>> {
             get(api::raid_config_unavailable).put(api::raid_config_unavailable),
         )
         .route("/config/characters", get(api::list_character_configs))
-        .route(
-            "/config/discord",
-            get(api::discord::get_settings).put(api::discord::put_settings),
-        )
         .route(
             "/config/characters/{character}",
             put(api::put_character_config),
@@ -543,7 +567,6 @@ mod tests {
     };
     use http_body_util::BodyExt;
     use serde_json::{Value, json};
-    use textquest_common::shared_client_state::SharedClientState;
     use tower::ServiceExt;
 
     async fn json_response(app: Router, request: Request<Body>) -> (StatusCode, Value) {
@@ -568,7 +591,8 @@ mod tests {
                 accounts::CredentialStore::open(path, "test_master_pw").expect("credential store"),
             ),
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
-            auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
+            character_config_path: path.with_file_name("character-configs.json"),
+            character_config_write_lock: tokio::sync::Mutex::new(()),
             loot_state: api::loot::LootState::new_demo(),
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: api::dashboard::DashboardState::new_demo(),
@@ -641,51 +665,6 @@ mod tests {
                 .unwrap_or_default()
                 .contains("not implemented")
         );
-    }
-
-    #[tokio::test]
-    async fn sessions_endpoint_prefers_live_snapshot_when_present() {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let state = test_state_with_credentials(&tempdir.path().join("creds.db"));
-        std::fs::write(
-            &state.live_session_snapshot_path,
-            serde_json::to_vec(&vec![SharedClientState {
-                client_id: 77,
-                spawn_id: 42,
-                character_name: "Frostreaver".into(),
-                class_id: 2,
-                level: 60,
-                zone_short_name: "kael".into(),
-                zone_long_name: "Kael Drakkel".into(),
-                hp_pct: 72.5,
-                mana_pct: 81.0,
-                endurance_pct: 49.0,
-                is_dead: false,
-                status: "active".into(),
-                target: None,
-                buffs: Vec::new(),
-                pet: None,
-            }])
-            .expect("snapshot json"),
-        )
-        .expect("write snapshot");
-
-        let app = build_app(state);
-        let (status, body) = json_response(
-            app,
-            Request::builder()
-                .uri("/api/sessions")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await;
-
-        assert_eq!(status, StatusCode::OK);
-        let sessions = body.as_array().expect("sessions array");
-        assert_eq!(sessions.len(), 1);
-        assert_eq!(sessions[0]["character_name"], "Frostreaver");
-        assert_eq!(sessions[0]["zone"], "Kael Drakkel");
-        assert_eq!(sessions[0]["endurance_pct"], 49.0);
     }
 
     #[tokio::test]

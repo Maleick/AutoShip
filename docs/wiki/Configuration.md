@@ -6,6 +6,7 @@
 | --- | --- |
 | `config/textquest.toml` | Main TextQuest app config |
 | `config/accounts.toml` | Account and group-launch metadata |
+| `config/character-configs.json` | Web UI character tuning and task reward automation rules |
 | `data/credentials.db` | Encrypted account password store used by `textquest autologin` |
 | `config/camps/*.toml` | Saved camp locations and thresholds |
 | `config/classes/*.toml` | Per-class combat and ability config |

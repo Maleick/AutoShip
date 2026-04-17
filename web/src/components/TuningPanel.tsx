@@ -8,16 +8,17 @@ import {
   CheckSquare,
   Square,
   UsersThree,
+  Plus,
+  Trash,
 } from "@phosphor-icons/react";
 import type {
   AutoRezConfig,
   CharacterConfig,
   ClassParams,
   RotationEntry,
-  TributeAlertState,
+  TaskRewardPreference,
 } from "../types";
 import { useCharacterConfigs } from "../hooks/useTuning";
-import { formatDuration } from "../utils/time";
 
 const DEFAULT_AUTO_REZ_CONFIG: AutoRezConfig = {
   enabled: false,
@@ -36,25 +37,6 @@ function parseTrustedCasters(value: string): string[] {
         .filter(Boolean),
     ),
   );
-}
-
-function normalizeAutoRezConfig(
-  config?: Partial<AutoRezConfig> | null,
-): AutoRezConfig {
-  return {
-    ...DEFAULT_AUTO_REZ_CONFIG,
-    ...config,
-    trusted_casters: Array.isArray(config?.trusted_casters)
-      ? parseTrustedCasters(config.trusted_casters.join("\n"))
-      : DEFAULT_AUTO_REZ_CONFIG.trusted_casters,
-  };
-}
-
-function normalizeCharacterConfig(config: CharacterConfig): CharacterConfig {
-  return {
-    ...config,
-    auto_rez: normalizeAutoRezConfig(config.auto_rez),
-  };
 }
 
 // ─── Slider ──────────────────────────────────────────────────────────────────
@@ -164,26 +146,6 @@ function RotationRow({
       </div>
     </div>
   );
-}
-
-function tributeTone(alertState: TributeAlertState) {
-  switch (alertState) {
-    case "expiring":
-      return {
-        badge: "border-amber-400/40 bg-amber-400/10 text-amber-200",
-        label: "Expiring",
-      };
-    case "expired":
-      return {
-        badge: "border-red-500/40 bg-red-500/10 text-red-300",
-        label: "Expired",
-      };
-    default:
-      return {
-        badge: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
-        label: "Stable",
-      };
-  }
 }
 
 // ─── Class-specific params section ───────────────────────────────────────────
@@ -348,18 +310,23 @@ interface CharacterEditorProps {
 }
 
 function CharacterEditor({ config, onSave }: CharacterEditorProps) {
-  const normalizedConfig = normalizeCharacterConfig(config);
-  const [draft, setDraft] = useState<CharacterConfig>(normalizedConfig);
+  const [draft, setDraft] = useState<CharacterConfig>({
+    ...config,
+    auto_rez: config.auto_rez ?? DEFAULT_AUTO_REZ_CONFIG,
+  });
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
   // Reset draft when selected character changes.
   useEffect(() => {
-    setDraft(normalizedConfig);
+    setDraft({
+      ...config,
+      auto_rez: config.auto_rez ?? DEFAULT_AUTO_REZ_CONFIG,
+    });
     setSaveMsg(null);
   }, [config]);
 
-  const isDirty = JSON.stringify(draft) !== JSON.stringify(normalizedConfig);
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(config);
 
   const moveRotation = (index: number, dir: -1 | 1) => {
     const rot = [...draft.rotation];
@@ -378,7 +345,46 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
     setDraft({ ...draft, rotation: rot });
   };
 
-  const autoRez = normalizeAutoRezConfig(draft.auto_rez);
+  const rewardRules = draft.reward_automation.rules;
+
+  const updateRewardRule = (
+    index: number,
+    updater: (rule: TaskRewardPreference) => TaskRewardPreference,
+  ) => {
+    const rules = rewardRules.map((rule, ruleIndex) =>
+      ruleIndex === index ? updater(rule) : rule,
+    );
+    setDraft({
+      ...draft,
+      reward_automation: { rules },
+    });
+  };
+
+  const addRewardRule = () => {
+    setDraft({
+      ...draft,
+      reward_automation: {
+        rules: [
+          ...rewardRules,
+          {
+            task_matcher: "*",
+            preference: { kind: "by_position", reward_position: 1 },
+          },
+        ],
+      },
+    });
+  };
+
+  const removeRewardRule = (index: number) => {
+    setDraft({
+      ...draft,
+      reward_automation: {
+        rules: rewardRules.filter((_, ruleIndex) => ruleIndex !== index),
+      },
+    });
+  };
+
+  const autoRez = draft.auto_rez ?? DEFAULT_AUTO_REZ_CONFIG;
 
   const handleSave = async () => {
     setSaving(true);
@@ -427,7 +433,7 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
           )}
           {isDirty && !saving && (
             <button
-              onClick={() => setDraft(normalizedConfig)}
+              onClick={() => setDraft(config)}
               className="p-2 text-white/40 hover:text-spectral transition-colors"
               title="Discard changes"
             >
@@ -553,7 +559,7 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
             }
           />
 
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+          <div className="flex items-center gap-4">
             <button
               onClick={() =>
                 setDraft({
@@ -576,8 +582,8 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
               </span>
             </button>
 
-            <label className="flex items-center gap-2 text-xs font-tech text-white/70 lg:ml-auto">
-              <span>Delay Before Action</span>
+            <label className="ml-auto flex items-center gap-2 text-xs font-tech text-white/70">
+              Delay
               <input
                 type="number"
                 min={0}
@@ -604,7 +610,7 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
           </div>
 
           <label className="flex flex-col gap-2 text-xs font-tech text-white/70">
-            <span>Trusted Casters</span>
+            Trusted Casters
             <textarea
               rows={4}
               value={autoRez.trusted_casters.join("\n")}
@@ -625,144 +631,9 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
           </label>
 
           <p className="text-[10px] text-white/35 font-rune">
-            TextQuest only accepts an offer when the resurrection percent meets
-            the threshold and the caster appears in this trust list. The delay
-            leaves a manual override window before the dialog is clicked.
-          </p>
-        </div>
-      </section>
-
-      {/* Tribute automation */}
-      <section>
-        <h4 className="font-archaic text-xs uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
-          <Faders size={12} className="text-amber-300" />
-          Tribute Automation
-        </h4>
-        <div className="bg-violet/20 border border-white/5 p-4 flex flex-col gap-4">
-          <div className="grid grid-cols-4 gap-3">
-            <div className="border border-white/10 bg-void/40 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-widest text-white/35 font-rune">
-                Status
-              </div>
-              <div className="mt-2">
-                <span
-                  className={`inline-flex items-center border px-2 py-1 text-[10px] uppercase tracking-widest font-rune ${
-                    tributeTone(draft.tribute_status.alert_state).badge
-                  }`}
-                >
-                  {draft.tribute_status.active ? "Active" : "Inactive"} ·{" "}
-                  {tributeTone(draft.tribute_status.alert_state).label}
-                </span>
-              </div>
-            </div>
-            <div className="border border-white/10 bg-void/40 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-widest text-white/35 font-rune">
-                Time Remaining
-              </div>
-              <div className="mt-2 font-rune text-lg text-white">
-                {formatDuration(draft.tribute_status.remaining_secs)}
-              </div>
-            </div>
-            <div className="border border-white/10 bg-void/40 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-widest text-white/35 font-rune">
-                Tribute Balance
-              </div>
-              <div className="mt-2 font-rune text-lg text-amber-200">
-                {draft.tribute_status.point_balance.toLocaleString()}
-              </div>
-            </div>
-            <div className="border border-white/10 bg-void/40 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-widest text-white/35 font-rune">
-                Active Bonuses
-              </div>
-              <div className="mt-2 text-xs text-white/70 font-tech">
-                {draft.tribute_status.active_tributes.length > 0
-                  ? draft.tribute_status.active_tributes.join(", ")
-                  : "None"}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 border border-white/10 bg-void/30 px-3 py-2">
-            <button
-              onClick={() =>
-                setDraft({
-                  ...draft,
-                  tribute_preferences: {
-                    ...draft.tribute_preferences,
-                    auto_activate: !draft.tribute_preferences.auto_activate,
-                  },
-                })
-              }
-              className="flex items-center gap-2 text-sm font-tech transition-colors hover:text-magentaglow"
-            >
-              {draft.tribute_preferences.auto_activate ? (
-                <CheckSquare weight="fill" size={16} className="text-magentaglow" />
-              ) : (
-                <Square size={16} className="text-white/40" />
-              )}
-              <span className="text-white/70">Auto-activate on expiry</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-[180px_1fr] gap-3 items-start">
-            <label
-              htmlFor="tribute-warning-threshold"
-              className="text-[10px] uppercase tracking-widest text-white/35 font-rune pt-2"
-            >
-              Warning Lead Time
-            </label>
-            <input
-              id="tribute-warning-threshold"
-              type="number"
-              min={0}
-              value={draft.tribute_preferences.warning_threshold_secs}
-              onChange={(e) => {
-                const nextValue = e.currentTarget.valueAsNumber;
-                if (!Number.isFinite(nextValue)) {
-                  return;
-                }
-                setDraft({
-                  ...draft,
-                  tribute_preferences: {
-                    ...draft.tribute_preferences,
-                    warning_threshold_secs: Math.max(0, Math.trunc(nextValue)),
-                  },
-                });
-              }}
-              className="w-40 bg-void border border-white/20 text-white text-xs px-3 py-2 focus:outline-none focus:border-magentaglow font-rune"
-            />
-          </div>
-
-          <div className="grid grid-cols-[180px_1fr] gap-3 items-start">
-            <label
-              htmlFor="preferred-tributes"
-              className="text-[10px] uppercase tracking-widest text-white/35 font-rune pt-2"
-            >
-              Preferred Tributes
-            </label>
-            <input
-              id="preferred-tributes"
-              type="text"
-              value={draft.tribute_preferences.preferred_tributes.join(", ")}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  tribute_preferences: {
-                    ...draft.tribute_preferences,
-                    preferred_tributes: e.target.value
-                      .split(",")
-                      .map((entry) => entry.trim())
-                      .filter(Boolean),
-                  },
-                })
-              }
-              className="w-full bg-void border border-white/20 text-white text-xs px-3 py-2 focus:outline-none focus:border-magentaglow font-rune"
-            />
-          </div>
-          <p className="text-[10px] text-white/35 font-rune">
-            Comma-separated tribute names. The monitor warns before expiry and
-            re-activates this list when points are available.
+            Offers are only accepted when the rez percent meets the threshold
+            and the caster appears in the trust list. The delay leaves a manual
+            override window before TextQuest clicks the popup.
           </p>
         </div>
       </section>
@@ -801,6 +672,127 @@ function CharacterEditor({ config, onSave }: CharacterEditorProps) {
           )}
         </div>
       </section>
+
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h4 className="font-archaic text-xs uppercase tracking-widest text-white/50 flex items-center gap-2">
+              <Faders size={12} className="text-blue-400" />
+              Task Rewards
+            </h4>
+            <p className="text-[10px] text-white/30 font-rune mt-1">
+              Match the reward window title. Use <span className="text-white/70">*</span> for
+              the default fallback rule.
+            </p>
+          </div>
+          <button
+            onClick={addRewardRule}
+            className="flex items-center gap-2 px-3 py-1.5 border border-blue-400/30 text-blue-300 text-[11px] font-tech uppercase tracking-wider hover:bg-blue-500/10 transition-colors"
+          >
+            <Plus size={12} />
+            Add Rule
+          </button>
+        </div>
+
+        <div className="bg-violet/20 border border-white/5 p-4 flex flex-col gap-3">
+          {rewardRules.length === 0 ? (
+            <p className="text-xs text-white/30 font-rune italic">
+              No reward automation rules configured. The client will claim the first reward when the
+              reward window appears.
+            </p>
+          ) : (
+            rewardRules.map((rule, index) => (
+              <div
+                // Index is stable across edits to task_matcher, preventing
+                // React from remounting the row (and blowing away input
+                // focus/caret) each keystroke. Safe here because rewardRules
+                // is only ever appended to or spliced by index — there's no
+                // reorder path that would require a persistent id.
+                key={`reward-rule-${index}`}
+                className="grid grid-cols-[minmax(0,1.5fr)_140px_minmax(0,1fr)_auto] gap-3 items-center"
+              >
+                <input
+                  type="text"
+                  value={rule.task_matcher}
+                  onChange={(e) =>
+                    updateRewardRule(index, (current) => ({
+                      ...current,
+                      task_matcher: e.target.value,
+                    }))
+                  }
+                  placeholder="Task title or *"
+                  className="bg-void border border-white/20 text-white text-xs px-3 py-2 focus:outline-none focus:border-magentaglow font-rune placeholder:text-white/30"
+                />
+
+                <select
+                  value={rule.preference.kind}
+                  onChange={(e) =>
+                    updateRewardRule(index, (current) => ({
+                      ...current,
+                      preference:
+                        e.target.value === "by_name"
+                          ? {
+                              kind: "by_name",
+                              reward_name:
+                                current.preference.kind === "by_name"
+                                  ? current.preference.reward_name
+                                  : "",
+                            }
+                          : { kind: "by_position", reward_position: 1 },
+                    }))
+                  }
+                  className="bg-void border border-white/20 text-white text-xs px-3 py-2 focus:outline-none focus:border-magentaglow font-rune"
+                >
+                  <option value="by_name">Reward Name</option>
+                  <option value="by_position">Reward Position</option>
+                </select>
+
+                {rule.preference.kind === "by_name" ? (
+                  <input
+                    type="text"
+                    value={rule.preference.reward_name}
+                    onChange={(e) =>
+                      updateRewardRule(index, (current) => ({
+                        ...current,
+                        preference: {
+                          kind: "by_name",
+                          reward_name: e.target.value,
+                        },
+                      }))
+                    }
+                    placeholder="Exact reward tab"
+                    className="bg-void border border-white/20 text-white text-xs px-3 py-2 focus:outline-none focus:border-magentaglow font-rune placeholder:text-white/30"
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    min={1}
+                    value={rule.preference.reward_position}
+                    onChange={(e) =>
+                      updateRewardRule(index, (current) => ({
+                        ...current,
+                        preference: {
+                          kind: "by_position",
+                          reward_position: Math.max(1, Number(e.target.value) || 1),
+                        },
+                      }))
+                    }
+                    className="bg-void border border-white/20 text-white text-xs px-3 py-2 focus:outline-none focus:border-magentaglow font-rune"
+                  />
+                )}
+
+                <button
+                  onClick={() => removeRewardRule(index)}
+                  className="p-2 text-white/40 hover:text-red-400 transition-colors"
+                  title="Remove rule"
+                >
+                  <Trash size={14} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
     </div>
   );
 }
@@ -830,18 +822,7 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       delay_ms: 5000,
     },
     group_override: false,
-    tribute_preferences: {
-      auto_activate: true,
-      warning_threshold_secs: 300,
-      preferred_tributes: ["Marr's Gift", "Champion's Aura"],
-    },
-    tribute_status: {
-      active: true,
-      remaining_secs: 240,
-      point_balance: 3200,
-      active_tributes: ["Marr's Gift"],
-      alert_state: "expiring",
-    },
+    reward_automation: { rules: [] },
   },
   {
     character_name: "Noxus",
@@ -864,17 +845,13 @@ const DEMO_CONFIGS: CharacterConfig[] = [
       delay_ms: 3000,
     },
     group_override: false,
-    tribute_preferences: {
-      auto_activate: true,
-      warning_threshold_secs: 420,
-      preferred_tributes: ["Stalwart Ward", "Champion's Aura"],
-    },
-    tribute_status: {
-      active: true,
-      remaining_secs: 3600,
-      point_balance: 1950,
-      active_tributes: ["Stalwart Ward", "Champion's Aura"],
-      alert_state: "ok",
+    reward_automation: {
+      rules: [
+        {
+          task_matcher: "*",
+          preference: { kind: "by_position", reward_position: 1 },
+        },
+      ],
     },
   },
 ];

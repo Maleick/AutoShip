@@ -84,7 +84,6 @@ Retrieve all active character sessions currently under orchestration.
     "level": 60,
     "hp_pct": 95.5,
     "mana_pct": 87.0,
-    "endurance_pct": 100.0,
     "status": "idle"
   },
   {
@@ -94,11 +93,6 @@ Retrieve all active character sessions currently under orchestration.
     "level": 58,
     "hp_pct": 100.0,
     "mana_pct": 0.0,
-    "endurance_pct": 77.5,
-    "buff_count": 12,
-    "target_name": "A drake",
-    "target_hp_pct": 48.0,
-    "pet_name": "Greater Vocarate: Water",
     "status": "combat"
   }
 ]
@@ -112,17 +106,12 @@ Retrieve all active character sessions currently under orchestration.
 - `level: u8` — Character level
 - `hp_pct: f32` — HP percentage (0-100)
 - `mana_pct: f32` — Mana percentage (0-100)
-- `endurance_pct: f32` — Endurance percentage (0-100)
 - `status: String` — Current status (idle, combat, moving, dead, etc.)
-- `buff_count: usize` — Number of active buffs in the shared roster snapshot
-- `target_name: Option<String>` — Current target name when available
-- `target_hp_pct: Option<f32>` — Current target HP percentage when available
-- `pet_name: Option<String>` — Current pet name when available
 
 **Notes**:
 
-- The endpoint prefers the orchestrator's runtime roster snapshot at `data/runtime/live_sessions.json`.
-- If no live roster snapshot exists yet, the endpoint falls back to character-config-backed demo rows so the dashboard still renders in demo mode.
+- In current implementation, zone/level/hp/mana/status are filled from character configs (demo data).
+- Future: Pull live state from shared memory or IPC.
 
 ---
 
@@ -134,7 +123,7 @@ Retrieve all active character sessions currently under orchestration.
 
 Retrieve all character ability and behavior configurations.
 
-**Status**: 200 OK
+**Response**: 200 OK
 
 ```json
 [
@@ -165,15 +154,19 @@ Retrieve all character ability and behavior configurations.
       "burn_at_hp_pct": null,
       "slow_at_hp_pct": null
     },
-    "auto_rez": {
-      "enabled": true,
-      "min_xp_pct": 96,
-      "trusted_casters": ["Highclerk", "Leafbinder"],
-      "decline_if_untrusted": true,
-      "delay_ms": 5000
-    },
     "group_override": false,
-    "group_name": "Group 1"
+    "group_name": "Group 1",
+    "reward_automation": {
+      "rules": [
+        {
+          "task_matcher": "*",
+          "preference": {
+            "kind": "by_position",
+            "reward_position": 1
+          }
+        }
+      ]
+    }
   }
 ]
 ```
@@ -188,23 +181,16 @@ Retrieve all character ability and behavior configurations.
 - `nuke_at_pct: u8` — Nuke trigger threshold (%)
 - `rotation: Vec<RotationEntry>` — Rotation abilities
 - `class_params: ClassParams` — Class-specific tuning
-- `auto_rez: AutoRezConfig` — Resurrection-offer policy for trust list, minimum XP, decline behavior, and delay
 - `group_override: bool` — Override group assignment
 - `group_name: Option<String>` — Group assignment
+- `reward_automation: RewardAutomationConfig` — Per-task reward selection rules
 
-### Get Character Config
+`RewardAutomationConfig.rules` supports:
 
-#### GET /api/config/characters/:name
-
-Retrieve a single character's configuration.
-
-**Status**: 501 Not Implemented (placeholder)
-
-**Path Parameters**:
-
-- `name: String` — Character name
-
-**Response**: 501 Not Implemented
+- `task_matcher: String` — Reward window title match. `*` acts as the default
+  fallback rule.
+- `preference.kind = "by_name"` with `reward_name`
+- `preference.kind = "by_position"` with 1-based `reward_position`
 
 ### Upsert Character Config
 
@@ -212,42 +198,21 @@ Retrieve a single character's configuration.
 
 Create or update a character configuration.
 
-**Status**: 200 OK
-
 **Path Parameters**:
 
 - `name: String` — Character name
 
 **Request Body**: `CharacterConfig` (character_name field ignored, uses path param)
 
+**Response**: 200 OK
+
 ```json
 {
   "character_name": "Frostreaver",
   "class": "Cleric",
-  "role": "Healer",
-  "heal_at_pct": 70,
-  "mana_sit_pct": 25,
-  "nuke_at_pct": 90,
-  "rotation": [],
-  "class_params": {
-    "ch_chain_timing_ms": 2500
-  },
-  "auto_rez": {
-    "enabled": true,
-    "min_xp_pct": 96,
-    "trusted_casters": ["Highclerk", "Leafbinder"],
-    "decline_if_untrusted": true,
-    "delay_ms": 5000
-  },
-  "group_override": false,
-  "group_name": "Group 1"
+  ...
 }
 ```
-
-**Notes**:
-
-- The current implementation stores character configs in memory for the running `textquest-web` process.
-- The request-body `character_name` is ignored and replaced with the `:name` path parameter.
 
 ---
 

@@ -3,7 +3,6 @@
 pub mod chat_log;
 pub mod chat_pattern_rules;
 pub mod dashboard;
-pub mod discord;
 pub mod economy;
 pub mod loot;
 pub mod say_detection;

@@ -18,18 +18,20 @@ use crate::{
     },
     chat_log::{ChatChannel, ChatLogConfig, ChatLogManager},
     combat::coordinator::CombatCoordinator,
+    economy::price_monitor::TradePriceMonitor,
     ipc::{pipe::CommandPipe, shared::SharedStateReader},
     say_detection::{SayAction, SayDetector, SayPattern, SayRule},
 };
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
+    time::{Duration, Instant, SystemTime},
 };
 use textquest_common::{
+    character_config::{CharacterConfigMap, RewardAutomationConfig, load_character_configs},
     combat::HateTargetCategory,
-    ipc::{Command, Response, SessionToken},
+    ipc::{ChatMessageInfo, Command, Response, SessionControlCommand, SessionToken},
     routing::RoutingScope,
-    shared_client_state::{SharedClientState, extended_state_enabled},
     types::GameState,
 };
 
@@ -48,24 +50,15 @@ const PROGRESSION_CHECK_INTERVAL: u64 = 50;
 
 /// Ticks before CC expiry to push a `CcExpiring` event.
 const CC_EXPIRY_BUFFER: u64 = 3;
+/// How often to check the persisted character config file for reward updates.
+const REWARD_CONFIG_SYNC_INTERVAL: u64 = 50;
 
-fn live_session_snapshot_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/runtime/live_sessions.json")
+fn character_config_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/character-configs.json")
 }
 
-fn persist_shared_client_states_to_path(
-    path: &Path,
-    states: &[SharedClientState],
-) -> anyhow::Result<()> {
-    let payload = serde_json::to_vec(states)?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let temp_path = path.with_extension("json.tmp");
-    std::fs::write(&temp_path, payload)?;
-    std::fs::rename(temp_path, path)?;
-    Ok(())
-}
+/// Poll interval for passive trade-chat capture.
+const TRADE_CHAT_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 /// Top-level orchestrator that ticks the camp loop and dispatches commands.
 pub struct Orchestrator {
@@ -111,6 +104,14 @@ pub struct Orchestrator {
     prev_cc_state: HashMap<u32, CcType>,
     /// Previous nearby spawn IDs for add detection.
     prev_nearby_spawns: HashMap<u32, String>,
+    /// Path to the persisted character configuration file.
+    character_config_path: PathBuf,
+    /// Last observed modification time for the character config file.
+    character_config_mtime: Option<SystemTime>,
+    /// Cached character configs loaded from disk.
+    cached_character_configs: CharacterConfigMap,
+    /// Last reward automation config sent to each live client.
+    last_sent_reward_configs: HashMap<u32, RewardAutomationConfig>,
     /// Lazy-initialized passive trade-price monitor.
     trade_price_monitor: Option<TradePriceMonitor>,
     /// Prevent repeated warning spam when the local trade-price DB cannot be
@@ -169,6 +170,10 @@ impl Orchestrator {
             suggested_camp: None,
             prev_cc_state: HashMap::new(),
             prev_nearby_spawns: HashMap::new(),
+            character_config_path: character_config_path(),
+            character_config_mtime: None,
+            cached_character_configs: HashMap::new(),
+            last_sent_reward_configs: HashMap::new(),
             trade_price_monitor: None,
             trade_price_monitor_open_failed: false,
             last_trade_chat_poll: None,
@@ -219,46 +224,70 @@ impl Orchestrator {
         }
     }
 
-    fn build_shared_client_states(&self) -> Vec<SharedClientState> {
-        let include_extended = extended_state_enabled();
-        self.client_pids
-            .iter()
-            .filter_map(|pid| {
-                let state = self.game_states.get(pid)?;
-                SharedClientState::from_game_state(
-                    self.client_names.get(pid).map(String::as_str),
-                    state,
-                    include_extended,
-                )
-            })
-            .collect()
-    }
-
-    fn sync_shared_client_states(&mut self) {
-        let states = self.build_shared_client_states();
-        if states == self.last_shared_client_states {
+    fn refresh_character_configs_if_changed(&mut self) {
+        let modified = std::fs::metadata(&self.character_config_path)
+            .and_then(|metadata| metadata.modified())
+            .ok();
+        if modified == self.character_config_mtime {
             return;
         }
 
-        let recipients = self.client_pids.clone();
-        for pid in recipients {
-            self.send_ipc_command(
-                pid,
-                Command::UpdateSharedClientStates {
-                    states: states.clone(),
-                },
-            );
+        match load_character_configs(&self.character_config_path) {
+            Ok(configs) => {
+                self.cached_character_configs = configs;
+                self.character_config_mtime = modified;
+            }
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    path = %self.character_config_path.display(),
+                    "Failed to reload character configs for reward automation; keeping last known good configs"
+                );
+            }
         }
-
-        if let Err(error) =
-            persist_shared_client_states_to_path(&live_session_snapshot_path(), &states)
-        {
-            tracing::warn!(%error, "Failed to persist live session snapshot");
-        }
-
-        self.last_shared_client_states = states;
     }
 
+    pub(crate) fn sync_reward_automation_configs(&mut self) {
+        self.refresh_character_configs_if_changed();
+
+        let known_pids = self.client_pids.clone();
+        self.last_sent_reward_configs
+            .retain(|pid, _| known_pids.contains(pid));
+
+        for pid in known_pids {
+            let Some(character_name) = self.client_names.get(&pid).cloned() else {
+                continue;
+            };
+
+            let config = self
+                .cached_character_configs
+                .get(&character_name)
+                .map(|cfg| cfg.reward_automation.clone())
+                .unwrap_or_default();
+
+            if self.last_sent_reward_configs.get(&pid) == Some(&config) {
+                continue;
+            }
+
+            // Only mark the config as "sent" if IPC actually delivered it.
+            // Otherwise a transient pipe failure during client startup would
+            // permanently starve the DLL's reward automation path, because
+            // the cache short-circuits future sync passes until the config
+            // changes again or the client is removed.
+            let dispatched = self.send_ipc_command(
+                pid,
+                Command::SetRewardAutomation {
+                    config: config.clone(),
+                },
+            );
+            if dispatched {
+                self.last_sent_reward_configs.insert(pid, config);
+            } else {
+                // Drop any stale entry so the next pass retries.
+                self.last_sent_reward_configs.remove(&pid);
+            }
+        }
+    }
     /// Build a `CampSnapshot` from live game state for the active camp's
     /// members. Returns `None` if any critical role (tank/healer) has stale
     /// state.
@@ -371,6 +400,14 @@ impl Orchestrator {
             .into_iter()
             .filter(|(pid, _)| in_scope.is_empty() || in_scope.contains(pid))
             .collect();
+        let emergency = self.cross_group.tick(
+            &self.session_controls,
+            &self.client_names,
+            &self.client_class_names,
+            &self.game_states,
+            &self.state_timestamps,
+            self.tick_count,
+        );
 
         let count = scoped.len();
         for (pid, action) in &scoped {
@@ -817,6 +854,9 @@ impl Orchestrator {
         if !self.client_pids.contains(&pid) {
             self.client_pids.push(pid);
         }
+        self.session_controls
+            .entry(pid)
+            .or_insert_with(|| SessionControl::new(pid));
         token
     }
 
@@ -879,7 +919,15 @@ impl Orchestrator {
     /// Send a structured IPC command to a client via named pipe.
     /// Creates a fresh connection per command (connect → token → command →
     /// drop).
-    pub(crate) fn send_ipc_command(&mut self, pid: u32, cmd: Command) {
+    ///
+    /// Returns `true` on successful dispatch, `false` on any failure
+    /// (pipe not ready, serialization error, remote-error response). Callers
+    /// that cache "last sent" state must check this value — see
+    /// `sync_reward_automation_configs` for the DLL-side reward-config sync
+    /// that previously cached "sent" unconditionally and could starve reward
+    /// automation when the pipe was briefly unavailable during client
+    /// startup.
+    pub(crate) fn send_ipc_command(&mut self, pid: u32, cmd: Command) -> bool {
         let name = self
             .client_names
             .get(&pid)
@@ -887,14 +935,29 @@ impl Orchestrator {
             .to_string();
 
         let Some(pipe) = self.get_pipe(pid) else {
-            return;
+            return false;
         };
         match pipe.send(&cmd) {
+            Ok(Response::CommandResult {
+                success: false,
+                message,
+            }) => {
+                tracing::warn!(
+                    pid,
+                    name = %name,
+                    ?cmd,
+                    %message,
+                    "DLL rejected IPC command"
+                );
+                false
+            }
             Ok(_response) => {
                 tracing::debug!(pid, name = %name, ?cmd, "Dispatched IPC command");
+                true
             }
             Err(e) => {
                 tracing::warn!(pid, name = %name, ?cmd, error = %e, "Failed to send command");
+                false
             }
         }
         // pipe is dropped here — DLL will disconnect its end too
@@ -927,6 +990,21 @@ impl Orchestrator {
             Ok(_) => Vec::new(),
             Err(e) => {
                 tracing::debug!(pid, error = %e, "Failed to poll spawn events");
+                Vec::new()
+            }
+        }
+    }
+
+    /// Poll a client for accumulated chat messages captured by the DLL.
+    pub fn poll_chat(&mut self, pid: u32) -> Vec<ChatMessageInfo> {
+        let Some(pipe) = self.get_pipe(pid) else {
+            return Vec::new();
+        };
+        match pipe.send(&Command::PollChat) {
+            Ok(Response::ChatBatch { messages }) => messages,
+            Ok(_) => Vec::new(),
+            Err(e) => {
+                tracing::debug!(pid, error = %e, "Failed to poll chat");
                 Vec::new()
             }
         }
@@ -1379,7 +1457,7 @@ mod tests {
     use super::*;
     use crate::camp::state::Role;
     use textquest_common::{
-        combat::{BuffCategory, BuffInfo, CombatStatus},
+        combat::CombatStatus,
         nav::NavStatus,
         types::{GameState, SpawnData},
     };
@@ -1413,9 +1491,9 @@ mod tests {
         ]
     }
 
-    fn make_spawn(name: &str, class_id: u8, hp_current: i64, mana_current: i32) -> SpawnData {
+    fn make_spawn_named(name: &str, class_id: u8, hp_current: i64, hp_max: i64) -> SpawnData {
         SpawnData {
-            spawn_id: class_id as u32 * 10,
+            spawn_id: 1,
             name: name.into(),
             displayed_name: name.into(),
             spawn_type: 0,
@@ -1426,113 +1504,45 @@ mod tests {
             z: 0.0,
             heading: 0.0,
             hp_current,
-            hp_max: 1000,
-            mana_current,
+            hp_max,
+            mana_current: 1000,
             mana_max: 1000,
-            endurance_current: 500,
-            endurance_max: 1000,
+            endurance_current: 100,
+            endurance_max: 100,
             speed_run: 0.0,
-            stand_state: 0,
+            stand_state: if hp_current <= 0 { 111 } else { 0 },
             is_gm: false,
         }
     }
 
-    fn make_game_state(name: &str, class_id: u8, hp_current: i64, mana_current: i32) -> GameState {
+    fn make_game_state(
+        client_id: u32,
+        zone: &str,
+        local_player: SpawnData,
+        target: Option<SpawnData>,
+    ) -> GameState {
         GameState {
-            client_id: class_id as u32,
-            local_player: Some(make_spawn(name, class_id, hp_current, mana_current)),
-            target: Some(SpawnData {
-                spawn_id: 999,
-                name: "a frost giant".into(),
-                displayed_name: "a frost giant".into(),
-                spawn_type: 1,
-                level: 60,
-                class_id: 1,
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-                heading: 0.0,
-                hp_current: 500,
-                hp_max: 1000,
-                mana_current: 0,
-                mana_max: 0,
-                endurance_current: 0,
-                endurance_max: 0,
-                speed_run: 0.0,
-                stand_state: 0,
-                is_gm: false,
-            }),
+            client_id,
+            local_player: Some(local_player),
+            target,
             nearby_spawns: vec![],
             timestamp_ms: 0,
             nav_status: NavStatus::Idle,
-            combat_status: CombatStatus::Engaging { target_id: 999 },
-            zone_short_name: "kael".into(),
-            zone_long_name: "Kael Drakkel".into(),
-            active_buffs: vec![BuffInfo {
-                spell_id: 1234,
-                duration_ticks: 12,
-                initial_duration: 20,
-                hit_count: 0,
-                category: BuffCategory::LongBuff,
-                caster_level: 60,
-                slot_index: 1,
-            }],
-            pet: None,
+            combat_status: if client_id.is_multiple_of(10) {
+                CombatStatus::Idle
+            } else {
+                CombatStatus::Engaging { target_id: 999 }
+            },
+            zone_short_name: zone.to_string(),
+            zone_long_name: zone.to_string(),
             actual_version: None,
         }
     }
 
-    #[test]
-    fn build_shared_client_states_exposes_vitals_target_and_buffs() {
-        let mut orch = Orchestrator::new();
-        orch.client_pids = vec![100, 101];
-        orch.client_names.insert(100, "Tank".into());
-        orch.client_names.insert(101, "Healer".into());
-        orch.game_states
-            .insert(100, make_game_state("Tank", 1, 900, 0));
-        orch.game_states
-            .insert(101, make_game_state("Healer", 2, 700, 800));
-
-        let states = orch.build_shared_client_states();
-
-        assert_eq!(states.len(), 2);
-        assert_eq!(states[0].character_name, "Tank");
-        assert_eq!(
-            states[0].target.as_ref().map(|target| target.spawn_id),
-            Some(999)
-        );
-        assert_eq!(states[0].buffs[0].spell_id, 1234);
-        assert!((states[1].hp_pct - 70.0).abs() < f32::EPSILON);
-        assert!((states[1].mana_pct - 80.0).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn persist_shared_client_states_to_path_writes_json_snapshot() {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let path = tempdir.path().join("runtime/live_sessions.json");
-        let states = vec![SharedClientState {
-            client_id: 100,
-            spawn_id: 42,
-            character_name: "Frostreaver".into(),
-            class_id: 2,
-            level: 60,
-            zone_short_name: "kael".into(),
-            zone_long_name: "Kael Drakkel".into(),
-            hp_pct: 75.0,
-            mana_pct: 80.0,
-            endurance_pct: 50.0,
-            is_dead: false,
-            status: "active".into(),
-            target: None,
-            buffs: Vec::new(),
-            pet: None,
-        }];
-
-        persist_shared_client_states_to_path(&path, &states).expect("snapshot write");
-
-        let payload = std::fs::read_to_string(path).expect("snapshot exists");
-        assert!(payload.contains("Frostreaver"));
-        assert!(payload.contains("\"hp_pct\":75.0"));
+    fn mark_states_fresh(orch: &mut Orchestrator, pids: &[u32]) {
+        for &pid in pids {
+            orch.state_timestamps.insert(pid, orch.tick_count);
+        }
     }
 
     #[test]
@@ -1657,8 +1667,6 @@ mod tests {
                 local_player: Some(make_spawn(800, 1000, 0, 0)),
                 target: Some(make_spawn(500, 1000, 0, 0)),
                 nearby_spawns: vec![],
-                active_buffs: vec![],
-                pet: None,
                 timestamp_ms: 0,
                 nav_status: NavStatus::Idle,
                 combat_status: CombatStatus::Idle,
@@ -1676,8 +1684,6 @@ mod tests {
                 local_player: Some(make_spawn(1000, 1000, 600, 1000)),
                 target: None,
                 nearby_spawns: vec![],
-                active_buffs: vec![],
-                pet: None,
                 timestamp_ms: 0,
                 nav_status: NavStatus::Idle,
                 combat_status: CombatStatus::Idle,
@@ -1751,8 +1757,6 @@ mod tests {
                 local_player: Some(make_spawn(1000, 1000, 0, 0)),
                 target: None,
                 nearby_spawns: vec![],
-                active_buffs: vec![],
-                pet: None,
                 timestamp_ms: 0,
                 nav_status: NavStatus::Idle,
                 combat_status: CombatStatus::Idle,
@@ -1768,8 +1772,6 @@ mod tests {
                 local_player: Some(make_spawn(1000, 1000, 1000, 1000)),
                 target: None,
                 nearby_spawns: vec![],
-                active_buffs: vec![],
-                pet: None,
                 timestamp_ms: 0,
                 nav_status: NavStatus::Idle,
                 combat_status: CombatStatus::Idle,
@@ -2062,8 +2064,6 @@ mod tests {
                 }),
                 target: None,
                 nearby_spawns: vec![new_npc],
-                active_buffs: vec![],
-                pet: None,
                 timestamp_ms: 0,
                 nav_status: NavStatus::Idle,
                 combat_status: CombatStatus::Idle,
@@ -2157,5 +2157,390 @@ mod tests {
         let orch = Orchestrator::new();
         assert_eq!(orch.routing_scope, RoutingScope::AllSession);
         assert!(orch.scope_pids.is_empty());
+    }
+
+    #[test]
+    fn cross_group_rez_dispatches_same_zone_cleric_once() {
+        let mut orch = Orchestrator::new();
+
+        for pid in [100, 101, 200, 201] {
+            orch.register_client(pid);
+        }
+
+        orch.client_names.insert(100, "Warrior01".into());
+        orch.client_names.insert(101, "Cleric01".into());
+        orch.client_names.insert(200, "Warrior02".into());
+        orch.client_names.insert(201, "Cleric02".into());
+
+        orch.set_client_group(100, 1);
+        orch.set_client_group(101, 1);
+        orch.set_client_group(200, 2);
+        orch.set_client_group(201, 2);
+
+        orch.set_client_class_name(100, "Warrior");
+        orch.set_client_class_name(101, "Cleric");
+        orch.set_client_class_name(200, "Warrior");
+        orch.set_client_class_name(201, "Cleric");
+
+        orch.game_states.insert(
+            100,
+            make_game_state(
+                100,
+                "crushbone",
+                make_spawn_named("Warrior01", 1, 1800, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            101,
+            make_game_state(
+                101,
+                "crushbone",
+                make_spawn_named("Cleric01", 2, 1500, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            200,
+            make_game_state(
+                200,
+                "crushbone",
+                make_spawn_named("Warrior02", 1, 0, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            201,
+            make_game_state(
+                201,
+                "crushbone",
+                make_spawn_named("Cleric02", 2, 0, 2000),
+                None,
+            ),
+        );
+        mark_states_fresh(&mut orch, &[100, 101, 200, 201]);
+
+        let first_tick = orch.tick();
+        assert_eq!(first_tick, 2, "expected rez target + cast commands");
+        assert!(
+            orch.last_dispatched
+                .iter()
+                .any(|(pid, action)| *pid == 101 && action == "/target Cleric02")
+        );
+        assert!(
+            orch.last_dispatched
+                .iter()
+                .any(|(pid, action)| *pid == 101 && action == "/cast 5")
+        );
+
+        let second_tick = orch.tick();
+        assert_eq!(second_tick, 0, "rez request should not spam every tick");
+    }
+
+    #[test]
+    fn cross_group_assist_dispatches_same_zone_attackers_once() {
+        let mut orch = Orchestrator::new();
+
+        for pid in [110, 111, 210, 211] {
+            orch.register_client(pid);
+        }
+
+        orch.client_names.insert(110, "Warrior10".into());
+        orch.client_names.insert(111, "Cleric10".into());
+        orch.client_names.insert(210, "Warrior20".into());
+        orch.client_names.insert(211, "Ranger20".into());
+
+        orch.set_client_group(110, 1);
+        orch.set_client_group(111, 1);
+        orch.set_client_group(210, 2);
+        orch.set_client_group(211, 2);
+
+        orch.set_client_class_name(110, "Warrior");
+        orch.set_client_class_name(111, "Cleric");
+        orch.set_client_class_name(210, "Warrior");
+        orch.set_client_class_name(211, "Ranger");
+
+        let rescue_target = Some(make_spawn_named("an_orc_centurion", 1, 900, 1000));
+        orch.game_states.insert(
+            110,
+            make_game_state(
+                110,
+                "crushbone",
+                make_spawn_named("Warrior10", 1, 300, 2000),
+                rescue_target.clone(),
+            ),
+        );
+        orch.game_states.insert(
+            111,
+            make_game_state(
+                111,
+                "crushbone",
+                make_spawn_named("Cleric10", 2, 500, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            210,
+            make_game_state(
+                210,
+                "crushbone",
+                make_spawn_named("Warrior20", 1, 1800, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            211,
+            make_game_state(
+                211,
+                "crushbone",
+                make_spawn_named("Ranger20", 4, 1600, 2000),
+                None,
+            ),
+        );
+        mark_states_fresh(&mut orch, &[110, 111, 210, 211]);
+
+        let first_tick = orch.tick();
+        assert_eq!(first_tick, 4, "expected assist + attack for each responder");
+        assert!(
+            orch.last_dispatched
+                .iter()
+                .any(|(pid, action)| *pid == 210 && action == "/assist Warrior10")
+        );
+        assert!(
+            orch.last_dispatched
+                .iter()
+                .any(|(pid, action)| *pid == 211 && action == "/assist Warrior10")
+        );
+
+        let second_tick = orch.tick();
+        assert_eq!(second_tick, 0, "assist request should not spam every tick");
+    }
+
+    #[test]
+    fn cross_group_coordination_skips_other_zones() {
+        let mut orch = Orchestrator::new();
+
+        for pid in [120, 121, 220] {
+            orch.register_client(pid);
+        }
+
+        orch.client_names.insert(120, "Warrior12".into());
+        orch.client_names.insert(121, "Cleric12".into());
+        orch.client_names.insert(220, "Cleric22".into());
+
+        orch.set_client_group(120, 1);
+        orch.set_client_group(121, 1);
+        orch.set_client_group(220, 2);
+
+        orch.set_client_class_name(120, "Warrior");
+        orch.set_client_class_name(121, "Cleric");
+        orch.set_client_class_name(220, "Cleric");
+
+        orch.game_states.insert(
+            120,
+            make_game_state(
+                120,
+                "mistmoore",
+                make_spawn_named("Warrior12", 1, 0, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            121,
+            make_game_state(
+                121,
+                "mistmoore",
+                make_spawn_named("Cleric12", 2, 0, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            220,
+            make_game_state(
+                220,
+                "guktop",
+                make_spawn_named("Cleric22", 2, 1700, 2000),
+                None,
+            ),
+        );
+        mark_states_fresh(&mut orch, &[120, 121, 220]);
+
+        assert_eq!(orch.tick(), 0, "different-zone groups must not coordinate");
+        assert!(orch.last_dispatched.is_empty());
+    }
+
+    #[test]
+    fn cross_group_priority_reserves_responder_for_rez_before_assist() {
+        let mut orch = Orchestrator::new();
+
+        for pid in [130, 131, 230, 231, 330, 331] {
+            orch.register_client(pid);
+        }
+
+        orch.client_names.insert(130, "Warrior13".into());
+        orch.client_names.insert(131, "Cleric13".into());
+        orch.client_names.insert(230, "Warrior23".into());
+        orch.client_names.insert(231, "Cleric23".into());
+        orch.client_names.insert(330, "Warrior33".into());
+        orch.client_names.insert(331, "Cleric33".into());
+
+        orch.set_client_group(130, 1);
+        orch.set_client_group(131, 1);
+        orch.set_client_group(230, 2);
+        orch.set_client_group(231, 2);
+        orch.set_client_group(330, 3);
+        orch.set_client_group(331, 3);
+
+        orch.set_client_class_name(130, "Warrior");
+        orch.set_client_class_name(131, "Cleric");
+        orch.set_client_class_name(230, "Warrior");
+        orch.set_client_class_name(231, "Cleric");
+        orch.set_client_class_name(330, "Warrior");
+        orch.set_client_class_name(331, "Cleric");
+
+        orch.game_states.insert(
+            130,
+            make_game_state(
+                130,
+                "crushbone",
+                make_spawn_named("Warrior13", 1, 0, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            131,
+            make_game_state(
+                131,
+                "crushbone",
+                make_spawn_named("Cleric13", 2, 0, 2000),
+                None,
+            ),
+        );
+
+        let mut add_target = make_spawn_named("an_orc_legionnaire", 1, 900, 1000);
+        add_target.spawn_type = 1;
+        orch.game_states.insert(
+            230,
+            make_game_state(
+                230,
+                "crushbone",
+                make_spawn_named("Warrior23", 1, 400, 2000),
+                Some(add_target.clone()),
+            ),
+        );
+        orch.game_states.insert(
+            231,
+            make_game_state(
+                231,
+                "crushbone",
+                make_spawn_named("Cleric23", 2, 500, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            330,
+            make_game_state(
+                330,
+                "crushbone",
+                make_spawn_named("Warrior33", 1, 1800, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            331,
+            make_game_state(
+                331,
+                "crushbone",
+                make_spawn_named("Cleric33", 2, 1700, 2000),
+                None,
+            ),
+        );
+        mark_states_fresh(&mut orch, &[130, 131, 230, 231, 330, 331]);
+
+        let first_tick = orch.tick();
+        assert_eq!(
+            first_tick, 2,
+            "single responder group should be reserved for the higher-priority rez"
+        );
+        assert!(
+            orch.last_dispatched
+                .iter()
+                .any(|(pid, action)| *pid == 331 && action == "/target Cleric13")
+        );
+        assert!(
+            orch.last_dispatched
+                .iter()
+                .all(|(_, action)| !action.starts_with("/assist "))
+        );
+    }
+
+    #[test]
+    fn cross_group_ignores_stale_group_state() {
+        let mut orch = Orchestrator::new();
+
+        for pid in [140, 141, 240, 241] {
+            orch.register_client(pid);
+        }
+
+        orch.client_names.insert(140, "Warrior14".into());
+        orch.client_names.insert(141, "Cleric14".into());
+        orch.client_names.insert(240, "Warrior24".into());
+        orch.client_names.insert(241, "Cleric24".into());
+
+        orch.set_client_group(140, 1);
+        orch.set_client_group(141, 1);
+        orch.set_client_group(240, 2);
+        orch.set_client_group(241, 2);
+
+        orch.set_client_class_name(140, "Warrior");
+        orch.set_client_class_name(141, "Cleric");
+        orch.set_client_class_name(240, "Warrior");
+        orch.set_client_class_name(241, "Cleric");
+
+        orch.game_states.insert(
+            140,
+            make_game_state(
+                140,
+                "crushbone",
+                make_spawn_named("Warrior14", 1, 0, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            141,
+            make_game_state(
+                141,
+                "crushbone",
+                make_spawn_named("Cleric14", 2, 0, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            240,
+            make_game_state(
+                240,
+                "crushbone",
+                make_spawn_named("Warrior24", 1, 1800, 2000),
+                None,
+            ),
+        );
+        orch.game_states.insert(
+            241,
+            make_game_state(
+                241,
+                "crushbone",
+                make_spawn_named("Cleric24", 2, 1700, 2000),
+                None,
+            ),
+        );
+
+        orch.tick_count = STALE_TICK_THRESHOLD + 5;
+        orch.state_timestamps.insert(140, 1);
+        orch.state_timestamps.insert(141, 1);
+        orch.state_timestamps.insert(240, orch.tick_count);
+        orch.state_timestamps.insert(241, orch.tick_count);
+
+        assert_eq!(orch.tick(), 0, "stale groups must not request rescue");
+        assert!(orch.last_dispatched.is_empty());
     }
 }
