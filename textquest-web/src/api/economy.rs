@@ -195,6 +195,8 @@ mod tests {
             alerting_config_path: std::env::temp_dir()
                 .join(format!("textquest-economy-test-alerting-{}.toml", uuid::Uuid::new_v4())),
             api_token: None,
+            live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../data/runtime/economy-test-live-sessions.json"),
         })
     }
 

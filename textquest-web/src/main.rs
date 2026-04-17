@@ -532,6 +532,7 @@ mod tests {
     };
     use http_body_util::BodyExt;
     use serde_json::{Value, json};
+    use textquest_common::shared_client_state::SharedClientState;
     use tower::ServiceExt;
 
     async fn json_response(app: Router, request: Request<Body>) -> (StatusCode, Value) {
@@ -628,6 +629,51 @@ mod tests {
                 .unwrap_or_default()
                 .contains("not implemented")
         );
+    }
+
+    #[tokio::test]
+    async fn sessions_endpoint_prefers_live_snapshot_when_present() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let state = test_state_with_credentials(&tempdir.path().join("creds.db"));
+        std::fs::write(
+            &state.live_session_snapshot_path,
+            serde_json::to_vec(&vec![SharedClientState {
+                client_id: 77,
+                spawn_id: 42,
+                character_name: "Frostreaver".into(),
+                class_id: 2,
+                level: 60,
+                zone_short_name: "kael".into(),
+                zone_long_name: "Kael Drakkel".into(),
+                hp_pct: 72.5,
+                mana_pct: 81.0,
+                endurance_pct: 49.0,
+                is_dead: false,
+                status: "active".into(),
+                target: None,
+                buffs: Vec::new(),
+                pet: None,
+            }])
+            .expect("snapshot json"),
+        )
+        .expect("write snapshot");
+
+        let app = build_app(state);
+        let (status, body) = json_response(
+            app,
+            Request::builder()
+                .uri("/api/sessions")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let sessions = body.as_array().expect("sessions array");
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0]["character_name"], "Frostreaver");
+        assert_eq!(sessions[0]["zone"], "Kael Drakkel");
+        assert_eq!(sessions[0]["endurance_pct"], 49.0);
     }
 
     #[tokio::test]
