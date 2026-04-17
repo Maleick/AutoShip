@@ -115,6 +115,8 @@ pub struct AppState {
     pub say_detection: Option<Arc<api::say_detection::SayDetectionState>>,
     /// Auto-group formation state — MQ2AutoGroup parity.
     pub auto_group_state: Arc<api::auto_group::AutoGroupState>,
+    /// Persisted extension catalog metadata, overrides, and runtime status.
+    pub extension_catalog_state: Arc<api::extensions::ExtensionCatalogState>,
 }
 
 /// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is
@@ -371,6 +373,9 @@ fn build_state() -> Arc<AppState> {
         chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
         auto_group_state: api::auto_group::AutoGroupState::new_demo(),
+        extension_catalog_state: api::extensions::ExtensionCatalogState::load(
+            api::extensions::extension_catalog_path(),
+        ),
     })
 }
 
@@ -416,6 +421,12 @@ pub(crate) fn test_app_state() -> AppState {
         chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
         auto_group_state: api::auto_group::AutoGroupState::new_demo(),
+        extension_catalog_state: api::extensions::ExtensionCatalogState::load(
+            std::env::temp_dir().join(format!(
+                "textquest-web-test-extension-catalog-{}.json",
+                uuid::Uuid::new_v4()
+            )),
+        ),
     }
 }
 
@@ -464,6 +475,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .route("/sessions", get(api::list_sessions))
         .nest("/accounts", accounts::router())
         .nest("/dashboard", api::dashboard::router())
+        .nest("/extensions", api::extensions::router())
         .route(
             "/box-chat/settings",
             get(api::get_box_chat_settings).put(api::put_box_chat_settings),
@@ -718,6 +730,12 @@ mod tests {
             chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
             say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
             auto_group_state: api::auto_group::AutoGroupState::new_demo(),
+            extension_catalog_state: api::extensions::ExtensionCatalogState::load(
+                std::env::temp_dir().join(format!(
+                    "textquest-main-test-extension-catalog-{}.json",
+                    uuid::Uuid::new_v4()
+                )),
+            ),
         })
     }
 
@@ -806,6 +824,214 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn extension_catalog_routes_expose_supported_entries() {
+        let app = build_app(Arc::new(test_app_state()));
+        let (status, body) = json_response(
+            app,
+            Request::builder()
+                .uri("/api/extensions/catalog")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let entries = body.as_array().expect("catalog array");
+        assert!(
+            entries.iter().any(|entry| entry["id"] == "mq2eqbc"),
+            "expected box-chat parity entry in extension catalog"
+        );
+        assert!(
+            entries.iter().any(|entry| entry["id"] == "mq2autoaccept"),
+            "expected auto-accept parity entry in extension catalog"
+        );
+    }
+
+    #[tokio::test]
+    async fn extension_catalog_scope_overrides_round_trip() {
+        let app = build_app(Arc::new(test_app_state()));
+
+        let (status, saved) = json_response(
+            app.clone(),
+            Request::builder()
+                .method("PUT")
+                .uri("/api/extensions/catalog/mq2autoaccept/scopes/character/Frostreaver")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "settings": {
+                            "enabled": true,
+                            "acceptGroupInvites": true,
+                            "acceptTrades": true,
+                            "acceptTaskAdds": true,
+                            "acceptDzAdds": true,
+                            "acceptTranslocates": true,
+                            "acceptAnchors": true,
+                            "trustMode": "trust_list",
+                            "trustedPlayers": ["Noxus"]
+                        }
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(saved["scope"]["kind"], "character");
+        assert_eq!(saved["scope"]["id"], "Frostreaver");
+
+        let (status, entry) = json_response(
+            app.clone(),
+            Request::builder()
+                .uri("/api/extensions/catalog/mq2autoaccept")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(entry["id"], "mq2autoaccept");
+        assert_eq!(
+            entry["overrides"].as_array().expect("override array").len(),
+            1
+        );
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/extensions/catalog/mq2autoaccept/scopes/character/Frostreaver")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn extension_catalog_rejects_invalid_settings_payloads() {
+        let app = build_app(Arc::new(test_app_state()));
+
+        let (status, body) = json_response(
+            app,
+            Request::builder()
+                .method("PUT")
+                .uri("/api/extensions/catalog/mq2eqbc/settings")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "settings": {
+                            "enabled": true,
+                            "host": "127.0.0.1",
+                            "port": 2112,
+                            "autoConnect": false,
+                            "bogusField": "unexpected"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], "Unsupported setting `bogusField`");
+    }
+
+    #[tokio::test]
+    async fn extension_catalog_write_routes_reject_untrusted_origin() {
+        let app = build_app(Arc::new(test_app_state()));
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/extensions/catalog/mq2eqbc/settings")
+                    .header("origin", "https://evil.invalid")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "settings": {
+                                "enabled": true,
+                                "host": "127.0.0.1",
+                                "port": 2112,
+                                "autoConnect": true
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/extensions/catalog/mq2autoaccept/scopes/character/Frostreaver")
+                    .header("origin", "https://evil.invalid")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "settings": {
+                                "enabled": true,
+                                "acceptGroupInvites": true,
+                                "acceptTrades": true,
+                                "acceptTaskAdds": true,
+                                "acceptDzAdds": true,
+                                "acceptTranslocates": true,
+                                "acceptAnchors": true,
+                                "trustMode": "trust_all",
+                                "trustedPlayers": []
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/extensions/catalog/mq2autoaccept/scopes/character/Frostreaver")
+                    .header("origin", "https://evil.invalid")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/extensions/catalog/mq2eqbc/runtime")
+                    .header("origin", "https://evil.invalid")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "enabled": true
+                        })
+                        .to_string(),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]

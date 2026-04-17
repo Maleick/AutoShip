@@ -167,7 +167,7 @@ const baseSnapshot: DashboardSnapshot = {
   },
   relocation: {
     readyDestinations: 2,
-    coolingDownCount: 1,
+    coolingDownCount: 2,
     destinations: [
       {
         zone: "guildlobby",
@@ -188,12 +188,20 @@ const baseSnapshot: DashboardSnapshot = {
       {
         zone: "guildhall",
         label: "Guild Hall",
-        preferredOption: "Primary Anchor",
+        preferredOption: "Secondary Anchor",
         preferredSource: "item",
         options: [
           {
             id: "primary_anchor",
             name: "Primary Anchor",
+            source: "item",
+            owned: true,
+            ready: false,
+            cooldownRemainingSecs: 900,
+          },
+          {
+            id: "secondary_anchor",
+            name: "Secondary Anchor",
             source: "item",
             owned: true,
             ready: false,
@@ -227,8 +235,16 @@ const baseSnapshot: DashboardSnapshot = {
   },
   combat: {
     dpsSeries: [
-      { characterName: "Aelrindel", color: "#60a5fa", samples: [1200, 1800, 2400, 2100] },
-      { characterName: "Noxus", color: "#f97316", samples: [900, 1100, 950, 1050] },
+      {
+        characterName: "Aelrindel",
+        color: "#60a5fa",
+        samples: [1200, 1800, 2400, 2100],
+      },
+      {
+        characterName: "Noxus",
+        color: "#f97316",
+        samples: [900, 1100, 950, 1050],
+      },
     ],
     spellUsage: [
       { spellName: "Ice Comet", casts: 24, efficiency: 91 },
@@ -249,8 +265,20 @@ const baseSnapshot: DashboardSnapshot = {
   },
   health: {
     clients: [
-      { clientId: 1, characterName: "Frostreaver", memoryMb: 684, frameRate: 58, status: "healthy" },
-      { clientId: 2, characterName: "Noxus", memoryMb: 742, frameRate: 41, status: "warning" },
+      {
+        clientId: 1,
+        characterName: "Frostreaver",
+        memoryMb: 684,
+        frameRate: 58,
+        status: "healthy",
+      },
+      {
+        clientId: 2,
+        characterName: "Noxus",
+        memoryMb: 742,
+        frameRate: 41,
+        status: "warning",
+      },
     ],
     ipcLatency: { p50: 9, p95: 22, p99: 37 },
     errorLog: [
@@ -265,12 +293,51 @@ const baseSnapshot: DashboardSnapshot = {
 };
 
 const baseDiscordSettings = createDefaultDiscordSettings();
+const extensionCatalog = [
+  {
+    id: "mq2eqbc",
+    displayName: "MQ2EQBC",
+    description: "Relay integration",
+    domain: "operator_utilities",
+    compatibilityTier: "adapted",
+    sourceKind: "textquest_native",
+    configProvenance: {
+      kind: "extension_catalog",
+      label: "Dashboard sidecar",
+      path: "config/extensions-catalog.json",
+    },
+    supportedScopes: ["character", "group", "session"],
+    schema: [
+      {
+        key: "enabled",
+        label: "Enabled",
+        description: "Enable relay integration",
+        kind: "boolean",
+        required: true,
+        defaultValue: false,
+      },
+    ],
+    settings: {
+      enabled: false,
+    },
+    overrides: [],
+    runtime: {
+      enabled: false,
+      adapterHealth: "disabled",
+      lastSyncMessage: "Runtime disabled",
+    },
+    unsupportedFields: [],
+  },
+] as const;
 
 function mockDashboardFetch(actionSnapshot = baseSnapshot) {
   const fetchMock = vi.mocked(fetch);
   fetchMock.mockImplementation(async (input, init) => {
     if (input === "/api/dashboard") {
       return jsonResponse(baseSnapshot);
+    }
+    if (input === "/api/extensions/catalog") {
+      return jsonResponse(extensionCatalog);
     }
     if (input === "/api/config/discord") {
       return jsonResponse(baseDiscordSettings);
@@ -313,13 +380,25 @@ describe("App dashboard integration", () => {
       ).toBeInTheDocument()
     );
 
-    expect(screen.getByRole("heading", { name: /group coordination/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /navigation control/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /economy monitoring/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /combat analytics/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /system health/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /group coordination/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /navigation control/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /economy monitoring/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /combat analytics/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /system health/i })
+    ).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: /security wards/i })).toBeInTheDocument()
+      expect(
+        screen.getByRole("heading", { name: /security wards/i })
+      ).toBeInTheDocument()
     );
     expect(screen.getAllByText(/plane of fire/i).length).toBeGreaterThan(0);
   }, 15000);
@@ -395,6 +474,23 @@ describe("App dashboard integration", () => {
     expect(screen.getByText(/newpuller/i)).toBeInTheDocument();
   }, 15000);
 
+  it("navigates to the extension catalog view", async () => {
+    const fetchMock = mockDashboardFetch();
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: /extension catalog/i }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/extensions/catalog")
+    );
+    expect(
+      screen.getByRole("heading", { name: /extension catalog/i })
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByText(/relay integration/i).length).toBeGreaterThan(0)
+    );
+  });
   it("navigates to awareness coordination panels from the main app shell", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockImplementation(async (input) => {

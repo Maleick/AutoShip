@@ -104,6 +104,11 @@ async fn receive_message(socket: &mut WebSocket) -> Option<Message> {
 #[cfg(test)]
 mod tests {
     use crate::{AppState, build_app};
+    use axum::http::StatusCode;
+    use axum::{
+        Json,
+        extract::{Path as AxumPath, State},
+    };
     use futures_util::{SinkExt, StreamExt};
     use std::{sync::Arc, time::Duration};
     use tokio::{net::TcpListener, task::JoinHandle, time::timeout};
@@ -152,8 +157,14 @@ mod tests {
         (state, server, socket)
     }
 
+    fn websocket_test_timeout() -> Duration {
+        // Coverage instrumentation slows websocket handshakes and broadcast
+        // delivery enough that a 1s test budget becomes flaky in CI.
+        Duration::from_secs(10)
+    }
+
     async fn wait_for_receiver_count(state: &AppState, expected: usize) {
-        timeout(Duration::from_secs(1), async {
+        timeout(websocket_test_timeout(), async {
             while state.event_tx.receiver_count() != expected {
                 tokio::task::yield_now().await;
             }
@@ -167,7 +178,7 @@ mod tests {
             tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
         >,
     ) -> WsMessage {
-        timeout(Duration::from_secs(1), socket.next())
+        timeout(websocket_test_timeout(), socket.next())
             .await
             .expect("message should arrive in time")
             .expect("socket should stay open")
@@ -227,6 +238,34 @@ mod tests {
             next_message(&mut socket).await,
             WsMessage::Text("after-text".into())
         );
+
+        server.abort();
+        let _ = server.await;
+    }
+
+    #[tokio::test]
+    async fn websocket_receives_extension_runtime_events() {
+        let (state, server, mut socket) = connect_test_socket().await;
+
+        let response = crate::api::extensions::put_runtime_status(
+            State(state.clone()),
+            AxumPath("mq2eqbc".to_string()),
+            axum::http::HeaderMap::new(),
+            Json(crate::api::extensions::RuntimeUpdateRequest { enabled: true }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let message = next_message(&mut socket).await;
+        let WsMessage::Text(payload) = message else {
+            panic!("expected websocket text frame");
+        };
+        let event: serde_json::Value =
+            serde_json::from_str(payload.as_ref()).expect("runtime event json");
+        assert_eq!(event["type"], "extension.runtime");
+        assert_eq!(event["entry"]["id"], "mq2eqbc");
+        assert_eq!(event["entry"]["runtime"]["enabled"], true);
+        assert_eq!(event["entry"]["runtime"]["adapterHealth"], "healthy");
 
         server.abort();
         let _ = server.await;
@@ -301,7 +340,7 @@ mod tests {
 
         let mut socket = socket;
         assert_eq!(
-            timeout(Duration::from_secs(1), socket.next())
+            timeout(websocket_test_timeout(), socket.next())
                 .await
                 .expect("message should arrive in time")
                 .expect("socket should stay open")

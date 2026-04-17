@@ -5,6 +5,7 @@ import BoxChatPanel from "./components/BoxChatPanel";
 import CenterContent from "./components/CenterContent";
 import ChatPatternRules from "./components/ChatPatternRules";
 import EconomyPanel from "./components/EconomyPanel";
+import ExtensionCatalogPanel from "./components/ExtensionCatalogPanel";
 import GroupBuilder from "./components/GroupBuilder";
 import LeftSidebar, { type ActiveView } from "./components/LeftSidebar";
 import LootConfig from "./components/LootConfig";
@@ -46,6 +47,8 @@ function App() {
           <PlayerWatchPanel />
         ) : activeView === "chat_pattern_rules" ? (
           <ChatPatternRules />
+        ) : activeView === "extensions" ? (
+          <ExtensionCatalogPanel />
         ) : activeView === "say" ? (
           <SayDetectionPanel />
         ) : activeView === "xassist" ? (

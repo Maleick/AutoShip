@@ -6,6 +6,7 @@ import {
   ChatCircle,
   ChatTeardropText,
   Coins,
+  Cpu,
   Crosshair,
   Eye,
   Globe,
@@ -25,6 +26,7 @@ export type ActiveView =
   | "loot"
   | "soul"
   | "boxchat"
+  | "extensions"
   | "spawns"
   | "player_watch"
   | "say"
@@ -50,6 +52,7 @@ const navItems: {
   { icon: Bag, label: "Loot Configuration", id: "loot" },
   { icon: Brain, label: "Soul Engine", id: "soul" },
   { icon: Broadcast, label: "Network Box Chat", id: "boxchat" },
+  { icon: Cpu, label: "Extension Catalog", id: "extensions", pulse: true },
   { icon: ChatCircle, label: "Chat Pattern Rules", id: "chat_pattern_rules" },
 ];
 

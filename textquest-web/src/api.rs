@@ -7,6 +7,7 @@ pub mod chat_pattern_rules;
 pub mod dashboard;
 pub mod discord;
 pub mod economy;
+pub mod extensions;
 pub mod gm_alerts;
 pub mod kill_tracker;
 pub mod loot;

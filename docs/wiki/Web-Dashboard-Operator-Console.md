@@ -18,9 +18,28 @@ Issue `#1691` extends that operator console by making the mounted app boot into 
 - `Alert Routing`
 - `Rare Spawn Alerts`
 - `Network Box Chat`
+- `Extension Catalog`
 
 The plugin-by-plugin parity accounting for those surfaces lives in
 [`RedGuides-Awareness-and-Coordination-Parity.md`](RedGuides-Awareness-and-Coordination-Parity).
+
+Issue `#1690` adds the extension catalog workflow operators needed for
+RedGuides / OpenVanilla parity without editing sidecar files by hand:
+
+- `GET /api/extensions/catalog` exposes the supported extension inventory,
+  compatibility tier, config provenance, unsupported imported fields, and live
+  runtime state.
+- `PUT /api/extensions/catalog/{id}/settings` persists schema-driven base
+  settings to `config/extensions-catalog.json`.
+- `PUT` / `DELETE /api/extensions/catalog/{id}/scopes/{scope_kind}/{scope_id}`
+  manage per-character, per-group, and per-session overrides through the same
+  UI.
+- `PUT /api/extensions/catalog/{id}/runtime` toggles runtime adapters and the
+  panel shows degraded-mode warnings, adapter health, and last-sync status.
+
+Imported legacy profiles now appear in the same catalog as TextQuest-native
+features, so operators can review legacy source metadata and adjust supported
+fields without round-tripping through TOML or INI files.
 
 ## Layout
 
@@ -83,6 +102,12 @@ spawn list without leaving the browser.
   upgrades over vendor trash when no explicit loot rule matches.
 - Awareness utilities now stay reachable from the primary app shell instead of
   being stranded behind unmounted demo-only routes.
+- Extension Catalog edits are schema-driven and scope-aware, so operators can
+  save a base parity profile once and then layer character, group, or session
+  exceptions on top of it.
+- Runtime status in the Extension Catalog is live. Toggling an adapter emits an
+  `extension.runtime` websocket event so the panel can refresh health and
+  degraded warnings without a page reload.
 
 ## Review Artifact
 

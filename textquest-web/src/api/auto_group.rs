@@ -393,6 +393,12 @@ mod tests {
             )),
             auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
             auto_group_state: AutoGroupState::new_demo(),
+            extension_catalog_state: crate::api::extensions::ExtensionCatalogState::load(
+                std::env::temp_dir().join(format!(
+                    "textquest-auto-group-test-extension-catalog-{}.json",
+                    uuid::Uuid::new_v4()
+                )),
+            ),
         })
     }
 

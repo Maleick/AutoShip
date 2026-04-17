@@ -7,8 +7,6 @@ import type { Session } from "../types";
 function PlayerRow({ session }: { session: Session }) {
   const isDead = session.status === "dead";
   const targetHpPct = session.target_hp_pct ?? null;
-  const endurancePct = session.endurance_pct ?? 0;
-  const buffCount = session.buff_count ?? 0;
   const targetLabel = session.target_name
     ? `Target: ${session.target_name}${targetHpPct != null ? ` ${Math.round(targetHpPct)}%` : ""}`
     : "Target: none";

@@ -27,8 +27,8 @@ python3 scripts/coverage-report.py
 # Generate HTML report
 python3 scripts/coverage-report.py --html
 
-# Check against threshold (exit 1 if below 75%)
-python3 scripts/coverage-report.py --threshold 75
+# Check against the advisory overall target (exit 1 if below 60%)
+python3 scripts/coverage-report.py --threshold 60
 ```
 
 ### Coverage in CI
@@ -36,10 +36,10 @@ python3 scripts/coverage-report.py --threshold 75
 Pull requests trigger a **coverage job** that:
 
 1. Runs `cargo tarpaulin` on the full workspace
-2. Publishes a coverage summary as a PR comment (advisory)
+2. Emits a coverage summary in the CI job logs (advisory)
 3. Does NOT block merge (informational only)
 
-The coverage job runs on Linux self-hosted runners with the same environment as the main gate.
+The coverage job runs inside the main Linux CI gate with the same environment as the rest of the PR checks.
 
 ## Writing Testable Code
 

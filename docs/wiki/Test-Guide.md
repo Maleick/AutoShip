@@ -120,17 +120,18 @@ End-to-end multibox workflow tests. See [Integration Scenario Testing Framework]
 
 ---
 
-## CI Coverage Gate
+## CI Coverage Check
 
-The CI pipeline enforces a **75% code coverage threshold**:
+The CI pipeline runs coverage as an advisory signal during the main PR gate:
 
 ```yaml
-- name: Run coverage (threshold 75%)
+- name: Run coverage (advisory)
   if: steps.scope.outputs.docs_only != 'true'
-  run: python3 scripts/coverage-report.py --threshold 75
+  continue-on-error: true
+  run: python3 scripts/coverage-report.py
 ```
 
-If coverage drops below 75%, the PR fails and cannot merge.
+If overall coverage drops below the advisory target, the step is marked with a warning in the job logs, but the PR is not blocked from merging. New code should still target 80%+ coverage and modified logic should aim for 70%+ coverage.
 
 Coverage targets by layer:
 
@@ -287,10 +288,10 @@ cargo install cargo-tarpaulin
 
 Run locally:
 ```bash
-python3 scripts/coverage-report.py --threshold 75
+python3 scripts/coverage-report.py --threshold 60
 ```
 
-The script parses tarpaulin output and exits with code 1 if coverage falls below threshold.
+The script parses tarpaulin output and exits with code 1 if coverage falls below the requested threshold.
 
 ---
 

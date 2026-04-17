@@ -24,6 +24,8 @@ import re
 from pathlib import Path
 from typing import Optional, Tuple
 
+COMMAND_TIMEOUT_SECONDS = 1800
+
 def run_command(cmd: list, capture_output: bool = True) -> Tuple[int, str, str]:
     """Run a command and return (exit_code, stdout, stderr)."""
     try:
@@ -31,11 +33,12 @@ def run_command(cmd: list, capture_output: bool = True) -> Tuple[int, str, str]:
             cmd,
             capture_output=capture_output,
             text=True,
-            timeout=600
+            timeout=COMMAND_TIMEOUT_SECONDS
         )
         return result.returncode, result.stdout, result.stderr
     except subprocess.TimeoutExpired:
-        return 1, "", "Coverage command timed out (10 minutes)"
+        timeout_minutes = COMMAND_TIMEOUT_SECONDS // 60
+        return 1, "", f"Coverage command timed out ({timeout_minutes} minutes)"
     except FileNotFoundError:
         return 127, "", f"Command not found: {cmd[0]}"
 
@@ -58,8 +61,9 @@ def generate_coverage_report(html: bool = False) -> Tuple[int, Optional[float]]:
     cmd = [
         "cargo",
         "tarpaulin",
-        "--all",
+        "--workspace",
         "--all-features",
+        "--tests",
         "--timeout", "300",
         "--out", "Stdout"
     ]
@@ -74,6 +78,9 @@ def generate_coverage_report(html: bool = False) -> Tuple[int, Optional[float]]:
 
     if exit_code != 0:
         print(f"ERROR: Coverage command failed (exit code {exit_code})")
+        if stdout:
+            print("STDOUT:")
+            print(stdout)
         if stderr:
             print("STDERR:")
             print(stderr)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import subprocess
 import sys
 import unittest
@@ -129,10 +130,20 @@ class GenerateCoverageReportTests(unittest.TestCase):
 
     def test_returns_error_when_tarpaulin_command_fails(self) -> None:
         with mock.patch.object(self.module, "check_tarpaulin_installed", return_value=True):
-            with mock.patch.object(self.module, "run_command", return_value=(1, "", "build failed")):
-                exit_code, pct = self.module.generate_coverage_report(html=False)
+            with mock.patch.object(
+                self.module,
+                "run_command",
+                return_value=(1, "partial stdout", "build failed"),
+            ):
+                with mock.patch("sys.stdout", new_callable=io.StringIO) as captured_stdout:
+                    exit_code, pct = self.module.generate_coverage_report(html=False)
         self.assertNotEqual(exit_code, 0)
         self.assertIsNone(pct)
+        output = captured_stdout.getvalue()
+        self.assertIn("STDOUT:", output)
+        self.assertIn("partial stdout", output)
+        self.assertIn("STDERR:", output)
+        self.assertIn("build failed", output)
 
     def test_passes_html_flag_to_tarpaulin_command(self) -> None:
         tarpaulin_output = "80.00% coverage, 80/100 lines covered\n"
@@ -148,6 +159,22 @@ class GenerateCoverageReportTests(unittest.TestCase):
 
         self.assertIn("Html", captured_cmd["cmd"])
         self.assertIn("--out", captured_cmd["cmd"])
+
+    def test_passes_workspace_and_tests_flags_to_tarpaulin_command(self) -> None:
+        tarpaulin_output = "80.00% coverage, 80/100 lines covered\n"
+        captured_cmd = {}
+
+        def fake_run_command(cmd, capture_output=True):
+            captured_cmd["cmd"] = cmd
+            return (0, tarpaulin_output, "")
+
+        with mock.patch.object(self.module, "check_tarpaulin_installed", return_value=True):
+            with mock.patch.object(self.module, "run_command", side_effect=fake_run_command):
+                self.module.generate_coverage_report(html=False)
+
+        self.assertIn("--workspace", captured_cmd["cmd"])
+        self.assertIn("--tests", captured_cmd["cmd"])
+        self.assertNotIn("--all", captured_cmd["cmd"])
 
 
 class MainThresholdTests(unittest.TestCase):

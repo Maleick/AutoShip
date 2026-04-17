@@ -884,6 +884,12 @@ mod tests {
                 crate::api::say_detection::SayDetectionState::new_demo(),
             )),
             auto_group_state: crate::api::auto_group::AutoGroupState::new_demo(),
+            extension_catalog_state: crate::api::extensions::ExtensionCatalogState::load(
+                std::env::temp_dir().join(format!(
+                    "textquest-loot-test-extension-catalog-{}.json",
+                    uuid::Uuid::new_v4()
+                )),
+            ),
         });
 
         let original = get_item_score(State(state.clone())).await.0;
