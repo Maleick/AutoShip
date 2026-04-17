@@ -627,6 +627,77 @@ mod tests {
         assert!((ability.effective_duration_secs() - 0.0).abs() < f32::EPSILON);
     }
 
+    #[test]
+    fn beastlord_config_breakpoints_are_explicit_and_group_safe() {
+        let classes_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("config/classes");
+        let path = classes_dir.join("beastlord.toml");
+        let config = ClassConfig::load(&path)
+            .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", path.display()));
+
+        let level_60 = config.profile_for_level(Some(60));
+        assert_eq!(level_60.combat_abilities[2].name, "Sha's Advantage");
+        assert_eq!(level_60.buff_abilities[0].name, "Savagery");
+        assert_eq!(level_60.buff_abilities[1].name, "Spiritual Strength");
+        assert!(level_60.emergency_abilities.is_empty());
+
+        let level_61 = config.profile_for_level(Some(61));
+        assert!(
+            level_61
+                .combat_abilities
+                .iter()
+                .any(|ability| ability.name == "Scorpion Venom"),
+            "61 profile should add the poison DPS line"
+        );
+        assert!(
+            level_61
+                .buff_abilities
+                .iter()
+                .any(|ability| ability.name == "Infusion of Spirit"),
+            "61 profile should add the single-target melee buff"
+        );
+
+        let level_62 = config.profile_for_level(Some(62));
+        let level_62_buffs: Vec<&str> = level_62
+            .buff_abilities
+            .iter()
+            .map(|ability| ability.name.as_str())
+            .collect();
+        assert_eq!(level_62_buffs, vec!["Spiritual Vigor", "Talisman of Kragg"]);
+
+        let level_65 = config.profile_for_level(Some(65));
+        assert_eq!(level_65.combat_abilities[2].name, "Sha's Revenge");
+        assert!(
+            level_65
+                .combat_abilities
+                .iter()
+                .any(|ability| ability.name == "Trushar's Frost"),
+            "65 profile should upgrade the direct damage spell"
+        );
+        assert_eq!(level_65.emergency_abilities[0].name, "Trushar's Mending");
+        let level_65_buffs: Vec<&str> = level_65
+            .buff_abilities
+            .iter()
+            .map(|ability| ability.name.as_str())
+            .collect();
+        assert_eq!(
+            level_65_buffs,
+            vec!["Ferocity", "Spiritual Vigor", "Talisman of Kragg"]
+        );
+
+        for profile in [level_60, level_61, level_62, level_65] {
+            assert!(
+                profile
+                    .buff_abilities
+                    .iter()
+                    .all(|ability| !ability.name.to_ascii_lowercase().contains("warder")),
+                "beastlord camp buffs must stay group-target safe"
+            );
+        }
+    }
+
     /// Validate all shipped class TOML files parse correctly.
     #[test]
     fn test_all_shipped_configs_parse() {

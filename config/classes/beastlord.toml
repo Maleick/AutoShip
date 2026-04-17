@@ -2,6 +2,8 @@ class_name = "beastlord"
 role = "dps"
 rest_command = "/sit"
 
+# Baseline below 60 stays intentionally lean. The higher-level Luclin/PoP
+# Beastlord kit is modeled through explicit 60/61/62/65 overrides below.
 [[combat_abilities]]
 name = "Attack"
 command = "/attack"
@@ -9,25 +11,248 @@ cooldown_secs = 0.0
 priority = 1
 
 [[combat_abilities]]
-name = "Slow"
-command = "/cast 1"
-cooldown_secs = 12.0
+name = "Pet Attack"
+command = "/pet attack"
+cooldown_secs = 0.0
 priority = 2
-
-[[combat_abilities]]
-name = "Heal"
-command = "/cast 2"
-cooldown_secs = 8.0
-priority = 3
 
 [[combat_abilities]]
 name = "Kick"
 command = "/kick"
-cooldown_secs = 6.0
-priority = 4
+cooldown_secs = 7.0
+priority = 3
 
-[[combat_abilities]]
+[[level_overrides]]
+name = "Level 60"
+min_level = 60
+max_level = 60
+
+[[level_overrides.combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
 name = "Pet Attack"
 command = "/pet attack"
 cooldown_secs = 0.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Sha's Advantage"
+command = "/cast 1"
+cooldown_secs = 12.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Bestial Fury Discipline"
+command = "/doability 1"
+cooldown_secs = 120.0
+priority = 4
+
+[[level_overrides.combat_abilities]]
+name = "Kick"
+command = "/kick"
+cooldown_secs = 7.0
 priority = 5
+
+[[level_overrides.buff_abilities]]
+name = "Savagery"
+command = "/cast 5"
+cooldown_secs = 600.0
+duration_secs = 3600.0
+priority = 1
+
+[[level_overrides.buff_abilities]]
+name = "Spiritual Strength"
+command = "/cast 6"
+cooldown_secs = 600.0
+duration_secs = 3600.0
+priority = 2
+
+[[level_overrides]]
+name = "Level 61"
+min_level = 61
+max_level = 61
+
+[[level_overrides.combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Pet Attack"
+command = "/pet attack"
+cooldown_secs = 0.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Sha's Advantage"
+command = "/cast 1"
+cooldown_secs = 12.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Bestial Fury Discipline"
+command = "/doability 1"
+cooldown_secs = 120.0
+priority = 4
+
+[[level_overrides.combat_abilities]]
+name = "Scorpion Venom"
+command = "/cast 2"
+cooldown_secs = 6.0
+priority = 5
+
+[[level_overrides.combat_abilities]]
+name = "Kick"
+command = "/kick"
+cooldown_secs = 7.0
+priority = 6
+
+[[level_overrides.buff_abilities]]
+name = "Savagery"
+command = "/cast 5"
+cooldown_secs = 600.0
+duration_secs = 3600.0
+priority = 1
+
+[[level_overrides.buff_abilities]]
+name = "Spiritual Strength"
+command = "/cast 6"
+cooldown_secs = 600.0
+duration_secs = 3600.0
+priority = 2
+
+[[level_overrides.buff_abilities]]
+name = "Infusion of Spirit"
+command = "/cast 7"
+cooldown_secs = 600.0
+duration_secs = 3600.0
+priority = 3
+
+[[level_overrides]]
+name = "Levels 62-64"
+min_level = 62
+max_level = 64
+
+[[level_overrides.combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Pet Attack"
+command = "/pet attack"
+cooldown_secs = 0.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Sha's Advantage"
+command = "/cast 1"
+cooldown_secs = 12.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Bestial Fury Discipline"
+command = "/doability 1"
+cooldown_secs = 120.0
+priority = 4
+
+[[level_overrides.combat_abilities]]
+name = "Scorpion Venom"
+command = "/cast 2"
+cooldown_secs = 6.0
+priority = 5
+
+[[level_overrides.combat_abilities]]
+name = "Kick"
+command = "/kick"
+cooldown_secs = 7.0
+priority = 6
+
+[[level_overrides.buff_abilities]]
+name = "Spiritual Vigor"
+command = "/cast 5"
+cooldown_secs = 600.0
+duration_secs = 3600.0
+priority = 1
+
+[[level_overrides.buff_abilities]]
+name = "Talisman of Kragg"
+command = "/cast 6"
+cooldown_secs = 600.0
+duration_secs = 3600.0
+priority = 2
+
+[[level_overrides]]
+name = "Level 65+"
+min_level = 65
+max_level = 255
+
+[[level_overrides.combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Pet Attack"
+command = "/pet attack"
+cooldown_secs = 0.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Sha's Revenge"
+command = "/cast 1"
+cooldown_secs = 12.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Bestial Fury Discipline"
+command = "/doability 1"
+cooldown_secs = 120.0
+priority = 4
+
+[[level_overrides.combat_abilities]]
+name = "Trushar's Frost"
+command = "/cast 2"
+cooldown_secs = 4.0
+priority = 5
+
+[[level_overrides.combat_abilities]]
+name = "Kick"
+command = "/kick"
+cooldown_secs = 7.0
+priority = 6
+
+[[level_overrides.emergency_abilities]]
+name = "Trushar's Mending"
+command = "/cast 3"
+cooldown_secs = 4.0
+priority = 1
+condition = "hp_below_40"
+
+[[level_overrides.buff_abilities]]
+name = "Ferocity"
+command = "/cast 5"
+cooldown_secs = 600.0
+duration_secs = 3600.0
+priority = 1
+
+[[level_overrides.buff_abilities]]
+name = "Spiritual Vigor"
+command = "/cast 6"
+cooldown_secs = 600.0
+duration_secs = 3600.0
+priority = 2
+
+[[level_overrides.buff_abilities]]
+name = "Talisman of Kragg"
+command = "/cast 7"
+cooldown_secs = 600.0
+duration_secs = 3600.0
+priority = 3

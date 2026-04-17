@@ -1,6 +1,6 @@
 # EverQuest Class Combat Rotations: Classic / Kunark / Velious
 
-Reference for Frostreaver automation. Covers the 10 classes relevant to the 36-box TLP setup.
+Reference for Frostreaver automation. Covers the 11 classes relevant to the 36-box TLP setup.
 Spell levels, rotation priorities, mana management, and group roles.
 
 ---
@@ -830,6 +830,63 @@ Pet class DPS. Pet provides consistent melee damage. Supplemental nuking. Utilit
 - Runtime damage priority is `Mala` once per target, then `Sun Storm` for 3+ enemies, then `Seeking Flame of Seukor`, then `Shock of Steel`.
 - The mod rod click path is handled through the shared activated-ability cooldown tracker with a 300 second reuse window, so downtime mana recovery does not spam item use every tick.
 - Direct damage casting stops below the secondary mana floor; when mana is low, automation leans on pet damage and medding instead of wasting casts.
+
+---
+
+## 11. Beastlord (Melee DPS / Warder Support)
+
+### Key Spells and Disciplines
+
+| Ability / Spell         | Level | Notes |
+| ----------------------- | ----- | ----- |
+| Kick                    | 1     | Baseline melee filler when spell DPS is gated |
+| Bestial Fury Discipline | 60    | Primary burn discipline for healthy targets |
+| Sha's Advantage         | 60    | Opening slow for the 60-64 profile |
+| Scorpion Venom          | 61    | Poison DoT; expensive enough to reserve for mana-positive fights |
+| Healing of Sorsha       | 61    | Pet heal spell; tracked as an available line, not auto-fired in combat yet |
+| Infusion of Spirit      | 61    | Strong single-target melee buff for group members |
+| Spiritual Vigor         | 62    | Group HP/attack buff upgrade |
+| Talisman of Kragg       | 62    | HP/stat buff upgrade for group members |
+| Arag's Celerity         | 63    | Warder haste/attack buff; held out of active combat rotation for now |
+| Ferocity                | 65    | Best single-target melee stat buff in this bracket |
+| Sha's Revenge           | 65    | Final slow upgrade in the 65+ profile |
+| Trushar's Frost         | 65    | Direct-damage nuke for mana-positive fights |
+| Trushar's Mending       | 65    | Emergency self-heal when HP falls under the configured floor |
+
+### Combat Priority
+
+1. **Emergency self-heal** if HP falls below 40% and mana is still healthy
+2. **Sha's slow** at the opener while the target is still near full HP
+3. **Bestial Fury Discipline** on durable targets
+4. **Spell DPS** with Scorpion Venom at 61-64 or Trushar's Frost at 65+ when mana is comfortably above the reserve threshold
+5. **Kick** as the low-cost fallback
+6. Keep the **warder attacking** the current assist target
+
+### Mana and Endurance Management
+
+- Reserve mana for the opener slow first
+- Skip spell DPS once mana drops under roughly 45%
+- Fall back to kick and warder damage instead of spending the last mana on low-value casts
+- Bestial Fury is modeled as a burn button and should not crowd out the opener slow
+
+### Buff and Utility Notes
+
+- Group-safe buff maintenance lives in `config/classes/beastlord.toml`
+- The 60 profile uses **Savagery** and **Spiritual Strength**
+- The 61 profile adds **Infusion of Spirit**
+- The 62 profile upgrades to **Spiritual Vigor** and **Talisman of Kragg**
+- The 65 profile upgrades the melee buff line to **Ferocity**
+- Warder-only buffs and warder heals are tracked as known Beastlord lines, but active combat automation does not try to maintain them because the current combat context does not expose pet HP or pet buff state
+
+### Group Role
+
+Secondary slow support plus steady melee/pet DPS. Beastlords should not be treated like primary healers or CC casters in this era; their value is opener control, melee buffs, and clean damage once the pull is stable.
+
+### Automation Notes
+
+- Slow is modeled as an opener-only action because the DLL does not yet track target debuff state
+- Beastlord spell DPS upgrades from **Scorpion Venom** at 61-64 to **Trushar's Frost** at 65, with both lines held behind the mana reserve threshold
+- Optional resist-debuff clickies remain operator-specific and belong in per-toon overrides rather than as hard-coded runtime item assumptions
 
 ---
 
