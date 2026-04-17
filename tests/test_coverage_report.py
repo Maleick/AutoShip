@@ -114,6 +114,21 @@ class GenerateCoverageReportTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertAlmostEqual(pct, 73.45)
 
+    def test_parses_coverage_percentage_from_stderr_when_stdout_empty(self) -> None:
+        tarpaulin_stderr = (
+            "tarpaulin log line\n"
+            "73.45% coverage, 150/200 lines covered\n"
+        )
+        with mock.patch.object(self.module, "check_tarpaulin_installed", return_value=True):
+            with mock.patch.object(
+                self.module,
+                "run_command",
+                return_value=(0, "", tarpaulin_stderr),
+            ):
+                exit_code, pct = self.module.generate_coverage_report(html=False)
+        self.assertEqual(exit_code, 0)
+        self.assertAlmostEqual(pct, 73.45)
+
     def test_returns_none_when_percentage_unparseable(self) -> None:
         tarpaulin_output = "something happened but no percentage\n"
         with mock.patch.object(self.module, "check_tarpaulin_installed", return_value=True):
@@ -159,6 +174,8 @@ class GenerateCoverageReportTests(unittest.TestCase):
 
         self.assertIn("Html", captured_cmd["cmd"])
         self.assertIn("--out", captured_cmd["cmd"])
+        self.assertIn("--stderr", captured_cmd["cmd"])
+        self.assertTrue(captured_cmd["cmd"][-2:] == ["--", "--nocapture"])
 
     def test_passes_workspace_and_tests_flags_to_tarpaulin_command(self) -> None:
         tarpaulin_output = "80.00% coverage, 80/100 lines covered\n"

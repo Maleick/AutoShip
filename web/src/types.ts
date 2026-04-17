@@ -928,6 +928,101 @@ export interface ItemScoreConfig {
   class_weights: Record<string, StatWeights>;
 }
 
+export type PluginCoverageStatus = "native" | "adapted" | "deferred";
+
+export interface PluginMapping {
+  plugin: string;
+  owner: string;
+  status: PluginCoverageStatus;
+  config_surface: string;
+  notes: string;
+}
+
+export interface LegacyAdapterWarning {
+  plugin: string;
+  source_reference: string;
+  adapted_into: string;
+  unsupported_fields: string[];
+}
+
+export interface ItemKnowledgeConfig {
+  link_sources: string[];
+  show_provenance: boolean;
+  show_unsupported_fields: boolean;
+}
+
+export type CursorAction = "keep" | "sell" | "destroy" | "consume";
+
+export interface CursorRule {
+  item_matcher: string;
+  action: CursorAction;
+  keep_at_or_below: number | null;
+  overflow_action: CursorAction | null;
+}
+
+export type CollectionRoute = "keep" | "bank" | "tribute" | "sell";
+
+export interface CollectionRoutingRule {
+  set_matcher: string;
+  incomplete_route: CollectionRoute;
+  completed_route: CollectionRoute;
+  duplicate_route: CollectionRoute;
+}
+
+export interface RewardRoutingRule {
+  task_matcher: string;
+  preference: RewardPreference;
+  auto_claim: boolean;
+}
+
+export interface ConsumablePreferences {
+  enabled: boolean;
+  preferred_food: string[];
+  preferred_drink: string[];
+  ignored_items: string[];
+}
+
+export interface VendorWatchRule {
+  item_name: string;
+  max_price_pp: number | null;
+  notify: boolean;
+}
+
+export interface RelocationRule {
+  destination: string;
+  required_option_id: string | null;
+  keep_on_hand: number;
+  notify_if_unavailable: boolean;
+}
+
+export interface TrophyPreferences {
+  enabled: boolean;
+  auto_equip: boolean;
+  restore_after_craft: boolean;
+  trophy_items: string[];
+}
+
+export interface AutoClaimPreferences {
+  enabled: boolean;
+  claim_membership_grants: boolean;
+  claim_task_windows: boolean;
+  once_per_session: boolean;
+}
+
+export interface InventoryUtilityConfig {
+  plugin_mappings: PluginMapping[];
+  legacy_adapters: LegacyAdapterWarning[];
+  item_knowledge: ItemKnowledgeConfig;
+  cursor_rules: CursorRule[];
+  collection_routing: CollectionRoutingRule[];
+  reward_routing: RewardRoutingRule[];
+  consumption: ConsumablePreferences;
+  vendor_watch: VendorWatchRule[];
+  relocation_rules: RelocationRule[];
+  trophy_preferences: TrophyPreferences;
+  auto_claim: AutoClaimPreferences;
+}
+
 // ── XAssist types ────────────────────────────────────────────────────────────
 
 export interface XAssistCharacterConfig {

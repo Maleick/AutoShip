@@ -100,6 +100,10 @@ spawn list without leaving the browser.
 - Loot configuration now includes an **Item Score** tab with per-class stat
   weights and an upgrade threshold so auto-loot keep/sell decisions can prefer
   upgrades over vendor trash when no explicit loot rule matches.
+- Loot configuration also includes an **Inventory Utilities** tab that surfaces
+  plugin coverage, provenance warnings, and editable cursor, collection,
+  reward, consume, vendor-watch, trophy, auto-claim, and relocation rules in
+  one place.
 - Awareness utilities now stay reachable from the primary app shell instead of
   being stranded behind unmounted demo-only routes.
 - Extension Catalog edits are schema-driven and scope-aware, so operators can

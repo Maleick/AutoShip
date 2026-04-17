@@ -249,6 +249,33 @@ Current behavior:
 The persisted backend shape lives in `textquest-web/src/api/loot.rs`, and the
 comparison engine used by the loot module lives in
 `textquest/src/loot/item_score.rs`.
+
+## Inventory Utility Parity
+
+The loot dashboard also exposes an **Inventory Utilities** tab that groups the
+remaining RedGuides item-knowledge, cursor, reward, collection, vendor-watch,
+consumption, trophy, and relocation adapters behind one shared config model.
+
+Operator surface:
+
+- `GET /api/loot/inventory-utility`
+- `PUT /api/loot/inventory-utility`
+- the web dashboard **Loot Config** panel under the **Inventory Utilities** tab
+
+Current behavior:
+
+- explicit plugin mappings, owners, and status badges are shown for every
+  plugin in the item-knowledge and inventory-utility parity pack
+- provenance and unsupported-field warnings are displayed for adapted legacy
+  settings such as `MQ2LinkDB`, `MQ2Cursor`, and `MQ2PortalSetter`
+- cursor handling, collection routing, reward routing, food and drink
+  consumption, vendor watch alerts, relocation-item retention, tradeskill
+  trophy preferences, and auto-claim policy are editable in the local web UI
+- the config persists alongside item-score weights in `config/textquest.toml`
+  under the `[inventory_utility]` table
+
+See [Inventory Utility Parity](Inventory-Utility-Parity) for the per-plugin
+native versus adapted classification and ownership table.
 ## Maps and Offsets
 
 - `config/maps/*.txt` supplies zone linework and labels for the TUI map.

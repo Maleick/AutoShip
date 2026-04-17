@@ -19,11 +19,19 @@ use toml_edit::DocumentMut;
 use crate::AppState;
 
 pub type ItemScoreConfigPayload = textquest::loot::ItemScoreConfig;
+pub type InventoryUtilityConfigPayload =
+    textquest_common::inventory_utility::InventoryUtilityConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct ItemScoreConfigFile {
     #[serde(default)]
     item_score: ItemScoreConfigPayload,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct InventoryUtilityConfigFile {
+    #[serde(default)]
+    inventory_utility: InventoryUtilityConfigPayload,
 }
 
 // ── Shared loot state ────────────────────────────────────────────────────────
@@ -36,7 +44,9 @@ pub struct LootState {
     pub distribution: RwLock<DistributionConfig>,
     pub history: RwLock<Vec<LootHistoryEntry>>,
     pub item_score: RwLock<ItemScoreConfigPayload>,
+    pub inventory_utility: RwLock<InventoryUtilityConfigPayload>,
     pub item_score_write_lock: tokio::sync::Mutex<()>,
+    pub inventory_utility_write_lock: tokio::sync::Mutex<()>,
     item_score_config_path: PathBuf,
 }
 
@@ -51,6 +61,15 @@ impl LootState {
             tracing::warn!(%error, path = %item_score_config_path.display(), "Failed to load item-score config");
             ItemScoreConfigPayload::default()
         });
+        let inventory_utility = load_inventory_utility_from_path(&item_score_config_path)
+            .unwrap_or_else(|error| {
+                tracing::warn!(
+                    %error,
+                    path = %item_score_config_path.display(),
+                    "Failed to load inventory-utility config"
+                );
+                InventoryUtilityConfigPayload::default()
+            });
 
         Arc::new(Self {
             rules: RwLock::new(LootRulesPayload::default()),
@@ -59,7 +78,9 @@ impl LootState {
             distribution: RwLock::new(DistributionConfig::default()),
             history: RwLock::new(demo_history()),
             item_score: RwLock::new(item_score),
+            inventory_utility: RwLock::new(inventory_utility),
             item_score_write_lock: tokio::sync::Mutex::new(()),
+            inventory_utility_write_lock: tokio::sync::Mutex::new(()),
             item_score_config_path,
         })
     }
@@ -352,6 +373,51 @@ fn save_item_score_to_path(path: &FsPath, config: &ItemScoreConfigPayload) -> Re
         .map_err(|error| format!("Failed to write item-score config: {error}"))
 }
 
+fn load_inventory_utility_from_path(
+    path: &FsPath,
+) -> Result<InventoryUtilityConfigPayload, String> {
+    if !path.exists() {
+        return Ok(InventoryUtilityConfigPayload::default());
+    }
+
+    let content = fs::read_to_string(path)
+        .map_err(|error| format!("Failed to read inventory-utility config: {error}"))?;
+    let file = toml::from_str::<InventoryUtilityConfigFile>(&content)
+        .map_err(|error| format!("Failed to deserialize inventory-utility config: {error}"))?;
+    Ok(file.inventory_utility)
+}
+
+fn save_inventory_utility_to_path(
+    path: &FsPath,
+    config: &InventoryUtilityConfigPayload,
+) -> Result<(), String> {
+    let mut doc = if path.exists() {
+        fs::read_to_string(path)
+            .map_err(|error| format!("Failed to read config file: {error}"))?
+            .parse::<DocumentMut>()
+            .map_err(|error| format!("Failed to parse config file: {error}"))?
+    } else {
+        DocumentMut::new()
+    };
+
+    let serialized = toml::to_string_pretty(&InventoryUtilityConfigFile {
+        inventory_utility: config.clone(),
+    })
+    .map_err(|error| format!("Failed to serialize inventory-utility config: {error}"))?;
+    let inventory_doc = serialized
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("Failed to parse inventory-utility config: {error}"))?;
+    doc["inventory_utility"] = inventory_doc["inventory_utility"].clone();
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create config directory: {error}"))?;
+    }
+
+    fs::write(path, doc.to_string())
+        .map_err(|error| format!("Failed to write inventory-utility config: {error}"))
+}
+
 // ── Origin allowlist
 // ──────────────────────────────────────────────────────────
 
@@ -532,6 +598,39 @@ pub async fn put_item_score(
     }
 
     let mut config = state.loot_state.item_score.write().await;
+    *config = payload;
+    StatusCode::NO_CONTENT
+}
+
+/// GET /api/loot/inventory-utility — return current inventory utility parity config.
+pub async fn get_inventory_utility(
+    State(state): State<Arc<AppState>>,
+) -> Json<InventoryUtilityConfigPayload> {
+    let config = state.loot_state.inventory_utility.read().await;
+    Json(config.clone())
+}
+
+/// PUT /api/loot/inventory-utility — replace current inventory utility parity config.
+pub async fn put_inventory_utility(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(payload): Json<InventoryUtilityConfigPayload>,
+) -> StatusCode {
+    if !is_trusted_origin(&headers) {
+        return StatusCode::FORBIDDEN;
+    }
+
+    let _config_write_guard = crate::api::textquest_config_write_lock().lock().await;
+    let _write_guard = state.loot_state.inventory_utility_write_lock.lock().await;
+
+    if let Err(error) =
+        save_inventory_utility_to_path(&state.loot_state.item_score_config_path, &payload)
+    {
+        tracing::warn!(%error, "Failed to persist inventory-utility config");
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    }
+
+    let mut config = state.loot_state.inventory_utility.write().await;
     *config = payload;
     StatusCode::NO_CONTENT
 }
@@ -911,5 +1010,60 @@ mod tests {
         std::fs::set_permissions(&read_only_dir, std::fs::Permissions::from_mode(0o755))
             .expect("restore dir perms");
         std::fs::remove_dir_all(&temp_root).ok();
+    }
+
+    #[test]
+    fn load_inventory_utility_returns_default_when_missing() {
+        let config = load_inventory_utility_from_path(&test_config_path()).expect("default config");
+        assert_eq!(config.plugin_mappings.len(), 13);
+        assert!(config.item_knowledge.show_provenance);
+    }
+
+    #[test]
+    fn save_inventory_utility_round_trips() {
+        let path = test_config_path();
+        let mut config = textquest_common::inventory_utility::default_inventory_utility_config();
+        config.cursor_rules[0].keep_at_or_below = Some(3);
+        config.auto_claim.enabled = true;
+
+        save_inventory_utility_to_path(&path, &config).expect("saved");
+        let loaded = load_inventory_utility_from_path(&path).expect("loaded");
+
+        assert_eq!(loaded.cursor_rules[0].keep_at_or_below, Some(3));
+        assert!(loaded.auto_claim.enabled);
+    }
+
+    #[tokio::test]
+    async fn get_inventory_utility_returns_defaults() {
+        let state = demo_state();
+        let Json(config) = get_inventory_utility(State(state)).await;
+        assert_eq!(config.plugin_mappings.len(), 13);
+        assert!(config.item_knowledge.show_unsupported_fields);
+    }
+
+    #[tokio::test]
+    async fn put_inventory_utility_updates_state() {
+        let state = demo_state();
+        let mut payload = textquest_common::inventory_utility::default_inventory_utility_config();
+        payload.vendor_watch.push(
+            textquest_common::inventory_utility::VendorWatchRule::notify_on("Jacinth", Some(450)),
+        );
+        payload.auto_claim.enabled = true;
+
+        let status = put_inventory_utility(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(payload.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+
+        let Json(saved) = get_inventory_utility(State(state.clone())).await;
+        assert_eq!(saved.vendor_watch.len(), payload.vendor_watch.len());
+        assert!(saved.auto_claim.enabled);
+
+        let reloaded = load_inventory_utility_from_path(&state.loot_state.item_score_config_path)
+            .expect("config persisted");
+        assert_eq!(reloaded.auto_claim.enabled, payload.auto_claim.enabled);
     }
 }

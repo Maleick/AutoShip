@@ -14,6 +14,8 @@ import {
   Star,
 } from "@phosphor-icons/react";
 import { useItemScoreConfig } from "../hooks/useItemScoreConfig";
+import { useInventoryUtilityConfig } from "../hooks/useInventoryUtilityConfig";
+import InventoryUtilitySection from "./InventoryUtilitySection";
 import {
   demoLootRules,
   demoCharacterFilters,
@@ -29,6 +31,7 @@ import type {
   DistributionMethod,
   DistributionRule,
   ItemScoreConfig,
+  InventoryUtilityConfig,
   MasterLooter,
   LootHistoryEntry,
   StatWeights,
@@ -901,7 +904,14 @@ function ItemScoreSection({
 
 // ── Tab navigation ────────────────────────────────────────────────────────────
 
-type Tab = "rules" | "filters" | "distribution" | "master-looter" | "item-score" | "history";
+type Tab =
+  | "rules"
+  | "filters"
+  | "distribution"
+  | "master-looter"
+  | "item-score"
+  | "inventory-utility"
+  | "history";
 
 const TABS: { id: Tab; label: string; icon: ElementType }[] = [
   { id: "rules", label: "Loot Rules", icon: ListBullets },
@@ -909,6 +919,7 @@ const TABS: { id: Tab; label: string; icon: ElementType }[] = [
   { id: "distribution", label: "Distribution Policy", icon: ArrowClockwise },
   { id: "master-looter", label: "Master Looter", icon: Crown },
   { id: "item-score", label: "Item Score", icon: CheckCircle },
+  { id: "inventory-utility", label: "Inventory Utilities", icon: Bag },
   { id: "history", label: "Loot History", icon: Star },
 ];
 
@@ -934,15 +945,33 @@ export default function LootConfig() {
     save: saveItemScore,
   } = useItemScoreConfig();
   const [draftItemScore, setDraftItemScore] = useState<ItemScoreConfig>(itemScoreConfig);
+  const {
+    config: inventoryUtilityConfig,
+    loading: inventoryUtilityLoading,
+    saving: inventoryUtilitySaving,
+    error: inventoryUtilityError,
+    savedAt: inventoryUtilitySavedAt,
+    loaded: inventoryUtilityLoaded,
+    refresh: refreshInventoryUtility,
+    save: saveInventoryUtility,
+  } = useInventoryUtilityConfig();
+  const [draftInventoryUtility, setDraftInventoryUtility] =
+    useState<InventoryUtilityConfig>(inventoryUtilityConfig);
 
   // Derive character list from current filters — stays in sync as filters change.
   const characters = Array.from(new Set(filters.map((f) => f.character)));
   const itemScoreDirty =
     JSON.stringify(draftItemScore) !== JSON.stringify(itemScoreConfig);
+  const inventoryUtilityDirty =
+    JSON.stringify(draftInventoryUtility) !== JSON.stringify(inventoryUtilityConfig);
 
   useEffect(() => {
     setDraftItemScore(itemScoreConfig);
   }, [itemScoreConfig]);
+
+  useEffect(() => {
+    setDraftInventoryUtility(inventoryUtilityConfig);
+  }, [inventoryUtilityConfig]);
 
   useEffect(() => {
     if (!saved) {
@@ -971,6 +1000,10 @@ export default function LootConfig() {
       await saveItemScore(draftItemScore);
       return;
     }
+    if (activeTab === "inventory-utility") {
+      await saveInventoryUtility(draftInventoryUtility);
+      return;
+    }
 
     // The legacy loot tabs are still demo-backed in the dashboard.
     setSaved(true);
@@ -978,16 +1011,25 @@ export default function LootConfig() {
 
   const saveDisabled = activeTab === "item-score"
     ? itemScoreLoading || itemScoreSaving || !itemScoreLoaded
-    : false;
-  const saveLabel =
-    activeTab === "item-score"
-      ? itemScoreSaving
+    : activeTab === "inventory-utility"
+      ? inventoryUtilityLoading || inventoryUtilitySaving || !inventoryUtilityLoaded
+      : false;
+  const saveLabel = activeTab === "item-score"
+    ? itemScoreSaving
+      ? "Saving..."
+      : itemScoreDirty
+        ? "Save Weights"
+        : itemScoreSavedAt
+          ? "Saved!"
+          : "Save Weights"
+    : activeTab === "inventory-utility"
+      ? inventoryUtilitySaving
         ? "Saving..."
-        : itemScoreDirty
-          ? "Save Weights"
-          : itemScoreSavedAt
+        : inventoryUtilityDirty
+          ? "Save Inventory Utility"
+          : inventoryUtilitySavedAt
             ? "Saved!"
-            : "Save Weights"
+            : "Save Inventory Utility"
       : saved
         ? "Saved!"
         : "Save Changes";
@@ -1005,7 +1047,7 @@ export default function LootConfig() {
               Loot Configuration
             </h2>
             <p className="text-[10px] uppercase tracking-widest text-white/50 font-rune">
-              Rules · Filters · Distribution · Item Score · History
+              Rules · Filters · Distribution · Item Score · Inventory Utilities · History
             </p>
           </div>
         </div>
@@ -1017,6 +1059,8 @@ export default function LootConfig() {
           className={`px-4 py-1.5 border text-sm font-medium uppercase tracking-wider transition-all ${
             activeTab === "item-score" && itemScoreSavedAt && !itemScoreDirty
               ? "border-cyan-300/40 bg-cyan-400/15 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.18)]"
+              : activeTab === "inventory-utility" && inventoryUtilitySavedAt && !inventoryUtilityDirty
+                ? "border-cyan-300/40 bg-cyan-400/15 text-cyan-100 shadow-[0_0_18px_rgba(34,211,238,0.18)]"
               : saved
               ? "border-spectral/60 bg-spectral/20 text-spectral shadow-[0_0_15px_rgba(0,229,255,0.3)]"
               : "bg-magentadark/20 border-magentaglow text-white hover:bg-magentadark/40 shadow-[0_0_15px_rgba(204,68,255,0.3)]"
@@ -1072,6 +1116,19 @@ export default function LootConfig() {
             onChange={setDraftItemScore}
             onRefresh={() => {
               void refreshItemScore();
+            }}
+          />
+        )}
+        {activeTab === "inventory-utility" && (
+          <InventoryUtilitySection
+            config={draftInventoryUtility}
+            loading={inventoryUtilityLoading}
+            saving={inventoryUtilitySaving}
+            error={inventoryUtilityError}
+            savedAt={inventoryUtilitySavedAt}
+            onChange={setDraftInventoryUtility}
+            onRefresh={() => {
+              void refreshInventoryUtility();
             }}
           />
         )}

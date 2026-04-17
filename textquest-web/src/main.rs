@@ -355,7 +355,7 @@ fn build_state() -> Arc<AppState> {
         player_watch_write_lock: tokio::sync::Mutex::new(()),
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
-        vendor_watch_state: api::vendor_watch::VendorWatchState::new_demo(),
+        vendor_watch_state: api::vendor_watch::VendorWatchState::new_from_disk_or_default(),
         timestamp_configs: tokio::sync::RwLock::new(
             api::load_timestamp_configs_from_disk().unwrap_or_else(|error| {
                 tracing::warn!(%error, "Failed to load timestamp configs");
@@ -466,6 +466,10 @@ fn build_loot_router() -> Router<Arc<AppState>> {
         .route(
             "/item-score",
             get(api::loot::get_item_score).put(api::loot::put_item_score),
+        )
+        .route(
+            "/inventory-utility",
+            get(api::loot::get_inventory_utility).put(api::loot::put_inventory_utility),
         )
 }
 

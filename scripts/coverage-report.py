@@ -65,11 +65,14 @@ def generate_coverage_report(html: bool = False) -> Tuple[int, Optional[float]]:
         "--all-features",
         "--tests",
         "--timeout", "300",
-        "--out", "Stdout"
+        "--out", "Stdout",
+        "--stderr",
     ]
 
     if html:
         cmd.extend(["--out", "Html"])
+
+    cmd.extend(["--", "--nocapture"])
 
     print(f"Running: {' '.join(cmd)}")
     print("-" * 80)
@@ -86,12 +89,15 @@ def generate_coverage_report(html: bool = False) -> Tuple[int, Optional[float]]:
             print(stderr)
         return exit_code, None
 
-    # Parse coverage percentage from tarpaulin output
-    # Pattern: "X.XX% coverage"
-    match = re.search(r'(\d+\.\d+)%\s+coverage', stdout)
+    # Parse coverage percentage from tarpaulin output.
+    # With --stderr enabled, tarpaulin may emit the summary to either stream.
+    coverage_output = "\n".join(part for part in (stdout, stderr) if part)
+    match = re.search(r'(\d+\.\d+)%\s+coverage', coverage_output)
     coverage_percent = None
 
     print(stdout)
+    if stderr:
+        print(stderr, file=sys.stderr, end="")
 
     if match:
         coverage_percent = float(match.group(1))

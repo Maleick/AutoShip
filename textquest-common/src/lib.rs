@@ -28,6 +28,8 @@ pub mod etw_ti_detect;
 pub mod ghidra_db;
 /// External integration infrastructure for notifications and alerts.
 pub mod integrations;
+/// Shared inventory-utility parity config, provenance, and rule helpers.
+pub mod inventory_utility;
 /// IPC command and response enums for orchestrator-to-DLL communication.
 pub mod ipc;
 /// Login automation shared types (credentials, server selection, login phases).

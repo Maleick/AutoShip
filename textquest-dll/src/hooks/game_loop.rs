@@ -3903,7 +3903,7 @@ mod tests {
                 .into_iter()
                 .collect();
 
-        let current = vec![fake_spawn(2, "a_bear", 1), fake_spawn(3, "a_ox", 2)];
+        let current = vec![fake_spawn(2, "a_bear", 1), fake_spawn(3, "a_ox", 1)];
         let (next, events) =
             compute_spawn_delta_events(&previous, &current, "freportw".into(), 12345);
 
@@ -3911,7 +3911,7 @@ mod tests {
             next,
             [
                 (2u32, ("a_bear".to_string(), 1)),
-                (3u32, ("a_ox".to_string(), 2))
+                (3u32, ("a_ox".to_string(), 1))
             ]
             .into_iter()
             .collect()
@@ -3922,7 +3922,7 @@ mod tests {
             .find(|event| event.kind == textquest_common::ipc::SpawnEventKind::Created)
             .expect("created event should exist");
         assert_eq!(created.spawn_name, "a_ox");
-        assert_eq!(created.spawn_type, 2);
+        assert_eq!(created.spawn_type, 1);
         let destroyed = events
             .iter()
             .find(|event| event.kind == textquest_common::ipc::SpawnEventKind::Destroyed)

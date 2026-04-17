@@ -16,6 +16,7 @@
 - [Login Automation](Login-Automation)
 - [Soul Engine](Soul-Engine)
 - [Configuration](Configuration)
+- [Inventory Utility Parity](Inventory-Utility-Parity)
 - [Say Detection and Alerting](Say-Detection-and-Alerting)
 - [RedGuides Awareness and Coordination Parity](RedGuides-Awareness-and-Coordination-Parity)
 - [Security and Anti-Detection Notes](Security-and-Anti-Detection-Notes)

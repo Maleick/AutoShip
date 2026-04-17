@@ -173,6 +173,13 @@ mod inner {
 pub use inner::{install, remove};
 
 #[cfg(test)]
+pub(crate) fn reset_test_state() {
+    TIMING_CORRECTION_ENABLED.store(false, Ordering::Release);
+    GAME_LOOP_OVERHEAD_NS.store(0, Ordering::Release);
+    QPC_FREQUENCY_HZ.store(10_000_000, Ordering::Release);
+}
+
+#[cfg(test)]
 pub(crate) fn test_state_lock() -> std::sync::MutexGuard<'static, ()> {
     use std::sync::{Mutex, OnceLock};
 
@@ -180,13 +187,6 @@ pub(crate) fn test_state_lock() -> std::sync::MutexGuard<'static, ()> {
     LOCK.get_or_init(|| Mutex::new(()))
         .lock()
         .expect("timing test state lock poisoned")
-}
-
-#[cfg(test)]
-pub(crate) fn reset_test_state() {
-    TIMING_CORRECTION_ENABLED.store(false, Ordering::Release);
-    GAME_LOOP_OVERHEAD_NS.store(0, Ordering::Release);
-    QPC_FREQUENCY_HZ.store(10_000_000, Ordering::Release);
 }
 
 #[cfg(test)]

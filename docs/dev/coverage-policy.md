@@ -8,7 +8,7 @@ TextQuest maintains an active test coverage monitoring program to ensure code qu
 
 - **New code**: Minimum 80% line coverage required for new files and major new functions
 - **Modified code**: Aim for 70%+ coverage on changed logic
-- **Overall repository**: Advisory target of 60%+ across all crates (not blocking)
+- **Overall repository**: Minimum 60%+ across all crates in CI
 - **Windows-specific code**: Platform-gated tests exempt from strict requirements (run on Windows CI only)
 
 ## How Coverage is Measured
@@ -27,17 +27,17 @@ python3 scripts/coverage-report.py
 # Generate HTML report
 python3 scripts/coverage-report.py --html
 
-# Check against the advisory overall target (exit 1 if below 60%)
+# Check against the CI baseline (exit 1 if below 60%)
 python3 scripts/coverage-report.py --threshold 60
 ```
 
 ### Coverage in CI
 
-Pull requests trigger a **coverage job** that:
+ Pull requests trigger a **coverage job** that:
 
-1. Runs `cargo tarpaulin` on the full workspace
-2. Emits a coverage summary in the CI job logs (advisory)
-3. Does NOT block merge (informational only)
+ 1. Runs `cargo tarpaulin` on the full workspace
+2. Blocks merge if the overall workspace falls below the 60% baseline
+3. Publishes a coverage summary in CI logs for review
 
 The coverage job runs inside the main Linux CI gate with the same environment as the rest of the PR checks.
 
@@ -93,8 +93,8 @@ GitHub will post a coverage summary comment on PRs showing:
 
 ## FAQ
 
-**Q: Why is coverage not blocking merge?**
-A: Coverage is a trend indicator, not a guarantee of correctness. High coverage without good tests can be misleading. We monitor it as advisory but merge decision is human-driven.
+**Q: Why is the CI baseline lower than the per-change targets?**
+A: The workspace baseline keeps the whole repository from regressing while still recognizing that several legacy crates remain below the bar expected for new or heavily modified logic. Review still expects higher coverage on the code you touch, even when the repository-wide gate is satisfied.
 
 **Q: How do I test Windows-specific code on macOS?**
 A: Use stubs (`.rs` files with `#[cfg(not(windows))]`) that return dummy data. For integration testing, run on Windows CI or a Windows machine.
