@@ -122,11 +122,22 @@ pub struct GroupCommandLogEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CampOverlay {
+    pub camp_center: [f32; 2],
+    pub pull_point: [f32; 2],
+    pub camp_radius: f32,
+    pub pull_radius: f32,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NavigationSection {
     pub current_zone: String,
     pub active_route_id: String,
     pub stuck_clients: u32,
     pub routes: Vec<RouteCard>,
+    pub camp_overlay: Option<CampOverlay>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -871,6 +882,13 @@ fn demo_snapshot() -> DashboardSnapshot {
                     ],
                 },
             ],
+            camp_overlay: Some(CampOverlay {
+                camp_center: [420.0, 680.0],
+                pull_point: [510.0, 720.0],
+                camp_radius: 80.0,
+                pull_radius: 40.0,
+                name: "Fire Core Camp".to_string(),
+            }),
         },
         relocation: demo_relocation_section(),
         economy: EconomySection {
@@ -1106,6 +1124,8 @@ fn short_time_label() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
 
     use axum::extract::State;
@@ -1131,6 +1151,8 @@ mod tests {
             alerting_config_path: std::env::temp_dir()
                 .join(format!("textquest-dashboard-test-alerting-{}.toml", uuid::Uuid::new_v4())),
             api_token: None,
+            live_session_snapshot_path: PathBuf::from("/tmp/test_live_sessions.json"),
+            xassist_configs: api::xassist::demo_xassist_configs(),
         })
     }
 

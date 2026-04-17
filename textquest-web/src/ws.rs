@@ -106,6 +106,7 @@ mod tests {
     use crate::{AppState, accounts, api, build_app};
     use futures_util::{SinkExt, StreamExt};
     use std::{
+        collections::HashMap,
         sync::{Arc, Mutex},
         time::Duration,
     };

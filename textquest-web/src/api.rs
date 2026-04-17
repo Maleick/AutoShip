@@ -4,9 +4,15 @@ pub mod chat_log;
 pub mod chat_pattern_rules;
 pub mod dashboard;
 pub mod economy;
+pub mod gm_alerts;
+pub mod kill_tracker;
 pub mod loot;
 pub mod say_detection;
 pub mod soul;
+pub mod spawn_alerts;
+pub mod xassist;
+
+pub use player_watch::PlayerWatchConfig;
 use axum::{
     Json,
     extract::{Path, State},
@@ -20,7 +26,7 @@ use std::{
     sync::Arc,
 };
 use textquest_common::box_chat::BoxChatConfig;
-use textquest_common::ipc::{AutoAcceptSettings, AutoRezConfig};
+use textquest_common::ipc::AutoAcceptSettings;
 use toml_edit::{DocumentMut, Item, Table, value};
 
 use crate::AppState;
@@ -298,7 +304,11 @@ fn write_chat_log_settings_to_disk(settings: &ChatLogSettings) -> Result<(), Str
 
     let mut table = Table::new();
     table["enabled"] = value(settings.enabled);
-    table["channels"] = value(settings.channels.clone());
+    let mut channels_array = toml_edit::Array::default();
+    for channel in &settings.channels {
+        channels_array.push(channel.as_str());
+    }
+    table["channels"] = Item::Value(toml_edit::Value::Array(channels_array));
     table["rotation_strategy"] = value(settings.rotation_strategy.clone());
     table["max_file_size_bytes"] = value(settings.max_file_size_bytes as i64);
     table["min_level"] = value(settings.min_level.clone());
@@ -364,6 +374,70 @@ pub async fn put_chat_log_settings(Json(settings): Json<ChatLogSettings>) -> imp
         Ok(()) => (StatusCode::OK, Json(settings)).into_response(),
         Err(error) => json_error(StatusCode::BAD_REQUEST, error).into_response(),
     }
+}
+
+// ─── Timestamp Config ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimestampConfig {
+    pub character: String,
+    pub enabled: bool,
+}
+
+/// GET /api/timestamp-config — list all timestamp configs.
+pub async fn list_timestamp_configs(
+    State(state): State<Arc<AppState>>,
+) -> Json<Vec<TimestampConfig>> {
+    let configs = state.timestamp_configs.read().await;
+    Json(configs.values().cloned().collect())
+}
+
+/// GET /api/timestamp-config/:character — get timestamp config for a character.
+pub async fn get_timestamp_config(
+    State(state): State<Arc<AppState>>,
+    Path(character): Path<String>,
+) -> impl IntoResponse {
+    let configs = state.timestamp_configs.read().await;
+    match configs.get(&character).cloned() {
+        Some(config) => (StatusCode::OK, Json(config)).into_response(),
+        None => json_error(StatusCode::NOT_FOUND, "Character not found").into_response(),
+    }
+}
+
+/// PUT /api/timestamp-config/:character — upsert timestamp config.
+pub async fn put_timestamp_config(
+    State(state): State<Arc<AppState>>,
+    Path(character): Path<String>,
+    Json(mut config): Json<TimestampConfig>,
+) -> Result<Json<TimestampConfig>, StatusCode> {
+    if character.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    config.character = character;
+    {
+        let mut configs = state.timestamp_configs.write().await;
+        configs.insert(config.character.clone(), config.clone());
+    }
+    Ok(Json(config))
+}
+
+// ─── Player Watch API ───────────────────────────────────────────────────────────
+
+/// GET /api/config/player-watch — get player watch configuration.
+pub async fn get_player_watch_config(
+    State(state): State<Arc<AppState>>,
+) -> Json<PlayerWatchConfig> {
+    Json(state.player_watch_config.read().await.clone())
+}
+
+/// PUT /api/config/player-watch — update player watch configuration.
+pub async fn put_player_watch_config(
+    State(state): State<Arc<AppState>>,
+    Json(settings): Json<PlayerWatchConfig>,
+) -> Json<PlayerWatchConfig> {
+    let response = settings.clone();
+    *state.player_watch_config.write().await = settings;
+    Json(response)
 }
 // ─── Sessions
 // ─────────────────────────────────────────────────────────────────
@@ -873,12 +947,45 @@ mod tests {
     use axum::response::IntoResponse;
     use http_body_util::BodyExt;
     use serde_json::Value;
+    use std::collections::HashMap;
     use std::path::PathBuf;
-    use tempfile::tempdir;
     use textquest_common::ipc::{AutoAcceptSettings, AutoAcceptTrustMode};
 
     fn test_live_session_snapshot_path(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../data/runtime/{name}"))
+    }
+
+    fn test_app_state(snapshot_path: Option<PathBuf>) -> Arc<AppState> {
+        use textquest::alerts::AlertStore;
+        use textquest::config::AlertingConfig;
+
+        Arc::new(AppState {
+            event_tx: tokio::sync::broadcast::channel::<String>(8).0,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
+            character_configs: tokio::sync::RwLock::new(demo_character_configs()),
+            character_config_path: std::env::temp_dir().join("test-character-configs.json"),
+            character_config_write_lock: tokio::sync::Mutex::new(()),
+            loot_state: Arc::new(crate::api::loot::LootState::new_demo()),
+            economy_state: Arc::new(crate::api::economy::EconomyState::new_demo()),
+            dashboard_state: Arc::new(crate::api::dashboard::DashboardState::new_demo()),
+            soul_audit: Arc::new(crate::api::soul::SoulAuditState::new_demo()),
+            discord_state: Arc::new(crate::api::discord::DiscordState::new_demo()),
+            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
+            spawn_alerts: Arc::new(crate::api::spawn_alerts::SpawnAlertState::new_demo()),
+            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
+            kill_tracker_state: Arc::new(crate::api::kill_tracker::KillTrackerState::new_demo()),
+            alert_store: AlertStore::open_memory().expect("alert store"),
+            alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
+            alerting_config_path: std::env::temp_dir().join(format!("test-alerting-{}.toml", uuid::Uuid::new_v4())),
+            xassist_configs: crate::api::xassist::demo_xassist_configs(),
+            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
+            say_detection: Some(Arc::new(crate::api::say_detection::SayDetectionState::new_demo())),
+            api_token: None,
+            live_session_snapshot_path: snapshot_path
+                .unwrap_or_else(|| PathBuf::from("/tmp/test.json")),
+        })
     }
 
     async fn error_response_json(response: axum::response::Response) -> (StatusCode, Value) {

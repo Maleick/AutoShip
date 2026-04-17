@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use axum::{
     Json,
@@ -149,7 +149,7 @@ async fn put_settings(
     (StatusCode::OK, Json(settings)).into_response()
 }
 
-async fn get_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn get_sessions(State(state): State<Arc<AppState>>) -> Json<Vec<SessionStats>> {
     let sessions = state.kill_tracker_state.sessions.read().await;
     let mut result: Vec<SessionStats> = Vec::new();
     for (_character, char_sessions) in sessions.iter() {
@@ -157,21 +157,18 @@ async fn get_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
             result.push(latest.clone());
         }
     }
-    (StatusCode::OK, Json(result)).into_response()
+    Json(result)
 }
 
 async fn get_character_sessions(
     State(state): State<Arc<AppState>>,
     Path(character): Path<String>,
-) -> impl IntoResponse {
+) -> Json<Vec<SessionStats>> {
     let sessions = state.kill_tracker_state.sessions.read().await;
-    match sessions.get(&character) {
-        Some(char_sessions) => (StatusCode::OK, Json(char_sessions.clone())).into_response(),
-        None => (StatusCode::OK, Json(Vec::<SessionStats>::new())).into_response(),
-    }
+    Json(sessions.get(&character).cloned().unwrap_or_else(Vec::new))
 }
 
-async fn get_history(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn get_history(State(state): State<Arc<AppState>>) -> Json<Vec<CharacterHistory>> {
     let sessions = state.kill_tracker_state.sessions.read().await;
     let history: Vec<CharacterHistory> = sessions
         .iter()
@@ -180,7 +177,7 @@ async fn get_history(State(state): State<Arc<AppState>>) -> impl IntoResponse {
             sessions: char_sessions.clone(),
         })
         .collect();
-    (StatusCode::OK, Json(history)).into_response()
+    Json(history)
 }
 
 pub fn demo_session() -> SessionStats {
@@ -241,12 +238,20 @@ mod tests {
             account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(HashMap::new()),
+            auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
             dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            discord_state: crate::api::discord::DiscordState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(Default::default()),
+            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
+            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
             api_token: None,
             kill_tracker_state: KillTrackerState::new_demo(),
+            live_session_snapshot_path: PathBuf::from("/tmp/test_live_sessions.json"),
+            xassist_configs: crate::api::xassist::demo_xassist_configs(),
         })
     }
 
@@ -272,7 +277,9 @@ mod tests {
             max_session_history: 50,
         };
 
-        let response = put_settings(State(state.clone()), Json(new_settings.clone())).await;
+        let response = put_settings(State(state.clone()), Json(new_settings.clone()))
+            .await
+            .into_response();
         assert_eq!(response.status(), StatusCode::OK);
 
         let Json(updated) = get_settings(State(state)).await;
@@ -283,25 +290,22 @@ mod tests {
     #[tokio::test]
     async fn get_sessions_returns_empty_when_no_sessions() {
         let state = test_state();
-        let response = get_sessions(State(state)).await;
-        let Json(sessions) = response;
+        let Json(sessions) = get_sessions(State(state)).await;
         assert!(sessions.is_empty());
     }
 
     #[tokio::test]
     async fn get_character_sessions_returns_empty_for_unknown_character() {
         let state = test_state();
-        let response =
+        let Json(sessions) =
             get_character_sessions(State(state.clone()), Path("UnknownChar".to_string())).await;
-        let Json(sessions) = response;
         assert!(sessions.is_empty());
     }
 
     #[tokio::test]
     async fn get_history_returns_empty_when_no_sessions() {
         let state = test_state();
-        let response = get_history(State(state)).await;
-        let Json(history) = response;
+        let Json(history) = get_history(State(state)).await;
         assert!(history.is_empty());
     }
 }
