@@ -223,6 +223,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub box_chat: BoxChatConfig,
 
+    /// Chat logging configuration (MQ2Log parity).
+    #[serde(default)]
+    pub chat_log: crate::chat_log::ChatLogConfig,
+
     /// Enable timing-based anti-debug evasion correction.
     ///
     /// When enabled, hooks correct timing APIs (`GetTickCount` and
@@ -599,6 +603,7 @@ impl AppConfig {
             hook_rotation_interval_ms: default_hook_rotation_interval_ms(),
             discovery: PeerDiscoveryConfig::default(),
             box_chat: BoxChatConfig::default(),
+            chat_log: crate::chat_log::ChatLogConfig::default(),
             timing_correction: false,
             kill_tracker: KillTrackerConfig::default(),
         }
@@ -782,6 +787,7 @@ character = "Foo"
         assert!(cfg.group.is_empty());
         assert!(!cfg.discovery.multicast_enabled);
         assert_eq!(cfg.box_chat, BoxChatConfig::default());
+        assert!(!cfg.chat_log.enabled);
         assert!(!cfg.timing_correction);
         assert!(!cfg.hook_rotation_enabled);
         assert_eq!(cfg.hook_rotation_interval_ms, 30_000);
@@ -809,7 +815,10 @@ player_filter_mode = "strangers_only"
 "#,
         )
         .unwrap();
-        assert_eq!(cfg.spawn_watch.player_filter_mode, PlayerFilterMode::StrangersOnly);
+        assert_eq!(
+            cfg.spawn_watch.player_filter_mode,
+            PlayerFilterMode::StrangersOnly
+        );
     }
 
     #[test]

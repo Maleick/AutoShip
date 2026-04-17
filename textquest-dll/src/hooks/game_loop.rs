@@ -83,7 +83,7 @@ static CACHED_NEARBY_FOR_STICK: std::sync::Mutex<Vec<textquest_common::types::Sp
 /// Previous nearby-spawn snapshot used for delta detection and spawn event
 /// emission.
 static PREV_NEARBY_SPAWNS: std::sync::OnceLock<
-    std::sync::Mutex<std::collections::HashMap<u32, (String, u8)>>,
+    std::sync::Mutex<std::collections::HashMap<u32, String>>,
 > = std::sync::OnceLock::new();
 
 /// Set a button widget address to be clicked on the next game loop tick.
@@ -314,9 +314,9 @@ pub fn queue_slash_command(command: String) {
 //               `CancelCastLoop` command.
 //
 // `recast` mode: cast N+1 times total with exponential backoff between
-//                attempts. The backoff starts at
-//                `CAST_LOOP_BASE_BACKOFF_TICKS` and doubles each attempt,
-//                capped at `CAST_LOOP_MAX_BACKOFF_TICKS`.
+//                attempts.  The backoff starts at
+// `CAST_LOOP_BASE_BACKOFF_TICKS`                and doubles each attempt,
+// capped at `CAST_LOOP_MAX_BACKOFF_TICKS`.
 
 /// Base backoff between recast attempts (~0.4 s at 20 ticks/sec).
 const CAST_LOOP_BASE_BACKOFF_TICKS: u64 = 8;
@@ -1668,6 +1668,8 @@ fn read_and_publish_state(tick: u64) {
 
     // Read target (every tick).
     let target = read_target_state(eq_base);
+    let active_buffs = crate::combat::buffs::read_active_buffs(eq_base);
+    let pet = read_pet_state(eq_base);
 
     // Cache the entire GameState to avoid cloning the spawn Vec on non-refresh
     // ticks. On refresh ticks (every 30): rebuild spawns + all fields.
@@ -1722,9 +1724,9 @@ fn read_and_publish_state(tick: u64) {
             combat_status: crate::combat::status(),
             zone_short_name: zone_short,
             zone_long_name: zone_long,
+            active_buffs,
+            pet,
             actual_version: crate::eq_actual_version(),
-            active_buffs: Vec::new(),
-            pet: None,
         });
     } else if let Some(ref mut state) = *cached {
         state.local_player = local_player;
@@ -1732,6 +1734,8 @@ fn read_and_publish_state(tick: u64) {
         state.timestamp_ms = current_time_ms();
         state.nav_status = crate::nav::status();
         state.combat_status = crate::combat::status();
+        state.active_buffs = active_buffs;
+        state.pet = pet;
     } else {
         return;
     }
@@ -1748,12 +1752,12 @@ fn read_and_publish_state(tick: u64) {
 }
 
 fn compute_spawn_delta_events(
-    previous: &std::collections::HashMap<u32, (String, u8)>,
+    previous: &std::collections::HashMap<u32, String>,
     current: &[textquest_common::types::SpawnData],
     zone: String,
     timestamp_ms: u64,
 ) -> (
-    std::collections::HashMap<u32, (String, u8)>,
+    std::collections::HashMap<u32, String>,
     Vec<textquest_common::ipc::SpawnEvent>,
 ) {
     let mut next = std::collections::HashMap::new();
@@ -1762,36 +1766,31 @@ fn compute_spawn_delta_events(
         if spawn.spawn_id == 0 {
             continue;
         }
-        next.insert(
-            spawn.spawn_id,
-            (spawn.displayed_name.clone(), spawn.spawn_type),
-        );
+        next.insert(spawn.spawn_id, spawn.displayed_name.clone());
     }
 
     if previous.is_empty() {
         return (next, events);
     }
 
-    for (spawn_id, (name, spawn_type)) in &next {
+    for (spawn_id, name) in &next {
         if !previous.contains_key(spawn_id) {
             events.push(textquest_common::ipc::SpawnEvent {
                 client_id: std::process::id(),
                 zone: zone.clone(),
                 spawn_name: name.clone(),
-                spawn_type: *spawn_type,
                 kind: textquest_common::ipc::SpawnEventKind::Created,
                 timestamp_ms,
             });
         }
     }
 
-    for (spawn_id, (name, _)) in previous {
+    for (spawn_id, name) in previous {
         if !next.contains_key(spawn_id) {
             events.push(textquest_common::ipc::SpawnEvent {
                 client_id: std::process::id(),
                 zone: zone.clone(),
                 spawn_name: name.clone(),
-                spawn_type: 0,
                 kind: textquest_common::ipc::SpawnEventKind::Destroyed,
                 timestamp_ms,
             });
@@ -2056,6 +2055,25 @@ fn read_target_state(eq_base: u64) -> Option<textquest_common::types::SpawnData>
         return None;
     }
     Some(unsafe { read_spawn_data(target_ptr) })
+}
+
+#[cfg(windows)]
+fn read_pet_state(eq_base: u64) -> Option<textquest_common::types::PetData> {
+    let xtargets = unsafe { crate::combat::xtarget::read_extended_targets(eq_base) }?;
+    let pet = xtargets.pet()?;
+    let pet_target = xtargets.pet_target();
+    Some(textquest_common::types::PetData {
+        spawn_id: pet.spawn_id,
+        name: pet.name.clone(),
+        target_id: pet_target.map(|target| target.spawn_id),
+        target_name: pet_target.map(|target| target.name.clone()),
+        buffs: Vec::new(),
+    })
+}
+
+#[cfg(not(windows))]
+fn read_pet_state(_eq_base: u64) -> Option<textquest_common::types::PetData> {
+    None
 }
 
 /// Walk the spawn linked list and collect spawns within `max_distance` units
@@ -2786,12 +2804,6 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             let slots = crate::eq::inventory::query_open_container_slots(eq_base, &filter);
             crate::ipc::send_response(textquest_common::ipc::Response::ContainerSlots { slots });
         }
-        Command::QueryBazaarResults { filter } => {
-            tracing::info!(?filter, "QueryBazaarResults received");
-            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
-            let windows = crate::eq::bazaar::query_bazaar_results(eq_base, &filter);
-            crate::ipc::send_response(textquest_common::ipc::Response::BazaarResults { windows });
-        }
         Command::QueryContextMenu => {
             tracing::info!("QueryContextMenu received");
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
@@ -2877,6 +2889,10 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 spawn_id,
             });
         }
+        Command::UpdateSharedClientStates { states } => {
+            tracing::debug!(count = states.len(), "UpdateSharedClientStates received");
+            crate::combat::set_shared_client_states(states);
+        }
         Command::LootCorpse => {
             tracing::info!("LootCorpse received");
             crate::combat::loot::loot_nearest_corpse();
@@ -2890,8 +2906,12 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             crate::dialog::set_enabled(enabled);
         }
         Command::SetAutoRezConfig { config } => {
-            tracing::info!(?config, "SetAutoRezConfig received");
+            tracing::info!("SetAutoRezConfig received");
             crate::dialog::set_rez_config(config);
+        }
+        Command::SetAutoAcceptSettings { settings } => {
+            tracing::info!(enabled = settings.enabled, "SetAutoAcceptSettings received");
+            crate::dialog::set_settings(settings);
         }
         Command::SetRenderMode { mode } => {
             tracing::info!(%mode, "SetRenderMode received");
@@ -3100,10 +3120,6 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 address,
                 bytes: buf,
             });
-        }
-        Command::SetChatTimestampConfig { enabled, format } => {
-            tracing::info!(enabled, format = ?format, "SetChatTimestampConfig received");
-            crate::timestamp::apply(enabled, format);
         }
         other => {
             tracing::debug!(?other, "Unhandled command");
@@ -3752,10 +3768,9 @@ mod tests {
 
     #[test]
     fn spawn_delta_events_report_created_and_destroyed() {
-        let previous: HashMap<u32, (String, u8)> =
-            [(1u32, ("a_wolf".into(), 1)), (2, ("a_bear".into(), 1))]
-                .into_iter()
-                .collect();
+        let previous: HashMap<u32, String> = [(1u32, "a_wolf".into()), (2, "a_bear".into())]
+            .into_iter()
+            .collect();
 
         let current = vec![fake_spawn(2, "a_bear"), fake_spawn(3, "a_ox")];
         let (next, events) =
@@ -3763,12 +3778,9 @@ mod tests {
 
         assert_eq!(
             next,
-            [
-                (2u32, ("a_bear".to_string(), 1)),
-                (3u32, ("a_ox".to_string(), 1))
-            ]
-            .into_iter()
-            .collect()
+            [(2u32, "a_bear".to_string()), (3u32, "a_ox".to_string())]
+                .into_iter()
+                .collect()
         );
         assert_eq!(events.len(), 2);
         assert_eq!(
@@ -3785,13 +3797,13 @@ mod tests {
 
     #[test]
     fn spawn_delta_events_with_empty_previous_emits_none() {
-        let previous: HashMap<u32, (String, u8)> = HashMap::new();
+        let previous: HashMap<u32, String> = HashMap::new();
         let current = vec![fake_spawn(10, "a_goblin")];
         let (next, events) = compute_spawn_delta_events(&previous, &current, "freportw".into(), 1);
 
         assert_eq!(
             next,
-            [(10u32, ("a_goblin".to_string(), 1))].into_iter().collect()
+            [(10u32, "a_goblin".to_string())].into_iter().collect()
         );
         assert!(
             events.is_empty(),

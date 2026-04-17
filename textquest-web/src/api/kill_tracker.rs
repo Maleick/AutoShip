@@ -1,11 +1,11 @@
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
-    routing::get,
     Json,
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
+    routing::get,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -142,7 +142,10 @@ async fn put_settings(
     State(state): State<Arc<AppState>>,
     Json(settings): Json<KillTrackerSettings>,
 ) -> impl IntoResponse {
-    state.kill_tracker_state.update_settings(settings.clone()).await;
+    state
+        .kill_tracker_state
+        .update_settings(settings.clone())
+        .await;
     (StatusCode::OK, Json(settings)).into_response()
 }
 
@@ -163,9 +166,7 @@ async fn get_character_sessions(
 ) -> impl IntoResponse {
     let sessions = state.kill_tracker_state.sessions.read().await;
     match sessions.get(&character) {
-        Some(char_sessions) => {
-            (StatusCode::OK, Json(char_sessions.clone())).into_response()
-        }
+        Some(char_sessions) => (StatusCode::OK, Json(char_sessions.clone())).into_response(),
         None => (StatusCode::OK, Json(Vec::<SessionStats>::new())).into_response(),
     }
 }
@@ -290,7 +291,8 @@ mod tests {
     #[tokio::test]
     async fn get_character_sessions_returns_empty_for_unknown_character() {
         let state = test_state();
-        let response = get_character_sessions(State(state.clone()), Path("UnknownChar".to_string())).await;
+        let response =
+            get_character_sessions(State(state.clone()), Path("UnknownChar".to_string())).await;
         let Json(sessions) = response;
         assert!(sessions.is_empty());
     }

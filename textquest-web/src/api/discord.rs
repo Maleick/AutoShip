@@ -12,9 +12,7 @@ use tokio::sync::RwLock;
 
 use crate::AppState;
 
-use textquest_common::integrations::{
-    DiscordMentionPolicy, DiscordRouteConfig, Severity,
-};
+use textquest_common::integrations::{DiscordMentionPolicy, DiscordRouteConfig, Severity};
 
 /// In-memory Discord settings state shared across handlers.
 pub struct DiscordState {

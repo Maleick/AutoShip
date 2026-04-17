@@ -1250,7 +1250,7 @@ impl Combatant {
             3 => PALADIN_MELEE_SKILLS,       // Paladin: taunt, bash, kick
             5 => SHADOW_KNIGHT_MELEE_SKILLS, // Shadow Knight: taunt, bash, kick
             7 => MONK_MELEE_SKILLS,          /* Monk: flying kick, round kick, tiger claw, eagle
-                                               * strike */
+            * strike */
             9 => ROGUE_MELEE_SKILLS,      // Rogue: backstab
             15 => BEASTLORD_MELEE_SKILLS, // Beastlord: kick, flying kick
             _ => DEFAULT_MELEE_SKILLS,    // Berserker / Generic: kick

@@ -283,17 +283,21 @@ fn build_api_router() -> Router<Arc<AppState>> {
             get(api::spawn_alerts::list_alerts).delete(api::spawn_alerts::clear_alerts),
         )
         .route("/spawn-alerts/stats", get(api::spawn_alerts::get_stats))
-        .route("/spawn-alerts/config", get(api::spawn_alerts::get_config).put(api::spawn_alerts::put_config))
-        .route("/spawn-alerts/watch-list", get(api::spawn_alerts::get_watch_list))
+        .route(
+            "/spawn-alerts/config",
+            get(api::spawn_alerts::get_config).put(api::spawn_alerts::put_config),
+        )
+        .route(
+            "/spawn-alerts/watch-list",
+            get(api::spawn_alerts::get_watch_list),
+        )
         .route(
             "/spawn-alerts/watch-list/{pattern}",
-            put(api::spawn_alerts::put_watch_pattern).delete(api::spawn_alerts::delete_watch_pattern),
+            put(api::spawn_alerts::put_watch_pattern)
+                .delete(api::spawn_alerts::delete_watch_pattern),
         )
         // Timestamp Config API
-        .route(
-            "/timestamp-config",
-            get(api::list_timestamp_configs),
-        )
+        .route("/timestamp-config", get(api::list_timestamp_configs))
         .route(
             "/timestamp-config/{character}",
             get(api::get_timestamp_config).put(api::put_timestamp_config),

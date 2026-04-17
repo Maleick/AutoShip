@@ -118,7 +118,10 @@ impl OrchestratorLoop {
             app_config.retry.clone(),
             app_config.server.clone(),
         );
-        let orchestrator = Orchestrator::new();
+        let mut orchestrator = Orchestrator::new();
+        let log_dir = crate::paths::resolve_log_dir().join("chat");
+        orchestrator.init_chat_log_manager(app_config.chat_log.clone(), log_dir);
+
         let auto_camp_settings = app_config
             .group
             .iter()

@@ -1,17 +1,8 @@
 //! Orchestrator — wires the camp loop state machine to IPC command delivery.
 
-/// Cross-group emergency coordination for same-zone rez and assist flows.
-pub mod cross_group;
-/// Cross-group outside-group assist — MQ2XAssist parity.
-pub mod xassist;
 /// Session and group control model for the orchestrator.
 pub mod session_control;
 
-use self::{
-    cross_group::CrossGroupCoordinator,
-    session_control::SessionControl,
-    xassist::{XAssist, XAssistConfig},
-};
 use crate::{
     camp::{
         cc::CcType,
@@ -21,7 +12,7 @@ use crate::{
         state::{CampAction, CampEvent, CampLoop, CampMember, CampSnapshot, CampState, Role},
         vendor::{SellCycle, SellState, VendorConfig},
     },
-    chat_log::ChatLogWriter,
+    chat_log::{ChatChannel, ChatLogConfig, ChatLogManager},
     combat::coordinator::CombatCoordinator,
     ipc::{pipe::CommandPipe, shared::SharedStateReader},
 };
@@ -95,14 +86,6 @@ pub struct Orchestrator {
     state_timestamps: HashMap<u32, u64>,
     /// Last broadcast cross-client roster snapshot.
     last_shared_client_states: Vec<SharedClientState>,
-    /// Per-client coordination state, including group membership.
-    session_controls: HashMap<u32, SessionControl>,
-    /// Cached class names for clients registered through the launcher flow.
-    client_class_names: HashMap<u32, String>,
-    /// Same-zone cross-group rez and assist coordinator.
-    cross_group: CrossGroupCoordinator,
-    /// Cross-group outside-group assist (MQ2XAssist parity).
-    xassist: XAssist,
     // Pipe connections are created per-command (connect → token → command → drop).
     // The DLL's pipe server disconnects after each command, so persistent
     // connections would fail on the second write.
@@ -130,10 +113,12 @@ pub struct Orchestrator {
     trade_price_monitor_open_failed: bool,
     /// Last time passive trade chat was polled from the DLL.
     last_trade_chat_poll: Option<Instant>,
-    /// MQ2Log-style per-character chat output writer.
-    chat_log_writer: Option<ChatLogWriter>,
-    /// Server name for chat log file naming (server_charname.log format).
-    server_name: String,
+    /// Chat log manager for per-character log files (MQ2Log parity).
+    chat_log_manager: Option<ChatLogManager>,
+    /// Last time chat was polled for logging.
+    last_chat_log_poll: Option<Instant>,
+    /// Poll interval for chat logging.
+    chat_log_poll_interval: Duration,
 
     // --- M8 Orchestrator routing ---
     /// Active routing scope (synced from TUI `App::routing_scope` each tick).
@@ -166,10 +151,6 @@ impl Orchestrator {
             session_tokens: HashMap::new(),
             state_timestamps: HashMap::new(),
             last_shared_client_states: Vec::new(),
-            session_controls: HashMap::new(),
-            client_class_names: HashMap::new(),
-            cross_group: CrossGroupCoordinator::new(),
-            xassist: XAssist::new(),
             operating_mode: OperatingMode::Camp,
             active_hunt: None,
             sell_cycle: None,
@@ -180,8 +161,9 @@ impl Orchestrator {
             trade_price_monitor: None,
             trade_price_monitor_open_failed: false,
             last_trade_chat_poll: None,
-            chat_log_writer: None,
-            server_name: String::new(),
+            chat_log_manager: None,
+            last_chat_log_poll: None,
+            chat_log_poll_interval: Duration::from_secs(1),
             routing_scope: RoutingScope::AllSession,
             scope_pids: Vec::new(),
         }
@@ -359,6 +341,8 @@ impl Orchestrator {
 
         self.poll_game_states();
         self.sync_shared_client_states();
+        self.poll_trade_chat_if_due();
+        self.poll_chat_log_if_due();
 
         let commands = match self.operating_mode {
             OperatingMode::Camp => self.tick_camp(),
@@ -373,26 +357,11 @@ impl Orchestrator {
             .filter(|(pid, _)| in_scope.is_empty() || in_scope.contains(pid))
             .collect();
 
-        let xassist_commands = self.xassist.tick(&self.game_states);
-
-        let count = scoped.len() + xassist_commands.len();
+        let count = scoped.len();
         for (pid, action) in &scoped {
             self.dispatch_action(*pid, action);
         }
-        for (pid, cmd) in &xassist_commands {
-            if let xassist::AssistCommand::Target(spawn_id) = cmd {
-                self.send_ipc_command(*pid, Command::SetTarget { spawn_id: *spawn_id });
-            }
-        }
         self.last_dispatched = scoped;
-        self.last_dispatched
-            .extend(xassist_commands.iter().filter_map(|(pid, cmd)| {
-                if let xassist::AssistCommand::Target(spawn_id) = cmd {
-                    Some((*pid, CampAction::Slash(format!("/target spawn:{spawn_id}"))))
-                } else {
-                    None
-                }
-            }));
         count
     }
 
@@ -818,51 +787,6 @@ impl Orchestrator {
         token
     }
 
-    /// Assign a client to a logical orchestration group for cross-group
-    /// coordination.
-    pub fn set_client_group(&mut self, pid: u32, group_id: u8) {
-        let control = self
-            .session_controls
-            .entry(pid)
-            .or_insert_with(|| SessionControl::new(pid));
-        control.apply_command(&SessionControlCommand::SetGroup { group_id });
-    }
-
-    /// Return the configured orchestration group for a client, if known.
-    #[must_use]
-    pub fn client_group(&self, pid: u32) -> Option<u8> {
-        self.session_controls
-            .get(&pid)
-            .map(|control| control.group_id)
-    }
-
-    /// Cache a class name for a client so coordination logic can make
-    /// class-aware decisions.
-    pub fn set_client_class_name(&mut self, pid: u32, class_name: impl Into<String>) {
-        self.client_class_names.insert(pid, class_name.into());
-    }
-
-    /// Return the cached class name for a client, if one is known.
-    #[must_use]
-    pub fn client_class_name(&self, pid: u32) -> Option<&str> {
-        self.client_class_names.get(&pid).map(String::as_str)
-    }
-
-    /// Set the cross-group assist configuration for a client.
-    pub fn set_xassist_config(&mut self, pid: u32, config: xassist::XAssistConfig) {
-        self.xassist.set_config(pid, config);
-    }
-
-    /// Get the cross-group assist configuration for a client.
-    #[must_use]
-    pub fn get_xassist_config(&self, pid: u32) -> Option<xassist::XAssistConfig> {
-        self.xassist.get_config(pid).cloned()
-    }
-
-    /// Remove client from XAssist tracking.
-    pub fn remove_client_from_xassist(&mut self, pid: u32) {
-        self.xassist.remove_client(pid);
-    }
     /// Dispatch a `CampAction` to the appropriate client via IPC.
     fn dispatch_action(&mut self, pid: u32, action: &CampAction) {
         match action {
@@ -1018,9 +942,6 @@ impl Orchestrator {
         self.state_readers.remove(&pid);
         self.session_tokens.remove(&pid);
         self.state_timestamps.remove(&pid);
-        self.session_controls.remove(&pid);
-        self.client_class_names.remove(&pid);
-        self.xassist.remove_client(pid);
         tracing::info!(pid, "Client removed from orchestrator");
     }
 
@@ -1122,62 +1043,95 @@ impl Orchestrator {
         self.trade_price_monitor.as_mut()
     }
 
-    /// Set the server name for chat log file naming.
-    pub fn set_server_name(&mut self, server_name: impl Into<String>) {
-        self.server_name = server_name.into();
-    }
-
-    /// Configure the MQ2Log-style chat output writer.
-    ///
-    /// When `config.enabled` is `false`, the writer is dropped. When `enabled` is
-    /// `true`, a writer is created (or reconfigured) with the provided settings.
-    pub fn configure_chat_log(&mut self, config: textquest_common::chat::ChatLogConfig) {
-        use std::path::PathBuf;
-
-        if !config.enabled {
-            self.chat_log_writer = None;
-            tracing::info!("Chat logging disabled");
+    fn poll_chat_log_if_due(&mut self) {
+        if self
+            .last_chat_log_poll
+            .is_some_and(|last| last.elapsed() < self.chat_log_poll_interval)
+        {
             return;
         }
 
-        let log_dir = crate::paths::resolve_log_dir().join("chat");
-        let writer = match ChatLogWriter::new(PathBuf::from(&log_dir), config) {
-            Ok(w) => w,
-            Err(e) => {
-                tracing::warn!(error = %e, path = %log_dir.display(), "Failed to create chat log writer");
-                return;
-            }
-        };
-        self.chat_log_writer = Some(writer);
-        tracing::info!(path = %log_dir.display(), "Chat logging enabled");
-    }
-
-    /// Poll chat from all clients and write to log files.
-    fn poll_and_log_chat(&mut self) {
-        let writer = match &self.chat_log_writer {
-            Some(w) => w,
-            None => return,
-        };
-
-        let server = &self.server_name;
-        if server.is_empty() {
+        let pids = self.client_pids.clone();
+        if pids.is_empty() {
             return;
         }
+        self.last_chat_log_poll = Some(Instant::now());
 
-        for &pid in &self.client_pids {
-            let character_name = match self.client_names.get(&pid) {
-                Some(name) => name.as_str(),
-                None => continue,
+        for pid in pids {
+            let Some((server, character_name)) = self.game_states.get(&pid).map(|state| {
+                let server = if !state.zone_short_name.is_empty() {
+                    state.zone_short_name.clone()
+                } else {
+                    state.zone_long_name.clone()
+                };
+                let character_name = state
+                    .local_player
+                    .as_ref()
+                    .map(|player| player.displayed_name.clone())
+                    .or_else(|| self.client_names.get(&pid).cloned());
+                (server, character_name)
+            }) else {
+                continue;
+            };
+
+            let Some(character) = character_name else {
+                continue;
             };
 
             let messages = self.poll_chat(pid);
-            for msg in messages {
-                if let Some(event) = textquest_common::chat::parse_chat_text(&msg.text) {
-                    if let Err(e) = writer.write_event(character_name, server, &event) {
-                        tracing::warn!(error = %e, pid, character = character_name, "Failed to write chat to log");
+            if messages.is_empty() {
+                continue;
+            }
+
+            let Some(manager) = self.chat_log_manager.as_mut() else {
+                continue;
+            };
+
+            for message in messages {
+                let Some(chat) = textquest_common::chat::parse_chat_text(&message.text) else {
+                    if manager.get_config().log_eq_chat {
+                        let _ = manager.log_message(&server, &character, &message, None);
                     }
+                    continue;
+                };
+
+                let channel: ChatChannel = chat.channel.into();
+
+                if let Err(error) =
+                    manager.log_message(&server, &character, &message, Some(channel))
+                {
+                    tracing::warn!(
+                        pid,
+                        server = %server,
+                        character = %character,
+                        error = %error,
+                        "Failed to log chat message"
+                    );
                 }
             }
+        }
+    }
+
+    /// Initialize the chat log manager from config.
+    pub fn init_chat_log_manager(&mut self, config: ChatLogConfig, log_dir: PathBuf) {
+        match ChatLogManager::new(config, log_dir) {
+            Ok(manager) => {
+                tracing::info!("Chat log manager initialized");
+                self.chat_log_manager = Some(manager);
+            }
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    "Failed to initialize chat log manager"
+                );
+            }
+        }
+    }
+
+    /// Update chat log config at runtime.
+    pub fn update_chat_log_config(&mut self, config: ChatLogConfig) {
+        if let Some(manager) = self.chat_log_manager.as_mut() {
+            manager.update_config(config);
         }
     }
 

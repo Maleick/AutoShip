@@ -4,8 +4,9 @@ use crate::combat::{
     mez_queue::MezQueue,
     strategy::{ClassStrategy, CombatContext},
     twist::{
-        DEFAULT_SONG_DURATION_TICKS, DEFAULT_TWIST_DELAY_TICKS, InstrumentSlot, InstrumentSwapAction,
-        InstrumentSwapEngine, InstrumentType, SongCategory, SongSlot, TwistAction, TwistEngine,
+        DEFAULT_SONG_DURATION_TICKS, DEFAULT_TWIST_DELAY_TICKS, InstrumentSlot,
+        InstrumentSwapAction, InstrumentSwapEngine, InstrumentType, SongCategory, SongSlot,
+        TwistAction, TwistEngine,
     },
 };
 
@@ -233,7 +234,12 @@ impl BardStrategy {
         self.instrument_swap_enabled
     }
 
-    pub fn configure_instrument(&mut self, set_index: usize, inst_type: InstrumentType, item_id: u32) {
+    pub fn configure_instrument(
+        &mut self,
+        set_index: usize,
+        inst_type: InstrumentType,
+        item_id: u32,
+    ) {
         self.instrument_swap
             .configure_instrument(set_index, inst_type, item_id);
     }

@@ -489,3 +489,43 @@ export interface KillTrackerDashboard {
   characterHistory: CharacterHistory[];
   settings: KillTrackerSettings;
 }
+
+// ── Chat Log types ───────────────────────────────────────────────────────────
+
+export type ChatChannel =
+  | "say"
+  | "tell"
+  | "group"
+  | "raid"
+  | "guild"
+  | "ooc"
+  | "shout"
+  | "auction"
+  | "shout2"
+  | "pet"
+  | "spontaneous"
+  | "mpets"
+  | "mq2";
+
+export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
+
+export type RotationStrategy =
+  | { daily: null }
+  | { size: number }
+  | "none";
+
+export interface ChatLogConfig {
+  enabled: boolean;
+  channels: ChatChannel[];
+  rotation_strategy: RotationStrategy;
+  max_file_size_bytes: number;
+  min_level: LogLevel;
+  log_eq_chat: boolean;
+}
+
+export interface PerCharacterChatLogConfig {
+  character_name: string;
+  enabled: boolean;
+  channels: ChatChannel[];
+}
+}

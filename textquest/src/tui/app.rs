@@ -3647,11 +3647,8 @@ impl App {
     fn execute_friends_command(&mut self, args: &[&str]) {
         match args.first().copied() {
             None => {
-                let friends: Vec<String> = self
-                    .player_notification_friends
-                    .iter()
-                    .cloned()
-                    .collect();
+                let friends: Vec<String> =
+                    self.player_notification_friends.iter().cloned().collect();
                 if friends.is_empty() {
                     self.set_feedback(
                         ToastLevel::Info,
@@ -3667,11 +3664,8 @@ impl App {
                 }
             }
             Some("list") => {
-                let friends: Vec<String> = self
-                    .player_notification_friends
-                    .iter()
-                    .cloned()
-                    .collect();
+                let friends: Vec<String> =
+                    self.player_notification_friends.iter().cloned().collect();
                 if friends.is_empty() {
                     self.set_feedback(
                         ToastLevel::Info,

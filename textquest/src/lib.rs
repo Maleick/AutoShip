@@ -13,6 +13,8 @@ pub mod chat_log;
 /// Camp loop state machine — pulls, fights, loots, meds, buffs.
 #[allow(dead_code)]
 pub mod camp;
+/// Chat logging to file per character (MQ2Log parity).
+pub mod chat_log;
 /// Multi-client session management and self-healing monitor.
 #[allow(dead_code)]
 pub mod client;

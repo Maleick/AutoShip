@@ -120,8 +120,7 @@ mod imp {
     }
 
     fn is_process_alive(pid: u32) -> bool {
-        let Ok(handle) =
-            (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) })
+        let Ok(handle) = (unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) })
         else {
             return false;
         };

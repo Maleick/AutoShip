@@ -214,7 +214,10 @@ impl GmDetector {
             if spawn.is_gm && spawn.spawn_type == crate::eq::structs::SpawnType::Player {
                 current_gm_ids.insert(spawn.spawn_id);
 
-                let is_new = self.known_gms.insert(spawn.spawn_id, spawn.name.clone()).is_none();
+                let is_new = self
+                    .known_gms
+                    .insert(spawn.spawn_id, spawn.name.clone())
+                    .is_none();
 
                 if is_new {
                     let event = GmAlertEvent {
@@ -236,7 +239,8 @@ impl GmDetector {
             }
         }
 
-        let departed_gms: Vec<(u32, String)> = self.known_gms
+        let departed_gms: Vec<(u32, String)> = self
+            .known_gms
             .iter()
             .filter(|(id, _)| !current_gm_ids.contains(id))
             .map(|(id, name)| (*id, name.clone()))
