@@ -11,6 +11,10 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
+use textquest_common::nav::{
+    RelocationOptionState, RelocationSourceKind, build_relocation_destination_statuses,
+    relocation_catalog,
+};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -24,6 +28,7 @@ pub struct DashboardSnapshot {
     pub sessions: SessionSection,
     pub groups: GroupSection,
     pub navigation: NavigationSection,
+    pub relocation: RelocationSection,
     pub economy: EconomySection,
     pub combat: CombatSection,
     pub health: HealthSection,
@@ -122,6 +127,35 @@ pub struct NavigationSection {
     pub active_route_id: String,
     pub stuck_clients: u32,
     pub routes: Vec<RouteCard>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelocationSection {
+    pub ready_destinations: u32,
+    pub cooling_down_count: u32,
+    pub destinations: Vec<RelocationDestinationCard>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelocationDestinationCard {
+    pub zone: String,
+    pub label: String,
+    pub preferred_option: Option<String>,
+    pub preferred_source: Option<RelocationSourceKind>,
+    pub options: Vec<RelocationOptionCard>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelocationOptionCard {
+    pub id: String,
+    pub name: String,
+    pub source: RelocationSourceKind,
+    pub owned: bool,
+    pub ready: bool,
+    pub cooldown_remaining_secs: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -838,6 +872,7 @@ fn demo_snapshot() -> DashboardSnapshot {
                 },
             ],
         },
+        relocation: demo_relocation_section(),
         economy: EconomySection {
             items_received: 17,
             last_vendor_run: "14m ago".to_string(),
@@ -964,6 +999,58 @@ fn demo_snapshot() -> DashboardSnapshot {
     snapshot
 }
 
+fn demo_relocation_section() -> RelocationSection {
+    fn option_state(id: &str, cooldown_remaining_secs: Option<u32>) -> RelocationOptionState {
+        let option = relocation_catalog()
+            .into_iter()
+            .find(|option| option.id == id)
+            .expect("relocation catalog option");
+        RelocationOptionState::new(option, true, cooldown_remaining_secs)
+    }
+
+    let options = vec![
+        option_state("throne_of_heroes", None),
+        option_state("origin", None),
+        option_state("primary_anchor", Some(900)),
+        option_state("secondary_anchor", Some(480)),
+        option_state("nexus_gate_talisman", None),
+    ];
+    let destinations = build_relocation_destination_statuses(&options)
+        .into_iter()
+        .map(|status| RelocationDestinationCard {
+            zone: status.zone_name,
+            label: status.destination_label,
+            preferred_option: status.preferred_option_name,
+            preferred_source: status.preferred_source,
+            options: status
+                .options
+                .into_iter()
+                .map(|option| RelocationOptionCard {
+                    id: option.option.id,
+                    name: option.option.name,
+                    source: option.option.source,
+                    owned: option.owned,
+                    ready: option.ready,
+                    cooldown_remaining_secs: option.cooldown_remaining_secs,
+                })
+                .collect(),
+        })
+        .collect::<Vec<_>>();
+
+    RelocationSection {
+        ready_destinations: destinations
+            .iter()
+            .filter(|destination| destination.options.iter().any(|option| option.ready))
+            .count() as u32,
+        cooling_down_count: destinations
+            .iter()
+            .flat_map(|destination| destination.options.iter())
+            .filter(|option| !option.ready && option.cooldown_remaining_secs.is_some())
+            .count() as u32,
+        destinations,
+    }
+}
+
 fn refresh_snapshot(snapshot: &mut DashboardSnapshot) {
     snapshot.generated_at = iso_timestamp();
     snapshot.navigation.stuck_clients = snapshot
@@ -1064,6 +1151,7 @@ mod tests {
             "sessions",
             "groups",
             "navigation",
+            "relocation",
             "economy",
             "combat",
             "health",

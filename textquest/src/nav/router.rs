@@ -2,8 +2,10 @@
 //! transitions.
 
 use std::collections::HashMap;
+
+use crate::nav::relocate::{RelocationLoadout, group_ready_relocations};
 use textquest_common::{
-    nav::{IndexedQueue, Waypoint},
+    nav::{IndexedQueue, RelocationSourceKind, Waypoint},
     types::ClientId,
 };
 
@@ -28,6 +30,17 @@ pub enum TravelStep {
         zone_name: String,
         /// Client ID of the character casting the port spell.
         caster_id: ClientId,
+    },
+    /// Personal relocation: AA or clicky teleports the character directly.
+    RelocateTo {
+        /// Destination zone short name.
+        zone_name: String,
+        /// Stable catalog identifier for the relocation source.
+        option_id: String,
+        /// Display name for the selected relocation source.
+        option_name: String,
+        /// Whether the source is an AA or an item.
+        source: RelocationSourceKind,
     },
     /// Wait for staggered entry (random delay before zoning).
     StaggerWait {
@@ -108,6 +121,8 @@ pub fn generate_zone_staggers(
 pub struct GroupRouter {
     /// Client IDs of characters that can cast port/teleport spells.
     porters: Vec<ClientId>,
+    /// Per-client personal relocation tools (clickies and AAs).
+    relocation_loadouts: HashMap<ClientId, RelocationLoadout>,
 }
 
 impl GroupRouter {
@@ -116,6 +131,7 @@ impl GroupRouter {
     pub fn new() -> Self {
         Self {
             porters: Vec::new(),
+            relocation_loadouts: HashMap::new(),
         }
     }
 
@@ -124,6 +140,18 @@ impl GroupRouter {
     pub fn set_porters(&mut self, porter_ids: Vec<ClientId>) {
         tracing::info!(count = porter_ids.len(), "Registered porters for routing");
         self.porters = porter_ids;
+    }
+
+    /// Register the available personal relocation options for each client.
+    pub fn set_relocation_loadouts(
+        &mut self,
+        relocation_loadouts: HashMap<ClientId, RelocationLoadout>,
+    ) {
+        tracing::info!(
+            count = relocation_loadouts.len(),
+            "Registered relocation loadouts for routing"
+        );
+        self.relocation_loadouts = relocation_loadouts;
     }
 
     /// Whether any porters are available for long-distance travel.
@@ -144,8 +172,29 @@ impl GroupRouter {
         client_ids: &[ClientId],
         _class_map: &HashMap<ClientId, u8>,
         _from_zone: &str,
-        _to_zone: &str,
+        to_zone: &str,
     ) -> Vec<TravelPlan> {
+        if let Some(relocations) =
+            group_ready_relocations(client_ids, &self.relocation_loadouts, to_zone)
+        {
+            return client_ids
+                .iter()
+                .filter_map(|&id| {
+                    relocations.get(&id).map(|option| {
+                        TravelPlan::new(
+                            id,
+                            vec![TravelStep::RelocateTo {
+                                zone_name: option.option.zone_name.clone(),
+                                option_id: option.option.id.clone(),
+                                option_name: option.option.name.clone(),
+                                source: option.option.source,
+                            }],
+                        )
+                    })
+                })
+                .collect();
+        }
+
         // Future: when from_zone and to_zone are far apart (3+ zone transitions)
         // and self.has_porters(), generate PortTo steps using the nearest porter
         // instead of walking the full route.
@@ -183,6 +232,15 @@ pub fn plan_group_travel(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use textquest_common::nav::{RelocationOptionState, relocation_catalog};
+
+    fn relocation_state(id: &str, cooldown_remaining_secs: Option<u32>) -> RelocationOptionState {
+        let option = relocation_catalog()
+            .into_iter()
+            .find(|option| option.id == id)
+            .expect("catalog option");
+        RelocationOptionState::new(option, true, cooldown_remaining_secs)
+    }
 
     #[test]
     fn generate_zone_staggers_returns_correct_count() {
@@ -367,6 +425,28 @@ mod tests {
     }
 
     #[test]
+    fn travel_step_relocate_to() {
+        let step = TravelStep::RelocateTo {
+            zone_name: "guildlobby".to_string(),
+            option_id: "throne_of_heroes".to_string(),
+            option_name: "Throne of Heroes".to_string(),
+            source: RelocationSourceKind::Aa,
+        };
+        if let TravelStep::RelocateTo {
+            zone_name,
+            option_id,
+            option_name,
+            source,
+        } = step
+        {
+            assert_eq!(zone_name, "guildlobby");
+            assert_eq!(option_id, "throne_of_heroes");
+            assert_eq!(option_name, "Throne of Heroes");
+            assert_eq!(source, RelocationSourceKind::Aa);
+        }
+    }
+
+    #[test]
     fn generate_zone_staggers_different_seeds_produce_different_delays() {
         let ids = vec![1, 2, 3, 4, 5];
         let a = generate_zone_staggers(&ids, 5, 60, 42);
@@ -408,5 +488,90 @@ mod tests {
             let step = plan.current().unwrap();
             assert!(matches!(step, TravelStep::StaggerWait { .. }));
         }
+    }
+
+    #[test]
+    fn plan_travel_uses_group_relocation_when_every_client_is_ready() {
+        let ids = vec![1, 2];
+        let class_map: HashMap<u32, u8> = ids.iter().map(|&id| (id, 1u8)).collect();
+        let mut router = GroupRouter::new();
+        let mut loadouts = HashMap::new();
+        loadouts.insert(
+            1,
+            RelocationLoadout::new(vec![relocation_state("throne_of_heroes", None)]),
+        );
+        loadouts.insert(
+            2,
+            RelocationLoadout::new(vec![relocation_state("throne_of_heroes", None)]),
+        );
+        router.set_relocation_loadouts(loadouts);
+
+        let plans = router.plan_travel(&ids, &class_map, "poknowledge", "guildlobby");
+
+        assert_eq!(plans.len(), 2);
+        assert!(plans.iter().all(|plan| matches!(
+            plan.current(),
+            Some(TravelStep::RelocateTo {
+                zone_name,
+                option_id,
+                source: RelocationSourceKind::Aa,
+                ..
+            }) if zone_name == "guildlobby" && option_id == "throne_of_heroes"
+        )));
+    }
+
+    #[test]
+    fn plan_travel_falls_back_to_stagger_when_group_cannot_all_relocate() {
+        let ids = vec![1, 2];
+        let class_map: HashMap<u32, u8> = ids.iter().map(|&id| (id, 1u8)).collect();
+        let mut router = GroupRouter::new();
+        let mut loadouts = HashMap::new();
+        loadouts.insert(
+            1,
+            RelocationLoadout::new(vec![relocation_state("throne_of_heroes", None)]),
+        );
+        loadouts.insert(
+            2,
+            RelocationLoadout::new(vec![relocation_state("throne_of_heroes", Some(300))]),
+        );
+        router.set_relocation_loadouts(loadouts);
+
+        let plans = router.plan_travel(&ids, &class_map, "poknowledge", "guildlobby");
+
+        assert_eq!(plans.len(), 2);
+        assert!(
+            plans
+                .iter()
+                .all(|plan| matches!(plan.current(), Some(TravelStep::StaggerWait { .. })))
+        );
+    }
+
+    #[test]
+    fn plan_travel_prefers_ready_item_when_aa_is_on_cooldown() {
+        let ids = vec![1];
+        let class_map: HashMap<u32, u8> = ids.iter().map(|&id| (id, 1u8)).collect();
+        let mut router = GroupRouter::new();
+        let mut loadouts = HashMap::new();
+        loadouts.insert(
+            1,
+            RelocationLoadout::new(vec![
+                relocation_state("throne_of_heroes", Some(300)),
+                relocation_state("primary_anchor", None),
+            ]),
+        );
+        router.set_relocation_loadouts(loadouts);
+
+        let plans = router.plan_travel(&ids, &class_map, "poknowledge", "guildhall");
+
+        assert_eq!(plans.len(), 1);
+        assert!(matches!(
+            plans[0].current(),
+            Some(TravelStep::RelocateTo {
+                zone_name,
+                option_id,
+                source: RelocationSourceKind::Item,
+                ..
+            }) if zone_name == "guildhall" && option_id == "primary_anchor"
+        ));
     }
 }

@@ -14,6 +14,7 @@ pub mod mesh;
 #[cfg(windows)]
 pub mod mesh;
 pub mod recorder;
+pub mod relocate;
 pub mod router;
 pub mod stuck_detection;
 pub mod zone_transition;

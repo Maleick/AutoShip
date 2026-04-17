@@ -298,6 +298,28 @@ function titleCase(raw: string) {
   return raw.replaceAll("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function relocationSourceLabel(source: "aa" | "item" | null) {
+  if (source === "aa") {
+    return "AA";
+  }
+  if (source === "item") {
+    return "Item";
+  }
+  return "Unknown";
+}
+
+function relocationStatusLabel(
+  option: DashboardSnapshot["relocation"]["destinations"][number]["options"][number]
+) {
+  if (option.ready) {
+    return "Ready";
+  }
+  if (typeof option.cooldownRemainingSecs === "number") {
+    return `${option.cooldownRemainingSecs}s cooldown`;
+  }
+  return "Unavailable";
+}
+
 export default function OperatorDashboard() {
   const { snapshot, loading, error, connected, refresh, submitAction } = useDashboard();
   const [boxChatOpen, setBoxChatOpen] = useState(false);
@@ -1004,6 +1026,90 @@ export default function OperatorDashboard() {
 
           <div className="grid gap-6">
             <AutoAcceptPanel embedded />
+
+            <Panel
+              title="Relocation Network"
+              subtitle="AA and clicky travel coverage with cooldown visibility"
+              icon={<Sparkle size={20} />}
+              accent="cyan"
+            >
+              <div className="grid gap-3 sm:grid-cols-3">
+                <StatChip
+                  label="Ready Destinations"
+                  value={String(snapshot.relocation.readyDestinations)}
+                  tone="good"
+                />
+                <StatChip
+                  label="Cooling Down"
+                  value={String(snapshot.relocation.coolingDownCount)}
+                  tone={snapshot.relocation.coolingDownCount > 0 ? "warning" : "good"}
+                />
+                <StatChip
+                  label="Catalog"
+                  value={String(snapshot.relocation.destinations.length)}
+                />
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {snapshot.relocation.destinations.map((destination) => (
+                  <div
+                    key={destination.zone}
+                    className="rounded-3xl border border-white/10 bg-[#0d0715] p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="font-archaic text-lg text-white">
+                          {destination.label}
+                        </div>
+                        <p className="font-tech text-xs uppercase tracking-[0.24em] text-white/45">
+                          {destination.zone}
+                        </p>
+                      </div>
+                      <div className="text-right text-sm text-white/70">
+                        <div className="font-rune text-white">
+                          {destination.preferredOption ?? "No preferred option"}
+                        </div>
+                        <div className="font-tech text-[10px] uppercase tracking-[0.24em] text-cyan-100/80">
+                          Preferred {relocationSourceLabel(destination.preferredSource)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid gap-2">
+                      {destination.options.map((option) => (
+                        <div
+                          key={option.id}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3"
+                        >
+                          <div>
+                            <div className="font-rune text-white/90">{option.name}</div>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 font-tech text-[10px] uppercase tracking-[0.2em] text-cyan-100">
+                                {relocationSourceLabel(option.source)}
+                              </span>
+                              {!option.owned && (
+                                <span className="rounded-full border border-rose-400/20 bg-rose-400/10 px-2 py-1 font-tech text-[10px] uppercase tracking-[0.2em] text-rose-100">
+                                  Missing
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <span
+                            className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.24em] ${
+                              option.ready
+                                ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100"
+                                : "border-amber-300/25 bg-amber-300/10 text-amber-100"
+                            }`}
+                          >
+                            {relocationStatusLabel(option)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Panel>
 
             <Panel
               title="Economy Monitoring"

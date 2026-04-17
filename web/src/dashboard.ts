@@ -4,6 +4,7 @@ export interface DashboardSnapshot {
   sessions: SessionSection;
   groups: GroupSection;
   navigation: NavigationSection;
+  relocation: RelocationSection;
   economy: EconomySection;
   combat: CombatSection;
   health: HealthSection;
@@ -70,6 +71,29 @@ export interface NavigationSection {
   activeRouteId: string;
   stuckClients: number;
   routes: RouteCard[];
+}
+
+export interface RelocationSection {
+  readyDestinations: number;
+  coolingDownCount: number;
+  destinations: RelocationDestinationCard[];
+}
+
+export interface RelocationDestinationCard {
+  zone: string;
+  label: string;
+  preferredOption: string | null;
+  preferredSource: "aa" | "item" | null;
+  options: RelocationOptionCard[];
+}
+
+export interface RelocationOptionCard {
+  id: string;
+  name: string;
+  source: "aa" | "item";
+  owned: boolean;
+  ready: boolean;
+  cooldownRemainingSecs: number | null;
 }
 
 export interface RouteCard {

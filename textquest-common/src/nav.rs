@@ -1,5 +1,6 @@
 // textquest-common/src/nav.rs
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Knuth multiplicative hash constant for deterministic per-client randomness.
 pub const KNUTH_HASH: u32 = 2_654_435_761;
@@ -1076,6 +1077,226 @@ impl MoveToConfig {
     }
 }
 
+/// Source category for a relocation option.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelocationSourceKind {
+    /// Alternate Advancement relocation such as Throne of Heroes or Origin.
+    Aa,
+    /// Inventory item clicky such as anchors or gate talismans.
+    Item,
+}
+
+impl RelocationSourceKind {
+    fn priority(self) -> u8 {
+        match self {
+            Self::Aa => 0,
+            Self::Item => 1,
+        }
+    }
+}
+
+/// Static relocation definition with a known destination.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelocationOption {
+    /// Stable identifier used for config and UI wiring.
+    pub id: String,
+    /// Operator-visible ability or item name.
+    pub name: String,
+    /// Whether the option comes from an AA or an inventory item.
+    pub source: RelocationSourceKind,
+    /// Lowercase EQ zone short name or symbolic destination key.
+    pub zone_name: String,
+    /// Human-readable destination label.
+    pub destination_label: String,
+    /// Approximate cast or click time in seconds.
+    pub cast_time_secs: u16,
+    /// Full cooldown duration in seconds.
+    pub cooldown_secs: u32,
+}
+
+/// Runtime status for a single relocation option.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelocationOptionState {
+    /// Static relocation metadata.
+    pub option: RelocationOption,
+    /// Whether the character currently owns or has trained the option.
+    pub owned: bool,
+    /// Whether the option is immediately usable.
+    pub ready: bool,
+    /// Remaining cooldown, if any.
+    pub cooldown_remaining_secs: Option<u32>,
+}
+
+impl RelocationOptionState {
+    /// Create a relocation state and normalize any zero cooldown to ready.
+    #[must_use]
+    pub fn new(
+        option: RelocationOption,
+        owned: bool,
+        cooldown_remaining_secs: Option<u32>,
+    ) -> Self {
+        let cooldown_remaining_secs = cooldown_remaining_secs.filter(|secs| *secs > 0);
+        Self {
+            option,
+            owned,
+            ready: owned && cooldown_remaining_secs.is_none(),
+            cooldown_remaining_secs,
+        }
+    }
+}
+
+/// Operator-facing destination grouping for the relocation UI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelocationDestinationStatus {
+    /// Lowercase EQ zone short name or symbolic destination key.
+    pub zone_name: String,
+    /// Human-readable destination label.
+    pub destination_label: String,
+    /// Stable ID of the preferred option for this destination, if any.
+    pub preferred_option_id: Option<String>,
+    /// Human-readable name of the preferred option for this destination, if any.
+    pub preferred_option_name: Option<String>,
+    /// Source kind for the preferred option, if any.
+    pub preferred_source: Option<RelocationSourceKind>,
+    /// All known options for the destination.
+    pub options: Vec<RelocationOptionState>,
+}
+
+fn relocation_option(
+    id: &str,
+    name: &str,
+    source: RelocationSourceKind,
+    zone_name: &str,
+    destination_label: &str,
+    cast_time_secs: u16,
+    cooldown_secs: u32,
+) -> RelocationOption {
+    RelocationOption {
+        id: id.to_string(),
+        name: name.to_string(),
+        source,
+        zone_name: zone_name.to_string(),
+        destination_label: destination_label.to_string(),
+        cast_time_secs,
+        cooldown_secs,
+    }
+}
+
+fn relocation_option_sort_key(option: &RelocationOptionState) -> (u8, u8, u32, u16, String) {
+    (
+        u8::from(!option.ready),
+        option.option.source.priority(),
+        option.cooldown_remaining_secs.unwrap_or(0),
+        option.option.cast_time_secs,
+        option.option.name.clone(),
+    )
+}
+
+/// Built-in relocation catalog used by the travel router and dashboard.
+#[must_use]
+pub fn relocation_catalog() -> Vec<RelocationOption> {
+    vec![
+        relocation_option(
+            "throne_of_heroes",
+            "Throne of Heroes",
+            RelocationSourceKind::Aa,
+            "guildlobby",
+            "Guild Lobby",
+            10,
+            4_320,
+        ),
+        relocation_option(
+            "origin",
+            "Origin",
+            RelocationSourceKind::Aa,
+            "bind",
+            "Bind Point",
+            10,
+            900,
+        ),
+        relocation_option(
+            "primary_anchor",
+            "Primary Anchor",
+            RelocationSourceKind::Item,
+            "guildhall",
+            "Guild Hall",
+            6,
+            900,
+        ),
+        relocation_option(
+            "secondary_anchor",
+            "Secondary Anchor",
+            RelocationSourceKind::Item,
+            "guildhall",
+            "Guild Hall",
+            6,
+            900,
+        ),
+        relocation_option(
+            "nexus_gate_talisman",
+            "Nexus Gate Talisman",
+            RelocationSourceKind::Item,
+            "nexus",
+            "Nexus",
+            6,
+            300,
+        ),
+    ]
+}
+
+/// Choose the best owned relocation option.
+///
+/// Selection rules:
+/// - ready options always beat cooling-down options
+/// - ready AAs beat ready items
+/// - otherwise prefer the shortest remaining cooldown, then faster cast time
+#[must_use]
+pub fn select_best_relocation_option(
+    options: &[RelocationOptionState],
+) -> Option<&RelocationOptionState> {
+    options
+        .iter()
+        .filter(|option| option.owned)
+        .min_by_key(|option| relocation_option_sort_key(option))
+}
+
+/// Group relocation options by destination for operator display.
+#[must_use]
+pub fn build_relocation_destination_statuses(
+    options: &[RelocationOptionState],
+) -> Vec<RelocationDestinationStatus> {
+    let mut grouped = BTreeMap::<(String, String), Vec<RelocationOptionState>>::new();
+    for option in options {
+        grouped
+            .entry((
+                option.option.zone_name.clone(),
+                option.option.destination_label.clone(),
+            ))
+            .or_default()
+            .push(option.clone());
+    }
+
+    grouped
+        .into_iter()
+        .map(|((zone_name, destination_label), mut options)| {
+            options.sort_by_key(relocation_option_sort_key);
+            let preferred = select_best_relocation_option(&options);
+            RelocationDestinationStatus {
+                zone_name,
+                destination_label,
+                preferred_option_id: preferred.map(|option| option.option.id.clone()),
+                preferred_option_name: preferred.map(|option| option.option.name.clone()),
+                preferred_source: preferred.map(|option| option.option.source),
+                options,
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1092,6 +1313,86 @@ mod tests {
         assert_eq!(cfg.max_delay_ms, 0);
         assert!(!cfg.return_no_aggro);
         assert!(!cfg.return_not_looting);
+    }
+
+    #[test]
+    fn relocation_catalog_includes_items_and_aa_options() {
+        let catalog = relocation_catalog();
+        assert!(
+            catalog
+                .iter()
+                .any(|option| option.source == RelocationSourceKind::Aa),
+            "catalog should include at least one AA relocation"
+        );
+        assert!(
+            catalog
+                .iter()
+                .any(|option| option.source == RelocationSourceKind::Item),
+            "catalog should include at least one item relocation"
+        );
+    }
+
+    #[test]
+    fn select_best_relocation_option_prefers_ready_aa_over_ready_item() {
+        let catalog = relocation_catalog();
+        let aa = catalog
+            .iter()
+            .find(|option| option.id == "throne_of_heroes")
+            .cloned()
+            .expect("AA option");
+        let item = catalog
+            .iter()
+            .find(|option| option.id == "secondary_anchor")
+            .cloned()
+            .expect("item option");
+
+        let options = [
+            RelocationOptionState::new(item, true, None),
+            RelocationOptionState::new(aa, true, None),
+        ];
+        let selected = select_best_relocation_option(&options).expect("best option");
+
+        assert_eq!(selected.option.id, "throne_of_heroes");
+    }
+
+    #[test]
+    fn select_best_relocation_option_uses_ready_item_when_aa_is_cooling_down() {
+        let catalog = relocation_catalog();
+        let aa = catalog
+            .iter()
+            .find(|option| option.id == "throne_of_heroes")
+            .cloned()
+            .expect("AA option");
+        let item = catalog
+            .iter()
+            .find(|option| option.id == "secondary_anchor")
+            .cloned()
+            .expect("item option");
+
+        let options = [
+            RelocationOptionState::new(aa, true, Some(600)),
+            RelocationOptionState::new(item, true, None),
+        ];
+        let selected = select_best_relocation_option(&options).expect("best option");
+
+        assert_eq!(selected.option.id, "secondary_anchor");
+    }
+
+    #[test]
+    fn build_relocation_destination_statuses_groups_same_destination() {
+        let catalog = relocation_catalog();
+        let statuses = build_relocation_destination_statuses(&[
+            RelocationOptionState::new(catalog[2].clone(), true, Some(480)),
+            RelocationOptionState::new(catalog[3].clone(), true, None),
+        ]);
+
+        assert_eq!(statuses.len(), 1);
+        assert_eq!(statuses[0].zone_name, "guildhall");
+        assert_eq!(
+            statuses[0].preferred_option_id.as_deref(),
+            Some("secondary_anchor")
+        );
+        assert_eq!(statuses[0].options.len(), 2);
     }
 
     #[test]
