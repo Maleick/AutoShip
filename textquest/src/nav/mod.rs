@@ -8,6 +8,10 @@ use anyhow::{Context, Result};
 use crate::ipc;
 
 pub mod camp;
+#[cfg(not(windows))]
+#[path = "mesh_stub.rs"]
+pub mod mesh;
+#[cfg(windows)]
 pub mod mesh;
 pub mod recorder;
 pub mod router;

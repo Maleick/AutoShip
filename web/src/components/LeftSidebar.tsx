@@ -4,6 +4,7 @@ import {
   UsersThree,
   Globe,
   ShieldWarning,
+  BellRinging,
   Bag,
   Brain,
   Broadcast,
@@ -16,6 +17,7 @@ export type ActiveView =
   | "formations"
   | "map"
   | "security"
+  | "alerts"
   | "loot"
   | "soul"
   | "boxchat"
@@ -31,8 +33,8 @@ const navItems: {
   { icon: Sword, label: "Active Engagements", id: "engagements", pulse: true },
   { icon: UsersThree, label: "Fleet Formations", id: "formations" },
   { icon: Globe, label: "Realm Map (Norrath)", id: "map" },
-  { icon: Skull, label: "Rare Spawn Alerts", id: "spawns", pulse: true },
-  { icon: ShieldWarning, label: "Auto-Accept Wards", id: "security" },
+  { icon: ShieldWarning, label: "Security Wards", id: "security" },
+  { icon: BellRinging, label: "Alert Routing", id: "alerts", pulse: true },
   { icon: Bag, label: "Loot Configuration", id: "loot" },
   { icon: Brain, label: "Soul Engine", id: "soul" },
   { icon: Broadcast, label: "Network Box Chat", id: "boxchat" },

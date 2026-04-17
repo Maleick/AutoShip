@@ -53,6 +53,47 @@ export interface Alert {
   highlight?: string;
 }
 
+export type OperationalAlertSeverity = "critical" | "warning" | "info";
+
+export interface OperationalAlert {
+  id: number;
+  created_at: string;
+  severity: OperationalAlertSeverity;
+  kind: string;
+  message: string;
+  source: string | null;
+  actor: string | null;
+  zone: string | null;
+  metadata_json: string | null;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+}
+
+export interface AlertThresholdConfig {
+  death_alert: boolean;
+  stuck_alert: boolean;
+  memory_warning_mb: number;
+  ipc_latency_warning_ms: number;
+  error_rate_warning_per_min: number;
+  dps_drop_warning_pct: number;
+  zone_timeout_secs: number;
+}
+
+export interface AlertingConfig {
+  enable_discord: boolean;
+  discord_webhook_url: string;
+  enable_email: boolean;
+  smtp_server: string;
+  smtp_port: number;
+  smtp_username: string;
+  smtp_password: string;
+  email_from: string;
+  email_recipients: string[];
+  email_subject_prefix: string;
+  warning_batch_window_secs: number;
+  thresholds: AlertThresholdConfig;
+}
+
 export type NavItem = {
   id: string;
   label: string;

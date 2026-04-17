@@ -7,7 +7,6 @@
 | `config/textquest.toml` | Main TextQuest app config |
 | `config/accounts.toml` | Account and group-launch metadata |
 | `data/credentials.db` | Encrypted account password store used by `textquest autologin` |
-| `data/trade_prices.db` | Local SQLite store for passive `/ooc` and `/auction` Krono price observations |
 | `config/camps/*.toml` | Saved camp locations and thresholds |
 | `config/classes/*.toml` | Per-class combat and ability config |
 | `config/toons/*.toml` | Per-toon combat action overrides for the injected DLL |
@@ -31,87 +30,49 @@ Current sections include:
 - `[launch]`
 - `[server]`
 - `[retry]`
-- `[discovery]`
-- `[box_chat]`
+- `[alerts]`
 - `[soul]`
 - `[[group]]`
 - Discord-related options
 
-## Discord Webhooks
+## Operational Alerts
 
-TextQuest supports Discord webhook delivery for both category feeds and
-operational alert routes.
+Operational alert defaults are loaded from the main app config and persisted at runtime in
+`data/alerts.db`.
 
-The canonical operator surface is:
-
-- `config/textquest.toml` for static config
-- the web dashboard `Security Wards` view for webhook URL management and
-  per-event delivery policy
-
-The Discord config model is split into three parts:
-
-- `[discord]`
-  - `webhook_url` is the fallback webhook used when no more specific route is set
-  - `alert_hvt`, `alert_crashes`, `alert_mass_failures`, and `alert_status`
-    gate whether those alert families are emitted at all
-- `[discord.channels]`
-  - category feeds keyed by `kills`, `loot`, `timers`, `feats`, and `status`
-  - blank values fall back to `discord.webhook_url`
-- `[discord.notification_routes.<route>]`
-  - stable route keys: `death`, `status`, `hvt`, `crash`, `mass_failure`
-  - each route can override:
-    - `enabled`
-    - `webhook_url`
-    - `level`
-    - `message_mode`
-    - `mention_policy`
-
-Accepted route values are:
-
-- `level`: `INFO`, `WARNING`, `ERROR`, `CRITICAL`
-- `message_mode`: `rich_embed`, `plain_text`
-- `mention_policy`: `none`, `everyone`
-
-Current defaults are intentionally opinionated:
-
-- `death` defaults to `CRITICAL` with `mention_policy = "everyone"`
-- `status` defaults to `INFO` with `mention_policy = "none"`
-- all other operational routes default to `CRITICAL`
-
-The webhook sender enforces Discord's per-webhook delivery ceiling of 30
-requests per minute, so splitting high-volume feeds across different webhook
-URLs also increases available throughput.
-
-### `[box_chat]`
-
-`[box_chat]` enables the EQBC-style TCP relay used for cross-machine `/bc`,
-`/bca`, `/bcaa`, and `/bct` command delivery.
-
-Example:
+Use the `[alerts]` table in `config/textquest.toml` for bootstrap values:
 
 ```toml
-[box_chat]
-enabled = true
-host = "192.168.1.25"
-port = 2112
-auto_connect = true
+[alerts]
+enable_discord = true
+discord_webhook_url = "https://discord.com/api/webhooks/..."
+enable_email = false
+smtp_server = "smtp.example.com"
+smtp_port = 587
+smtp_username = "operator"
+smtp_password = "__SET_SMTP_PASSWORD__"
+email_from = "alerts@example.com"
+email_recipients = ["ops@example.com"]
+email_subject_prefix = "[TextQuest] "
+warning_batch_window_secs = 300
+
+[alerts.thresholds]
+death_alert = true
+stuck_alert = true
+memory_warning_mb = 200
+ipc_latency_warning_ms = 10
+error_rate_warning_per_min = 5
+dps_drop_warning_pct = 20
+zone_timeout_secs = 60
 ```
 
-Fields:
+Current behavior:
 
-- `enabled`: start the local box-chat runtime and listen on `port`
-- `host`: relay server host to connect to when `auto_connect = true`
-- `port`: shared TCP port used by the listener and connector
-- `auto_connect`: maintain an outbound connection to `host:port`
-
-Runtime behavior:
-
-- TextQuest long-lived processes poll `config/textquest.toml` and apply
-  `[box_chat]` changes without restart.
-- One machine can run as the relay server with `enabled = true` and
-  `auto_connect = false`.
-- Other machines can point `host` at that relay server and set
-  `auto_connect = true`.
+- Critical alerts are delivered immediately.
+- Warning alerts are batched over `warning_batch_window_secs`.
+- Info alerts stay in the alert history and daily-summary path.
+- The checked-in `config/frostreaver.toml` template now includes this section; copy it into `config/textquest.toml` for active operator configs.
+- The web dashboard can edit the live alert config at runtime, but those edits are currently process-local and are recorded as audit alerts instead of being written back to TOML automatically.
 
 ## Accounts
 
@@ -190,42 +151,6 @@ Supported sections are:
 
 These files are optional. When no per-toon file exists, TextQuest keeps using the existing built-in class strategy and any already-supplied combat config data.
 
-## Web Strategy Tuning
-
-The Strategy Tuning panel and `/api/config/characters` expose a per-character web configuration surface.
-
-Current fields include:
-
-- heal, mana-sit, and nuke thresholds
-- ordered rotation entries
-- class-specific strategy parameters
-- group override metadata
-- auto-rez policy
-
-The auto-rez policy currently covers:
-
-- `enabled`
-- `min_xp_pct`
-- `trusted_casters`
-- `decline_if_untrusted`
-- `delay_ms`
-
-Tribute automation is also exposed per character. The dashboard currently carries:
-
-- tribute auto-activate toggle
-- tribute warning lead time in seconds
-- preferred tribute list
-- live tribute status snapshot:
-  - active/inactive state
-  - time remaining
-  - current tribute point balance
-  - current active tribute list
-  - alert state (`ok`, `expiring`, or `expired`)
-
-The live demo/API shape for those settings is served from `textquest-web/src/api.rs` via `/api/config/characters` and `/api/config/characters/:name`.
-
-This state currently lives in memory inside `textquest-web`. It is available to the running dashboard process, but it is not yet persisted across backend restarts.
-
 ## Maps and Offsets
 
 - `config/maps/*.txt` supplies zone linework and labels for the TUI map.
@@ -234,14 +159,9 @@ This state currently lives in memory inside `textquest-web`. It is available to 
 ## Local Ghidra Caches
 
 - `data/ghidra.db` and `data/ghidra-export/` are local runtime/debug caches only.
+- `data/alerts.db` is a local runtime SQLite log for operational alerts and acknowledgments.
 - Canonical manifests, snapshot variants, baseline selection, and copied evidence live in the sibling `Maleick/TextQuest-Ghidra` repo under `snapshots/` and `baseline-selection/current.json`.
 - If a runbook needs durable evidence, link to the canonical `TextQuest-Ghidra` snapshot path rather than copying payload into this repo.
-
-## Passive Trade Price Cache
-
-- `data/trade_prices.db` is a repo-local SQLite database populated from the DLL's existing passive chat capture path.
-- The orchestrator polls accumulated `PollChat` batches, filters `/ooc` and `/auction` messages to trade hub zones, and stores Krono-denominated item sightings for later trend analysis.
-- This cache is mutable runtime state, not canonical evidence. Treat it like other local operator data stores and rebuild it from live captures when needed.
 
 ## Internals
 

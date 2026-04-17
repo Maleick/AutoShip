@@ -27,7 +27,6 @@ prost = "0.13"
 flate2 = "1"
 goblin = "0.9"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-recastnavigation-sys = { version = "1.0.3", features = ["detour_large_nav_meshes"] }
 tui-menu = "0.3"
 tui-tree-widget = "0.24"
 tui-widget-list = "0.15"

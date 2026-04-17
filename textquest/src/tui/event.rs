@@ -598,6 +598,29 @@ pub fn handle_events(
             return Ok(true);
         }
 
+        if app.alert_panel_visible {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('q') | KeyCode::F(8) => {
+                    app.alert_panel_visible = false;
+                }
+                KeyCode::Up | KeyCode::Char('k') => app.select_prev_alert(),
+                KeyCode::Down | KeyCode::Char('j') => app.select_next_alert(),
+                KeyCode::Char('r') => app.refresh_alert_history(),
+                KeyCode::Enter | KeyCode::Char('a') => {
+                    if let Err(err) = app.acknowledge_selected_alert("tui") {
+                        app.status_message = format!("Failed to acknowledge alert: {err}");
+                    }
+                }
+                KeyCode::Char('A') => {
+                    if let Err(err) = app.acknowledge_all_alerts("tui") {
+                        app.status_message = format!("Failed to acknowledge all alerts: {err}");
+                    }
+                }
+                _ => {}
+            }
+            return Ok(true);
+        }
+
         if app.spawns_state.search_mode {
             match key.code {
                 KeyCode::Esc | KeyCode::Enter => {
@@ -718,6 +741,10 @@ pub fn handle_events(
             }
             (KeyCode::Char(':'), _) => {
                 app.cmd_state.enter(None);
+                return Ok(true);
+            }
+            (KeyCode::F(8), _) => {
+                app.toggle_alert_panel();
                 return Ok(true);
             }
             (KeyCode::Char('/'), _) => {

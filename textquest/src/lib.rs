@@ -6,6 +6,8 @@
 
 #![allow(clippy::new_without_default)]
 
+/// Operational alerting — persistence, routing, Discord/email delivery.
+pub mod alerts;
 /// EQBC-style cross-machine TCP relay and dispatch manager.
 pub mod box_chat;
 /// Camp loop state machine — pulls, fights, loots, meds, buffs.
@@ -65,9 +67,6 @@ pub mod tui;
 
 /// CLI subcommands (dump, inject, navigate, login, etc.).
 pub mod cli;
-/// Shared local slash-command dispatch path used by direct sends and box-chat
-/// replay.
-pub mod command_dispatch;
 /// Testing utilities — scenario harness, metric types, and result types.
 #[allow(dead_code)]
 pub mod testing;
@@ -80,10 +79,6 @@ pub mod economy;
 /// logic.
 pub mod zoning;
 
-/// Timestamp config runtime — loads per-character timestamp settings from disk
-/// and dispatches IPC commands to DLL clients.
-pub mod timestamp_runtime;
-
 #[cfg(windows)]
 use anyhow::Context;
 use anyhow::Result;
@@ -93,9 +88,6 @@ pub const SOUL_DB_PATH: &str = "data/soul_memory.db";
 
 /// Default path for the Ghidra analysis SQLite cache.
 pub const GHIDRA_DB_PATH: &str = "data/ghidra.db";
-
-/// Default path for passive Krono trade-price observations.
-pub const TRADE_PRICE_DB_PATH: &str = "data/trade_prices.db";
 
 /// Path to the opcodes config file imported into the Ghidra DB at startup.
 pub const OPCODES_CONFIG_PATH: &str = "config/opcodes.json";

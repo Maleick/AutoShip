@@ -21,7 +21,6 @@ pub mod map;
 pub mod navigation;
 pub mod orchestrator_panel;
 pub mod packets;
-pub mod spawn_events;
 pub mod spawns;
 pub mod widgets;
 pub mod zone_status_panel;
@@ -34,11 +33,14 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
-use crate::tui::{
-    app::{ActivePanel, ActiveScreen, App, HelpFocus, ToastLevel},
-    command::HelpSection,
-    ui::widgets::{
-        WidthClass, centered_popup, classify_width, line_width, spans_width, truncate_inline,
+use crate::{
+    alerts::AlertSeverity,
+    tui::{
+        app::{ActivePanel, ActiveScreen, App, HelpFocus, ToastLevel},
+        command::HelpSection,
+        ui::widgets::{
+            WidthClass, centered_popup, classify_width, line_width, spans_width, truncate_inline,
+        },
     },
 };
 
@@ -71,9 +73,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         ActiveScreen::Debug => spawns::draw_debug_screen(frame, outer[1], app),
         ActiveScreen::PacketMonitor => packets::draw_packet_monitor(frame, outer[1], app),
         ActiveScreen::Economy => economy_controls::draw_economy_screen(frame, outer[1], app),
-        ActiveScreen::Orchestrator => {
-            orchestrator_panel::draw_orchestrator_screen(frame, outer[1], app);
-        }
+        ActiveScreen::Orchestrator => economy_controls::draw_economy_screen(frame, outer[1], app),
     }
 
     draw_status_bar(frame, outer[2], app);
@@ -146,6 +146,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             WizardWidget::new(&app.wizard_state).accent_color(app.theme.text_accent),
             frame.area(),
         );
+    }
+
+    if app.alert_panel_visible {
+        draw_alert_overlay(frame, area, app);
     }
 
     // Toast notification (bottom-right floating overlay, above status bar)
@@ -438,6 +442,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
                 ("Tab", "pane"),
                 ("[ ]", "client"),
                 ("/", "search"),
+                ("F8", "alerts"),
                 ("g/v", "sect"),
                 ("?", "help"),
             ],
@@ -446,6 +451,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
                 ("Shift+1-6", "group"),
                 ("Tab", "pane"),
                 ("[ ]", "client"),
+                ("F8", "alerts"),
                 ("g/v", "sections"),
                 ("z", "collapse"),
                 ("/", "search"),
@@ -457,6 +463,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
                 ("Shift+1-6", "group"),
                 ("Tab", "pane"),
                 ("[ ]", "client"),
+                ("F8", "alerts"),
                 ("g/v", "sections"),
                 ("z", "collapse"),
                 ("/", "search"),
@@ -543,6 +550,7 @@ fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> V
     });
 
     let filter = app.spawns_state.spawn_type_filter.label();
+    let unread_alerts = app.unread_alert_count();
     if let Some(ma) = ma_label {
         let _ = push_segment_if_fits(
             &mut spans,
@@ -598,6 +606,27 @@ fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> V
                         .bg(t.text_accent)
                         .add_modifier(Modifier::BOLD),
                 ),
+            ],
+            max_width,
+        );
+    }
+    if unread_alerts > 0 {
+        let badge_style = if unread_alerts >= 5 {
+            Style::default()
+                .fg(Color::White)
+                .bg(t.hp_low)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+                .fg(Color::Black)
+                .bg(t.text_highlight)
+                .add_modifier(Modifier::BOLD)
+        };
+        let _ = push_segment_if_fits(
+            &mut spans,
+            vec![
+                Span::raw(" "),
+                Span::styled(format!(" Alerts {unread_alerts} "), badge_style),
             ],
             max_width,
         );
@@ -742,6 +771,188 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(
         Paragraph::new(Line::from(right_spans)).block(widgets::panel("", t.border_dim, t)),
         cols[1],
+    );
+}
+
+fn alert_severity_style(t: &crate::tui::theme::Theme, severity: AlertSeverity) -> Style {
+    match severity {
+        AlertSeverity::Critical => Style::default()
+            .fg(Color::White)
+            .bg(t.hp_low)
+            .add_modifier(Modifier::BOLD),
+        AlertSeverity::Warning => Style::default()
+            .fg(Color::Black)
+            .bg(t.text_highlight)
+            .add_modifier(Modifier::BOLD),
+        AlertSeverity::Info => Style::default()
+            .fg(Color::Black)
+            .bg(t.text_accent)
+            .add_modifier(Modifier::BOLD),
+    }
+}
+
+fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let popup = centered_popup(area, 86, 82, 26, 12, 118, 38, 1);
+    let t = &app.theme;
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(8),
+            Constraint::Length(7),
+        ])
+        .split(popup);
+
+    frame.render_widget(Clear, popup);
+    frame.render_widget(
+        Paragraph::new(vec![
+            Line::from(vec![
+                Span::styled(" Operational Alerts ", t.statusbar_badge),
+                Span::raw(" "),
+                Span::styled(
+                    format!("Unread {}", app.unread_alert_count()),
+                    Style::default().fg(t.text_secondary),
+                ),
+            ]),
+            Line::from(Span::styled(
+                "F8/Esc close  j/k move  Enter or a acknowledge  Shift+A acknowledge all",
+                t.statusbar_dim,
+            )),
+        ])
+        .block(widgets::panel("Alert Feed", t.border_active, t)),
+        sections[0],
+    );
+
+    let list_body_height = sections[1].height.saturating_sub(2) as usize;
+    let visible_height = list_body_height.max(1);
+    let start = app
+        .alert_selected
+        .saturating_sub(visible_height.saturating_sub(1));
+    let end = (start + visible_height).min(app.alert_history.len());
+    let mut lines = Vec::new();
+
+    if app.alert_history.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "No operational alerts recorded yet.",
+            t.statusbar_dim,
+        )));
+    } else {
+        for (idx, alert) in app.alert_history[start..end].iter().enumerate() {
+            let absolute_idx = start + idx;
+            let selector = if absolute_idx == app.alert_selected {
+                ">"
+            } else {
+                " "
+            };
+            let ack = if alert.unread() { "NEW" } else { "ACK" };
+            let message = truncate_inline(
+                &alert.message,
+                sections[1].width.saturating_sub(24) as usize,
+            );
+            let line = Line::from(vec![
+                Span::styled(
+                    format!("{selector} "),
+                    if absolute_idx == app.alert_selected {
+                        Style::default()
+                            .fg(t.text_bright)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        t.statusbar_dim
+                    },
+                ),
+                Span::styled(
+                    format!(" {} ", alert.severity.as_str().to_uppercase()),
+                    alert_severity_style(t, alert.severity),
+                ),
+                Span::raw(" "),
+                Span::styled(
+                    format!("{ack:>3} "),
+                    if alert.unread() {
+                        Style::default().fg(t.text_highlight)
+                    } else {
+                        t.statusbar_dim
+                    },
+                ),
+                Span::styled(
+                    truncate_inline(alert.kind.display_name(), 20),
+                    Style::default().fg(t.text_secondary),
+                ),
+                Span::raw(" "),
+                Span::styled(message, Style::default().fg(t.text_bright)),
+            ]);
+            lines.push(line);
+        }
+    }
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(widgets::panel("History", t.border_dim, t))
+            .wrap(Wrap { trim: false }),
+        sections[1],
+    );
+
+    let detail_lines = if let Some(alert) = app.alert_history.get(app.alert_selected) {
+        vec![
+            Line::from(vec![
+                Span::styled("Kind: ", t.statusbar_dim),
+                Span::styled(
+                    alert.kind.display_name(),
+                    Style::default().fg(t.text_bright),
+                ),
+                Span::raw("   "),
+                Span::styled("Created: ", t.statusbar_dim),
+                Span::styled(
+                    alert.created_at.clone(),
+                    Style::default().fg(t.text_secondary),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Source: ", t.statusbar_dim),
+                Span::styled(
+                    alert.source.clone().unwrap_or_else(|| String::from("n/a")),
+                    Style::default().fg(t.text_secondary),
+                ),
+                Span::raw("   "),
+                Span::styled("Actor: ", t.statusbar_dim),
+                Span::styled(
+                    alert.actor.clone().unwrap_or_else(|| String::from("n/a")),
+                    Style::default().fg(t.text_secondary),
+                ),
+            ]),
+            Line::from(vec![
+                Span::styled("Zone: ", t.statusbar_dim),
+                Span::styled(
+                    alert.zone.clone().unwrap_or_else(|| String::from("n/a")),
+                    Style::default().fg(t.text_secondary),
+                ),
+                Span::raw("   "),
+                Span::styled("Ack: ", t.statusbar_dim),
+                Span::styled(
+                    alert
+                        .acknowledged_by
+                        .clone()
+                        .unwrap_or_else(|| String::from("unread")),
+                    Style::default().fg(t.text_secondary),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                alert.message.clone(),
+                Style::default().fg(t.text_bright),
+            )),
+        ]
+    } else {
+        vec![Line::from(Span::styled(
+            "Select an alert to inspect details.",
+            t.statusbar_dim,
+        ))]
+    };
+
+    frame.render_widget(
+        Paragraph::new(detail_lines)
+            .block(widgets::panel("Details", t.border_dim, t))
+            .wrap(Wrap { trim: false }),
+        sections[2],
     );
 }
 
@@ -1135,44 +1346,6 @@ mod tests {
     }
 
     #[test]
-    fn orchestrator_screen_dispatches_to_dashboard_renderer() {
-        let mut app = sample_app();
-        app.set_active_screen(ActiveScreen::Orchestrator);
-
-        let rendered = render_app(app, 150, 36);
-
-        assert!(rendered.contains("Session"));
-        assert!(rendered.contains("System"));
-        assert!(!rendered.contains("Economy Operator Controls"));
-    }
-
-    #[test]
-    fn orchestrator_screen_renders_system_health_when_tab_changes() {
-        let mut app = sample_app();
-        app.set_active_screen(ActiveScreen::Orchestrator);
-        app.orchestrator_state.active_tab =
-            crate::tui::ui::orchestrator_panel::OrchestratorTab::System;
-
-        let rendered = render_app(app, 140, 34);
-
-        assert!(rendered.contains("Client Health"));
-        assert!(rendered.contains("System Detail"));
-        assert!(rendered.contains("IPC p50/p95/p99"));
-    }
-
-    #[test]
-    fn orchestrator_screen_stays_readable_on_narrow_terminals() {
-        let mut app = sample_app();
-        app.set_active_screen(ActiveScreen::Orchestrator);
-
-        let rendered = render_app(app, 90, 24);
-
-        assert!(rendered.contains("Operator Dashboard"));
-        assert!(rendered.contains("Dashboard Shortcuts"));
-        assert!(rendered.contains("Session"));
-    }
-
-    #[test]
     fn help_overlay_small_host_uses_compact_rows() {
         let mut app = sample_app();
         app.help_visible = true;
@@ -1273,14 +1446,6 @@ mod tests {
             is_adaptive: true,
             target_id: 42,
         });
-        app.economy_state.loot_recent_items = vec![
-            String::from("Fungus Covered Scale Tunic"),
-            String::from("Crown of Narandi"),
-        ];
-        app.economy_state.loot_queue_size = 3;
-        app.economy_state.vendor_cycles_completed = 2;
-        app.economy_state.banking_chars_total = 6;
-        app.economy_state.banking_chars_done = 4;
         app.clients = (1..=12).map(sample_client).collect();
         app.selected_client = 0;
         app.sync_from_selected_client();

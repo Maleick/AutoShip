@@ -1,18 +1,8 @@
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-use textquest_common::box_chat::BoxChatConfig;
 use textquest_soul::config::SoulConfig;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PlayerFilterMode {
-    #[default]
-    All,
-    StrangersOnly,
-    FriendsOnly,
-}
 
 // ─── Account Configuration ───────────────────────────────────────────────
 
@@ -198,6 +188,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub discord: DiscordConfig,
 
+    /// Operational alerting configuration.
+    #[serde(default)]
+    pub alerts: AlertingConfig,
+
     /// Orchestrator event loop configuration
     #[serde(default)]
     pub orchestrator: OrchestratorConfig,
@@ -234,10 +228,6 @@ pub struct AppConfig {
     /// values.
     #[serde(default)]
     pub timing_correction: bool,
-
-    /// Kill tracker configuration for auto-reporting and session tracking.
-    #[serde(default)]
-    pub kill_tracker: KillTrackerConfig,
 }
 
 /// Discord webhook and bot configuration.
@@ -286,17 +276,6 @@ pub struct DiscordConfig {
     /// ```
     #[serde(default)]
     pub chat_channels: std::collections::HashMap<String, String>,
-    /// Per-alert-type Discord routing overrides.
-    ///
-    /// Keys are stable route names such as `"death"`, `"status"`, `"hvt"`,
-    /// `"crash"`, and `"mass_failure"`.
-    ///
-    /// A route can override the webhook URL, delivery level, message mode,
-    /// and mention policy for that alert type while falling back to the
-    /// default/category webhook URL when `webhook_url` is empty.
-    #[serde(default = "default_discord_notification_routes")]
-    pub notification_routes:
-        std::collections::HashMap<String, textquest_common::integrations::DiscordRouteConfig>,
 }
 
 impl Default for DiscordConfig {
@@ -312,53 +291,72 @@ impl Default for DiscordConfig {
             alert_status: false,
             command_allowed_senders: Vec::new(),
             chat_channels: std::collections::HashMap::new(),
-            notification_routes: default_discord_notification_routes(),
         }
     }
 }
 
-fn default_discord_notification_routes()
--> std::collections::HashMap<String, textquest_common::integrations::DiscordRouteConfig> {
-    use textquest_common::integrations::{DiscordMentionPolicy, DiscordRouteConfig, Severity};
+/// Thresholds that drive warning and timeout alert generation.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct AlertThresholdConfig {
+    pub death_alert: bool,
+    pub stuck_alert: bool,
+    pub memory_warning_mb: u32,
+    pub ipc_latency_warning_ms: u32,
+    pub error_rate_warning_per_min: u32,
+    pub dps_drop_warning_pct: u32,
+    pub zone_timeout_secs: u64,
+}
 
-    let mut routes = std::collections::HashMap::new();
-    routes.insert(
-        "death".to_string(),
-        DiscordRouteConfig {
-            level: Severity::Critical,
-            mention_policy: DiscordMentionPolicy::Everyone,
-            ..DiscordRouteConfig::default()
-        },
-    );
-    routes.insert(
-        "status".to_string(),
-        DiscordRouteConfig {
-            level: Severity::Info,
-            ..DiscordRouteConfig::default()
-        },
-    );
-    routes.insert(
-        "hvt".to_string(),
-        DiscordRouteConfig {
-            level: Severity::Critical,
-            ..DiscordRouteConfig::default()
-        },
-    );
-    routes.insert(
-        "crash".to_string(),
-        DiscordRouteConfig {
-            level: Severity::Critical,
-            ..DiscordRouteConfig::default()
-        },
-    );
-    routes.insert(
-        "mass_failure".to_string(),
-        DiscordRouteConfig {
-            level: Severity::Critical,
-            ..DiscordRouteConfig::default()
-        },
-    );
-    routes
+impl Default for AlertThresholdConfig {
+    fn default() -> Self {
+        Self {
+            death_alert: true,
+            stuck_alert: true,
+            memory_warning_mb: 200,
+            ipc_latency_warning_ms: 10,
+            error_rate_warning_per_min: 5,
+            dps_drop_warning_pct: 20,
+            zone_timeout_secs: 60,
+        }
+    }
+}
+
+/// Operational alert delivery configuration for Discord, email, and batching.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct AlertingConfig {
+    pub enable_discord: bool,
+    pub discord_webhook_url: String,
+    pub enable_email: bool,
+    pub smtp_server: String,
+    pub smtp_port: u16,
+    pub smtp_username: String,
+    pub smtp_password: String,
+    pub email_from: String,
+    pub email_recipients: Vec<String>,
+    pub email_subject_prefix: String,
+    pub warning_batch_window_secs: u64,
+    pub thresholds: AlertThresholdConfig,
+}
+
+impl Default for AlertingConfig {
+    fn default() -> Self {
+        Self {
+            enable_discord: false,
+            discord_webhook_url: String::new(),
+            enable_email: false,
+            smtp_server: String::new(),
+            smtp_port: 587,
+            smtp_username: String::new(),
+            smtp_password: String::new(),
+            email_from: String::new(),
+            email_recipients: Vec::new(),
+            email_subject_prefix: String::from("[TextQuest] "),
+            warning_batch_window_secs: 300,
+            thresholds: AlertThresholdConfig::default(),
+        }
+    }
 }
 
 /// Configuration for a group of characters that play together.
@@ -372,28 +370,6 @@ pub struct GroupConfig {
     /// Toon (character) definitions within this group.
     #[serde(default)]
     pub toon: Vec<ToonConfig>,
-}
-
-/// Per-character unattended death handling.
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-#[serde(default)]
-pub struct AutoCampOnDeathConfig {
-    /// Enable automatic `/camp desktop` plus relog scheduling after death.
-    pub enabled: bool,
-    /// Seconds to wait after death before camping to allow a rez attempt.
-    pub camp_delay_secs: u64,
-    /// Seconds to stay logged out before triggering AutoLogin relog.
-    pub relog_wait_secs: u64,
-}
-
-impl Default for AutoCampOnDeathConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            camp_delay_secs: 30,
-            relog_wait_secs: 900,
-        }
-    }
 }
 
 /// Configuration for a single character (toon) within a group.
@@ -412,9 +388,6 @@ pub struct ToonConfig {
     /// Account name this toon belongs to.
     #[serde(default)]
     pub account: Option<String>,
-    /// Unattended death auto-camp and relog behavior.
-    #[serde(default)]
-    pub auto_camp_on_death: AutoCampOnDeathConfig,
 }
 
 /// Configuration for EQ client launching — paths, stagger timing, and resource
@@ -597,6 +570,7 @@ impl AppConfig {
             retry: RetryConfig::default(),
             soul: SoulConfig::default(),
             discord: DiscordConfig::default(),
+            alerts: AlertingConfig::default(),
             orchestrator: OrchestratorConfig::default(),
             spawn_watch: SpawnWatchConfig::default(),
             hook_rotation_enabled: false,
@@ -605,17 +579,7 @@ impl AppConfig {
             box_chat: BoxChatConfig::default(),
             chat_log: crate::chat_log::ChatLogConfig::default(),
             timing_correction: false,
-            kill_tracker: KillTrackerConfig::default(),
         }
-    }
-
-    /// Find a toon definition by character name, case-insensitively.
-    #[must_use]
-    pub fn find_toon(&self, character_name: &str) -> Option<&ToonConfig> {
-        self.group
-            .iter()
-            .flat_map(|group| group.toon.iter())
-            .find(|toon| toon.name.eq_ignore_ascii_case(character_name))
     }
 }
 
@@ -627,9 +591,6 @@ pub struct SpawnWatchConfig {
     pub watch_names: Vec<String>,
     pub alert_named: bool,
     pub max_feed_entries: usize,
-    pub player_filter_mode: PlayerFilterMode,
-    pub sound_on_player_zone_in: bool,
-    pub friends: Vec<String>,
 }
 
 impl Default for SpawnWatchConfig {
@@ -639,44 +600,6 @@ impl Default for SpawnWatchConfig {
             watch_names: Vec::new(),
             alert_named: true,
             max_feed_entries: 200,
-            player_filter_mode: PlayerFilterMode::default(),
-            sound_on_player_zone_in: false,
-            friends: Vec::new(),
-        }
-    }
-}
-
-/// Configuration for kill count tracking and auto-reporting (MQ2KillTracker parity).
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
-pub struct KillTrackerConfig {
-    /// Enable kill count tracking and recording.
-    pub enabled: bool,
-    /// Auto-report kill stats to the specified chat channel every N minutes.
-    /// 0 = disabled.
-    pub auto_report_interval_minutes: u32,
-    /// Chat channel to report to: "group", "raid", "guild", "say", "shout", "ooc".
-    pub auto_report_channel: String,
-    /// Include per-mob breakdown in auto-reports.
-    pub auto_report_include_mobs: bool,
-    /// Include kills-per-hour in auto-reports.
-    pub auto_report_include_kph: bool,
-    /// Enable per-character session tracking.
-    pub track_per_character: bool,
-    /// Maximum number of historical sessions to retain per character.
-    pub max_session_history: usize,
-}
-
-impl Default for KillTrackerConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            auto_report_interval_minutes: 10,
-            auto_report_channel: String::from("group"),
-            auto_report_include_mobs: true,
-            auto_report_include_kph: true,
-            track_per_character: true,
-            max_session_history: 100,
         }
     }
 }
@@ -916,7 +839,6 @@ timing_correction = true
         // Defaults for nested configs
         assert!(cfg.group.is_empty());
         assert_eq!(cfg.server.name, "Firiona Vie");
-        assert_eq!(cfg.box_chat, BoxChatConfig::default());
     }
 
     #[test]
@@ -944,14 +866,6 @@ timing_correction = true
         assert!(!cfg.alert_status);
         assert!(cfg.command_allowed_senders.is_empty());
         assert!(cfg.chat_channels.is_empty());
-        assert_eq!(cfg.notification_routes.len(), 5);
-        assert_eq!(
-            cfg.notification_routes
-                .get("death")
-                .expect("death route")
-                .mention_policy,
-            textquest_common::integrations::DiscordMentionPolicy::Everyone
-        );
     }
 
     #[test]
@@ -975,40 +889,6 @@ timing_correction = true
             "https://example.com/raid"
         );
         assert!(!cfg.discord.chat_channels.contains_key("guild"));
-    }
-
-    #[test]
-    fn discord_config_notification_routes_parsed() {
-        let toml_str = r#"
-            [discord]
-            webhook_url = "https://example.com/default"
-
-            [discord.notification_routes.death]
-            webhook_url = "https://example.com/death"
-            level = "CRITICAL"
-            message_mode = "plain_text"
-            mention_policy = "everyone"
-
-            [discord.notification_routes.status]
-            enabled = false
-            level = "INFO"
-        "#;
-
-        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
-        let death = cfg.discord.notification_routes.get("death").unwrap();
-        assert_eq!(death.webhook_url, "https://example.com/death");
-        assert_eq!(
-            death.message_mode,
-            textquest_common::integrations::DiscordMessageMode::PlainText
-        );
-        assert_eq!(
-            death.mention_policy,
-            textquest_common::integrations::DiscordMentionPolicy::Everyone
-        );
-
-        let status = cfg.discord.notification_routes.get("status").unwrap();
-        assert!(!status.enabled);
-        assert_eq!(status.level, textquest_common::integrations::Severity::Info);
     }
 
     #[test]
@@ -1077,12 +957,6 @@ timing_correction = true
             timers = "https://example.com/timers"
             feats = "https://example.com/feats"
 
-            [discord.notification_routes.death]
-            webhook_url = "https://example.com/death"
-            level = "CRITICAL"
-            message_mode = "plain_text"
-            mention_policy = "everyone"
-
             [discovery]
             multicast_enabled = true
             bind_addr = "0.0.0.0"
@@ -1092,12 +966,6 @@ timing_correction = true
             peer_ttl_ms = 9000
             node_name = "basement-rig"
             multicast_ttl = 2
-
-            [box_chat]
-            enabled = true
-            host = "192.168.1.25"
-            port = 3002
-            auto_connect = true
         "#;
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.process_name, "custom.exe");
@@ -1121,12 +989,6 @@ timing_correction = true
             cfg.discord.channels.get("kills").unwrap(),
             "https://example.com/kills"
         );
-        let death = cfg.discord.notification_routes.get("death").unwrap();
-        assert_eq!(death.webhook_url, "https://example.com/death");
-        assert_eq!(
-            death.message_mode,
-            textquest_common::integrations::DiscordMessageMode::PlainText
-        );
         assert!(cfg.discovery.multicast_enabled);
         assert_eq!(cfg.discovery.multicast_addr, "239.255.42.123");
         assert_eq!(cfg.discovery.port, 39001);
@@ -1134,10 +996,6 @@ timing_correction = true
         assert_eq!(cfg.discovery.peer_ttl_ms, 9000);
         assert_eq!(cfg.discovery.node_name, "basement-rig");
         assert_eq!(cfg.discovery.multicast_ttl, 2);
-        assert!(cfg.box_chat.enabled);
-        assert_eq!(cfg.box_chat.host, "192.168.1.25");
-        assert_eq!(cfg.box_chat.port, 3002);
-        assert!(cfg.box_chat.auto_connect);
     }
 
     #[test]
@@ -1181,38 +1039,6 @@ timing_correction = true
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
         assert!(cfg.group[0].toon[0].eq_window_title.is_empty());
         assert!(cfg.group[0].toon[0].account.is_none());
-        assert_eq!(
-            cfg.group[0].toon[0].auto_camp_on_death,
-            AutoCampOnDeathConfig::default()
-        );
-    }
-
-    #[test]
-    fn toon_config_parses_auto_camp_on_death() {
-        let toml_str = r#"
-            [[group]]
-            id = 1
-            name = "Test"
-
-            [[group.toon]]
-            name = "Foo"
-            class = "WAR"
-            role = "dps"
-
-            [group.toon.auto_camp_on_death]
-            enabled = true
-            camp_delay_secs = 45
-            relog_wait_secs = 1200
-        "#;
-        let cfg: AppConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(
-            cfg.group[0].toon[0].auto_camp_on_death,
-            AutoCampOnDeathConfig {
-                enabled: true,
-                camp_delay_secs: 45,
-                relog_wait_secs: 1200,
-            }
-        );
     }
 
     #[test]
@@ -1341,34 +1167,5 @@ name = "AltGroup"
         // AltGroup (id=3) exists but no accounts have group=3
         let accts = cfg.accounts_for_profile_name("AltGroup").unwrap();
         assert!(accts.is_empty());
-    }
-
-    #[test]
-    fn kill_tracker_config_defaults() {
-        let cfg = KillTrackerConfig::default();
-        assert!(cfg.enabled);
-        assert_eq!(cfg.auto_report_interval_minutes, 10);
-        assert_eq!(cfg.auto_report_channel, "group");
-        assert!(cfg.auto_report_include_mobs);
-        assert!(cfg.auto_report_include_kph);
-        assert!(cfg.track_per_character);
-        assert_eq!(cfg.max_session_history, 100);
-    }
-
-    #[test]
-    fn kill_tracker_config_toml_parse() {
-        let toml_str = r#"
-            auto_report_interval_minutes = 5
-            auto_report_channel = "raid"
-            auto_report_include_mobs = false
-            auto_report_include_kph = false
-            max_session_history = 50
-        "#;
-        let cfg: KillTrackerConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(cfg.auto_report_interval_minutes, 5);
-        assert_eq!(cfg.auto_report_channel, "raid");
-        assert!(!cfg.auto_report_include_mobs);
-        assert!(!cfg.auto_report_include_kph);
-        assert_eq!(cfg.max_session_history, 50);
     }
 }

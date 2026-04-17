@@ -178,6 +178,7 @@ pub async fn resume_economy(State(state): State<Arc<AppState>>, headers: HeaderM
 #[cfg(test)]
 mod tests {
     use super::*;
+    use textquest::{alerts::AlertStore, config::AlertingConfig};
 
     fn demo_state() -> Arc<AppState> {
         let (event_tx, _) = tokio::sync::broadcast::channel(1);
@@ -186,15 +187,14 @@ mod tests {
             account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
-            auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: EconomyState::new_demo(),
-            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
-            discord_state: crate::api::discord::DiscordState::new_demo(),
+            alert_store: AlertStore::open_memory().expect("alert store"),
+            alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
+            alerting_config_path: std::env::temp_dir()
+                .join(format!("textquest-economy-test-alerting-{}.toml", uuid::Uuid::new_v4())),
             api_token: None,
-            live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../data/runtime/economy-test-live-sessions.json"),
         })
     }
 

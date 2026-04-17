@@ -38,6 +38,31 @@ eq_path = "C:\\Path\\To\\EverQuest"
 # mass_failure_threshold = 5
 # mass_failure_window_secs = 60
 
+# ─── Operational Alerts ───
+# Bootstrap settings for persisted alerts, Discord webhooks, SMTP summaries,
+# and threshold-based warning generation. Alerts are written to `data/alerts.db`.
+[alerts]
+enable_discord = false
+discord_webhook_url = ""
+enable_email = false
+smtp_server = ""
+smtp_port = 587
+smtp_username = ""
+smtp_password = ""
+email_from = ""
+email_recipients = []
+email_subject_prefix = "[TextQuest] "
+warning_batch_window_secs = 300
+
+[alerts.thresholds]
+death_alert = true
+stuck_alert = true
+memory_warning_mb = 200
+ipc_latency_warning_ms = 10
+error_rate_warning_per_min = 5
+dps_drop_warning_pct = 20
+zone_timeout_secs = 60
+
 # ─── Optional Peer Discovery ───
 # Enable this to advertise active sessions over UDP multicast and discover
 # other TextQuest orchestrators on the same network segment.

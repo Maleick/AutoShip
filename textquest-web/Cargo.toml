@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+textquest = { path = "../textquest" }
 textquest-common = { path = "../textquest-common" }
 axum = { version = "0.8", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }
@@ -11,11 +12,8 @@ tower-http = { version = "0.6", features = ["cors", "fs"] }
 chrono = { version = "0.4", features = ["serde"] }
 serde.workspace = true
 serde_json.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
-anyhow.workspace = true
-toml_edit.workspace = true
 toml.workspace = true
+tracing.workspace = true
 rusqlite = { version = "0.32", features = ["bundled"] }
 aes-gcm = "0.10"
 argon2 = "0.5"

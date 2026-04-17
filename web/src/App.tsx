@@ -5,6 +5,7 @@ import RightSidebar from "./components/RightSidebar";
 import GroupBuilder from "./components/GroupBuilder";
 import LootConfig from "./components/LootConfig";
 import SoulPanel from "./components/SoulPanel";
+import AlertsPanel from "./components/AlertsPanel";
 import SpawnAlerts from "./components/SpawnAlerts";
 import ChatPatternRules from "./components/ChatPatternRules";
 
@@ -22,6 +23,8 @@ function App() {
         <LeftSidebar activeView={activeView} onNavigate={setActiveView} />
         {activeView === "formations" ? (
           <GroupBuilder />
+        ) : activeView === "alerts" ? (
+          <AlertsPanel />
         ) : activeView === "loot" ? (
           <LootConfig />
         ) : activeView === "soul" ? (

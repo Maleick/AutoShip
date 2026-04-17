@@ -26,12 +26,17 @@ use axum::{
     http::{HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::Response,
-    routing::{get, put},
+    routing::{delete, get, post, put},
 };
 use tokio::sync::broadcast;
 use tower_http::{
     cors::CorsLayer,
     services::{ServeDir, ServeFile},
+};
+
+use textquest::{
+    alerts::AlertStore,
+    config::AlertingConfig,
 };
 
 mod accounts;
@@ -72,6 +77,14 @@ pub struct AppState {
     pub timestamp_configs: tokio::sync::RwLock<HashMap<String, api::TimestampConfig>>,
     /// Kill tracker state for session tracking and auto-reporting.
     pub kill_tracker_state: Arc<api::kill_tracker::KillTrackerState>,
+    /// Persistent operational alert history.
+    pub alert_store: AlertStore,
+    /// Runtime-editable alert delivery configuration for the web dashboard.
+    pub alert_config: tokio::sync::RwLock<AlertingConfig>,
+    /// Disk location where `PUT /api/alerts/config` persists the
+    /// `AlertingConfig`. Tests point this at a tempfile via
+    /// [`test_state`] so they never touch the checked-in repo.
+    pub alerting_config_path: PathBuf,
     /// Optional static API token for protecting all `/api` endpoints.
     /// Set via `TEXTQUEST_API_TOKEN` environment variable.
     /// When `None`, API endpoints are unauthenticated (localhost-only
@@ -139,15 +152,115 @@ fn live_session_snapshot_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/runtime/live_sessions.json")
 }
 
+fn alerts_db_path() -> PathBuf {
+    // Delegate to the shared helper so the TUI and web processes always
+    // resolve to the same SQLite file. Honors TEXTQUEST_ALERT_DB_PATH.
+    textquest::alerts::resolve_alert_db_path()
+}
+
+/// Side-car file where dashboard-edited [`AlertingConfig`] values persist
+/// across web restarts. Separate from `config/textquest.toml` so the web
+/// dashboard can re-save alert config without touching operator-managed
+/// TUI configuration.
+fn alerting_config_path() -> PathBuf {
+    if let Ok(override_path) = std::env::var("TEXTQUEST_ALERTING_CONFIG_PATH") {
+        if !override_path.is_empty() {
+            return PathBuf::from(override_path);
+        }
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../config/alerting.toml")
+}
+
+fn load_alerting_config_from(path: &std::path::Path) -> AlertingConfig {
+    match std::fs::read_to_string(path) {
+        Ok(contents) => match toml::from_str::<AlertingConfig>(&contents) {
+            Ok(config) => {
+                tracing::info!(path = %path.display(), "Loaded persisted alerting config");
+                config
+            }
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    path = %path.display(),
+                    "Failed to parse alerting config; using defaults"
+                );
+                AlertingConfig::default()
+            }
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => AlertingConfig::default(),
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                path = %path.display(),
+                "Failed to read alerting config; using defaults"
+            );
+            AlertingConfig::default()
+        }
+    }
+}
+
+/// Persist the supplied [`AlertingConfig`] to `path` so subsequent web
+/// restarts (and, once an alerting-config watcher is added to the TUI, the
+/// live TUI process) pick up dashboard edits. Errors are logged and
+/// surfaced to the caller.
+pub fn persist_alerting_config(
+    path: &std::path::Path,
+    config: &AlertingConfig,
+) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| {
+            anyhow::anyhow!(
+                "Failed to create alerting config directory {}: {error}",
+                parent.display()
+            )
+        })?;
+    }
+    let contents = toml::to_string_pretty(config).map_err(|error| {
+        anyhow::anyhow!("Failed to serialize alerting config: {error}")
+    })?;
+    std::fs::write(path, contents).map_err(|error| {
+        anyhow::anyhow!(
+            "Failed to write alerting config to {}: {error}",
+            path.display()
+        )
+    })?;
+    Ok(())
+}
+
+fn open_alert_store() -> AlertStore {
+    let path = alerts_db_path();
+    if let Some(parent) = path.parent()
+        && let Err(error) = std::fs::create_dir_all(parent)
+    {
+        tracing::warn!(
+            %error,
+            path = %parent.display(),
+            "Failed to create alert store directory"
+        );
+    }
+
+    match AlertStore::open(&path) {
+        Ok(store) => store,
+        Err(error) => {
+            tracing::error!(
+                %error,
+                path = %path.display(),
+                "Falling back to in-memory alert store"
+            );
+            AlertStore::open_memory().expect("in-memory alert store")
+        }
+    }
+}
+
 /// Build the initial application state for production use.
 ///
 /// - `event_tx` and `account_store` are always initialised empty.
 /// - `credential_store` is populated only when `TEXTQUEST_MASTER_PASSWORD` is
 ///   set in the environment; otherwise password routes return `501`.
-/// - `character_configs`, `loot_state`, `economy_state`, `dashboard_state`,
-///   and `soul_audit` are seeded with in-memory state. Character-config routes
-///   are live, but the data resets on process restart until a durable backing
-///   store is wired.
+/// - `character_configs`, `loot_state`, `economy_state`, and `soul_audit` are
+///   seeded with in-memory state; character-config routes still return `501`
+///   until a supported backing store is wired.
 fn build_state() -> Arc<AppState> {
     let (event_tx, _) = broadcast::channel::<String>(256);
     let credential_store = std::env::var("TEXTQUEST_MASTER_PASSWORD")
@@ -190,6 +303,9 @@ fn build_state() -> Arc<AppState> {
         spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
         timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
         kill_tracker_state: api::kill_tracker::KillTrackerState::new_demo(),
+        alert_store: open_alert_store(),
+        alert_config: tokio::sync::RwLock::new(load_alerting_config_from(&alerting_config_path())),
+        alerting_config_path: alerting_config_path(),
         api_token,
         live_session_snapshot_path: live_session_snapshot_path(),
         xassist_configs: api::xassist::demo_xassist_configs(),
@@ -235,16 +351,7 @@ fn build_loot_router() -> Router<Arc<AppState>> {
 fn build_api_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(api::health))
-        .route(
-            "/box-chat/settings",
-            get(api::get_box_chat_settings).put(api::put_box_chat_settings),
-        )
-        .route(
-            "/chat-log/settings",
-            get(api::chat_log::get_chat_log_settings).put(api::chat_log::put_chat_log_settings),
-        )
         .route("/sessions", get(api::list_sessions))
-        .nest("/dashboard", api::dashboard::router())
         .nest("/accounts", accounts::router())
         .route(
             "/economy/settings",
@@ -261,6 +368,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .route("/economy/wealth", get(api::get_wealth))
         .route("/soul", get(api::soul::list_soul_states))
         .route("/soul/{character_id}", get(api::soul::get_soul_state))
+        .nest("/alerts", api::alerts::router())
         .route(
             "/raid/config",
             get(api::raid_config_unavailable).put(api::raid_config_unavailable),
@@ -406,7 +514,6 @@ async fn main() {
         .init();
 
     let state = build_state();
-    api::dashboard::spawn_dashboard_tick_loop(state.clone());
     let app = build_app(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3001));
@@ -425,7 +532,6 @@ mod tests {
     };
     use http_body_util::BodyExt;
     use serde_json::{Value, json};
-    use textquest_common::shared_client_state::SharedClientState;
     use tower::ServiceExt;
 
     async fn json_response(app: Router, request: Request<Body>) -> (StatusCode, Value) {
@@ -461,6 +567,10 @@ mod tests {
             spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
             timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
             kill_tracker_state: api::kill_tracker::KillTrackerState::new_demo(),
+            alert_store: AlertStore::open_memory().expect("alert store"),
+            alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
+            alerting_config_path: std::env::temp_dir()
+                .join(format!("textquest-main-test-alerting-{}.toml", uuid::Uuid::new_v4())),
             api_token: None, // No auth in tests — auth middleware is a no-op when None
             live_session_snapshot_path: path.with_file_name("live_sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),
@@ -485,7 +595,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn mixed_api_routes_return_expected_statuses() {
+    async fn known_unimplemented_routes_return_json_501() {
         let app = build_app(build_state());
         let (status, body) = json_response(
             app.clone(),
@@ -502,168 +612,22 @@ mod tests {
                 .unwrap_or_default()
                 .contains("not implemented")
         );
-    }
 
-    #[tokio::test]
-    async fn character_config_routes_are_live() {
-        let app = build_app(build_state());
         let (status, body) = json_response(
-            app.clone(),
+            app,
             Request::builder()
                 .uri("/api/config/characters")
                 .body(Body::empty())
                 .expect("request"),
         )
         .await;
-        assert_eq!(status, StatusCode::OK);
-        let configs = body.as_array().expect("character configs array");
-        assert!(!configs.is_empty(), "expected demo character configs");
-        let first = &configs[0];
-        assert_eq!(first["character_name"], "Aelrindel");
-        assert!(first["auto_rez"].is_object());
-        assert!(first.get("tribute_preferences").is_some());
-        assert!(first.get("tribute_status").is_some());
-        assert!(first.get("auto_camp_on_death").is_some());
-
-        let (status, body) = json_response(
-            app,
-            Request::builder()
-                .method("PUT")
-                .uri("/api/config/characters/Frostreaver")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "character_name": "ignored",
-                        "class": "Cleric",
-                        "role": "Healer",
-                        "heal_at_pct": 72,
-                        "mana_sit_pct": 28,
-                        "nuke_at_pct": 95,
-                        "rotation": [],
-                        "class_params": {},
-                        "auto_rez": {
-                            "enabled": true,
-                            "min_xp_pct": 96,
-                            "trusted_casters": ["Highclerk", "Leafbinder"],
-                            "decline_if_untrusted": true,
-                            "delay_ms": 5100
-                        },
-                        "group_override": false,
-                        "group_name": "Group 1",
-                        "auto_camp_on_death": {
-                            "enabled": true,
-                            "camp_delay_secs": 60,
-                            "relog_wait_secs": 1800
-                        },
-                        "tribute_preferences": {
-                            "auto_activate": true,
-                            "warning_threshold_secs": 180,
-                            "preferred_tributes": ["Marr's Gift", "Champion's Aura"]
-                        }
-                    })
-                    .to_string(),
-                ))
-                .expect("request"),
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["character_name"], "Frostreaver");
-        assert_eq!(body["auto_rez"]["min_xp_pct"], 96);
-        assert_eq!(
-            body["tribute_preferences"]["preferred_tributes"],
-            json!(["Marr's Gift", "Champion's Aura"])
-        );
-        assert_eq!(body["tribute_status"]["alert_state"], "expiring");
-        assert_eq!(body["tribute_status"]["point_balance"], json!(3_200));
-        assert_eq!(body["auto_rez"]["delay_ms"], 5100);
-        assert_eq!(body["auto_camp_on_death"]["camp_delay_secs"], 60);
-    }
-
-    #[tokio::test]
-    async fn dashboard_routes_are_mounted() {
-        let app = build_app(build_state());
-
-        let (status, body) = json_response(
-            app.clone(),
-            Request::builder()
-                .uri("/api/dashboard")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
-        assert!(body.get("sessions").is_some());
-
-        let (status, body) = json_response(
-            app,
-            Request::builder()
-                .method("POST")
-                .uri("/api/dashboard/action")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "type": "create_session",
-                        "profile": "Loot Crew",
-                        "character_name": "Newpuller"
-                    })
-                    .to_string(),
-                ))
-                .expect("request"),
-        )
-        .await;
-        assert_eq!(status, StatusCode::OK);
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
         assert!(
-            body["sessions"]["items"]
-                .as_array()
-                .expect("sessions array")
-                .iter()
-                .any(|session| session["characterName"] == "Newpuller")
+            body["error"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("not implemented")
         );
-    }
-
-    #[tokio::test]
-    async fn sessions_endpoint_prefers_live_snapshot_when_present() {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let state = test_state_with_credentials(&tempdir.path().join("creds.db"));
-        std::fs::write(
-            &state.live_session_snapshot_path,
-            serde_json::to_vec(&vec![SharedClientState {
-                client_id: 77,
-                spawn_id: 42,
-                character_name: "Frostreaver".into(),
-                class_id: 2,
-                level: 60,
-                zone_short_name: "kael".into(),
-                zone_long_name: "Kael Drakkel".into(),
-                hp_pct: 72.5,
-                mana_pct: 81.0,
-                endurance_pct: 49.0,
-                is_dead: false,
-                status: "active".into(),
-                target: None,
-                buffs: Vec::new(),
-                pet: None,
-            }])
-            .expect("snapshot json"),
-        )
-        .expect("write snapshot");
-
-        let app = build_app(state);
-        let (status, body) = json_response(
-            app,
-            Request::builder()
-                .uri("/api/sessions")
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await;
-
-        assert_eq!(status, StatusCode::OK);
-        let sessions = body.as_array().expect("sessions array");
-        assert_eq!(sessions.len(), 1);
-        assert_eq!(sessions[0]["character_name"], "Frostreaver");
-        assert_eq!(sessions[0]["zone"], "Kael Drakkel");
-        assert_eq!(sessions[0]["endurance_pct"], 49.0);
     }
 
     #[tokio::test]

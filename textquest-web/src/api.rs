@@ -40,6 +40,10 @@ fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Js
     )
 }
 
+fn live_state_unavailable(message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
+    json_error(StatusCode::NOT_IMPLEMENTED, message)
+}
+
 /// Catch-all for unknown API routes so they do not fall through to the SPA.
 pub async fn api_not_found() -> impl IntoResponse {
     json_error(StatusCode::NOT_FOUND, "API route not found")
@@ -51,6 +55,22 @@ pub async fn raid_config_unavailable() -> impl IntoResponse {
     json_error(
         StatusCode::NOT_IMPLEMENTED,
         "Raid configuration API is not implemented in this build",
+    )
+}
+
+/// Placeholder response for known character-config list endpoint.
+pub async fn character_configs_unavailable() -> impl IntoResponse {
+    json_error(
+        StatusCode::NOT_IMPLEMENTED,
+        "Character configuration API is not implemented in this build",
+    )
+}
+
+/// Placeholder response for known per-character config mutation endpoint.
+pub async fn character_config_unavailable(Path(character): Path<String>) -> impl IntoResponse {
+    json_error(
+        StatusCode::NOT_IMPLEMENTED,
+        format!("Character configuration API is not implemented for '{character}'"),
     )
 }
 
@@ -893,7 +913,7 @@ mod tests {
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             discord_state: crate::api::discord::DiscordState::new_demo(),
             player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
-            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
+            gm_alert_state: std::sync::Arc::new(crate::api::gm_alerts::GmAlertState::default()),
             spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
             timestamp_configs: tokio::sync::RwLock::new(Default::default()),
             kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_demo(),

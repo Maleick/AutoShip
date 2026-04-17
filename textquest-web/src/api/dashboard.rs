@@ -1035,12 +1035,14 @@ mod tests {
             account_store: Mutex::new(accounts::AccountStore::default()),
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
-            auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
             loot_state: api::loot::LootState::new_demo(),
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: DashboardState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
-            discord_state: api::discord::DiscordState::new_demo(),
+            alert_store: textquest::alerts::AlertStore::open_memory().expect("alert store"),
+            alert_config: tokio::sync::RwLock::new(textquest::config::AlertingConfig::default()),
+            alerting_config_path: std::env::temp_dir()
+                .join(format!("textquest-dashboard-test-alerting-{}.toml", uuid::Uuid::new_v4())),
             api_token: None,
         })
     }

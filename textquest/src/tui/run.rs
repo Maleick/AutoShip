@@ -171,20 +171,6 @@ fn run_loop(
                 .collect();
             orchestrator.routing_scope = app.routing_scope.clone();
             orchestrator.scope_pids = app.focused_pids();
-            crate::box_chat::update_local_clients(
-                app.clients
-                    .iter()
-                    .map(|client| (client.pid, client.character_name.clone())),
-            );
-            match crate::box_chat::reload_from_disk() {
-                Ok(Some(config)) => {
-                    tracing::info!(?config, "Reloaded box-chat config from disk");
-                }
-                Ok(None) => {}
-                Err(error) => {
-                    tracing::warn!(%error, "Failed to reload box-chat config from disk");
-                }
-            }
             last_process_scan = Instant::now();
         }
 
@@ -210,7 +196,9 @@ fn run_loop(
             }
             app.update_tracked_spawns();
             app.update_spawn_alerts();
-            app.update_gm_detection();
+            if let Err(error) = app.service_alerts() {
+                tracing::warn!(%error, "Failed to service operational alerts");
+            }
             last_refresh = Instant::now();
         }
 
@@ -256,11 +244,6 @@ fn run_loop(
 
                 let spawn_events = orchestrator.poll_spawn_events(pid);
                 app.apply_spawn_events(spawn_events);
-
-                let bells = app.drain_terminal_bells();
-                for _ in 0..bells {
-                    eprint!("\x07");
-                }
             }
             last_packet_poll = Instant::now();
         }

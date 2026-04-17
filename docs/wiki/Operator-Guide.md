@@ -154,6 +154,37 @@ name = "Group 2"
 - Adjust `max_clients` if you run fewer or more clients
 - Add group definitions for your multibox composition
 
+### Alerting and Notifications
+
+Operational alert routing is bootstrapped from the `[alerts]` section in `config/textquest.toml`.
+
+```toml
+[alerts]
+enable_discord = true
+discord_webhook_url = "https://discord.com/api/webhooks/..."
+enable_email = false
+warning_batch_window_secs = 300
+
+[alerts.thresholds]
+death_alert = true
+stuck_alert = true
+memory_warning_mb = 200
+ipc_latency_warning_ms = 10
+error_rate_warning_per_min = 5
+dps_drop_warning_pct = 20
+zone_timeout_secs = 60
+```
+
+Use this section to define:
+
+- whether Discord webhook delivery is enabled
+- whether SMTP email delivery is enabled
+- who receives daily summaries
+- which warning thresholds generate alerts
+
+Alert history and acknowledgments are stored locally in `data/alerts.db`.
+The web dashboard `Alert Routing` panel can change the live alert configuration for the current process and writes an audit alert whenever those settings change.
+
 ### Accounts: `config/accounts.toml`
 
 Maps account names to character and group information:
@@ -392,11 +423,22 @@ Launch the TUI with `cargo run` (demo mode) or `textquest.exe tui` (live mode).
 | `z`           | Collapse focused section                     |
 | `+` / `-`     | Adjust map Z slice                           |
 | `m`           | Maximize map                                 |
+| `F8`          | Open or close the alert history overlay      |
 | `p`           | Toggle privacy mode (redacts names)          |
 | `T`           | Cycle theme (Dark, Dracula, Classic, Neriak) |
 | `:`           | Enter command mode                           |
 | `?`           | Toggle help overlay                          |
 | `q`           | Quit                                         |
+
+### Alert History and Acknowledgment
+
+Press `F8` from any TUI screen to open the operational alert overlay.
+
+- The header shows unread count plus quick controls.
+- The left pane shows the most recent 100 alerts with severity and acknowledgment state.
+- The right pane shows the full message, actor, zone, and source for the selected alert.
+- Press `Enter` or `a` to acknowledge the selected alert.
+- Press `Shift+A` to acknowledge every unread alert.
 
 ### Command Mode (`:`)
 

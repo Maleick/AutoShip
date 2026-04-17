@@ -28,6 +28,7 @@ TextQuest's default interface is a ratatui-based dashboard with five main screen
 | `z` | Collapse focused section |
 | `+` / `-` | Adjust map Z slice |
 | `m` | Maximize map |
+| `F8` | Toggle the alert history overlay |
 | `p` | Privacy mode |
 | `T` | Cycle theme |
 | `:` | Command mode |
@@ -102,10 +103,23 @@ Use this for:
 
 - `:` opens the command bar defined in `textquest/src/tui/app.rs`.
 - `?` opens a context-sensitive, scrollable help overlay with command usage and jump targets.
+- `F8` opens the operational alert overlay with the last 100 alerts, unread count, and acknowledgment controls.
 - `config` opens the interactive configuration panel.
 - `chui` opens the CH chain panel.
 - `wizard` opens the setup wizard shell.
 - Shared TUI surfaces include breadcrumbs, tab bars, the dropdown command menu bar, toast notifications, keybinding hint rows, badges, cast bars, sparklines, scrollable lists with scrollbar indicators, tooltips, popup selectors, the config tree editor, and the first-run wizard overlay.
+
+### Alert overlay controls
+
+When the alert overlay is open:
+
+- `Esc`, `q`, or `F8` closes the overlay.
+- `j` / `k` or arrow keys move through alert history.
+- `Enter` or `a` acknowledges the selected alert.
+- `Shift+A` acknowledges every unread alert in the local store.
+- `r` refreshes the history from `data/alerts.db`.
+
+The status bar also shows an unread alert badge even when the overlay is closed.
 
 ## Internals
 

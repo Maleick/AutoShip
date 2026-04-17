@@ -2,6 +2,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
+    time::Duration,
 };
 
 use super::{
@@ -15,23 +16,25 @@ use super::{
     wizard::WizardState,
 };
 use crate::{
+    alerts::{
+        AlertManager, AlertRecord, AlertStore, DailySummary, DiscordAlertClient,
+        EmailAlertClient, NewAlert,
+    },
     camp::{
         config::CampConfig,
         state::{CampMember, Role},
     },
     config::AccountsConfig,
     eq::{
-        gm_detector::{GmAlertConfig, GmDetector, GmEventType},
         log_parser::{ChatEvent, LootDatabase},
         log_watcher::LogWatcher,
         named_db::NamedMobDatabase,
         named_tracker::{NamedAlert, NamedTracker},
-        spawn_alert::{MatchSource, RareSpawnTracker, SpawnAlertEvent, SpawnAlertFeed},
+        spawn_alert::{MatchSource, SpawnAlertEvent, SpawnAlertFeed},
         structs::{SpawnInfo, SpawnType},
     },
     orchestrator::Orchestrator,
 };
-
 use anyhow::Context;
 use ratatui::style::Color;
 use textquest_soul::coordinator::SoulCoordinator;
@@ -134,10 +137,6 @@ pub enum ActivePanel {
     DebugInternals,
     /// Economy controls panel (vendor cycle, banking, loot queue).
     EconomyControls,
-    /// Orchestrator dashboard panel with internal parity tabs.
-    OrchestratorDashboard,
-    /// Spawn event feed panel (zone in/out notifications).
-    SpawnEvents,
 }
 
 /// Layout preset for panel arrangement within a screen.
@@ -502,19 +501,6 @@ pub struct App {
     pub spawn_alert_feed: SpawnAlertFeed,
     /// Whether to auto-alert on named NPC spawns.
     pub spawn_watch_named: bool,
-    /// Rare spawn tracker for time-since-last-pop tracking.
-    pub rare_spawn_tracker: crate::eq::spawn_alert::RareSpawnTracker,
-    /// Sound alert manager for spawn events.
-    pub sound_alert_manager: crate::tui::sound::SoundAlertManager,
-
-    /// Player zone notification filter mode (all, strangers only, friends only).
-    pub player_notification_filter: crate::config::PlayerFilterMode,
-    /// Whether to emit a terminal bell on player zone-in events.
-    pub sound_on_player_zone_in: bool,
-    /// Normalized friend list for player notification filtering (lowercase names).
-    player_notification_friends: std::collections::HashSet<String>,
-    /// Pending terminal bell requests to drain in the run loop.
-    pending_terminal_bells: u8,
 
     /// User-tracked spawns registered via the `:track` command.
     pub tracked_spawns: HashMap<String, TrackedSpawn>,
@@ -588,6 +574,18 @@ pub struct App {
     pub command_aliases: HashMap<String, String>,
     /// Transient toast feedback shown above the main chrome.
     pub toast: Option<Toast>,
+    /// Persistent operational alert history store shared with the dashboard.
+    pub alert_store: AlertStore,
+    /// Alert delivery and batching coordinator.
+    pub alert_manager: AlertManager,
+    /// Cached operational alert history (newest first) for the TUI overlay.
+    pub alert_history: Vec<AlertRecord>,
+    /// Cached unread alert count used by the status bar and overlay chrome.
+    pub alert_unread_count: u64,
+    /// Currently selected alert row in the overlay.
+    pub alert_selected: usize,
+    /// Whether the operational alerts overlay is visible.
+    pub alert_panel_visible: bool,
 
     /// Whether operator has paused all automation (HOME to pause, END to
     /// resume).
@@ -741,10 +739,42 @@ struct FocusedNavClient {
 type CachedLiveGroups = (u64, Vec<LiveGroup>, Vec<usize>);
 type CachedClientNameIndex = (u64, HashMap<String, usize>);
 
+fn default_alert_store() -> AlertStore {
+    #[cfg(test)]
+    {
+        AlertStore::open_memory().expect("in-memory alert store")
+    }
+
+    #[cfg(not(test))]
+    {
+        let path = crate::alerts::resolve_alert_db_path();
+        if let Some(parent) = path.parent()
+            && let Err(error) = std::fs::create_dir_all(parent)
+        {
+            tracing::warn!(
+                %error,
+                path = %parent.display(),
+                "Failed to create alert store directory"
+            );
+        }
+
+        AlertStore::open(&path).unwrap_or_else(|error| {
+            tracing::error!(
+                %error,
+                path = %path.display(),
+                "Falling back to in-memory alert store for TUI session"
+            );
+            AlertStore::open_memory().expect("in-memory alert store")
+        })
+    }
+}
+
 impl App {
     /// Create a new TUI application with default state.
     #[must_use]
     pub fn new() -> Self {
+        let alert_store = default_alert_store();
+        let alert_manager = AlertManager::new(alert_store.clone());
         let mut app = Self {
             running: true,
             active_screen: ActiveScreen::Overview,
@@ -801,12 +831,6 @@ impl App {
             },
             spawn_alert_feed: SpawnAlertFeed::new(200),
             spawn_watch_named: true,
-            player_notification_filter: crate::config::PlayerFilterMode::All,
-            sound_on_player_zone_in: false,
-            player_notification_friends: std::collections::HashSet::new(),
-            pending_terminal_bells: 0,
-            rare_spawn_tracker: RareSpawnTracker::new(),
-            sound_alert_manager: crate::tui::sound::SoundAlertManager::new(),
             tracked_spawns: HashMap::new(),
 
             help_visible: false,
@@ -849,6 +873,12 @@ impl App {
 
             command_aliases: Self::build_default_aliases(),
             toast: None,
+            alert_store,
+            alert_manager,
+            alert_history: Vec::new(),
+            alert_unread_count: 0,
+            alert_selected: 0,
+            alert_panel_visible: false,
             automation_paused: false,
             priority_snapshots: Vec::new(),
             economy_state: super::state::EconomyState::default(),
@@ -871,6 +901,7 @@ impl App {
             },
         };
         app.cmd_state.load_history_from_disk();
+        app.refresh_alert_history();
         app
     }
 
@@ -978,20 +1009,40 @@ impl App {
             .map(|sender| sender.trim().to_ascii_lowercase())
             .filter(|sender| !sender.is_empty())
             .collect();
-        let has_default_webhook = !config.webhook_url.trim().is_empty();
-        let has_category_webhook = config.channels.values().any(|url| !url.trim().is_empty());
-        let has_route_webhook = config
-            .notification_routes
-            .values()
-            .any(|route| route.enabled && !route.webhook_url.trim().is_empty());
-        if has_default_webhook || has_category_webhook || has_route_webhook {
+        if !config.webhook_url.is_empty() || !config.channels.is_empty() {
             tracing::info!("Discord webhook enabled");
-            self.discord_webhook = Some(crate::discord::webhook::WebhookSender::with_routes(
+            self.discord_webhook = Some(crate::discord::webhook::WebhookSender::with_channels(
                 config.webhook_url.clone(),
                 config.channels.clone(),
-                config.notification_routes.clone(),
             ));
         }
+    }
+
+    /// Initialize operational alert routing from config.
+    pub fn init_alerting(&mut self, config: &crate::config::AlertingConfig) {
+        self.alert_manager = AlertManager::new(self.alert_store.clone());
+        self.alert_manager
+            .set_warning_batch_window(Duration::from_secs(config.warning_batch_window_secs));
+
+        if config.enable_discord && !config.discord_webhook_url.trim().is_empty() {
+            self.alert_manager
+                .set_discord_client(DiscordAlertClient::new(config.discord_webhook_url.clone()));
+        }
+
+        match EmailAlertClient::from_config(config) {
+            Ok(Some(client)) => self.alert_manager.set_email_client(client),
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(%error, "Alert email integration disabled due to config error");
+                self.set_feedback(
+                    ToastLevel::Warning,
+                    "Alerts: email integration disabled by config error",
+                    false,
+                );
+            }
+        }
+
+        self.refresh_alert_history();
     }
 
     /// Send a Discord alert if webhook is configured.
@@ -1003,16 +1054,130 @@ impl App {
         level: crate::discord::webhook::AlertLevel,
     ) {
         if let Some(ref webhook) = self.discord_webhook {
-            webhook.send(
-                crate::discord::webhook::DiscordAlert::simple(
-                    title,
-                    message,
-                    level,
-                    crate::discord::webhook::EventCategory::Status,
-                )
-                .with_route_key("status"),
+            webhook.send(crate::discord::webhook::DiscordAlert::simple(
+                title,
+                message,
+                level,
+                crate::discord::webhook::EventCategory::Status,
+            ));
+        }
+    }
+
+    /// Publish an alert into the shared alert history and trigger any
+    /// configured delivery.
+    pub fn publish_alert(&mut self, alert: NewAlert) -> anyhow::Result<()> {
+        let published = self.alert_manager.publish(alert)?;
+        let feedback = match published.record.severity {
+            crate::alerts::AlertSeverity::Critical => ToastLevel::Error,
+            crate::alerts::AlertSeverity::Warning => ToastLevel::Warning,
+            crate::alerts::AlertSeverity::Info => ToastLevel::Info,
+        };
+        self.refresh_alert_history();
+        self.set_feedback(
+            feedback,
+            format!(
+                "{}: {}",
+                published.record.kind.display_name(),
+                published.record.message
+            ),
+            published.record.severity != crate::alerts::AlertSeverity::Info,
+        );
+        Ok(())
+    }
+
+    /// Publish the daily info summary through the alert manager.
+    pub fn publish_daily_alert_summary(&mut self, summary: DailySummary) -> anyhow::Result<()> {
+        let published = self.alert_manager.publish_daily_summary(summary)?;
+        self.refresh_alert_history();
+        self.set_feedback(
+            ToastLevel::Info,
+            format!("{} published", published.record.kind.display_name()),
+            false,
+        );
+        Ok(())
+    }
+
+    /// Reload alert history from persistent storage.
+    pub fn refresh_alert_history(&mut self) {
+        self.alert_history = self.alert_store.recent(100).unwrap_or_default();
+        self.alert_unread_count = self.alert_store.unread_count().unwrap_or(0);
+        if self.alert_history.is_empty() {
+            self.alert_selected = 0;
+        } else {
+            self.alert_selected = self.alert_selected.min(self.alert_history.len() - 1);
+        }
+    }
+
+    /// Flush batched warning alerts when the configured dispatch window elapses.
+    pub fn service_alerts(&mut self) -> anyhow::Result<()> {
+        let flushed = self.alert_manager.flush_warning_batch_if_due()?;
+        if !flushed.is_empty() {
+            self.refresh_alert_history();
+            self.set_feedback(
+                ToastLevel::Info,
+                format!("Dispatched {} warning alert(s)", flushed.len()),
+                false,
             );
         }
+        Ok(())
+    }
+
+    /// Number of currently unread operational alerts.
+    #[must_use]
+    pub fn unread_alert_count(&self) -> u64 {
+        self.alert_unread_count
+    }
+
+    /// Toggle the operational alerts overlay.
+    pub fn toggle_alert_panel(&mut self) {
+        self.alert_panel_visible = !self.alert_panel_visible;
+        if self.alert_panel_visible {
+            self.refresh_alert_history();
+        }
+    }
+
+    /// Move the alert overlay selection to the next row.
+    pub fn select_next_alert(&mut self) {
+        if self.alert_history.is_empty() {
+            return;
+        }
+        self.alert_selected = (self.alert_selected + 1).min(self.alert_history.len() - 1);
+    }
+
+    /// Move the alert overlay selection to the previous row.
+    pub fn select_prev_alert(&mut self) {
+        self.alert_selected = self.alert_selected.saturating_sub(1);
+    }
+
+    /// Acknowledge the currently selected alert.
+    pub fn acknowledge_selected_alert(&mut self, operator: &str) -> anyhow::Result<bool> {
+        let Some(alert) = self.alert_history.get(self.alert_selected).cloned() else {
+            return Ok(false);
+        };
+        if !alert.unread() {
+            return Ok(false);
+        }
+
+        self.alert_store.acknowledge(alert.id, operator)?;
+        self.refresh_alert_history();
+        self.set_feedback(
+            ToastLevel::Success,
+            format!("Acknowledged alert #{}", alert.id),
+            true,
+        );
+        Ok(true)
+    }
+
+    /// Acknowledge all unread alerts.
+    pub fn acknowledge_all_alerts(&mut self, operator: &str) -> anyhow::Result<usize> {
+        let updated = self.alert_store.acknowledge_all(operator)?;
+        self.refresh_alert_history();
+        self.set_feedback(
+            ToastLevel::Success,
+            format!("Acknowledged {updated} alert(s)"),
+            updated > 0,
+        );
+        Ok(updated)
     }
 
     /// Cycle to the next theme.
@@ -1030,7 +1195,7 @@ impl App {
             ActiveScreen::Debug => ActivePanel::DebugSpawns,
             ActiveScreen::PacketMonitor => ActivePanel::PacketMonitorLog,
             ActiveScreen::Economy => ActivePanel::EconomyControls,
-            ActiveScreen::Orchestrator => ActivePanel::OrchestratorDashboard,
+            ActiveScreen::Orchestrator => ActivePanel::EconomyControls,
         }
     }
 
@@ -1072,7 +1237,7 @@ impl App {
             }
             ActiveScreen::PacketMonitor => vec![ActivePanel::PacketMonitorLog],
             ActiveScreen::Economy => vec![ActivePanel::EconomyControls],
-            ActiveScreen::Orchestrator => vec![ActivePanel::OrchestratorDashboard],
+            ActiveScreen::Orchestrator => vec![ActivePanel::EconomyControls],
         }
     }
 
@@ -3065,14 +3230,6 @@ impl App {
                     NamedAlert::SpawnUp { name, .. } => (name.clone(), true),
                     NamedAlert::SpawnDown { name, .. } => (name.clone(), false),
                 };
-
-                // Calculate time since last pop for UP events
-                let time_since_last_pop = if is_up {
-                    self.rare_spawn_tracker.record_spawn(&name)
-                } else {
-                    None
-                };
-
                 self.spawn_alert_feed.push(SpawnAlertEvent {
                     spawn_name: name.clone(),
                     zone: zone.clone(),
@@ -3080,245 +3237,17 @@ impl App {
                     timestamp: std::time::SystemTime::now(),
                     tick,
                     match_source: MatchSource::Named,
-                    time_since_last_pop,
                 });
-
-                // Fire sound alert for spawn events
-                let sound_event = format!("named_spawn_{}", if is_up { "up" } else { "down" });
-                if let Some(trigger) = self.sound_alert_manager.check_event(&sound_event).first() {
-                    if trigger.sound_file.is_some() {
-                        self.play_spawn_alert_sound(trigger.sound_file.as_deref());
-                    }
-                }
-
                 let label = if is_up { "UP" } else { "DOWN" };
                 let level = if is_up {
                     ToastLevel::Success
                 } else {
                     ToastLevel::Warning
                 };
-
-                // Include time since last pop in the alert message if available
-                let message = if let Some(duration) = time_since_last_pop {
-                    let minutes = duration.as_secs() / 60;
-                    let seconds = duration.as_secs() % 60;
-                    format!("[Named] {name} {label} in {zone} (last: {minutes}m {seconds}s ago)")
-                } else {
-                    format!("[Named] {name} {label} in {zone}")
-                };
-                self.set_feedback(level, message, true);
+                self.set_feedback(level, format!("[Named] {name} {label} in {zone}"), true);
             }
         }
         self.check_watched_spawn_changes();
-    }
-
-    pub fn update_gm_detection(&mut self) {
-        if !self.gm_detector.is_enabled() {
-            return;
-        }
-
-        let zone = self.current_zone();
-        self.gm_detector.update_spawns(&self.spawns, &zone);
-
-        let events = self.gm_detector.pending_events();
-        for event in events {
-            let level = if event.event_type == GmEventType::GmEntered {
-                ToastLevel::Error
-            } else {
-                ToastLevel::Success
-            };
-
-            let label = event.event_type.label();
-            self.set_feedback(
-                level,
-                format!("[GM] {label}: {} in {}", event.gm_name, event.zone),
-                true,
-            );
-
-            if event.event_type == GmEventType::GmEntered {
-                self.play_gm_alert_sound();
-            }
-
-            if self.gm_detector.config().discord_webhook_url.is_some() {
-                self.discord_alert(
-                    label,
-                    &format!(
-                        "{} detected in {} by {}",
-                        event.gm_name, event.zone, self.server_name
-                    ),
-                    crate::discord::webhook::AlertLevel::Critical,
-                );
-            }
-        }
-
-        if self.gm_detector.should_pause_automation() && !self.gm_auto_paused {
-            self.automation_paused = true;
-            self.gm_auto_paused = true;
-            self.set_feedback(ToastLevel::Warning, "Automation paused: GM in zone", true);
-        } else if !self.gm_detector.should_pause_automation() && self.gm_auto_paused {
-            self.automation_paused = false;
-            self.gm_auto_paused = false;
-            self.set_feedback(ToastLevel::Info, "Automation resumed: Zone clear", true);
-        }
-
-        self.sync_gm_state_to_web();
-    }
-
-    #[cfg(windows)]
-    fn play_gm_alert_sound(&self) {
-        use std::ffi::OsStr;
-        use std::os::windows::ffi::OsStrExt;
-
-        if !self.gm_detector.config().sound_enabled {
-            return;
-        }
-
-        let sound_file = self
-            .gm_detector
-            .config()
-            .sound_file
-            .as_deref()
-            .unwrap_or("gm_alert.wav");
-
-        let base_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let config_dir = base_path.join("config");
-        let sounds_dir = config_dir.join("sounds");
-        let sound_path = sounds_dir.join(sound_file);
-
-        if !sound_path.exists() {
-            tracing::warn!(
-                path = %sound_path.display(),
-                "GM alert sound file not found"
-            );
-            return;
-        }
-
-        let wide_path: Vec<u16> = OsStr::new(sound_path.to_str().unwrap_or_default())
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
-
-        #[link(name = "winmm")]
-        extern "system" {
-            fn PlaySoundW(pszSound: *const u16, hmod: *mut std::ffi::c_void, fdwSound: u32) -> i32;
-        }
-
-        const SND_FILENAME: u32 = 0x00020000;
-        const SND_ASYNC: u32 = 0x0001;
-        const SND_NODEFAULT: u32 = 0x0002;
-
-        unsafe {
-            let _ = PlaySoundW(
-                wide_path.as_ptr(),
-                std::ptr::null_mut(),
-                SND_FILENAME | SND_ASYNC | SND_NODEFAULT,
-            );
-        }
-    }
-
-    #[cfg(not(windows))]
-    fn play_gm_alert_sound(&self) {
-        if self.gm_detector.config().sound_enabled {
-            tracing::debug!("GM alert sound playback not supported on this platform");
-        }
-    }
-
-    #[cfg(windows)]
-    fn play_spawn_alert_sound(&self, sound_file: Option<&str>) {
-        let sound_file = match sound_file {
-            Some(f) => f,
-            None => return,
-        };
-
-        let base_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let config_dir = base_path.join("config");
-        let sounds_dir = config_dir.join("sounds");
-        let sound_path = sounds_dir.join(sound_file);
-
-        if !sound_path.exists() {
-            tracing::warn!(
-                path = %sound_path.display(),
-                "Spawn alert sound file not found"
-            );
-            return;
-        }
-
-        tracing::info!(path = %sound_path.display(), "Playing spawn alert sound");
-
-        use std::ffi::OsStr;
-        use std::os::windows::ffi::OsStrExt;
-
-        let wide_path: Vec<u16> = OsStr::new(sound_path.to_str().unwrap_or_default())
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
-
-        #[link(name = "winmm")]
-        extern "system" {
-            fn PlaySoundW(pszSound: *const u16, hmod: *mut std::ffi::c_void, fdwSound: u32) -> i32;
-        }
-
-        const SND_FILENAME: u32 = 0x00020000;
-        const SND_ASYNC: u32 = 0x0001;
-        const SND_NODEFAULT: u32 = 0x0002;
-
-        unsafe {
-            let _ = PlaySoundW(
-                wide_path.as_ptr(),
-                std::ptr::null_mut(),
-                SND_FILENAME | SND_ASYNC | SND_NODEFAULT,
-            );
-        }
-    }
-
-    #[cfg(not(windows))]
-    fn play_spawn_alert_sound(&self, _sound_file: Option<&str>) {
-        tracing::debug!("Spawn alert sound playback not supported on this platform");
-    }
-
-    pub fn sync_gm_state_to_web(&self) {
-        if !self.gm_detector.is_enabled() {
-            return;
-        }
-
-        let web_url = std::env::var("TEXTQUEST_WEB_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:3001".to_string());
-
-        let url = format!("{}/api/gm-alerts/sync", web_url);
-
-        let presence = self.gm_detector.presence();
-        let payload = serde_json::json!({
-            "isGmInZone": presence.is_gm_in_zone(),
-            "gmCount": presence.gm_count,
-            "gmNames": presence.gm_names,
-            "automationPaused": self.gm_auto_paused,
-        });
-
-        let client = match reqwest::blocking::Client::builder()
-            .timeout(std::time::Duration::from_secs(2))
-            .build()
-        {
-            Ok(c) => c,
-            Err(e) => {
-                tracing::debug!(%e, "Failed to create HTTP client for GM sync");
-                return;
-            }
-        };
-
-        match client.post(&url).json(&payload).send() {
-            Ok(resp) if resp.status().is_success() => {
-                tracing::debug!("GM state synced to web dashboard");
-            }
-            Ok(resp) => {
-                tracing::debug!(
-                    status = %resp.status(),
-                    "GM state sync to web returned non-success"
-                );
-            }
-            Err(e) => {
-                tracing::debug!(%e, "Failed to sync GM state to web");
-            }
-        }
     }
 
     fn check_watched_spawn_changes(&mut self) {
@@ -3355,7 +3284,6 @@ impl App {
                         timestamp: std::time::SystemTime::now(),
                         tick,
                         match_source: MatchSource::WatchPattern(pattern.to_string()),
-                        time_since_last_pop: None,
                     });
                 }
             }
@@ -3378,7 +3306,6 @@ impl App {
                 timestamp: std::time::SystemTime::now(),
                 tick,
                 match_source: MatchSource::WatchPattern(String::new()),
-                time_since_last_pop: None,
             };
             self.spawn_alert_feed.push(event);
             self.set_feedback(
@@ -3402,35 +3329,6 @@ impl App {
         }
     }
 
-    fn should_announce_player(&self, name: &str) -> bool {
-        let is_friend = self
-            .player_notification_friends
-            .contains(&name.to_ascii_lowercase());
-        match self.player_notification_filter {
-            crate::config::PlayerFilterMode::All => true,
-            crate::config::PlayerFilterMode::StrangersOnly => !is_friend,
-            crate::config::PlayerFilterMode::FriendsOnly => is_friend,
-        }
-    }
-
-    pub fn set_player_notification_friends(&mut self, friends: impl IntoIterator<Item = String>) {
-        self.player_notification_friends.clear();
-        for name in friends {
-            self.player_notification_friends
-                .insert(name.to_ascii_lowercase());
-        }
-    }
-
-    pub fn pending_terminal_bells(&self) -> u8 {
-        self.pending_terminal_bells
-    }
-
-    pub fn drain_terminal_bells(&mut self) -> u8 {
-        let count = self.pending_terminal_bells;
-        self.pending_terminal_bells = 0;
-        count
-    }
-
     pub fn apply_spawn_events(&mut self, events: Vec<textquest_common::ipc::SpawnEvent>) {
         let tick = self.tick_count;
 
@@ -3450,30 +3348,12 @@ impl App {
                 timestamp: std::time::SystemTime::now(),
                 tick,
                 match_source: MatchSource::WatchPattern("spawn-delta".to_string()),
-                time_since_last_pop: None,
             });
             self.set_feedback(
                 level,
                 format!("[Spawn] {} {} in {}", event.spawn_name, label, event.zone),
                 false,
             );
-
-            let is_player = event.spawn_type == 0;
-            if is_player && self.should_announce_player(&event.spawn_name) {
-                let verb = if is_up { "entered" } else { "left" };
-                self.set_feedback(
-                    if is_up {
-                        ToastLevel::Warning
-                    } else {
-                        ToastLevel::Info
-                    },
-                    format!("[Player] {} {verb} {}", event.spawn_name, event.zone),
-                    true,
-                );
-                if is_up && self.sound_on_player_zone_in {
-                    self.pending_terminal_bells = self.pending_terminal_bells.saturating_add(1);
-                }
-            }
         }
     }
 
@@ -4257,18 +4137,6 @@ impl App {
         scope: textquest_common::routing::RoutingScope,
         slash_cmd: &str,
     ) {
-        match crate::box_chat::dispatch_if_box_chat(slash_cmd) {
-            Ok(Some(report)) => {
-                self.set_feedback(ToastLevel::Success, report.summary(), true);
-                return;
-            }
-            Ok(None) => {}
-            Err(error) => {
-                self.set_feedback(ToastLevel::Error, format!("Box chat failed: {error}"), true);
-                return;
-            }
-        }
-
         let pids = self.routed_pids_for_scope(&scope);
 
         if pids.is_empty() {
@@ -4549,50 +4417,6 @@ impl App {
         let parts: Vec<&str> = input.split_whitespace().collect();
         let (command_name, rest) = self.split_command(&input);
         match command_name {
-            "bc" | "bca" | "bcaa" => {
-                if rest.trim().is_empty() {
-                    self.usage_feedback(command_name, "Missing box-chat payload.");
-                } else {
-                    let slash = format!("/{command_name} {rest}").trim().to_string();
-                    match crate::box_chat::dispatch_if_box_chat(&slash) {
-                        Ok(Some(report)) => {
-                            self.set_feedback(ToastLevel::Success, report.summary(), true);
-                        }
-                        Ok(None) => {
-                            self.usage_feedback(command_name, "Missing box-chat payload.");
-                        }
-                        Err(error) => {
-                            self.set_feedback(
-                                ToastLevel::Error,
-                                format!("Box chat failed: {error}"),
-                                true,
-                            );
-                        }
-                    }
-                }
-            }
-            "bct" => {
-                if rest.split_whitespace().count() < 2 {
-                    self.usage_feedback("bct", "Missing target or slash command.");
-                } else {
-                    let slash = format!("/bct {rest}").trim().to_string();
-                    match crate::box_chat::dispatch_if_box_chat(&slash) {
-                        Ok(Some(report)) => {
-                            self.set_feedback(ToastLevel::Success, report.summary(), true);
-                        }
-                        Ok(None) => {
-                            self.usage_feedback("bct", "Missing target or slash command.");
-                        }
-                        Err(error) => {
-                            self.set_feedback(
-                                ToastLevel::Error,
-                                format!("Box chat failed: {error}"),
-                                true,
-                            );
-                        }
-                    }
-                }
-            }
             "help" => {
                 if rest.is_empty() {
                     self.help_scroll = 0;
@@ -4846,15 +4670,6 @@ impl App {
             }
             "alerts" => {
                 self.execute_alerts_command(&parts[1..]);
-            }
-            "pf" | "playerfilter" | "player_filter" => {
-                self.execute_pf_command(&parts[1..]);
-            }
-            "sound" => {
-                self.execute_sound_command(&parts[1..]);
-            }
-            "friends" | "friend" => {
-                self.execute_friends_command(&parts[1..]);
             }
             "mode" => match parts.get(1).copied() {
                 Some("camp") => {
@@ -5535,15 +5350,13 @@ impl App {
         }
     }
 
-    /// CH commands:
-    /// - `ch start <pid1,pid2,...> <interval> <target_id> [spell_slot]`
-    /// - `ch stop`: stop the running CH chain
-    /// - `ch add <pid>`: add a cleric to the chain
-    /// - `ch remove <pid>`: remove a cleric from the chain (`rm` alias
-    ///   supported)
-    /// - `ch interval <seconds>`: set the interval between casts
-    /// - `ch adaptive on|off`: toggle adaptive timing mode
-    /// - `ch status`: show current chain status
+    ///   ch start <pid1,pid2,...> <interval> <`target_id`> [`spell_slot`]
+    ///   ch stop                  — Stop the running CH chain
+    ///   ch add <pid>             — Add a cleric to the chain
+    ///   ch remove <pid>          — Remove a cleric from the chain (`rm` alias
+    /// supported)   ch interval <seconds>    — Set the interval between
+    /// casts   ch adaptive on|off       — Toggle adaptive timing mode
+    ///   ch status                — Show current chain status
     fn execute_ch_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
         match args.first().copied() {
             None | Some("status") => {
@@ -7313,7 +7126,19 @@ fn command_help_detail(command: &str) -> Option<&'static str> {
 
 /// Send a slash command to a specific PID via named pipe.
 fn send_slash_command(pid: u32, command: &str) -> anyhow::Result<()> {
-    crate::command_dispatch::dispatch_local_command(pid, command)
+    use textquest_common::ipc::Command;
+
+    if let Some(message) = crate::nav::try_handle_local_slash_command(pid, command)? {
+        tracing::info!(pid, %message, "Handled local slash command");
+        return Ok(());
+    }
+
+    send_ipc_command(
+        pid,
+        &Command::SlashCommand {
+            command: command.to_string(),
+        },
+    )
 }
 
 fn send_ipc_command(pid: u32, cmd: &textquest_common::ipc::Command) -> anyhow::Result<()> {
@@ -7427,11 +7252,9 @@ fn ascii_icontains(haystack: &str, needle: &str) -> bool {
 mod tests {
     use super::*;
     use crate::{
-        config::DiscordConfig,
         eq::structs::{GroupInfo, SpawnInfo, SpawnType, StandState},
         orchestrator::Orchestrator,
     };
-    use textquest_common::integrations::DiscordRouteConfig;
 
     fn test_spawn(name: &str) -> SpawnInfo {
         SpawnInfo {
@@ -8345,32 +8168,5 @@ mod tests {
     fn hex_dump_state_pending_memory_poll_starts_false() {
         let state = crate::tui::state::HexDumpState::new();
         assert!(!state.pending_memory_poll);
-    }
-
-    #[test]
-    fn init_discord_enables_route_only_webhook_config() {
-        let mut app = App::new();
-        let mut config = DiscordConfig::default();
-        config.notification_routes.insert(
-            "death".into(),
-            DiscordRouteConfig {
-                webhook_url: "https://discord.example.com/death".into(),
-                ..DiscordRouteConfig::default()
-            },
-        );
-
-        app.init_discord(&config);
-
-        assert!(app.discord_webhook.is_some());
-    }
-
-    #[test]
-    fn init_discord_skips_empty_default_routes_without_targets() {
-        let mut app = App::new();
-        let config = DiscordConfig::default();
-
-        app.init_discord(&config);
-
-        assert!(app.discord_webhook.is_none());
     }
 }

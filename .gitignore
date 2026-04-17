@@ -79,6 +79,7 @@ mq2-reference/
 
 # TUI runtime preferences (user-specific)
 config/tui-prefs.toml
+config/alerting.toml
 
 # Account credentials
 accounts.csv
