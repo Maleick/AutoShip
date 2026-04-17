@@ -11,7 +11,7 @@ pub use paste;
 pub mod bindings;
 /// Box-chat config, slash-route parsing, and TCP relay wire types.
 pub mod box_chat;
-/// Shared per-character tuning config persisted to JSON.
+/// Shared character configuration schema and persistence helpers.
 pub mod character_config;
 /// Chat channel types, STML stripping, and structured chat event parsing.
 pub mod chat;
@@ -64,6 +64,8 @@ pub mod scanner;
 pub mod shared_client_state;
 /// Soul Engine shared types (LLM personalities, memory, social dynamics).
 pub mod soul;
+/// Runtime spawn finder snapshot types shared by orchestrator and web.
+pub mod spawn_finder;
 /// Common type aliases and utility structures.
 pub mod types;
 /// Struct size/range validation helpers.

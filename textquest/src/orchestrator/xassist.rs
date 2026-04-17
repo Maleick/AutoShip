@@ -12,19 +12,10 @@ use std::collections::HashMap;
 
 use textquest_common::types::{ClientId, GameState};
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct XAssistConfig {
     pub ma_name: Option<String>,
     pub enabled: bool,
-}
-
-impl Default for XAssistConfig {
-    fn default() -> Self {
-        Self {
-            ma_name: None,
-            enabled: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,26 +76,20 @@ impl XAssist {
 
             let current = self.current_targets.get(&client_id).copied();
 
-            match (current, new_target) {
-                (_, None) => {
+            match new_target {
+                None => {
                     self.current_targets
                         .insert(client_id, AssistTargetState::None);
                 }
-                (Some(AssistTargetState::Tracking { spawn_id }), Some(target))
-                    if spawn_id == target => {}
-                (Some(AssistTargetState::Tracking { spawn_id }), Some(target))
-                    if spawn_id != target =>
-                {
-                    commands.push((client_id, AssistCommand::Target(target)));
-                    self.current_targets
-                        .insert(client_id, AssistTargetState::Tracking { spawn_id: target });
-                }
-                (None, Some(target)) => {
-                    commands.push((client_id, AssistCommand::Target(target)));
-                    self.current_targets
-                        .insert(client_id, AssistTargetState::Tracking { spawn_id: target });
-                }
-                (Some(AssistTargetState::None), Some(target)) => {
+                Some(target) => {
+                    let already_tracking = matches!(
+                        current,
+                        Some(AssistTargetState::Tracking { spawn_id }) if spawn_id == target
+                    );
+                    if already_tracking {
+                        continue;
+                    }
+
                     commands.push((client_id, AssistCommand::Target(target)));
                     self.current_targets
                         .insert(client_id, AssistTargetState::Tracking { spawn_id: target });
@@ -116,8 +101,8 @@ impl XAssist {
     }
 
     pub fn clear_all_targets(&mut self) {
-        for key in self.current_targets.keys() {
-            self.current_targets.insert(*key, AssistTargetState::None);
+        for state in self.current_targets.values_mut() {
+            *state = AssistTargetState::None;
         }
     }
 }
@@ -134,15 +119,20 @@ pub enum AssistCommand {
 }
 
 fn find_spawn_by_name(state: &GameState, name: &str) -> Option<u32> {
+    let wanted = normalize_spawn_name(name);
     state
         .nearby_spawns
         .iter()
         .find(|spawn| {
             spawn.spawn_type == 0
-                && (spawn.name.eq_ignore_ascii_case(name)
-                    || spawn.displayed_name.eq_ignore_ascii_case(name))
+                && (normalize_spawn_name(&spawn.name) == wanted
+                    || normalize_spawn_name(&spawn.displayed_name) == wanted)
         })
         .map(|spawn| spawn.spawn_id)
+}
+
+fn normalize_spawn_name(name: &str) -> String {
+    name.trim().to_ascii_lowercase()
 }
 
 fn get_spawn_target(state: &GameState, spawn_id: u32) -> Option<u32> {
@@ -170,6 +160,7 @@ mod tests {
             spawn_type: 0,
             level: 60,
             class_id: 1,
+            race_id: 1,
             x: 0.0,
             y: 0.0,
             z: 0.0,
@@ -194,6 +185,7 @@ mod tests {
             spawn_type: 1,
             level: 50,
             class_id: 1,
+            race_id: 1,
             x: 10.0,
             y: 10.0,
             z: 0.0,
@@ -207,25 +199,6 @@ mod tests {
             speed_run: 0.0,
             stand_state: 0,
             is_gm: false,
-        }
-    }
-
-    fn make_game_state(
-        client_id: u32,
-        local_player: SpawnData,
-        nearby_spawns: Vec<SpawnData>,
-    ) -> GameState {
-        GameState {
-            client_id,
-            local_player: Some(local_player),
-            target: None,
-            nearby_spawns,
-            timestamp_ms: 0,
-            nav_status: NavStatus::Idle,
-            combat_status: CombatStatus::Idle,
-            zone_short_name: "test".into(),
-            zone_long_name: "Test Zone".into(),
-            actual_version: None,
         }
     }
 
@@ -256,6 +229,8 @@ mod tests {
             combat_status: CombatStatus::Idle,
             zone_short_name: "test".into(),
             zone_long_name: "Test Zone".into(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         };
 
@@ -279,10 +254,10 @@ mod tests {
             make_npc_spawn(300, "an_orc"),
             make_npc_spawn(301, "another_orc"),
         ];
-        let target = make_player_spawn(200, "MainTank");
+        let target = make_npc_spawn(300, "an_orc");
         let state = GameState {
             client_id: 100,
-            local_player: Some(make_player_spawn(100, "BoxDPS")),
+            local_player: Some(make_player_spawn(200, "MainTank")),
             target: Some(target),
             nearby_spawns: nearby,
             timestamp_ms: 0,
@@ -290,6 +265,8 @@ mod tests {
             combat_status: CombatStatus::Idle,
             zone_short_name: "test".into(),
             zone_long_name: "Test Zone".into(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         };
 
@@ -318,10 +295,10 @@ mod tests {
             make_player_spawn(200, "MainTank"),
             make_npc_spawn(300, "an_orc"),
         ];
-        let target = make_player_spawn(200, "MainTank");
+        let target = make_npc_spawn(300, "an_orc");
         let state = GameState {
             client_id: 100,
-            local_player: Some(make_player_spawn(100, "BoxDPS")),
+            local_player: Some(make_player_spawn(200, "MainTank")),
             target: Some(target),
             nearby_spawns: nearby,
             timestamp_ms: 0,
@@ -329,6 +306,8 @@ mod tests {
             combat_status: CombatStatus::Idle,
             zone_short_name: "test".into(),
             zone_long_name: "Test Zone".into(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         };
 
@@ -358,10 +337,10 @@ mod tests {
             make_npc_spawn(300, "old_orc"),
             make_npc_spawn(301, "new_orc"),
         ];
-        let target = make_player_spawn(200, "MainTank");
+        let target = make_npc_spawn(301, "new_orc");
         let state = GameState {
             client_id: 100,
-            local_player: Some(make_player_spawn(100, "BoxDPS")),
+            local_player: Some(make_player_spawn(200, "MainTank")),
             target: Some(target),
             nearby_spawns: nearby,
             timestamp_ms: 0,
@@ -369,6 +348,8 @@ mod tests {
             combat_status: CombatStatus::Idle,
             zone_short_name: "test".into(),
             zone_long_name: "Test Zone".into(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         };
 
@@ -404,6 +385,8 @@ mod tests {
             combat_status: CombatStatus::Idle,
             zone_short_name: "test".into(),
             zone_long_name: "Test Zone".into(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         };
 
@@ -416,38 +399,26 @@ mod tests {
 
     #[test]
     fn xassist_name_matching_is_case_insensitive() {
-        let mut xassist = XAssist::new();
-        xassist.set_config(
-            100,
-            XAssistConfig {
-                ma_name: Some("maIntTaNk".into()),
-                enabled: true,
-            },
-        );
-
         let nearby = vec![
             make_player_spawn(200, "MainTank"),
             make_npc_spawn(300, "an_orc"),
         ];
-        let target = make_npc_spawn(300, "an_orc");
         let state = GameState {
             client_id: 100,
             local_player: Some(make_player_spawn(100, "BoxDPS")),
-            target: Some(target),
+            target: None,
             nearby_spawns: nearby,
             timestamp_ms: 0,
             nav_status: NavStatus::Idle,
             combat_status: CombatStatus::Idle,
             zone_short_name: "test".into(),
             zone_long_name: "Test Zone".into(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
         };
 
-        let commands = xassist.tick(&[(100, state)].into_iter().collect());
-        assert!(
-            !commands.is_empty(),
-            "Case-insensitive matching should work"
-        );
+        assert_eq!(find_spawn_by_name(&state, "  MaInTaNk  "), Some(200));
     }
 
     #[test]

@@ -274,17 +274,6 @@ pub async fn clear_alerts(State(state): State<Arc<AppState>>) -> impl IntoRespon
     StatusCode::NO_CONTENT
 }
 
-pub fn broadcast_spawn_alert(state: &AppState, alert: &SpawnAlertEntry) {
-    let is_enabled = *state.spawn_alerts.broadcast_to_web.blocking_read();
-    if is_enabled {
-        let event = serde_json::json!({
-            "type": "spawn_alert",
-            "data": alert
-        });
-        let _ = state.event_tx.send(event.to_string());
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

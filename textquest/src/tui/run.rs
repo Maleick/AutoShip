@@ -25,7 +25,7 @@ impl Drop for TerminalGuard {
 }
 
 use super::{
-    app::{App, ChChainStatus, NavClientStatus},
+    app::{App, ChChainStatus, NavClientStatus, send_slash_command},
     cast::{CastDisplay, short_cast_label},
     event::handle_events,
     live_cast_capture::{LIVE_CAST_CAPTURE_ENV, live_cast_capture_enabled},
@@ -1594,21 +1594,23 @@ fn tick_soul_engine(app: &mut App) {
 /// database.
 fn poll_log_watchers(app: &mut App) {
     use crate::eq::log_parser::LogEvent;
+    let mut events = Vec::new();
     for watcher in &mut app.log_watchers {
-        let events = watcher.poll();
-        for event in &events {
-            app.loot_database.record(event);
-            if let LogEvent::Chat(chat) = event {
-                app.chat_events.push_back(chat.clone());
-                if app.chat_events.len() > 200 {
-                    app.chat_events.pop_front();
-                }
-                let actions =
-                    app.chat_pattern_engine
-                        .evaluate(&chat.channel, &chat.sender, &chat.message);
-                for (_rule_id, action) in actions {
-                    handle_chat_pattern_action(app, &action);
-                }
+        events.extend(watcher.poll());
+    }
+
+    for event in events {
+        app.loot_database.record(&event);
+        if let LogEvent::Chat(chat) = event {
+            app.chat_events.push_back(chat.clone());
+            if app.chat_events.len() > 200 {
+                app.chat_events.pop_front();
+            }
+            let actions =
+                app.chat_pattern_engine
+                    .evaluate(&chat.channel, &chat.sender, &chat.message);
+            for (_rule_id, action) in actions {
+                handle_chat_pattern_action(app, &action);
             }
         }
     }
@@ -1622,16 +1624,24 @@ fn handle_chat_pattern_action(
     use textquest_common::chat_pattern_rules::RuleAction;
     match action {
         RuleAction::ExecuteCommand(cmd) => {
-            if let Some(client) = app.clients.get(app.selected_client) {
-                if !client.is_demo && client.connected {
-                    let full_cmd = if cmd.starts_with('/') {
-                        cmd.to_string()
-                    } else {
-                        format!("/{}", cmd)
-                    };
-                    if let Err(e) = client.send_command(&full_cmd) {
-                        tracing::warn!(cmd = %full_cmd, error = %e, "Failed to execute pattern rule command");
-                    }
+            if let Some(pid) = app
+                .clients
+                .get(app.selected_client)
+                .filter(|client| !client.is_demo)
+                .map(|client| client.pid)
+            {
+                let full_cmd = if cmd.starts_with('/') {
+                    cmd.to_string()
+                } else {
+                    format!("/{}", cmd)
+                };
+                if let Err(error) = send_slash_command(pid, &full_cmd) {
+                    tracing::warn!(
+                        pid,
+                        cmd = %full_cmd,
+                        %error,
+                        "Failed to execute pattern rule command"
+                    );
                 }
             }
         }

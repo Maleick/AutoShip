@@ -1,4 +1,7 @@
-use crate::{shared_client_state::SharedClientState, types::ClientId};
+use crate::{
+    character_config::RewardAutomationConfig, shared_client_state::SharedClientState,
+    types::ClientId,
+};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Generates monotonically increasing correlation IDs for IPC request-response
@@ -420,6 +423,10 @@ pub enum SessionControlCommand {
 }
 
 /// Commands sent from the manager to an injected DLL
+///
+/// NOTE: `Command` is serialized over IPC with bincode's implicit enum variant
+/// discriminants. Append new variants to the end of this enum so mixed-version
+/// deployments keep the same wire indices for existing commands.
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Command {
     // Movement
@@ -970,6 +977,14 @@ pub enum Command {
         format: String,
         /// Server name used for `{server}` substitutions.
         server_name: String,
+    },
+    /// Update the task/mission reward automation preferences for this client.
+    ///
+    /// Appended after `SetWindowTitleConfig` to preserve the wire
+    /// discriminants already shipped on `master`.
+    SetRewardAutomation {
+        /// Reward selection rules keyed by task title or wildcard fallback.
+        config: RewardAutomationConfig,
     },
 }
 
@@ -3092,6 +3107,18 @@ mod tests {
         };
         let encoded = encode(&cmd).expect("encode SetAutoRezConfig");
         let (decoded, _): (Command, _) = decode(&encoded).expect("decode SetAutoRezConfig");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
+    fn command_roundtrip_set_reward_automation() {
+        use crate::protocol::{decode, encode};
+
+        let cmd = Command::SetRewardAutomation {
+            config: RewardAutomationConfig::default(),
+        };
+        let encoded = encode(&cmd).expect("encode SetRewardAutomation");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode SetRewardAutomation");
         assert_eq!(decoded, cmd);
     }
 

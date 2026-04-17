@@ -82,7 +82,7 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake clang libclang-dev llvm-dev
+          sudo apt-get install -y cmake clang libclang-dev llvm-dev pkg-config libasound2-dev
           echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
 
       - name: Setup Python

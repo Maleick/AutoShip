@@ -106,8 +106,12 @@ impl ChatLogWriter {
     }
 
     fn rotate(&mut self, date_suffix: &str) -> std::io::Result<()> {
-        if let Some(mut file) = self.file.take() {
+        if let Some(file) = self.file.as_mut() {
             file.flush()?;
+        }
+        if let Some(file) = self.file.take() {
+            let file = file.into_inner().map_err(|error| error.into_error())?;
+            drop(file);
         }
 
         let archive_dir = self.path.parent().unwrap_or(Path::new("."));
@@ -151,7 +155,7 @@ impl ChatLogWriter {
         let file = self
             .file
             .as_mut()
-            .expect("chat log file writer should exist");
+            .expect("chat log writer should always have an active file");
         writeln!(file, "[{}] {}", level, line)?;
         file.flush()?;
         self.current_size_bytes += line.len() as u64 + 1;
@@ -335,10 +339,17 @@ impl ChatLogManager {
 mod tests {
     use super::*;
     use std::io::Read;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     fn temp_log_dir() -> PathBuf {
         let temp = std::env::temp_dir();
-        let dir = temp.join(format!("textquest-chat-log-test-{}", std::process::id()));
+        let unique = TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = temp.join(format!(
+            "textquest-chat-log-test-{}-{unique}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).ok();
         dir
     }
@@ -346,7 +357,7 @@ mod tests {
     fn default_config() -> ChatLogConfig {
         ChatLogConfig {
             enabled: true,
-            channels: vec![ChatChannel::MQ2],
+            channels: vec![ChatChannel::Say, ChatChannel::MQ2],
             rotation_strategy: RotationStrategy::Size(1024 * 1024),
             max_file_size_bytes: 1024 * 1024,
             min_level: LogLevel::Info,
@@ -505,5 +516,49 @@ mod tests {
 
         let log_path = dir.join("Firiona Vie_TestChar.log");
         assert!(log_path.exists());
+    }
+
+    #[test]
+    fn size_rotation_archives_before_reopening_active_log() {
+        let dir = temp_log_dir();
+        let mut config = default_config();
+        config.rotation_strategy = RotationStrategy::Size(1);
+        config.max_file_size_bytes = 1;
+        let mut manager = ChatLogManager::new(config, dir.clone()).unwrap();
+
+        let first = ChatMessageInfo {
+            text: "First line".to_string(),
+            color: 273,
+            timestamp_ms: 1700000000000,
+        };
+        let second = ChatMessageInfo {
+            text: "Second line".to_string(),
+            color: 273,
+            timestamp_ms: 1700000001000,
+        };
+
+        manager
+            .log_message("Firiona Vie", "TestChar", &first, Some(ChatChannel::Say))
+            .unwrap();
+        manager
+            .log_message("Firiona Vie", "TestChar", &second, Some(ChatChannel::Say))
+            .unwrap();
+
+        let log_path = dir.join("Firiona Vie_TestChar.log");
+        let current = std::fs::read_to_string(&log_path).expect("current log");
+        assert!(current.contains("Second line"));
+        assert!(!current.contains("First line"));
+
+        let archive_count = std::fs::read_dir(&dir)
+            .expect("archive dir")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                let name = entry.file_name().to_string_lossy().to_string();
+                name.starts_with("Firiona Vie_TestChar.")
+                    && name.ends_with(".log")
+                    && name != "Firiona Vie_TestChar.log"
+            })
+            .count();
+        assert!(archive_count >= 1, "expected rotated archive file");
     }
 }

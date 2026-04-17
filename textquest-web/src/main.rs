@@ -429,6 +429,15 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .route("/health", get(api::health))
         .route("/sessions", get(api::list_sessions))
         .nest("/accounts", accounts::router())
+        .nest("/dashboard", api::dashboard::router())
+        .route(
+            "/box-chat/settings",
+            get(api::get_box_chat_settings).put(api::put_box_chat_settings),
+        )
+        .route(
+            "/chat-log/settings",
+            get(api::chat_log::get_chat_log_settings).put(api::chat_log::put_chat_log_settings),
+        )
         .route(
             "/economy/settings",
             get(api::get_economy_settings).put(api::put_economy_settings),
@@ -457,6 +466,10 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .route(
             "/config/auto-accept",
             get(api::get_auto_accept_settings).put(api::put_auto_accept_settings),
+        )
+        .route(
+            "/config/discord",
+            get(api::discord::get_settings).put(api::discord::put_settings),
         )
         .route(
             "/config/player-watch",
@@ -502,7 +515,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
         // Chat Pattern Rules API
         .route(
             "/chat-pattern-rules",
-            get(api::chat_pattern_rules::list_rules),
+            get(api::chat_pattern_rules::list_rules).post(api::chat_pattern_rules::create_rule),
         )
         .route(
             "/chat-pattern-rules/stats",
@@ -587,6 +600,7 @@ async fn main() {
         .init();
 
     let state = build_state();
+    api::dashboard::spawn_dashboard_tick_loop(state.clone());
     let app = build_app(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3001));

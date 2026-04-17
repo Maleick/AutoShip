@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 /// Unique ID for each managed EQ client
 pub type ClientId = u32;
 
@@ -148,6 +150,9 @@ pub struct SpawnData {
     pub level: u8,
     /// EQ class ID (1=Warrior, 2=Cleric, etc.).
     pub class_id: u8,
+    /// Race ID from `ActorClient` (e.g. Human=1, Iksar=128).
+    #[serde(default)]
+    pub race_id: u32,
     /// World X position.
     pub x: f32,
     /// World Y position.
@@ -181,6 +186,63 @@ pub struct SpawnData {
 }
 
 impl SpawnData {
+    /// Returns the short class name string (e.g. "WAR"), or "?cN?" if
+    /// unknown.
+    #[must_use]
+    pub fn class_str(&self) -> String {
+        self.class_label().into_owned()
+    }
+
+    /// Returns the short class label, borrowing known class names to avoid
+    /// allocation.
+    #[must_use]
+    pub fn class_label(&self) -> Cow<'static, str> {
+        match self.class_id {
+            1 => Cow::Borrowed("WAR"),
+            2 => Cow::Borrowed("CLR"),
+            3 => Cow::Borrowed("PAL"),
+            4 => Cow::Borrowed("RNG"),
+            5 => Cow::Borrowed("SK"),
+            6 => Cow::Borrowed("DRU"),
+            7 => Cow::Borrowed("MNK"),
+            8 => Cow::Borrowed("BRD"),
+            9 => Cow::Borrowed("ROG"),
+            10 => Cow::Borrowed("SHM"),
+            11 => Cow::Borrowed("NEC"),
+            12 => Cow::Borrowed("WIZ"),
+            13 => Cow::Borrowed("MAG"),
+            14 => Cow::Borrowed("ENC"),
+            15 => Cow::Borrowed("BST"),
+            16 => Cow::Borrowed("BER"),
+            id => Cow::Owned(format!("?c{id}?")),
+        }
+    }
+
+    /// Human-readable race name from the numeric race ID.
+    #[must_use]
+    pub fn race_name(&self) -> String {
+        match self.race_id {
+            1 => "Human".to_string(),
+            2 => "Barbarian".to_string(),
+            3 => "Erudite".to_string(),
+            4 => "Wood Elf".to_string(),
+            5 => "High Elf".to_string(),
+            6 => "Dark Elf".to_string(),
+            7 => "Half Elf".to_string(),
+            8 => "Dwarf".to_string(),
+            9 => "Troll".to_string(),
+            10 => "Ogre".to_string(),
+            11 => "Halfling".to_string(),
+            12 => "Gnome".to_string(),
+            128 => "Iksar".to_string(),
+            130 => "Vah Shir".to_string(),
+            330 => "Froglok".to_string(),
+            522 => "Drakkin".to_string(),
+            0 => "Unknown".to_string(),
+            id => format!("R{id}"),
+        }
+    }
+
     /// Returns current HP as a percentage (0.0 - 100.0). Returns 100.0 if max
     /// HP is zero or negative.
     #[must_use]
@@ -360,6 +422,7 @@ mod tests {
             spawn_type: 0,
             level: 60,
             class_id: 1,
+            race_id: 1,
             x: 0.0,
             y: 0.0,
             z: 0.0,
@@ -754,6 +817,42 @@ mod tests {
             ..SpawnData::default()
         };
         assert_ne!(spawn.name, spawn.displayed_name);
+    }
+
+    #[test]
+    fn spawn_data_class_label_uses_short_name() {
+        let spawn = SpawnData {
+            class_id: 2,
+            race_id: 1,
+            ..SpawnData::default()
+        };
+
+        assert_eq!(spawn.class_str(), "CLR");
+    }
+
+    #[test]
+    fn spawn_data_race_name_uses_known_label() {
+        let spawn = SpawnData {
+            race_id: 128,
+            ..SpawnData::default()
+        };
+
+        assert_eq!(spawn.race_name(), "Iksar");
+    }
+
+    #[test]
+    fn spawn_data_deserializes_when_race_id_is_missing() {
+        let mut payload =
+            serde_json::to_value(SpawnData::default()).expect("serialize default spawn");
+        payload
+            .as_object_mut()
+            .expect("spawn payload object")
+            .remove("race_id");
+
+        let spawn: SpawnData =
+            serde_json::from_value(payload).expect("deserialize spawn without race_id");
+
+        assert_eq!(spawn.race_id, 0);
     }
 
     #[test]

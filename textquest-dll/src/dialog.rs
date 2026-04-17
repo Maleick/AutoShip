@@ -21,6 +21,8 @@ use textquest_common::ipc::{AutoAcceptSettings, AutoRezConfig};
 /// Whether auto-accept is enabled. Disabled by default; toggled via IPC
 /// `SetAutoAccept`.
 static AUTO_ACCEPT_ENABLED: AtomicBool = AtomicBool::new(false);
+static AUTO_ACCEPT_SETTINGS: LazyLock<Mutex<AutoAcceptSettings>> =
+    LazyLock::new(|| Mutex::new(AutoAcceptSettings::default()));
 static AUTO_REZ_CONFIG: LazyLock<Mutex<AutoRezConfig>> =
     LazyLock::new(|| Mutex::new(AutoRezConfig::default()));
 static PENDING_REZ_OFFER: LazyLock<Mutex<Option<PendingRezOffer>>> =
@@ -60,6 +62,10 @@ enum RezDecision {
 /// Enable or disable auto-accept.
 pub fn set_enabled(enabled: bool) {
     AUTO_ACCEPT_ENABLED.store(enabled, Ordering::Relaxed);
+    AUTO_ACCEPT_SETTINGS
+        .lock()
+        .expect("auto accept settings lock poisoned")
+        .enabled = enabled;
     tracing::info!(enabled, "Auto-accept dialog handling toggled");
 }
 
@@ -97,9 +103,13 @@ pub fn set_rez_config(config: AutoRezConfig) {
     );
 }
 
-/// Apply the broader auto-accept dashboard settings.
+/// Replace the current auto-accept settings snapshot.
 pub fn set_settings(settings: AutoAcceptSettings) {
-    set_enabled(settings.enabled);
+    AUTO_ACCEPT_ENABLED.store(settings.enabled, Ordering::Relaxed);
+    *AUTO_ACCEPT_SETTINGS
+        .lock()
+        .expect("auto accept settings lock poisoned") = settings;
+    tracing::info!("Auto-accept settings updated");
 }
 
 fn current_rez_config() -> AutoRezConfig {

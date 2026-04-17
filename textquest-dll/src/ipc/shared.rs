@@ -363,6 +363,7 @@ mod tests {
             spawn_type: 1,
             level: 60,
             class_id: 1,
+            race_id: 1,
             x: id as f32,
             y: id as f32,
             z: 0.0,

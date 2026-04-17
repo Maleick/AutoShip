@@ -5,7 +5,6 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -35,17 +34,6 @@ impl Default for KillTrackerSettings {
             max_session_history: 100,
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KillRecord {
-    pub mob_name: String,
-    pub mob_level: u8,
-    pub zone: String,
-    pub timestamp: String,
-    pub kill_time_ms: u64,
-    pub total_damage: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,14 +74,6 @@ pub struct SessionStats {
 pub struct CharacterHistory {
     pub character: String,
     pub sessions: Vec<SessionStats>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KillTrackerDashboard {
-    pub current_session: Option<SessionStats>,
-    pub character_history: Vec<CharacterHistory>,
-    pub settings: KillTrackerSettings,
 }
 
 pub struct KillTrackerState {
@@ -179,51 +159,6 @@ async fn get_history(State(state): State<Arc<AppState>>) -> Json<Vec<CharacterHi
         })
         .collect();
     Json(history)
-}
-
-pub fn demo_session() -> SessionStats {
-    SessionStats {
-        character: "Frostreaver".to_string(),
-        session_start: Utc::now().to_rfc3339(),
-        total_kills: 47,
-        total_deaths: 2,
-        kills_per_hour: 42.5,
-        efficiency: EfficiencyScore {
-            kills_per_hour: 42.5,
-            avg_kill_time_secs: 28.3,
-            death_ratio: 0.04,
-            score: 78.5,
-        },
-        mob_stats: vec![
-            MobStats {
-                mob_name: "Fennin Ro".to_string(),
-                kill_count: 15,
-                best_time_ms: 22000,
-                avg_time_ms: 28000,
-                avg_dps: 1850.0,
-            },
-            MobStats {
-                mob_name: "Fire Elemental".to_string(),
-                kill_count: 12,
-                best_time_ms: 18000,
-                avg_time_ms: 24000,
-                avg_dps: 2100.0,
-            },
-            MobStats {
-                mob_name: "Flame Spirit".to_string(),
-                kill_count: 20,
-                best_time_ms: 12000,
-                avg_time_ms: 16000,
-                avg_dps: 2400.0,
-            },
-        ],
-        top_mobs: vec![
-            ("Flame Spirit".to_string(), 20),
-            ("Fennin Ro".to_string(), 15),
-            ("Fire Elemental".to_string(), 12),
-        ],
-        zone: "Plane of Fire".to_string(),
-    }
 }
 
 #[cfg(test)]

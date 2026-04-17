@@ -124,21 +124,10 @@ impl OrchestratorLoop {
         let log_dir = crate::paths::resolve_log_dir().join("chat");
         orchestrator.init_chat_log_manager(app_config.chat_log.clone(), log_dir);
         orchestrator.configure_say_detection(&app_config.say_detection);
-        let auto_camp_settings = app_config
-            .group
-            .iter()
-            .flat_map(|group| group.toon.iter())
-            .map(|toon| {
-                (
-                    toon.name.to_ascii_lowercase(),
-                    AutoCampOnDeathSettings {
-                        enabled: toon.auto_camp_on_death.enabled,
-                        camp_delay_secs: toon.auto_camp_on_death.camp_delay_secs,
-                        relog_wait_secs: toon.auto_camp_on_death.relog_wait_secs,
-                    },
-                )
-            })
-            .collect::<HashMap<_, _>>();
+        // `ToonConfig` no longer carries per-character death-camp policy in
+        // the static TOML. Missing entries fall back to the disabled default
+        // in `tick_death_camp`.
+        let auto_camp_settings = HashMap::new();
         let credential_store = std::env::var("TEXTQUEST_MASTER_PASSWORD")
             .ok()
             .filter(|password| !password.trim().is_empty())
@@ -511,12 +500,12 @@ impl OrchestratorLoop {
         if updated_configs.is_some() {
             tracing::debug!("Timestamp config changed, applying to clients");
         }
-        let clients = self
+        let clients: Vec<_> = self
             .orchestrator
             .client_names
             .iter()
             .map(|(&pid, name)| (pid, name.clone()))
-            .collect::<Vec<_>>();
+            .collect();
         for (pid, name) in clients {
             self.timestamp_runtime
                 .apply_to_client(&mut self.orchestrator, pid, &name);

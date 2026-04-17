@@ -2,6 +2,7 @@ export interface DashboardSnapshot {
   generatedAt: string;
   environment: EnvironmentSummary;
   sessions: SessionSection;
+  spawnFinder: SpawnFinderSection;
   groups: GroupSection;
   navigation: NavigationSection;
   relocation: RelocationSection;
@@ -36,6 +37,33 @@ export interface SessionCard {
   status: "online" | "offline" | "stuck";
   recoveryState: "stable" | "respawning" | "waiting";
   lastHeartbeat: string;
+}
+
+export interface SpawnFinderSection {
+  observers: SpawnObserverSummary[];
+  items: SpawnFinderItem[];
+}
+
+export interface SpawnObserverSummary {
+  clientId: number;
+  characterName: string;
+  zone: string;
+  totalSpawns: number;
+}
+
+export interface SpawnFinderItem {
+  observerClientId: number;
+  observerName: string;
+  observerZone: string;
+  spawnId: number;
+  name: string;
+  spawnType: string;
+  level: number;
+  className: string;
+  raceName: string;
+  distance: number;
+  hpPct: number;
+  isCurrentTarget: boolean;
 }
 
 export interface GroupSection {
@@ -240,6 +268,11 @@ export type DashboardActionRequest =
   | {
       type: "set_active_route";
       route_id: string;
+    }
+  | {
+      type: "target_spawn";
+      client_id: number;
+      spawn_id: number;
     }
   | {
       type: "update_wishlist";

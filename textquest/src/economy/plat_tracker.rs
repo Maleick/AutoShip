@@ -44,12 +44,12 @@ impl CoinStack {
     }
 
     pub fn total_copper(&self) -> i64 {
-        (self.plat * 1000 * 100) + (self.gold * 100) + (self.silver * 10) + self.copper
+        (self.plat * 1000) + (self.gold * 100) + (self.silver * 10) + self.copper
     }
 
     pub fn from_copper(copper: i64) -> Self {
-        let plat = copper / (1000 * 100);
-        let remainder = copper % (1000 * 100);
+        let plat = copper / 1000;
+        let remainder = copper % 1000;
         let gold = remainder / 100;
         let remainder = remainder % 100;
         let silver = remainder / 10;
@@ -102,7 +102,7 @@ impl CoinStack {
     }
 
     pub fn format_compact(&self) -> String {
-        format!("{}p", self.total_copper() / 100)
+        format!("{}p", self.total_copper() / 1000)
     }
 }
 
@@ -112,7 +112,7 @@ impl Default for CoinStack {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TransactionRecord {
     pub timestamp: Instant,
     pub coin_delta: CoinStack,
@@ -181,7 +181,7 @@ impl TransactionType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SessionSummary {
     pub session_start: Instant,
     pub total_gained: CoinStack,
@@ -210,7 +210,7 @@ impl SessionSummary {
         }
         let net_plat_copper = self.net_change.total_copper();
         let hours = elapsed.as_secs_f64() / 3600.0;
-        net_plat_copper as f64 / 100.0 / hours
+        net_plat_copper as f64 / 1000.0 / hours
     }
 
     pub fn session_duration(&self) -> Duration {
@@ -376,7 +376,7 @@ mod tests {
             silver: 3,
             copper: 4,
         };
-        assert_eq!(coin.total_copper(), 1 * 1000 * 100 + 2 * 100 + 3 * 10 + 4);
+        assert_eq!(coin.total_copper(), 1_234);
     }
 
     #[test]
@@ -389,10 +389,16 @@ mod tests {
         };
         let copper = original.total_copper();
         let restored = CoinStack::from_copper(copper);
-        assert_eq!(original.plat, restored.plat);
-        assert_eq!(original.gold, restored.gold);
-        assert_eq!(original.silver, restored.silver);
-        assert_eq!(original.copper, restored.copper);
+        assert_eq!(restored.total_copper(), copper);
+        assert_eq!(
+            restored,
+            CoinStack {
+                plat: 127,
+                gold: 5,
+                silver: 6,
+                copper: 7,
+            }
+        );
     }
 
     #[test]
@@ -534,7 +540,7 @@ mod tests {
 
     #[test]
     fn session_summary_format_duration() {
-        let mut summary = SessionSummary::new();
+        let summary = SessionSummary::new();
         std::thread::sleep(Duration::from_millis(10));
         let formatted = summary.format_duration();
         assert!(formatted.contains("s") || formatted.contains("m"));

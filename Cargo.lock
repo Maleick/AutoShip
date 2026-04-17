@@ -3814,6 +3814,7 @@ dependencies = [
  "rand 0.9.4",
  "ratatui",
  "recastnavigation-sys",
+ "regex",
  "reqwest",
  "rodio",
  "rpassword",

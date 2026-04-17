@@ -20,6 +20,7 @@ use crate::{
     combat::coordinator::CombatCoordinator,
     economy::price_monitor::TradePriceMonitor,
     ipc::{pipe::CommandPipe, shared::SharedStateReader},
+    orchestrator::session_control::SessionControl,
     say_detection::{SayAction, SayDetector, SayPattern, SayRule},
 };
 use std::{
@@ -32,6 +33,8 @@ use textquest_common::{
     combat::HateTargetCategory,
     ipc::{ChatMessageInfo, Command, Response, SessionControlCommand, SessionToken},
     routing::RoutingScope,
+    shared_client_state::{SharedClientState, extended_state_enabled},
+    spawn_finder::{LiveSpawnObserver, LiveSpawnSnapshot},
     types::GameState,
 };
 
@@ -57,6 +60,51 @@ fn character_config_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/character-configs.json")
 }
 
+fn live_session_snapshot_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/runtime/live_sessions.json")
+}
+
+fn live_spawn_snapshot_path() -> PathBuf {
+    live_session_snapshot_path().with_file_name("live_spawns.json")
+}
+
+fn replace_snapshot_file(temp_path: &Path, path: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    if path.exists() {
+        std::fs::remove_file(path)?;
+    }
+
+    std::fs::rename(temp_path, path)
+}
+
+fn persist_shared_client_states_to_path(
+    path: &Path,
+    states: &[SharedClientState],
+) -> anyhow::Result<()> {
+    let payload = serde_json::to_vec(states)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let temp_path = path.with_extension("json.tmp");
+    std::fs::write(&temp_path, payload)?;
+    replace_snapshot_file(&temp_path, path)?;
+    Ok(())
+}
+
+fn persist_live_spawn_snapshot_to_path(
+    path: &Path,
+    snapshot: &LiveSpawnSnapshot,
+) -> anyhow::Result<()> {
+    let payload = serde_json::to_vec(snapshot)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let temp_path = path.with_extension("json.tmp");
+    std::fs::write(&temp_path, payload)?;
+    replace_snapshot_file(&temp_path, path)?;
+    Ok(())
+}
+
 /// Poll interval for passive trade-chat capture.
 const TRADE_CHAT_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
@@ -76,14 +124,26 @@ pub struct Orchestrator {
     pub last_dispatched: Vec<(u32, CampAction)>,
     /// Latest game state per client PID.
     pub game_states: HashMap<u32, GameState>,
+    /// Cross-group same-zone coordination state for rez/assist rescue flows.
+    cross_group: cross_group::CrossGroupCoordinator,
     /// Shared memory readers per client PID.
     state_readers: HashMap<u32, SharedStateReader>,
     /// CSPRNG session tokens per client PID (generated at registration time).
     session_tokens: HashMap<u32, SessionToken>,
+    /// Session routing/group metadata for each live client.
+    session_controls: HashMap<u32, SessionControl>,
+    /// Best-known class label for each registered client.
+    client_class_names: HashMap<u32, String>,
     /// Tick number when each client's game state was last updated.
     state_timestamps: HashMap<u32, u64>,
     /// Last broadcast cross-client roster snapshot.
     last_shared_client_states: Vec<SharedClientState>,
+    /// Tracks whether the current process has persisted the live session file.
+    persisted_shared_client_states: bool,
+    /// Last persisted spawn finder snapshot for the web dashboard.
+    last_live_spawn_snapshot: LiveSpawnSnapshot,
+    /// Tracks whether the current process has persisted the live spawn file.
+    persisted_live_spawn_snapshot: bool,
     // Pipe connections are created per-command (connect → token → command → drop).
     // The DLL's pipe server disconnects after each command, so persistent
     // connections would fail on the second write.
@@ -159,10 +219,16 @@ impl Orchestrator {
             tick_count: 0,
             last_dispatched: Vec::new(),
             game_states: HashMap::new(),
+            cross_group: cross_group::CrossGroupCoordinator::new(),
             state_readers: HashMap::new(),
             session_tokens: HashMap::new(),
+            session_controls: HashMap::new(),
+            client_class_names: HashMap::new(),
             state_timestamps: HashMap::new(),
             last_shared_client_states: Vec::new(),
+            persisted_shared_client_states: false,
+            last_live_spawn_snapshot: LiveSpawnSnapshot::default(),
+            persisted_live_spawn_snapshot: false,
             operating_mode: OperatingMode::Camp,
             active_hunt: None,
             sell_cycle: None,
@@ -221,6 +287,81 @@ impl Orchestrator {
                 self.game_states.insert(pid, state);
                 self.state_timestamps.insert(pid, self.tick_count);
             }
+        }
+    }
+
+    fn build_shared_client_states(&self) -> Vec<SharedClientState> {
+        let include_extended = extended_state_enabled();
+        self.client_pids
+            .iter()
+            .filter_map(|pid| {
+                let state = self.game_states.get(pid)?;
+                SharedClientState::from_game_state(
+                    self.client_names.get(pid).map(String::as_str),
+                    state,
+                    include_extended,
+                )
+            })
+            .collect()
+    }
+
+    fn build_live_spawn_snapshot(&self) -> LiveSpawnSnapshot {
+        LiveSpawnSnapshot {
+            observers: self
+                .client_pids
+                .iter()
+                .filter_map(|pid| {
+                    let state = self.game_states.get(pid)?;
+                    LiveSpawnObserver::from_game_state(
+                        self.client_names.get(pid).map(String::as_str),
+                        state,
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    fn sync_runtime_snapshots(&mut self) {
+        let states = self.build_shared_client_states();
+        if states != self.last_shared_client_states || !self.persisted_shared_client_states {
+            let recipients = self.client_pids.clone();
+            for pid in recipients {
+                self.send_ipc_command(
+                    pid,
+                    Command::UpdateSharedClientStates {
+                        states: states.clone(),
+                    },
+                );
+            }
+
+            self.persisted_shared_client_states = match persist_shared_client_states_to_path(
+                &live_session_snapshot_path(),
+                &states,
+            ) {
+                Ok(()) => true,
+                Err(error) => {
+                    tracing::warn!(%error, "Failed to persist live session snapshot");
+                    false
+                }
+            };
+
+            self.last_shared_client_states = states;
+        }
+
+        let spawn_snapshot = self.build_live_spawn_snapshot();
+        if spawn_snapshot != self.last_live_spawn_snapshot || !self.persisted_live_spawn_snapshot {
+            self.persisted_live_spawn_snapshot = match persist_live_spawn_snapshot_to_path(
+                &live_spawn_snapshot_path(),
+                &spawn_snapshot,
+            ) {
+                Ok(()) => true,
+                Err(error) => {
+                    tracing::warn!(%error, "Failed to persist live spawn snapshot");
+                    false
+                }
+            };
+
+            self.last_live_spawn_snapshot = spawn_snapshot;
         }
     }
 
@@ -383,7 +524,10 @@ impl Orchestrator {
         self.last_dispatched.clear();
 
         self.poll_game_states();
-        self.sync_shared_client_states();
+        if self.tick_count.is_multiple_of(REWARD_CONFIG_SYNC_INTERVAL) {
+            self.sync_reward_automation_configs();
+        }
+        self.sync_runtime_snapshots();
         self.poll_trade_chat_if_due();
         self.poll_chat_log_if_due();
         let say_matches = self.poll_and_evaluate_say_detection();
@@ -408,31 +552,18 @@ impl Orchestrator {
             &self.state_timestamps,
             self.tick_count,
         );
+        let emergency_count = emergency.len();
 
         let count = scoped.len();
         for (pid, action) in &scoped {
             self.dispatch_action(*pid, action);
         }
-        for (pid, cmd) in &xassist_commands {
-            if let xassist::AssistCommand::Target(spawn_id) = cmd {
-                self.send_ipc_command(
-                    *pid,
-                    Command::SetTarget {
-                        spawn_id: *spawn_id,
-                    },
-                );
-            }
+        for (pid, action) in &emergency {
+            self.dispatch_action(*pid, action);
         }
         self.last_dispatched = scoped;
-        self.last_dispatched
-            .extend(xassist_commands.iter().filter_map(|(pid, cmd)| {
-                if let xassist::AssistCommand::Target(spawn_id) = cmd {
-                    Some((*pid, CampAction::Slash(format!("/target spawn:{spawn_id}"))))
-                } else {
-                    None
-                }
-            }));
-        count + say_matches
+        self.last_dispatched.extend(emergency);
+        count + emergency_count + say_matches
     }
 
     /// Returns the PIDs that should receive camp/hunt loop dispatches under the
@@ -860,6 +991,33 @@ impl Orchestrator {
         token
     }
 
+    /// Set or update the coordination group for a registered client.
+    pub fn set_client_group(&mut self, pid: u32, group_id: u8) {
+        self.session_controls
+            .entry(pid)
+            .or_insert_with(|| SessionControl::new(pid))
+            .apply_command(&SessionControlCommand::SetGroup { group_id });
+    }
+
+    /// Return the current coordination group for a registered client.
+    #[must_use]
+    pub fn client_group(&self, pid: u32) -> Option<u8> {
+        self.session_controls
+            .get(&pid)
+            .map(|control| control.group_id)
+    }
+
+    /// Cache the class name used by cross-group role classification.
+    pub fn set_client_class_name(&mut self, pid: u32, class_name: impl Into<String>) {
+        self.client_class_names.insert(pid, class_name.into());
+    }
+
+    /// Return the cached class name for a registered client.
+    #[must_use]
+    pub fn client_class_name(&self, pid: u32) -> Option<&str> {
+        self.client_class_names.get(&pid).map(String::as_str)
+    }
+
     /// Dispatch a `CampAction` to the appropriate client via IPC.
     fn dispatch_action(&mut self, pid: u32, action: &CampAction) {
         match action {
@@ -1052,7 +1210,10 @@ impl Orchestrator {
         self.game_states.remove(&pid);
         self.state_readers.remove(&pid);
         self.session_tokens.remove(&pid);
+        self.session_controls.remove(&pid);
+        self.client_class_names.remove(&pid);
         self.state_timestamps.remove(&pid);
+        self.last_sent_reward_configs.remove(&pid);
         tracing::info!(pid, "Client removed from orchestrator");
     }
 
@@ -1276,8 +1437,8 @@ impl Orchestrator {
                 crate::config::SayRuleAction::Broadcast => {
                     let Some(command) = rule_config
                         .action_value
-                        .as_ref()
-                        .map(String::trim)
+                        .as_deref()
+                        .map(str::trim)
                         .filter(|value| !value.is_empty())
                     else {
                         tracing::warn!(
@@ -1291,8 +1452,8 @@ impl Orchestrator {
                 crate::config::SayRuleAction::Command => {
                     let Some(command) = rule_config
                         .action_value
-                        .as_ref()
-                        .map(String::trim)
+                        .as_deref()
+                        .map(str::trim)
                         .filter(|value| !value.is_empty())
                     else {
                         tracing::warn!(
@@ -1330,8 +1491,9 @@ impl Orchestrator {
         }
 
         let mut match_count = 0;
+        let pids = self.client_pids.clone();
 
-        for &pid in &self.client_pids {
+        for pid in pids {
             let messages = self.poll_chat(pid);
             for msg in messages {
                 if let Some(event) = textquest_common::chat::parse_chat_text(&msg.text) {
@@ -1410,7 +1572,8 @@ impl Orchestrator {
 
     /// Send a slash command to all registered clients.
     fn broadcast_command(&mut self, command: &str) {
-        for &pid in &self.client_pids {
+        let pids = self.client_pids.clone();
+        for pid in pids {
             self.send_slash_command(pid, command);
         }
     }
@@ -1456,11 +1619,17 @@ impl Orchestrator {
 mod tests {
     use super::*;
     use crate::camp::state::Role;
+    use std::sync::{Mutex, OnceLock};
     use textquest_common::{
         combat::CombatStatus,
         nav::NavStatus,
         types::{GameState, SpawnData},
     };
+
+    fn runtime_snapshot_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     fn test_config() -> CampConfig {
         CampConfig {
@@ -1499,6 +1668,7 @@ mod tests {
             spawn_type: 0,
             level: 60,
             class_id,
+            race_id: 1,
             x: 0.0,
             y: 0.0,
             z: 0.0,
@@ -1535,7 +1705,299 @@ mod tests {
             },
             zone_short_name: zone.to_string(),
             zone_long_name: zone.to_string(),
+            active_buffs: vec![],
+            pet: None,
             actual_version: None,
+        }
+    }
+
+    #[test]
+    fn build_live_spawn_snapshot_exposes_observers_and_nearby_spawns() {
+        let mut orch = Orchestrator::new();
+        orch.client_pids = vec![100];
+        orch.client_names.insert(100, "Tank".into());
+        let mut state = make_game_state(100, "kael", make_spawn_named("Tank", 1, 900, 1000), None);
+        state.target = Some(SpawnData {
+            spawn_id: 999,
+            name: "a frost giant".into(),
+            displayed_name: "a frost giant".into(),
+            spawn_type: 1,
+            level: 61,
+            class_id: 1,
+            race_id: 10,
+            x: 50.0,
+            y: 75.0,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 500,
+            hp_max: 1000,
+            mana_current: 0,
+            mana_max: 0,
+            endurance_current: 0,
+            endurance_max: 0,
+            speed_run: 0.0,
+            stand_state: 0,
+            is_gm: false,
+        });
+        state.zone_long_name = "Kael Drakkel".into();
+        state.nearby_spawns = vec![SpawnData {
+            spawn_id: 1234,
+            name: "a fire giant".into(),
+            displayed_name: "a fire giant".into(),
+            spawn_type: 1,
+            level: 61,
+            class_id: 1,
+            race_id: 10,
+            x: 20.0,
+            y: 40.0,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 800,
+            hp_max: 1000,
+            mana_current: 0,
+            mana_max: 0,
+            endurance_current: 0,
+            endurance_max: 0,
+            speed_run: 0.0,
+            stand_state: 0,
+            is_gm: false,
+        }];
+        orch.game_states.insert(100, state);
+
+        let snapshot = orch.build_live_spawn_snapshot();
+
+        assert_eq!(snapshot.observers.len(), 1);
+        assert_eq!(snapshot.observers[0].character_name, "Tank");
+        assert_eq!(snapshot.observers[0].zone_short_name, "kael");
+        assert_eq!(snapshot.observers[0].zone_long_name, "Kael Drakkel");
+        assert_eq!(snapshot.observers[0].target_spawn_id, Some(999));
+        assert_eq!(snapshot.observers[0].nearby_spawns[0].spawn_id, 1234);
+    }
+
+    #[test]
+    fn persist_live_spawn_snapshot_to_path_writes_json_snapshot() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("runtime/live_spawns.json");
+        let snapshot = LiveSpawnSnapshot {
+            observers: vec![LiveSpawnObserver {
+                client_id: 100,
+                character_name: "Frostreaver".into(),
+                zone_short_name: "kael".into(),
+                zone_long_name: "Kael Drakkel".into(),
+                local_player: make_spawn_named("Frostreaver", 2, 900, 1000),
+                target_spawn_id: Some(999),
+                nearby_spawns: vec![SpawnData {
+                    spawn_id: 999,
+                    name: "a frost giant".into(),
+                    displayed_name: "a frost giant".into(),
+                    spawn_type: 1,
+                    level: 60,
+                    class_id: 1,
+                    race_id: 9,
+                    x: 50.0,
+                    y: 75.0,
+                    z: 0.0,
+                    heading: 0.0,
+                    hp_current: 500,
+                    hp_max: 1000,
+                    mana_current: 0,
+                    mana_max: 0,
+                    endurance_current: 0,
+                    endurance_max: 0,
+                    speed_run: 0.0,
+                    stand_state: 0,
+                    is_gm: false,
+                }],
+            }],
+        };
+
+        persist_live_spawn_snapshot_to_path(&path, &snapshot).expect("snapshot write");
+
+        let payload = std::fs::read_to_string(path).expect("snapshot exists");
+        assert!(payload.contains("Frostreaver"));
+        assert!(payload.contains("\"target_spawn_id\":999"));
+        assert!(payload.contains("\"observers\""));
+    }
+
+    #[test]
+    fn persist_shared_client_states_to_path_replaces_existing_file() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("runtime/live_sessions.json");
+
+        let initial = vec![
+            SharedClientState::from_game_state(
+                Some("Tank"),
+                &make_game_state(100, "kael", make_spawn_named("Tank", 1, 900, 1000), None),
+                false,
+            )
+            .expect("initial shared state"),
+        ];
+        persist_shared_client_states_to_path(&path, &initial).expect("initial snapshot write");
+
+        let replacement = vec![
+            SharedClientState::from_game_state(
+                Some("Healer"),
+                &make_game_state(
+                    101,
+                    "soldungc",
+                    make_spawn_named("Healer", 2, 850, 1000),
+                    None,
+                ),
+                false,
+            )
+            .expect("replacement shared state"),
+        ];
+        persist_shared_client_states_to_path(&path, &replacement)
+            .expect("replacement snapshot write");
+
+        let payload = std::fs::read_to_string(path).expect("snapshot exists");
+        assert!(payload.contains("Healer"));
+        assert!(!payload.contains("\"Tank\""));
+    }
+
+    #[test]
+    fn persist_live_spawn_snapshot_to_path_replaces_existing_file() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let path = tempdir.path().join("runtime/live_spawns.json");
+
+        let initial = LiveSpawnSnapshot {
+            observers: vec![LiveSpawnObserver {
+                client_id: 100,
+                character_name: "Frostreaver".into(),
+                zone_short_name: "kael".into(),
+                zone_long_name: "Kael Drakkel".into(),
+                local_player: make_spawn_named("Frostreaver", 2, 900, 1000),
+                target_spawn_id: None,
+                nearby_spawns: vec![make_spawn_named("a frost giant", 1, 900, 1000)],
+            }],
+        };
+        persist_live_spawn_snapshot_to_path(&path, &initial).expect("initial snapshot write");
+
+        let replacement = LiveSpawnSnapshot {
+            observers: vec![LiveSpawnObserver {
+                client_id: 101,
+                character_name: "Leafbinder".into(),
+                zone_short_name: "soldungc".into(),
+                zone_long_name: "Solusek's Lair".into(),
+                local_player: make_spawn_named("Leafbinder", 2, 700, 900),
+                target_spawn_id: None,
+                nearby_spawns: vec![make_spawn_named("a lava walker", 1, 600, 1000)],
+            }],
+        };
+        persist_live_spawn_snapshot_to_path(&path, &replacement)
+            .expect("replacement snapshot write");
+
+        let payload = std::fs::read_to_string(path).expect("snapshot exists");
+        assert!(payload.contains("Leafbinder"));
+        assert!(!payload.contains("Frostreaver"));
+    }
+
+    #[test]
+    fn sync_runtime_snapshots_overwrites_stale_live_spawn_snapshot_with_empty_state() {
+        let _guard = runtime_snapshot_test_lock()
+            .lock()
+            .expect("live spawn snapshot test lock");
+        let path = live_spawn_snapshot_path();
+        let previous = std::fs::read(&path).ok();
+
+        let stale_snapshot = LiveSpawnSnapshot {
+            observers: vec![LiveSpawnObserver {
+                client_id: 100,
+                character_name: "Frostreaver".into(),
+                zone_short_name: "kael".into(),
+                zone_long_name: "Kael Drakkel".into(),
+                local_player: make_spawn_named("Frostreaver", 2, 900, 1000),
+                target_spawn_id: Some(999),
+                nearby_spawns: vec![SpawnData {
+                    spawn_id: 999,
+                    name: "a frost giant".into(),
+                    displayed_name: "a frost giant".into(),
+                    spawn_type: 1,
+                    level: 60,
+                    class_id: 1,
+                    race_id: 9,
+                    x: 50.0,
+                    y: 75.0,
+                    z: 0.0,
+                    heading: 0.0,
+                    hp_current: 500,
+                    hp_max: 1000,
+                    mana_current: 0,
+                    mana_max: 0,
+                    endurance_current: 0,
+                    endurance_max: 0,
+                    speed_run: 0.0,
+                    stand_state: 0,
+                    is_gm: false,
+                }],
+            }],
+        };
+        persist_live_spawn_snapshot_to_path(&path, &stale_snapshot).expect("seed stale snapshot");
+
+        let mut orch = Orchestrator::new();
+        orch.sync_runtime_snapshots();
+
+        let payload = std::fs::read(&path).expect("live spawn snapshot exists");
+        let snapshot =
+            serde_json::from_slice::<LiveSpawnSnapshot>(&payload).expect("parse live snapshot");
+
+        if let Some(contents) = previous {
+            std::fs::write(&path, contents).expect("restore prior snapshot");
+        } else {
+            let _ = std::fs::remove_file(&path);
+        }
+
+        assert!(snapshot.observers.is_empty());
+    }
+
+    #[test]
+    fn sync_runtime_snapshots_retries_after_persist_failure() {
+        let _guard = runtime_snapshot_test_lock()
+            .lock()
+            .expect("runtime snapshot test lock");
+        let session_path = live_session_snapshot_path();
+        let spawn_path = live_spawn_snapshot_path();
+        let runtime_dir = session_path.parent().expect("runtime dir").to_path_buf();
+        let data_dir = runtime_dir.parent().expect("data dir").to_path_buf();
+        let runtime_dir_existed = runtime_dir.exists();
+        let data_dir_existed = data_dir.exists();
+        let backup_dir = runtime_dir.with_extension(format!(
+            "bak-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock")
+                .as_nanos()
+        ));
+
+        if runtime_dir_existed {
+            std::fs::rename(&runtime_dir, &backup_dir).expect("backup runtime dir");
+        } else if !data_dir_existed {
+            std::fs::create_dir_all(&data_dir).expect("create data dir");
+        }
+        std::fs::write(&runtime_dir, b"blocked").expect("block runtime dir");
+
+        let mut orch = Orchestrator::new();
+        orch.sync_runtime_snapshots();
+
+        assert!(!orch.persisted_shared_client_states);
+        assert!(!orch.persisted_live_spawn_snapshot);
+
+        std::fs::remove_file(&runtime_dir).expect("remove runtime dir blocker");
+        orch.sync_runtime_snapshots();
+
+        assert!(orch.persisted_shared_client_states);
+        assert!(orch.persisted_live_spawn_snapshot);
+        assert!(session_path.exists());
+        assert!(spawn_path.exists());
+
+        let _ = std::fs::remove_file(&session_path);
+        let _ = std::fs::remove_file(&spawn_path);
+        let _ = std::fs::remove_dir(&runtime_dir);
+        if runtime_dir_existed {
+            std::fs::rename(&backup_dir, &runtime_dir).expect("restore runtime dir");
+        } else if !data_dir_existed {
+            let _ = std::fs::remove_dir(&data_dir);
         }
     }
 
@@ -1638,6 +2100,7 @@ mod tests {
                 spawn_type: 0,
                 level: 60,
                 class_id: 1,
+                race_id: 1,
                 x: 0.0,
                 y: 0.0,
                 z: 0.0,
@@ -1672,6 +2135,8 @@ mod tests {
                 combat_status: CombatStatus::Idle,
                 zone_short_name: String::new(),
                 zone_long_name: String::new(),
+                active_buffs: vec![],
+                pet: None,
                 actual_version: None,
             },
         );
@@ -1689,6 +2154,8 @@ mod tests {
                 combat_status: CombatStatus::Idle,
                 zone_short_name: String::new(),
                 zone_long_name: String::new(),
+                active_buffs: vec![],
+                pet: None,
                 actual_version: None,
             },
         );
@@ -1733,6 +2200,7 @@ mod tests {
                 spawn_type: 0,
                 level: 60,
                 class_id: 1,
+                race_id: 1,
                 x: 0.0,
                 y: 0.0,
                 z: 0.0,
@@ -1762,6 +2230,8 @@ mod tests {
                 combat_status: CombatStatus::Idle,
                 zone_short_name: String::new(),
                 zone_long_name: String::new(),
+                active_buffs: vec![],
+                pet: None,
                 actual_version: None,
             },
         );
@@ -1777,6 +2247,8 @@ mod tests {
                 combat_status: CombatStatus::Idle,
                 zone_short_name: String::new(),
                 zone_long_name: String::new(),
+                active_buffs: vec![],
+                pet: None,
                 actual_version: None,
             },
         );
@@ -2023,6 +2495,7 @@ mod tests {
             spawn_type: 1, // NPC
             level: 10,
             class_id: 1,
+            race_id: 1,
             x: 0.0,
             y: 0.0,
             z: 0.0,
@@ -2048,6 +2521,7 @@ mod tests {
                     spawn_type: 0,
                     level: 60,
                     class_id: 1,
+                    race_id: 1,
                     x: 0.0,
                     y: 0.0,
                     z: 0.0,
@@ -2069,6 +2543,8 @@ mod tests {
                 combat_status: CombatStatus::Idle,
                 zone_short_name: String::new(),
                 zone_long_name: String::new(),
+                active_buffs: vec![],
+                pet: None,
                 actual_version: None,
             },
         );

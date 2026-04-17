@@ -159,7 +159,7 @@ fn rule_to_dto(rule: &textquest_common::chat_pattern_rules::ChatPatternRule) -> 
     }
 }
 
-fn dto_to_rule(dto: ChatPatternRuleDto) -> textquest_common::chat_pattern_rules::ChatPatternRule {
+fn dto_to_rule(dto: &ChatPatternRuleDto) -> textquest_common::chat_pattern_rules::ChatPatternRule {
     let pattern_type = match dto.pattern_type.as_str() {
         "regex" => textquest_common::chat_pattern_rules::PatternType::Regex,
         _ => textquest_common::chat_pattern_rules::PatternType::Literal,
@@ -183,18 +183,20 @@ fn dto_to_rule(dto: ChatPatternRuleDto) -> textquest_common::chat_pattern_rules:
         .collect();
 
     let action = match dto.action.action_type.as_str() {
-        "send_ipc" => {
-            textquest_common::chat_pattern_rules::RuleAction::SendIpcCommand(dto.action.payload)
-        }
-        "trigger_alert" => {
-            textquest_common::chat_pattern_rules::RuleAction::TriggerAlert(dto.action.payload)
-        }
-        _ => textquest_common::chat_pattern_rules::RuleAction::ExecuteCommand(dto.action.payload),
+        "send_ipc" => textquest_common::chat_pattern_rules::RuleAction::SendIpcCommand(
+            dto.action.payload.clone(),
+        ),
+        "trigger_alert" => textquest_common::chat_pattern_rules::RuleAction::TriggerAlert(
+            dto.action.payload.clone(),
+        ),
+        _ => textquest_common::chat_pattern_rules::RuleAction::ExecuteCommand(
+            dto.action.payload.clone(),
+        ),
     };
 
     let mut rule = textquest_common::chat_pattern_rules::ChatPatternRule::new(
-        dto.name,
-        dto.pattern,
+        dto.name.clone(),
+        dto.pattern.clone(),
         pattern_type,
         action,
     )
@@ -202,7 +204,7 @@ fn dto_to_rule(dto: ChatPatternRuleDto) -> textquest_common::chat_pattern_rules:
     .with_priority(dto.priority)
     .with_cooldown(dto.cooldown_secs)
     .with_fire_count(dto.fire_count);
-    rule.id = dto.id;
+    rule.id = dto.id.clone();
     rule.enabled = dto.enabled;
     rule
 }
@@ -445,7 +447,7 @@ pub async fn import_rules(
     let imported_count = rules.len();
     let mut engine = state.chat_pattern_rules.write().await;
     let imported: Vec<textquest_common::chat_pattern_rules::ChatPatternRule> =
-        rules.into_iter().map(dto_to_rule).collect();
+        rules.into_iter().map(|dto| dto_to_rule(&dto)).collect();
 
     for rule in imported {
         engine.add_rule(rule);
@@ -525,7 +527,7 @@ mod tests {
             fire_count: 0,
         };
 
-        let rule = dto_to_rule(dto.clone());
+        let rule = dto_to_rule(&dto);
 
         assert_eq!(rule.name, "Test");
         assert_eq!(rule.pattern, "test");

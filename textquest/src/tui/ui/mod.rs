@@ -73,7 +73,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         ActiveScreen::Debug => spawns::draw_debug_screen(frame, outer[1], app),
         ActiveScreen::PacketMonitor => packets::draw_packet_monitor(frame, outer[1], app),
         ActiveScreen::Economy => economy_controls::draw_economy_screen(frame, outer[1], app),
-        ActiveScreen::Orchestrator => economy_controls::draw_economy_screen(frame, outer[1], app),
+        ActiveScreen::Orchestrator => {
+            orchestrator_panel::draw_orchestrator_screen(frame, outer[1], app)
+        }
     }
 
     draw_status_bar(frame, outer[2], app);

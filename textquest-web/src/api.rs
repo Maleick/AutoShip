@@ -20,7 +20,6 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-pub use player_watch::PlayerWatchConfig;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -28,7 +27,7 @@ use std::{
     sync::Arc,
 };
 use textquest_common::box_chat::BoxChatConfig;
-use textquest_common::character_config as shared_character_config;
+use textquest_common::character_config::{self as shared_character_config};
 use textquest_common::ipc::{AutoAcceptSettings, AutoRezConfig};
 use toml_edit::{DocumentMut, Item, Table, value};
 
@@ -40,6 +39,32 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayerFilterMode {
+    #[default]
+    All,
+    StrangersOnly,
+    FriendsOnly,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct PlayerWatchConfig {
+    #[serde(default)]
+    pub filter_mode: PlayerFilterMode,
+    #[serde(default)]
+    pub sound_on_zone_in: bool,
+    #[serde(default)]
+    pub friends: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PlayerWatchConfigUpdate {
+    pub filter_mode: Option<PlayerFilterMode>,
+    pub sound_on_zone_in: Option<bool>,
+    pub friends: Option<Vec<String>>,
+}
+
 fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
     (
         status,
@@ -47,10 +72,6 @@ fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Js
             error: message.into(),
         }),
     )
-}
-
-fn live_state_unavailable(message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
-    json_error(StatusCode::NOT_IMPLEMENTED, message)
 }
 
 /// Catch-all for unknown API routes so they do not fall through to the SPA.
@@ -64,22 +85,6 @@ pub async fn raid_config_unavailable() -> impl IntoResponse {
     json_error(
         StatusCode::NOT_IMPLEMENTED,
         "Raid configuration API is not implemented in this build",
-    )
-}
-
-/// Placeholder response for known character-config list endpoint.
-pub async fn character_configs_unavailable() -> impl IntoResponse {
-    json_error(
-        StatusCode::NOT_IMPLEMENTED,
-        "Character configuration API is not implemented in this build",
-    )
-}
-
-/// Placeholder response for known per-character config mutation endpoint.
-pub async fn character_config_unavailable(Path(character): Path<String>) -> impl IntoResponse {
-    json_error(
-        StatusCode::NOT_IMPLEMENTED,
-        format!("Character configuration API is not implemented for '{character}'"),
     )
 }
 
@@ -214,7 +219,6 @@ pub async fn put_box_chat_settings(Json(settings): Json<BoxChatConfig>) -> impl 
         Err(error) => json_error(StatusCode::BAD_REQUEST, error).into_response(),
     }
 }
-
 // ─── Chat Log Settings ──────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -388,15 +392,42 @@ pub async fn get_player_watch_config(
     Json(state.player_watch_config.read().await.clone())
 }
 
-/// PUT /api/config/player-watch — update player watch configuration.
+/// PUT /api/config/player-watch — update player-watch settings.
 pub async fn put_player_watch_config(
     State(state): State<Arc<AppState>>,
-    Json(settings): Json<PlayerWatchConfig>,
-) -> Json<PlayerWatchConfig> {
-    let response = settings.clone();
-    *state.player_watch_config.write().await = settings;
-    Json(response)
+    Json(update): Json<PlayerWatchConfigUpdate>,
+) -> Result<Json<PlayerWatchConfig>, (StatusCode, Json<ErrorResponse>)> {
+    let mut config = state.player_watch_config.write().await;
+
+    if let Some(filter_mode) = update.filter_mode {
+        config.filter_mode = filter_mode;
+    }
+    if let Some(sound_on_zone_in) = update.sound_on_zone_in {
+        config.sound_on_zone_in = sound_on_zone_in;
+    }
+    if let Some(friends) = update.friends {
+        let mut normalized = Vec::new();
+        for friend in friends {
+            let trimmed = friend.trim();
+            if trimmed.is_empty() {
+                return Err(json_error(
+                    StatusCode::BAD_REQUEST,
+                    "Friend names must not be blank",
+                ));
+            }
+            if normalized
+                .iter()
+                .all(|existing: &String| !existing.eq_ignore_ascii_case(trimmed))
+            {
+                normalized.push(trimmed.to_string());
+            }
+        }
+        config.friends = normalized;
+    }
+
+    Ok(Json(config.clone()))
 }
+
 // ─── Sessions
 // ─────────────────────────────────────────────────────────────────
 
@@ -1453,7 +1484,6 @@ mod tests {
         state.character_configs = tokio::sync::RwLock::new(demo_character_configs());
         state
     }
-
     async fn error_response_json(response: axum::response::Response) -> (StatusCode, Value) {
         let status = response.status();
         let body = response

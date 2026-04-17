@@ -1,8 +1,8 @@
 # TextQuest Security Audit Report
 
-**Date:** 2026-04-17  
-**Scope:** Rust backend codebase (20 source files)  
-**Analysis:** Buffer overflow vulnerability prediction + protocol security review  
+**Date:** 2026-04-17
+**Scope:** Rust backend codebase (20 source files)
+**Analysis:** Buffer overflow vulnerability prediction + protocol security review
 **Result:** No critical vulnerabilities detected
 
 ---
@@ -216,20 +216,20 @@ All unsafe calls are wrapped with error handling:
 
 ### 4.1 Session Token Storage
 
-**Current:** Plaintext tokens in `%TEMP%/textquest/login_token_<PID>.bin`  
-**Risk:** Medium — TEMP directory is world-readable on some Windows configurations  
+**Current:** Plaintext tokens in `%TEMP%/textquest/login_token_<PID>.bin`
+**Risk:** Medium — TEMP directory is world-readable on some Windows configurations
 **Recommendation:** Encrypt tokens at rest or use file ACLs to restrict TEMP access
 
 ### 4.2 Protocol Version Extensibility
 
-**Current:** Hard-coded FRAME_VERSION = 1  
-**Risk:** Low — Protocol is internal only, not exposed to untrusted networks  
+**Current:** Hard-coded FRAME_VERSION = 1
+**Risk:** Low — Protocol is internal only, not exposed to untrusted networks
 **Recommendation:** If protocol exposed externally in future, add version negotiation
 
 ### 4.3 Bincode Vulnerability Window
 
-**Current:** Bincode v1.x used for serialization  
-**Risk:** Low — Pinned dependencies, no known RCE in use  
+**Current:** Bincode v1.x used for serialization
+**Risk:** Low — Pinned dependencies, no known RCE in use
 **Recommendation:** Monitor bincode advisory feed; upgrade when v2.0 stabilizes
 
 ---
@@ -273,6 +273,6 @@ TextQuest's security posture is **STRONG**. The codebase demonstrates:
 
 ---
 
-**Report generated:** 2026-04-17  
-**Analysis tools:** autoresearch:predict + autoresearch:learn  
+**Report generated:** 2026-04-17
+**Analysis tools:** autoresearch:predict + autoresearch:learn
 **Confidence:** HIGH (multi-persona consensus)

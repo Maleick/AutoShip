@@ -1,11 +1,14 @@
-use anyhow::{Context, Result};
-use textquest_common::ipc::Command;
+use anyhow::Result;
 
 /// Dispatch a slash command to a local client without box-chat interception.
 ///
 /// This path is reused by direct TUI/CLI sends and by the box-chat runtime when
 /// a network message needs to execute on a local DLL client.
+#[cfg(windows)]
 pub fn dispatch_local_command(pid: u32, command: &str) -> Result<()> {
+    use anyhow::Context;
+    use textquest_common::ipc::Command;
+
     if let Some(message) = crate::nav::try_handle_local_slash_command(pid, command)? {
         tracing::info!(pid, %message, "Handled local slash command");
         return Ok(());
@@ -21,4 +24,9 @@ pub fn dispatch_local_command(pid: u32, command: &str) -> Result<()> {
         command: command.to_string(),
     })?;
     Ok(())
+}
+
+#[cfg(not(windows))]
+pub fn dispatch_local_command(_pid: u32, _command: &str) -> Result<()> {
+    anyhow::bail!("local slash command dispatch is only available on Windows builds")
 }

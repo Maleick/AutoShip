@@ -7,7 +7,7 @@ use std::time::Duration;
 use axum::Json;
 use axum::Router;
 use axum::extract::State;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
@@ -15,6 +15,7 @@ use textquest_common::nav::{
     RelocationOptionState, RelocationSourceKind, build_relocation_destination_statuses,
     relocation_catalog,
 };
+use textquest_common::spawn_finder::LiveSpawnSnapshot;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -26,6 +27,7 @@ pub struct DashboardSnapshot {
     pub generated_at: String,
     pub environment: EnvironmentSummary,
     pub sessions: SessionSection,
+    pub spawn_finder: SpawnFinderSection,
     pub groups: GroupSection,
     pub navigation: NavigationSection,
     pub relocation: RelocationSection,
@@ -66,6 +68,39 @@ pub struct SessionCard {
     pub status: SessionStatus,
     pub recovery_state: RecoveryState,
     pub last_heartbeat: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpawnFinderSection {
+    pub observers: Vec<SpawnObserverSummary>,
+    pub items: Vec<SpawnFinderItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpawnObserverSummary {
+    pub client_id: u32,
+    pub character_name: String,
+    pub zone: String,
+    pub total_spawns: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpawnFinderItem {
+    pub observer_client_id: u32,
+    pub observer_name: String,
+    pub observer_zone: String,
+    pub spawn_id: u32,
+    pub name: String,
+    pub spawn_type: String,
+    pub level: u8,
+    pub class_name: String,
+    pub race_name: String,
+    pub distance: u16,
+    pub hp_pct: u8,
+    pub is_current_target: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -346,6 +381,10 @@ pub enum DashboardActionRequest {
     SetActiveRoute {
         route_id: String,
     },
+    TargetSpawn {
+        client_id: u32,
+        spawn_id: u32,
+    },
     UpdateWishlist {
         items: Vec<String>,
     },
@@ -591,6 +630,7 @@ impl DashboardState {
                     snapshot.navigation.active_route_id = route_id;
                 }
             }
+            DashboardActionRequest::TargetSpawn { .. } => {}
             DashboardActionRequest::UpdateWishlist { items } => {
                 snapshot.economy.wishlist = items;
             }
@@ -684,13 +724,39 @@ async fn get_dashboard(State(state): State<Arc<AppState>>) -> Json<DashboardSnap
 
 async fn apply_dashboard_action(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(action): Json<DashboardActionRequest>,
 ) -> Result<Json<DashboardSnapshot>, (StatusCode, Json<DashboardActionError>)> {
-    let mut snapshot = state
-        .dashboard_state
-        .apply_action(action)
-        .await
-        .map_err(|error| (StatusCode::BAD_REQUEST, Json(error)))?;
+    if !crate::api::loot::is_trusted_origin(&headers) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(DashboardActionError {
+                error: "Untrusted origin".to_string(),
+            }),
+        ));
+    }
+
+    let mut snapshot = match action {
+        DashboardActionRequest::TargetSpawn {
+            client_id,
+            spawn_id,
+        } => {
+            send_target_command(client_id, spawn_id).map_err(|error| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(DashboardActionError {
+                        error: error.to_string(),
+                    }),
+                )
+            })?;
+            state.dashboard_state.current_snapshot().await
+        }
+        action => state
+            .dashboard_state
+            .apply_action(action)
+            .await
+            .map_err(|error| (StatusCode::BAD_REQUEST, Json(error)))?,
+    };
     hydrate_runtime_state(state.as_ref(), &mut snapshot);
     broadcast_snapshot(state.as_ref(), snapshot.clone(), "action");
     Ok(Json(snapshot))
@@ -762,6 +828,66 @@ fn demo_snapshot() -> DashboardSnapshot {
                     status: SessionStatus::Stuck,
                     recovery_state: RecoveryState::Respawning,
                     last_heartbeat: "12s ago".to_string(),
+                },
+            ],
+        },
+        spawn_finder: SpawnFinderSection {
+            observers: vec![
+                SpawnObserverSummary {
+                    client_id: 1,
+                    character_name: "Frostreaver".to_string(),
+                    zone: "Plane of Fire".to_string(),
+                    total_spawns: 2,
+                },
+                SpawnObserverSummary {
+                    client_id: 2,
+                    character_name: "Noxus".to_string(),
+                    zone: "Plane of Fire".to_string(),
+                    total_spawns: 2,
+                },
+            ],
+            items: vec![
+                SpawnFinderItem {
+                    observer_client_id: 1,
+                    observer_name: "Frostreaver".to_string(),
+                    observer_zone: "Plane of Fire".to_string(),
+                    spawn_id: 9901,
+                    name: "a fire giant".to_string(),
+                    spawn_type: "NPC".to_string(),
+                    level: 61,
+                    class_name: "WAR".to_string(),
+                    race_name: "Ogre".to_string(),
+                    distance: 34,
+                    hp_pct: 82,
+                    is_current_target: true,
+                },
+                SpawnFinderItem {
+                    observer_client_id: 1,
+                    observer_name: "Frostreaver".to_string(),
+                    observer_zone: "Plane of Fire".to_string(),
+                    spawn_id: 9902,
+                    name: "a lava walker".to_string(),
+                    spawn_type: "NPC".to_string(),
+                    level: 60,
+                    class_name: "MNK".to_string(),
+                    race_name: "Elemental".to_string(),
+                    distance: 62,
+                    hp_pct: 100,
+                    is_current_target: false,
+                },
+                SpawnFinderItem {
+                    observer_client_id: 2,
+                    observer_name: "Noxus".to_string(),
+                    observer_zone: "Plane of Fire".to_string(),
+                    spawn_id: 9911,
+                    name: "Frostreaver".to_string(),
+                    spawn_type: "PC".to_string(),
+                    level: 60,
+                    class_name: "CLR".to_string(),
+                    race_name: "Human".to_string(),
+                    distance: 18,
+                    hp_pct: 98,
+                    is_current_target: false,
                 },
             ],
         },
@@ -1111,6 +1237,15 @@ fn refresh_snapshot(snapshot: &mut DashboardSnapshot) {
 
 fn hydrate_runtime_state(state: &AppState, snapshot: &mut DashboardSnapshot) {
     snapshot.environment.websocket_connected = state.event_tx.receiver_count() > 0;
+    match read_live_spawn_snapshot(&spawn_snapshot_path(state)) {
+        Ok(Some(live_snapshot)) => {
+            snapshot.spawn_finder = build_spawn_finder_section(&live_snapshot);
+        }
+        Ok(None) => {}
+        Err(error) => {
+            tracing::warn!(%error, "Failed to read live spawn snapshot");
+        }
+    }
 }
 
 fn iso_timestamp() -> String {
@@ -1121,13 +1256,114 @@ fn short_time_label() -> String {
     Utc::now().format("%H:%M").to_string()
 }
 
+fn spawn_snapshot_path(state: &AppState) -> std::path::PathBuf {
+    state
+        .live_session_snapshot_path
+        .with_file_name("live_spawns.json")
+}
+
+fn read_live_spawn_snapshot(path: &std::path::Path) -> anyhow::Result<Option<LiveSpawnSnapshot>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let payload = std::fs::read(path)?;
+    let snapshot = serde_json::from_slice::<LiveSpawnSnapshot>(&payload)?;
+    Ok(Some(snapshot))
+}
+
+fn build_spawn_finder_section(snapshot: &LiveSpawnSnapshot) -> SpawnFinderSection {
+    let observers = snapshot
+        .observers
+        .iter()
+        .map(|observer| SpawnObserverSummary {
+            client_id: observer.client_id,
+            character_name: observer.character_name.clone(),
+            zone: observer_zone_label(observer),
+            total_spawns: observer.nearby_spawns.len(),
+        })
+        .collect();
+
+    let items = snapshot
+        .observers
+        .iter()
+        .flat_map(|observer| {
+            let zone = observer_zone_label(observer);
+            observer
+                .nearby_spawns
+                .iter()
+                .filter(|spawn| spawn.spawn_id != 0 && !spawn.displayed_name.trim().is_empty())
+                .map(move |spawn| {
+                    let distance = ((spawn.x - observer.local_player.x).powi(2)
+                        + (spawn.y - observer.local_player.y).powi(2))
+                    .sqrt()
+                    .round()
+                    .clamp(0.0, u16::MAX as f32) as u16;
+                    SpawnFinderItem {
+                        observer_client_id: observer.client_id,
+                        observer_name: observer.character_name.clone(),
+                        observer_zone: zone.clone(),
+                        spawn_id: spawn.spawn_id,
+                        name: spawn.displayed_name.clone(),
+                        spawn_type: spawn_type_label(spawn.spawn_type).to_string(),
+                        level: spawn.level,
+                        class_name: spawn.class_str(),
+                        race_name: spawn.race_name(),
+                        distance,
+                        hp_pct: spawn.hp_pct().round().clamp(0.0, 255.0) as u8,
+                        is_current_target: observer.target_spawn_id == Some(spawn.spawn_id),
+                    }
+                })
+        })
+        .collect();
+
+    SpawnFinderSection { observers, items }
+}
+
+fn observer_zone_label(observer: &textquest_common::spawn_finder::LiveSpawnObserver) -> String {
+    if observer.zone_long_name.trim().is_empty() {
+        observer.zone_short_name.clone()
+    } else {
+        observer.zone_long_name.clone()
+    }
+}
+
+fn spawn_type_label(spawn_type: u8) -> &'static str {
+    match spawn_type {
+        0 => "PC",
+        1 => "NPC",
+        2 | 3 => "Corpse",
+        _ => "Unknown",
+    }
+}
+
+#[cfg(windows)]
+fn send_target_command(client_id: u32, spawn_id: u32) -> anyhow::Result<()> {
+    use anyhow::Context;
+
+    let token = textquest::ipc::load_session_token(client_id).with_context(|| {
+        format!("missing session token for PID {client_id}; inject the DLL before targeting")
+    })?;
+    let session_id = textquest_common::ipc::session_id_from_token(&token);
+    let pipe = textquest::ipc::pipe::CommandPipe::connect(client_id, session_id)?;
+    pipe.send_raw_token(&token)?;
+    pipe.send_async(&textquest_common::ipc::Command::SetTarget { spawn_id })?;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn send_target_command(client_id: u32, spawn_id: u32) -> anyhow::Result<()> {
+    let _ = (client_id, spawn_id);
+    anyhow::bail!("Live spawn targeting is only available on Windows builds")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Arc;
 
     use axum::extract::State;
-    use axum::http::StatusCode;
+    use axum::http::{HeaderMap, StatusCode};
     use axum::response::IntoResponse;
     use serde_json::Value;
 
@@ -1154,6 +1390,7 @@ mod tests {
         for field in [
             "environment",
             "sessions",
+            "spawnFinder",
             "groups",
             "navigation",
             "relocation",
@@ -1175,6 +1412,7 @@ mod tests {
 
         let response = apply_dashboard_action(
             State(state.clone()),
+            HeaderMap::new(),
             axum::Json(DashboardActionRequest::CreateSession {
                 profile: "Loot Crew".to_string(),
                 character_name: "Newpuller".to_string(),
@@ -1215,6 +1453,7 @@ mod tests {
         let state = test_state();
         let response = apply_dashboard_action(
             State(state),
+            HeaderMap::new(),
             axum::Json(DashboardActionRequest::CreateSession {
                 profile: "Unknown".to_string(),
                 character_name: "   ".to_string(),
@@ -1230,5 +1469,159 @@ mod tests {
             .expect("response body");
         let json: Value = serde_json::from_slice(&body).expect("dashboard error response");
         assert_eq!(json["error"], "Character name is required");
+    }
+
+    #[tokio::test]
+    async fn get_dashboard_prefers_live_spawn_snapshot_when_present() {
+        let state = test_state();
+        let spawn_path = spawn_snapshot_path(state.as_ref());
+        if let Some(parent) = spawn_path.parent() {
+            std::fs::create_dir_all(parent).expect("spawn snapshot dir");
+        }
+        let live_snapshot = LiveSpawnSnapshot {
+            observers: vec![textquest_common::spawn_finder::LiveSpawnObserver {
+                client_id: 77,
+                character_name: "Scout".into(),
+                zone_short_name: "soldungc".into(),
+                zone_long_name: "Solusek's Lair".into(),
+                local_player: textquest_common::types::SpawnData {
+                    spawn_id: 1,
+                    name: "Scout".into(),
+                    displayed_name: "Scout".into(),
+                    spawn_type: 0,
+                    level: 60,
+                    class_id: 9,
+                    race_id: 1,
+                    x: 10.0,
+                    y: 10.0,
+                    z: 0.0,
+                    heading: 0.0,
+                    hp_current: 900,
+                    hp_max: 1000,
+                    mana_current: 0,
+                    mana_max: 0,
+                    endurance_current: 0,
+                    endurance_max: 0,
+                    speed_run: 0.0,
+                    stand_state: 0,
+                    is_gm: false,
+                },
+                target_spawn_id: Some(9001),
+                nearby_spawns: vec![textquest_common::types::SpawnData {
+                    spawn_id: 9001,
+                    name: "a goblin raider".into(),
+                    displayed_name: "a goblin raider".into(),
+                    spawn_type: 1,
+                    level: 22,
+                    class_id: 1,
+                    race_id: 9,
+                    x: 22.0,
+                    y: 10.0,
+                    z: 0.0,
+                    heading: 0.0,
+                    hp_current: 470,
+                    hp_max: 1000,
+                    mana_current: 0,
+                    mana_max: 0,
+                    endurance_current: 0,
+                    endurance_max: 0,
+                    speed_run: 0.0,
+                    stand_state: 0,
+                    is_gm: false,
+                }],
+            }],
+        };
+        std::fs::write(
+            &spawn_path,
+            serde_json::to_vec(&live_snapshot).expect("serialize live snapshot"),
+        )
+        .expect("write live snapshot");
+
+        let response = get_dashboard(State(state)).await.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let json: Value = serde_json::from_slice(&body).expect("dashboard json");
+
+        assert_eq!(
+            json["spawnFinder"]["observers"][0]["characterName"],
+            "Scout"
+        );
+        assert_eq!(json["spawnFinder"]["items"][0]["spawnId"], 9001);
+        assert_eq!(json["spawnFinder"]["items"][0]["distance"], 12);
+        assert_eq!(json["spawnFinder"]["items"][0]["className"], "WAR");
+        assert_eq!(json["spawnFinder"]["items"][0]["raceName"], "Troll");
+        assert_eq!(json["spawnFinder"]["items"][0]["isCurrentTarget"], true);
+    }
+
+    #[tokio::test]
+    async fn get_dashboard_uses_empty_live_spawn_snapshot_when_present() {
+        let state = test_state();
+        let spawn_path = spawn_snapshot_path(state.as_ref());
+        if let Some(parent) = spawn_path.parent() {
+            std::fs::create_dir_all(parent).expect("spawn snapshot dir");
+        }
+        std::fs::write(
+            &spawn_path,
+            serde_json::to_vec(&LiveSpawnSnapshot::default()).expect("serialize live snapshot"),
+        )
+        .expect("write live snapshot");
+
+        let response = get_dashboard(State(state)).await.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let json: Value = serde_json::from_slice(&body).expect("dashboard json");
+
+        assert_eq!(
+            json["spawnFinder"]["observers"]
+                .as_array()
+                .expect("observers array")
+                .len(),
+            0
+        );
+        assert_eq!(
+            json["spawnFinder"]["items"]
+                .as_array()
+                .expect("items array")
+                .len(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn post_dashboard_action_rejects_untrusted_origin() {
+        let state = test_state();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::ORIGIN,
+            "https://evil.example".parse().expect("origin header"),
+        );
+
+        let response = apply_dashboard_action(
+            State(state.clone()),
+            headers,
+            axum::Json(DashboardActionRequest::CreateSession {
+                profile: "Loot Crew".to_string(),
+                character_name: "Blocked".to_string(),
+            }),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        let Json(snapshot) = get_dashboard(State(state)).await;
+        assert!(
+            !snapshot
+                .sessions
+                .items
+                .iter()
+                .any(|session| session.character_name == "Blocked")
+        );
     }
 }

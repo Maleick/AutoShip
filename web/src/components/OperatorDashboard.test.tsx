@@ -61,6 +61,46 @@ const SNAPSHOT: DashboardSnapshot = {
       },
     ],
   },
+  spawnFinder: {
+    observers: [
+      {
+        clientId: 1,
+        characterName: "Frostreaver",
+        zone: "Plane of Fire",
+        totalSpawns: 2,
+      },
+    ],
+    items: [
+      {
+        observerClientId: 1,
+        observerName: "Frostreaver",
+        observerZone: "Plane of Fire",
+        spawnId: 9001,
+        name: "a fire giant",
+        spawnType: "NPC",
+        level: 61,
+        className: "WAR",
+        raceName: "Ogre",
+        distance: 18,
+        hpPct: 82,
+        isCurrentTarget: true,
+      },
+      {
+        observerClientId: 1,
+        observerName: "Frostreaver",
+        observerZone: "Plane of Fire",
+        spawnId: 9002,
+        name: "a lava walker",
+        spawnType: "NPC",
+        level: 60,
+        className: "MNK",
+        raceName: "Human",
+        distance: 42,
+        hpPct: 100,
+        isCurrentTarget: false,
+      },
+    ],
+  },
   groups: {
     items: [
       {
@@ -220,6 +260,7 @@ describe("OperatorDashboard relocation panel", () => {
       expect(
         screen.getByRole("heading", { name: /relocation network/i })
       ).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /spawn finder/i })).toBeInTheDocument();
       expect(screen.getByText("Guild Lobby")).toBeInTheDocument();
       expect(screen.getAllByText("Throne of Heroes")).toHaveLength(2);
       expect(screen.getByText("Preferred AA")).toBeInTheDocument();

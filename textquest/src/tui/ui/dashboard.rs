@@ -1518,7 +1518,7 @@ fn draw_kill_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
             for (name, count) in &top_mobs {
                 let label: String = name.chars().take(18).collect();
                 let pct = if total_kills > 0 {
-                    (*count as f64 / total_kills as f64 * 100.0) as u32
+                    (**count as f64 / total_kills as f64 * 100.0) as u32
                 } else {
                     0
                 };

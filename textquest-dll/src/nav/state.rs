@@ -1594,6 +1594,7 @@ mod tests {
             spawn_type: 0, // player
             level: 255,
             class_id: 0,
+            race_id: 1,
             x,
             y,
             z: 0.0,
@@ -1618,6 +1619,7 @@ mod tests {
             spawn_type: 1,
             level: 10,
             class_id: 0,
+            race_id: 1,
             x,
             y,
             z: 0.0,

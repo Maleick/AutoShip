@@ -727,7 +727,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            vec!["member-1", "target-1", "member-2", "target-2"]
+            vec!["member-1", "target-1", "member-2", "member-3"]
         );
     }
 
@@ -765,7 +765,7 @@ mod tests {
             })
             .collect();
 
-        assert_eq!(rendered, vec!["member-1", "cast-1", "target-1", "member-2"]);
+        assert_eq!(rendered, vec!["member-1", "cast-1", "member-2", "member-3"]);
         assert!(!rendered.iter().any(|line| line.contains("buff")));
         assert!(!rendered.iter().any(|line| line == "mode"));
     }

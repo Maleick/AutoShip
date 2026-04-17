@@ -55,7 +55,6 @@ impl ChatChannel {
             _ => None,
         }
     }
-
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Say => "say",
@@ -71,6 +70,29 @@ impl ChatChannel {
             Self::Spontaneous => "spontaneous",
             Self::Mpets => "mpets",
             Self::MQ2 => "mq2",
+        }
+    }
+}
+
+impl std::str::FromStr for ChatChannel {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "say" => Ok(Self::Say),
+            "tell" => Ok(Self::Tell),
+            "group" => Ok(Self::Group),
+            "raid" => Ok(Self::Raid),
+            "guild" => Ok(Self::Guild),
+            "ooc" => Ok(Self::Ooc),
+            "shout" => Ok(Self::Shout),
+            "auction" => Ok(Self::Auction),
+            "shout2" => Ok(Self::Shout2),
+            "pet" => Ok(Self::Pet),
+            "spontaneous" => Ok(Self::Spontaneous),
+            "mpets" => Ok(Self::Mpets),
+            "mq2" => Ok(Self::MQ2),
+            _ => Err(()),
         }
     }
 }
@@ -102,7 +124,6 @@ impl LogLevel {
             _ => None,
         }
     }
-
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Trace => "TRACE",
@@ -110,6 +131,21 @@ impl LogLevel {
             Self::Info => "INFO",
             Self::Warn => "WARN",
             Self::Error => "ERROR",
+        }
+    }
+}
+
+impl std::str::FromStr for LogLevel {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "trace" => Ok(Self::Trace),
+            "debug" => Ok(Self::Debug),
+            "info" => Ok(Self::Info),
+            "warn" => Ok(Self::Warn),
+            "error" => Ok(Self::Error),
+            _ => Err(()),
         }
     }
 }

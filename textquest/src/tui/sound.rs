@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 /// Predefined game event types for common sound alerts.
 /// These map to MQ2Sound's built-in alert categories.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GameEventType {
     LowHp,
@@ -17,17 +17,12 @@ pub enum GameEventType {
     NamedSpawn,
     GmEnter,
     TellReceived,
+    #[default]
     Custom,
 }
 
-impl Default for GameEventType {
-    fn default() -> Self {
-        Self::Custom
-    }
-}
-
 /// Sound playback type for a trigger.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SoundType {
     /// Play a WAV or MP3 file.
@@ -35,13 +30,8 @@ pub enum SoundType {
     /// Play the system beep.
     Beep,
     /// No sound (mute for this trigger).
+    #[default]
     None,
-}
-
-impl Default for SoundType {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 impl SoundType {
@@ -137,10 +127,25 @@ impl SoundTrigger {
         if !self.enabled {
             return false;
         }
-        let event_lower = event.to_lowercase();
-        let pattern_lower = self.event_pattern.to_lowercase();
-        event_lower.contains(&pattern_lower)
+        normalize_event_text(event).contains(&normalize_event_text(&self.event_pattern))
     }
+}
+
+fn normalize_event_text(text: &str) -> String {
+    let mut normalized = String::with_capacity(text.len());
+    let mut last_was_separator = true;
+
+    for ch in text.chars() {
+        if ch.is_ascii_alphanumeric() {
+            normalized.push(ch.to_ascii_lowercase());
+            last_was_separator = false;
+        } else if !last_was_separator {
+            normalized.push(' ');
+            last_was_separator = true;
+        }
+    }
+
+    normalized.trim().to_string()
 }
 
 // ─── Config ────────────────────────────────────────────────────────────────
@@ -213,6 +218,19 @@ struct SoundPlayerInner {
     #[cfg(windows)]
     output: Option<AudioOutput>,
     volume: f32,
+}
+
+impl std::fmt::Debug for SoundPlayerInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[cfg(windows)]
+        let has_output = self.output.is_some();
+        #[cfg(not(windows))]
+        let has_output = false;
+        f.debug_struct("SoundPlayerInner")
+            .field("has_output", &has_output)
+            .field("volume", &self.volume)
+            .finish()
+    }
 }
 
 impl Default for SoundPlayerInner {
@@ -376,7 +394,7 @@ impl SoundAlertManager {
     /// Creates a manager from an existing configuration.
     #[must_use]
     pub fn from_config(config: SoundConfig) -> Self {
-        let mut mgr = Self {
+        let mgr = Self {
             config,
             player: SoundPlayer::new(),
         };
@@ -388,7 +406,7 @@ impl SoundAlertManager {
     #[must_use]
     pub fn with_preset_triggers() -> Self {
         let config = SoundConfig::with_preset_triggers();
-        let mut mgr = Self {
+        let mgr = Self {
             config,
             player: SoundPlayer::new(),
         };
@@ -501,10 +519,10 @@ impl SoundAlertManager {
         if !self.config.enabled {
             return;
         }
-        if let Some(trigger) = self.config.triggers.iter_mut().find(|t| t.name == name) {
-            if trigger.enabled {
-                tracing::info!(trigger = %name, "Triggering named sound alert");
-            }
+        if let Some(trigger) = self.config.triggers.iter_mut().find(|t| t.name == name)
+            && trigger.enabled
+        {
+            tracing::info!(trigger = %name, "Triggering named sound alert");
         }
     }
 }
@@ -566,9 +584,12 @@ mod tests {
     }
 
     #[test]
-    fn preset_triggers_still_match_when_manager_flag_is_toggled() {
+    fn preset_triggers_resume_matching_after_manager_reenabled() {
         let mut mgr = SoundAlertManager::with_preset_triggers();
         mgr.set_enabled(false);
+        assert!(mgr.check_event("You have died.").is_empty());
+
+        mgr.set_enabled(true);
         let matches = mgr.check_event("You have died.");
         assert!(!matches.is_empty());
         assert_eq!(matches[0].name, "Death");

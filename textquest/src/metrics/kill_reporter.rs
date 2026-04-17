@@ -5,7 +5,7 @@
 //! and include session summaries, kills/hour, and optional per-mob breakdowns.
 
 use crate::config::KillTrackerConfig;
-use crate::metrics::{EfficiencyScore, KillSessionStore, KillTracker};
+use crate::metrics::{KillSessionStore, KillTracker};
 
 pub struct KillReporter {
     config: KillTrackerConfig,
@@ -28,7 +28,7 @@ impl KillReporter {
             u64::from(self.config.auto_report_interval_minutes) * 60,
         );
         if let Some(last) = self.last_report_time {
-            elapsed.saturating_duration_since(last) >= interval
+            last.elapsed() >= interval
         } else {
             elapsed >= interval
         }
@@ -39,8 +39,9 @@ impl KillReporter {
     }
 
     pub fn format_report(
+        &self,
         tracker: &KillTracker,
-        session_store: &KillSessionStore,
+        _session_store: &KillSessionStore,
         character: &str,
         zone: &str,
         elapsed_secs: u64,
@@ -231,7 +232,7 @@ mod tests {
         tracker.record_kill(make_record("goblin", chrono::Utc::now().timestamp()));
 
         let store = KillSessionStore::new();
-        let report = KillReporter::format_report(&tracker, &store, "TestChar", "gfaydark", 3600);
+        let report = reporter.format_report(&tracker, &store, "TestChar", "gfaydark", 3600);
 
         assert!(report.contains("TestChar"));
         assert!(report.contains("gfaydark"));
@@ -259,7 +260,7 @@ mod tests {
         }
 
         let store = KillSessionStore::new();
-        let report = KillReporter::format_report(&tracker, &store, "TestChar", "gfaydark", 3600);
+        let report = reporter.format_report(&tracker, &store, "TestChar", "gfaydark", 3600);
 
         assert!(report.contains("orc_pawn"));
         assert!(report.contains("goblin"));
@@ -274,7 +275,7 @@ mod tests {
         let tracker = KillTracker::new(chrono::Utc::now().timestamp());
         let store = KillSessionStore::new();
 
-        let report = KillReporter::format_report(&tracker, &store, "NewChar", "poknowledge", 0);
+        let report = reporter.format_report(&tracker, &store, "NewChar", "poknowledge", 0);
 
         assert!(report.contains("NewChar"));
         assert!(report.contains("Kills: 0"));

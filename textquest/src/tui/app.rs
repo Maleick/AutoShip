@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{HashMap, VecDeque, hash_map::DefaultHasher},
+    collections::{HashMap, HashSet, VecDeque, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
     time::Duration,
 };
@@ -27,6 +27,7 @@ use crate::{
     },
     config::AccountsConfig,
     eq::{
+        gm_detector::{GmAlertConfig, GmDetector},
         log_parser::{ChatEvent, LootDatabase},
         log_watcher::LogWatcher,
         named_db::NamedMobDatabase,
@@ -138,6 +139,8 @@ pub enum ActivePanel {
     DebugInternals,
     /// Economy controls panel (vendor cycle, banking, loot queue).
     EconomyControls,
+    /// Orchestrator dashboard panel.
+    OrchestratorDashboard,
 }
 
 /// Layout preset for panel arrangement within a screen.
@@ -222,10 +225,14 @@ pub enum SpawnSort {
     Name,
     /// Sort by class abbreviation.
     Class,
+    /// Sort by race name.
+    Race,
     /// Sort by level.
     Level,
     /// Sort by distance from local player.
     Distance,
+    /// Sort by current HP%.
+    HpPct,
 }
 
 impl SpawnSort {
@@ -234,9 +241,11 @@ impl SpawnSort {
         match self {
             Self::Default => Self::Name,
             Self::Name => Self::Class,
-            Self::Class => Self::Level,
+            Self::Class => Self::Race,
+            Self::Race => Self::Level,
             Self::Level => Self::Distance,
-            Self::Distance => Self::Default,
+            Self::Distance => Self::HpPct,
+            Self::HpPct => Self::Default,
         }
     }
 
@@ -246,8 +255,10 @@ impl SpawnSort {
             Self::Default => "Default",
             Self::Name => "Name",
             Self::Class => "Class",
+            Self::Race => "Race",
             Self::Level => "Level",
             Self::Distance => "Dist",
+            Self::HpPct => "HP%",
         }
     }
 }
@@ -502,6 +513,14 @@ pub struct App {
     pub spawn_alert_feed: SpawnAlertFeed,
     /// Whether to auto-alert on named NPC spawns.
     pub spawn_watch_named: bool,
+    /// Current player-zone notification filter mode.
+    pub player_notification_filter: crate::config::PlayerFilterMode,
+    /// Whether player zone-in notifications should trigger audio.
+    pub sound_on_player_zone_in: bool,
+    /// Lowercased friends allowlist for player notifications.
+    pub player_notification_friends: HashSet<String>,
+    /// Sound trigger manager for chat-pattern and spawn-watch alerts.
+    pub sound_alert_manager: SoundAlertManager,
 
     /// User-tracked spawns registered via the `:track` command.
     pub tracked_spawns: HashMap<String, TrackedSpawn>,
@@ -832,6 +851,10 @@ impl App {
             },
             spawn_alert_feed: SpawnAlertFeed::new(200),
             spawn_watch_named: true,
+            player_notification_filter: crate::config::PlayerFilterMode::default(),
+            sound_on_player_zone_in: false,
+            player_notification_friends: HashSet::new(),
+            sound_alert_manager: SoundAlertManager::with_preset_triggers(),
             tracked_spawns: HashMap::new(),
 
             help_visible: false,
@@ -1196,7 +1219,7 @@ impl App {
             ActiveScreen::Debug => ActivePanel::DebugSpawns,
             ActiveScreen::PacketMonitor => ActivePanel::PacketMonitorLog,
             ActiveScreen::Economy => ActivePanel::EconomyControls,
-            ActiveScreen::Orchestrator => ActivePanel::EconomyControls,
+            ActiveScreen::Orchestrator => ActivePanel::OrchestratorDashboard,
         }
     }
 
@@ -1238,7 +1261,7 @@ impl App {
             }
             ActiveScreen::PacketMonitor => vec![ActivePanel::PacketMonitorLog],
             ActiveScreen::Economy => vec![ActivePanel::EconomyControls],
-            ActiveScreen::Orchestrator => vec![ActivePanel::EconomyControls],
+            ActiveScreen::Orchestrator => vec![ActivePanel::OrchestratorDashboard],
         }
     }
 
@@ -2340,6 +2363,10 @@ impl App {
                     let c = spawns[a].class_str().cmp(&spawns[b].class_str());
                     if asc { c } else { c.reverse() }
                 }),
+                SpawnSort::Race => indices.sort_by(|&a, &b| {
+                    let c = spawns[a].race_name().cmp(&spawns[b].race_name());
+                    if asc { c } else { c.reverse() }
+                }),
                 SpawnSort::Level => indices.sort_by(|&a, &b| {
                     let c = spawns[a].level.cmp(&spawns[b].level);
                     if asc { c } else { c.reverse() }
@@ -2354,6 +2381,13 @@ impl App {
                         });
                     }
                 }
+                SpawnSort::HpPct => indices.sort_by(|&a, &b| {
+                    let c = spawns[a]
+                        .hp_pct()
+                        .partial_cmp(&spawns[b].hp_pct())
+                        .unwrap_or(std::cmp::Ordering::Equal);
+                    if asc { c } else { c.reverse() }
+                }),
             }
 
             self.filtered_spawn_cache.indices = indices;
@@ -3238,6 +3272,7 @@ impl App {
                     timestamp: std::time::SystemTime::now(),
                     tick,
                     match_source: MatchSource::Named,
+                    time_since_last_pop: None,
                 });
                 let label = if is_up { "UP" } else { "DOWN" };
                 let level = if is_up {
@@ -3285,6 +3320,7 @@ impl App {
                         timestamp: std::time::SystemTime::now(),
                         tick,
                         match_source: MatchSource::WatchPattern(pattern.to_string()),
+                        time_since_last_pop: None,
                     });
                 }
             }
@@ -3307,6 +3343,7 @@ impl App {
                 timestamp: std::time::SystemTime::now(),
                 tick,
                 match_source: MatchSource::WatchPattern(String::new()),
+                time_since_last_pop: None,
             };
             self.spawn_alert_feed.push(event);
             self.set_feedback(
@@ -3349,6 +3386,7 @@ impl App {
                 timestamp: std::time::SystemTime::now(),
                 tick,
                 match_source: MatchSource::WatchPattern("spawn-delta".to_string()),
+                time_since_last_pop: None,
             });
             self.set_feedback(
                 level,
@@ -4647,6 +4685,15 @@ impl App {
             }
             "watch" => {
                 self.execute_watch_command(&parts[1..]);
+            }
+            "pf" => {
+                self.execute_pf_command(&parts[1..]);
+            }
+            "sound" => {
+                self.execute_sound_command(&parts[1..]);
+            }
+            "friends" => {
+                self.execute_friends_command(&parts[1..]);
             }
             "unwatch" => {
                 if parts.get(1).is_some() {
@@ -7126,7 +7173,7 @@ fn command_help_detail(command: &str) -> Option<&'static str> {
 }
 
 /// Send a slash command to a specific PID via named pipe.
-fn send_slash_command(pid: u32, command: &str) -> anyhow::Result<()> {
+pub(crate) fn send_slash_command(pid: u32, command: &str) -> anyhow::Result<()> {
     use textquest_common::ipc::Command;
 
     if let Some(message) = crate::nav::try_handle_local_slash_command(pid, command)? {
@@ -7232,8 +7279,13 @@ fn spawn_matches_filter(spawn: &SpawnInfo, spawn_filter: SpawnFilter, text_filte
     }
 
     ascii_icontains(&spawn.displayed_name, text_filter)
+        || ascii_icontains(&spawn.name, text_filter)
         || ascii_icontains(spawn.class_label().as_ref(), text_filter)
+        || ascii_icontains(&spawn.race_name(), text_filter)
         || ascii_icontains(spawn.spawn_type.as_str(), text_filter)
+        || ascii_icontains(&spawn.level.to_string(), text_filter)
+        || ascii_icontains(&format!("{:.0}", spawn.hp_pct()), text_filter)
+        || ascii_icontains(&format!("{:.0}%", spawn.hp_pct()), text_filter)
 }
 
 /// Case-insensitive substring search for ASCII strings, without heap
@@ -7309,6 +7361,68 @@ mod tests {
 
         assert!(spawn_matches_filter(&spawn, SpawnFilter::All, "war"));
         assert!(spawn_matches_filter(&spawn, SpawnFilter::All, "WAR"));
+    }
+
+    #[test]
+    fn spawn_matches_filter_checks_race_level_and_hp_text() {
+        let mut spawn = test_spawn("Frostreaver");
+        spawn.race_id = 128;
+        spawn.level = 65;
+        spawn.hp_current = 530;
+        spawn.hp_max = 1000;
+
+        assert!(spawn_matches_filter(&spawn, SpawnFilter::All, "iksar"));
+        assert!(spawn_matches_filter(&spawn, SpawnFilter::All, "65"));
+        assert!(spawn_matches_filter(&spawn, SpawnFilter::All, "53"));
+        assert!(spawn_matches_filter(&spawn, SpawnFilter::All, "53%"));
+    }
+
+    #[test]
+    fn filtered_spawn_indices_sort_by_race_and_hp_pct() {
+        let mut app = App::new();
+        let mut local_player = test_spawn("Observer");
+        local_player.spawn_type = SpawnType::Player;
+        local_player.x = 0.0;
+        local_player.y = 0.0;
+
+        let mut ogre = test_spawn("Ogre");
+        ogre.spawn_id = 1;
+        ogre.race_id = 10;
+        ogre.hp_current = 400;
+        ogre.hp_max = 1000;
+
+        let mut human = test_spawn("Human");
+        human.spawn_id = 2;
+        human.race_id = 1;
+        human.hp_current = 900;
+        human.hp_max = 1000;
+
+        app.clients.push(test_client(42, "Observer"));
+        app.clients[0].local_player = Some(local_player);
+        app.spawns = vec![ogre, human];
+        app.spawns_state.sort_column = SpawnSort::Race;
+        app.spawns_state.sort_ascending = true;
+
+        let race_sorted = {
+            let indices = app.filtered_spawn_indices().to_vec();
+            indices
+                .into_iter()
+                .map(|index| app.spawns[index].displayed_name.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(race_sorted, vec!["Human", "Ogre"]);
+
+        app.spawns_state.sort_column = SpawnSort::HpPct;
+        app.spawns_state.sort_ascending = false;
+
+        let hp_sorted = {
+            let indices = app.filtered_spawn_indices().to_vec();
+            indices
+                .into_iter()
+                .map(|index| app.spawns[index].displayed_name.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(hp_sorted, vec!["Human", "Ogre"]);
     }
 
     #[test]

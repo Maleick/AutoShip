@@ -1938,7 +1938,7 @@ unsafe fn read_string_at(addr: usize, max_len: usize) -> String {
 /// This function validates readability before dereferencing and returns
 /// `SpawnData::default()` for any invalid pointer.
 unsafe fn read_spawn_data(spawn_ptr: usize) -> textquest_common::types::SpawnData {
-    use textquest_common::offsets::{player_base, player_zone};
+    use textquest_common::offsets::{actor_client, player_base, player_zone};
 
     // Reject null and obviously bad pointers (must be pointer-aligned).
     if spawn_ptr == 0 || !spawn_ptr.is_multiple_of(core::mem::align_of::<usize>()) {
@@ -1994,6 +1994,7 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> textquest_common::types::SpawnDat
 
     let level = unsafe { *((spawn_ptr + player_zone::LEVEL) as *const u8) };
     let class_id = unsafe { *((spawn_ptr + player_zone::CHAR_CLASS) as *const u8) };
+    let race_id = unsafe { *((spawn_ptr + actor_client::RACE) as *const i32) }.max(0) as u32;
     let hp_current = unsafe { *((spawn_ptr + player_zone::HP_CURRENT) as *const i64) };
     let hp_max = unsafe { *((spawn_ptr + player_zone::HP_MAX) as *const i64) };
     let mana_current = unsafe { *((spawn_ptr + player_zone::MANA_CURRENT) as *const i32) };
@@ -2016,6 +2017,7 @@ unsafe fn read_spawn_data(spawn_ptr: usize) -> textquest_common::types::SpawnDat
         spawn_type,
         level,
         class_id,
+        race_id,
         x,
         y,
         z,
@@ -3016,6 +3018,10 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         Command::SetAutoRezConfig { config } => {
             tracing::info!("SetAutoRezConfig received");
             crate::dialog::set_rez_config(config);
+        }
+        Command::SetRewardAutomation { config } => {
+            tracing::info!("SetRewardAutomation received");
+            crate::rewards::set_config(config);
         }
         Command::SetAutoAcceptSettings { settings } => {
             tracing::info!(enabled = settings.enabled, "SetAutoAcceptSettings received");

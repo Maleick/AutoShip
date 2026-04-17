@@ -217,7 +217,6 @@ mod tests {
             channel: ChatChannel::Say,
             sender: "TestNPC".into(),
             message: text.into(),
-            target: None,
         }
     }
 
@@ -226,7 +225,6 @@ mod tests {
             channel: ChatChannel::Tell,
             sender: "TestPlayer".into(),
             message: text.into(),
-            target: Some("MyChar".into()),
         }
     }
 

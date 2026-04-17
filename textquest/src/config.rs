@@ -239,6 +239,46 @@ pub struct AppConfig {
     pub say_detection: SayDetectionConfig,
 }
 
+/// Kill tracker auto-reporting configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct KillTrackerConfig {
+    /// Whether session tracking and auto-reporting are enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Minutes between automatic status reports. `0` disables auto-reporting.
+    #[serde(default = "default_kill_tracker_interval_minutes")]
+    pub auto_report_interval_minutes: u32,
+    /// In-game chat channel used for auto-reports.
+    #[serde(default = "default_kill_tracker_channel")]
+    pub auto_report_channel: String,
+    /// Include top mob breakdowns in generated reports.
+    #[serde(default = "default_true")]
+    pub auto_report_include_mobs: bool,
+    /// Include kills-per-hour and efficiency summary lines.
+    #[serde(default = "default_true")]
+    pub auto_report_include_kph: bool,
+    /// Track per-character session history instead of a single global bucket.
+    #[serde(default = "default_true")]
+    pub track_per_character: bool,
+    /// Maximum number of historical sessions to retain in memory/on disk.
+    #[serde(default = "default_kill_tracker_max_session_history")]
+    pub max_session_history: usize,
+}
+
+impl Default for KillTrackerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            auto_report_interval_minutes: default_kill_tracker_interval_minutes(),
+            auto_report_channel: default_kill_tracker_channel(),
+            auto_report_include_mobs: true,
+            auto_report_include_kph: true,
+            track_per_character: true,
+            max_session_history: default_kill_tracker_max_session_history(),
+        }
+    }
+}
+
 /// Say detection rule actions.
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
@@ -250,6 +290,22 @@ pub enum SayRuleAction {
     Broadcast,
     /// Run a command on the client that saw the `/say` line.
     Command,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_kill_tracker_interval_minutes() -> u32 {
+    10
+}
+
+fn default_kill_tracker_channel() -> String {
+    "group".to_string()
+}
+
+fn default_kill_tracker_max_session_history() -> usize {
+    100
 }
 
 /// Say pattern matching mode.
@@ -691,13 +747,26 @@ impl AppConfig {
 }
 
 /// Configuration for spawn watch alerts and the alert feed.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayerFilterMode {
+    #[default]
+    All,
+    StrangersOnly,
+    FriendsOnly,
+}
+
+/// Configuration for spawn watch alerts and the alert feed.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct SpawnWatchConfig {
     pub enabled: bool,
     pub watch_names: Vec<String>,
     pub alert_named: bool,
     pub max_feed_entries: usize,
+    pub player_filter_mode: PlayerFilterMode,
+    pub sound_on_player_zone_in: bool,
+    pub friends: Vec<String>,
 }
 
 impl Default for SpawnWatchConfig {
@@ -707,33 +776,9 @@ impl Default for SpawnWatchConfig {
             watch_names: Vec::new(),
             alert_named: true,
             max_feed_entries: 200,
-        }
-    }
-}
-
-/// Kill tracker auto-reporting configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(default)]
-pub struct KillTrackerConfig {
-    pub enabled: bool,
-    pub auto_report_interval_minutes: u32,
-    pub auto_report_channel: String,
-    pub auto_report_include_mobs: bool,
-    pub auto_report_include_kph: bool,
-    pub track_per_character: bool,
-    pub max_session_history: usize,
-}
-
-impl Default for KillTrackerConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            auto_report_interval_minutes: 30,
-            auto_report_channel: "group".to_string(),
-            auto_report_include_mobs: true,
-            auto_report_include_kph: true,
-            track_per_character: true,
-            max_session_history: 100,
+            player_filter_mode: PlayerFilterMode::All,
+            sound_on_player_zone_in: false,
+            friends: Vec::new(),
         }
     }
 }

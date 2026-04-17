@@ -276,6 +276,14 @@ pub fn run_tui_mode() -> Result<()> {
     } else {
         app.spawn_watch_named = false;
     }
+    app.player_notification_filter = config.spawn_watch.player_filter_mode.clone();
+    app.sound_on_player_zone_in = config.spawn_watch.sound_on_player_zone_in;
+    app.player_notification_friends = config
+        .spawn_watch
+        .friends
+        .iter()
+        .map(|name| name.to_ascii_lowercase())
+        .collect();
 
     // Initialize Ghidra DB and import opcodes from config/opcodes.json if present.
     {

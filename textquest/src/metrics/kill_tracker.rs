@@ -85,6 +85,7 @@ pub struct EfficiencyScore {
 }
 
 /// Tracks kill events and computes analytics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KillTracker {
     kills: Vec<KillRecord>,
     /// Session start timestamp (Unix epoch).
