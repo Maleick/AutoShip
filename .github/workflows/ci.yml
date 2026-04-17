@@ -65,7 +65,7 @@ jobs:
           docs_only=true
           for file in "${changed_files[@]}"; do
             case "$file" in
-              docs/**|site/**|*.md|*.txt|.github/workflows/ci.yml|.github/workflows/docs-pages.yml)
+              docs/**|site/**|*.md|*.txt|.github/workflows/ci.yml|.github/workflows/docs-pages.yml|tests/test_*docs*.py|tests/test_workflow_contract.py)
                 ;;
               *)
                 docs_only=false

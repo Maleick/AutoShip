@@ -65,6 +65,14 @@ class WorkflowContractTests(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, text)
 
+    def test_ci_docs_only_allowlist_includes_docs_contract_tests(self) -> None:
+        text = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "docs/**|site/**|*.md|*.txt|.github/workflows/ci.yml|.github/workflows/docs-pages.yml|tests/test_*docs*.py|tests/test_workflow_contract.py",
+            text,
+        )
+
     def test_nightly_release_still_has_dispatch_and_schedule(self) -> None:
         text = (WORKFLOWS / "nightly-release.yml").read_text(encoding="utf-8")
 
