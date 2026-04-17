@@ -11,6 +11,7 @@ use super::{
     config_panel::ConfigPanelState,
     demo_data::{DemoRole, demo_client_cast_info, demo_client_profile},
     menu::MenuState,
+    sound::SoundAlertManager,
     theme::{Theme, ThemeKind},
     ui::ch_chain::{CastState as ChPanelCastState, ChChainPanelState, ChainCleric, ChainStats},
     wizard::WizardState,

@@ -40,8 +40,8 @@ use textquest::{
 };
 
 mod accounts;
+mod accounts;
 mod api;
-mod live_ipc;
 mod ws;
 
 /// Shared application state accessible from all handlers.
@@ -404,6 +404,13 @@ fn build_api_router() -> Router<Arc<AppState>> {
             "/spawn-alerts/watch-list",
             get(api::spawn_alerts::get_watch_list),
         )
+        .route(
+            "/spawn-alerts/watch-list/{pattern}",
+            put(api::spawn_alerts::put_watch_pattern)
+                .delete(api::spawn_alerts::delete_watch_pattern),
+        )
+        // Timestamp Config API
+        .route("/timestamp-config", get(api::list_timestamp_configs))
         .route(
             "/spawn-alerts/watch-list/{pattern}",
             put(api::spawn_alerts::put_watch_pattern)

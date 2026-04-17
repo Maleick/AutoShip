@@ -2,18 +2,75 @@
 //! notifications.
 
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
+
+// ─── Event Types ────────────────────────────────────────────────────────────
+
+/// Predefined game event types for common sound alerts.
+/// These map to MQ2Sound's built-in alert categories.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GameEventType {
+    LowHp,
+    Death,
+    NamedSpawn,
+    GmEnter,
+    TellReceived,
+    Custom,
+}
+
+impl Default for GameEventType {
+    fn default() -> Self {
+        Self::Custom
+    }
+}
+
+/// Sound playback type for a trigger.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SoundType {
+    /// Play a WAV or MP3 file.
+    File { path: String },
+    /// Play the system beep.
+    Beep,
+    /// No sound (mute for this trigger).
+    None,
+}
+
+impl Default for SoundType {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+impl SoundType {
+    pub fn is_some(&self) -> bool {
+        !matches!(self, Self::None)
+    }
+}
+
+impl Default for &SoundType {
+    fn default() -> Self {
+        static NONE: SoundType = SoundType::None;
+        &NONE
+    }
+}
 
 // ─── Trigger ───────────────────────────────────────────────────────────────
 
 /// A single sound alert trigger that matches game events by pattern.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SoundTrigger {
+    /// Unique identifier for this trigger.
+    pub id: String,
     /// Human-readable name for this trigger (e.g. "Low HP Warning").
     pub name: String,
     /// Pattern to match against event strings (substring match).
     pub event_pattern: String,
-    /// Optional path to a sound file to play when triggered.
-    pub sound_file: Option<String>,
+    /// The type of sound to play.
+    #[serde(default)]
+    pub sound: SoundType,
     /// Whether this trigger is active.
     pub enabled: bool,
     /// Priority level (0 = lowest, 255 = highest). Higher priority triggers
@@ -25,19 +82,28 @@ impl SoundTrigger {
     /// Creates a new enabled trigger with the given name and pattern.
     #[must_use]
     pub fn new(name: impl Into<String>, event_pattern: impl Into<String>) -> Self {
+        let name = name.into();
         Self {
-            name: name.into(),
+            id: format!("trigger_{}", name.to_lowercase().replace(' ', "_")),
+            name,
             event_pattern: event_pattern.into(),
-            sound_file: None,
+            sound: SoundType::None,
             enabled: true,
             priority: 0,
         }
     }
 
-    /// Sets the sound file path for this trigger.
+    /// Sets a sound file path for this trigger.
     #[must_use]
     pub fn with_sound_file(mut self, path: impl Into<String>) -> Self {
-        self.sound_file = Some(path.into());
+        self.sound = SoundType::File { path: path.into() };
+        self
+    }
+
+    /// Sets system beep for this trigger.
+    #[must_use]
+    pub fn with_beep(mut self) -> Self {
+        self.sound = SoundType::Beep;
         self
     }
 
@@ -53,6 +119,15 @@ impl SoundTrigger {
     pub fn with_enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
+    }
+
+    /// Gets the sound file path if this trigger uses a file sound type.
+    #[must_use]
+    pub fn sound_file(&self) -> Option<&str> {
+        match &self.sound {
+            SoundType::File { path } => Some(path),
+            _ => None,
+        }
     }
 
     /// Whether this trigger matches the given event string (case-insensitive
@@ -81,6 +156,44 @@ pub struct SoundConfig {
     pub triggers: Vec<SoundTrigger>,
 }
 
+impl SoundConfig {
+    pub fn with_defaults() -> Self {
+        Self::default()
+    }
+
+    pub fn with_muted() -> Self {
+        Self {
+            enabled: false,
+            volume: 0.75,
+            triggers: Vec::new(),
+        }
+    }
+
+    pub fn with_preset_triggers() -> Self {
+        Self {
+            enabled: true,
+            volume: 0.75,
+            triggers: vec![
+                SoundTrigger::new("Low HP", "hp_low")
+                    .with_sound_file("sounds/hp_low.wav")
+                    .with_priority(100),
+                SoundTrigger::new("Death", "you_have_died")
+                    .with_sound_file("sounds/death.wav")
+                    .with_priority(200),
+                SoundTrigger::new("Named Spawn", "named_spawn")
+                    .with_beep()
+                    .with_priority(150),
+                SoundTrigger::new("GM Detected", "gm_detected")
+                    .with_sound_file("sounds/gm_alert.wav")
+                    .with_priority(255),
+                SoundTrigger::new("Tell Received", "tell:")
+                    .with_sound_file("sounds/tell.wav")
+                    .with_priority(180),
+            ],
+        }
+    }
+}
+
 impl Default for SoundConfig {
     fn default() -> Self {
         Self {
@@ -91,31 +204,213 @@ impl Default for SoundConfig {
     }
 }
 
+// ─── Sound Player ───────────────────────────────────────────────────────────
+
+struct SoundPlayerInner {
+    #[cfg(not(windows))]
+    device: Option<rodio::Device>,
+    #[cfg(windows)]
+    _device: Option<()>,
+    output: Option<rodio::OutputStream>,
+    volume: f32,
+}
+
+impl Default for SoundPlayerInner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SoundPlayerInner {
+    fn new() -> Self {
+        #[cfg(not(windows))]
+        let device = match rodio::default_output_device() {
+            Some(d) => Some(d),
+            None => {
+                tracing::warn!("No audio output device available");
+                None
+            }
+        };
+        #[cfg(windows)]
+        let device = Some(());
+
+        let output = device.as_ref().and_then(|_| {
+            rodio::OutputStream::try_default()
+                .ok()
+                .map(|(stream, _)| stream)
+        });
+
+        Self {
+            #[cfg(not(windows))]
+            device,
+            #[cfg(windows)]
+            _device: device,
+            output,
+            volume: 0.75,
+        }
+    }
+
+    fn play_file(&self, path: &str, volume: f32) -> Result<(), String> {
+        let Some((stream, stream_handle)) = &self.output else {
+            return Err("No audio output available".to_string());
+        };
+
+        let path = PathBuf::from(path);
+        if !path.exists() {
+            return Err(format!("Sound file not found: {}", path.display()));
+        }
+
+        let file = rodio::Decoder::new(
+            std::fs::File::open(&path).map_err(|e| format!("Failed to open file: {e}"))?,
+        )
+        .map_err(|e| format!("Failed to decode audio: {e}"))?;
+
+        let sink = rodio::Sink::try_new(stream_handle)
+            .map_err(|e| format!("Failed to create sink: {e}"))?;
+        sink.set_volume(volume.clamp(0.0, 1.0));
+        sink.append(file);
+        sink.sleep_until_end();
+
+        Ok(())
+    }
+
+    fn play_beep(&self, volume: f32) -> Result<(), String> {
+        #[cfg(windows)]
+        {
+            use std::ptr::null_mut;
+            #[link(name = "kernel32")]
+            extern "system" {
+                fn Beep(dwFreq: u32, dwDuration: u32) -> i32;
+            }
+            let freq = 800u32;
+            let duration = 200u32;
+            unsafe {
+                Beep(freq, duration);
+            }
+            Ok(())
+        }
+
+        #[cfg(not(windows))]
+        {
+            use std::process::Command;
+            let _ = Command::new("printf").arg(r#"\a"#).output();
+            let _ = Command::new("paplay")
+                .arg("/usr/share/sounds/ubuntu/stereo/bell.ogg")
+                .output()
+                .ok();
+            Ok(())
+        }
+    }
+
+    fn set_volume(&mut self, volume: f32) {
+        self.volume = volume.clamp(0.0, 1.0);
+    }
+
+    fn get_volume(&self) -> f32 {
+        self.volume
+    }
+}
+
+/// Thread-safe sound player for playing audio alerts.
+#[derive(Clone, Default)]
+pub struct SoundPlayer {
+    inner: Arc<Mutex<SoundPlayerInner>>,
+}
+
+impl SoundPlayer {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(SoundPlayerInner::new())),
+        }
+    }
+
+    /// Play a sound file at the given volume.
+    pub fn play_file(&self, path: &str) -> Result<(), String> {
+        let inner = self.inner.lock().map_err(|e| format!("Lock error: {e}"))?;
+        let volume = inner.get_volume();
+        inner.play_file(path, volume)
+    }
+
+    /// Play the system beep at the given volume.
+    pub fn play_beep(&self) -> Result<(), String> {
+        let inner = self.inner.lock().map_err(|e| format!("Lock error: {e}"))?;
+        let volume = inner.get_volume();
+        inner.play_beep(volume)
+    }
+
+    /// Set the master volume (0.0 to 1.0).
+    pub fn set_volume(&self, volume: f32) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.set_volume(volume);
+        }
+    }
+
+    /// Get the current master volume.
+    pub fn get_volume(&self) -> f32 {
+        self.inner
+            .lock()
+            .map(|inner| inner.get_volume())
+            .unwrap_or(0.75)
+    }
+}
+
 // ─── Manager ───────────────────────────────────────────────────────────────
 
 /// Manages sound alert triggers and matches incoming events against them.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct SoundAlertManager {
     config: SoundConfig,
+    player: SoundPlayer,
+}
+
+impl Default for SoundAlertManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SoundAlertManager {
     /// Creates a new manager with default configuration.
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            config: SoundConfig::default(),
+            player: SoundPlayer::new(),
+        }
     }
 
     /// Creates a manager from an existing configuration.
     #[must_use]
     pub fn from_config(config: SoundConfig) -> Self {
-        Self { config }
+        let mut mgr = Self {
+            config,
+            player: SoundPlayer::new(),
+        };
+        mgr.player.set_volume(mgr.config.volume);
+        mgr
+    }
+
+    /// Creates a manager with preset triggers for common game events.
+    #[must_use]
+    pub fn with_preset_triggers() -> Self {
+        let config = SoundConfig::with_preset_triggers();
+        let mut mgr = Self {
+            config,
+            player: SoundPlayer::new(),
+        };
+        mgr.player.set_volume(mgr.config.volume);
+        mgr
     }
 
     /// Returns a reference to the current configuration.
     #[must_use]
     pub fn config(&self) -> &SoundConfig {
         &self.config
+    }
+
+    /// Returns a mutable reference to the configuration.
+    pub fn config_mut(&mut self) -> &mut SoundConfig {
+        &mut self.config
     }
 
     /// Adds a trigger to the manager.
@@ -155,6 +450,39 @@ impl SoundAlertManager {
         matches
     }
 
+    /// Checks an event and plays sound for the first matching trigger.
+    /// Returns the trigger that was fired, if any.
+    pub fn fire_event(&self, event: &str) -> Option<&SoundTrigger> {
+        let triggers = self.check_event(event);
+        if let Some(trigger) = triggers.first() {
+            self.play_trigger_sound(trigger);
+            Some(trigger)
+        } else {
+            None
+        }
+    }
+
+    /// Plays the sound associated with a trigger.
+    pub fn play_trigger_sound(&self, trigger: &SoundTrigger) {
+        if !self.config.enabled || !trigger.enabled {
+            return;
+        }
+
+        match &trigger.sound {
+            SoundType::File { path } => {
+                if let Err(e) = self.player.play_file(path) {
+                    tracing::warn!("Failed to play sound '{}': {}", path, e);
+                }
+            }
+            SoundType::Beep => {
+                if let Err(e) = self.player.play_beep() {
+                    tracing::warn!("Failed to play beep: {}", e);
+                }
+            }
+            SoundType::None => {}
+        }
+    }
+
     /// Sets the global enabled state.
     pub fn set_enabled(&mut self, enabled: bool) {
         self.config.enabled = enabled;
@@ -162,7 +490,15 @@ impl SoundAlertManager {
 
     /// Sets the master volume, clamped to 0.0..=1.0.
     pub fn set_volume(&mut self, volume: f32) {
-        self.config.volume = volume.clamp(0.0, 1.0);
+        let vol = volume.clamp(0.0, 1.0);
+        self.config.volume = vol;
+        self.player.set_volume(vol);
+    }
+
+    /// Gets the current master volume.
+    #[must_use]
+    pub fn volume(&self) -> f32 {
+        self.config.volume
     }
 
     /// Triggers a named alert by looking up the trigger and playing its sound.
@@ -218,6 +554,30 @@ mod tests {
         assert_eq!(matches[0].name, "High");
         assert_eq!(matches[1].name, "Med");
         assert_eq!(matches[2].name, "Low");
+    }
+
+    #[test]
+    fn preset_triggers_match_death_event_without_firing_audio() {
+        let mgr = SoundAlertManager::with_preset_triggers();
+        let matches = mgr.check_event("You have died.");
+        assert!(!matches.is_empty());
+        assert_eq!(matches[0].name, "Death");
+    }
+
+    #[test]
+    fn preset_triggers_return_no_match_for_unrelated_event() {
+        let mgr = SoundAlertManager::with_preset_triggers();
+        let matches = mgr.check_event("unrelated_event");
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn preset_triggers_still_match_when_manager_flag_is_toggled() {
+        let mut mgr = SoundAlertManager::with_preset_triggers();
+        mgr.set_enabled(false);
+        let matches = mgr.check_event("You have died.");
+        assert!(!matches.is_empty());
+        assert_eq!(matches[0].name, "Death");
     }
 
     #[test]
@@ -291,7 +651,7 @@ mod tests {
 
         assert_eq!(trigger.name, "Raid");
         assert_eq!(trigger.event_pattern, "raid_target");
-        assert_eq!(trigger.sound_file.as_deref(), Some("/sounds/raid.wav"));
+        assert_eq!(trigger.sound_file(), Some("/sounds/raid.wav"));
         assert_eq!(trigger.priority, 100);
         assert!(trigger.enabled);
     }
@@ -308,5 +668,24 @@ mod tests {
         assert!((mgr.config().volume - 0.5).abs() < f32::EPSILON);
         assert_eq!(mgr.config().triggers.len(), 1);
         assert_eq!(mgr.config().triggers[0].priority, 42);
+    }
+
+    #[test]
+    fn preset_triggers_contain_common_events() {
+        let mgr = SoundAlertManager::with_preset_triggers();
+        let triggers = &mgr.config().triggers;
+        let names: Vec<_> = triggers.iter().map(|t| t.name.as_str()).collect();
+
+        assert!(names.contains(&"Low HP"));
+        assert!(names.contains(&"Death"));
+        assert!(names.contains(&"Named Spawn"));
+        assert!(names.contains(&"GM Detected"));
+        assert!(names.contains(&"Tell Received"));
+    }
+
+    #[test]
+    fn sound_type_beep() {
+        let trigger = SoundTrigger::new("Beep Test", "test").with_beep();
+        assert!(matches!(trigger.sound, SoundType::Beep));
     }
 }
