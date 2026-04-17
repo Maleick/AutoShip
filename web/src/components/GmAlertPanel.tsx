@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { FloppyDisk, ShieldWarning, Warning } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
 import type { GmAlertConfig } from "../types";
 import { useGmAlerts } from "../hooks/useGmAlerts";
 

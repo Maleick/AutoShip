@@ -1,29 +1,36 @@
 import { useState } from "react";
-import LeftSidebar, { type ActiveView } from "./components/LeftSidebar";
-import CenterContent from "./components/CenterContent";
-import RightSidebar from "./components/RightSidebar";
-import GroupBuilder from "./components/GroupBuilder";
-import LootConfig from "./components/LootConfig";
-import SayDetectionPanel from "./components/SayDetectionPanel";
-import SoulPanel from "./components/SoulPanel";
+
 import AlertsPanel from "./components/AlertsPanel";
-import SpawnAlerts from "./components/SpawnAlerts";
+import BoxChatPanel from "./components/BoxChatPanel";
+import CenterContent from "./components/CenterContent";
 import ChatPatternRules from "./components/ChatPatternRules";
 import EconomyPanel from "./components/EconomyPanel";
+import GroupBuilder from "./components/GroupBuilder";
+import LeftSidebar, { type ActiveView } from "./components/LeftSidebar";
+import LootConfig from "./components/LootConfig";
+import OperatorDashboard from "./components/OperatorDashboard";
+import PlayerWatchPanel from "./components/PlayerWatchPanel";
+import RightSidebar from "./components/RightSidebar";
+import SayDetectionPanel from "./components/SayDetectionPanel";
+import SoulPanel from "./components/SoulPanel";
+import SpawnAlerts from "./components/SpawnAlerts";
+import XAssistPanel from "./components/XAssistPanel";
 
 function App() {
   const [activeView, setActiveView] = useState<ActiveView>("engagements");
 
   return (
-    <div className="flex h-screen w-screen selection:bg-magentaglow selection:text-void relative">
+    <div className="relative flex h-screen w-screen selection:bg-magentaglow selection:text-void">
       {/* Rotating sigil background */}
       <div className="bg-sigil" />
       {/* Radial gradient overlay */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-violet/20 via-void to-void z-0 pointer-events-none" />
+      <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-violet/20 via-void to-void" />
       {/* Main content */}
-      <main className="relative z-10 w-full h-full flex px-6 py-4 gap-6">
+      <main className="relative z-10 flex h-full w-full gap-6 px-6 py-4">
         <LeftSidebar activeView={activeView} onNavigate={setActiveView} />
-        {activeView === "economy" ? (
+        {activeView === "engagements" ? (
+          <OperatorDashboard />
+        ) : activeView === "economy" ? (
           <EconomyPanel />
         ) : activeView === "formations" ? (
           <GroupBuilder />
@@ -35,10 +42,16 @@ function App() {
           <SoulPanel />
         ) : activeView === "spawns" ? (
           <SpawnAlerts />
+        ) : activeView === "player_watch" ? (
+          <PlayerWatchPanel />
         ) : activeView === "chat_pattern_rules" ? (
           <ChatPatternRules />
         ) : activeView === "say" ? (
           <SayDetectionPanel />
+        ) : activeView === "xassist" ? (
+          <XAssistPanel />
+        ) : activeView === "boxchat" ? (
+          <BoxChatPanel />
         ) : (
           <>
             <CenterContent />

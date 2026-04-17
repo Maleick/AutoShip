@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
+import type { DashboardSnapshot } from "./dashboard";
 import { createDefaultDiscordSettings } from "./hooks/useDiscordConfig";
 import { jsonResponse } from "./test/http";
 
@@ -33,7 +34,7 @@ class MockWebSocket {
   }
 }
 
-const baseSnapshot = {
+const baseSnapshot: DashboardSnapshot = {
   generatedAt: "2026-04-15T08:00:00Z",
   environment: {
     cluster: "Teek",
@@ -71,6 +72,52 @@ const baseSnapshot = {
         status: "stuck",
         recoveryState: "respawning",
         lastHeartbeat: "12s ago",
+      },
+    ],
+  },
+  spawnFinder: {
+    observers: [
+      {
+        clientId: 1,
+        characterName: "Frostreaver",
+        zone: "Plane of Fire",
+        totalSpawns: 2,
+      },
+      {
+        clientId: 2,
+        characterName: "Noxus",
+        zone: "Plane of Fire",
+        totalSpawns: 1,
+      },
+    ],
+    items: [
+      {
+        observerClientId: 1,
+        observerName: "Frostreaver",
+        observerZone: "Plane of Fire",
+        spawnId: 9001,
+        name: "a fire giant",
+        spawnType: "NPC",
+        level: 61,
+        className: "WAR",
+        raceName: "Ogre",
+        distance: 18,
+        hpPct: 82,
+        isCurrentTarget: true,
+      },
+      {
+        observerClientId: 2,
+        observerName: "Noxus",
+        observerZone: "Plane of Fire",
+        spawnId: 9002,
+        name: "a lava walker",
+        spawnType: "NPC",
+        level: 60,
+        className: "MNK",
+        raceName: "Human",
+        distance: 42,
+        hpPct: 100,
+        isCurrentTarget: false,
       },
     ],
   },
@@ -114,6 +161,44 @@ const baseSnapshot = {
           { id: "wp-1", x: 10, y: 20, label: "Camp" },
           { id: "wp-2", x: 64, y: 48, label: "Ridge" },
           { id: "wp-3", x: 88, y: 20, label: "Ring" },
+        ],
+      },
+    ],
+  },
+  relocation: {
+    readyDestinations: 2,
+    coolingDownCount: 1,
+    destinations: [
+      {
+        zone: "guildlobby",
+        label: "Guild Lobby",
+        preferredOption: "Throne of Heroes",
+        preferredSource: "aa",
+        options: [
+          {
+            id: "throne_of_heroes",
+            name: "Throne of Heroes",
+            source: "aa",
+            owned: true,
+            ready: true,
+            cooldownRemainingSecs: null,
+          },
+        ],
+      },
+      {
+        zone: "guildhall",
+        label: "Guild Hall",
+        preferredOption: "Primary Anchor",
+        preferredSource: "item",
+        options: [
+          {
+            id: "primary_anchor",
+            name: "Primary Anchor",
+            source: "item",
+            owned: true,
+            ready: false,
+            cooldownRemainingSecs: 480,
+          },
         ],
       },
     ],
@@ -177,7 +262,7 @@ const baseSnapshot = {
       },
     ],
   },
-} as const;
+};
 
 const baseDiscordSettings = createDefaultDiscordSettings();
 
@@ -308,5 +393,61 @@ describe("App dashboard integration", () => {
 
     await waitFor(() => expect(screen.getByText("44 ms")).toBeInTheDocument());
     expect(screen.getByText(/newpuller/i)).toBeInTheDocument();
+  }, 15000);
+
+  it("navigates to awareness coordination panels from the main app shell", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (input) => {
+      if (input === "/api/dashboard") {
+        return jsonResponse(baseSnapshot);
+      }
+      if (input === "/api/config/player-watch") {
+        return jsonResponse({
+          filter_mode: "all",
+          sound_on_zone_in: false,
+          friends: ["Scout"],
+        });
+      }
+      if (input === "/api/xassist/configs") {
+        return jsonResponse([
+          {
+            character_name: "Frostreaver",
+            ma_name: "Noxus",
+            enabled: true,
+          },
+        ]);
+      }
+      if (input === "/api/config/discord") {
+        return jsonResponse(baseDiscordSettings);
+      }
+
+      throw new Error(`Unexpected fetch call: ${String(input)}`);
+    });
+
+    render(<App />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: /session command center/i })
+      ).toBeInTheDocument()
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /player watch/i }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: /player watch/i })
+      ).toBeInTheDocument()
+    );
+    expect(fetchMock).toHaveBeenCalledWith("/api/config/player-watch");
+
+    fireEvent.click(screen.getByRole("button", { name: /x-assist/i }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: /x-assist configuration/i })
+      ).toBeInTheDocument()
+    );
+    expect(fetchMock).toHaveBeenCalledWith("/api/xassist/configs");
   }, 15000);
 });

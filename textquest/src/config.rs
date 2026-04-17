@@ -592,28 +592,6 @@ pub struct ToonConfig {
     pub auto_camp_on_death: AutoCampOnDeathConfig,
 }
 
-/// Per-character unattended death handling configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(default)]
-pub struct AutoCampOnDeathConfig {
-    /// Whether the death-camp workflow is enabled for this toon.
-    pub enabled: bool,
-    /// Delay before camping the character out after death.
-    pub camp_delay_secs: u64,
-    /// Delay before attempting an automated relog after the camp-out.
-    pub relog_wait_secs: u64,
-}
-
-impl Default for AutoCampOnDeathConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            camp_delay_secs: 30,
-            relog_wait_secs: 900,
-        }
-    }
-}
-
 /// Configuration for EQ client launching — paths, stagger timing, and resource
 /// limits.
 #[derive(Debug, Clone, Deserialize)]

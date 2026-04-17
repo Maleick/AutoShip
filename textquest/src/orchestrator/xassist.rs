@@ -253,9 +253,7 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
-};
+        };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
         assert!(commands.is_empty());
@@ -291,9 +289,7 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
-};
+        };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
         assert!(
@@ -334,9 +330,7 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
-};
+        };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
         assert!(
@@ -378,9 +372,7 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
-};
+        };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
         assert!(
@@ -417,9 +409,7 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
-};
+        };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
         assert!(
@@ -447,9 +437,7 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
-};
+        };
 
         assert_eq!(find_spawn_by_name(&state, "  MaInTaNk  "), Some(200));
     }

@@ -10,6 +10,18 @@ The M6 web dashboard now exposes a single operator console instead of the earlie
 - Combat analytics
 - System health
 
+Issue `#1691` extends that operator console by making the mounted app boot into the dashboard on the default `engagements` view and by keeping the awareness utilities reachable from the left rail:
+
+- `Player Watch`
+- `Say Detection`
+- `X-Assist`
+- `Alert Routing`
+- `Rare Spawn Alerts`
+- `Network Box Chat`
+
+The plugin-by-plugin parity accounting for those surfaces lives in
+[`RedGuides-Awareness-and-Coordination-Parity.md`](RedGuides-Awareness-and-Coordination-Parity).
+
 ## Layout
 
 The console is split into two vertical rails on desktop and collapses to a single stack on narrower widths.
@@ -69,6 +81,8 @@ spawn list without leaving the browser.
 - Loot configuration now includes an **Item Score** tab with per-class stat
   weights and an upgrade threshold so auto-loot keep/sell decisions can prefer
   upgrades over vendor trash when no explicit loot rule matches.
+- Awareness utilities now stay reachable from the primary app shell instead of
+  being stranded behind unmounted demo-only routes.
 
 ## Review Artifact
 

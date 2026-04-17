@@ -11,8 +11,6 @@ pub mod alerts;
 /// EQBC-style cross-machine TCP relay and dispatch manager.
 #[cfg(windows)]
 pub mod box_chat;
-/// Local slash-command dispatch shared with box-chat relay execution.
-pub mod command_dispatch;
 /// Camp loop state machine — pulls, fights, loots, meds, buffs.
 #[allow(dead_code)]
 pub mod camp;
@@ -26,8 +24,8 @@ pub mod client;
 #[cfg(windows)]
 #[allow(dead_code)]
 pub mod combat;
-/// Local slash-command dispatch helpers shared by chat and UI entrypoints.
-#[cfg(windows)]
+/// Local slash-command dispatch shared by box-chat relay execution and chat/UI
+/// entrypoints.
 pub mod command_dispatch;
 /// TOML configuration loading.
 pub mod config;
@@ -117,8 +115,6 @@ use anyhow::Result;
 /// Default path for the soul memory database.
 pub const SOUL_DB_PATH: &str = "data/soul_memory.db";
 
-/// Default path for the trade price SQLite cache.
-pub const TRADE_PRICE_DB_PATH: &str = "data/trade_prices.db";
 /// Default path for the Ghidra analysis SQLite cache.
 pub const GHIDRA_DB_PATH: &str = "data/ghidra.db";
 /// Default path for the passive trade-price observation database.
