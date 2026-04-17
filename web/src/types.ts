@@ -269,6 +269,28 @@ export interface RaidConfig {
   members: RaidMember[];
 }
 
+// ── Discord configuration types ─────────────────────────────────────────────
+
+export type DiscordSeverity = "INFO" | "WARNING" | "ERROR" | "CRITICAL";
+
+export type DiscordMessageMode = "plain_text" | "rich_embed";
+
+export type DiscordMentionPolicy = "none" | "everyone";
+
+export interface DiscordRouteConfig {
+  enabled: boolean;
+  webhook_url: string;
+  level: DiscordSeverity;
+  message_mode: DiscordMessageMode;
+  mention_policy: DiscordMentionPolicy;
+}
+
+export interface DiscordSettings {
+  webhook_url: string;
+  channels: Record<string, string>;
+  notification_routes: Record<string, DiscordRouteConfig>;
+}
+
 // ── Strategy tuning types ───────────────────────────────────────────────────
 
 export type CharacterRole = "Tank" | "Healer" | "Support" | "DPS";

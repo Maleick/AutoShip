@@ -1,7 +1,5 @@
 //! REST API handlers for the web dashboard.
 
-#![allow(dead_code)] // Demo shapes and placeholder handlers stay in this module before router wiring.
-
 pub mod chat_log;
 pub mod chat_pattern_rules;
 pub mod dashboard;
@@ -42,10 +40,6 @@ fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Js
     )
 }
 
-fn live_state_unavailable(message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
-    json_error(StatusCode::NOT_IMPLEMENTED, message)
-}
-
 /// Catch-all for unknown API routes so they do not fall through to the SPA.
 pub async fn api_not_found() -> impl IntoResponse {
     json_error(StatusCode::NOT_FOUND, "API route not found")
@@ -57,22 +51,6 @@ pub async fn raid_config_unavailable() -> impl IntoResponse {
     json_error(
         StatusCode::NOT_IMPLEMENTED,
         "Raid configuration API is not implemented in this build",
-    )
-}
-
-/// Placeholder response for known character-config list endpoint.
-pub async fn character_configs_unavailable() -> impl IntoResponse {
-    json_error(
-        StatusCode::NOT_IMPLEMENTED,
-        "Character configuration API is not implemented in this build",
-    )
-}
-
-/// Placeholder response for known per-character config mutation endpoint.
-pub async fn character_config_unavailable(Path(character): Path<String>) -> impl IntoResponse {
-    json_error(
-        StatusCode::NOT_IMPLEMENTED,
-        format!("Character configuration API is not implemented for '{character}'"),
     )
 }
 
@@ -911,10 +889,18 @@ mod tests {
             auto_accept_settings: tokio::sync::RwLock::new(AutoAcceptSettings::default()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            discord_state: crate::api::discord::DiscordState::new_demo(),
             player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
+            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(Default::default()),
+            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_demo(),
             api_token: None,
             live_session_snapshot_path: test_live_session_snapshot_path("api-sessions-ok.json"),
+            xassist_configs: crate::api::xassist::demo_xassist_configs(),
+            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
         });
         let response = list_sessions(State(state)).await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
@@ -1003,11 +989,20 @@ mod tests {
             auto_accept_settings: tokio::sync::RwLock::new(AutoAcceptSettings::default()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            discord_state: crate::api::discord::DiscordState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
+            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(Default::default()),
+            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_demo(),
             api_token: None,
             live_session_snapshot_path: test_live_session_snapshot_path(
                 "api-character-configs-demo.json",
             ),
+            xassist_configs: crate::api::xassist::demo_xassist_configs(),
+            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
         });
         let Json(configs) = list_character_configs(State(state)).await;
         assert!(!configs.is_empty());
@@ -1024,11 +1019,20 @@ mod tests {
             auto_accept_settings: tokio::sync::RwLock::new(AutoAcceptSettings::default()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            discord_state: crate::api::discord::DiscordState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
+            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(Default::default()),
+            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_demo(),
             api_token: None,
             live_session_snapshot_path: test_live_session_snapshot_path(
                 "api-put-character-config.json",
             ),
+            xassist_configs: crate::api::xassist::demo_xassist_configs(),
+            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
         });
         let input = CharacterConfig {
             character_name: "IgnoredName".into(),
@@ -1068,8 +1072,18 @@ mod tests {
             economy_state: crate::api::economy::EconomyState::new_demo(),
             dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            discord_state: crate::api::discord::DiscordState::new_demo(),
             player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
+            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(Default::default()),
+            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_demo(),
             api_token: None,
+            live_session_snapshot_path: test_live_session_snapshot_path(
+                "api-auto-accept-round-trip.json",
+            ),
+            xassist_configs: crate::api::xassist::demo_xassist_configs(),
+            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
         });
         let update = AutoAcceptSettings {
             enabled: true,
@@ -1100,8 +1114,18 @@ mod tests {
             economy_state: crate::api::economy::EconomyState::new_demo(),
             dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            discord_state: crate::api::discord::DiscordState::new_demo(),
             player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
+            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(Default::default()),
+            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_demo(),
             api_token: None,
+            live_session_snapshot_path: test_live_session_snapshot_path(
+                "api-put-auto-accept-blank-reject.json",
+            ),
+            xassist_configs: crate::api::xassist::demo_xassist_configs(),
+            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
         });
         let invalid = AutoAcceptSettings {
             enabled: true,

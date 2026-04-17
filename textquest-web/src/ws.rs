@@ -134,6 +134,7 @@ mod tests {
             live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../data/runtime/ws-test-live-sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),
+            chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         })
     }
 
@@ -296,6 +297,7 @@ mod tests {
             live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../data/runtime/ws-auth-test-live-sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),
+            chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         });
 
         // Spawn server with authenticated state
