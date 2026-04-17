@@ -5,8 +5,8 @@
 //! "unknown" timers so we can throttle retries instead of spamming the EQ
 //! client every tick.
 
-/// Maximum number of concurrent ability cooldowns tracked.
-const MAX_TRACKED_ABILITIES: usize = 16;
+/// Initial inline capacity for tracked ability cooldowns.
+const INITIAL_TRACKED_ABILITIES: usize = 16;
 
 /// Public view of an ability's availability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,11 +33,12 @@ impl AbilityAvailability {
 }
 
 /// Tracks cooldown state for abilities with optional metadata.
-/// Uses a fixed-capacity array instead of HashMap for zero-allocation per-tick
-/// operation.
+///
+/// A small inline capacity keeps the common case allocation-light, while the
+/// backing `Vec` can still grow for target-scoped rotation entries like
+/// Enchanter debuffs that legitimately need more than sixteen concurrent keys.
 pub struct AbilityCooldownTracker {
-    entries: [(i32, AbilityAvailability); MAX_TRACKED_ABILITIES],
-    len: usize,
+    entries: Vec<(i32, AbilityAvailability)>,
     fallback_retry_ticks: u32,
 }
 
@@ -46,8 +47,7 @@ impl AbilityCooldownTracker {
 
     pub fn new() -> Self {
         Self {
-            entries: [(0, AbilityAvailability::Ready); MAX_TRACKED_ABILITIES],
-            len: 0,
+            entries: Vec::with_capacity(INITIAL_TRACKED_ABILITIES),
             fallback_retry_ticks: Self::DEFAULT_RETRY_TICKS,
         }
     }
@@ -55,8 +55,7 @@ impl AbilityCooldownTracker {
     #[cfg(test)]
     pub fn with_retry_ticks(fallback_retry_ticks: u32) -> Self {
         Self {
-            entries: [(0, AbilityAvailability::Ready); MAX_TRACKED_ABILITIES],
-            len: 0,
+            entries: Vec::with_capacity(INITIAL_TRACKED_ABILITIES),
             fallback_retry_ticks,
         }
     }
@@ -65,7 +64,7 @@ impl AbilityCooldownTracker {
     #[inline]
     pub fn tick(&mut self, now: u32) {
         let mut i = 0;
-        while i < self.len {
+        while i < self.entries.len() {
             let keep = match &mut self.entries[i].1 {
                 AbilityAvailability::CoolingDown(remaining) => {
                     *remaining = remaining.saturating_sub(1);
@@ -77,10 +76,7 @@ impl AbilityCooldownTracker {
             if keep {
                 i += 1;
             } else {
-                self.len -= 1;
-                if i < self.len {
-                    self.entries[i] = self.entries[self.len];
-                }
+                self.entries.swap_remove(i);
             }
         }
     }
@@ -88,9 +84,9 @@ impl AbilityCooldownTracker {
     /// View the current availability state for an ability at the given tick.
     #[inline]
     pub fn availability(&self, ability_id: i32, now: u32) -> AbilityAvailability {
-        for i in 0..self.len {
-            if self.entries[i].0 == ability_id {
-                return match self.entries[i].1 {
+        for (tracked_id, state) in &self.entries {
+            if *tracked_id == ability_id {
+                return match *state {
                     AbilityAvailability::CoolingDown(remaining) => {
                         if remaining == 0 {
                             AbilityAvailability::Ready
@@ -127,16 +123,13 @@ impl AbilityCooldownTracker {
                 retry_at: now.saturating_add(self.fallback_retry_ticks),
             },
         };
-        for i in 0..self.len {
-            if self.entries[i].0 == ability_id {
-                self.entries[i].1 = state;
+        for (tracked_id, tracked_state) in &mut self.entries {
+            if *tracked_id == ability_id {
+                *tracked_state = state;
                 return;
             }
         }
-        if self.len < MAX_TRACKED_ABILITIES {
-            self.entries[self.len] = (ability_id, state);
-            self.len += 1;
-        }
+        self.entries.push((ability_id, state));
     }
 }
 
@@ -258,18 +251,20 @@ mod tests {
     }
 
     #[test]
-    fn capacity_limit_silently_drops_excess_entries() {
+    fn tracks_more_than_sixteen_concurrent_ability_cooldowns() {
         let mut tracker = AbilityCooldownTracker::with_retry_ticks(5);
-        // Fill all MAX_TRACKED_ABILITIES (16) slots.
-        for id in 0..MAX_TRACKED_ABILITIES as i32 {
+        for id in 0..24 {
             tracker.consume(id, Some(100), 0);
             assert!(!tracker.can_use(id, 0));
         }
-        // Adding a 17th entry must be silently dropped.
-        let extra_id = MAX_TRACKED_ABILITIES as i32;
-        tracker.consume(extra_id, Some(100), 0);
-        // The extra entry is not tracked, so it reports Ready.
-        assert!(tracker.can_use(extra_id, 0));
+
+        for id in 0..24 {
+            assert_eq!(
+                tracker.availability(id, 0),
+                AbilityAvailability::CoolingDown(100),
+                "cooldown entry {id} should remain tracked even after the old 16-slot limit",
+            );
+        }
     }
 
     #[test]

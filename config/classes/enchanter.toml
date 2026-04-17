@@ -2,57 +2,485 @@ class_name = "enchanter"
 role = "cc"
 rest_command = "/sit"
 
-[[combat_abilities]]
-name = "Mesmerize"
-command = "/cast 1"
-cooldown_secs = 3.0
-priority = 1
-condition = "add_count_above_1"
+# Operator-facing baseline for sub-60 Enchanter automation. The DLL owns the
+# live rotation logic, but this profile mirrors the intended priority ordering
+# and mana gates so camp-side tooling and docs stay aligned.
 
 [[combat_abilities]]
-name = "Tash"
+name = "Color Slant"
 command = "/cast 2"
-cooldown_secs = 30.0
+cooldown_secs = 12.0
+priority = 1
+condition = "enemy_count_above_4 and mana_above_45"
+
+[[combat_abilities]]
+name = "Tashania"
+command = "/cast 5"
+cooldown_secs = 120.0
 priority = 2
+condition = "enemy_count_above_2 and mana_above_35"
+
+[[combat_abilities]]
+name = "Dazzle"
+command = "/cast 3"
+cooldown_secs = 2.0
+priority = 3
+condition = "enemy_count_above_2 and mana_above_25"
+
+[[combat_abilities]]
+name = "Tashania"
+command = "/cast 5"
+cooldown_secs = 120.0
+priority = 4
+condition = "target_hp_above_95 and mana_above_35"
+
+[[combat_abilities]]
+name = "Tepid Deeds"
+command = "/cast 6"
+cooldown_secs = 120.0
+priority = 5
+condition = "target_hp_above_80 and mana_above_50"
+
+[[combat_abilities]]
+name = "Sanity Warp"
+command = "/cast 1"
+cooldown_secs = 3.0
+priority = 6
+condition = "mana_above_65"
 
 [[cc_abilities]]
-name = "Color Stun"
+name = "Color Slant"
 cc_type = "stun"
-command = "/cast 8"
-cooldown_secs = 6.0
-duration_secs = 4.0
+command = "/cast 2"
+cooldown_secs = 12.0
+duration_secs = 6.0
 priority = 1
 
 [[cc_abilities]]
-name = "Mesmerize"
+name = "Dazzle"
 cc_type = "mez"
-command = "/cast 1"
-cooldown_secs = 3.0
-duration_secs = 18.0
+command = "/cast 3"
+cooldown_secs = 2.0
+duration_secs = 96.0
 priority = 2
 
 [[cc_abilities]]
-name = "Charm"
+name = "Boltran's Agacerie"
 cc_type = "charm"
-command = "/cast 3"
+command = "/cast 4"
 cooldown_secs = 3.0
-duration_secs = 60.0
+duration_secs = 180.0
 priority = 4
 
 [[debuff_abilities]]
-name = "Tash"
-command = "/cast 2"
-cooldown_secs = 3.0
+name = "Tashania"
+command = "/cast 5"
+cooldown_secs = 120.0
 order = 1
 
+[[debuff_abilities]]
+name = "Tepid Deeds"
+command = "/cast 6"
+cooldown_secs = 120.0
+order = 2
+
 [[buff_abilities]]
-name = "Haste"
-command = "/cast 5"
+name = "Wonderous Rapidity"
+command = "/cast 7"
 cooldown_secs = 600.0
+duration_secs = 1800.0
 priority = 1
 
 [[buff_abilities]]
-name = "Clarity"
-command = "/cast 6"
+name = "Clarity II"
+command = "/cast 8"
 cooldown_secs = 600.0
+duration_secs = 1800.0
+priority = 2
+
+[[level_overrides]]
+name = "level-60"
+min_level = 60
+max_level = 60
+
+[[level_overrides.combat_abilities]]
+name = "Color Slant"
+command = "/cast 2"
+cooldown_secs = 12.0
+priority = 1
+condition = "enemy_count_above_4 and mana_above_45"
+
+[[level_overrides.combat_abilities]]
+name = "Tashanian"
+command = "/cast 5"
+cooldown_secs = 120.0
+priority = 2
+condition = "enemy_count_above_2 and mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Glamour of Kintaz"
+command = "/cast 3"
+cooldown_secs = 2.0
+priority = 3
+condition = "enemy_count_above_2 and mana_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Tashanian"
+command = "/cast 5"
+cooldown_secs = 120.0
+priority = 4
+condition = "target_hp_above_95 and mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Dreary Deeds"
+command = "/cast 6"
+cooldown_secs = 120.0
+priority = 5
+condition = "target_hp_above_80 and mana_above_50"
+
+[[level_overrides.combat_abilities]]
+name = "Dementia"
+command = "/cast 1"
+cooldown_secs = 3.0
+priority = 6
+condition = "mana_above_65"
+
+[[level_overrides.cc_abilities]]
+name = "Color Slant"
+cc_type = "stun"
+command = "/cast 2"
+cooldown_secs = 12.0
+duration_secs = 6.0
+priority = 1
+
+[[level_overrides.cc_abilities]]
+name = "Glamour of Kintaz"
+cc_type = "mez"
+command = "/cast 3"
+cooldown_secs = 2.0
+duration_secs = 96.0
+priority = 2
+
+[[level_overrides.cc_abilities]]
+name = "Boltran's Agacerie"
+cc_type = "charm"
+command = "/cast 4"
+cooldown_secs = 3.0
+duration_secs = 180.0
+priority = 4
+
+[[level_overrides.debuff_abilities]]
+name = "Tashanian"
+command = "/cast 5"
+cooldown_secs = 120.0
+order = 1
+
+[[level_overrides.debuff_abilities]]
+name = "Dreary Deeds"
+command = "/cast 6"
+cooldown_secs = 120.0
+order = 2
+
+[[level_overrides.buff_abilities]]
+name = "Speed of the Shissar"
+command = "/cast 7"
+cooldown_secs = 600.0
+duration_secs = 1800.0
+priority = 1
+
+[[level_overrides.buff_abilities]]
+name = "Clarity II"
+command = "/cast 8"
+cooldown_secs = 600.0
+duration_secs = 1800.0
+priority = 2
+
+[[level_overrides]]
+name = "level-61"
+min_level = 61
+max_level = 61
+
+[[level_overrides.combat_abilities]]
+name = "Color Slant"
+command = "/cast 2"
+cooldown_secs = 12.0
+priority = 1
+condition = "enemy_count_above_4 and mana_above_45"
+
+[[level_overrides.combat_abilities]]
+name = "Tashanian"
+command = "/cast 5"
+cooldown_secs = 120.0
+priority = 2
+condition = "enemy_count_above_2 and mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Glamour of Kintaz"
+command = "/cast 3"
+cooldown_secs = 2.0
+priority = 3
+condition = "enemy_count_above_2 and mana_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Tashanian"
+command = "/cast 5"
+cooldown_secs = 120.0
+priority = 4
+condition = "target_hp_above_95 and mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Dreary Deeds"
+command = "/cast 6"
+cooldown_secs = 120.0
+priority = 5
+condition = "target_hp_above_80 and mana_above_50"
+
+[[level_overrides.combat_abilities]]
+name = "Dementia"
+command = "/cast 1"
+cooldown_secs = 3.0
+priority = 6
+condition = "mana_above_65"
+
+[[level_overrides.cc_abilities]]
+name = "Color Slant"
+cc_type = "stun"
+command = "/cast 2"
+cooldown_secs = 12.0
+duration_secs = 6.0
+priority = 1
+
+[[level_overrides.cc_abilities]]
+name = "Glamour of Kintaz"
+cc_type = "mez"
+command = "/cast 3"
+cooldown_secs = 2.0
+duration_secs = 96.0
+priority = 2
+
+[[level_overrides.cc_abilities]]
+name = "Boltran's Agacerie"
+cc_type = "charm"
+command = "/cast 4"
+cooldown_secs = 3.0
+duration_secs = 180.0
+priority = 4
+
+[[level_overrides.debuff_abilities]]
+name = "Tashanian"
+command = "/cast 5"
+cooldown_secs = 120.0
+order = 1
+
+[[level_overrides.debuff_abilities]]
+name = "Dreary Deeds"
+command = "/cast 6"
+cooldown_secs = 120.0
+order = 2
+
+[[level_overrides.buff_abilities]]
+name = "Speed of the Shissar"
+command = "/cast 7"
+cooldown_secs = 600.0
+duration_secs = 1800.0
+priority = 1
+
+[[level_overrides.buff_abilities]]
+name = "Clarity II"
+command = "/cast 8"
+cooldown_secs = 600.0
+duration_secs = 1800.0
+priority = 2
+
+[[level_overrides]]
+name = "level-62"
+min_level = 62
+max_level = 64
+
+[[level_overrides.combat_abilities]]
+name = "Color Slant"
+command = "/cast 2"
+cooldown_secs = 12.0
+priority = 1
+condition = "enemy_count_above_4 and mana_above_45"
+
+[[level_overrides.combat_abilities]]
+name = "Wind of Tashani"
+command = "/cast 5"
+cooldown_secs = 120.0
+priority = 2
+condition = "enemy_count_above_2 and mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Glamour of Kintaz"
+command = "/cast 3"
+cooldown_secs = 2.0
+priority = 3
+condition = "enemy_count_above_2 and mana_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Wind of Tashani"
+command = "/cast 5"
+cooldown_secs = 120.0
+priority = 4
+condition = "target_hp_above_95 and mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Dreary Deeds"
+command = "/cast 6"
+cooldown_secs = 120.0
+priority = 5
+condition = "target_hp_above_80 and mana_above_50"
+
+[[level_overrides.combat_abilities]]
+name = "Dementia"
+command = "/cast 1"
+cooldown_secs = 3.0
+priority = 6
+condition = "mana_above_65"
+
+[[level_overrides.cc_abilities]]
+name = "Color Slant"
+cc_type = "stun"
+command = "/cast 2"
+cooldown_secs = 12.0
+duration_secs = 6.0
+priority = 1
+
+[[level_overrides.cc_abilities]]
+name = "Glamour of Kintaz"
+cc_type = "mez"
+command = "/cast 3"
+cooldown_secs = 2.0
+duration_secs = 96.0
+priority = 2
+
+[[level_overrides.cc_abilities]]
+name = "Boltran's Agacerie"
+cc_type = "charm"
+command = "/cast 4"
+cooldown_secs = 3.0
+duration_secs = 180.0
+priority = 4
+
+[[level_overrides.debuff_abilities]]
+name = "Wind of Tashani"
+command = "/cast 5"
+cooldown_secs = 120.0
+order = 1
+
+[[level_overrides.debuff_abilities]]
+name = "Dreary Deeds"
+command = "/cast 6"
+cooldown_secs = 120.0
+order = 2
+
+[[level_overrides.buff_abilities]]
+name = "Speed of the Shissar"
+command = "/cast 7"
+cooldown_secs = 600.0
+duration_secs = 1800.0
+priority = 1
+
+[[level_overrides.buff_abilities]]
+name = "Clarity II"
+command = "/cast 8"
+cooldown_secs = 600.0
+duration_secs = 1800.0
+priority = 2
+
+[[level_overrides]]
+name = "level-65"
+min_level = 65
+
+[[level_overrides.combat_abilities]]
+name = "Color Slant"
+command = "/cast 2"
+cooldown_secs = 12.0
+priority = 1
+condition = "enemy_count_above_4 and mana_above_45"
+
+[[level_overrides.combat_abilities]]
+name = "Wind of Tashani"
+command = "/cast 5"
+cooldown_secs = 120.0
+priority = 2
+condition = "enemy_count_above_2 and mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Bliss"
+command = "/cast 3"
+cooldown_secs = 2.0
+priority = 3
+condition = "enemy_count_above_2 and mana_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Wind of Tashani"
+command = "/cast 5"
+cooldown_secs = 120.0
+priority = 4
+condition = "target_hp_above_95 and mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Dreary Deeds"
+command = "/cast 6"
+cooldown_secs = 120.0
+priority = 5
+condition = "target_hp_above_80 and mana_above_50"
+
+[[level_overrides.combat_abilities]]
+name = "Dementia"
+command = "/cast 1"
+cooldown_secs = 3.0
+priority = 6
+condition = "mana_above_65"
+
+[[level_overrides.cc_abilities]]
+name = "Color Slant"
+cc_type = "stun"
+command = "/cast 2"
+cooldown_secs = 12.0
+duration_secs = 6.0
+priority = 1
+
+[[level_overrides.cc_abilities]]
+name = "Bliss"
+cc_type = "mez"
+command = "/cast 3"
+cooldown_secs = 2.0
+duration_secs = 96.0
+priority = 2
+
+[[level_overrides.cc_abilities]]
+name = "Command of Druzzil"
+cc_type = "charm"
+command = "/cast 4"
+cooldown_secs = 3.0
+duration_secs = 180.0
+priority = 4
+
+[[level_overrides.debuff_abilities]]
+name = "Wind of Tashani"
+command = "/cast 5"
+cooldown_secs = 120.0
+order = 1
+
+[[level_overrides.debuff_abilities]]
+name = "Dreary Deeds"
+command = "/cast 6"
+cooldown_secs = 120.0
+order = 2
+
+[[level_overrides.buff_abilities]]
+name = "Speed of Vallon"
+command = "/cast 7"
+cooldown_secs = 600.0
+duration_secs = 1800.0
+priority = 1
+
+[[level_overrides.buff_abilities]]
+name = "Clarity II"
+command = "/cast 8"
+cooldown_secs = 600.0
+duration_secs = 1800.0
 priority = 2

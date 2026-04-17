@@ -192,6 +192,27 @@ fn item_action_key(item_name: &str) -> i32 {
     (hash & 0x7FFF_FFFF) as i32
 }
 
+/// Stable key for spell/song rotation cooldown tracking.
+///
+/// Spell entries default to target-scoped cooldowns so debuffs like Tash and
+/// Slow can fire once per mob instead of spamming every frame. Self-targeted
+/// actions resolve to the player spawn ID, so their cooldown keys remain stable
+/// for the owning character without leaking across targets.
+fn rotation_spell_key(entry_name: &str, target_id: u32) -> i32 {
+    let scope = if target_id == 0 {
+        entry_name.to_string()
+    } else {
+        format!("{entry_name}:{target_id}")
+    };
+
+    let mut hash = 0x811C_9DC5u32;
+    for byte in scope.bytes() {
+        hash ^= u32::from(byte);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    (hash & 0x7FFF_FFFF) as i32
+}
+
 fn normalize_action_name(action_name: &str) -> String {
     action_name
         .chars()
@@ -207,12 +228,36 @@ fn item_cooldown_ticks(item_name: &str) -> Option<u32> {
     }
 }
 
+fn rotation_action_target<'a>(ctx: &'a CombatContext<'_>, target_id: u32) -> Option<&'a SpawnData> {
+    if target_id == 0 {
+        return None;
+    }
+
+    ctx.target
+        .filter(|target| target.spawn_id == target_id)
+        .or_else(|| {
+            ctx.nearby_enemies
+                .iter()
+                .find(|spawn| spawn.spawn_id == target_id)
+        })
+}
+
+fn should_retarget_spell_target(
+    target_id: u32,
+    current_target_id: Option<u32>,
+    player_id: u32,
+) -> bool {
+    target_id != 0 && target_id != player_id && current_target_id != Some(target_id)
+}
+
 struct RotationActionRuntime<'a> {
     resolved_abilities: &'a HashMap<String, ResolvedAbility>,
     ability_cooldowns: &'a mut AbilityCooldownTracker,
     skill_cooldowns: &'a mut SkillCooldownTracker,
     gcd: &'a mut GcdTracker,
     personality: &'a mut CombatPersonality,
+    active_cast_entry: &'a mut Option<String>,
+    active_cast_cooldown_ticks: &'a mut Option<u32>,
     tick_count: u32,
     state: &'a mut CombatState,
 }
@@ -220,12 +265,27 @@ struct RotationActionRuntime<'a> {
 fn execute_rotation_action(
     groups: &mut Option<Vec<RotationGroup>>,
     ctx: &CombatContext,
+    selected_spell_target: Option<u32>,
     runtime: &mut RotationActionRuntime<'_>,
 ) -> bool {
     let Some(groups) = groups.as_mut() else {
         return false;
     };
-    let Some(action) = rotation::execute_rotations(groups, ctx) else {
+    let ability_cooldowns = &*runtime.ability_cooldowns;
+    let tick_count = runtime.tick_count;
+    let mut rotation_entry_ready =
+        |entry: &rotation::RotationEntry, target_id: u32| match entry.action_type {
+            ActionType::Spell(_) | ActionType::Song(_) => entry.cooldown_ticks.is_none_or(|_| {
+                ability_cooldowns.can_use(rotation_spell_key(&entry.name, target_id), tick_count)
+            }),
+            _ => true,
+        };
+    let Some(action) = rotation::execute_rotations_filtered_with_strategy_target(
+        groups,
+        ctx,
+        selected_spell_target,
+        &mut rotation_entry_ready,
+    ) else {
         return false;
     };
 
@@ -246,6 +306,32 @@ fn execute_rotation_action(
 
     match &action.action_type {
         ActionType::Spell(_) | ActionType::Song(_) => {
+            if let Some(target_spawn) = rotation_action_target(ctx, action.target_id) {
+                let dist = Waypoint::new(ctx.player.x, ctx.player.y, ctx.player.z).distance_3d(
+                    &Waypoint::new(target_spawn.x, target_spawn.y, target_spawn.z),
+                );
+                if dist > MAX_SPELL_RANGE {
+                    tracing::debug!(
+                        entry = %action.entry_name,
+                        target_id = action.target_id,
+                        dist,
+                        "Rotation spell target out of range"
+                    );
+                    return true;
+                }
+            }
+            if should_retarget_spell_target(
+                action.target_id,
+                ctx.target.map(|target| target.spawn_id),
+                ctx.player.spawn_id,
+            ) {
+                tracing::debug!(
+                    entry = %action.entry_name,
+                    target_id = action.target_id,
+                    "Retargeting for rotation spell"
+                );
+                crate::eq::slash_command(&format!("/target id {}", action.target_id));
+            }
             if spell_id <= 0 {
                 tracing::warn!(
                     entry = %action.entry_name,
@@ -267,6 +353,8 @@ fn execute_rotation_action(
             crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
             let cast_delay = u32::from(runtime.personality.next_cast_delay());
             runtime.gcd.consume();
+            *runtime.active_cast_entry = Some(action.entry_name.clone());
+            *runtime.active_cast_cooldown_ticks = action.cooldown_ticks;
             *runtime.state = CombatState::Casting {
                 spell_slot: cast_plan.gem_id,
                 spell_id: cast_plan.spell_id,
@@ -301,6 +389,8 @@ fn execute_rotation_action(
                 .ability_cooldowns
                 .consume(spell_id, None, runtime.tick_count);
             runtime.gcd.consume();
+            *runtime.active_cast_entry = None;
+            *runtime.active_cast_cooldown_ticks = None;
             *runtime.state = CombatState::OnGcd;
         }
         ActionType::Ability(ability_name) => {
@@ -325,6 +415,8 @@ fn execute_rotation_action(
                 runtime.skill_cooldowns.consume(skill_id, cooldown);
             }
             runtime.gcd.consume();
+            *runtime.active_cast_entry = None;
+            *runtime.active_cast_cooldown_ticks = None;
             *runtime.state = CombatState::OnGcd;
         }
         ActionType::Item(item_name) => {
@@ -354,6 +446,8 @@ fn execute_rotation_action(
                 runtime.tick_count,
             );
             runtime.gcd.consume();
+            *runtime.active_cast_entry = None;
+            *runtime.active_cast_cooldown_ticks = None;
             *runtime.state = CombatState::OnGcd;
         }
     }
@@ -451,6 +545,8 @@ pub struct Combatant {
     config: CombatConfig,
     pending_cast_result: Option<CastResult>,
     last_cast_result: Option<CastResult>,
+    active_cast_entry: Option<String>,
+    active_cast_cooldown_ticks: Option<u32>,
     toon_actions_loaded: bool,
 }
 
@@ -502,6 +598,8 @@ impl Combatant {
             config,
             pending_cast_result: None,
             last_cast_result: None,
+            active_cast_entry: None,
+            active_cast_cooldown_ticks: None,
             toon_actions_loaded: false,
         }
     }
@@ -690,7 +788,7 @@ impl Combatant {
                 ch_chain_slot: None,
                 active_buffs: &[],
                 buff_info: &[],
-                target_is_mezzed: false,
+                target_is_mezzed: target.is_some_and(super::strategy::is_mezzed),
                 extended_targets: extended_targets.as_ref(),
             };
 
@@ -723,7 +821,7 @@ impl Combatant {
             ch_chain_slot: None,
             active_buffs: &[],
             buff_info: &[],
-            target_is_mezzed: false,
+            target_is_mezzed: target.is_some_and(super::strategy::is_mezzed),
             extended_targets: extended_targets.as_ref(),
         };
 
@@ -762,6 +860,7 @@ impl Combatant {
                     tracing::warn!(slot, gem_id, "HolyShit: casting emergency spell");
                     crate::eq::cast_spell(gem_id, 0); // spell_id 0 = use whatever is in the gem
                     self.gcd.consume();
+                    self.active_cast_entry = None;
                     self.state = CombatState::Casting {
                         spell_slot: gem_id,
                         spell_id: 0,
@@ -813,7 +912,7 @@ impl Combatant {
                         ch_chain_slot: None,
                         active_buffs: &[],
                         buff_info: &[],
-                        target_is_mezzed: false,
+                        target_is_mezzed: target.is_some_and(super::strategy::is_mezzed),
                         extended_targets: None,
                     };
                     self.strategy.on_action_complete(&flee_ctx);
@@ -832,23 +931,16 @@ impl Combatant {
             }
 
             selected_spell_target = self.strategy.select_target(&ctx);
+            let selected_spell_target_spawn = selected_spell_target
+                .and_then(|spell_target| rotation_action_target(&ctx, spell_target));
 
-            // Ask strategy for a spell target (may differ from assist target).
-            // Healers target lowest-HP group member, enchanters target off-mobs
-            // for mez, etc. This only influences spell targeting — it does NOT
-            // override the assist target for auto-attack.
-            if let Some(spell_target) = selected_spell_target
-                && target.is_none_or(|t| t.spawn_id != spell_target)
-            {
-                tracing::debug!(
-                    spell_target,
-                    assist = ?self.assist_target,
-                    "Strategy selected different spell target"
-                );
-                crate::eq::slash_command(&format!("/target id {spell_target}"));
-            }
+            let range_check_target = if selected_spell_target.is_some() {
+                selected_spell_target_spawn
+            } else {
+                target
+            };
 
-            if let Some(t) = target {
+            if let Some(t) = range_check_target {
                 let dist = Waypoint::new(player.x, player.y, player.z)
                     .distance_3d(&Waypoint::new(t.x, t.y, t.z));
                 if dist > MAX_SPELL_RANGE {
@@ -870,10 +962,17 @@ impl Combatant {
                 skill_cooldowns: &mut self.skill_cooldowns,
                 gcd: &mut self.gcd,
                 personality: &mut self.personality,
+                active_cast_entry: &mut self.active_cast_entry,
+                active_cast_cooldown_ticks: &mut self.active_cast_cooldown_ticks,
                 tick_count: self.tick_count,
                 state: &mut self.state,
             };
-            if execute_rotation_action(&mut self.rotation_groups, &ctx, &mut runtime) {
+            if execute_rotation_action(
+                &mut self.rotation_groups,
+                &ctx,
+                selected_spell_target,
+                &mut runtime,
+            ) {
                 return;
             }
         }
@@ -886,10 +985,12 @@ impl Combatant {
                 skill_cooldowns: &mut self.skill_cooldowns,
                 gcd: &mut self.gcd,
                 personality: &mut self.personality,
+                active_cast_entry: &mut self.active_cast_entry,
+                active_cast_cooldown_ticks: &mut self.active_cast_cooldown_ticks,
                 tick_count: self.tick_count,
                 state: &mut self.state,
             };
-            if execute_rotation_action(&mut self.rotation_groups, &ctx, &mut runtime) {
+            if execute_rotation_action(&mut self.rotation_groups, &ctx, None, &mut runtime) {
                 return;
             }
         }
@@ -942,12 +1043,25 @@ impl Combatant {
                         }
                     }
 
+                    if let Some(target_id) = selected_spell_target.filter(|target_id| {
+                        should_retarget_spell_target(
+                            *target_id,
+                            target.map(|current| current.spawn_id),
+                            player.spawn_id,
+                        )
+                    }) {
+                        tracing::debug!(target_id, "Retargeting for legacy spell");
+                        crate::eq::slash_command(&format!("/target id {target_id}"));
+                    }
+
                     // Call the real EQ CastSpell function via FFI
                     crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
 
                     // Apply humanization delay (cast_start_delay absorbed into cast time)
                     let cast_delay = u32::from(self.personality.next_cast_delay());
                     self.gcd.consume();
+                    self.active_cast_entry = None;
+                    self.active_cast_cooldown_ticks = None;
                     self.state = CombatState::Casting {
                         spell_slot: cast_plan.gem_id,
                         spell_id: cast_plan.spell_id,
@@ -1247,14 +1361,32 @@ impl Combatant {
             ch_chain_slot: None,
             active_buffs: &[],
             buff_info: &[],
-            target_is_mezzed: false,
+            target_is_mezzed: target.is_some_and(super::strategy::is_mezzed),
             extended_targets: None,
         };
 
         self.pending_cast_result = None;
         self.last_cast_result = Some(result);
         self.strategy.on_cast_outcome(&ctx, spell_slot, result);
-        self.strategy.on_action_complete(&ctx);
+        if result.landed()
+            && let (Some(entry_name), Some(cooldown_ticks)) = (
+                self.active_cast_entry.as_deref(),
+                self.active_cast_cooldown_ticks,
+            )
+        {
+            self.ability_cooldowns.consume(
+                rotation_spell_key(entry_name, target_id),
+                Some(cooldown_ticks),
+                self.tick_count,
+            );
+        }
+        self.strategy.on_resolved_action_outcome(
+            &ctx,
+            self.active_cast_entry.as_deref(),
+            spell_id,
+            target_id,
+            result,
+        );
 
         // Attempts so far = retry_count + 1 (the initial cast).
         let attempts_so_far = retry_count.saturating_add(1);
@@ -1283,6 +1415,10 @@ impl Combatant {
             self.group_members = group_members;
             return;
         }
+
+        self.active_cast_entry = None;
+        self.active_cast_cooldown_ticks = None;
+        self.strategy.on_action_complete(&ctx);
 
         if result.is_retryable() {
             tracing::debug!(
@@ -1456,6 +1592,8 @@ impl Combatant {
 
                 let cast_delay = u32::from(self.personality.next_cast_delay());
                 self.gcd.consume();
+                self.active_cast_entry = None;
+                self.active_cast_cooldown_ticks = None;
                 self.state = CombatState::Casting {
                     spell_slot: cast_plan.gem_id,
                     spell_id: cast_plan.spell_id,
@@ -1475,7 +1613,40 @@ impl Combatant {
 mod tests {
     use super::*;
     use crate::combat::{ability_cooldowns::AbilityAvailability, rotation};
-    use textquest_common::combat::{ActionType, CastRetryPolicy, CombatConfig};
+    use textquest_common::combat::{
+        ActionType, CastRetryPolicy, CombatConfig, CombatRole, SpellEntry,
+    };
+
+    struct AllyTargetStrategy {
+        spell: SpellEntry,
+        target_id: u32,
+    }
+
+    impl ClassStrategy for AllyTargetStrategy {
+        fn class_id(&self) -> u8 {
+            2
+        }
+
+        fn select_spell(&self, _ctx: &CombatContext) -> Option<SpellEntry> {
+            Some(self.spell.clone())
+        }
+
+        fn select_target(&self, _ctx: &CombatContext) -> Option<u32> {
+            Some(self.target_id)
+        }
+
+        fn should_assist(&self, _ctx: &CombatContext) -> bool {
+            false
+        }
+
+        fn aoe_threshold(&self) -> u8 {
+            u8::MAX
+        }
+
+        fn role(&self) -> CombatRole {
+            CombatRole::Healer
+        }
+    }
 
     fn test_config() -> CombatConfig {
         CombatConfig {
@@ -1527,6 +1698,27 @@ mod tests {
             textquest_common::combat::TargetSelector::SelfOnly,
             textquest_common::combat::CombatStateReq::Combat,
         )
+    }
+
+    fn spell_rotation_group_with_cooldown(
+        entry_name: &str,
+        cooldown_ticks: u32,
+        target_selector: textquest_common::combat::TargetSelector,
+    ) -> RotationGroup {
+        RotationGroup {
+            name: "SpellTest".into(),
+            target_selector,
+            combat_state_req: textquest_common::combat::CombatStateReq::Combat,
+            steps_per_frame: 1,
+            full_rotation: false,
+            hp_threshold: None,
+            entries: vec![rotation::entry_with_cooldown(
+                entry_name,
+                ActionType::Spell(entry_name.to_string()),
+                cooldown_ticks,
+            )],
+            current_step: 0,
+        }
     }
 
     #[test]
@@ -1961,6 +2153,114 @@ mod tests {
     }
 
     #[test]
+    fn rotation_spell_cooldown_commits_on_success_not_cast_start() {
+        let mut c = Combatant::new(1, 0, test_config());
+        c.rotation_groups = Some(vec![spell_rotation_group_with_cooldown(
+            "TestDebuff",
+            77,
+            textquest_common::combat::TargetSelector::AutoTarget,
+        )]);
+        c.resolved_abilities.insert(
+            "TestDebuff".into(),
+            ResolvedAbility {
+                set_name: "TestSet".into(),
+                ability_name: "Test Debuff".into(),
+                spell_id: 4242,
+                min_level: 1,
+            },
+        );
+
+        let mut player = test_player();
+        player.mana_current = 1000;
+        player.mana_max = 1000;
+        let target = test_target();
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), std::slice::from_ref(&target));
+
+        let cooldown_key = rotation_spell_key("TestDebuff", target.spawn_id);
+        assert!(
+            c.ability_cooldowns.can_use(cooldown_key, c.tick_count),
+            "rotation cooldown should remain ready until the cast lands"
+        );
+        assert_eq!(c.active_cast_entry.as_deref(), Some("TestDebuff"));
+        assert_eq!(c.active_cast_cooldown_ticks, Some(77));
+
+        let (spell_slot, spell_id, target_id) = match c.state {
+            CombatState::Casting {
+                spell_slot,
+                spell_id,
+                target_id,
+                ..
+            } => (spell_slot, spell_id, target_id),
+            _ => panic!("expected rotation spell to enter Casting state"),
+        };
+
+        c.finish_cast(
+            &player,
+            Some(&target),
+            std::slice::from_ref(&target),
+            true,
+            spell_slot,
+            spell_id,
+            target_id,
+            0,
+            CastResult::Success,
+        );
+
+        assert_eq!(
+            c.ability_cooldowns.availability(cooldown_key, c.tick_count),
+            AbilityAvailability::CoolingDown(77)
+        );
+        assert_eq!(c.active_cast_entry, None);
+        assert_eq!(c.active_cast_cooldown_ticks, None);
+    }
+
+    #[test]
+    fn retryable_rotation_cast_preserves_active_entry_until_terminal_result() {
+        let mut c = Combatant::new(1, 0, config_with_retry(3, 0));
+        let player = test_player();
+        let target = test_target();
+
+        c.active_cast_entry = Some("Mez".into());
+        c.active_cast_cooldown_ticks = Some(55);
+        c.state = CombatState::Casting {
+            spell_slot: 2,
+            spell_id: 5150,
+            target_id: target.spawn_id,
+            ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
+        };
+
+        c.finish_cast(
+            &player,
+            Some(&target),
+            std::slice::from_ref(&target),
+            true,
+            2,
+            5150,
+            target.spawn_id,
+            0,
+            CastResult::Fizzled,
+        );
+
+        assert!(
+            matches!(c.state, CombatState::Casting { retry_count: 1, .. }),
+            "retryable failures should schedule a retry"
+        );
+        assert_eq!(c.active_cast_entry.as_deref(), Some("Mez"));
+        assert_eq!(c.active_cast_cooldown_ticks, Some(55));
+        assert!(
+            c.ability_cooldowns
+                .can_use(rotation_spell_key("Mez", target.spawn_id), c.tick_count),
+            "retryable failures should not commit the rotation cooldown"
+        );
+    }
+
+    #[test]
     fn downtime_rotation_groups_execute_while_idle() {
         let mut c = Combatant::new(1, 0, test_config());
         c.rotation_groups = Some(vec![item_rotation_group_with(
@@ -2005,6 +2305,43 @@ mod tests {
         assert!(
             matches!(c.state, CombatState::OnGcd),
             "A successful rotation action should end the tick before legacy spell selection runs"
+        );
+    }
+
+    #[test]
+    fn legacy_spell_targeting_does_not_use_far_enemy_for_ally_selected_casts() {
+        let mut c = Combatant::new(2, 0, test_config());
+        c.strategy = Box::new(AllyTargetStrategy {
+            spell: SpellEntry {
+                slot: 1,
+                spell_id: 5150,
+                name: "Test Heal".into(),
+                min_mana_pct: 0.0,
+                priority: 1,
+                is_aoe: false,
+            },
+            target_id: 7,
+        });
+
+        let player = test_player();
+        let mut far_enemy = test_target();
+        far_enemy.x = MAX_SPELL_RANGE + 50.0;
+
+        c.state = CombatState::Engaging {
+            target_id: far_enemy.spawn_id,
+        };
+        c.tick(&player, Some(&far_enemy), &[]);
+
+        assert!(
+            matches!(
+                c.state,
+                CombatState::Casting {
+                    spell_id: 5150,
+                    target_id: 7,
+                    ..
+                }
+            ),
+            "ally-targeted legacy casts should proceed even when the current enemy target is out of range"
         );
     }
 

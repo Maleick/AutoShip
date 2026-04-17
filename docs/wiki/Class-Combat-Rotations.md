@@ -218,6 +218,23 @@ Crowd control is the #1 priority. One missed mez can wipe the group. Secondary: 
 - Haste buff tracking per group member
 - Clarity buff tracking per caster
 - The DLL now tracks successful **Enchanter** charm casts, detects a break when the former pet drops out of `MyPet` and shows back up as hostile, and immediately re-casts the resolved charm spell.
+
+### Live-Safe Rotation Profile
+
+- Emergency CC: fire `ColorStun` only when the pull has 4 or more enemies total and mana is above 45%.
+- Add control: on strategy-selected off-targets, cast `Tash` first and then `Mez` once there are 2 or more enemies total and mana is above the respective 35% / 25% floors.
+- Kill target debuffs: once adds are stable, apply `Tash` above 95% target HP and `Slow` above 80% target HP, with 35% / 50% mana floors.
+- Nuke: cast the configured direct-damage line only when mana is above 65%.
+- Charm remains available as a utility/control line, but it is not part of the default unattended DPS rotation.
+
+### Live Breakpoints
+
+| Level | Mez               | Tash            | Slow         | Haste                | Clarity    | Nuke     | Charm               |
+| ----- | ----------------- | --------------- | ------------ | -------------------- | ---------- | -------- | ------------------- |
+| 60    | Glamour of Kintaz | Tashanian       | Dreary Deeds | Speed of the Shissar | Clarity II | Dementia | Boltran's Agacerie  |
+| 61    | Glamour of Kintaz | Tashanian       | Dreary Deeds | Speed of the Shissar | Clarity II | Dementia | Boltran's Agacerie  |
+| 62    | Glamour of Kintaz | Wind of Tashani | Dreary Deeds | Speed of the Shissar | Clarity II | Dementia | Boltran's Agacerie  |
+| 65    | Bliss             | Wind of Tashani | Dreary Deeds | Speed of Vallon      | Clarity II | Dementia | Command of Druzzil  |
 - Retryable re-charm failures (for example cooldown/pending-style outcomes) still use the normal cast retry policy; terminal failures such as resists/immunity are counted separately and stop after 3 attempts so the group can fall back to killing the mob.
 - Current scope is the resolved `Charm` line in the DLL combat FSM; Druid/Necromancer animal/undead charm extensions still need explicit spell-line support before they get the same automation path.
 - Color Flux (PBAE stun) is the emergency "everything broke" button

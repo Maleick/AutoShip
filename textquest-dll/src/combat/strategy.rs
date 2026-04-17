@@ -179,6 +179,21 @@ pub trait ClassStrategy: Send {
         }
     }
 
+    /// Called when a cast attempt resolves for a specific rotation entry.
+    ///
+    /// This gives class strategies access to the resolved spell ID and target
+    /// so they can maintain per-line state like mez refresh queues without
+    /// hard-coding that logic into the generic combat FSM.
+    fn on_resolved_action_outcome(
+        &mut self,
+        _ctx: &CombatContext,
+        _entry_name: Option<&str>,
+        _spell_id: i32,
+        _target_id: u32,
+        _result: CastResult,
+    ) {
+    }
+
     /// Minimum enemy count before switching to `AoE` rotation.
     fn aoe_threshold(&self) -> u8;
 

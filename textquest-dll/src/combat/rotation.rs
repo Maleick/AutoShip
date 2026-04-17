@@ -38,6 +38,12 @@ pub struct RotationEntry {
     pub post_activate: Option<ActivationHook>,
     /// Whether the user has enabled this entry (togglable at runtime).
     pub enabled: bool,
+    /// Optional cooldown window in game ticks.
+    ///
+    /// When set, the combat runtime throttles repeat attempts for this entry.
+    /// Spell entries default to target-scoped cooldown tracking so debuffs can
+    /// land once per target instead of spamming every frame.
+    pub cooldown_ticks: Option<u32>,
 }
 
 /// Hook action to execute before or after a rotation entry fires.
@@ -181,6 +187,8 @@ pub struct SelectedAction {
     pub action_type: ActionType,
     /// Target spawn ID (0 = self).
     pub target_id: u32,
+    /// Optional cooldown window for the selected action.
+    pub cooldown_ticks: Option<u32>,
 }
 
 /// Execute a single rotation group for one frame, returning selected actions.
@@ -189,7 +197,15 @@ pub struct SelectedAction {
 /// `full_rotation`), testing each entry's condition. Entries that pass get
 /// added to the result up to `steps_per_frame`. The group's `current_step`
 /// is advanced for next frame.
-pub fn execute_group(group: &mut RotationGroup, ctx: &CombatContext) -> RotationResult {
+fn execute_group_inner<F>(
+    group: &mut RotationGroup,
+    ctx: &CombatContext,
+    strategy_target_id: Option<u32>,
+    is_ready: &mut F,
+) -> RotationResult
+where
+    F: FnMut(&RotationEntry, u32) -> bool,
+{
     let mut result = RotationResult {
         actions: Vec::new(),
     };
@@ -222,7 +238,9 @@ pub fn execute_group(group: &mut RotationGroup, ctx: &CombatContext) -> Rotation
     }
 
     // Determine target ID based on selector
-    let target_id = select_target(&group.target_selector, ctx);
+    let Some(target_id) = select_target(&group.target_selector, ctx, strategy_target_id) else {
+        return result;
+    };
 
     // Determine start position
     let start = if group.full_rotation {
@@ -276,6 +294,10 @@ pub fn execute_group(group: &mut RotationGroup, ctx: &CombatContext) -> Rotation
             continue;
         }
 
+        if !is_ready(entry, target_id) {
+            continue;
+        }
+
         // Run pre-activation hook
         if let Some(ref hook) = entry.pre_activate {
             run_hook(hook, ctx);
@@ -285,6 +307,7 @@ pub fn execute_group(group: &mut RotationGroup, ctx: &CombatContext) -> Rotation
             entry_name: entry.name.clone(),
             action_type: entry.action_type.clone(),
             target_id,
+            cooldown_ticks: entry.cooldown_ticks,
         });
 
         // Run post-activation hook
@@ -303,6 +326,18 @@ pub fn execute_group(group: &mut RotationGroup, ctx: &CombatContext) -> Rotation
     result
 }
 
+pub fn execute_group(group: &mut RotationGroup, ctx: &CombatContext) -> RotationResult {
+    execute_group_inner(group, ctx, None, &mut |_, _| true)
+}
+
+pub fn execute_group_with_strategy_target(
+    group: &mut RotationGroup,
+    ctx: &CombatContext,
+    strategy_target_id: Option<u32>,
+) -> RotationResult {
+    execute_group_inner(group, ctx, strategy_target_id, &mut |_, _| true)
+}
+
 /// Execute all rotation groups in order, returning the first non-empty result.
 ///
 /// This is the main entry point for the rotation system. Groups are evaluated
@@ -313,8 +348,30 @@ pub fn execute_rotations(
     groups: &mut [RotationGroup],
     ctx: &CombatContext,
 ) -> Option<SelectedAction> {
+    execute_rotations_with_strategy_target(groups, ctx, None)
+}
+
+pub fn execute_rotations_with_strategy_target(
+    groups: &mut [RotationGroup],
+    ctx: &CombatContext,
+    strategy_target_id: Option<u32>,
+) -> Option<SelectedAction> {
+    execute_rotations_filtered_with_strategy_target(groups, ctx, strategy_target_id, &mut |_, _| {
+        true
+    })
+}
+
+pub fn execute_rotations_filtered_with_strategy_target<F>(
+    groups: &mut [RotationGroup],
+    ctx: &CombatContext,
+    strategy_target_id: Option<u32>,
+    is_ready: &mut F,
+) -> Option<SelectedAction>
+where
+    F: FnMut(&RotationEntry, u32) -> bool,
+{
     for group in groups.iter_mut() {
-        let result = execute_group(group, ctx);
+        let result = execute_group_inner(group, ctx, strategy_target_id, is_ready);
         if let Some(action) = result.actions.into_iter().next() {
             return Some(action);
         }
@@ -323,17 +380,22 @@ pub fn execute_rotations(
 }
 
 /// Resolve target ID based on a `TargetSelector` and current context.
-fn select_target(selector: &TargetSelector, ctx: &CombatContext) -> u32 {
+fn select_target(
+    selector: &TargetSelector,
+    ctx: &CombatContext,
+    strategy_target_id: Option<u32>,
+) -> Option<u32> {
     match selector {
-        TargetSelector::SelfOnly => ctx.player.spawn_id,
-        TargetSelector::AutoTarget => ctx.target.map_or(0, |t| t.spawn_id),
+        TargetSelector::SelfOnly => Some(ctx.player.spawn_id),
+        TargetSelector::AutoTarget => ctx.target.map(|t| t.spawn_id),
+        TargetSelector::StrategyTarget => strategy_target_id.filter(|target_id| *target_id != 0),
         TargetSelector::AggroTarget => {
             // For now, fall back to auto-target. Full aggro scanning
             // will be implemented in issue #456.
-            ctx.target.map_or(0, |t| t.spawn_id)
+            ctx.target.map(|t| t.spawn_id)
         }
         TargetSelector::LowestHpGroupMember => {
-            super::strategy::lowest_hp_member(ctx).map_or(ctx.player.spawn_id, |(id, _)| id)
+            Some(super::strategy::lowest_hp_member(ctx).map_or(ctx.player.spawn_id, |(id, _)| id))
         }
     }
 }
@@ -352,6 +414,7 @@ pub fn entry(name: &str, action_type: ActionType) -> RotationEntry {
         pre_activate: None,
         post_activate: None,
         enabled: true,
+        cooldown_ticks: None,
     }
 }
 
@@ -365,6 +428,7 @@ pub fn entry_if(name: &str, action_type: ActionType, cond: ConditionExpr) -> Rot
         pre_activate: None,
         post_activate: None,
         enabled: true,
+        cooldown_ticks: None,
     }
 }
 
@@ -382,7 +446,19 @@ pub fn entry_unless_active(
         pre_activate: None,
         post_activate: None,
         enabled: true,
+        cooldown_ticks: None,
     }
+}
+
+/// Convenience: create an entry with an explicit cooldown.
+pub fn entry_with_cooldown(
+    name: &str,
+    action_type: ActionType,
+    cooldown_ticks: u32,
+) -> RotationEntry {
+    let mut entry = entry(name, action_type);
+    entry.cooldown_ticks = Some(cooldown_ticks);
+    entry
 }
 
 /// Convenience builder for rotation groups.

@@ -982,6 +982,8 @@ pub enum TargetSelector {
     SelfOnly,
     /// Target the current auto-target (main assist target).
     AutoTarget,
+    /// Target selected by the class strategy for off-target utility or CC.
+    StrategyTarget,
     /// Target the mob with lowest aggro on the tank (aggro scan).
     AggroTarget,
     /// Target the group member with the lowest HP (for heals).
