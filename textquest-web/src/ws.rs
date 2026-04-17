@@ -125,11 +125,15 @@ mod tests {
             dashboard_state: api::dashboard::DashboardState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
             discord_state: api::discord::DiscordState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
+            kill_tracker_state: api::kill_tracker::KillTrackerState::new_demo(),
             api_token: None,
             live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../data/runtime/ws-test-live-sessions.json"),
+            xassist_configs: api::xassist::demo_xassist_configs(),
         })
     }
 
@@ -283,11 +287,15 @@ mod tests {
             dashboard_state: api::dashboard::DashboardState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
             discord_state: api::discord::DiscordState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
+            kill_tracker_state: api::kill_tracker::KillTrackerState::new_demo(),
             api_token: Some("secret-token".to_string()),
             live_session_snapshot_path: std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../data/runtime/ws-auth-test-live-sessions.json"),
+            xassist_configs: api::xassist::demo_xassist_configs(),
         });
 
         // Spawn server with authenticated state

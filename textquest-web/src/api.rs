@@ -340,6 +340,119 @@ impl Default for TimestampConfig {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlayerWatchConfig {
+    pub enabled: bool,
+    pub watch_zones: Vec<String>,
+    pub notify_on_zone_change: bool,
+    pub notify_on_spawn: bool,
+}
+
+impl Default for PlayerWatchConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            watch_zones: Vec::new(),
+            notify_on_zone_change: true,
+            notify_on_spawn: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AutoAcceptSettings {
+    pub enabled: bool,
+    pub accept_group_invites: bool,
+    pub accept_trades: bool,
+    pub accept_task_adds: bool,
+    pub accept_dz_adds: bool,
+    pub accept_translocates: bool,
+    pub accept_anchors: bool,
+    pub trust_mode: textquest_common::ipc::AutoAcceptTrustMode,
+    pub trusted_players: Vec<String>,
+}
+
+impl Default for AutoAcceptSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            accept_group_invites: true,
+            accept_trades: true,
+            accept_task_adds: true,
+            accept_dz_adds: true,
+            accept_translocates: true,
+            accept_anchors: true,
+            trust_mode: textquest_common::ipc::AutoAcceptTrustMode::Anyone,
+            trusted_players: Vec::new(),
+        }
+    }
+}
+
+impl From<textquest_common::ipc::AutoAcceptSettings> for AutoAcceptSettings {
+    fn from(s: textquest_common::ipc::AutoAcceptSettings) -> Self {
+        Self {
+            enabled: s.enabled,
+            accept_group_invites: s.accept_group_invites,
+            accept_trades: s.accept_trades,
+            accept_task_adds: s.accept_task_adds,
+            accept_dz_adds: s.accept_dz_adds,
+            accept_translocates: s.accept_translocates,
+            accept_anchors: s.accept_anchors,
+            trust_mode: s.trust_mode,
+            trusted_players: s.trusted_players,
+        }
+    }
+}
+
+impl From<AutoAcceptSettings> for textquest_common::ipc::AutoAcceptSettings {
+    fn from(s: AutoAcceptSettings) -> Self {
+        Self {
+            enabled: s.enabled,
+            accept_group_invites: s.accept_group_invites,
+            accept_trades: s.accept_trades,
+            accept_task_adds: s.accept_task_adds,
+            accept_dz_adds: s.accept_dz_adds,
+            accept_translocates: s.accept_translocates,
+            accept_anchors: s.accept_anchors,
+            trust_mode: s.trust_mode,
+            trusted_players: s.trusted_players,
+        }
+    }
+}
+
+pub async fn get_auto_accept_settings(
+    State(state): State<Arc<AppState>>,
+) -> Json<AutoAcceptSettings> {
+    let settings = state.auto_accept_settings.read().await;
+    Json(AutoAcceptSettings::from(settings.clone()))
+}
+
+pub async fn put_auto_accept_settings(
+    State(state): State<Arc<AppState>>,
+    Json(settings): Json<AutoAcceptSettings>,
+) -> Json<AutoAcceptSettings> {
+    let mut current = state.auto_accept_settings.write().await;
+    *current = settings.clone().into();
+    Json(settings)
+}
+
+pub async fn get_player_watch_config(
+    State(state): State<Arc<AppState>>,
+) -> Json<PlayerWatchConfig> {
+    let config = state.player_watch_config.read().await;
+    Json(config.clone())
+}
+
+pub async fn put_player_watch_config(
+    State(state): State<Arc<AppState>>,
+    Json(config): Json<PlayerWatchConfig>,
+) -> Json<PlayerWatchConfig> {
+    let mut current = state.player_watch_config.write().await;
+    *current = config.clone();
+    Json(config)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CharacterConfigUpdate {
     pub character_name: String,
@@ -829,11 +942,7 @@ pub async fn get_timestamp_config(
     let configs = state.timestamp_configs.read().await;
     match configs.get(&character) {
         Some(config) => (StatusCode::OK, Json(config.clone())).into_response(),
-        None => (
-            StatusCode::OK,
-            Json(TimestampConfig::default()),
-        )
-            .into_response(),
+        None => (StatusCode::OK, Json(TimestampConfig::default())).into_response(),
     }
 }
 
@@ -853,12 +962,14 @@ fn load_timestamp_configs_from_disk() -> Result<HashMap<String, TimestampConfig>
     }
     let content = std::fs::read_to_string(&path)
         .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
-    let configs: HashMap<String, TimestampConfig> =
-        toml::from_str(&content).map_err(|error| format!("Failed to parse {}: {error}", path.display()))?;
+    let configs: HashMap<String, TimestampConfig> = toml::from_str(&content)
+        .map_err(|error| format!("Failed to parse {}: {error}", path.display()))?;
     Ok(configs)
 }
 
-fn write_timestamp_configs_to_disk(configs: &HashMap<String, TimestampConfig>) -> Result<(), String> {
+fn write_timestamp_configs_to_disk(
+    configs: &HashMap<String, TimestampConfig>,
+) -> Result<(), String> {
     let path = timestamp_config_path();
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
@@ -879,9 +990,9 @@ pub async fn put_timestamp_config(
     State(state): State<Arc<AppState>>,
     Path(character): Path<String>,
     Json(config): Json<TimestampConfig>,
-) -> impl IntoResponse {
+) -> (StatusCode, Json<TimestampConfig>) {
     if character.trim().is_empty() {
-        return json_error(StatusCode::BAD_REQUEST, "Character name must not be empty");
+        panic!("Character name must not be empty");
     }
     let mut configs = state.timestamp_configs.write().await;
     configs.insert(character.clone(), config.clone());
@@ -896,7 +1007,7 @@ pub async fn put_timestamp_config(
         format = ?config.format,
         "Timestamp config updated"
     );
-    (StatusCode::OK, Json(config)).into_response()
+    (StatusCode::OK, Json(config))
 }
 
 #[cfg(test)]
@@ -1039,15 +1150,22 @@ mod tests {
             account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(demo_character_configs()),
+            auto_accept_settings: tokio::sync::RwLock::new(
+                textquest_common::ipc::AutoAcceptSettings::default(),
+            ),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
             dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
             soul_audit: crate::api::soul::SoulAuditState::new_demo(),
             discord_state: crate::api::discord::DiscordState::new_demo(),
             player_watch_config: tokio::sync::RwLock::new(PlayerWatchConfig::default()),
+            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
             spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
             timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
+            kill_tracker_state: Arc::new(crate::api::kill_tracker::KillTrackerState::new_demo()),
             api_token: None,
+            live_session_snapshot_path: std::path::PathBuf::from("test-sessions.json"),
+            xassist_configs: crate::api::xassist::demo_xassist_configs(),
         });
         let response = list_sessions(State(state)).await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
@@ -1214,7 +1332,10 @@ mod tests {
             saved_json["tribute_status"]["alert_state"],
             serde_json::json!("expired")
         );
-        assert_eq!(saved_json["tribute_status"]["point_balance"], serde_json::json!(875));
+        assert_eq!(
+            saved_json["tribute_status"]["point_balance"],
+            serde_json::json!(875)
+        );
 
         let Json(configs) = list_character_configs(State(state)).await;
         let updated = configs
@@ -1244,7 +1365,11 @@ mod tests {
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = response.into_body().collect().await.expect("body should collect");
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("body should collect");
         let body_bytes = body.to_bytes();
         let config: TimestampConfig =
             serde_json::from_slice(&body_bytes).expect("response should parse");
@@ -1294,10 +1419,9 @@ mod tests {
             enabled: true,
             format: TimestampFormat::DateTime12,
         };
-        let response =
-            put_timestamp_config(State(state), Path("".into()), Json(input))
-                .await
-                .into_response();
+        let response = put_timestamp_config(State(state), Path("".into()), Json(input))
+            .await
+            .into_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 

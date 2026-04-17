@@ -114,10 +114,7 @@ impl SpawnAlertState {
             .next_id
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut entries = self.entries.write().await;
-        entries.push(SpawnAlertEntry {
-            id,
-            ..entry
-        });
+        entries.push(SpawnAlertEntry { id, ..entry });
         id
     }
 
@@ -186,12 +183,15 @@ pub async fn list_alerts(
         .cloned()
         .collect();
 
-    (StatusCode::OK, Json(AlertPage {
-        total,
-        offset,
-        limit,
-        entries: page,
-    }))
+    (
+        StatusCode::OK,
+        Json(AlertPage {
+            total,
+            offset,
+            limit,
+            entries: page,
+        }),
+    )
 }
 
 pub async fn get_stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -276,7 +276,8 @@ pub async fn clear_alerts(State(state): State<Arc<AppState>>) -> impl IntoRespon
 }
 
 pub fn broadcast_spawn_alert(state: &AppState, alert: &SpawnAlertEntry) {
-    if state.spawn_alerts.broadcast_to_web.read().now_or_never().unwrap_or(false) {
+    let is_enabled = *state.spawn_alerts.broadcast_to_web.blocking_read();
+    if is_enabled {
         let event = serde_json::json!({
             "type": "spawn_alert",
             "data": alert

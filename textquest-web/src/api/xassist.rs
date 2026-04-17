@@ -4,7 +4,7 @@ use axum::{
     Json,
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response as AxumResponse},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -82,13 +82,88 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
-fn json_error(status: StatusCode, message: impl Into<String>) -> impl IntoResponse {
+fn json_error(status: StatusCode, message: impl Into<String>) -> AxumResponse {
     (
         status,
         Json(ErrorResponse {
             error: message.into(),
         }),
     )
+        .into_response()
+}
+
+pub async fn get_xassist_config(
+    State(state): State<Arc<AppState>>,
+    Path(character): Path<String>,
+) -> AxumResponse {
+    let configs = state.xassist_configs.read().await;
+    match configs.get(&character) {
+        Some(cfg) => (
+            StatusCode::OK,
+            Json(XAssistCharacterConfig {
+                character_name: character,
+                ma_name: cfg.ma_name.clone(),
+                enabled: cfg.enabled,
+            }),
+        )
+            .into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("Config not found for '{}'", character),
+            }),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct XAssistConfigUpdate {
+    pub ma_name: Option<String>,
+    pub enabled: bool,
+}
+
+pub async fn put_xassist_config(
+    State(state): State<Arc<AppState>>,
+    Path(character): Path<String>,
+    Json(update): Json<XAssistConfigUpdate>,
+) -> AxumResponse {
+    if character.trim().is_empty() {
+        return json_error(StatusCode::BAD_REQUEST, "Character name cannot be empty");
+    }
+    let ma_name = update.ma_name.clone();
+    let mut configs = state.xassist_configs.write().await;
+    configs.insert(
+        character.clone(),
+        XAssistConfig {
+            ma_name: update.ma_name,
+            enabled: update.enabled,
+        },
+    );
+    (
+        StatusCode::OK,
+        Json(XAssistCharacterConfig {
+            character_name: character,
+            ma_name,
+            enabled: update.enabled,
+        }),
+    )
+        .into_response()
+}
+
+pub async fn delete_xassist_config(
+    State(state): State<Arc<AppState>>,
+    Path(character): Path<String>,
+) -> AxumResponse {
+    let mut configs = state.xassist_configs.write().await;
+    if configs.remove(&character).is_some() {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        json_error(
+            StatusCode::NOT_FOUND,
+            format!("Config not found for '{}'", character),
+        )
+    }
 }
 
 pub async fn list_xassist_configs(
@@ -105,68 +180,4 @@ pub async fn list_xassist_configs(
         .collect();
     result.sort_by(|a, b| a.character_name.cmp(&b.character_name));
     Json(result)
-}
-
-pub async fn get_xassist_config(
-    State(state): State<Arc<AppState>>,
-    Path(character): Path<String>,
-) -> impl IntoResponse {
-    let configs = state.xassist_configs.read().await;
-    match configs.get(&character) {
-        Some(cfg) => (
-            StatusCode::OK,
-            Json(XAssistCharacterConfig {
-                character_name: character,
-                ma_name: cfg.ma_name.clone(),
-                enabled: cfg.enabled,
-            }),
-        )
-            .into_response(),
-        None => json_error(StatusCode::NOT_FOUND, format!("Config not found for '{}'", character)),
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct XAssistConfigUpdate {
-    pub ma_name: Option<String>,
-    pub enabled: bool,
-}
-
-pub async fn put_xassist_config(
-    State(state): State<Arc<AppState>>,
-    Path(character): Path<String>,
-    Json(update): Json<XAssistConfigUpdate>,
-) -> impl IntoResponse {
-    if character.trim().is_empty() {
-        return json_error(StatusCode::BAD_REQUEST, "Character name cannot be empty");
-    }
-
-    let mut configs = state.xassist_configs.write().await;
-    let new_config = XAssistConfig {
-        ma_name: update.ma_name,
-        enabled: update.enabled,
-    };
-    configs.insert(character.clone(), new_config);
-
-    (
-        StatusCode::OK,
-        Json(XAssistCharacterConfig {
-            character_name: character,
-            ma_name: update.ma_name,
-            enabled: update.enabled,
-        }),
-    )
-        .into_response()
-}
-
-pub async fn delete_xassist_config(
-    State(state): State<Arc<AppState>>,
-    Path(character): Path<String>,
-) -> impl IntoResponse {
-    let mut configs = state.xassist_configs.write().await;
-    if configs.remove(&character).is_some() {
-        StatusCode::NO_CONTENT.into_response()
-    } else {
-        json_error(StatusCode::NOT_FOUND, format!("Config not found for '{}'", character))
-    }
 }
