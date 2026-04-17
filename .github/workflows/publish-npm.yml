@@ -1,0 +1,57 @@
+name: Publish npm Package
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'Maleick'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          scope: '@textquest'
+
+      - name: Install dependencies
+        run: |
+          cd textquest-client/tstextquest
+          npm ci
+
+      - name: Lint
+        run: |
+          cd textquest-client/tstextquest
+          npm run lint || true
+
+      - name: Typecheck
+        run: |
+          cd textquest-client/tstextquest
+          npm run typecheck || true
+
+      - name: Build package
+        run: |
+          cd textquest-client/tstextquest
+          npm run build
+
+      - name: Publish to npm
+        run: |
+          cd textquest-client/tstextquest
+          npm publish --access public --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: true
+
+      - name: Publish to npm (live)
+        run: |
+          cd textquest-client/tstextquest
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

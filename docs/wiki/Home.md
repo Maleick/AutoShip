@@ -73,6 +73,19 @@ Repository rules that matter for documentation:
 - The canonical wiki source lives in `docs/wiki/`, not only in the GitHub wiki repo.
 - Link to canonical `TextQuest-Ghidra` evidence paths instead of duplicating immutable evidence payloads in this repo.
 
+## SDK & Client Libraries
+
+TextQuest exposes its IPC protocol for external applications via multi-language SDK packages.
+
+- [SDK Documentation](https://maleick.github.io/TextQuest/textquest-client/) — mdBook documentation for the SDK surface
+- [IPC Protocol Specification](Specs-and-Protocols/IPC-Protocol.md) — Detailed wire protocol documentation
+
+| Language | Package | Registry | Status |
+|----------|---------|----------|--------|
+| Rust | `textquest-common` | [crates.io](https://crates.io/crates/textquest-common) | Published (v0.6.0) |
+| Python | `textquest` | PyPI | Not yet published |
+| TypeScript | `@textquest/client` | npm | Not yet published |
+
 ## Current Behavior vs Roadmap
 
 ### Current behavior

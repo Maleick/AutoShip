@@ -196,6 +196,20 @@ cargo test -p textquest-common
 cargo test -p textquest-dll
 ```
 
+#### SDK Documentation Work
+
+```bash
+# Install mdbook
+cargo install mdbook
+
+# Build SDK docs
+cd textquest-client/docs
+mdbook build
+mdbook serve  # Preview locally
+```
+
+**SDK docs are at:** `textquest-client/docs/src/`
+
 ### 3. Before Every Commit
 
 ```bash
@@ -842,6 +856,52 @@ sudo cargo flamegraph -- cargo run
 
 ---
 
+## SDK Development
+
+External applications can interact with TextQuest-managed EQ clients via the IPC protocol.
+
+### SDK Packages
+
+| Language | Package | Registry | Status |
+|----------|---------|----------|--------|
+| Rust | `textquest-common` | [crates.io](https://crates.io/crates/textquest-common) | Published |
+| Python | `textquest` | PyPI | Planned |
+| TypeScript | `@textquest/client` | npm | Planned |
+
+### SDK Documentation
+
+Full SDK documentation with language-specific quickstarts and API references is available at:
+
+- **mdBook Docs**: `textquest-client/docs/` (published to GitHub Pages)
+- **IPC Protocol**: [Specs-and-Protocols/IPC-Protocol.md](Specs-and-Protocols/IPC-Protocol.md)
+
+### Building the SDK Docs
+
+```bash
+# Install mdbook
+cargo install mdbook
+
+# Build the SDK documentation
+cd textquest-client/docs
+mdbook build
+```
+
+### Publishing SDK Packages
+
+Publication workflows are defined in:
+
+- `.github/workflows/publish-python.yml` — PyPI publication
+- `.github/workflows/publish-npm.yml` — npm publication
+
+**Required secrets (not yet configured):**
+
+| Registry | Secret | Instructions |
+|----------|--------|--------------|
+| PyPI | `PYPI_API_TOKEN` | Generate at pypi.org/manage/account |
+| npm | `NPM_TOKEN` | Generate at npmjs.com/settings/tokens |
+
+The `textquest-common` crate is already published to crates.io via the existing `release.yml` workflow.
+
 ## Further Reading
 
 - **[Architecture Overview](Architecture-Overview.md)** — Deep dive into data flow and module boundaries
@@ -850,5 +910,6 @@ sudo cargo flamegraph -- cargo run
 - **[Combat and Camp Loop](Combat-and-Camp-Loop.md)** — Combat FSM, class rotations, camp phases
 - **[Login Automation](Login-Automation.md)** — Widget manipulation and credential storage
 - **[Development Workflow](Development-Workflow.md)** — PR, CI, and wiki sync process
+- **[IPC Protocol Specification](Specs-and-Protocols/IPC-Protocol.md)** — Complete command/response reference
 
 For questions about the EQ memory layout or offsets, see [Offsets, EQ Internals, and MacroQuest References](Offsets-EQ-Internals-and-MacroQuest-References.md).

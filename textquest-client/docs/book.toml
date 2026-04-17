@@ -1,0 +1,28 @@
+[book]
+authors = ["TextQuest Team"]
+language = "en"
+src = "src"
+title = "TextQuest SDK"
+
+[build]
+build-dir = "book"
+
+[output.html]
+additional-js = []
+additional-css = []
+no-section-label = false
+
+[output.html.search]
+enable = true
+limit-results = 20
+use-boolean-and = true
+
+[output.html.playground]
+editable = false
+copyable = true
+copy-js = true
+runnable = true
+
+[output.html.fold]
+enable = false
+level = 0
