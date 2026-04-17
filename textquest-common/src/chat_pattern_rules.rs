@@ -113,7 +113,7 @@ fn uuid_v4() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
     let nanos = now.as_nanos();
-    let random: u64 = (nanos as u64) ^ std::process::id() as u64;
+    let random: u128 = nanos ^ (std::process::id() as u128);
     format!(
         "{:016x}-{:04x}-4{:03x}-{:04x}-{:012x}",
         random >> 96,
@@ -162,9 +162,9 @@ impl ChatPatternRuleEngine {
 
     pub fn remove_rule(&mut self, id: &str) -> Option<ChatPatternRule> {
         if let Some(pos) = self.rules.iter().position(|r| r.id == id) {
-            self.rules.remove(pos);
+            let removed = self.rules.remove(pos);
             self.rule_states.remove(pos);
-            self.rules.get(pos).cloned()
+            Some(removed)
         } else {
             None
         }
@@ -461,8 +461,8 @@ mod tests {
 
         let actions = engine.evaluate(&ChatChannel::Say, "sender", "test message");
         assert_eq!(actions.len(), 2);
-        assert_eq!(actions[0].1, &RuleAction::ExecuteCommand("/cmd2".into()));
-        assert_eq!(actions[1].1, &RuleAction::ExecuteCommand("/cmd1".into()));
+        assert_eq!(actions[0].1, RuleAction::ExecuteCommand("/cmd2".into()));
+        assert_eq!(actions[1].1, RuleAction::ExecuteCommand("/cmd1".into()));
     }
 
     #[test]
@@ -527,19 +527,20 @@ mod tests {
 
     #[test]
     fn config_roundtrip() {
-        let mut rules = Vec::new();
-        rules.push(ChatPatternRule::new(
-            "rule1",
-            "hello",
-            PatternType::Literal,
-            RuleAction::ExecuteCommand("/cmd1".into()),
-        ));
-        rules.push(ChatPatternRule::new(
-            "rule2",
-            r"\d+",
-            PatternType::Regex,
-            RuleAction::TriggerAlert("Test".into()),
-        ));
+        let rules = vec![
+            ChatPatternRule::new(
+                "rule1",
+                "hello",
+                PatternType::Literal,
+                RuleAction::ExecuteCommand("/cmd1".into()),
+            ),
+            ChatPatternRule::new(
+                "rule2",
+                r"\d+",
+                PatternType::Regex,
+                RuleAction::TriggerAlert("Test".into()),
+            ),
+        ];
 
         let config = ChatPatternRulesConfig { rules };
         let serialized = toml::to_string_pretty(&config).unwrap();
@@ -567,5 +568,307 @@ mod tests {
         let deserialized: ChatPatternRule = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(rule.channels, deserialized.channels);
+    }
+
+    // ── remove_rule ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn remove_rule_returns_removed_rule() {
+        let mut engine = ChatPatternRuleEngine::new();
+        let rule = make_rule("to-remove", "hello", PatternType::Literal);
+        let id = rule.id.clone();
+        let name = rule.name.clone();
+        engine.add_rule(rule);
+
+        let removed = engine.remove_rule(&id);
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().name, name);
+        assert!(engine.get_rules().is_empty());
+    }
+
+    #[test]
+    fn remove_rule_unknown_id_returns_none() {
+        let mut engine = ChatPatternRuleEngine::new();
+        engine.add_rule(make_rule("keep", "hello", PatternType::Literal));
+        assert!(engine.remove_rule("nonexistent-id").is_none());
+        assert_eq!(engine.get_rules().len(), 1);
+    }
+
+    #[test]
+    fn remove_rule_syncs_rule_states() {
+        let mut engine = ChatPatternRuleEngine::new();
+        engine.add_rule(make_rule("r1", "alpha", PatternType::Literal));
+        engine.add_rule(make_rule("r2", "beta", PatternType::Literal));
+        let r1_id = engine.get_rules()[0].id.clone();
+
+        engine.remove_rule(&r1_id);
+        assert_eq!(engine.rules.len(), 1);
+        assert_eq!(engine.rule_states.len(), 1);
+        assert_eq!(engine.rules[0].name, "r2");
+    }
+
+    #[test]
+    fn remove_rule_last_rule_returns_removed() {
+        let mut engine = ChatPatternRuleEngine::new();
+        let rule = make_rule("only", "match", PatternType::Literal);
+        let id = rule.id.clone();
+        engine.add_rule(rule);
+
+        let removed = engine.remove_rule(&id);
+        assert!(removed.is_some(), "last rule should be returned");
+        assert!(engine.get_rules().is_empty());
+    }
+
+    // ── get_rule / get_mut_rule ──────────────────────────────────────────────
+
+    #[test]
+    fn get_rule_finds_by_id() {
+        let mut engine = ChatPatternRuleEngine::new();
+        let rule = make_rule("findme", "pattern", PatternType::Literal);
+        let id = rule.id.clone();
+        engine.add_rule(rule);
+
+        let found = engine.get_rule(&id);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().name, "findme");
+    }
+
+    #[test]
+    fn get_rule_returns_none_for_unknown_id() {
+        let engine = ChatPatternRuleEngine::new();
+        assert!(engine.get_rule("no-such-id").is_none());
+    }
+
+    #[test]
+    fn get_mut_rule_allows_mutation() {
+        let mut engine = ChatPatternRuleEngine::new();
+        let rule = make_rule("mutable", "pattern", PatternType::Literal);
+        let id = rule.id.clone();
+        engine.add_rule(rule);
+
+        let mut_rule = engine.get_mut_rule(&id).unwrap();
+        mut_rule.enabled = false;
+
+        assert!(!engine.get_rule(&id).unwrap().enabled);
+    }
+
+    // ── set_rule_enabled ────────────────────────────────────────────────────
+
+    #[test]
+    fn set_rule_enabled_disables_and_enables() {
+        let mut engine = ChatPatternRuleEngine::new();
+        let rule = make_rule("toggle", "hello", PatternType::Literal);
+        let id = rule.id.clone();
+        engine.add_rule(rule);
+
+        assert!(engine.set_rule_enabled(&id, false));
+        assert!(!engine.get_rule(&id).unwrap().enabled);
+
+        assert!(engine.set_rule_enabled(&id, true));
+        assert!(engine.get_rule(&id).unwrap().enabled);
+    }
+
+    #[test]
+    fn set_rule_enabled_returns_false_for_unknown_id() {
+        let mut engine = ChatPatternRuleEngine::new();
+        assert!(!engine.set_rule_enabled("nonexistent", false));
+    }
+
+    // ── clear_rules / set_rules ─────────────────────────────────────────────
+
+    #[test]
+    fn clear_rules_removes_all() {
+        let mut engine = ChatPatternRuleEngine::new();
+        engine.add_rule(make_rule("r1", "a", PatternType::Literal));
+        engine.add_rule(make_rule("r2", "b", PatternType::Literal));
+
+        engine.clear_rules();
+        assert!(engine.get_rules().is_empty());
+        assert!(engine.rule_states.is_empty());
+    }
+
+    #[test]
+    fn set_rules_replaces_all_rules() {
+        let mut engine = ChatPatternRuleEngine::new();
+        engine.add_rule(make_rule("old", "old", PatternType::Literal));
+
+        let new_rules = vec![
+            make_rule("new1", "alpha", PatternType::Literal),
+            make_rule("new2", "beta", PatternType::Literal),
+        ];
+        engine.set_rules(new_rules);
+
+        let rules = engine.get_rules();
+        assert_eq!(rules.len(), 2);
+        assert_eq!(rules[0].name, "new1");
+        assert_eq!(engine.rule_states.len(), 2);
+    }
+
+    // ── get_stats ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn get_stats_empty_engine() {
+        let engine = ChatPatternRuleEngine::new();
+        let stats = engine.get_stats();
+        assert_eq!(stats.total_rules, 0);
+        assert_eq!(stats.enabled_rules, 0);
+        assert_eq!(stats.total_fires, 0);
+    }
+
+    #[test]
+    fn get_stats_counts_enabled_and_total() {
+        let mut engine = ChatPatternRuleEngine::new();
+        engine.add_rule(make_rule("r1", "a", PatternType::Literal));
+        let rule2 = {
+            let mut r = make_rule("r2", "b", PatternType::Literal);
+            r.enabled = false;
+            r
+        };
+        engine.add_rule(rule2);
+
+        let stats = engine.get_stats();
+        assert_eq!(stats.total_rules, 2);
+        assert_eq!(stats.enabled_rules, 1);
+        assert_eq!(stats.total_fires, 0);
+    }
+
+    #[test]
+    fn get_stats_total_fires_accumulates() {
+        let mut engine = ChatPatternRuleEngine::new();
+        engine.add_rule(make_rule("r1", "ping", PatternType::Literal));
+        engine.add_rule(make_rule("r2", "pong", PatternType::Literal));
+
+        engine.evaluate(&ChatChannel::Say, "s", "ping!");
+        engine.evaluate(&ChatChannel::Say, "s", "pong!");
+
+        let stats = engine.get_stats();
+        assert_eq!(stats.total_fires, 2);
+    }
+
+    // ── reset_all_cooldowns ──────────────────────────────────────────────────
+
+    #[test]
+    fn reset_all_cooldowns_re_enables_all_rules() {
+        let mut engine = ChatPatternRuleEngine::new();
+        engine.add_rule(
+            make_rule("r1", "hello", PatternType::Literal).with_cooldown(60),
+        );
+        engine.add_rule(
+            make_rule("r2", "world", PatternType::Literal).with_cooldown(60),
+        );
+
+        // Fire both rules to put them in cooldown
+        engine.evaluate(&ChatChannel::Say, "s", "hello");
+        engine.evaluate(&ChatChannel::Say, "s", "world");
+
+        // Both should be blocked
+        assert!(engine.evaluate(&ChatChannel::Say, "s", "hello").is_empty());
+        assert!(engine.evaluate(&ChatChannel::Say, "s", "world").is_empty());
+
+        engine.reset_all_cooldowns();
+
+        // Both should fire again after reset
+        assert_eq!(
+            engine.evaluate(&ChatChannel::Say, "s", "hello").len(),
+            1
+        );
+        // r1 is in cooldown again; r2 was not triggered this round so it fires
+        engine.reset_all_cooldowns();
+        assert_eq!(
+            engine.evaluate(&ChatChannel::Say, "s", "world").len(),
+            1
+        );
+    }
+
+    // ── with_rules constructor ───────────────────────────────────────────────
+
+    #[test]
+    fn with_rules_initialises_states() {
+        let rules = vec![
+            make_rule("r1", "a", PatternType::Literal),
+            make_rule("r2", "b", PatternType::Literal),
+        ];
+        let engine = ChatPatternRuleEngine::with_rules(rules);
+        assert_eq!(engine.rules.len(), 2);
+        assert_eq!(engine.rule_states.len(), 2);
+    }
+
+    // ── builder patterns on ChatPatternRule ──────────────────────────────────
+
+    #[test]
+    fn with_priority_sets_value() {
+        let rule = make_rule("p", "x", PatternType::Literal).with_priority(42);
+        assert_eq!(rule.priority, 42);
+    }
+
+    #[test]
+    fn with_cooldown_sets_value() {
+        let rule = make_rule("c", "x", PatternType::Literal).with_cooldown(30);
+        assert_eq!(rule.cooldown_secs, 30);
+    }
+
+    // ── RuleAction Display ───────────────────────────────────────────────────
+
+    #[test]
+    fn rule_action_display_execute_command() {
+        let action = RuleAction::ExecuteCommand("/assist".into());
+        assert!(action.to_string().contains("/assist"));
+    }
+
+    #[test]
+    fn rule_action_display_send_ipc_command() {
+        let action = RuleAction::SendIpcCommand("/follow".into());
+        assert!(action.to_string().contains("/follow"));
+    }
+
+    #[test]
+    fn rule_action_display_trigger_alert() {
+        let action = RuleAction::TriggerAlert("low_health".into());
+        assert!(action.to_string().contains("low_health"));
+    }
+
+    // ── evaluate: no match / no rules ────────────────────────────────────────
+
+    #[test]
+    fn engine_with_no_rules_returns_empty() {
+        let mut engine = ChatPatternRuleEngine::new();
+        assert!(engine.evaluate(&ChatChannel::Say, "s", "anything").is_empty());
+    }
+
+    #[test]
+    fn engine_returns_empty_when_no_pattern_matches() {
+        let mut engine = ChatPatternRuleEngine::new();
+        engine.add_rule(make_rule("r", "specific_keyword", PatternType::Literal));
+        assert!(engine
+            .evaluate(&ChatChannel::Say, "s", "unrelated message")
+            .is_empty());
+    }
+
+    // ── evaluate: sender included in match ───────────────────────────────────
+
+    #[test]
+    fn pattern_matched_against_sender_and_message() {
+        let mut engine = ChatPatternRuleEngine::new();
+        engine.add_rule(make_rule("r", "Adventurer", PatternType::Literal));
+
+        // Match against sender name "Adventurer: msg"
+        let actions = engine.evaluate(&ChatChannel::Say, "Adventurer", "hello");
+        assert_eq!(actions.len(), 1);
+    }
+
+    // ── uuid_v4 produces valid-looking IDs ──────────────────────────────────
+
+    #[test]
+    fn uuid_v4_has_correct_format() {
+        let id = uuid_v4();
+        let parts: Vec<&str> = id.split('-').collect();
+        assert_eq!(parts.len(), 5);
+        assert_eq!(parts[0].len(), 16);
+        assert_eq!(parts[1].len(), 4);
+        assert_eq!(parts[2].len(), 4);
+        assert_eq!(parts[3].len(), 4);
+        assert_eq!(parts[4].len(), 12);
+        // Version digit must be '4'
+        assert!(parts[2].starts_with('4'));
     }
 }
