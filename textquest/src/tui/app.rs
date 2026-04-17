@@ -1221,7 +1221,11 @@ impl App {
             ActiveScreen::Debug => ActivePanel::DebugSpawns,
             ActiveScreen::PacketMonitor => ActivePanel::PacketMonitorLog,
             ActiveScreen::Economy => ActivePanel::EconomyControls,
-            ActiveScreen::Orchestrator => ActivePanel::OrchestratorDashboard,
+            // Orchestrator screen currently routes to draw_economy_screen in
+            // tui/ui/mod.rs, so the focused panel must match the renderer's
+            // panel set. Align with Economy until a dedicated Orchestrator
+            // renderer ships.
+            ActiveScreen::Orchestrator => ActivePanel::EconomyControls,
         }
     }
 

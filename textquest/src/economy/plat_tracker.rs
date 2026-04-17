@@ -114,6 +114,7 @@ impl Default for CoinStack {
 
 #[derive(Debug, Clone)]
 pub struct TransactionRecord {
+    #[serde(skip, default = "Instant::now")]
     pub timestamp: Instant,
     pub coin_delta: CoinStack,
     pub transaction_type: TransactionType,
@@ -183,6 +184,7 @@ impl TransactionType {
 
 #[derive(Debug, Clone)]
 pub struct SessionSummary {
+    #[serde(skip, default = "Instant::now")]
     pub session_start: Instant,
     pub total_gained: CoinStack,
     pub total_spent: CoinStack,

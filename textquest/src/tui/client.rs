@@ -30,6 +30,8 @@ pub struct ClientState {
     pub group_info: Option<GroupInfo>,
     /// Status message specific to this client.
     pub client_status: String,
+    /// Whether the client currently has an active IPC/control connection.
+    pub connected: bool,
     /// Whether this client was created from demo data (not a real process).
     pub is_demo: bool,
     /// Last logged live cast snapshot when `TEXTQUEST_CAST_CAPTURE=1`.
@@ -59,12 +61,26 @@ impl ClientState {
             character_name: String::new(),
             group_info: None,
             client_status: format!("Attached to PID {pid}"),
+            connected: true,
             is_demo: false,
             last_live_cast_capture: None,
             slot_lifecycle: SlotLifecycle::Configured,
             launch_profile: None,
             session_preset: None,
         }
+    }
+
+    /// Best-effort slash-command delivery hook used by some TUI paths.
+    ///
+    /// Returns an error stub — the IPC dispatch path is owned by
+    /// `Orchestrator::send_ipc_command`, not `ClientState`. Callers that hit
+    /// this path are expected to surface the failure so operators know the
+    /// rule action did not run.
+    pub fn send_command(&self, _command: &str) -> anyhow::Result<()> {
+        Err(anyhow::anyhow!(
+            "ClientState::send_command is not wired; dispatch must go through Orchestrator for PID {}",
+            self.pid
+        ))
     }
 }
 

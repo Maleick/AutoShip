@@ -18,6 +18,15 @@
         "Roadmap-facing docs route provider-backed Soul/LLM work to M11 and economy execution loops to M10"
       ],
       "notes": "Loot intake, vendor cycle, banking cycle, and economy TUI summaries. Soul/LLM work routed to M11."
+    },
+    {
+      "id": "textquest-no-run-compile-repair-20260417",
+      "name": "TextQuest no-run compile repair",
+      "status": "complete",
+      "acceptance_tests": [
+        "cargo test -p textquest --no-run"
+      ],
+      "notes": "Session compile-repair pass reduced `cargo test -p textquest --no-run` errors from 167 to 0 and restored missing orchestrator/config/runtime surfaces needed for test compilation."
     }
   ]
 }

@@ -849,6 +849,11 @@ pub enum Command {
         /// Auto-accept settings to apply in the DLL.
         settings: AutoAcceptSettings,
     },
+    /// Update per-character task reward automation preferences.
+    SetRewardAutomation {
+        /// Reward selection rules keyed by task title matching.
+        config: RewardAutomationConfig,
+    },
     /// Set the rendering mode for this client.
     ///
     /// `Normal` = full rendering (the "eyes" client).
@@ -977,14 +982,6 @@ pub enum Command {
         format: String,
         /// Server name used for `{server}` substitutions.
         server_name: String,
-    },
-    /// Update the task/mission reward automation preferences for this client.
-    ///
-    /// Appended after `SetWindowTitleConfig` to preserve the wire
-    /// discriminants already shipped on `master`.
-    SetRewardAutomation {
-        /// Reward selection rules keyed by task title or wildcard fallback.
-        config: RewardAutomationConfig,
     },
 }
 

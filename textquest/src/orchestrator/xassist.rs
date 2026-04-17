@@ -202,6 +202,27 @@ mod tests {
         }
     }
 
+    fn make_game_state(
+        client_id: u32,
+        local_player: SpawnData,
+        nearby_spawns: Vec<SpawnData>,
+    ) -> GameState {
+        GameState {
+            client_id,
+            local_player: Some(local_player),
+            target: None,
+            nearby_spawns,
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status: CombatStatus::Idle,
+            zone_short_name: "test".into(),
+            zone_long_name: "Test Zone".into(),
+            actual_version: None,
+            active_buffs: vec![],
+            pet: None,
+        }
+    }
+
     #[test]
     fn xassist_disabled_produces_no_commands() {
         let mut xassist = XAssist::new();
@@ -232,7 +253,9 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-        };
+            active_buffs: vec![],
+            pet: None,
+};
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
         assert!(commands.is_empty());
@@ -268,7 +291,9 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-        };
+            active_buffs: vec![],
+            pet: None,
+};
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
         assert!(
@@ -309,7 +334,9 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-        };
+            active_buffs: vec![],
+            pet: None,
+};
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
         assert!(
@@ -351,7 +378,9 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-        };
+            active_buffs: vec![],
+            pet: None,
+};
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
         assert!(
@@ -388,7 +417,9 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-        };
+            active_buffs: vec![],
+            pet: None,
+};
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
         assert!(
@@ -416,7 +447,9 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-        };
+            active_buffs: vec![],
+            pet: None,
+};
 
         assert_eq!(find_spawn_by_name(&state, "  MaInTaNk  "), Some(200));
     }

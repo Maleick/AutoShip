@@ -7,7 +7,11 @@ pub mod session_control;
 /// Cross-group outside-group assist — MQ2XAssist parity.
 pub mod xassist;
 
-use self::{cross_group::CrossGroupCoordinator, session_control::SessionControl};
+use self::{
+    cross_group::CrossGroupCoordinator,
+    session_control::SessionControl,
+    xassist::{XAssist, XAssistConfig},
+};
 use crate::{
     camp::{
         cc::CcType,
@@ -190,6 +194,8 @@ pub struct Orchestrator {
     chat_log_poll_interval: Duration,
     /// Same-zone cross-group rescue coordinator.
     cross_group: CrossGroupCoordinator,
+    /// Cross-group outside-group assist (MQ2XAssist parity).
+    xassist: XAssist,
     /// Say channel detection and alerting (MQ2Say parity).
     say_detector: SayDetector,
     /// Alert routing and delivery configuration for say detection.
@@ -252,6 +258,7 @@ impl Orchestrator {
             last_chat_log_poll: None,
             chat_log_poll_interval: Duration::from_secs(1),
             cross_group: CrossGroupCoordinator::new(),
+            xassist: XAssist::new(),
             say_detector: SayDetector::new(),
             say_detection_config: crate::config::SayDetectionConfig::default(),
             say_detection_webhook: None,
@@ -583,7 +590,8 @@ impl Orchestrator {
             .into_iter()
             .filter(|(pid, _)| in_scope.is_empty() || in_scope.contains(pid))
             .collect();
-        let emergency = self.cross_group.tick(
+        let xassist_commands = self.xassist.tick(&self.game_states);
+        let _emergency = self.cross_group.tick(
             &self.session_controls,
             &self.client_names,
             &self.client_class_names,
@@ -591,18 +599,32 @@ impl Orchestrator {
             &self.state_timestamps,
             self.tick_count,
         );
-        let emergency_count = emergency.len();
 
-        let count = scoped.len() + emergency.len();
+        let count = scoped.len();
+        let xassist_count = xassist_commands.len();
         for (pid, action) in &scoped {
             self.dispatch_action(*pid, action);
         }
-        for (pid, action) in &emergency {
-            self.dispatch_action(*pid, action);
+        for (pid, cmd) in &xassist_commands {
+            if let xassist::AssistCommand::Target(spawn_id) = cmd {
+                self.send_ipc_command(
+                    *pid,
+                    Command::SetTarget {
+                        spawn_id: *spawn_id,
+                    },
+                );
+            }
         }
         self.last_dispatched = scoped;
-        self.last_dispatched.extend(emergency);
-        count + emergency_count + say_matches
+        self.last_dispatched
+            .extend(xassist_commands.iter().filter_map(|(pid, cmd)| {
+                if let xassist::AssistCommand::Target(spawn_id) = cmd {
+                    Some((*pid, CampAction::Slash(format!("/target spawn:{spawn_id}"))))
+                } else {
+                    None
+                }
+            }));
+        count + say_matches + xassist_count
     }
 
     /// Returns the PIDs that should receive camp/hunt loop dispatches under the
@@ -1057,6 +1079,22 @@ impl Orchestrator {
         self.client_class_names.get(&pid).map(String::as_str)
     }
 
+    /// Set the cross-group assist configuration for a client.
+    pub fn set_xassist_config(&mut self, pid: u32, config: XAssistConfig) {
+        self.xassist.set_config(pid, config);
+    }
+
+    /// Get the cross-group assist configuration for a client.
+    #[must_use]
+    pub fn get_xassist_config(&self, pid: u32) -> Option<XAssistConfig> {
+        self.xassist.get_config(pid).cloned()
+    }
+
+    /// Remove client from XAssist tracking.
+    pub fn remove_client_from_xassist(&mut self, pid: u32) {
+        self.xassist.remove_client(pid);
+    }
+
     /// Dispatch a `CampAction` to the appropriate client via IPC.
     fn dispatch_action(&mut self, pid: u32, action: &CampAction) {
         match action {
@@ -1255,6 +1293,7 @@ impl Orchestrator {
         self.client_class_names.remove(&pid);
         self.state_timestamps.remove(&pid);
         self.last_sent_reward_configs.remove(&pid);
+        self.xassist.remove_client(pid);
         tracing::info!(pid, "Client removed from orchestrator");
     }
 

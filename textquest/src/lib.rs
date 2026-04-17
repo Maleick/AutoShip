@@ -11,6 +11,8 @@ pub mod alerts;
 /// EQBC-style cross-machine TCP relay and dispatch manager.
 #[cfg(windows)]
 pub mod box_chat;
+/// Local slash-command dispatch shared with box-chat relay execution.
+pub mod command_dispatch;
 /// Camp loop state machine — pulls, fights, loots, meds, buffs.
 #[allow(dead_code)]
 pub mod camp;

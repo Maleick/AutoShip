@@ -46,6 +46,7 @@ impl KillReporter {
         zone: &str,
         elapsed_secs: u64,
     ) -> String {
+        let defaults = &self.config;
         let total_kills = tracker.total_kills() as u32;
         let total_deaths = tracker.total_deaths();
         let mob_stats = tracker.mob_stats();
@@ -76,7 +77,7 @@ impl KillReporter {
             kills_per_hour
         ));
 
-        if self.config.auto_report_include_mobs && !top_mobs.is_empty() {
+        if defaults.auto_report_include_mobs && !top_mobs.is_empty() {
             lines.push(String::from("Top mobs:"));
             for (mob_name, count) in top_mobs.iter().take(5) {
                 if let Some(stats) = mob_stats.get(mob_name) {
@@ -90,7 +91,7 @@ impl KillReporter {
             }
         }
 
-        if self.config.auto_report_include_kph {
+        if defaults.auto_report_include_kph {
             lines.push(format!(
                 "Efficiency Score: {:.0}/100 ({:.1} KPH avg)",
                 efficiency.score, efficiency.kills_per_hour
