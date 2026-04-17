@@ -1,4 +1,5 @@
 import {
+  Coins,
   Eye,
   Sword,
   UsersThree,
@@ -15,6 +16,7 @@ import {
 
 export type ActiveView =
   | "engagements"
+  | "economy"
   | "formations"
   | "map"
   | "security"
@@ -33,6 +35,7 @@ const navItems: {
   pulse?: boolean;
 }[] = [
   { icon: Sword, label: "Active Engagements", id: "engagements", pulse: true },
+  { icon: Coins, label: "Economy Ledger", id: "economy" },
   { icon: UsersThree, label: "Fleet Formations", id: "formations" },
   { icon: Globe, label: "Realm Map (Norrath)", id: "map" },
   { icon: ShieldWarning, label: "Security Wards", id: "security" },

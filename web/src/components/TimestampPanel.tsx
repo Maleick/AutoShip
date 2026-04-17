@@ -220,4 +220,6 @@ function getPreviewTimestamp(format: TimestampFormat, isMorning: boolean): strin
     case "time_12":
       return `${hour.toString().padStart(2, "0")}:30:45 ${ampm}`;
   }
+
+  return `${date} ${hour.toString().padStart(2, "0")}:30:45`;
 }

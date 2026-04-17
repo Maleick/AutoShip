@@ -112,7 +112,7 @@ export default function SpawnAlerts() {
     setConfig((prev) => ({
       ...prev,
       watch_patterns: prev.watch_patterns.map((p) =>
-        p.pattern === pattern ? { ...p, enabled: !p.enabled } : p,
+        p.pattern === pattern ? { ...p, enabled: !p.enabled } : p
       ),
     }));
   }

@@ -30,7 +30,7 @@ impl KillReporter {
         if let Some(last) = self.last_report_time {
             last.elapsed() >= interval
         } else {
-            elapsed >= interval
+            elapsed > interval
         }
     }
 
@@ -224,9 +224,6 @@ mod tests {
 
     #[test]
     fn format_report_basic() {
-        let config = KillTrackerConfig::default();
-        let reporter = KillReporter::new(config);
-
         let mut tracker = KillTracker::new(chrono::Utc::now().timestamp() - 3600);
         tracker.record_kill(make_record("orc_pawn", chrono::Utc::now().timestamp()));
         tracker.record_kill(make_record("orc_pawn", chrono::Utc::now().timestamp()));
@@ -243,12 +240,6 @@ mod tests {
 
     #[test]
     fn format_report_top_mobs() {
-        let config = KillTrackerConfig {
-            auto_report_include_mobs: true,
-            ..KillTrackerConfig::default()
-        };
-        let reporter = KillReporter::new(config);
-
         let mut tracker = KillTracker::new(chrono::Utc::now().timestamp() - 3600);
         for _ in 0..5 {
             tracker.record_kill(make_record("orc_pawn", chrono::Utc::now().timestamp()));
@@ -270,9 +261,6 @@ mod tests {
 
     #[test]
     fn format_report_empty_session() {
-        let config = KillTrackerConfig::default();
-        let reporter = KillReporter::new(config);
-
         let tracker = KillTracker::new(chrono::Utc::now().timestamp());
         let store = KillSessionStore::new();
 

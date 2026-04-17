@@ -9,6 +9,7 @@ import SoulPanel from "./components/SoulPanel";
 import AlertsPanel from "./components/AlertsPanel";
 import SpawnAlerts from "./components/SpawnAlerts";
 import ChatPatternRules from "./components/ChatPatternRules";
+import EconomyPanel from "./components/EconomyPanel";
 
 function App() {
   const [activeView, setActiveView] = useState<ActiveView>("engagements");
@@ -22,7 +23,9 @@ function App() {
       {/* Main content */}
       <main className="relative z-10 w-full h-full flex px-6 py-4 gap-6">
         <LeftSidebar activeView={activeView} onNavigate={setActiveView} />
-        {activeView === "formations" ? (
+        {activeView === "economy" ? (
+          <EconomyPanel />
+        ) : activeView === "formations" ? (
           <GroupBuilder />
         ) : activeView === "alerts" ? (
           <AlertsPanel />

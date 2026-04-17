@@ -14,6 +14,7 @@ pub mod player_watch;
 pub mod say_detection;
 pub mod soul;
 pub mod spawn_alerts;
+pub mod vendor_watch;
 pub mod xassist;
 use axum::{
     Json,
@@ -1708,6 +1709,11 @@ mod tests {
             "textquest-web-api-{name}-{}.toml",
             uuid::Uuid::new_v4()
         ))
+    }
+
+    fn env_lock() -> &'static tokio::sync::Mutex<()> {
+        static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
     }
 
     fn test_state(snapshot_name: &str) -> AppState {

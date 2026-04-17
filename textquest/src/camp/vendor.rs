@@ -8,6 +8,66 @@
 
 use std::collections::HashSet;
 
+fn normalize_vendor_name(name: &str) -> String {
+    name.trim().to_ascii_lowercase()
+}
+
+fn vendor_listing_key(
+    vendor_name: &str,
+    item_name: &str,
+    price_copper: Option<u64>,
+    quantity: u32,
+) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        normalize_vendor_name(vendor_name),
+        normalize_vendor_name(item_name),
+        price_copper.map_or_else(|| String::from("unknown"), |price| price.to_string()),
+        quantity
+    )
+}
+
+/// One watched item entry for vendor browsing alerts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VendorWatchEntry {
+    /// Item name to look for on merchant stock.
+    pub item_name: String,
+    /// Maximum acceptable vendor price in copper, when known.
+    pub max_price_copper: Option<u64>,
+}
+
+/// One visible item on the currently opened vendor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VendorStockItem {
+    /// Merchant item name.
+    pub item_name: String,
+    /// Observed vendor price in copper, when known.
+    pub price_copper: Option<u64>,
+    /// Quantity or stack size visible on the vendor.
+    pub quantity: u32,
+}
+
+/// Alert produced when a watched item appears on a vendor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VendorWatchAlert {
+    /// Vendor NPC display name.
+    pub vendor_name: String,
+    /// Matched item name.
+    pub item_name: String,
+    /// Configured maximum acceptable vendor price in copper.
+    pub expected_max_price_copper: Option<u64>,
+    /// Observed vendor price in copper, when available.
+    pub actual_price_copper: Option<u64>,
+    /// `actual - expected` in copper when both are available.
+    pub price_delta_copper: Option<i64>,
+    /// Whether the current sighting is within the configured price cap.
+    pub within_budget: Option<bool>,
+    /// Quantity or stack size visible on the vendor.
+    pub quantity: u32,
+    /// Tick when the alert was observed.
+    pub observed_tick: u64,
+}
+
 /// Configuration for the vendor sell cycle.
 #[derive(Debug, Clone)]
 pub struct VendorConfig {
@@ -26,6 +86,8 @@ pub struct VendorConfig {
     /// Optional gate/origin spell gem for return travel (e.g., "gate" or "5"
     /// for gem 5).
     pub return_spell: Option<String>,
+    /// Items to watch for when browsing vendor inventory.
+    pub watch_items: Vec<VendorWatchEntry>,
 }
 
 /// Sub-steps within the Selling state that drive vendor UI interaction.
@@ -76,6 +138,7 @@ pub struct SellCycle {
     keep_set: HashSet<String>,
     /// Items queued for selling in the current cycle.
     sell_queue: Vec<String>,
+    active_vendor_watch_listings: HashSet<String>,
 }
 
 impl SellCycle {
@@ -90,6 +153,7 @@ impl SellCycle {
             state_entered_tick: 0,
             keep_set,
             sell_queue: Vec::new(),
+            active_vendor_watch_listings: HashSet::new(),
         }
     }
 
@@ -117,6 +181,71 @@ impl SellCycle {
             .filter(|item| !use_allowlist || self.config.sellable_items.contains(*item))
             .cloned()
             .collect();
+    }
+
+    /// Scan visible vendor stock for watched items and emit alerts for new
+    /// sightings within the current browse session.
+    #[must_use]
+    pub fn scan_vendor_stock(
+        &mut self,
+        vendor_name: &str,
+        stock: &[VendorStockItem],
+        current_tick: u64,
+    ) -> Vec<VendorWatchAlert> {
+        let mut next_visible = HashSet::new();
+        let mut alerts = Vec::new();
+
+        for item in stock {
+            let Some(watch) = self
+                .config
+                .watch_items
+                .iter()
+                .find(|entry| entry.item_name.eq_ignore_ascii_case(&item.item_name))
+            else {
+                continue;
+            };
+
+            let listing_key = vendor_listing_key(
+                vendor_name,
+                &item.item_name,
+                item.price_copper,
+                item.quantity,
+            );
+            next_visible.insert(listing_key.clone());
+
+            if self.active_vendor_watch_listings.contains(&listing_key) {
+                continue;
+            }
+
+            let price_delta_copper = match (item.price_copper, watch.max_price_copper) {
+                (Some(actual), Some(expected)) => Some(actual as i64 - expected as i64),
+                _ => None,
+            };
+            let within_budget = match (item.price_copper, watch.max_price_copper) {
+                (Some(actual), Some(expected)) => Some(actual <= expected),
+                _ => None,
+            };
+
+            alerts.push(VendorWatchAlert {
+                vendor_name: vendor_name.to_string(),
+                item_name: item.item_name.clone(),
+                expected_max_price_copper: watch.max_price_copper,
+                actual_price_copper: item.price_copper,
+                price_delta_copper,
+                within_budget,
+                quantity: item.quantity,
+                observed_tick: current_tick,
+            });
+        }
+
+        self.active_vendor_watch_listings = next_visible;
+        alerts
+    }
+
+    /// Clear the dedupe cache for the current vendor browse session so the next
+    /// interaction can re-alert on matching items.
+    pub fn reset_vendor_watch_session(&mut self) {
+        self.active_vendor_watch_listings.clear();
     }
 
     /// Begin the sell cycle.
@@ -255,6 +384,7 @@ impl SellCycle {
                     "/notify MerchantWnd MW_Done_Button leftmouseup".into(),
                 )];
                 self.sell_queue.clear();
+                self.reset_vendor_watch_session();
                 self.state = SellState::Returning;
                 self.state_entered_tick = current_tick;
                 cmds
@@ -299,6 +429,7 @@ mod tests {
             sellable_items: vec![],
             sell_step_delay: 2,
             return_spell: None,
+            watch_items: vec![],
         }
     }
 
@@ -618,6 +749,111 @@ mod tests {
         // After delay (2 ticks), should advance
         let cmds = cycle.tick(pid, 107);
         assert!(!cmds.is_empty());
+    }
+
+    fn vendor_config_with_watch_items(watch_items: Vec<VendorWatchEntry>) -> VendorConfig {
+        let mut config = test_vendor_config();
+        config.watch_items = watch_items;
+        config
+    }
+
+    #[test]
+    fn test_vendor_watch_emits_alert_with_price_delta() {
+        let mut cycle = SellCycle::new(vendor_config_with_watch_items(vec![VendorWatchEntry {
+            item_name: "Flowing Thought Ring".into(),
+            max_price_copper: Some(1500),
+        }]));
+
+        let alerts = cycle.scan_vendor_stock(
+            "Merchant_Leah",
+            &[VendorStockItem {
+                item_name: "Flowing Thought Ring".into(),
+                price_copper: Some(1200),
+                quantity: 1,
+            }],
+            200,
+        );
+
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].vendor_name, "Merchant_Leah");
+        assert_eq!(alerts[0].item_name, "Flowing Thought Ring");
+        assert_eq!(alerts[0].expected_max_price_copper, Some(1500));
+        assert_eq!(alerts[0].actual_price_copper, Some(1200));
+        assert_eq!(alerts[0].price_delta_copper, Some(-300));
+        assert_eq!(alerts[0].within_budget, Some(true));
+        assert_eq!(alerts[0].observed_tick, 200);
+    }
+
+    #[test]
+    fn test_vendor_watch_dedupes_unchanged_listing_until_inventory_changes() {
+        let mut cycle = SellCycle::new(vendor_config_with_watch_items(vec![VendorWatchEntry {
+            item_name: "Flowing Thought Ring".into(),
+            max_price_copper: Some(1500),
+        }]));
+
+        let first = cycle.scan_vendor_stock(
+            "Merchant_Leah",
+            &[VendorStockItem {
+                item_name: "Flowing Thought Ring".into(),
+                price_copper: Some(1200),
+                quantity: 1,
+            }],
+            200,
+        );
+        let duplicate = cycle.scan_vendor_stock(
+            "Merchant_Leah",
+            &[VendorStockItem {
+                item_name: "Flowing Thought Ring".into(),
+                price_copper: Some(1200),
+                quantity: 1,
+            }],
+            201,
+        );
+        let changed = cycle.scan_vendor_stock(
+            "Merchant_Leah",
+            &[VendorStockItem {
+                item_name: "Flowing Thought Ring".into(),
+                price_copper: Some(1400),
+                quantity: 1,
+            }],
+            202,
+        );
+
+        assert_eq!(first.len(), 1);
+        assert!(duplicate.is_empty());
+        assert_eq!(changed.len(), 1);
+        assert_eq!(changed[0].price_delta_copper, Some(-100));
+    }
+
+    #[test]
+    fn test_vendor_watch_resets_after_browse_session_ends() {
+        let mut cycle = SellCycle::new(vendor_config_with_watch_items(vec![VendorWatchEntry {
+            item_name: "Journeyman's Boots".into(),
+            max_price_copper: Some(5000),
+        }]));
+
+        let initial = cycle.scan_vendor_stock(
+            "Merchant_Leah",
+            &[VendorStockItem {
+                item_name: "Journeyman's Boots".into(),
+                price_copper: Some(4200),
+                quantity: 1,
+            }],
+            300,
+        );
+        cycle.reset_vendor_watch_session();
+        let repeated = cycle.scan_vendor_stock(
+            "Merchant_Leah",
+            &[VendorStockItem {
+                item_name: "Journeyman's Boots".into(),
+                price_copper: Some(4200),
+                quantity: 1,
+            }],
+            301,
+        );
+
+        assert_eq!(initial.len(), 1);
+        assert_eq!(repeated.len(), 1);
     }
 
     #[test]

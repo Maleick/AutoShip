@@ -278,6 +278,27 @@ Operational notes:
 - In trust-list mode, requests without a detected sender are rejected instead of being auto-accepted.
 - Turning the master toggle off disables all auto-accept behavior without clearing the saved per-type settings.
 
+### Vendor Watch (Web Dashboard)
+
+The web dashboard now exposes a **Vendor Item Watch** panel under **Economy**
+for MQ2Vendors-style merchant browse alerts.
+
+What it does:
+
+- lets you maintain a watched item list in the dashboard
+- stores that watch list in `config/textquest.toml` under `[vendor_watch]`
+- polls live `MerchantWnd` rows from injected clients while merchant windows are open
+- records an alert when a watched item appears on a merchant during normal browsing
+- shows expected-vs-actual price comparison whenever the merchant row exposes a price
+
+Operational notes:
+
+- matches are case-insensitive on the merchant item name
+- alerts are deduped while the same merchant row remains visible, then reset when
+  the merchant window closes or the row changes
+- merchant rows with `--` quantity in EQ are shown as `qty Infinite` in the dashboard
+- the dashboard websocket pushes new vendor-watch alerts live to connected browsers
+
 ### Classes: `config/classes/*.toml`
 
 Define combat ability rotations for each class. TextQuest includes pre-configured rotations for all 16 classes (Bard, Beastlord, Berserker, Cleric, Druid, Enchanter, Magician, Monk, Necromancer, Paladin, Ranger, Rogue, Shadowknight, Shaman, Warrior, Wizard).

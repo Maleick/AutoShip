@@ -282,6 +282,15 @@ pub struct BazaarQuery {
     pub max_rows: Option<u16>,
 }
 
+/// Filter for querying visible merchant window rows from the injected client.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MerchantQuery {
+    /// Case-insensitive substring applied against the listing's raw columns.
+    pub text_contains: Option<String>,
+    /// Maximum number of rows to return per matching merchant list.
+    pub max_rows: Option<u16>,
+}
+
 /// One bazaar listing row captured from an in-game `CListWnd`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BazaarListing {
@@ -301,6 +310,27 @@ pub struct BazaarListing {
     pub quantity: Option<u32>,
 }
 
+/// One merchant listing row captured from the live merchant window.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MerchantListing {
+    /// Zero-based row index within the source list window.
+    pub row_index: u32,
+    /// Raw text columns as displayed in the merchant list.
+    pub columns: Vec<String>,
+    /// Best-effort normalized item name from the merchant list.
+    pub item_name: Option<String>,
+    /// Raw price text from the merchant row.
+    pub price_text: Option<String>,
+    /// Parsed price in copper when the row exposes a numeric price.
+    pub price_copper: Option<u64>,
+    /// Parsed quantity when present.
+    pub quantity: Option<u32>,
+    /// Raw quantity text as displayed by EQ (for example `--`).
+    pub quantity_text: Option<String>,
+    /// Whether the merchant row indicates an infinite restock quantity.
+    pub infinite_quantity: bool,
+}
+
 /// Snapshot of one bazaar-related list window in the active EQ UI.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BazaarWindowSnapshot {
@@ -314,6 +344,23 @@ pub struct BazaarWindowSnapshot {
     pub row_count: u32,
     /// Listing rows captured from the window.
     pub listings: Vec<BazaarListing>,
+}
+
+/// Snapshot of one visible merchant window in the active EQ UI.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MerchantWindowSnapshot {
+    /// Best-effort vendor display name.
+    pub vendor_name: Option<String>,
+    /// Root window display text when available.
+    pub window_text: Option<String>,
+    /// Root window SIDL name when available.
+    pub window_sidl_name: Option<String>,
+    /// Merchant list SIDL name when available.
+    pub list_sidl_name: Option<String>,
+    /// Number of rows observed in the merchant list.
+    pub row_count: u32,
+    /// Listing rows captured from the window.
+    pub listings: Vec<MerchantListing>,
 }
 
 /// Snapshot of the item shown in an open container slot.
@@ -961,6 +1008,11 @@ pub enum Command {
         /// Filters applied before returning bazaar list snapshots.
         filter: BazaarQuery,
     },
+    /// Query the visible merchant window rows from the populated EQ UI.
+    QueryMerchantItems {
+        /// Filters applied before returning merchant list snapshots.
+        filter: MerchantQuery,
+    },
     /// Configure chat message timestamps (MQ2Timestamp parity).
     ///
     /// Enables or disables timestamp prepending and sets the timestamp format
@@ -1399,6 +1451,11 @@ pub enum Response {
     BazaarResults {
         /// Matching bazaar window snapshots.
         windows: Vec<BazaarWindowSnapshot>,
+    },
+    /// Merchant list snapshots captured from visible merchant windows.
+    MerchantItems {
+        /// Matching merchant window snapshots.
+        windows: Vec<MerchantWindowSnapshot>,
     },
 }
 
@@ -1871,6 +1928,22 @@ mod tests {
     }
 
     #[test]
+    fn command_query_merchant_items_roundtrip_preserves_filter() {
+        use crate::protocol::{decode, encode};
+
+        let command = Command::QueryMerchantItems {
+            filter: MerchantQuery {
+                text_contains: Some("fungi".into()),
+                max_rows: Some(40),
+            },
+        };
+
+        let encoded = encode(&command).expect("encode failed");
+        let (decoded, _): (Command, usize) = decode(&encoded).expect("decode failed");
+        assert_eq!(command, decoded);
+    }
+
+    #[test]
     fn response_all_variants_roundtrip() {
         use crate::protocol::{decode, encode};
 
@@ -1933,6 +2006,31 @@ mod tests {
                         price_text: Some("2,000".into()),
                         price_copper: Some(2_000_000),
                         quantity: Some(1),
+                    }],
+                }],
+            },
+            Response::MerchantItems {
+                windows: vec![MerchantWindowSnapshot {
+                    vendor_name: Some("Merchant_Leah".into()),
+                    window_text: Some("> Merchant_Leah <".into()),
+                    window_sidl_name: Some("MerchantWnd".into()),
+                    list_sidl_name: Some("MW_ItemList".into()),
+                    row_count: 1,
+                    listings: vec![MerchantListing {
+                        row_index: 0,
+                        columns: vec![
+                            String::new(),
+                            "Fungi Covered Scale Tunic".into(),
+                            "--".into(),
+                            String::new(),
+                            "475".into(),
+                        ],
+                        item_name: Some("Fungi Covered Scale Tunic".into()),
+                        price_text: Some("475".into()),
+                        price_copper: Some(475_000),
+                        quantity: None,
+                        quantity_text: Some("--".into()),
+                        infinite_quantity: true,
                     }],
                 }],
             },

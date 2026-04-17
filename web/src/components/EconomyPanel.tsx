@@ -25,6 +25,7 @@ import type {
   BankingRule,
   TradeskillSupply,
 } from "../types";
+import VendorWatchPanel from "./VendorWatchPanel";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -674,6 +675,7 @@ export default function EconomyPanel() {
       <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
         <WealthDashboard />
         <KronoFarmPanel />
+        <VendorWatchPanel />
         <VendorRouteEditor />
         <BankingRulesPanel />
         <TradeskillSupplyPanel />

@@ -462,6 +462,17 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                     continue;
                 }
 
+                if let Command::QueryMerchantItems { filter } = &cmd {
+                    let eq_base = crate::EQ_BASE.load(Ordering::Relaxed);
+                    let windows = crate::eq::merchant::query_merchant_items(eq_base, filter);
+                    let _ = listener.respond(&IpcResponse::echo(
+                        Response::MerchantItems { windows },
+                        correlation_id,
+                    ));
+                    listener.disconnect();
+                    continue;
+                }
+
                 // Queue for game loop processing (bounded to prevent OOM
                 // if the game loop stalls during loading screens).
                 const MAX_PENDING: usize = 256;

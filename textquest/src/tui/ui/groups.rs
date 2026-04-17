@@ -164,65 +164,39 @@ fn assemble_member_lines<'a>(
     if max_lines == 0 {
         return Vec::new();
     }
-
-    let visible_count = entries.len().min(max_lines);
-    let detail_capacity = max_lines.saturating_sub(visible_count);
-
-    let active_cast_total = entries
-        .iter()
-        .take(visible_count)
-        .filter(|entry| entry.cast.is_some())
-        .count();
-    let active_target_total = entries
-        .iter()
-        .take(visible_count)
-        .filter(|entry| entry.target.is_some())
-        .count();
-    let cast_budget = detail_capacity.min(active_cast_total);
-    let remaining_after_cast = detail_capacity.saturating_sub(cast_budget);
-    let target_budget = remaining_after_cast.min(active_target_total);
-    let buff_budget = if width_class == WidthClass::Wide {
-        detail_capacity
-            .saturating_sub(cast_budget)
-            .saturating_sub(target_budget)
-    } else {
-        0
-    };
-
     let mut lines = Vec::with_capacity(max_lines);
-    let mut remaining_cast = cast_budget;
-    let mut remaining_target = target_budget;
-    let mut remaining_buff = buff_budget;
+    let mut deferred_buffs = Vec::new();
 
-    for entry in entries.into_iter().take(visible_count) {
+    for entry in entries {
         if lines.len() >= max_lines {
             break;
         }
         lines.push(entry.primary);
 
-        if remaining_cast > 0
+        if let Some(detail) = entry.cast
             && lines.len() < max_lines
-            && let Some(detail) = entry.cast
         {
             lines.push(detail);
-            remaining_cast -= 1;
         }
 
-        if remaining_target > 0
+        if let Some(detail) = entry.target
             && lines.len() < max_lines
-            && let Some(detail) = entry.target
         {
             lines.push(detail);
-            remaining_target -= 1;
         }
 
-        if remaining_buff > 0
-            && lines.len() < max_lines
+        if width_class == WidthClass::Wide
             && let Some(detail) = entry.buff
         {
-            lines.push(detail);
-            remaining_buff -= 1;
+            deferred_buffs.push(detail);
         }
+    }
+
+    for detail in deferred_buffs {
+        if lines.len() >= max_lines {
+            break;
+        }
+        lines.push(detail);
     }
 
     if let Some(mode_line) = mode

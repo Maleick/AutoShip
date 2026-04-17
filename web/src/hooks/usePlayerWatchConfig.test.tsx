@@ -13,8 +13,8 @@ describe("usePlayerWatchConfig", () => {
   it("loads config on mount", async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({
-        filter_mode: "all",
-        sound_on_zone_in: false,
+        filter_mode: "friends_only",
+        sound_on_zone_in: true,
         friends: ["FriendOne"],
       }), {
         status: 200,
@@ -25,7 +25,8 @@ describe("usePlayerWatchConfig", () => {
     const { result } = renderHook(() => usePlayerWatchConfig());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.config.filter_mode).toBe("all");
+    expect(result.current.config.filter_mode).toBe("friends_only");
+    expect(result.current.config.sound_on_zone_in).toBe(true);
     expect(result.current.config.friends).toContain("FriendOne");
   });
 
@@ -62,7 +63,10 @@ describe("usePlayerWatchConfig", () => {
 
     expect(mockFetch).toHaveBeenCalledWith(
       "/api/config/player-watch",
-      expect.objectContaining({ method: "PUT" })
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ filter_mode: "strangers_only" }),
+      })
     );
   });
 
@@ -97,6 +101,13 @@ describe("usePlayerWatchConfig", () => {
       await result.current.setSoundOnZoneIn(true);
     });
 
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/config/player-watch",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ sound_on_zone_in: true }),
+      })
+    );
     expect(result.current.config.sound_on_zone_in).toBe(true);
   });
 

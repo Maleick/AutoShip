@@ -15,9 +15,11 @@
 //!
 //! ```
 //! use textquest::eq::gm_detector::{GmDetector, GmAlertConfig};
+//! use textquest::eq::structs::SpawnInfo;
 //!
 //! let mut detector = GmDetector::new(GmAlertConfig::default());
-//! detector.update_spawns(&spawns);
+//! let spawns: Vec<SpawnInfo> = Vec::new();
+//! detector.update_spawns(&spawns, "qeynos");
 //!
 //! for event in detector.pending_events() {
 //!     // Handle GM_ENTERED or GM_DEPARTED events

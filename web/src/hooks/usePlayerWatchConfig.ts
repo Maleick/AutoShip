@@ -1,6 +1,28 @@
 import { useState, useEffect, useCallback } from "react";
 import type { PlayerWatchConfig, PlayerFilterMode } from "../types";
 
+type PlayerWatchApiConfig = {
+  filter_mode?: PlayerFilterMode;
+  sound_on_zone_in?: boolean;
+  friends?: string[];
+};
+
+function normalizeConfig(config: PlayerWatchApiConfig): PlayerWatchConfig {
+  return {
+    filter_mode: config.filter_mode ?? "all",
+    sound_on_zone_in: config.sound_on_zone_in ?? false,
+    friends: config.friends ?? [],
+  };
+}
+
+function toApiConfig(config: Partial<PlayerWatchConfig>): PlayerWatchApiConfig {
+  return {
+    filter_mode: config.filter_mode,
+    sound_on_zone_in: config.sound_on_zone_in,
+    friends: config.friends,
+  };
+}
+
 export function usePlayerWatchConfig() {
   const [config, setConfig] = useState<PlayerWatchConfig>({
     filter_mode: "all",
@@ -14,8 +36,8 @@ export function usePlayerWatchConfig() {
     try {
       const res = await fetch("/api/config/player-watch");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: PlayerWatchConfig = await res.json();
-      setConfig(data);
+      const data: PlayerWatchApiConfig = await res.json();
+      setConfig(normalizeConfig(data));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to fetch player watch config");
@@ -32,14 +54,14 @@ export function usePlayerWatchConfig() {
     const res = await fetch("/api/config/player-watch", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newConfig),
+      body: JSON.stringify(toApiConfig(newConfig)),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.error ?? `HTTP ${res.status}`);
     }
-    const updated: PlayerWatchConfig = await res.json();
-    setConfig(updated);
+    const updated: PlayerWatchApiConfig = await res.json();
+    setConfig(normalizeConfig(updated));
   }, []);
 
   const setFilterMode = useCallback(

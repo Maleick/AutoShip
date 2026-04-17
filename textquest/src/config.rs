@@ -209,6 +209,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub spawn_watch: SpawnWatchConfig,
 
+    /// Vendor item watch configuration for merchant browse alerts.
+    #[serde(default)]
+    pub vendor_watch: VendorWatchConfig,
+
     /// Enable periodic hook unhook/rehook rotation to evade point-in-time
     /// scans.
     #[serde(default)]
@@ -533,7 +537,8 @@ impl Default for AlertingConfig {
 
 /// Configuration for a group of characters that play together.
 #[allow(dead_code)] // Deserialized from config, consumed in later milestones
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Default, Deserialize, Clone)]
+#[serde(default)]
 pub struct GroupConfig {
     /// Numeric group identifier.
     pub id: u32,
@@ -542,6 +547,28 @@ pub struct GroupConfig {
     /// Toon (character) definitions within this group.
     #[serde(default)]
     pub toon: Vec<ToonConfig>,
+}
+
+/// Per-character unattended death handling.
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[serde(default)]
+pub struct AutoCampOnDeathConfig {
+    /// Enable automatic `/camp desktop` plus relog scheduling after death.
+    pub enabled: bool,
+    /// Seconds to wait after death before camping to allow a rez attempt.
+    pub camp_delay_secs: u64,
+    /// Seconds to wait after logout before relogging.
+    pub relog_wait_secs: u64,
+}
+
+impl Default for AutoCampOnDeathConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            camp_delay_secs: 60,
+            relog_wait_secs: 900,
+        }
+    }
 }
 
 /// Configuration for a single character (toon) within a group.
@@ -770,6 +797,7 @@ impl AppConfig {
             alerts: AlertingConfig::default(),
             orchestrator: OrchestratorConfig::default(),
             spawn_watch: SpawnWatchConfig::default(),
+            vendor_watch: VendorWatchConfig::default(),
             hook_rotation_enabled: false,
             hook_rotation_interval_ms: default_hook_rotation_interval_ms(),
             discovery: PeerDiscoveryConfig::default(),
@@ -803,9 +831,36 @@ impl Default for SpawnWatchConfig {
             watch_names: Vec::new(),
             alert_named: true,
             max_feed_entries: 200,
-            player_filter_mode: PlayerFilterMode::All,
+            player_filter_mode: PlayerFilterMode::default(),
             sound_on_player_zone_in: false,
             friends: Vec::new(),
+        }
+    }
+}
+
+/// One vendor item watch entry loaded from config.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct VendorWatchItemConfig {
+    pub item_name: String,
+    #[serde(default)]
+    pub max_price_copper: Option<u64>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+/// Vendor watch configuration for merchant browse alerts.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct VendorWatchConfig {
+    pub enabled: bool,
+    pub items: Vec<VendorWatchItemConfig>,
+}
+
+impl Default for VendorWatchConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            items: Vec::new(),
         }
     }
 }
@@ -932,6 +987,41 @@ character = "Foo"
     }
 
     #[test]
+    fn spawn_watch_defaults_include_player_notifications() {
+        let cfg = AppConfig::default_config();
+        assert_eq!(cfg.spawn_watch.player_filter_mode, PlayerFilterMode::All);
+        assert!(!cfg.spawn_watch.sound_on_player_zone_in);
+        assert!(cfg.spawn_watch.friends.is_empty());
+    }
+
+    #[test]
+    fn vendor_watch_defaults_are_enabled_with_empty_items() {
+        let cfg = AppConfig::default_config();
+        assert!(cfg.vendor_watch.enabled);
+        assert!(cfg.vendor_watch.items.is_empty());
+    }
+
+    #[test]
+    fn player_filter_mode_default_is_all() {
+        assert_eq!(PlayerFilterMode::default(), PlayerFilterMode::All);
+    }
+
+    #[test]
+    fn spawn_watch_player_filter_mode_parses_from_toml() {
+        let cfg: AppConfig = toml::from_str(
+            r#"
+[spawn_watch]
+player_filter_mode = "strangers_only"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            cfg.spawn_watch.player_filter_mode,
+            PlayerFilterMode::StrangersOnly
+        );
+    }
+
+    #[test]
     fn spawn_watch_watch_names_parse_from_toml() {
         let cfg: AppConfig = toml::from_str(
             r#"
@@ -943,6 +1033,20 @@ watch_names = ["Quillmane", "Raster of Guk"]
         assert_eq!(cfg.spawn_watch.watch_names.len(), 2);
         assert_eq!(cfg.spawn_watch.watch_names[0], "Quillmane");
         assert_eq!(cfg.spawn_watch.watch_names[1], "Raster of Guk");
+    }
+
+    #[test]
+    fn spawn_watch_friends_parses_from_toml() {
+        let cfg: AppConfig = toml::from_str(
+            r#"
+[spawn_watch]
+friends = ["Camrene", "Zisdarenu"]
+"#,
+        )
+        .unwrap();
+        assert_eq!(cfg.spawn_watch.friends.len(), 2);
+        assert!(cfg.spawn_watch.friends.contains(&"Camrene".to_string()));
+        assert!(cfg.spawn_watch.friends.contains(&"Zisdarenu".to_string()));
     }
 
     #[test]
@@ -959,6 +1063,36 @@ max_feed_entries = 42
         assert!(!cfg.spawn_watch.enabled);
         assert!(!cfg.spawn_watch.alert_named);
         assert_eq!(cfg.spawn_watch.max_feed_entries, 42);
+    }
+
+    #[test]
+    fn vendor_watch_items_parse_from_toml() {
+        let cfg: AppConfig = toml::from_str(
+            r#"
+[vendor_watch]
+enabled = true
+
+[[vendor_watch.items]]
+item_name = "Fungi Covered Scale Tunic"
+max_price_copper = 500000
+
+[[vendor_watch.items]]
+item_name = "Holgresh Elder Beads"
+enabled = false
+"#,
+        )
+        .unwrap();
+        assert!(cfg.vendor_watch.enabled);
+        assert_eq!(cfg.vendor_watch.items.len(), 2);
+        assert_eq!(
+            cfg.vendor_watch.items[0].item_name,
+            "Fungi Covered Scale Tunic"
+        );
+        assert_eq!(cfg.vendor_watch.items[0].max_price_copper, Some(500000));
+        assert!(cfg.vendor_watch.items[0].enabled);
+        assert_eq!(cfg.vendor_watch.items[1].item_name, "Holgresh Elder Beads");
+        assert_eq!(cfg.vendor_watch.items[1].max_price_copper, None);
+        assert!(!cfg.vendor_watch.items[1].enabled);
     }
 
     #[test]

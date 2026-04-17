@@ -6,6 +6,7 @@ pub mod bazaar;
 pub mod chat;
 pub mod context_menu;
 pub mod inventory;
+pub mod merchant;
 pub mod notification;
 pub mod widgets;
 

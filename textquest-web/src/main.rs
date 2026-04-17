@@ -82,6 +82,8 @@ pub struct AppState {
     pub gm_alert_state: Arc<api::gm_alerts::GmAlertState>,
     /// In-memory spawn alert state for rare spawn monitoring.
     pub spawn_alerts: Arc<api::spawn_alerts::SpawnAlertState>,
+    /// In-memory vendor item watch configuration and alert history.
+    pub vendor_watch_state: Arc<api::vendor_watch::VendorWatchState>,
     /// In-memory timestamp config store per character.
     pub timestamp_configs: tokio::sync::RwLock<HashMap<String, api::TimestampConfig>>,
     /// Serializes timestamp sidecar writes so acknowledged edits persist in the
@@ -394,6 +396,7 @@ pub(crate) fn test_app_state() -> AppState {
         player_watch_write_lock: tokio::sync::Mutex::new(()),
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
+        vendor_watch_state: api::vendor_watch::VendorWatchState::new_demo(),
         timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
         timestamp_config_write_lock: tokio::sync::Mutex::new(()),
         kill_tracker_state: api::kill_tracker::KillTrackerState::new_empty(),
@@ -524,6 +527,23 @@ fn build_api_router() -> Router<Arc<AppState>> {
             put(api::spawn_alerts::put_watch_pattern)
                 .delete(api::spawn_alerts::delete_watch_pattern),
         )
+        .route(
+            "/vendor-watch/alerts",
+            get(api::vendor_watch::list_alerts).delete(api::vendor_watch::clear_alerts),
+        )
+        .route("/vendor-watch/stats", get(api::vendor_watch::get_stats))
+        .route(
+            "/vendor-watch/config",
+            get(api::vendor_watch::get_config).put(api::vendor_watch::put_config),
+        )
+        .route(
+            "/vendor-watch/watch-list",
+            get(api::vendor_watch::get_watch_list).put(api::vendor_watch::put_watch_item),
+        )
+        .route(
+            "/vendor-watch/watch-list/{item_name}",
+            delete(api::vendor_watch::delete_watch_item),
+        )
         // Timestamp Config API
         .route("/timestamp-config", get(api::list_timestamp_configs))
         .route(
@@ -625,6 +645,7 @@ async fn main() {
         .init();
 
     let state = build_state();
+    api::vendor_watch::spawn_vendor_watch_loop(state.clone());
     api::dashboard::spawn_dashboard_tick_loop(state.clone());
     let app = build_app(state);
 
@@ -680,6 +701,7 @@ mod tests {
             player_watch_write_lock: tokio::sync::Mutex::new(()),
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
+            vendor_watch_state: api::vendor_watch::VendorWatchState::new_demo(),
             timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
             timestamp_config_write_lock: tokio::sync::Mutex::new(()),
             kill_tracker_state: api::kill_tracker::KillTrackerState::new_empty(),

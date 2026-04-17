@@ -127,6 +127,8 @@ Current evidence state: `Research-backed` for address set; `Needs Live Proof` fo
 
 Bazaar note: current `M10` price sampling is intentionally implemented as a passive read of bazaar window list data already resident in client memory after a normal player search. This keeps bazaar capture inside the existing EQ-memory observation boundary and avoids promoting `ProcessBazaarPacket` into the live requirement set.
 
+Roadmap note: economy work is `M10`, while packet-backed chat ingest (`M11`) stays grouped with Soul Engine follow-on work in the canonical roadmap.
+
 ## Capability Boundary Summary
 
 The table below formalizes the M5 packet engine capability boundary for TextQuest. It answers the question: for each major packet surface, what does TextQuest support today and what is explicitly out of scope until further validation?

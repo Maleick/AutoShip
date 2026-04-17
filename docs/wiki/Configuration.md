@@ -32,6 +32,7 @@ Current sections include:
 - `[server]`
 - `[retry]`
 - `[alerts]`
+- `[vendor_watch]`
 - `[soul]`
 - `[[group]]`
 - Discord-related options
@@ -74,6 +75,41 @@ Current behavior:
 - Info alerts stay in the alert history and daily-summary path.
 - The checked-in `config/frostreaver.toml` template now includes this section; copy it into `config/textquest.toml` for active operator configs.
 - The web dashboard can edit the live alert config at runtime, but those edits are currently process-local and are recorded as audit alerts instead of being written back to TOML automatically.
+
+## Vendor Watch
+
+`[vendor_watch]` configures MQ2Vendors-style merchant browse alerts. The web
+dashboard is the primary operator surface, but the underlying watch list is
+persisted in `config/textquest.toml`.
+
+Example:
+
+```toml
+[vendor_watch]
+enabled = true
+
+[[vendor_watch.items]]
+item_name = "Fungi Covered Scale Tunic"
+max_price_copper = 500000
+enabled = true
+
+[[vendor_watch.items]]
+item_name = "Holgresh Elder Beads"
+enabled = true
+```
+
+Fields:
+
+- `enabled`: master toggle for live merchant browsing alerts
+- `item_name`: case-insensitive item name match against merchant window rows
+- `max_price_copper`: optional price cap used for expected-vs-actual comparison
+- `enabled` on each item: lets the dashboard keep an entry without actively matching it
+
+Runtime behavior:
+
+- `textquest-web` polls visible merchant windows from injected clients and records alerts when a watched item appears during normal vendor browsing.
+- Alerts are deduped per live merchant listing until the merchant window closes or the observed listing changes.
+- When EQ exposes a merchant price column, the dashboard stores both the observed price and the delta against the configured cap.
 
 ## Accounts
 

@@ -1,4 +1,4 @@
-use textquest_common::ipc::AutoAcceptSettings;
+use textquest_common::ipc::{AutoAcceptSettings, MerchantWindowSnapshot};
 
 #[derive(Debug, Default, Clone)]
 pub struct LiveApplySummary {
@@ -7,16 +7,30 @@ pub struct LiveApplySummary {
     pub failures: Vec<(u32, String)>,
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct LiveMerchantQueryResult {
+    pub pid: u32,
+    pub windows: Vec<MerchantWindowSnapshot>,
+}
+
 pub fn apply_auto_accept_settings(settings: &AutoAcceptSettings) -> LiveApplySummary {
     imp::apply_auto_accept_settings(settings)
 }
 
+pub fn query_merchant_windows() -> Vec<LiveMerchantQueryResult> {
+    imp::query_merchant_windows()
+}
+
 #[cfg(not(windows))]
 mod imp {
-    use super::{AutoAcceptSettings, LiveApplySummary};
+    use super::{AutoAcceptSettings, LiveApplySummary, LiveMerchantQueryResult};
 
     pub fn apply_auto_accept_settings(_settings: &AutoAcceptSettings) -> LiveApplySummary {
         LiveApplySummary::default()
+    }
+
+    pub fn query_merchant_windows() -> Vec<LiveMerchantQueryResult> {
+        Vec::new()
     }
 }
 
@@ -27,8 +41,8 @@ mod imp {
     use anyhow::{Context, Result};
     use textquest_common::{
         ipc::{
-            AutoAcceptSettings, Command, IpcCommand, load_session_token, pipe_name,
-            session_id_from_token,
+            AutoAcceptSettings, Command, IpcCommand, IpcResponse, MerchantQuery,
+            MerchantWindowSnapshot, Response, load_session_token, pipe_name, session_id_from_token,
         },
         protocol,
     };
@@ -36,7 +50,8 @@ mod imp {
         Win32::{
             Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, STILL_ACTIVE},
             Storage::FileSystem::{
-                CreateFileA, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_NONE, OPEN_EXISTING, WriteFile,
+                CreateFileA, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_NONE, OPEN_EXISTING, ReadFile,
+                WriteFile,
             },
             System::Threading::{
                 GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
@@ -45,7 +60,9 @@ mod imp {
         core::PCSTR,
     };
 
-    use super::LiveApplySummary;
+    use super::{LiveApplySummary, LiveMerchantQueryResult};
+
+    const PIPE_READ_CHUNK_SIZE: usize = 4096;
 
     struct PipeClient {
         handle: HANDLE,
@@ -101,6 +118,40 @@ mod imp {
                 .context("encode IPC command")?;
             self.write_all(&frame)
         }
+
+        fn send_sync(&self, command: &Command) -> Result<Response> {
+            let frame = protocol::encode(&IpcCommand::new(command.clone()))
+                .context("encode IPC command")?;
+            self.write_all(&frame)?;
+
+            let max_frame_size = protocol::MAX_MESSAGE_SIZE as usize + protocol::FRAME_HEADER_SIZE;
+            let mut buf = Vec::with_capacity(max_frame_size);
+
+            loop {
+                if buf.len() >= max_frame_size {
+                    anyhow::bail!("IPC response exceeded max frame size");
+                }
+
+                let mut chunk =
+                    vec![0u8; PIPE_READ_CHUNK_SIZE.min(max_frame_size.saturating_sub(buf.len()))];
+                let mut bytes_read = 0u32;
+                unsafe { ReadFile(self.handle, Some(&mut chunk), Some(&mut bytes_read), None) }
+                    .context("read from named pipe")?;
+                if bytes_read == 0 {
+                    anyhow::bail!("named pipe read returned zero bytes");
+                }
+
+                buf.extend_from_slice(&chunk[..bytes_read as usize]);
+
+                match protocol::decode_frame::<IpcResponse>(&buf) {
+                    Ok(Some((ipc_response, _))) => return Ok(ipc_response.response),
+                    Ok(None) => continue,
+                    Err(error) => {
+                        return Err(anyhow::Error::new(error)).context("decode IPC response");
+                    }
+                }
+            }
+        }
     }
 
     impl Drop for PipeClient {
@@ -133,11 +184,13 @@ mod imp {
         alive
     }
 
-    pub fn apply_auto_accept_settings(settings: &AutoAcceptSettings) -> LiveApplySummary {
-        let mut summary = LiveApplySummary::default();
+    fn for_each_live_session<F>(mut visit: F)
+    where
+        F: FnMut(u32),
+    {
         let token_dir = std::env::temp_dir().join("textquest");
         let Ok(entries) = std::fs::read_dir(&token_dir) else {
-            return summary;
+            return;
         };
 
         for entry in entries.flatten() {
@@ -145,11 +198,16 @@ mod imp {
             let Some(pid) = token_pid(&path) else {
                 continue;
             };
-
             if !is_process_alive(pid) {
                 continue;
             }
+            visit(pid);
+        }
+    }
 
+    pub fn apply_auto_accept_settings(settings: &AutoAcceptSettings) -> LiveApplySummary {
+        let mut summary = LiveApplySummary::default();
+        for_each_live_session(|pid| {
             summary.attempted += 1;
 
             let apply_result = (|| -> Result<()> {
@@ -168,8 +226,40 @@ mod imp {
                 Ok(()) => summary.applied += 1,
                 Err(error) => summary.failures.push((pid, error.to_string())),
             }
-        }
+        });
 
         summary
+    }
+
+    pub fn query_merchant_windows() -> Vec<LiveMerchantQueryResult> {
+        let mut results = Vec::new();
+
+        for_each_live_session(|pid| {
+            let query_result = (|| -> Result<Vec<MerchantWindowSnapshot>> {
+                let token =
+                    load_session_token(pid).with_context(|| format!("load token for PID {pid}"))?;
+                let session_id = session_id_from_token(&token);
+                let pipe = PipeClient::connect(pid, session_id)?;
+                pipe.send_token(&token)?;
+                match pipe.send_sync(&Command::QueryMerchantItems {
+                    filter: MerchantQuery {
+                        text_contains: None,
+                        max_rows: Some(256),
+                    },
+                })? {
+                    Response::MerchantItems { windows } => Ok(windows),
+                    other => anyhow::bail!("Unexpected IPC response: {other:?}"),
+                }
+            })();
+
+            match query_result {
+                Ok(windows) => results.push(LiveMerchantQueryResult { pid, windows }),
+                Err(error) => {
+                    tracing::debug!(pid, error = %error, "Failed to query merchant windows");
+                }
+            }
+        });
+
+        results
     }
 }

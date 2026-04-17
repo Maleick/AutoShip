@@ -219,6 +219,42 @@ export interface WealthHistory {
   snapshots: WealthSnapshot[];
 }
 
+export interface VendorWatchItem {
+  item_name: string;
+  max_price_copper: number | null;
+  enabled: boolean;
+}
+
+export interface VendorWatchConfig {
+  enabled: boolean;
+  items: VendorWatchItem[];
+}
+
+export interface VendorWatchAlertEntry {
+  id: number;
+  vendor_name: string;
+  item_name: string;
+  expected_max_price_copper: number | null;
+  actual_price_copper: number | null;
+  price_delta_copper: number | null;
+  within_budget: boolean | null;
+  quantity: number;
+  timestamp: string;
+}
+
+export interface VendorWatchAlertPage {
+  total: number;
+  offset: number;
+  limit: number;
+  entries: VendorWatchAlertEntry[];
+}
+
+export interface VendorWatchStats {
+  total_alerts: number;
+  watched_items: number;
+  budget_hits: number;
+}
+
 export interface BoxChatSettings {
   enabled: boolean;
   host: string;

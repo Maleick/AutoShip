@@ -301,6 +301,15 @@ pub fn validate_command(cmd: &Command) -> bool {
                     .max_rows
                     .is_none_or(|value| value > 0 && value <= 2000)
         }
+        Command::QueryMerchantItems { filter } => {
+            filter
+                .text_contains
+                .as_ref()
+                .is_none_or(|value| !value.is_empty() && value.len() <= 128)
+                && filter
+                    .max_rows
+                    .is_none_or(|value| value > 0 && value <= 256)
+        }
         Command::StartLogin {
             account_name,
             password,
@@ -445,7 +454,7 @@ impl Drop for CommandListener {
 #[cfg(test)]
 mod tests {
     use super::validate_command;
-    use textquest_common::ipc::{BazaarQuery, Command};
+    use textquest_common::ipc::{BazaarQuery, Command, MerchantQuery};
 
     #[test]
     fn validate_cast_spell_valid_slot() {
@@ -559,6 +568,41 @@ mod tests {
             filter: BazaarQuery {
                 text_contains: None,
                 max_rows: Some(2001),
+            },
+        }));
+    }
+
+    #[test]
+    fn validate_query_merchant_items_accepts_default_filter() {
+        assert!(validate_command(&Command::QueryMerchantItems {
+            filter: MerchantQuery::default(),
+        }));
+    }
+
+    #[test]
+    fn validate_query_merchant_items_rejects_empty_or_oversized_filters() {
+        assert!(!validate_command(&Command::QueryMerchantItems {
+            filter: MerchantQuery {
+                text_contains: Some(String::new()),
+                max_rows: None,
+            },
+        }));
+        assert!(!validate_command(&Command::QueryMerchantItems {
+            filter: MerchantQuery {
+                text_contains: Some("x".repeat(129)),
+                max_rows: Some(10),
+            },
+        }));
+        assert!(!validate_command(&Command::QueryMerchantItems {
+            filter: MerchantQuery {
+                text_contains: None,
+                max_rows: Some(0),
+            },
+        }));
+        assert!(!validate_command(&Command::QueryMerchantItems {
+            filter: MerchantQuery {
+                text_contains: None,
+                max_rows: Some(257),
             },
         }));
     }
