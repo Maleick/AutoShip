@@ -278,6 +278,36 @@ Operational notes:
 - In trust-list mode, requests without a detected sender are rejected instead of being auto-accepted.
 - Turning the master toggle off disables all auto-accept behavior without clearing the saved per-type settings.
 
+### Tradeskill Trophy (Web Dashboard)
+
+The web dashboard now exposes a **Tradeskill Trophy** panel for MQ2TSTrophy-style
+crafting support.
+
+What it controls:
+
+- master enable or disable for trophy automation
+- the exact trophy item name to pick up and equip before crafting
+- live status for any injected client currently reporting trophy activity
+
+What it does at runtime:
+
+1. Detects supported world crafting containers such as forges, looms, ovens,
+   brew barrels, and other MQ2TSTrophy parity stations.
+2. Equips the configured trophy in the ammo slot for most skills, or the main
+   hand slot when the skill requires it.
+3. Restores the displaced item after the crafting session ends.
+4. Tracks remaining trophy charges when the client can read them from the
+   equipped slot or cursor choreography.
+
+Operator notes:
+
+- Enter the trophy item name exactly as it appears in game.
+- The panel applies settings to live injected clients immediately.
+- Status cards show the active container, chosen slot, displaced item restore
+  target, and any observed remaining charges.
+- These dashboard settings are currently runtime-only and reset if the web
+  process restarts.
+
 ### Vendor Watch (Web Dashboard)
 
 The web dashboard now exposes a **Vendor Item Watch** panel under **Economy**

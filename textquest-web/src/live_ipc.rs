@@ -1,4 +1,8 @@
-use textquest_common::ipc::{AutoAcceptSettings, MerchantWindowSnapshot};
+use serde::Serialize;
+use textquest_common::{
+    ipc::{AutoAcceptSettings, MerchantWindowSnapshot},
+    tradeskill_trophy::{TradeskillTrophySettings, TradeskillTrophyStatus},
+};
 
 #[derive(Debug, Default, Clone)]
 pub struct LiveApplySummary {
@@ -13,23 +17,50 @@ pub struct LiveMerchantQueryResult {
     pub windows: Vec<MerchantWindowSnapshot>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct LiveTradeskillTrophyStatusResult {
+    pub pid: u32,
+    pub status: TradeskillTrophyStatus,
+}
+
 pub fn apply_auto_accept_settings(settings: &AutoAcceptSettings) -> LiveApplySummary {
     imp::apply_auto_accept_settings(settings)
+}
+
+pub fn apply_tradeskill_trophy_settings(settings: &TradeskillTrophySettings) -> LiveApplySummary {
+    imp::apply_tradeskill_trophy_settings(settings)
 }
 
 pub fn query_merchant_windows() -> Vec<LiveMerchantQueryResult> {
     imp::query_merchant_windows()
 }
 
+pub fn query_tradeskill_trophy_statuses() -> Vec<LiveTradeskillTrophyStatusResult> {
+    imp::query_tradeskill_trophy_statuses()
+}
+
 #[cfg(not(windows))]
 mod imp {
-    use super::{AutoAcceptSettings, LiveApplySummary, LiveMerchantQueryResult};
+    use super::{
+        AutoAcceptSettings, LiveApplySummary, LiveMerchantQueryResult,
+        LiveTradeskillTrophyStatusResult, TradeskillTrophySettings,
+    };
 
     pub fn apply_auto_accept_settings(_settings: &AutoAcceptSettings) -> LiveApplySummary {
         LiveApplySummary::default()
     }
 
+    pub fn apply_tradeskill_trophy_settings(
+        _settings: &TradeskillTrophySettings,
+    ) -> LiveApplySummary {
+        LiveApplySummary::default()
+    }
+
     pub fn query_merchant_windows() -> Vec<LiveMerchantQueryResult> {
+        Vec::new()
+    }
+
+    pub fn query_tradeskill_trophy_statuses() -> Vec<LiveTradeskillTrophyStatusResult> {
         Vec::new()
     }
 }
@@ -45,6 +76,7 @@ mod imp {
             MerchantWindowSnapshot, Response, load_session_token, pipe_name, session_id_from_token,
         },
         protocol,
+        tradeskill_trophy::{TradeskillTrophySettings, TradeskillTrophyStatus},
     };
     use windows::{
         Win32::{
@@ -60,7 +92,7 @@ mod imp {
         core::PCSTR,
     };
 
-    use super::{LiveApplySummary, LiveMerchantQueryResult};
+    use super::{LiveApplySummary, LiveMerchantQueryResult, LiveTradeskillTrophyStatusResult};
 
     const PIPE_READ_CHUNK_SIZE: usize = 4096;
 
@@ -231,6 +263,34 @@ mod imp {
         summary
     }
 
+    pub fn apply_tradeskill_trophy_settings(
+        settings: &TradeskillTrophySettings,
+    ) -> LiveApplySummary {
+        let mut summary = LiveApplySummary::default();
+        for_each_live_session(|pid| {
+            summary.attempted += 1;
+
+            let apply_result = (|| -> Result<()> {
+                let token =
+                    load_session_token(pid).with_context(|| format!("load token for PID {pid}"))?;
+                let session_id = session_id_from_token(&token);
+                let pipe = PipeClient::connect(pid, session_id)?;
+                pipe.send_token(&token)?;
+                pipe.send_async(&Command::SetTradeskillTrophySettings {
+                    settings: settings.clone(),
+                })?;
+                Ok(())
+            })();
+
+            match apply_result {
+                Ok(()) => summary.applied += 1,
+                Err(error) => summary.failures.push((pid, error.to_string())),
+            }
+        });
+
+        summary
+    }
+
     pub fn query_merchant_windows() -> Vec<LiveMerchantQueryResult> {
         let mut results = Vec::new();
 
@@ -256,6 +316,33 @@ mod imp {
                 Ok(windows) => results.push(LiveMerchantQueryResult { pid, windows }),
                 Err(error) => {
                     tracing::debug!(pid, error = %error, "Failed to query merchant windows");
+                }
+            }
+        });
+
+        results
+    }
+
+    pub fn query_tradeskill_trophy_statuses() -> Vec<LiveTradeskillTrophyStatusResult> {
+        let mut results = Vec::new();
+
+        for_each_live_session(|pid| {
+            let query_result = (|| -> Result<TradeskillTrophyStatus> {
+                let token =
+                    load_session_token(pid).with_context(|| format!("load token for PID {pid}"))?;
+                let session_id = session_id_from_token(&token);
+                let pipe = PipeClient::connect(pid, session_id)?;
+                pipe.send_token(&token)?;
+                match pipe.send_sync(&Command::QueryTradeskillTrophyStatus)? {
+                    Response::TradeskillTrophyStatus { status } => Ok(status),
+                    other => anyhow::bail!("Unexpected IPC response: {other:?}"),
+                }
+            })();
+
+            match query_result {
+                Ok(status) => results.push(LiveTradeskillTrophyStatusResult { pid, status }),
+                Err(error) => {
+                    tracing::debug!(pid, error = %error, "Failed to query tradeskill trophy status");
                 }
             }
         });

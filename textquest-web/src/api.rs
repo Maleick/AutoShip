@@ -35,6 +35,7 @@ use textquest::chat_log::{
 use textquest_common::box_chat::BoxChatConfig;
 use textquest_common::character_config::{self as shared_character_config};
 use textquest_common::ipc::{AutoAcceptSettings, AutoRezConfig};
+use textquest_common::tradeskill_trophy::TradeskillTrophySettings;
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 
 use crate::AppState;
@@ -1210,6 +1211,53 @@ pub async fn put_auto_accept_settings(
     Ok(Json(settings))
 }
 
+/// GET /api/config/tradeskill-trophy — return the current trophy automation
+/// settings.
+pub async fn get_tradeskill_trophy_settings(
+    State(state): State<Arc<AppState>>,
+) -> Json<TradeskillTrophySettings> {
+    Json(state.tradeskill_trophy_settings.read().await.clone())
+}
+
+/// PUT /api/config/tradeskill-trophy — replace the current trophy automation
+/// policy.
+pub async fn put_tradeskill_trophy_settings(
+    State(state): State<Arc<AppState>>,
+    Json(settings): Json<TradeskillTrophySettings>,
+) -> Result<Json<TradeskillTrophySettings>, (StatusCode, Json<ErrorResponse>)> {
+    let settings = settings.sanitized();
+    if settings.enabled && settings.trophy_item_name.is_empty() {
+        return Err(json_error(
+            StatusCode::BAD_REQUEST,
+            "Trophy item name must not be blank when tradeskill trophy automation is enabled",
+        ));
+    }
+
+    *state.tradeskill_trophy_settings.write().await = settings.clone();
+    let applied = crate::live_ipc::apply_tradeskill_trophy_settings(&settings);
+    tracing::info!(
+        attempted_clients = applied.attempted,
+        applied_clients = applied.applied,
+        failed_clients = applied.failures.len(),
+        "Updated tradeskill trophy settings"
+    );
+    for (pid, error) in applied.failures {
+        tracing::warn!(
+            pid,
+            %error,
+            "Failed to apply tradeskill trophy settings to live client"
+        );
+    }
+    Ok(Json(settings))
+}
+
+/// GET /api/tradeskill-trophy/status — return live trophy status for connected
+/// clients.
+pub async fn get_tradeskill_trophy_statuses()
+-> Json<Vec<crate::live_ipc::LiveTradeskillTrophyStatusResult>> {
+    Json(crate::live_ipc::query_tradeskill_trophy_statuses())
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlayerFilterMode {
@@ -1971,6 +2019,51 @@ mod tests {
         assert_eq!(
             body,
             serde_json::json!({ "error": "Trusted player names must not be blank" })
+        );
+    }
+
+    #[tokio::test]
+    async fn tradeskill_trophy_settings_round_trip() {
+        let state = Arc::new(test_state("api-tradeskill-trophy-round-trip.json"));
+        let update = TradeskillTrophySettings {
+            enabled: true,
+            trophy_item_name: "  Geerlok Automated Hammer  ".into(),
+        };
+
+        let Json(saved) = put_tradeskill_trophy_settings(State(state.clone()), Json(update))
+            .await
+            .expect("put tradeskill trophy settings should succeed");
+        assert_eq!(
+            saved,
+            TradeskillTrophySettings {
+                enabled: true,
+                trophy_item_name: "Geerlok Automated Hammer".into(),
+            }
+        );
+
+        let Json(loaded) = get_tradeskill_trophy_settings(State(state)).await;
+        assert_eq!(loaded, saved);
+    }
+
+    #[tokio::test]
+    async fn put_tradeskill_trophy_settings_rejects_blank_name_when_enabled() {
+        let state = Arc::new(test_state("api-put-tradeskill-trophy-blank-reject.json"));
+        let invalid = TradeskillTrophySettings {
+            enabled: true,
+            trophy_item_name: "   ".into(),
+        };
+
+        let response = put_tradeskill_trophy_settings(State(state), Json(invalid))
+            .await
+            .expect_err("blank trophy item should be rejected")
+            .into_response();
+        let (status, body) = error_response_json(response).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "error": "Trophy item name must not be blank when tradeskill trophy automation is enabled"
+            })
         );
     }
 

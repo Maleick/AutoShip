@@ -24,6 +24,7 @@ import ChatLogPanel from "./ChatLogPanel";
 import GmAlertPanel from "./GmAlertPanel";
 import KillTrackerPanel from "./KillTrackerPanel";
 import SpawnFinderPanel from "./SpawnFinderPanel";
+import TradeskillTrophyPanel from "./TradeskillTrophyPanel";
 import type {
   DashboardActionRequest,
   DashboardSnapshot,
@@ -1027,6 +1028,7 @@ export default function OperatorDashboard() {
 
           <div className="grid gap-6">
             <AutoAcceptPanel embedded />
+            <TradeskillTrophyPanel embedded />
             <SpawnFinderPanel
               spawnFinder={snapshot.spawnFinder}
               submitAction={submitAction}

@@ -68,6 +68,8 @@ pub mod shared_client_state;
 pub mod soul;
 /// Runtime spawn finder snapshot types shared by orchestrator and web.
 pub mod spawn_finder;
+/// Tradeskill trophy config and swap state machine shared by runtime layers.
+pub mod tradeskill_trophy;
 /// Common type aliases and utility structures.
 pub mod types;
 /// Struct size/range validation helpers.

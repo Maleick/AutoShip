@@ -13,6 +13,10 @@ vi.mock("./AutoAcceptPanel", () => ({
   default: () => <div>AutoAcceptPanel</div>,
 }));
 
+vi.mock("./TradeskillTrophyPanel", () => ({
+  default: () => <div>TradeskillTrophyPanel</div>,
+}));
+
 vi.mock("./BoxChatPanel", () => ({
   default: () => <div>BoxChatPanel</div>,
 }));

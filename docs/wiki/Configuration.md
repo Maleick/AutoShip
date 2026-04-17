@@ -226,6 +226,28 @@ again after each zone change. A typical format looks like:
 [{server}] {character} ({level} {class_short})
 ```
 
+## Runtime-Only Dashboard Controls
+
+Some operator controls currently live only in the running `textquest-web`
+process and are applied directly to connected clients instead of being written
+back into a checked-in config file.
+
+Current runtime-only controls include:
+
+- `Auto-Accept Wards`: per-request prompt acceptance plus trust-list policy
+- `Tradeskill Trophy`: master enable plus the exact trophy item name to equip
+  around supported crafting stations
+
+Current behavior:
+
+- dashboard edits are applied to every live injected client reachable through
+  named-pipe IPC
+- the trophy panel also exposes live telemetry for active crafting sessions,
+  chosen equip slot, displaced item restore target, and remaining charges when
+  the client can observe them
+- these settings reset to defaults when the web process restarts
+  unless a future persistence layer is added
+
 ## Loot Scoring
 
 The loot dashboard exposes an **Item Score** tab that applies

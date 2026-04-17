@@ -41,6 +41,8 @@ mod stealth;
 mod syscall;
 #[allow(dead_code)]
 pub mod timestamp;
+#[allow(dead_code)]
+mod tradeskill_trophy;
 
 use std::{
     path::PathBuf,

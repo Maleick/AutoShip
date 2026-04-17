@@ -49,6 +49,24 @@ pub fn query_open_container_slots(
     }
 }
 
+/// Query the item currently occupying a top-level inventory slot.
+pub fn query_top_level_slot_item(
+    eq_base: u64,
+    location: i32,
+    top_slot: i16,
+) -> Option<ContainerSlotItemInfo> {
+    #[cfg(windows)]
+    {
+        unsafe { query_top_level_slot_item_windows(eq_base, location, top_slot) }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (eq_base, location, top_slot);
+        None
+    }
+}
+
 fn normalize_filter_value(value: &str) -> String {
     value
         .chars()
@@ -209,42 +227,7 @@ unsafe fn query_open_container_slots_windows(
     eq_base: u64,
     filter: &ContainerSlotQuery,
 ) -> Vec<ContainerSlotInfo> {
-    type GetItemBaseFn = unsafe extern "C" fn(usize, *mut usize);
-
-    let Some(mgr_addr) = offsets::rebase(offsets::PINST_CINV_SLOT_MGR, eq_base) else {
-        return Vec::new();
-    };
-    let Some(mgr_ptr) = read_value::<usize>(mgr_addr) else {
-        return Vec::new();
-    };
-
-    let Some(total_slots) = read_value::<i32>(mgr_ptr + offsets::inv_slot_mgr::TOTAL_SLOTS) else {
-        return Vec::new();
-    };
-    let total_slots = total_slots.clamp(0, MAX_INV_SLOTS as i32) as usize;
-
-    let Some(get_item_base_addr) = offsets::rebase(offsets::INV_SLOT_GET_ITEM_BASE, eq_base) else {
-        return Vec::new();
-    };
-    if !crate::eq::validate_fn_ptr(get_item_base_addr, "CInvSlot::GetItemBase") {
-        return Vec::new();
-    }
-    let get_item_base: GetItemBaseFn = unsafe { std::mem::transmute(get_item_base_addr) };
-
-    let mut raw_slots = Vec::new();
-    for idx in 0..total_slots {
-        let slot_addr = mgr_ptr + offsets::inv_slot_mgr::SLOT_ARRAY + idx * size_of::<usize>();
-        let Some(slot_ptr) = read_value::<usize>(slot_addr) else {
-            continue;
-        };
-        if slot_ptr == 0 {
-            continue;
-        }
-        if let Some(snapshot) = unsafe { read_slot_snapshot(slot_ptr, idx as i32, get_item_base) } {
-            raw_slots.push(snapshot);
-        }
-    }
-
+    let raw_slots = unsafe { collect_raw_slot_snapshots(eq_base) };
     let parent_slots: HashMap<(i32, i16), ParentContainerInfo> = raw_slots
         .iter()
         .filter(|slot| slot.bag_slot < 0)
@@ -286,6 +269,58 @@ unsafe fn query_open_container_slots_windows(
         })
         .filter(|slot| matches_prepared_filter(slot, &prepared_filter))
         .collect()
+}
+
+#[cfg(windows)]
+unsafe fn query_top_level_slot_item_windows(
+    eq_base: u64,
+    location: i32,
+    top_slot: i16,
+) -> Option<ContainerSlotItemInfo> {
+    unsafe { collect_raw_slot_snapshots(eq_base) }
+        .into_iter()
+        .find(|slot| slot.location == location && slot.top_slot == top_slot && slot.bag_slot < 0)
+        .and_then(|slot| slot.item)
+}
+
+#[cfg(windows)]
+unsafe fn collect_raw_slot_snapshots(eq_base: u64) -> Vec<RawSlotSnapshot> {
+    type GetItemBaseFn = unsafe extern "C" fn(usize, *mut usize);
+
+    let Some(mgr_addr) = offsets::rebase(offsets::PINST_CINV_SLOT_MGR, eq_base) else {
+        return Vec::new();
+    };
+    let Some(mgr_ptr) = read_value::<usize>(mgr_addr) else {
+        return Vec::new();
+    };
+
+    let Some(total_slots) = read_value::<i32>(mgr_ptr + offsets::inv_slot_mgr::TOTAL_SLOTS) else {
+        return Vec::new();
+    };
+    let total_slots = total_slots.clamp(0, MAX_INV_SLOTS as i32) as usize;
+
+    let Some(get_item_base_addr) = offsets::rebase(offsets::INV_SLOT_GET_ITEM_BASE, eq_base) else {
+        return Vec::new();
+    };
+    if !crate::eq::validate_fn_ptr(get_item_base_addr, "CInvSlot::GetItemBase") {
+        return Vec::new();
+    }
+    let get_item_base: GetItemBaseFn = unsafe { std::mem::transmute(get_item_base_addr) };
+
+    let mut raw_slots = Vec::new();
+    for idx in 0..total_slots {
+        let slot_addr = mgr_ptr + offsets::inv_slot_mgr::SLOT_ARRAY + idx * size_of::<usize>();
+        let Some(slot_ptr) = read_value::<usize>(slot_addr) else {
+            continue;
+        };
+        if slot_ptr == 0 {
+            continue;
+        }
+        if let Some(snapshot) = unsafe { read_slot_snapshot(slot_ptr, idx as i32, get_item_base) } {
+            raw_slots.push(snapshot);
+        }
+    }
+    raw_slots
 }
 
 #[cfg(windows)]

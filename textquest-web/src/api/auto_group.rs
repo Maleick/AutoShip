@@ -392,6 +392,7 @@ mod tests {
                 crate::api::say_detection::SayDetectionState::new_demo(),
             )),
             auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
+            tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
             auto_group_state: AutoGroupState::new_demo(),
             extension_catalog_state: crate::api::extensions::ExtensionCatalogState::load(
                 std::env::temp_dir().join(format!(

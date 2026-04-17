@@ -23,6 +23,7 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         credential_store: None,
         character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
         auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
+        tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
         character_config_path: test_live_session_snapshot_path("test-character-configs.json"),
         character_config_write_lock: tokio::sync::Mutex::new(()),
         loot_state: api::loot::LootState::new_demo(),

@@ -56,6 +56,9 @@ pub struct AppState {
     pub character_configs: tokio::sync::RwLock<HashMap<String, api::CharacterConfig>>,
     /// Auto-accept trade settings exposed through the web API.
     pub auto_accept_settings: tokio::sync::RwLock<textquest_common::ipc::AutoAcceptSettings>,
+    /// Tradeskill trophy automation settings exposed through the web API.
+    pub tradeskill_trophy_settings:
+        tokio::sync::RwLock<textquest_common::tradeskill_trophy::TradeskillTrophySettings>,
     /// On-disk JSON store for character tuning and reward automation settings.
     pub character_config_path: PathBuf,
     /// Serializes PUT-driven writes to [`character_config_path`] so concurrent
@@ -339,6 +342,7 @@ fn build_state() -> Arc<AppState> {
         credential_store,
         character_configs: tokio::sync::RwLock::new(character_configs),
         auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
+        tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
         character_config_path,
         character_config_write_lock: tokio::sync::Mutex::new(()),
         loot_state: api::loot::LootState::new_demo(),
@@ -393,6 +397,7 @@ pub(crate) fn test_app_state() -> AppState {
         )),
         character_config_write_lock: tokio::sync::Mutex::new(()),
         auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
+        tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
         loot_state: api::loot::LootState::new_demo(),
         economy_state: api::economy::EconomyState::new_demo(),
         dashboard_state: api::dashboard::DashboardState::new_demo(),
@@ -516,6 +521,14 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .route(
             "/config/auto-accept",
             get(api::get_auto_accept_settings).put(api::put_auto_accept_settings),
+        )
+        .route(
+            "/config/tradeskill-trophy",
+            get(api::get_tradeskill_trophy_settings).put(api::put_tradeskill_trophy_settings),
+        )
+        .route(
+            "/tradeskill-trophy/status",
+            get(api::get_tradeskill_trophy_statuses),
         )
         .route(
             "/config/discord",
@@ -707,6 +720,7 @@ mod tests {
             ),
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
             auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
+            tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
             character_config_path: path.with_file_name("character-configs.json"),
             character_config_write_lock: tokio::sync::Mutex::new(()),
             loot_state: api::loot::LootState::new_demo(),

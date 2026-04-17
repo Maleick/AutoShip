@@ -1,5 +1,7 @@
 use crate::{
-    character_config::RewardAutomationConfig, shared_client_state::SharedClientState,
+    character_config::RewardAutomationConfig,
+    shared_client_state::SharedClientState,
+    tradeskill_trophy::{TradeskillTrophySettings, TradeskillTrophyStatus},
     types::ClientId,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -1035,6 +1037,13 @@ pub enum Command {
         /// Server name used for `{server}` substitutions.
         server_name: String,
     },
+    /// Replace the current tradeskill trophy automation settings.
+    SetTradeskillTrophySettings {
+        /// Tradeskill trophy policy to apply in the DLL.
+        settings: TradeskillTrophySettings,
+    },
+    /// Query the current tradeskill trophy runtime status from the DLL.
+    QueryTradeskillTrophyStatus,
 }
 
 impl std::fmt::Debug for Command {
@@ -1456,6 +1465,11 @@ pub enum Response {
     MerchantItems {
         /// Matching merchant window snapshots.
         windows: Vec<MerchantWindowSnapshot>,
+    },
+    /// Current tradeskill trophy runtime status from the live client.
+    TradeskillTrophyStatus {
+        /// Live DLL state for tradeskill trophy automation.
+        status: TradeskillTrophyStatus,
     },
 }
 
@@ -1903,6 +1917,10 @@ mod tests {
                 mode: RenderMode::Strobe,
             },
             Command::CaptureScreenshot,
+            Command::SetTradeskillTrophySettings {
+                settings: TradeskillTrophySettings::default(),
+            },
+            Command::QueryTradeskillTrophyStatus,
         ];
         for cmd in &commands {
             let encoded = encode(cmd).expect("encode failed");
@@ -2033,6 +2051,9 @@ mod tests {
                         infinite_quantity: true,
                     }],
                 }],
+            },
+            Response::TradeskillTrophyStatus {
+                status: TradeskillTrophyStatus::default(),
             },
             Response::ZoneGraph { zones: vec![] },
             Response::RenderModeChanged {

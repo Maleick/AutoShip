@@ -1353,6 +1353,13 @@ fn on_game_tick() {
         }
     }
 
+    // Tradeskill trophy automation every 10 frames (~0.5 seconds) so the
+    // equip/restore cursor choreography advances promptly without polling every
+    // frame.
+    if tick % 10 == 3 {
+        crate::tradeskill_trophy::check();
+    }
+
     // Refresh the title frequently enough that zoning/login transitions feel
     // immediate without touching Win32 every frame.
     if tick % 10 == 5 {
@@ -3025,6 +3032,20 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         Command::SetAutoAcceptSettings { settings } => {
             tracing::info!(enabled = settings.enabled, "SetAutoAcceptSettings received");
             crate::dialog::set_settings(settings);
+        }
+        Command::SetTradeskillTrophySettings { settings } => {
+            tracing::info!(
+                enabled = settings.enabled,
+                trophy_item_name = %settings.trophy_item_name,
+                "SetTradeskillTrophySettings received"
+            );
+            crate::tradeskill_trophy::set_settings(settings);
+        }
+        Command::QueryTradeskillTrophyStatus => {
+            let status = crate::tradeskill_trophy::status();
+            crate::ipc::send_response(textquest_common::ipc::Response::TradeskillTrophyStatus {
+                status,
+            });
         }
         Command::SetRenderMode { mode } => {
             tracing::info!(%mode, "SetRenderMode received");

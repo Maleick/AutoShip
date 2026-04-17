@@ -841,6 +841,42 @@ export interface AutoAcceptSettings {
   trusted_players: string[];
 }
 
+export interface TradeskillTrophySettings {
+  enabled: boolean;
+  trophy_item_name: string;
+}
+
+export type TradeskillContainerType =
+  | "alchemy"
+  | "baking"
+  | "brewing"
+  | "blacksmithing"
+  | "fletching"
+  | "fishing"
+  | "jewelry"
+  | "poison"
+  | "pottery"
+  | "research"
+  | "tailoring"
+  | "tinkering";
+
+export type TrophyEquipSlot = "ammo" | "mainhand";
+
+export interface TradeskillTrophyStatus {
+  active: boolean;
+  equipped_by_manager: boolean;
+  open_container_name: string | null;
+  container_type: TradeskillContainerType | null;
+  target_slot: TrophyEquipSlot | null;
+  previous_item_name: string | null;
+  charges_remaining: number | null;
+}
+
+export interface LiveTradeskillTrophyStatus {
+  pid: number;
+  status: TradeskillTrophyStatus;
+}
+
 export type PlayerFilterMode = "all" | "strangers_only" | "friends_only";
 
 export interface PlayerWatchConfig {

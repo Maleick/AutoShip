@@ -951,6 +951,7 @@ mod tests {
             credential_store: None,
             character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
+            tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
             character_config_path: crate::test_support::test_live_session_snapshot_path(
                 "loot-test-character-configs.json",
             ),
