@@ -6,6 +6,7 @@ import GroupBuilder from "./components/GroupBuilder";
 import LootConfig from "./components/LootConfig";
 import SoulPanel from "./components/SoulPanel";
 import SpawnAlerts from "./components/SpawnAlerts";
+import ChatPatternRules from "./components/ChatPatternRules";
 
 function App() {
   const [activeView, setActiveView] = useState<ActiveView>("engagements");
@@ -27,6 +28,8 @@ function App() {
           <SoulPanel />
         ) : activeView === "spawns" ? (
           <SpawnAlerts />
+        ) : activeView === "chat_pattern_rules" ? (
+          <ChatPatternRules />
         ) : (
           <>
             <CenterContent />

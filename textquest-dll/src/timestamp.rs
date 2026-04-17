@@ -4,27 +4,17 @@
 //! effect immediately — the chat hook reads the current state when formatting
 //! each message.
 
-use std::sync::RwLock;
 use once_cell::sync::Lazy;
+use std::sync::RwLock;
 use textquest_common::chat::TimestampFormat;
 
-static TIMESTAMP_CONFIG: Lazy<RwLock<TimestampState>> = Lazy::new(|| {
-    RwLock::new(TimestampState::default())
-});
+static TIMESTAMP_CONFIG: Lazy<RwLock<TimestampState>> =
+    Lazy::new(|| RwLock::new(TimestampState::default()));
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TimestampState {
     pub enabled: bool,
     pub format: TimestampFormat,
-}
-
-impl Default for TimestampState {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            format: TimestampFormat::default(),
-        }
-    }
 }
 
 pub fn get() -> TimestampState {

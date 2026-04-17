@@ -252,33 +252,23 @@ fn draw_session_tracker_panel(frame: &mut Frame, area: ratatui::layout::Rect, ap
             Span::styled("  Net:           ", Style::default().fg(t.text_muted)),
             Span::styled(
                 format!("{}p", net_plat),
-                Style::default()
-                    .fg(net_color)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(net_color).add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(vec![
             Span::styled("  Rate:          ", Style::default().fg(t.text_muted)),
             Span::styled(
                 format!("{:.1}p/h", rate),
-                Style::default()
-                    .fg(rate_color)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(rate_color).add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(vec![
             Span::styled("  Gained:        ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format!("{}p", gained),
-                Style::default().fg(t.hp_high),
-            ),
+            Span::styled(format!("{}p", gained), Style::default().fg(t.hp_high)),
         ]),
         Line::from(vec![
             Span::styled("  Spent:         ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format!("{}p", spent),
-                Style::default().fg(t.hp_low),
-            ),
+            Span::styled(format!("{}p", spent), Style::default().fg(t.hp_low)),
         ]),
         Line::from(vec![
             Span::styled("  Duration:      ", Style::default().fg(t.text_muted)),

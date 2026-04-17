@@ -52,21 +52,23 @@ impl ChatLogWriter {
 
         let file_path = self.resolve_log_path(server, character);
         let mut writers = self.writers.lock().unwrap();
-        let handle = writers.entry(format!("{server}/{character}")).or_insert_with(|| {
-            let writer = self.open_writer(&file_path);
-            let (current_date, current_size, max_size) = match &self.config.rotation {
-                LogRotation::None | LogRotation::Daily => {
-                    (Some(current_date_string()), 0, None)
+        let handle = writers
+            .entry(format!("{server}/{character}"))
+            .or_insert_with(|| {
+                let writer = self.open_writer(&file_path);
+                let (current_date, current_size, max_size) = match &self.config.rotation {
+                    LogRotation::None | LogRotation::Daily => {
+                        (Some(current_date_string()), 0, None)
+                    }
+                    LogRotation::BySize(max) => (None, 0, Some(*max)),
+                };
+                LogWriterHandle {
+                    writer,
+                    current_date,
+                    current_size,
+                    max_size,
                 }
-                LogRotation::BySize(max) => (None, 0, Some(*max)),
-            };
-            LogWriterHandle {
-                writer,
-                current_date,
-                current_size,
-                max_size,
-            }
-        });
+            });
 
         self.write_to_handle(handle, &file_path, character, server, event)
     }
@@ -143,12 +145,8 @@ impl ChatLogWriter {
     fn should_rotate(&self, handle: &LogWriterHandle, additional_bytes: u64) -> bool {
         match &self.config.rotation {
             LogRotation::None => false,
-            LogRotation::Daily => {
-                handle.current_date.as_ref() != Some(&current_date_string())
-            }
-            LogRotation::BySize(max) => {
-                handle.current_size + additional_bytes > *max
-            }
+            LogRotation::Daily => handle.current_date.as_ref() != Some(&current_date_string()),
+            LogRotation::BySize(max) => handle.current_size + additional_bytes > *max,
         }
     }
 
@@ -239,9 +237,15 @@ mod tests {
         };
         let writer = ChatLogWriter::new(dir.path().to_path_buf(), config).unwrap();
 
-        writer.write_event("MyChar", "MyServer", &make_event(ChatChannel::Say)).unwrap();
-        writer.write_event("MyChar", "MyServer", &make_event(ChatChannel::Tell)).unwrap();
-        writer.write_event("MyChar", "MyServer", &make_event(ChatChannel::Group)).unwrap();
+        writer
+            .write_event("MyChar", "MyServer", &make_event(ChatChannel::Say))
+            .unwrap();
+        writer
+            .write_event("MyChar", "MyServer", &make_event(ChatChannel::Tell))
+            .unwrap();
+        writer
+            .write_event("MyChar", "MyServer", &make_event(ChatChannel::Group))
+            .unwrap();
 
         let log_path = dir.path().join("MyServer_MyChar.log");
         let content = fs::read_to_string(&log_path).unwrap();

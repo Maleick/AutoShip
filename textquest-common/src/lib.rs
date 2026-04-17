@@ -13,6 +13,8 @@ pub mod bindings;
 pub mod box_chat;
 /// Chat channel types, STML stripping, and structured chat event parsing.
 pub mod chat;
+/// User-defined chat pattern rule engine (MQ2Events/MQ2React parity).
+pub mod chat_pattern_rules;
 /// Combat-related shared types (class roles, spell metadata, assist targets).
 pub mod combat;
 /// Unified error handling framework with structured error types and recovery

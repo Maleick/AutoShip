@@ -2,9 +2,9 @@
 //! detail.
 
 use ratatui::{
-    style::Color,
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
+    style::Color,
     style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Cell, Paragraph, Row, Table, Wrap},
@@ -1468,12 +1468,12 @@ fn draw_kill_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
 
     let lines = if collapsed {
         vec![Line::from(vec![
-            Span::styled(
-                total_kills.to_string(),
-                Style::default().fg(t.hp_low),
-            ),
+            Span::styled(total_kills.to_string(), Style::default().fg(t.hp_low)),
             Span::styled(" kills", Style::default().fg(t.text_muted)),
-            Span::styled(" | ", Style::default().fg(t.border_dim.fg.unwrap_or(Color::DarkGray))),
+            Span::styled(
+                " | ",
+                Style::default().fg(t.border_dim.fg.unwrap_or(Color::DarkGray)),
+            ),
             Span::styled(
                 format!("{:.1} KPH", kills_per_hour),
                 Style::default().fg(t.text_accent),
@@ -1529,10 +1529,7 @@ fn draw_kill_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
                         Style::default().fg(t.text_highlight),
                     ),
                     Span::styled(label, Style::default().fg(t.text_secondary)),
-                    Span::styled(
-                        format!(" ({}%)", pct),
-                        Style::default().fg(t.text_muted),
-                    ),
+                    Span::styled(format!(" ({}%)", pct), Style::default().fg(t.text_muted)),
                 ]));
             }
         }

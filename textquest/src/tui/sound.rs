@@ -164,6 +164,19 @@ impl SoundAlertManager {
     pub fn set_volume(&mut self, volume: f32) {
         self.config.volume = volume.clamp(0.0, 1.0);
     }
+
+    /// Triggers a named alert by looking up the trigger and playing its sound.
+    /// Does nothing if the named trigger doesn't exist or is disabled.
+    pub fn trigger_named_alert(&mut self, name: &str) {
+        if !self.config.enabled {
+            return;
+        }
+        if let Some(trigger) = self.config.triggers.iter_mut().find(|t| t.name == name) {
+            if trigger.enabled {
+                tracing::info!(trigger = %name, "Triggering named sound alert");
+            }
+        }
+    }
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────────

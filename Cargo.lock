@@ -3635,6 +3635,7 @@ dependencies = [
  "criterion",
  "paste",
  "rand 0.9.2",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",

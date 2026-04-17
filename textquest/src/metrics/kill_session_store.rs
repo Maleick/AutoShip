@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::{KillTracker, KillRecord};
+use super::{KillRecord, KillTracker};
 
 /// A multi-session store that keeps separate KillTracker instances per character.
 /// This enables per-character historical tracking while allowing a single

@@ -49,9 +49,7 @@ impl KillReporter {
         let total_deaths = tracker.total_deaths();
         let mob_stats = tracker.mob_stats();
         let top_mobs = tracker.top_mobs(5);
-        let efficiency = tracker.efficiency(
-            chrono::Utc::now().timestamp(),
-        );
+        let efficiency = tracker.efficiency(chrono::Utc::now().timestamp());
 
         let hours = elapsed_secs as f64 / 3600.0;
         let kills_per_hour = if hours > 0.0 {
@@ -62,9 +60,7 @@ impl KillReporter {
 
         let mut lines = vec![format!(
             "[KillTracker] Session Report for {} in {} ({:.1}h elapsed)",
-            character,
-            zone,
-            hours
+            character, zone, hours
         )];
 
         lines.push(format!(
@@ -235,13 +231,7 @@ mod tests {
         tracker.record_kill(make_record("goblin", chrono::Utc::now().timestamp()));
 
         let store = KillSessionStore::new();
-        let report = KillReporter::format_report(
-            &tracker,
-            &store,
-            "TestChar",
-            "gfaydark",
-            3600,
-        );
+        let report = KillReporter::format_report(&tracker, &store, "TestChar", "gfaydark", 3600);
 
         assert!(report.contains("TestChar"));
         assert!(report.contains("gfaydark"));
@@ -269,13 +259,7 @@ mod tests {
         }
 
         let store = KillSessionStore::new();
-        let report = KillReporter::format_report(
-            &tracker,
-            &store,
-            "TestChar",
-            "gfaydark",
-            3600,
-        );
+        let report = KillReporter::format_report(&tracker, &store, "TestChar", "gfaydark", 3600);
 
         assert!(report.contains("orc_pawn"));
         assert!(report.contains("goblin"));
@@ -290,13 +274,7 @@ mod tests {
         let tracker = KillTracker::new(chrono::Utc::now().timestamp());
         let store = KillSessionStore::new();
 
-        let report = KillReporter::format_report(
-            &tracker,
-            &store,
-            "NewChar",
-            "poknowledge",
-            0,
-        );
+        let report = KillReporter::format_report(&tracker, &store, "NewChar", "poknowledge", 0);
 
         assert!(report.contains("NewChar"));
         assert!(report.contains("Kills: 0"));

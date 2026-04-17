@@ -596,9 +596,10 @@ impl InstrumentSet {
 }
 
 /// Instrument swap action returned by the InstrumentSwapEngine.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum InstrumentSwapAction {
     /// No action needed — current instrument is correct.
+    #[default]
     None,
     /// Equip the specified instrument.
     Equip {
@@ -608,12 +609,6 @@ pub enum InstrumentSwapAction {
     },
     /// Restore the previously equipped item.
     Restore { slot: InstrumentSlot, item_id: u32 },
-}
-
-impl Default for InstrumentSwapAction {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 /// Engine for automatic instrument swapping — MQ2BardSwap parity.

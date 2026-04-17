@@ -507,7 +507,8 @@ impl OrchestratorLoop {
             tracing::debug!("Timestamp config changed, applying to clients");
         }
         for (&pid, name) in &self.orchestrator.client_names {
-            self.timestamp_runtime.apply_to_client(&mut self.orchestrator, pid, name);
+            self.timestamp_runtime
+                .apply_to_client(&mut self.orchestrator, pid, name);
         }
     }
 

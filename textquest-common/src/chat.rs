@@ -118,7 +118,10 @@ pub fn format_chat_timestamp(time: SystemTime, format: TimestampFormat) -> Strin
 
     match format {
         TimestampFormat::DateTime24 => {
-            format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", year, month, day, hours, minutes, seconds)
+            format!(
+                "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+                year, month, day, hours, minutes, seconds
+            )
         }
         TimestampFormat::Time24 => {
             format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
@@ -133,7 +136,10 @@ pub fn format_chat_timestamp(time: SystemTime, format: TimestampFormat) -> Strin
             } else {
                 (hours - 12, "PM")
             };
-            format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02} {}", year, month, day, hour12, minutes, seconds, am_pm)
+            format!(
+                "{:04}-{:02}-{:02} {:02}:{:02}:{:02} {}",
+                year, month, day, hour12, minutes, seconds, am_pm
+            )
         }
         TimestampFormat::Time12 => {
             let (hour12, am_pm) = if hours == 0 {
@@ -151,7 +157,7 @@ pub fn format_chat_timestamp(time: SystemTime, format: TimestampFormat) -> Strin
 }
 
 const fn is_leap_year(year: u64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
 }
 
 /// A structured chat message extracted from EQ `dsp_chat` output or a log file
@@ -167,43 +173,33 @@ pub struct ChatEvent {
 }
 
 /// Log rotation strategy for per-character chat log files.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LogRotation {
     /// No rotation — append to a single log file indefinitely.
     None,
     /// Rotate daily at midnight.
+    #[default]
     Daily,
     /// Rotate when the file exceeds the specified size in bytes.
     BySize(u64),
 }
 
-impl Default for LogRotation {
-    fn default() -> Self {
-        Self::Daily
-    }
-}
-
 /// Log level filter for chat output logging.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LogLevel {
     /// Log all captured chat output.
+    #[default]
     Info,
     /// Log all captured chat output with additional debug metadata.
     Debug,
 }
 
-impl Default for LogLevel {
-    fn default() -> Self {
-        Self::Info
-    }
-}
-
 /// Configuration for per-character MQ2Log-style chat output logging.
 ///
 /// When enabled, all MQ2 output is written to `logs/server_charname.log`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ChatLogConfig {
     /// Enable per-character chat output logging.
@@ -214,17 +210,6 @@ pub struct ChatLogConfig {
     pub level: LogLevel,
     /// EQ chat channels to log. If empty, all channels are logged.
     pub channels: Vec<ChatChannel>,
-}
-
-impl Default for ChatLogConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            rotation: LogRotation::default(),
-            level: LogLevel::default(),
-            channels: Vec::new(),
-        }
-    }
 }
 
 /// Strip STML/HTML-like markup tags from EQ text.

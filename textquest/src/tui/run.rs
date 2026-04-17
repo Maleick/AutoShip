@@ -1620,7 +1620,43 @@ fn poll_log_watchers(app: &mut App) {
                 if app.chat_events.len() > 200 {
                     app.chat_events.pop_front();
                 }
+                let actions =
+                    app.chat_pattern_engine
+                        .evaluate(&chat.channel, &chat.sender, &chat.message);
+                for (_rule_id, action) in actions {
+                    handle_chat_pattern_action(app, &action);
+                }
             }
+        }
+    }
+}
+
+/// Handle a triggered chat pattern rule action.
+fn handle_chat_pattern_action(
+    app: &mut App,
+    action: &textquest_common::chat_pattern_rules::RuleAction,
+) {
+    use textquest_common::chat_pattern_rules::RuleAction;
+    match action {
+        RuleAction::ExecuteCommand(cmd) => {
+            if let Some(client) = app.clients.get(app.selected_client) {
+                if !client.is_demo && client.connected {
+                    let full_cmd = if cmd.starts_with('/') {
+                        cmd.to_string()
+                    } else {
+                        format!("/{}", cmd)
+                    };
+                    if let Err(e) = client.send_command(&full_cmd) {
+                        tracing::warn!(cmd = %full_cmd, error = %e, "Failed to execute pattern rule command");
+                    }
+                }
+            }
+        }
+        RuleAction::SendIpcCommand(cmd) => {
+            tracing::debug!(cmd = %cmd, "Chat pattern rule triggered IPC command");
+        }
+        RuleAction::TriggerAlert(name) => {
+            app.sound_alert_manager.trigger_named_alert(name);
         }
     }
 }

@@ -18,6 +18,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use textquest_common::chat_pattern_rules::ChatPatternRuleEngine;
+
 use axum::{
     Router,
     extract::Request,
@@ -80,6 +82,8 @@ pub struct AppState {
     pub live_session_snapshot_path: PathBuf,
     /// In-memory XAssist configuration per character.
     pub xassist_configs: api::xassist::XAssistConfigs,
+    /// In-memory chat pattern rules engine for MQ2Events/MQ2React parity.
+    pub chat_pattern_rules: tokio::sync::RwLock<ChatPatternRuleEngine>,
 }
 
 /// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is
@@ -189,6 +193,7 @@ fn build_state() -> Arc<AppState> {
         api_token,
         live_session_snapshot_path: live_session_snapshot_path(),
         xassist_configs: api::xassist::demo_xassist_configs(),
+        chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
     })
 }
 
@@ -313,6 +318,43 @@ fn build_api_router() -> Router<Arc<AppState>> {
                 .put(api::xassist::put_xassist_config)
                 .delete(api::xassist::delete_xassist_config),
         )
+        // Chat Pattern Rules API
+        .route(
+            "/chat-pattern-rules",
+            get(api::chat_pattern_rules::list_rules),
+        )
+        .route(
+            "/chat-pattern-rules/stats",
+            get(api::chat_pattern_rules::get_stats),
+        )
+        .route(
+            "/chat-pattern-rules/import",
+            post(api::chat_pattern_rules::import_rules),
+        )
+        .route(
+            "/chat-pattern-rules/{id}",
+            get(api::chat_pattern_rules::get_rule),
+        )
+        .route(
+            "/chat-pattern-rules/{id}",
+            put(api::chat_pattern_rules::update_rule),
+        )
+        .route(
+            "/chat-pattern-rules/{id}",
+            delete(api::chat_pattern_rules::delete_rule),
+        )
+        .route(
+            "/chat-pattern-rules/{id}/toggle",
+            put(api::chat_pattern_rules::toggle_rule),
+        )
+        .route(
+            "/chat-pattern-rules/{id}/reset-cooldown",
+            put(api::chat_pattern_rules::reset_cooldown),
+        )
+        .route(
+            "/chat-pattern-rules/cooldowns/reset",
+            put(api::chat_pattern_rules::reset_all_cooldowns),
+        )
         .fallback(api::api_not_found)
 }
 
@@ -422,6 +464,7 @@ mod tests {
             api_token: None, // No auth in tests — auth middleware is a no-op when None
             live_session_snapshot_path: path.with_file_name("live_sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),
+            chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         })
     }
 

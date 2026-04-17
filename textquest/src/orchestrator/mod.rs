@@ -1,7 +1,11 @@
 //! Orchestrator — wires the camp loop state machine to IPC command delivery.
 
+/// Cross-group emergency coordination for same-zone rez and assist flows.
+pub mod cross_group;
 /// Session and group control model for the orchestrator.
 pub mod session_control;
+/// Cross-group outside-group assist — MQ2XAssist parity.
+pub mod xassist;
 
 use crate::{
     camp::{
@@ -360,6 +364,16 @@ impl Orchestrator {
         let count = scoped.len();
         for (pid, action) in &scoped {
             self.dispatch_action(*pid, action);
+        }
+        for (pid, cmd) in &xassist_commands {
+            if let xassist::AssistCommand::Target(spawn_id) = cmd {
+                self.send_ipc_command(
+                    *pid,
+                    Command::SetTarget {
+                        spawn_id: *spawn_id,
+                    },
+                );
+            }
         }
         self.last_dispatched = scoped;
         count

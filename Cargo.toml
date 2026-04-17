@@ -23,6 +23,7 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 tracing-appender = "0.2"
 toml = "0.8"
 toml_edit = "0.22"
+regex = "1"
 
 # Release profile for the injected DLL and orchestrator.
 # `panic = "abort"` is critical for the cdylib: an unwinding panic from the DLL

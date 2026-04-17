@@ -8,12 +8,10 @@
 
 /// EQBC-style cross-machine TCP relay and dispatch manager.
 pub mod box_chat;
-/// MQ2Log-style per-character chat output logging.
-pub mod chat_log;
 /// Camp loop state machine — pulls, fights, loots, meds, buffs.
 #[allow(dead_code)]
 pub mod camp;
-/// Chat logging to file per character (MQ2Log parity).
+/// MQ2Log-style per-character chat output logging.
 pub mod chat_log;
 /// Multi-client session management and self-healing monitor.
 #[allow(dead_code)]

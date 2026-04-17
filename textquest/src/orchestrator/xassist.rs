@@ -87,21 +87,27 @@ impl XAssist {
 
             match (current, new_target) {
                 (_, None) => {
-                    self.current_targets.insert(client_id, AssistTargetState::None);
+                    self.current_targets
+                        .insert(client_id, AssistTargetState::None);
                 }
-                (Some(AssistTargetState::Tracking { spawn_id }), Some(target)) if spawn_id == target => {
-                }
-                (Some(AssistTargetState::Tracking { spawn_id }), Some(target)) if spawn_id != target => {
+                (Some(AssistTargetState::Tracking { spawn_id }), Some(target))
+                    if spawn_id == target => {}
+                (Some(AssistTargetState::Tracking { spawn_id }), Some(target))
+                    if spawn_id != target =>
+                {
                     commands.push((client_id, AssistCommand::Target(target)));
-                    self.current_targets.insert(client_id, AssistTargetState::Tracking { spawn_id: target });
+                    self.current_targets
+                        .insert(client_id, AssistTargetState::Tracking { spawn_id: target });
                 }
                 (None, Some(target)) => {
                     commands.push((client_id, AssistCommand::Target(target)));
-                    self.current_targets.insert(client_id, AssistTargetState::Tracking { spawn_id: target });
+                    self.current_targets
+                        .insert(client_id, AssistTargetState::Tracking { spawn_id: target });
                 }
                 (Some(AssistTargetState::None), Some(target)) => {
                     commands.push((client_id, AssistCommand::Target(target)));
-                    self.current_targets.insert(client_id, AssistTargetState::Tracking { spawn_id: target });
+                    self.current_targets
+                        .insert(client_id, AssistTargetState::Tracking { spawn_id: target });
                 }
             }
         }
@@ -133,8 +139,8 @@ fn find_spawn_by_name(state: &GameState, name: &str) -> Option<u32> {
         .iter()
         .find(|spawn| {
             spawn.spawn_type == 0
-            && (spawn.name.eq_ignore_ascii_case(name)
-                || spawn.displayed_name.eq_ignore_ascii_case(name))
+                && (spawn.name.eq_ignore_ascii_case(name)
+                    || spawn.displayed_name.eq_ignore_ascii_case(name))
         })
         .map(|spawn| spawn.spawn_id)
 }
@@ -204,7 +210,11 @@ mod tests {
         }
     }
 
-    fn make_game_state(client_id: u32, local_player: SpawnData, nearby_spawns: Vec<SpawnData>) -> GameState {
+    fn make_game_state(
+        client_id: u32,
+        local_player: SpawnData,
+        nearby_spawns: Vec<SpawnData>,
+    ) -> GameState {
         GameState {
             client_id,
             local_player: Some(local_player),
@@ -222,7 +232,13 @@ mod tests {
     #[test]
     fn xassist_disabled_produces_no_commands() {
         let mut xassist = XAssist::new();
-        xassist.set_config(100, XAssistConfig { ma_name: Some("MainTank".into()), enabled: false });
+        xassist.set_config(
+            100,
+            XAssistConfig {
+                ma_name: Some("MainTank".into()),
+                enabled: false,
+            },
+        );
 
         let nearby = vec![
             make_player_spawn(200, "MainTank"),
@@ -250,7 +266,13 @@ mod tests {
     #[test]
     fn xassist_targets_ma_when_enabled() {
         let mut xassist = XAssist::new();
-        xassist.set_config(100, XAssistConfig { ma_name: Some("MainTank".into()), enabled: true });
+        xassist.set_config(
+            100,
+            XAssistConfig {
+                ma_name: Some("MainTank".into()),
+                enabled: true,
+            },
+        );
 
         let nearby = vec![
             make_player_spawn(200, "MainTank"),
@@ -272,14 +294,25 @@ mod tests {
         };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
-        assert!(!commands.is_empty(), "Should have assist commands when targeting MA");
+        assert!(
+            !commands.is_empty(),
+            "Should have assist commands when targeting MA"
+        );
     }
 
     #[test]
     fn xassist_no_command_when_target_unchanged() {
         let mut xassist = XAssist::new();
-        xassist.set_config(100, XAssistConfig { ma_name: Some("MainTank".into()), enabled: true });
-        xassist.current_targets.insert(100, AssistTargetState::Tracking { spawn_id: 300 });
+        xassist.set_config(
+            100,
+            XAssistConfig {
+                ma_name: Some("MainTank".into()),
+                enabled: true,
+            },
+        );
+        xassist
+            .current_targets
+            .insert(100, AssistTargetState::Tracking { spawn_id: 300 });
 
         let nearby = vec![
             make_player_spawn(200, "MainTank"),
@@ -300,14 +333,25 @@ mod tests {
         };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
-        assert!(commands.is_empty(), "Should not re-target when already tracking MA's target");
+        assert!(
+            commands.is_empty(),
+            "Should not re-target when already tracking MA's target"
+        );
     }
 
     #[test]
     fn xassist_tracks_new_target_when_ma_switches() {
         let mut xassist = XAssist::new();
-        xassist.set_config(100, XAssistConfig { ma_name: Some("MainTank".into()), enabled: true });
-        xassist.current_targets.insert(100, AssistTargetState::Tracking { spawn_id: 300 });
+        xassist.set_config(
+            100,
+            XAssistConfig {
+                ma_name: Some("MainTank".into()),
+                enabled: true,
+            },
+        );
+        xassist
+            .current_targets
+            .insert(100, AssistTargetState::Tracking { spawn_id: 300 });
 
         let nearby = vec![
             make_player_spawn(200, "MainTank"),
@@ -329,13 +373,22 @@ mod tests {
         };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
-        assert!(!commands.is_empty(), "Should track MA's new target when targeting MA");
+        assert!(
+            !commands.is_empty(),
+            "Should track MA's new target when targeting MA"
+        );
     }
 
     #[test]
     fn xassist_ma_not_in_spawn_list_produces_no_commands() {
         let mut xassist = XAssist::new();
-        xassist.set_config(100, XAssistConfig { ma_name: Some("NonExistentMA".into()), enabled: true });
+        xassist.set_config(
+            100,
+            XAssistConfig {
+                ma_name: Some("NonExistentMA".into()),
+                enabled: true,
+            },
+        );
 
         let nearby = vec![
             make_player_spawn(200, "SomeOtherPlayer"),
@@ -355,13 +408,22 @@ mod tests {
         };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
-        assert!(commands.is_empty(), "Should not command when MA not visible");
+        assert!(
+            commands.is_empty(),
+            "Should not command when MA not visible"
+        );
     }
 
     #[test]
     fn xassist_name_matching_is_case_insensitive() {
         let mut xassist = XAssist::new();
-        xassist.set_config(100, XAssistConfig { ma_name: Some("maIntTaNk".into()), enabled: true });
+        xassist.set_config(
+            100,
+            XAssistConfig {
+                ma_name: Some("maIntTaNk".into()),
+                enabled: true,
+            },
+        );
 
         let nearby = vec![
             make_player_spawn(200, "MainTank"),
@@ -382,14 +444,25 @@ mod tests {
         };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
-        assert!(!commands.is_empty(), "Case-insensitive matching should work");
+        assert!(
+            !commands.is_empty(),
+            "Case-insensitive matching should work"
+        );
     }
 
     #[test]
     fn xassist_remove_client_clears_state() {
         let mut xassist = XAssist::new();
-        xassist.set_config(100, XAssistConfig { ma_name: Some("MainTank".into()), enabled: true });
-        xassist.current_targets.insert(100, AssistTargetState::Tracking { spawn_id: 300 });
+        xassist.set_config(
+            100,
+            XAssistConfig {
+                ma_name: Some("MainTank".into()),
+                enabled: true,
+            },
+        );
+        xassist
+            .current_targets
+            .insert(100, AssistTargetState::Tracking { spawn_id: 300 });
 
         xassist.remove_client(100);
 

@@ -297,7 +297,11 @@ impl PlatTracker {
         self.summary.transaction_count += 1;
 
         let type_key = record.transaction_type.as_str().to_string();
-        *self.summary.transactions_by_type.entry(type_key).or_insert(0) += 1;
+        *self
+            .summary
+            .transactions_by_type
+            .entry(type_key)
+            .or_insert(0) += 1;
     }
 
     pub fn record_from_ledger(
@@ -493,10 +497,7 @@ mod tests {
         }
         assert_eq!(tracker.recent_transactions().len(), 5);
         assert_eq!(tracker.recent_transactions()[0].coin_delta.plat, 5);
-        assert_eq!(
-            tracker.recent_transactions()[4].coin_delta.plat,
-            9
-        );
+        assert_eq!(tracker.recent_transactions()[4].coin_delta.plat, 9);
     }
 
     #[test]
@@ -547,10 +548,7 @@ mod tests {
             TransactionType::Repair,
             TransactionType::BankDeposit,
         ] {
-            assert_eq!(
-                TransactionType::from_str(tt.as_str()),
-                tt
-            );
+            assert_eq!(TransactionType::from_str(tt.as_str()), tt);
         }
     }
 }

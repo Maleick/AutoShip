@@ -612,6 +612,9 @@ pub struct App {
     pub kill_tracker: crate::metrics::KillTracker,
     /// Multi-session store for per-character kill history.
     pub kill_session_store: crate::metrics::KillSessionStore,
+
+    /// Chat pattern rule engine for user-defined event triggers.
+    pub chat_pattern_engine: textquest_common::chat_pattern_rules::ChatPatternRuleEngine,
 }
 
 /// Navigation status for a single client.
@@ -855,6 +858,17 @@ impl App {
             kill_reporter: crate::metrics::KillReporter::default(),
             kill_tracker: crate::metrics::KillTracker::new(chrono::Utc::now().timestamp()),
             kill_session_store: crate::metrics::KillSessionStore::new(),
+
+            chat_pattern_engine: {
+                use textquest_common::chat_pattern_rules::ChatPatternRulesConfig;
+                let config = ChatPatternRulesConfig::load(std::path::Path::new(
+                    "config/chat_pattern_rules.toml",
+                ))
+                .unwrap_or_default();
+                textquest_common::chat_pattern_rules::ChatPatternRuleEngine::with_rules(
+                    config.rules,
+                )
+            },
         };
         app.cmd_state.load_history_from_disk();
         app

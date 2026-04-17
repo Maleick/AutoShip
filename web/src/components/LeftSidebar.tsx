@@ -8,6 +8,7 @@ import {
   Brain,
   Broadcast,
   Skull,
+  ChatCircle,
 } from "@phosphor-icons/react";
 
 export type ActiveView =
@@ -18,7 +19,8 @@ export type ActiveView =
   | "loot"
   | "soul"
   | "boxchat"
-  | "spawns";
+  | "spawns"
+  | "chat_pattern_rules";
 
 const navItems: {
   icon: typeof Sword;
@@ -34,6 +36,7 @@ const navItems: {
   { icon: Bag, label: "Loot Configuration", id: "loot" },
   { icon: Brain, label: "Soul Engine", id: "soul" },
   { icon: Broadcast, label: "Network Box Chat", id: "boxchat" },
+  { icon: ChatCircle, label: "Chat Pattern Rules", id: "chat_pattern_rules" },
 ];
 
 interface LeftSidebarProps {
