@@ -232,3 +232,49 @@ This matters because the system is proactive, not reactive:
 
 - Class strategy quality still needs live EQ validation class by class.
 - Vendor/sell and more advanced economy loops exist in module structure, but not every path should be treated as fully battle-tested.
+
+## Auto Group Formation
+
+The `AutoGroupController` automates the group formation sequence before a camp session starts. It is the TextQuest equivalent of MQ2AutoGroup.
+
+### Phase sequence
+
+| Phase | What happens |
+| ----- | ------------ |
+| `Idle` | Waiting for operator to start formation |
+| `Inviting` | Leader sends `/invite <name>` to each member in configured order; retries up to `max_retries` per slot |
+| `WaitingForMembers` | Polls live group membership until all members have joined or `member_wait_ticks` expires |
+| `AssigningRoles` | Sends `/grouprole set <name> <id>` for each member with a configured role |
+| `Done` | Dispatches the configurable completion command (e.g. start the camp loop) |
+
+### Configuration
+
+Configured via `PUT /api/auto-group` on the web dashboard. Fields:
+
+- `enabled` — must be true for `POST /api/auto-group/start` to proceed
+- `members` — ordered list of `{ name, role }` entries (role is optional)
+- `completion_command` — slash command to dispatch after the group is fully formed
+- `max_retries` — per-slot invite retry limit before failing a member
+- `invite_interval_ticks` — orchestrator ticks between successive invite attempts
+- `member_wait_ticks` — how many ticks to wait for all members to accept before timing out
+
+### Group roles
+
+Roles map to EQ's numeric group role IDs:
+
+| Role | EQ ID |
+| ---- | ----- |
+| MainTank | 1 |
+| MainAssist | 2 |
+| Puller | 3 |
+| MarkNpc | 4 |
+| MasterLooter | 5 |
+
+### REST API
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/api/auto-group` | Returns current config and phase label |
+| PUT | `/api/auto-group` | Updates config (rejected with 409 if formation is active) |
+| POST | `/api/auto-group/start` | Begins formation (requires `enabled: true` and non-empty `members`) |
+| POST | `/api/auto-group/reset` | Aborts formation and returns to Idle |

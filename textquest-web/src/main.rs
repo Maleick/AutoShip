@@ -111,6 +111,8 @@ pub struct AppState {
     pub chat_pattern_rules: tokio::sync::RwLock<ChatPatternRuleEngine>,
     /// Say detection state for /say channel pattern matching.
     pub say_detection: Option<Arc<api::say_detection::SayDetectionState>>,
+    /// Auto-group formation state — MQ2AutoGroup parity.
+    pub auto_group_state: Arc<api::auto_group::AutoGroupState>,
 }
 
 /// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is
@@ -365,6 +367,7 @@ fn build_state() -> Arc<AppState> {
         xassist_configs: api::xassist::demo_xassist_configs(),
         chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
+        auto_group_state: api::auto_group::AutoGroupState::new_demo(),
     })
 }
 
@@ -408,6 +411,7 @@ pub(crate) fn test_app_state() -> AppState {
         xassist_configs: api::xassist::demo_xassist_configs(),
         chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
+        auto_group_state: api::auto_group::AutoGroupState::new_demo(),
     }
 }
 
@@ -531,6 +535,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .nest("/soul", build_soul_router())
         .nest("/gm-alerts", api::gm_alerts::router())
         .nest("/say-detection", api::say_detection::router())
+        .nest("/auto-group", api::auto_group::router())
         .route("/xassist/configs", get(api::xassist::list_xassist_configs))
         .route(
             "/xassist/config/{character}",
@@ -689,6 +694,7 @@ mod tests {
             xassist_configs: api::xassist::demo_xassist_configs(),
             chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
             say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
+            auto_group_state: api::auto_group::AutoGroupState::new_demo(),
         })
     }
 
