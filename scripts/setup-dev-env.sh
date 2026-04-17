@@ -231,55 +231,107 @@ if [[ "$PROFILE" == "test" || "$PROFILE" == "full" ]]; then
 fi
 
 # ── 8. gh CLI (full profile only) ────────────────────────────────────────────
+_gh_check_auth() {
+    local GH_CLEAN_CONFIG=""
+    if [[ -n "${1:-}" ]]; then
+        GH_CLEAN_CONFIG="$1"
+        export GH_CONFIG_DIR="$GH_CLEAN_CONFIG"
+    fi
+
+    local GH_AUTH_OK=0
+    local GH_REPO_OK=0
+    if gh auth status >/dev/null 2>&1; then
+        GH_AUTH_OK=1
+        if gh repo view >/dev/null 2>&1; then
+            GH_REPO_OK=1
+        fi
+    fi
+
+    if [[ -n "$GH_CLEAN_CONFIG" ]]; then
+        rm -rf "$GH_CLEAN_CONFIG"
+    fi
+
+    echo "$GH_AUTH_OK:$GH_REPO_OK"
+}
+
+_gh_verify_and_report() {
+    local gh_path="$1"
+    shift
+    local GH_AUTH_SOURCE="$1"
+    local GH_ENV_PREFIX=("${@:-}")
+
+    if [[ $DRY_RUN -eq 1 ]]; then
+        if [[ ${#GH_ENV_PREFIX[@]} -gt 0 ]]; then
+            info "would run: ${GH_ENV_PREFIX[*]} $gh_path auth status"
+            info "would run: ${GH_ENV_PREFIX[*]} $gh_path repo view"
+        else
+            info "would run: $gh_path auth status"
+            info "would run: $gh_path repo view"
+        fi
+        pass "gh auth verification configured ($GH_AUTH_SOURCE)"
+        return 0
+    fi
+
+    local result
+    result=$("${GH_ENV_PREFIX[@]:+${GH_ENV_PREFIX[@]}}" "$gh_path" auth status >/dev/null 2>&1 && echo "ok")
+    local GH_AUTH_OK=0
+    local GH_REPO_OK=0
+
+    if [[ "$result" == "ok" ]]; then
+        GH_AUTH_OK=1
+        if "${GH_ENV_PREFIX[@]:+${GH_ENV_PREFIX[@]}}" "$gh_path" repo view >/dev/null 2>&1; then
+            GH_REPO_OK=1
+        fi
+    fi
+
+    if [[ $GH_AUTH_OK -eq 1 && $GH_REPO_OK -eq 1 ]]; then
+        pass "gh auth OK ($GH_AUTH_SOURCE)"
+    elif [[ $GH_AUTH_OK -eq 1 ]]; then
+        warn "gh auth is configured, but repo access could not be verified from this checkout"
+        info "If this repo should be reachable, run: gh repo view"
+    else
+        return 1
+    fi
+}
+
 if [[ "$PROFILE" == "full" ]]; then
     header "8. GitHub CLI (gh)"
     if command -v gh &>/dev/null; then
         GH_VERSION_CONFIG="$(mktemp -d)"
+        trap 'rm -rf "$GH_VERSION_CONFIG"' EXIT INT TERM
         GH_VER=$(GH_CONFIG_DIR="$GH_VERSION_CONFIG" gh --version 2>&1 | head -1)
         rm -rf "$GH_VERSION_CONFIG"
+        trap - EXIT INT TERM
         pass "gh: $GH_VER"
 
         info "Checking gh auth..."
-        GH_AUTH_SOURCE="local gh auth session"
-        GH_ENV_PREFIX=()
-        GH_CLEAN_CONFIG=""
-        if [[ -n "${GH_TOKEN:-}" || -n "${GITHUB_TOKEN:-}" ]]; then
-            GH_AUTH_SOURCE="GH_TOKEN/GITHUB_TOKEN environment"
-            GH_CLEAN_CONFIG="$(mktemp -d)"
-            GH_ENV_PREFIX=(env "GH_CONFIG_DIR=$GH_CLEAN_CONFIG")
-        fi
-
-        if [[ $DRY_RUN -eq 1 ]]; then
-            if [[ -n "$GH_CLEAN_CONFIG" ]]; then
-                info "would run: GH_CONFIG_DIR=<temp> gh auth status"
-                info "would run: GH_CONFIG_DIR=<temp> gh repo view"
+        if gh auth status >/dev/null 2>&1; then
+            if gh repo view >/dev/null 2>&1; then
+                pass "gh auth OK (local session)"
             else
-                info "would run: gh auth status"
-                info "would run: gh repo view"
-            fi
-            pass "gh auth verification configured ($GH_AUTH_SOURCE)"
-        else
-            GH_AUTH_OK=0
-            GH_REPO_OK=0
-            if "${GH_ENV_PREFIX[@]}" gh auth status >/dev/null 2>&1; then
-                GH_AUTH_OK=1
-                if "${GH_ENV_PREFIX[@]}" gh repo view >/dev/null 2>&1; then
-                    GH_REPO_OK=1
-                fi
-            fi
-
-            if [[ -n "$GH_CLEAN_CONFIG" ]]; then
-                rm -rf "$GH_CLEAN_CONFIG"
-            fi
-
-            if [[ $GH_AUTH_OK -eq 1 && $GH_REPO_OK -eq 1 ]]; then
-                pass "gh auth OK ($GH_AUTH_SOURCE)"
-            elif [[ $GH_AUTH_OK -eq 1 ]]; then
                 warn "gh auth is configured, but repo access could not be verified from this checkout"
                 info "If this repo should be reachable, run: gh repo view"
+            fi
+        elif [[ -n "${GH_TOKEN:-}" || -n "${GITHUB_TOKEN:-}" ]]; then
+            info "Local gh session not usable — trying token fallback..."
+            GH_CLEAN_CONFIG="$(mktemp -d)"
+            trap 'rm -rf "$GH_CLEAN_CONFIG"' EXIT INT TERM
+            if GH_CONFIG_DIR="$GH_CLEAN_CONFIG" gh auth status >/dev/null 2>&1; then
+                if GH_CONFIG_DIR="$GH_CLEAN_CONFIG" gh repo view >/dev/null 2>&1; then
+                    pass "gh auth OK (GH_TOKEN/GITHUB_TOKEN environment)"
+                else
+                    warn "gh auth via token configured, but repo access could not be verified"
+                    info "If this repo should be reachable, check token scope"
+                fi
             else
+                rm -rf "$GH_CLEAN_CONFIG"
+                trap - EXIT INT TERM
                 fail "gh auth is not usable — run 'gh auth login' or export GH_TOKEN/GITHUB_TOKEN"
             fi
+            rm -rf "$GH_CLEAN_CONFIG"
+            trap - EXIT INT TERM
+        else
+            fail "gh auth is not usable — run 'gh auth login' or export GH_TOKEN/GITHUB_TOKEN"
         fi
     else
         PLATFORM="$(uname -s)"
@@ -289,7 +341,34 @@ if [[ "$PROFILE" == "full" ]]; then
             if command -v gh &>/dev/null; then
                 GH_VER=$(gh --version 2>&1 | head -1)
                 pass "gh installed: $GH_VER"
-                fail "gh is installed, but auth is not configured yet — run 'gh auth login' or export GH_TOKEN/GITHUB_TOKEN"
+                if gh auth status >/dev/null 2>&1; then
+                    if gh repo view >/dev/null 2>&1; then
+                        pass "gh auth OK (local session)"
+                    else
+                        warn "gh auth is configured, but repo access could not be verified from this checkout"
+                        info "If this repo should be reachable, run: gh repo view"
+                    fi
+                elif [[ -n "${GH_TOKEN:-}" || -n "${GITHUB_TOKEN:-}" ]]; then
+                    info "Local gh session not usable — trying token fallback..."
+                    GH_CLEAN_CONFIG="$(mktemp -d)"
+                    trap 'rm -rf "$GH_CLEAN_CONFIG"' EXIT INT TERM
+                    if GH_CONFIG_DIR="$GH_CLEAN_CONFIG" gh auth status >/dev/null 2>&1; then
+                        if GH_CONFIG_DIR="$GH_CLEAN_CONFIG" gh repo view >/dev/null 2>&1; then
+                            pass "gh auth OK (GH_TOKEN/GITHUB_TOKEN environment)"
+                        else
+                            warn "gh auth via token configured, but repo access could not be verified"
+                            info "If this repo should be reachable, check token scope"
+                        fi
+                    else
+                        rm -rf "$GH_CLEAN_CONFIG"
+                        trap - EXIT INT TERM
+                        fail "gh auth is not usable — run 'gh auth login' or export GH_TOKEN/GITHUB_TOKEN"
+                    fi
+                    rm -rf "$GH_CLEAN_CONFIG"
+                    trap - EXIT INT TERM
+                else
+                    fail "gh auth is not usable — run 'gh auth login' or export GH_TOKEN/GITHUB_TOKEN"
+                fi
             else
                 fail "gh installation failed — install manually: https://cli.github.com"
             fi

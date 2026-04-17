@@ -33,7 +33,7 @@ The repository already sets this through repo configuration, but the explicit ex
 For issue, PR, and wiki automation work, use the full setup profile:
 
 ```bash
-./scripts/setup-dev-env.sh --profile full
+./scripts/setup-dev-env.sh --profile=full
 ```
 
 The full profile now verifies that `gh` is both installed and usable from this checkout:
