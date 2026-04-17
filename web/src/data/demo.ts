@@ -26,7 +26,6 @@ import type {
   LootPolicy,
   LootFilterAction,
   SpawnAlertEntry,
-  WatchPattern,
   SpawnAlertConfig,
   SpawnAlertStats,
 } from "../types";

@@ -401,7 +401,7 @@ struct DashboardEvent {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DashboardActionError {
+pub struct DashboardActionError {
     error: String,
 }
 
@@ -716,13 +716,13 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/action", post(apply_dashboard_action))
 }
 
-async fn get_dashboard(State(state): State<Arc<AppState>>) -> Json<DashboardSnapshot> {
+pub async fn get_dashboard(State(state): State<Arc<AppState>>) -> Json<DashboardSnapshot> {
     let mut snapshot = state.dashboard_state.current_snapshot().await;
     hydrate_runtime_state(state.as_ref(), &mut snapshot);
     Json(snapshot)
 }
 
-async fn apply_dashboard_action(
+pub async fn apply_dashboard_action(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(action): Json<DashboardActionRequest>,
@@ -1370,9 +1370,7 @@ mod tests {
     use crate::AppState;
 
     fn test_state() -> Arc<AppState> {
-        let mut state = crate::test_app_state();
-        state.dashboard_state = DashboardState::new_demo();
-        Arc::new(state)
+        crate::test_support::demo_app_state()
     }
 
     #[tokio::test]

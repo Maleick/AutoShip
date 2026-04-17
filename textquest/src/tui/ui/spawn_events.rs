@@ -2,9 +2,9 @@
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
+    layout::{Constraint, Rect},
+    style::{Color, Style},
+    text::Span,
     widgets::{Cell, Paragraph, Row, Table, Wrap},
 };
 

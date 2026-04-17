@@ -82,7 +82,7 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake clang libclang-dev llvm-dev pkg-config libasound2-dev
+          sudo apt-get install -y cmake clang libclang-dev llvm-dev pkg-config libssl-dev libasound2-dev
           echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
 
       - name: Setup Python
@@ -100,6 +100,10 @@ jobs:
       - name: Cache cargo registry
         if: steps.scope.outputs.docs_only != 'true'
         uses: Swatinem/rust-cache@v2
+
+      - name: Check Rust formatting
+        if: steps.scope.outputs.docs_only != 'true'
+        run: cargo fmt --all -- --check
 
       - name: Validate wiki sources
         run: python3 scripts/sync_wiki.py --check
@@ -148,10 +152,6 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         continue-on-error: true
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
-
-      - name: Check rustfmt
-        if: steps.scope.outputs.docs_only != 'true'
-        run: cargo fmt --all --check
 
       - name: Run clippy
         if: steps.scope.outputs.docs_only != 'true'

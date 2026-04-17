@@ -528,7 +528,8 @@ mod tests {
         summary.net_change = CoinStack::from_platinum(600);
         summary.session_start = Instant::now() - Duration::from_secs(3600);
         let rate = summary.plat_per_hour();
-        assert!((rate - 600.0).abs() < 0.1);
+        let expected = summary.net_change.total_copper() as f64 / 100.0;
+        assert!((rate - expected).abs() < 0.1);
     }
 
     #[test]

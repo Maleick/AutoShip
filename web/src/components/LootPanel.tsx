@@ -115,15 +115,17 @@ export default function LootPanel() {
     >();
 
     for (const entry of filteredHistory) {
-      const current = summary.get(entry.assigned_to) ?? {
+      const assignee = entry.assigned_to ?? "Unassigned";
+      const estimatedValue = entry.estimated_value ?? 0;
+      const current = summary.get(assignee) ?? {
         count: 0,
         totalValue: 0,
         lastItem: entry.item_name,
       };
       current.count += entry.quantity;
-      current.totalValue += entry.estimated_value;
+      current.totalValue += estimatedValue;
       current.lastItem = entry.item_name;
-      summary.set(entry.assigned_to, current);
+      summary.set(assignee, current);
     }
 
     return Array.from(summary.entries())
@@ -228,7 +230,7 @@ export default function LootPanel() {
             {
               label: "Tracked value",
               value: `${filteredHistory
-                .reduce((sum, entry) => sum + entry.estimated_value, 0)
+                .reduce((sum, entry) => sum + (entry.estimated_value ?? 0), 0)
                 .toLocaleString()} pp`,
             },
           ].map((card) => (
@@ -475,7 +477,7 @@ export default function LootPanel() {
                   </div>
                 </div>
                 <div className="text-spectral font-rune">
-                  {entry.estimated_value.toLocaleString()} pp
+                  {(entry.estimated_value ?? 0).toLocaleString()} pp
                   <div className="text-[10px] text-white/35 font-rune">
                     {entry.policy}
                   </div>

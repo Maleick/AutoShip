@@ -5,6 +5,14 @@ use std::path::Path;
 use textquest_common::box_chat::BoxChatConfig;
 use textquest_soul::config::SoulConfig;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayerFilterMode {
+    #[default]
+    All,
+    StrangersOnly,
+    FriendsOnly,
+}
 // ─── Account Configuration ───────────────────────────────────────────────
 
 /// A single account entry from config/accounts.toml.
@@ -233,6 +241,9 @@ pub struct AppConfig {
     /// Kill tracker configuration for auto-reporting and session tracking.
     #[serde(default)]
     pub kill_tracker: KillTrackerConfig,
+    /// Weighted item upgrade scoring configuration (MQ2ItemScore parity).
+    #[serde(default)]
+    pub item_score: crate::loot::ItemScoreConfig,
 
     /// Say detection and alerting configuration.
     #[serde(default)]
@@ -549,6 +560,31 @@ pub struct ToonConfig {
     /// Account name this toon belongs to.
     #[serde(default)]
     pub account: Option<String>,
+    /// Unattended camp-out + delayed relog settings after death.
+    #[serde(default)]
+    pub auto_camp_on_death: AutoCampOnDeathConfig,
+}
+
+/// Per-character unattended death handling configuration.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct AutoCampOnDeathConfig {
+    /// Whether the death-camp workflow is enabled for this toon.
+    pub enabled: bool,
+    /// Delay before camping the character out after death.
+    pub camp_delay_secs: u64,
+    /// Delay before attempting an automated relog after the camp-out.
+    pub relog_wait_secs: u64,
+}
+
+impl Default for AutoCampOnDeathConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            camp_delay_secs: 30,
+            relog_wait_secs: 900,
+        }
+    }
 }
 
 /// Configuration for EQ client launching — paths, stagger timing, and resource
@@ -741,19 +777,10 @@ impl AppConfig {
             chat_log: crate::chat_log::ChatLogConfig::default(),
             timing_correction: false,
             kill_tracker: KillTrackerConfig::default(),
+            item_score: crate::loot::ItemScoreConfig::default(),
             say_detection: SayDetectionConfig::default(),
         }
     }
-}
-
-/// Configuration for spawn watch alerts and the alert feed.
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum PlayerFilterMode {
-    #[default]
-    All,
-    StrangersOnly,
-    FriendsOnly,
 }
 
 /// Configuration for spawn watch alerts and the alert feed.

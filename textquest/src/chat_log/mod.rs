@@ -7,7 +7,7 @@
 pub mod config;
 pub mod writer;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -152,13 +152,14 @@ impl ChatLogWriter {
     }
 
     fn write_line(&mut self, line: &str, level: LogLevel) -> std::io::Result<()> {
+        let formatted_line = format!("[{}] {line}\n", level);
         let file = self
             .file
             .as_mut()
             .expect("chat log writer should always have an active file");
-        writeln!(file, "[{}] {}", level, line)?;
+        file.write_all(formatted_line.as_bytes())?;
         file.flush()?;
-        self.current_size_bytes += line.len() as u64 + 1;
+        self.current_size_bytes += formatted_line.len() as u64;
         Ok(())
     }
 }
@@ -185,6 +186,20 @@ impl ChatLogManager {
             .join(format!("{}_{}.log", sanitized_server, sanitized_char))
     }
 
+    fn writer_for(&mut self, server: &str, character: &str) -> std::io::Result<&mut ChatLogWriter> {
+        let key = format!("{}/{}", server, character);
+        let path = self.log_path(server, character);
+
+        match self.writers.entry(key) {
+            Entry::Occupied(entry) => Ok(entry.into_mut()),
+            Entry::Vacant(entry) => {
+                std::fs::create_dir_all(&self.log_dir)?;
+                let writer = ChatLogWriter::new(path)?;
+                Ok(entry.insert(writer))
+            }
+        }
+    }
+
     pub fn log_message(
         &mut self,
         server: &str,
@@ -202,18 +217,11 @@ impl ChatLogManager {
             return Ok(());
         }
 
-        let key = format!("{}/{}", server, character);
-        let path = self.log_path(server, character);
-        let log_dir = self.log_dir.clone();
-        let writer = self.writers.entry(key.clone()).or_insert_with(|| {
-            std::fs::create_dir_all(log_dir.as_path()).ok();
-            ChatLogWriter::new(path).expect("failed to create chat log writer")
-        });
+        let rotation_strategy = self.config.rotation_strategy.clone();
+        let max_file_size_bytes = self.config.max_file_size_bytes;
+        let writer = self.writer_for(server, character)?;
 
-        writer.check_rotation(
-            &self.config.rotation_strategy,
-            self.config.max_file_size_bytes,
-        )?;
+        writer.check_rotation(&rotation_strategy, max_file_size_bytes)?;
 
         let timestamp = Self::format_timestamp(message.timestamp_ms);
         let channel_prefix = channel.map(|c| format!("[{}] ", c)).unwrap_or_default();
@@ -237,18 +245,11 @@ impl ChatLogManager {
             return Ok(());
         }
 
-        let key = format!("{}/{}", server, character);
-        let path = self.log_path(server, character);
-        let log_dir = self.log_dir.clone();
-        let writer = self.writers.entry(key.clone()).or_insert_with(|| {
-            std::fs::create_dir_all(log_dir.as_path()).ok();
-            ChatLogWriter::new(path).expect("failed to create chat log writer")
-        });
+        let rotation_strategy = self.config.rotation_strategy.clone();
+        let max_file_size_bytes = self.config.max_file_size_bytes;
+        let writer = self.writer_for(server, character)?;
 
-        writer.check_rotation(
-            &self.config.rotation_strategy,
-            self.config.max_file_size_bytes,
-        )?;
+        writer.check_rotation(&rotation_strategy, max_file_size_bytes)?;
 
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -368,7 +369,9 @@ mod tests {
     #[test]
     fn log_message_creates_file() {
         let dir = temp_log_dir();
-        let config = default_config();
+        let mut config = default_config();
+        config.channels = vec![ChatChannel::Say];
+        config.log_eq_chat = true;
         let mut manager = ChatLogManager::new(config, dir.clone()).unwrap();
 
         let message = ChatMessageInfo {
@@ -397,6 +400,8 @@ mod tests {
         let dir = temp_log_dir();
         let mut config = default_config();
         config.enabled = false;
+        config.channels = vec![ChatChannel::Say];
+        config.log_eq_chat = true;
         let mut manager = ChatLogManager::new(config, dir.clone()).unwrap();
 
         let message = ChatMessageInfo {
@@ -560,5 +565,47 @@ mod tests {
             })
             .count();
         assert!(archive_count >= 1, "expected rotated archive file");
+    }
+
+    #[test]
+    fn write_line_tracks_full_written_bytes() {
+        let path = temp_log_dir().join("size-test.log");
+        let mut writer = ChatLogWriter::new(path.clone()).unwrap();
+
+        writer.write_line("payload", LogLevel::Warn).unwrap();
+
+        let on_disk = std::fs::metadata(&path).unwrap().len();
+        assert_eq!(writer.current_size_bytes, on_disk);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn log_message_returns_error_when_writer_creation_fails() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_root = temp_log_dir();
+        let read_only_root = temp_root.join("readonly");
+        std::fs::create_dir_all(&read_only_root).unwrap();
+        std::fs::set_permissions(&read_only_root, std::fs::Permissions::from_mode(0o555)).unwrap();
+
+        let mut config = default_config();
+        config.channels = vec![ChatChannel::Say];
+        config.log_eq_chat = true;
+        let nested_log_dir = read_only_root.join("nested");
+        let mut manager = ChatLogManager::new(config, nested_log_dir).unwrap();
+
+        let message = ChatMessageInfo {
+            text: "Test chat message".to_string(),
+            color: 273,
+            timestamp_ms: 1700000000000,
+        };
+
+        let error = manager
+            .log_message("Firiona Vie", "TestChar", &message, Some(ChatChannel::Say))
+            .expect_err("writer creation should fail");
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+
+        std::fs::set_permissions(&read_only_root, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::remove_dir_all(&temp_root).ok();
     }
 }

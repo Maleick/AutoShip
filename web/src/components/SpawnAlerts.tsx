@@ -76,7 +76,7 @@ function formatTimestamp(ts: string): string {
 }
 
 export default function SpawnAlerts() {
-  const [alerts] = useState<SpawnAlertEntry[]>(initialSpawnAlerts);
+  const alerts = initialSpawnAlerts as SpawnAlertEntry[];
   const [config, setConfig] = useState<SpawnAlertConfig>(initialConfig);
   const [stats] = useState<SpawnAlertStats>(initialStats);
   const [search, setSearch] = useState("");

@@ -26,7 +26,7 @@ use axum::{
     http::{HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::Response,
-    routing::{delete, get, post, put},
+    routing::{get, post, put},
 };
 use tokio::sync::broadcast;
 use tower_http::{
@@ -39,6 +39,8 @@ use textquest::{alerts::AlertStore, config::AlertingConfig};
 mod accounts;
 mod api;
 mod live_ipc;
+#[cfg(test)]
+mod test_support;
 mod ws;
 
 /// Shared application state accessible from all handlers.
@@ -52,6 +54,8 @@ pub struct AppState {
     pub credential_store: Option<accounts::CredentialStore>,
     /// In-memory character tuning config store for the strategy tuning panel.
     pub character_configs: tokio::sync::RwLock<HashMap<String, api::CharacterConfig>>,
+    /// Auto-accept trade settings exposed through the web API.
+    pub auto_accept_settings: tokio::sync::RwLock<textquest_common::ipc::AutoAcceptSettings>,
     /// On-disk JSON store for character tuning and reward automation settings.
     pub character_config_path: PathBuf,
     /// Serializes PUT-driven writes to [`character_config_path`] so concurrent
@@ -59,8 +63,6 @@ pub struct AppState {
     /// Reads are unaffected — they still go through the `character_configs`
     /// RwLock.
     pub character_config_write_lock: tokio::sync::Mutex<()>,
-    /// Shared auto-accept policy for live IPC application.
-    pub auto_accept_settings: tokio::sync::RwLock<textquest_common::ipc::AutoAcceptSettings>,
     /// In-memory loot configuration state.
     pub loot_state: Arc<api::loot::LootState>,
     /// In-memory economy cycle state.
@@ -73,12 +75,18 @@ pub struct AppState {
     pub discord_state: Arc<api::discord::DiscordState>,
     /// In-memory player watch (zone entry/exit) configuration.
     pub player_watch_config: tokio::sync::RwLock<api::PlayerWatchConfig>,
+    /// Serializes PUT-driven writes to the player-watch config sidecar so disk
+    /// and in-memory state stay in the same order under concurrent requests.
+    pub player_watch_write_lock: tokio::sync::Mutex<()>,
     /// GM alert state — zone-wide GM detection status for web dashboard.
     pub gm_alert_state: Arc<api::gm_alerts::GmAlertState>,
     /// In-memory spawn alert state for rare spawn monitoring.
     pub spawn_alerts: Arc<api::spawn_alerts::SpawnAlertState>,
     /// In-memory timestamp config store per character.
     pub timestamp_configs: tokio::sync::RwLock<HashMap<String, api::TimestampConfig>>,
+    /// Serializes timestamp sidecar writes so acknowledged edits persist in the
+    /// same order they become visible through the API.
+    pub timestamp_config_write_lock: tokio::sync::Mutex<()>,
     /// Kill tracker state for session tracking and auto-reporting.
     pub kill_tracker_state: Arc<api::kill_tracker::KillTrackerState>,
     /// Persistent operational alert history.
@@ -324,19 +332,31 @@ fn build_state() -> Arc<AppState> {
         account_store: Mutex::new(accounts::AccountStore::default()),
         credential_store,
         character_configs: tokio::sync::RwLock::new(character_configs),
+        auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
         character_config_path,
         character_config_write_lock: tokio::sync::Mutex::new(()),
-        auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
         loot_state: api::loot::LootState::new_demo(),
         economy_state: api::economy::EconomyState::new_demo(),
         dashboard_state: api::dashboard::DashboardState::new_demo(),
         soul_audit: api::soul::SoulAuditState::new_demo(),
         discord_state: api::discord::DiscordState::new_demo(),
-        player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
+        player_watch_config: tokio::sync::RwLock::new(
+            api::read_player_watch_config_from_disk().unwrap_or_else(|error| {
+                tracing::warn!(%error, "Failed to load player-watch config");
+                api::PlayerWatchConfig::default()
+            }),
+        ),
+        player_watch_write_lock: tokio::sync::Mutex::new(()),
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
-        timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
-        kill_tracker_state: api::kill_tracker::KillTrackerState::new_demo(),
+        timestamp_configs: tokio::sync::RwLock::new(
+            api::load_timestamp_configs_from_disk().unwrap_or_else(|error| {
+                tracing::warn!(%error, "Failed to load timestamp configs");
+                HashMap::new()
+            }),
+        ),
+        timestamp_config_write_lock: tokio::sync::Mutex::new(()),
+        kill_tracker_state: api::kill_tracker::KillTrackerState::new_empty(),
         alert_store: open_alert_store(),
         alert_config: tokio::sync::RwLock::new(load_alerting_config_from(&alerting_config_path())),
         alerting_config_path: alerting_config_path(),
@@ -368,10 +388,12 @@ pub(crate) fn test_app_state() -> AppState {
         soul_audit: api::soul::SoulAuditState::new_demo(),
         discord_state: api::discord::DiscordState::new_demo(),
         player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
+        player_watch_write_lock: tokio::sync::Mutex::new(()),
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
         timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
-        kill_tracker_state: api::kill_tracker::KillTrackerState::new_demo(),
+        timestamp_config_write_lock: tokio::sync::Mutex::new(()),
+        kill_tracker_state: api::kill_tracker::KillTrackerState::new_empty(),
         alert_store: AlertStore::open_memory().expect("alert store"),
         alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
         alerting_config_path: std::env::temp_dir().join(format!(
@@ -422,6 +444,10 @@ fn build_loot_router() -> Router<Arc<AppState>> {
             get(api::loot::get_distribution).put(api::loot::put_distribution),
         )
         .route("/history", get(api::loot::get_history))
+        .route(
+            "/item-score",
+            get(api::loot::get_item_score).put(api::loot::put_item_score),
+        )
 }
 
 fn build_api_router() -> Router<Arc<AppState>> {
@@ -527,15 +553,9 @@ fn build_api_router() -> Router<Arc<AppState>> {
         )
         .route(
             "/chat-pattern-rules/{id}",
-            get(api::chat_pattern_rules::get_rule),
-        )
-        .route(
-            "/chat-pattern-rules/{id}",
-            put(api::chat_pattern_rules::update_rule),
-        )
-        .route(
-            "/chat-pattern-rules/{id}",
-            delete(api::chat_pattern_rules::delete_rule),
+            get(api::chat_pattern_rules::get_rule)
+                .put(api::chat_pattern_rules::update_rule)
+                .delete(api::chat_pattern_rules::delete_rule),
         )
         .route(
             "/chat-pattern-rules/{id}/toggle",
@@ -643,21 +663,21 @@ mod tests {
                 accounts::CredentialStore::open(path, "test_master_pw").expect("credential store"),
             ),
             character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
+            auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
             character_config_path: path.with_file_name("character-configs.json"),
             character_config_write_lock: tokio::sync::Mutex::new(()),
-            auto_accept_settings: tokio::sync::RwLock::new(
-                textquest_common::ipc::AutoAcceptSettings::default(),
-            ),
             loot_state: api::loot::LootState::new_demo(),
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: api::dashboard::DashboardState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
             discord_state: api::discord::DiscordState::new_demo(),
             player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
+            player_watch_write_lock: tokio::sync::Mutex::new(()),
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
             timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
-            kill_tracker_state: api::kill_tracker::KillTrackerState::new_demo(),
+            timestamp_config_write_lock: tokio::sync::Mutex::new(()),
+            kill_tracker_state: api::kill_tracker::KillTrackerState::new_empty(),
             alert_store: AlertStore::open_memory().expect("alert store"),
             alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
             alerting_config_path: std::env::temp_dir().join(format!(
@@ -689,7 +709,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn known_unimplemented_routes_return_json_501() {
+    async fn known_unimplemented_and_live_config_routes_return_expected_statuses() {
         let app = build_app(build_state());
         let (status, body) = json_response(
             app.clone(),
@@ -708,7 +728,7 @@ mod tests {
         );
 
         let (status, body) = json_response(
-            app,
+            app.clone(),
             Request::builder()
                 .uri("/api/config/characters")
                 .body(Body::empty())
@@ -717,6 +737,46 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::OK);
         assert!(body.is_array());
+
+        let (status, _body) = json_response(
+            app.clone(),
+            Request::builder()
+                .uri("/api/dashboard")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let (status, _body) = json_response(
+            app.clone(),
+            Request::builder()
+                .uri("/api/config/discord")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let (status, _body) = json_response(
+            app.clone(),
+            Request::builder()
+                .uri("/api/box-chat/settings")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+
+        let (status, _body) = json_response(
+            app,
+            Request::builder()
+                .uri("/api/chat-log/settings")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
     }
 
     #[tokio::test]

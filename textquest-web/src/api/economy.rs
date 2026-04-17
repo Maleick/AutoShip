@@ -178,12 +178,9 @@ pub async fn resume_economy(State(state): State<Arc<AppState>>, headers: HeaderM
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AppState;
 
     fn demo_state() -> Arc<AppState> {
-        let mut state = crate::test_app_state();
-        state.economy_state = EconomyState::new_demo();
-        Arc::new(state)
+        crate::test_support::demo_app_state()
     }
 
     #[tokio::test]

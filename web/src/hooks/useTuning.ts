@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import type { CharacterConfig } from "../types";
 
+const DEFAULT_AUTO_CAMP_ON_DEATH = {
+  enabled: false,
+  camp_delay_secs: 30,
+  relog_wait_secs: 900,
+};
+
 const DEFAULT_AUTO_REZ_CONFIG = {
   enabled: false,
   min_xp_pct: 90,
@@ -8,8 +14,6 @@ const DEFAULT_AUTO_REZ_CONFIG = {
   decline_if_untrusted: false,
   delay_ms: 3000,
 };
-
-const DEFAULT_REWARD_AUTOMATION = { rules: [] };
 
 const DEFAULT_TRIBUTE_PREFERENCES = {
   auto_activate: false,
@@ -35,6 +39,10 @@ function normalizeConfig(config: CharacterConfig): CharacterConfig {
       ...DEFAULT_AUTO_REZ_CONFIG,
       ...config.auto_rez,
       trusted_casters: config.auto_rez?.trusted_casters ?? [],
+    },
+    auto_camp_on_death: {
+      ...DEFAULT_AUTO_CAMP_ON_DEATH,
+      ...config.auto_camp_on_death,
     },
     reward_automation: {
       rules: config.reward_automation?.rules ?? [],

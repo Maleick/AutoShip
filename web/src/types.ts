@@ -5,7 +5,7 @@ export interface Session {
   level: number;
   hp_pct: number;
   mana_pct: number;
-  endurance_pct: number;
+  endurance_pct?: number;
   status: "active" | "idle" | "dead" | "camping" | "zoning";
   buff_count: number;
   target_name?: string | null;
@@ -448,6 +448,10 @@ export interface RotationEntry {
 
 export interface ClassParams {
   ch_chain_timing_ms?: number;
+  cross_client_heal_enabled?: boolean;
+  cross_client_heal_threshold_pct?: number;
+  cross_client_heal_priority?: number;
+  cross_client_claim_timeout_ms?: number;
   dot_overlap_pct?: number;
   burn_at_hp_pct?: number;
   slow_at_hp_pct?: number;
@@ -490,6 +494,12 @@ export interface AutoRezConfig {
   delay_ms: number;
 }
 
+export interface AutoCampOnDeathConfig {
+  enabled: boolean;
+  camp_delay_secs: number;
+  relog_wait_secs: number;
+}
+
 export interface CharacterConfig {
   character_name: string;
   class: string;
@@ -500,12 +510,69 @@ export interface CharacterConfig {
   rotation: RotationEntry[];
   class_params: ClassParams;
   auto_rez?: AutoRezConfig;
+  auto_camp_on_death?: AutoCampOnDeathConfig;
   group_override: boolean;
   group_name?: string;
   reward_automation?: RewardAutomationConfig;
   window_title_format?: string;
   tribute_preferences?: TributePreferences;
   tribute_status?: TributeStatus;
+}
+
+// ── Bard configuration types ─────────────────────────────────────────────────
+
+export type InstrumentType =
+  | "None"
+  | "String"
+  | "Brass"
+  | "Wind"
+  | "Percussion";
+
+export type SongCategory =
+  | "Haste"
+  | "SpellFocus"
+  | "MeleeProc"
+  | "Crescendo"
+  | "Insult"
+  | "RunSpeed"
+  | "Regen"
+  | "Tank"
+  | "Slow"
+  | "Accelerando"
+  | "Mez"
+  | "Dot"
+  | "Arcane"
+  | "Other";
+
+export type InstrumentSlot = "Primary" | "Secondary";
+
+export interface SongSlotConfig {
+  id: string;
+  gem: number;
+  name: string;
+  priority: number;
+  enabled: boolean;
+  min_recast_ticks: number;
+  buff_duration_ticks: number | null;
+  category: SongCategory;
+  instrument_type: InstrumentType;
+  instrument_slot: InstrumentSlot;
+}
+
+export interface InstrumentSet {
+  string_item_id: number | null;
+  brass_item_id: number | null;
+  wind_item_id: number | null;
+  percussion_item_id: number | null;
+}
+
+export interface BardConfig {
+  character_name: string;
+  twist_enabled: boolean;
+  full_rotation_enabled: boolean;
+  instrument_swap_enabled: boolean;
+  songs: SongSlotConfig[];
+  instruments: InstrumentSet[];
 }
 
 // ── Loot configuration types ─────────────────────────────────────────────────
@@ -603,13 +670,13 @@ export interface LootHistoryEntry {
   zone: string | null;
   quantity: number;
   assigned_by: string | null;
-  item_type: string;
-  quality: string | null;
-  assigned_to: string;
-  looted_by: string;
-  source: string | null;
-  policy: LootPolicy;
-  estimated_value: number;
+  item_type?: string;
+  quality?: string | null;
+  assigned_to?: string;
+  looted_by?: string;
+  source?: string | null;
+  policy?: LootPolicy;
+  estimated_value?: number;
 }
 
 // ── Kill Tracker types ────────────────────────────────────────────────────────
@@ -708,4 +775,132 @@ export interface PerCharacterChatLogConfig {
   character_name: string;
   enabled: boolean;
   channels: ChatChannel[];
+}
+
+export type LogRotation =
+  | { type: "none" }
+  | { type: "daily" }
+  | { type: "by_size"; max_bytes: number };
+
+export interface ChatLogSettings {
+  enabled: boolean;
+  rotation: LogRotation;
+  level: "info" | "debug";
+  channels: ChatChannel[];
+}
+
+// ── Auto-accept types ────────────────────────────────────────────────────────
+
+export type AutoAcceptTrustMode = "anyone" | "trust_list";
+
+export interface AutoAcceptSettings {
+  enabled: boolean;
+  accept_group_invites: boolean;
+  accept_trades: boolean;
+  accept_task_adds: boolean;
+  accept_dz_adds: boolean;
+  accept_translocates: boolean;
+  accept_anchors: boolean;
+  trust_mode: AutoAcceptTrustMode;
+  trusted_players: string[];
+}
+
+export type PlayerFilterMode = "all" | "strangers_only" | "friends_only";
+
+export interface PlayerWatchConfig {
+  filter_mode: PlayerFilterMode;
+  sound_on_zone_in: boolean;
+  friends: string[];
+}
+
+export type TimestampFormat =
+  | "date_time_24"
+  | "time_24"
+  | "date_time_12"
+  | "time_12";
+
+export interface TimestampConfig {
+  enabled: boolean;
+  format: TimestampFormat;
+}
+
+// ── GM alerts types ──────────────────────────────────────────────────────────
+
+export interface GmAlertConfig {
+  enabled: boolean;
+  soundEnabled: boolean;
+  soundFile: string | null;
+  toastEnabled: boolean;
+  autoPauseEnabled: boolean;
+  discordWebhookUrl: string | null;
+  broadcastAllClients: boolean;
+}
+
+export interface GmPresenceStatus {
+  isGmInZone: boolean;
+  gmCount: number;
+  gmNames: string[];
+}
+
+export interface GmAlertStatus {
+  config: GmAlertConfig;
+  presence: GmPresenceStatus;
+  automationPaused: boolean;
+}
+
+// ── Spawn alert types ────────────────────────────────────────────────────────
+
+export interface SpawnAlertEntry {
+  id: number;
+  spawn_name: string;
+  zone: string;
+  is_up: boolean;
+  timestamp: string;
+  time_since_last_pop_ms: number | null;
+  match_source: string;
+}
+
+export interface WatchPattern {
+  pattern: string;
+  enabled: boolean;
+}
+
+export interface SpawnAlertConfig {
+  watch_named_enabled: boolean;
+  watch_patterns: WatchPattern[];
+  broadcast_to_web: boolean;
+  broadcast_to_clients: boolean;
+}
+
+export interface SpawnAlertStats {
+  total_alerts: number;
+  spawns_up: number;
+  spawns_down: number;
+}
+
+export interface SpawnAlertPage {
+  total: number;
+  offset: number;
+  limit: number;
+  entries: SpawnAlertEntry[];
+}
+
+export type StatWeights = Record<string, number>;
+
+export interface ItemScoreConfig {
+  min_upgrade_delta: number;
+  class_weights: Record<string, StatWeights>;
+}
+
+// ── XAssist types ────────────────────────────────────────────────────────────
+
+export interface XAssistCharacterConfig {
+  character_name: string;
+  ma_name: string | null;
+  enabled: boolean;
+}
+
+export interface XAssistConfigUpdate {
+  ma_name: string | null;
+  enabled: boolean;
 }

@@ -45,7 +45,7 @@ function PlayerRow({ session }: { session: Session }) {
           {targetLabel}
         </div>
         <div className="text-[10px] text-white/30 font-rune truncate">
-          MP {Math.round(session.mana_pct)}% | END {Math.round(session.endurance_pct)}% | Buffs {session.buff_count}
+          MP {Math.round(session.mana_pct)}% | END {Math.round(session.endurance_pct ?? 0)}% | Buffs {session.buff_count ?? 0}
           {session.pet_name ? ` | Pet ${session.pet_name}` : ""}
         </div>
       </div>

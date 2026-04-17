@@ -24,12 +24,15 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::{Path as StdPath, PathBuf},
-    sync::Arc,
+    sync::{Arc, OnceLock},
+};
+use textquest::chat_log::{
+    ChatChannel, ChatLogConfig as CoreChatLogConfig, LogLevel, RotationStrategy,
 };
 use textquest_common::box_chat::BoxChatConfig;
 use textquest_common::character_config::{self as shared_character_config};
 use textquest_common::ipc::{AutoAcceptSettings, AutoRezConfig};
-use toml_edit::{DocumentMut, Item, Table, value};
+use toml_edit::{Array, DocumentMut, Item, Table, value};
 
 use crate::AppState;
 use textquest_common::shared_client_state::SharedClientState;
@@ -37,32 +40,6 @@ use textquest_common::shared_client_state::SharedClientState;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ErrorResponse {
     pub error: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum PlayerFilterMode {
-    #[default]
-    All,
-    StrangersOnly,
-    FriendsOnly,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub struct PlayerWatchConfig {
-    #[serde(default)]
-    pub filter_mode: PlayerFilterMode,
-    #[serde(default)]
-    pub sound_on_zone_in: bool,
-    #[serde(default)]
-    pub friends: Vec<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct PlayerWatchConfigUpdate {
-    pub filter_mode: Option<PlayerFilterMode>,
-    pub sound_on_zone_in: Option<bool>,
-    pub friends: Option<Vec<String>>,
 }
 
 fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
@@ -111,6 +88,15 @@ fn textquest_config_path() -> PathBuf {
     std::env::var("TEXTQUEST_CONFIG_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
+}
+
+pub(crate) fn textquest_config_write_lock() -> &'static tokio::sync::Mutex<()> {
+    static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+}
+
+fn config_sidecar_path(file_name: &str) -> PathBuf {
+    textquest_config_path().with_file_name(file_name)
 }
 
 fn read_box_chat_settings_from_disk() -> Result<BoxChatConfig, String> {
@@ -213,7 +199,11 @@ pub async fn get_box_chat_settings() -> impl IntoResponse {
 }
 
 /// PUT /api/box-chat/settings — persist EQBC-style relay settings.
-pub async fn put_box_chat_settings(Json(settings): Json<BoxChatConfig>) -> impl IntoResponse {
+pub async fn put_box_chat_settings(
+    State(_state): State<Arc<AppState>>,
+    Json(settings): Json<BoxChatConfig>,
+) -> impl IntoResponse {
+    let _config_write_guard = textquest_config_write_lock().lock().await;
     match write_box_chat_settings_to_disk(&settings) {
         Ok(()) => (StatusCode::OK, Json(settings)).into_response(),
         Err(error) => json_error(StatusCode::BAD_REQUEST, error).into_response(),
@@ -221,27 +211,97 @@ pub async fn put_box_chat_settings(Json(settings): Json<BoxChatConfig>) -> impl 
 }
 // ─── Chat Log Settings ──────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ChatLogRotationPayload {
+    Daily { daily: Option<()> },
+    Size { size: u64 },
+    None(String),
+}
+
+impl Default for ChatLogRotationPayload {
+    fn default() -> Self {
+        Self::Size {
+            size: 10 * 1024 * 1024,
+        }
+    }
+}
+
+impl From<RotationStrategy> for ChatLogRotationPayload {
+    fn from(value: RotationStrategy) -> Self {
+        match value {
+            RotationStrategy::Daily => Self::Daily { daily: None },
+            RotationStrategy::Size(size) => Self::Size { size },
+            RotationStrategy::None => Self::None("none".to_string()),
+        }
+    }
+}
+
+impl TryFrom<ChatLogRotationPayload> for RotationStrategy {
+    type Error = String;
+
+    fn try_from(value: ChatLogRotationPayload) -> Result<Self, Self::Error> {
+        match value {
+            ChatLogRotationPayload::Daily { .. } => Ok(Self::Daily),
+            ChatLogRotationPayload::Size { size } => Ok(Self::Size(size)),
+            ChatLogRotationPayload::None(value) if value.eq_ignore_ascii_case("none") => {
+                Ok(Self::None)
+            }
+            ChatLogRotationPayload::None(value) => Err(format!(
+                "Invalid chat log rotation strategy literal: {value}"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatLogSettings {
     pub enabled: bool,
-    pub channels: Vec<String>,
-    pub rotation_strategy: String,
+    pub channels: Vec<ChatChannel>,
+    pub rotation_strategy: ChatLogRotationPayload,
     pub max_file_size_bytes: u64,
-    pub min_level: String,
+    pub min_level: LogLevel,
     pub log_eq_chat: bool,
 }
 
 impl Default for ChatLogSettings {
     fn default() -> Self {
+        CoreChatLogConfig::default().into()
+    }
+}
+
+impl From<CoreChatLogConfig> for ChatLogSettings {
+    fn from(value: CoreChatLogConfig) -> Self {
         Self {
-            enabled: false,
-            channels: vec!["mq2".to_string()],
-            rotation_strategy: "size:10".to_string(),
-            max_file_size_bytes: 10 * 1024 * 1024,
-            min_level: "info".to_string(),
-            log_eq_chat: false,
+            enabled: value.enabled,
+            channels: value.channels,
+            rotation_strategy: value.rotation_strategy.into(),
+            max_file_size_bytes: value.max_file_size_bytes,
+            min_level: value.min_level,
+            log_eq_chat: value.log_eq_chat,
         }
     }
+}
+
+impl TryFrom<ChatLogSettings> for CoreChatLogConfig {
+    type Error = String;
+
+    fn try_from(value: ChatLogSettings) -> Result<Self, Self::Error> {
+        Ok(Self {
+            enabled: value.enabled,
+            channels: value.channels,
+            rotation_strategy: value.rotation_strategy.try_into()?,
+            max_file_size_bytes: value.max_file_size_bytes,
+            min_level: value.min_level,
+            log_eq_chat: value.log_eq_chat,
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatLogSettingsFile {
+    #[serde(default)]
+    chat_log: CoreChatLogConfig,
 }
 
 fn read_chat_log_settings_from_disk() -> Result<ChatLogSettings, String> {
@@ -260,44 +320,19 @@ fn read_chat_log_settings_from_disk() -> Result<ChatLogSettings, String> {
         return Ok(ChatLogSettings::default());
     };
 
-    let mut settings = ChatLogSettings::default();
+    let mut wrapped = DocumentMut::new();
+    wrapped["chat_log"] = item.clone();
 
-    if let Some(enabled) = item.get("enabled")
-        && let Some(val) = enabled.as_bool()
-    {
-        settings.enabled = val;
-    }
+    let config = toml::from_str::<ChatLogSettingsFile>(&wrapped.to_string())
+        .map_err(|error| format!("Failed to parse {}: {error}", path.display()))?;
 
-    if let Some(channels) = item.get("channels")
-        && let Ok(ch) = toml_edit::de::from_str::<Vec<String>>(&channels.to_string())
-    {
-        settings.channels = ch;
-    }
-
-    if let Some(rotation) = item.get("rotation_strategy") {
-        settings.rotation_strategy = rotation.to_string().trim_matches('"').to_string();
-    }
-
-    if let Some(size) = item.get("max_file_size_bytes")
-        && let Some(val) = size.as_integer()
-    {
-        settings.max_file_size_bytes = val as u64;
-    }
-
-    if let Some(level) = item.get("min_level") {
-        settings.min_level = level.to_string().trim_matches('"').to_string();
-    }
-
-    if let Some(eq_chat) = item.get("log_eq_chat")
-        && let Some(val) = eq_chat.as_bool()
-    {
-        settings.log_eq_chat = val;
-    }
-
-    Ok(settings)
+    Ok(config.chat_log.into())
 }
 
 fn write_chat_log_settings_to_disk(settings: &ChatLogSettings) -> Result<(), String> {
+    let settings: CoreChatLogConfig = settings.clone().try_into()?;
+    let max_file_size_bytes = i64::try_from(settings.max_file_size_bytes)
+        .map_err(|_| "max_file_size_bytes exceeds TOML integer range".to_string())?;
     let path = textquest_config_path();
     let mut doc = if path.exists() {
         let content = std::fs::read_to_string(&path)
@@ -311,14 +346,35 @@ fn write_chat_log_settings_to_disk(settings: &ChatLogSettings) -> Result<(), Str
 
     let mut table = Table::new();
     table["enabled"] = value(settings.enabled);
-    let mut channels = toml_edit::Array::new();
-    for channel in &settings.channels {
-        channels.push(channel.as_str());
+    let channels = settings
+        .channels
+        .iter()
+        .map(|channel| toml_edit::Value::from(channel.to_string()))
+        .collect::<Array>();
+    table["channels"] = Item::Value(channels.into());
+    match settings.rotation_strategy {
+        RotationStrategy::Daily => {
+            table["rotation_strategy"] = value("daily");
+        }
+        RotationStrategy::Size(size) => {
+            let size = i64::try_from(size)
+                .map_err(|_| "rotation_strategy.size exceeds TOML integer range".to_string())?;
+            let mut rotation = toml_edit::InlineTable::new();
+            rotation.insert("size", toml_edit::Value::from(size));
+            table["rotation_strategy"] = Item::Value(toml_edit::Value::InlineTable(rotation));
+        }
+        RotationStrategy::None => {
+            table["rotation_strategy"] = value("none");
+        }
     }
-    table["channels"] = Item::Value(toml_edit::Value::Array(channels));
-    table["rotation_strategy"] = value(settings.rotation_strategy.clone());
-    table["max_file_size_bytes"] = value(settings.max_file_size_bytes as i64);
-    table["min_level"] = value(settings.min_level.clone());
+    table["max_file_size_bytes"] = value(max_file_size_bytes);
+    table["min_level"] = value(match settings.min_level {
+        LogLevel::Trace => "trace",
+        LogLevel::Debug => "debug",
+        LogLevel::Info => "info",
+        LogLevel::Warn => "warn",
+        LogLevel::Error => "error",
+    });
     table["log_eq_chat"] = value(settings.log_eq_chat);
     doc["chat_log"] = Item::Table(table);
 
@@ -376,58 +432,16 @@ pub async fn get_chat_log_settings() -> impl IntoResponse {
 }
 
 /// PUT /api/chat-log/settings — persist chat log settings.
-pub async fn put_chat_log_settings(Json(settings): Json<ChatLogSettings>) -> impl IntoResponse {
+pub async fn put_chat_log_settings(
+    State(_state): State<Arc<AppState>>,
+    Json(settings): Json<ChatLogSettings>,
+) -> impl IntoResponse {
+    let _config_write_guard = textquest_config_write_lock().lock().await;
     match write_chat_log_settings_to_disk(&settings) {
         Ok(()) => (StatusCode::OK, Json(settings)).into_response(),
         Err(error) => json_error(StatusCode::BAD_REQUEST, error).into_response(),
     }
 }
-
-// ─── Player Watch API ───────────────────────────────────────────────────────────
-
-/// GET /api/config/player-watch — get player watch configuration.
-pub async fn get_player_watch_config(
-    State(state): State<Arc<AppState>>,
-) -> Json<PlayerWatchConfig> {
-    Json(state.player_watch_config.read().await.clone())
-}
-
-/// PUT /api/config/player-watch — update player-watch settings.
-pub async fn put_player_watch_config(
-    State(state): State<Arc<AppState>>,
-    Json(update): Json<PlayerWatchConfigUpdate>,
-) -> Result<Json<PlayerWatchConfig>, (StatusCode, Json<ErrorResponse>)> {
-    let mut config = state.player_watch_config.write().await;
-
-    if let Some(filter_mode) = update.filter_mode {
-        config.filter_mode = filter_mode;
-    }
-    if let Some(sound_on_zone_in) = update.sound_on_zone_in {
-        config.sound_on_zone_in = sound_on_zone_in;
-    }
-    if let Some(friends) = update.friends {
-        let mut normalized = Vec::new();
-        for friend in friends {
-            let trimmed = friend.trim();
-            if trimmed.is_empty() {
-                return Err(json_error(
-                    StatusCode::BAD_REQUEST,
-                    "Friend names must not be blank",
-                ));
-            }
-            if normalized
-                .iter()
-                .all(|existing: &String| !existing.eq_ignore_ascii_case(trimmed))
-            {
-                normalized.push(trimmed.to_string());
-            }
-        }
-        config.friends = normalized;
-    }
-
-    Ok(Json(config.clone()))
-}
-
 // ─── Sessions
 // ─────────────────────────────────────────────────────────────────
 
@@ -525,6 +539,28 @@ pub struct RotationEntry {
     pub name: String,
     pub priority: u32,
     pub enabled: bool,
+}
+
+impl From<textquest_common::character_config::RotationEntry> for RotationEntry {
+    fn from(value: textquest_common::character_config::RotationEntry) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            priority: value.priority,
+            enabled: value.enabled,
+        }
+    }
+}
+
+impl From<RotationEntry> for textquest_common::character_config::RotationEntry {
+    fn from(value: RotationEntry) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            priority: value.priority,
+            enabled: value.enabled,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -625,12 +661,6 @@ impl From<TimestampFormat> for textquest_common::chat::TimestampFormat {
             TimestampFormat::Time12 => textquest_common::chat::TimestampFormat::Time12,
         }
     }
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct TimestampConfig {
-    pub enabled: bool,
-    pub format: TimestampFormat,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1057,9 +1087,6 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
 }
 
 /// GET /api/config/characters — list all character tuning configs.
-/// Not yet mounted in the live API router (returns 501 via placeholder); kept
-/// for future use.
-#[allow(dead_code)]
 pub async fn list_character_configs(
     State(state): State<Arc<AppState>>,
 ) -> Json<Vec<CharacterConfig>> {
@@ -1072,17 +1099,18 @@ pub async fn list_character_configs(
 }
 
 /// PUT /api/config/characters/:name — upsert per-character tuning config.
-/// Not yet mounted in the live API router (returns 501 via placeholder); kept
-/// for future use.
-#[allow(dead_code)]
 pub async fn put_character_config(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Json(config): Json<CharacterConfigUpdate>,
-) -> Result<Json<CharacterConfig>, StatusCode> {
+) -> Result<Json<CharacterConfig>, (StatusCode, Json<ErrorResponse>)> {
     if name.trim().is_empty() {
-        return Err(StatusCode::BAD_REQUEST);
+        return Err(json_error(
+            StatusCode::BAD_REQUEST,
+            "Character name must not be blank",
+        ));
     }
+
     let _write_guard = state.character_config_write_lock.lock().await;
     let mut configs_map = state.character_configs.write().await;
     let existing = configs_map.get(&name).cloned();
@@ -1130,7 +1158,7 @@ pub async fn put_character_config(
             configs_map.remove(&saved.character_name);
         }
         tracing::error!(%error, "Failed to persist character config update");
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        return Err(json_error(StatusCode::INTERNAL_SERVER_ERROR, error));
     }
     Ok(Json(saved))
 }
@@ -1177,6 +1205,274 @@ pub async fn put_auto_accept_settings(
         tracing::warn!(pid, %error, "Failed to apply auto-accept settings to live client");
     }
     Ok(Json(settings))
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayerFilterMode {
+    #[default]
+    All,
+    StrangersOnly,
+    FriendsOnly,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerWatchConfig {
+    pub filter_mode: PlayerFilterMode,
+    pub sound_on_zone_in: bool,
+    pub friends: Vec<String>,
+}
+
+impl Default for PlayerWatchConfig {
+    fn default() -> Self {
+        Self {
+            filter_mode: PlayerFilterMode::All,
+            sound_on_zone_in: false,
+            friends: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PlayerWatchConfigPatch {
+    pub filter_mode: Option<PlayerFilterMode>,
+    pub sound_on_zone_in: Option<bool>,
+    pub friends: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct PlayerWatchConfigFile {
+    #[serde(default)]
+    player_filter_mode: PlayerFilterMode,
+    #[serde(default)]
+    sound_on_player_zone_in: bool,
+    #[serde(default)]
+    friends: Vec<String>,
+}
+
+impl Default for PlayerWatchConfigFile {
+    fn default() -> Self {
+        Self {
+            player_filter_mode: PlayerFilterMode::All,
+            sound_on_player_zone_in: false,
+            friends: Vec::new(),
+        }
+    }
+}
+
+impl From<PlayerWatchConfigFile> for PlayerWatchConfig {
+    fn from(value: PlayerWatchConfigFile) -> Self {
+        Self {
+            filter_mode: value.player_filter_mode,
+            sound_on_zone_in: value.sound_on_player_zone_in,
+            friends: value.friends,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimestampConfig {
+    pub enabled: bool,
+    pub format: TimestampFormat,
+}
+
+impl Default for TimestampConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            format: TimestampFormat::DateTime24,
+        }
+    }
+}
+
+pub(crate) fn read_player_watch_config_from_disk() -> Result<PlayerWatchConfig, String> {
+    let path = textquest_config_path();
+    if !path.exists() {
+        return Ok(PlayerWatchConfig::default());
+    }
+
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
+    let doc = content
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("Failed to parse {}: {error}", path.display()))?;
+
+    let Some(item) = doc.get("spawn_watch") else {
+        return Ok(PlayerWatchConfig::default());
+    };
+
+    let config = toml_edit::de::from_str::<PlayerWatchConfigFile>(&item.to_string())
+        .map_err(|error| format!("Failed to decode [spawn_watch]: {error}"))?;
+    Ok(config.into())
+}
+
+fn write_player_watch_config_to_disk(config: &PlayerWatchConfig) -> Result<(), String> {
+    let path = textquest_config_path();
+    let mut doc = if path.exists() {
+        let content = std::fs::read_to_string(&path)
+            .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
+        content
+            .parse::<DocumentMut>()
+            .map_err(|error| format!("Failed to parse {}: {error}", path.display()))?
+    } else {
+        DocumentMut::new()
+    };
+
+    let mut table = match doc.get("spawn_watch") {
+        Some(Item::Table(existing)) => existing.clone(),
+        _ => Table::new(),
+    };
+    let filter_mode = match config.filter_mode {
+        PlayerFilterMode::All => "all",
+        PlayerFilterMode::StrangersOnly => "strangers_only",
+        PlayerFilterMode::FriendsOnly => "friends_only",
+    };
+    table["player_filter_mode"] = value(filter_mode);
+    table["sound_on_player_zone_in"] = value(config.sound_on_zone_in);
+    let friends = config
+        .friends
+        .iter()
+        .cloned()
+        .map(toml_edit::Value::from)
+        .collect::<Array>();
+    table["friends"] = Item::Value(friends.into());
+    doc["spawn_watch"] = Item::Table(table);
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create {}: {error}", parent.display()))?;
+    }
+
+    std::fs::write(&path, doc.to_string())
+        .map_err(|error| format!("Failed to write {}: {error}", path.display()))
+}
+
+fn timestamp_config_path() -> PathBuf {
+    config_sidecar_path("timestamp.toml")
+}
+
+pub(crate) fn load_timestamp_configs_from_disk() -> Result<HashMap<String, TimestampConfig>, String>
+{
+    let path = timestamp_config_path();
+    if !path.exists() {
+        return Ok(HashMap::new());
+    }
+
+    let content = std::fs::read_to_string(&path)
+        .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
+    toml::from_str(&content).map_err(|error| format!("Failed to parse {}: {error}", path.display()))
+}
+
+fn write_timestamp_configs_to_disk(
+    configs: &HashMap<String, TimestampConfig>,
+) -> Result<(), String> {
+    let path = timestamp_config_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create {}: {error}", parent.display()))?;
+    }
+
+    let content = toml::to_string_pretty(configs)
+        .map_err(|error| format!("Failed to serialize timestamp config: {error}"))?;
+    std::fs::write(&path, content)
+        .map_err(|error| format!("Failed to write {}: {error}", path.display()))
+}
+
+/// GET /api/config/player-watch — return the current player watch filter config.
+pub async fn get_player_watch_config(
+    State(state): State<Arc<AppState>>,
+) -> Json<PlayerWatchConfig> {
+    Json(state.player_watch_config.read().await.clone())
+}
+
+/// PUT /api/config/player-watch — update the current player watch filter config.
+pub async fn put_player_watch_config(
+    State(state): State<Arc<AppState>>,
+    Json(patch): Json<PlayerWatchConfigPatch>,
+) -> Result<Json<PlayerWatchConfig>, (StatusCode, Json<ErrorResponse>)> {
+    let _config_write_guard = textquest_config_write_lock().lock().await;
+    let _write_guard = state.player_watch_write_lock.lock().await;
+
+    let updated = {
+        let current = state.player_watch_config.read().await;
+        let mut updated = current.clone();
+        if let Some(filter_mode) = patch.filter_mode {
+            updated.filter_mode = filter_mode;
+        }
+        if let Some(sound_on_zone_in) = patch.sound_on_zone_in {
+            updated.sound_on_zone_in = sound_on_zone_in;
+        }
+        if let Some(friends) = patch.friends {
+            let mut normalized = Vec::new();
+            for friend in friends {
+                let trimmed = friend.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if normalized
+                    .iter()
+                    .all(|existing: &String| !existing.eq_ignore_ascii_case(trimmed))
+                {
+                    normalized.push(trimmed.to_string());
+                }
+            }
+            updated.friends = normalized;
+        }
+        updated
+    };
+
+    write_player_watch_config_to_disk(&updated)
+        .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+
+    *state.player_watch_config.write().await = updated.clone();
+
+    Ok(Json(updated))
+}
+
+/// GET /api/timestamp-config — return all known per-character timestamp configs.
+pub async fn list_timestamp_configs(
+    State(state): State<Arc<AppState>>,
+) -> Json<HashMap<String, TimestampConfig>> {
+    Json(state.timestamp_configs.read().await.clone())
+}
+
+/// GET /api/timestamp-config/:character — return the stored config for one character.
+pub async fn get_timestamp_config(
+    State(state): State<Arc<AppState>>,
+    Path(character): Path<String>,
+) -> Json<TimestampConfig> {
+    let configs = state.timestamp_configs.read().await;
+    Json(configs.get(&character).cloned().unwrap_or_default())
+}
+
+/// PUT /api/timestamp-config/:character — replace one character's timestamp config.
+pub async fn put_timestamp_config(
+    State(state): State<Arc<AppState>>,
+    Path(character): Path<String>,
+    Json(config): Json<TimestampConfig>,
+) -> Result<Json<TimestampConfig>, (StatusCode, Json<ErrorResponse>)> {
+    if character.trim().is_empty() {
+        return Err(json_error(
+            StatusCode::BAD_REQUEST,
+            "Character name must not be blank",
+        ));
+    }
+
+    let _write_guard = state.timestamp_config_write_lock.lock().await;
+
+    let snapshot = {
+        let configs = state.timestamp_configs.read().await;
+        let mut snapshot = configs.clone();
+        snapshot.insert(character.clone(), config.clone());
+        snapshot
+    };
+
+    write_timestamp_configs_to_disk(&snapshot)
+        .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+
+    *state.timestamp_configs.write().await = snapshot;
+
+    Ok(Json(config))
 }
 // ── Economy types
 // ─────────────────────────────────────────────────────────────
@@ -1367,120 +1663,56 @@ pub async fn get_wealth() -> impl IntoResponse {
     (StatusCode::OK, Json(history)).into_response()
 }
 
-// ─── Timestamp Config ───────────────────────────────────────────────────────
-
-pub async fn list_timestamp_configs(
-    State(state): State<Arc<AppState>>,
-) -> Json<HashMap<String, TimestampConfig>> {
-    if let Ok(from_disk) = load_timestamp_configs_from_disk() {
-        let mut configs = state.timestamp_configs.write().await;
-        *configs = from_disk;
-    }
-    let configs = state.timestamp_configs.read().await;
-    Json(configs.clone())
-}
-
-pub async fn get_timestamp_config(
-    State(state): State<Arc<AppState>>,
-    Path(character): Path<String>,
-) -> impl IntoResponse {
-    if let Ok(from_disk) = load_timestamp_configs_from_disk() {
-        let mut configs = state.timestamp_configs.write().await;
-        *configs = from_disk;
-    }
-
-    let configs = state.timestamp_configs.read().await;
-    let config = configs.get(&character).cloned().unwrap_or_default();
-    (StatusCode::OK, Json(config)).into_response()
-}
-
-fn timestamp_config_path() -> PathBuf {
-    std::env::var("TEXTQUEST_CONFIG_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
-        .parent()
-        .map(|parent| parent.join("timestamp.toml"))
-        .unwrap_or_else(|| PathBuf::from("config/timestamp.toml"))
-}
-
-fn load_timestamp_configs_from_disk() -> Result<HashMap<String, TimestampConfig>, String> {
-    let path = timestamp_config_path();
-    if !path.exists() {
-        return Ok(HashMap::new());
-    }
-
-    let content = std::fs::read_to_string(&path)
-        .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
-    toml::from_str(&content).map_err(|error| format!("Failed to parse {}: {error}", path.display()))
-}
-
-fn write_timestamp_configs_to_disk(
-    configs: &HashMap<String, TimestampConfig>,
-) -> Result<(), String> {
-    let path = timestamp_config_path();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("Failed to create {}: {error}", parent.display()))?;
-    }
-
-    let content = toml::to_string_pretty(configs)
-        .map_err(|error| format!("Failed to serialize timestamp configs: {error}"))?;
-    let temp_path = path.with_extension("toml.tmp");
-    std::fs::write(&temp_path, content)
-        .map_err(|error| format!("Failed to write temp file {}: {error}", temp_path.display()))?;
-    std::fs::rename(&temp_path, &path).map_err(|error| {
-        format!(
-            "Failed to replace {} with {}: {error}",
-            path.display(),
-            temp_path.display()
-        )
-    })
-}
-
-pub async fn put_timestamp_config(
-    State(state): State<Arc<AppState>>,
-    Path(character): Path<String>,
-    Json(config): Json<TimestampConfig>,
-) -> Result<Json<TimestampConfig>, (StatusCode, Json<ErrorResponse>)> {
-    if character.trim().is_empty() {
-        return Err(json_error(
-            StatusCode::BAD_REQUEST,
-            "Character name must not be empty",
-        ));
-    }
-
-    let mut configs = state.timestamp_configs.write().await;
-    configs.insert(character.clone(), config.clone());
-    if let Err(error) = write_timestamp_configs_to_disk(&configs) {
-        return Err(json_error(StatusCode::INTERNAL_SERVER_ERROR, error));
-    }
-
-    tracing::debug!(
-        %character,
-        enabled = config.enabled,
-        format = ?config.format,
-        "Updated timestamp config"
-    );
-    Ok(Json(config))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::response::IntoResponse;
     use http_body_util::BodyExt;
     use serde_json::Value;
-    use std::path::PathBuf;
+    use std::{collections::HashMap, ffi::OsString, sync::OnceLock};
     use tempfile::tempdir;
     use textquest_common::ipc::{AutoAcceptSettings, AutoAcceptTrustMode};
 
-    fn test_live_session_snapshot_path(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../data/runtime/{name}"))
+    fn config_env_lock() -> &'static tokio::sync::Mutex<()> {
+        static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+    }
+
+    struct ConfigPathGuard {
+        previous: Option<OsString>,
+    }
+
+    impl ConfigPathGuard {
+        fn set(path: &std::path::Path) -> Self {
+            let previous = std::env::var_os("TEXTQUEST_CONFIG_PATH");
+            unsafe { std::env::set_var("TEXTQUEST_CONFIG_PATH", path) };
+            Self { previous }
+        }
+    }
+
+    impl Drop for ConfigPathGuard {
+        fn drop(&mut self) {
+            unsafe {
+                if let Some(previous) = &self.previous {
+                    std::env::set_var("TEXTQUEST_CONFIG_PATH", previous);
+                } else {
+                    std::env::remove_var("TEXTQUEST_CONFIG_PATH");
+                }
+            }
+        }
+    }
+
+    fn temp_config_path(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "textquest-web-api-{name}-{}.toml",
+            uuid::Uuid::new_v4()
+        ))
     }
 
     fn test_state(snapshot_name: &str) -> AppState {
         let mut state = crate::test_app_state();
-        state.live_session_snapshot_path = test_live_session_snapshot_path(snapshot_name);
+        state.live_session_snapshot_path =
+            crate::test_support::test_live_session_snapshot_path(snapshot_name);
         state.character_configs = tokio::sync::RwLock::new(demo_character_configs());
         state
     }
@@ -1677,7 +1909,7 @@ mod tests {
             serde_json::json!("orc mission")
         );
 
-        let Json(configs) = list_character_configs(State(state)).await;
+        let Json(configs) = list_character_configs(State(state.clone())).await;
         let updated = configs
             .into_iter()
             .find(|c| c.character_name == "Aelrindel")
@@ -1732,5 +1964,299 @@ mod tests {
             body,
             serde_json::json!({ "error": "Trusted player names must not be blank" })
         );
+    }
+
+    #[tokio::test]
+    async fn read_chat_log_settings_returns_typed_rotation_payload() {
+        let _lock = config_env_lock().lock().await;
+        let config_path = temp_config_path("chat-log-read");
+        let _guard = ConfigPathGuard::set(&config_path);
+
+        std::fs::write(
+            &config_path,
+            r#"[chat_log]
+enabled = true
+channels = ["say", "group"]
+rotation_strategy = { size = 5242880 }
+max_file_size_bytes = 5242880
+min_level = "debug"
+log_eq_chat = true
+"#,
+        )
+        .expect("seed chat log config");
+
+        let settings = read_chat_log_settings_from_disk().expect("chat log settings");
+
+        assert!(settings.enabled);
+        assert_eq!(
+            settings.channels,
+            vec![ChatChannel::Say, ChatChannel::Group]
+        );
+        assert_eq!(
+            settings.rotation_strategy,
+            ChatLogRotationPayload::Size {
+                size: 5 * 1024 * 1024
+            }
+        );
+        assert_eq!(settings.min_level, LogLevel::Debug);
+        assert!(settings.log_eq_chat);
+
+        std::fs::remove_file(&config_path).ok();
+    }
+
+    #[tokio::test]
+    async fn write_chat_log_settings_round_trips_rotation_shape() {
+        let _lock = config_env_lock().lock().await;
+        let config_path = temp_config_path("chat-log-write");
+        let _guard = ConfigPathGuard::set(&config_path);
+
+        let settings = ChatLogSettings {
+            enabled: true,
+            channels: vec![ChatChannel::MQ2, ChatChannel::Guild],
+            rotation_strategy: ChatLogRotationPayload::Daily { daily: None },
+            max_file_size_bytes: 10 * 1024 * 1024,
+            min_level: LogLevel::Warn,
+            log_eq_chat: true,
+        };
+
+        write_chat_log_settings_to_disk(&settings).expect("write chat log config");
+        let reloaded = read_chat_log_settings_from_disk().expect("reload chat log config");
+
+        assert_eq!(reloaded, settings);
+
+        std::fs::remove_file(&config_path).ok();
+    }
+
+    #[tokio::test]
+    async fn write_chat_log_settings_rejects_values_outside_toml_integer_range() {
+        let _lock = config_env_lock().lock().await;
+        let config_path = temp_config_path("chat-log-overflow");
+        let _guard = ConfigPathGuard::set(&config_path);
+
+        let oversized_rotation = ChatLogSettings {
+            enabled: true,
+            channels: vec![ChatChannel::MQ2],
+            rotation_strategy: ChatLogRotationPayload::Size {
+                size: i64::MAX as u64 + 1,
+            },
+            max_file_size_bytes: 1024,
+            min_level: LogLevel::Info,
+            log_eq_chat: false,
+        };
+        let error = write_chat_log_settings_to_disk(&oversized_rotation)
+            .expect_err("oversized rotation should fail");
+        assert!(error.contains("rotation_strategy.size"));
+
+        let oversized_max = ChatLogSettings {
+            enabled: true,
+            channels: vec![ChatChannel::MQ2],
+            rotation_strategy: ChatLogRotationPayload::None("none".to_string()),
+            max_file_size_bytes: i64::MAX as u64 + 1,
+            min_level: LogLevel::Info,
+            log_eq_chat: false,
+        };
+        let error = write_chat_log_settings_to_disk(&oversized_max)
+            .expect_err("oversized max file size should fail");
+        assert!(error.contains("max_file_size_bytes"));
+
+        std::fs::remove_file(&config_path).ok();
+    }
+
+    #[tokio::test]
+    async fn write_player_watch_config_preserves_existing_spawn_watch_fields() {
+        let _lock = config_env_lock().lock().await;
+        let config_path = temp_config_path("player-watch-preserve");
+        let _guard = ConfigPathGuard::set(&config_path);
+
+        std::fs::write(
+            &config_path,
+            r#"[spawn_watch]
+enabled = true
+watch_names = ["Quillmane"]
+alert_named = true
+max_feed_entries = 99
+player_filter_mode = "all"
+sound_on_player_zone_in = false
+friends = ["OldFriend"]
+"#,
+        )
+        .expect("seed player watch config");
+
+        write_player_watch_config_to_disk(&PlayerWatchConfig {
+            filter_mode: PlayerFilterMode::FriendsOnly,
+            sound_on_zone_in: true,
+            friends: vec!["NewFriend".into()],
+        })
+        .expect("write player watch config");
+
+        let contents = std::fs::read_to_string(&config_path).expect("updated config");
+        let doc = contents
+            .parse::<DocumentMut>()
+            .expect("updated config should parse");
+
+        assert_eq!(doc["spawn_watch"]["enabled"].as_bool(), Some(true));
+        assert_eq!(doc["spawn_watch"]["alert_named"].as_bool(), Some(true));
+        assert_eq!(
+            doc["spawn_watch"]["max_feed_entries"].as_integer(),
+            Some(99)
+        );
+        assert_eq!(
+            doc["spawn_watch"]["player_filter_mode"].as_str(),
+            Some("friends_only")
+        );
+        assert_eq!(
+            doc["spawn_watch"]["sound_on_player_zone_in"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            doc["spawn_watch"]["watch_names"]
+                .as_array()
+                .expect("watch_names array")
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Quillmane"]
+        );
+        assert_eq!(
+            doc["spawn_watch"]["friends"]
+                .as_array()
+                .expect("friends array")
+                .iter()
+                .filter_map(|value| value.as_str())
+                .collect::<Vec<_>>(),
+            vec!["NewFriend"]
+        );
+
+        std::fs::remove_file(&config_path).ok();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn put_player_watch_config_does_not_update_state_when_disk_write_fails() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _lock = config_env_lock().lock().await;
+        let temp_root = std::env::temp_dir().join(format!(
+            "textquest-web-api-player-watch-readonly-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let read_only_dir = temp_root.join("readonly");
+        std::fs::create_dir_all(&read_only_dir).expect("create readonly dir");
+        std::fs::set_permissions(&read_only_dir, std::fs::Permissions::from_mode(0o555))
+            .expect("mark readonly");
+
+        let config_path = read_only_dir.join("textquest.toml");
+        let _guard = ConfigPathGuard::set(&config_path);
+        let state =
+            crate::test_support::demo_app_state_with_snapshot("api-player-watch-failure.json");
+        let original = PlayerWatchConfig {
+            filter_mode: PlayerFilterMode::All,
+            sound_on_zone_in: false,
+            friends: vec!["ExistingFriend".into()],
+        };
+        *state.player_watch_config.write().await = original.clone();
+
+        let response = put_player_watch_config(
+            State(state.clone()),
+            Json(PlayerWatchConfigPatch {
+                filter_mode: Some(PlayerFilterMode::FriendsOnly),
+                sound_on_zone_in: Some(true),
+                friends: Some(vec!["NewFriend".into()]),
+            }),
+        )
+        .await
+        .expect_err("readonly target should fail")
+        .into_response();
+        let (status, _) = error_response_json(response).await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+
+        let saved = state.player_watch_config.read().await.clone();
+        assert_eq!(saved, original);
+
+        std::fs::set_permissions(&read_only_dir, std::fs::Permissions::from_mode(0o755))
+            .expect("restore dir perms");
+        std::fs::remove_dir_all(&temp_root).ok();
+    }
+
+    #[tokio::test]
+    async fn write_timestamp_configs_uses_textquest_config_path_base_name() {
+        let _lock = config_env_lock().lock().await;
+        let config_path = temp_config_path("timestamp-sidecar");
+        let _guard = ConfigPathGuard::set(&config_path);
+
+        let expected_timestamp_path = config_path.with_file_name("timestamp.toml");
+        let configs = HashMap::from([(
+            "Frostreaver".to_string(),
+            TimestampConfig {
+                enabled: true,
+                format: TimestampFormat::DateTime12,
+            },
+        )]);
+
+        write_timestamp_configs_to_disk(&configs).expect("write timestamp config");
+
+        let contents =
+            std::fs::read_to_string(&expected_timestamp_path).expect("timestamp config file");
+        let parsed: HashMap<String, TimestampConfig> =
+            toml::from_str(&contents).expect("timestamp config should parse");
+        assert_eq!(parsed, configs);
+
+        std::fs::remove_file(&expected_timestamp_path).ok();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn put_timestamp_config_does_not_update_state_when_disk_write_fails() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _lock = config_env_lock().lock().await;
+        let temp_root = std::env::temp_dir().join(format!(
+            "textquest-web-api-timestamp-readonly-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let read_only_dir = temp_root.join("readonly");
+        std::fs::create_dir_all(&read_only_dir).expect("create readonly dir");
+        std::fs::set_permissions(&read_only_dir, std::fs::Permissions::from_mode(0o555))
+            .expect("mark readonly");
+
+        let config_path = read_only_dir.join("textquest.toml");
+        let _guard = ConfigPathGuard::set(&config_path);
+        let state = crate::test_support::demo_app_state_with_snapshot("api-timestamp-failure.json");
+        let original = TimestampConfig {
+            enabled: false,
+            format: TimestampFormat::Time24,
+        };
+        state
+            .timestamp_configs
+            .write()
+            .await
+            .insert("Frostreaver".into(), original.clone());
+
+        let response = put_timestamp_config(
+            State(state.clone()),
+            Path("Frostreaver".into()),
+            Json(TimestampConfig {
+                enabled: true,
+                format: TimestampFormat::DateTime12,
+            }),
+        )
+        .await
+        .expect_err("readonly target should fail")
+        .into_response();
+        let (status, _) = error_response_json(response).await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+
+        let saved = state
+            .timestamp_configs
+            .read()
+            .await
+            .get("Frostreaver")
+            .cloned()
+            .expect("original config still present");
+        assert_eq!(saved, original);
+
+        std::fs::set_permissions(&read_only_dir, std::fs::Permissions::from_mode(0o755))
+            .expect("restore dir perms");
+        std::fs::remove_dir_all(&temp_root).ok();
     }
 }

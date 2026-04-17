@@ -157,8 +157,7 @@ impl LootStore {
         })
     }
 
-    /// Open an in-memory loot database (for testing).
-    #[cfg(test)]
+    /// Open an in-memory loot database.
     pub fn open_memory() -> Result<Self> {
         let conn = Connection::open_in_memory().context("Failed to open in-memory DB")?;
         conn.execute_batch("PRAGMA foreign_keys=ON;")

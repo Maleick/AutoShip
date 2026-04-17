@@ -133,13 +133,10 @@ use axum::response::IntoResponse;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AppState;
     use textquest_common::integrations::DiscordMessageMode;
 
     fn demo_state() -> Arc<AppState> {
-        let mut state = crate::test_app_state();
-        state.discord_state = DiscordState::new_demo();
-        Arc::new(state)
+        crate::test_support::demo_app_state()
     }
 
     #[tokio::test]

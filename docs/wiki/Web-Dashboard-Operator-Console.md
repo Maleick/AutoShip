@@ -66,6 +66,9 @@ spawn list without leaving the browser.
 - Group role edits are inline and post immediately to the dashboard action endpoint.
 - Navigation routes are stored as named waypoint sets with a map preview rendered directly in the console.
 - Wishlist entries are editable in-place to keep loot routing and vendor priorities close to the economy data.
+- Loot configuration now includes an **Item Score** tab with per-class stat
+  weights and an upgrade threshold so auto-loot keep/sell decisions can prefer
+  upgrades over vendor trash when no explicit loot rule matches.
 
 ## Review Artifact
 

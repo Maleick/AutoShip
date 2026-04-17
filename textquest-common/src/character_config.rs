@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fs, path::Path};
 
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{ipc::AutoRezConfig, window_title::default_window_title_format};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -20,11 +20,77 @@ pub struct ClassParams {
     pub slow_at_hp_pct: Option<u8>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RewardPreference {
     ByName { reward_name: String },
     ByPosition { reward_position: usize },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum HumanReadableRewardPreference {
+    ByName { reward_name: String },
+    ByPosition { reward_position: usize },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+enum BinaryRewardPreference {
+    ByName { reward_name: String },
+    ByPosition { reward_position: usize },
+}
+
+impl Serialize for RewardPreference {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        if serializer.is_human_readable() {
+            let helper = match self {
+                Self::ByName { reward_name } => HumanReadableRewardPreference::ByName {
+                    reward_name: reward_name.clone(),
+                },
+                Self::ByPosition { reward_position } => HumanReadableRewardPreference::ByPosition {
+                    reward_position: *reward_position,
+                },
+            };
+            helper.serialize(serializer)
+        } else {
+            let helper = match self {
+                Self::ByName { reward_name } => BinaryRewardPreference::ByName {
+                    reward_name: reward_name.clone(),
+                },
+                Self::ByPosition { reward_position } => BinaryRewardPreference::ByPosition {
+                    reward_position: *reward_position,
+                },
+            };
+            helper.serialize(serializer)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for RewardPreference {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        if deserializer.is_human_readable() {
+            match HumanReadableRewardPreference::deserialize(deserializer)? {
+                HumanReadableRewardPreference::ByName { reward_name } => {
+                    Ok(Self::ByName { reward_name })
+                }
+                HumanReadableRewardPreference::ByPosition { reward_position } => {
+                    Ok(Self::ByPosition { reward_position })
+                }
+            }
+        } else {
+            match BinaryRewardPreference::deserialize(deserializer)? {
+                BinaryRewardPreference::ByName { reward_name } => Ok(Self::ByName { reward_name }),
+                BinaryRewardPreference::ByPosition { reward_position } => {
+                    Ok(Self::ByPosition { reward_position })
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -300,6 +366,18 @@ mod tests {
         let rewards = vec!["A".to_string(), "B".to_string()];
 
         assert_eq!(resolve_reward_index("Anything", &rewards, &config), Some(0));
+    }
+
+    #[test]
+    fn reward_preference_json_shape_matches_web_config_contract() {
+        let pref = RewardPreference::ByPosition { reward_position: 2 };
+
+        let encoded = serde_json::to_string(&pref).expect("serialize reward preference");
+
+        assert_eq!(encoded, r#"{"kind":"by_position","reward_position":2}"#);
+        let decoded: RewardPreference =
+            serde_json::from_str(&encoded).expect("deserialize reward preference");
+        assert_eq!(decoded, pref);
     }
 
     #[test]

@@ -31,6 +31,7 @@
 ## Reporting
 
 - [Project Metrics](Project-Metrics)
+- [Frostreaver Cost Model](Frostreaver-Cost-Model)
 - [Troubleshooting](Troubleshooting)
 
 ## Research

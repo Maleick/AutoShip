@@ -139,6 +139,8 @@ pub enum ActivePanel {
     DebugInternals,
     /// Economy controls panel (vendor cycle, banking, loot queue).
     EconomyControls,
+    /// Spawn event feed panel.
+    SpawnEvents,
     /// Orchestrator dashboard panel.
     OrchestratorDashboard,
 }
@@ -511,6 +513,8 @@ pub struct App {
 
     /// Spawn alert feed.
     pub spawn_alert_feed: SpawnAlertFeed,
+    /// Sound alert trigger manager used by UI- and rule-driven events.
+    pub sound_alert_manager: SoundAlertManager,
     /// Whether to auto-alert on named NPC spawns.
     pub spawn_watch_named: bool,
     /// Current player-zone notification filter mode.
@@ -519,8 +523,6 @@ pub struct App {
     pub sound_on_player_zone_in: bool,
     /// Lowercased friends allowlist for player notifications.
     pub player_notification_friends: HashSet<String>,
-    /// Sound trigger manager for chat-pattern and spawn-watch alerts.
-    pub sound_alert_manager: SoundAlertManager,
 
     /// User-tracked spawns registered via the `:track` command.
     pub tracked_spawns: HashMap<String, TrackedSpawn>,
@@ -850,11 +852,11 @@ impl App {
                 }
             },
             spawn_alert_feed: SpawnAlertFeed::new(200),
+            sound_alert_manager: SoundAlertManager::with_preset_triggers(),
             spawn_watch_named: true,
             player_notification_filter: crate::config::PlayerFilterMode::default(),
             sound_on_player_zone_in: false,
             player_notification_friends: HashSet::new(),
-            sound_alert_manager: SoundAlertManager::with_preset_triggers(),
             tracked_spawns: HashMap::new(),
 
             help_visible: false,
@@ -3491,6 +3493,7 @@ impl App {
         }
     }
 
+    #[allow(dead_code)]
     fn execute_pf_command(&mut self, args: &[&str]) {
         match args.first().copied() {
             None => {
@@ -3541,6 +3544,7 @@ impl App {
         }
     }
 
+    #[allow(dead_code)]
     fn execute_sound_command(&mut self, args: &[&str]) {
         match args.first().copied() {
             None => {
@@ -3577,6 +3581,7 @@ impl App {
         }
     }
 
+    #[allow(dead_code)]
     fn execute_friends_command(&mut self, args: &[&str]) {
         match args.first().copied() {
             None => {

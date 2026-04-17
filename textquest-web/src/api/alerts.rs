@@ -248,7 +248,6 @@ pub async fn ack_all_alerts(State(state): State<Arc<AppState>>) -> impl IntoResp
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AppState;
     use axum::response::Response;
     use http_body_util::BodyExt;
     use serde_json::Value;
@@ -265,7 +264,7 @@ mod tests {
     }
 
     fn test_state() -> Arc<AppState> {
-        Arc::new(crate::test_app_state())
+        crate::test_support::demo_app_state()
     }
 
     #[tokio::test]

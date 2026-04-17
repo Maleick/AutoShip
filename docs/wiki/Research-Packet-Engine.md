@@ -173,3 +173,7 @@ This inventory contributes to the M5 exit gate as follows:
 - `#50` (zoning): zone request state machine, failure codes, and receive-side zone acknowledgment (feed from `ProcessZonePacket`)
 - `M7` anti-cheat: counter tracking, opcode scrambler integration, and hook exposure review
 - Future receive-side work: `ProcessChannelMessagePacket` hook candidate for Soul Engine chat ingest (`M11`)
+
+That milestone boundary is intentional: economy work is `M10`, while packet-fed
+chat ingest (`M11`) remains part of the Soul Engine lane instead of the
+economy execution slice.

@@ -7,6 +7,7 @@ pub mod session_control;
 /// Cross-group outside-group assist — MQ2XAssist parity.
 pub mod xassist;
 
+use self::{cross_group::CrossGroupCoordinator, session_control::SessionControl};
 use crate::{
     camp::{
         cc::CcType,
@@ -20,18 +21,18 @@ use crate::{
     combat::coordinator::CombatCoordinator,
     economy::price_monitor::TradePriceMonitor,
     ipc::{pipe::CommandPipe, shared::SharedStateReader},
-    orchestrator::session_control::SessionControl,
     say_detection::{SayAction, SayDetector, SayPattern, SayRule},
 };
 use std::{
     collections::HashMap,
+    fs, io,
     path::{Path, PathBuf},
     time::{Duration, Instant, SystemTime},
 };
 use textquest_common::{
     character_config::{CharacterConfigMap, RewardAutomationConfig, load_character_configs},
     combat::HateTargetCategory,
-    ipc::{ChatMessageInfo, Command, Response, SessionControlCommand, SessionToken},
+    ipc::{ChatMessageInfo, Command, Response, SessionToken},
     routing::RoutingScope,
     shared_client_state::{SharedClientState, extended_state_enabled},
     spawn_finder::{LiveSpawnObserver, LiveSpawnSnapshot},
@@ -68,25 +69,26 @@ fn live_spawn_snapshot_path() -> PathBuf {
     live_session_snapshot_path().with_file_name("live_spawns.json")
 }
 
-fn replace_snapshot_file(temp_path: &Path, path: &Path) -> std::io::Result<()> {
+fn replace_snapshot_file(temp_path: &Path, path: &Path) -> io::Result<()> {
     #[cfg(windows)]
     if path.exists() {
-        std::fs::remove_file(path)?;
+        fs::remove_file(path)?;
     }
 
-    std::fs::rename(temp_path, path)
+    fs::rename(temp_path, path)
 }
 
 fn persist_shared_client_states_to_path(
     path: &Path,
     states: &[SharedClientState],
-) -> anyhow::Result<()> {
-    let payload = serde_json::to_vec(states)?;
+) -> io::Result<()> {
+    let payload =
+        serde_json::to_vec(states).map_err(|error| io::Error::other(error.to_string()))?;
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent)?;
     }
     let temp_path = path.with_extension("json.tmp");
-    std::fs::write(&temp_path, payload)?;
+    fs::write(&temp_path, payload)?;
     replace_snapshot_file(&temp_path, path)?;
     Ok(())
 }
@@ -94,13 +96,14 @@ fn persist_shared_client_states_to_path(
 fn persist_live_spawn_snapshot_to_path(
     path: &Path,
     snapshot: &LiveSpawnSnapshot,
-) -> anyhow::Result<()> {
-    let payload = serde_json::to_vec(snapshot)?;
+) -> io::Result<()> {
+    let payload =
+        serde_json::to_vec(snapshot).map_err(|error| io::Error::other(error.to_string()))?;
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent)?;
     }
     let temp_path = path.with_extension("json.tmp");
-    std::fs::write(&temp_path, payload)?;
+    fs::write(&temp_path, payload)?;
     replace_snapshot_file(&temp_path, path)?;
     Ok(())
 }
@@ -114,6 +117,10 @@ pub struct Orchestrator {
     pub client_pids: Vec<u32>,
     /// Mapping of PID to character name for each client.
     pub client_names: HashMap<u32, String>,
+    /// Static group metadata learned from login/account bindings.
+    client_groups: HashMap<u32, u8>,
+    /// Static class metadata learned from login/account bindings.
+    client_class_names: HashMap<u32, String>,
     /// Active camp loop state machine, if a camp is running.
     pub active_camp: Option<CampLoop>,
     /// Group combat coordinator (assist, CC, CH chain).
@@ -124,16 +131,12 @@ pub struct Orchestrator {
     pub last_dispatched: Vec<(u32, CampAction)>,
     /// Latest game state per client PID.
     pub game_states: HashMap<u32, GameState>,
-    /// Cross-group same-zone coordination state for rez/assist rescue flows.
-    cross_group: cross_group::CrossGroupCoordinator,
     /// Shared memory readers per client PID.
     state_readers: HashMap<u32, SharedStateReader>,
     /// CSPRNG session tokens per client PID (generated at registration time).
     session_tokens: HashMap<u32, SessionToken>,
     /// Session routing/group metadata for each live client.
     session_controls: HashMap<u32, SessionControl>,
-    /// Best-known class label for each registered client.
-    client_class_names: HashMap<u32, String>,
     /// Tick number when each client's game state was last updated.
     state_timestamps: HashMap<u32, u64>,
     /// Last broadcast cross-client roster snapshot.
@@ -185,6 +188,8 @@ pub struct Orchestrator {
     last_chat_log_poll: Option<Instant>,
     /// Poll interval for chat logging.
     chat_log_poll_interval: Duration,
+    /// Same-zone cross-group rescue coordinator.
+    cross_group: CrossGroupCoordinator,
     /// Say channel detection and alerting (MQ2Say parity).
     say_detector: SayDetector,
     /// Alert routing and delivery configuration for say detection.
@@ -214,16 +219,16 @@ impl Orchestrator {
         Self {
             client_pids: Vec::new(),
             client_names: HashMap::new(),
+            client_groups: HashMap::new(),
+            client_class_names: HashMap::new(),
             active_camp: None,
             combat: CombatCoordinator::new(),
             tick_count: 0,
             last_dispatched: Vec::new(),
             game_states: HashMap::new(),
-            cross_group: cross_group::CrossGroupCoordinator::new(),
             state_readers: HashMap::new(),
             session_tokens: HashMap::new(),
             session_controls: HashMap::new(),
-            client_class_names: HashMap::new(),
             state_timestamps: HashMap::new(),
             last_shared_client_states: Vec::new(),
             persisted_shared_client_states: false,
@@ -246,6 +251,7 @@ impl Orchestrator {
             chat_log_manager: None,
             last_chat_log_poll: None,
             chat_log_poll_interval: Duration::from_secs(1),
+            cross_group: CrossGroupCoordinator::new(),
             say_detector: SayDetector::new(),
             say_detection_config: crate::config::SayDetectionConfig::default(),
             say_detection_webhook: None,
@@ -259,6 +265,37 @@ impl Orchestrator {
     #[must_use]
     pub fn get_client_state(&self, pid: u32) -> Option<&GameState> {
         self.game_states.get(&pid)
+    }
+
+    pub fn set_client_group(&mut self, pid: u32, group_id: u8) {
+        self.client_groups.insert(pid, group_id);
+        let control = self
+            .session_controls
+            .entry(pid)
+            .or_insert_with(|| SessionControl::new(pid));
+        control.group_id = group_id;
+        control.routing_scope = if group_id == 0 {
+            RoutingScope::AllSession
+        } else {
+            RoutingScope::Group {
+                group_id,
+                label: format!("G{group_id}"),
+            }
+        };
+    }
+
+    #[must_use]
+    pub fn client_group(&self, pid: u32) -> Option<u8> {
+        self.client_groups.get(&pid).copied()
+    }
+
+    pub fn set_client_class_name(&mut self, pid: u32, class_name: impl Into<String>) {
+        self.client_class_names.insert(pid, class_name.into());
+    }
+
+    #[must_use]
+    pub fn client_class_name(&self, pid: u32) -> Option<&str> {
+        self.client_class_names.get(&pid).map(String::as_str)
     }
 
     /// Read game state from shared memory for all known clients.
@@ -531,12 +568,14 @@ impl Orchestrator {
         self.poll_trade_chat_if_due();
         self.poll_chat_log_if_due();
         let say_matches = self.poll_and_evaluate_say_detection();
+        if self.tick_count.is_multiple_of(REWARD_CONFIG_SYNC_INTERVAL) {
+            self.sync_reward_automation_configs();
+        }
 
         let commands = match self.operating_mode {
             OperatingMode::Camp => self.tick_camp(),
             OperatingMode::Hunt => self.tick_hunt(),
         };
-
         // Filter to in-scope PIDs so the operator's routing scope is respected
         // by camp/hunt loop commands just as it is for TUI-initiated commands.
         let in_scope = self.pids_in_scope();
@@ -554,7 +593,7 @@ impl Orchestrator {
         );
         let emergency_count = emergency.len();
 
-        let count = scoped.len();
+        let count = scoped.len() + emergency.len();
         for (pid, action) in &scoped {
             self.dispatch_action(*pid, action);
         }
@@ -1207,6 +1246,8 @@ impl Orchestrator {
     pub fn remove_client(&mut self, pid: u32) {
         self.client_pids.retain(|&p| p != pid);
         self.client_names.remove(&pid);
+        self.client_groups.remove(&pid);
+        self.client_class_names.remove(&pid);
         self.game_states.remove(&pid);
         self.state_readers.remove(&pid);
         self.session_tokens.remove(&pid);

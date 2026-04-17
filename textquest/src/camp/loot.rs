@@ -7,6 +7,7 @@
 use std::collections::HashSet;
 
 use crate::camp::personality::PersonalityProfile;
+use crate::loot::ItemScoreComparison;
 
 /// Loot rules controlling what happens to items.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -280,6 +281,25 @@ pub fn classify_item(item_name: &str, rules: &LootRules) -> ItemAction {
         return ItemAction::Keep;
     }
     ItemAction::Ignore
+}
+
+/// Classify an item using explicit loot rules first, then item-score output.
+#[must_use]
+pub fn classify_item_with_score(
+    item_name: &str,
+    rules: &LootRules,
+    comparison: Option<&ItemScoreComparison>,
+) -> ItemAction {
+    let base = classify_item(item_name, rules);
+    if base != ItemAction::Ignore {
+        return base;
+    }
+
+    match comparison {
+        Some(score) if score.is_upgrade => ItemAction::Keep,
+        Some(_) => ItemAction::Sell,
+        None => ItemAction::Ignore,
+    }
 }
 
 #[cfg(test)]

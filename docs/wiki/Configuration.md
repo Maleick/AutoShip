@@ -160,6 +160,7 @@ web dashboard strategy tuning panel.
 Current operator-facing fields include:
 
 - combat thresholds such as `heal_at_pct`, `mana_sit_pct`, and `nuke_at_pct`
+- ordered rotation entries and class-specific strategy parameters
 - resurrection-offer policy under `auto_rez`
 - task reward automation rules under `reward_automation`
 - tribute automation preferences and live tribute status
@@ -183,6 +184,31 @@ again after each zone change. A typical format looks like:
 [{server}] {character} ({level} {class_short})
 ```
 
+## Loot Scoring
+
+The loot dashboard exposes an **Item Score** tab that applies
+MQ2ItemScore-style stat weighting when TextQuest compares a looted item against
+the currently equipped item in the same slot.
+
+Operator surface:
+
+- `GET /api/loot/item-score`
+- `PUT /api/loot/item-score`
+- the web dashboard **Loot Config** panel under the **Item Score** tab
+
+Current behavior:
+
+- stat weights are configured per EverQuest class
+- weights can include core stats such as `STR`, `AGI`, `STA`, `DEX`, `WIS`,
+  `INT`, `CHA`, `HP`, `MANA`, and any additional stat keys exposed by item data
+- `min_upgrade_delta` defines how much positive weighted score a candidate item
+  needs before the loot engine treats it as a keep-worthy upgrade
+- explicit loot rules still win first; item scoring is the fallback path when
+  no hard keep, sell, or destroy rule matches
+
+The persisted backend shape lives in `textquest-web/src/api/loot.rs`, and the
+comparison engine used by the loot module lives in
+`textquest/src/loot/item_score.rs`.
 ## Maps and Offsets
 
 - `config/maps/*.txt` supplies zone linework and labels for the TUI map.

@@ -61,7 +61,7 @@ interface TimestampPanelProps {
 }
 
 export default function TimestampPanel({ character }: TimestampPanelProps) {
-  const { config, loading, saving, error, savedAt, save, setFormat } = useTimestampConfig(character);
+  const { config, loading, saving, error, savedAt, save } = useTimestampConfig(character);
   const [draft, setDraft] = useState<TimestampConfig>(config);
 
   useEffect(() => {

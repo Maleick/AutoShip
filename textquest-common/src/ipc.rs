@@ -2554,6 +2554,26 @@ mod tests {
     }
 
     #[test]
+    fn reward_automation_config_command_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let cmd = Command::SetRewardAutomation {
+            config: RewardAutomationConfig {
+                rules: vec![crate::character_config::TaskRewardPreference {
+                    task_matcher: "Expedition".into(),
+                    preference: crate::character_config::RewardPreference::ByPosition {
+                        reward_position: 2,
+                    },
+                }],
+            },
+        };
+
+        let encoded = encode(&cmd).expect("encode SetRewardAutomation");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode SetRewardAutomation");
+        assert_eq!(decoded, cmd);
+    }
+
+    #[test]
     fn auto_rez_config_default_matches_ui_baseline() {
         assert_eq!(
             AutoRezConfig::default(),

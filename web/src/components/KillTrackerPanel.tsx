@@ -2,12 +2,11 @@ import { useState } from "react";
 import {
   Crosshair,
   Pulse,
-  Skull,
   Sword,
   TrendUp,
   Gear,
 } from "@phosphor-icons/react";
-import { useKillTracker, type KillTrackerState } from "../hooks/useKillTracker";
+import { useKillTracker } from "../hooks/useKillTracker";
 import type { KillTrackerSettings } from "../types";
 
 function StatChip({

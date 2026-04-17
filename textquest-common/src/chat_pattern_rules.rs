@@ -107,12 +107,17 @@ impl ChatPatternRule {
         self
     }
 
+    pub fn matches_channel(&self, channel: &ChatChannel) -> bool {
+        self.channels.is_empty() || self.channels.contains(channel)
+    }
+
+    #[must_use]
     pub fn fire_count(&self) -> u64 {
         self.fire_count
     }
 
-    pub fn matches_channel(&self, channel: &ChatChannel) -> bool {
-        self.channels.is_empty() || self.channels.contains(channel)
+    pub fn set_fire_count(&mut self, fire_count: u64) {
+        self.fire_count = fire_count;
     }
 }
 
@@ -122,7 +127,7 @@ fn uuid_v4() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
     let nanos = now.as_nanos();
-    let random: u128 = nanos ^ (std::process::id() as u128);
+    let random = nanos ^ u128::from(std::process::id());
     format!(
         "{:016x}-{:04x}-4{:03x}-{:04x}-{:012x}",
         random >> 96,

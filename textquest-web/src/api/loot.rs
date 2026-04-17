@@ -1,6 +1,11 @@
-//! REST API handlers for loot rules and distribution configuration.
+//! REST API handlers for loot rules, scoring, and distribution configuration.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path as FsPath, PathBuf},
+    sync::Arc,
+};
 
 use axum::{
     Json,
@@ -9,8 +14,17 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use toml_edit::DocumentMut;
 
 use crate::AppState;
+
+pub type ItemScoreConfigPayload = textquest::loot::ItemScoreConfig;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct ItemScoreConfigFile {
+    #[serde(default)]
+    item_score: ItemScoreConfigPayload,
+}
 
 // ── Shared loot state ────────────────────────────────────────────────────────
 
@@ -21,17 +35,32 @@ pub struct LootState {
     pub master_looter: RwLock<MasterLooterPayload>,
     pub distribution: RwLock<DistributionConfig>,
     pub history: RwLock<Vec<LootHistoryEntry>>,
+    pub item_score: RwLock<ItemScoreConfigPayload>,
+    pub item_score_write_lock: tokio::sync::Mutex<()>,
+    item_score_config_path: PathBuf,
 }
 
 impl LootState {
     /// Create state pre-populated with sensible defaults and demo data.
     pub fn new_demo() -> Arc<Self> {
+        Self::new_with_item_score_path(item_score_config_path())
+    }
+
+    pub(crate) fn new_with_item_score_path(item_score_config_path: PathBuf) -> Arc<Self> {
+        let item_score = load_item_score_from_path(&item_score_config_path).unwrap_or_else(|error| {
+            tracing::warn!(%error, path = %item_score_config_path.display(), "Failed to load item-score config");
+            ItemScoreConfigPayload::default()
+        });
+
         Arc::new(Self {
             rules: RwLock::new(LootRulesPayload::default()),
             filters: RwLock::new(default_filters()),
             master_looter: RwLock::new(MasterLooterPayload::default()),
             distribution: RwLock::new(DistributionConfig::default()),
             history: RwLock::new(demo_history()),
+            item_score: RwLock::new(item_score),
+            item_score_write_lock: tokio::sync::Mutex::new(()),
+            item_score_config_path,
         })
     }
 }
@@ -277,6 +306,52 @@ fn demo_history() -> Vec<LootHistoryEntry> {
     ]
 }
 
+fn item_score_config_path() -> PathBuf {
+    std::env::var("TEXTQUEST_CONFIG_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
+}
+
+fn load_item_score_from_path(path: &FsPath) -> Result<ItemScoreConfigPayload, String> {
+    if !path.exists() {
+        return Ok(ItemScoreConfigPayload::default());
+    }
+
+    let content = fs::read_to_string(path)
+        .map_err(|error| format!("Failed to read item-score config: {error}"))?;
+    let file = toml::from_str::<ItemScoreConfigFile>(&content)
+        .map_err(|error| format!("Failed to deserialize item-score config: {error}"))?;
+    Ok(file.item_score)
+}
+
+fn save_item_score_to_path(path: &FsPath, config: &ItemScoreConfigPayload) -> Result<(), String> {
+    let mut doc = if path.exists() {
+        fs::read_to_string(path)
+            .map_err(|error| format!("Failed to read config file: {error}"))?
+            .parse::<DocumentMut>()
+            .map_err(|error| format!("Failed to parse config file: {error}"))?
+    } else {
+        DocumentMut::new()
+    };
+
+    let serialized = toml::to_string_pretty(&ItemScoreConfigFile {
+        item_score: config.clone(),
+    })
+    .map_err(|error| format!("Failed to serialize item-score config: {error}"))?;
+    let item_doc = serialized
+        .parse::<DocumentMut>()
+        .map_err(|error| format!("Failed to parse item-score config: {error}"))?;
+    doc["item_score"] = item_doc["item_score"].clone();
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create config directory: {error}"))?;
+    }
+
+    fs::write(path, doc.to_string())
+        .map_err(|error| format!("Failed to write item-score config: {error}"))
+}
+
 // ── Origin allowlist
 // ──────────────────────────────────────────────────────────
 
@@ -431,16 +506,55 @@ pub async fn get_history(
     Json(results)
 }
 
+/// GET /api/loot/item-score — return current per-class stat weights.
+pub async fn get_item_score(State(state): State<Arc<AppState>>) -> Json<ItemScoreConfigPayload> {
+    let config = state.loot_state.item_score.read().await;
+    Json(config.clone())
+}
+
+/// PUT /api/loot/item-score — replace current per-class stat weights.
+pub async fn put_item_score(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(payload): Json<ItemScoreConfigPayload>,
+) -> StatusCode {
+    if !is_trusted_origin(&headers) {
+        return StatusCode::FORBIDDEN;
+    }
+
+    let _config_write_guard = crate::api::textquest_config_write_lock().lock().await;
+    let _write_guard = state.loot_state.item_score_write_lock.lock().await;
+
+    if let Err(error) = save_item_score_to_path(&state.loot_state.item_score_config_path, &payload)
+    {
+        tracing::warn!(%error, "Failed to persist item-score config");
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    }
+
+    let mut config = state.loot_state.item_score.write().await;
+    *config = payload;
+    StatusCode::NO_CONTENT
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::AppState;
+    use textquest::alerts::AlertStore;
+    use textquest::config::AlertingConfig;
+
+    fn test_config_path() -> std::path::PathBuf {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("textquest.toml");
+        std::mem::forget(dir);
+        path
+    }
 
     fn demo_state() -> Arc<AppState> {
         let mut state = crate::test_app_state();
-        state.loot_state = LootState::new_demo();
+        state.loot_state = LootState::new_with_item_score_path(test_config_path());
         Arc::new(state)
     }
 
@@ -644,5 +758,150 @@ mod tests {
         )
         .await;
         assert!(history.iter().all(|e| e.recipient == "Shadowdancer"));
+    }
+
+    #[test]
+    fn load_item_score_returns_default_when_missing() {
+        let config = load_item_score_from_path(&test_config_path()).expect("default config");
+        assert!(!config.class_weights.is_empty());
+        assert_eq!(config.min_upgrade_delta, 0.0);
+    }
+
+    #[test]
+    fn save_item_score_round_trips() {
+        let path = test_config_path();
+        let mut config = ItemScoreConfigPayload {
+            min_upgrade_delta: 3.5,
+            ..ItemScoreConfigPayload::default()
+        };
+        config.class_weights.insert(
+            "Warrior".into(),
+            std::collections::BTreeMap::from([("STR".into(), 1.2), ("AC".into(), 0.8)]),
+        );
+
+        save_item_score_to_path(&path, &config).expect("saved");
+        let loaded = load_item_score_from_path(&path).expect("loaded");
+
+        assert_eq!(loaded.min_upgrade_delta, 3.5);
+        assert_eq!(
+            loaded.class_weights.get("Warrior"),
+            config.class_weights.get("Warrior")
+        );
+    }
+
+    #[tokio::test]
+    async fn get_item_score_returns_defaults() {
+        let state = demo_state();
+        let Json(config) = get_item_score(State(state)).await;
+        assert!(!config.class_weights.is_empty());
+    }
+
+    #[tokio::test]
+    async fn put_item_score_updates_state() {
+        let state = demo_state();
+        let mut payload = ItemScoreConfigPayload {
+            min_upgrade_delta: 2.25,
+            ..ItemScoreConfigPayload::default()
+        };
+        payload.class_weights.insert(
+            "Rogue".into(),
+            std::collections::BTreeMap::from([("DEX".into(), 1.4), ("STR".into(), 0.6)]),
+        );
+
+        let status = put_item_score(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(payload.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+
+        let Json(saved) = get_item_score(State(state.clone())).await;
+        assert_eq!(saved.min_upgrade_delta, 2.25);
+        assert_eq!(
+            saved.class_weights.get("Rogue"),
+            payload.class_weights.get("Rogue")
+        );
+
+        let reloaded = load_item_score_from_path(&state.loot_state.item_score_config_path)
+            .expect("config persisted");
+        assert_eq!(
+            reloaded.class_weights.get("Rogue"),
+            payload.class_weights.get("Rogue")
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn put_item_score_does_not_update_state_when_disk_write_fails() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_root = std::env::temp_dir().join(format!(
+            "textquest-web-loot-item-score-readonly-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let read_only_dir = temp_root.join("readonly");
+        std::fs::create_dir_all(&read_only_dir).expect("create readonly dir");
+        std::fs::set_permissions(&read_only_dir, std::fs::Permissions::from_mode(0o555))
+            .expect("mark readonly");
+
+        let path = read_only_dir.join("item-score.toml");
+        let state = Arc::new(AppState {
+            event_tx: tokio::sync::broadcast::channel(1).0,
+            account_store: std::sync::Mutex::new(crate::accounts::AccountStore::default()),
+            credential_store: None,
+            character_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
+            character_config_path: crate::test_support::test_live_session_snapshot_path(
+                "loot-test-character-configs.json",
+            ),
+            character_config_write_lock: tokio::sync::Mutex::new(()),
+            loot_state: LootState::new_with_item_score_path(path),
+            economy_state: crate::api::economy::EconomyState::new_demo(),
+            dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
+            soul_audit: crate::api::soul::SoulAuditState::new_demo(),
+            discord_state: crate::api::discord::DiscordState::new_demo(),
+            player_watch_config: tokio::sync::RwLock::new(crate::api::PlayerWatchConfig::default()),
+            player_watch_write_lock: tokio::sync::Mutex::new(()),
+            gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
+            spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
+            timestamp_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            timestamp_config_write_lock: tokio::sync::Mutex::new(()),
+            kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_empty(),
+            alert_store: AlertStore::open_memory().expect("alert store"),
+            alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
+            alerting_config_path: crate::test_support::test_live_session_snapshot_path(
+                "loot-test-alerting.toml",
+            ),
+            api_token: None,
+            live_session_snapshot_path: crate::test_support::test_live_session_snapshot_path(
+                "loot-test-live-sessions.json",
+            ),
+            xassist_configs: crate::api::xassist::demo_xassist_configs(),
+            chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
+            say_detection: Some(Arc::new(
+                crate::api::say_detection::SayDetectionState::new_demo(),
+            )),
+        });
+
+        let original = get_item_score(State(state.clone())).await.0;
+        let mut payload = ItemScoreConfigPayload {
+            min_upgrade_delta: 9.5,
+            ..ItemScoreConfigPayload::default()
+        };
+        payload.class_weights.insert(
+            "Warrior".into(),
+            std::collections::BTreeMap::from([("STR".into(), 2.0)]),
+        );
+
+        let status = put_item_score(State(state.clone()), HeaderMap::new(), Json(payload)).await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+
+        let saved = get_item_score(State(state.clone())).await.0;
+        assert_eq!(saved, original);
+
+        std::fs::set_permissions(&read_only_dir, std::fs::Permissions::from_mode(0o755))
+            .expect("restore dir perms");
+        std::fs::remove_dir_all(&temp_root).ok();
     }
 }

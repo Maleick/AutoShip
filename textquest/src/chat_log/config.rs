@@ -1,6 +1,7 @@
 //! Chat logging configuration types.
 
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 impl From<textquest_common::chat::ChatChannel> for ChatChannel {
     fn from(other: textquest_common::chat::ChatChannel) -> Self {
@@ -33,6 +34,7 @@ pub enum ChatChannel {
     Pet,
     Spontaneous,
     Mpets,
+    #[serde(rename = "mq2", alias = "m_q2")]
     MQ2,
 }
 
@@ -74,11 +76,11 @@ impl ChatChannel {
     }
 }
 
-impl std::str::FromStr for ChatChannel {
+impl FromStr for ChatChannel {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
+        match s.to_ascii_lowercase().as_str() {
             "say" => Ok(Self::Say),
             "tell" => Ok(Self::Tell),
             "group" => Ok(Self::Group),
@@ -135,11 +137,11 @@ impl LogLevel {
     }
 }
 
-impl std::str::FromStr for LogLevel {
+impl FromStr for LogLevel {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
+        match s.to_ascii_lowercase().as_str() {
             "trace" => Ok(Self::Trace),
             "debug" => Ok(Self::Debug),
             "info" => Ok(Self::Info),

@@ -12,7 +12,6 @@ pub mod alerts;
 #[cfg(windows)]
 pub mod box_chat;
 /// Camp loop state machine — pulls, fights, loots, meds, buffs.
-#[cfg(windows)]
 #[allow(dead_code)]
 pub mod camp;
 /// MQ2Log-style per-character chat output logging.
@@ -26,6 +25,7 @@ pub mod client;
 #[allow(dead_code)]
 pub mod combat;
 /// Local slash-command dispatch helpers shared by chat and UI entrypoints.
+#[cfg(windows)]
 pub mod command_dispatch;
 /// TOML configuration loading.
 pub mod config;
@@ -56,7 +56,6 @@ pub mod inject;
 #[cfg(windows)]
 pub mod ipc;
 /// EQ item database, TLP loot tables, wishlists, and loot history.
-#[cfg(windows)]
 pub mod loot;
 /// Fleet metrics — SQLite-backed storage for events, DPS, loot, lockouts, plat.
 #[cfg(windows)]
@@ -118,7 +117,7 @@ pub const SOUL_DB_PATH: &str = "data/soul_memory.db";
 
 /// Default path for the Ghidra analysis SQLite cache.
 pub const GHIDRA_DB_PATH: &str = "data/ghidra.db";
-/// Default path for persisted trade price observations.
+/// Default path for the passive trade-price observation database.
 pub const TRADE_PRICE_DB_PATH: &str = "data/trade_prices.db";
 
 /// Path to the opcodes config file imported into the Ghidra DB at startup.

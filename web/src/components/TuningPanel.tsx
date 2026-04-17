@@ -12,14 +12,15 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import type {
+  AutoCampOnDeathConfig,
   AutoRezConfig,
   CharacterConfig,
   ClassParams,
   RotationEntry,
-  TaskRewardPreference,
   TributeAlertState,
   TributePreferences,
   TributeStatus,
+  TaskRewardPreference,
 } from "../types";
 import { useCharacterConfigs } from "../hooks/useTuning";
 import { formatDuration } from "../utils/time";
@@ -30,6 +31,12 @@ const DEFAULT_AUTO_REZ_CONFIG: AutoRezConfig = {
   trusted_casters: [],
   decline_if_untrusted: false,
   delay_ms: 3000,
+};
+
+const DEFAULT_AUTO_CAMP_ON_DEATH: AutoCampOnDeathConfig = {
+  enabled: false,
+  camp_delay_secs: 30,
+  relog_wait_secs: 900,
 };
 
 const DEFAULT_WINDOW_TITLE_FORMAT =
@@ -76,6 +83,10 @@ function normalizeCharacterConfig(config: CharacterConfig): CharacterConfig {
   return {
     ...config,
     auto_rez: normalizeAutoRezConfig(config.auto_rez),
+    auto_camp_on_death: {
+      ...DEFAULT_AUTO_CAMP_ON_DEATH,
+      ...config.auto_camp_on_death,
+    },
     reward_automation: config.reward_automation ?? { rules: [] },
     window_title_format:
       config.window_title_format?.trim() || DEFAULT_WINDOW_TITLE_FORMAT,

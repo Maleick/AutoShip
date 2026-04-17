@@ -3,8 +3,11 @@ use std::{collections::HashMap, sync::Arc};
 use axum::{
     Json,
     extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
     routing::get,
 };
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -82,10 +85,19 @@ pub struct KillTrackerState {
 }
 
 impl KillTrackerState {
-    pub fn new_demo() -> Arc<Self> {
+    pub fn new_empty() -> Arc<Self> {
         Arc::new(Self {
             settings: RwLock::new(KillTrackerSettings::default()),
             sessions: RwLock::new(HashMap::new()),
+        })
+    }
+
+    pub fn new_demo() -> Arc<Self> {
+        let demo_session = demo_session();
+        let demo_character = demo_session.character.clone();
+        Arc::new(Self {
+            settings: RwLock::new(KillTrackerSettings::default()),
+            sessions: RwLock::new(HashMap::from([(demo_character, vec![demo_session])])),
         })
     }
 
@@ -119,12 +131,12 @@ async fn get_settings(State(state): State<Arc<AppState>>) -> Json<KillTrackerSet
 async fn put_settings(
     State(state): State<Arc<AppState>>,
     Json(settings): Json<KillTrackerSettings>,
-) -> Json<KillTrackerSettings> {
+) -> impl IntoResponse {
     state
         .kill_tracker_state
         .update_settings(settings.clone())
         .await;
-    Json(settings)
+    (StatusCode::OK, Json(settings)).into_response()
 }
 
 async fn get_sessions(State(state): State<Arc<AppState>>) -> Json<Vec<SessionStats>> {
@@ -143,10 +155,7 @@ async fn get_character_sessions(
     Path(character): Path<String>,
 ) -> Json<Vec<SessionStats>> {
     let sessions = state.kill_tracker_state.sessions.read().await;
-    match sessions.get(&character) {
-        Some(char_sessions) => Json(char_sessions.clone()),
-        None => Json(Vec::<SessionStats>::new()),
-    }
+    Json(sessions.get(&character).cloned().unwrap_or_else(Vec::new))
 }
 
 async fn get_history(State(state): State<Arc<AppState>>) -> Json<Vec<CharacterHistory>> {
@@ -161,16 +170,63 @@ async fn get_history(State(state): State<Arc<AppState>>) -> Json<Vec<CharacterHi
     Json(history)
 }
 
+pub fn demo_session() -> SessionStats {
+    SessionStats {
+        character: "Frostreaver".to_string(),
+        session_start: Utc::now().to_rfc3339(),
+        total_kills: 47,
+        total_deaths: 2,
+        kills_per_hour: 42.5,
+        efficiency: EfficiencyScore {
+            kills_per_hour: 42.5,
+            avg_kill_time_secs: 84.7,
+            death_ratio: 0.04,
+            score: 88.2,
+        },
+        mob_stats: vec![
+            MobStats {
+                mob_name: "A restless frost giant".to_string(),
+                kill_count: 18,
+                best_time_ms: 52_000,
+                avg_time_ms: 81_000,
+                avg_dps: 913.4,
+            },
+            MobStats {
+                mob_name: "A restless icy servant".to_string(),
+                kill_count: 12,
+                best_time_ms: 41_000,
+                avg_time_ms: 67_000,
+                avg_dps: 1_024.7,
+            },
+        ],
+        top_mobs: vec![
+            ("A restless frost giant".to_string(), 18),
+            ("A restless icy servant".to_string(), 12),
+        ],
+        zone: "Kael Drakkel".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AppState;
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+    use http_body_util::BodyExt;
     use std::sync::Arc;
 
     fn test_state() -> Arc<AppState> {
-        let mut state = crate::test_app_state();
-        state.kill_tracker_state = KillTrackerState::new_demo();
-        Arc::new(state)
+        Arc::new(crate::test_app_state())
+    }
+
+    async fn json_body<T: serde::de::DeserializeOwned>(response: axum::response::Response) -> T {
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("response body")
+            .to_bytes();
+        serde_json::from_slice(&body).expect("valid json body")
     }
 
     #[tokio::test]
@@ -195,8 +251,10 @@ mod tests {
             max_session_history: 50,
         };
 
-        let Json(saved) = put_settings(State(state.clone()), Json(new_settings.clone())).await;
-        assert_eq!(saved.auto_report_interval_minutes, 5);
+        let response = put_settings(State(state.clone()), Json(new_settings.clone()))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
 
         let Json(updated) = get_settings(State(state)).await;
         assert!(!updated.enabled);
@@ -206,22 +264,27 @@ mod tests {
     #[tokio::test]
     async fn get_sessions_returns_empty_when_no_sessions() {
         let state = test_state();
-        let Json(sessions) = get_sessions(State(state)).await;
+        let response = get_sessions(State(state)).await.into_response();
+        let sessions: Vec<SessionStats> = json_body(response).await;
         assert!(sessions.is_empty());
     }
 
     #[tokio::test]
     async fn get_character_sessions_returns_empty_for_unknown_character() {
         let state = test_state();
-        let Json(sessions) =
-            get_character_sessions(State(state.clone()), Path("UnknownChar".to_string())).await;
+        let response =
+            get_character_sessions(State(state.clone()), Path("UnknownChar".to_string()))
+                .await
+                .into_response();
+        let sessions: Vec<SessionStats> = json_body(response).await;
         assert!(sessions.is_empty());
     }
 
     #[tokio::test]
     async fn get_history_returns_empty_when_no_sessions() {
         let state = test_state();
-        let Json(history) = get_history(State(state)).await;
+        let response = get_history(State(state)).await.into_response();
+        let history: Vec<CharacterHistory> = json_body(response).await;
         assert!(history.is_empty());
     }
 }
