@@ -3,26 +3,239 @@ role = "dps"
 rest_command = "/sit"
 
 [[combat_abilities]]
-name = "Pet Attack"
-command = "/cast 1"
-cooldown_secs = 0.0
-priority = 1
-
-[[combat_abilities]]
-name = "Nuke"
+name = "Seeking Flame of Seukor"
 command = "/cast 2"
 cooldown_secs = 6.0
 priority = 2
+condition = "mana_above_55"
 
 [[combat_abilities]]
-name = "Mod Rod"
-command = "/cast 4"
+name = "Shock of Swords"
+command = "/cast 3"
+cooldown_secs = 6.0
+priority = 3
+condition = "mana_above_40"
+
+[[combat_abilities]]
+name = "Rod of Mystical Transvergence"
+command = '/useitem "Rod of Mystical Transvergence"'
 cooldown_secs = 300.0
 priority = 4
 condition = "mana_below_40"
 
 [[buff_abilities]]
-name = "Damage Shield"
-command = "/cast 3"
-cooldown_secs = 600.0
+name = "Greater Burnout"
+command = "/cast 1"
+cooldown_secs = 300.0
 priority = 1
+duration_secs = 1800.0
+
+[[buff_abilities]]
+name = "Greater Vocaration: Water"
+command = "/cast 4"
+cooldown_secs = 6.0
+priority = 2
+
+[[level_overrides]]
+name = "level-60"
+min_level = 60
+max_level = 60
+
+[[level_overrides.combat_abilities]]
+name = "Mala"
+command = "/cast 5"
+cooldown_secs = 30.0
+priority = 1
+condition = "target_hp_above_80 and mana_above_70"
+
+[[level_overrides.combat_abilities]]
+name = "Seeking Flame of Seukor"
+command = "/cast 2"
+cooldown_secs = 6.0
+priority = 2
+condition = "mana_above_55"
+
+[[level_overrides.combat_abilities]]
+name = "Shock of Steel"
+command = "/cast 3"
+cooldown_secs = 6.0
+priority = 3
+condition = "mana_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Rod of Mystical Transvergence"
+command = '/useitem "Rod of Mystical Transvergence"'
+cooldown_secs = 300.0
+priority = 4
+condition = "mana_below_40"
+
+[[level_overrides.buff_abilities]]
+name = "Greater Burnout"
+command = "/cast 1"
+cooldown_secs = 300.0
+priority = 1
+duration_secs = 1800.0
+
+[[level_overrides.buff_abilities]]
+name = "Greater Vocaration: Water"
+command = "/cast 4"
+cooldown_secs = 6.0
+priority = 2
+
+[[level_overrides]]
+name = "level-61"
+min_level = 61
+max_level = 61
+
+[[level_overrides.combat_abilities]]
+name = "Mala"
+command = "/cast 5"
+cooldown_secs = 30.0
+priority = 1
+condition = "target_hp_above_80 and mana_above_70"
+
+[[level_overrides.combat_abilities]]
+name = "Seeking Flame of Seukor"
+command = "/cast 2"
+cooldown_secs = 6.0
+priority = 2
+condition = "mana_above_55"
+
+[[level_overrides.combat_abilities]]
+name = "Shock of Steel"
+command = "/cast 3"
+cooldown_secs = 6.0
+priority = 3
+condition = "mana_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Rod of Mystical Transvergence"
+command = '/useitem "Rod of Mystical Transvergence"'
+cooldown_secs = 300.0
+priority = 4
+condition = "mana_below_40"
+
+[[level_overrides.buff_abilities]]
+name = "Burnout IV"
+command = "/cast 1"
+cooldown_secs = 300.0
+priority = 1
+duration_secs = 1800.0
+
+[[level_overrides.buff_abilities]]
+name = "Greater Vocaration: Water"
+command = "/cast 4"
+cooldown_secs = 6.0
+priority = 2
+
+[[level_overrides]]
+name = "level-62"
+min_level = 62
+max_level = 64
+
+[[level_overrides.combat_abilities]]
+name = "Mala"
+command = "/cast 5"
+cooldown_secs = 30.0
+priority = 1
+condition = "target_hp_above_80 and mana_above_70"
+
+[[level_overrides.combat_abilities]]
+name = "Sun Storm"
+command = "/cast 6"
+cooldown_secs = 12.0
+priority = 2
+condition = "enemy_count_above_2 and mana_above_75"
+
+[[level_overrides.combat_abilities]]
+name = "Seeking Flame of Seukor"
+command = "/cast 2"
+cooldown_secs = 6.0
+priority = 3
+condition = "mana_above_55"
+
+[[level_overrides.combat_abilities]]
+name = "Shock of Steel"
+command = "/cast 3"
+cooldown_secs = 6.0
+priority = 4
+condition = "mana_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Rod of Mystical Transvergence"
+command = '/useitem "Rod of Mystical Transvergence"'
+cooldown_secs = 300.0
+priority = 5
+condition = "mana_below_40"
+
+[[level_overrides.buff_abilities]]
+name = "Burnout V"
+command = "/cast 1"
+cooldown_secs = 300.0
+priority = 1
+duration_secs = 1800.0
+
+[[level_overrides.buff_abilities]]
+name = "Greater Vocaration: Water"
+command = "/cast 4"
+cooldown_secs = 6.0
+priority = 2
+
+[[level_overrides]]
+name = "level-65"
+min_level = 65
+
+[[level_overrides.combat_abilities]]
+name = "Mala"
+command = "/cast 5"
+cooldown_secs = 30.0
+priority = 1
+condition = "target_hp_above_80 and mana_above_70"
+
+[[level_overrides.combat_abilities]]
+name = "Sun Storm"
+command = "/cast 6"
+cooldown_secs = 12.0
+priority = 2
+condition = "enemy_count_above_2 and mana_above_75"
+
+[[level_overrides.combat_abilities]]
+name = "Seeking Flame of Seukor"
+command = "/cast 2"
+cooldown_secs = 6.0
+priority = 3
+condition = "mana_above_55"
+
+[[level_overrides.combat_abilities]]
+name = "Shock of Steel"
+command = "/cast 3"
+cooldown_secs = 6.0
+priority = 4
+condition = "mana_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Call of the Arch Mage"
+command = "/cast 7"
+cooldown_secs = 6.0
+priority = 5
+condition = "pet_missing"
+
+[[level_overrides.combat_abilities]]
+name = "Rod of Mystical Transvergence"
+command = '/useitem "Rod of Mystical Transvergence"'
+cooldown_secs = 300.0
+priority = 6
+condition = "mana_below_40"
+
+[[level_overrides.buff_abilities]]
+name = "Burnout V"
+command = "/cast 1"
+cooldown_secs = 300.0
+priority = 1
+duration_secs = 1800.0
+
+[[level_overrides.buff_abilities]]
+name = "Greater Vocaration: Water"
+command = "/cast 4"
+cooldown_secs = 6.0
+priority = 2

@@ -663,4 +663,57 @@ mod tests {
             "Expected at least 7 class configs, found {count}"
         );
     }
+
+    #[test]
+    fn magician_shipped_config_has_expected_level_overrides() {
+        let magician_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("config/classes/magician.toml");
+        let config = ClassConfig::load(&magician_path).expect("load shipped magician config");
+
+        let profile_60 = config.profile_for_level(Some(60));
+        assert!(
+            profile_60
+                .combat_abilities
+                .iter()
+                .any(|ability| ability.name == "Mala")
+        );
+        assert!(
+            profile_60
+                .combat_abilities
+                .iter()
+                .any(|ability| ability.name == "Shock of Steel")
+        );
+
+        let profile_61 = config.profile_for_level(Some(61));
+        assert!(
+            profile_61
+                .buff_abilities
+                .iter()
+                .any(|ability| ability.name == "Burnout IV")
+        );
+
+        let profile_62 = config.profile_for_level(Some(62));
+        assert!(
+            profile_62
+                .buff_abilities
+                .iter()
+                .any(|ability| ability.name == "Burnout V")
+        );
+        assert!(
+            profile_62
+                .combat_abilities
+                .iter()
+                .any(|ability| ability.name == "Sun Storm")
+        );
+
+        let profile_65 = config.profile_for_level(Some(65));
+        assert!(
+            profile_65
+                .combat_abilities
+                .iter()
+                .any(|ability| ability.name == "Call of the Arch Mage")
+        );
+    }
 }

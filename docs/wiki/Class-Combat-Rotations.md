@@ -766,11 +766,13 @@ Sustained DPS through DOTs. Pet provides additional damage. Utility: summon corp
 
 1. **Summon pet** before group starts (water pet default)
 2. **Gear pet**: give summoned weapons and shield, cast Burnout (pet haste/damage)
-3. **Send pet** to attack (pet is primary DPS source)
-4. **Nuke** with Shock of Swords / Seeking Flame (secondary DPS)
-5. **Pet heal** if pet is taking damage (pet heals are weak pre-Luclin; earth pet can tank light hits)
-6. **Re-summon pet** if pet dies (keep reagents stocked)
-7. **Rain nukes** only on stationary mobs (AoE; risk of breaking mez)
+3. **Send pet** to attack immediately on engage (pet is primary DPS source)
+4. **Debuff** healthy targets with **Mala** once per target before spending mana on direct damage
+5. **AoE nuke** with **Sun Storm** only when 3+ enemies are present and mana is healthy
+6. **Primary nuke** with **Seeking Flame of Seukor** when mana is above the main burn threshold
+7. **Fallback nuke** with **Shock of Steel** when mana is only high enough for the cheaper line
+8. **Stop direct damage casting** below the low-mana floor and let pet DPS carry the fight
+9. **Downtime utility**: click **Rod of Mystical Transvergence** out of combat when mana drops below 40%
 
 ### Pet Management
 
@@ -795,11 +797,11 @@ Pet class DPS. Pet provides consistent melee damage. Supplemental nuking. Utilit
 
 ### Automation Notes
 
-- Pet summon + equip + buff is a startup macro (do once per session or on pet death)
-- Pet attack on current target when tank establishes aggro
-- Nuke on cooldown (with mana threshold check)
-- Pet recall if pet is about to die
-- Mod Rod distribution to casters between pulls
+- Pet summon + equip + buff is still a startup macro, but the DLL now tracks a newly detected pet and casts the best available **Burnout** line exactly once during downtime.
+- Resolved Magician spell lines are explicit at the Live-safe level breakpoints: `Mala`, `Seeking Flame of Seukor`, `Shock of Steel`, `Burnout IV`, `Burnout V`, `Sun Storm`, `Greater Vocaration: Water`, and `Call of the Arch Mage`.
+- Runtime damage priority is `Mala` once per target, then `Sun Storm` for 3+ enemies, then `Seeking Flame of Seukor`, then `Shock of Steel`.
+- The mod rod click path is handled through the shared activated-ability cooldown tracker with a 300 second reuse window, so downtime mana recovery does not spam item use every tick.
+- Direct damage casting stops below the secondary mana floor; when mana is low, automation leans on pet damage and medding instead of wasting casts.
 
 ---
 

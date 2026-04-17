@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use textquest_common::{
     combat::{
         AbilitySet, BuffInfo, CastResult, CombatConfig, CombatRole, ExtendedTargetList,
-        HpPreference, NamedPreference, SpellEntry, TargetScanConfig,
+        HpPreference, NamedPreference, ResolvedAbility, SpellEntry, TargetScanConfig,
     },
     types::SpawnData,
 };
@@ -204,6 +206,12 @@ pub trait ClassStrategy: Send {
     fn ability_sets(&self) -> Vec<AbilitySet> {
         Vec::new()
     }
+
+    /// Called whenever the FSM re-resolves this class' ability sets.
+    ///
+    /// Strategies that build runtime priority state from resolved spell lines
+    /// can cache it here.
+    fn on_abilities_resolved(&mut self, _resolved: &HashMap<String, ResolvedAbility>) {}
 }
 
 // ---------------------------------------------------------------------------

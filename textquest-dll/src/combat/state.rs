@@ -10,7 +10,7 @@ use std::{collections::HashMap, sync::atomic::Ordering};
 use textquest_common::{
     combat::{
         ActionType, CastResult, CombatConfig, CombatRole, CombatStatus, HolyShitAction,
-        ResolvedAbility,
+        ResolvedAbility, SpellEntry,
     },
     nav::Waypoint,
     shared_client_state::SharedClientState,
@@ -141,6 +141,20 @@ fn plan_spell_cast(
     })
 }
 
+fn preferred_spell_slot(spell: &SpellEntry, memorized_spells: &[i32]) -> Option<u8> {
+    // Strategy-generated spells sometimes use slot 0 as a placeholder when no
+    // preferred gem is known. If gem 0 does not actually hold the spell, drop
+    // the preference and let the planner search memorized gems normally.
+    if spell.spell_id > 0
+        && spell.slot == 0
+        && memorized_spells.first().copied() != Some(spell.spell_id)
+    {
+        return None;
+    }
+
+    Some(spell.slot)
+}
+
 /// Build a safe `/useitem` slash command for an item name.
 ///
 /// EQ item names commonly contain spaces, so they are quoted. Quotes and
@@ -184,6 +198,167 @@ fn normalize_action_name(action_name: &str) -> String {
         .filter(|ch| ch.is_ascii_alphanumeric())
         .flat_map(char::to_lowercase)
         .collect()
+}
+
+fn item_cooldown_ticks(item_name: &str) -> Option<u32> {
+    match normalize_action_name(item_name).as_str() {
+        "rodofmysticaltransvergence" => Some(300 * 20),
+        _ => None,
+    }
+}
+
+struct RotationActionRuntime<'a> {
+    resolved_abilities: &'a HashMap<String, ResolvedAbility>,
+    ability_cooldowns: &'a mut AbilityCooldownTracker,
+    skill_cooldowns: &'a mut SkillCooldownTracker,
+    gcd: &'a mut GcdTracker,
+    personality: &'a mut CombatPersonality,
+    tick_count: u32,
+    state: &'a mut CombatState,
+}
+
+fn execute_rotation_action(
+    groups: &mut Option<Vec<RotationGroup>>,
+    ctx: &CombatContext,
+    runtime: &mut RotationActionRuntime<'_>,
+) -> bool {
+    let Some(groups) = groups.as_mut() else {
+        return false;
+    };
+    let Some(action) = rotation::execute_rotations(groups, ctx) else {
+        return false;
+    };
+
+    let (spell_id, resolved_name) =
+        if let Some(resolved) = runtime.resolved_abilities.get(&action.entry_name) {
+            (resolved.spell_id, resolved.ability_name.as_str())
+        } else {
+            (0, action.entry_name.as_str())
+        };
+
+    tracing::debug!(
+        entry = %action.entry_name,
+        resolved = %resolved_name,
+        spell_id,
+        target = action.target_id,
+        "Rotation engine selected action"
+    );
+
+    match &action.action_type {
+        ActionType::Spell(_) | ActionType::Song(_) => {
+            if spell_id <= 0 {
+                tracing::warn!(
+                    entry = %action.entry_name,
+                    action = ?action.action_type,
+                    "Skipping unresolved spell/song from rotation"
+                );
+                return true;
+            }
+            let memorized_spells = crate::eq::read_memorized_spells();
+            let Some(cast_plan) = plan_spell_cast(None, spell_id, &memorized_spells) else {
+                tracing::warn!(
+                    entry = %action.entry_name,
+                    spell_id,
+                    action = ?action.action_type,
+                    "Skipping spell/song from rotation because no valid cast plan was found"
+                );
+                return true;
+            };
+            crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
+            let cast_delay = u32::from(runtime.personality.next_cast_delay());
+            runtime.gcd.consume();
+            *runtime.state = CombatState::Casting {
+                spell_slot: cast_plan.gem_id,
+                spell_id: cast_plan.spell_id,
+                target_id: action.target_id,
+                ticks_remaining: 20 + cast_delay,
+                backoff_ticks: 0,
+                retry_count: 0,
+            };
+        }
+        ActionType::Disc(_) | ActionType::AA(_) => {
+            if spell_id <= 0 {
+                tracing::warn!(
+                    entry = %action.entry_name,
+                    action = ?action.action_type,
+                    "Skipping unresolved activated ability from rotation"
+                );
+                return true;
+            }
+            if !runtime
+                .ability_cooldowns
+                .can_use(spell_id, runtime.tick_count)
+            {
+                tracing::debug!(
+                    entry = %action.entry_name,
+                    spell_id,
+                    "Activated rotation ability blocked by cooldown metadata"
+                );
+                return true;
+            }
+            crate::eq::do_combat_ability(spell_id, true);
+            runtime
+                .ability_cooldowns
+                .consume(spell_id, None, runtime.tick_count);
+            runtime.gcd.consume();
+            *runtime.state = CombatState::OnGcd;
+        }
+        ActionType::Ability(ability_name) => {
+            let Some(skill_id) = combat_skill_id(ability_name) else {
+                tracing::warn!(
+                    ability = %ability_name,
+                    entry = %action.entry_name,
+                    "Skipping unknown combat skill from rotation"
+                );
+                return true;
+            };
+            if !runtime.skill_cooldowns.is_ready(skill_id) {
+                tracing::debug!(
+                    skill_id,
+                    ability = %ability_name,
+                    "Rotation skill blocked by cooldown"
+                );
+                return true;
+            }
+            crate::eq::use_skill(skill_id, None);
+            if let Some(cooldown) = default_cooldown(skill_id) {
+                runtime.skill_cooldowns.consume(skill_id, cooldown);
+            }
+            runtime.gcd.consume();
+            *runtime.state = CombatState::OnGcd;
+        }
+        ActionType::Item(item_name) => {
+            let Some(command) = use_item_command(item_name) else {
+                tracing::warn!(
+                    entry = %action.entry_name,
+                    "Skipping item rotation with empty sanitized name"
+                );
+                return true;
+            };
+            let item_key = item_action_key(item_name);
+            if !runtime
+                .ability_cooldowns
+                .can_use(item_key, runtime.tick_count)
+            {
+                tracing::debug!(
+                    entry = %action.entry_name,
+                    item = %item_name,
+                    "Rotation item blocked by cooldown metadata"
+                );
+                return true;
+            }
+            crate::eq::slash_command(&command);
+            runtime.ability_cooldowns.consume(
+                item_key,
+                item_cooldown_ticks(item_name),
+                runtime.tick_count,
+            );
+            runtime.gcd.consume();
+            *runtime.state = CombatState::OnGcd;
+        }
+    }
+
+    true
 }
 
 const COMBAT_SKILL_ID_TAUNT: u32 = 73;
@@ -389,6 +564,8 @@ impl Combatant {
         }
         self.resolved_abilities =
             textquest_common::combat::resolve_abilities(&sets, known, character_level);
+        self.strategy
+            .on_abilities_resolved(&self.resolved_abilities);
         tracing::info!(
             resolved = self.resolved_abilities.len(),
             total_sets = sets.len(),
@@ -648,6 +825,75 @@ impl Combatant {
             }
         }
 
+        let mut selected_spell_target = None;
+        if matches!(self.state, CombatState::Engaging { .. }) {
+            if !self.gcd.is_ready() {
+                return;
+            }
+
+            selected_spell_target = self.strategy.select_target(&ctx);
+
+            // Ask strategy for a spell target (may differ from assist target).
+            // Healers target lowest-HP group member, enchanters target off-mobs
+            // for mez, etc. This only influences spell targeting — it does NOT
+            // override the assist target for auto-attack.
+            if let Some(spell_target) = selected_spell_target
+                && target.is_none_or(|t| t.spawn_id != spell_target)
+            {
+                tracing::debug!(
+                    spell_target,
+                    assist = ?self.assist_target,
+                    "Strategy selected different spell target"
+                );
+                crate::eq::slash_command(&format!("/target id {spell_target}"));
+            }
+
+            if let Some(t) = target {
+                let dist = Waypoint::new(player.x, player.y, player.z)
+                    .distance_3d(&Waypoint::new(t.x, t.y, t.z));
+                if dist > MAX_SPELL_RANGE {
+                    tracing::debug!(dist, "Target out of spell range, waiting");
+                    return;
+                }
+            }
+
+            let mana_pct = player.mana_pct();
+            if !self.mana_governor.can_cast(mana_pct) {
+                tracing::debug!(mana_pct, "Mana too low, transitioning to Recovering");
+                self.state = CombatState::Recovering;
+                return;
+            }
+
+            let mut runtime = RotationActionRuntime {
+                resolved_abilities: &self.resolved_abilities,
+                ability_cooldowns: &mut self.ability_cooldowns,
+                skill_cooldowns: &mut self.skill_cooldowns,
+                gcd: &mut self.gcd,
+                personality: &mut self.personality,
+                tick_count: self.tick_count,
+                state: &mut self.state,
+            };
+            if execute_rotation_action(&mut self.rotation_groups, &ctx, &mut runtime) {
+                return;
+            }
+        }
+
+        if self.gcd.is_ready() && matches!(self.state, CombatState::Idle | CombatState::Recovering)
+        {
+            let mut runtime = RotationActionRuntime {
+                resolved_abilities: &self.resolved_abilities,
+                ability_cooldowns: &mut self.ability_cooldowns,
+                skill_cooldowns: &mut self.skill_cooldowns,
+                gcd: &mut self.gcd,
+                personality: &mut self.personality,
+                tick_count: self.tick_count,
+                state: &mut self.state,
+            };
+            if execute_rotation_action(&mut self.rotation_groups, &ctx, &mut runtime) {
+                return;
+            }
+        }
+
         // --- Normal state machine ---
         match &mut self.state {
             CombatState::Idle => {
@@ -655,178 +901,6 @@ impl Combatant {
             }
 
             CombatState::Engaging { .. } => {
-                if !self.gcd.is_ready() {
-                    return;
-                }
-
-                let selected_spell_target = self.strategy.select_target(&ctx);
-
-                // Ask strategy for a spell target (may differ from assist target).
-                // Healers target lowest-HP group member, enchanters target off-mobs
-                // for mez, etc. This only influences spell targeting — it does NOT
-                // override the assist target for auto-attack.
-                if let Some(spell_target) = selected_spell_target
-                    && target.is_none_or(|t| t.spawn_id != spell_target)
-                {
-                    tracing::debug!(
-                        spell_target,
-                        assist = ?self.assist_target,
-                        "Strategy selected different spell target"
-                    );
-                    crate::eq::slash_command(&format!("/target id {spell_target}"));
-                }
-
-                // Range check — don't cast if target is too far away
-                if let Some(t) = target {
-                    let dist = Waypoint::new(player.x, player.y, player.z)
-                        .distance_3d(&Waypoint::new(t.x, t.y, t.z));
-                    if dist > MAX_SPELL_RANGE {
-                        tracing::debug!(dist, "Target out of spell range, waiting");
-                        return;
-                    }
-                }
-
-                // Check mana governor
-                let mana_pct = player.mana_pct();
-
-                if !self.mana_governor.can_cast(mana_pct) {
-                    tracing::debug!(mana_pct, "Mana too low, transitioning to Recovering");
-                    self.state = CombatState::Recovering;
-                    return;
-                }
-
-                // --- Rotation engine path ---
-                // When the class defines data-driven rotation groups, use the
-                // rotation engine instead of the legacy `select_spell()` path.
-                if let Some(ref mut groups) = self.rotation_groups {
-                    if let Some(action) = rotation::execute_rotations(groups, &ctx) {
-                        // Resolve the action's spell line name to a concrete spell ID
-                        // via the pre-resolved ability map. If no resolution exists,
-                        // the action name is treated as a literal and spell_id=0.
-                        let (spell_id, resolved_name) = if let Some(resolved) =
-                            self.resolved_abilities.get(&action.entry_name)
-                        {
-                            (resolved.spell_id, resolved.ability_name.as_str())
-                        } else {
-                            (0, action.entry_name.as_str())
-                        };
-
-                        tracing::debug!(
-                            entry = %action.entry_name,
-                            resolved = %resolved_name,
-                            spell_id,
-                            target = action.target_id,
-                            "Rotation engine selected action"
-                        );
-                        match &action.action_type {
-                            ActionType::Spell(_) | ActionType::Song(_) => {
-                                if spell_id <= 0 {
-                                    tracing::warn!(
-                                        entry = %action.entry_name,
-                                        action = ?action.action_type,
-                                        "Skipping unresolved spell/song from rotation"
-                                    );
-                                    return;
-                                }
-                                let memorized_spells = crate::eq::read_memorized_spells();
-                                let Some(cast_plan) =
-                                    plan_spell_cast(None, spell_id, &memorized_spells)
-                                else {
-                                    tracing::warn!(
-                                        entry = %action.entry_name,
-                                        spell_id,
-                                        action = ?action.action_type,
-                                        "Skipping spell/song from rotation because no valid cast plan was found"
-                                    );
-                                    return;
-                                };
-                                crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
-                                let cast_delay = u32::from(self.personality.next_cast_delay());
-                                self.gcd.consume();
-                                self.state = CombatState::Casting {
-                                    spell_slot: cast_plan.gem_id,
-                                    spell_id: cast_plan.spell_id,
-                                    target_id: action.target_id,
-                                    ticks_remaining: 20 + cast_delay,
-                                    backoff_ticks: 0,
-                                    retry_count: 0,
-                                };
-                            }
-                            ActionType::Disc(_) | ActionType::AA(_) => {
-                                if spell_id <= 0 {
-                                    tracing::warn!(
-                                        entry = %action.entry_name,
-                                        action = ?action.action_type,
-                                        "Skipping unresolved activated ability from rotation"
-                                    );
-                                    return;
-                                }
-                                if !self.ability_cooldowns.can_use(spell_id, self.tick_count) {
-                                    tracing::debug!(
-                                        entry = %action.entry_name,
-                                        spell_id,
-                                        "Activated rotation ability blocked by cooldown metadata"
-                                    );
-                                    return;
-                                }
-                                crate::eq::do_combat_ability(spell_id, true);
-                                self.ability_cooldowns
-                                    .consume(spell_id, None, self.tick_count);
-                                self.gcd.consume();
-                                self.state = CombatState::OnGcd;
-                            }
-                            ActionType::Ability(ability_name) => {
-                                let Some(skill_id) = combat_skill_id(ability_name) else {
-                                    tracing::warn!(
-                                        ability = %ability_name,
-                                        entry = %action.entry_name,
-                                        "Skipping unknown combat skill from rotation"
-                                    );
-                                    return;
-                                };
-                                if !self.skill_cooldowns.is_ready(skill_id) {
-                                    tracing::debug!(
-                                        skill_id,
-                                        ability = %ability_name,
-                                        "Rotation skill blocked by cooldown"
-                                    );
-                                    return;
-                                }
-                                crate::eq::use_skill(skill_id, None);
-                                if let Some(cooldown) = default_cooldown(skill_id) {
-                                    self.skill_cooldowns.consume(skill_id, cooldown);
-                                }
-                                self.gcd.consume();
-                                self.state = CombatState::OnGcd;
-                            }
-                            ActionType::Item(item_name) => {
-                                let Some(command) = use_item_command(item_name) else {
-                                    tracing::warn!(
-                                        entry = %action.entry_name,
-                                        "Skipping item rotation with empty sanitized name"
-                                    );
-                                    return;
-                                };
-                                let item_key = item_action_key(item_name);
-                                if !self.ability_cooldowns.can_use(item_key, self.tick_count) {
-                                    tracing::debug!(
-                                        entry = %action.entry_name,
-                                        item = %item_name,
-                                        "Rotation item blocked by cooldown metadata"
-                                    );
-                                    return;
-                                }
-                                crate::eq::slash_command(&command);
-                                self.ability_cooldowns
-                                    .consume(item_key, None, self.tick_count);
-                                self.gcd.consume();
-                                self.state = CombatState::OnGcd;
-                            }
-                        }
-                    }
-                    return;
-                }
-
                 // --- Legacy select_spell() path ---
                 // Ask strategy for next spell
                 if let Some(spell) = self.strategy.select_spell(&ctx) {
@@ -837,9 +911,11 @@ impl Combatant {
                     );
 
                     let memorized_spells = crate::eq::read_memorized_spells();
-                    let Some(cast_plan) =
-                        plan_spell_cast(Some(spell.slot), spell.spell_id, &memorized_spells)
-                    else {
+                    let Some(cast_plan) = plan_spell_cast(
+                        preferred_spell_slot(&spell, &memorized_spells),
+                        spell.spell_id,
+                        &memorized_spells,
+                    ) else {
                         tracing::warn!(slot = spell.slot, "Skipping cast with invalid spell slot");
                         return;
                     };
@@ -1354,10 +1430,15 @@ impl Combatant {
                 let Some(pet_id) = pet_status.spawn_id else {
                     return false;
                 };
-                let Some(gem_id) = normalize_gem_id(spell.slot) else {
+                let memorized_spells = crate::eq::read_memorized_spells();
+                let Some(cast_plan) = plan_spell_cast(
+                    preferred_spell_slot(&spell, &memorized_spells),
+                    spell.spell_id,
+                    &memorized_spells,
+                ) else {
                     tracing::warn!(
                         slot = spell.slot,
-                        "Skipping pet buff with invalid spell slot"
+                        "Skipping pet buff without a valid cast plan"
                     );
                     return false;
                 };
@@ -1366,7 +1447,7 @@ impl Combatant {
                 if original_target != Some(pet_id) {
                     crate::eq::slash_command(&format!("/target id {pet_id}"));
                 }
-                crate::eq::cast_spell(gem_id, spell.spell_id);
+                crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
                 if let Some(original_target) = original_target
                     && original_target != pet_id
                 {
@@ -1376,8 +1457,8 @@ impl Combatant {
                 let cast_delay = u32::from(self.personality.next_cast_delay());
                 self.gcd.consume();
                 self.state = CombatState::Casting {
-                    spell_slot: gem_id,
-                    spell_id: spell.spell_id,
+                    spell_slot: cast_plan.gem_id,
+                    spell_id: cast_plan.spell_id,
                     target_id: pet_id,
                     ticks_remaining: 20 + cast_delay,
                     retry_count: 0,
@@ -1810,6 +1891,121 @@ mod tests {
     #[test]
     fn plan_spell_cast_rejects_invalid_preferred_slot() {
         assert_eq!(plan_spell_cast(Some(99), 1500, &[0, 0, 0]), None);
+    }
+
+    #[test]
+    fn preferred_spell_slot_ignores_placeholder_zero_when_spell_is_elsewhere() {
+        let spell = SpellEntry {
+            slot: 0,
+            spell_id: 1500,
+            name: "StrategySpell".into(),
+            min_mana_pct: 0.0,
+            priority: 1,
+            is_aoe: false,
+        };
+
+        assert_eq!(preferred_spell_slot(&spell, &[0, 0, 1500]), None);
+        assert_eq!(preferred_spell_slot(&spell, &[1500, 0, 0]), Some(0));
+    }
+
+    #[test]
+    fn rotation_group_absence_of_action_falls_back_to_magician_spell_selection() {
+        let mut c = Combatant::new(13, 0, test_config());
+        c.resolve_abilities(
+            &[
+                textquest_common::combat::KnownAbility {
+                    name: "Seeking Flame of Seukor".into(),
+                    spell_id: 1715,
+                    level: 59,
+                },
+                textquest_common::combat::KnownAbility {
+                    name: "Shock of Steel".into(),
+                    spell_id: 1716,
+                    level: 60,
+                },
+                textquest_common::combat::KnownAbility {
+                    name: "Mala".into(),
+                    spell_id: 1717,
+                    level: 60,
+                },
+            ],
+            60,
+        );
+
+        let mut player = test_player();
+        player.level = 60;
+        player.mana_current = 9000;
+        player.mana_max = 10000;
+        let mut target = test_target();
+        target.hp_current = 9900;
+        target.hp_max = 10000;
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), &[]);
+
+        assert!(
+            matches!(c.state, CombatState::Casting { spell_id: 1717, .. }),
+            "Magician should fall back to spell selection when no downtime item action fires"
+        );
+    }
+
+    #[test]
+    fn item_cooldown_ticks_tracks_magician_mod_rod_reuse() {
+        assert_eq!(
+            item_cooldown_ticks("Rod of Mystical Transvergence"),
+            Some(6000)
+        );
+        assert_eq!(item_cooldown_ticks("Unknown Clicky"), None);
+    }
+
+    #[test]
+    fn downtime_rotation_groups_execute_while_idle() {
+        let mut c = Combatant::new(1, 0, test_config());
+        c.rotation_groups = Some(vec![item_rotation_group_with(
+            "Rod of Mystical Transvergence",
+            textquest_common::combat::TargetSelector::SelfOnly,
+            textquest_common::combat::CombatStateReq::Downtime,
+        )]);
+
+        c.tick(&test_player(), None, &[]);
+
+        assert!(matches!(c.state, CombatState::OnGcd));
+        assert!(
+            !c.ability_cooldowns.can_use(
+                item_action_key("Rod of Mystical Transvergence"),
+                c.tick_count
+            ),
+            "Downtime rotation should consume the mod rod cooldown"
+        );
+    }
+
+    #[test]
+    fn executed_rotation_action_does_not_fall_through_to_legacy_spell_selection() {
+        let mut c = Combatant::new(13, 0, test_config());
+        c.rotation_groups = Some(vec![item_rotation_group("Rod of Mystical Transvergence")]);
+        c.config.spells = vec![SpellEntry {
+            slot: 1,
+            spell_id: 1717,
+            name: "Mala".into(),
+            min_mana_pct: 0.0,
+            priority: 1,
+            is_aoe: false,
+        }];
+
+        let player = test_player();
+        let target = test_target();
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+
+        c.tick(&player, Some(&target), &[]);
+
+        assert!(
+            matches!(c.state, CombatState::OnGcd),
+            "A successful rotation action should end the tick before legacy spell selection runs"
+        );
     }
 
     #[test]
