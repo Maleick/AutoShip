@@ -660,6 +660,14 @@ pub async fn import_accounts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex as StdMutex, MutexGuard as StdMutexGuard, OnceLock};
+
+    fn credential_store_test_guard() -> StdMutexGuard<'static, ()> {
+        static LOCK: OnceLock<StdMutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| StdMutex::new(()))
+            .lock()
+            .expect("credential store test lock poisoned")
+    }
 
     fn make_store() -> AccountStore {
         AccountStore::default()
@@ -749,6 +757,7 @@ mod tests {
 
     #[test]
     fn credential_store_set_and_has_password() {
+        let _guard = credential_store_test_guard();
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("creds.db");
         let cred_store = CredentialStore::open(&db_path, "test_master_pw").unwrap();
@@ -759,6 +768,7 @@ mod tests {
 
     #[test]
     fn credential_store_remove_password() {
+        let _guard = credential_store_test_guard();
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("creds.db");
         let cred_store = CredentialStore::open(&db_path, "master").unwrap();
@@ -769,6 +779,7 @@ mod tests {
 
     #[test]
     fn credential_store_persists_master_salt_across_reopen() {
+        let _guard = credential_store_test_guard();
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("creds.db");
         let _store = CredentialStore::open(&db_path, "master").unwrap();

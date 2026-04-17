@@ -2,13 +2,17 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::time::{Duration, Instant};
 
-use super::app::{ActivePanel, ActiveScreen, App};
+use super::app::{ActivePanel, ActiveScreen, App, MapViewportMode};
 use crate::{
     orchestrator::Orchestrator,
     tui::{state::MapFilterKind, ui::ch_chain::ChPanelFocus},
 };
 
 fn toggle_tactical_map_layer(app: &mut App, layer: u8) {
+    if layer == 4 {
+        app.toggle_tactical_navmesh_overlay();
+        return;
+    }
     let status = app.map_state.toggle_layer(layer);
     app.status_message = status.to_string();
     app.active_screen = ActiveScreen::Tactical;
@@ -78,7 +82,10 @@ fn handle_tactical_map_panel_toggle(app: &mut App, key: KeyCode) -> bool {
         KeyCode::Char('g') => toggle_tactical_map_layer(app, 1),
         KeyCode::Char('s') => toggle_tactical_map_layer(app, 2),
         KeyCode::Char('w') => toggle_tactical_map_layer(app, 3),
-        KeyCode::Char('x') => toggle_tactical_map_layer(app, 4),
+        KeyCode::Char('x') | KeyCode::Char('X') => {
+            app.toggle_tactical_navmesh_overlay();
+            return true;
+        }
         KeyCode::Char('l') => toggle_tactical_map_layer(app, 5),
         KeyCode::Char('a') => toggle_tactical_map_layer(app, 6),
         KeyCode::Char('N') => toggle_tactical_map_filter(app, MapFilterKind::Npc),
@@ -88,6 +95,79 @@ fn handle_tactical_map_panel_toggle(app: &mut App, key: KeyCode) -> bool {
         KeyCode::Char('T') => toggle_tactical_map_filter(app, MapFilterKind::Pet),
         KeyCode::Char('R') => toggle_tactical_map_filter(app, MapFilterKind::Named),
         KeyCode::Char('U') => toggle_tactical_map_filter(app, MapFilterKind::Untargetable),
+        _ => return false,
+    }
+
+    true
+}
+
+fn handle_tactical_map_focused_shortcut(app: &mut App, key: KeyEvent) -> bool {
+    if app.active_screen != ActiveScreen::Tactical || app.active_panel != ActivePanel::TacticalMap {
+        return false;
+    }
+
+    if key.modifiers.contains(KeyModifiers::ALT) {
+        return false;
+    }
+
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        match key.code {
+            KeyCode::Char('a' | 'A') => {
+                let _ = app.set_tactical_map_view_mode(MapViewportMode::Auto);
+                return true;
+            }
+            KeyCode::Char('l' | 'L') => {
+                let _ = app.set_tactical_map_view_mode(MapViewportMode::Local);
+                return true;
+            }
+            KeyCode::Char('g' | 'G') => {
+                let _ = app.set_tactical_map_view_mode(MapViewportMode::Global);
+                return true;
+            }
+            KeyCode::Char('i' | 'I') => {
+                app.show_tactical_zone_info();
+                return true;
+            }
+            _ => return false,
+        }
+    }
+
+    match key.code {
+        KeyCode::Char('g') => toggle_tactical_map_layer(app, 1),
+        KeyCode::Char('s') => toggle_tactical_map_layer(app, 2),
+        KeyCode::Char('I') => {
+            app.show_tactical_zone_info();
+            return true;
+        }
+        KeyCode::Char('w') | KeyCode::Char('W') => toggle_tactical_map_layer(app, 3),
+        KeyCode::Char('x') => {
+            app.toggle_tactical_navmesh_overlay();
+            return true;
+        }
+        KeyCode::Char('l') => toggle_tactical_map_layer(app, 5),
+        KeyCode::Char('a') => toggle_tactical_map_layer(app, 6),
+        KeyCode::Char('n') => toggle_tactical_map_filter(app, MapFilterKind::Npc),
+        KeyCode::Char('p') => toggle_tactical_map_filter(app, MapFilterKind::Pc),
+        KeyCode::Char('c') => toggle_tactical_map_filter(app, MapFilterKind::Corpse),
+        KeyCode::Char('t') => toggle_tactical_map_filter(app, MapFilterKind::Pet),
+        KeyCode::Char('r') => toggle_tactical_map_filter(app, MapFilterKind::Named),
+        KeyCode::Char('u') => toggle_tactical_map_filter(app, MapFilterKind::Untargetable),
+        KeyCode::Char('N') => {
+            app.toggle_tactical_navmesh_overlay();
+            return true;
+        }
+        KeyCode::Home => {
+            app.center_tactical_map_on_player();
+            return true;
+        }
+        KeyCode::End => {
+            app.fit_tactical_map_zone();
+            return true;
+        }
+        KeyCode::Char('v') => {
+            app.cycle_tactical_map_view();
+            return true;
+        }
         _ => return false,
     }
 
@@ -645,6 +725,10 @@ pub fn handle_events(
             return Ok(true);
         }
 
+        if handle_tactical_map_focused_shortcut(app, key) {
+            return Ok(true);
+        }
+
         if handle_orchestrator_dashboard_shortcut(app, orchestrator, key) {
             return Ok(true);
         }
@@ -730,9 +814,8 @@ pub fn handle_events(
             (KeyCode::Char('?'), _) => {
                 app.help_visible = !app.help_visible;
                 if app.help_visible {
-                    app.help_focus = Some(crate::tui::app::HelpFocus::Section(
-                        crate::tui::command::HelpSection::Workflows,
-                    ));
+                    app.help_focus = None;
+                    app.help_scroll = 0;
                 } else {
                     app.help_focus = None;
                     app.help_scroll = 0;
@@ -917,20 +1000,6 @@ pub fn handle_events(
                     app.zoom_tactical_map_out();
                     return Ok(true);
                 }
-                KeyCode::Home => {
-                    app.reset_tactical_map_view();
-                    return Ok(true);
-                }
-                KeyCode::Char('v') => {
-                    app.cycle_tactical_map_view();
-                    return Ok(true);
-                }
-                KeyCode::Char('n') => {
-                    let enabled = app.map_state.toggle_navmesh();
-                    app.status_message =
-                        format!("Navmesh overlay: {}", if enabled { "ON" } else { "OFF" });
-                    return Ok(true);
-                }
                 key if handle_tactical_map_panel_toggle(app, key) => {
                     return Ok(true);
                 }
@@ -1077,6 +1146,41 @@ pub fn handle_events(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tui::app::MapViewportMode;
+    use crate::{
+        eq::structs::{SpawnInfo, SpawnType, StandState},
+        tui::state::MapFilterKind,
+    };
+
+    fn test_local_player(name: &str) -> SpawnInfo {
+        SpawnInfo {
+            name: name.into(),
+            displayed_name: name.into(),
+            lastname: String::new(),
+            spawn_id: 1,
+            spawn_type: SpawnType::Player,
+            level: 60,
+            class_id: 1,
+            class: None,
+            stand_state: StandState::Standing,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 100,
+            hp_max: 100,
+            mana_current: 100,
+            mana_max: 100,
+            endurance_current: 100,
+            endurance_max: 100,
+            is_gm: false,
+            race_id: 1,
+            buff_slots: Vec::new(),
+            spellbook: Vec::new(),
+            memorized_spells: Vec::new(),
+            cast_state: None,
+        }
+    }
 
     #[test]
     fn tactical_map_global_alt_filter_shortcut_toggles_npc_filter() {
@@ -1091,6 +1195,22 @@ mod tests {
         assert_eq!(app.active_panel, ActivePanel::TacticalMap);
         assert_eq!(app.status_message, "NPC filter OFF");
         assert!(!app.map_state.filters.show_npc);
+    }
+
+    #[test]
+    fn tactical_map_global_alt_navmesh_shortcut_uses_overlay_loader() {
+        let mut app = App::new();
+        app.active_screen = ActiveScreen::Tactical;
+        app.active_panel = ActivePanel::TacticalSpawns;
+        app.map_state.show_navmesh = false;
+
+        assert!(handle_tactical_map_global_shortcut(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('4'), KeyModifiers::ALT),
+        ));
+        assert!(app.map_state.show_navmesh);
+        assert_eq!(app.active_panel, ActivePanel::TacticalMap);
+        assert!(app.status_message.contains("navmesh overlay"));
     }
 
     #[test]
@@ -1110,6 +1230,73 @@ mod tests {
         ));
         assert_eq!(app.status_message, "PC filter OFF");
         assert!(!app.map_state.filters.show_pc);
+    }
+
+    #[test]
+    fn tactical_map_focused_shortcuts_set_view_modes_and_fit_zone() {
+        let mut app = App::new();
+        app.active_screen = ActiveScreen::Tactical;
+        app.active_panel = ActivePanel::TacticalMap;
+        app.local_player = Some(test_local_player("Observer"));
+
+        assert!(handle_tactical_map_focused_shortcut(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL),
+        ));
+        assert_eq!(app.map_state.viewport_mode, MapViewportMode::Local);
+        assert_eq!(app.status_message, "Map: local view");
+
+        assert!(handle_tactical_map_focused_shortcut(
+            &mut app,
+            KeyEvent::new(KeyCode::End, KeyModifiers::NONE),
+        ));
+        assert_eq!(app.map_state.viewport_mode, MapViewportMode::Global);
+        assert_eq!(app.status_message, "Map: zone fit");
+
+        assert!(handle_tactical_map_focused_shortcut(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('I'), KeyModifiers::SHIFT),
+        ));
+        assert!(app.status_message.starts_with("Map info: "));
+    }
+
+    #[test]
+    fn tactical_map_focused_shortcuts_consume_unavailable_local_view() {
+        let mut app = App::new();
+        app.active_screen = ActiveScreen::Tactical;
+        app.active_panel = ActivePanel::TacticalMap;
+        app.map_state.viewport_mode = MapViewportMode::Global;
+
+        assert!(handle_tactical_map_focused_shortcut(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL),
+        ));
+        assert_eq!(app.map_state.viewport_mode, MapViewportMode::Global);
+        assert_eq!(app.status_message, "Map: local view unavailable");
+    }
+
+    #[test]
+    fn tactical_map_focused_shortcuts_prefer_map_controls_over_global_loot() {
+        let mut app = App::new();
+        app.active_screen = ActiveScreen::Tactical;
+        app.active_panel = ActivePanel::TacticalMap;
+
+        assert!(handle_tactical_map_focused_shortcut(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE),
+        ));
+        assert!(app.map_state.show_labels);
+        assert_eq!(app.status_message, "Labels ON");
+
+        assert!(handle_tactical_map_focused_shortcut(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT),
+        ));
+        assert!(!app.map_state.filters.show_ground);
+        assert_eq!(
+            app.status_message,
+            MapFilterKind::Ground.toggle_status(false)
+        );
     }
 
     #[test]

@@ -26,7 +26,7 @@ use axum::{
     http::{HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::Response,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
 };
 use tokio::sync::broadcast;
 use tower_http::{
@@ -353,6 +353,7 @@ fn build_state() -> Arc<AppState> {
         player_watch_write_lock: tokio::sync::Mutex::new(()),
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
+        vendor_watch_state: api::vendor_watch::VendorWatchState::new_demo(),
         timestamp_configs: tokio::sync::RwLock::new(
             api::load_timestamp_configs_from_disk().unwrap_or_else(|error| {
                 tracing::warn!(%error, "Failed to load timestamp configs");

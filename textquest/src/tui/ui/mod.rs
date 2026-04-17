@@ -1029,23 +1029,36 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
         }
         ActiveScreen::Tactical => {
             push_heading(&mut rows, None, "Map Controls");
+            push_kv(&mut rows, None, "?", "Toggle this help overlay");
             push_kv(&mut rows, None, "+ / -", "Zoom in / out");
             push_kv(&mut rows, None, "Arrows", "Pan the map viewport");
-            push_kv(
-                &mut rows,
-                None,
-                "< / >",
-                "Adjust Z-depth slice (height filter)",
-            );
+            push_kv(&mut rows, None, "Home", "Center on player (local view)");
+            push_kv(&mut rows, None, "End", "Fit the full zone / global view");
             push_kv(
                 &mut rows,
                 None,
                 "v",
                 "Cycle viewport: Auto / Local / Global",
             );
-            push_kv(&mut rows, None, "n", "Toggle navmesh overlay data");
+            push_kv(
+                &mut rows,
+                None,
+                "Ctrl+A / Ctrl+L / Ctrl+G",
+                "Set Auto / Local / Global view directly",
+            );
             push_kv(&mut rows, None, "m", "Maximize / restore map panel");
-            push_kv(&mut rows, None, "Home", "Reset zoom, pan, and viewport");
+            push_kv(
+                &mut rows,
+                None,
+                "Shift+I",
+                "Show zone/map stats in the status lane",
+            );
+            push_kv(
+                &mut rows,
+                None,
+                "< / >",
+                "Adjust Z-depth slice (height filter)",
+            );
             rows.push(help_row(None, HelpCell::Text(String::new())));
             push_heading(&mut rows, None, "Map Layers");
             push_kv(
@@ -1069,7 +1082,7 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
             push_kv(
                 &mut rows,
                 None,
-                "x",
+                "x / Shift+N",
                 "Mesh: navigation mesh walkable-area overlay for pathfinding",
             );
             push_kv(
@@ -1086,22 +1099,29 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
             );
             rows.push(help_row(None, HelpCell::Text(String::new())));
             push_heading(&mut rows, None, "Map Filters");
-            push_kv(&mut rows, None, "Shift+N", "Toggle NPC spawn markers");
-            push_kv(&mut rows, None, "Shift+P", "Toggle PC spawn markers");
-            push_kv(&mut rows, None, "Shift+C", "Toggle corpse markers");
-            push_kv(&mut rows, None, "Shift+G", "Toggle ground-spawn markers");
-            push_kv(&mut rows, None, "Shift+T", "Toggle pet markers");
             push_kv(
                 &mut rows,
                 None,
-                "Shift+R",
-                "Toggle named (rare) NPC markers",
+                "n / p / c / Shift+G",
+                "Toggle NPC / PC / corpse / ground markers",
             );
             push_kv(
                 &mut rows,
                 None,
-                "Shift+U",
-                "Toggle untargetable spawn markers",
+                "t / r / u",
+                "Toggle pet / named / untargetable markers",
+            );
+            push_kv(
+                &mut rows,
+                None,
+                "Alt+1-6",
+                "Toggle geometry, spawns, paths, mesh, labels, annotations from anywhere on Map",
+            );
+            push_kv(
+                &mut rows,
+                None,
+                "Alt+N / P / C / G / T / R / U",
+                "Toggle the same entity filters when another tactical panel has focus",
             );
             rows.push(help_row(None, HelpCell::Text(String::new())));
             push_heading(&mut rows, None, "Spawn List");
@@ -1357,6 +1377,24 @@ mod tests {
         assert!(rendered.contains("Help"));
         assert!(rendered.contains("Active: Characters"));
         assert!(rendered.contains("Dashboard Controls"));
+    }
+
+    #[test]
+    fn tactical_help_overlay_lists_map_hotkeys_and_view_presets() {
+        let mut app = sample_app();
+        app.set_active_screen(ActiveScreen::Tactical);
+        app.active_panel = ActivePanel::TacticalMap;
+        app.help_visible = true;
+
+        let rendered = render_app(app, 132, 34);
+
+        assert!(rendered.contains("Ctrl+L"));
+        assert!(rendered.contains("Ctrl+G"));
+        assert!(rendered.contains("Ctrl+A"));
+        assert!(rendered.contains("Shift+I"));
+        assert!(rendered.contains("End"));
+        assert!(rendered.contains("Shift+G"));
+        assert!(rendered.contains("Alt+N / P / C / G / T / R / U"));
     }
 
     #[test]

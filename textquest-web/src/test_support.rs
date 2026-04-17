@@ -34,6 +34,7 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         player_watch_write_lock: tokio::sync::Mutex::new(()),
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
+        vendor_watch_state: api::vendor_watch::VendorWatchState::new_demo(),
         timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
         timestamp_config_write_lock: tokio::sync::Mutex::new(()),
         kill_tracker_state: api::kill_tracker::KillTrackerState::new_empty(),
@@ -48,5 +49,6 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         xassist_configs: api::xassist::demo_xassist_configs(),
         chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
+        auto_group_state: api::auto_group::AutoGroupState::new_demo(),
     })
 }

@@ -21,6 +21,7 @@ This site is the published public docs surface. The repo-side `docs/wiki/` tree 
 - [Quick Start](Quick-Start.md)
 - [Installation and Build](Installation-and-Build.md)
 - [Operating the TUI](Operating-the-TUI.md)
+- [Map Hotkeys and Controls](Map-Hotkeys-and-Controls.md)
 - [Command Reference](Command-Reference.md)
 - [Epic Quest Sequencing](Epic-Quest-Sequencing.md)
 - [Troubleshooting](Troubleshooting.md)

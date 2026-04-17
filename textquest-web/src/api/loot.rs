@@ -865,6 +865,7 @@ mod tests {
             player_watch_write_lock: tokio::sync::Mutex::new(()),
             gm_alert_state: Arc::new(crate::api::gm_alerts::GmAlertState::default()),
             spawn_alerts: crate::api::spawn_alerts::SpawnAlertState::new_demo(),
+            vendor_watch_state: crate::api::vendor_watch::VendorWatchState::new_demo(),
             timestamp_configs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             timestamp_config_write_lock: tokio::sync::Mutex::new(()),
             kill_tracker_state: crate::api::kill_tracker::KillTrackerState::new_empty(),
@@ -882,6 +883,7 @@ mod tests {
             say_detection: Some(Arc::new(
                 crate::api::say_detection::SayDetectionState::new_demo(),
             )),
+            auto_group_state: crate::api::auto_group::AutoGroupState::new_demo(),
         });
 
         let original = get_item_score(State(state.clone())).await.0;

@@ -1101,6 +1101,20 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
                     ]);
                 }
 
+                if w >= 118 {
+                    spans.extend([
+                        Span::raw(" │ "),
+                        Span::styled("? ", Style::default().fg(t.text_accent)),
+                        Span::styled("Help", Style::default().fg(t.text_muted)),
+                        Span::raw(" "),
+                        Span::styled("Home ", Style::default().fg(t.text_accent)),
+                        Span::styled("Me", Style::default().fg(t.text_muted)),
+                        Span::raw(" "),
+                        Span::styled("End ", Style::default().fg(t.text_accent)),
+                        Span::styled("Fit", Style::default().fg(t.text_muted)),
+                    ]);
+                }
+
                 Line::from(spans)
             } else {
                 Line::from(color_run_spans(row))
@@ -3024,6 +3038,14 @@ mod tests {
             rendered.contains("Hdg"),
             "Legend should contain 'Hdg' heading label"
         );
+    }
+
+    #[test]
+    fn map_legend_includes_hotkey_hints() {
+        let app = test_app_with_spawns();
+        let rendered = render_map_view_text(app, 140, 20);
+        assert!(rendered.contains("? Help"));
+        assert!(rendered.contains("End Fit"));
     }
 
     #[test]

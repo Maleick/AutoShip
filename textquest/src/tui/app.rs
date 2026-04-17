@@ -1434,6 +1434,36 @@ impl App {
         self.ensure_panel_focus();
     }
 
+    pub fn set_tactical_map_view_mode(&mut self, mode: MapViewportMode) -> bool {
+        if mode == MapViewportMode::Local && self.local_player.is_none() {
+            self.status_message = String::from("Map: local view unavailable");
+            return false;
+        }
+
+        self.map_state.viewport_mode = mode;
+        self.map_state.reset_viewport();
+        self.active_screen = ActiveScreen::Tactical;
+        self.active_panel = ActivePanel::TacticalMap;
+        self.status_message = format!("Map: {} view", mode.label());
+        self.ensure_panel_focus();
+        true
+    }
+
+    pub fn center_tactical_map_on_player(&mut self) {
+        if self.set_tactical_map_view_mode(MapViewportMode::Local) {
+            self.status_message = String::from("Map: centered on player");
+        }
+    }
+
+    pub fn fit_tactical_map_zone(&mut self) {
+        self.map_state.viewport_mode = MapViewportMode::Global;
+        self.map_state.reset_viewport();
+        self.active_screen = ActiveScreen::Tactical;
+        self.active_panel = ActivePanel::TacticalMap;
+        self.status_message = String::from("Map: zone fit");
+        self.ensure_panel_focus();
+    }
+
     pub fn zoom_tactical_map_in(&mut self) {
         self.map_state.zoom_in();
         self.status_message = format!("Map: zoom {:.2}x", self.map_state.zoom);
@@ -1447,6 +1477,36 @@ impl App {
     pub fn reset_tactical_map_view(&mut self) {
         self.map_state.reset_viewport();
         self.status_message = format!("Map: {} view reset", self.map_state.viewport_mode.label());
+    }
+
+    pub fn show_tactical_zone_info(&mut self) {
+        let zone_name = self
+            .active_client()
+            .map(|client| client.zone_name.as_str())
+            .unwrap_or("Unknown");
+        let line_count = self
+            .map_state
+            .zone_map
+            .as_ref()
+            .map_or(0, |map| map.lines.len());
+        let label_count = self
+            .map_state
+            .zone_map
+            .as_ref()
+            .map_or(0, |map| map.points.len());
+        let mesh_segments = self
+            .map_state
+            .navmesh_overlay
+            .as_ref()
+            .map_or(0, |overlay| overlay.segment_count());
+        let message = format!(
+            "Map info: {zone_name} | {line_count} lines | {label_count} labels | {mesh_segments} mesh segments | {} view",
+            self.map_state.viewport_mode.label()
+        );
+        self.active_screen = ActiveScreen::Tactical;
+        self.active_panel = ActivePanel::TacticalMap;
+        self.ensure_panel_focus();
+        self.set_feedback(ToastLevel::Info, message, true);
     }
 
     pub fn pan_tactical_map_left(&mut self) {

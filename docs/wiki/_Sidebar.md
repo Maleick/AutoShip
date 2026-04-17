@@ -10,6 +10,7 @@
 ## Operation
 
 - [Combat and Camp Loop](Combat-and-Camp-Loop)
+- [Map Hotkeys and Controls](Map-Hotkeys-and-Controls)
 - [Sebilis Farming Validation](Sebilis-Farming-Validation)
 - [Navigation and Maps](Navigation-and-Maps)
 - [Login Automation](Login-Automation)

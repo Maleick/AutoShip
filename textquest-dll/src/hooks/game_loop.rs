@@ -3891,7 +3891,7 @@ mod tests {
             spawn_id: id,
             displayed_name: display.to_string(),
             name: display.to_string(),
-            spawn_type: 1,
+            spawn_type,
             ..Default::default()
         }
     }
@@ -3911,7 +3911,7 @@ mod tests {
             next,
             [
                 (2u32, ("a_bear".to_string(), 1)),
-                (3u32, ("a_ox".to_string(), 1))
+                (3u32, ("a_ox".to_string(), 2))
             ]
             .into_iter()
             .collect()
@@ -3922,7 +3922,7 @@ mod tests {
             .find(|event| event.kind == textquest_common::ipc::SpawnEventKind::Created)
             .expect("created event should exist");
         assert_eq!(created.spawn_name, "a_ox");
-        assert_eq!(created.spawn_type, 1);
+        assert_eq!(created.spawn_type, 2);
         let destroyed = events
             .iter()
             .find(|event| event.kind == textquest_common::ipc::SpawnEventKind::Destroyed)
@@ -3934,7 +3934,7 @@ mod tests {
     #[test]
     fn spawn_delta_events_with_empty_previous_emits_none() {
         let previous: HashMap<u32, (String, u8)> = HashMap::new();
-        let current = vec![fake_spawn(10, "a_goblin")];
+        let current = vec![fake_spawn(10, "a_goblin", 1)];
         let (next, events) = compute_spawn_delta_events(&previous, &current, "freportw".into(), 1);
 
         assert_eq!(

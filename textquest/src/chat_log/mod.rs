@@ -217,7 +217,7 @@ impl ChatLogManager {
             return Ok(());
         }
 
-        let rotation_strategy = self.config.rotation_strategy.clone();
+        let rotation_strategy = self.config.rotation_strategy;
         let max_file_size_bytes = self.config.max_file_size_bytes;
         let writer = self.writer_for(server, character)?;
 
@@ -245,7 +245,7 @@ impl ChatLogManager {
             return Ok(());
         }
 
-        let rotation_strategy = self.config.rotation_strategy.clone();
+        let rotation_strategy = self.config.rotation_strategy;
         let max_file_size_bytes = self.config.max_file_size_bytes;
         let writer = self.writer_for(server, character)?;
 

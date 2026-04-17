@@ -71,6 +71,8 @@ The Map screen currently supports:
 
 The map directory lookup is handled in `textquest/src/tui/state.rs`.
 
+For the current operator-facing key table, viewport presets, and focused-map shortcut rules, see [Map Hotkeys and Controls](Map-Hotkeys-and-Controls).
+
 ## Demo Mode Notes
 
 Demo mode still exercises:
