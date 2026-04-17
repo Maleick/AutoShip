@@ -253,7 +253,7 @@ pub const DSP_CHAT: u64 = 0x0001_4010_CFC0;
 pub const EVERQUEST_SET_GAME_STATE: u64 = 0x0000_0000_0000_0000;
 
 /// `CDisplay::RealRender_World` — render loop (alternative hook point)
-pub const REAL_RENDER_WORLD: u64 = 0x0001_401A_4320;
+pub const REAL_RENDER_WORLD: u64 = 0x0001_401A_4650;
 
 /// `EQGraphicsDLL::RealRender_World` — render entry point in eqgraphicsdx9.dll.
 /// Source: eqgraphicsdx9.h (placeholder pending Ghidra verification)
@@ -351,20 +351,20 @@ pub const PROCESS_KEYBOARD_EVENTS: u64 = 0x0;
 pub const CRENDER_RESET_DEVICE: u64 = 0x0;
 
 // ─── Anti-Cheat / Network Internals (Ghidra-verified) ───
-// Source: Ghidra analysis of eqgame.exe, 2026-04-03
+// Source: Ghidra analysis of eqgame.exe, 2026-04-15
 // These addresses were discovered via binary analysis, not eqlib headers.
 
 /// Main network packet send function (247 bytes, 29+ callers)
-pub const NET_SEND: u64 = 0x0001_4056_3130;
+pub const NET_SEND: u64 = 0x0001_4056_3330;
 
 /// Global outbound message counter (decremented by every opcode handler)
-pub const OUTBOUND_MSG_COUNTER: u64 = 0x0001_40F6_0ED8;
+pub const OUTBOUND_MSG_COUNTER: u64 = 0x0001_40F6_0FC8;
 
 /// Global inbound message counter
-pub const INBOUND_MSG_COUNTER: u64 = 0x0001_40F6_0ED4;
+pub const INBOUND_MSG_COUNTER: u64 = 0x0001_40F6_0FC4;
 
 /// File integrity check dispatcher (EXE self-hash + data files)
-pub const FILE_INTEGRITY_DISPATCHER: u64 = 0x0001_4021_D730;
+pub const FILE_INTEGRITY_DISPATCHER: u64 = 0x0001_4056_4BC0;
 
 /// Server memcheck opcode 0x4f27 handler (returns region hashes)
 pub const SERVER_MEMCHECK_HANDLER: u64 = 0x0001_400B_5720;
