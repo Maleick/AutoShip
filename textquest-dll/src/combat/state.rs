@@ -27,8 +27,8 @@ use super::{
     rotation::{self, RotationGroup},
     skill_cooldowns::{SkillCooldownTracker, default_cooldown},
     strategy::{
-        ClassStrategy, CombatContext, GroupMemberState, PetAction, PetStatus, build_strategy,
-        pet_attack_focused, pet_back_off,
+        AbilityResolution, ClassStrategy, CombatContext, GroupMemberState, PetAction, PetStatus,
+        build_strategy, pet_attack_focused, pet_back_off,
     },
     toon_config,
 };
@@ -251,7 +251,7 @@ fn should_retarget_spell_target(
 }
 
 struct RotationActionRuntime<'a> {
-    resolved_abilities: &'a HashMap<String, ResolvedAbility>,
+    resolved_abilities: &'a HashMap<String, AbilityResolution>,
     ability_cooldowns: &'a mut AbilityCooldownTracker,
     skill_cooldowns: &'a mut SkillCooldownTracker,
     gcd: &'a mut GcdTracker,
@@ -276,7 +276,11 @@ fn execute_rotation_action(
     let mut rotation_entry_ready =
         |entry: &rotation::RotationEntry, target_id: u32| match entry.action_type {
             ActionType::Spell(_) | ActionType::Song(_) => entry.cooldown_ticks.is_none_or(|_| {
-                ability_cooldowns.can_use(rotation_spell_key(&entry.name, target_id), tick_count)
+                ability_cooldowns.can_use(
+                    rotation_spell_key(&entry.name, target_id),
+                    None,
+                    tick_count,
+                )
             }),
             _ => true,
         };
@@ -289,11 +293,17 @@ fn execute_rotation_action(
         return false;
     };
 
-    let (spell_id, resolved_name) =
+    let (spell_id, resolved_name, cooldown_ticks, shared_cooldown_key, shared_cooldown_ticks) =
         if let Some(resolved) = runtime.resolved_abilities.get(&action.entry_name) {
-            (resolved.spell_id, resolved.ability_name.as_str())
+            (
+                resolved.spell_id,
+                resolved.ability_name.as_str(),
+                resolved.cooldown_ticks,
+                resolved.shared_cooldown_key.as_deref(),
+                resolved.shared_cooldown_ticks,
+            )
         } else {
-            (0, action.entry_name.as_str())
+            (0, action.entry_name.as_str(), None, None, None)
         };
 
     tracing::debug!(
@@ -375,7 +385,7 @@ fn execute_rotation_action(
             }
             if !runtime
                 .ability_cooldowns
-                .can_use(spell_id, runtime.tick_count)
+                .can_use(spell_id, shared_cooldown_key, runtime.tick_count)
             {
                 tracing::debug!(
                     entry = %action.entry_name,
@@ -385,9 +395,13 @@ fn execute_rotation_action(
                 return true;
             }
             crate::eq::do_combat_ability(spell_id, true);
-            runtime
-                .ability_cooldowns
-                .consume(spell_id, None, runtime.tick_count);
+            runtime.ability_cooldowns.consume(
+                spell_id,
+                cooldown_ticks,
+                shared_cooldown_key,
+                shared_cooldown_ticks,
+                runtime.tick_count,
+            );
             runtime.gcd.consume();
             *runtime.active_cast_entry = None;
             *runtime.active_cast_cooldown_ticks = None;
@@ -430,7 +444,7 @@ fn execute_rotation_action(
             let item_key = item_action_key(item_name);
             if !runtime
                 .ability_cooldowns
-                .can_use(item_key, runtime.tick_count)
+                .can_use(item_key, None, runtime.tick_count)
             {
                 tracing::debug!(
                     entry = %action.entry_name,
@@ -443,6 +457,8 @@ fn execute_rotation_action(
             runtime.ability_cooldowns.consume(
                 item_key,
                 item_cooldown_ticks(item_name),
+                None,
+                None,
                 runtime.tick_count,
             );
             runtime.gcd.consume();
@@ -539,7 +555,7 @@ pub struct Combatant {
     rotation_groups: Option<Vec<RotationGroup>>,
     /// Resolved ability sets — maps spell line names to the best available
     /// spell for this character's level.
-    resolved_abilities: HashMap<String, ResolvedAbility>,
+    resolved_abilities: HashMap<String, AbilityResolution>,
     tick_count: u32,
     client_id: u32,
     config: CombatConfig,
@@ -660,10 +676,25 @@ impl Combatant {
         if sets.is_empty() {
             return;
         }
-        self.resolved_abilities =
-            textquest_common::combat::resolve_abilities(&sets, known, character_level);
-        self.strategy
-            .on_abilities_resolved(&self.resolved_abilities);
+        self.resolved_abilities = self
+            .strategy
+            .resolve_abilities_for_character(known, character_level);
+        let resolved_for_hooks: HashMap<String, ResolvedAbility> = self
+            .resolved_abilities
+            .iter()
+            .map(|(name, resolved)| {
+                (
+                    name.clone(),
+                    ResolvedAbility {
+                        set_name: resolved.set_name.clone(),
+                        ability_name: resolved.ability_name.clone(),
+                        spell_id: resolved.spell_id,
+                        min_level: resolved.min_level,
+                    },
+                )
+            })
+            .collect();
+        self.strategy.on_abilities_resolved(&resolved_for_hooks);
         tracing::info!(
             resolved = self.resolved_abilities.len(),
             total_sets = sets.len(),
@@ -764,7 +795,9 @@ impl Combatant {
         // Fire melee skills when engaging (independent of GCD/spell casting)
         if matches!(self.state, CombatState::Engaging { .. }) {
             let class_id = self.strategy.class_id();
-            self.tick_melee_skills(class_id, player);
+            if !self.strategy.manages_melee_skills_in_rotation() {
+                self.tick_melee_skills(class_id, player);
+            }
             self.tick_disciplines(player);
         }
 
@@ -874,7 +907,7 @@ impl Combatant {
                 HolyShitAction::UseAbility(ability_id) => {
                     if !self
                         .ability_cooldowns
-                        .can_use(ability_id as i32, self.tick_count)
+                        .can_use(ability_id as i32, None, self.tick_count)
                     {
                         tracing::debug!(
                             ability_id,
@@ -884,8 +917,13 @@ impl Combatant {
                     }
                     tracing::warn!(ability_id, "HolyShit: using emergency ability");
                     crate::eq::do_combat_ability(ability_id as i32, true);
-                    self.ability_cooldowns
-                        .consume(ability_id as i32, None, self.tick_count);
+                    self.ability_cooldowns.consume(
+                        ability_id as i32,
+                        None,
+                        None,
+                        None,
+                        self.tick_count,
+                    );
                     self.gcd.consume();
                     self.state = CombatState::OnGcd;
                     return;
@@ -1377,6 +1415,8 @@ impl Combatant {
             self.ability_cooldowns.consume(
                 rotation_spell_key(entry_name, target_id),
                 Some(cooldown_ticks),
+                None,
+                None,
                 self.tick_count,
             );
         }
@@ -1539,7 +1579,7 @@ impl Combatant {
             };
             crate::eq::do_combat_ability(disc.spell_id, true);
             self.ability_cooldowns
-                .consume(disc.spell_id, cooldown, self.tick_count);
+                .consume(disc.spell_id, cooldown, None, None, self.tick_count);
 
             // Only one disc per tick
             return;
@@ -2022,6 +2062,89 @@ mod tests {
     }
 
     #[test]
+    fn warrior_rotation_owns_melee_skills() {
+        let mut c = Combatant::new(1, 0, test_config());
+        let player = player_with_hp_end(1000, 1000, 100, 100);
+        let target = test_target();
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), &[]);
+
+        assert!(
+            !c.skill_cooldowns.is_ready(COMBAT_SKILL_ID_TAUNT),
+            "Warrior rotation should spend Taunt on the first combat tick"
+        );
+        assert!(
+            c.skill_cooldowns.is_ready(COMBAT_SKILL_ID_KICK),
+            "Generic melee skill ticking should not also fire Kick for Warrior"
+        );
+    }
+
+    #[test]
+    fn rotation_disc_consumes_shared_cooldown_metadata() {
+        let mut c = Combatant::new(1, 0, test_config());
+        let player = player_with_hp_end(1000, 1000, 100, 100);
+        let target = test_target();
+
+        c.rotation_groups = Some(vec![RotationGroup {
+            name: "Burn".into(),
+            target_selector: textquest_common::combat::TargetSelector::AutoTarget,
+            combat_state_req: textquest_common::combat::CombatStateReq::Combat,
+            steps_per_frame: 1,
+            full_rotation: false,
+            hp_threshold: None,
+            entries: vec![
+                rotation::entry("BurnPrimary", ActionType::Disc("BurnPrimary".into())),
+                rotation::entry("PrecisionLine", ActionType::Disc("PrecisionLine".into())),
+            ],
+            current_step: 0,
+        }]);
+        c.resolved_abilities = std::collections::HashMap::from([
+            (
+                "BurnPrimary".into(),
+                AbilityResolution {
+                    set_name: "BurnPrimary".into(),
+                    ability_name: "Fellstrike Discipline".into(),
+                    spell_id: 4001,
+                    min_level: 65,
+                    cooldown_ticks: Some(20),
+                    shared_cooldown_key: Some("warrior-offense".into()),
+                    shared_cooldown_ticks: Some(30),
+                },
+            ),
+            (
+                "PrecisionLine".into(),
+                AbilityResolution {
+                    set_name: "PrecisionLine".into(),
+                    ability_name: "Precision Discipline".into(),
+                    spell_id: 4002,
+                    min_level: 60,
+                    cooldown_ticks: Some(20),
+                    shared_cooldown_key: Some("warrior-offense".into()),
+                    shared_cooldown_ticks: Some(30),
+                },
+            ),
+        ]);
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), &[]);
+
+        assert_eq!(
+            c.ability_cooldowns.availability(4001, c.tick_count),
+            AbilityAvailability::CoolingDown(20)
+        );
+        assert!(
+            !c.ability_cooldowns
+                .can_use(4002, Some("warrior-offense"), c.tick_count),
+            "Shared timer metadata should block the second offensive disc"
+        );
+    }
+
+    #[test]
     fn status_reflects_fleeing() {
         let mut c = Combatant::new(1, 0, test_config());
         c.flee_requested = true;
@@ -2167,7 +2290,8 @@ mod tests {
                 ability_name: "Test Debuff".into(),
                 spell_id: 4242,
                 min_level: 1,
-            },
+            }
+            .into(),
         );
 
         let mut player = test_player();
@@ -2182,7 +2306,7 @@ mod tests {
 
         let cooldown_key = rotation_spell_key("TestDebuff", target.spawn_id);
         assert!(
-            c.ability_cooldowns.can_use(cooldown_key, c.tick_count),
+            c.ability_cooldowns.can_use(cooldown_key, None, c.tick_count),
             "rotation cooldown should remain ready until the cast lands"
         );
         assert_eq!(c.active_cast_entry.as_deref(), Some("TestDebuff"));
@@ -2255,7 +2379,7 @@ mod tests {
         assert_eq!(c.active_cast_cooldown_ticks, Some(55));
         assert!(
             c.ability_cooldowns
-                .can_use(rotation_spell_key("Mez", target.spawn_id), c.tick_count),
+                .can_use(rotation_spell_key("Mez", target.spawn_id), None, c.tick_count),
             "retryable failures should not commit the rotation cooldown"
         );
     }
@@ -2275,6 +2399,7 @@ mod tests {
         assert!(
             !c.ability_cooldowns.can_use(
                 item_action_key("Rod of Mystical Transvergence"),
+                None,
                 c.tick_count
             ),
             "Downtime rotation should consume the mod rod cooldown"

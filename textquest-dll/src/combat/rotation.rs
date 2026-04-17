@@ -123,6 +123,7 @@ pub fn evaluate_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
         ConditionExpr::Always => true,
         ConditionExpr::HpBelow(threshold) => ctx.player.hp_pct() < *threshold,
         ConditionExpr::ManaBelow(threshold) => ctx.player.mana_pct() < *threshold,
+        ConditionExpr::EnduranceBelow(threshold) => ctx.player.endurance_pct() < *threshold,
         ConditionExpr::TargetHpAbove(threshold) => {
             ctx.target.is_some_and(|t| t.hp_pct() > *threshold)
         }
@@ -130,6 +131,7 @@ pub fn evaluate_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
             ctx.target.is_some_and(|t| t.hp_pct() < *threshold)
         }
         ConditionExpr::ManaAbove(threshold) => ctx.player.mana_pct() > *threshold,
+        ConditionExpr::EnduranceAbove(threshold) => ctx.player.endurance_pct() > *threshold,
         ConditionExpr::AggroOnMe => {
             // Check if we're in combat with an NPC target (spawn_type == 1).
             ctx.in_combat && ctx.target.is_some_and(|t| t.spawn_type == 1)
@@ -909,5 +911,37 @@ mod tests {
         let ctx = build_ctx(&player, None, &config, true);
         assert!(evaluate_condition(&ConditionExpr::ManaBelow(20.0), &ctx));
         assert!(!evaluate_condition(&ConditionExpr::ManaBelow(10.0), &ctx));
+    }
+
+    #[test]
+    fn evaluate_condition_endurance_below() {
+        let (mut player, _, config) = make_ctx(true, 80.0, 15.0);
+        player.endurance_current = 15;
+        player.endurance_max = 100;
+        let ctx = build_ctx(&player, None, &config, true);
+        assert!(evaluate_condition(
+            &ConditionExpr::EnduranceBelow(20.0),
+            &ctx
+        ));
+        assert!(!evaluate_condition(
+            &ConditionExpr::EnduranceBelow(10.0),
+            &ctx
+        ));
+    }
+
+    #[test]
+    fn evaluate_condition_endurance_above() {
+        let (mut player, _, config) = make_ctx(true, 80.0, 15.0);
+        player.endurance_current = 55;
+        player.endurance_max = 100;
+        let ctx = build_ctx(&player, None, &config, true);
+        assert!(evaluate_condition(
+            &ConditionExpr::EnduranceAbove(40.0),
+            &ctx
+        ));
+        assert!(!evaluate_condition(
+            &ConditionExpr::EnduranceAbove(60.0),
+            &ctx
+        ));
     }
 }

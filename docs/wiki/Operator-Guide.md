@@ -306,29 +306,49 @@ Define combat ability rotations for each class. TextQuest includes pre-configure
 Example (Warrior):
 
 ```toml
-[warrior]
-# Offensive abilities in order of priority
-[[warrior.actions]]
-action = "ability"
-name = "Bash"
-cooldown_secs = 6
+class_name = "warrior"
+role = "tank"
+rest_command = "/sit"
 
-[[warrior.actions]]
-action = "spell"
-name = "Kick"
-cooldown_secs = 12
+[[level_overrides]]
+name = "warrior-live-62"
+min_level = 62
+max_level = 62
 
-# Defensive overrides (HolyShit)
-[[warrior.holyshit]]
-trigger = "hp_below_20"
-action = "ability"
-name = "Shield Block"
+[[level_overrides.combat_abilities]]
+name = "Deflection Discipline"
+command = "/disc Deflection Discipline"
+cooldown_secs = 900.0
+priority = 10
+
+[[ability_sets]]
+name = "BurnPrimary"
+
+[[ability_sets.candidates]]
+name = "Spirit of Rage Discipline"
+min_level = 61
+spell_id = 4689
+cooldown_ticks = 36000
+shared_cooldown_key = "warrior-offensive-disc"
+shared_cooldown_ticks = 36000
+
+[[rotation_groups]]
+name = "Burn"
+target_selector = "AutoTarget"
+combat_state_req = "Combat"
+
+[[rotation_groups.entries]]
+name = "BurnPrimary"
+action_type = { Disc = "BurnPrimary" }
+condition = { And = [ { TargetHpAbove = 25.0 }, { EnduranceAbove = 40.0 } ] }
 ```
 
 **When to edit:**
 
 - Per-class rotation tuning happens in the class file
 - Per-character overrides go in `config/toons/<character>.toml`
+- Live-safe Warrior tuning is split between operator-facing `level_overrides`
+  and runtime `ability_sets` / `rotation_groups` in the same class file
 - Changes take effect after re-injection of the DLL
 
 ### Per-Character Overrides: `config/toons/<character>.toml`

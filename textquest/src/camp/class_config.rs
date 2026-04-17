@@ -665,6 +665,47 @@ mod tests {
     }
 
     #[test]
+    fn shipped_warrior_config_has_live_level_overrides() {
+        let warrior_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("config/classes/warrior.toml");
+        let warrior = ClassConfig::load(&warrior_path).expect("warrior config should parse");
+
+        let override_levels: Vec<_> = warrior
+            .level_overrides
+            .iter()
+            .map(|profile| (profile.min_level, profile.max_level))
+            .collect();
+
+        assert_eq!(
+            override_levels,
+            vec![
+                (Some(60), Some(60)),
+                (Some(61), Some(61)),
+                (Some(62), Some(62)),
+                (Some(65), Some(65))
+            ]
+        );
+
+        let level_65 = warrior
+            .level_overrides
+            .iter()
+            .find(|profile| profile.min_level == Some(65))
+            .expect("level 65 warrior override should exist");
+        let combat_abilities = level_65
+            .combat_abilities
+            .as_ref()
+            .expect("level 65 warrior override should define combat abilities");
+        let ability_names: Vec<_> = combat_abilities
+            .iter()
+            .map(|ability| ability.name.as_str())
+            .collect();
+        assert!(ability_names.contains(&"Stonewall Discipline"));
+        assert!(ability_names.contains(&"Fellstrike Discipline"));
+    }
+
+    #[test]
     fn magician_shipped_config_has_expected_level_overrides() {
         let magician_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()

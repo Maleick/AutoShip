@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use textquest_common::{
     combat::{
         AbilitySet, BuffInfo, CastResult, CombatConfig, CombatRole, ExtendedTargetList,
-        HpPreference, NamedPreference, ResolvedAbility, SpellEntry, TargetScanConfig,
+        HpPreference, KnownAbility, NamedPreference, ResolvedAbility, SpellEntry, TargetScanConfig,
     },
     types::SpawnData,
 };
@@ -124,6 +124,39 @@ pub struct GroupMemberState {
     pub has_detrimental: bool,
 }
 
+/// Runtime-resolved ability plus any activated-ability cooldown metadata.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AbilityResolution {
+    /// Which ability set this entry resolved from.
+    pub set_name: String,
+    /// The chosen candidate's display name.
+    pub ability_name: String,
+    /// EQ spell/disc ID to activate.
+    pub spell_id: i32,
+    /// Level gate that selected this candidate.
+    pub min_level: u8,
+    /// Explicit reuse timer for this ability, in combat ticks.
+    pub cooldown_ticks: Option<u32>,
+    /// Optional shared reuse bucket name.
+    pub shared_cooldown_key: Option<String>,
+    /// Optional shared reuse duration for the bucket, in combat ticks.
+    pub shared_cooldown_ticks: Option<u32>,
+}
+
+impl From<ResolvedAbility> for AbilityResolution {
+    fn from(value: ResolvedAbility) -> Self {
+        Self {
+            set_name: value.set_name,
+            ability_name: value.ability_name,
+            spell_id: value.spell_id,
+            min_level: value.min_level,
+            cooldown_ticks: None,
+            shared_cooldown_key: None,
+            shared_cooldown_ticks: None,
+        }
+    }
+}
+
 /// The core seam between generic combat framework and per-class logic.
 /// Each EQ class implements this trait to define its combat behavior.
 pub trait ClassStrategy: Send {
@@ -220,6 +253,31 @@ pub trait ClassStrategy: Send {
     /// character's known spells and level.
     fn ability_sets(&self) -> Vec<AbilitySet> {
         Vec::new()
+    }
+
+    /// Resolve class ability sets for the current character.
+    ///
+    /// Default behavior uses the generic resolver and carries no explicit
+    /// cooldown metadata. Classes with activated abilities that are not present
+    /// in spellbook scans can override this.
+    fn resolve_abilities_for_character(
+        &self,
+        known: &[KnownAbility],
+        character_level: u8,
+    ) -> HashMap<String, AbilityResolution> {
+        textquest_common::combat::resolve_abilities(&self.ability_sets(), known, character_level)
+            .into_iter()
+            .map(|(set_name, resolved)| (set_name, resolved.into()))
+            .collect()
+    }
+
+    /// Whether this class owns its melee skills through the rotation engine.
+    ///
+    /// Classes that return `true` skip the generic `tick_melee_skills()`
+    /// helper so taunt/kick/bash usage stays config-driven and does not double
+    /// fire.
+    fn manages_melee_skills_in_rotation(&self) -> bool {
+        false
     }
 
     /// Called whenever the FSM re-resolves this class' ability sets.

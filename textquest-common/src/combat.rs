@@ -478,12 +478,16 @@ pub enum ConditionExpr {
     HpBelow(f32),
     /// Character mana is below the given percentage.
     ManaBelow(f32),
+    /// Character endurance is below the given percentage.
+    EnduranceBelow(f32),
     /// Current target HP is above the given percentage.
     TargetHpAbove(f32),
     /// Current target HP is below the given percentage.
     TargetHpBelow(f32),
     /// Character mana is above the given percentage.
     ManaAbove(f32),
+    /// Character endurance is above the given percentage.
+    EnduranceAbove(f32),
     /// The character has aggro from a mob.
     AggroOnMe,
     /// Character is in combat.

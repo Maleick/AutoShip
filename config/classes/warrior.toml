@@ -5,23 +5,377 @@ rest_command = "/sit"
 [[combat_abilities]]
 name = "Taunt"
 command = "/taunt"
-cooldown_secs = 8.0
-priority = 1
-
-[[combat_abilities]]
-name = "Kick"
-command = "/kick"
 cooldown_secs = 6.0
-priority = 2
+priority = 1
 
 [[combat_abilities]]
 name = "Bash"
 command = "/bash"
-cooldown_secs = 6.0
+cooldown_secs = 10.0
+priority = 2
+
+[[combat_abilities]]
+name = "Kick"
+command = "/kick"
+cooldown_secs = 7.0
 priority = 3
 
 [[combat_abilities]]
-name = "Attack"
-command = "/attack"
-cooldown_secs = 0.0
+name = "Fortitude Discipline"
+command = "/disc Fortitude Discipline"
+cooldown_secs = 900.0
 priority = 10
+
+[[combat_abilities]]
+name = "Defensive Discipline"
+command = "/disc Defensive Discipline"
+cooldown_secs = 900.0
+priority = 11
+
+[[combat_abilities]]
+name = "Aggressive Discipline"
+command = "/disc Aggressive Discipline"
+cooldown_secs = 1800.0
+priority = 20
+
+[[combat_abilities]]
+name = "Precision Discipline"
+command = "/disc Precision Discipline"
+cooldown_secs = 1800.0
+priority = 21
+
+[[level_overrides]]
+name = "warrior-live-60"
+min_level = 60
+max_level = 60
+
+[[level_overrides.combat_abilities]]
+name = "Taunt"
+command = "/taunt"
+cooldown_secs = 6.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Bash"
+command = "/bash"
+cooldown_secs = 10.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Kick"
+command = "/kick"
+cooldown_secs = 7.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Fortitude Discipline"
+command = "/disc Fortitude Discipline"
+cooldown_secs = 900.0
+priority = 10
+
+[[level_overrides.combat_abilities]]
+name = "Defensive Discipline"
+command = "/disc Defensive Discipline"
+cooldown_secs = 900.0
+priority = 11
+
+[[level_overrides.combat_abilities]]
+name = "Aggressive Discipline"
+command = "/disc Aggressive Discipline"
+cooldown_secs = 1800.0
+priority = 20
+
+[[level_overrides.combat_abilities]]
+name = "Precision Discipline"
+command = "/disc Precision Discipline"
+cooldown_secs = 1800.0
+priority = 21
+
+[[level_overrides]]
+name = "warrior-live-61"
+min_level = 61
+max_level = 61
+
+[[level_overrides.combat_abilities]]
+name = "Taunt"
+command = "/taunt"
+cooldown_secs = 6.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Bash"
+command = "/bash"
+cooldown_secs = 10.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Kick"
+command = "/kick"
+cooldown_secs = 7.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Fortitude Discipline"
+command = "/disc Fortitude Discipline"
+cooldown_secs = 900.0
+priority = 10
+
+[[level_overrides.combat_abilities]]
+name = "Defensive Discipline"
+command = "/disc Defensive Discipline"
+cooldown_secs = 900.0
+priority = 11
+
+[[level_overrides.combat_abilities]]
+name = "Spirit of Rage Discipline"
+command = "/disc Spirit of Rage Discipline"
+cooldown_secs = 1800.0
+priority = 20
+
+[[level_overrides.combat_abilities]]
+name = "Precision Discipline"
+command = "/disc Precision Discipline"
+cooldown_secs = 1800.0
+priority = 21
+
+[[level_overrides]]
+name = "warrior-live-62"
+min_level = 62
+max_level = 62
+
+[[level_overrides.combat_abilities]]
+name = "Taunt"
+command = "/taunt"
+cooldown_secs = 6.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Bash"
+command = "/bash"
+cooldown_secs = 10.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Kick"
+command = "/kick"
+cooldown_secs = 7.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Deflection Discipline"
+command = "/disc Deflection Discipline"
+cooldown_secs = 900.0
+priority = 10
+
+[[level_overrides.combat_abilities]]
+name = "Defensive Discipline"
+command = "/disc Defensive Discipline"
+cooldown_secs = 900.0
+priority = 11
+
+[[level_overrides.combat_abilities]]
+name = "Spirit of Rage Discipline"
+command = "/disc Spirit of Rage Discipline"
+cooldown_secs = 1800.0
+priority = 20
+
+[[level_overrides.combat_abilities]]
+name = "Precision Discipline"
+command = "/disc Precision Discipline"
+cooldown_secs = 1800.0
+priority = 21
+
+[[level_overrides]]
+name = "warrior-live-65"
+min_level = 65
+max_level = 65
+
+[[level_overrides.combat_abilities]]
+name = "Taunt"
+command = "/taunt"
+cooldown_secs = 6.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Bash"
+command = "/bash"
+cooldown_secs = 10.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Kick"
+command = "/kick"
+cooldown_secs = 7.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Stonewall Discipline"
+command = "/disc Stonewall Discipline"
+cooldown_secs = 900.0
+priority = 10
+
+[[level_overrides.combat_abilities]]
+name = "Defensive Discipline"
+command = "/disc Defensive Discipline"
+cooldown_secs = 900.0
+priority = 11
+
+[[level_overrides.combat_abilities]]
+name = "Fellstrike Discipline"
+command = "/disc Fellstrike Discipline"
+cooldown_secs = 1800.0
+priority = 20
+
+[[level_overrides.combat_abilities]]
+name = "Precision Discipline"
+command = "/disc Precision Discipline"
+cooldown_secs = 1800.0
+priority = 21
+
+[[ability_sets]]
+name = "EmergencyGuard"
+
+[[ability_sets.candidates]]
+name = "Stonewall Discipline"
+min_level = 65
+spell_id = 4688
+cooldown_ticks = 18000
+shared_cooldown_key = "warrior-defensive-emergency"
+shared_cooldown_ticks = 18000
+
+[[ability_sets.candidates]]
+name = "Deflection Discipline"
+min_level = 62
+spell_id = 4694
+cooldown_ticks = 18000
+shared_cooldown_key = "warrior-defensive-emergency"
+shared_cooldown_ticks = 18000
+
+[[ability_sets.candidates]]
+name = "Fortitude Discipline"
+min_level = 60
+spell_id = 4670
+cooldown_ticks = 18000
+shared_cooldown_key = "warrior-defensive-emergency"
+shared_cooldown_ticks = 18000
+
+[[ability_sets]]
+name = "DefensiveLine"
+
+[[ability_sets.candidates]]
+name = "Defensive Discipline"
+min_level = 60
+spell_id = 4685
+cooldown_ticks = 18000
+shared_cooldown_key = "warrior-defensive-sustain"
+shared_cooldown_ticks = 18000
+
+[[ability_sets]]
+name = "BurnPrimary"
+
+[[ability_sets.candidates]]
+name = "Fellstrike Discipline"
+min_level = 65
+spell_id = 4675
+cooldown_ticks = 36000
+shared_cooldown_key = "warrior-offensive-disc"
+shared_cooldown_ticks = 36000
+
+[[ability_sets.candidates]]
+name = "Spirit of Rage Discipline"
+min_level = 61
+spell_id = 4689
+cooldown_ticks = 36000
+shared_cooldown_key = "warrior-offensive-disc"
+shared_cooldown_ticks = 36000
+
+[[ability_sets.candidates]]
+name = "Aggressive Discipline"
+min_level = 60
+spell_id = 4498
+cooldown_ticks = 36000
+shared_cooldown_key = "warrior-offensive-disc"
+shared_cooldown_ticks = 36000
+
+[[ability_sets]]
+name = "PrecisionLine"
+
+[[ability_sets.candidates]]
+name = "Precision Discipline"
+min_level = 60
+spell_id = 4501
+cooldown_ticks = 36000
+shared_cooldown_key = "warrior-offensive-disc"
+shared_cooldown_ticks = 36000
+
+[[rotation_groups]]
+name = "Downtime"
+target_selector = "SelfOnly"
+combat_state_req = "Downtime"
+steps_per_frame = 1
+
+[[rotation_groups]]
+name = "HateTools"
+target_selector = "AutoTarget"
+combat_state_req = "Combat"
+steps_per_frame = 1
+
+[[rotation_groups.entries]]
+name = "Taunt"
+action_type = { Ability = "Taunt" }
+condition = { TargetDistanceBelow = 30.0 }
+
+[[rotation_groups]]
+name = "Emergency"
+target_selector = "AutoTarget"
+combat_state_req = "Combat"
+steps_per_frame = 1
+full_rotation = true
+
+[[rotation_groups.entries]]
+name = "EmergencyGuard"
+action_type = { Disc = "EmergencyGuard" }
+condition = { And = [ { HpBelow = 25.0 }, { EnduranceAbove = 10.0 } ] }
+
+[[rotation_groups]]
+name = "Defenses"
+target_selector = "AutoTarget"
+combat_state_req = "Combat"
+steps_per_frame = 1
+
+[[rotation_groups.entries]]
+name = "DefensiveLine"
+action_type = { Disc = "DefensiveLine" }
+condition = { And = [ { HpBelow = 55.0 }, { EnduranceAbove = 20.0 } ] }
+
+[[rotation_groups]]
+name = "Burn"
+target_selector = "AutoTarget"
+combat_state_req = "Combat"
+steps_per_frame = 1
+
+[[rotation_groups.entries]]
+name = "BurnPrimary"
+action_type = { Disc = "BurnPrimary" }
+condition = { And = [ { TargetHpAbove = 25.0 }, { EnduranceAbove = 40.0 } ] }
+
+[[rotation_groups.entries]]
+name = "PrecisionLine"
+action_type = { Disc = "PrecisionLine" }
+condition = { And = [ { TargetHpAbove = 40.0 }, { EnduranceAbove = 35.0 } ] }
+
+[[rotation_groups]]
+name = "Combat"
+target_selector = "AutoTarget"
+combat_state_req = "Combat"
+steps_per_frame = 1
+
+[[rotation_groups.entries]]
+name = "Bash"
+action_type = { Ability = "Bash" }
+condition = { And = [ { TargetDistanceBelow = 30.0 }, { EnduranceAbove = 20.0 } ] }
+
+[[rotation_groups.entries]]
+name = "Kick"
+action_type = { Ability = "Kick" }
+condition = { And = [ { TargetDistanceBelow = 30.0 }, { EnduranceAbove = 15.0 } ] }

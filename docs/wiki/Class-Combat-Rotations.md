@@ -55,6 +55,17 @@ Primary tank. Establish and hold aggro. Call for heals. Position mobs facing awa
 - Disc usage is situational -- trigger Defensive/Fortitude when HP drops below threshold
 - No spell gem management needed
 
+### Live-Safe Warrior Runtime Note
+
+The modern Live-safe Warrior automation in `config/classes/warrior.toml` is
+explicitly level-gated for 60, 61, 62, and 65. The runtime order is
+`HateTools -> Emergency -> Defenses -> Burn -> Combat`, with endurance floors
+to keep low-value bash/kick spam from starving defensive and burn discs. The
+burn line upgrades from `Aggressive Discipline` to `Spirit of Rage Discipline`
+and then `Fellstrike Discipline`, while the emergency line upgrades from
+`Fortitude Discipline` to `Deflection Discipline` and then `Stonewall
+Discipline`.
+
 ---
 
 ## 2. Cleric (Healer)
