@@ -213,17 +213,17 @@ Independent verification via GhidraMCP analysis of eqgame.exe on Frostreaver. Ev
 
 **Network send function:**
 
-- `FUN_140563130` at 0x140563130 (247 bytes) — main packet send. Called from 29+ functions including main loop. Contains critical section lock. Not yet in offsets.rs.
+- `FUN_140563330` at 0x140563330 (247 bytes) — main packet send. Called from 29+ functions including main loop. Contains critical section lock. Not yet in offsets.rs.
 
-**Message counter heartbeat system (`FUN_1401a4320`):**
+**Message counter heartbeat system (`FUN_1401a4650`):**
 
-- Two global counters: `DAT_140f60ed8` (outbound, decremented on every packet send via `FUN_140563130`) and `DAT_140f60ed4` (inbound, decremented on every WorldAuth message)
+- Two global counters: `DAT_140f60ed8` (outbound, decremented on every packet send via `FUN_140563330`) and `DAT_140f60ed4` (inbound, decremented on every WorldAuth message)
 - Main loop touches outbound counter at 40+ locations — every opcode handler decrements after sending
 - Every 500ms: checks if counters < 2, refills (+0x37 or +0x55), negates both, sends via opcode `0xbb29`
 - Server compares against its own message counts — mismatch = detected
 - **Any hook intercepting packet sends MUST preserve counter decrements**
 
-**File integrity checks (dispatcher `FUN_14021d730`):**
+**File integrity checks (dispatcher `FUN_140564bc0`):**
 
 - Check 1x: `eqgame.exe` self-hash via `GetModuleFileNameA` → opcode `0x8bdc`
 - Check 1sa: `Resources/BaseData.txt` → opcode `0xe91d`
@@ -232,7 +232,7 @@ Independent verification via GhidraMCP analysis of eqgame.exe on Frostreaver. Ev
 - PRNG is deterministic — server knows which positions were sampled
 - Triggered on world connect via `FUN_1402c9c80` (WorldAuthenticate)
 
-**Server-initiated memcheck (opcode `0x4f27` → `FUN_1400b5720`):**
+**Server-initiated memcheck (opcode `0x4f27` → `FUN_1400b5760`):**
 
 - Server sends counted list of memory region specs
 - Client copies 0x100-byte blocks, hashes them, returns results
@@ -242,7 +242,7 @@ Independent verification via GhidraMCP analysis of eqgame.exe on Frostreaver. Ev
 
 - Server sends `"World disconnecting because the checksums didn't match."` and kills connection
 
-**Zone entry integrity (`FUN_1402824c0`):**
+**Zone entry integrity (`FUN_1402827c0`):**
 
 - On zone connect: hashes player name (32 bytes), spell data, UI string data
 - Sends via opcode `0xe4b3`
