@@ -285,6 +285,22 @@ pub trait ClassStrategy: Send {
     /// Strategies that build runtime priority state from resolved spell lines
     /// can cache it here.
     fn on_abilities_resolved(&mut self, _resolved: &HashMap<String, ResolvedAbility>) {}
+
+    /// Whether this class should be gated by mana recovery logic during
+    /// combat.
+    fn uses_mana_for_combat(&self) -> bool {
+        true
+    }
+
+    /// Allow strategies to reconcile rotation groups after spell-line
+    /// resolution (for example, pruning entries that do not exist at the
+    /// current level).
+    fn sync_resolved_rotation_groups(
+        &self,
+        _groups: &mut [RotationGroup],
+        _resolved_abilities: &HashMap<String, AbilityResolution>,
+    ) {
+    }
 }
 
 // ---------------------------------------------------------------------------

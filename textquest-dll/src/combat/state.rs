@@ -273,17 +273,14 @@ fn execute_rotation_action(
     };
     let ability_cooldowns = &*runtime.ability_cooldowns;
     let tick_count = runtime.tick_count;
-    let mut rotation_entry_ready =
-        |entry: &rotation::RotationEntry, target_id: u32| match entry.action_type {
-            ActionType::Spell(_) | ActionType::Song(_) => entry.cooldown_ticks.is_none_or(|_| {
-                ability_cooldowns.can_use(
-                    rotation_spell_key(&entry.name, target_id),
-                    None,
-                    tick_count,
-                )
-            }),
-            _ => true,
-        };
+    let mut rotation_entry_ready = |entry: &rotation::RotationEntry, target_id: u32| match entry
+        .action_type
+    {
+        ActionType::Spell(_) | ActionType::Song(_) => entry.cooldown_ticks.is_none_or(|_| {
+            ability_cooldowns.can_use(rotation_spell_key(&entry.name, target_id), None, tick_count)
+        }),
+        _ => true,
+    };
     let Some(action) = rotation::execute_rotations_filtered_with_strategy_target(
         groups,
         ctx,
@@ -389,6 +386,7 @@ fn execute_rotation_action(
             {
                 tracing::debug!(
                     entry = %action.entry_name,
+                    resolved = %resolved_name,
                     spell_id,
                     "Activated rotation ability blocked by cooldown metadata"
                 );
@@ -695,6 +693,10 @@ impl Combatant {
             })
             .collect();
         self.strategy.on_abilities_resolved(&resolved_for_hooks);
+        if let Some(groups) = self.rotation_groups.as_mut() {
+            self.strategy
+                .sync_resolved_rotation_groups(groups, &self.resolved_abilities);
+        }
         tracing::info!(
             resolved = self.resolved_abilities.len(),
             total_sets = sets.len(),
@@ -988,7 +990,7 @@ impl Combatant {
             }
 
             let mana_pct = player.mana_pct();
-            if !self.mana_governor.can_cast(mana_pct) {
+            if self.strategy.uses_mana_for_combat() && !self.mana_governor.can_cast(mana_pct) {
                 tracing::debug!(mana_pct, "Mana too low, transitioning to Recovering");
                 self.state = CombatState::Recovering;
                 return;
@@ -1712,6 +1714,31 @@ mod tests {
         t
     }
 
+    fn rogue_known_abilities() -> Vec<textquest_common::combat::KnownAbility> {
+        vec![
+            textquest_common::combat::KnownAbility {
+                name: "Blinding Speed Discipline".into(),
+                spell_id: 4677,
+                level: 58,
+            },
+            textquest_common::combat::KnownAbility {
+                name: "Duelist Discipline".into(),
+                spell_id: 4676,
+                level: 59,
+            },
+            textquest_common::combat::KnownAbility {
+                name: "Weapon Affinity Discipline".into(),
+                spell_id: 4696,
+                level: 61,
+            },
+            textquest_common::combat::KnownAbility {
+                name: "Twisted Chance Discipline".into(),
+                spell_id: 4695,
+                level: 65,
+            },
+        ]
+    }
+
     fn item_rotation_group_with(
         item_name: &str,
         target_selector: textquest_common::combat::TargetSelector,
@@ -2306,7 +2333,8 @@ mod tests {
 
         let cooldown_key = rotation_spell_key("TestDebuff", target.spawn_id);
         assert!(
-            c.ability_cooldowns.can_use(cooldown_key, None, c.tick_count),
+            c.ability_cooldowns
+                .can_use(cooldown_key, None, c.tick_count),
             "rotation cooldown should remain ready until the cast lands"
         );
         assert_eq!(c.active_cast_entry.as_deref(), Some("TestDebuff"));
@@ -2378,8 +2406,11 @@ mod tests {
         assert_eq!(c.active_cast_entry.as_deref(), Some("Mez"));
         assert_eq!(c.active_cast_cooldown_ticks, Some(55));
         assert!(
-            c.ability_cooldowns
-                .can_use(rotation_spell_key("Mez", target.spawn_id), None, c.tick_count),
+            c.ability_cooldowns.can_use(
+                rotation_spell_key("Mez", target.spawn_id),
+                None,
+                c.tick_count
+            ),
             "retryable failures should not commit the rotation cooldown"
         );
     }
@@ -2706,6 +2737,84 @@ mod tests {
         let mut c = Combatant::new(1, 0, test_config());
         c.state = CombatState::Recovering;
         assert!(matches!(c.status(), CombatStatus::Recovering));
+    }
+
+    #[test]
+    fn rogue_does_not_enter_recovering_when_mana_is_zero() {
+        let mut c = Combatant::new(9, 0, test_config());
+        c.resolve_abilities(&rogue_known_abilities(), 65);
+        let mut player = test_player();
+        player.mana_current = 0;
+        player.mana_max = 100;
+        player.endurance_current = 900;
+        player.endurance_max = 1000;
+        let target = test_target();
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), &[]);
+
+        assert!(
+            !matches!(c.status(), CombatStatus::Recovering),
+            "rogues should stay on the melee/discipline path even at zero mana"
+        );
+        assert_eq!(
+            c.ability_cooldowns.availability(4695, c.tick_count),
+            AbilityAvailability::CoolingDown(26_400)
+        );
+    }
+
+    #[test]
+    fn rogue_level_60_resolution_prunes_weapon_affinity_from_rotation_groups() {
+        let mut c = Combatant::new(9, 0, test_config());
+        c.resolve_abilities(&rogue_known_abilities(), 60);
+
+        let groups = c.rotation_groups.as_ref().expect("rogue rotation groups");
+        assert_eq!(
+            groups[0]
+                .entries
+                .iter()
+                .map(|entry| entry.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Precision", "Duelist"]
+        );
+    }
+
+    #[test]
+    fn rogue_rotation_shared_timer_blocks_followup_burn_disc() {
+        let mut c = Combatant::new(9, 0, test_config());
+        c.resolve_abilities(&rogue_known_abilities(), 65);
+        c.gcd = crate::combat::gcd::GcdTracker::new(0);
+        let mut player = test_player();
+        player.mana_current = 0;
+        player.mana_max = 100;
+        player.endurance_current = 900;
+        player.endurance_max = 1000;
+        let target = test_target();
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), &[]);
+        assert_eq!(
+            c.ability_cooldowns.availability(4695, c.tick_count),
+            AbilityAvailability::CoolingDown(26_400)
+        );
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), &[]);
+
+        assert_eq!(
+            c.ability_cooldowns.availability(4676, c.tick_count),
+            AbilityAvailability::Ready
+        );
+        assert!(
+            !c.ability_cooldowns
+                .can_use(4676, Some("rogue-burn"), c.tick_count)
+        );
     }
 
     #[test]

@@ -3,33 +3,283 @@ role = "dps"
 rest_command = "/sit"
 
 [[combat_abilities]]
-name = "Attack"
-command = "/attack"
-cooldown_secs = 0.0
+name = "Backstab"
+command = "/doability backstab"
+cooldown_secs = 10.0
 priority = 1
 
 [[combat_abilities]]
-name = "Backstab"
-command = "/disc 1"
-cooldown_secs = 6.0
+name = "Deadly Precision Discipline"
+command = "/disc Deadly Precision"
+cooldown_secs = 300.0
 priority = 2
+condition = "endurance_above_55"
 
 [[combat_abilities]]
-name = "Evade"
-command = "/disc 2"
-cooldown_secs = 18.0
+name = "Duelist Discipline"
+command = "/disc Duelist"
+cooldown_secs = 1320.0
 priority = 3
+condition = "endurance_above_45"
+
+[[combat_abilities]]
+name = "Weapon Affinity Discipline"
+command = "/disc Weapon Affinity"
+cooldown_secs = 1800.0
+priority = 4
+condition = "endurance_above_35"
+
+[[combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 10
+
+[[combat_abilities]]
+name = "Rogue's Ploy"
+command = "/disc Rogue's Ploy"
+cooldown_secs = 30.0
+priority = 20
+condition = "manual_only_cc"
 
 [[combat_abilities]]
 name = "Hide"
 command = "/hide"
 cooldown_secs = 0.0
-priority = 10
+priority = 30
 condition = "out_of_combat"
 
 [[combat_abilities]]
 name = "Sneak"
 command = "/sneak"
 cooldown_secs = 0.0
-priority = 11
+priority = 31
+condition = "out_of_combat"
+
+[[level_overrides]]
+name = "rogue-60"
+min_level = 60
+max_level = 60
+
+[[level_overrides.combat_abilities]]
+name = "Backstab"
+command = "/doability backstab"
+cooldown_secs = 10.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Blinding Speed Discipline"
+command = "/disc Blinding Speed"
+cooldown_secs = 1200.0
+priority = 2
+condition = "endurance_above_55"
+
+[[level_overrides.combat_abilities]]
+name = "Duelist Discipline"
+command = "/disc Duelist"
+cooldown_secs = 1320.0
+priority = 3
+condition = "endurance_above_45"
+
+[[level_overrides.combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 10
+
+[[level_overrides.combat_abilities]]
+name = "Hide"
+command = "/hide"
+cooldown_secs = 0.0
+priority = 30
+condition = "out_of_combat"
+
+[[level_overrides.combat_abilities]]
+name = "Sneak"
+command = "/sneak"
+cooldown_secs = 0.0
+priority = 31
+condition = "out_of_combat"
+
+[[level_overrides]]
+name = "rogue-61"
+min_level = 61
+max_level = 61
+
+[[level_overrides.combat_abilities]]
+name = "Backstab"
+command = "/doability backstab"
+cooldown_secs = 10.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Blinding Speed Discipline"
+command = "/disc Blinding Speed"
+cooldown_secs = 1200.0
+priority = 2
+condition = "endurance_above_55"
+
+[[level_overrides.combat_abilities]]
+name = "Duelist Discipline"
+command = "/disc Duelist"
+cooldown_secs = 1320.0
+priority = 3
+condition = "endurance_above_45"
+
+[[level_overrides.combat_abilities]]
+name = "Weapon Affinity Discipline"
+command = "/disc Weapon Affinity"
+cooldown_secs = 1800.0
+priority = 4
+condition = "endurance_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 10
+
+[[level_overrides.combat_abilities]]
+name = "Rogue's Ploy"
+command = "/disc Rogue's Ploy"
+cooldown_secs = 30.0
+priority = 20
+condition = "manual_only_cc"
+
+[[level_overrides.combat_abilities]]
+name = "Hide"
+command = "/hide"
+cooldown_secs = 0.0
+priority = 30
+condition = "out_of_combat"
+
+[[level_overrides.combat_abilities]]
+name = "Sneak"
+command = "/sneak"
+cooldown_secs = 0.0
+priority = 31
+condition = "out_of_combat"
+
+[[level_overrides]]
+name = "rogue-62"
+min_level = 62
+max_level = 62
+
+[[level_overrides.combat_abilities]]
+name = "Backstab"
+command = "/doability backstab"
+cooldown_secs = 10.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Blinding Speed Discipline"
+command = "/disc Blinding Speed"
+cooldown_secs = 1200.0
+priority = 2
+condition = "endurance_above_55"
+
+[[level_overrides.combat_abilities]]
+name = "Duelist Discipline"
+command = "/disc Duelist"
+cooldown_secs = 1320.0
+priority = 3
+condition = "endurance_above_45"
+
+[[level_overrides.combat_abilities]]
+name = "Weapon Affinity Discipline"
+command = "/disc Weapon Affinity"
+cooldown_secs = 1800.0
+priority = 4
+condition = "endurance_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 10
+
+[[level_overrides.combat_abilities]]
+name = "Rogue's Ploy"
+command = "/disc Rogue's Ploy"
+cooldown_secs = 30.0
+priority = 20
+condition = "manual_only_cc"
+
+[[level_overrides.combat_abilities]]
+name = "Hide"
+command = "/hide"
+cooldown_secs = 0.0
+priority = 30
+condition = "out_of_combat"
+
+[[level_overrides.combat_abilities]]
+name = "Sneak"
+command = "/sneak"
+cooldown_secs = 0.0
+priority = 31
+condition = "out_of_combat"
+
+[[level_overrides]]
+name = "rogue-65"
+min_level = 65
+
+[[level_overrides.combat_abilities]]
+name = "Backstab"
+command = "/doability backstab"
+cooldown_secs = 10.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Twisted Chance Discipline"
+command = "/disc Twisted Chance"
+cooldown_secs = 1320.0
+priority = 2
+condition = "endurance_above_55"
+
+[[level_overrides.combat_abilities]]
+name = "Duelist Discipline"
+command = "/disc Duelist"
+cooldown_secs = 1320.0
+priority = 3
+condition = "endurance_above_45"
+
+[[level_overrides.combat_abilities]]
+name = "Weapon Affinity Discipline"
+command = "/disc Weapon Affinity"
+cooldown_secs = 1800.0
+priority = 4
+condition = "endurance_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 10
+
+[[level_overrides.combat_abilities]]
+name = "Rogue's Ploy"
+command = "/disc Rogue's Ploy"
+cooldown_secs = 30.0
+priority = 20
+condition = "manual_only_cc"
+
+[[level_overrides.combat_abilities]]
+name = "Kyv Strike"
+command = "/disc Kyv Strike"
+cooldown_secs = 30.0
+priority = 21
+condition = "manual_hidden_opener"
+
+[[level_overrides.combat_abilities]]
+name = "Hide"
+command = "/hide"
+cooldown_secs = 0.0
+priority = 30
+condition = "out_of_combat"
+
+[[level_overrides.combat_abilities]]
+name = "Sneak"
+command = "/sneak"
+cooldown_secs = 0.0
+priority = 31
 condition = "out_of_combat"

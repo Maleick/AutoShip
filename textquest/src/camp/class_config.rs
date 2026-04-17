@@ -757,4 +757,76 @@ mod tests {
                 .any(|ability| ability.name == "Call of the Arch Mage")
         );
     }
+
+    #[test]
+    fn rogue_shipped_config_tracks_rotation_breakpoints() {
+        let rogue_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("config/classes/rogue.toml");
+        let config = ClassConfig::load(&rogue_path).expect("rogue config should parse");
+
+        assert_eq!(
+            config
+                .level_overrides
+                .iter()
+                .map(|profile| (profile.min_level, profile.max_level))
+                .collect::<Vec<_>>(),
+            vec![
+                (Some(60), Some(60)),
+                (Some(61), Some(61)),
+                (Some(62), Some(62)),
+                (Some(65), None),
+            ]
+        );
+
+        let names_for_level = |level| {
+            config
+                .profile_for_level(Some(level))
+                .combat_abilities
+                .iter()
+                .map(|ability| ability.name.as_str())
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(
+            names_for_level(60),
+            vec![
+                "Backstab",
+                "Blinding Speed Discipline",
+                "Duelist Discipline",
+                "Attack",
+                "Hide",
+                "Sneak",
+            ]
+        );
+        assert_eq!(
+            names_for_level(61),
+            vec![
+                "Backstab",
+                "Blinding Speed Discipline",
+                "Duelist Discipline",
+                "Weapon Affinity Discipline",
+                "Attack",
+                "Rogue's Ploy",
+                "Hide",
+                "Sneak",
+            ]
+        );
+        assert_eq!(names_for_level(62), names_for_level(61));
+        assert_eq!(
+            names_for_level(65),
+            vec![
+                "Backstab",
+                "Twisted Chance Discipline",
+                "Duelist Discipline",
+                "Weapon Affinity Discipline",
+                "Attack",
+                "Rogue's Ploy",
+                "Kyv Strike",
+                "Hide",
+                "Sneak",
+            ]
+        );
+    }
 }

@@ -160,6 +160,8 @@ Runtime loading still happens through `config/toons/*.toml` overrides plus the b
 The class TOML files are the reference surface for those built-in defaults.
 For Bard, unit tests keep the live-safe runtime rotation data synchronized with `config/classes/bard.toml`.
 
+Rogue ships explicit level breakpoints for 60, 61, 62, and 65 so the operator-facing TOML stays aligned with the injected DLL's burn and utility tuning.
+
 Current repo coverage includes classes such as:
 
 - bard
