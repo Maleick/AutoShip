@@ -56,13 +56,9 @@ curl -s "http://127.0.0.1:8089/list_exports"
 
 | Old Address  | What to Find                          | New Address |
 | ----------- | ------------------------------------ | ---------- |
-| 0x1400556d0 | Network send function                | TBD        |
-| 0x1400557f0 | WSASend hook location               | TBD        |
-| 0x14001a460 | Message counter heartbeat           | TBD        |
-| 0x1400564b0 | File integrity check dispatcher      | TBD        |
-| 0x140056540 | File integrity PRNG                | TBD        |
-| 0x1400565d0 | GetModuleFileName hash trigger      | TBD        |
-| 0x1400567f0 | LaggedFibonacci PRNG              | TBD        |
+| 0x140563130 | Network send function                | 0x140563330 (+0x200) |
+| 0x14001a460 | Message counter heartbeat           | 0x1401a4650 (+0xF0) |
+| ~0x14021d730 | File integrity check dispatcher      | 0x140564bc0 (moved)      |
 
 ## Update Offsets
 
