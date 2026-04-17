@@ -455,7 +455,7 @@ Launch the TUI with `cargo run` (demo mode) or `textquest.exe tui` (live mode).
 | **Map**        | `2` | Zone map, spawn overlays, named tracking      |
 | **Navigation** | `3` | Route status, waypoints, stuck recovery       |
 | **Debug**      | `4` | Spawn list, hex dump, EQ internals browser    |
-| **Packets**    | `5` | Live send/receive opcode capture              |
+| **Packets**    | `5` | Packet monitor UI for captured opcode events  |
 
 ### Global Keybindings
 
@@ -631,16 +631,22 @@ Shows:
 
 Shows:
 
-- Live send/receive packets
+- Captured packet rows when the current DLL build emits packet events
 - Opcode decode
 - Filtering by opcode
 - Pause/resume capture
 
 **Use this for:**
 
-- Monitoring login sequences
-- Verifying ability casts
-- Debugging IPC issues
+- Inspecting whichever packet events the attached DLL build produces
+- Debugging packet-monitor output during attended runs
+- Cross-checking opcode rows against other client state
+
+Current limitation:
+
+- Packet-monitor activation and zone-transition validation are still tracked by
+  issue `#1270`. The screen is real, but the current repo does not treat it as
+  validated proof that live packet capture is active on every build.
 
 ---
 

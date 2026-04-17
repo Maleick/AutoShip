@@ -61,6 +61,7 @@
 - [MQ2 Launch Plugin Survey](Research-MQ2-Launch-Plugin-Survey)
 - [MQ2 Parity Matrix](Research-MQ2-Parity-Matrix)
 - [Packet Engine](Research-Packet-Engine)
+- [Packet Engine Zone-Transition Validation](Packet-Engine-Zone-Transition-Validation)
 - [Packet Zoning](Research-Packet-Zoning)
 - [RDP Automation](Research-RDP-Automation)
 - [RedGuides](Research-RedGuides)

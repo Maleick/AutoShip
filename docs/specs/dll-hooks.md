@@ -205,7 +205,7 @@ TextQuest uses two primary hooking mechanisms:
 | **Hook mechanism** | Inline detours (retour static detours)                                            |
 | **Targets**        | `ws2_32!WSASend`, `ws2_32!WSARecv`                                                |
 | **Purpose**        | Capture network packets before scrambler (send) / after descrambler (recv)        |
-| **Installation**   | Deferred — hooks installed on first `SetRenderMode` or explicit request           |
+| **Installation**   | Not wired into normal DLL startup on current `master`; validation tracked by issue `#1270` |
 | **Removal**        | On DLL unload                                                                     |
 | **Safety**         | Thread-safe via atomic detour handles                                             |
 | **Validation**     | Verify opcode extraction (bytes [2..4] as little-endian u16); check buffer bounds |

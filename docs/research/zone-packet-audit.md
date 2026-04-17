@@ -85,15 +85,19 @@ These packets are known to occur during zone transitions but are not explicitly 
 
 ## Zone Packet Capture Infrastructure
 
-TextQuest has packet capture infrastructure in place (from `textquest-dll/src/hooks/packet_hook.rs` and `textquest-common/src/packet.rs`):
+TextQuest has packet-capture code paths and operator plumbing, but the current
+checkout does not install `packet_hook` during normal DLL startup. Treat the
+items below as repo-grounded implementation detail, not as live-proof that the
+packet monitor is active on every build.
 
 ### Capture Mechanisms
 
-1. **WSASend/WSARecv hooks** (`textquest-dll/src/hooks/packet_hook.rs`):
-   - Installed on ws2_32.dll exports
+1. **WSASend/WSARecv hook code** (`textquest-dll/src/hooks/packet_hook.rs`):
+   - `packet_hook::install()` resolves ws2_32.dll exports and enables retour detours
    - Captures packets before scrambler (outbound) and after descrambler (inbound)
    - Uses retour static detours for atomic trampoline installation
    - Forwards opcode + direction + timestamp to orchestrator via IPC
+   - Current blocker: `textquest-dll/src/lib.rs` does not call `packet_hook::install()` during normal DLL init
 
 2. **Packet ring buffer** (`textquest-common/src/packet.rs`):
    - `CaptureSession`: bounded ring buffer with configurable capacity
@@ -166,7 +170,7 @@ The following opcodes and zone transition behaviors require dedicated research:
 
 ### Code Artifacts
 
-- ✓ Packet capture infra: `textquest-dll/src/hooks/packet_hook.rs` (WSASend/WSARecv hooks)
+- ~ Packet capture code path: `textquest-dll/src/hooks/packet_hook.rs` (WSASend/WSARecv detours exist, but normal DLL startup does not currently install them)
 - ✓ Ring buffer: `textquest-common/src/packet.rs` (CaptureSession, filtering, persistence)
 - ✓ IPC protocol: `textquest-common/src/ipc.rs` (PacketEvent, PacketBatch responses)
 - ✓ Zone handlers: `textquest-common/src/offsets.rs` (EQ_BEGIN_ZONE, EQ_ZONE_CHANGE offsets)
@@ -198,4 +202,10 @@ The following opcodes and zone transition behaviors require dedicated research:
 
 ## Conclusion
 
-Zone transition packets are well-understood at the protocol level (EQ streams opcodes in a fixed sequence), but TextQuest's implementation is incomplete. The packet capture infrastructure is in place (WSASend/WSARecv hooks, ring buffering, IPC batching), but opcode numeric values are only partially mapped. Filling these gaps requires live packet capture from a TLP server and cross-referencing against EQ's internal definitions (via Ghidra or MacroQuest).
+Zone transition packets are well-understood at the protocol level (EQ streams
+opcodes in a fixed sequence), but TextQuest's implementation remains incomplete.
+The repo has packet-capture code, IPC batching, and a packet-monitor UI, but
+the current checkout does not install `packet_hook` during normal DLL startup,
+and opcode numeric values are only partially mapped. Filling these gaps still
+requires live packet capture from a TLP server and cross-referencing against
+EQ's internal definitions (via Ghidra or MacroQuest).

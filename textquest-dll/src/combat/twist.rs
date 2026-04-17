@@ -107,10 +107,8 @@ pub struct SongSlot {
     pub category: SongCategory,
     /// Instrument type required for this song's skill bonus.
     /// When `None`, the default instrument for the category is used.
-    #[serde(default)]
     pub instrument_type: Option<InstrumentType>,
     /// Which equipment slot holds the instrument for this song.
-    #[serde(default)]
     pub instrument_slot: InstrumentSlot,
 }
 

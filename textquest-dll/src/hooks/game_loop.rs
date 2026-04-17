@@ -1601,11 +1601,10 @@ fn on_game_tick() {
     read_and_publish_state(tick);
 
     let overhead = tick_start.elapsed();
-    let overhead_nanos = overhead.as_nanos();
     crate::hooks::timing::record_game_loop_hook_overhead(overhead);
     #[cfg(debug_assertions)]
     tracing::debug!(
-        elapsed_ns = overhead_nanos,
+        elapsed_ns = overhead.as_nanos(),
         tick = tick,
         "ProcessGameEvents hook overhead recorded"
     );
@@ -3887,7 +3886,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    fn fake_spawn(id: u32, display: &str) -> textquest_common::types::SpawnData {
+    fn fake_spawn(id: u32, display: &str, spawn_type: u8) -> textquest_common::types::SpawnData {
         textquest_common::types::SpawnData {
             spawn_id: id,
             displayed_name: display.to_string(),
@@ -3904,7 +3903,7 @@ mod tests {
                 .into_iter()
                 .collect();
 
-        let current = vec![fake_spawn(2, "a_bear"), fake_spawn(3, "a_ox")];
+        let current = vec![fake_spawn(2, "a_bear", 1), fake_spawn(3, "a_ox", 2)];
         let (next, events) =
             compute_spawn_delta_events(&previous, &current, "freportw".into(), 12345);
 

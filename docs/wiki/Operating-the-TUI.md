@@ -10,7 +10,7 @@ TextQuest's default interface is a ratatui-based dashboard with five main screen
 | Map | `2` | Tactical map, spawn overlays, named tracking, tactical nav section, and viewport controls |
 | Navigation | `3` | Per-character route status, selected-route detail, blockers, recovery state, and command reference |
 | Debug | `4` | Raw spawn table, filters, target detail, hex dump, explorer, and EQ internals |
-| Packets | `5` | Live packet monitor with pause state, filtering, opcode decode, and send/receive separation |
+| Packets | `5` | Packet monitor UI for captured opcode events, with pause state, filtering, and send/receive separation |
 
 ### Core keys
 
@@ -94,10 +94,16 @@ Use this for:
 
 Use this for:
 
-- live send/receive packet capture
+- inspecting captured packet rows when the current DLL build is emitting packet events
 - pausing the packet stream without leaving the screen
 - opcode decode and filter inspection
-- comparing raw traffic while other screens stay focused on state
+- validating packet-monitor output during attended troubleshooting runs
+
+Current limitation:
+
+- The packet monitor screen exists today, but packet-hook activation and
+  zone-transition proof are tracked by issue `#1270`. Do not treat an empty
+  packet table as proof that zoning has no packet traffic.
 
 ## Command and Overlay Surfaces
 
