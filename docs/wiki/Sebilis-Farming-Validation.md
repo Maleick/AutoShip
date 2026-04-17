@@ -229,12 +229,13 @@ The current `config/named_mobs/sebilis.toml` drop list instead tracks
 repo's checked-in named evidence still diverges from most of the issue's
 proposed Sebilis output targets.
 
-Suggested target metrics:
+Suggested `target_metric` values for the validation template's
+`target_metric` column (do not add these as new CSV columns):
 
-- `route_time_minutes`
-- `placeholder_respawn_minutes`
+- `route_duration_minutes`
+- `placeholder_respawn_interval_minutes`
 - `named_seen_per_hour`
-- `wait_time_minutes`
+- `camp_wait_duration_minutes`
 - `forage_hits_per_hour`
 - `operator_interruptions_per_hour`
 

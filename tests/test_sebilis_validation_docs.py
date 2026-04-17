@@ -230,6 +230,23 @@ class SebilisValidationDocsTests(unittest.TestCase):
         )
         self.assertIn("instrumented in TextQuest.", text)
 
+    def test_validation_doc_disambiguates_target_metric_values_from_csv_columns(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            "Suggested `target_metric` values for the validation template's",
+            text,
+        )
+        self.assertIn("`target_metric` column", text)
+        self.assertIn("`route_duration_minutes`", text)
+        self.assertIn("`placeholder_respawn_interval_minutes`", text)
+        self.assertIn("`camp_wait_duration_minutes`", text)
+        self.assertNotIn("\n- `route_time_minutes`", text)
+        self.assertNotIn("\n- `placeholder_respawn_minutes`", text)
+        self.assertNotIn("\n- `wait_time_minutes`", text)
+
     def test_validation_doc_records_operator_controls_and_observability_as_attended_run_aids(self) -> None:
         text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
             encoding="utf-8"
