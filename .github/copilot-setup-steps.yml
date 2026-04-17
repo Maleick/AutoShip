@@ -1,0 +1,8 @@
+steps:
+  - name: Authenticate gh CLI with ISSUES_PAT
+    env:
+      ISSUES_PAT: ${{ secrets.ISSUES_PAT }}
+    run: |
+      if [ -n "$ISSUES_PAT" ]; then
+        echo "$ISSUES_PAT" | gh auth login --with-token
+      fi
