@@ -553,9 +553,29 @@ Pure DPS. Wizards exist to kill things fast. Secondary: ports and evac for group
 3. Auto-attack with fists or weapons (H2H or 2H staff at high levels)
 4. **Mend** self when below 50% HP
 
+### Live Automation Priorities
+
+1. **Emergency**: fire **Mend** below 50% HP, then fall through to **Voiddance / Earthwalk** below 35% HP, and reserve **Feign Death** for hard-break escapes when HP is critically low.
+2. **Utility**: treat **Planeswalk** as a low-priority movement utility once it unlocks at 61, never ahead of survival tools or core burn discs.
+3. **Burn**: use **Whirlwind** only on multi-enemy packs, then **Innerflame / Hundred Fists / Speed Focus** for primary burst, followed by **Thunderkick / Ashenhand** for special-attack amplification.
+4. **Baseline melee**: keep the kick family (**Kick / Round Kick / Flying Kick**) and punch family (**Eagle Strike / Tiger Claw**) on shared timers so only the best unlocked skill fires.
+
+### Level Breakpoints
+
+- **60**: upgrade the kick-focus line from **Thunderkick Discipline** to **Ashenhand Discipline**.
+- **61**: add **Planeswalk Discipline** as a utility option without displacing the main burn or emergency lines.
+- **62**: keep the 61 rotation intact; this level is a tuning checkpoint, not a new line swap.
+- **63-64**: replace **Hundred Fists Discipline** with **Speed Focus Discipline** for the primary attack-speed burn window.
+- **65**: replace **Voiddance Discipline** with **Earthwalk Discipline** for the defensive line while retaining **Speed Focus** and **Planeswalk**.
+
 ### Mana Management
 
 N/A -- Monks have no mana. All abilities are skill-based with timers.
+
+### Endurance Management
+
+- Hold burn disciplines when endurance is low so short-fuse utility or survival tools are not starved.
+- Keep basic melee skills active down to a low endurance floor, but stop firing low-value activated abilities once endurance drops below the configured burn thresholds.
 
 ### Group Role
 
@@ -565,7 +585,7 @@ Primary puller. Use FD to split camps and deliver single mobs. Secondary: melee 
 
 - Pull routine: target mob > attack > run toward camp > FD > wait > stand
 - FD timing is critical; too early = mob resets, too late = mob reaches group
-- Flying Kick and Tiger Claw on cooldown timers
+- Flying Kick / Round Kick / Kick share one timer; Tiger Claw / Eagle Strike share another
 - Mend at HP threshold
 - Weight management: monks lose AC when carrying too much (keep weight low)
 

@@ -3365,6 +3365,162 @@ impl App {
         self.check_watched_spawn_changes();
     }
 
+    pub fn update_gm_detection(&mut self) {
+        if !self.gm_detector.is_enabled() {
+            return;
+        }
+
+        let zone = self.current_zone();
+        self.gm_detector.update_spawns(&self.spawns, &zone);
+
+        let events = self.gm_detector.pending_events();
+        for event in events {
+            let level = if event.event_type == GmEventType::GmEntered {
+                ToastLevel::Error
+            } else {
+                ToastLevel::Success
+            };
+
+            let label = event.event_type.label();
+            self.set_feedback(
+                level,
+                format!("[GM] {label}: {} in {}", event.gm_name, event.zone),
+                true,
+            );
+
+            if event.event_type == GmEventType::GmEntered {
+                self.play_gm_alert_sound();
+            }
+
+            if self.gm_detector.config().discord_webhook_url.is_some() {
+                self.discord_alert(
+                    label,
+                    &format!(
+                        "{} detected in {} by {}",
+                        event.gm_name, event.zone, self.server_name
+                    ),
+                    crate::discord::webhook::AlertLevel::Critical,
+                );
+            }
+        }
+
+        if self.gm_detector.should_pause_automation() && !self.gm_auto_paused {
+            self.automation_paused = true;
+            self.gm_auto_paused = true;
+            self.set_feedback(ToastLevel::Warning, "Automation paused: GM in zone", true);
+        } else if !self.gm_detector.should_pause_automation() && self.gm_auto_paused {
+            self.automation_paused = false;
+            self.gm_auto_paused = false;
+            self.set_feedback(ToastLevel::Info, "Automation resumed: Zone clear", true);
+        }
+
+        self.sync_gm_state_to_web();
+    }
+
+    #[cfg(windows)]
+    fn play_gm_alert_sound(&self) {
+        use std::ffi::OsStr;
+        use std::os::windows::ffi::OsStrExt;
+
+        if !self.gm_detector.config().sound_enabled {
+            return;
+        }
+
+        let sound_file = self
+            .gm_detector
+            .config()
+            .sound_file
+            .as_deref()
+            .unwrap_or("gm_alert.wav");
+
+        let base_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let config_dir = base_path.join("config");
+        let sounds_dir = config_dir.join("sounds");
+        let sound_path = sounds_dir.join(sound_file);
+
+        if !sound_path.exists() {
+            tracing::warn!(
+                path = %sound_path.display(),
+                "GM alert sound file not found"
+            );
+            return;
+        }
+
+        let wide_path: Vec<u16> = OsStr::new(sound_path.to_str().unwrap_or_default())
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
+        #[link(name = "winmm")]
+        extern "system" {
+            fn PlaySoundW(pszSound: *const u16, hmod: *mut std::ffi::c_void, fdwSound: u32) -> i32;
+        }
+
+        const SND_FILENAME: u32 = 0x00020000;
+        const SND_ASYNC: u32 = 0x0001;
+        const SND_NODEFAULT: u32 = 0x0002;
+
+        unsafe {
+            let _ = PlaySoundW(
+                wide_path.as_ptr(),
+                std::ptr::null_mut(),
+                SND_FILENAME | SND_ASYNC | SND_NODEFAULT,
+            );
+        }
+    }
+
+    #[cfg(not(windows))]
+    fn play_gm_alert_sound(&self) {
+        if self.gm_detector.config().sound_enabled {
+            tracing::debug!("GM alert sound playback not supported on this platform");
+        }
+    }
+
+    pub fn sync_gm_state_to_web(&self) {
+        if !self.gm_detector.is_enabled() {
+            return;
+        }
+
+        let web_url = std::env::var("TEXTQUEST_WEB_URL")
+            .unwrap_or_else(|_| "http://127.0.0.1:3001".to_string());
+
+        let url = format!("{}/api/gm-alerts/sync", web_url);
+
+        let presence = self.gm_detector.presence();
+        let payload = serde_json::json!({
+            "isGmInZone": presence.is_gm_in_zone(),
+            "gmCount": presence.gm_count,
+            "gmNames": presence.gm_names,
+            "automationPaused": self.gm_auto_paused,
+        });
+
+        let client = match reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::debug!(%e, "Failed to create HTTP client for GM sync");
+                return;
+            }
+        };
+
+        match client.post(&url).json(&payload).send() {
+            Ok(resp) if resp.status().is_success() => {
+                tracing::debug!("GM state synced to web dashboard");
+            }
+            Ok(resp) => {
+                tracing::debug!(
+                    status = %resp.status(),
+                    "GM state sync to web returned non-success"
+                );
+            }
+            Err(e) => {
+                tracing::debug!(%e, "Failed to sync GM state to web");
+            }
+        }
+    }
+
     fn check_watched_spawn_changes(&mut self) {
         use crate::eq::named_tracker::is_named;
         if self.spawn_alert_feed.watch_patterns().is_empty() {
@@ -3446,6 +3602,35 @@ impl App {
         }
     }
 
+    fn should_announce_player(&self, name: &str) -> bool {
+        let is_friend = self
+            .player_notification_friends
+            .contains(&name.to_ascii_lowercase());
+        match self.player_notification_filter {
+            crate::config::PlayerFilterMode::All => true,
+            crate::config::PlayerFilterMode::StrangersOnly => !is_friend,
+            crate::config::PlayerFilterMode::FriendsOnly => is_friend,
+        }
+    }
+
+    pub fn set_player_notification_friends(&mut self, friends: impl IntoIterator<Item = String>) {
+        self.player_notification_friends.clear();
+        for name in friends {
+            self.player_notification_friends
+                .insert(name.to_ascii_lowercase());
+        }
+    }
+
+    pub fn pending_terminal_bells(&self) -> u8 {
+        self.pending_terminal_bells
+    }
+
+    pub fn drain_terminal_bells(&mut self) -> u8 {
+        let count = self.pending_terminal_bells;
+        self.pending_terminal_bells = 0;
+        count
+    }
+
     pub fn apply_spawn_events(&mut self, events: Vec<textquest_common::ipc::SpawnEvent>) {
         let tick = self.tick_count;
 
@@ -3485,17 +3670,7 @@ impl App {
 
         self.should_announce_player(&event.spawn_name)
     }
-
-    fn should_announce_player(&self, name: &str) -> bool {
-        let is_friend = self
-            .player_notification_friends
-            .contains(&name.to_ascii_lowercase());
-        match self.player_notification_filter {
-            crate::config::PlayerFilterMode::All => true,
-            crate::config::PlayerFilterMode::StrangersOnly => !is_friend,
-            crate::config::PlayerFilterMode::FriendsOnly => is_friend,
-        }
-    }
+}
 
     fn execute_watch_command(&mut self, args: &[&str]) {
         match args.first().copied() {

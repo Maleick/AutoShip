@@ -9,26 +9,447 @@ cooldown_secs = 0.0
 priority = 1
 
 [[combat_abilities]]
-name = "Kick"
-command = "/kick"
-cooldown_secs = 6.0
-priority = 2
-
-[[combat_abilities]]
 name = "Flying Kick"
-command = "/disc 1"
-cooldown_secs = 8.0
-priority = 3
+command = "/useability Flying Kick"
+cooldown_secs = 7.0
+priority = 2
+condition = "endurance_above_10"
 
 [[combat_abilities]]
-name = "Feign Death"
-command = "/cast 1"
-cooldown_secs = 12.0
-priority = 5
+name = "Tiger Claw"
+command = "/useability Tiger Claw"
+cooldown_secs = 6.0
+priority = 3
+condition = "endurance_above_10"
+
+[[combat_abilities]]
+name = "Whirlwind Discipline"
+command = "/disc Whirlwind Discipline"
+cooldown_secs = 2400.0
+duration_secs = 12.0
+priority = 20
+condition = "enemy_count_above_3 && endurance_above_60"
+
+[[combat_abilities]]
+name = "Thunderkick Discipline"
+command = "/disc Thunderkick Discipline"
+cooldown_secs = 600.0
+duration_secs = 60.0
+priority = 30
+condition = "target_hp_above_20 && endurance_above_35"
+
+[[combat_abilities]]
+name = "Voiddance Discipline"
+command = "/disc Voiddance Discipline"
+cooldown_secs = 2400.0
+duration_secs = 12.0
+priority = 40
+condition = "hp_below_35 && endurance_above_25"
+
+[[combat_abilities]]
+name = "Hundred Fists Discipline"
+command = "/disc Hundred Fists Discipline"
+cooldown_secs = 1320.0
+duration_secs = 30.0
+priority = 50
+condition = "target_hp_above_40 && endurance_above_50"
 
 [[emergency_abilities]]
 name = "Mend"
-command = "/disc 2"
+command = "/useability Mend"
 cooldown_secs = 360.0
 priority = 0
-condition = "hp_below_30"
+condition = "hp_below_50"
+
+[[emergency_abilities]]
+name = "Feign Death"
+command = "/useability Feign Death"
+cooldown_secs = 2.0
+priority = 1
+condition = "hp_below_12 && aggro_on_me"
+
+[[level_overrides]]
+name = "monk-level-60"
+min_level = 60
+max_level = 60
+
+[[level_overrides.combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Flying Kick"
+command = "/useability Flying Kick"
+cooldown_secs = 7.0
+priority = 2
+condition = "endurance_above_10"
+
+[[level_overrides.combat_abilities]]
+name = "Tiger Claw"
+command = "/useability Tiger Claw"
+cooldown_secs = 6.0
+priority = 3
+condition = "endurance_above_10"
+
+[[level_overrides.combat_abilities]]
+name = "Whirlwind Discipline"
+command = "/disc Whirlwind Discipline"
+cooldown_secs = 2400.0
+duration_secs = 12.0
+priority = 20
+condition = "enemy_count_above_3 && endurance_above_60"
+
+[[level_overrides.combat_abilities]]
+name = "Ashenhand Discipline"
+command = "/disc Ashenhand Discipline"
+cooldown_secs = 1800.0
+duration_secs = 60.0
+priority = 30
+condition = "target_hp_above_20 && endurance_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Voiddance Discipline"
+command = "/disc Voiddance Discipline"
+cooldown_secs = 2400.0
+duration_secs = 12.0
+priority = 40
+condition = "hp_below_35 && endurance_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Hundred Fists Discipline"
+command = "/disc Hundred Fists Discipline"
+cooldown_secs = 1320.0
+duration_secs = 30.0
+priority = 50
+condition = "target_hp_above_40 && endurance_above_50"
+
+[[level_overrides.emergency_abilities]]
+name = "Mend"
+command = "/useability Mend"
+cooldown_secs = 360.0
+priority = 0
+condition = "hp_below_50"
+
+[[level_overrides.emergency_abilities]]
+name = "Feign Death"
+command = "/useability Feign Death"
+cooldown_secs = 2.0
+priority = 1
+condition = "hp_below_12 && aggro_on_me"
+
+[[level_overrides]]
+name = "monk-level-61"
+min_level = 61
+max_level = 61
+
+[[level_overrides.combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Flying Kick"
+command = "/useability Flying Kick"
+cooldown_secs = 7.0
+priority = 2
+condition = "endurance_above_10"
+
+[[level_overrides.combat_abilities]]
+name = "Tiger Claw"
+command = "/useability Tiger Claw"
+cooldown_secs = 6.0
+priority = 3
+condition = "endurance_above_10"
+
+[[level_overrides.combat_abilities]]
+name = "Whirlwind Discipline"
+command = "/disc Whirlwind Discipline"
+cooldown_secs = 2400.0
+duration_secs = 12.0
+priority = 20
+condition = "enemy_count_above_3 && endurance_above_60"
+
+[[level_overrides.combat_abilities]]
+name = "Ashenhand Discipline"
+command = "/disc Ashenhand Discipline"
+cooldown_secs = 1800.0
+duration_secs = 60.0
+priority = 30
+condition = "target_hp_above_20 && endurance_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Voiddance Discipline"
+command = "/disc Voiddance Discipline"
+cooldown_secs = 2400.0
+duration_secs = 12.0
+priority = 40
+condition = "hp_below_35 && endurance_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Hundred Fists Discipline"
+command = "/disc Hundred Fists Discipline"
+cooldown_secs = 1320.0
+duration_secs = 30.0
+priority = 50
+condition = "target_hp_above_40 && endurance_above_50"
+
+[[level_overrides.combat_abilities]]
+name = "Planeswalk Discipline"
+command = "/disc Planeswalk Discipline"
+cooldown_secs = 1800.0
+duration_secs = 18.0
+priority = 60
+condition = "target_hp_above_90 && endurance_above_70"
+
+[[level_overrides.emergency_abilities]]
+name = "Mend"
+command = "/useability Mend"
+cooldown_secs = 360.0
+priority = 0
+condition = "hp_below_50"
+
+[[level_overrides.emergency_abilities]]
+name = "Feign Death"
+command = "/useability Feign Death"
+cooldown_secs = 2.0
+priority = 1
+condition = "hp_below_12 && aggro_on_me"
+
+[[level_overrides]]
+name = "monk-level-62"
+min_level = 62
+max_level = 62
+
+[[level_overrides.combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Flying Kick"
+command = "/useability Flying Kick"
+cooldown_secs = 7.0
+priority = 2
+condition = "endurance_above_10"
+
+[[level_overrides.combat_abilities]]
+name = "Tiger Claw"
+command = "/useability Tiger Claw"
+cooldown_secs = 6.0
+priority = 3
+condition = "endurance_above_10"
+
+[[level_overrides.combat_abilities]]
+name = "Whirlwind Discipline"
+command = "/disc Whirlwind Discipline"
+cooldown_secs = 2400.0
+duration_secs = 12.0
+priority = 20
+condition = "enemy_count_above_3 && endurance_above_60"
+
+[[level_overrides.combat_abilities]]
+name = "Ashenhand Discipline"
+command = "/disc Ashenhand Discipline"
+cooldown_secs = 1800.0
+duration_secs = 60.0
+priority = 30
+condition = "target_hp_above_20 && endurance_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Voiddance Discipline"
+command = "/disc Voiddance Discipline"
+cooldown_secs = 2400.0
+duration_secs = 12.0
+priority = 40
+condition = "hp_below_35 && endurance_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Hundred Fists Discipline"
+command = "/disc Hundred Fists Discipline"
+cooldown_secs = 1320.0
+duration_secs = 30.0
+priority = 50
+condition = "target_hp_above_40 && endurance_above_50"
+
+[[level_overrides.combat_abilities]]
+name = "Planeswalk Discipline"
+command = "/disc Planeswalk Discipline"
+cooldown_secs = 1800.0
+duration_secs = 18.0
+priority = 60
+condition = "target_hp_above_90 && endurance_above_70"
+
+[[level_overrides.emergency_abilities]]
+name = "Mend"
+command = "/useability Mend"
+cooldown_secs = 360.0
+priority = 0
+condition = "hp_below_50"
+
+[[level_overrides.emergency_abilities]]
+name = "Feign Death"
+command = "/useability Feign Death"
+cooldown_secs = 2.0
+priority = 1
+condition = "hp_below_12 && aggro_on_me"
+
+[[level_overrides]]
+name = "monk-level-63-64"
+min_level = 63
+max_level = 64
+
+[[level_overrides.combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Flying Kick"
+command = "/useability Flying Kick"
+cooldown_secs = 7.0
+priority = 2
+condition = "endurance_above_10"
+
+[[level_overrides.combat_abilities]]
+name = "Tiger Claw"
+command = "/useability Tiger Claw"
+cooldown_secs = 6.0
+priority = 3
+condition = "endurance_above_10"
+
+[[level_overrides.combat_abilities]]
+name = "Whirlwind Discipline"
+command = "/disc Whirlwind Discipline"
+cooldown_secs = 2400.0
+duration_secs = 12.0
+priority = 20
+condition = "enemy_count_above_3 && endurance_above_60"
+
+[[level_overrides.combat_abilities]]
+name = "Ashenhand Discipline"
+command = "/disc Ashenhand Discipline"
+cooldown_secs = 1800.0
+duration_secs = 60.0
+priority = 30
+condition = "target_hp_above_20 && endurance_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Voiddance Discipline"
+command = "/disc Voiddance Discipline"
+cooldown_secs = 2400.0
+duration_secs = 12.0
+priority = 40
+condition = "hp_below_35 && endurance_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Speed Focus Discipline"
+command = "/disc Speed Focus Discipline"
+cooldown_secs = 1320.0
+duration_secs = 30.0
+priority = 50
+condition = "target_hp_above_40 && endurance_above_50"
+
+[[level_overrides.combat_abilities]]
+name = "Planeswalk Discipline"
+command = "/disc Planeswalk Discipline"
+cooldown_secs = 1800.0
+duration_secs = 18.0
+priority = 60
+condition = "target_hp_above_90 && endurance_above_70"
+
+[[level_overrides.emergency_abilities]]
+name = "Mend"
+command = "/useability Mend"
+cooldown_secs = 360.0
+priority = 0
+condition = "hp_below_50"
+
+[[level_overrides.emergency_abilities]]
+name = "Feign Death"
+command = "/useability Feign Death"
+cooldown_secs = 2.0
+priority = 1
+condition = "hp_below_12 && aggro_on_me"
+
+[[level_overrides]]
+name = "monk-level-65"
+min_level = 65
+
+[[level_overrides.combat_abilities]]
+name = "Attack"
+command = "/attack"
+cooldown_secs = 0.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Flying Kick"
+command = "/useability Flying Kick"
+cooldown_secs = 7.0
+priority = 2
+condition = "endurance_above_10"
+
+[[level_overrides.combat_abilities]]
+name = "Tiger Claw"
+command = "/useability Tiger Claw"
+cooldown_secs = 6.0
+priority = 3
+condition = "endurance_above_10"
+
+[[level_overrides.combat_abilities]]
+name = "Whirlwind Discipline"
+command = "/disc Whirlwind Discipline"
+cooldown_secs = 2400.0
+duration_secs = 12.0
+priority = 20
+condition = "enemy_count_above_3 && endurance_above_60"
+
+[[level_overrides.combat_abilities]]
+name = "Ashenhand Discipline"
+command = "/disc Ashenhand Discipline"
+cooldown_secs = 1800.0
+duration_secs = 60.0
+priority = 30
+condition = "target_hp_above_20 && endurance_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Earthwalk Discipline"
+command = "/disc Earthwalk Discipline"
+cooldown_secs = 234.0
+duration_secs = 12.0
+priority = 40
+condition = "hp_below_35 && endurance_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Speed Focus Discipline"
+command = "/disc Speed Focus Discipline"
+cooldown_secs = 1320.0
+duration_secs = 30.0
+priority = 50
+condition = "target_hp_above_40 && endurance_above_50"
+
+[[level_overrides.combat_abilities]]
+name = "Planeswalk Discipline"
+command = "/disc Planeswalk Discipline"
+cooldown_secs = 1800.0
+duration_secs = 18.0
+priority = 60
+condition = "target_hp_above_90 && endurance_above_70"
+
+[[level_overrides.emergency_abilities]]
+name = "Mend"
+command = "/useability Mend"
+cooldown_secs = 360.0
+priority = 0
+condition = "hp_below_50"
+
+[[level_overrides.emergency_abilities]]
+name = "Feign Death"
+command = "/useability Feign Death"
+cooldown_secs = 2.0
+priority = 1
+condition = "hp_below_12 && aggro_on_me"

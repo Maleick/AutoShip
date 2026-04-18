@@ -609,6 +609,12 @@ pub enum InstrumentSwapAction {
     Restore { slot: InstrumentSlot, item_id: u32 },
 }
 
+impl Default for InstrumentSwapAction {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
 /// Engine for automatic instrument swapping — MQ2BardSwap parity.
 ///
 /// The InstrumentSwapEngine tracks:

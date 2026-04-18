@@ -477,6 +477,8 @@ const COMBAT_SKILL_ID_ROUND_KICK: u32 = 38;
 const COMBAT_SKILL_ID_TIGER_CLAW: u32 = 52;
 const COMBAT_SKILL_ID_EAGLE_STRIKE: u32 = 23;
 const COMBAT_SKILL_ID_BACKSTAB: u32 = 8;
+const COMBAT_SKILL_ID_FEIGN_DEATH: u32 = 25;
+const COMBAT_SKILL_ID_MEND: u32 = 53;
 
 const COMBAT_SKILL_IDS: &[(&str, u32)] = &[
     ("taunt", COMBAT_SKILL_ID_TAUNT),
@@ -486,6 +488,8 @@ const COMBAT_SKILL_IDS: &[(&str, u32)] = &[
     ("roundkick", COMBAT_SKILL_ID_ROUND_KICK),
     ("tigerclaw", COMBAT_SKILL_ID_TIGER_CLAW),
     ("eaglestrike", COMBAT_SKILL_ID_EAGLE_STRIKE),
+    ("feigndeath", COMBAT_SKILL_ID_FEIGN_DEATH),
+    ("mend", COMBAT_SKILL_ID_MEND),
     ("backstab", COMBAT_SKILL_ID_BACKSTAB),
 ];
 
@@ -717,6 +721,41 @@ impl Combatant {
                 spell_id = resolved.spell_id,
                 "Resolved ability"
             );
+        }
+    }
+
+    fn activated_ability_cooldown(&self, spell_id: i32) -> Option<u32> {
+        self.config
+            .disciplines
+            .iter()
+            .find(|disc| disc.spell_id == spell_id)
+            .and_then(|disc| (disc.cooldown_ticks > 0).then_some(disc.cooldown_ticks))
+            .or_else(|| self.strategy.activated_ability_cooldown_ticks(spell_id))
+    }
+
+    fn rotation_ability_is_ready(&self, spell_id: i32) -> bool {
+        if !self.ability_cooldowns.can_use(spell_id, self.tick_count) {
+            return false;
+        }
+
+        self.strategy
+            .shared_activated_ability_ids(spell_id)
+            .iter()
+            .filter(|&&shared_id| shared_id != spell_id)
+            .all(|&shared_id| self.ability_cooldowns.can_use(shared_id, self.tick_count))
+    }
+
+    fn consume_rotation_ability_cooldown(&mut self, spell_id: i32) {
+        let cooldown = self.activated_ability_cooldown(spell_id);
+        self.ability_cooldowns
+            .consume(spell_id, cooldown, self.tick_count);
+
+        for &shared_id in self.strategy.shared_activated_ability_ids(spell_id) {
+            if shared_id == spell_id {
+                continue;
+            }
+            self.ability_cooldowns
+                .consume(shared_id, cooldown, self.tick_count);
         }
     }
 
@@ -1546,11 +1585,7 @@ impl Combatant {
         }
 
         let hp_pct = player.hp_pct();
-        let end_pct = if player.endurance_max > 0 {
-            (player.endurance_current as f32 / player.endurance_max as f32) * 100.0
-        } else {
-            100.0
-        };
+        let end_pct = player.endurance_pct();
 
         // Disciplines are pre-sorted by priority in new(), iterate directly.
         for disc in &self.config.disciplines {
@@ -2300,6 +2335,147 @@ mod tests {
     }
 
     #[test]
+    fn rotation_disc_uses_configured_cooldown_metadata() {
+        let mut cfg = config_with_discs(vec![make_disc("Ashenhand Discipline", 4508, 1, 900)]);
+        cfg.mana_floor = 0.0;
+        let mut c = Combatant::new(7, 0, cfg);
+        c.rotation_groups = Some(vec![RotationGroup {
+            name: "Burn".into(),
+            target_selector: textquest_common::combat::TargetSelector::SelfOnly,
+            combat_state_req: textquest_common::combat::CombatStateReq::Combat,
+            steps_per_frame: 1,
+            full_rotation: false,
+            hp_threshold: None,
+            entries: vec![rotation::entry(
+                "KickFocus",
+                ActionType::Disc("KickFocus".into()),
+            )],
+            current_step: 0,
+        }]);
+        c.resolved_abilities.insert(
+            "KickFocus".into(),
+            textquest_common::combat::ResolvedAbility {
+                set_name: "KickFocus".into(),
+                ability_name: "Ashenhand Discipline".into(),
+                spell_id: 4508,
+                min_level: 60,
+            },
+        );
+
+        let player = player_with_hp_end(1000, 1000, 500, 500);
+        let target = test_target();
+        c.state = CombatState::Engaging { target_id: 100 };
+        c.tick(&player, Some(&target), &[]);
+
+        assert_eq!(
+            c.ability_cooldowns.availability(4508, c.tick_count),
+            AbilityAvailability::CoolingDown(900)
+        );
+    }
+
+    #[test]
+    fn rotation_disc_consumes_monk_shared_timer_family() {
+        let mut c = Combatant::new(7, 0, CombatConfig::default());
+        c.rotation_groups = Some(vec![RotationGroup {
+            name: "Burn".into(),
+            target_selector: textquest_common::combat::TargetSelector::SelfOnly,
+            combat_state_req: textquest_common::combat::CombatStateReq::Combat,
+            steps_per_frame: 1,
+            full_rotation: false,
+            hp_threshold: None,
+            entries: vec![rotation::entry(
+                "KickFocus",
+                ActionType::Disc("KickFocus".into()),
+            )],
+            current_step: 0,
+        }]);
+        c.resolved_abilities.insert(
+            "KickFocus".into(),
+            textquest_common::combat::ResolvedAbility {
+                set_name: "KickFocus".into(),
+                ability_name: "Ashenhand Discipline".into(),
+                spell_id: 4508,
+                min_level: 60,
+            },
+        );
+
+        let player = player_with_hp_end(1000, 1000, 900, 1000);
+        let target = test_target();
+        c.state = CombatState::Engaging { target_id: 100 };
+        c.tick(&player, Some(&target), &[]);
+
+        assert!(!c.ability_cooldowns.can_use(4507, c.tick_count));
+        assert!(!c.ability_cooldowns.can_use(4511, c.tick_count));
+    }
+
+    #[test]
+    fn rotation_disc_uses_triggering_cooldown_for_shared_family() {
+        let mut c = Combatant::new(7, 0, CombatConfig::default());
+        c.rotation_groups = Some(vec![RotationGroup {
+            name: "Burn".into(),
+            target_selector: textquest_common::combat::TargetSelector::SelfOnly,
+            combat_state_req: textquest_common::combat::CombatStateReq::Combat,
+            steps_per_frame: 1,
+            full_rotation: false,
+            hp_threshold: None,
+            entries: vec![rotation::entry(
+                "PrecisionStrikes",
+                ActionType::Disc("PrecisionStrikes".into()),
+            )],
+            current_step: 0,
+        }]);
+        c.resolved_abilities.insert(
+            "PrecisionStrikes".into(),
+            textquest_common::combat::ResolvedAbility {
+                set_name: "PrecisionStrikes".into(),
+                ability_name: "Silentfist Discipline".into(),
+                spell_id: 4507,
+                min_level: 59,
+            },
+        );
+
+        let player = player_with_hp_end(1000, 1000, 900, 1000);
+        let target = test_target();
+        c.state = CombatState::Engaging { target_id: 100 };
+        c.tick(&player, Some(&target), &[]);
+
+        assert_eq!(
+            c.ability_cooldowns.availability(4508, c.tick_count),
+            AbilityAvailability::CoolingDown(12000)
+        );
+        assert_eq!(
+            c.ability_cooldowns.availability(4511, c.tick_count),
+            AbilityAvailability::CoolingDown(12000)
+        );
+    }
+
+    #[test]
+    fn rotation_skill_action_uses_default_skill_cooldown() {
+        let mut c = Combatant::new(7, 0, CombatConfig::default());
+        c.rotation_groups = Some(vec![RotationGroup {
+            name: "Emergency".into(),
+            target_selector: textquest_common::combat::TargetSelector::SelfOnly,
+            combat_state_req: textquest_common::combat::CombatStateReq::Combat,
+            steps_per_frame: 1,
+            full_rotation: false,
+            hp_threshold: None,
+            entries: vec![rotation::entry_if(
+                "Mend",
+                ActionType::Ability("Mend".into()),
+                textquest_common::combat::ConditionExpr::HpBelow(50.0),
+            )],
+            current_step: 0,
+        }]);
+
+        let player = player_with_hp_end(400, 1000, 900, 1000);
+        let target = test_target();
+        c.state = CombatState::Engaging { target_id: 100 };
+        c.tick(&player, Some(&target), &[]);
+
+        assert!(!c.skill_cooldowns.is_ready(53));
+    }
+
+    #[test]
     fn status_reflects_fleeing() {
         let mut c = Combatant::new(1, 0, test_config());
         c.flee_requested = true;
@@ -2634,6 +2810,8 @@ mod tests {
         assert_eq!(combat_skill_id("Taunt"), Some(73));
         assert_eq!(combat_skill_id("Kick"), Some(30));
         assert_eq!(combat_skill_id("Flying Kick"), Some(26));
+        assert_eq!(combat_skill_id("Mend"), Some(53));
+        assert_eq!(combat_skill_id("Feign Death"), Some(25));
         assert_eq!(combat_skill_id("Backstab"), Some(8));
     }
 

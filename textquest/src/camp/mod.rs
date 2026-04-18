@@ -13,7 +13,6 @@ pub mod buffs;
 #[cfg(windows)]
 pub mod cc;
 /// Per-class ability configuration for the camp loop.
-#[cfg(windows)]
 pub mod class_config;
 /// Collectible and tribute management — collection quest progress, tribute
 /// automation.

@@ -14,10 +14,29 @@ pub mod skill_timers {
     pub const BASH: (u32, u32) = (10, 200); // ~10s
     pub const BACKSTAB: (u32, u32) = (8, 200); // ~10s
     pub const TAUNT: (u32, u32) = (73, 120); // ~6s
+    pub const FEIGN_DEATH: (u32, u32) = (25, 180); // 9s
     pub const FLYING_KICK: (u32, u32) = (26, 140); // ~7s
+    pub const MEND: (u32, u32) = (53, 7200); // 6m
     pub const ROUND_KICK: (u32, u32) = (38, 140); // ~7s
     pub const TIGER_CLAW: (u32, u32) = (52, 120); // ~6s
     pub const EAGLE_STRIKE: (u32, u32) = (23, 120); // ~6s
+}
+
+const KICK_FAMILY: &[u32] = &[
+    skill_timers::KICK.0,
+    skill_timers::FLYING_KICK.0,
+    skill_timers::ROUND_KICK.0,
+];
+const PUNCH_FAMILY: &[u32] = &[skill_timers::TIGER_CLAW.0, skill_timers::EAGLE_STRIKE.0];
+
+fn shared_family(skill_id: u32) -> &'static [u32] {
+    if KICK_FAMILY.contains(&skill_id) {
+        KICK_FAMILY
+    } else if PUNCH_FAMILY.contains(&skill_id) {
+        PUNCH_FAMILY
+    } else {
+        &[]
+    }
 }
 
 /// Tracks per-skill cooldown timers using a fixed-capacity array.
@@ -40,9 +59,12 @@ impl SkillCooldownTracker {
     /// Returns true if the skill has no active cooldown (ready to fire).
     #[inline]
     pub fn is_ready(&self, skill_id: u32) -> bool {
+        let family = shared_family(skill_id);
         for i in 0..self.len {
-            if self.entries[i].0 == skill_id {
-                return self.entries[i].1 == 0;
+            if self.entries[i].0 == skill_id || family.contains(&self.entries[i].0) {
+                if self.entries[i].1 > 0 {
+                    return false;
+                }
             }
         }
         true
@@ -51,6 +73,17 @@ impl SkillCooldownTracker {
     /// Put a skill on cooldown for the given number of ticks.
     #[inline]
     pub fn consume(&mut self, skill_id: u32, cooldown_ticks: u32) {
+        let family = shared_family(skill_id);
+        if !family.is_empty() {
+            for &family_skill in family {
+                self.consume_single(family_skill, cooldown_ticks);
+            }
+            return;
+        }
+        self.consume_single(skill_id, cooldown_ticks);
+    }
+
+    fn consume_single(&mut self, skill_id: u32, cooldown_ticks: u32) {
         for i in 0..self.len {
             if self.entries[i].0 == skill_id {
                 self.entries[i].1 = cooldown_ticks;
@@ -90,7 +123,9 @@ pub fn default_cooldown(skill_id: u32) -> Option<u32> {
         10 => Some(skill_timers::BASH.1),
         8 => Some(skill_timers::BACKSTAB.1),
         73 => Some(skill_timers::TAUNT.1),
+        25 => Some(skill_timers::FEIGN_DEATH.1),
         26 => Some(skill_timers::FLYING_KICK.1),
+        53 => Some(skill_timers::MEND.1),
         38 => Some(skill_timers::ROUND_KICK.1),
         52 => Some(skill_timers::TIGER_CLAW.1),
         23 => Some(skill_timers::EAGLE_STRIKE.1),
@@ -177,9 +212,11 @@ mod tests {
     #[test]
     fn default_cooldown_all_known() {
         assert_eq!(default_cooldown(8), Some(200)); // backstab
+        assert_eq!(default_cooldown(25), Some(180)); // feign death
         assert_eq!(default_cooldown(26), Some(140)); // flying kick
         assert_eq!(default_cooldown(38), Some(140)); // round kick
         assert_eq!(default_cooldown(52), Some(120)); // tiger claw
+        assert_eq!(default_cooldown(53), Some(7200)); // mend
         assert_eq!(default_cooldown(23), Some(120)); // eagle strike
     }
 
@@ -222,5 +259,32 @@ mod tests {
         tracker.tick(); // goes to 0
         tracker.tick(); // should stay at 0, not underflow
         assert!(tracker.is_ready(1));
+    }
+
+    #[test]
+    fn monk_kick_family_uses_shared_timer() {
+        let mut tracker = SkillCooldownTracker::new();
+        tracker.consume(skill_timers::FLYING_KICK.0, skill_timers::FLYING_KICK.1);
+
+        assert!(!tracker.is_ready(skill_timers::ROUND_KICK.0));
+        assert!(!tracker.is_ready(skill_timers::KICK.0));
+    }
+
+    #[test]
+    fn monk_punch_family_uses_shared_timer() {
+        let mut tracker = SkillCooldownTracker::new();
+        tracker.consume(skill_timers::TIGER_CLAW.0, skill_timers::TIGER_CLAW.1);
+
+        assert!(!tracker.is_ready(skill_timers::EAGLE_STRIKE.0));
+    }
+
+    #[test]
+    fn shared_family_readiness_checks_all_matching_entries() {
+        let mut tracker = SkillCooldownTracker::new();
+        tracker.entries[0] = (skill_timers::FLYING_KICK.0, 0);
+        tracker.entries[1] = (skill_timers::ROUND_KICK.0, 20);
+        tracker.len = 2;
+
+        assert!(!tracker.is_ready(skill_timers::KICK.0));
     }
 }

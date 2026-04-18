@@ -132,10 +132,10 @@ pub fn evaluate_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
         }
         ConditionExpr::ManaAbove(threshold) => ctx.player.mana_pct() > *threshold,
         ConditionExpr::EnduranceAbove(threshold) => ctx.player.endurance_pct() > *threshold,
-        ConditionExpr::AggroOnMe => {
-            // Check if we're in combat with an NPC target (spawn_type == 1).
-            ctx.in_combat && ctx.target.is_some_and(|t| t.spawn_type == 1)
-        }
+        ConditionExpr::AggroOnMe => ctx.extended_targets.map_or_else(
+            || ctx.in_combat && ctx.target.is_some_and(|t| t.spawn_type == 1),
+            |xt| ctx.target.is_some_and(|t| xt.is_hater(t.spawn_id)),
+        ),
         ConditionExpr::InCombat => ctx.in_combat,
         ConditionExpr::OutOfCombat => !ctx.in_combat,
         ConditionExpr::BuffActive(spell_id) => ctx.active_buffs.contains(spell_id),
@@ -486,7 +486,10 @@ pub fn group(name: &str, target: TargetSelector, state: CombatStateReq) -> Rotat
 mod tests {
     use super::*;
     use textquest_common::{
-        combat::{ActionType, CombatConfig, ConditionExpr},
+        combat::{
+            ActionType, CombatConfig, ConditionExpr, ExtendedTargetList, ExtendedTargetSlot,
+            XTargetSlotStatus, XTargetType,
+        },
         types::SpawnData,
     };
 
@@ -943,5 +946,85 @@ mod tests {
             &ConditionExpr::EnduranceAbove(60.0),
             &ctx
         ));
+    }
+
+    #[test]
+    fn evaluate_condition_endurance_bounds() {
+        let (mut player, _, config) = make_ctx(true, 80.0, 80.0);
+        player.endurance_current = 200;
+        player.endurance_max = 1000;
+        let ctx = build_ctx(&player, None, &config, true);
+        assert!(evaluate_condition(
+            &ConditionExpr::EnduranceBelow(30.0),
+            &ctx
+        ));
+        assert!(evaluate_condition(
+            &ConditionExpr::EnduranceAbove(15.0),
+            &ctx
+        ));
+        assert!(!evaluate_condition(
+            &ConditionExpr::EnduranceAbove(25.0),
+            &ctx
+        ));
+    }
+
+    #[test]
+    fn evaluate_condition_aggro_on_me_prefers_xtarget_signal() {
+        let (player, target, config) = make_ctx(true, 80.0, 80.0);
+        let xtargets = ExtendedTargetList {
+            slots: vec![ExtendedTargetSlot {
+                slot_type: XTargetType::AutoHater,
+                status: XTargetSlotStatus::CurrentZone,
+                spawn_id: target.spawn_id,
+                name: "TestMob".into(),
+            }],
+            auto_add_haters: true,
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: Some(&xtargets),
+        };
+
+        assert!(evaluate_condition(&ConditionExpr::AggroOnMe, &ctx));
+    }
+
+    #[test]
+    fn evaluate_condition_aggro_on_me_false_when_xtarget_omits_target() {
+        let (player, target, config) = make_ctx(true, 80.0, 80.0);
+        let xtargets = ExtendedTargetList {
+            slots: vec![ExtendedTargetSlot {
+                slot_type: XTargetType::AutoHater,
+                status: XTargetSlotStatus::CurrentZone,
+                spawn_id: 999,
+                name: "OtherMob".into(),
+            }],
+            auto_add_haters: true,
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: Some(&xtargets),
+        };
+
+        assert!(!evaluate_condition(&ConditionExpr::AggroOnMe, &ctx));
     }
 }
