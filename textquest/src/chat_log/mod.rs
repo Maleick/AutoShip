@@ -119,6 +119,7 @@ impl ChatLogWriter {
             .as_mut()
             .expect("chat log writer should always have an active file");
         file.write_all(formatted_line.as_bytes())?;
+        file.flush()?;
         self.current_size_bytes += formatted_line.len() as u64;
         Ok(())
     }
