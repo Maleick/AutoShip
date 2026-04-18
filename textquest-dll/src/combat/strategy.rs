@@ -323,6 +323,24 @@ pub trait ClassStrategy: Send {
     fn heal_cancel_threshold(&self) -> Option<f32> {
         matches!(self.role(), CombatRole::Healer).then_some(85.0)
     }
+
+    /// Whether this class uses built-in combat drivers (e.g., damage procs, pet management).
+    /// Classes that manage abilities through rotation entries return false.
+    fn uses_builtin_combat_drivers(&self) -> bool {
+        true
+    }
+
+    /// Get the cooldown ticks for an activated ability by spell ID.
+    /// Returns None if the ability is not known or has no fixed cooldown.
+    fn activated_ability_cooldown_ticks(&self, _spell_id: i32) -> Option<u32> {
+        None
+    }
+
+    /// Get the list of shared timer IDs for an activated ability.
+    /// Used for abilities that share timers with other abilities.
+    fn shared_activated_ability_ids(&self, _spell_id: i32) -> &'static [i32] {
+        &[]
+    }
 }
 
 // ---------------------------------------------------------------------------

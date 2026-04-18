@@ -285,6 +285,7 @@ impl EnchanterStrategy {
                     rotation::entry_with_cooldown(
                         "ColorStun",
                         ActionType::Spell("ColorStun".into()),
+                        "ColorStun",
                         COLOR_STUN_COOLDOWN_TICKS,
                     ),
                     ConditionExpr::And(vec![
@@ -305,6 +306,7 @@ impl EnchanterStrategy {
                         rotation::entry_with_cooldown(
                             "Tash",
                             ActionType::Spell("Tash".into()),
+                            "Tash",
                             TASH_COOLDOWN_TICKS,
                         ),
                         ConditionExpr::And(vec![
@@ -316,6 +318,7 @@ impl EnchanterStrategy {
                         rotation::entry_with_cooldown(
                             "Mez",
                             ActionType::Spell("Mez".into()),
+                            "Mez",
                             MEZ_RETRY_COOLDOWN_TICKS,
                         ),
                         ConditionExpr::And(vec![
@@ -337,6 +340,7 @@ impl EnchanterStrategy {
                         rotation::entry_with_cooldown(
                             "Tash",
                             ActionType::Spell("Tash".into()),
+                            "Tash",
                             TASH_COOLDOWN_TICKS,
                         ),
                         ConditionExpr::And(vec![
@@ -348,6 +352,7 @@ impl EnchanterStrategy {
                         rotation::entry_with_cooldown(
                             "Slow",
                             ActionType::Spell("Slow".into()),
+                            "Slow",
                             SLOW_COOLDOWN_TICKS,
                         ),
                         ConditionExpr::And(vec![

@@ -51,7 +51,7 @@ pub struct RotationEntry {
     pub cooldown_ticks: Option<u32>,
     /// Optional shared cooldown key used to model reuse lockouts shared across
     /// multiple actions.
-    pub cooldown_key: Option<String>,
+    pub shared_cooldown_key: Option<String>,
 }
 
 /// Hook action to execute before or after a rotation entry fires.
@@ -174,6 +174,7 @@ pub fn evaluate_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
         ConditionExpr::HasXTargetAggro => {
             ctx.extended_targets.is_some_and(|xt| xt.hater_count() > 0)
         }
+        ConditionExpr::PlayerLevelAtLeast(level) => ctx.player.level >= *level,
     }
 }
 
@@ -203,7 +204,7 @@ pub struct SelectedAction {
     pub cooldown_ticks: Option<u32>,
     /// Optional shared cooldown key carried through from the source rotation
     /// entry.
-    pub cooldown_key: Option<String>,
+    pub shared_cooldown_key: Option<String>,
 }
 
 /// Execute a single rotation group for one frame, returning selected actions.
@@ -342,7 +343,7 @@ where
             target_id,
             cooldown_key: entry.cooldown_key.clone(),
             cooldown_ticks: entry.cooldown_ticks,
-            cooldown_key: entry.cooldown_key.clone(),
+            shared_cooldown_key: entry.shared_cooldown_key.clone(),
         });
 
         // Run post-activation hook
@@ -455,7 +456,7 @@ pub fn entry(name: &str, action_type: ActionType) -> RotationEntry {
         enabled: true,
         cooldown_key: None,
         cooldown_ticks: None,
-        cooldown_key: None,
+        shared_cooldown_key: None,
     }
 }
 
@@ -471,7 +472,7 @@ pub fn entry_if(name: &str, action_type: ActionType, cond: ConditionExpr) -> Rot
         enabled: true,
         cooldown_key: None,
         cooldown_ticks: None,
-        cooldown_key: None,
+        shared_cooldown_key: None,
     }
 }
 
@@ -491,7 +492,7 @@ pub fn entry_unless_active(
         enabled: true,
         cooldown_key: None,
         cooldown_ticks: None,
-        cooldown_key: None,
+        shared_cooldown_key: None,
     }
 }
 

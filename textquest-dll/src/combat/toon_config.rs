@@ -41,8 +41,6 @@ pub struct ToonRotationEntry {
     pub name: String,
     pub action_type: ActionType,
     #[serde(default)]
-    pub cooldown_ticks: Option<u32>,
-    #[serde(default)]
     pub condition: Option<ConditionExpr>,
     #[serde(default)]
     pub active_condition: Option<ConditionExpr>,
@@ -168,7 +166,6 @@ impl From<ToonRotationEntry> for RotationEntry {
         Self {
             name: value.name,
             action_type: value.action_type,
-            cooldown_ticks: value.cooldown_ticks,
             condition: value.condition,
             active_condition: value.active_condition,
             pre_activate: None,
@@ -176,6 +173,7 @@ impl From<ToonRotationEntry> for RotationEntry {
             enabled: value.enabled,
             cooldown_key: value.cooldown_key,
             cooldown_ticks: value.cooldown_ticks,
+            shared_cooldown_key: None,
         }
     }
 }
@@ -301,7 +299,6 @@ mod tests {
                 entries: vec![ToonRotationEntry {
                     name: "Taunt".into(),
                     action_type: ActionType::Ability("Taunt".into()),
-                    cooldown_ticks: None,
                     condition: Some(ConditionExpr::Always),
                     active_condition: None,
                     enabled: true,

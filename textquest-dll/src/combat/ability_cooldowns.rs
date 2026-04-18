@@ -8,6 +8,30 @@
 /// Initial inline capacity for tracked ability cooldowns.
 const INITIAL_TRACKED_ABILITIES: usize = 16;
 
+/// Maximum number of tracked abilities before we stop tracking new ones inline.
+const MAX_TRACKED_ABILITIES: usize = 32;
+
+/// Base key for shared timer IDs. Shared timers use negative keys derived from this base.
+const SHARED_TIMER_KEY_BASE: i32 = -100_000;
+
+/// Berserker timer IDs for primary burn abilities.
+const BERSERKER_TIMER_PRIMARY_BURN: u8 = 1;
+/// Berserker timer ID for Volley ability.
+const BERSERKER_TIMER_VOLLEY: u8 = 2;
+/// Berserker timer ID for Battle Cry ability.
+const BERSERKER_TIMER_BATTLE_CRY: u8 = 3;
+/// Berserker timer ID for Cleave ability.
+const BERSERKER_TIMER_CLEAVE: u8 = 4;
+
+/// Metadata for an activated ability's cooldown and shared timer behavior.
+#[derive(Debug, Clone, Copy)]
+pub struct AbilityReuseMetadata {
+    /// Fixed cooldown in ticks, if known.
+    pub cooldown_ticks: Option<u32>,
+    /// Shared timer ID if this ability participates in a shared timer group.
+    pub shared_timer_id: Option<u8>,
+}
+
 /// Public view of an ability's availability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AbilityAvailability {
@@ -162,8 +186,14 @@ impl AbilityCooldownTracker {
         shared_timer_id: Option<u8>,
         now: u32,
     ) -> bool {
-        self.can_use(ability_id, now)
-            && shared_timer_id.is_none_or(|timer_id| self.can_use(shared_timer_key(timer_id), now))
+        if !self.availability(ability_id, now).is_ready_at(now) {
+            return false;
+        }
+
+        shared_timer_id.is_none_or(|timer_id| {
+            self.availability(shared_timer_key(timer_id), now)
+                .is_ready_at(now)
+        })
     }
 
     /// Mark an ability as consumed with a known cooldown, or fall back to a
@@ -198,7 +228,7 @@ impl AbilityCooldownTracker {
             },
         };
 
-        for i in 0..self.len {
+        for i in 0..self.entries.len() {
             if self.entries[i].0 == timer_key {
                 self.entries[i].1 = match (self.entries[i].1, new_state) {
                     (
@@ -221,14 +251,14 @@ impl AbilityCooldownTracker {
                     (_, AbilityAvailability::CoolingDown(new_ticks)) => {
                         AbilityAvailability::CoolingDown(new_ticks)
                     }
+                    (existing, _) => existing,
                 };
                 return;
             }
         }
 
-        if self.len < MAX_TRACKED_ABILITIES {
-            self.entries[self.len] = (timer_key, new_state);
-            self.len += 1;
+        if self.entries.len() < MAX_TRACKED_ABILITIES {
+            self.entries.push((timer_key, new_state));
         }
     }
 
@@ -240,9 +270,16 @@ impl AbilityCooldownTracker {
         shared_timer_id: Option<u8>,
         now: u32,
     ) {
-        self.consume(ability_id, cooldown_ticks, now);
+        let state = Self::availability_state(cooldown_ticks, self.fallback_retry_ticks, now);
+        self.upsert(ability_id, state);
+
         if let Some(timer_id) = shared_timer_id {
-            self.consume_shared_timer(shared_timer_key(timer_id), cooldown_ticks, now);
+            let shared_state = Self::availability_state(
+                cooldown_ticks,
+                self.fallback_retry_ticks,
+                now,
+            );
+            self.upsert(shared_timer_key(timer_id), shared_state);
         }
     }
 }

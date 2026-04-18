@@ -18,7 +18,7 @@ use textquest_common::{
 };
 
 use super::{
-    ability_cooldowns::{AbilityCooldownTracker, metadata_for_activated_ability},
+    ability_cooldowns::AbilityCooldownTracker,
     dot_tracker::DotTracker,
     gcd::GcdTracker,
     holyshit::HolyShitEvaluator,
@@ -744,7 +744,7 @@ impl Combatant {
     }
 
     fn rotation_ability_is_ready(&self, spell_id: i32) -> bool {
-        if !self.ability_cooldowns.can_use(spell_id, self.tick_count) {
+        if !self.ability_cooldowns.can_use_with_shared(spell_id, None, self.tick_count) {
             return false;
         }
 
@@ -752,20 +752,20 @@ impl Combatant {
             .shared_activated_ability_ids(spell_id)
             .iter()
             .filter(|&&shared_id| shared_id != spell_id)
-            .all(|&shared_id| self.ability_cooldowns.can_use(shared_id, self.tick_count))
+            .all(|&shared_id| self.ability_cooldowns.can_use_with_shared(shared_id, None, self.tick_count))
     }
 
     fn consume_rotation_ability_cooldown(&mut self, spell_id: i32) {
         let cooldown = self.activated_ability_cooldown(spell_id);
         self.ability_cooldowns
-            .consume(spell_id, cooldown, self.tick_count);
+            .consume_with_shared(spell_id, cooldown, None, self.tick_count);
 
         for &shared_id in self.strategy.shared_activated_ability_ids(spell_id) {
             if shared_id == spell_id {
                 continue;
             }
             self.ability_cooldowns
-                .consume(shared_id, cooldown, self.tick_count);
+                .consume_with_shared(shared_id, cooldown, None, self.tick_count);
         }
     }
 
@@ -1165,7 +1165,7 @@ impl Combatant {
                                     }
                                     entry.cooldown_key.as_ref().is_none_or(|key| {
                                         self.ability_cooldowns
-                                            .can_use(shared_cooldown_key(key), None, self.tick_count)
+                                            .can_use(rotation_cooldown_key(key), None, self.tick_count)
                                     })
                                 }
                                 ActionType::Ability(ability_name) => combat_skill_id(ability_name)
@@ -1179,7 +1179,7 @@ impl Combatant {
                                             .can_use(item_action_key(item_name), None, self.tick_count)
                                         && entry.cooldown_key.as_ref().is_none_or(|key| {
                                             self.ability_cooldowns
-                                                .can_use(shared_cooldown_key(key), None, self.tick_count)
+                                                .can_use(rotation_cooldown_key(key), None, self.tick_count)
                                         })
                                 }
                             }
@@ -2117,6 +2117,7 @@ mod tests {
                 enabled: true,
                 cooldown_key: Some(cooldown_key.to_string()),
                 cooldown_ticks: Some(cooldown_ticks),
+                shared_cooldown_key: None,
             }],
             current_step: 0,
         }
@@ -2716,8 +2717,8 @@ mod tests {
         c.state = CombatState::Engaging { target_id: 100 };
         c.tick(&player, Some(&target), &[]);
 
-        assert!(!c.ability_cooldowns.can_use(4507, c.tick_count));
-        assert!(!c.ability_cooldowns.can_use(4511, c.tick_count));
+        assert!(!c.ability_cooldowns.can_use_with_shared(4507, None, c.tick_count));
+        assert!(!c.ability_cooldowns.can_use_with_shared(4511, None, c.tick_count));
     }
 
     #[test]
@@ -3153,6 +3154,7 @@ mod tests {
                 enabled: true,
                 cooldown_ticks: Some(77),
                 cooldown_key: None,
+                shared_cooldown_key: None,
             }],
             current_step: 0,
         }]);
