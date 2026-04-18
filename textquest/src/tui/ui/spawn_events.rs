@@ -127,9 +127,79 @@ fn format_time(event: &SpawnAlertEvent) -> String {
 }
 
 fn truncate(s: &str, max_len: usize) -> String {
-    if s.len() > max_len {
-        format!("{}..", &s[..(max_len - 2)])
+    if max_len <= 2 {
+        let mut chars = s.chars();
+        for _ in 0..max_len {
+            if chars.next().is_none() {
+                return s.to_string();
+            }
+        }
+        if chars.next().is_some() {
+            ".".repeat(max_len)
+        } else {
+            s.to_string()
+        }
     } else {
-        s.to_string()
+        let keep = max_len - 2;
+        let mut iter = s.char_indices();
+        let mut cutoff = s.len();
+
+        for _ in 0..keep {
+            match iter.next() {
+                Some((idx, ch)) => {
+                    cutoff = idx + ch.len_utf8();
+                }
+                None => return s.to_string(),
+            }
+        }
+
+        if iter.next().is_some() {
+            format!("{}..", &s[..cutoff])
+        } else {
+            s.to_string()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate;
+
+    #[test]
+    fn truncate_keeps_short_ascii_strings() {
+        assert_eq!(truncate("West Freeport", 20), "West Freeport");
+    }
+
+    #[test]
+    fn truncate_limits_ascii_strings() {
+        assert_eq!(truncate("abcdefghijklmnop", 8), "abcdef..");
+    }
+
+    #[test]
+    fn truncate_handles_multibyte_utf8_without_panicking() {
+        assert_eq!(truncate("ééééé", 4), "éé..");
+    }
+
+    #[test]
+    fn truncate_handles_max_len_zero() {
+        assert_eq!(truncate("", 0), "");
+        assert_eq!(truncate("a", 0), "");
+        assert_eq!(truncate("West Freeport", 0), "");
+    }
+
+    #[test]
+    fn truncate_handles_max_len_one() {
+        assert_eq!(truncate("", 1), "");
+        assert_eq!(truncate("a", 1), "a");
+        assert_eq!(truncate("ab", 1), ".");
+        assert_eq!(truncate("West Freeport", 1), ".");
+    }
+
+    #[test]
+    fn truncate_handles_max_len_two() {
+        assert_eq!(truncate("a", 2), "a");
+        assert_eq!(truncate("ab", 2), "ab");
+        assert_eq!(truncate("abc", 2), "..");
+        assert_eq!(truncate("West Freeport", 2), "..");
     }
 }
