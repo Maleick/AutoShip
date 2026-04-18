@@ -10,6 +10,43 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class SebilisValidationDocsTests(unittest.TestCase):
+    def test_sebilis_disco_companion_doc_exists_with_waypoints_restrictions_and_route_notes(self) -> None:
+        doc = REPO_ROOT / "docs" / "wiki" / "Sebilis-Disco-Camp.md"
+        self.assertTrue(doc.exists(), "Sebilis disco companion doc should exist")
+
+        text = doc.read_text(encoding="utf-8")
+        self.assertIn("# Sebilis Disco Camp", text)
+        self.assertIn("## Runtime Camp Config", text)
+        self.assertIn("## Research Waypoint Lattice", text)
+        self.assertIn("## Restriction Zones", text)
+        self.assertIn("## Multibox Route Notes", text)
+        self.assertIn("## Spawn Pattern Notes", text)
+        self.assertIn("## Validation Status", text)
+        self.assertIn("Trakanon Idol", text)
+        self.assertIn("Legion of Cabilis", text)
+        self.assertIn("return_no_aggro", text)
+        self.assertIn(
+            "`#1900`",
+            text,
+            "Sebilis disco companion doc should point operators at the schema follow-up issue",
+        )
+
+        waypoint_rows = re.findall(r"^\|\s*[0-9]{1,2}\s*\|", text, re.MULTILINE)
+        self.assertGreaterEqual(
+            len(waypoint_rows),
+            20,
+            "Sebilis disco companion doc should define at least 20 waypoint rows",
+        )
+
+    def test_configuration_doc_points_camp_operators_to_sebilis_companion_doc(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Configuration.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("Sebilis-Disco-Camp.md", text)
+        self.assertIn("runtime loader only consumes the baseline TOML fields", text)
+        self.assertIn("document richer waypoint and restriction notes", text)
+
     def test_validation_doc_and_template_exist_with_explicit_evidence_boundaries(self) -> None:
         doc = REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md"
         template = REPO_ROOT / "docs" / "wiki" / "assets" / "sebilis-validation-template.csv"
@@ -32,6 +69,19 @@ class SebilisValidationDocsTests(unittest.TestCase):
             header,
             "sample_id,validated_at_utc,character,launch_staging_point,zone_path,required_keying,camp_name,camp_area,target_metric,target_name,measurement_window_minutes,travel_time_minutes,placeholder_count,named_count,mean_respawn_minutes,wait_time_minutes,attempts,successes,observed_item,observed_item_count,result_per_hour,operator_mode,notes,evidence_state",
         )
+
+    def test_validation_and_companion_docs_link_issue_1718_to_canonical_live_proof_ledger(self) -> None:
+        validation_text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+        companion_text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Disco-Camp.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("`#1718`", validation_text)
+        self.assertIn("6-box validation", validation_text)
+        self.assertIn("Sebilis-Farming-Validation.md", companion_text)
+        self.assertIn("canonical ledger", companion_text)
 
     def test_farming_guide_links_to_validation_doc_and_marks_sebilis_as_unproven(self) -> None:
         text = (REPO_ROOT / "docs" / "wiki" / "Frostreaver-Farming-Guide.md").read_text(
@@ -596,6 +646,19 @@ class SebilisValidationDocsTests(unittest.TestCase):
             "This output target is still unanchored by repo-local evidence or live samples.",
             text,
         )
+
+    def test_validation_doc_maps_missing_live_proof_buckets_to_child_issues(self) -> None:
+        text = (REPO_ROOT / "docs" / "wiki" / "Sebilis-Farming-Validation.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("Current live-evidence ownership under issue `#1526`:", text)
+        self.assertIn("`#1837` owns the Scars-launch route, keying, travel-time, and corpse-recovery", text)
+        self.assertIn("`#1838` owns camp-by-camp spawn cadence and rotation-overlap measurement.", text)
+        self.assertIn("`#1839` owns the attended Nodding Blue Lily forage baseline.", text)
+        self.assertIn("`#1840` owns observed drops and pp-session output evidence.", text)
+        self.assertIn("`#1841` owns the macro-safety and operator-risk slice only", text)
+        self.assertIn("substitute for route, spawn, forage, or output proof.", text)
 
 
 if __name__ == "__main__":

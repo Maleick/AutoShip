@@ -274,4 +274,19 @@ mod tests {
         assert_eq!(config.camp_radius, 0.0);
         assert_eq!(config.rest_mana_pct, 0);
     }
+
+    #[test]
+    fn test_checked_in_sebilis_disco_config_parses() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../config/camps/sebilis_disco.toml");
+        let contents = std::fs::read_to_string(&path).unwrap();
+        let config: CampConfig = toml::from_str(&contents).unwrap();
+
+        assert_eq!(config.name, "sebilis_disco");
+        assert_eq!(config.zone, "sebilis");
+        assert!(config.return_no_aggro);
+        assert!(config.pull_radius > config.camp_radius);
+        assert!(!config.pull_mob_names.is_empty());
+        assert!(!config.burn_mob_names.is_empty());
+        assert_eq!(config.prev_camp.as_deref(), Some("lguk_dead_side"));
+    }
 }

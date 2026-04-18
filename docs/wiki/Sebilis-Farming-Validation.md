@@ -2,6 +2,9 @@
 
 This page is the canonical validation ledger for issue `#1526` and the source
 of truth for any claim that Old Sebilis is a primary M10 farming hub.
+Issue `#1718` depends on this ledger for its remaining `6-box validation`
+acceptance criterion, so the Sebilis disco camp work stays blocked until this
+page can cite direct live evidence instead of research theory alone.
 
 Use this page to separate what the repository already supports from what still
 needs live EverQuest proof. Do not promote Sebilis routing, spawn, forage, or
@@ -28,15 +31,29 @@ automation claims beyond the evidence state recorded here.
 
 - `config/camps/sebilis_disco.toml` defines an initial Disco camp center, pull
   point, leash, mana thresholds, and pull list for Sebilis.
-- Current `sebilis_disco` defaults are `pull_radius = 220`,
-  `camp_radius = 30`, `level_range = [45, 55]`, and
+- `docs/wiki/Sebilis-Disco-Camp.md` now records the research-baseline safe med
+  spot, right-wing waypoint lattice, restriction zones, and multibox route
+  ordering that the runtime camp schema cannot store directly yet.
+- Current `sebilis_disco` defaults are `pull_radius = 380`,
+  `camp_radius = 35`, `level_range = [50, 57]`, and
   `prev_camp = "lguk_dead_side"`.
 - These defaults are planning inputs only, not live-validated route or spawn proof.
-- Current pull-control defaults are `leash_radius = 110`,
+- Current pull-control defaults are `leash_radius = 160`,
   `rest_mana_pct = 70`, and `pull_mana_pct = 40`.
-- Current mob filters are `a sebilite guardian`, `a sebilite protector`, and
-  `a crypt caretaker` in `pull_mob_names`, `Trakanon` in
-  `ignore_mob_names`, and `a sebilite juggernaut` in `burn_mob_names`.
+- Current mob filters include `a froglok bok knight`, `a froglok bok shaman`,
+  `a froglok bok wizard`, `a froglok dar knight`, `a froglok dar wizard`,
+  `a froglok jin shaman`, `a froglok jin wizard`, `a froglok ilis knight`,
+  `a froglok ilis shaman`, `a froglok ilis wizard`, `a froglok krup knight`,
+  `a froglok krup shaman`, `a froglok krup wizard`, `krup ghoul knight`,
+  `a pox scarab`, `a leprous scarab`, `a sepsis scarab`, and
+  `a sebilite golem` in `pull_mob_names`.
+- Current ignore filters are `Trakanon`, `sebilite protector`,
+  `sebilite juggernaut`, and `myconid spore king`.
+- Current burn filters are `a necrosis scarab`, `froglok armorer`,
+  `froglok bartender`, `Froggy`, `froglok armsman`, `froglok chef`,
+  `froglok repairer`, `froglok ostiary`, `froglok commander`,
+  `froglok pickler`, `Brogg`, `sebilite guardian`, and
+  `crypt caretaker`.
 - These pull-control defaults describe current camp intent only; they do not prove live camp-rotation efficiency or safe overlap.
 - `config/camps/lguk_dead_side.toml` currently links forward with
   `next_camp = "sebilis_disco"`.
@@ -152,6 +169,16 @@ automation claims beyond the evidence state recorded here.
 - Treat AFK or overnight macro safety as unresolved until a live session proves
   the route and timing are operator-safe. The repo explicitly does **not**
   guarantee anti-detection safety.
+
+Current live-evidence ownership under issue `#1526`:
+
+- `#1837` owns the Scars-launch route, keying, travel-time, and corpse-recovery
+  proof.
+- `#1838` owns camp-by-camp spawn cadence and rotation-overlap measurement.
+- `#1839` owns the attended Nodding Blue Lily forage baseline.
+- `#1840` owns observed drops and pp-session output evidence.
+- `#1841` owns the macro-safety and operator-risk slice only; it is not a
+  substitute for route, spawn, forage, or output proof.
 
 ## Validation procedure
 

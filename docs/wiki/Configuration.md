@@ -148,9 +148,21 @@ Camp configs in `config/camps/*.toml` define:
 - camp radius
 - leash radius
 - mana thresholds
+- optional `return_no_aggro`
 - optional next/previous camp links
 
 These files drive `:camp start`, `:camp next`, and `:camp prev`.
+
+The runtime loader only consumes the baseline TOML fields above. When a camp
+needs richer operator metadata than the schema can carry, document richer waypoint and restriction notes
+in a companion wiki page instead of inventing new untracked TOML keys.
+
+Current example:
+
+- `config/camps/sebilis_disco.toml` holds the loader-safe runtime values.
+- [Sebilis Disco Camp](Sebilis-Disco-Camp.md) carries the research waypoint
+  lattice, pull lanes, restriction zones, and multibox route notes for that
+  camp.
 
 ## Class Configs
 
