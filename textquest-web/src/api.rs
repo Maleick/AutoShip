@@ -4,6 +4,7 @@ pub mod admin;
 pub mod admin_config;
 pub mod admin_diagnostics;
 pub mod admin_logs;
+pub mod admin_sessions;
 pub mod alerts;
 pub mod auto_group;
 pub mod chat_log;

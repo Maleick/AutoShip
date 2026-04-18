@@ -687,6 +687,8 @@ fn build_api_router() -> Router<Arc<AppState>> {
             "/chat-pattern-rules/cooldowns/reset",
             put(api::chat_pattern_rules::reset_all_cooldowns),
         )
+        // Admin Sessions API
+        .nest("/admin/sessions", api::admin_sessions::router())
         .fallback(api::api_not_found)
 }
 
