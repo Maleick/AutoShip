@@ -806,6 +806,57 @@ mod tests {
             .find(|ability| ability.name == "Malos")
             .unwrap();
         assert_eq!(level_65_malos.order, 2);
+    fn shipped_necromancer_config_matches_live_breakpoints() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("config/classes/necromancer.toml");
+        let config = ClassConfig::load(&path)
+            .unwrap_or_else(|error| panic!("Failed to parse {}: {error}", path.display()));
+
+        let override_ranges: Vec<(Option<u8>, Option<u8>)> = config
+            .level_overrides
+            .iter()
+            .map(|profile| (profile.min_level, profile.max_level))
+            .collect();
+        assert_eq!(
+            override_ranges,
+            vec![
+                (Some(60), Some(60)),
+                (Some(61), Some(61)),
+                (Some(62), Some(64)),
+                (Some(65), Some(65)),
+            ]
+        );
+
+        let base = config.profile_for_level(None);
+        assert_eq!(base.combat_abilities[0].name, "Resist Debuff");
+        assert_eq!(base.combat_abilities[1].name, "Disease DoT");
+        assert_eq!(base.emergency_abilities[1].name, "Feign Death");
+
+        let level_60 = config.profile_for_level(Some(60));
+        assert_eq!(level_60.combat_abilities[0].name, "Scent of Terris");
+        assert_eq!(level_60.combat_abilities[1].name, "Splurt");
+        assert_eq!(level_60.combat_abilities[2].name, "Funeral Pyre of Kelador");
+        assert_eq!(level_60.combat_abilities[4].name, "Touch of Night");
+        assert_eq!(level_60.buff_abilities[0].name, "Arch Lich");
+
+        let level_61 = config.profile_for_level(Some(61));
+        assert_eq!(level_61.combat_abilities[1].name, "Dark Plague");
+
+        let level_62 = config.profile_for_level(Some(62));
+        assert_eq!(level_62.combat_abilities[3].name, "Legacy of Zek");
+        assert_eq!(level_62.combat_abilities[5].name, "Touch of Mujaki");
+        assert_eq!(level_62.buff_abilities[1].name, "Rune of Death");
+
+        let level_65 = config.profile_for_level(Some(65));
+        assert_eq!(level_65.combat_abilities[2].name, "Night Fire");
+        assert_eq!(level_65.combat_abilities[3].name, "Blood of Thule");
+        assert_eq!(
+            level_65.combat_abilities[5].name,
+            "Gangrenous Touch of Zum'uul"
+        );
+        assert_eq!(level_65.emergency_abilities[1].name, "Death Peace");
     }
 
     #[test]
