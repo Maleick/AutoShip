@@ -14,6 +14,10 @@ const EMERGENCY_HP: f32 = 30.0;
 /// HP threshold for moderate heals — below this, cast a standard heal.
 const MODERATE_HP: f32 = 65.0;
 
+/// Mana reserve threshold: skip non-essential “primary target” debuffs when
+/// mana is too low.
+const DEBUFF_RESERVE_MANA: f32 = 80.0;
+
 /// Cleric strategy: healer with resurrection, prioritized heal tiers, buff
 /// support.
 ///
@@ -228,6 +232,19 @@ impl ClericStrategy {
             .cloned()
     }
 
+    /// Find an in-combat debuff spell (prevents “everyone healthy” from
+    /// falling through to med without applying primary-target debuffs).
+    fn find_debuff_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
+        let mana_pct = ctx.player.mana_pct();
+        ctx.config
+            .spells
+            .iter()
+            .filter(|s| is_debuff_spell(s))
+            .filter(|s| mana_pct >= DEBUFF_RESERVE_MANA && mana_pct >= s.min_mana_pct)
+            .max_by_key(|s| s.priority)
+            .cloned()
+    }
+
     /// Find a cure spell (remove poison, disease, curse).
     fn find_cure_spell(&self, ctx: &CombatContext) -> Option<SpellEntry> {
         let mana_pct = ctx.player.mana_pct();
@@ -361,14 +378,22 @@ impl ClassStrategy for ClericStrategy {
                 .cloned();
         }
 
-        // Priority 5: Out-of-combat buffs
+        // Priority 5: In-combat debuffs (debuff before DPS).
+        if ctx.in_combat {
+            if let Some(debuff) = self.find_debuff_spell(ctx) {
+                tracing::info!(spell = %debuff.name, "Cleric: debuffing before DPS");
+                return Some(debuff);
+            }
+        }
+
+        // Priority 6: Out-of-combat buffs
         if !ctx.in_combat {
             if let Some(buff) = self.find_buff_spell(ctx) {
                 return Some(buff);
             }
         }
 
-        // Priority 6: Everyone is healthy, med up.
+        // Priority 7: Everyone is healthy, med up.
         None
     }
 
@@ -428,6 +453,15 @@ fn is_buff_spell(s: &SpellEntry) -> bool {
         || name.contains("armor")
         || name.contains("guard")
         || name.contains("buff")
+}
+
+/// Cleric-specific “primary-target debuff” heuristic.
+///
+/// The cleric spell list contains both healing support and damage/debuff
+/// utility; when the group is stable we apply debuffs rather than med.
+fn is_debuff_spell(s: &SpellEntry) -> bool {
+    let name = s.name.to_lowercase();
+    name.contains("mark of") || name.contains("kings") || name.contains("reproach")
 }
 
 #[cfg(test)]

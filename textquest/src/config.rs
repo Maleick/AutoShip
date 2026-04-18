@@ -113,9 +113,11 @@ impl AccountsConfig {
     #[must_use]
     pub fn camera_preset_by_hotkey(&self, hotkey: &str) -> Option<&CameraPreset> {
         let lower = hotkey.to_lowercase();
-        self.camera_presets
-            .iter()
-            .find(|cp| cp.hotkey.as_ref().map_or(false, |h| h.to_lowercase() == lower))
+        self.camera_presets.iter().find(|cp| {
+            cp.hotkey
+                .as_ref()
+                .is_some_and(|h| h.to_lowercase() == lower)
+        })
     }
 }
 
@@ -1559,7 +1561,10 @@ pitch = 60.0
         let cfg = parse_with_profiles();
         assert!(cfg.camera_preset_by_hotkey("f5").is_some());
         assert!(cfg.camera_preset_by_hotkey("F5").is_some());
-        assert_eq!(cfg.camera_preset_by_hotkey("F5").unwrap().name, "First Person");
+        assert_eq!(
+            cfg.camera_preset_by_hotkey("F5").unwrap().name,
+            "First Person"
+        );
         assert!(cfg.camera_preset_by_hotkey("F9").is_none());
     }
 }

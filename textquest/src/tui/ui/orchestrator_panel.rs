@@ -395,7 +395,12 @@ fn draw_fleet_header(frame: &mut Frame, area: Rect, app: &App) {
     let lines = vec![
         Line::from(vec![
             Span::styled("Active Intent: ", Style::default().fg(t.text_normal)),
-            Span::styled(intent, Style::default().fg(t.text_server).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                intent,
+                Style::default()
+                    .fg(t.text_server)
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]),
         Line::from(vec![
             Span::styled("Phase: ", Style::default().fg(t.text_normal)),
@@ -412,10 +417,7 @@ fn draw_fleet_header(frame: &mut Frame, area: Rect, app: &App) {
         ]),
         Line::from(vec![
             Span::styled("Cadence: ", Style::default().fg(t.text_normal)),
-            Span::styled(
-                format!("{} Hz", hz),
-                Style::default().fg(t.text_bright),
-            ),
+            Span::styled(format!("{} Hz", hz), Style::default().fg(t.text_bright)),
             Span::raw(" · "),
             Span::styled(
                 format!("tick {}", last_tick),
@@ -582,7 +584,9 @@ fn draw_phase_timeline(frame: &mut Frame, area: Rect, app: &App) {
                     Span::raw("  "),
                     Span::styled(
                         entry.phase.clone(),
-                        Style::default().fg(phase_color).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(phase_color)
+                            .add_modifier(Modifier::BOLD),
                     ),
                     Span::raw("  "),
                     Span::styled(

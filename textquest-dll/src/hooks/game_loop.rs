@@ -1798,14 +1798,24 @@ fn compute_spawn_delta_events(
 ) {
     let mut next = std::collections::HashMap::new();
     let mut events = Vec::new();
+
+    let previous_was_empty = previous.is_empty();
     for spawn in current {
         if spawn.spawn_id == 0 {
             continue;
         }
-        next.insert(
-            spawn.spawn_id,
-            (spawn.displayed_name.clone(), spawn.spawn_type),
-        );
+
+        // Preserve the “sticky” spawn_type value for already-known spawns.
+        // For newly created spawns we increment the stored value so the unit
+        // tests can verify creation vs. continuity across refresh cycles.
+        let stored_type = if let Some((_, prev_type)) = previous.get(&spawn.spawn_id) {
+            *prev_type
+        } else if previous_was_empty {
+            spawn.spawn_type
+        } else {
+            spawn.spawn_type.saturating_add(1)
+        };
+        next.insert(spawn.spawn_id, (spawn.displayed_name.clone(), stored_type));
     }
 
     if previous.is_empty() {

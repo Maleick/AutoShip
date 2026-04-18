@@ -66,8 +66,7 @@ fn draw_packet_stream(frame: &mut Frame, area: Rect, app: &App) {
     let footer = " ↑↓ select  ·  / filter  ·  p pause  ·  space mark  ·  e export ";
 
     let blk = panel(title, border_style, t).footer(
-        Line::from(Span::styled(footer, Style::default().fg(t.text_secondary)))
-            .right_aligned(),
+        Line::from(Span::styled(footer, Style::default().fg(t.text_secondary))).right_aligned(),
     );
 
     if filtered.is_empty() {
@@ -83,10 +82,7 @@ fn draw_packet_stream(frame: &mut Frame, area: Rect, app: &App) {
             area,
         );
     } else {
-        let header = themed_header_row(
-            &["", "Time", "Dir", "Opcode", "Size", "Payload"],
-            t,
-        );
+        let header = themed_header_row(&["", "Time", "Dir", "Opcode", "Size", "Payload"], t);
 
         // Calculate visible rows (area height minus borders, header, and filter line)
         let visible_rows = area.height.saturating_sub(6) as usize;
@@ -107,7 +103,12 @@ fn draw_packet_stream(frame: &mut Frame, area: Rect, app: &App) {
                 let is_selected = false; // TODO: Track selected index in state
 
                 let cursor = if is_selected {
-                    Span::styled("▶", Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD))
+                    Span::styled(
+                        "▶",
+                        Style::default()
+                            .fg(t.text_accent)
+                            .add_modifier(Modifier::BOLD),
+                    )
                 } else {
                     Span::raw(" ")
                 };
@@ -254,10 +255,7 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
         )]),
         Line::from(vec![
             Span::raw("  "),
-            Span::styled(
-                "caster_id",
-                Style::default().fg(t.text_accent),
-            ),
+            Span::styled("caster_id", Style::default().fg(t.text_accent)),
             Span::raw("    = "),
             Span::styled("4826", Style::default().fg(t.text_bright)),
             Span::raw("  "),
@@ -265,10 +263,7 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
         ]),
         Line::from(vec![
             Span::raw("  "),
-            Span::styled(
-                "target_id",
-                Style::default().fg(t.text_accent),
-            ),
+            Span::styled("target_id", Style::default().fg(t.text_accent)),
             Span::raw("    = "),
             Span::styled("4829", Style::default().fg(t.text_bright)),
             Span::raw("  "),
@@ -276,10 +271,7 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
         ]),
         Line::from(vec![
             Span::raw("  "),
-            Span::styled(
-                "spell_id",
-                Style::default().fg(t.text_accent),
-            ),
+            Span::styled("spell_id", Style::default().fg(t.text_accent)),
             Span::raw("     = "),
             Span::styled("1000", Style::default().fg(t.text_bright)),
             Span::raw("  "),
@@ -287,10 +279,7 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
         ]),
         Line::from(vec![
             Span::raw("  "),
-            Span::styled(
-                "cast_time_ms",
-                Style::default().fg(t.text_accent),
-            ),
+            Span::styled("cast_time_ms", Style::default().fg(t.text_accent)),
             Span::raw(" = "),
             Span::styled("10000", Style::default().fg(t.text_bright)),
         ]),
@@ -313,9 +302,7 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
     ];
 
     frame.render_widget(
-        Paragraph::new(lines)
-            .block(blk)
-            .wrap(Wrap { trim: false }),
+        Paragraph::new(lines).block(blk).wrap(Wrap { trim: false }),
         area,
     );
 }
@@ -343,9 +330,25 @@ fn format_opcode_name(opcode: u16) -> String {
 /// Format hex preview (first 16 bytes, currently placeholder).
 fn format_hex_preview(opcode: u16) -> String {
     // TODO: Get actual payload bytes
-    format!("{:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X}",
-        (opcode >> 8) & 0xFF, opcode & 0xFF, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05,
-        0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D)
+    format!(
+        "{:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X}",
+        (opcode >> 8) & 0xFF,
+        opcode & 0xFF,
+        0x00,
+        0x01,
+        0x02,
+        0x03,
+        0x04,
+        0x05,
+        0x06,
+        0x07,
+        0x08,
+        0x09,
+        0x0A,
+        0x0B,
+        0x0C,
+        0x0D
+    )
 }
 
 /// Format client name (currently uses PID, TODO: resolve to character names).
@@ -355,7 +358,10 @@ fn format_client_name(client_id: u32) -> String {
 }
 
 /// Format the filter echo line.
-fn format_filter_line(state: &crate::tui::app::PacketMonitorState, filtered: &[crate::tui::state::PacketRecord]) -> Line {
+fn format_filter_line(
+    state: &crate::tui::app::PacketMonitorState,
+    filtered: &[crate::tui::state::PacketRecord],
+) -> Line {
     let spans = vec![
         Span::styled("filter: ", Style::default().fg(ratatui::style::Color::Cyan)),
         Span::raw("op=* · "),
@@ -366,7 +372,11 @@ fn format_filter_line(state: &crate::tui::app::PacketMonitorState, filtered: &[c
         Span::styled("▶ live", Style::default().fg(ratatui::style::Color::Green)),
         Span::raw("  "),
         Span::styled(
-            format!("({} rows · {} since 11:42)", filtered.len(), state.packets.len()),
+            format!(
+                "({} rows · {} since 11:42)",
+                filtered.len(),
+                state.packets.len()
+            ),
             Style::default().fg(ratatui::style::Color::DarkGray),
         ),
     ];

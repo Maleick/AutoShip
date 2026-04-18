@@ -559,7 +559,6 @@ fn build_loot_router() -> Router<Arc<AppState>> {
 fn build_api_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(api::health))
-        .route("/admin/sessions", get(api::admin::list_sessions))
         .route(
             "/admin/diagnostics/{session_id}",
             get(api::admin_diagnostics::get_diagnostics),

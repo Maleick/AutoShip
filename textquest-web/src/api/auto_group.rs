@@ -356,6 +356,7 @@ use textquest_common::auto_group::AutoGroupSettings;
     use http_body_util::BodyExt;
     use serde_json::{Value, json};
     use std::sync::Mutex;
+    use textquest_common::auto_group::AutoGroupSettings;
     use tokio::sync::{RwLock, broadcast};
     use tower::ServiceExt;
 
@@ -408,6 +409,7 @@ use textquest_common::auto_group::AutoGroupSettings;
                     uuid::Uuid::new_v4()
                 )),
             ),
+            session_control_state: crate::api::session_control::SessionControlState::new(),
         })
     }
 

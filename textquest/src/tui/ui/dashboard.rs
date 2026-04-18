@@ -121,10 +121,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
 
     let t = &app.theme;
     let visible = app.visible_clients();
-    let title = format!(
-        " Ops Roster · {} clients · sorted by Group ",
-        visible.len()
-    );
+    let title = format!(" Ops Roster · {} clients · sorted by Group ", visible.len());
 
     let border_style = if app.is_panel_focused(ActivePanel::OverviewRoster) {
         t.border_active
@@ -144,7 +141,9 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     // Fixed column layout matching design mock
-    let headers = vec!["", "Name", "Grp", "Cls", "Lvl", "Zone", "HP", "Mana", "Cond", "State", "Activity"];
+    let headers = vec![
+        "", "Name", "Grp", "Cls", "Lvl", "Zone", "HP", "Mana", "Cond", "State", "Activity",
+    ];
     let header = themed_header_row(headers.as_slice(), t);
     let highlight_style = Style::default()
         .bg(t.row_selected_bg)
@@ -198,7 +197,10 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                 cells.push(Cell::from(hp_bar).style(Style::default().fg(hp_color(hp_pct, t))));
 
                 // Mana bar (melee classes show --)
-                let is_melee = matches!(player.class, EqClass::Warrior | EqClass::Monk | EqClass::Rogue | EqClass::Berserker);
+                let is_melee = matches!(
+                    player.class,
+                    EqClass::Warrior | EqClass::Monk | EqClass::Rogue | EqClass::Berserker
+                );
                 if is_melee {
                     cells.push(Cell::from("  --  ").style(Style::default().fg(t.text_muted)));
                 } else {
@@ -254,17 +256,17 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
 
     // Fixed column constraints matching design widths
     let constraints = vec![
-        Constraint::Length(2),   // cursor
-        Constraint::Length(14),  // Name
-        Constraint::Length(3),   // Grp
-        Constraint::Length(4),   // Cls
-        Constraint::Length(3),   // Lvl
-        Constraint::Length(22),  // Zone
-        Constraint::Length(16),  // HP
-        Constraint::Length(12),  // Mana
-        Constraint::Length(9),   // Cond
-        Constraint::Length(8),   // State
-        Constraint::Min(10),     // Activity
+        Constraint::Length(2),  // cursor
+        Constraint::Length(14), // Name
+        Constraint::Length(3),  // Grp
+        Constraint::Length(4),  // Cls
+        Constraint::Length(3),  // Lvl
+        Constraint::Length(22), // Zone
+        Constraint::Length(16), // HP
+        Constraint::Length(12), // Mana
+        Constraint::Length(9),  // Cond
+        Constraint::Length(8),  // State
+        Constraint::Min(10),    // Activity
     ];
 
     // Build activity legend footer
@@ -287,10 +289,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
             width: inner.width,
             height: 2,
         };
-        frame.render_widget(
-            Paragraph::new(activity_legend_lines),
-            legend_area,
-        );
+        frame.render_widget(Paragraph::new(activity_legend_lines), legend_area);
     }
 }
 
@@ -338,12 +337,10 @@ fn build_activity_legend_lines(t: &crate::tui::theme::Theme) -> Vec<Line<'static
         ("●", "Rdy", t.text_success),
     ];
 
-    let mut legend = vec![
-        Span::styled(
-            "Activity glyphs:  ",
-            Style::default().fg(t.text_muted),
-        ),
-    ];
+    let mut legend = vec![Span::styled(
+        "Activity glyphs:  ",
+        Style::default().fg(t.text_muted),
+    )];
 
     for (glyph, label, color) in activity_glyphs {
         legend.push(Span::styled(glyph, Style::default().fg(color)));
@@ -422,7 +419,10 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
 
     // Uptime
     let uptime_str = if let Some(uptime) = &app.session_uptime {
-        format!("{:02}:{:02}:{:02}", uptime.hours, uptime.minutes, uptime.seconds)
+        format!(
+            "{:02}:{:02}:{:02}",
+            uptime.hours, uptime.minutes, uptime.seconds
+        )
     } else {
         "00:00:00".to_string()
     };
@@ -430,10 +430,7 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
         "Uptime ",
         Style::default().fg(t.text_secondary),
     ));
-    line_spans.push(Span::styled(
-        uptime_str,
-        Style::default().fg(t.text_bright),
-    ));
+    line_spans.push(Span::styled(uptime_str, Style::default().fg(t.text_bright)));
     line_spans.push(Span::raw(" │ "));
 
     // Kills / Deaths
@@ -457,16 +454,17 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
     let xp_total = app.combat_stats.xp_total.unwrap_or(0) as f64 / 1_000_000.0;
     let xp_per_hour = app.combat_stats.xp_per_hour.unwrap_or(0.0);
     let xp_per_15m = app.combat_stats.xp_per_15m.unwrap_or(0.0);
-    line_spans.push(Span::styled(
-        "XP ",
-        Style::default().fg(t.text_secondary),
-    ));
+    line_spans.push(Span::styled("XP ", Style::default().fg(t.text_secondary)));
     line_spans.push(Span::styled(
         format!("{:.2}M", xp_total),
         Style::default().fg(t.text_bright),
     ));
     line_spans.push(Span::styled(
-        format!(" · +{:.0}k/h · +{:.0}k/15m", xp_per_hour / 1000.0, xp_per_15m / 1000.0),
+        format!(
+            " · +{:.0}k/h · +{:.0}k/15m",
+            xp_per_hour / 1000.0,
+            xp_per_15m / 1000.0
+        ),
         Style::default().fg(t.text_bright),
     ));
     line_spans.push(Span::raw(" │ "));
@@ -474,10 +472,7 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
     // Platinum
     let plat = app.platinum_balance.unwrap_or(0.0);
     let plat_per_hour = app.platinum_per_hour.unwrap_or(0.0);
-    line_spans.push(Span::styled(
-        "Plat ",
-        Style::default().fg(t.text_secondary),
-    ));
+    line_spans.push(Span::styled("Plat ", Style::default().fg(t.text_secondary)));
     line_spans.push(Span::styled(
         format!("{:.1}", plat),
         Style::default().fg(t.text_bright),
@@ -1222,7 +1217,12 @@ fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
         };
         lines.push(Line::from(vec![
             Span::styled("Target   ", Style::default().fg(t.text_secondary)),
-            Span::styled(target_name, Style::default().fg(target_type_color).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                target_name,
+                Style::default()
+                    .fg(target_type_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]));
 
         let target_hp_pct = (target.cur_hp as f64 / target.max_hp.max(1) as f64) * 100.0;
@@ -1246,7 +1246,12 @@ fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
         let spell_label = &cast_info.spell_name;
         lines.push(Line::from(vec![
             Span::styled("Casting  ", Style::default().fg(t.text_secondary)),
-            Span::styled(spell_label, Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                spell_label,
+                Style::default()
+                    .fg(t.text_accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(" "),
             Span::styled(&cast_info.gem_slot, Style::default().fg(t.text_muted)),
         ]));
@@ -1275,13 +1280,19 @@ fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
             Span::styled("Progress ", Style::default().fg(t.text_secondary)),
             Span::styled(progress_bar, Style::default().fg(t.text_accent)),
             Span::raw(" "),
-            Span::styled(format!("{:.0}%", progress * 100.0), Style::default().fg(t.text_bright)),
+            Span::styled(
+                format!("{:.0}%", progress * 100.0),
+                Style::default().fg(t.text_bright),
+            ),
         ]));
 
         lines.push(Line::from(vec![
             Span::styled("Remaining", Style::default().fg(t.text_secondary)),
             Span::raw(" "),
-            Span::styled(format!("{:.1}s", remaining), Style::default().fg(t.text_bright)),
+            Span::styled(
+                format!("{:.1}s", remaining),
+                Style::default().fg(t.text_bright),
+            ),
         ]));
     } else {
         lines.push(Line::from(Span::styled(

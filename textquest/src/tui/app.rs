@@ -6232,8 +6232,10 @@ impl App {
                         cp.name, hotkey_str, dist_str, default_str
                     ));
                 }
-                self.status_message =
-                    format!("{} camera preset(s). Use :camera <name>", accounts.camera_presets.len());
+                self.status_message = format!(
+                    "{} camera preset(s). Use :camera <name>",
+                    accounts.camera_presets.len()
+                );
                 for line in &lines {
                     tracing::info!("{}", line);
                 }

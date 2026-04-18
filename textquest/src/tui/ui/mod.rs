@@ -270,18 +270,12 @@ fn build_header_tabs(app: &App, width_class: WidthClass) -> Line<'static> {
             ));
         } else {
             // Inactive tab: [label] with muted brackets, secondary label
-            spans.push(Span::styled(
-                "[",
-                Style::default().fg(t.text_muted),
-            ));
+            spans.push(Span::styled("[", Style::default().fg(t.text_muted)));
             spans.push(Span::styled(
                 format!(" {idx} {label} "),
                 Style::default().fg(t.text_secondary),
             ));
-            spans.push(Span::styled(
-                "]",
-                Style::default().fg(t.text_muted),
-            ));
+            spans.push(Span::styled("]", Style::default().fg(t.text_muted)));
         }
     }
     Line::from(spans)
@@ -361,10 +355,7 @@ fn build_header_meta(app: &App, width_class: WidthClass, max_width: usize) -> Ve
         &mut spans,
         vec![
             Span::styled(" │ ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                app.group_focus_label(),
-                Style::default().fg(t.text_accent),
-            ),
+            Span::styled(app.group_focus_label(), Style::default().fg(t.text_accent)),
         ],
         max_width,
     );
@@ -472,7 +463,9 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     let left_meta = build_header_meta(app, width_class, width);
 
     let left_width = spans_width(&left_meta);
-    let gap_width = width.saturating_sub(left_width).saturating_sub(tabs_width as usize);
+    let gap_width = width
+        .saturating_sub(left_width)
+        .saturating_sub(tabs_width as usize);
 
     let mut mid_spans = vec![Span::styled(
         "│",
@@ -693,20 +686,27 @@ fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> V
     }
 
     // CH chain: "CH {members}x@{interval}s {adaptive}"
-    let ch_label = app.ch_chain_status.as_ref().map(|chain| {
-        format!(
-            "{}x@{:.1}s",
-            chain.members,
-            chain.interval_secs,
-        )
-    });
+    let ch_label = app
+        .ch_chain_status
+        .as_ref()
+        .map(|chain| format!("{}x@{:.1}s", chain.members, chain.interval_secs,));
     if let Some(ch) = ch_label {
-        let adaptive_char = if app.ch_chain_status.as_ref().map(|c| c.is_adaptive).unwrap_or(false) {
+        let adaptive_char = if app
+            .ch_chain_status
+            .as_ref()
+            .map(|c| c.is_adaptive)
+            .unwrap_or(false)
+        {
             "A"
         } else {
             "·"
         };
-        let adaptive_style = if app.ch_chain_status.as_ref().map(|c| c.is_adaptive).unwrap_or(false) {
+        let adaptive_style = if app
+            .ch_chain_status
+            .as_ref()
+            .map(|c| c.is_adaptive)
+            .unwrap_or(false)
+        {
             Style::default().fg(t.hp_high) // green for adaptive
         } else {
             Style::default().fg(t.text_muted) // muted for non-adaptive
@@ -760,7 +760,9 @@ fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> V
             Span::styled(
                 format!("{}", unread_alerts),
                 if unread_alerts > 0 {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD) // amber
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD) // amber
                 } else {
                     Style::default().fg(t.text_muted)
                 },
@@ -775,10 +777,7 @@ fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> V
             &mut spans,
             vec![
                 Span::styled(" │ ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    app.theme_kind.label(),
-                    Style::default().fg(t.text_muted),
-                ),
+                Span::styled(app.theme_kind.label(), Style::default().fg(t.text_muted)),
             ],
             max_width,
         );
@@ -803,10 +802,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     // Line 1: Dashed rule
     let rule_width = area.width as usize;
     let dashed_rule = "─".repeat(rule_width);
-    let rule_spans = vec![Span::styled(
-        dashed_rule,
-        Style::default().fg(t.text_muted),
-    )];
+    let rule_spans = vec![Span::styled(dashed_rule, Style::default().fg(t.text_muted))];
     frame.render_widget(Paragraph::new(Line::from(rule_spans)), lines[0]);
 
     // Line 2: Status bar content
@@ -913,14 +909,12 @@ fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Clear, popup);
     frame.render_widget(
         Paragraph::new(vec![
-            Line::from(vec![
-                Span::styled(
-                    format!("Alert Feed · {} unread", app.unread_alert_count()),
-                    Style::default()
-                        .fg(t.text_bright)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]),
+            Line::from(vec![Span::styled(
+                format!("Alert Feed · {} unread", app.unread_alert_count()),
+                Style::default()
+                    .fg(t.text_bright)
+                    .add_modifier(Modifier::BOLD),
+            )]),
             Line::from(Span::styled(
                 "↑↓ select · a acknowledge · A ack all · F8 close",
                 t.statusbar_dim,
@@ -950,11 +944,16 @@ fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
             // Severity-colored dot: ● for unread, ○ for acknowledged
             let (dot, dot_style) = if alert.unread() {
                 let severity_color = match alert.severity {
-                    AlertSeverity::Critical => t.hp_low,   // red
+                    AlertSeverity::Critical => t.hp_low,        // red
                     AlertSeverity::Warning => t.text_highlight, // amber
-                    AlertSeverity::Info => t.text_accent,  // cyan
+                    AlertSeverity::Info => t.text_accent,       // cyan
                 };
-                ("●", Style::default().fg(severity_color).add_modifier(Modifier::BOLD))
+                (
+                    "●",
+                    Style::default()
+                        .fg(severity_color)
+                        .add_modifier(Modifier::BOLD),
+                )
             } else {
                 ("○", Style::default().fg(t.text_muted))
             };
@@ -978,10 +977,7 @@ fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
                         t.text_secondary
                     },
                 ),
-                Span::styled(
-                    format!("{:<10}", timestamp),
-                    t.text_secondary,
-                ),
+                Span::styled(format!("{:<10}", timestamp), t.text_secondary),
                 Span::styled(message, Style::default().fg(t.text_bright)),
             ]);
             lines.push(line1);
@@ -989,10 +985,7 @@ fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
             // Line 2: kind and source in muted
             let line2 = Line::from(vec![
                 Span::styled("  ", t.text_muted),
-                Span::styled(
-                    format!("kind={} ", alert.kind.display_name()),
-                    t.text_muted,
-                ),
+                Span::styled(format!("kind={} ", alert.kind.display_name()), t.text_muted),
                 Span::styled(
                     format!("source={}", alert.kind.display_name()),
                     t.text_muted,
@@ -1003,8 +996,7 @@ fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     frame.render_widget(
-        Paragraph::new(lines)
-            .wrap(Wrap { trim: false }),
+        Paragraph::new(lines).wrap(Wrap { trim: false }),
         sections[1],
     );
 
@@ -1385,7 +1377,10 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
     let scroll = app.help_scroll.min(max_scroll);
 
     let title = if max_scroll > 0 {
-        format!(" Help · Keybinds [{}%] (press ? to close) ", (scroll * 100) / max_scroll.max(1))
+        format!(
+            " Help · Keybinds [{}%] (press ? to close) ",
+            (scroll * 100) / max_scroll.max(1)
+        )
     } else {
         String::from(" Help · Keybinds (press ? to close) ")
     };

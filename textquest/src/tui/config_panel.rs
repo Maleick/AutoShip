@@ -654,7 +654,7 @@ impl Widget for ConfigPanelWidget<'_> {
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.accent_color)) // cyan border
+            .border_style(Style::default().fg(self.accent_color)); // cyan border
 
         let inner = block.inner(area);
         block.render(area, buf);
@@ -728,7 +728,12 @@ impl Widget for ConfigPanelWidget<'_> {
             // Branch indicator: ▾ (expanded), ▸ (collapsed), · (leaf) — in magenta
             let (branch_char, branch_style) = if node.value.is_none() {
                 let glyph = if node.expanded { "▾" } else { "▸" };
-                (glyph, Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
+                (
+                    glyph,
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                )
             } else {
                 ("·", Style::default().fg(Color::Magenta))
             };
@@ -787,12 +792,7 @@ impl Widget for ConfigPanelWidget<'_> {
                 if val_x > inner.x + 20 {
                     // Render {key} = {value}
                     buf.set_string(val_x, y, " = ", Style::default().fg(Color::DarkGray));
-                    buf.set_string(
-                        val_x + 3,
-                        y,
-                        &display_val,
-                        val_style,
-                    );
+                    buf.set_string(val_x + 3, y, &display_val, val_style);
                 }
             }
         }

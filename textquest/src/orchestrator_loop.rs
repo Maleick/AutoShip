@@ -132,7 +132,10 @@ impl OrchestratorLoop {
             .iter()
             .flat_map(|group| group.toon.iter())
             .map(|toon| {
-                (toon.name.to_ascii_lowercase(), toon.auto_camp_on_death.clone())
+                (
+                    toon.name.to_ascii_lowercase(),
+                    toon.auto_camp_on_death.clone(),
+                )
             })
             .collect::<HashMap<_, _>>();
         let credential_store = std::env::var("TEXTQUEST_MASTER_PASSWORD")

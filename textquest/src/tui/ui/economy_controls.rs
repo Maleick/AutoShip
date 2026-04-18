@@ -205,26 +205,38 @@ fn draw_vendor_bank_panel(frame: &mut Frame, area: Rect, app: &App) {
     // Footer with control hints
     lines.push(Line::from(""));
     lines.push(Line::from(vec![
-        Span::styled("s", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "s",
+            Style::default()
+                .fg(t.text_highlight)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" start · "),
-        Span::styled("S", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "S",
+            Style::default()
+                .fg(t.text_highlight)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" stop · "),
-        Span::styled("x", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "x",
+            Style::default()
+                .fg(t.text_highlight)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" skip client · "),
-        Span::styled("r", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "r",
+            Style::default()
+                .fg(t.text_highlight)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" reload rules"),
     ]));
 
     frame.render_widget(Paragraph::new(lines).block(blk), area);
 }
-
-
-
-
-
-
-
-
 
 /// Render the roster table with client status.
 fn draw_roster_panel(frame: &mut Frame, area: Rect, app: &App) {
@@ -234,11 +246,31 @@ fn draw_roster_panel(frame: &mut Frame, area: Rect, app: &App) {
 
     // Column headers
     let header_cells = vec![
-        Cell::from("Slot").style(Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
-        Cell::from("Status").style(Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
-        Cell::from("Plat").style(Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
-        Cell::from("Bags").style(Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
-        Cell::from("Reason/Notes").style(Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+        Cell::from("Slot").style(
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Status").style(
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Plat").style(
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Bags").style(
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Cell::from("Reason/Notes").style(
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        ),
     ];
 
     let header = Row::new(header_cells)
@@ -258,7 +290,7 @@ fn draw_roster_panel(frame: &mut Frame, area: Rect, app: &App) {
             // Status coloring: Active=amber/inverse, Done=green, Queued=cyan, Skipped=muted
             let status_color = match client.state.name.as_str() {
                 "Active" => t.text_highlight, // amber
-                "Done" => t.hp_high,           // green
+                "Done" => t.hp_high,          // green
                 "Queued" => t.text_accent,    // cyan
                 _ => t.text_muted,
             };
@@ -276,18 +308,16 @@ fn draw_roster_panel(frame: &mut Frame, area: Rect, app: &App) {
         .collect();
 
     let constraints = vec![
-        Constraint::Length(16),  // Slot
-        Constraint::Length(10),  // Status
-        Constraint::Length(6),   // Plat (right-aligned)
-        Constraint::Length(6),   // Bags
-        Constraint::Min(34),     // Reason/Notes
+        Constraint::Length(16), // Slot
+        Constraint::Length(10), // Status
+        Constraint::Length(6),  // Plat (right-aligned)
+        Constraint::Length(6),  // Bags
+        Constraint::Min(34),    // Reason/Notes
     ];
 
     let inner = blk.inner(area);
     frame.render_widget(
-        Table::new(rows, constraints)
-            .header(header)
-            .block(blk),
+        Table::new(rows, constraints).header(header).block(blk),
         area,
     );
 }
@@ -324,11 +354,26 @@ fn draw_rules_panel(frame: &mut Frame, area: Rect, app: &App) {
         Style::default().fg(t.text_muted),
     )));
     lines.push(Line::from(vec![
-        Span::styled("e", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "e",
+            Style::default()
+                .fg(t.text_highlight)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" edit · "),
-        Span::styled("r", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "r",
+            Style::default()
+                .fg(t.text_highlight)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" reload · "),
-        Span::styled("t", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "t",
+            Style::default()
+                .fg(t.text_highlight)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" test"),
     ]));
 
@@ -352,14 +397,28 @@ fn draw_ledger_panel(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("  Earned  ", Style::default().fg(t.text_muted)),
             Span::styled(
-                format!("+{} pp", if econ.ledger_earned_today > 0 { econ.ledger_earned_today } else { econ.vendor_plat_earned }),
+                format!(
+                    "+{} pp",
+                    if econ.ledger_earned_today > 0 {
+                        econ.ledger_earned_today
+                    } else {
+                        econ.vendor_plat_earned
+                    }
+                ),
                 Style::default().fg(t.hp_high),
             ),
         ]),
         Line::from(vec![
             Span::styled("  Vendor  ", Style::default().fg(t.text_muted)),
             Span::styled(
-                format!("+{} pp", if econ.ledger_vendor_today > 0 { econ.ledger_vendor_today } else { econ.vendor_plat_earned }),
+                format!(
+                    "+{} pp",
+                    if econ.ledger_vendor_today > 0 {
+                        econ.ledger_vendor_today
+                    } else {
+                        econ.vendor_plat_earned
+                    }
+                ),
                 Style::default().fg(t.text_accent),
             ),
         ]),
@@ -380,22 +439,44 @@ fn draw_ledger_panel(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("  Sold    ", Style::default().fg(t.text_muted)),
             Span::styled(
-                format!("{} items", if econ.ledger_last_sold > 0 { econ.ledger_last_sold } else { econ.vendor_items_sold }),
+                format!(
+                    "{} items",
+                    if econ.ledger_last_sold > 0 {
+                        econ.ledger_last_sold
+                    } else {
+                        econ.vendor_items_sold
+                    }
+                ),
                 Style::default().fg(t.text_normal),
             ),
         ]),
         Line::from(vec![
             Span::styled("  Banked  ", Style::default().fg(t.text_muted)),
             Span::styled(
-                format!("{} pp", if econ.ledger_last_banked > 0 { econ.ledger_last_banked } else { econ.banking_consolidated_plat }),
+                format!(
+                    "{} pp",
+                    if econ.ledger_last_banked > 0 {
+                        econ.ledger_last_banked
+                    } else {
+                        econ.banking_consolidated_plat
+                    }
+                ),
                 Style::default().fg(t.text_normal),
             ),
         ]),
         Line::from(vec![
             Span::styled("  Skipped ", Style::default().fg(t.text_muted)),
             Span::styled(
-                if econ.ledger_last_skipped > 0 { format!("{} (combat)", econ.ledger_last_skipped) } else { String::from("0") },
-                Style::default().fg(if econ.ledger_last_skipped > 0 { t.text_highlight } else { t.text_muted }),
+                if econ.ledger_last_skipped > 0 {
+                    format!("{} (combat)", econ.ledger_last_skipped)
+                } else {
+                    String::from("0")
+                },
+                Style::default().fg(if econ.ledger_last_skipped > 0 {
+                    t.text_highlight
+                } else {
+                    t.text_muted
+                }),
             ),
         ]),
     ];

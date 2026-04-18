@@ -10,18 +10,20 @@ use textquest_common::auto_group::AutoGroupSettings;
 use crate::{AppState, accounts, api};
 
 pub(crate) fn test_live_session_snapshot_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../data/runtime/{name}"))
+    std::env::temp_dir().join(format!("textquest-web-test-runtime/{name}"))
 }
 
 pub(crate) fn test_admin_session_snapshot_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../data/runtime/{name}"))
+    std::env::temp_dir().join(format!("textquest-web-test-runtime/{name}"))
 }
 
 pub(crate) fn demo_app_state() -> Arc<AppState> {
-    demo_app_state_with_snapshot("test-live-sessions.json")
+    let live_name = format!("test-live-sessions-{}.json", uuid::Uuid::new_v4());
+    demo_app_state_with_snapshot(&live_name)
 }
 
 pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
+    let admin_name = format!("test-admin-sessions-{name}");
     let (event_tx, _) = tokio::sync::broadcast::channel::<String>(8);
     Arc::new(AppState {
         event_tx,
@@ -30,7 +32,9 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         character_configs: tokio::sync::RwLock::new(api::demo_character_configs()),
         auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
         tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
-        character_config_path: test_live_session_snapshot_path("test-character-configs.json"),
+        character_config_path: test_live_session_snapshot_path(&format!(
+            "test-character-configs-{name}"
+        )),
         character_config_write_lock: tokio::sync::Mutex::new(()),
         auto_group_settings: tokio::sync::RwLock::new(AutoGroupSettings::default()),
         loot_state: api::loot::LootState::new_demo(),
@@ -65,7 +69,7 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         )),
         api_token: None,
         live_session_snapshot_path: test_live_session_snapshot_path(name),
-        admin_session_snapshot_path: test_admin_session_snapshot_path("test-admin-sessions.json"),
+        admin_session_snapshot_path: test_admin_session_snapshot_path(&admin_name),
         xassist_configs: api::xassist::demo_xassist_configs(),
         chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),

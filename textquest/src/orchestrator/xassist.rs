@@ -243,7 +243,7 @@ mod tests {
             actual_version: None,
             active_buffs: vec![],
             pet: None,
-}
+        }
     }
 
     #[test]
@@ -278,7 +278,7 @@ mod tests {
             actual_version: None,
             active_buffs: vec![],
             pet: None,
-};
+        };
 
         let commands = xassist.tick(&[(100, state), (200, ma_state)].into_iter().collect());
         assert!(commands.is_empty());
@@ -316,7 +316,7 @@ mod tests {
             actual_version: None,
             active_buffs: vec![],
             pet: None,
-};
+        };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
         assert!(
@@ -363,7 +363,7 @@ mod tests {
             actual_version: None,
             active_buffs: vec![],
             pet: None,
-};
+        };
 
         let commands = xassist.tick(&[(100, state), (200, ma_state)].into_iter().collect());
         assert!(
@@ -407,7 +407,7 @@ mod tests {
             actual_version: None,
             active_buffs: vec![],
             pet: None,
-};
+        };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
         assert!(
@@ -450,7 +450,7 @@ mod tests {
             actual_version: None,
             active_buffs: vec![],
             pet: None,
-};
+        };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
         assert!(
@@ -489,7 +489,7 @@ mod tests {
             actual_version: None,
             active_buffs: vec![],
             pet: None,
-};
+        };
 
         let state_for_find = make_state(100, make_player_spawn(100, "BoxDPS"), None, nearby);
         assert_eq!(

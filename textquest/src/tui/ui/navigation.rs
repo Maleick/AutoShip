@@ -5,7 +5,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Paragraph, Block, Borders},
+    widgets::{Block, Borders, Paragraph},
 };
 
 use crate::tui::{app::App, theme::Theme};
@@ -90,13 +90,15 @@ fn draw_blocker_panel(frame: &mut Frame, area: Rect, app: &App) {
 
         for (name, pid) in &blockers_detail {
             if let Some(nav) = app.nav_state.nav_statuses.get(pid) {
-                let slot = app.visible_clients()
+                let slot = app
+                    .visible_clients()
                     .iter()
                     .position(|c| c.pid == *pid)
                     .map(|i| format!("S{:02}", i + 1))
                     .unwrap_or_else(|| "—".to_string());
 
-                let zone = app.visible_clients()
+                let zone = app
+                    .visible_clients()
                     .iter()
                     .find(|c| c.pid == *pid)
                     .map(|c| c.zone_name.as_str())
@@ -105,71 +107,59 @@ fn draw_blocker_panel(frame: &mut Frame, area: Rect, app: &App) {
                 // Header line with warning marker
                 lines.push(Line::from(vec![
                     Span::styled("⚠ ", Style::default().fg(t.hp_low)),
-                    Span::styled(
-                        name.clone(),
-                        Style::default().fg(t.text_bright),
-                    ),
+                    Span::styled(name.clone(), Style::default().fg(t.text_bright)),
                     Span::raw("  "),
-                    Span::styled(
-                        format!("slot {}", slot),
-                        Style::default().fg(t.text_muted),
-                    ),
+                    Span::styled(format!("slot {}", slot), Style::default().fg(t.text_muted)),
                     Span::raw(" · "),
-                    Span::styled(
-                        zone.to_string(),
-                        Style::default().fg(t.text_muted),
-                    ),
+                    Span::styled(zone.to_string(), Style::default().fg(t.text_muted)),
                 ]));
 
                 // Detail lines
-                let blocker_desc = nav.blockers.first().cloned()
+                let blocker_desc = nav
+                    .blockers
+                    .first()
+                    .cloned()
                     .or_else(|| nav.blocker_description.clone());
                 if let Some(desc) = blocker_desc {
                     lines.push(Line::from(vec![
                         Span::raw("    "),
-                        Span::styled(
-                            "blocker   ",
-                            Style::default().fg(t.text_secondary),
-                        ),
-                        Span::styled(
-                            desc,
-                            Style::default().fg(t.text_bright),
-                        ),
+                        Span::styled("blocker   ", Style::default().fg(t.text_secondary)),
+                        Span::styled(desc, Style::default().fg(t.text_bright)),
                     ]));
                 }
 
                 let retry_label = format!("{}/5", nav.retry_count);
                 lines.push(Line::from(vec![
                     Span::raw("    "),
-                    Span::styled(
-                        "retries   ",
-                        Style::default().fg(t.text_secondary),
-                    ),
+                    Span::styled("retries   ", Style::default().fg(t.text_secondary)),
                     Span::styled(
                         retry_label,
-                        Style::default().fg(if nav.retry_count >= 4 { t.hp_low } else { t.text_accent }),
+                        Style::default().fg(if nav.retry_count >= 4 {
+                            t.hp_low
+                        } else {
+                            t.text_accent
+                        }),
                     ),
                 ]));
 
                 let fallback_label = nav.fallback_route.as_deref().unwrap_or("none");
                 lines.push(Line::from(vec![
                     Span::raw("    "),
-                    Span::styled(
-                        "fallback  ",
-                        Style::default().fg(t.text_secondary),
-                    ),
+                    Span::styled("fallback  ", Style::default().fg(t.text_secondary)),
                     Span::styled(
                         fallback_label.to_string(),
-                        Style::default().fg(if nav.fallback_route.is_some() { t.text_highlight } else { t.text_muted }),
+                        Style::default().fg(if nav.fallback_route.is_some() {
+                            t.text_highlight
+                        } else {
+                            t.text_muted
+                        }),
                     ),
                 ]));
 
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        "    resolution options: :nav unstick · :nav reroute · :nav force_tp",
-                        Style::default().fg(t.text_muted),
-                    ),
-                ]));
+                lines.push(Line::from(vec![Span::styled(
+                    "    resolution options: :nav unstick · :nav reroute · :nav force_tp",
+                    Style::default().fg(t.text_muted),
+                )]));
             }
         }
     }
@@ -180,10 +170,7 @@ fn draw_blocker_panel(frame: &mut Frame, area: Rect, app: &App) {
         .title("Nav Blockers")
         .border_style(Style::default().fg(t.hp_low));
 
-    frame.render_widget(
-        Paragraph::new(lines).block(blk),
-        area,
-    );
+    frame.render_widget(Paragraph::new(lines).block(blk), area);
 }
 
 /// Draw a single client navigation card.
@@ -239,10 +226,7 @@ fn draw_nav_card(
         // Zone
         lines.push(Line::from(vec![
             Span::styled("Zone     ", Style::default().fg(t.text_secondary)),
-            Span::styled(
-                client.zone_name.clone(),
-                Style::default().fg(t.text_bright),
-            ),
+            Span::styled(client.zone_name.clone(), Style::default().fg(t.text_bright)),
         ]));
 
         // Position
@@ -268,19 +252,13 @@ fn draw_nav_card(
         };
 
         lines.push(Line::from(vec![
-            Span::styled(
-                "Position ",
-                Style::default().fg(t.text_secondary),
-            ),
+            Span::styled("Position ", Style::default().fg(t.text_secondary)),
             Span::styled(
                 format!("{:.1}, {:.1}, {:.1}", y, x, z),
                 Style::default().fg(t.text_bright),
             ),
             Span::raw("  "),
-            Span::styled(
-                format!("h{}", h),
-                Style::default().fg(t.text_muted),
-            ),
+            Span::styled(format!("h{}", h), Style::default().fg(t.text_muted)),
         ]));
 
         lines.push(Line::from(""));
@@ -290,22 +268,18 @@ fn draw_nav_card(
             Span::styled("Status   ", Style::default().fg(t.text_secondary)),
             Span::styled(
                 status_label,
-                Style::default().fg(status_color).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(status_color)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw("   "),
             Span::styled("ETA ", Style::default().fg(t.text_secondary)),
-            Span::styled(
-                eta,
-                Style::default().fg(t.text_bright),
-            ),
+            Span::styled(eta, Style::default().fg(t.text_bright)),
         ]));
 
         // Destination
         lines.push(Line::from(vec![
-            Span::styled(
-                "Destination",
-                Style::default().fg(t.text_secondary),
-            ),
+            Span::styled("Destination", Style::default().fg(t.text_secondary)),
             Span::styled(
                 nav.destination.clone(),
                 Style::default().fg(t.text_highlight),
@@ -331,17 +305,12 @@ fn draw_nav_card(
                         "⚠ Blocker: ",
                         Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
                     ),
-                    Span::styled(
-                        blocker.clone(),
-                        Style::default().fg(t.text_bright),
-                    ),
+                    Span::styled(blocker.clone(), Style::default().fg(t.text_bright)),
                 ]));
-                lines.push(Line::from(vec![
-                    Span::styled(
-                        "  retries 3/5 · fallback route queued · :nav unstick",
-                        Style::default().fg(t.text_muted),
-                    ),
-                ]));
+                lines.push(Line::from(vec![Span::styled(
+                    "  retries 3/5 · fallback route queued · :nav unstick",
+                    Style::default().fg(t.text_muted),
+                )]));
             }
         } else {
             lines.push(Line::from(""));
@@ -354,16 +323,10 @@ fn draw_nav_card(
             };
             let percent = format!("{:.0}%", progress * 100.0);
             lines.push(Line::from(vec![
-                Span::styled(
-                    "Progress ",
-                    Style::default().fg(t.text_secondary),
-                ),
+                Span::styled("Progress ", Style::default().fg(t.text_secondary)),
                 draw_progress_bar(progress, 28, t.text_highlight),
                 Span::raw(" "),
-                Span::styled(
-                    percent.clone(),
-                    Style::default().fg(t.text_bright),
-                ),
+                Span::styled(percent.clone(), Style::default().fg(t.text_bright)),
             ]));
         }
     }
@@ -395,10 +358,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
     let blocker_height = 7u16; // estimated height for blocker panel
     let sections = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(blocker_height),
-            Constraint::Min(10),
-        ])
+        .constraints([Constraint::Length(blocker_height), Constraint::Min(10)])
         .split(area);
 
     // Draw blocker panel
@@ -493,10 +453,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
 
         // Only render if there's space
         if card_area.height > 0 && card_area.width > 0 {
-            frame.render_widget(
-                Paragraph::new(lines).block(blk),
-                card_area,
-            );
+            frame.render_widget(Paragraph::new(lines).block(blk), card_area);
         }
 
         // Move to next row after every 2 cards

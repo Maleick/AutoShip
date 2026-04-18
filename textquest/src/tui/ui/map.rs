@@ -323,10 +323,10 @@ fn spawn_marker_glyph(
                 // PC: first letter of class, bold
                 let class_abbr = spawn.class_abbr.chars().next().unwrap_or('?');
                 let color = match spawn.class_abbr.as_str() {
-                    "CLR" => app.theme.text_accent,      // cyan
-                    "WAR" => app.theme.hp_mid,            // amber
-                    "MAG" => app.theme.text_highlight,    // magenta
-                    "MNK" => app.theme.hp_low,            // red
+                    "CLR" => app.theme.text_accent,         // cyan
+                    "WAR" => app.theme.hp_mid,              // amber
+                    "MAG" => app.theme.text_highlight,      // magenta
+                    "MNK" => app.theme.hp_low,              // red
                     "ENC" | "NEC" => app.theme.text_bright, // bright
                     _ => app.theme.text_normal,
                 };
@@ -1034,19 +1034,20 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
     if show_legend {
         // Blank line
         lines.push(Line::from(""));
-        
+
         // Grid info line with zone and coordinate ranges
         let grid_info = format!(
             "grid: {} · y..., x... · resolution 1 cell ≈ N.Nu",
             zone_label
         );
-        lines.push(Line::from(
-            Span::styled(grid_info, Style::default().fg(t.text_muted))
-        ));
-        
+        lines.push(Line::from(Span::styled(
+            grid_info,
+            Style::default().fg(t.text_muted),
+        )));
+
         // Blank line
         lines.push(Line::from(""));
-        
+
         // Legend line with new spawn markers
         let mut legend_spans = vec![
             Span::styled("Legend: ", Style::default().fg(t.text_secondary)),
@@ -1056,10 +1057,26 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             Span::raw(" NPC  ·  "),
             Span::styled("†", Style::default().fg(t.spawn_corpse)),
             Span::raw(" Corpse  ·  "),
-            Span::styled("C", Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
-            Span::styled("W", Style::default().fg(t.hp_mid).add_modifier(Modifier::BOLD)),
-            Span::styled("M", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
-            Span::styled("K", Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "C",
+                Style::default()
+                    .fg(t.text_accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "W",
+                Style::default().fg(t.hp_mid).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "M",
+                Style::default()
+                    .fg(t.text_highlight)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "K",
+                Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
+            ),
             Span::raw(" clients"),
         ];
         lines.push(Line::from(legend_spans));
@@ -1890,12 +1907,12 @@ fn draw_spawn_list_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &A
 
     // Named group
     if !named_spawns.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!("Named ({})", named_spawns.len()),
-                Style::default().fg(t.spawn_named).add_modifier(Modifier::BOLD),
-            ),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            format!("Named ({})", named_spawns.len()),
+            Style::default()
+                .fg(t.spawn_named)
+                .add_modifier(Modifier::BOLD),
+        )]));
         for spawn in named_spawns.iter().take(6) {
             let hp_color = if spawn.hp_current > 0 {
                 if spawn.hp_current as f32 > spawn.hp_max as f32 * 0.75 {
@@ -1917,7 +1934,10 @@ fn draw_spawn_list_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &A
             lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled(name, Style::default().fg(t.spawn_named)),
-                Span::styled(format!("L{:>2}", spawn.level), Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!("L{:>2}", spawn.level),
+                    Style::default().fg(t.text_muted),
+                ),
                 Span::raw(" "),
                 Span::styled(hp_str, Style::default().fg(hp_color)),
             ]));
@@ -1929,12 +1949,12 @@ fn draw_spawn_list_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &A
         if !lines.is_empty() {
             lines.push(Line::from(""));
         }
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!("NPCs ({})", npc_spawns.len()),
-                Style::default().fg(t.spawn_npc).add_modifier(Modifier::BOLD),
-            ),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            format!("NPCs ({})", npc_spawns.len()),
+            Style::default()
+                .fg(t.spawn_npc)
+                .add_modifier(Modifier::BOLD),
+        )]));
         for spawn in npc_spawns.iter().take(6) {
             let hp_color = if spawn.hp_current as f32 > spawn.hp_max as f32 * 0.75 {
                 t.hp_high
@@ -1948,7 +1968,10 @@ fn draw_spawn_list_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &A
             lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled(name, Style::default().fg(t.text_normal)),
-                Span::styled(format!("L{:>2}", spawn.level), Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!("L{:>2}", spawn.level),
+                    Style::default().fg(t.text_muted),
+                ),
                 Span::raw(" "),
                 Span::styled(hp_str, Style::default().fg(hp_color)),
             ]));
@@ -1960,18 +1983,21 @@ fn draw_spawn_list_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &A
         if !lines.is_empty() {
             lines.push(Line::from(""));
         }
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!("Corpses ({})", corpse_spawns.len()),
-                Style::default().fg(t.text_muted).add_modifier(Modifier::BOLD),
-            ),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            format!("Corpses ({})", corpse_spawns.len()),
+            Style::default()
+                .fg(t.text_muted)
+                .add_modifier(Modifier::BOLD),
+        )]));
         for spawn in corpse_spawns.iter().take(6) {
             let name = format!("{:<24}", app.redact_name(&spawn.displayed_name));
             lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled(name, Style::default().fg(t.text_muted)),
-                Span::styled(format!("L{:>2}", spawn.level), Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!("L{:>2}", spawn.level),
+                    Style::default().fg(t.text_muted),
+                ),
                 Span::raw(" "),
                 Span::styled("---".to_string(), Style::default().fg(t.text_muted)),
             ]));
@@ -1979,15 +2005,20 @@ fn draw_spawn_list_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &A
     }
 
     if lines.is_empty() {
-        lines.push(Line::from(
-            Span::styled("No spawns", Style::default().fg(t.text_muted)),
-        ));
+        lines.push(Line::from(Span::styled(
+            "No spawns",
+            Style::default().fg(t.text_muted),
+        )));
     }
 
     let footer = "/ filter  ·  n next named";
     frame.render_widget(
         Paragraph::new(lines)
-            .block(panel(&title, border_style, t).title(footer).title_alignment(ratatui::layout::Alignment::Right))
+            .block(
+                panel(&title, border_style, t)
+                    .title(footer)
+                    .title_alignment(ratatui::layout::Alignment::Right),
+            )
             .style(Style::default()),
         area,
     );
@@ -2007,11 +2038,7 @@ fn draw_target_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) 
         let target_color = if matches!(target.spawn_type, SpawnType::Npc) {
             let is_named = !target.displayed_name.starts_with("a ")
                 && !target.displayed_name.starts_with("an ");
-            if is_named {
-                t.spawn_named
-            } else {
-                t.spawn_npc
-            }
+            if is_named { t.spawn_named } else { t.spawn_npc }
         } else {
             t.text_normal
         };
@@ -2020,7 +2047,9 @@ fn draw_target_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) 
         lines.push(Line::from(vec![
             Span::styled(
                 app.redact_name(&target.displayed_name),
-                Style::default().fg(target_color).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(target_color)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 format!(" · L{} {}", target.level, target.class_abbr),
@@ -2045,14 +2074,24 @@ fn draw_target_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) 
         lines.push(Line::from(""));
 
         // Assist info
-        if let Some(ma_name) = app.visible_clients().first().map(|c| c.local_player.as_ref().map(|p| p.displayed_name.as_str()).unwrap_or("Unknown")) {
+        if let Some(ma_name) = app.visible_clients().first().map(|c| {
+            c.local_player
+                .as_ref()
+                .map(|p| p.displayed_name.as_str())
+                .unwrap_or("Unknown")
+        }) {
             lines.push(Line::from(vec![
                 Span::styled("Assisting ", Style::default().fg(t.text_muted)),
                 Span::styled(ma_name.to_string(), Style::default().fg(t.text_highlight)),
             ]));
         }
 
-        if let Some(mt_name) = app.visible_clients().last().map(|c| c.local_player.as_ref().map(|p| p.displayed_name.as_str()).unwrap_or("Unknown")) {
+        if let Some(mt_name) = app.visible_clients().last().map(|c| {
+            c.local_player
+                .as_ref()
+                .map(|p| p.displayed_name.as_str())
+                .unwrap_or("Unknown")
+        }) {
             lines.push(Line::from(vec![
                 Span::styled("Tanked by ", Style::default().fg(t.text_muted)),
                 Span::styled(mt_name.to_string(), Style::default().fg(t.text_highlight)),
@@ -2066,9 +2105,10 @@ fn draw_target_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) 
             Span::styled("· no add", Style::default().fg(t.text_muted)),
         ]));
     } else {
-        lines.push(Line::from(
-            Span::styled("No target", Style::default().fg(t.text_muted)),
-        ));
+        lines.push(Line::from(Span::styled(
+            "No target",
+            Style::default().fg(t.text_muted),
+        )));
     }
 
     frame.render_widget(
@@ -2092,7 +2132,10 @@ fn draw_ch_chain_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
     // Members line
     lines.push(Line::from(vec![
         Span::styled("Members ", Style::default().fg(t.text_muted)),
-        Span::styled("3 clerics", Style::default().fg(t.hp_high).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "3 clerics",
+            Style::default().fg(t.hp_high).add_modifier(Modifier::BOLD),
+        ),
         Span::styled("  · ", Style::default().fg(t.text_muted)),
         Span::styled("0.5s interval", Style::default().fg(t.text_muted)),
     ]));
@@ -2154,7 +2197,10 @@ fn tactical_sections(app: &App) -> Vec<(TacticalSectionKind, Constraint)> {
     } else {
         6
     };
-    sections.push((TacticalSectionKind::SpawnList, Constraint::Length(spawn_list_height.max(5))));
+    sections.push((
+        TacticalSectionKind::SpawnList,
+        Constraint::Length(spawn_list_height.max(5)),
+    ));
 
     // Target·Main Assist panel: fixed 6 lines
     sections.push((TacticalSectionKind::Target, Constraint::Length(6)));

@@ -210,7 +210,6 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
 /// Used in the left pane of the debug layout (spawns + hex sidebar).
 /// Columns: cursor, ID, Name, Type, Cls, Lvl, HP%, Y, X, Z, State
 fn draw_debug_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
-
     let filtered_indices = app.filtered_spawn_indices().to_vec();
     let t = &app.theme;
     let is_active = matches!(app.active_panel, ActivePanel::DebugSpawns);
@@ -230,7 +229,9 @@ fn draw_debug_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &m
 
     let title = format!(" Spawns · zone {zone_name} · {total} entities ");
 
-    let header_cells = vec!["", "ID", "Name", "Type", "Cls", "Lvl", "HP%", "Y", "X", "Z", "State"];
+    let header_cells = vec![
+        "", "ID", "Name", "Type", "Cls", "Lvl", "HP%", "Y", "X", "Z", "State",
+    ];
     let header = themed_header_row(&header_cells, t);
 
     let highlight_style = Style::default()
@@ -246,7 +247,12 @@ fn draw_debug_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &m
 
                 // Cursor column
                 let cursor_span = if is_selected {
-                    Span::styled("▶", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD))
+                    Span::styled(
+                        "▶",
+                        Style::default()
+                            .fg(t.text_highlight)
+                            .add_modifier(Modifier::BOLD),
+                    )
                 } else {
                     Span::raw(" ")
                 };
@@ -261,9 +267,7 @@ fn draw_debug_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &m
 
                 // Name color: inverse magenta if selected, else spawn type color
                 let name_style = if is_selected {
-                    Style::default()
-                        .fg(Color::Black)
-                        .bg(t.spawn_named)
+                    Style::default().fg(Color::Black).bg(t.spawn_named)
                 } else {
                     Style::default().fg(type_color)
                 };
@@ -343,17 +347,17 @@ fn draw_debug_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &m
         .collect();
 
     let constraints = vec![
-        Constraint::Length(2),   // cursor
-        Constraint::Length(7),   // ID
-        Constraint::Length(26),  // Name
-        Constraint::Length(7),   // Type
-        Constraint::Length(4),   // Cls
-        Constraint::Length(4),   // Lvl
-        Constraint::Length(5),   // HP%
-        Constraint::Length(8),   // Y
-        Constraint::Length(8),   // X
-        Constraint::Length(6),   // Z
-        Constraint::Length(6),   // State
+        Constraint::Length(2),  // cursor
+        Constraint::Length(7),  // ID
+        Constraint::Length(26), // Name
+        Constraint::Length(7),  // Type
+        Constraint::Length(4),  // Cls
+        Constraint::Length(4),  // Lvl
+        Constraint::Length(5),  // HP%
+        Constraint::Length(8),  // Y
+        Constraint::Length(8),  // X
+        Constraint::Length(6),  // Z
+        Constraint::Length(6),  // State
     ];
 
     let footer_line = Line::from(vec![
@@ -368,8 +372,7 @@ fn draw_debug_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &m
         Span::styled("d dump", Style::default().fg(t.text_muted)),
     ]);
 
-    let table_block = panel(title.as_str(), border_style, t)
-        .footer(footer_line);
+    let table_block = panel(title.as_str(), border_style, t).footer(footer_line);
 
     let table = Table::new(rows, constraints)
         .header(header)
@@ -450,14 +453,12 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     };
 
     // Determine if we have a selected spawn
-    let selected_spawn = app
-        .spawns_state
-        .table_state
-        .selected()
-        .and_then(|idx| {
-            let filtered_indices = app.filtered_spawn_indices();
-            filtered_indices.get(idx).and_then(|&spawn_idx| app.spawns.get(spawn_idx))
-        });
+    let selected_spawn = app.spawns_state.table_state.selected().and_then(|idx| {
+        let filtered_indices = app.filtered_spawn_indices();
+        filtered_indices
+            .get(idx)
+            .and_then(|&spawn_idx| app.spawns.get(spawn_idx))
+    });
 
     let title = match selected_spawn {
         Some(spawn) => format!(
@@ -478,7 +479,9 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
             Span::styled("inspect ", Style::default().fg(t.text_secondary)),
             Span::styled(
                 app.redact_name(&spawn.displayed_name).into_owned(),
-                Style::default().fg(t.text_bright).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(t.text_bright)
+                    .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" "),
             Span::styled(
@@ -510,7 +513,10 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
             Span::styled("name", Style::default().fg(t.text_accent)),
             Span::raw("        = "),
             Span::styled(
-                format!("\"{}\"", app.redact_name(&spawn.displayed_name).into_owned()),
+                format!(
+                    "\"{}\"",
+                    app.redact_name(&spawn.displayed_name).into_owned()
+                ),
                 Style::default().fg(Color::Yellow),
             ),
         ]));
@@ -556,10 +562,7 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
             Span::raw("  "),
             Span::styled("hp_pct", Style::default().fg(t.text_accent)),
             Span::raw("      = "),
-            Span::styled(
-                format!("{:.0}", hp_pct),
-                Style::default().fg(Color::Yellow),
-            ),
+            Span::styled(format!("{:.0}", hp_pct), Style::default().fg(Color::Yellow)),
         ]));
 
         lines.push(Line::from(vec![
@@ -592,7 +595,10 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
             ),
         ]));
 
-        lines.push(Line::from(vec![Span::styled("}", Style::default().fg(t.text_muted))]));
+        lines.push(Line::from(vec![Span::styled(
+            "}",
+            Style::default().fg(t.text_muted),
+        )]));
         lines.push(Line::from(""));
 
         // Raw bytes header
@@ -621,7 +627,12 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
             spans.push(Span::raw("  "));
 
             // Hex bytes in 4 groups of 4 bytes each, cycling colors
-            let colors = [t.text_accent, t.text_bright, t.text_bright, t.text_highlight];
+            let colors = [
+                t.text_accent,
+                t.text_bright,
+                t.text_bright,
+                t.text_highlight,
+            ];
             for (i, b) in chunk.iter().enumerate() {
                 let color = colors[i / 4 % 4];
                 spans.push(Span::styled(
@@ -652,10 +663,7 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
                     }
                 })
                 .collect();
-            spans.push(Span::styled(
-                ascii_str,
-                Style::default().fg(Color::Yellow),
-            ));
+            spans.push(Span::styled(ascii_str, Style::default().fg(Color::Yellow)));
 
             lines.push(Line::from(spans));
         }
