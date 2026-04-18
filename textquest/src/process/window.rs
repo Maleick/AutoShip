@@ -13,6 +13,37 @@ pub struct WindowHandle {
     pub pid: u32,
 }
 
+/// Get the PID of the foreground window among a set of known PIDs.
+/// Returns `None` if no known PID matches the foreground window.
+#[cfg(windows)]
+pub fn get_foreground_pid(known_pids: &[u32]) -> Option<u32> {
+    use windows::Win32::{
+        Foundation::HWND,
+        UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId},
+    };
+
+    unsafe {
+        let fg: HWND = GetForegroundWindow();
+        if fg.is_invalid() {
+            return None;
+        }
+
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(fg, Some(&mut pid));
+
+        if pid != 0 && known_pids.contains(&pid) {
+            Some(pid)
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub fn get_foreground_pid(_known_pids: &[u32]) -> Option<u32> {
+    None
+}
+
 /// Find all windows matching a title substring (case-insensitive).
 /// Returns (HWND, title, PID) tuples.
 ///
@@ -77,5 +108,11 @@ mod tests {
             windows.is_empty(),
             "non-Windows stub should not report windows"
         );
+    }
+
+    #[test]
+    fn get_foreground_pid_stub_returns_none() {
+        let pids = vec![100, 200, 300];
+        assert!(get_foreground_pid(&pids).is_none());
     }
 }

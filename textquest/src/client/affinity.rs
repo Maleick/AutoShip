@@ -24,6 +24,96 @@ pub enum ProcessPriority {
     High,
 }
 
+/// Foreground-aware affinity controller that assigns the focused EQ client
+/// a preferred CPU core and distributes background clients across remaining cores.
+pub struct AffinityController {
+    enabled: bool,
+    foreground_cpu: u64,
+    background_cpu_start: u64,
+}
+
+impl AffinityController {
+    /// Create a new affinity controller.
+    ///
+    /// `foreground_cpu` is the core assigned to the focused EQ window.
+    /// `background_cpu_start` is the first core for background clients.
+    #[must_use]
+    pub fn new(foreground_cpu: u64, background_cpu_start: u64) -> Self {
+        Self {
+            enabled: true,
+            foreground_cpu,
+            background_cpu_start,
+        }
+    }
+
+    /// Enable or disable foreground-aware affinity.
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    /// Whether foreground-aware affinity is enabled.
+    #[must_use]
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    /// Compute affinity assignments based on current focus.
+    ///
+    /// The focused client gets `foreground_cpu`. Background clients are
+    /// distributed across remaining cores starting at `background_cpu_start`.
+    /// Returns the assignment for each client index (0 = focused, 1+ = background).
+    #[must_use]
+    pub fn compute_assignments(
+        &self,
+        client_pids: &[u32],
+        focused_pid: Option<u32>,
+        total_cpus: usize,
+    ) -> Vec<AffinityConfig> {
+        if !self.enabled {
+            return compute_affinity_assignments(client_pids.len(), total_cpus);
+        }
+
+        let focused_idx = focused_pid.and_then(|fp| {
+            client_pids.iter().position(|&p| p == fp)
+        });
+
+        let mut assignments = Vec::with_capacity(client_pids.len());
+        let available_cpus = if total_cpus > 1 { total_cpus - 1 } else { 1 };
+
+        for (i, _) in client_pids.iter().enumerate() {
+            let config = if focused_idx.map_or(false, |idx| idx == i) {
+                AffinityConfig {
+                    cpu_mask: 1u64 << self.foreground_cpu,
+                    priority: ProcessPriority::Normal,
+                }
+            } else {
+                let bg_idx = if focused_idx.is_some() { i } else { i.saturating_sub(1) };
+                let cpu_index = ((bg_idx % (available_cpus.saturating_sub(1)).max(1))
+                    + self.background_cpu_start as usize)
+                    .min(total_cpus.saturating_sub(1));
+                let mask = 1u64 << (cpu_index + 1);
+                AffinityConfig {
+                    cpu_mask: if mask == 1u64 << self.foreground_cpu {
+                        1u64 << self.background_cpu_start
+                    } else {
+                        mask
+                    },
+                    priority: ProcessPriority::BelowNormal,
+                }
+            };
+            assignments.push(config);
+        }
+
+        assignments
+    }
+}
+
+impl Default for AffinityController {
+    fn default() -> Self {
+        Self::new(1, 2)
+    }
+}
+
 /// Apply CPU affinity and process priority to a running process.
 ///
 /// # Errors
@@ -266,5 +356,77 @@ mod tests {
         let p = ProcessPriority::AboveNormal;
         let p2 = p.clone();
         assert_eq!(p, p2);
+    }
+
+    // ── AffinityController tests ─────────────────────────────────────────────
+
+    #[test]
+    fn affinity_controller_default() {
+        let ctrl = AffinityController::default();
+        assert!(ctrl.is_enabled());
+    }
+
+    #[test]
+    fn affinity_controller_enable_disable() {
+        let mut ctrl = AffinityController::default();
+        assert!(ctrl.is_enabled());
+
+        ctrl.set_enabled(false);
+        assert!(!ctrl.is_enabled());
+
+        ctrl.set_enabled(true);
+        assert!(ctrl.is_enabled());
+    }
+
+    #[test]
+    fn affinity_controller_focused_gets_foreground_cpu() {
+        let ctrl = AffinityController::new(1, 2);
+        let pids = [100, 200, 300];
+        let assignments = ctrl.compute_assignments(&pids, Some(200), 8);
+
+        assert_eq!(assignments[0].cpu_mask, 1 << 2);
+        assert_eq!(assignments[1].cpu_mask, 1 << 1);
+        assert_eq!(assignments[1].priority, ProcessPriority::Normal);
+        assert_eq!(assignments[2].cpu_mask, 1 << 2);
+    }
+
+    #[test]
+    fn affinity_controller_no_focus_uses_round_robin() {
+        let ctrl = AffinityController::new(1, 2);
+        let pids = [100, 200, 300];
+        let assignments = ctrl.compute_assignments(&pids, None, 8);
+
+        assert_eq!(assignments.len(), 3);
+    }
+
+    #[test]
+    fn affinity_controller_disabled_uses_original_algorithm() {
+        let mut ctrl = AffinityController::default();
+        ctrl.set_enabled(false);
+        let pids = [100, 200];
+        let assignments = ctrl.compute_assignments(&pids, Some(100), 8);
+
+        for a in &assignments {
+            assert_eq!(a.priority, ProcessPriority::BelowNormal);
+        }
+    }
+
+    #[test]
+    fn affinity_controller_focus_not_in_list_uses_round_robin() {
+        let ctrl = AffinityController::new(1, 2);
+        let pids = [100, 200];
+        let assignments = ctrl.compute_assignments(&pids, Some(999), 8);
+
+        assert_eq!(assignments.len(), 2);
+    }
+
+    #[test]
+    fn affinity_controller_single_client_focused() {
+        let ctrl = AffinityController::new(1, 2);
+        let pids = [100];
+        let assignments = ctrl.compute_assignments(&pids, Some(100), 8);
+
+        assert_eq!(assignments[0].cpu_mask, 1 << 1);
+        assert_eq!(assignments[0].priority, ProcessPriority::Normal);
     }
 }

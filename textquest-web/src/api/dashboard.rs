@@ -34,6 +34,24 @@ pub struct DashboardSnapshot {
     pub economy: EconomySection,
     pub combat: CombatSection,
     pub health: HealthSection,
+    pub affinity: Option<AffinitySection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AffinitySection {
+    pub enabled: bool,
+    pub focused_client_id: Option<u32>,
+    pub assignments: Vec<AffinityAssignment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AffinityAssignment {
+    pub client_id: u32,
+    pub cpu_mask: u64,
+    pub priority: String,
+    pub is_focused: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -388,6 +406,9 @@ pub enum DashboardActionRequest {
     UpdateWishlist {
         items: Vec<String>,
     },
+    SetAffinityEnabled {
+        enabled: bool,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -633,6 +654,17 @@ impl DashboardState {
             DashboardActionRequest::TargetSpawn { .. } => {}
             DashboardActionRequest::UpdateWishlist { items } => {
                 snapshot.economy.wishlist = items;
+            }
+            DashboardActionRequest::SetAffinityEnabled { enabled } => {
+                if let Some(ref mut affinity) = snapshot.affinity {
+                    affinity.enabled = enabled;
+                } else {
+                    snapshot.affinity = Some(AffinitySection {
+                        enabled,
+                        focused_client_id: None,
+                        assignments: Vec::new(),
+                    });
+                }
             }
         }
 
@@ -1137,6 +1169,24 @@ fn demo_snapshot() -> DashboardSnapshot {
                 recovery_action: "Respawn requested".to_string(),
             }],
         },
+        affinity: Some(AffinitySection {
+            enabled: true,
+            focused_client_id: Some(1),
+            assignments: vec![
+                AffinityAssignment {
+                    client_id: 1,
+                    cpu_mask: 2,
+                    priority: "Normal".to_string(),
+                    is_focused: true,
+                },
+                AffinityAssignment {
+                    client_id: 2,
+                    cpu_mask: 4,
+                    priority: "BelowNormal".to_string(),
+                    is_focused: false,
+                },
+            ],
+        }),
     };
 
     refresh_snapshot(&mut snapshot);
