@@ -32,15 +32,9 @@ enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    Sessions,
-    Start {
-        session_id: u32,
-    },
-    Stop {
-        session_id: u32,
-    },
-    Restart {
-        session_id: u32,
+    Session {
+        #[command(subcommand)]
+        action: SessionAction,
     },
 }
 
@@ -56,6 +50,14 @@ enum LogAction {
 #[derive(Subcommand)]
 enum ConfigAction {
     Audit { session_id: u32 },
+}
+
+#[derive(Subcommand)]
+enum SessionAction {
+    List,
+    Start { profile: u32 },
+    Stop { session_id: u32 },
+    Restart { session_id: u32 },
 }
 
 fn main() -> ExitCode {
@@ -127,61 +129,63 @@ fn main() -> ExitCode {
                 }
             },
         },
-        Commands::Sessions => match client.list_sessions() {
-            Ok(sessions) => {
-                if sessions.is_empty() {
-                    println!("No active sessions.");
-                } else {
-                    println!("=== Managed Sessions ===");
-                    for session in sessions {
-                        println!(
-                            "Session {}: {} ({}) - {} [{}]",
-                            session.session_id,
-                            session
-                                .character_name
-                                .unwrap_or_else(|| "Unknown".to_string()),
-                            session.class_name.unwrap_or_else(|| "Unknown".to_string()),
-                            session.routing_scope.label,
-                            format!("{:?}", session.lifecycle_state).to_lowercase()
-                        );
+        Commands::Session { action } => match action {
+            SessionAction::List => match client.list_sessions() {
+                Ok(sessions) => {
+                    if sessions.is_empty() {
+                        println!("No active sessions.");
+                    } else {
+                        println!("=== Managed Sessions ===");
+                        for session in sessions {
+                            println!(
+                                "Session {}: {} ({}) - {} [{}]",
+                                session.session_id,
+                                session
+                                    .character_name
+                                    .unwrap_or_else(|| "Unknown".to_string()),
+                                session.class_name.unwrap_or_else(|| "Unknown".to_string()),
+                                session.routing_scope.label,
+                                format!("{:?}", session.lifecycle_state).to_lowercase()
+                            );
+                        }
                     }
+                    ExitCode::SUCCESS
                 }
-                ExitCode::SUCCESS
-            }
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                ExitCode::FAILURE
-            }
-        },
-        Commands::Start { session_id } => match client.start_session(session_id) {
-            Ok(resp) => {
-                println!("{}", resp.message);
-                ExitCode::SUCCESS
-            }
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                ExitCode::FAILURE
-            }
-        },
-        Commands::Stop { session_id } => match client.stop_session(session_id) {
-            Ok(resp) => {
-                println!("{}", resp.message);
-                ExitCode::SUCCESS
-            }
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                ExitCode::FAILURE
-            }
-        },
-        Commands::Restart { session_id } => match client.restart_session(session_id) {
-            Ok(resp) => {
-                println!("{}", resp.message);
-                ExitCode::SUCCESS
-            }
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                ExitCode::FAILURE
-            }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    ExitCode::FAILURE
+                }
+            },
+            SessionAction::Start { profile } => match client.start_session(profile) {
+                Ok(resp) => {
+                    println!("{}", resp.message);
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    ExitCode::FAILURE
+                }
+            },
+            SessionAction::Stop { session_id } => match client.stop_session(session_id) {
+                Ok(resp) => {
+                    println!("{}", resp.message);
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    ExitCode::FAILURE
+                }
+            },
+            SessionAction::Restart { session_id } => match client.restart_session(session_id) {
+                Ok(resp) => {
+                    println!("{}", resp.message);
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    ExitCode::FAILURE
+                }
+            },
         },
     }
 }

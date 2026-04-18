@@ -287,18 +287,26 @@ impl BlockingClient {
     }
 
     /// List timestamp configurations (returns a map of character name → config)
-    pub fn list_timestamp_configs(&self) -> Result<std::collections::HashMap<String, TimestampFormat>> {
+    pub fn list_timestamp_configs(
+        &self,
+    ) -> Result<std::collections::HashMap<String, TimestampFormat>> {
         self.runtime.block_on(self.client.list_timestamp_configs())
     }
 
     /// Get timestamp configuration for a character
     pub fn get_timestamp_config(&self, character: &str) -> Result<TimestampFormat> {
-        self.runtime.block_on(self.client.get_timestamp_config(character))
+        self.runtime
+            .block_on(self.client.get_timestamp_config(character))
     }
 
     /// Update timestamp configuration for a character
-    pub fn put_timestamp_config(&self, character: &str, config: TimestampFormat) -> Result<TimestampFormat> {
-        self.runtime.block_on(self.client.put_timestamp_config(character, config))
+    pub fn put_timestamp_config(
+        &self,
+        character: &str,
+        config: TimestampFormat,
+    ) -> Result<TimestampFormat> {
+        self.runtime
+            .block_on(self.client.put_timestamp_config(character, config))
     }
 
     /// Get kill tracker history

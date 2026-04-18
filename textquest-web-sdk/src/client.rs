@@ -561,7 +561,8 @@ impl Client {
         let req = self.add_token(req);
 
         let response = req.send().await?;
-        self.handle_response::<HashMap<String, TimestampFormat>>(response).await
+        self.handle_response::<HashMap<String, TimestampFormat>>(response)
+            .await
     }
 
     /// Get timestamp configuration for a character
@@ -575,7 +576,11 @@ impl Client {
     }
 
     /// Update timestamp configuration for a character
-    pub async fn put_timestamp_config(&self, character: &str, config: TimestampFormat) -> Result<TimestampFormat> {
+    pub async fn put_timestamp_config(
+        &self,
+        character: &str,
+        config: TimestampFormat,
+    ) -> Result<TimestampFormat> {
         let url = self.build_url(&format!("/timestamp-config/{}", character));
         let req = self.http_client.put(&url).json(&config);
         let req = self.add_token(req);
@@ -860,7 +865,6 @@ impl Client {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests_extended {
