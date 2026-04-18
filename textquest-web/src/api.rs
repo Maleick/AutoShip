@@ -1735,6 +1735,7 @@ mod tests {
     use axum::response::IntoResponse;
     use http_body_util::BodyExt;
     use serde_json::Value;
+    use std::path::PathBuf;
     use std::{collections::HashMap, ffi::OsString, sync::OnceLock};
     use tempfile::tempdir;
     use textquest_common::ipc::{AutoAcceptSettings, AutoAcceptTrustMode};
