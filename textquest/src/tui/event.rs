@@ -110,6 +110,42 @@ fn handle_tactical_map_focused_shortcut(app: &mut App, key: KeyEvent) -> bool {
         return false;
     }
 
+    if key.modifiers.contains(KeyModifiers::SHIFT) {
+        match key.code {
+            KeyCode::Char('!' | '1') => {
+                if let Some(preset) = app.map_state.select_preset_by_index(0) {
+                    app.status_message = format!("Map preset: {}", preset.label());
+                }
+                return true;
+            }
+            KeyCode::Char('@' | '2') => {
+                if let Some(preset) = app.map_state.select_preset_by_index(1) {
+                    app.status_message = format!("Map preset: {}", preset.label());
+                }
+                return true;
+            }
+            KeyCode::Char('#' | '3') => {
+                if let Some(preset) = app.map_state.select_preset_by_index(2) {
+                    app.status_message = format!("Map preset: {}", preset.label());
+                }
+                return true;
+            }
+            KeyCode::Char('$' | '4') => {
+                if let Some(preset) = app.map_state.select_preset_by_index(3) {
+                    app.status_message = format!("Map preset: {}", preset.label());
+                }
+                return true;
+            }
+            KeyCode::Char('%' | '5') => {
+                if let Some(preset) = app.map_state.select_preset_by_index(4) {
+                    app.status_message = format!("Map preset: {}", preset.label());
+                }
+                return true;
+            }
+            _ => {}
+        }
+    }
+
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
             KeyCode::Char('a' | 'A') => {
@@ -166,6 +202,16 @@ fn handle_tactical_map_focused_shortcut(app: &mut App, key: KeyEvent) -> bool {
         }
         KeyCode::Char('v') => {
             app.cycle_tactical_map_view();
+            return true;
+        }
+        KeyCode::Char('[') => {
+            let prev = app.map_state.prev_preset();
+            app.status_message = format!("Map preset: {}", prev.label());
+            return true;
+        }
+        KeyCode::Char(']') => {
+            let next = app.map_state.next_preset();
+            app.status_message = format!("Map preset: {}", next.label());
             return true;
         }
         _ => return false,

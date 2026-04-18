@@ -891,6 +891,67 @@ pub enum MapVisibilityPreset {
     SpawnsOnly,
 }
 
+// Alias for clarity — MapViewPreset is the primary name
+pub type MapViewPreset = MapVisibilityPreset;
+
+impl MapVisibilityPreset {
+    /// Returns the human-readable label for this preset.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::All => "All",
+            Self::Tactical => "Tactical",
+            Self::Navigation => "Navigator",
+            Self::GeometryOnly => "Geometry",
+            Self::SpawnsOnly => "Spawns",
+        }
+    }
+
+    /// Returns the next preset in order.
+    pub fn next(self) -> Self {
+        match self {
+            Self::All => Self::Tactical,
+            Self::Tactical => Self::Navigation,
+            Self::Navigation => Self::GeometryOnly,
+            Self::GeometryOnly => Self::SpawnsOnly,
+            Self::SpawnsOnly => Self::All,
+        }
+    }
+
+    /// Returns the previous preset in order.
+    pub fn prev(self) -> Self {
+        match self {
+            Self::All => Self::SpawnsOnly,
+            Self::Tactical => Self::All,
+            Self::Navigation => Self::Tactical,
+            Self::GeometryOnly => Self::Navigation,
+            Self::SpawnsOnly => Self::GeometryOnly,
+        }
+    }
+
+    /// Get preset by index (0-4).
+    pub fn from_index(idx: usize) -> Option<Self> {
+        match idx {
+            0 => Some(Self::All),
+            1 => Some(Self::Tactical),
+            2 => Some(Self::Navigation),
+            3 => Some(Self::GeometryOnly),
+            4 => Some(Self::SpawnsOnly),
+            _ => None,
+        }
+    }
+
+    /// Get the index of this preset (0-4).
+    pub fn to_index(self) -> usize {
+        match self {
+            Self::All => 0,
+            Self::Tactical => 1,
+            Self::Navigation => 2,
+            Self::GeometryOnly => 3,
+            Self::SpawnsOnly => 4,
+        }
+    }
+}
+
 /// State for the Map screen.
 pub struct MapScreenState {
     /// Parsed zone map data (lines and points), if loaded.
@@ -943,6 +1004,8 @@ pub struct MapScreenState {
     pub marker_file: PathBuf,
     /// Active camp location overlay (set when a camp is started).
     pub camp_overlay: Option<CampOverlay>,
+    /// Currently active map view preset.
+    pub current_preset: MapVisibilityPreset,
 }
 
 impl MapScreenState {
@@ -982,6 +1045,7 @@ impl MapScreenState {
             named_markers,
             marker_file,
             camp_overlay: None,
+            current_preset: MapVisibilityPreset::All,
         }
     }
 
@@ -1177,6 +1241,34 @@ impl MapScreenState {
         let before = self.saved_presets.len();
         self.saved_presets.retain(|p| p.name != name);
         self.saved_presets.len() < before
+    }
+
+    /// Apply a map view preset and update the current_preset tracking.
+    pub fn apply_view_preset(&mut self, preset: MapVisibilityPreset) {
+        self.apply_visibility_preset(preset);
+        self.current_preset = preset;
+    }
+
+    /// Cycle to the next map view preset.
+    pub fn next_preset(&mut self) -> MapVisibilityPreset {
+        let next = self.current_preset.next();
+        self.apply_view_preset(next);
+        next
+    }
+
+    /// Cycle to the previous map view preset.
+    pub fn prev_preset(&mut self) -> MapVisibilityPreset {
+        let prev = self.current_preset.prev();
+        self.apply_view_preset(prev);
+        prev
+    }
+
+    /// Select a preset by index (0-4), returns the preset if valid.
+    pub fn select_preset_by_index(&mut self, idx: usize) -> Option<MapVisibilityPreset> {
+        MapVisibilityPreset::from_index(idx).map(|preset| {
+            self.apply_view_preset(preset);
+            preset
+        })
     }
 
     /// Add a spawn highlight.

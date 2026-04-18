@@ -676,17 +676,18 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             )
         })
         .unwrap_or_default();
+    let preset_label = format!("Preset: {}", app.map_state.current_preset.label());
     let map_info = app.map_state.zone_map.as_ref().map_or_else(
         || {
             format!(
                 " {zone_label} (no data){player_pos_label}{selected_spawn_label} |{layer_label} | \
-                 {filter_label} | Z:{z_range:.0} "
+                 {filter_label} | Z:{z_range:.0} | {preset_label} "
             )
         },
         |_| {
             format!(
                 " {zone_label}{player_pos_label}{selected_spawn_label} | {view_label} \
-                 {:.2}x{view_center} |{layer_label} | {filter_label} | Z:{z_range:.0} ",
+                 {:.2}x{view_center} |{layer_label} | {filter_label} | Z:{z_range:.0} | {preset_label} ",
                 app.map_state.zoom,
             )
         },
