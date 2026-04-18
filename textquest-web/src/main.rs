@@ -142,6 +142,8 @@ pub struct AppState {
     /// surface.  Mirrors the orchestrator's per-session state and acts as the
     /// authoritative staging area for external SDK commands.
     pub session_control_state: Arc<api::session_control::SessionControlState>,
+    /// In-memory session logs keyed by session_id for the admin log tail API.
+    pub session_logs: tokio::sync::RwLock<HashMap<u32, Vec<String>>>,
 }
 
 /// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is
@@ -439,6 +441,7 @@ fn build_state() -> Arc<AppState> {
             api::extensions::extension_catalog_path(),
         ),
         session_control_state: api::session_control::SessionControlState::new(),
+        session_logs: tokio::sync::RwLock::new(HashMap::new()),
     })
 }
 
@@ -510,6 +513,7 @@ pub(crate) fn test_app_state() -> AppState {
             )),
         ),
         session_control_state: api::session_control::SessionControlState::new(),
+        session_logs: tokio::sync::RwLock::new(HashMap::new()),
     }
 }
 
@@ -862,6 +866,7 @@ mod tests {
                 )),
             ),
             session_control_state: api::session_control::SessionControlState::new(),
+            session_logs: tokio::sync::RwLock::new(HashMap::new()),
         })
     }
 
