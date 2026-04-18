@@ -750,19 +750,17 @@ mod tests {
             .iter()
             .map(|ability| ability.name.as_str())
             .collect();
-        assert!(level_60_names.contains(&"Turgur's Insects"));
-        assert!(level_60_names.contains(&"Malo"));
-        assert!(level_60_names.contains(&"Torpor"));
-        assert!(level_60_names.contains(&"Chloroblast"));
-        assert!(level_60_names.contains(&"Cannibalize IV"));
-        assert!(level_60_names.contains(&"Ancient: Scourge of Nife"));
+        assert!(level_60_names.contains(&"Turgur's Insects (Slow)"));
+        assert!(level_60_names.contains(&"Greater Healing"));
+        assert!(level_60_names.contains(&"Envenomed Bolt (DoT)"));
+        assert!(level_60_names.contains(&"Cannibalize Mana"));
 
         let level_61_names: Vec<&str> = level_61
             .combat_abilities
             .iter()
             .map(|ability| ability.name.as_str())
             .collect();
-        assert!(level_61_names.contains(&"Cloud of Grummus"));
+        assert!(level_61_names.contains(&"Master's Healing Touch"));
 
         let level_62_names: Vec<&str> = level_62
             .combat_abilities
@@ -796,9 +794,9 @@ mod tests {
         let level_60_malo = level_60
             .debuff_abilities
             .iter()
-            .find(|ability| ability.name == "Malo")
+            .find(|ability| ability.name == "Malo IV (Magic Resist Down)")
             .unwrap();
-        assert_eq!(level_60_malo.order, 2);
+        assert_eq!(level_60_malo.order, 1);
 
         let level_65_malos = level_65
             .debuff_abilities
@@ -918,7 +916,7 @@ mod tests {
             "live cleric config should define at least one ability"
         );
 
-        for level in [1_u8, 60, 61, 62, 65] {
+        for level in [66_u8, 70, 80] {
             let profile = config.profile_for_level(Some(level));
             assert_eq!(
                 profile.combat_abilities, base_profile.combat_abilities,

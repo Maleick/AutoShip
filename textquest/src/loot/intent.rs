@@ -187,11 +187,7 @@ impl IntentTracker {
 
     /// Update the reserved_for character for an existing entry.
     /// Returns `true` if updated, `false` if item_id not found.
-    pub fn update_reserved_for(
-        &mut self,
-        item_id: u32,
-        char_id: Option<ClientId>,
-    ) -> bool {
+    pub fn update_reserved_for(&mut self, item_id: u32, char_id: Option<ClientId>) -> bool {
         if let Some(entry) = self.entries.get_mut(&item_id) {
             entry.reserved_for = char_id;
             entry.touch();
