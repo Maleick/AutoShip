@@ -3,22 +3,31 @@ role = "tank"
 rest_command = "/sit"
 
 [[combat_abilities]]
-name = "Taunt"
-command = "/taunt"
-cooldown_secs = 8.0
+name = "Shout"
+command = "/doability shout"
+cooldown_secs = 30.0
 priority = 1
+condition = "mana_above_50 and target_hp_above_40"
 
 [[combat_abilities]]
 name = "Lifetap"
 command = "/cast 1"
-cooldown_secs = 6.0
+cooldown_secs = 15.0
 priority = 2
+condition = "mana_above_40 and hp_below_60"
 
 [[combat_abilities]]
-name = "Disease DoT"
-command = "/cast 2"
-cooldown_secs = 30.0
+name = "DefensiveDisc"
+command = "/disc Unholy Aura"
+cooldown_secs = 60.0
 priority = 3
+condition = "mana_above_30 and hp_below_50"
+
+[[combat_abilities]]
+name = "Melee"
+command = "/attack"
+cooldown_secs = 6.0
+priority = 4
 
 [[emergency_abilities]]
 name = "Harm Touch"
@@ -26,3 +35,207 @@ command = "/cast 3"
 cooldown_secs = 3600.0
 priority = 0
 condition = "target_hp_below_10"
+
+[[ability_sets]]
+name = "Shout"
+
+[[ability_sets.candidates]]
+name = "Shout of Rage"
+min_level = 60
+spell_id = 5050
+cooldown_ticks = 1800
+
+[[ability_sets.candidates]]
+name = "Shout of Fury"
+min_level = 65
+spell_id = 5051
+cooldown_ticks = 1800
+
+[[ability_sets]]
+name = "Lifetap"
+
+[[ability_sets.candidates]]
+name = "Splurt of Decay"
+min_level = 60
+spell_id = 5052
+cooldown_ticks = 900
+
+[[ability_sets.candidates]]
+name = "Waves of Decay"
+min_level = 65
+spell_id = 5053
+cooldown_ticks = 900
+
+[[ability_sets]]
+name = "DefensiveDisc"
+
+[[ability_sets.candidates]]
+name = "Unholy Aura Discipline"
+min_level = 60
+spell_id = 5054
+cooldown_ticks = 1200
+
+[[level_overrides]]
+name = "shadowknight-60"
+min_level = 60
+max_level = 60
+
+[[level_overrides.combat_abilities]]
+name = "Shout"
+command = "/disc \"Shout of Rage\""
+cooldown_secs = 30.0
+priority = 1
+condition = "mana_above_50 and target_hp_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Lifetap"
+command = "/disc \"Splurt of Decay\""
+cooldown_secs = 15.0
+priority = 2
+condition = "mana_above_40 and hp_below_60"
+
+[[level_overrides.combat_abilities]]
+name = "DefensiveDisc"
+command = "/disc \"Unholy Aura Discipline\""
+cooldown_secs = 60.0
+priority = 3
+condition = "mana_above_30 and hp_below_50"
+
+[[level_overrides.combat_abilities]]
+name = "Melee"
+command = "/attack"
+cooldown_secs = 6.0
+priority = 4
+
+[[level_overrides]]
+name = "shadowknight-61"
+min_level = 61
+max_level = 61
+
+[[level_overrides.combat_abilities]]
+name = "Shout"
+command = "/disc \"Shout of Rage\""
+cooldown_secs = 30.0
+priority = 1
+condition = "mana_above_50 and target_hp_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Lifetap"
+command = "/disc \"Splurt of Decay\""
+cooldown_secs = 15.0
+priority = 2
+condition = "mana_above_40 and hp_below_60"
+
+[[level_overrides.combat_abilities]]
+name = "DefensiveDisc"
+command = "/disc \"Unholy Aura Discipline\""
+cooldown_secs = 60.0
+priority = 3
+condition = "mana_above_30 and hp_below_50"
+
+[[level_overrides.combat_abilities]]
+name = "Melee"
+command = "/attack"
+cooldown_secs = 6.0
+priority = 4
+
+[[level_overrides]]
+name = "shadowknight-62"
+min_level = 62
+max_level = 64
+
+[[level_overrides.combat_abilities]]
+name = "Shout"
+command = "/disc \"Shout of Rage\""
+cooldown_secs = 30.0
+priority = 1
+condition = "mana_above_50 and target_hp_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Lifetap"
+command = "/disc \"Splurt of Decay\""
+cooldown_secs = 15.0
+priority = 2
+condition = "mana_above_40 and hp_below_60"
+
+[[level_overrides.combat_abilities]]
+name = "DefensiveDisc"
+command = "/disc \"Unholy Aura Discipline\""
+cooldown_secs = 60.0
+priority = 3
+condition = "mana_above_30 and hp_below_50"
+
+[[level_overrides.combat_abilities]]
+name = "Melee"
+command = "/attack"
+cooldown_secs = 6.0
+priority = 4
+
+[[level_overrides]]
+name = "shadowknight-65"
+min_level = 65
+
+[[level_overrides.combat_abilities]]
+name = "Shout"
+command = "/disc \"Shout of Fury\""
+cooldown_secs = 30.0
+priority = 1
+condition = "mana_above_50 and target_hp_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Lifetap"
+command = "/disc \"Waves of Decay\""
+cooldown_secs = 15.0
+priority = 2
+condition = "mana_above_40 and hp_below_60"
+
+[[level_overrides.combat_abilities]]
+name = "DefensiveDisc"
+command = "/disc \"Unholy Aura Discipline\""
+cooldown_secs = 60.0
+priority = 3
+condition = "mana_above_30 and hp_below_50"
+
+[[level_overrides.combat_abilities]]
+name = "Melee"
+command = "/attack"
+cooldown_secs = 6.0
+priority = 4
+
+[[rotation_groups]]
+name = "Burn"
+target_selector = "AutoTarget"
+combat_state_req = "Combat"
+steps_per_frame = 1
+
+[[rotation_groups.entries]]
+name = "Shout"
+action_type = { Disc = "Shout" }
+condition = { And = [ { ManaAbove = 50.0 }, { TargetHpAbove = 40.0 } ] }
+
+[[rotation_groups.entries]]
+name = "Lifetap"
+action_type = { Disc = "Lifetap" }
+condition = { And = [ { ManaAbove = 40.0 }, { HpBelow = 60.0 } ] }
+
+[[rotation_groups]]
+name = "Debuff"
+target_selector = "AutoTarget"
+combat_state_req = "Combat"
+steps_per_frame = 1
+
+[[rotation_groups.entries]]
+name = "DefensiveDisc"
+action_type = { Disc = "DefensiveDisc" }
+condition = { And = [ { ManaAbove = 30.0 }, { HpBelow = 50.0 } ] }
+
+[[rotation_groups]]
+name = "Combat"
+target_selector = "AutoTarget"
+combat_state_req = "Combat"
+steps_per_frame = 1
+
+[[rotation_groups.entries]]
+name = "Attack"
+action_type = { Ability = "Attack" }
+condition = { ManaAbove = 20.0 }
