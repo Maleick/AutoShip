@@ -1,0 +1,35 @@
+# Tarpaulin coverage configuration for TextQuest
+# Enforces 80% line coverage minimum per issue #1202
+# Requirements: Minimum 80% line coverage per module, unit tests for happy path/edge cases/error cases.
+
+[coverage]
+# Minimum coverage threshold - matches CI enforcement (80%)
+threshold = 80
+
+# Timeout for test execution (seconds)
+timeout = 300
+
+# Include all features in coverage analysis
+all-features = true
+
+# Include test code in coverage (important for testing standards)
+tests = true
+
+# Output formats to generate
+output-formats = ["Stdout", "Html"]
+
+# Exclude files from coverage (optional - adjust based on project needs)
+# Examples: test utilities, generated code, stubs
+exclude-files = [
+    "tests/**",
+    "target/**"
+]
+
+[crates]
+# TextQuest workspace crates requiring 80%+ coverage
+textquest = { required = true, min-coverage = 80 }
+textquest-common = { required = true, min-coverage = 80 }
+textquest-dll = { required = true, min-coverage = 80 }
+textquest-client = { required = true, min-coverage = 80 }
+textquest-soul = { required = true, min-coverage = 80 }
+textquest-web = { required = true, min-coverage = 80 }

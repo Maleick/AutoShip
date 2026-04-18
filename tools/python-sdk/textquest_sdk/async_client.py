@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 import httpx
 
+from textquest_sdk.utils import summarize_kill_tracker_history
+
 from textquest_sdk.models import (
     HealthResponse,
     SessionInfo,
@@ -78,28 +80,6 @@ class AsyncTextQuestClient:
             return response.json()
         return None
 
-    @staticmethod
-    def _summarize_kill_tracker_history(history: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Build a lightweight stats view from kill-tracker history."""
-        total_kills = 0
-        kills_by_zone: Dict[str, int] = {}
-        total_sessions = 0
-
-        for character_history in history:
-            for session in character_history.get("sessions", []):
-                total_sessions += 1
-                kills = int(session.get("total_kills", 0))
-                total_kills += kills
-                zone = session.get("zone", "Unknown")
-                kills_by_zone[zone] = kills_by_zone.get(zone, 0) + kills
-
-        return {
-            "total_kills": total_kills,
-            "kills_by_zone": kills_by_zone,
-            "total_loot_value": 0,
-            "average_kill_value": 0.0,
-            "session_count": total_sessions,
-        }
 
     # ─── Health & Status ─────────────────────────────────────────────────
 
@@ -698,7 +678,7 @@ class AsyncTextQuestClient:
             Kill tracker stats
         """
         history = await self._make_request("GET", "/api/kill-tracker/history")
-        return self._summarize_kill_tracker_history(history)
+        return summarize_kill_tracker_history(history)
 
     async def get_kill_tracker_settings(self) -> Dict[str, Any]:
         """Get kill tracker settings."""

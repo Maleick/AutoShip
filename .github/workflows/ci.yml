@@ -176,9 +176,9 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true' && steps.cache-tarpaulin.outputs.cache-hit != 'true'
         run: cargo install cargo-tarpaulin --locked --version ^0.31
 
-      - name: Run coverage (threshold 60%)
+      - name: Run coverage (threshold 80%)
         if: steps.scope.outputs.docs_only != 'true'
-        run: python3 scripts/coverage-report.py --threshold 60
+        run: python3 scripts/coverage-report.py --threshold 80
 
   secrets_scan:
     name: Secret scan

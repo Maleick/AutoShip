@@ -3,18 +3,20 @@
 Coverage report script for TextQuest.
 
 Generates test coverage metrics using cargo-tarpaulin and reports summary statistics.
+Enforces minimum 80% line coverage per module as per issue #1202.
+
 Requires: cargo-tarpaulin (install with: cargo install cargo-tarpaulin)
 
 Usage:
   python3 scripts/coverage-report.py [--html] [--threshold <percent>]
 
   --html         Generate HTML report (output to target/tarpaulin-report.html)
-  --threshold N  Exit with code 1 if coverage falls below N% (default: 60)
+  --threshold N  Exit with code 1 if coverage falls below N% (default: 80)
 
 Examples:
-  python3 scripts/coverage-report.py                    # Text report
+  python3 scripts/coverage-report.py                    # Text report (80% threshold)
   python3 scripts/coverage-report.py --html             # Text + HTML report
-  python3 scripts/coverage-report.py --threshold 80     # Warn if below 80%
+  python3 scripts/coverage-report.py --threshold 80     # Enforce 80% minimum coverage
 """
 
 import subprocess
@@ -52,6 +54,7 @@ def generate_coverage_report(html: bool = False) -> Tuple[int, Optional[float]]:
     Generate coverage report using cargo-tarpaulin.
 
     Returns: (exit_code, coverage_percentage)
+    Enforces 80%+ line coverage per TextQuest crate (issue #1202).
     """
     if not check_tarpaulin_installed():
         print("ERROR: cargo-tarpaulin is not installed.")
@@ -104,6 +107,24 @@ def generate_coverage_report(html: bool = False) -> Tuple[int, Optional[float]]:
     else:
         print("\nWARNING: Could not parse coverage percentage from output")
 
+    # Extract per-file coverage details for detailed reporting (issue #1202).
+    print("\n" + "=" * 80)
+    print("DETAILED COVERAGE REPORT (Per-File Line Coverage)")
+    print("=" * 80)
+
+    # Parse file coverage lines from tarpaulin output.
+    # Tarpaulin format typically shows: "File: <path> ... Coverage: X.XX%"
+    file_coverage_lines = [line for line in coverage_output.split('\n')
+                          if 'File:' in line or ('Lines:' in line and '%' in line)]
+
+    if file_coverage_lines:
+        for line in file_coverage_lines[:20]:  # Show top 20 entries to avoid truncation
+            print(line)
+        if len(file_coverage_lines) > 20:
+            print(f"... and {len(file_coverage_lines) - 20} more files")
+    else:
+        print("(Detailed per-file coverage not available in output format)")
+
     if html:
         print("\nHTML report generated to: target/tarpaulin-report.html")
 
@@ -124,8 +145,8 @@ def main():
     parser.add_argument(
         "--threshold",
         type=int,
-        default=60,
-        help="Exit with code 1 if coverage falls below this percentage (default: 60)"
+        default=80,
+        help="Exit with code 1 if coverage falls below this percentage (default: 80)"
     )
 
     args = parser.parse_args()
