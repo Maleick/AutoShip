@@ -8,6 +8,7 @@ pub mod holyshit;
 pub mod humanize;
 pub mod loot;
 pub mod mana;
+pub mod melee;
 pub mod mez_queue;
 pub mod positioning;
 pub mod rotation;
