@@ -70,16 +70,22 @@ fn bench_json_field_access(c: &mut Criterion) {
 fn bench_config_struct_deser(c: &mut Criterion) {
     #[derive(serde::Deserialize)]
     struct SimpleAccount {
-        name: String,
-        server: String,
-        character: String,
-        class: String,
-        group: u32,
+        #[serde(rename = "name")]
+        _name: String,
+        #[serde(rename = "server")]
+        _server: String,
+        #[serde(rename = "character")]
+        _character: String,
+        #[serde(rename = "class")]
+        _class: String,
+        #[serde(rename = "group")]
+        _group: u32,
     }
 
     #[derive(serde::Deserialize)]
     struct SimpleConfig {
-        accounts: Vec<SimpleAccount>,
+        #[serde(rename = "accounts")]
+        _accounts: Vec<SimpleAccount>,
     }
 
     let json_data = r#"{"accounts":[{"name":"account1","server":"Firiona Vie","character":"MainChar","class":"WAR","group":1},{"name":"account2","server":"Firiona Vie","character":"OffChar","class":"CLR","group":1}]}"#;

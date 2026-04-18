@@ -20,9 +20,29 @@ class AutomationWorkflowTests(unittest.TestCase):
             ),
         )
 
+    def test_pr_automation_uses_only_pull_request_target(self) -> None:
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertNotIn("\n  pull_request:\n", text)
+        self.assertRegex(
+            text,
+            re.compile(
+                r"pull_request_target:\s*\n\s*types:\s*\[\s*labeled,\s*reopened,\s*synchronize,\s*ready_for_review,\s*closed\s*\]"
+            ),
+        )
+
     def test_roadmap_container_regex_keeps_js_tokens(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn(r'/^M(\d+|x)\b/i.test((title || "").trim());', text)
+
+    def test_linked_pr_detection_uses_rest_timeline_api(self) -> None:
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("GET /repos/{owner}/{repo}/issues/{issue_number}/timeline", text)
+        self.assertNotIn("timelineItems(first: 100", text)
+
+    def test_post_merge_sync_deletes_branch_inline(self) -> None:
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("contents: write", text)
+        self.assertIn("DELETE /repos/{owner}/{repo}/git/refs/{ref}", text)
 
     def test_ready_label_is_never_added_to_closed_issues(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")

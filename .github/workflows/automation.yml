@@ -3,8 +3,6 @@ name: Issue and PR Automation
 on:
   issues:
     types: [opened, edited, reopened, closed, labeled, unlabeled]
-  pull_request:
-    types: [labeled, synchronize, closed]
   pull_request_target:
     types: [labeled, reopened, synchronize, ready_for_review]
   workflow_dispatch:
@@ -20,6 +18,7 @@ jobs:
     runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
       issues: write
+      pull-requests: read
     steps:
       - name: Ensure agent:ready label state
         uses: actions/github-script@v8
@@ -35,31 +34,39 @@ jobs:
             ];
 
             async function hasOpenLinkedPr(issueNumber) {
-              let cursor = null;
+              let page = 1;
               while (true) {
-                const result = await github.graphql(`
-                    query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
-                      repository(owner: $owner, name: $repo) {
-                        issue(number: $number) {
-                          timelineItems(first: 100, after: $cursor, itemTypes: [CONNECTED_EVENT, CROSS_REFERENCED_EVENT]) {
-                            pageInfo { hasNextPage, endCursor }
-                            nodes {
-                              __typename
-                              ... on ConnectedEvent { subject { __typename ... on PullRequest { state, repository { name, owner { login } } } } }
-                              ... on CrossReferencedEvent { source { __typename ... on PullRequest { state, repository { name, owner { login } } } } }
-                            }
-                          }
-                        }
-                      }
+                const { data: events } = await github.request(
+                  "GET /repos/{owner}/{repo}/issues/{issue_number}/timeline",
+                  {
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    per_page: 100,
+                    page,
+                    headers: { accept: "application/vnd.github+json" },
+                  }
+                );
+
+                for (const event of events) {
+                  const candidates = [
+                    event.event === "connected" ? event.subject : null,
+                    event.event === "cross-referenced" ? event.source?.issue : null,
+                  ];
+                  for (const candidate of candidates) {
+                    const state = (candidate?.state || "").toLowerCase();
+                    if (
+                      candidate?.pull_request &&
+                      state === "open" &&
+                      candidate.repository?.owner?.login === owner &&
+                      candidate.repository?.name === repo
+                    ) {
+                      return true;
                     }
-                  `, { owner, repo, number: issueNumber, cursor });
-                const timeline = result.repository.issue.timelineItems;
-                for (const node of timeline.nodes) {
-                  const pr = node.__typename === "ConnectedEvent" ? node.subject : node.source;
-                  if (pr?.__typename === "PullRequest" && pr.state === "OPEN" && pr.repository?.owner?.login === owner && pr.repository?.name === repo) return true;
+                  }
                 }
-                if (!timeline.pageInfo.hasNextPage) return false;
-                cursor = timeline.pageInfo.endCursor;
+                if (events.length < 100) return false;
+                page += 1;
               }
             }
 
@@ -132,7 +139,7 @@ jobs:
   auto-merge:
     name: Enable auto-merge
     if: >
-      (github.event_name == 'pull_request' && github.event.pull_request.state == 'open' && contains(github.event.pull_request.labels.*.name, 'merge:auto') && !contains(github.event.pull_request.labels.*.name, 'merge:block')) ||
+      (github.event_name == 'pull_request_target' && github.event.pull_request.state == 'open' && contains(github.event.pull_request.labels.*.name, 'merge:auto') && !contains(github.event.pull_request.labels.*.name, 'merge:block')) ||
       github.event_name == 'workflow_dispatch'
     timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
@@ -155,7 +162,7 @@ jobs:
               } catch (e) { core.warning(`Failed for PR #${prNumber}: ${e.message}`); }
             }
 
-            if (context.eventName === "pull_request") {
+            if (context.eventName === "pull_request_target") {
               await enableAutoMerge(context.payload.pull_request.number);
             } else {
               const openPrs = await github.paginate(github.rest.pulls.list, { owner, repo, state: "open", per_page: 100 });
@@ -164,7 +171,7 @@ jobs:
 
   post-merge:
     name: Post-merge sync
-    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
+    if: github.event_name == 'pull_request_target' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master'
     timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
@@ -172,14 +179,15 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - name: Clean labels and sync linked issues
+      - name: Clean labels, sync linked issues, and delete merged branch
         uses: actions/github-script@v8
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const prNumber = context.payload.pull_request.number;
-            const prBody = context.payload.pull_request.body || "";
+            const pr = context.payload.pull_request;
+            const prNumber = pr.number;
+            const prBody = pr.body || "";
 
             const labelsToRemove = ["agent:working", "agent:ready", "merge:auto", "agent:blocked"];
             for (const label of labelsToRemove) {

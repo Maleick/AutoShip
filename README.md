@@ -187,14 +187,13 @@ Full guide: [`docs/wiki/Configuration.md`](docs/wiki/Configuration.md)
 
 | Trigger                | Jobs                                                             |
 | ---------------------- | ---------------------------------------------------------------- |
-| Same-repo pull request | `PR gate (fmt + clippy + test + python)` — self-hosted           |
-| Fork pull request      | `PR gate (fmt + clippy + test + python)` — GitHub-hosted Windows |
-| Push to master         | `PR gate (fmt + clippy + test + python)` — self-hosted           |
+| Pull request / master push | `Merge gate` — one Linux job for secret scan, docs validation, tests, fmt, and clippy |
+| Manual/nightly validation | `nightly-release.yml` — broader Windows release-style validation |
 | `v*` tag               | Windows release build + GitHub Release artifacts                 |
 
-- **Windows runners** (Frostreaver, Tailscale): Rust builds, release, nightly
-- **Linux runners** (DigitalOcean): merge gate, secrets scan, agent automation
-- `cargo fmt` is auto-fixed on push by `fmt-autofix.yml` — never added to the trusted PR gate (races against its own fix)
+- **Windows runners** (Frostreaver, Tailscale): release, nightly, patch-sensitive validation
+- **Linux runners** (DigitalOcean): merge gate, agent automation
+- Branch cleanup now happens inside `automation.yml` post-merge handling instead of a separate workflow
 - Dev preflight: `python3 scripts/dev-preflight.py`
 
 ## Testing

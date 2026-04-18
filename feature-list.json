@@ -6,9 +6,12 @@
       "status": "complete",
       "acceptance_tests": [
         "python3 -m unittest tests.test_workflow_contract -v",
-        "python3 scripts/sync_wiki.py --check"
+        "python3 -m unittest tests.test_agent_ready_workflow -v",
+        "python3 scripts/sync_wiki.py --check",
+        "cargo clippy --all-targets --all-features -- -D warnings",
+        "cargo test --all --all-features"
       ],
-      "notes": "Completed pruning and simplification work. Documentation now reflects the merge gate, public docs site, and nightly/manual wiki publication lanes."
+      "notes": "Completed pruning and simplification work, then reopened on 2026-04-14 to remove the redundant merged-branch cleanup workflow, collapse CI into one merge gate, switch agent-ready linked-PR detection from failing GraphQL to REST timeline reads, and repair the fmt/clippy drift that was leaving master red after PR #1600."
     },
     {
       "id": "m10-economy-execution-scope",

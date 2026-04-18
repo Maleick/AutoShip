@@ -55,10 +55,10 @@ When behavior or roadmap guidance changes:
 
 ## CI lanes
 
-- `ci.yml` is the only routine merge gate. It runs Linux-based wiki validation, Python tests, Rust format/lint/test, and secret scanning.
+- `ci.yml` is the only routine merge gate. It exposes one GitHub check and runs Linux-based secret scanning, wiki validation, Python tests, and Rust format/lint/test in that order.
 - `nightly-release.yml` is the broader Windows/manual validation lane. Use it for release-like confidence and patch-sensitive pipeline checks.
 - `release.yml` remains the tagged release lane for shipping releases after merge safety has already passed.
-- Repo automation workflows are operational helpers, not product-health signals. Failures there should be triaged separately from merge safety.
+- Repo automation workflows are operational helpers, not product-health signals. `automation.yml` owns repo-side PR housekeeping such as label cleanup and merged-branch deletion, and failures there should be triaged separately from merge safety.
 
 ## Roadmap and Tracking Workflow
 

@@ -73,11 +73,7 @@ When opening a pull request:
 2. **Modified files**: Run `python3 scripts/coverage-report.py` locally to see impact.
 3. **Coverage checklist**: Check the PR template coverage item before marking ready.
 
-GitHub will post a coverage summary comment on PRs showing:
-
-- Overall coverage percentage
-- Change in coverage from base branch
-- Uncovered lines (if HTML report is generated)
+Pull requests do not receive an automatic coverage comment anymore. If a review needs coverage data, include the local report summary directly in the PR discussion.
 
 ## Continuous Improvement
 
@@ -89,7 +85,7 @@ GitHub will post a coverage summary comment on PRs showing:
 
 - **Cargo Tarpaulin**: [GitHub](https://github.com/xd009642/tarpaulin) | [Docs](https://docs.rs/tarpaulin/)
 - **Rust Testing Guide**: [The Book](https://doc.rust-lang.org/book/ch11-00-testing.html)
-- **TextQuest CI**: See `.github/workflows/ci.yml` for coverage job configuration
+- **TextQuest CI**: See `.github/workflows/ci.yml` for the routine merge gate and use `scripts/coverage-report.py` for local coverage evidence
 
 ## FAQ
 

@@ -18,6 +18,7 @@ FEATURE_LIST = REPO_ROOT / "feature-list.json"
 REMOVED_WORKFLOWS = (
     "fmt-autofix.yml",
     "branch-cleanup.yml",
+    "cleanup-branches.yml",
     "readme-metrics.yml",
     "copilot-ci-dispatch.yml",
 )
@@ -28,6 +29,14 @@ FORBIDDEN_CI_STRINGS = (
     "PR gate (trusted path)",
     "PR gate (fork PR path)",
     "[self-hosted, Windows, X64, textquest]",
+    "run_release_build",
+    "  clippy_autofix:",
+    "  coverage:",
+    "  cargo_audit:",
+    "  unsafe_code_report:",
+    "  cargo_deny:",
+    "  windows:",
+    "  secrets_scan:",
 )
 
 
