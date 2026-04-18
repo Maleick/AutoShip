@@ -637,21 +637,13 @@ fn test_orchestrator_can_receive_shutdown_signal() {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
     // Verify initial state is "not shutdown"
-    assert_eq!(
-        *shutdown_rx.borrow(),
-        false,
-        "initial shutdown state should be false"
-    );
+    assert!(!*shutdown_rx.borrow(), "initial shutdown state should be false");
 
     // Simulate sending shutdown signal (as Ctrl+C would do)
     let _ = shutdown_tx.send(true);
 
     // Verify shutdown state was received
-    assert_eq!(
-        *shutdown_rx.borrow(),
-        true,
-        "shutdown state should be true after send"
-    );
+    assert!(*shutdown_rx.borrow(), "shutdown state should be true after send");
 }
 
 #[test]
@@ -662,13 +654,13 @@ fn test_orderly_shutdown_sequence() {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
     // 2. Verify it's running (not shut down)
-    assert_eq!(*shutdown_rx.borrow(), false);
+    assert!(!*shutdown_rx.borrow());
 
     // 3. Signal shutdown
     let _ = shutdown_tx.send(true);
 
     // 4. Verify shutdown was received
-    assert_eq!(*shutdown_rx.borrow(), true);
+    assert!(*shutdown_rx.borrow());
 
     // 5. Cleanup: drop channels (simulating cleanup)
     drop(shutdown_tx);

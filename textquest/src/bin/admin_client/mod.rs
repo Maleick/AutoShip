@@ -183,6 +183,8 @@ impl AdminClient {
     }
 }
 
+fn main() {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,5 +224,3 @@ mod tests {
         assert!(resp.message.contains("Restore"));
     }
 }
-
-fn main() {}
