@@ -171,8 +171,15 @@ impl AdminClient {
         self.get(&format!("/api/admin/sessions/{}/backups", session_id))
     }
 
-    pub fn restore_backup(&self, session_id: u32, backup_id: &str) -> Result<BackupRestoreResponse, String> {
-        self.post(&format!("/api/admin/sessions/{}/backups/{}/restore", session_id, backup_id))
+    pub fn restore_backup(
+        &self,
+        session_id: u32,
+        backup_id: &str,
+    ) -> Result<BackupRestoreResponse, String> {
+        self.post(&format!(
+            "/api/admin/sessions/{}/backups/{}/restore",
+            session_id, backup_id
+        ))
     }
 }
 
@@ -208,7 +215,8 @@ mod tests {
             "backup_id":"backup-2024-04-18-123456",
             "message":"Restore request queued for session 42"
         }"#;
-        let resp: BackupRestoreResponse = serde_json::from_str(json).expect("parse restore response");
+        let resp: BackupRestoreResponse =
+            serde_json::from_str(json).expect("parse restore response");
         assert_eq!(resp.session_id, 42);
         assert_eq!(resp.backup_id, "backup-2024-04-18-123456");
         assert!(resp.message.contains("Restore"));

@@ -609,8 +609,6 @@ pub enum InstrumentSwapAction {
     Restore { slot: InstrumentSlot, item_id: u32 },
 }
 
-
-
 /// Engine for automatic instrument swapping — MQ2BardSwap parity.
 ///
 /// The InstrumentSwapEngine tracks:

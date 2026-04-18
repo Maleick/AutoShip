@@ -7,18 +7,18 @@
 //! The [`distributor`] module provides a pure FSM for routing looted items
 //! through Reserve → Assign → Execute phases with automatic retry.
 
-mod item_score;
 pub mod intent;
+mod item_score;
 pub mod ledger;
 mod store;
 pub mod vendor_cycle;
 mod wishlist;
 
+pub use intent::{IntentTracker, ItemIntent, WishlistEntry};
 pub use item_score::{
     ItemScoreComparison, ItemScoreConfig, ScoreableItem, StatWeights, WeightedStatDelta,
     compare_item_upgrade,
 };
-pub use intent::{IntentTracker, ItemIntent, WishlistEntry};
 pub use ledger::{DaySummary, EconomyLedger, EntrySource, LedgerEntry, TrendReport};
 pub use store::{
     DropRateRow, ImportItem, ItemRow, ItemSearchFilter, LootHistoryRow, LootStore, LootTableRow,

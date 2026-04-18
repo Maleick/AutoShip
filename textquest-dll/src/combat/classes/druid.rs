@@ -187,7 +187,8 @@ impl DruidStrategy {
     fn build_rotations() -> Vec<RotationGroup> {
         vec![
             {
-                let mut g = rotation::group("Heal", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                let mut g =
+                    rotation::group("Heal", TargetSelector::AutoTarget, CombatStateReq::Combat);
                 g.steps_per_frame = 1;
                 g.entries = vec![
                     rotation::entry_if(
@@ -207,7 +208,8 @@ impl DruidStrategy {
                 g
             },
             {
-                let mut g = rotation::group("Snare", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                let mut g =
+                    rotation::group("Snare", TargetSelector::AutoTarget, CombatStateReq::Combat);
                 g.steps_per_frame = 1;
                 g.entries = vec![rotation::entry_if(
                     "Snare",
@@ -220,7 +222,8 @@ impl DruidStrategy {
                 g
             },
             {
-                let mut g = rotation::group("Nuke", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                let mut g =
+                    rotation::group("Nuke", TargetSelector::AutoTarget, CombatStateReq::Combat);
                 g.steps_per_frame = 1;
                 g.entries = vec![rotation::entry_if(
                     "DoT",
@@ -416,7 +419,6 @@ mod tests {
             has_detrimental: false,
         }
     }
-
 
     fn known_abilities() -> Vec<KnownAbility> {
         vec![
@@ -748,15 +750,11 @@ mod tests {
         let sets = DruidStrategy::build_ability_sets();
         let resolved = textquest_common::combat::resolve_abilities(&sets, &known_abilities(), 60);
 
-        let heal = resolved
-            .get("Heal")
-            .expect("level 60 should resolve heal");
+        let heal = resolved.get("Heal").expect("level 60 should resolve heal");
         assert_eq!(heal.ability_name, "Karana's Cure");
         assert_eq!(heal.spell_id, 5001);
 
-        let dot = resolved
-            .get("DoT")
-            .expect("level 60 should resolve DoT");
+        let dot = resolved.get("DoT").expect("level 60 should resolve DoT");
         assert_eq!(dot.ability_name, "Regrowth of the Grove");
         assert_eq!(dot.spell_id, 5004);
     }
@@ -766,15 +764,11 @@ mod tests {
         let sets = DruidStrategy::build_ability_sets();
         let resolved = textquest_common::combat::resolve_abilities(&sets, &known_abilities(), 65);
 
-        let heal = resolved
-            .get("Heal")
-            .expect("level 65 should resolve heal");
+        let heal = resolved.get("Heal").expect("level 65 should resolve heal");
         assert_eq!(heal.ability_name, "Karana's Healing");
         assert_eq!(heal.spell_id, 5000);
 
-        let dot = resolved
-            .get("DoT")
-            .expect("level 65 should resolve DoT");
+        let dot = resolved.get("DoT").expect("level 65 should resolve DoT");
         assert_eq!(dot.ability_name, "Vengeful Wrath");
         assert_eq!(dot.spell_id, 5003);
     }

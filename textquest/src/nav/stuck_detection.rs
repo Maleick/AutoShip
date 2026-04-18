@@ -385,8 +385,15 @@ mod tests {
             std::thread::sleep(Duration::from_millis(500));
         }
 
-        assert!(!recovery_triggered, "Normal movement should not trigger recovery");
-        assert_eq!(detector.stuck_window_count(), 0, "Stuck counter should remain 0");
+        assert!(
+            !recovery_triggered,
+            "Normal movement should not trigger recovery"
+        );
+        assert_eq!(
+            detector.stuck_window_count(),
+            0,
+            "Stuck counter should remain 0"
+        );
     }
 
     /// Issue #1268 scenario 2: Temporary stuck (within 30s threshold)

@@ -698,7 +698,6 @@ fn graceful_shutdown() {
     tracing::info!("TextQuest DLL graceful shutdown complete");
 }
 
-
 /// Activate packet hooks for validation mode.
 ///
 /// This is the explicit entry point for validating the packet capture system

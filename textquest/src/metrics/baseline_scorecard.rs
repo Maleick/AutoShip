@@ -174,8 +174,7 @@ impl BaselineScorecard {
                     - self.movement.route_efficiency,
             },
             economy_delta: EconomyDelta {
-                items_per_hour_delta: other.economy.items_per_hour
-                    - self.economy.items_per_hour,
+                items_per_hour_delta: other.economy.items_per_hour - self.economy.items_per_hour,
                 plat_per_hour_delta: other.economy.plat_per_hour - self.economy.plat_per_hour,
             },
             coordination_delta: CoordinationDelta {

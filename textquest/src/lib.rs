@@ -13,11 +13,11 @@ pub mod auto_group;
 /// EQBC-style cross-machine TCP relay and dispatch manager.
 #[cfg(windows)]
 pub mod box_chat;
-/// MQ2Log-style per-character chat output logging.
-pub mod chat_log;
 /// Camp loop state machine — pulls, fights, loots, meds, buffs.
 #[allow(dead_code)]
 pub mod camp;
+/// MQ2Log-style per-character chat output logging.
+pub mod chat_log;
 /// Multi-client session management and self-healing monitor.
 #[cfg(windows)]
 #[allow(dead_code)]

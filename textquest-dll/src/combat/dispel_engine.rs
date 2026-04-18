@@ -3,10 +3,10 @@
 //! Provides dispel ability database, priority ranking, target selection,
 //! and recommendations for removing crowd control and other detrimental effects.
 
-use std::collections::HashMap;
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
 
-use crate::combat::debuffs::{lookup_debuff, DispelType, DebuffType};
+use crate::combat::debuffs::{DebuffType, DispelType, lookup_debuff};
 use textquest_common::combat::BuffInfo;
 
 /// A dispel ability that can remove debuffs.
@@ -56,28 +56,10 @@ impl DispelAbility {
 static DISPEL_ABILITIES: Lazy<HashMap<i32, DispelAbility>> = Lazy::new(|| {
     let abilities = vec![
         // ─── Poison Cures ──────────────────────────────────────────────────────
-        DispelAbility::new(
-            2500,
-            "Cure Poison",
-            &[DispelType::CurePoison],
-            50,
-            6,
-        ),
-        DispelAbility::new(
-            2501,
-            "Antidote",
-            &[DispelType::CurePoison],
-            75,
-            6,
-        ),
+        DispelAbility::new(2500, "Cure Poison", &[DispelType::CurePoison], 50, 6),
+        DispelAbility::new(2501, "Antidote", &[DispelType::CurePoison], 75, 6),
         // ─── Disease Cures ────────────────────────────────────────────────────────
-        DispelAbility::new(
-            2600,
-            "Cure Disease",
-            &[DispelType::CureDisease],
-            50,
-            6,
-        ),
+        DispelAbility::new(2600, "Cure Disease", &[DispelType::CureDisease], 50, 6),
         DispelAbility::new(
             2601,
             "Cure Curse",
@@ -86,21 +68,9 @@ static DISPEL_ABILITIES: Lazy<HashMap<i32, DispelAbility>> = Lazy::new(|| {
             6,
         ),
         // ─── Remove Curse ────────────────────────────────────────────────────────
-        DispelAbility::new(
-            2700,
-            "Remove Curse",
-            &[DispelType::RemoveCurse],
-            100,
-            12,
-        ),
+        DispelAbility::new(2700, "Remove Curse", &[DispelType::RemoveCurse], 100, 12),
         // ─── Stun Breakers ────────────────────────────────────────────────────────
-        DispelAbility::new(
-            2800,
-            "Stun Breaker",
-            &[DispelType::StunBreaker],
-            60,
-            6,
-        ),
+        DispelAbility::new(2800, "Stun Breaker", &[DispelType::StunBreaker], 60, 6),
         DispelAbility::new(
             2801,
             "Resilience",
@@ -109,21 +79,9 @@ static DISPEL_ABILITIES: Lazy<HashMap<i32, DispelAbility>> = Lazy::new(|| {
             12,
         ),
         // ─── Mez Breakers ────────────────────────────────────────────────────────
-        DispelAbility::new(
-            2900,
-            "Awaken",
-            &[DispelType::MezBreaker],
-            60,
-            6,
-        ),
+        DispelAbility::new(2900, "Awaken", &[DispelType::MezBreaker], 60, 6),
         // ─── Snare Breakers ────────────────────────────────────────────────────────
-        DispelAbility::new(
-            3000,
-            "Freedom",
-            &[DispelType::SnareBreaker],
-            50,
-            6,
-        ),
+        DispelAbility::new(3000, "Freedom", &[DispelType::SnareBreaker], 50, 6),
     ];
 
     let mut map = HashMap::new();
@@ -218,7 +176,8 @@ impl DispelTargetSelector {
     /// Count debuffs in a buff list.
     #[must_use]
     pub fn count_debuffs(buffs: &[BuffInfo]) -> usize {
-        buffs.iter()
+        buffs
+            .iter()
             .filter(|buff| lookup_debuff(buff.spell_id).is_some())
             .count()
     }
@@ -226,7 +185,8 @@ impl DispelTargetSelector {
     /// Count crowd control debuffs in a buff list.
     #[must_use]
     pub fn count_cc_debuffs(buffs: &[BuffInfo]) -> usize {
-        buffs.iter()
+        buffs
+            .iter()
             .filter(|buff| {
                 lookup_debuff(buff.spell_id)
                     .map(|entry| entry.debuff_type == DebuffType::CrowdControl)
@@ -238,7 +198,8 @@ impl DispelTargetSelector {
     /// Check if a buff list contains any debuffs.
     #[must_use]
     pub fn has_debuffs(buffs: &[BuffInfo]) -> bool {
-        buffs.iter()
+        buffs
+            .iter()
             .any(|buff| lookup_debuff(buff.spell_id).is_some())
     }
 }
@@ -325,13 +286,7 @@ mod tests {
 
     #[test]
     fn dispel_ability_new() {
-        let ability = DispelAbility::new(
-            2500,
-            "Cure Poison",
-            &[DispelType::CurePoison],
-            50,
-            6,
-        );
+        let ability = DispelAbility::new(2500, "Cure Poison", &[DispelType::CurePoison], 50, 6);
         assert_eq!(ability.spell_id, 2500);
         assert_eq!(ability.name, "Cure Poison");
         assert_eq!(ability.mana_cost, 50);
@@ -340,13 +295,7 @@ mod tests {
 
     #[test]
     fn dispel_ability_can_cure_matching_type() {
-        let ability = DispelAbility::new(
-            2500,
-            "Cure Poison",
-            &[DispelType::CurePoison],
-            50,
-            6,
-        );
+        let ability = DispelAbility::new(2500, "Cure Poison", &[DispelType::CurePoison], 50, 6);
         assert!(ability.can_cure(DispelType::CurePoison));
         assert!(!ability.can_cure(DispelType::CureDisease));
     }
@@ -564,17 +513,15 @@ mod tests {
     fn target_selector_has_debuffs_true() {
         use textquest_common::combat::BuffCategory;
 
-        let buffs = vec![
-            BuffInfo {
-                spell_id: 1239, // Known debuff
-                duration_ticks: 18,
-                initial_duration: 18,
-                hit_count: 0,
-                category: BuffCategory::LongBuff,
-                caster_level: 65,
-                slot_index: 0,
-            },
-        ];
+        let buffs = vec![BuffInfo {
+            spell_id: 1239, // Known debuff
+            duration_ticks: 18,
+            initial_duration: 18,
+            hit_count: 0,
+            category: BuffCategory::LongBuff,
+            caster_level: 65,
+            slot_index: 0,
+        }];
 
         assert!(DispelTargetSelector::has_debuffs(&buffs));
     }
@@ -591,17 +538,15 @@ mod tests {
     fn recommendation_engine_recommend_dispel_finds_debuff() {
         use textquest_common::combat::BuffCategory;
 
-        let buffs = vec![
-            BuffInfo {
-                spell_id: 1239, // Stun
-                duration_ticks: 18,
-                initial_duration: 18,
-                hit_count: 0,
-                category: BuffCategory::LongBuff,
-                caster_level: 65,
-                slot_index: 0,
-            },
-        ];
+        let buffs = vec![BuffInfo {
+            spell_id: 1239, // Stun
+            duration_ticks: 18,
+            initial_duration: 18,
+            hit_count: 0,
+            category: BuffCategory::LongBuff,
+            caster_level: 65,
+            slot_index: 0,
+        }];
 
         let recommendation = DispelRecommendationEngine::recommend_dispel(&buffs);
         assert!(recommendation.is_some());
@@ -613,17 +558,15 @@ mod tests {
     fn recommendation_engine_crowdcontrol_high_urgency() {
         use textquest_common::combat::BuffCategory;
 
-        let buffs = vec![
-            BuffInfo {
-                spell_id: 1239, // Stun (CC)
-                duration_ticks: 18,
-                initial_duration: 18,
-                hit_count: 0,
-                category: BuffCategory::LongBuff,
-                caster_level: 65,
-                slot_index: 0,
-            },
-        ];
+        let buffs = vec![BuffInfo {
+            spell_id: 1239, // Stun (CC)
+            duration_ticks: 18,
+            initial_duration: 18,
+            hit_count: 0,
+            category: BuffCategory::LongBuff,
+            caster_level: 65,
+            slot_index: 0,
+        }];
 
         let recommendation = DispelRecommendationEngine::recommend_dispel(&buffs);
         assert!(recommendation.is_some());

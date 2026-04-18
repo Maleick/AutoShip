@@ -281,11 +281,8 @@ impl AbilityCooldownTracker {
         self.upsert(ability_id, state);
 
         if let Some(timer_id) = shared_timer_id {
-            let shared_state = Self::availability_state(
-                cooldown_ticks,
-                self.fallback_retry_ticks,
-                now,
-            );
+            let shared_state =
+                Self::availability_state(cooldown_ticks, self.fallback_retry_ticks, now);
             self.upsert(shared_timer_key(timer_id), shared_state);
         }
     }

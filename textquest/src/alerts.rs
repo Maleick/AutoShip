@@ -560,12 +560,7 @@ impl AlertThresholdEvaluator {
     }
 
     #[must_use]
-    pub fn gm_interaction_alert(
-        &self,
-        actor: &str,
-        sender: &str,
-        message: &str,
-    ) -> NewAlert {
+    pub fn gm_interaction_alert(&self, actor: &str, sender: &str, message: &str) -> NewAlert {
         NewAlert::new(
             AlertSeverity::Warning,
             AlertKind::GmInteraction,

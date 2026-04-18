@@ -822,7 +822,10 @@ impl Combatant {
     }
 
     fn rotation_ability_is_ready(&self, spell_id: i32) -> bool {
-        if !self.ability_cooldowns.can_use_with_shared(spell_id, None, self.tick_count) {
+        if !self
+            .ability_cooldowns
+            .can_use_with_shared(spell_id, None, self.tick_count)
+        {
             return false;
         }
 
@@ -830,7 +833,10 @@ impl Combatant {
             .shared_activated_ability_ids(spell_id)
             .iter()
             .filter(|&&shared_id| shared_id != spell_id)
-            .all(|&shared_id| self.ability_cooldowns.can_use_with_shared(shared_id, None, self.tick_count))
+            .all(|&shared_id| {
+                self.ability_cooldowns
+                    .can_use_with_shared(shared_id, None, self.tick_count)
+            })
     }
 
     fn consume_rotation_ability_cooldown(&mut self, spell_id: i32) {
@@ -1261,8 +1267,11 @@ impl Combatant {
                                         return false;
                                     }
                                     entry.cooldown_key.as_ref().is_none_or(|key| {
-                                        self.ability_cooldowns
-                                            .can_use(rotation_cooldown_key(key), None, self.tick_count)
+                                        self.ability_cooldowns.can_use(
+                                            rotation_cooldown_key(key),
+                                            None,
+                                            self.tick_count,
+                                        )
                                     })
                                 }
                                 ActionType::Ability(ability_name) => combat_skill_id(ability_name)
@@ -1277,8 +1286,11 @@ impl Combatant {
                                             self.tick_count,
                                         )
                                         && entry.cooldown_key.as_ref().is_none_or(|key| {
-                                            self.ability_cooldowns
-                                                .can_use(rotation_cooldown_key(key), None, self.tick_count)
+                                            self.ability_cooldowns.can_use(
+                                                rotation_cooldown_key(key),
+                                                None,
+                                                self.tick_count,
+                                            )
                                         })
                                 }
                             }
@@ -2900,8 +2912,14 @@ mod tests {
         c.state = CombatState::Engaging { target_id: 100 };
         c.tick(&player, Some(&target), &[]);
 
-        assert!(!c.ability_cooldowns.can_use_with_shared(4507, None, c.tick_count));
-        assert!(!c.ability_cooldowns.can_use_with_shared(4511, None, c.tick_count));
+        assert!(
+            !c.ability_cooldowns
+                .can_use_with_shared(4507, None, c.tick_count)
+        );
+        assert!(
+            !c.ability_cooldowns
+                .can_use_with_shared(4511, None, c.tick_count)
+        );
     }
 
     #[test]

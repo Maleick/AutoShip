@@ -266,10 +266,7 @@ impl DebuffTracker {
 
     /// Get the number of active debuffs.
     pub fn count(&self, now: u64) -> usize {
-        self.debuffs
-            .values()
-            .filter(|d| !d.is_expired(now))
-            .count()
+        self.debuffs.values().filter(|d| !d.is_expired(now)).count()
     }
 
     /// Clear all tracked debuffs.

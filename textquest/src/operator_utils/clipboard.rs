@@ -17,13 +17,15 @@ use anyhow::Result;
 #[cfg(windows)]
 pub fn copy_to_clipboard(text: &str) -> Result<()> {
     use anyhow::Context;
+    use std::ffi::CStr;
     use windows::Win32::{
         Foundation::HWND,
-        System::DataExchange::{GetClipboardOwner, OpenClipboard, CloseClipboard, SetClipboardData},
+        System::DataExchange::{
+            CloseClipboard, GetClipboardOwner, OpenClipboard, SetClipboardData,
+        },
         System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock},
         System::MemoryFlags::GMEM_MOVEABLE,
     };
-    use std::ffi::CStr;
 
     unsafe {
         // Open clipboard
@@ -47,11 +49,7 @@ pub fn copy_to_clipboard(text: &str) -> Result<()> {
         }
 
         // Copy text to allocated memory
-        std::ptr::copy_nonoverlapping(
-            text.as_ptr() as *const u8,
-            ptr.0 as *mut u8,
-            text.len(),
-        );
+        std::ptr::copy_nonoverlapping(text.as_ptr() as *const u8, ptr.0 as *mut u8, text.len());
         // Write null terminator
         *(ptr.0.add(text.len()) as *mut u8) = 0;
 
@@ -59,7 +57,10 @@ pub fn copy_to_clipboard(text: &str) -> Result<()> {
 
         // Set clipboard data (CF_TEXT = 1 for ANSI text)
         const CF_TEXT: u32 = 1;
-        if SetClipboardData(CF_TEXT, hglobal.0 as *mut std::ffi::c_void).0.is_null() {
+        if SetClipboardData(CF_TEXT, hglobal.0 as *mut std::ffi::c_void)
+            .0
+            .is_null()
+        {
             let _ = CloseClipboard();
             anyhow::bail!("Failed to set clipboard data");
         }
@@ -74,7 +75,11 @@ pub fn copy_to_clipboard(text: &str) -> Result<()> {
 /// Stub implementation for non-Windows platforms.
 #[cfg(not(windows))]
 pub fn copy_to_clipboard(text: &str) -> Result<()> {
-    tracing::debug!(len = text.len(), "Clipboard stub: would copy {} chars", text.len());
+    tracing::debug!(
+        len = text.len(),
+        "Clipboard stub: would copy {} chars",
+        text.len()
+    );
     Ok(())
 }
 

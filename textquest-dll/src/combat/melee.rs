@@ -7,7 +7,7 @@
 //! - Melee skill scheduling (kick, bash, slam, backstab, tiger claw)
 //! - Class-specific melee automation configuration
 
-use textquest_common::combat::{ActionType, ConditionExpr, TargetSelector, CombatStateReq};
+use textquest_common::combat::{ActionType, CombatStateReq, ConditionExpr, TargetSelector};
 
 use super::rotation::{RotationEntry, RotationGroup};
 
@@ -149,14 +149,13 @@ pub fn build_disc_rotation_group(
 
     for disc in sorted_discs {
         // Build condition: check endurance threshold
-        let min_endurance = disc.min_endurance_pct.unwrap_or(endurance_thresholds.disc_min_pct);
+        let min_endurance = disc
+            .min_endurance_pct
+            .unwrap_or(endurance_thresholds.disc_min_pct);
         let condition = ConditionExpr::EnduranceAbove(min_endurance);
 
-        let mut entry = super::rotation::entry_if(
-            &disc.name,
-            ActionType::Disc(disc.name.clone()),
-            condition,
-        );
+        let mut entry =
+            super::rotation::entry_if(&disc.name, ActionType::Disc(disc.name.clone()), condition);
 
         if let Some(shared_timer) = disc.shared_timer_key.as_ref() {
             entry.shared_cooldown_key = Some(shared_timer.clone());
@@ -187,7 +186,9 @@ pub fn build_melee_skill_entries(
     skills
         .iter()
         .map(|skill| {
-            let min_endurance = skill.min_endurance_pct.unwrap_or(endurance_thresholds.skill_min_pct);
+            let min_endurance = skill
+                .min_endurance_pct
+                .unwrap_or(endurance_thresholds.skill_min_pct);
             let condition = ConditionExpr::EnduranceAbove(min_endurance);
 
             let mut entry = super::rotation::entry_if(

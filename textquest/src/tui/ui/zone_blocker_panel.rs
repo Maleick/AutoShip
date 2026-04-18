@@ -86,31 +86,23 @@ pub fn draw_zone_blocker_panel(frame: &mut Frame, area: ratatui::layout::Rect, a
                     Style::default().fg(t.text_accent)
                 };
 
-                blocker_items.push(ListItem::new(
-                    Line::from(vec![
-                        Span::styled(
-                            format!("{} {}: ", marker, client_name),
-                            header_style,
-                        ),
-                    ]),
-                ));
+                blocker_items.push(ListItem::new(Line::from(vec![Span::styled(
+                    format!("{} {}: ", marker, client_name),
+                    header_style,
+                )])));
 
                 // Add each blocker with indentation
                 for blocker in &nav.blockers {
                     let blocker_style = if is_selected {
-                        Style::default()
-                            .fg(t.hp_low)
-                            .bg(t.row_selected_bg)
+                        Style::default().fg(t.hp_low).bg(t.row_selected_bg)
                     } else {
                         Style::default().fg(t.hp_low)
                     };
 
-                    blocker_items.push(ListItem::new(
-                        Line::from(vec![
-                            Span::styled("  • ", Style::default().fg(t.text_highlight)),
-                            Span::styled(blocker.as_str(), blocker_style),
-                        ]),
-                    ));
+                    blocker_items.push(ListItem::new(Line::from(vec![
+                        Span::styled("  • ", Style::default().fg(t.text_highlight)),
+                        Span::styled(blocker.as_str(), blocker_style),
+                    ])));
                 }
             }
         }
@@ -143,33 +135,25 @@ pub fn draw_zone_blocker_panel(frame: &mut Frame, area: ratatui::layout::Rect, a
                         Style::default().fg(t.text_accent)
                     };
 
-                    blocker_items.push(ListItem::new(
-                        Line::from(vec![
-                            Span::styled(
-                                format!("{} {}: ", marker, client_name),
-                                header_style,
-                            ),
-                        ]),
-                    ));
+                    blocker_items.push(ListItem::new(Line::from(vec![Span::styled(
+                        format!("{} {}: ", marker, client_name),
+                        header_style,
+                    )])));
                 }
 
                 let blocker_style = if is_selected {
-                    Style::default()
-                        .fg(t.text_highlight)
-                        .bg(t.row_selected_bg)
+                    Style::default().fg(t.text_highlight).bg(t.row_selected_bg)
                 } else {
                     Style::default().fg(t.text_highlight)
                 };
 
-                blocker_items.push(ListItem::new(
-                    Line::from(vec![
-                        Span::styled("  • ", Style::default().fg(t.hp_low)),
-                        Span::styled(
-                            "Zone transition stuck (recovery attempt may be in progress)",
-                            blocker_style,
-                        ),
-                    ]),
-                ));
+                blocker_items.push(ListItem::new(Line::from(vec![
+                    Span::styled("  • ", Style::default().fg(t.hp_low)),
+                    Span::styled(
+                        "Zone transition stuck (recovery attempt may be in progress)",
+                        blocker_style,
+                    ),
+                ])));
             }
         }
     }

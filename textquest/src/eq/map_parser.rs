@@ -173,10 +173,7 @@ fn detect_zone_exits(points: &[MapPoint]) -> Vec<ZoneExit> {
                     .map(|s| s.trim().to_string())
             } else if label_lower.contains("->") {
                 // Extract text after "->"
-                label_lower
-                    .split("->")
-                    .nth(1)
-                    .map(|s| s.trim().to_string())
+                label_lower.split("->").nth(1).map(|s| s.trim().to_string())
             } else if label_lower.contains("entrance") || label_lower.contains("exit") {
                 // Use full label for entrance/exit markers
                 Some(point.label.clone())
