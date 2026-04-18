@@ -89,7 +89,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn("PR gate (trusted path)", text)
         self.assertNotIn("PR gate (fork PR path)", text)
         self.assertNotIn("runs-on: [self-hosted, Windows, X64, textquest]", text)
-        self.assertIn("ubuntu-latest", text)
+      self.assertIn("runs-on: [self-hosted, Linux, X64, textquest]", text)
 
     def test_nightly_release_remains_present(self) -> None:
         text = self.read("nightly-release.yml")
@@ -229,7 +229,7 @@ env:
 jobs:
   merge_gate:
     name: Merge gate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 30
 ```
 
@@ -270,14 +270,14 @@ Use this step body under `merge_gate`:
         run: cargo test --all --all-features
 ```
 
-- [ ] **Step 3: Replace the existing secret scan jobs with one direct hosted job**
+- [ ] **Step 3: Replace the existing secret scan jobs with one direct self-hosted Linux job**
 
 Append this job below `merge_gate`:
 
 ```yaml
   secrets_scan:
     name: Secret scan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4

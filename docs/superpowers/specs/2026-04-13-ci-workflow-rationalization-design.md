@@ -155,11 +155,11 @@ Requirements:
 ## Structure
 
 - Trusted same-repo PR path:
-  Run on Linux.
+  Run on self-hosted Linux.
 - Fork PR path:
-  Run on GitHub-hosted infrastructure with the same or slightly reduced safe read-only checks.
+  If fork PRs are allowed, run on a read-only self-hosted Linux lane with the same or slightly reduced safe checks.
 - Secret scan:
-  Run as a direct sibling job, ideally on GitHub-hosted Linux for both paths.
+  Run as a direct sibling job on self-hosted Linux for both paths.
 
 Remove:
 

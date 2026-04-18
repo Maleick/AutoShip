@@ -20,7 +20,7 @@ permissions:
 jobs:
   deploy:
     name: Deploy to GitHub Pages
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

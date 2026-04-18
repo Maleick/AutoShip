@@ -713,7 +713,7 @@ name: Soul Engine Tests
 on: [push, pull_request]
 jobs:
   test:
-    runs-on: ubuntu-latest
+        runs-on: [self-hosted, Linux, X64, textquest]
     steps:
       - uses: actions/checkout@v4
       - name: Test Soul Engine
