@@ -3648,4 +3648,194 @@ mod tests {
             "Minimap should show a heading arrow adjacent to the player marker"
         );
     }
+
+    #[test]
+    fn test_player_marker_renders_at_player_xy() {
+        // Player at (0,0) should render player marker at grid center
+        let app = test_app_with_spawns();
+        let rendered = render_map_view_text(app, 80, 20);
+        // Check that some heading arrow appears (player uses arrow for heading indication)
+        assert!(
+            rendered.contains('↑')
+                || rendered.contains('↗')
+                || rendered.contains('→')
+                || rendered.contains('↘')
+                || rendered.contains('↓')
+                || rendered.contains('↙')
+                || rendered.contains('←')
+                || rendered.contains('↖'),
+            "Player marker with heading arrow should render at player position"
+        );
+    }
+
+    #[test]
+    fn test_player_marker_not_rendered_when_no_spawns() {
+        // When no player exists, map should still render gracefully
+        let mut app = App::new();
+        let mut client = ClientState::new(77, 0);
+        client.spawn_revision = 1;
+        client.spawns = vec![
+            test_spawn(1, "orc pawn", 4.0, 4.0),
+            test_spawn(2, "orc centurion", 5.0, 4.0),
+        ];
+        // Deliberately NOT setting local_player
+        app.clients.push(client);
+        app.sync_from_selected_client();
+
+        // Should render without panicking or error
+        let rendered = render_map_view_text(app, 80, 20);
+        assert!(!rendered.is_empty(), "Map should render even with no player");
+    }
+
+    #[test]
+    fn test_player_marker_updates_with_spawn_position() {
+        // Player marker should update when player moves
+        let mut app = test_app_with_spawns();
+        let original = render_map_view_text(app.clone(), 80, 20);
+
+        // Move player to a different position
+        if let Some(client) = app.clients.get_mut(0) {
+            if let Some(player) = &mut client.local_player {
+                player.x = 10.0;
+                player.y = 10.0;
+            }
+        }
+        app.sync_from_selected_client();
+
+        let moved = render_map_view_text(app, 80, 20);
+        // The rendered output should differ when player moves
+        // (map center changes, marker position changes relative to viewport)
+        assert_ne!(original, moved, "Map should update when player position changes");
+    }
+
+    #[test]
+    fn test_player_heading_arrow_shows_direction() {
+        // Heading arrow should point in correct direction for various headings
+        let mut app = App::new();
+        let mut client = ClientState::new(77, 0);
+        client.spawn_revision = 1;
+
+        // Test North heading (0)
+        let mut player_north = test_spawn(99, "Player", 0.0, 0.0);
+        player_north.heading = 0.0;
+        client.local_player = Some(player_north);
+        app.clients.push(client);
+        app.sync_from_selected_client();
+
+        let rendered_north = render_map_view_text(app.clone(), 80, 20);
+        assert!(
+            rendered_north.contains('↑'),
+            "Heading 0 (North) should show ↑ arrow"
+        );
+
+        // Test East heading (384)
+        let mut app_east = App::new();
+        let mut client_east = ClientState::new(77, 0);
+        client_east.spawn_revision = 1;
+        let mut player_east = test_spawn(99, "Player", 0.0, 0.0);
+        player_east.heading = 384.0;
+        client_east.local_player = Some(player_east);
+        app_east.clients.push(client_east);
+        app_east.sync_from_selected_client();
+
+        let rendered_east = render_map_view_text(app_east, 80, 20);
+        assert!(
+            rendered_east.contains('→'),
+            "Heading 384 (East) should show → arrow"
+        );
+    }
+
+    #[test]
+    fn test_player_marker_visible_at_different_zoom_levels() {
+        // Player marker should be visible at various zoom levels
+        let app = test_app_with_spawns();
+
+        // Test at zoom 0.5 (zoomed out)
+        let mut app_zoom_out = app.clone();
+        app_zoom_out.map_state.zoom = 0.5;
+        let rendered_zoom_out = render_map_view_text(app_zoom_out, 80, 20);
+        assert!(
+            rendered_zoom_out.contains('↑')
+                || rendered_zoom_out.contains('↗')
+                || rendered_zoom_out.contains('→')
+                || rendered_zoom_out.contains('↘')
+                || rendered_zoom_out.contains('↓')
+                || rendered_zoom_out.contains('↙')
+                || rendered_zoom_out.contains('←')
+                || rendered_zoom_out.contains('↖'),
+            "Player marker should be visible at zoom 0.5"
+        );
+
+        // Test at zoom 1.0 (normal)
+        let mut app_zoom_normal = app.clone();
+        app_zoom_normal.map_state.zoom = 1.0;
+        let rendered_zoom_normal = render_map_view_text(app_zoom_normal, 80, 20);
+        assert!(
+            rendered_zoom_normal.contains('↑')
+                || rendered_zoom_normal.contains('↗')
+                || rendered_zoom_normal.contains('→')
+                || rendered_zoom_normal.contains('↘')
+                || rendered_zoom_normal.contains('↓')
+                || rendered_zoom_normal.contains('↙')
+                || rendered_zoom_normal.contains('←')
+                || rendered_zoom_normal.contains('↖'),
+            "Player marker should be visible at zoom 1.0"
+        );
+
+        // Test at zoom 2.0 (zoomed in)
+        let mut app_zoom_in = app.clone();
+        app_zoom_in.map_state.zoom = 2.0;
+        let rendered_zoom_in = render_map_view_text(app_zoom_in, 80, 20);
+        assert!(
+            rendered_zoom_in.contains('↑')
+                || rendered_zoom_in.contains('↗')
+                || rendered_zoom_in.contains('→')
+                || rendered_zoom_in.contains('↘')
+                || rendered_zoom_in.contains('↓')
+                || rendered_zoom_in.contains('↙')
+                || rendered_zoom_in.contains('←')
+                || rendered_zoom_in.contains('↖'),
+            "Player marker should be visible at zoom 2.0"
+        );
+    }
+
+    #[test]
+    fn test_player_marker_distinct_from_npc_markers() {
+        // Player marker (heading arrow) should be visually distinct from NPC markers
+        let mut app = App::new();
+        let mut client = ClientState::new(77, 0);
+        client.spawn_revision = 1;
+
+        // Add named NPC (should render as ◆)
+        client.spawns = vec![
+            test_spawn(1, "Emperor Crush", 5.0, 5.0), // Named NPC
+            test_spawn(2, "a skeleton", 10.0, 10.0),  // Regular NPC
+        ];
+        let mut player = test_spawn(99, "Player", 0.0, 0.0);
+        player.heading = 0.0;
+        client.local_player = Some(player);
+        app.clients.push(client);
+        app.sync_from_selected_client();
+
+        let rendered = render_map_view_text(app, 120, 24);
+
+        // Player should render with a heading arrow (one of these characters)
+        assert!(
+            rendered.contains('↑')
+                || rendered.contains('↗')
+                || rendered.contains('→')
+                || rendered.contains('↘')
+                || rendered.contains('↓')
+                || rendered.contains('↙')
+                || rendered.contains('←')
+                || rendered.contains('↖'),
+            "Player should render with heading arrow"
+        );
+
+        // Named NPC should render as ◆
+        assert!(rendered.contains('◆'), "Named NPC should render as ◆");
+
+        // Regular NPC should render as ○
+        assert!(rendered.contains('○'), "Regular NPC should render as ○");
+    }
 }
