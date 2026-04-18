@@ -91,7 +91,7 @@ pub(crate) struct MapSpawnPresentationKey {
     pub z_filter_bits: u32,
     pub player_z_bits: Option<u32>,
     pub show_spawns: bool,
-    pub map_filter_bits: u8,
+    pub map_filter_bits: u16,
     pub theme_kind: ThemeKind,
     pub center_x_bits: u32,
     pub center_y_bits: u32,
@@ -379,6 +379,69 @@ impl MapViewportMode {
     }
 }
 
+/// NPC subcategories based on spawn name patterns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NpcCategory {
+    /// NPCs that serve as merchants/vendors.
+    Merchant,
+    /// NPCs that serve as bankers.
+    Banker,
+    /// Training dummies (typically for skill testing).
+    TrainingDummy,
+    /// Quest NPCs (typically have "quest" or similar in name).
+    QuestNpc,
+    /// All other NPCs not in the above categories.
+    Other,
+}
+
+impl NpcCategory {
+    /// Determine the NPC category from a spawn name.
+    /// Returns `Some(category)` for any NPC spawn; returns `None` for non-NPC types.
+    #[must_use]
+    pub fn from_spawn_name(name: &str) -> Option<Self> {
+        let lower = name.to_lowercase();
+        
+        // Check for merchant patterns
+        if lower.contains("merchant")
+            || lower.contains("vendor")
+            || lower.contains("trainer")
+            || lower.contains("master")
+            || lower.contains("captain")
+            || lower.contains("quartermaster")
+        {
+            return Some(Self::Merchant);
+        }
+        
+        // Check for banker patterns
+        if lower.contains("banker") || lower.contains("exchange") {
+            return Some(Self::Banker);
+        }
+        
+        // Check for training dummy patterns
+        if lower.contains("training dummy") || lower.contains("practice dummy") {
+            return Some(Self::TrainingDummy);
+        }
+        
+        // Check for quest NPC patterns
+        if lower.contains("quest") || lower.contains("task") {
+            return Some(Self::QuestNpc);
+        }
+        
+        // Default to Other for any unclassified NPC
+        Some(Self::Other)
+    }
+    
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Merchant => "Merchant",
+            Self::Banker => "Banker",
+            Self::TrainingDummy => "Training Dummy",
+            Self::QuestNpc => "Quest NPC",
+            Self::Other => "Other NPC",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MapFilterKind {
     Npc,
@@ -388,6 +451,11 @@ pub enum MapFilterKind {
     Pet,
     Named,
     Untargetable,
+    NpcMerchant,
+    NpcBanker,
+    NpcTrainingDummy,
+    NpcQuestNpc,
+    NpcOther,
 }
 
 impl MapFilterKind {
@@ -400,6 +468,11 @@ impl MapFilterKind {
             "pet" | "pets" => Some(Self::Pet),
             "named" | "nameds" => Some(Self::Named),
             "untargetable" | "untargetables" | "untarget" => Some(Self::Untargetable),
+            "merchant" => Some(Self::NpcMerchant),
+            "banker" => Some(Self::NpcBanker),
+            "training" | "dummy" => Some(Self::NpcTrainingDummy),
+            "quest" => Some(Self::NpcQuestNpc),
+            "other" => Some(Self::NpcOther),
             _ => None,
         }
     }
@@ -413,6 +486,11 @@ impl MapFilterKind {
             Self::Pet => "Pet",
             Self::Named => "Named",
             Self::Untargetable => "Untargetable",
+            Self::NpcMerchant => "Merchant",
+            Self::NpcBanker => "Banker",
+            Self::NpcTrainingDummy => "Training Dummy",
+            Self::NpcQuestNpc => "Quest NPC",
+            Self::NpcOther => "Other NPC",
         }
     }
 }
@@ -426,6 +504,11 @@ pub struct MapFilters {
     pub show_pet: bool,
     pub show_named: bool,
     pub show_untargetable: bool,
+    pub show_merchant: bool,
+    pub show_banker: bool,
+    pub show_training_dummy: bool,
+    pub show_quest_npc: bool,
+    pub show_other_npc: bool,
 }
 
 impl Default for MapFilters {
@@ -438,6 +521,11 @@ impl Default for MapFilters {
             show_pet: true,
             show_named: true,
             show_untargetable: true,
+            show_merchant: true,
+            show_banker: true,
+            show_training_dummy: true,
+            show_quest_npc: true,
+            show_other_npc: true,
         }
     }
 }
@@ -459,6 +547,11 @@ impl MapFilters {
             MapFilterKind::Pet => self.show_pet = enabled,
             MapFilterKind::Named => self.show_named = enabled,
             MapFilterKind::Untargetable => self.show_untargetable = enabled,
+            MapFilterKind::NpcMerchant => self.show_merchant = enabled,
+            MapFilterKind::NpcBanker => self.show_banker = enabled,
+            MapFilterKind::NpcTrainingDummy => self.show_training_dummy = enabled,
+            MapFilterKind::NpcQuestNpc => self.show_quest_npc = enabled,
+            MapFilterKind::NpcOther => self.show_other_npc = enabled,
         }
     }
 
@@ -472,6 +565,11 @@ impl MapFilters {
             MapFilterKind::Pet => self.show_pet,
             MapFilterKind::Named => self.show_named,
             MapFilterKind::Untargetable => self.show_untargetable,
+            MapFilterKind::NpcMerchant => self.show_merchant,
+            MapFilterKind::NpcBanker => self.show_banker,
+            MapFilterKind::NpcTrainingDummy => self.show_training_dummy,
+            MapFilterKind::NpcQuestNpc => self.show_quest_npc,
+            MapFilterKind::NpcOther => self.show_other_npc,
         }
     }
 
@@ -483,18 +581,28 @@ impl MapFilters {
         self.show_pet = enabled;
         self.show_named = enabled;
         self.show_untargetable = enabled;
+        self.show_merchant = enabled;
+        self.show_banker = enabled;
+        self.show_training_dummy = enabled;
+        self.show_quest_npc = enabled;
+        self.show_other_npc = enabled;
     }
 
     #[must_use]
-    pub fn cache_key_bits(&self) -> u8 {
-        let mut bits = 0u8;
-        bits |= u8::from(self.show_npc);
-        bits |= u8::from(self.show_pc) << 1;
-        bits |= u8::from(self.show_corpse) << 2;
-        bits |= u8::from(self.show_ground) << 3;
-        bits |= u8::from(self.show_pet) << 4;
-        bits |= u8::from(self.show_named) << 5;
-        bits |= u8::from(self.show_untargetable) << 6;
+    pub fn cache_key_bits(&self) -> u16 {
+        let mut bits = 0u16;
+        bits |= u16::from(self.show_npc);
+        bits |= u16::from(self.show_pc) << 1;
+        bits |= u16::from(self.show_corpse) << 2;
+        bits |= u16::from(self.show_ground) << 3;
+        bits |= u16::from(self.show_pet) << 4;
+        bits |= u16::from(self.show_named) << 5;
+        bits |= u16::from(self.show_untargetable) << 6;
+        bits |= u16::from(self.show_merchant) << 7;
+        bits |= u16::from(self.show_banker) << 8;
+        bits |= u16::from(self.show_training_dummy) << 9;
+        bits |= u16::from(self.show_quest_npc) << 10;
+        bits |= u16::from(self.show_other_npc) << 11;
         bits
     }
 
@@ -527,6 +635,22 @@ impl MapFilters {
         }
         if Self::looks_like_ground(spawn) && !self.show_ground {
             return false;
+        }
+
+        // Apply NPC subcategory filters if this is an NPC (and not a pet/named which take priority)
+        if is_npc && !is_pet && !is_named {
+            if let Some(category) = NpcCategory::from_spawn_name(&spawn.displayed_name) {
+                let allowed = match category {
+                    NpcCategory::Merchant => self.show_merchant,
+                    NpcCategory::Banker => self.show_banker,
+                    NpcCategory::TrainingDummy => self.show_training_dummy,
+                    NpcCategory::QuestNpc => self.show_quest_npc,
+                    NpcCategory::Other => self.show_other_npc,
+                };
+                if !allowed {
+                    return false;
+                }
+            }
         }
 
         true
@@ -2679,4 +2803,167 @@ mod tests {
         assert_eq!(MapFilterKind::Named.label(), "Named");
         assert_eq!(MapFilterKind::Untargetable.label(), "Untargetable");
     }
+
+    #[test]
+    fn npc_category_from_spawn_merchant() {
+        assert_eq!(
+            NpcCategory::from_spawn_name("a merchant"),
+            Some(NpcCategory::Merchant)
+        );
+        assert_eq!(
+            NpcCategory::from_spawn_name("Stonehand the Merchant"),
+            Some(NpcCategory::Merchant)
+        );
+        assert_eq!(
+            NpcCategory::from_spawn_name("Quartermaster Sho"),
+            Some(NpcCategory::Merchant)
+        );
+        assert_eq!(
+            NpcCategory::from_spawn_name("vendor of scrolls"),
+            Some(NpcCategory::Merchant)
+        );
+    }
+
+    #[test]
+    fn npc_category_from_spawn_banker() {
+        assert_eq!(
+            NpcCategory::from_spawn_name("Banker Erol"),
+            Some(NpcCategory::Banker)
+        );
+        assert_eq!(
+            NpcCategory::from_spawn_name("a banker"),
+            Some(NpcCategory::Banker)
+        );
+        assert_eq!(
+            NpcCategory::from_spawn_name("Exchange Master"),
+            Some(NpcCategory::Banker)
+        );
+    }
+
+    #[test]
+    fn npc_category_from_spawn_training_dummy() {
+        assert_eq!(
+            NpcCategory::from_spawn_name("a training dummy"),
+            Some(NpcCategory::TrainingDummy)
+        );
+        assert_eq!(
+            NpcCategory::from_spawn_name("practice dummy"),
+            Some(NpcCategory::TrainingDummy)
+        );
+    }
+
+    #[test]
+    fn npc_category_from_spawn_quest_npc() {
+        assert_eq!(
+            NpcCategory::from_spawn_name("Quest Master Dray"),
+            Some(NpcCategory::QuestNpc)
+        );
+        assert_eq!(
+            NpcCategory::from_spawn_name("a quest givers"),
+            Some(NpcCategory::QuestNpc)
+        );
+        assert_eq!(
+            NpcCategory::from_spawn_name("Task Master"),
+            Some(NpcCategory::QuestNpc)
+        );
+    }
+
+    #[test]
+    fn npc_category_from_spawn_other() {
+        assert_eq!(
+            NpcCategory::from_spawn_name("a moss snake"),
+            Some(NpcCategory::Other)
+        );
+        assert_eq!(
+            NpcCategory::from_spawn_name("Emperor Crush"),
+            Some(NpcCategory::Other)
+        );
+    }
+
+    #[test]
+    fn npc_category_label() {
+        assert_eq!(NpcCategory::Merchant.label(), "Merchant");
+        assert_eq!(NpcCategory::Banker.label(), "Banker");
+        assert_eq!(NpcCategory::TrainingDummy.label(), "Training Dummy");
+        assert_eq!(NpcCategory::QuestNpc.label(), "Quest NPC");
+        assert_eq!(NpcCategory::Other.label(), "Other NPC");
+    }
+
+    #[test]
+    fn map_filters_npc_subcategory_default_all_on() {
+        let filters = MapFilters::default();
+        assert!(filters.show_merchant);
+        assert!(filters.show_banker);
+        assert!(filters.show_training_dummy);
+        assert!(filters.show_quest_npc);
+        assert!(filters.show_other_npc);
+    }
+
+    #[test]
+    fn map_filters_npc_subcategory_set_get() {
+        let mut filters = MapFilters::default();
+        
+        // Test setting individual NPC subcategory filters
+        filters.set(MapFilterKind::NpcMerchant, false);
+        assert!(!filters.get(MapFilterKind::NpcMerchant));
+        assert!(filters.get(MapFilterKind::NpcBanker));
+        
+        filters.set(MapFilterKind::NpcBanker, false);
+        assert!(!filters.get(MapFilterKind::NpcBanker));
+        
+        filters.set(MapFilterKind::NpcMerchant, true);
+        assert!(filters.get(MapFilterKind::NpcMerchant));
+    }
+
+    #[test]
+    fn map_filters_allows_spawn_respects_npc_subcategories() {
+        use crate::eq::structs::EqClass;
+        use crate::eq::structs::StandState;
+        
+        let merchant_spawn = crate::eq::structs::SpawnInfo {
+            name: "Merchant".to_string(),
+            displayed_name: "Stonehand the Merchant".to_string(),
+            lastname: String::new(),
+            spawn_id: 1,
+            spawn_type: SpawnType::Npc,
+            level: 50,
+            class_id: 1,
+            class: Some(EqClass::Warrior),
+            stand_state: StandState::Standing,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            heading: 0.0,
+            hp_current: 1000,
+            hp_max: 1000,
+            mana_current: 0,
+            mana_max: 0,
+            endurance_current: 0,
+            endurance_max: 0,
+            is_gm: false,
+            race_id: 1,
+            buff_slots: Vec::new(),
+            spellbook: Vec::new(),
+            memorized_spells: Vec::new(),
+            cast_state: None,
+        };
+
+        let mut filters = MapFilters::default();
+
+        // With merchant filter on, merchant NPC should be allowed
+        filters.show_merchant = true;
+        filters.show_other_npc = true;
+        filters.show_npc = true;
+        assert!(filters.allows_spawn(&merchant_spawn));
+
+        // With merchant filter off, merchant NPC should be hidden
+        filters.show_merchant = false;
+        assert!(!filters.allows_spawn(&merchant_spawn));
+
+        // With NPC filter off entirely, merchant NPC should be hidden
+        filters.show_merchant = true;
+        filters.show_npc = false;
+        assert!(!filters.allows_spawn(&merchant_spawn));
+    }
+
 }
