@@ -728,11 +728,34 @@ Retrieve current wealth snapshot and historical trend.
 
 ## Loot Management
 
-### Loot Module (Demo)
+### Inventory Utility Parity Config
 
-Placeholder routes for loot tracking and distribution.
+#### GET /api/loot/inventory-utility
 
-**Endpoints**: To be documented when implemented.
+Return the active `InventoryUtilityConfig` — the parity pack config for
+RedGuides extension mappings, cursor rules, collection routing, and legacy
+provenance reporting.
+
+**Response**: 200 OK — full `InventoryUtilityConfig` JSON object.
+
+#### PUT /api/loot/inventory-utility
+
+Replace the inventory utility config and persist to
+`config/inventory-utility-parity.json`.
+
+**Response**: 200 OK — echoes saved config.
+
+**Error responses**:
+
+| Status | Condition         |
+| ------ | ----------------- |
+| 500    | Disk write failed |
+| 422    | Body malformed    |
+
+### Loot Filters, Item Score, and History
+
+Additional loot endpoints (filters, item score, history) are implemented in
+`textquest-web/src/api/loot.rs`. Full documentation to be added.
 
 ---
 
@@ -905,8 +928,14 @@ Planned rate limiting policy:
 
 - API handlers: `textquest-web/src/api.rs`
 - Sub-modules:
+  - `textquest-web/src/api/auto_group.rs` — auto-group formation API
+  - `textquest-web/src/api/admin.rs` — admin session inventory
+  - `textquest-web/src/api/admin_sessions.rs` — admin session lifecycle (start/stop/restart)
+  - `textquest-web/src/api/session_control.rs` — session and group control
   - `textquest-web/src/api/economy.rs`
   - `textquest-web/src/api/loot.rs`
+  - `textquest-web/src/api/inventory_utility_parity.rs` — inventory utility config handlers
   - `textquest-web/src/api/soul.rs`
+- Shared types: `textquest-common/src/auto_group.rs` — `AutoGroupSettings`, `AutoGroupProfile`, `AutoGroupRole`
 - Server setup: `textquest-web/src/main.rs`
-- React SPA: `textquest-web/web/src/`
+- React SPA: `web/src/`

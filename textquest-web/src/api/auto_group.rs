@@ -348,6 +348,7 @@ pub fn router() -> Router<Arc<AppState>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+use textquest_common::auto_group::AutoGroupSettings;
     use axum::{
         body::Body,
         http::{Request, StatusCode},

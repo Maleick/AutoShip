@@ -39,6 +39,7 @@
 - [Frostreaver Cost Model](Frostreaver-Cost-Model)
 - [Project Metrics](Project-Metrics)
 - [Frostreaver Cost Model](Frostreaver-Cost-Model)
+- [Project Metrics](Project-Metrics)
 - [Troubleshooting](Troubleshooting)
 
 ## Research

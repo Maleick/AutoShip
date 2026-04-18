@@ -455,6 +455,7 @@ pub(crate) fn test_app_state() -> AppState {
             uuid::Uuid::new_v4()
         )),
         character_config_write_lock: tokio::sync::Mutex::new(()),
+        auto_group_settings: tokio::sync::RwLock::new(AutoGroupSettings::default()),
         auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
         tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
         loot_state: api::loot::LootState::new_demo(),
