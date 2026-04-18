@@ -978,6 +978,9 @@ mod tests {
             live_session_snapshot_path: crate::test_support::test_live_session_snapshot_path(
                 "loot-test-live-sessions.json",
             ),
+            admin_session_snapshot_path: crate::test_support::test_admin_session_snapshot_path(
+                "loot-test-admin-sessions.json",
+            ),
             xassist_configs: crate::api::xassist::demo_xassist_configs(),
             chat_pattern_rules: crate::api::chat_pattern_rules::load_rules_state(),
             say_detection: Some(Arc::new(

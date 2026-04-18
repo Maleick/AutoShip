@@ -3,7 +3,13 @@
 //! `SessionControl` tracks per-session routing scope, group membership, and
 //! active/paused state. Commands arrive via the IPC layer as
 //! `SessionControlCommand` variants and are processed by `apply_command`.
+//!
+//! This module also defines the stable admin-session snapshot returned by the
+//! web admin API. The snapshot stays focused on orchestrator-managed metadata
+//! and keeps Windows-only identifiers optional so Linux/macOS builds can still
+//! emit an explicit inventory.
 
+use std::collections::HashMap;
 use textquest_common::{ipc::SessionControlCommand, routing::RoutingScope};
 
 /// Lifecycle state of a managed EQ session.
@@ -26,6 +32,112 @@ impl std::fmt::Display for SessionState {
             Self::Error => write!(f, "Error"),
         }
     }
+}
+
+/// Stable lifecycle label exposed by `/api/admin/sessions`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AdminSessionLifecycle {
+    Active,
+    Paused,
+    Error,
+}
+
+impl From<SessionState> for AdminSessionLifecycle {
+    fn from(value: SessionState) -> Self {
+        match value {
+            SessionState::Active => Self::Active,
+            SessionState::Paused => Self::Paused,
+            SessionState::Error => Self::Error,
+        }
+    }
+}
+
+/// Stable routing-scope kind exposed by `/api/admin/sessions`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AdminRoutingScopeKind {
+    OneToon,
+    Group,
+    AllSession,
+}
+
+/// Admin-safe routing summary for one managed session.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AdminRoutingScopeSnapshot {
+    pub kind: AdminRoutingScopeKind,
+    pub label: String,
+    pub group_id: Option<u8>,
+    pub toon_name: Option<String>,
+}
+
+impl From<&RoutingScope> for AdminRoutingScopeSnapshot {
+    fn from(value: &RoutingScope) -> Self {
+        match value {
+            RoutingScope::OneToon { name } => Self {
+                kind: AdminRoutingScopeKind::OneToon,
+                label: value.label(),
+                group_id: None,
+                toon_name: Some(name.clone()),
+            },
+            RoutingScope::Group { group_id, .. } => Self {
+                kind: AdminRoutingScopeKind::Group,
+                label: value.label(),
+                group_id: Some(*group_id),
+                toon_name: None,
+            },
+            RoutingScope::AllSession => Self {
+                kind: AdminRoutingScopeKind::AllSession,
+                label: value.label(),
+                group_id: None,
+                toon_name: None,
+            },
+        }
+    }
+}
+
+/// Stable admin snapshot for one orchestrator-managed session.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AdminSessionSnapshot {
+    /// Stable orchestrator session identifier. Today this matches the process
+    /// ID used to register the session with the orchestrator.
+    pub session_id: u32,
+    /// Optional character name associated with the session. This is filled once
+    /// launcher/login metadata is available; non-Windows test builds may leave
+    /// it unset.
+    pub character_name: Option<String>,
+    /// Optional class name associated with the session. This is populated from
+    /// launcher metadata when available and may remain unset on non-Windows
+    /// builds.
+    pub class_name: Option<String>,
+    /// Current group assignment tracked by the orchestrator (`0` = ungrouped /
+    /// broadcast-all).
+    pub group_id: u8,
+    pub routing_scope: AdminRoutingScopeSnapshot,
+    pub lifecycle_state: AdminSessionLifecycle,
+}
+
+/// Build a deterministic admin inventory from the orchestrator's per-session
+/// control state and known identifying metadata.
+#[must_use]
+pub fn build_admin_session_inventory(
+    session_controls: &HashMap<u32, SessionControl>,
+    client_names: &HashMap<u32, String>,
+    client_class_names: &HashMap<u32, String>,
+) -> Vec<AdminSessionSnapshot> {
+    let mut snapshots: Vec<_> = session_controls
+        .values()
+        .map(|control| AdminSessionSnapshot {
+            session_id: control.session_id,
+            character_name: client_names.get(&control.session_id).cloned(),
+            class_name: client_class_names.get(&control.session_id).cloned(),
+            group_id: control.group_id,
+            routing_scope: AdminRoutingScopeSnapshot::from(&control.routing_scope),
+            lifecycle_state: AdminSessionLifecycle::from(control.state),
+        })
+        .collect();
+    snapshots.sort_by_key(|snapshot| snapshot.session_id);
+    snapshots
 }
 
 /// Per-session control record maintained by the orchestrator.
@@ -149,6 +261,7 @@ impl SessionControl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use textquest_common::ipc::SessionControlCommand;
 
     #[test]
@@ -291,5 +404,63 @@ mod tests {
         let changed = sc.apply_command(&SessionControlCommand::Resume);
         assert!(!changed);
         assert_eq!(sc.state, SessionState::Error);
+    }
+
+    #[test]
+    fn admin_inventory_builder_reports_session_metadata_and_scope() {
+        let mut controls = HashMap::new();
+        let mut control = SessionControl::with_group(4242, 2);
+        control.apply_command(&SessionControlCommand::Pause);
+        controls.insert(4242, control);
+
+        let mut client_names = HashMap::new();
+        client_names.insert(4242, String::from("Cleric42"));
+
+        let mut client_class_names = HashMap::new();
+        client_class_names.insert(4242, String::from("Cleric"));
+
+        let snapshots =
+            build_admin_session_inventory(&controls, &client_names, &client_class_names);
+
+        assert_eq!(snapshots.len(), 1);
+        assert_eq!(snapshots[0].session_id, 4242);
+        assert_eq!(snapshots[0].character_name.as_deref(), Some("Cleric42"));
+        assert_eq!(snapshots[0].class_name.as_deref(), Some("Cleric"));
+        assert_eq!(snapshots[0].group_id, 2);
+        assert_eq!(snapshots[0].lifecycle_state, AdminSessionLifecycle::Paused);
+        assert_eq!(
+            snapshots[0].routing_scope.kind,
+            AdminRoutingScopeKind::Group
+        );
+        assert_eq!(snapshots[0].routing_scope.group_id, Some(2));
+        assert_eq!(snapshots[0].routing_scope.label, "G2");
+    }
+
+    #[test]
+    fn admin_inventory_builder_sorts_sessions_and_keeps_optional_metadata_null() {
+        let controls = HashMap::from([
+            (9, SessionControl::new(9)),
+            (2, SessionControl::with_group(2, 1)),
+        ]);
+
+        let snapshots = build_admin_session_inventory(&controls, &HashMap::new(), &HashMap::new());
+
+        assert_eq!(
+            snapshots
+                .iter()
+                .map(|snapshot| snapshot.session_id)
+                .collect::<Vec<_>>(),
+            vec![2, 9]
+        );
+        assert_eq!(snapshots[0].character_name, None);
+        assert_eq!(snapshots[0].class_name, None);
+        assert_eq!(
+            snapshots[0].routing_scope.kind,
+            AdminRoutingScopeKind::Group
+        );
+        assert_eq!(
+            snapshots[1].routing_scope.kind,
+            AdminRoutingScopeKind::AllSession
+        );
     }
 }

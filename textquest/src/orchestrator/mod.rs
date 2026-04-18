@@ -9,7 +9,7 @@ pub mod xassist;
 
 use self::{
     cross_group::CrossGroupCoordinator,
-    session_control::SessionControl,
+    session_control::{SessionControl, build_admin_session_inventory},
     xassist::{XAssist, XAssistConfig},
 };
 use crate::{
@@ -36,7 +36,7 @@ use std::{
 use textquest_common::{
     character_config::{CharacterConfigMap, RewardAutomationConfig, load_character_configs},
     combat::HateTargetCategory,
-    ipc::{ChatMessageInfo, Command, Response, SessionToken},
+    ipc::{ChatMessageInfo, Command, Response, SessionControlCommand, SessionToken},
     routing::RoutingScope,
     shared_client_state::{SharedClientState, extended_state_enabled},
     spawn_finder::{LiveSpawnObserver, LiveSpawnSnapshot},
@@ -69,6 +69,10 @@ fn live_session_snapshot_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/runtime/live_sessions.json")
 }
 
+fn admin_session_snapshot_path() -> PathBuf {
+    live_session_snapshot_path().with_file_name("admin_sessions.json")
+}
+
 fn live_spawn_snapshot_path() -> PathBuf {
     live_session_snapshot_path().with_file_name("live_spawns.json")
 }
@@ -86,23 +90,19 @@ fn persist_shared_client_states_to_path(
     path: &Path,
     states: &[SharedClientState],
 ) -> io::Result<()> {
-    let payload =
-        serde_json::to_vec(states).map_err(|error| io::Error::other(error.to_string()))?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let temp_path = path.with_extension("json.tmp");
-    fs::write(&temp_path, payload)?;
-    replace_snapshot_file(&temp_path, path)?;
-    Ok(())
+    persist_json_to_path(path, states)
 }
 
 fn persist_live_spawn_snapshot_to_path(
     path: &Path,
     snapshot: &LiveSpawnSnapshot,
 ) -> io::Result<()> {
+    persist_json_to_path(path, snapshot)
+}
+
+fn persist_json_to_path<T: serde::Serialize>(path: &Path, payload: &T) -> io::Result<()> {
     let payload =
-        serde_json::to_vec(snapshot).map_err(|error| io::Error::other(error.to_string()))?;
+        serde_json::to_vec(payload).map_err(|error| io::Error::other(error.to_string()))?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -121,8 +121,6 @@ pub struct Orchestrator {
     pub client_pids: Vec<u32>,
     /// Mapping of PID to character name for each client.
     pub client_names: HashMap<u32, String>,
-    /// Static group metadata learned from login/account bindings.
-    client_groups: HashMap<u32, u8>,
     /// Static class metadata learned from login/account bindings.
     client_class_names: HashMap<u32, String>,
     /// Active camp loop state machine, if a camp is running.
@@ -222,10 +220,9 @@ impl Orchestrator {
     /// Create a new orchestrator with no registered clients.
     #[must_use]
     pub fn new() -> Self {
-        Self {
+        let orchestrator = Self {
             client_pids: Vec::new(),
             client_names: HashMap::new(),
-            client_groups: HashMap::new(),
             client_class_names: HashMap::new(),
             active_camp: None,
             combat: CombatCoordinator::new(),
@@ -264,7 +261,9 @@ impl Orchestrator {
             say_detection_webhook: None,
             routing_scope: RoutingScope::AllSession,
             scope_pids: Vec::new(),
-        }
+        };
+        orchestrator.persist_admin_session_inventory();
+        orchestrator
     }
 
     /// Get the latest game state for a client PID.
@@ -272,37 +271,6 @@ impl Orchestrator {
     #[must_use]
     pub fn get_client_state(&self, pid: u32) -> Option<&GameState> {
         self.game_states.get(&pid)
-    }
-
-    pub fn set_client_group(&mut self, pid: u32, group_id: u8) {
-        self.client_groups.insert(pid, group_id);
-        let control = self
-            .session_controls
-            .entry(pid)
-            .or_insert_with(|| SessionControl::new(pid));
-        control.group_id = group_id;
-        control.routing_scope = if group_id == 0 {
-            RoutingScope::AllSession
-        } else {
-            RoutingScope::Group {
-                group_id,
-                label: format!("G{group_id}"),
-            }
-        };
-    }
-
-    #[must_use]
-    pub fn client_group(&self, pid: u32) -> Option<u8> {
-        self.client_groups.get(&pid).copied()
-    }
-
-    pub fn set_client_class_name(&mut self, pid: u32, class_name: impl Into<String>) {
-        self.client_class_names.insert(pid, class_name.into());
-    }
-
-    #[must_use]
-    pub fn client_class_name(&self, pid: u32) -> Option<&str> {
-        self.client_class_names.get(&pid).map(String::as_str)
     }
 
     /// Read game state from shared memory for all known clients.
@@ -406,6 +374,17 @@ impl Orchestrator {
             };
 
             self.last_live_spawn_snapshot = spawn_snapshot;
+        }
+    }
+
+    fn persist_admin_session_inventory(&self) {
+        let inventory = build_admin_session_inventory(
+            &self.session_controls,
+            &self.client_names,
+            &self.client_class_names,
+        );
+        if let Err(error) = persist_json_to_path(&admin_session_snapshot_path(), &inventory) {
+            tracing::warn!(%error, "Failed to persist admin session inventory");
         }
     }
 
@@ -1049,15 +1028,54 @@ impl Orchestrator {
         self.session_controls
             .entry(pid)
             .or_insert_with(|| SessionControl::new(pid));
+        self.persist_admin_session_inventory();
         token
+    }
+
+    /// Cache the character name used by admin inventory and cross-group
+    /// coordination.
+    pub fn set_client_name(&mut self, pid: u32, name: impl Into<String>) {
+        self.client_names.insert(pid, name.into());
+        self.persist_admin_session_inventory();
+    }
+
+    /// Update the admin-facing identifying metadata for a registered client and
+    /// persist one consolidated inventory snapshot.
+    pub fn update_client_admin_metadata(
+        &mut self,
+        pid: u32,
+        character_name: Option<String>,
+        group_id: Option<u8>,
+        class_name: Option<String>,
+    ) {
+        if let Some(name) = character_name {
+            self.client_names.insert(pid, name);
+        }
+
+        if let Some(group_id) = group_id {
+            self.session_controls
+                .entry(pid)
+                .or_insert_with(|| SessionControl::new(pid))
+                .apply_command(&SessionControlCommand::SetGroup { group_id });
+        }
+
+        if let Some(class_name) = class_name {
+            self.client_class_names.insert(pid, class_name);
+        }
+
+        self.persist_admin_session_inventory();
     }
 
     /// Set or update the coordination group for a registered client.
     pub fn set_client_group(&mut self, pid: u32, group_id: u8) {
-        self.session_controls
+        let changed = self
+            .session_controls
             .entry(pid)
             .or_insert_with(|| SessionControl::new(pid))
             .apply_command(&SessionControlCommand::SetGroup { group_id });
+        if changed {
+            self.persist_admin_session_inventory();
+        }
     }
 
     /// Return the current coordination group for a registered client.
@@ -1071,6 +1089,7 @@ impl Orchestrator {
     /// Cache the class name used by cross-group role classification.
     pub fn set_client_class_name(&mut self, pid: u32, class_name: impl Into<String>) {
         self.client_class_names.insert(pid, class_name.into());
+        self.persist_admin_session_inventory();
     }
 
     /// Return the cached class name for a registered client.
@@ -1284,16 +1303,15 @@ impl Orchestrator {
     pub fn remove_client(&mut self, pid: u32) {
         self.client_pids.retain(|&p| p != pid);
         self.client_names.remove(&pid);
-        self.client_groups.remove(&pid);
         self.client_class_names.remove(&pid);
         self.game_states.remove(&pid);
         self.state_readers.remove(&pid);
         self.session_tokens.remove(&pid);
         self.session_controls.remove(&pid);
-        self.client_class_names.remove(&pid);
         self.state_timestamps.remove(&pid);
         self.last_sent_reward_configs.remove(&pid);
         self.xassist.remove_client(pid);
+        self.persist_admin_session_inventory();
         tracing::info!(pid, "Client removed from orchestrator");
     }
 

@@ -11,6 +11,10 @@ pub(crate) fn test_live_session_snapshot_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../data/runtime/{name}"))
 }
 
+pub(crate) fn test_admin_session_snapshot_path(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../data/runtime/{name}"))
+}
+
 pub(crate) fn demo_app_state() -> Arc<AppState> {
     demo_app_state_with_snapshot("test-live-sessions.json")
 }
@@ -47,6 +51,7 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         )),
         api_token: None,
         live_session_snapshot_path: test_live_session_snapshot_path(name),
+        admin_session_snapshot_path: test_admin_session_snapshot_path("test-admin-sessions.json"),
         xassist_configs: api::xassist::demo_xassist_configs(),
         chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),

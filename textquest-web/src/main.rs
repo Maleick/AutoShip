@@ -110,6 +110,9 @@ pub struct AppState {
     /// Mutable runtime snapshot written by the orchestrator for live session
     /// monitoring.
     pub live_session_snapshot_path: PathBuf,
+    /// Mutable runtime snapshot written by the orchestrator for admin session
+    /// inventory.
+    pub admin_session_snapshot_path: PathBuf,
     /// In-memory XAssist configuration per character.
     pub xassist_configs: api::xassist::XAssistConfigs,
     /// In-memory chat pattern rules engine for MQ2Events/MQ2React parity.
@@ -173,6 +176,10 @@ fn credentials_db_path() -> PathBuf {
 
 fn live_session_snapshot_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/runtime/live_sessions.json")
+}
+
+fn admin_session_snapshot_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/runtime/admin_sessions.json")
 }
 
 fn character_config_path() -> PathBuf {
@@ -373,6 +380,7 @@ fn build_state() -> Arc<AppState> {
         alerting_config_path: alerting_config_path(),
         api_token,
         live_session_snapshot_path: live_session_snapshot_path(),
+        admin_session_snapshot_path: admin_session_snapshot_path(),
         xassist_configs: api::xassist::demo_xassist_configs(),
         chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
@@ -420,6 +428,10 @@ pub(crate) fn test_app_state() -> AppState {
         api_token: None,
         live_session_snapshot_path: std::env::temp_dir().join(format!(
             "textquest-web-test-live-sessions-{}.json",
+            uuid::Uuid::new_v4()
+        )),
+        admin_session_snapshot_path: std::env::temp_dir().join(format!(
+            "textquest-web-test-admin-sessions-{}.json",
             uuid::Uuid::new_v4()
         )),
         xassist_configs: api::xassist::demo_xassist_configs(),
@@ -481,6 +493,7 @@ fn build_loot_router() -> Router<Arc<AppState>> {
 fn build_api_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(api::health))
+        .route("/admin/sessions", get(api::admin::list_sessions))
         .route("/sessions", get(api::list_sessions))
         .nest("/accounts", accounts::router())
         .nest("/dashboard", api::dashboard::router())
@@ -744,6 +757,7 @@ mod tests {
             )),
             api_token: None, // No auth in tests — auth middleware is a no-op when None
             live_session_snapshot_path: path.with_file_name("live_sessions.json"),
+            admin_session_snapshot_path: path.with_file_name("admin_sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),
             chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
             say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
@@ -842,6 +856,70 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn admin_sessions_endpoint_returns_empty_array_when_inventory_missing() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let app = build_app(test_state_with_credentials(
+            &tempdir.path().join("creds.db"),
+        ));
+
+        let (status, body) = json_response(
+            app,
+            Request::builder()
+                .uri("/api/admin/sessions")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, json!([]));
+    }
+
+    #[tokio::test]
+    async fn admin_sessions_endpoint_returns_persisted_inventory() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let state = test_state_with_credentials(&tempdir.path().join("creds.db"));
+        std::fs::write(
+            &state.admin_session_snapshot_path,
+            serde_json::to_vec(&vec![json!({
+                "session_id": 4242,
+                "character_name": "Cleric42",
+                "class_name": "Cleric",
+                "group_id": 2,
+                "routing_scope": {
+                    "kind": "group",
+                    "label": "G2",
+                    "group_id": 2,
+                    "toon_name": null
+                },
+                "lifecycle_state": "paused"
+            })])
+            .expect("admin snapshot json"),
+        )
+        .expect("write admin snapshot");
+
+        let app = build_app(state);
+        let (status, body) = json_response(
+            app,
+            Request::builder()
+                .uri("/api/admin/sessions")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let sessions = body.as_array().expect("sessions array");
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0]["session_id"], 4242);
+        assert_eq!(sessions[0]["character_name"], "Cleric42");
+        assert_eq!(sessions[0]["class_name"], "Cleric");
+        assert_eq!(sessions[0]["group_id"], 2);
+        assert_eq!(sessions[0]["routing_scope"]["kind"], "group");
+        assert_eq!(sessions[0]["lifecycle_state"], "paused");
     }
 
     #[tokio::test]

@@ -1,5 +1,6 @@
 //! REST API handlers for the web dashboard.
 
+pub mod admin;
 pub mod alerts;
 pub mod auto_group;
 pub mod chat_log;

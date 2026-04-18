@@ -81,6 +81,7 @@ The console is split into two vertical rails on desktop and collapses to a singl
 The frontend uses two backend surfaces:
 
 - `GET /api/dashboard` for the full initial snapshot
+- `GET /api/admin/sessions` for the orchestrator-managed session inventory that powers admin-only session listings without changing the legacy `/api/sessions` contract
 - `POST /api/dashboard/action` for mutating operator actions such as session creation, recovery, group commands, route creation, and wishlist updates
 
 Realtime refresh is driven by `/ws` events. The backend now broadcasts `dashboard.snapshot` messages after actions and on a periodic tick so the console can refresh latency, economy, navigation, and combat telemetry without polling each subsystem separately.

@@ -633,9 +633,11 @@ impl OrchestratorLoop {
                         session.slot_lifecycle = SlotLifecycle::Live;
                         self.orchestrator.register_client(pid);
 
+                        let mut ready_group_id = None;
+                        let mut ready_class_name = None;
                         if let Some(account) = session.bound_toon.as_ref() {
                             if let Ok(group_id) = u8::try_from(account.group_id) {
-                                self.orchestrator.set_client_group(pid, group_id);
+                                ready_group_id = Some(group_id);
                             } else {
                                 tracing::warn!(
                                     client_id,
@@ -644,14 +646,15 @@ impl OrchestratorLoop {
                                     "Skipping out-of-range group assignment for coordination"
                                 );
                             }
-                            self.orchestrator
-                                .set_client_class_name(pid, account.class_name.clone());
+                            ready_class_name = Some(account.class_name.clone());
                         }
 
-                        // Store the session token for the DLL
-                        if let Some(name) = &session.character_name {
-                            self.orchestrator.client_names.insert(pid, name.clone());
-                        }
+                        self.orchestrator.update_client_admin_metadata(
+                            pid,
+                            session.character_name.clone(),
+                            ready_group_id,
+                            ready_class_name,
+                        );
 
                         if self.timing_correction_enabled {
                             self.orchestrator.send_ipc_command(
