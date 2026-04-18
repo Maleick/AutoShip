@@ -41,6 +41,8 @@ pub mod integrations;
 pub mod inventory_utility;
 /// IPC command and response enums for orchestrator-to-DLL communication.
 pub mod ipc;
+/// Launch profiles and session preset translation layer for M8 orchestrator.
+pub mod launch_profile;
 /// Login automation shared types (credentials, server selection, login phases).
 pub mod login;
 /// Navigation shared types (waypoints, zones, pathfinding requests).
