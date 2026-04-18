@@ -1,33 +1,54 @@
-"""TextQuest Python Client Library"""
+"""TextQuest Python Client SDK"""
 
-from .client import Client, AsyncClient, ClientConfig
-from .websocket import WebSocketClient
-from .types import (
-    SessionInfo,
-    CharacterConfig,
-    HealthResponse,
-    ErrorResponse,
-    CommandRequest,
-    CommandResponse,
-    GroupAssignment,
+from .client import (
+    AsyncTextQuestClient,
+    NotFoundError,
+    TextQuestClient,
     TextQuestError,
-    SessionEvent,
+    TextQuestHttpError,
+    TextQuestNotImplementedError,
+    TextQuestTimeoutError,
+    UnauthorizedError,
 )
+from .types import (
+    AccountRecord,
+    AckResponse,
+    AlertsResponse,
+    AuditEntry,
+    AuditPage,
+    CsvExport,
+    EconomyLedgerResponse,
+    EconomyQueuesResponse,
+    EconomyStatusResponse,
+    HealthResponse,
+    SessionInfo,
+    SoulState,
+)
+from .websocket import TextQuestWebSocket, WebSocketEvent
 
 __version__ = "0.1.0"
 
 __all__ = [
-    "Client",
-    "AsyncClient", 
-    "ClientConfig",
-    "WebSocketClient",
-    "SessionInfo",
-    "CharacterConfig",
+    "AccountRecord",
+    "AckResponse",
+    "AlertsResponse",
+    "AsyncTextQuestClient",
+    "AuditEntry",
+    "AuditPage",
+    "CsvExport",
+    "EconomyLedgerResponse",
+    "EconomyQueuesResponse",
+    "EconomyStatusResponse",
     "HealthResponse",
-    "ErrorResponse",
-    "CommandRequest",
-    "CommandResponse",
-    "GroupAssignment",
+    "NotFoundError",
+    "SessionInfo",
+    "SoulState",
+    "TextQuestClient",
     "TextQuestError",
-    "SessionEvent",
+    "TextQuestHttpError",
+    "TextQuestNotImplementedError",
+    "TextQuestTimeoutError",
+    "TextQuestWebSocket",
+    "UnauthorizedError",
+    "WebSocketEvent",
 ]
