@@ -101,6 +101,9 @@ pub mod economy;
 #[cfg(windows)]
 pub mod zoning;
 
+/// Operator utilities — clipboard export and persistent scratchpad.
+pub mod operator_utils;
+
 /// Timestamp config runtime — loads per-character timestamp settings from disk
 /// and dispatches IPC commands to DLL clients.
 pub mod timestamp_runtime;

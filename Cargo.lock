@@ -4142,6 +4142,7 @@ dependencies = [
  "tui-tree-widget",
  "tui-widget-list",
  "ureq",
+ "uuid",
  "windows",
  "zeroize",
 ]
@@ -4987,6 +4988,7 @@ dependencies = [
  "atomic",
  "getrandom 0.4.2",
  "js-sys",
+ "serde_core",
  "wasm-bindgen",
 ]
 
