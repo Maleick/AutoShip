@@ -806,6 +806,9 @@ mod tests {
             .find(|ability| ability.name == "Malos")
             .unwrap();
         assert_eq!(level_65_malos.order, 2);
+    }
+
+    #[test]
     fn shipped_ranger_config_tracks_level_rotation_overrides() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -874,111 +877,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn cleric_live_config_profiles_fall_back_to_base_when_no_level_override_exists() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("config/classes/cleric.toml");
-        let config = ClassConfig::load(&path).expect("load cleric class config");
-
-        let base_profile = config.profile_for_level(None);
-        assert!(
-            !base_profile.combat_abilities.is_empty() || !base_profile.buff_abilities.is_empty(),
-            "live cleric config should define at least one ability"
-        );
-
-        for level in [1_u8, 60, 61, 62, 65] {
-            let profile = config.profile_for_level(Some(level));
-            assert_eq!(
-                profile.combat_abilities, base_profile.combat_abilities,
-                "cleric combat profile at level {level} should fall back to base config"
-            );
-            assert_eq!(
-                profile.buff_abilities, base_profile.buff_abilities,
-                "cleric buff profile at level {level} should fall back to base config"
-            );
-        }
-    }
-
-    #[test]
-    fn cleric_live_config_profiles_fall_back_to_base_when_no_level_override_exists() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("config/classes/cleric.toml");
-        let config = ClassConfig::load(&path).expect("load cleric class config");
-
-        let base_profile = config.profile_for_level(None);
-        assert!(
-            !base_profile.combat_abilities.is_empty() || !base_profile.buff_abilities.is_empty(),
-            "live cleric config should define at least one ability"
-        );
-
-        for level in [1_u8, 60, 61, 62, 65] {
-            let profile = config.profile_for_level(Some(level));
-            assert_eq!(
-                profile.combat_abilities, base_profile.combat_abilities,
-                "cleric combat profile at level {level} should fall back to base config"
-            );
-            assert_eq!(
-                profile.buff_abilities, base_profile.buff_abilities,
-                "cleric buff profile at level {level} should fall back to base config"
-            );
-        }
-    }
-
-    #[test]
-    fn cleric_live_config_profiles_fall_back_to_base_when_no_level_override_exists() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("config/classes/cleric.toml");
-        let config = ClassConfig::load(&path).expect("load cleric class config");
-
-        let base_profile = config.profile_for_level(None);
-        assert!(
-            !base_profile.combat_abilities.is_empty() || !base_profile.buff_abilities.is_empty(),
-            "live cleric config should define at least one ability"
-        );
-
-        for level in [1_u8, 60, 61, 62, 65] {
-            let profile = config.profile_for_level(Some(level));
-            assert_eq!(
-                profile.combat_abilities, base_profile.combat_abilities,
-                "cleric combat profile at level {level} should fall back to base config"
-            );
-            assert_eq!(
-                profile.buff_abilities, base_profile.buff_abilities,
-                "cleric buff profile at level {level} should fall back to base config"
-            );
-        }
-    }
-
-    #[test]
-    fn cleric_live_config_profiles_fall_back_to_base_when_no_level_override_exists() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("config/classes/cleric.toml");
-        let config = ClassConfig::load(&path).expect("load cleric class config");
-
-        let base_profile = config.profile_for_level(None);
-        assert!(
-            !base_profile.combat_abilities.is_empty() || !base_profile.buff_abilities.is_empty(),
-            "live cleric config should define at least one ability"
-        );
-
-        for level in [1_u8, 60, 61, 62, 65] {
-            let profile = config.profile_for_level(Some(level));
-            assert_eq!(
-                profile.combat_abilities, base_profile.combat_abilities,
-                "cleric combat profile at level {level} should fall back to base config"
-            );
-            assert_eq!(
-                profile.buff_abilities, base_profile.buff_abilities,
-                "cleric buff profile at level {level} should fall back to base config"
-            );
-        }
-    }
 }

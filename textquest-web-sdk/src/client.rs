@@ -536,33 +536,33 @@ impl Client {
     // ─── Timestamp Config ──────────────────────────────────────────────────
 
     /// List timestamp configurations (returns a map of character name → config)
-    pub async fn list_timestamp_configs(&self) -> Result<HashMap<String, TimestampConfig>> {
+    pub async fn list_timestamp_configs(&self) -> Result<HashMap<String, TimestampFormat>> {
         let url = self.build_url("/timestamp-config");
         let req = self.http_client.get(&url);
         let req = self.add_token(req);
 
         let response = req.send().await?;
-        self.handle_response::<HashMap<String, TimestampConfig>>(response).await
+        self.handle_response::<HashMap<String, TimestampFormat>>(response).await
     }
 
     /// Get timestamp configuration for a character
-    pub async fn get_timestamp_config(&self, character: &str) -> Result<TimestampConfig> {
+    pub async fn get_timestamp_config(&self, character: &str) -> Result<TimestampFormat> {
         let url = self.build_url(&format!("/timestamp-config/{}", character));
         let req = self.http_client.get(&url);
         let req = self.add_token(req);
 
         let response = req.send().await?;
-        self.handle_response::<TimestampConfig>(response).await
+        self.handle_response::<TimestampFormat>(response).await
     }
 
     /// Update timestamp configuration for a character
-    pub async fn put_timestamp_config(&self, character: &str, config: TimestampConfig) -> Result<TimestampConfig> {
+    pub async fn put_timestamp_config(&self, character: &str, config: TimestampFormat) -> Result<TimestampFormat> {
         let url = self.build_url(&format!("/timestamp-config/{}", character));
         let req = self.http_client.put(&url).json(&config);
         let req = self.add_token(req);
 
         let response = req.send().await?;
-        self.handle_response::<TimestampConfig>(response).await
+        self.handle_response::<TimestampFormat>(response).await
     }
 
     // ─── Kill Tracker ──────────────────────────────────────────────────────
@@ -829,134 +829,6 @@ impl Client {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Write;
-    use std::net::TcpListener;
-
-    async fn build_response(status_line: &str, body: &str, content_type: Option<&str>) -> reqwest::Response {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap();
-        let status_line = status_line.to_string();
-        let body = body.to_string();
-        let content_type = content_type.map(|value| value.to_string());
-
-        std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let content_type_header = content_type
-                .map(|value| format!("Content-Type: {}\r\n", value))
-                .unwrap_or_default();
-            let response = format!(
-                "HTTP/1.1 {}\r\nContent-Length: {}\r\nConnection: close\r\n{}\r\n{}",
-                status_line,
-                body.as_bytes().len(),
-                content_type_header,
-                body
-            );
-            stream.write_all(response.as_bytes()).unwrap();
-            stream.flush().unwrap();
-        });
-
-        reqwest::get(format!("http://{}", addr)).await.unwrap()
-    }
-
-    #[tokio::test]
-    async fn handle_response_decodes_json_error_body_into_api_error() {
-        let client = Client::new("http://127.0.0.1");
-        let response = build_response(
-            "400 Bad Request",
-            r#"{"error":"invalid token"}"#,
-            Some("application/json"),
-        )
-        .await;
-
-        let err = client
-            .handle_response::<serde_json::Value>(response)
-            .await
-            .unwrap_err();
-
-        match err {
-            Error::ApiError { status, message } => {
-                assert_eq!(status, 400);
-                assert_eq!(message, "invalid token");
-            }
-            other => panic!("expected ApiError, got {:?}", other),
-        }
-    }
-
-    #[tokio::test]
-    async fn handle_response_preserves_non_json_error_body() {
-        let client = Client::new("http://127.0.0.1");
-        let response = build_response(
-            "502 Bad Gateway",
-            "upstream exploded",
-            Some("text/plain"),
-        )
-        .await;
-
-        let err = client
-            .handle_response::<serde_json::Value>(response)
-            .await
-            .unwrap_err();
-
-        match err {
-            Error::ApiError { status, message } => {
-                assert_eq!(status, 502);
-                assert_eq!(message, "upstream exploded");
-            }
-            other => panic!("expected ApiError, got {:?}", other),
-        }
-    }
-
-    #[tokio::test]
-    async fn handle_response_uses_raw_body_for_malformed_json_error() {
-        let client = Client::new("http://127.0.0.1");
-        let response = build_response(
-            "400 Bad Request",
-            "{\"error\":",
-            Some("application/json"),
-        )
-        .await;
-
-        let err = client
-            .handle_response::<serde_json::Value>(response)
-            .await
-            .unwrap_err();
-
-        match err {
-            Error::ApiError { status, message } => {
-                assert_eq!(status, 400);
-                assert_eq!(message, "{\"error\":");
-            }
-            other => panic!("expected ApiError, got {:?}", other),
-        }
-    }
-
-    #[tokio::test]
-    async fn handle_response_uses_empty_message_for_empty_error_body() {
-        let client = Client::new("http://127.0.0.1");
-        let response = build_response(
-            "500 Internal Server Error",
-            "",
-            Some("application/json"),
-        )
-        .await;
-
-        let err = client
-            .handle_response::<serde_json::Value>(response)
-            .await
-            .unwrap_err();
-
-        match err {
-            Error::ApiError { status, message } => {
-                assert_eq!(status, 500);
-                assert_eq!(message, "");
-            }
-            other => panic!("expected ApiError, got {:?}", other),
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {

@@ -104,20 +104,6 @@ pub enum AutoAcceptTrustMode {
     TrustList,
 }
 
-/// Auto-accept settings matching textquest_common::ipc::AutoAcceptSettings
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AutoAcceptSettings {
-    pub enabled: bool,
-    pub accept_group_invites: bool,
-    pub accept_trades: bool,
-    pub accept_task_adds: bool,
-    pub accept_dz_adds: bool,
-    pub accept_translocates: bool,
-    pub accept_anchors: bool,
-    pub trust_mode: AutoAcceptTrustMode,
-    pub trusted_players: Vec<String>,
-}
-
 /// Player filter mode for zone-in/out monitoring
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
