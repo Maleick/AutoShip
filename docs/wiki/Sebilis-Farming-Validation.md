@@ -266,6 +266,59 @@ Suggested `target_metric` values for the validation template's
 - `forage_hits_per_hour`
 - `operator_interruptions_per_hour`
 
+## Macro Safety and Operator Risk Assessment
+
+### Current Policy and Enforcement Context
+
+[Daybreak Account Security Policy](https://help.daybreakgames.com/hc/en-us/articles/217581258-Account-Security-Policy) and [What is considered cheating](https://help.daybreakgames.com/hc/en-us/articles/115015664167-What-is-considered-cheating) explicitly identify "use of third-party software or cheat programs to gain an unfair advantage" as a cheating violation subject to account suspension or ban.
+
+The current TextQuest approach applies three layers of risk mitigation:
+
+1. **In-process control paths** — TextQuest uses in-process control mechanisms (`InterpretCmd`, UI automation, login helpers, and in-process hooks) rather than packet simulation or injection. This reduces protocol-level exposure, but does not imply the absence of in-process code redirection.
+2. **Behavioral humanization** — TextQuest applies movement jitter, combat timing variation, and render strobing to reduce visibility compared to un-throttled macro behavior.
+3. **Operator observability and pause controls** — TextQuest exposes attended controls (HOME/END pause, manual abort) and structured logging for operator oversight.
+
+### Macro Safety Classification: ATTENDED ONLY, NOT UNATTENDED
+
+The current evidence state for unattended or overnight Sebilis macroing is:
+
+**BLOCKED** — No live operator proof yet that unattended Sebilis sessions are safe.
+
+#### High-confidence blockers (repo-grounded and policy-anchored):
+
+- **Official Daybreak policy classifies third-party automation as cheating** — Accounts running TextQuest automation without operator oversight are at direct policy-defined risk, regardless of hardening measures.
+- **No live unattended-session safeguards are complete yet** — The overnight testing infrastructure (`#866` GM-alert detection, `#865` error recovery, session logging) is still in development. Until those features are complete and validated, unattended sessions cannot claim safe-failure handling.
+- **Operator risk depends on session visibility and pause authority** — If automation runs without operator pause/abort capability, a sudden GM alert or anti-cheat trigger cannot be interrupted, and recovery depends entirely on pre-built error handlers (which are not yet complete).
+- **Forage timing has no validated baseline yet** — The `/forage` loop defaults may trigger rate-limiting if not calibrated to actual server behavior. Without a live Sebilis forage sample, unattended `/forage` iterations carry unknown risk of visibility or rate-limiting.
+
+#### Medium-confidence operational concerns (repo-grounded, but requiring live validation):
+
+- **Pathing and camp rotation assume stable spawn timing** — Live Sebilis validation is needed to confirm that the camp-overlap assumptions (Disco → Left Wing → Crypt → Juggs) do not create long wait periods that trigger AFK kicking or observer suspicion.
+- **Route corpse recovery assumes stable zone transitions** — The Scars-launch route to Sebilis has never been validated for corpse recovery stability or repeated turnover. If a client dies mid-route, recovery depends on the stored route path and safe-coordinate handling, neither of which have live Sebilis confirmation yet.
+- **Session token and artifact hygiene depends on live-machine state** — TextQuest stores session tokens and log artifacts locally (`%TEMP%/textquest`). Unattended sessions require clean machine hygiene, unrelated cheat-tool isolation, and artifact cleanup, which are operator responsibilities outside code control.
+
+#### Low-confidence attack surfaces (community reporting, provisional until validation):
+
+- **Visible behavior and group-chat reporting** — Community players can observe automation via chat spam, movement patterns, or group activity logs. High-visibility zones like Sebilis increase chance of group-mate reports.
+- **Detection pattern research remains evolving** — Anti-cheat research communities continuously update their understanding of detection vectors. Claims that TextQuest hardening is "sufficient" against unknown detection patterns are inherently speculative.
+
+### Attended Macro Guidance (RESEARCH-BACKED FOR ATTENDED SESSIONS)
+
+If an operator remains actively present, pauses sessions on demand, and aborts on manual input or alert detection, the risk profile shifts:
+
+- **Manual pause/abort authority** — Operator can stop automation when GM alerts appear or when client behavior looks exposed.
+- **Real-time observability** — Operator can witness spawn rates, camp efficiency, and lag/crash patterns and adjust camp timing or macro intensity on the fly.
+- **Forage rate sampling** — Operator can capture a live Nodding Blue Lily baseline by monitoring `/forage` results during attended sessions before attempting any automation scaling.
+- **Route validation under supervision** — Operator can validate the Scars-launch route, named overlap, and corpse recovery risk during attended runs and record evidence for eventual unattended claims.
+
+### Sebilis Automation Safety Conclusion
+
+| Use Case | Current Evidence State | Operator Requirements | Next Validation Step |
+| --- | --- | --- | --- |
+| Attended Sebilis runs (4-8 hours, operator present) | Research-backed | Operator must use pause/abort controls and monitor for GM alerts or lag. Attended runs should capture spawn metrics and forage baselines. | Open attended Sebilis test session, sample forage rate and camp overlap, then record results in `sebilis-validation-template.csv`. |
+| Semi-attended overnight runs (operator away, session monitored by alerts) | Blocked | Requires completion of `#866` GM-alert detection, `#865` error recovery, and explicit session-abort on alert. Cannot launch until infrastructure and live proof exist. | Close `#866` and `#865`, then run a monitored overnight test with live alert capture and operator standing by for pause/abort. |
+| Fully unattended overnight runs (no operator intervention expected) | Blocked | Requires all overnight infrastructure plus live proof that sessions can run 8+ hours without intervention, including automatic failure recovery and account-safety validation. | Not feasible until overnight testing infrastructure is complete, live-tested, and accounts have accumulated evidence of safe overnight execution. |
+
 ## Exit criteria
 
 Do not call Sebilis a validated farming hub until the template has at least:
@@ -276,3 +329,4 @@ Do not call Sebilis a validated farming hub until the template has at least:
 - one forage sample that includes total attempts and Nodding Blue Lily hits
 - one explicit automation-risk note that states whether the session remained
   attended, semi-attended, or unattended
+- **NEW (issue #1841):** One attended-session validation that confirms the operator paused or aborted without losing forage/spawn data, AND one explicit policy-risk assessment that remains bounded by current Daybreak official guidance rather than generalized anti-detection theory

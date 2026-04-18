@@ -1171,4 +1171,101 @@ mod tests {
         let r60 = textquest_common::combat::resolve_abilities(&sets, &known, 60);
         assert_eq!(r60.get("HpBuff").unwrap().ability_name, "Aegolism");
     }
+
+    #[test]
+    fn high_level_cleric_uses_debuff_before_dps_when_group_is_stable() {
+        let cleric = ClericStrategy::new(2);
+        let player = textquest_common::types::SpawnData {
+            level: 65,
+            mana_current: 92,
+            mana_max: 100,
+            ..Default::default()
+        };
+        let target = textquest_common::types::SpawnData {
+            spawn_id: 99,
+            hp_current: 9000,
+            hp_max: 10000,
+            ..Default::default()
+        };
+        let members = vec![make_member(10, 96.0, false), make_member(11, 91.0, false)];
+        let spells = vec![
+            SpellEntry {
+                slot: 1,
+                spell_id: 700,
+                name: "Mark of Kings".to_string(),
+                min_mana_pct: 80.0,
+                priority: 8,
+                is_aoe: false,
+            },
+            SpellEntry {
+                slot: 2,
+                spell_id: 701,
+                name: "Reproach".to_string(),
+                min_mana_pct: 90.0,
+                priority: 5,
+                is_aoe: false,
+            },
+        ];
+        let config = make_config(&spells);
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        let spell = cleric.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Mark of Kings");
+    }
+
+    #[test]
+    fn high_level_cleric_skips_dps_when_below_reserve_mana() {
+        let cleric = ClericStrategy::new(2);
+        let player = textquest_common::types::SpawnData {
+            level: 65,
+            mana_current: 74,
+            mana_max: 100,
+            ..Default::default()
+        };
+        let target = textquest_common::types::SpawnData {
+            spawn_id: 99,
+            hp_current: 9000,
+            hp_max: 10000,
+            ..Default::default()
+        };
+        let members = vec![make_member(10, 96.0, false)];
+        let spells = vec![SpellEntry {
+            slot: 1,
+            spell_id: 701,
+            name: "Reproach".to_string(),
+            min_mana_pct: 20.0,
+            priority: 5,
+            is_aoe: false,
+        }];
+        let config = make_config(&spells);
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        assert!(cleric.select_spell(&ctx).is_none());
+    }
 }
