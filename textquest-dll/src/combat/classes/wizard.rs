@@ -1,12 +1,32 @@
-use textquest_common::combat::{AbilityCandidate, AbilitySet, CombatRole, SpellEntry};
+use textquest_common::combat::{
+    AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+    SpellEntry, TargetSelector,
+};
 
-use crate::combat::strategy::{ClassStrategy, CombatContext};
+use crate::combat::{
+    rotation::{self, RotationGroup},
+    strategy::{ClassStrategy, CombatContext},
+};
 
 /// Wizard strategy: pure nuke DPS. Highest priority spell available,
 /// mana-aware. EQ class ID: 12
 pub struct WizardStrategy {
     class_id: u8,
 }
+
+/// Reserve this much mana before continuing the standard DPS cycle.
+const NUKING_MANA_FLOOR: f32 = 20.0;
+/// Trigger Harvest once mana drops low enough that sustained nuking would
+/// starve the primary lines.
+const HARVEST_MANA_THRESHOLD: f32 = 35.0;
+/// Require a healthier mana pool before spending casts on AoE.
+const AOE_MANA_THRESHOLD: f32 = 45.0;
+/// Emergency threshold for self-preservation tools.
+const EMERGENCY_HP_THRESHOLD: f32 = 20.0;
+/// Approximate spell reuse window for Harvest of Druzzil / Harvest.
+const HARVEST_COOLDOWN_TICKS: u32 = 1200;
+/// Conservative retry window for evac spells so low-HP checks do not spam.
+const EVAC_COOLDOWN_TICKS: u32 = 600;
 
 impl WizardStrategy {
     pub fn new(class_id: u8) -> Self {
@@ -23,6 +43,11 @@ impl WizardStrategy {
                         name: "Fire of Tallon".into(),
                         min_level: 65,
                         spell_id: 5006,
+                    },
+                    AbilityCandidate {
+                        name: "White Fire".into(),
+                        min_level: 62,
+                        spell_id: -1,
                     },
                     AbilityCandidate {
                         name: "Sunstrike".into(),
@@ -48,6 +73,11 @@ impl WizardStrategy {
                         name: "Draught of E`ci".into(),
                         min_level: 65,
                         spell_id: 5007,
+                    },
+                    AbilityCandidate {
+                        name: "Ancient: Destruction of Ice".into(),
+                        min_level: 62,
+                        spell_id: -1,
                     },
                     AbilityCandidate {
                         name: "Ice Comet".into(),
@@ -112,6 +142,21 @@ impl WizardStrategy {
                 ],
             },
             AbilitySet {
+                name: "Harvest".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Harvest of Druzzil".into(),
+                        min_level: 61,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Harvest".into(),
+                        min_level: 51,
+                        spell_id: -1,
+                    },
+                ],
+            },
+            AbilitySet {
                 name: "Root".into(),
                 candidates: vec![
                     AbilityCandidate {
@@ -130,6 +175,11 @@ impl WizardStrategy {
                 name: "Evac".into(),
                 candidates: vec![
                     AbilityCandidate {
+                        name: "Greater Decession".into(),
+                        min_level: 65,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
                         name: "Succor".into(),
                         min_level: 52,
                         spell_id: 2160,
@@ -140,6 +190,75 @@ impl WizardStrategy {
                         spell_id: 2161,
                     },
                 ],
+            },
+        ]
+    }
+
+    fn build_rotations() -> Vec<RotationGroup> {
+        vec![
+            {
+                let mut group = rotation::group(
+                    "Emergency",
+                    TargetSelector::SelfOnly,
+                    CombatStateReq::Combat,
+                );
+                group.hp_threshold = Some(EMERGENCY_HP_THRESHOLD);
+                group.full_rotation = true;
+                group.entries = vec![rotation::entry_with_cooldown(
+                    "Evac",
+                    ActionType::Spell("Evac".into()),
+                    "wizard-evac",
+                    EVAC_COOLDOWN_TICKS,
+                )];
+                group
+            },
+            {
+                let mut group =
+                    rotation::group("Recovery", TargetSelector::SelfOnly, CombatStateReq::Combat);
+                group.full_rotation = true;
+                group.entries = vec![rotation::entry_if_with_cooldown(
+                    "Harvest",
+                    ActionType::Spell("Harvest".into()),
+                    ConditionExpr::ManaBelow(HARVEST_MANA_THRESHOLD),
+                    "wizard-harvest",
+                    HARVEST_COOLDOWN_TICKS,
+                )];
+                group
+            },
+            {
+                let mut group =
+                    rotation::group("AoE", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                group.entries = vec![rotation::entry_if(
+                    "AoENuke",
+                    ActionType::Spell("AoENuke".into()),
+                    ConditionExpr::And(vec![
+                        ConditionExpr::EnemyCountAbove(3),
+                        ConditionExpr::ManaAbove(AOE_MANA_THRESHOLD),
+                    ]),
+                )];
+                group
+            },
+            {
+                let mut group =
+                    rotation::group("Combat", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                group.entries = vec![
+                    rotation::entry_if(
+                        "FireNuke",
+                        ActionType::Spell("FireNuke".into()),
+                        ConditionExpr::ManaAbove(NUKING_MANA_FLOOR),
+                    ),
+                    rotation::entry_if(
+                        "IceNuke",
+                        ActionType::Spell("IceNuke".into()),
+                        ConditionExpr::ManaAbove(HARVEST_MANA_THRESHOLD),
+                    ),
+                    rotation::entry_if(
+                        "MagicNuke",
+                        ActionType::Spell("MagicNuke".into()),
+                        ConditionExpr::ManaAbove(NUKING_MANA_FLOOR),
+                    ),
+                ];
+                group
             },
         ]
     }
@@ -174,6 +293,10 @@ impl ClassStrategy for WizardStrategy {
 
     fn role(&self) -> CombatRole {
         CombatRole::DpsRanged
+    }
+
+    fn rotation_groups(&self) -> Option<Vec<RotationGroup>> {
+        Some(Self::build_rotations())
     }
 
     fn ability_sets(&self) -> Vec<AbilitySet> {
@@ -343,6 +466,7 @@ mod tests {
         assert!(names.contains(&"IceNuke"));
         assert!(names.contains(&"MagicNuke"));
         assert!(names.contains(&"AoENuke"));
+        assert!(names.contains(&"Harvest"));
         assert!(names.contains(&"Root"));
         assert!(names.contains(&"Evac"));
     }
@@ -389,8 +513,8 @@ mod tests {
             textquest_common::combat::resolve_abilities(&sets, &wizard_known_spells(), 65);
         assert_eq!(
             resolved.len(),
-            6,
-            "All 6 wizard ability lines should resolve at 65"
+            7,
+            "All 7 wizard ability lines should resolve at 65"
         );
     }
 
@@ -402,5 +526,260 @@ mod tests {
         assert!(resolved.contains_key("IceNuke"), "Frost Bolt at level 1");
         assert!(resolved.contains_key("MagicNuke"), "Shock at level 1");
         assert!(!resolved.contains_key("AoENuke"), "No AoE at level 1");
+    }
+
+    #[test]
+    fn wizard_has_rotation_groups() {
+        let wiz = WizardStrategy::new(12);
+        let groups = wiz
+            .rotation_groups()
+            .expect("wizard should define rotations");
+        let names: Vec<_> = groups.iter().map(|group| group.name.as_str()).collect();
+        assert_eq!(names, vec!["Emergency", "Recovery", "AoE", "Combat"]);
+    }
+
+    #[test]
+    fn wizard_rotation_emergency_evacuates_before_any_other_action() {
+        let wiz = WizardStrategy::new(12);
+        let mut player = SpawnData {
+            spawn_id: 1,
+            hp_current: 10,
+            hp_max: 100,
+            mana_current: 8000,
+            mana_max: 10000,
+            ..SpawnData::default()
+        };
+        player.level = 65;
+        let target = SpawnData {
+            spawn_id: 77,
+            spawn_type: 1,
+            hp_current: 100,
+            hp_max: 100,
+            ..SpawnData::default()
+        };
+        let mut groups = wiz.rotation_groups().expect("wizard rotations");
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &CombatConfig::default(),
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)
+            .expect("wizard should pick an emergency action");
+        assert_eq!(action.entry_name, "Evac");
+        assert_eq!(action.action_type, ActionType::Spell("Evac".into()));
+        assert_eq!(action.target_id, player.spawn_id);
+    }
+
+    #[test]
+    fn wizard_rotation_uses_harvest_before_dps_when_mana_is_low() {
+        let wiz = WizardStrategy::new(12);
+        let mut player = SpawnData {
+            spawn_id: 1,
+            hp_current: 100,
+            hp_max: 100,
+            mana_current: 2500,
+            mana_max: 10000,
+            ..SpawnData::default()
+        };
+        player.level = 65;
+        let target = SpawnData {
+            spawn_id: 77,
+            spawn_type: 1,
+            hp_current: 100,
+            hp_max: 100,
+            ..SpawnData::default()
+        };
+        let mut groups = wiz.rotation_groups().expect("wizard rotations");
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &CombatConfig::default(),
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)
+            .expect("wizard should recover mana before nuking");
+        assert_eq!(action.entry_name, "Harvest");
+        assert_eq!(action.action_type, ActionType::Spell("Harvest".into()));
+        assert_eq!(action.target_id, player.spawn_id);
+    }
+
+    #[test]
+    fn wizard_rotation_prefers_aoe_when_multiple_enemies_are_present() {
+        let wiz = WizardStrategy::new(12);
+        let mut player = SpawnData {
+            spawn_id: 1,
+            hp_current: 100,
+            hp_max: 100,
+            mana_current: 8000,
+            mana_max: 10000,
+            ..SpawnData::default()
+        };
+        player.level = 65;
+        let target = SpawnData {
+            spawn_id: 77,
+            spawn_type: 1,
+            hp_current: 100,
+            hp_max: 100,
+            ..SpawnData::default()
+        };
+        let nearby = vec![
+            target.clone(),
+            SpawnData {
+                spawn_id: 78,
+                spawn_type: 1,
+                ..SpawnData::default()
+            },
+            SpawnData {
+                spawn_id: 79,
+                spawn_type: 1,
+                ..SpawnData::default()
+            },
+        ];
+        let mut groups = wiz.rotation_groups().expect("wizard rotations");
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &nearby,
+            group_members: &[],
+            config: &CombatConfig::default(),
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)
+            .expect("wizard should AoE when three enemies are present");
+        assert_eq!(action.entry_name, "AoENuke");
+        assert_eq!(action.action_type, ActionType::Spell("AoENuke".into()));
+        assert_eq!(action.target_id, target.spawn_id);
+    }
+
+    #[test]
+    fn wizard_rotation_uses_fire_nuke_for_single_target_sustain() {
+        let wiz = WizardStrategy::new(12);
+        let mut player = SpawnData {
+            spawn_id: 1,
+            hp_current: 100,
+            hp_max: 100,
+            mana_current: 8000,
+            mana_max: 10000,
+            ..SpawnData::default()
+        };
+        player.level = 65;
+        let target = SpawnData {
+            spawn_id: 77,
+            spawn_type: 1,
+            hp_current: 100,
+            hp_max: 100,
+            ..SpawnData::default()
+        };
+        let mut groups = wiz.rotation_groups().expect("wizard rotations");
+        let nearby_enemies = std::slice::from_ref(&target);
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies,
+            group_members: &[],
+            config: &CombatConfig::default(),
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)
+            .expect("wizard should cast a single-target nuke");
+        assert_eq!(action.entry_name, "FireNuke");
+        assert_eq!(action.action_type, ActionType::Spell("FireNuke".into()));
+        assert_eq!(action.target_id, target.spawn_id);
+    }
+
+    #[test]
+    fn wizard_level_60_resolves_group_dps_lines() {
+        let sets = WizardStrategy::build_ability_sets();
+        let resolved =
+            textquest_common::combat::resolve_abilities(&sets, &wizard_known_spells(), 60);
+        assert_eq!(
+            resolved
+                .get("FireNuke")
+                .expect("should resolve FireNuke at 60")
+                .ability_name,
+            "Sunstrike"
+        );
+        assert_eq!(
+            resolved
+                .get("IceNuke")
+                .expect("should resolve IceNuke at 60")
+                .ability_name,
+            "Ice Comet"
+        );
+        assert_eq!(
+            resolved
+                .get("AoENuke")
+                .expect("should resolve AoENuke at 60")
+                .ability_name,
+            "Jyll's Wave of Heat"
+        );
+    }
+
+    #[test]
+    fn wizard_level_61_unlocks_harvest_upgrade() {
+        let sets = WizardStrategy::build_ability_sets();
+        let resolved =
+            textquest_common::combat::resolve_abilities(&sets, &wizard_known_spells(), 61);
+        assert_eq!(
+            resolved
+                .get("Harvest")
+                .expect("should resolve Harvest at 61")
+                .ability_name,
+            "Harvest of Druzzil"
+        );
+    }
+
+    #[test]
+    fn wizard_level_62_unlocks_ancient_burst_line() {
+        let sets = WizardStrategy::build_ability_sets();
+        let resolved =
+            textquest_common::combat::resolve_abilities(&sets, &wizard_known_spells(), 62);
+        assert_eq!(
+            resolved
+                .get("FireNuke")
+                .expect("should resolve FireNuke at 62")
+                .ability_name,
+            "White Fire"
+        );
+        assert_eq!(
+            resolved
+                .get("IceNuke")
+                .expect("should resolve IceNuke at 62")
+                .ability_name,
+            "Ancient: Destruction of Ice"
+        );
     }
 }

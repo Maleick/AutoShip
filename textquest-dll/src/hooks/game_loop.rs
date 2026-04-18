@@ -86,8 +86,10 @@ static CACHED_NEARBY_FOR_STICK: std::sync::Mutex<Vec<textquest_common::types::Sp
 
 /// Previous nearby-spawn snapshot used for delta detection and spawn event
 /// emission.
+type SpawnSnapshot = (String, u8);
+
 static PREV_NEARBY_SPAWNS: std::sync::OnceLock<
-    std::sync::Mutex<std::collections::HashMap<u32, (String, u8)>>,
+    std::sync::Mutex<std::collections::HashMap<u32, SpawnSnapshot>>,
 > = std::sync::OnceLock::new();
 
 /// Set a button widget address to be clicked on the next game loop tick.
@@ -1786,12 +1788,12 @@ fn read_and_publish_state(tick: u64) {
 }
 
 fn compute_spawn_delta_events(
-    previous: &std::collections::HashMap<u32, (String, u8)>,
+    previous: &std::collections::HashMap<u32, SpawnSnapshot>,
     current: &[textquest_common::types::SpawnData],
     zone: String,
     timestamp_ms: u64,
 ) -> (
-    std::collections::HashMap<u32, (String, u8)>,
+    std::collections::HashMap<u32, SpawnSnapshot>,
     Vec<textquest_common::ipc::SpawnEvent>,
 ) {
     let mut next = std::collections::HashMap::new();
@@ -1818,6 +1820,7 @@ fn compute_spawn_delta_events(
                 spawn_name: name.clone(),
                 spawn_type: *spawn_type,
                 kind: textquest_common::ipc::SpawnEventKind::Created,
+                spawn_type: *spawn_type,
                 timestamp_ms,
             });
         }
@@ -1831,6 +1834,7 @@ fn compute_spawn_delta_events(
                 spawn_name: name.clone(),
                 spawn_type: *spawn_type,
                 kind: textquest_common::ipc::SpawnEventKind::Destroyed,
+                spawn_type: *spawn_type,
                 timestamp_ms,
             });
         }
@@ -3919,7 +3923,7 @@ mod tests {
 
     #[test]
     fn spawn_delta_events_report_created_and_destroyed() {
-        let previous: HashMap<u32, (String, u8)> =
+        let previous: HashMap<u32, SpawnSnapshot> =
             [(1u32, ("a_wolf".into(), 1)), (2, ("a_bear".into(), 1))]
                 .into_iter()
                 .collect();
@@ -3954,7 +3958,7 @@ mod tests {
 
     #[test]
     fn spawn_delta_events_with_empty_previous_emits_none() {
-        let previous: HashMap<u32, (String, u8)> = HashMap::new();
+        let previous: HashMap<u32, SpawnSnapshot> = HashMap::new();
         let current = vec![fake_spawn(10, "a_goblin", 1)];
         let (next, events) = compute_spawn_delta_events(&previous, &current, "freportw".into(), 1);
 

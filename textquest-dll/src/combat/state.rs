@@ -183,9 +183,9 @@ fn use_item_command(item_name: &str) -> Option<String> {
 /// share a retry window, which is acceptable until real item IDs are wired in.
 /// The sign bit is masked off so the result always fits the positive `i32`
 /// keyspace used elsewhere by the ability tracker.
-fn item_action_key(item_name: &str) -> i32 {
+fn stable_cooldown_key(namespace: &str, key: &str) -> i32 {
     let mut hash = 0x811C_9DC5u32;
-    for byte in item_name.bytes() {
+    for byte in namespace.bytes().chain([b':']).chain(key.bytes()) {
         hash ^= u32::from(byte);
         hash = hash.wrapping_mul(0x0100_0193);
     }
@@ -211,6 +211,14 @@ fn rotation_spell_key(entry_name: &str, target_id: u32) -> i32 {
         hash = hash.wrapping_mul(0x0100_0193);
     }
     (hash & 0x7FFF_FFFF) as i32
+}
+
+fn item_action_key(item_name: &str) -> i32 {
+    stable_cooldown_key("item", item_name)
+}
+
+fn rotation_cooldown_key(cooldown_key: &str) -> i32 {
+    stable_cooldown_key("rotation", cooldown_key)
 }
 
 fn normalize_action_name(action_name: &str) -> String {
@@ -1853,8 +1861,37 @@ mod tests {
             entries: vec![rotation::entry_with_cooldown(
                 entry_name,
                 ActionType::Spell(entry_name.to_string()),
+                entry_name,
                 cooldown_ticks,
             )],
+            current_step: 0,
+        }
+    }
+
+    fn spell_rotation_group(
+        entry_name: &str,
+        action_name: &str,
+        cooldown_key: &str,
+        cooldown_ticks: u32,
+    ) -> RotationGroup {
+        RotationGroup {
+            name: "SpellTest".into(),
+            target_selector: textquest_common::combat::TargetSelector::AutoTarget,
+            combat_state_req: textquest_common::combat::CombatStateReq::Combat,
+            steps_per_frame: 1,
+            full_rotation: false,
+            hp_threshold: None,
+            entries: vec![rotation::RotationEntry {
+                name: entry_name.into(),
+                action_type: ActionType::Spell(action_name.to_string()),
+                condition: None,
+                active_condition: None,
+                pre_activate: None,
+                post_activate: None,
+                enabled: true,
+                cooldown_key: Some(cooldown_key.to_string()),
+                cooldown_ticks: Some(cooldown_ticks),
+            }],
             current_step: 0,
         }
     }
@@ -3153,6 +3190,171 @@ mod tests {
             ),
             "Disc should re-fire after cooldown expires"
         );
+    }
+
+    #[test]
+    fn rotation_spell_cooldown_blocks_repeated_casts_until_expiry() {
+        let mut cfg = test_config();
+        cfg.mana_floor = 0.0;
+        let mut c = Combatant::new(12, 0, cfg);
+        c.gcd = crate::combat::gcd::GcdTracker::new(0);
+        let player = SpawnData {
+            mana_current: 1000,
+            mana_max: 1000,
+            ..test_player()
+        };
+        let target = test_target();
+        let cooldown_key = "wizard-harvest";
+        let cooldown_ticks = 3;
+
+        c.rotation_groups = Some(vec![spell_rotation_group(
+            "Harvest",
+            "Harvest",
+            cooldown_key,
+            cooldown_ticks,
+        )]);
+        c.resolved_abilities.insert(
+            "Harvest".into(),
+            ResolvedAbility {
+                set_name: "Harvest".into(),
+                ability_name: "Harvest of Druzzil".into(),
+                spell_id: 90210,
+                min_level: 61,
+            },
+        );
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), &[]);
+        let initial_availability = c
+            .ability_cooldowns
+            .availability(rotation_cooldown_key(cooldown_key), c.tick_count);
+        assert_eq!(
+            initial_availability,
+            AbilityAvailability::CoolingDown(cooldown_ticks)
+        );
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), &[]);
+        assert_eq!(
+            c.ability_cooldowns
+                .availability(rotation_cooldown_key(cooldown_key), c.tick_count),
+            AbilityAvailability::CoolingDown(cooldown_ticks - 1),
+            "spell cooldown should tick down instead of resetting immediately"
+        );
+
+        for _ in 0..(cooldown_ticks - 1) {
+            c.state = CombatState::Engaging {
+                target_id: target.spawn_id,
+            };
+            c.tick(&player, Some(&target), &[]);
+        }
+        assert_eq!(
+            c.ability_cooldowns
+                .availability(rotation_cooldown_key(cooldown_key), c.tick_count),
+            AbilityAvailability::CoolingDown(cooldown_ticks),
+            "spell should cast again once the tracked cooldown expires"
+        );
+    }
+
+    #[test]
+    fn rotation_falls_through_when_higher_priority_spell_is_on_cooldown() {
+        let mut cfg = test_config();
+        cfg.mana_floor = 0.0;
+        let mut c = Combatant::new(12, 0, cfg);
+        c.gcd = crate::combat::gcd::GcdTracker::new(0);
+        let player = SpawnData {
+            mana_current: 1000,
+            mana_max: 1000,
+            ..test_player()
+        };
+        let target = test_target();
+        let harvest_cooldown_key = "wizard-harvest";
+
+        c.rotation_groups = Some(vec![
+            spell_rotation_group("Harvest", "Harvest", harvest_cooldown_key, 3),
+            spell_rotation_group("FireNuke", "FireNuke", "wizard-fire", 0),
+        ]);
+        c.resolved_abilities.insert(
+            "Harvest".into(),
+            ResolvedAbility {
+                set_name: "Harvest".into(),
+                ability_name: "Harvest of Druzzil".into(),
+                spell_id: 90210,
+                min_level: 61,
+            },
+        );
+        c.resolved_abilities.insert(
+            "FireNuke".into(),
+            ResolvedAbility {
+                set_name: "FireNuke".into(),
+                ability_name: "White Fire".into(),
+                spell_id: 42424,
+                min_level: 62,
+            },
+        );
+        c.ability_cooldowns.consume(
+            rotation_cooldown_key(harvest_cooldown_key),
+            Some(3),
+            c.tick_count,
+        );
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), &[]);
+
+        assert!(matches!(
+            c.state,
+            CombatState::Casting {
+                spell_id: 42424,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn rotation_falls_through_when_higher_priority_spell_is_unresolved() {
+        let mut cfg = test_config();
+        cfg.mana_floor = 0.0;
+        let mut c = Combatant::new(12, 0, cfg);
+        c.gcd = crate::combat::gcd::GcdTracker::new(0);
+        let player = SpawnData {
+            mana_current: 1000,
+            mana_max: 1000,
+            ..test_player()
+        };
+        let target = test_target();
+
+        c.rotation_groups = Some(vec![
+            spell_rotation_group("Harvest", "Harvest", "wizard-harvest", 3),
+            spell_rotation_group("FireNuke", "FireNuke", "wizard-fire", 0),
+        ]);
+        c.resolved_abilities.insert(
+            "FireNuke".into(),
+            ResolvedAbility {
+                set_name: "FireNuke".into(),
+                ability_name: "White Fire".into(),
+                spell_id: 51515,
+                min_level: 62,
+            },
+        );
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), &[]);
+
+        assert!(matches!(
+            c.state,
+            CombatState::Casting {
+                spell_id: 51515,
+                ..
+            }
+        ));
     }
 
     fn config_with_retry(max_tries: u8, base_backoff_ticks: u32) -> CombatConfig {

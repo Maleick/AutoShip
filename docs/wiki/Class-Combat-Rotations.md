@@ -485,6 +485,15 @@ Pure DPS. Wizards exist to kill things fast. Secondary: ports and evac for group
 - Mana threshold: do not nuke below 20% mana (reserve for evac/gate)
 - Click mana-free nuke items on cooldown (these are free DPS)
 
+### Live 60-65 Rotation Notes
+
+- Level 60 sustained order: **Sunstrike** -> **Ice Comet** -> **Lure of Thunder** -> **Jyll's Wave of Heat** when 3+ enemies are stacked
+- Level 61 adds **Harvest of Druzzil** as the mana recovery action; automation should trigger it around **35% mana**
+- Level 62 upgrades the primary burst pair to **White Fire** and **Ancient: Destruction of Ice**
+- Level 65 upgrades to **Fire of Tallon** and **Draught of E`ci** and swaps the emergency evac line to **Greater Decession**
+- Live-safe reserve thresholds: keep **20% mana** in reserve for self-preservation and ports, and require roughly **45% mana** before spending casts on AoE
+- Emergency logic should treat evac as a self-preservation tool, not part of the normal DPS loop
+
 ---
 
 ## 7. Monk (Puller / Melee DPS)

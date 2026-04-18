@@ -48,6 +48,10 @@ pub struct ToonRotationEntry {
     pub active_condition: Option<ConditionExpr>,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    #[serde(default)]
+    pub cooldown_key: Option<String>,
+    #[serde(default)]
+    pub cooldown_ticks: Option<u32>,
 }
 
 const TOON_CONFIG_ENV_VAR: &str = "TEXTQUEST_TOON_CONFIG_DIR";
@@ -170,6 +174,8 @@ impl From<ToonRotationEntry> for RotationEntry {
             pre_activate: None,
             post_activate: None,
             enabled: value.enabled,
+            cooldown_key: value.cooldown_key,
+            cooldown_ticks: value.cooldown_ticks,
         }
     }
 }
@@ -299,6 +305,8 @@ mod tests {
                     condition: Some(ConditionExpr::Always),
                     active_condition: None,
                     enabled: true,
+                    cooldown_key: None,
+                    cooldown_ticks: None,
                 }],
             }]),
         };

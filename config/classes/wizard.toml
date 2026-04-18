@@ -3,26 +3,186 @@ role = "dps"
 rest_command = "/sit"
 
 [[combat_abilities]]
-name = "Nuke 1"
+name = "Conflagration"
 command = "/cast 1"
-cooldown_secs = 6.0
+cooldown_secs = 4.0
 priority = 1
 
 [[combat_abilities]]
-name = "Nuke 2"
+name = "Frost Bolt"
 command = "/cast 2"
-cooldown_secs = 6.0
+cooldown_secs = 8.0
 priority = 2
 
 [[combat_abilities]]
-name = "Harvest"
+name = "Shock of Lightning"
 command = "/cast 3"
-cooldown_secs = 60.0
+cooldown_secs = 4.0
 priority = 3
-condition = "mana_below_20"
 
 [[emergency_abilities]]
 name = "Evacuate"
+command = "/cast 6"
+cooldown_secs = 30.0
+priority = 0
+
+[[level_overrides]]
+name = "Wizard 60"
+min_level = 60
+max_level = 60
+
+[[level_overrides.combat_abilities]]
+name = "Sunstrike"
+command = "/cast 1"
+cooldown_secs = 4.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Ice Comet"
+command = "/cast 2"
+cooldown_secs = 8.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Lure of Thunder"
+command = "/cast 3"
+cooldown_secs = 4.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Jyll's Wave of Heat"
 command = "/cast 4"
-cooldown_secs = 0.0
+cooldown_secs = 12.0
+priority = 4
+
+[[level_overrides.emergency_abilities]]
+name = "Evacuate"
+command = "/cast 6"
+cooldown_secs = 30.0
+priority = 0
+
+[[level_overrides]]
+name = "Wizard 61"
+min_level = 61
+max_level = 61
+
+[[level_overrides.combat_abilities]]
+name = "Harvest of Druzzil"
+command = "/cast 5"
+cooldown_secs = 60.0
+priority = 0
+condition = "mana_below_35"
+
+[[level_overrides.combat_abilities]]
+name = "Sunstrike"
+command = "/cast 1"
+cooldown_secs = 4.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Ice Comet"
+command = "/cast 2"
+cooldown_secs = 8.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Lure of Thunder"
+command = "/cast 3"
+cooldown_secs = 4.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Jyll's Wave of Heat"
+command = "/cast 4"
+cooldown_secs = 12.0
+priority = 4
+
+[[level_overrides.emergency_abilities]]
+name = "Evacuate"
+command = "/cast 6"
+cooldown_secs = 30.0
+priority = 0
+
+[[level_overrides]]
+name = "Wizard 62"
+min_level = 62
+max_level = 64
+
+[[level_overrides.combat_abilities]]
+name = "White Fire"
+command = "/cast 1"
+cooldown_secs = 4.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Ancient: Destruction of Ice"
+command = "/cast 2"
+cooldown_secs = 8.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Lure of Thunder"
+command = "/cast 3"
+cooldown_secs = 4.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Jyll's Wave of Heat"
+command = "/cast 4"
+cooldown_secs = 12.0
+priority = 4
+
+[[level_overrides.combat_abilities]]
+name = "Harvest of Druzzil"
+command = "/cast 5"
+cooldown_secs = 60.0
+priority = 5
+condition = "mana_below_35"
+
+[[level_overrides.emergency_abilities]]
+name = "Evacuate"
+command = "/cast 6"
+cooldown_secs = 30.0
+priority = 0
+
+[[level_overrides]]
+name = "Wizard 65"
+min_level = 65
+max_level = 65
+
+[[level_overrides.combat_abilities]]
+name = "Fire of Tallon"
+command = "/cast 1"
+cooldown_secs = 4.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Draught of E`ci"
+command = "/cast 2"
+cooldown_secs = 8.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Lure of Thunder"
+command = "/cast 3"
+cooldown_secs = 4.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Jyll's Wave of Heat"
+command = "/cast 4"
+cooldown_secs = 12.0
+priority = 4
+
+[[level_overrides.combat_abilities]]
+name = "Harvest of Druzzil"
+command = "/cast 5"
+cooldown_secs = 60.0
+priority = 5
+condition = "mana_below_35"
+
+[[level_overrides.emergency_abilities]]
+name = "Greater Decession"
+command = "/cast 6"
+cooldown_secs = 30.0
 priority = 0

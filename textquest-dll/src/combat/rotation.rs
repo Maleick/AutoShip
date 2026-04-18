@@ -38,6 +38,11 @@ pub struct RotationEntry {
     pub post_activate: Option<ActivationHook>,
     /// Whether the user has enabled this entry (togglable at runtime).
     pub enabled: bool,
+    /// Optional cooldown key used to throttle this entry between attempts.
+    ///
+    /// When multiple entries share the same key they also share reuse state,
+    /// which lets upgraded spell lines or grouped utilities use a single timer.
+    pub cooldown_key: Option<String>,
     /// Optional cooldown window in game ticks.
     ///
     /// When set, the combat runtime throttles repeat attempts for this entry.
@@ -189,6 +194,8 @@ pub struct SelectedAction {
     pub action_type: ActionType,
     /// Target spawn ID (0 = self).
     pub target_id: u32,
+    /// Optional shared cooldown key to apply after firing.
+    pub cooldown_key: Option<String>,
     /// Optional cooldown window for the selected action.
     pub cooldown_ticks: Option<u32>,
 }
@@ -309,6 +316,7 @@ where
             entry_name: entry.name.clone(),
             action_type: entry.action_type.clone(),
             target_id,
+            cooldown_key: entry.cooldown_key.clone(),
             cooldown_ticks: entry.cooldown_ticks,
         });
 
@@ -416,6 +424,7 @@ pub fn entry(name: &str, action_type: ActionType) -> RotationEntry {
         pre_activate: None,
         post_activate: None,
         enabled: true,
+        cooldown_key: None,
         cooldown_ticks: None,
     }
 }
@@ -430,6 +439,7 @@ pub fn entry_if(name: &str, action_type: ActionType, cond: ConditionExpr) -> Rot
         pre_activate: None,
         post_activate: None,
         enabled: true,
+        cooldown_key: None,
         cooldown_ticks: None,
     }
 }
@@ -448,17 +458,34 @@ pub fn entry_unless_active(
         pre_activate: None,
         post_activate: None,
         enabled: true,
+        cooldown_key: None,
         cooldown_ticks: None,
     }
 }
 
-/// Convenience: create an entry with an explicit cooldown.
+/// Convenience: create an entry with explicit cooldown metadata.
 pub fn entry_with_cooldown(
     name: &str,
     action_type: ActionType,
+    cooldown_key: &str,
     cooldown_ticks: u32,
 ) -> RotationEntry {
     let mut entry = entry(name, action_type);
+    entry.cooldown_key = Some(cooldown_key.to_string());
+    entry.cooldown_ticks = Some(cooldown_ticks);
+    entry
+}
+
+/// Convenience: create a conditional entry with explicit cooldown metadata.
+pub fn entry_if_with_cooldown(
+    name: &str,
+    action_type: ActionType,
+    cond: ConditionExpr,
+    cooldown_key: &str,
+    cooldown_ticks: u32,
+) -> RotationEntry {
+    let mut entry = entry_if(name, action_type, cond);
+    entry.cooldown_key = Some(cooldown_key.to_string());
     entry.cooldown_ticks = Some(cooldown_ticks);
     entry
 }
