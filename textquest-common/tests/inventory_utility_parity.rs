@@ -1,5 +1,5 @@
 use textquest_common::inventory_utility::{
-    InventoryUtilityConfig, RewardRoutingRule, RewardClaimDecision, resolve_reward_claim,
+    InventoryUtilityConfig, RewardClaimDecision, RewardRoutingRule, resolve_reward_claim,
 };
 
 #[test]
@@ -29,18 +29,17 @@ fn default_config_explicitly_maps_every_redguides_plugin_in_scope() {
         assert!(plugins.contains(expected), "missing mapping for {expected}");
     }
 
-    assert!(config
-        .plugin_mappings
-        .iter()
-        .all(|mapping| !mapping.owner.trim().is_empty()));
+    assert!(
+        config
+            .plugin_mappings
+            .iter()
+            .all(|mapping| !mapping.owner.trim().is_empty())
+    );
 }
 
 #[test]
 fn reward_routes_prefer_exact_task_then_wildcard() {
-    let rewards = vec![
-        "Ancient Coin".to_string(),
-        "Heroic Augment".to_string(),
-    ];
+    let rewards = vec!["Ancient Coin".to_string(), "Heroic Augment".to_string()];
 
     let rules = vec![
         RewardRoutingRule::by_name("*", "Ancient Coin", false),
@@ -51,13 +50,19 @@ fn reward_routes_prefer_exact_task_then_wildcard() {
     let decision = resolve_reward_claim("Artifact Recovery", &rewards, &rules);
     assert_eq!(
         decision,
-        Some(RewardClaimDecision { reward_index: 1, auto_claim: true }),
+        Some(RewardClaimDecision {
+            reward_index: 1,
+            auto_claim: true
+        }),
     );
 
     // Wildcard match selects Ancient Coin at index 0 with auto_claim=false
     let decision = resolve_reward_claim("Different Task", &rewards, &rules);
     assert_eq!(
         decision,
-        Some(RewardClaimDecision { reward_index: 0, auto_claim: false }),
+        Some(RewardClaimDecision {
+            reward_index: 0,
+            auto_claim: false
+        }),
     );
 }

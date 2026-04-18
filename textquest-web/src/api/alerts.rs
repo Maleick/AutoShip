@@ -95,15 +95,12 @@ pub async fn get_alert(
 ) -> impl IntoResponse {
     match state.alert_store.get(id) {
         Ok(Some(alert)) => (StatusCode::OK, Json(alert)).into_response(),
-        Ok(None) => json_error(StatusCode::NOT_FOUND, format!("Alert {id} was not found"))
-            .into_response(),
+        Ok(None) => {
+            json_error(StatusCode::NOT_FOUND, format!("Alert {id} was not found")).into_response()
+        }
         Err(error) => {
             tracing::error!(%error, alert_id = id, "Failed to fetch alert");
-            json_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to fetch alert",
-            )
-            .into_response()
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch alert").into_response()
         }
     }
 }

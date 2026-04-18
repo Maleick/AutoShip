@@ -3,11 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use axum::{
-    Json,
-    extract::State,
-    http::StatusCode,
-};
+use axum::{Json, extract::State, http::StatusCode};
 use serde::Serialize;
 use textquest_common::inventory_utility::InventoryUtilityConfig;
 
@@ -89,10 +85,12 @@ mod tests {
 
         let Json(config) = get_config(State(state)).await;
 
-        assert!(config
-            .plugin_mappings
-            .iter()
-            .any(|mapping| mapping.plugin == "MQ2LinkDB"));
+        assert!(
+            config
+                .plugin_mappings
+                .iter()
+                .any(|mapping| mapping.plugin == "MQ2LinkDB")
+        );
     }
 
     #[tokio::test]

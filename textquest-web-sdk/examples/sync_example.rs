@@ -30,8 +30,10 @@ fn main() {
         Ok(sessions) => {
             println!("✓ Found {} sessions", sessions.len());
             for session in sessions {
-                println!("  - {}: Level {} in {} (hp: {}%)",
-                    session.character_name, session.level, session.zone, session.hp_pct);
+                println!(
+                    "  - {}: Level {} in {} (hp: {}%)",
+                    session.character_name, session.level, session.zone, session.hp_pct
+                );
             }
         }
         Err(e) => eprintln!("✗ Failed to fetch sessions: {}", e),
@@ -44,7 +46,10 @@ fn main() {
             println!("✓ Economy settings:");
             println!("  Krono enabled: {}", settings.krono.enabled);
             println!("  Banking rules: {}", settings.banking_rules.len());
-            println!("  Tradeskill supplies: {}", settings.tradeskill_supplies.len());
+            println!(
+                "  Tradeskill supplies: {}",
+                settings.tradeskill_supplies.len()
+            );
         }
         Err(e) => eprintln!("✗ Failed to fetch economy settings: {}", e),
     }
@@ -67,8 +72,10 @@ fn main() {
         Ok(states) => {
             println!("✓ Found {} soul states", states.len());
             for state in states {
-                println!("  - {}: {} (status: {})",
-                    state.character_id, state.memory_usage, state.status);
+                println!(
+                    "  - {}: {} (status: {})",
+                    state.character_id, state.memory_usage, state.status
+                );
             }
         }
         Err(e) => eprintln!("✗ Failed to fetch soul states: {}", e),
@@ -80,7 +87,10 @@ fn main() {
         Ok(routes) => {
             println!("✓ Found {} vendor routes", routes.len());
             for route in routes {
-                println!("  - {}: {} in {} (enabled: {})", route.id, route.npc_name, route.zone, route.enabled);
+                println!(
+                    "  - {}: {} in {} (enabled: {})",
+                    route.id, route.npc_name, route.zone, route.enabled
+                );
             }
         }
         Err(e) => eprintln!("✗ Failed to fetch vendor routes: {}", e),

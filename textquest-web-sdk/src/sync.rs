@@ -31,8 +31,9 @@ pub struct BlockingClient {
 impl BlockingClient {
     /// Create a new blocking client
     pub fn new(base_url: impl Into<String>) -> Result<Self> {
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| crate::Error::Configuration(format!("Failed to create tokio runtime: {}", e)))?;
+        let runtime = tokio::runtime::Runtime::new().map_err(|e| {
+            crate::Error::Configuration(format!("Failed to create tokio runtime: {}", e))
+        })?;
 
         Ok(Self {
             client: Client::new(base_url),
@@ -42,8 +43,9 @@ impl BlockingClient {
 
     /// Create a new blocking client with an API token
     pub fn with_token(base_url: impl Into<String>, token: Option<String>) -> Result<Self> {
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| crate::Error::Configuration(format!("Failed to create tokio runtime: {}", e)))?;
+        let runtime = tokio::runtime::Runtime::new().map_err(|e| {
+            crate::Error::Configuration(format!("Failed to create tokio runtime: {}", e))
+        })?;
 
         Ok(Self {
             client: Client::with_token(base_url, token),
@@ -73,7 +75,8 @@ impl BlockingClient {
 
     /// Update chat log settings
     pub fn put_chat_log_settings(&self, settings: ChatLogSettings) -> Result<ChatLogSettings> {
-        self.runtime.block_on(self.client.put_chat_log_settings(settings))
+        self.runtime
+            .block_on(self.client.put_chat_log_settings(settings))
     }
 
     /// Get box chat settings
@@ -83,7 +86,8 @@ impl BlockingClient {
 
     /// Update box chat settings
     pub fn put_box_chat_settings(&self, config: BoxChatConfig) -> Result<BoxChatConfig> {
-        self.runtime.block_on(self.client.put_box_chat_settings(config))
+        self.runtime
+            .block_on(self.client.put_box_chat_settings(config))
     }
 
     /// List all character configurations
@@ -93,18 +97,28 @@ impl BlockingClient {
 
     /// Get configuration for a specific character
     /// Update configuration for a character
-    pub fn put_character_config(&self, character: &str, config: CharacterConfig) -> Result<CharacterConfig> {
-        self.runtime.block_on(self.client.put_character_config(character, config))
+    pub fn put_character_config(
+        &self,
+        character: &str,
+        config: CharacterConfig,
+    ) -> Result<CharacterConfig> {
+        self.runtime
+            .block_on(self.client.put_character_config(character, config))
     }
 
     /// Get auto-accept settings
     pub fn get_auto_accept_settings(&self) -> Result<AutoAcceptSettings> {
-        self.runtime.block_on(self.client.get_auto_accept_settings())
+        self.runtime
+            .block_on(self.client.get_auto_accept_settings())
     }
 
     /// Update auto-accept settings
-    pub fn put_auto_accept_settings(&self, settings: AutoAcceptSettings) -> Result<AutoAcceptSettings> {
-        self.runtime.block_on(self.client.put_auto_accept_settings(settings))
+    pub fn put_auto_accept_settings(
+        &self,
+        settings: AutoAcceptSettings,
+    ) -> Result<AutoAcceptSettings> {
+        self.runtime
+            .block_on(self.client.put_auto_accept_settings(settings))
     }
 
     /// Get player watch configuration
@@ -114,7 +128,8 @@ impl BlockingClient {
 
     /// Update player watch configuration
     pub fn put_player_watch_config(&self, config: PlayerWatchConfig) -> Result<PlayerWatchConfig> {
-        self.runtime.block_on(self.client.put_player_watch_config(config))
+        self.runtime
+            .block_on(self.client.put_player_watch_config(config))
     }
 
     /// Get economy settings
@@ -124,7 +139,8 @@ impl BlockingClient {
 
     /// Update economy settings
     pub fn put_economy_settings(&self, settings: EconomySettings) -> Result<EconomySettings> {
-        self.runtime.block_on(self.client.put_economy_settings(settings))
+        self.runtime
+            .block_on(self.client.put_economy_settings(settings))
     }
 
     /// List all vendor routes
@@ -134,12 +150,14 @@ impl BlockingClient {
 
     /// Create a new vendor route
     pub fn create_vendor_route(&self, route: VendorRoute) -> Result<VendorRoute> {
-        self.runtime.block_on(self.client.create_vendor_route(route))
+        self.runtime
+            .block_on(self.client.create_vendor_route(route))
     }
 
     /// Update an existing vendor route
     pub fn update_vendor_route(&self, id: &str, route: VendorRoute) -> Result<VendorRoute> {
-        self.runtime.block_on(self.client.update_vendor_route(id, route))
+        self.runtime
+            .block_on(self.client.update_vendor_route(id, route))
     }
 
     /// Delete a vendor route
@@ -169,7 +187,8 @@ impl BlockingClient {
 
     /// Update loot filter for a character
     pub fn put_loot_filter(&self, character: &str, filter: LootFilter) -> Result<LootFilter> {
-        self.runtime.block_on(self.client.put_loot_filter(character, filter))
+        self.runtime
+            .block_on(self.client.put_loot_filter(character, filter))
     }
 
     /// Get master looter assignment
@@ -189,7 +208,8 @@ impl BlockingClient {
 
     /// Update loot distribution settings
     pub fn put_loot_distribution(&self, dist: LootDistribution) -> Result<LootDistribution> {
-        self.runtime.block_on(self.client.put_loot_distribution(dist))
+        self.runtime
+            .block_on(self.client.put_loot_distribution(dist))
     }
 
     /// Get loot history
@@ -204,7 +224,8 @@ impl BlockingClient {
 
     /// Get soul state for a specific character
     pub fn get_soul_state(&self, character_id: &str) -> Result<SoulState> {
-        self.runtime.block_on(self.client.get_soul_state(character_id))
+        self.runtime
+            .block_on(self.client.get_soul_state(character_id))
     }
 
     /// Get alerting configuration
@@ -244,7 +265,8 @@ impl BlockingClient {
 
     /// Update spawn alert configuration
     pub fn put_spawn_alert_config(&self, config: SpawnAlertConfig) -> Result<SpawnAlertConfig> {
-        self.runtime.block_on(self.client.put_spawn_alert_config(config))
+        self.runtime
+            .block_on(self.client.put_spawn_alert_config(config))
     }
 
     /// Get spawn alert watch list
@@ -254,12 +276,14 @@ impl BlockingClient {
 
     /// Add a pattern to spawn alert watch list
     pub fn put_spawn_watch_pattern(&self, pattern: &str) -> Result<()> {
-        self.runtime.block_on(self.client.put_spawn_watch_pattern(pattern))
+        self.runtime
+            .block_on(self.client.put_spawn_watch_pattern(pattern))
     }
 
     /// Remove a pattern from spawn alert watch list
     pub fn delete_spawn_watch_pattern(&self, pattern: &str) -> Result<()> {
-        self.runtime.block_on(self.client.delete_spawn_watch_pattern(pattern))
+        self.runtime
+            .block_on(self.client.delete_spawn_watch_pattern(pattern))
     }
 
     /// List timestamp configurations (returns a map of character name → config)
@@ -279,7 +303,8 @@ impl BlockingClient {
 
     /// Get kill tracker history
     pub fn get_kill_tracker_history(&self) -> Result<Vec<KillTrackerEntry>> {
-        self.runtime.block_on(self.client.get_kill_tracker_history())
+        self.runtime
+            .block_on(self.client.get_kill_tracker_history())
     }
 
     /// Get kill tracker stats
@@ -294,17 +319,23 @@ impl BlockingClient {
 
     /// Get say detection configuration
     pub fn get_say_detection_config(&self) -> Result<SayDetectionConfig> {
-        self.runtime.block_on(self.client.get_say_detection_config())
+        self.runtime
+            .block_on(self.client.get_say_detection_config())
     }
 
     /// Update say detection configuration
-    pub fn put_say_detection_config(&self, config: SayDetectionConfig) -> Result<SayDetectionConfig> {
-        self.runtime.block_on(self.client.put_say_detection_config(config))
+    pub fn put_say_detection_config(
+        &self,
+        config: SayDetectionConfig,
+    ) -> Result<SayDetectionConfig> {
+        self.runtime
+            .block_on(self.client.put_say_detection_config(config))
     }
 
     /// Get say detection matches
     pub fn get_say_detection_matches(&self) -> Result<Vec<SayMatch>> {
-        self.runtime.block_on(self.client.get_say_detection_matches())
+        self.runtime
+            .block_on(self.client.get_say_detection_matches())
     }
 
     /// List XAssist configurations
@@ -314,17 +345,24 @@ impl BlockingClient {
 
     /// Get XAssist configuration for a character
     pub fn get_xassist_config(&self, character: &str) -> Result<XAssistConfig> {
-        self.runtime.block_on(self.client.get_xassist_config(character))
+        self.runtime
+            .block_on(self.client.get_xassist_config(character))
     }
 
     /// Update XAssist configuration for a character
-    pub fn put_xassist_config(&self, character: &str, config: XAssistConfig) -> Result<XAssistConfig> {
-        self.runtime.block_on(self.client.put_xassist_config(character, config))
+    pub fn put_xassist_config(
+        &self,
+        character: &str,
+        config: XAssistConfig,
+    ) -> Result<XAssistConfig> {
+        self.runtime
+            .block_on(self.client.put_xassist_config(character, config))
     }
 
     /// Delete XAssist configuration for a character
     pub fn delete_xassist_config(&self, character: &str) -> Result<()> {
-        self.runtime.block_on(self.client.delete_xassist_config(character))
+        self.runtime
+            .block_on(self.client.delete_xassist_config(character))
     }
 
     /// List chat pattern rules
@@ -334,12 +372,14 @@ impl BlockingClient {
 
     /// Get stats for chat pattern rules
     pub fn get_chat_pattern_rules_stats(&self) -> Result<ChatPatternRuleStats> {
-        self.runtime.block_on(self.client.get_chat_pattern_rules_stats())
+        self.runtime
+            .block_on(self.client.get_chat_pattern_rules_stats())
     }
 
     /// Import chat pattern rules
     pub fn import_chat_pattern_rules(&self, rules: Vec<ChatPatternRule>) -> Result<()> {
-        self.runtime.block_on(self.client.import_chat_pattern_rules(rules))
+        self.runtime
+            .block_on(self.client.import_chat_pattern_rules(rules))
     }
 
     /// Get a specific chat pattern rule
@@ -348,27 +388,36 @@ impl BlockingClient {
     }
 
     /// Update a chat pattern rule
-    pub fn put_chat_pattern_rule(&self, id: &str, rule: ChatPatternRule) -> Result<ChatPatternRule> {
-        self.runtime.block_on(self.client.put_chat_pattern_rule(id, rule))
+    pub fn put_chat_pattern_rule(
+        &self,
+        id: &str,
+        rule: ChatPatternRule,
+    ) -> Result<ChatPatternRule> {
+        self.runtime
+            .block_on(self.client.put_chat_pattern_rule(id, rule))
     }
 
     /// Delete a chat pattern rule
     pub fn delete_chat_pattern_rule(&self, id: &str) -> Result<()> {
-        self.runtime.block_on(self.client.delete_chat_pattern_rule(id))
+        self.runtime
+            .block_on(self.client.delete_chat_pattern_rule(id))
     }
 
     /// Toggle a chat pattern rule on/off
     pub fn toggle_chat_pattern_rule(&self, id: &str) -> Result<ChatPatternRule> {
-        self.runtime.block_on(self.client.toggle_chat_pattern_rule(id))
+        self.runtime
+            .block_on(self.client.toggle_chat_pattern_rule(id))
     }
 
     /// Reset cooldown for a chat pattern rule
     pub fn reset_chat_pattern_rule_cooldown(&self, id: &str) -> Result<ChatPatternRule> {
-        self.runtime.block_on(self.client.reset_chat_pattern_rule_cooldown(id))
+        self.runtime
+            .block_on(self.client.reset_chat_pattern_rule_cooldown(id))
     }
 
     /// Reset all cooldowns for chat pattern rules
     pub fn reset_all_chat_pattern_rule_cooldowns(&self) -> Result<()> {
-        self.runtime.block_on(self.client.reset_all_chat_pattern_rule_cooldowns())
+        self.runtime
+            .block_on(self.client.reset_all_chat_pattern_rule_cooldowns())
     }
 }

@@ -348,7 +348,6 @@ pub fn router() -> Router<Arc<AppState>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-use textquest_common::auto_group::AutoGroupSettings;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -356,7 +355,6 @@ use textquest_common::auto_group::AutoGroupSettings;
     use http_body_util::BodyExt;
     use serde_json::{Value, json};
     use std::sync::Mutex;
-    use textquest_common::auto_group::AutoGroupSettings;
     use tokio::sync::{RwLock, broadcast};
     use tower::ServiceExt;
 
@@ -397,11 +395,16 @@ use textquest_common::auto_group::AutoGroupSettings;
             session_controls: RwLock::new(std::collections::HashMap::new()),
             auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
             tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
+            auto_group_settings: tokio::sync::RwLock::new(
+                textquest_common::auto_group::AutoGroupSettings::default(),
+            ),
+            auto_group_config_path: std::env::temp_dir().join("tq-test-auto-group.json"),
             auto_group_state: AutoGroupState::new_demo(),
             inventory_utility_parity: tokio::sync::RwLock::new(
                 textquest_common::inventory_utility::InventoryUtilityConfig::default(),
             ),
-            inventory_utility_parity_path: std::env::temp_dir().join("tq-test-inventory-utility.json"),
+            inventory_utility_parity_path: std::env::temp_dir()
+                .join("tq-test-inventory-utility.json"),
             inventory_utility_parity_write_lock: tokio::sync::Mutex::new(()),
             extension_catalog_state: crate::api::extensions::ExtensionCatalogState::load(
                 std::env::temp_dir().join(format!(

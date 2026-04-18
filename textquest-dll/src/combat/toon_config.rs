@@ -48,8 +48,6 @@ pub struct ToonRotationEntry {
     pub enabled: bool,
     #[serde(default)]
     pub cooldown_key: Option<String>,
-    #[serde(default)]
-    pub cooldown_ticks: Option<u32>,
 }
 
 const TOON_CONFIG_ENV_VAR: &str = "TEXTQUEST_TOON_CONFIG_DIR";
@@ -303,7 +301,6 @@ mod tests {
                     active_condition: None,
                     enabled: true,
                     cooldown_key: None,
-                    cooldown_ticks: None,
                 }],
             }]),
         };

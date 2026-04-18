@@ -49,7 +49,9 @@ use toml_edit::{Array, DocumentMut, Item, Table, value};
 use crate::AppState;
 use textquest_common::shared_client_state::SharedClientState;
 
-pub fn mount_admin_sessions(router: axum::Router<AppState>) -> axum::Router<AppState> {
+pub fn mount_admin_sessions(
+    router: axum::Router<std::sync::Arc<AppState>>,
+) -> axum::Router<std::sync::Arc<AppState>> {
     router.nest("/admin/sessions", admin_sessions::router())
 }
 
@@ -1733,7 +1735,6 @@ mod tests {
     use axum::response::IntoResponse;
     use http_body_util::BodyExt;
     use serde_json::Value;
-    use std::path::PathBuf;
     use std::{collections::HashMap, ffi::OsString, sync::OnceLock};
     use tempfile::tempdir;
     use textquest_common::ipc::{AutoAcceptSettings, AutoAcceptTrustMode};

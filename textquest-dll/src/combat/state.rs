@@ -268,6 +268,7 @@ struct RotationActionRuntime<'a> {
     active_cast_cooldown_ticks: &'a mut Option<u32>,
     tick_count: u32,
     state: &'a mut CombatState,
+    strategy: &'a dyn ClassStrategy,
 }
 
 fn execute_rotation_action(
@@ -280,15 +281,37 @@ fn execute_rotation_action(
         return false;
     };
     let ability_cooldowns = &*runtime.ability_cooldowns;
+    let resolved_abilities = runtime.resolved_abilities;
     let tick_count = runtime.tick_count;
-    let mut rotation_entry_ready = |entry: &rotation::RotationEntry, target_id: u32| match entry
-        .action_type
-    {
-        ActionType::Spell(_) | ActionType::Song(_) => entry.cooldown_ticks.is_none_or(|_| {
-            ability_cooldowns.can_use(rotation_spell_key(&entry.name, target_id), None, tick_count)
-        }),
-        _ => true,
-    };
+    let mut rotation_entry_ready =
+        |entry: &rotation::RotationEntry, target_id: u32| match entry.action_type {
+            ActionType::Spell(_) | ActionType::Song(_) => {
+                resolved_abilities
+                    .get(&entry.name)
+                    .is_some_and(|r| r.spell_id > 0)
+                    && entry.cooldown_ticks.is_none_or(|_| {
+                        ability_cooldowns.can_use(
+                            rotation_spell_key(&entry.name, target_id),
+                            None,
+                            tick_count,
+                        )
+                    })
+                    && entry.cooldown_key.as_ref().is_none_or(|key| {
+                        ability_cooldowns.can_use(rotation_cooldown_key(key), None, tick_count)
+                    })
+            }
+            ActionType::Disc(_) | ActionType::AA(_) => {
+                resolved_abilities
+                    .get(&entry.name)
+                    .is_some_and(|r| r.spell_id > 0)
+                    && entry.cooldown_key.as_ref().is_none_or(|key| {
+                        ability_cooldowns.can_use(rotation_cooldown_key(key), None, tick_count)
+                    })
+            }
+            _ => entry.cooldown_key.as_ref().is_none_or(|key| {
+                ability_cooldowns.can_use(rotation_cooldown_key(key), None, tick_count)
+            }),
+        };
     let Some(action) = rotation::execute_rotations_filtered_with_strategy_target(
         groups,
         ctx,
@@ -303,12 +326,18 @@ fn execute_rotation_action(
             (
                 resolved.spell_id,
                 resolved.ability_name.as_str(),
-                resolved.cooldown_ticks,
+                resolved.cooldown_ticks.or(action.cooldown_ticks),
                 resolved.shared_cooldown_key.as_deref(),
                 resolved.shared_cooldown_ticks,
             )
         } else {
-            (0, action.entry_name.as_str(), None, None, None)
+            (
+                0,
+                action.entry_name.as_str(),
+                action.cooldown_ticks,
+                None,
+                None,
+            )
         };
 
     tracing::debug!(
@@ -366,6 +395,15 @@ fn execute_rotation_action(
                 return true;
             };
             crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
+            if let Some(key) = &action.cooldown_key {
+                runtime.ability_cooldowns.consume(
+                    rotation_cooldown_key(key),
+                    cooldown_ticks,
+                    None,
+                    None,
+                    runtime.tick_count,
+                );
+            }
             let cast_delay = u32::from(runtime.personality.next_cast_delay());
             runtime.gcd.consume();
             *runtime.active_cast_entry = Some(action.entry_name.clone());
@@ -401,13 +439,37 @@ fn execute_rotation_action(
                 return true;
             }
             crate::eq::do_combat_ability(spell_id, true);
+            let disc_cooldown = runtime
+                .strategy
+                .activated_ability_cooldown_ticks(spell_id)
+                .or(cooldown_ticks);
             runtime.ability_cooldowns.consume(
                 spell_id,
-                cooldown_ticks,
+                disc_cooldown,
                 shared_cooldown_key,
                 shared_cooldown_ticks,
                 runtime.tick_count,
             );
+            if let Some(key) = &action.cooldown_key {
+                runtime.ability_cooldowns.consume(
+                    rotation_cooldown_key(key),
+                    disc_cooldown,
+                    None,
+                    None,
+                    runtime.tick_count,
+                );
+            }
+            for &shared_id in runtime.strategy.shared_activated_ability_ids(spell_id) {
+                if shared_id != spell_id {
+                    runtime.ability_cooldowns.consume(
+                        shared_id,
+                        disc_cooldown,
+                        None,
+                        None,
+                        runtime.tick_count,
+                    );
+                }
+            }
             runtime.gcd.consume();
             *runtime.active_cast_entry = None;
             *runtime.active_cast_cooldown_ticks = None;
@@ -431,8 +493,18 @@ fn execute_rotation_action(
                 return true;
             }
             crate::eq::use_skill(skill_id, None);
-            if let Some(cooldown) = default_cooldown(skill_id) {
+            let skill_cooldown = default_cooldown(skill_id);
+            if let Some(cooldown) = skill_cooldown {
                 runtime.skill_cooldowns.consume(skill_id, cooldown);
+            }
+            if let Some(key) = &action.cooldown_key {
+                runtime.ability_cooldowns.consume(
+                    rotation_cooldown_key(key),
+                    skill_cooldown,
+                    None,
+                    None,
+                    runtime.tick_count,
+                );
             }
             runtime.gcd.consume();
             *runtime.active_cast_entry = None;
@@ -460,13 +532,19 @@ fn execute_rotation_action(
                 return true;
             }
             crate::eq::slash_command(&command);
-            runtime.ability_cooldowns.consume(
-                item_key,
-                item_cooldown_ticks(item_name),
-                None,
-                None,
-                runtime.tick_count,
-            );
+            let item_cd = item_cooldown_ticks(item_name);
+            runtime
+                .ability_cooldowns
+                .consume(item_key, item_cd, None, None, runtime.tick_count);
+            if let Some(key) = &action.cooldown_key {
+                runtime.ability_cooldowns.consume(
+                    rotation_cooldown_key(key),
+                    item_cd,
+                    None,
+                    None,
+                    runtime.tick_count,
+                );
+            }
             runtime.gcd.consume();
             *runtime.active_cast_entry = None;
             *runtime.active_cast_cooldown_ticks = None;
@@ -1022,13 +1100,12 @@ impl Combatant {
             }
         }
 
-        let mut selected_spell_target = None;
         if matches!(self.state, CombatState::Engaging { .. }) {
             if !self.gcd.is_ready() {
                 return;
             }
 
-            selected_spell_target = self.strategy.select_target(&ctx);
+            let selected_spell_target = self.strategy.select_target(&ctx);
             let selected_spell_target_spawn = selected_spell_target
                 .and_then(|spell_target| rotation_action_target(&ctx, spell_target));
 
@@ -1064,6 +1141,7 @@ impl Combatant {
                 active_cast_cooldown_ticks: &mut self.active_cast_cooldown_ticks,
                 tick_count: self.tick_count,
                 state: &mut self.state,
+                strategy: self.strategy.as_ref(),
             };
             if execute_rotation_action(
                 &mut self.rotation_groups,
@@ -1087,6 +1165,7 @@ impl Combatant {
                 active_cast_cooldown_ticks: &mut self.active_cast_cooldown_ticks,
                 tick_count: self.tick_count,
                 state: &mut self.state,
+                strategy: self.strategy.as_ref(),
             };
             if execute_rotation_action(&mut self.rotation_groups, &ctx, None, &mut runtime) {
                 return;
@@ -1121,8 +1200,16 @@ impl Combatant {
                     crate::eq::slash_command(&format!("/target id {spell_target}"));
                 }
 
-                // Range check — don't cast if target is too far away
-                if let Some(t) = target {
+                // Range check — use the strategy spell target when set, otherwise
+                // use the current combat target.  If the strategy picked a target
+                // that isn't in the nearby list (e.g. an ally healer target), skip
+                // the range check so ally-targeted casts proceed normally.
+                let range_check_spawn = if let Some(spell_target) = selected_spell_target {
+                    rotation_action_target(&ctx, spell_target)
+                } else {
+                    target
+                };
+                if let Some(t) = range_check_spawn {
                     let dist = Waypoint::new(player.x, player.y, player.z)
                         .distance_3d(&Waypoint::new(t.x, t.y, t.z));
                     if dist > MAX_SPELL_RANGE {
@@ -1147,19 +1234,29 @@ impl Combatant {
                     if let Some(action) =
                         rotation::execute_rotations_with(groups, &ctx, |entry, _| {
                             match &entry.action_type {
-                                ActionType::Spell(_) | ActionType::Song(_) => self
-                                    .resolved_abilities
-                                    .get(&entry.name)
-                                    .is_some_and(|resolved| resolved.spell_id > 0),
+                                ActionType::Spell(_) | ActionType::Song(_) => {
+                                    self.resolved_abilities
+                                        .get(&entry.name)
+                                        .is_some_and(|resolved| resolved.spell_id > 0)
+                                        && entry.cooldown_key.as_ref().is_none_or(|key| {
+                                            self.ability_cooldowns.can_use(
+                                                rotation_cooldown_key(key),
+                                                None,
+                                                self.tick_count,
+                                            )
+                                        })
+                                }
                                 ActionType::Disc(_) | ActionType::AA(_) => {
                                     let Some(resolved) = self.resolved_abilities.get(&entry.name)
                                     else {
                                         return false;
                                     };
                                     if resolved.spell_id <= 0
-                                        || !self
-                                            .ability_cooldowns
-                                            .can_use(resolved.spell_id, None, self.tick_count)
+                                        || !self.ability_cooldowns.can_use(
+                                            resolved.spell_id,
+                                            None,
+                                            self.tick_count,
+                                        )
                                     {
                                         return false;
                                     }
@@ -1174,9 +1271,11 @@ impl Combatant {
                                     }),
                                 ActionType::Item(item_name) => {
                                     use_item_command(item_name).is_some()
-                                        && self
-                                            .ability_cooldowns
-                                            .can_use(item_action_key(item_name), None, self.tick_count)
+                                        && self.ability_cooldowns.can_use(
+                                            item_action_key(item_name),
+                                            None,
+                                            self.tick_count,
+                                        )
                                         && entry.cooldown_key.as_ref().is_none_or(|key| {
                                             self.ability_cooldowns
                                                 .can_use(rotation_cooldown_key(key), None, self.tick_count)
@@ -1226,6 +1325,15 @@ impl Combatant {
                                     return;
                                 };
                                 crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
+                                if let Some(key) = &action.cooldown_key {
+                                    self.ability_cooldowns.consume(
+                                        rotation_cooldown_key(key),
+                                        action.cooldown_ticks,
+                                        None,
+                                        None,
+                                        self.tick_count,
+                                    );
+                                }
                                 let cast_delay = u32::from(self.personality.next_cast_delay());
                                 self.gcd.consume();
                                 self.state = CombatState::Casting {
@@ -1246,7 +1354,10 @@ impl Combatant {
                                     );
                                     return;
                                 }
-                                if !self.ability_cooldowns.can_use(spell_id, None, self.tick_count) {
+                                if !self
+                                    .ability_cooldowns
+                                    .can_use(spell_id, None, self.tick_count)
+                                {
                                     tracing::debug!(
                                         entry = %action.entry_name,
                                         spell_id,
@@ -1258,10 +1369,32 @@ impl Combatant {
                                 self.ability_cooldowns.consume(
                                     spell_id,
                                     action.cooldown_ticks,
-                                    action.cooldown_key.as_deref(),
-                                    action.cooldown_ticks,
+                                    None,
+                                    None,
                                     self.tick_count,
                                 );
+                                if let Some(key) = &action.cooldown_key {
+                                    self.ability_cooldowns.consume(
+                                        rotation_cooldown_key(key),
+                                        action.cooldown_ticks,
+                                        None,
+                                        None,
+                                        self.tick_count,
+                                    );
+                                }
+                                for &shared_id in
+                                    self.strategy.shared_activated_ability_ids(spell_id)
+                                {
+                                    if shared_id != spell_id {
+                                        self.ability_cooldowns.consume(
+                                            shared_id,
+                                            action.cooldown_ticks,
+                                            None,
+                                            None,
+                                            self.tick_count,
+                                        );
+                                    }
+                                }
                                 self.gcd.consume();
                                 self.state = CombatState::OnGcd;
                             }
@@ -1298,7 +1431,10 @@ impl Combatant {
                                     return;
                                 };
                                 let item_key = item_action_key(item_name);
-                                if !self.ability_cooldowns.can_use(item_key, None, self.tick_count) {
+                                if !self
+                                    .ability_cooldowns
+                                    .can_use(item_key, None, self.tick_count)
+                                {
                                     tracing::debug!(
                                         entry = %action.entry_name,
                                         item = %item_name,
@@ -1310,16 +1446,25 @@ impl Combatant {
                                 self.ability_cooldowns.consume(
                                     item_key,
                                     action.cooldown_ticks,
-                                    action.cooldown_key.as_deref(),
-                                    action.cooldown_ticks,
+                                    None,
+                                    None,
                                     self.tick_count,
                                 );
+                                if let Some(key) = &action.cooldown_key {
+                                    self.ability_cooldowns.consume(
+                                        rotation_cooldown_key(key),
+                                        action.cooldown_ticks,
+                                        None,
+                                        None,
+                                        self.tick_count,
+                                    );
+                                }
                                 self.gcd.consume();
                                 self.state = CombatState::OnGcd;
                             }
                         }
+                        return;
                     }
-                    return;
                 }
 
                 // --- Legacy select_spell() path ---
@@ -2032,6 +2177,35 @@ mod tests {
         ]
     }
 
+    fn necro_player(hp_pct: f32, mana_pct: f32) -> SpawnData {
+        let mut p = SpawnData::default();
+        p.name = "NecroPlayer".into();
+        p.spawn_id = 1;
+        p.level = 65;
+        p.hp_max = 1000;
+        p.hp_current = (hp_pct / 100.0 * 1000.0) as i64;
+        p.mana_max = 1000;
+        p.mana_current = (mana_pct / 100.0 * 1000.0) as i32;
+        p
+    }
+
+    fn necro_target(hp_pct: f32) -> SpawnData {
+        let mut t = SpawnData::default();
+        t.name = "TestMob".into();
+        t.spawn_id = 100;
+        t.hp_max = 1000;
+        t.hp_current = (hp_pct / 100.0 * 1000.0) as i64;
+        t
+    }
+
+    fn necro_known_abilities() -> Vec<textquest_common::combat::KnownAbility> {
+        vec![textquest_common::combat::KnownAbility {
+            name: "Scent of Terris".into(),
+            spell_id: 3234,
+            level: 60,
+        }]
+    }
+
     fn test_group_member(spawn_id: u32, hp_pct: f32) -> GroupMemberState {
         GroupMemberState {
             spawn_id,
@@ -2672,7 +2846,8 @@ mod tests {
                 ability_name: "Ashenhand Discipline".into(),
                 spell_id: 4508,
                 min_level: 60,
-            },
+            }
+            .into(),
         );
 
         let player = player_with_hp_end(1000, 1000, 500, 500);
@@ -2709,7 +2884,8 @@ mod tests {
                 ability_name: "Ashenhand Discipline".into(),
                 spell_id: 4508,
                 min_level: 60,
-            },
+            }
+            .into(),
         );
 
         let player = player_with_hp_end(1000, 1000, 900, 1000);
@@ -2744,7 +2920,8 @@ mod tests {
                 ability_name: "Silentfist Discipline".into(),
                 spell_id: 4507,
                 min_level: 59,
-            },
+            }
+            .into(),
         );
 
         let player = player_with_hp_end(1000, 1000, 900, 1000);
@@ -3165,7 +3342,8 @@ mod tests {
                 ability_name: "Trueshot Discipline".into(),
                 spell_id: 4_694,
                 min_level: 60,
-            },
+            }
+            .into(),
         );
 
         let mut player = test_player();
@@ -3550,7 +3728,8 @@ mod tests {
                 ability_name: "Harvest of Druzzil".into(),
                 spell_id: 90210,
                 min_level: 61,
-            },
+            }
+            .into(),
         );
 
         c.state = CombatState::Engaging {
@@ -3615,7 +3794,8 @@ mod tests {
                 ability_name: "Harvest of Druzzil".into(),
                 spell_id: 90210,
                 min_level: 61,
-            },
+            }
+            .into(),
         );
         c.resolved_abilities.insert(
             "FireNuke".into(),
@@ -3624,11 +3804,14 @@ mod tests {
                 ability_name: "White Fire".into(),
                 spell_id: 42424,
                 min_level: 62,
-            },
+            }
+            .into(),
         );
         c.ability_cooldowns.consume(
             rotation_cooldown_key(harvest_cooldown_key),
             Some(3),
+            None,
+            None,
             c.tick_count,
         );
 
@@ -3670,7 +3853,8 @@ mod tests {
                 ability_name: "White Fire".into(),
                 spell_id: 51515,
                 min_level: 62,
-            },
+            }
+            .into(),
         );
 
         c.state = CombatState::Engaging {

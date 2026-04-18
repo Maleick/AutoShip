@@ -3670,7 +3670,6 @@ impl App {
 
         self.should_announce_player(&event.spawn_name)
     }
-}
 
     fn execute_watch_command(&mut self, args: &[&str]) {
         match args.first().copied() {

@@ -25,8 +25,10 @@ async fn main() {
         Ok(sessions) => {
             println!("✓ Found {} sessions", sessions.len());
             for session in sessions {
-                println!("  - {}: Level {} in {} (hp: {}%)",
-                    session.character_name, session.level, session.zone, session.hp_pct);
+                println!(
+                    "  - {}: Level {} in {} (hp: {}%)",
+                    session.character_name, session.level, session.zone, session.hp_pct
+                );
             }
         }
         Err(e) => eprintln!("✗ Failed to fetch sessions: {}", e),
@@ -39,7 +41,10 @@ async fn main() {
             println!("✓ Economy settings:");
             println!("  Krono enabled: {}", settings.krono.enabled);
             println!("  Banking rules: {}", settings.banking_rules.len());
-            println!("  Tradeskill supplies: {}", settings.tradeskill_supplies.len());
+            println!(
+                "  Tradeskill supplies: {}",
+                settings.tradeskill_supplies.len()
+            );
         }
         Err(e) => eprintln!("✗ Failed to fetch economy settings: {}", e),
     }
@@ -62,8 +67,10 @@ async fn main() {
         Ok(states) => {
             println!("✓ Found {} soul states", states.len());
             for state in states {
-                println!("  - {}: {} (status: {})",
-                    state.character_id, state.memory_usage, state.status);
+                println!(
+                    "  - {}: {} (status: {})",
+                    state.character_id, state.memory_usage, state.status
+                );
             }
         }
         Err(e) => eprintln!("✗ Failed to fetch soul states: {}", e),

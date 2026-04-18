@@ -1,7 +1,7 @@
-use reqwest::{Client as ReqwestClient, StatusCode};
-use std::collections::HashMap;
 use crate::error::{Error, Result};
 use crate::models::*;
+use reqwest::{Client as ReqwestClient, StatusCode};
+use std::collections::HashMap;
 
 /// Async TextQuest Web API client
 pub struct Client {
@@ -80,7 +80,10 @@ impl Client {
     }
 
     /// Update chat log settings
-    pub async fn put_chat_log_settings(&self, settings: ChatLogSettings) -> Result<ChatLogSettings> {
+    pub async fn put_chat_log_settings(
+        &self,
+        settings: ChatLogSettings,
+    ) -> Result<ChatLogSettings> {
         let url = self.build_url("/chat-log/settings");
         let req = self.http_client.put(&url).json(&settings);
         let req = self.add_token(req);
@@ -124,7 +127,11 @@ impl Client {
     }
 
     /// Update configuration for a character
-    pub async fn put_character_config(&self, character: &str, config: CharacterConfig) -> Result<CharacterConfig> {
+    pub async fn put_character_config(
+        &self,
+        character: &str,
+        config: CharacterConfig,
+    ) -> Result<CharacterConfig> {
         let url = self.build_url(&format!("/config/characters/{}", character));
         let req = self.http_client.put(&url).json(&config);
         let req = self.add_token(req);
@@ -146,7 +153,10 @@ impl Client {
     }
 
     /// Update auto-accept settings
-    pub async fn put_auto_accept_settings(&self, settings: AutoAcceptSettings) -> Result<AutoAcceptSettings> {
+    pub async fn put_auto_accept_settings(
+        &self,
+        settings: AutoAcceptSettings,
+    ) -> Result<AutoAcceptSettings> {
         let url = self.build_url("/config/auto-accept");
         let req = self.http_client.put(&url).json(&settings);
         let req = self.add_token(req);
@@ -168,7 +178,10 @@ impl Client {
     }
 
     /// Update player watch configuration
-    pub async fn put_player_watch_config(&self, config: PlayerWatchConfig) -> Result<PlayerWatchConfig> {
+    pub async fn put_player_watch_config(
+        &self,
+        config: PlayerWatchConfig,
+    ) -> Result<PlayerWatchConfig> {
         let url = self.build_url("/config/player-watch");
         let req = self.http_client.put(&url).json(&config);
         let req = self.add_token(req);
@@ -347,7 +360,8 @@ impl Client {
         let req = self.add_token(req);
 
         let response = req.send().await?;
-        self.handle_response::<Vec<LootHistoryEntry>>(response).await
+        self.handle_response::<Vec<LootHistoryEntry>>(response)
+            .await
     }
 
     // ─── Soul ──────────────────────────────────────────────────────────────
@@ -379,7 +393,8 @@ impl Client {
         let req = self.add_token(req);
 
         let response = req.send().await?;
-        self.handle_response::<Vec<serde_json::Value>>(response).await
+        self.handle_response::<Vec<serde_json::Value>>(response)
+            .await
     }
 
     /// Get soul audit for a specific character
@@ -389,7 +404,8 @@ impl Client {
         let req = self.add_token(req);
 
         let response = req.send().await?;
-        self.handle_response::<Vec<serde_json::Value>>(response).await
+        self.handle_response::<Vec<serde_json::Value>>(response)
+            .await
     }
 
     // ─── Alerts ────────────────────────────────────────────────────────────
@@ -476,7 +492,10 @@ impl Client {
     }
 
     /// Update spawn alert configuration
-    pub async fn put_spawn_alert_config(&self, config: SpawnAlertConfig) -> Result<SpawnAlertConfig> {
+    pub async fn put_spawn_alert_config(
+        &self,
+        config: SpawnAlertConfig,
+    ) -> Result<SpawnAlertConfig> {
         let url = self.build_url("/spawn-alerts/config");
         let req = self.http_client.put(&url).json(&config);
         let req = self.add_token(req);
@@ -574,7 +593,8 @@ impl Client {
         let req = self.add_token(req);
 
         let response = req.send().await?;
-        self.handle_response::<Vec<KillTrackerEntry>>(response).await
+        self.handle_response::<Vec<KillTrackerEntry>>(response)
+            .await
     }
 
     /// Get kill tracker stats
@@ -612,7 +632,10 @@ impl Client {
     }
 
     /// Update say detection configuration
-    pub async fn put_say_detection_config(&self, config: SayDetectionConfig) -> Result<SayDetectionConfig> {
+    pub async fn put_say_detection_config(
+        &self,
+        config: SayDetectionConfig,
+    ) -> Result<SayDetectionConfig> {
         let url = self.build_url("/say-detection/config");
         let req = self.http_client.put(&url).json(&config);
         let req = self.add_token(req);
@@ -654,7 +677,11 @@ impl Client {
     }
 
     /// Update XAssist configuration for a character
-    pub async fn put_xassist_config(&self, character: &str, config: XAssistConfig) -> Result<XAssistConfig> {
+    pub async fn put_xassist_config(
+        &self,
+        character: &str,
+        config: XAssistConfig,
+    ) -> Result<XAssistConfig> {
         let url = self.build_url(&format!("/xassist/config/{}", character));
         let req = self.http_client.put(&url).json(&config);
         let req = self.add_token(req);
@@ -734,7 +761,11 @@ impl Client {
     }
 
     /// Update a chat pattern rule
-    pub async fn put_chat_pattern_rule(&self, id: &str, rule: ChatPatternRule) -> Result<ChatPatternRule> {
+    pub async fn put_chat_pattern_rule(
+        &self,
+        id: &str,
+        rule: ChatPatternRule,
+    ) -> Result<ChatPatternRule> {
         let url = self.build_url(&format!("/chat-pattern-rules/{}", id));
         let req = self.http_client.put(&url).json(&rule);
         let req = self.add_token(req);
@@ -803,15 +834,16 @@ impl Client {
 
     // ─── Helper Methods ────────────────────────────────────────────────────
 
-    async fn handle_response<T: serde::de::DeserializeOwned>(&self, response: reqwest::Response) -> Result<T> {
+    async fn handle_response<T: serde::de::DeserializeOwned>(
+        &self,
+        response: reqwest::Response,
+    ) -> Result<T> {
         let status = response.status();
         let body = response.text().await?;
 
         match status {
-            StatusCode::OK | StatusCode::CREATED => {
-                serde_json::from_str::<T>(&body)
-                    .map_err(|e| Error::Serde(format!("Failed to deserialize response: {}", e)))
-            }
+            StatusCode::OK | StatusCode::CREATED => serde_json::from_str::<T>(&body)
+                .map_err(|e| Error::Serde(format!("Failed to deserialize response: {}", e))),
             _ => {
                 if let Ok(error) = serde_json::from_str::<ErrorResponse>(&body) {
                     Err(Error::ApiError {
@@ -831,7 +863,7 @@ impl Client {
 
 
 #[cfg(test)]
-mod tests {
+mod tests_extended {
     use super::*;
     use std::io::Write;
     use std::net::TcpListener;
@@ -904,12 +936,8 @@ mod tests {
     #[tokio::test]
     async fn handle_response_preserves_non_json_error_body() {
         let client = Client::new("http://127.0.0.1");
-        let response = build_mock_response(
-            "502 Bad Gateway",
-            "upstream exploded",
-            Some("text/plain"),
-        )
-        .await;
+        let response =
+            build_mock_response("502 Bad Gateway", "upstream exploded", Some("text/plain")).await;
 
         let err = client
             .handle_response::<serde_json::Value>(response)
@@ -929,12 +957,8 @@ mod tests {
     async fn handle_response_uses_raw_body_for_malformed_json_error() {
         let client = Client::new("http://127.0.0.1");
         let malformed = r#"{"error":"#;
-        let response = build_mock_response(
-            "400 Bad Request",
-            malformed,
-            Some("application/json"),
-        )
-        .await;
+        let response =
+            build_mock_response("400 Bad Request", malformed, Some("application/json")).await;
 
         let err = client
             .handle_response::<serde_json::Value>(response)
@@ -953,12 +977,8 @@ mod tests {
     #[tokio::test]
     async fn handle_response_uses_empty_message_for_empty_error_body() {
         let client = Client::new("http://127.0.0.1");
-        let response = build_mock_response(
-            "500 Internal Server Error",
-            "",
-            Some("application/json"),
-        )
-        .await;
+        let response =
+            build_mock_response("500 Internal Server Error", "", Some("application/json")).await;
 
         let err = client
             .handle_response::<serde_json::Value>(response)

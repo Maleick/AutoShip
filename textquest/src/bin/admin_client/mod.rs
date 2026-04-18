@@ -146,3 +146,5 @@ impl AdminClient {
         self.post(&format!("/api/admin/sessions/{}/restart", session_id))
     }
 }
+
+fn main() {}

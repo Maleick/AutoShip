@@ -147,7 +147,8 @@ mod tests {
             actual_version: None,
         };
 
-        let observer = LiveSpawnObserver::from_game_state(Some("Fallback"), &state).expect("observer");
+        let observer =
+            LiveSpawnObserver::from_game_state(Some("Fallback"), &state).expect("observer");
         assert_eq!(observer.character_name, "Iceclaw");
     }
 

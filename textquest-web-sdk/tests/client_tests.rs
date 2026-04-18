@@ -1,7 +1,7 @@
 // Integration tests for TextQuest Web SDK client
 // These tests verify type deserialization and client construction
 
-use textquest_web_sdk::{Client, models::*};
+use textquest_web_sdk::{models::*, Client};
 
 #[test]
 fn test_client_creation() {
@@ -20,8 +20,8 @@ fn test_health_response_serialization() {
         "version": "0.1.0"
     }"#;
 
-    let health: HealthResponse = serde_json::from_str(json)
-        .expect("Failed to deserialize HealthResponse");
+    let health: HealthResponse =
+        serde_json::from_str(json).expect("Failed to deserialize HealthResponse");
 
     assert_eq!(health.status, "ok");
     assert_eq!(health.version, "0.1.0");
@@ -31,8 +31,8 @@ fn test_health_response_serialization() {
 fn test_error_response_serialization() {
     let json = r#"{"error": "API error message"}"#;
 
-    let error: ErrorResponse = serde_json::from_str(json)
-        .expect("Failed to deserialize ErrorResponse");
+    let error: ErrorResponse =
+        serde_json::from_str(json).expect("Failed to deserialize ErrorResponse");
 
     assert_eq!(error.error, "API error message");
 }
@@ -54,8 +54,8 @@ fn test_session_info_serialization() {
         "pet_name": null
     }"#;
 
-    let session: SessionInfo = serde_json::from_str(json)
-        .expect("Failed to deserialize SessionInfo");
+    let session: SessionInfo =
+        serde_json::from_str(json).expect("Failed to deserialize SessionInfo");
 
     assert_eq!(session.client_id, 1);
     assert_eq!(session.character_name, "Maleick");
@@ -78,8 +78,8 @@ fn test_character_config_serialization() {
         "group_name": null
     }"#;
 
-    let config: CharacterConfig = serde_json::from_str(json)
-        .expect("Failed to deserialize CharacterConfig");
+    let config: CharacterConfig =
+        serde_json::from_str(json).expect("Failed to deserialize CharacterConfig");
 
     assert_eq!(config.character_name, "TestChar");
     assert_eq!(config.class, "Wizard");
@@ -101,8 +101,8 @@ fn test_economy_settings_serialization() {
         "tradeskill_supplies": []
     }"#;
 
-    let settings: EconomySettings = serde_json::from_str(json)
-        .expect("Failed to deserialize EconomySettings");
+    let settings: EconomySettings =
+        serde_json::from_str(json).expect("Failed to deserialize EconomySettings");
 
     assert!(settings.krono.enabled);
     assert_eq!(settings.krono.target_rate_per_day, 5);
@@ -112,8 +112,8 @@ fn test_economy_settings_serialization() {
 #[test]
 fn test_loot_action_enum() {
     let json_keep = r#""keep""#;
-    let action: LootAction = serde_json::from_str(json_keep)
-        .expect("Failed to deserialize LootAction");
+    let action: LootAction =
+        serde_json::from_str(json_keep).expect("Failed to deserialize LootAction");
 
     match action {
         LootAction::Keep => {}
@@ -121,8 +121,8 @@ fn test_loot_action_enum() {
     }
 
     let json_vendor = r#""vendor""#;
-    let action: LootAction = serde_json::from_str(json_vendor)
-        .expect("Failed to deserialize LootAction");
+    let action: LootAction =
+        serde_json::from_str(json_vendor).expect("Failed to deserialize LootAction");
 
     match action {
         LootAction::Vendor => {}
@@ -141,8 +141,7 @@ fn test_vendor_route_serialization() {
         "enabled": true
     }"#;
 
-    let route: VendorRoute = serde_json::from_str(json)
-        .expect("Failed to deserialize VendorRoute");
+    let route: VendorRoute = serde_json::from_str(json).expect("Failed to deserialize VendorRoute");
 
     assert_eq!(route.id, "route-1");
     assert_eq!(route.zone, "East Commonlands");
@@ -159,8 +158,7 @@ fn test_spawn_alert_serialization() {
         "level": 65
     }"#;
 
-    let alert: SpawnAlert = serde_json::from_str(json)
-        .expect("Failed to deserialize SpawnAlert");
+    let alert: SpawnAlert = serde_json::from_str(json).expect("Failed to deserialize SpawnAlert");
 
     assert_eq!(alert.pattern, "Venril Sathir");
     assert_eq!(alert.location, "Sepulcher");
@@ -175,8 +173,7 @@ fn test_loot_rules_serialization() {
         "auto_loot_enabled": true
     }"#;
 
-    let rules: LootRules = serde_json::from_str(json)
-        .expect("Failed to deserialize LootRules");
+    let rules: LootRules = serde_json::from_str(json).expect("Failed to deserialize LootRules");
 
     assert_eq!(rules.master_looter, "MainChar");
     assert!(rules.auto_loot_enabled);
@@ -193,8 +190,7 @@ fn test_soul_state_serialization() {
         "status": "active"
     }"#;
 
-    let state: SoulState = serde_json::from_str(json)
-        .expect("Failed to deserialize SoulState");
+    let state: SoulState = serde_json::from_str(json).expect("Failed to deserialize SoulState");
 
     assert_eq!(state.character_id, "char-123");
     assert_eq!(state.memory_usage, 1024000);
@@ -211,8 +207,8 @@ fn test_chat_pattern_rule_serialization() {
         "cooldown_seconds": 60
     }"#;
 
-    let rule: ChatPatternRule = serde_json::from_str(json)
-        .expect("Failed to deserialize ChatPatternRule");
+    let rule: ChatPatternRule =
+        serde_json::from_str(json).expect("Failed to deserialize ChatPatternRule");
 
     assert_eq!(rule.id, "rule-1");
     assert_eq!(rule.pattern, "looking for group");
@@ -229,8 +225,8 @@ fn test_xassist_config_serialization() {
         "auto_attack": true
     }"#;
 
-    let config: XAssistConfig = serde_json::from_str(json)
-        .expect("Failed to deserialize XAssistConfig");
+    let config: XAssistConfig =
+        serde_json::from_str(json).expect("Failed to deserialize XAssistConfig");
 
     assert_eq!(config.character, "Warrior1");
     assert!(config.enabled);
@@ -246,8 +242,7 @@ fn test_gm_alert_serialization() {
         "last_seen_timestamp": 1713350400
     }"#;
 
-    let alert: GmAlert = serde_json::from_str(json)
-        .expect("Failed to deserialize GmAlert");
+    let alert: GmAlert = serde_json::from_str(json).expect("Failed to deserialize GmAlert");
 
     assert_eq!(alert.zone, "Plane of Sky");
     assert!(!alert.detected);
@@ -263,8 +258,8 @@ fn test_kill_tracker_entry_serialization() {
         "level": 25
     }"#;
 
-    let entry: KillTrackerEntry = serde_json::from_str(json)
-        .expect("Failed to deserialize KillTrackerEntry");
+    let entry: KillTrackerEntry =
+        serde_json::from_str(json).expect("Failed to deserialize KillTrackerEntry");
 
     assert_eq!(entry.character, "Warrior1");
     assert_eq!(entry.target, "Giant Spider");
@@ -281,8 +276,7 @@ fn test_alert_entry_serialization() {
         "acknowledged": false
     }"#;
 
-    let entry: AlertEntry = serde_json::from_str(json)
-        .expect("Failed to deserialize AlertEntry");
+    let entry: AlertEntry = serde_json::from_str(json).expect("Failed to deserialize AlertEntry");
 
     assert_eq!(entry.id, "alert-001");
     assert_eq!(entry.alert_type, "spawn");
@@ -296,8 +290,8 @@ fn test_timestamp_config_serialization() {
         "format": "time24"
     }"#;
 
-    let config: TimestampConfig = serde_json::from_str(json)
-        .expect("Failed to deserialize TimestampConfig");
+    let config: TimestampConfig =
+        serde_json::from_str(json).expect("Failed to deserialize TimestampConfig");
 
     assert!(config.enabled);
     match config.format {
@@ -314,8 +308,8 @@ fn test_player_watch_config_serialization() {
         "friends": ["Maleick", "Frostreaver"]
     }"#;
 
-    let config: PlayerWatchConfig = serde_json::from_str(json)
-        .expect("Failed to deserialize PlayerWatchConfig");
+    let config: PlayerWatchConfig =
+        serde_json::from_str(json).expect("Failed to deserialize PlayerWatchConfig");
 
     assert!(config.sound_on_zone_in);
     assert_eq!(config.friends.len(), 2);
@@ -337,8 +331,8 @@ fn test_wealth_history_serialization() {
         "snapshots": []
     }"#;
 
-    let history: WealthHistory = serde_json::from_str(json)
-        .expect("Failed to deserialize WealthHistory");
+    let history: WealthHistory =
+        serde_json::from_str(json).expect("Failed to deserialize WealthHistory");
 
     assert_eq!(history.current.plat, 50000);
     assert_eq!(history.current.krono, 3);
@@ -359,12 +353,11 @@ fn test_auto_accept_settings_serialization() {
         "trusted_players": []
     }"#;
 
-    let settings: AutoAcceptSettings = serde_json::from_str(json)
-        .expect("Failed to deserialize AutoAcceptSettings");
+    let settings: AutoAcceptSettings =
+        serde_json::from_str(json).expect("Failed to deserialize AutoAcceptSettings");
 
     assert!(settings.enabled);
     assert!(settings.accept_group_invites);
     assert!(!settings.accept_trades);
     assert!(settings.trusted_players.is_empty());
 }
-

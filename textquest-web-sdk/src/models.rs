@@ -133,7 +133,21 @@ pub enum TimestampFormat {
     Time12,
 }
 
-pub use textquest_common::ipc::AutoAcceptSettings;
+/// Per-character timestamp display configuration (mirrors server TimestampConfig).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimestampConfig {
+    pub enabled: bool,
+    pub format: TimestampFormat,
+}
+
+impl Default for TimestampConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            format: TimestampFormat::DateTime24,
+        }
+    }
+}
 
 /// Krono-related economy settings
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -577,9 +577,28 @@ mod tests {
             alerting_config_path: std::path::PathBuf::from("/tmp/test-alerting.toml"),
             api_token: None,
             live_session_snapshot_path: std::path::PathBuf::from("/tmp/test-live-sessions.json"),
+            admin_session_snapshot_path: std::path::PathBuf::from("/tmp/test-admin-sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),
             chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
             say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
+            session_controls: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+            tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
+            auto_group_settings: tokio::sync::RwLock::new(
+                textquest_common::auto_group::AutoGroupSettings::default(),
+            ),
+            auto_group_config_path: std::path::PathBuf::from("/tmp/test-auto-group.json"),
+            auto_group_state: api::auto_group::AutoGroupState::new_demo(),
+            inventory_utility_parity: tokio::sync::RwLock::new(
+                textquest_common::inventory_utility::InventoryUtilityConfig::default(),
+            ),
+            inventory_utility_parity_path: std::path::PathBuf::from(
+                "/tmp/test-inventory-utility.json",
+            ),
+            inventory_utility_parity_write_lock: tokio::sync::Mutex::new(()),
+            vendor_watch_state: api::vendor_watch::VendorWatchState::new_demo(),
+            extension_catalog_state: api::extensions::ExtensionCatalogState::load(
+                std::path::PathBuf::from("/tmp/test-extension-catalog.json"),
+            ),
             session_control_state: SessionControlState::new(),
         })
     }

@@ -20,6 +20,7 @@ pub mod skill_timers {
     pub const ROUND_KICK: (u32, u32) = (38, 140); // ~7s
     pub const TIGER_CLAW: (u32, u32) = (52, 120); // ~6s
     pub const EAGLE_STRIKE: (u32, u32) = (23, 120); // ~6s
+    pub const FRENZY: (u32, u32) = (56, 240); // ~12s
 }
 
 const KICK_FAMILY: &[u32] = &[
@@ -129,6 +130,7 @@ pub fn default_cooldown(skill_id: u32) -> Option<u32> {
         38 => Some(skill_timers::ROUND_KICK.1),
         52 => Some(skill_timers::TIGER_CLAW.1),
         23 => Some(skill_timers::EAGLE_STRIKE.1),
+        56 => Some(skill_timers::FRENZY.1),
         _ => None,
     }
 }

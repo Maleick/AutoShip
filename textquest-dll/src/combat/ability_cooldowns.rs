@@ -7,6 +7,24 @@
 
 /// Initial inline capacity for tracked ability cooldowns.
 const INITIAL_TRACKED_ABILITIES: usize = 16;
+/// Maximum number of concurrent ability cooldowns tracked before entries are
+/// silently dropped. Higher than INITIAL to avoid truncating active fights.
+const MAX_TRACKED_ABILITIES: usize = 64;
+/// Base for synthetic shared-timer keys. Negative range avoids collision with
+/// real spell/ability IDs which are always positive.
+const SHARED_TIMER_KEY_BASE: i32 = -20_000;
+
+// Berserker shared timer bucket IDs (u8 fed into shared_timer_key()).
+const BERSERKER_TIMER_PRIMARY_BURN: u8 = 1;
+const BERSERKER_TIMER_VOLLEY: u8 = 2;
+const BERSERKER_TIMER_BATTLE_CRY: u8 = 3;
+const BERSERKER_TIMER_CLEAVE: u8 = 4;
+
+/// Cooldown metadata for an activated ability used by `metadata_for_activated_ability`.
+pub struct AbilityReuseMetadata {
+    pub cooldown_ticks: Option<u32>,
+    pub shared_timer_id: Option<u8>,
+}
 
 /// Maximum number of tracked abilities before we stop tracking new ones inline.
 const MAX_TRACKED_ABILITIES: usize = 32;
@@ -162,6 +180,16 @@ impl AbilityCooldownTracker {
             }
         }
         AbilityAvailability::Ready
+    }
+
+    /// Whether the shared-timer bucket for `key` is ready.
+    ///
+    /// Used by the rotation engine to gate entries that share a named lockout
+    /// without knowing the raw bucket ID.
+    #[inline]
+    pub fn can_use_shared_key(&self, key: &str, now: u32) -> bool {
+        self.availability(Self::shared_timer_id(key), now)
+            .is_ready_at(now)
     }
 
     /// Whether an ability can be attempted at the given tick.

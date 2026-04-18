@@ -445,6 +445,16 @@ fn is_cure_spell(s: &SpellEntry) -> bool {
     strategy::is_standard_cure_spell(s) || name.contains("abolish") || name.contains("radiant cure")
 }
 
+/// Check if a spell entry is a direct-healing spell.
+fn is_heal_spell(s: &SpellEntry) -> bool {
+    let name = s.name.to_ascii_lowercase();
+    name.contains("heal")
+        || name.contains("remedy")
+        || name.contains("restoration")
+        || name.contains("replenishment")
+        || name.starts_with("word of ")
+}
+
 /// Check if a spell entry is a buff spell.
 fn is_buff_spell(s: &SpellEntry) -> bool {
     let name = s.name.to_lowercase();

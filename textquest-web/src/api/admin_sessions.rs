@@ -6,8 +6,7 @@
 //! - POST /api/admin/sessions/{id}/restart
 
 use axum::{
-    Json,
-    Router,
+    Json, Router,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
@@ -190,7 +189,9 @@ fn read_live_sessions(
     }
 
     let payload = std::fs::read(path)?;
-    let sessions = serde_json::from_slice::<Vec<textquest_common::shared_client_state::SharedClientState>>(&payload)?;
+    let sessions = serde_json::from_slice::<
+        Vec<textquest_common::shared_client_state::SharedClientState>,
+    >(&payload)?;
     Ok(sessions)
 }
 

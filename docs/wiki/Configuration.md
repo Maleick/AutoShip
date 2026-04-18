@@ -157,12 +157,14 @@ The runtime loader only consumes the baseline TOML fields above. When a camp
 needs richer operator metadata than the schema can carry, document richer waypoint and restriction notes
 in a companion wiki page instead of inventing new untracked TOML keys.
 
-Current example:
+Current examples:
 
 - `config/camps/sebilis_disco.toml` holds the loader-safe runtime values.
 - [Sebilis Disco Camp](Sebilis-Disco-Camp.md) carries the research waypoint
   lattice, pull lanes, restriction zones, and multibox route notes for that
   camp.
+- `config/camps/velketors_frenzy.toml` holds the loader-safe runtime values for the Velketor's Labyrinth frenzy route.
+- [Velketors Labyrinth Frenzy Camp](Velketors-Labyrinth-Frenzy-Camp.md) carries the waypoint lattice, pull lanes, and multibox route notes.
 
 - `config/camps/velketors_labyrinth_frenzy.toml` holds the loader-safe runtime
   values.

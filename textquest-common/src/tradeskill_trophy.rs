@@ -863,7 +863,10 @@ mod tests {
         assert!(!s.is_configured(), "disabled should not be configured");
 
         s.enabled = true;
-        assert!(s.is_configured(), "enabled with a name should be configured");
+        assert!(
+            s.is_configured(),
+            "enabled with a name should be configured"
+        );
 
         s.trophy_item_name = "   ".into();
         assert!(

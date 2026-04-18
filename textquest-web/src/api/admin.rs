@@ -2,7 +2,7 @@
 
 use std::{path::Path, sync::Arc};
 
-use axum::{Json, extract::State, http::StatusCode, response::IntoResponse, routing::get, Router};
+use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
 use serde::Serialize;
 
 use crate::AppState;
@@ -93,30 +93,30 @@ pub struct AdminSessionRecord {
 /// if no live snapshot exists yet.
 pub async fn list_admin_sessions(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     // Try to read live session snapshot first
-    if let Ok(live_sessions) = super::read_live_sessions(&state.live_session_snapshot_path) {
-        if !live_sessions.is_empty() {
-            let sessions: Vec<AdminSessionRecord> = live_sessions
-                .into_iter()
-                .map(|session| AdminSessionRecord {
-                    session_id: format!("session-{}", session.client_id),
-                    character_name: session.character_name,
-                    profile: None, // TODO: enrich from profile registry
-                    group_id: None, // TODO: enrich from group assignments
-                    routing_scope: None, // TODO: enrich from routing config
-                    lifecycle: Some(session.status.clone()),
-                    status: Some(session.status),
-                    zone: if session.zone_long_name.is_empty() {
-                        Some(session.zone_short_name)
-                    } else {
-                        Some(session.zone_long_name)
-                    },
-                    level: Some(session.level as u32),
-                    class_name: None, // TODO: enrich from character config
-                    last_heartbeat: None, // TODO: track heartbeat timestamps
-                })
-                .collect();
-            return Json(sessions).into_response();
-        }
+    if let Ok(live_sessions) = super::read_live_sessions(&state.live_session_snapshot_path)
+        && !live_sessions.is_empty()
+    {
+        let sessions: Vec<AdminSessionRecord> = live_sessions
+            .into_iter()
+            .map(|session| AdminSessionRecord {
+                session_id: format!("session-{}", session.client_id),
+                character_name: session.character_name,
+                profile: None,       // TODO: enrich from profile registry
+                group_id: None,      // TODO: enrich from group assignments
+                routing_scope: None, // TODO: enrich from routing config
+                lifecycle: Some(session.status.clone()),
+                status: Some(session.status),
+                zone: if session.zone_long_name.is_empty() {
+                    Some(session.zone_short_name)
+                } else {
+                    Some(session.zone_long_name)
+                },
+                level: Some(session.level as u32),
+                class_name: None,     // TODO: enrich from character config
+                last_heartbeat: None, // TODO: track heartbeat timestamps
+            })
+            .collect();
+        return Json(sessions).into_response();
     }
 
     // Fallback: return configured sessions as placeholders

@@ -111,7 +111,7 @@ Pull behavior notes:
 
 - Keep the actual pull envelope inside the outpost ruins even though the safe
   med fallback is further east at the spires.
-- `pull_radius = 500` and `leash_radius = 700` are intentionally conservative
+- `pull_radius = 500.0` and `leash_radius = 700.0` are intentionally conservative
   so a single bad tag does not drag the puller into the main valley.
 - `return_no_aggro = true` is required because open-zone roamers can cross the
   approach line while the group is still resetting.
