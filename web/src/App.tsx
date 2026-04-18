@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import AlertsPanel from "./components/AlertsPanel";
+import AdminDashboard from "./components/AdminDashboard";
 import BoxChatPanel from "./components/BoxChatPanel";
 import CenterContent from "./components/CenterContent";
 import ChatPatternRules from "./components/ChatPatternRules";
@@ -55,6 +56,8 @@ function App() {
           <XAssistPanel />
         ) : activeView === "boxchat" ? (
           <BoxChatPanel />
+        ) : activeView === "admin" ? (
+          <AdminDashboard />
         ) : (
           <>
             <CenterContent />

@@ -498,6 +498,15 @@ fn build_api_router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(api::health))
         .route("/admin/sessions", get(api::admin::list_sessions))
+        .route(
+            "/admin/diagnostics/{session_id}",
+            get(api::admin_diagnostics::get_diagnostics),
+        )
+        .route("/admin/logs/{session_id}", get(api::admin_logs::tail_logs))
+        .route(
+            "/admin/config/audit/{session_id}",
+            get(api::admin_config::audit_config),
+        )
         .route("/sessions", get(api::list_sessions))
         .nest("/accounts", accounts::router())
         .nest("/dashboard", api::dashboard::router())

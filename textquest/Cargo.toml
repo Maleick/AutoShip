@@ -41,11 +41,17 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"
 chrono = { version = "0.4", features = ["serde"] }
 tempfile = "3"
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "rustls-tls", "hostname"] }
+ureq = "2"
 
 [build-dependencies]
 cc = "1"
 
-[dev-dependencies]
+[features]
+default = []
+
+[[bin]]
+name = "textquest-admin"
+path = "src/bin/textquest_admin.rs"
 
 [target.'cfg(windows)'.dependencies]
 recastnavigation-sys = { version = "1.0.3", features = ["detour_large_nav_meshes"] }

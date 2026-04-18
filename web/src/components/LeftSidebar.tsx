@@ -14,6 +14,7 @@ import {
   Skull,
   Sword,
   UsersThree,
+  Wrench,
 } from "@phosphor-icons/react";
 
 export type ActiveView =
@@ -31,7 +32,8 @@ export type ActiveView =
   | "player_watch"
   | "say"
   | "chat_pattern_rules"
-  | "xassist";
+  | "xassist"
+  | "admin";
 
 const navItems: {
   icon: typeof Sword;
@@ -54,6 +56,7 @@ const navItems: {
   { icon: Broadcast, label: "Network Box Chat", id: "boxchat" },
   { icon: Cpu, label: "Extension Catalog", id: "extensions", pulse: true },
   { icon: ChatCircle, label: "Chat Pattern Rules", id: "chat_pattern_rules" },
+  { icon: Wrench, label: "Admin Tools", id: "admin" },
 ];
 
 interface LeftSidebarProps {
