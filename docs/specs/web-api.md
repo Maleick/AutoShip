@@ -115,6 +115,272 @@ Retrieve all active character sessions currently under orchestration.
 
 ---
 
+## Session and Group Control API
+
+These endpoints expose the same lifecycle and routing-scope transitions that the
+TUI operator panel and internal IPC layer use, so external SDKs can drive the
+orchestrator over HTTP.
+
+### Command execution model
+
+All mutating endpoints are **fire-and-forget**: the handler updates the
+in-memory control record and returns `200 OK` immediately. There is no live
+IPC connection to running EQ clients in this build — the in-memory state acts
+as the authoritative staging area that a future orchestrator watcher will read
+from. SDK authors must not expect synchronous confirmation from the game client.
+
+### Get All Session Control Records
+
+#### GET /api/sessions/control
+
+List all session control records currently held in memory.
+
+**Response**: 200 OK
+
+```json
+[
+  {
+    "session_id": 1,
+    "state": "active",
+    "group_id": 2,
+    "routing_scope": { "kind": "group", "group_id": 2, "label": "G2" },
+    "message": ""
+  }
+]
+```
+
+### Get Session Control Record
+
+#### GET /api/sessions/:id/control
+
+Fetch (or lazily create) the control record for a single session.
+
+**Path Parameters**:
+
+- `id: u32` — Session identifier (non-zero, typically the EQ client process ID)
+
+**Response**: 200 OK
+
+```json
+{
+  "session_id": 42,
+  "state": "active",
+  "group_id": 0,
+  "routing_scope": { "kind": "all_session" },
+  "message": "Session control record retrieved"
+}
+```
+
+**Error responses**:
+
+| Status | Condition            |
+| ------ | -------------------- |
+| 400    | `session_id` is zero |
+
+### Pause Session
+
+#### PUT /api/sessions/:id/pause
+
+Pause an active session. Returns `200 OK` even when already paused
+(idempotent).
+
+**Path Parameters**:
+
+- `id: u32` — Session identifier (non-zero)
+
+**Response**: 200 OK
+
+```json
+{
+  "session_id": 1,
+  "state": "paused",
+  "group_id": 0,
+  "routing_scope": { "kind": "all_session" },
+  "message": "Session paused"
+}
+```
+
+When already paused, `message` is `"Session was already paused"` and `state`
+remains `"paused"`.
+
+**Error responses**:
+
+| Status | Condition            |
+| ------ | -------------------- |
+| 400    | `session_id` is zero |
+
+### Resume Session
+
+#### PUT /api/sessions/:id/resume
+
+Resume a paused session. Returns `200 OK` even when already active
+(idempotent).
+
+**Path Parameters**:
+
+- `id: u32` — Session identifier (non-zero)
+
+**Response**: 200 OK
+
+```json
+{
+  "session_id": 1,
+  "state": "active",
+  "group_id": 0,
+  "routing_scope": { "kind": "all_session" },
+  "message": "Session resumed"
+}
+```
+
+**Error responses**:
+
+| Status | Condition            |
+| ------ | -------------------- |
+| 400    | `session_id` is zero |
+
+### Set Session Group
+
+#### PUT /api/sessions/:id/group
+
+Assign a session to a group or remove it from group routing.
+
+**Path Parameters**:
+
+- `id: u32` — Session identifier (non-zero)
+
+**Request Body**:
+
+```json
+{ "group_id": 3 }
+```
+
+- `group_id: u8` — Target group (1-based; `0` = ungrouped / resets scope to
+  `AllSession`)
+
+**Response**: 200 OK
+
+```json
+{
+  "session_id": 1,
+  "state": "active",
+  "group_id": 3,
+  "routing_scope": { "kind": "group", "group_id": 3, "label": "G3" },
+  "message": "Session assigned to group 3"
+}
+```
+
+When `group_id` is `0`, `routing_scope` is `{ "kind": "all_session" }` and
+`message` is `"Session removed from group; routing scope reset to AllSession"`.
+
+**Error responses**:
+
+| Status | Condition                    |
+| ------ | ---------------------------- |
+| 400    | `session_id` is zero         |
+| 422    | Body is missing or malformed |
+
+### Set Broadcast-All Scope
+
+#### PUT /api/sessions/:id/broadcast-all
+
+Set a session's routing scope to `AllSession` so it receives every broadcast
+command rather than only group-scoped ones.
+
+**Path Parameters**:
+
+- `id: u32` — Session identifier (non-zero)
+
+**Response**: 200 OK
+
+```json
+{
+  "session_id": 1,
+  "state": "active",
+  "group_id": 1,
+  "routing_scope": { "kind": "all_session" },
+  "message": "Routing scope set to AllSession"
+}
+```
+
+**Error responses**:
+
+| Status | Condition            |
+| ------ | -------------------- |
+| 400    | `session_id` is zero |
+
+---
+
+## Slash-Command Relay API
+
+### Relay Slash Command
+
+#### POST /api/sessions/:id/command
+
+Relay a slash command to an EQ session.
+
+**Path Parameters**:
+
+- `id: u32` — Session identifier (non-zero)
+
+**Request Body**:
+
+```json
+{
+  "command": "who all",
+  "scope": "group"
+}
+```
+
+- `command: String` — Command text (without the leading `/`). Must not be
+  empty after trimming whitespace.
+- `scope?: "single" | "group" | "all"` — Optional scope override for this
+  single command. When omitted the session's stored routing scope is used.
+
+**Execution semantics**: **fire-and-forget**.
+
+- If the session is `Active`: the command is accepted and `accepted: true` is
+  returned. In a live deployment the command would be forwarded over IPC; in
+  this build it is logged only.
+- If the session is `Paused` or `Error`: the command is **dropped** and
+  `accepted: false` is returned. The caller must not retry until the session
+  is resumed.
+
+**Response**: 200 OK (always, unless validation fails)
+
+```json
+{
+  "session_id": 1,
+  "command": "who all",
+  "scope_used": "group",
+  "accepted": true,
+  "message": "Command accepted for dispatch"
+}
+```
+
+When dropped (session paused):
+
+```json
+{
+  "session_id": 8,
+  "command": "say hello",
+  "scope_used": "all_session",
+  "accepted": false,
+  "message": "Command dropped: session is paused"
+}
+```
+
+**Error responses**:
+
+| Status | Condition                                  |
+| ------ | ------------------------------------------ |
+| 400    | `session_id` is zero or `command` is empty |
+| 422    | Request body is missing or malformed       |
+
+**Authentication**: Subject to the same `X-API-Token` header enforcement as
+all other `/api` endpoints when `TEXTQUEST_API_TOKEN` is configured.
+
+---
+
 ## Character Configuration API
 
 ### List Character Configs

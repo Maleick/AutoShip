@@ -70,5 +70,6 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
                 uuid::Uuid::new_v4()
             )),
         ),
+        session_control_state: api::session_control::SessionControlState::new(),
     })
 }

@@ -130,6 +130,10 @@ pub struct AppState {
     pub auto_group_state: Arc<api::auto_group::AutoGroupState>,
     /// Persisted extension catalog metadata, overrides, and runtime status.
     pub extension_catalog_state: Arc<api::extensions::ExtensionCatalogState>,
+    /// In-memory session and group control records for the web API control
+    /// surface.  Mirrors the orchestrator's per-session state and acts as the
+    /// authoritative staging area for external SDK commands.
+    pub session_control_state: Arc<api::session_control::SessionControlState>,
 }
 
 /// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is
@@ -414,6 +418,7 @@ fn build_state() -> Arc<AppState> {
         extension_catalog_state: api::extensions::ExtensionCatalogState::load(
             api::extensions::extension_catalog_path(),
         ),
+        session_control_state: api::session_control::SessionControlState::new(),
     })
 }
 
@@ -475,6 +480,7 @@ pub(crate) fn test_app_state() -> AppState {
                 uuid::Uuid::new_v4()
             )),
         ),
+        session_control_state: api::session_control::SessionControlState::new(),
     }
 }
 
@@ -535,6 +541,8 @@ fn build_api_router() -> Router<Arc<AppState>> {
             get(api::admin_config::audit_config),
         )
         .route("/sessions", get(api::list_sessions))
+        // Session and group control — SDK-facing control surface
+        .nest("/sessions", api::session_control::router())
         .nest("/accounts", accounts::router())
         .nest("/admin", api::admin::router())
         .nest("/dashboard", api::dashboard::router())
@@ -813,6 +821,7 @@ mod tests {
                     uuid::Uuid::new_v4()
                 )),
             ),
+            session_control_state: api::session_control::SessionControlState::new(),
         })
     }
 

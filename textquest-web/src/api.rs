@@ -18,6 +18,7 @@ pub mod kill_tracker;
 pub mod loot;
 pub mod player_watch;
 pub mod say_detection;
+pub mod session_control;
 pub mod soul;
 pub mod spawn_alerts;
 pub mod vendor_watch;

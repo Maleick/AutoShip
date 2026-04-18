@@ -1000,6 +1000,7 @@ mod tests {
                     uuid::Uuid::new_v4()
                 )),
             ),
+            session_control_state: crate::api::session_control::SessionControlState::new(),
         });
 
         let original = get_item_score(State(state.clone())).await.0;
