@@ -17,6 +17,7 @@ import OperatorDashboard from "./components/OperatorDashboard";
 import PlayerWatchPanel from "./components/PlayerWatchPanel";
 import RightSidebar from "./components/RightSidebar";
 import SayDetectionPanel from "./components/SayDetectionPanel";
+import SessionMonitoringDashboard from "./components/SessionMonitoringDashboard";
 import SoulPanel from "./components/SoulPanel";
 import SpawnAlerts from "./components/SpawnAlerts";
 import XAssistPanel from "./components/XAssistPanel";
@@ -67,6 +68,8 @@ function App() {
           <BoxChatPanel />
         ) : activeView === "credentials" ? (
           <CredentialsPage />
+        ) : activeView === "sessions" ? (
+          <SessionMonitoringDashboard />
         ) : activeView === "admin" ? (
           <AdminDashboard />
         ) : (

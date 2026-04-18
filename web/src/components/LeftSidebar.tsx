@@ -10,6 +10,7 @@ import {
   Crosshair,
   Eye,
   Globe,
+  Heartbeat,
   Key,
   ShieldWarning,
   Skull,
@@ -37,6 +38,7 @@ export type ActiveView =
   | "chat_pattern_rules"
   | "xassist"
   | "credentials"
+  | "sessions"
   | "admin";
 
 const navItems: {
@@ -62,6 +64,7 @@ const navItems: {
   { icon: Cpu, label: "Extension Catalog", id: "extensions", pulse: true },
   { icon: ChatCircle, label: "Chat Pattern Rules", id: "chat_pattern_rules" },
   { icon: Key, label: "Credentials Management", id: "credentials" },
+  { icon: Heartbeat, label: "Session Monitor", id: "sessions", pulse: true },
   { icon: Wrench, label: "Admin Tools", id: "admin" },
 ];
 
@@ -145,7 +148,9 @@ export default function LeftSidebar({
               />
               <span
                 className={`font-medium tracking-wide transition-colors ${
-                  isActive ? "text-white" : "text-white/70 group-hover:text-white"
+                  isActive
+                    ? "text-white"
+                    : "text-white/70 group-hover:text-white"
                 }`}
               >
                 {item.label}
