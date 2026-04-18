@@ -5,6 +5,7 @@ members = [
     "textquest-dll",
     "textquest-common",
     "textquest-web",
+    "textquest-web-sdk",
     "tools/llm-client",
     "tools/eqdiff",
 ]

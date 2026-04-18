@@ -1,0 +1,16 @@
+[package]
+name = "textquest-web-sdk"
+version = "0.1.0"
+edition = "2021"
+authors = ["TextQuest Contributors"]
+description = "Rust SDK for the TextQuest web API"
+license = "MIT"
+
+[dependencies]
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
