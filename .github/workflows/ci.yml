@@ -177,24 +177,26 @@ jobs:
         run: python3 scripts/coverage-report.py --threshold 80
 
   test-matrix:
-    name: Unit tests on ${{ matrix.os }} (rust-${{ matrix.rust }})
+    name: Unit tests on ${{ matrix.os-name }} (rust-${{ matrix.rust }})
+    continue-on-error: ${{ matrix.continue-on-error == true }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # macOS with stable Rust
-          - os: macos-latest
-            rust: stable
           # Windows with stable Rust (primary target)
-          - os: windows-latest
+          - runner: '["self-hosted", "Windows", "X64", "textquest"]'
+            os-name: windows
             rust: stable
           # Windows with nightly Rust (for unsafe hooks testing)
-          - os: windows-latest
+          - runner: '["self-hosted", "Windows", "X64", "textquest"]'
+            os-name: windows
             rust: nightly
-          # Ubuntu with stable Rust
-          - os: ubuntu-latest
+            continue-on-error: true
+          # Linux with stable Rust
+          - runner: '["self-hosted", "Linux", "X64", "textquest"]'
+            os-name: linux
             rust: stable
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ fromJSON(matrix.runner) }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4

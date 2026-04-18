@@ -88,8 +88,14 @@ fn test_config_validation_valid() {
 
     // Verify config can be read
     let content = fs::read_to_string(&config_path).expect("failed to read config");
-    assert!(content.contains("[launch]"), "config should have [launch] section");
-    assert!(content.contains("[server]"), "config should have [server] section");
+    assert!(
+        content.contains("[launch]"),
+        "config should have [launch] section"
+    );
+    assert!(
+        content.contains("[server]"),
+        "config should have [server] section"
+    );
 }
 
 #[test]
@@ -102,7 +108,10 @@ fn test_config_validation_invalid() {
 
     // Verify config content is actually invalid TOML
     let content = fs::read_to_string(&config_path).expect("failed to read config");
-    assert!(content.contains("[invalid"), "should contain malformed TOML");
+    assert!(
+        content.contains("[invalid"),
+        "should contain malformed TOML"
+    );
 
     // Attempt to parse — should fail
     let result: Result<toml::Table, _> = toml::from_str(&content);
@@ -190,7 +199,10 @@ fn test_cli_start_command_simulation() {
 
     // Simulate cleanup on shutdown
     fs::remove_file(&pidfile).expect("failed to remove PID file");
-    assert!(!pidfile.exists(), "PID file should be removed after shutdown");
+    assert!(
+        !pidfile.exists(),
+        "PID file should be removed after shutdown"
+    );
 }
 
 // ============================================================================
@@ -302,7 +314,10 @@ fn test_config_launch_section() {
 
     let launch = &table["launch"];
     assert!(launch["eq_path"].is_str(), "eq_path should be a string");
-    assert!(launch["max_concurrent_launches"].is_integer(), "max_concurrent_launches should be integer");
+    assert!(
+        launch["max_concurrent_launches"].is_integer(),
+        "max_concurrent_launches should be integer"
+    );
     assert_eq!(
         launch["max_concurrent_launches"].as_integer().unwrap(),
         1,
@@ -351,10 +366,7 @@ fn test_scenario_dry_run_mode() {
 
     // Verify no side effects (no PID file would be created in dry-run)
     let pidfile = temp_dir.path().join("textquest.pid");
-    assert!(
-        !pidfile.exists(),
-        "dry-run mode should not create PID file"
-    );
+    assert!(!pidfile.exists(), "dry-run mode should not create PID file");
 }
 
 /// Represents a single iteration test scenario
@@ -394,7 +406,8 @@ fn test_scenario_graceful_shutdown() {
 
     // Act: Create a report file to simulate shutdown logging
     let report_path = temp_dir.path().join("shutdown_report.txt");
-    let report_content = "Orchestrator received SIGINT - shutting down gracefully\nEvents processed: 0\n";
+    let report_content =
+        "Orchestrator received SIGINT - shutting down gracefully\nEvents processed: 0\n";
     fs::write(&report_path, report_content).expect("failed to write report");
 
     // Assert: Report should exist after graceful shutdown
@@ -427,10 +440,7 @@ fn test_scenario_error_handling_invalid_profile() {
     let parse_result: Result<toml::Table, _> = toml::from_str(&content);
 
     // Assert: Should fail with parse error (exit 2 in real scenario)
-    assert!(
-        parse_result.is_err(),
-        "invalid config should fail to parse"
-    );
+    assert!(parse_result.is_err(), "invalid config should fail to parse");
 
     // Verify no side effects (no operations should proceed)
     let pidfile = temp_dir.path().join("textquest.pid");
@@ -627,13 +637,19 @@ fn test_orchestrator_can_receive_shutdown_signal() {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
     // Verify initial state is "not shutdown"
-    assert_eq!(*shutdown_rx.borrow(), false, "initial shutdown state should be false");
+    assert!(
+        !*shutdown_rx.borrow(),
+        "initial shutdown state should be false"
+    );
 
     // Simulate sending shutdown signal (as Ctrl+C would do)
     let _ = shutdown_tx.send(true);
 
     // Verify shutdown state was received
-    assert_eq!(*shutdown_rx.borrow(), true, "shutdown state should be true after send");
+    assert!(
+        *shutdown_rx.borrow(),
+        "shutdown state should be true after send"
+    );
 }
 
 #[test]
@@ -644,13 +660,13 @@ fn test_orderly_shutdown_sequence() {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
     // 2. Verify it's running (not shut down)
-    assert_eq!(*shutdown_rx.borrow(), false);
+    assert!(!*shutdown_rx.borrow());
 
     // 3. Signal shutdown
     let _ = shutdown_tx.send(true);
 
     // 4. Verify shutdown was received
-    assert_eq!(*shutdown_rx.borrow(), true);
+    assert!(*shutdown_rx.borrow());
 
     // 5. Cleanup: drop channels (simulating cleanup)
     drop(shutdown_tx);

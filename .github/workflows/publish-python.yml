@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     if: github.repository_owner == 'Maleick'
     steps:
       - uses: actions/checkout@v4

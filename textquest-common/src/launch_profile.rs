@@ -227,9 +227,7 @@ impl LaunchProfile {
         }
 
         if self.stagger_min_ms > self.stagger_max_ms {
-            return Err(
-                "stagger_min_ms must be <= stagger_max_ms".to_string()
-            );
+            return Err("stagger_min_ms must be <= stagger_max_ms".to_string());
         }
 
         Ok(())
@@ -271,11 +269,7 @@ pub struct SessionPreset {
 impl SessionPreset {
     /// Create a new session preset.
     #[must_use]
-    pub fn new(
-        id: impl Into<String>,
-        group_id: u8,
-        routing_label: impl Into<String>,
-    ) -> Self {
+    pub fn new(id: impl Into<String>, group_id: u8, routing_label: impl Into<String>) -> Self {
         Self {
             id: id.into(),
             group_id,
@@ -377,15 +371,13 @@ pub fn translate_profile_to_presets(
     for character in &profile.characters {
         let group_id = character.group_id;
 
-        let preset = presets
-            .entry(group_id)
-            .or_insert_with(|| {
-                SessionPreset::new(
-                    format!("{}_{}", profile.id, group_id),
-                    group_id,
-                    format!("G{} {}", group_id, profile.name),
-                )
-            });
+        let preset = presets.entry(group_id).or_insert_with(|| {
+            SessionPreset::new(
+                format!("{}_{}", profile.id, group_id),
+                group_id,
+                format!("G{} {}", group_id, profile.name),
+            )
+        });
 
         preset.add_character(character.name.clone(), character.role);
     }
@@ -430,7 +422,11 @@ mod tests {
         let profile = LaunchProfile::new("raid-main", "Main Raid", "Teek")
             .with_description("Primary raid setup")
             .with_character(LaunchProfileCharacter::new("Tank1", 1, CharacterRole::Tank))
-            .with_character(LaunchProfileCharacter::new("Healer1", 1, CharacterRole::Healer))
+            .with_character(LaunchProfileCharacter::new(
+                "Healer1",
+                1,
+                CharacterRole::Healer,
+            ))
             .with_character(LaunchProfileCharacter::new("Dps1", 2, CharacterRole::Dps))
             .with_launch_limits(3, 2000, 4000);
 
@@ -454,10 +450,12 @@ mod tests {
     fn launch_profile_validation_fails_on_empty_characters() {
         let profile = LaunchProfile::new("test", "Test", "Teek");
         assert!(profile.validate().is_err());
-        assert!(profile
-            .validate()
-            .unwrap_err()
-            .contains("at least one character"));
+        assert!(
+            profile
+                .validate()
+                .unwrap_err()
+                .contains("at least one character")
+        );
     }
 
     #[test]
@@ -475,7 +473,12 @@ mod tests {
             .with_character(LaunchProfileCharacter::new("Char1", 7, CharacterRole::Tank));
 
         assert!(profile.validate().is_err());
-        assert!(profile.validate().unwrap_err().contains("exceeding max of 6"));
+        assert!(
+            profile
+                .validate()
+                .unwrap_err()
+                .contains("exceeding max of 6")
+        );
     }
 
     #[test]
@@ -492,10 +495,12 @@ mod tests {
         };
 
         assert!(profile.validate().is_err());
-        assert!(profile
-            .validate()
-            .unwrap_err()
-            .contains("stagger_min_ms must be <= stagger_max_ms"));
+        assert!(
+            profile
+                .validate()
+                .unwrap_err()
+                .contains("stagger_min_ms must be <= stagger_max_ms")
+        );
     }
 
     #[test]
@@ -503,7 +508,11 @@ mod tests {
         let profile = LaunchProfile::new("test", "Test", "Teek")
             .with_character(LaunchProfileCharacter::new("Char1", 1, CharacterRole::Tank))
             .with_character(LaunchProfileCharacter::new("Char2", 1, CharacterRole::Dps))
-            .with_character(LaunchProfileCharacter::new("Char3", 2, CharacterRole::Healer));
+            .with_character(LaunchProfileCharacter::new(
+                "Char3",
+                2,
+                CharacterRole::Healer,
+            ));
 
         let summary = profile.group_summary();
         assert_eq!(summary.get(&1), Some(&2));
@@ -582,7 +591,11 @@ mod tests {
             .with_character(LaunchProfileCharacter::new("Char1", 1, CharacterRole::Tank))
             .with_character(LaunchProfileCharacter::new("Char2", 1, CharacterRole::Dps))
             .with_character(LaunchProfileCharacter::new("Char3", 2, CharacterRole::Tank))
-            .with_character(LaunchProfileCharacter::new("Char4", 2, CharacterRole::Healer));
+            .with_character(LaunchProfileCharacter::new(
+                "Char4",
+                2,
+                CharacterRole::Healer,
+            ));
 
         let presets = translate_profile_to_presets(&profile).unwrap();
 
@@ -608,13 +621,20 @@ mod tests {
     fn translate_profile_to_presets_preserves_roles() {
         let profile = LaunchProfile::new("test", "Test", "Teek")
             .with_character(LaunchProfileCharacter::new("Tank1", 1, CharacterRole::Tank))
-            .with_character(LaunchProfileCharacter::new("Healer1", 1, CharacterRole::Healer))
+            .with_character(LaunchProfileCharacter::new(
+                "Healer1",
+                1,
+                CharacterRole::Healer,
+            ))
             .with_character(LaunchProfileCharacter::new("Dps1", 1, CharacterRole::Dps));
 
         let presets = translate_profile_to_presets(&profile).unwrap();
         let preset = presets.get(&1).unwrap();
 
-        assert_eq!(preset.get_character_role("Tank1"), Some(CharacterRole::Tank));
+        assert_eq!(
+            preset.get_character_role("Tank1"),
+            Some(CharacterRole::Tank)
+        );
         assert_eq!(
             preset.get_character_role("Healer1"),
             Some(CharacterRole::Healer)
@@ -630,9 +650,6 @@ mod tests {
 
         // Should still have only one entry; last role wins
         assert_eq!(preset.character_count(), 1);
-        assert_eq!(
-            preset.get_character_role("Char1"),
-            Some(CharacterRole::Dps)
-        );
+        assert_eq!(preset.get_character_role("Char1"), Some(CharacterRole::Dps));
     }
 }

@@ -162,42 +162,38 @@ impl IntentTracker {
     // ── Update ────────────────────────────────────────────────────────────
 
     /// Update the intent for an existing entry.
-    /// Returns `Ok(())` if updated, `Err(())` if item_id not found.
-    pub fn update_intent(&mut self, item_id: u32, new_intent: ItemIntent) -> Result<(), ()> {
+    /// Returns `true` if updated, `false` if item_id not found.
+    pub fn update_intent(&mut self, item_id: u32, new_intent: ItemIntent) -> bool {
         if let Some(entry) = self.entries.get_mut(&item_id) {
             entry.intent = new_intent;
             entry.touch();
-            Ok(())
+            true
         } else {
-            Err(())
+            false
         }
     }
 
     /// Update the note for an existing entry.
     /// Returns `Ok(())` if updated, `Err(())` if item_id not found.
-    pub fn update_note(&mut self, item_id: u32, note: impl Into<String>) -> Result<(), ()> {
+    pub fn update_note(&mut self, item_id: u32, note: impl Into<String>) -> bool {
         if let Some(entry) = self.entries.get_mut(&item_id) {
             entry.note = note.into();
             entry.touch();
-            Ok(())
+            true
         } else {
-            Err(())
+            false
         }
     }
 
     /// Update the reserved_for character for an existing entry.
-    /// Returns `Ok(())` if updated, `Err(())` if item_id not found.
-    pub fn update_reserved_for(
-        &mut self,
-        item_id: u32,
-        char_id: Option<ClientId>,
-    ) -> Result<(), ()> {
+    /// Returns `true` if updated, `false` if item_id not found.
+    pub fn update_reserved_for(&mut self, item_id: u32, char_id: Option<ClientId>) -> bool {
         if let Some(entry) = self.entries.get_mut(&item_id) {
             entry.reserved_for = char_id;
             entry.touch();
-            Ok(())
+            true
         } else {
-            Err(())
+            false
         }
     }
 
@@ -256,7 +252,7 @@ mod tests {
 
         // Update from Keep to Sell.
         let result = tracker.update_intent(ITEM_RING, ItemIntent::Sell);
-        assert!(result.is_ok());
+        assert!(result);
 
         let entry = tracker.get(ITEM_RING).expect("entry should exist");
         assert_eq!(entry.intent, ItemIntent::Sell);
@@ -279,9 +275,7 @@ mod tests {
         assert_eq!(entry.note, "healer robe for group");
 
         // Update
-        tracker
-            .update_note(ITEM_ROBE, "updated healer robe note")
-            .ok();
+        tracker.update_note(ITEM_ROBE, "updated healer robe note");
         let entry = tracker.get(ITEM_ROBE).expect("should exist");
         assert_eq!(entry.note, "updated healer robe note");
 
@@ -326,9 +320,7 @@ mod tests {
         assert_eq!(retrieved.reserved_for, Some(CHAR_WARRIOR));
 
         // Update reserved_for.
-        tracker
-            .update_reserved_for(ITEM_SWORD, Some(CHAR_MAGE))
-            .ok();
+        tracker.update_reserved_for(ITEM_SWORD, Some(CHAR_MAGE));
         let entry = tracker.get(ITEM_SWORD).expect("should exist");
         assert_eq!(entry.reserved_for, Some(CHAR_MAGE));
     }

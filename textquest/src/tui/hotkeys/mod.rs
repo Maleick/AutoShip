@@ -7,7 +7,7 @@
 //! - Per-character hotkey profiles
 //! - Extensible action types (Command, ToggleMode, OpenHelp, SendAssist, Custom)
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use crossterm::event::{KeyCode, KeyModifiers};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -64,9 +64,7 @@ impl KeyBinding {
     /// Check if a key code matches the binding's key
     fn match_key_code(&self, code: KeyCode) -> bool {
         match code {
-            KeyCode::Char(c) => {
-                self.key.to_lowercase() == c.to_lowercase().to_string()
-            }
+            KeyCode::Char(c) => self.key.to_lowercase() == c.to_lowercase().to_string(),
             KeyCode::F(n) => self.key == format!("F{}", n),
             KeyCode::Enter => self.key == "Enter",
             KeyCode::Tab => self.key == "Tab",
@@ -220,7 +218,9 @@ impl HotkeyRegistry {
                 let key_str = hotkey.binding.to_string_pretty();
                 char_bindings.insert(key_str);
             }
-            registry.character_bindings.insert(character.clone(), char_bindings);
+            registry
+                .character_bindings
+                .insert(character.clone(), char_bindings);
         }
 
         Ok(registry)
@@ -293,7 +293,9 @@ impl HotkeyRegistry {
             return Err(anyhow!("Global hotkey '{}' not found", key));
         }
 
-        self.config.global.retain(|h| h.binding.to_string_pretty() != key_str);
+        self.config
+            .global
+            .retain(|h| h.binding.to_string_pretty() != key_str);
         Ok(())
     }
 
@@ -310,7 +312,10 @@ impl HotkeyRegistry {
                 ));
             }
         } else {
-            return Err(anyhow!("No hotkeys registered for character '{}'", character));
+            return Err(anyhow!(
+                "No hotkeys registered for character '{}'",
+                character
+            ));
         }
 
         if let Some(hotkeys) = self.config.character_profiles.get_mut(character) {
@@ -377,8 +382,8 @@ impl HotkeyRegistry {
 
         let content = std::fs::read_to_string(path)
             .map_err(|e| anyhow!("Failed to read config file: {}", e))?;
-        let config: HotkeyConfig = toml::from_str(&content)
-            .map_err(|e| anyhow!("Failed to parse config file: {}", e))?;
+        let config: HotkeyConfig =
+            toml::from_str(&content).map_err(|e| anyhow!("Failed to parse config file: {}", e))?;
 
         *self = Self::from_config(config)?;
         Ok(())
@@ -396,8 +401,7 @@ impl HotkeyRegistry {
 
         let content = toml::to_string_pretty(&self.config)
             .map_err(|e| anyhow!("Failed to serialize config: {}", e))?;
-        std::fs::write(path, content)
-            .map_err(|e| anyhow!("Failed to write config file: {}", e))?;
+        std::fs::write(path, content).map_err(|e| anyhow!("Failed to write config file: {}", e))?;
 
         Ok(())
     }
@@ -409,7 +413,10 @@ impl HotkeyRegistry {
 
     /// Get all hotkeys for a character
     pub fn character_hotkeys(&self, character: &str) -> Option<&[Hotkey]> {
-        self.config.character_profiles.get(character).map(|v| v.as_slice())
+        self.config
+            .character_profiles
+            .get(character)
+            .map(|v| v.as_slice())
     }
 
     /// List all registered character profiles

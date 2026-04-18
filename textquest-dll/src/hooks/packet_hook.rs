@@ -87,148 +87,6 @@ use textquest_common::types::ClientId;
 // Set once during install() and read from callbacks (which must not allocate).
 // ---------------------------------------------------------------------------
 
-#[cfg(windows)]
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-
-/// ClientId stored atomically so the callback can read it without locking.
-#[cfg(windows)]
-static ACTIVE_CLIENT_ID: AtomicU32 = AtomicU32::new(0);
-
-/// Address of WSASend — stored for removal.
-#[cfg(windows)]
-static WSASEND_ADDR: AtomicUsize = AtomicUsize::new(0);
-/// Address of WSARecv — stored for removal.
-#[cfg(windows)]
-static WSARECV_ADDR: AtomicUsize = AtomicUsize::new(0);
-
-// ---------------------------------------------------------------------------
-// Windows platform
-// ---------------------------------------------------------------------------
-
-/// Resolve the address of a named export from a loaded module.
-#[cfg(windows)]
-fn resolve_ws2_function(name: &str) -> Result<usize, Box<dyn std::error::Error>> {
-    use windows::{
-        Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress},
-        core::PCSTR,
-    };
-
-    let module_name = std::ffi::CString::new("ws2_32.dll")?;
-    let func_name = std::ffi::CString::new(name)?;
-
-    let module = unsafe { GetModuleHandleA(PCSTR(module_name.as_ptr() as *const u8)) }
-        .map_err(|e| format!("GetModuleHandleA(ws2_32.dll) failed: {e}"))?;
-
-    let addr = unsafe { GetProcAddress(module, PCSTR(func_name.as_ptr() as *const u8)) };
-    match addr {
-        Some(f) => Ok(f as usize),
-        None => {
-            Err(format!("GetProcAddress({name}) returned null — ws2_32.dll not loaded?").into())
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// WSASend callback
-//
-// x64 Microsoft ABI at WSASend entry point:
-//   RCX = SOCKET s
-//   RDX = LPWSABUF lpBuffers          ← pointer to array of WSABUF
-//   R8  = DWORD dwBufferCount
-//   R9  = LPDWORD lpNumberOfBytesSent
-//   (stack) = DWORD dwFlags, ...
-//
-// WSABUF layout (16 bytes on x64):
-//   +0  u32  len
-//   +8  *u8  buf
-// ---------------------------------------------------------------------------
-
-#[cfg(windows)]
-#[cfg_attr(windows, unsafe(link_section = ".tq"))]
-fn wsa_send_callback(exception_info: *mut ()) -> bool {
-    let context = unsafe {
-        let ptrs =
-            exception_info as *const windows::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS;
-        &*(*ptrs).ContextRecord
-    };
-
-    // RDX = LPWSABUF (pointer to first WSABUF entry)
-    let wsa_buf_ptr = context.Rdx as *const u8;
-    // R8 = buffer count
-    let buf_count = context.R8 as u32;
-
-    if wsa_buf_ptr.is_null() || buf_count == 0 {
-        return true;
-    }
-
-    // Read first WSABUF: len (u32 at +0), buf ptr (usize at +8 on x64)
-    let (buf_ptr, buf_len) = unsafe {
-        let len = (wsa_buf_ptr as *const u32).read_unaligned();
-        let buf = ((wsa_buf_ptr as *const u8).add(8) as *const usize).read_unaligned();
-        (buf as *const u8, len as usize)
-    };
-
-    if buf_ptr.is_null() || buf_len < 2 {
-        return true;
-    }
-
-    let client_id = ACTIVE_CLIENT_ID.load(Ordering::Relaxed) as ClientId;
-    on_packet_send(client_id, buf_ptr, buf_len);
-    true
-}
-
-#[cfg(not(windows))]
-fn wsa_send_callback(_exception_info: *mut ()) -> bool {
-    true
-}
-
-// ---------------------------------------------------------------------------
-// WSARecv callback
-//
-// x64 Microsoft ABI at WSARecv entry point:
-//   RCX = SOCKET s
-//   RDX = LPWSABUF lpBuffers
-//   R8  = DWORD dwBufferCount
-//   R9  = LPDWORD lpNumberOfBytesRecvd
-//   (stack) = LPDWORD lpFlags, ...
-// ---------------------------------------------------------------------------
-
-#[cfg(windows)]
-#[cfg_attr(windows, unsafe(link_section = ".tq"))]
-fn wsa_recv_callback(exception_info: *mut ()) -> bool {
-    let context = unsafe {
-        let ptrs =
-            exception_info as *const windows::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS;
-        &*(*ptrs).ContextRecord
-    };
-
-    let wsa_buf_ptr = context.Rdx as *const u8;
-    let buf_count = context.R8 as u32;
-
-    if wsa_buf_ptr.is_null() || buf_count == 0 {
-        return true;
-    }
-
-    let (buf_ptr, buf_len) = unsafe {
-        let len = (wsa_buf_ptr as *const u32).read_unaligned();
-        let buf = ((wsa_buf_ptr as *const u8).add(8) as *const usize).read_unaligned();
-        (buf as *const u8, len as usize)
-    };
-
-    if buf_ptr.is_null() || buf_len < 2 {
-        return true;
-    }
-
-    let client_id = ACTIVE_CLIENT_ID.load(Ordering::Relaxed) as ClientId;
-    on_packet_recv(client_id, buf_ptr, buf_len);
-    true
-}
-
-#[cfg(not(windows))]
-fn wsa_recv_callback(_exception_info: *mut ()) -> bool {
-    true
-}
-
 // ---------------------------------------------------------------------------
 // Install / remove
 // ---------------------------------------------------------------------------
@@ -254,7 +112,6 @@ pub fn install(_client_id: ClientId) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
 /// Activate packet hooks for validation mode.
 ///
 /// This is an explicit entry point for validating the packet capture system
@@ -278,15 +135,8 @@ pub fn install(_client_id: ClientId) -> Result<(), Box<dyn std::error::Error>> {
 /// let result = textquest_dll::hooks::packet_hook::activate_packet_hooks(pid);
 /// assert!(result.is_ok());
 /// ```
-#[cfg(windows)]
 pub fn activate_packet_hooks(client_id: ClientId) -> Result<(), Box<dyn std::error::Error>> {
-    inner::install(client_id)
-}
-
-#[cfg(not(windows))]
-pub fn activate_packet_hooks(_client_id: ClientId) -> Result<(), Box<dyn std::error::Error>> {
-    tracing::debug!("Packet hooks: activate_packet_hooks is a no-op on non-Windows");
-    Ok(())
+    install(client_id)
 }
 
 /// Remove WSASend/WSARecv hooks and restore original function bytes.
@@ -299,16 +149,6 @@ pub fn remove() {
 pub const fn remove() {}
 
 // ─── Windows implementation ────────────────────────────────────────────────
-
-#[cfg(windows)]
-fn on_packet_send(client_id: ClientId, buf: *const u8, len: usize) {
-    inner::handle_send(client_id, buf, len);
-}
-
-#[cfg(windows)]
-fn on_packet_recv(client_id: ClientId, buf: *const u8, len: usize) {
-    inner::handle_recv(client_id, buf, len);
-}
 
 #[cfg(windows)]
 mod inner {
@@ -580,7 +420,8 @@ mod inner {
             // valid for that many WSABUF entries. We iterate through and validate
             // each entry independently.
             for i in 0..dw_buffer_count as usize {
-                let wsabuf_addr = (lp_buffers as usize).saturating_add(i * std::mem::size_of::<WSABUF>());
+                let wsabuf_addr =
+                    (lp_buffers as usize).saturating_add(i * std::mem::size_of::<WSABUF>());
                 let wsabuf_size = std::mem::size_of::<WSABUF>();
 
                 if is_safe_packet_buffer(wsabuf_addr, wsabuf_size) {
@@ -807,16 +648,6 @@ mod inner {
 
 // ─── Tests ─────────────────────────────────────────────────────────────────
 
-/// Returns current time as milliseconds since the Unix epoch.
-/// Uses a fast path via `std::time` — acceptable in a detour context since
-/// we are at function entry, not inside a Windows syscall.
-fn current_timestamp_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -909,7 +740,11 @@ mod tests {
         const WSABUF_SIZE: usize = 16;
         for i in 0..3usize {
             let offset = i.saturating_mul(WSABUF_SIZE);
-            assert_eq!(offset, i * 16, "Buffer iteration offset should match expected value");
+            assert_eq!(
+                offset,
+                i * 16,
+                "Buffer iteration offset should match expected value"
+            );
         }
     }
 
@@ -926,7 +761,10 @@ mod tests {
 
         // A buffer with zero length should not be processed
         let min_opcode_len = 4usize;
-        assert!(zero_len < min_opcode_len, "Zero-length buffers should be skipped");
+        assert!(
+            zero_len < min_opcode_len,
+            "Zero-length buffers should be skipped"
+        );
     }
 
     /// Test: Overlapped receive with WSA_IO_PENDING is detected and logged.
@@ -957,7 +795,10 @@ mod tests {
 
         // Asynchronous path: ret == WSA_IO_PENDING == -1
         let async_ret = -1i32;
-        assert_eq!(async_ret, -1, "Asynchronous receive returns WSA_IO_PENDING (-1)");
+        assert_eq!(
+            async_ret, -1,
+            "Asynchronous receive returns WSA_IO_PENDING (-1)"
+        );
 
         // The two cases are mutually exclusive and should not execute the same
         // buffer capture code. The synchronous path reads the buffer immediately;
@@ -1010,6 +851,9 @@ mod tests {
     fn wsabuf_size_for_multi_buffer_iteration() {
         use super::inner::WSABUF;
         let wsabuf_size = std::mem::size_of::<WSABUF>();
-        assert_eq!(wsabuf_size, 16, "WSABUF must be 16 bytes for correct multi-buffer arithmetic");
+        assert_eq!(
+            wsabuf_size, 16,
+            "WSABUF must be 16 bytes for correct multi-buffer arithmetic"
+        );
     }
 }

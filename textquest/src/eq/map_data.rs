@@ -2,11 +2,10 @@
 ///
 /// This module provides structures and functions for populating map data from zone files,
 /// organizing terrain, spawn points, portals, and collision blockers into a structured format.
-
 use anyhow::{Context, Result};
 use std::path::Path;
 
-use super::map_parser::{load_zone_map, MapLine, MapPoint, ZoneMap};
+use super::map_parser::{MapLine, MapPoint, ZoneMap, load_zone_map};
 
 /// Represents a terrain segment (line on the map).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -361,8 +360,7 @@ impl PopulatedMapData {
     ///
     /// Returns an error if loading or parsing fails.
     pub fn load_from_dir(map_dir: &Path, zone_name: &str) -> Result<Self> {
-        let zone_map = load_zone_map(map_dir, zone_name)
-            .context("failed to load zone map")?;
+        let zone_map = load_zone_map(map_dir, zone_name).context("failed to load zone map")?;
         Ok(Self::from_zone_map(&zone_map))
     }
 
@@ -618,23 +616,29 @@ mod tests {
             MapPointType::from_label("freeport zone"),
             MapPointType::Portal
         );
-        assert_eq!(MapPointType::from_label("portal exit"), MapPointType::Portal);
+        assert_eq!(
+            MapPointType::from_label("portal exit"),
+            MapPointType::Portal
+        );
     }
 
     #[test]
     fn map_point_type_from_label_spawn() {
         assert_eq!(MapPointType::from_label("spawn"), MapPointType::SpawnPoint);
-        assert_eq!(MapPointType::from_label("orc spawn"), MapPointType::SpawnPoint);
+        assert_eq!(
+            MapPointType::from_label("orc spawn"),
+            MapPointType::SpawnPoint
+        );
     }
 
     #[test]
     fn map_point_type_from_label_landmark() {
         assert_eq!(MapPointType::from_label("camp"), MapPointType::Landmark);
+        assert_eq!(MapPointType::from_label("landmark"), MapPointType::Landmark);
         assert_eq!(
-            MapPointType::from_label("landmark"),
+            MapPointType::from_label("point of interest"),
             MapPointType::Landmark
         );
-        assert_eq!(MapPointType::from_label("point of interest"), MapPointType::Landmark);
     }
 
     #[test]
@@ -912,7 +916,11 @@ mod tests {
             bounds_max_z: 10.0,
         };
         let errors = data.validate();
-        assert!(errors.iter().any(|e| matches!(e, MapValidationError::EmptyZoneName)));
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, MapValidationError::EmptyZoneName))
+        );
     }
 
     #[test]

@@ -6,8 +6,8 @@
 //! The debuff database is a static collection of known EQ debuffs categorized by type,
 //! used by the combat system to determine cure priorities and per-class handling.
 
-use std::collections::HashMap;
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
 
 /// Debuff type classification.
 ///
@@ -412,13 +412,7 @@ mod tests {
 
     #[test]
     fn debuff_entry_is_high_priority_for_curse() {
-        let entry = DebuffEntry::new(
-            1500,
-            "Curse",
-            DebuffType::Curse,
-            0,
-            DispelType::RemoveCurse,
-        );
+        let entry = DebuffEntry::new(1500, "Curse", DebuffType::Curse, 0, DispelType::RemoveCurse);
         assert!(entry.is_high_priority());
     }
 

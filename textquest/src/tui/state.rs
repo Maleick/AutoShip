@@ -400,7 +400,7 @@ impl NpcCategory {
     #[must_use]
     pub fn from_spawn_name(name: &str) -> Option<Self> {
         let lower = name.to_lowercase();
-        
+
         // Check for merchant patterns
         if lower.contains("merchant")
             || lower.contains("vendor")
@@ -411,26 +411,26 @@ impl NpcCategory {
         {
             return Some(Self::Merchant);
         }
-        
+
         // Check for banker patterns
         if lower.contains("banker") || lower.contains("exchange") {
             return Some(Self::Banker);
         }
-        
+
         // Check for training dummy patterns
         if lower.contains("training dummy") || lower.contains("practice dummy") {
             return Some(Self::TrainingDummy);
         }
-        
+
         // Check for quest NPC patterns
         if lower.contains("quest") || lower.contains("task") {
             return Some(Self::QuestNpc);
         }
-        
+
         // Default to Other for any unclassified NPC
         Some(Self::Other)
     }
-    
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Merchant => "Merchant",
@@ -2902,15 +2902,15 @@ mod tests {
     #[test]
     fn map_filters_npc_subcategory_set_get() {
         let mut filters = MapFilters::default();
-        
+
         // Test setting individual NPC subcategory filters
         filters.set(MapFilterKind::NpcMerchant, false);
         assert!(!filters.get(MapFilterKind::NpcMerchant));
         assert!(filters.get(MapFilterKind::NpcBanker));
-        
+
         filters.set(MapFilterKind::NpcBanker, false);
         assert!(!filters.get(MapFilterKind::NpcBanker));
-        
+
         filters.set(MapFilterKind::NpcMerchant, true);
         assert!(filters.get(MapFilterKind::NpcMerchant));
     }
@@ -2919,7 +2919,7 @@ mod tests {
     fn map_filters_allows_spawn_respects_npc_subcategories() {
         use crate::eq::structs::EqClass;
         use crate::eq::structs::StandState;
-        
+
         let merchant_spawn = crate::eq::structs::SpawnInfo {
             name: "Merchant".to_string(),
             displayed_name: "Stonehand the Merchant".to_string(),
@@ -2965,5 +2965,4 @@ mod tests {
         filters.show_npc = false;
         assert!(!filters.allows_spawn(&merchant_spawn));
     }
-
 }

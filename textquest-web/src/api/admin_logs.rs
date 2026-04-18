@@ -54,8 +54,8 @@ pub async fn tail_logs(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::sync::RwLock;
     use std::collections::HashMap;
+    use tokio::sync::RwLock;
 
     #[tokio::test]
     async fn test_tail_logs_empty_session() {

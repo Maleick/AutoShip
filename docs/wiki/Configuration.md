@@ -369,3 +369,20 @@ native versus adapted classification and ownership table.
 ### Validation notes
 
 - When features change, update both the code and the relevant sample config comments so the wiki does not drift from what operators actually edit.
+
+## Chat Log Settings
+
+The `[chat_log]` section in `config/textquest.toml` controls in-game chat logging.
+
+```toml
+[chat_log]
+enabled = true
+rotation = "daily"       # "none", "daily", or "by_size:<bytes>"
+level = "info"           # "info" or "debug"
+channels = ["say", "tell", "tell_out", "group", "guild", "raid", "shout", "ooc", "auction"]
+```
+
+- Settings can also be read and written via the web API at `GET/PUT /api/chat_log/settings`.
+- `rotation = "by_size:10485760"` rotates when the log file exceeds 10 MB.
+- `level = "debug"` includes additional diagnostic output in log entries.
+- Toon-specific combat overrides live in `config/toons/<ToonName>.toml` (see `Class-Combat-Rotations.md`).

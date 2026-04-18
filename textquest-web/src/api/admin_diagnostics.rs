@@ -69,7 +69,7 @@ pub async fn get_diagnostics(
         hp: session.hp_pct,
         mana: session.mana_pct,
         action_count: 0, // Placeholder: would need action counting
-        error_count: 0,   // Placeholder: would need error tracking
+        error_count: 0,  // Placeholder: would need error tracking
     };
 
     (StatusCode::OK, Json(diagnostics)).into_response()

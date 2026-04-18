@@ -1830,7 +1830,6 @@ fn compute_spawn_delta_events(
                 spawn_name: name.clone(),
                 spawn_type: *spawn_type,
                 kind: textquest_common::ipc::SpawnEventKind::Created,
-                spawn_type: *spawn_type,
                 timestamp_ms,
             });
         }
@@ -1844,7 +1843,6 @@ fn compute_spawn_delta_events(
                 spawn_name: name.clone(),
                 spawn_type: *spawn_type,
                 kind: textquest_common::ipc::SpawnEventKind::Destroyed,
-                spawn_type: *spawn_type,
                 timestamp_ms,
             });
         }

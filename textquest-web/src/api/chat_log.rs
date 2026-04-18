@@ -1,7 +1,8 @@
 //! Chat log settings API handlers.
 
+use axum::{Json, http::StatusCode, response::IntoResponse};
 use std::path::PathBuf;
-use textquest_common::chat::{ChatLogConfig, ChatChannel, LogRotation, LogLevel};
+use textquest_common::chat::{ChatChannel, ChatLogConfig, LogLevel, LogRotation};
 
 pub fn textquest_config_path() -> PathBuf {
     std::env::var("TEXTQUEST_CONFIG_PATH")
@@ -43,26 +44,41 @@ fn write_chat_log_settings_to_disk(settings: &ChatLogConfig) -> Result<(), Strin
     let mut table = toml_edit::Table::new();
     table["enabled"] = toml_edit::value(settings.enabled);
     match &settings.rotation {
-        LogRotation::None => { table["rotation"] = toml_edit::value("none"); }
-        LogRotation::Daily => { table["rotation"] = toml_edit::value("daily"); }
-        LogRotation::BySize(size) => { table["rotation"] = toml_edit::value(format!("by_size:{}", size)); }
+        LogRotation::None => {
+            table["rotation"] = toml_edit::value("none");
+        }
+        LogRotation::Daily => {
+            table["rotation"] = toml_edit::value("daily");
+        }
+        LogRotation::BySize(size) => {
+            table["rotation"] = toml_edit::value(format!("by_size:{}", size));
+        }
     }
     match &settings.level {
-        LogLevel::Info => { table["level"] = toml_edit::value("info"); }
-        LogLevel::Debug => { table["level"] = toml_edit::value("debug"); }
+        LogLevel::Info => {
+            table["level"] = toml_edit::value("info");
+        }
+        LogLevel::Debug => {
+            table["level"] = toml_edit::value("debug");
+        }
     }
-    let channels: Vec<&str> = settings.channels.iter().map(|c| match c {
-        ChatChannel::Say => "say",
-        ChatChannel::Tell => "tell",
-        ChatChannel::TellOut => "tell_out",
-        ChatChannel::Group => "group",
-        ChatChannel::Guild => "guild",
-        ChatChannel::Raid => "raid",
-        ChatChannel::Shout => "shout",
-        ChatChannel::Ooc => "ooc",
-        ChatChannel::Auction => "auction",
-    }).collect();
-    table["channels"] = toml_edit::value(channels);
+    let channels: Vec<&str> = settings
+        .channels
+        .iter()
+        .map(|c| match c {
+            ChatChannel::Say => "say",
+            ChatChannel::Tell => "tell",
+            ChatChannel::TellOut => "tell_out",
+            ChatChannel::Group => "group",
+            ChatChannel::Guild => "guild",
+            ChatChannel::Raid => "raid",
+            ChatChannel::Shout => "shout",
+            ChatChannel::Ooc => "ooc",
+            ChatChannel::Auction => "auction",
+        })
+        .collect();
+    let arr: toml_edit::Array = channels.into_iter().collect();
+    table["channels"] = toml_edit::value(arr);
     doc["chat_log"] = toml_edit::Item::Table(table);
 
     if let Some(parent) = path.parent() {
@@ -86,7 +102,12 @@ fn write_chat_log_settings_to_disk(settings: &ChatLogConfig) -> Result<(), Strin
         .write(true)
         .create_new(true)
         .open(&temp_path)
-        .map_err(|error| format!("Failed to create temp file {}: {error}", temp_path.display()))?;
+        .map_err(|error| {
+            format!(
+                "Failed to create temp file {}: {error}",
+                temp_path.display()
+            )
+        })?;
     std::io::Write::write_all(&mut temp_file, doc.to_string().as_bytes())
         .map_err(|error| format!("Failed to write temp file {}: {error}", temp_path.display()))?;
     temp_file
@@ -95,23 +116,33 @@ fn write_chat_log_settings_to_disk(settings: &ChatLogConfig) -> Result<(), Strin
     drop(temp_file);
     std::fs::rename(&temp_path, &path).map_err(|error| {
         let _ = std::fs::remove_file(&temp_path);
-        format!("Failed to replace {} with {}: {error}", path.display(), temp_path.display())
+        format!(
+            "Failed to replace {} with {}: {error}",
+            path.display(),
+            temp_path.display()
+        )
     })?;
     Ok(())
 }
 
-pub async fn get_chat_log_settings() -> axum::response::impl IntoResponse {
-    use axum::{Json, http::StatusCode};
+pub async fn get_chat_log_settings() -> impl IntoResponse {
     match read_chat_log_settings_from_disk() {
         Ok(settings) => (StatusCode::OK, Json(settings)).into_response(),
-        Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, Json(crate::api::ErrorResponse { error })).into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(crate::api::ErrorResponse { error }),
+        )
+            .into_response(),
     }
 }
 
-pub async fn put_chat_log_settings(Json(settings): Json<ChatLogConfig>) -> axum::response::impl IntoResponse {
-    use axum::{Json, http::StatusCode};
+pub async fn put_chat_log_settings(Json(settings): Json<ChatLogConfig>) -> impl IntoResponse {
     match write_chat_log_settings_to_disk(&settings) {
         Ok(()) => (StatusCode::OK, Json(settings)).into_response(),
-        Err(error) => (StatusCode::BAD_REQUEST, Json(crate::api::ErrorResponse { error })).into_response(),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(crate::api::ErrorResponse { error }),
+        )
+            .into_response(),
     }
 }

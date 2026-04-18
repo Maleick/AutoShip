@@ -604,6 +604,7 @@ pub struct AutoCampOnDeathConfig {
     pub relog_wait_secs: u64,
 }
 
+#[allow(deprecated)]
 impl Default for AutoCampOnDeathConfig {
     fn default() -> Self {
         Self {
@@ -616,6 +617,7 @@ impl Default for AutoCampOnDeathConfig {
 
 /// Configuration for a single character (toon) within a group.
 #[allow(dead_code)] // Deserialized from config, consumed in later milestones
+#[allow(deprecated)] // auto_camp_on_death field uses deprecated backward-compat type
 #[derive(Debug, Deserialize, Clone)]
 pub struct ToonConfig {
     /// Character name.
@@ -632,6 +634,7 @@ pub struct ToonConfig {
     pub account: Option<String>,
     /// Unattended death auto-camp and relog behavior.
     #[serde(default)]
+    #[allow(deprecated)]
     pub auto_camp_on_death: AutoCampOnDeathConfig,
 }
 

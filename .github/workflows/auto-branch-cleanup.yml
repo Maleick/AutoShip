@@ -10,7 +10,7 @@ permissions:
 jobs:
   delete_branch:
     name: Delete branch after merge
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     if: github.event.pull_request.merged == true
     steps:
       - name: Delete merged branch

@@ -30,13 +30,13 @@ impl ShadowKnightStrategy {
                 name: "Shout".into(),
                 candidates: vec![
                     AbilityCandidate {
-                        name: "Shout of Rage".into(),
-                        min_level: 60,
+                        name: "Shout of Fury".into(),
+                        min_level: 65,
                         spell_id: -1,
                     },
                     AbilityCandidate {
-                        name: "Shout of Fury".into(),
-                        min_level: 65,
+                        name: "Shout of Rage".into(),
+                        min_level: 60,
                         spell_id: -1,
                     },
                 ],
@@ -45,13 +45,13 @@ impl ShadowKnightStrategy {
                 name: "Lifetap".into(),
                 candidates: vec![
                     AbilityCandidate {
-                        name: "Splurt of Decay".into(),
-                        min_level: 60,
+                        name: "Waves of Decay".into(),
+                        min_level: 65,
                         spell_id: -1,
                     },
                     AbilityCandidate {
-                        name: "Waves of Decay".into(),
-                        min_level: 65,
+                        name: "Splurt of Decay".into(),
+                        min_level: 60,
                         spell_id: -1,
                     },
                 ],
@@ -533,7 +533,7 @@ mod tests {
         let ctx = make_ctx(&player, Some(&target), &[], true);
 
         let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx).unwrap();
-        assert_eq!(action.entry_name, "Lifetap");
+        assert_eq!(action.entry_name, "Shout");
     }
 
     #[test]
