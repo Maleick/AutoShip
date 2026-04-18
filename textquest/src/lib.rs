@@ -8,6 +8,8 @@
 
 /// Operational alerting — persistence, routing, Discord/email delivery.
 pub mod alerts;
+/// Auto-group config persistence and runtime invite/role orchestration.
+pub mod auto_group;
 /// EQBC-style cross-machine TCP relay and dispatch manager.
 #[cfg(windows)]
 pub mod box_chat;

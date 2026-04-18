@@ -956,6 +956,9 @@ mod tests {
                 "loot-test-character-configs.json",
             ),
             character_config_write_lock: tokio::sync::Mutex::new(()),
+            auto_group_settings: tokio::sync::RwLock::new(
+                textquest_common::auto_group::AutoGroupSettings::default(),
+            ),
             loot_state: LootState::new_with_item_score_path(path),
             economy_state: crate::api::economy::EconomyState::new_demo(),
             dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
@@ -973,6 +976,9 @@ mod tests {
             alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
             alerting_config_path: crate::test_support::test_live_session_snapshot_path(
                 "loot-test-alerting.toml",
+            ),
+            auto_group_config_path: crate::test_support::test_live_session_snapshot_path(
+                "loot-test-auto-group.toml",
             ),
             api_token: None,
             live_session_snapshot_path: crate::test_support::test_live_session_snapshot_path(

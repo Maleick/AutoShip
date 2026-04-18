@@ -5,6 +5,7 @@ The M6 web dashboard now exposes a single operator console instead of the earlie
 - Session command center
 - Spawn finder
 - Group coordination
+- Auto-group profiles
 - Navigation control
 - Economy monitoring
 - Combat analytics
@@ -68,6 +69,12 @@ The console is split into two vertical rails on desktop and collapses to a singl
 | - command buttons (camp/pull/navigate)  | - death log                            |
 | - command log                           | - rotation efficiency                  |
 +-----------------------------------------+----------------------------------------+
+| Auto-Group Profiles                     |                                        |
+| - leader character                      |                                        |
+| - ordered member invites                |                                        |
+| - post-join role assignment             |                                        |
+| - completion slash command              |                                        |
++-----------------------------------------+----------------------------------------+
 | Navigation Control                      | System Health                          |
 | - route list                            | - memory per client                    |
 | - waypoint editor                       | - frame rate                           |
@@ -96,6 +103,7 @@ spawn list without leaving the browser.
 - Session creation is profile-driven and intentionally lightweight so operators can recover capacity quickly during live runs.
 - Spawn Finder supports type-to-filter and one-click targeting for the selected observer.
 - Group role edits are inline and post immediately to the dashboard action endpoint.
+- Auto-group profiles persist to `config/auto-group.toml`, and the orchestrator watches that file to drive ordered invites, `/grouproles` assignment, and the completion command.
 - Navigation routes are stored as named waypoint sets with a map preview rendered directly in the console.
 - Wishlist entries are editable in-place to keep loot routing and vendor priorities close to the economy data.
 - Loot configuration now includes an **Item Score** tab with per-class stat

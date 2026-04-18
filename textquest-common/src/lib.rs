@@ -7,6 +7,8 @@
 #[doc(hidden)]
 pub use paste;
 
+/// Auto-group configuration and invite/role controller logic.
+pub mod auto_group;
 /// Typed, runtime-rebased function bindings.
 pub mod bindings;
 /// Box-chat config, slash-route parsing, and TCP relay wire types.

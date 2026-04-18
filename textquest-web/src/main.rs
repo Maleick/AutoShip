@@ -18,6 +18,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use textquest_common::auto_group::AutoGroupSettings;
 use textquest_common::chat_pattern_rules::ChatPatternRuleEngine;
 
 use axum::{
@@ -66,6 +67,8 @@ pub struct AppState {
     /// Reads are unaffected — they still go through the `character_configs`
     /// RwLock.
     pub character_config_write_lock: tokio::sync::Mutex<()>,
+    /// Persisted auto-group profiles consumed by the orchestrator runtime.
+    pub auto_group_settings: tokio::sync::RwLock<AutoGroupSettings>,
     /// In-memory loot configuration state.
     pub loot_state: Arc<api::loot::LootState>,
     /// In-memory economy cycle state.
@@ -102,6 +105,8 @@ pub struct AppState {
     /// `AlertingConfig`. Tests point this at a tempfile via
     /// [`test_state`] so they never touch the checked-in repo.
     pub alerting_config_path: PathBuf,
+    /// Side-car file where dashboard-edited auto-group profiles persist.
+    pub auto_group_config_path: PathBuf,
     /// Optional static API token for protecting all `/api` endpoints.
     /// Set via `TEXTQUEST_API_TOKEN` environment variable.
     /// When `None`, API endpoints are unauthenticated (localhost-only
@@ -205,6 +210,10 @@ fn alerting_config_path() -> PathBuf {
         return PathBuf::from(override_path);
     }
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/alerting.toml")
+}
+
+fn auto_group_config_path() -> PathBuf {
+    textquest::auto_group::default_config_path()
 }
 
 fn load_alerting_config_from(path: &std::path::Path) -> AlertingConfig {
@@ -322,6 +331,7 @@ fn build_state() -> Arc<AppState> {
     }
 
     let character_config_path = character_config_path();
+    let auto_group_config_path = auto_group_config_path();
     // Demo-default seeding only runs when the file is absent. A present-but-
     // empty file ({}) is an explicit operator choice — restoring demo entries
     // would pollute their config on the next save.
@@ -344,6 +354,17 @@ fn build_state() -> Arc<AppState> {
         );
         api::demo_character_configs()
     };
+    let auto_group_settings = textquest::auto_group::load_settings_from_path(
+        &auto_group_config_path,
+    )
+    .unwrap_or_else(|error| {
+        tracing::warn!(
+            %error,
+            path = %auto_group_config_path.display(),
+            "Failed to load persisted auto-group config; using defaults"
+        );
+        AutoGroupSettings::default()
+    });
 
     Arc::new(AppState {
         event_tx,
@@ -354,6 +375,7 @@ fn build_state() -> Arc<AppState> {
         tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
         character_config_path,
         character_config_write_lock: tokio::sync::Mutex::new(()),
+        auto_group_settings: tokio::sync::RwLock::new(auto_group_settings),
         loot_state: api::loot::LootState::new_demo(),
         economy_state: api::economy::EconomyState::new_demo(),
         dashboard_state: api::dashboard::DashboardState::new_demo(),
@@ -380,6 +402,7 @@ fn build_state() -> Arc<AppState> {
         alert_store: open_alert_store(),
         alert_config: tokio::sync::RwLock::new(load_alerting_config_from(&alerting_config_path())),
         alerting_config_path: alerting_config_path(),
+        auto_group_config_path,
         api_token,
         live_session_snapshot_path: live_session_snapshot_path(),
         admin_session_snapshot_path: admin_session_snapshot_path(),
@@ -426,6 +449,10 @@ pub(crate) fn test_app_state() -> AppState {
         alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
         alerting_config_path: std::env::temp_dir().join(format!(
             "textquest-web-test-alerting-{}.toml",
+            uuid::Uuid::new_v4()
+        )),
+        auto_group_config_path: std::env::temp_dir().join(format!(
+            "textquest-web-test-auto-group-{}.toml",
             uuid::Uuid::new_v4()
         )),
         api_token: None,
@@ -750,6 +777,7 @@ mod tests {
             tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
             character_config_path: path.with_file_name("character-configs.json"),
             character_config_write_lock: tokio::sync::Mutex::new(()),
+            auto_group_settings: tokio::sync::RwLock::new(AutoGroupSettings::default()),
             loot_state: api::loot::LootState::new_demo(),
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: api::dashboard::DashboardState::new_demo(),
@@ -769,6 +797,7 @@ mod tests {
                 "textquest-main-test-alerting-{}.toml",
                 uuid::Uuid::new_v4()
             )),
+            auto_group_config_path: path.with_file_name("auto-group.toml"),
             api_token: None, // No auth in tests — auth middleware is a no-op when None
             live_session_snapshot_path: path.with_file_name("live_sessions.json"),
             admin_session_snapshot_path: path.with_file_name("admin_sessions.json"),

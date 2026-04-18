@@ -23,6 +23,7 @@ import BoxChatPanel from "./BoxChatPanel";
 import ChatLogPanel from "./ChatLogPanel";
 import GmAlertPanel from "./GmAlertPanel";
 import KillTrackerPanel from "./KillTrackerPanel";
+import AutoGroupPanel from "./AutoGroupPanel";
 import SpawnFinderPanel from "./SpawnFinderPanel";
 import TradeskillTrophyPanel from "./TradeskillTrophyPanel";
 import type {

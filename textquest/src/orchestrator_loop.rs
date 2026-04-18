@@ -66,6 +66,7 @@ pub struct OrchestratorLoop {
     status_webhook: Option<WebhookSender>,
     timing_correction_enabled: bool,
     shutdown_rx: watch::Receiver<bool>,
+    auto_group_runtime: crate::auto_group::AutoGroupRuntime,
     timestamp_runtime: crate::timestamp_runtime::TimestampRuntime,
     window_title_runtime: crate::window_title_runtime::WindowTitleRuntime,
 }
@@ -107,6 +108,7 @@ impl OrchestratorLoop {
             status_webhook,
             timing_correction_enabled,
             shutdown_rx,
+            auto_group_runtime: crate::auto_group::AutoGroupRuntime::new(),
             timestamp_runtime: crate::timestamp_runtime::TimestampRuntime::new(),
             window_title_runtime: crate::window_title_runtime::WindowTitleRuntime::new(),
         }
@@ -206,6 +208,7 @@ impl OrchestratorLoop {
                     for event in &events {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
+                    self.sync_auto_group_runtime();
                     self.sync_box_chat_runtime();
                     self.sync_timestamp_runtime();
                     self.sync_window_title_runtime();
@@ -215,6 +218,7 @@ impl OrchestratorLoop {
                     for event in &events {
                         tracing::debug!(?event, "orchestrator loop event");
                     }
+                    self.sync_auto_group_runtime();
                     self.sync_box_chat_runtime();
                     self.sync_timestamp_runtime();
                     self.sync_window_title_runtime();
@@ -226,6 +230,7 @@ impl OrchestratorLoop {
                     }
                     self.orchestrator.tick();
                     self.tick_death_camp();
+                    self.sync_auto_group_runtime();
                     self.sync_box_chat_runtime();
                     self.sync_timestamp_runtime();
                     self.sync_window_title_runtime();
@@ -550,6 +555,11 @@ impl OrchestratorLoop {
                 &server_name,
             );
         }
+    }
+
+    fn sync_auto_group_runtime(&mut self) {
+        self.auto_group_runtime
+            .tick(&self.client_manager, &mut self.orchestrator);
     }
 
     /// Run health checks on all managed clients.

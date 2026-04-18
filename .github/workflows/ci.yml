@@ -153,6 +153,9 @@ jobs:
         continue-on-error: true
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
+      - name: Check rustfmt
+        if: steps.scope.outputs.docs_only != 'true'
+        run: cargo fmt --check
       - name: Run clippy
         if: steps.scope.outputs.docs_only != 'true'
         run: cargo clippy --all-targets --all-features -- -D warnings

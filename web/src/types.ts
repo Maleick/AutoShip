@@ -262,6 +262,71 @@ export interface BoxChatSettings {
   auto_connect: boolean;
 }
 
+// ── Operator config types ────────────────────────────────────────────────────
+
+export type AutoAcceptTrustMode = "anyone" | "trust_list";
+
+export interface AutoAcceptSettings {
+  enabled: boolean;
+  accept_group_invites: boolean;
+  accept_trades: boolean;
+  accept_task_adds: boolean;
+  accept_dz_adds: boolean;
+  accept_translocates: boolean;
+  accept_anchors: boolean;
+  trust_mode: AutoAcceptTrustMode;
+  trusted_players: string[];
+}
+
+export type TimestampFormat =
+  | "date_time_24"
+  | "time_24"
+  | "date_time_12"
+  | "time_12";
+
+export interface TimestampConfig {
+  enabled: boolean;
+  format: TimestampFormat;
+}
+
+export interface XAssistCharacterConfig {
+  character_name: string;
+  ma_name: string | null;
+  enabled: boolean;
+}
+
+export interface XAssistConfigUpdate {
+  ma_name: string | null;
+  enabled: boolean;
+}
+
+export type AutoGroupRole =
+  | "none"
+  | "main_tank"
+  | "main_assist"
+  | "puller"
+  | "mark_npc"
+  | "master_looter";
+
+export interface AutoGroupMember {
+  name: string;
+  role: AutoGroupRole;
+}
+
+export interface AutoGroupProfile {
+  name: string;
+  leader_name: string;
+  enabled: boolean;
+  invite_retry_interval_secs: number;
+  max_invite_retries: number;
+  completion_command: string | null;
+  members: AutoGroupMember[];
+}
+
+export interface AutoGroupSettings {
+  groups: AutoGroupProfile[];
+}
+
 // ── GM alert types ───────────────────────────────────────────────────────────
 
 export interface GmAlertConfig {

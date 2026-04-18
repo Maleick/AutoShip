@@ -125,7 +125,7 @@ Current evidence state: `Research-backed` for existence and dual-instance patter
 
 Current evidence state: `Research-backed` for address set; `Needs Live Proof` for current-build addresses and dispatch coverage.
 
-Bazaar note: current `M10` price sampling is intentionally implemented as a passive read of bazaar window list data already resident in client memory after a normal player search. This keeps bazaar capture inside the existing EQ-memory observation boundary and avoids promoting `ProcessBazaarPacket` into the live requirement set.
+Bazaar note: current `M10` price sampling is intentionally implemented as a passive read of bazaar window list data already resident in client memory after a normal player search. This keeps bazaar capture inside the existing EQ-memory observation boundary and avoids promoting `ProcessBazaarPacket` into the live requirement set. In roadmap terms, economy work is `M10`, while chat ingest (`M11`) stays on the Soul Engine track.
 
 Roadmap note: economy work is `M10`, while packet-backed chat ingest (`M11`) stays grouped with Soul Engine follow-on work in the canonical roadmap.
 

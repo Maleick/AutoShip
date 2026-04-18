@@ -4,8 +4,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{AppState, accounts, api};
 use textquest::{alerts::AlertStore, config::AlertingConfig};
+use textquest_common::auto_group::AutoGroupSettings;
+
+use crate::{AppState, accounts, api};
 
 pub(crate) fn test_live_session_snapshot_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../data/runtime/{name}"))
@@ -30,6 +32,7 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
         character_config_path: test_live_session_snapshot_path("test-character-configs.json"),
         character_config_write_lock: tokio::sync::Mutex::new(()),
+        auto_group_settings: tokio::sync::RwLock::new(AutoGroupSettings::default()),
         loot_state: api::loot::LootState::new_demo(),
         economy_state: api::economy::EconomyState::new_demo(),
         dashboard_state: api::dashboard::DashboardState::new_demo(),
@@ -47,6 +50,10 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
         alerting_config_path: std::env::temp_dir().join(format!(
             "textquest-test-alerting-{}.toml",
+            uuid::Uuid::new_v4()
+        )),
+        auto_group_config_path: std::env::temp_dir().join(format!(
+            "textquest-test-auto-group-{}.toml",
             uuid::Uuid::new_v4()
         )),
         api_token: None,
