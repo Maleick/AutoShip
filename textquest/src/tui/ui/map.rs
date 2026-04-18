@@ -309,6 +309,32 @@ where
     true
 }
 
+/// Maps a spawn's type and properties to a glyph (character) and color pair for rendering.
+///
+/// This function implements the SpawnType→glyph mapping for the map display:
+/// - **Player**: First letter of class abbreviation (C, W, M, N, E, etc.) with class-specific color
+///   - CLR: Cyan, WAR: Amber, MAG: Magenta, MNK: Red, ENC/NEC: Bright
+/// - **Named NPC**: Diamond (◆) in spawn_named color
+/// - **Regular NPC**: Circle (○) in spawn_npc color
+/// - **Corpse**: Cross dagger (†) in spawn_corpse color
+/// - **Unknown**: Question mark (?) in spawn_unknown color
+/// - **Selected**: Bold circle (◍) in text_highlight color (highest priority)
+///
+/// # Parameters
+/// - `app`: Reference to the App state for theme and selection data
+/// - `spawn`: The SpawnInfo entry to render
+/// - `group_names`: Set of names in the player's group (currently unused, reserved for future features)
+/// - `selected_spawn_id`: The spawn_id of the currently selected spawn, if any
+///
+/// # Returns
+/// A tuple of (character, Color) representing the glyph and its theme color.
+///
+/// # Example
+/// ```ignore
+/// let spawn = SpawnInfo { spawn_id: 42, spawn_type: SpawnType::Npc, .. };
+/// let (glyph, color) = spawn_marker_glyph(&app, &spawn, &group_names, None);
+/// assert_eq!(glyph, '◆'); // Named mob
+/// ```
 fn spawn_marker_glyph(
     app: &App,
     spawn: &crate::eq::structs::SpawnInfo,
@@ -500,6 +526,34 @@ fn place_heading_arrow(
     }
 }
 
+/// Renders the entire tactical map view including geometry, spawns, overlays, and tactical sidebars.
+///
+/// This is the main rendering entry point for the map UI. It handles:
+/// - Building the map transform (world→screen projection) based on viewport mode and zoom
+/// - Rendering zone geometry, navigation paths, and navmesh data
+/// - Placing spawn markers with color-coded glyphs
+/// - Drawing cast radius circles, spell radius overlays, and aggro radius indicators
+/// - Rendering combat state overlays (named markers, camp markers)
+/// - Composing the tactical sidebar with spawn list, target panel, and chain-casting indicators
+/// - Building and displaying the information header with player position, zoom level, and filters
+///
+/// # Parameters
+/// - `frame`: Mutable reference to the ratatui Frame for drawing primitives
+/// - `area`: The rectangular area in the terminal where the map should be rendered
+/// - `app`: Mutable reference to the App state (required for state updates during rendering)
+///
+/// # Performance Notes
+/// - The map transform computation is relatively expensive; it's cached and only recalculated
+///   when viewport mode, zoom, or visible bounds change.
+/// - Spawn filtering and color-run coalescing (via `color_run_spans`) amortize line composition cost.
+/// - Line drawing uses Bresenham's algorithm with bounds checking to minimize invalid cells.
+/// - Z-clipping (via `clip_line_z`) prevents off-range geometry from being rendered.
+///
+/// # Example
+/// ```ignore
+/// let area = ratatui::layout::Rect::new(0, 0, 80, 24);
+/// draw_map_view(&mut frame, area, &mut app);
+/// ```
 pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     use ratatui::style::Color;
     let theme = app.theme.clone();
@@ -1144,6 +1198,41 @@ fn draw_target_direction_overlay(frame: &mut Frame, inner: ratatui::layout::Rect
 /// Collapse a row of `(char, Color)` cells into spans grouped by consecutive
 /// color runs. Produces ~10-30 spans per row instead of one per cell, avoiding
 /// thousands of heap allocations.
+/// Coalesces consecutive characters with identical colors into single ratatui Spans.
+///
+/// This function optimizes ratatui line rendering by grouping characters that share the same
+/// foreground color into a single styled Span, reducing the number of style changes and
+/// improving terminal rendering efficiency. It implements run-length encoding for colors.
+///
+/// # Parameters
+/// - `row`: A vector of (character, Color) tuples representing a single line of the map,
+///   typically from the inner grid of the map view
+///
+/// # Returns
+/// A vector of ratatui Span objects, each containing a contiguous run of same-colored characters.
+/// The Spans are ready to be rendered as a Line or part of a Text block.
+///
+/// # Algorithm
+/// The function iterates through the input, buffering characters with the same color.
+/// When the color changes, the accumulated characters are bundled into a new Span
+/// and pushed to the output. A final Span is pushed for any remaining buffered characters.
+///
+/// # Performance
+/// - O(n) time complexity where n is the input vector length
+/// - O(m) space complexity where m is the number of color runs (typically much less than n)
+/// - Typically reduces 80+ characters per line to 3-5 Spans
+///
+/// # Example
+/// ```ignore
+/// let row = vec![
+///     ('A', Color::Red),
+///     ('B', Color::Red),
+///     ('C', Color::Blue),
+///     ('D', Color::Blue),
+/// ];
+/// let spans = color_run_spans(row);
+/// assert_eq!(spans.len(), 2); // Two spans: "AB" in red, "CD" in blue
+/// ```
 fn color_run_spans(row: Vec<(char, Color)>) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     let mut buf = String::new();
@@ -1625,6 +1714,44 @@ fn active_view_label(mode: MapViewportMode, using_local_view: bool) -> String {
 /// Otherwise returns the (possibly clipped) `(x1, y1, x2, y2)` coordinates,
 /// interpolating XY at the height boundary when one endpoint is outside.
 #[allow(clippy::too_many_arguments)]
+/// Clips a 3D line segment against the current Z-view frustum, returning only the X-Y projection.
+///
+/// This function implements Cohen-Sutherland line clipping in the Z dimension, ensuring that
+/// only geometry within the player's Z-filter range is rendered. The Z-range is defined as
+/// [center_z - z_range, center_z + z_range].
+///
+/// # Parameters
+/// - `x1, y1, z1`: Start point of the line in world space
+/// - `x2, y2, z2`: End point of the line in world space
+/// - `center_z`: The Z coordinate around which the filter range is centered
+/// - `z_range`: Half-width of the Z frustum (radius in Z)
+///
+/// # Returns
+/// - `Some((cx1, cy1, cx2, cy2))` if the line segment intersects the frustum: the X-Y
+///   coordinates of the clipped start and end points
+/// - `None` if the entire line is outside the frustum on the same side
+///
+/// # Algorithm
+/// 1. Checks if both endpoints are inside the frustum (quick path)
+/// 2. Checks if both endpoints are outside on the same side (culls immediately)
+/// 3. Uses parametric clipping for segments that cross the frustum boundaries
+/// 4. Handles edge cases (horizontal lines, epsilon-small segments)
+///
+/// # Performance Notes
+/// - Quick rejection: O(1) when both points are clearly outside
+/// - General case: 6 parameter calculations (two planes, two axes) with clamping
+/// - Used extensively in geometry rendering; calls are typically batched
+///
+/// # Example
+/// ```ignore
+/// let (x1, y1, z1) = (100.0, 200.0, 0.0);
+/// let (x2, y2, z2) = (150.0, 250.0, 50.0);
+/// let center_z = 25.0;
+/// let z_range = 10.0; // Range: [15.0, 35.0]
+/// if let Some((cx1, cy1, cx2, cy2)) = clip_line_z(x1, y1, z1, x2, y2, z2, center_z, z_range) {
+///     // Draw line from (cx1, cy1) to (cx2, cy2)
+/// }
+/// ```
 fn clip_line_z(
     x1: f32,
     y1: f32,
@@ -1747,6 +1874,35 @@ fn clip_project_draw_line(
     bresenham_line(c1, r1, c2, r2, w, h, grid, color, paint_mode);
 }
 
+/// Converts RGB geometry data into a ratatui terminal Color for rendering.
+///
+/// Maps zone map geometry colors (from EQ map files or parsed textures) to terminal colors.
+/// Black (0, 0, 0) is treated as a special case representing solid geometry and is mapped to
+/// the theme's `map_geometry` color. All other RGB values are passed through as direct RGB
+/// terminal colors.
+///
+/// # Parameters
+/// - `r, g, b`: Red, green, blue components (0–255 each)
+/// - `t`: Reference to the current Theme for geometry color lookup
+///
+/// # Returns
+/// A ratatui Color value:
+/// - `Color::Black` → `t.map_geometry` (typically a dim color like Dark Gray or DarkGray)
+/// - All other colors → `Color::Rgb(r, g, b)` (direct RGB passthrough)
+///
+/// # Rationale
+/// EQ map files encode geometry with black pixels to indicate impassable terrain or walls.
+/// Using the theme's geometry color ensures visual consistency across different theme
+/// configurations and respects user color preferences.
+///
+/// # Example
+/// ```ignore
+/// let black_geometry = map_rgb_to_color(0, 0, 0, &theme);
+/// assert_eq!(black_geometry, theme.map_geometry);
+///
+/// let grass = map_rgb_to_color(34, 139, 34, &theme);
+/// assert_eq!(grass, Color::Rgb(34, 139, 34));
+/// ```
 fn map_rgb_to_color(r: u8, g: u8, b: u8, t: &Theme) -> ratatui::style::Color {
     if r == 0 && g == 0 && b == 0 {
         t.map_geometry
@@ -1761,6 +1917,48 @@ enum LinePaintMode {
     OverwriteLinework,
 }
 
+/// Rasterizes a line segment into a 2D character grid using Bresenham's algorithm.
+///
+/// Implements the classic Bresenham line algorithm optimized for terminal rendering.
+/// The algorithm draws a line by stepping along either X or Y axis, deciding pixel placement
+/// using an error term to maintain a close approximation to the ideal line path.
+///
+/// # Parameters
+/// - `x0, y0`: Starting point of the line
+/// - `x1, y1`: Ending point of the line
+/// - `w, h`: Width and height of the grid (for bounds checking)
+/// - `grid`: Mutable reference to a 2D grid of (character, Color) tuples to draw into
+/// - `color`: The color to apply to line cells
+/// - `paint_mode`: Controls where the line can overwrite existing characters:
+///   - `LinePaintMode::BlankOnly`: Only paint over spaces (' ')
+///   - `LinePaintMode::OverwriteLinework`: Paint over spaces or existing line characters
+///
+/// # Algorithm
+/// The classic Bresenham rasterization algorithm:
+/// 1. Compute absolute deltas (dx, dy) and step directions (sx, sy)
+/// 2. Initialize error term: err = dx + dy (both negative for octant normalization)
+/// 3. For each step, determine which axis to step along based on error comparison
+/// 4. Update error term and current position until target is reached
+/// 5. Step limit (10,000) prevents infinite loops on degenerate inputs
+///
+/// # Line Character Selection
+/// The character placed at each cell is determined by line direction:
+/// - Horizontal: '─'
+/// - Vertical: '│'
+/// - Diagonal (SW-NE or NW-SE): '╱' or '╲'
+/// - Single point: '·'
+///
+/// # Performance Notes
+/// - O(max(|dx|, |dy|)) time complexity with fixed max iterations
+/// - Bounds checking via `grid_in_bounds` prevents invalid array access
+/// - Color runs are typically coalesced by `color_run_spans` during rendering
+///
+/// # Example
+/// ```ignore
+/// let mut grid = vec![vec![(' ', Color::Reset); 80]; 24];
+/// bresenham_line(0, 0, 20, 10, 80, 24, &mut grid, Color::Green, LinePaintMode::BlankOnly);
+/// // Grid now contains a green line from (0,0) to (20,10)
+/// ```
 #[allow(clippy::too_many_arguments)]
 fn bresenham_line(
     x0: i32,
@@ -2516,6 +2714,53 @@ fn draw_navigation_summary(
 
 /// Draw a radius circle around a world position on the map grid.
 #[allow(clippy::too_many_arguments)]
+/// Draws a circle of dots at a specified radius, mapping world coordinates to screen grid cells.
+///
+/// Renders a circle outline by sampling the circumference at evenly spaced angles and plotting
+/// a dot ('·') at each sample point. Used for spell radius indicators, cast range circles,
+/// aggro radius overlays, and camp/pull radius markers.
+///
+/// # Parameters
+/// - `to_grid`: A closure that maps world coordinates (x, y) to grid indices (col, row).
+///   This typically performs the world→screen transformation including zoom and viewport offset.
+/// - `center_x, center_y`: World coordinates of the circle center
+/// - `radius`: World distance radius (not grid units; must be transformed by `to_grid`)
+/// - `color`: Color of the circle dots
+/// - `w, h`: Width and height of the grid in characters (for bounds checking)
+/// - `grid`: Mutable reference to the grid to draw into
+///
+/// # Algorithm
+/// - Computes the number of sample steps: `steps = (radius * 0.5).clamp(24, 120)`
+///   - Small circles (~radius < 50) use fewer samples for efficiency
+///   - Large circles (~radius > 240) cap at 120 samples to prevent overdrawing
+/// - Iterates from angle 0 to 2π in steps of (2π / steps)
+/// - For each angle, computes the world point and transforms via `to_grid`
+/// - Bounds checking prevents out-of-range grid access
+///
+/// # Performance Notes
+/// - O(steps) time complexity, typically 24–120 iterations
+/// - Each iteration involves two transcendental functions (cos, sin)
+/// - Well-suited for batching multiple circles (e.g., casting overlays, aggro radii)
+/// - Consider caching the `to_grid` closure if drawing many circles
+///
+/// # Coordinate System
+/// The transformation from world (EQ) coordinates to grid is handled by `to_grid`.
+/// Typical usage negates Y and X to align EQ's (Y forward, X right) with standard grid layout.
+///
+/// # Example
+/// ```ignore
+/// let center_x = 100.0;
+/// let center_y = 200.0;
+/// let radius = 50.0;
+/// draw_radius_circle(
+///     &|wx, wy| ((wx as i32) % 80, (wy as i32) % 24),
+///     center_x, center_y, radius,
+///     Color::Blue,
+///     80, 24,
+///     &mut grid
+/// );
+/// // Grid now has blue dots in a circle around (100, 200) with radius 50
+/// ```
 fn draw_radius_circle(
     to_grid: &impl Fn(f32, f32) -> (i32, i32),
     center_x: f32,
