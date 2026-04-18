@@ -1,4 +1,5 @@
 //! Chat log settings API handlers.
+#![allow(dead_code)]
 
 use axum::{Json, response::IntoResponse};
 use std::path::PathBuf;

@@ -8,6 +8,8 @@ use textquest_common::types::SlotLifecycle;
 pub struct ClientState {
     /// OS process ID of the EQ client.
     pub pid: u32,
+    /// Whether the IPC path for this client is considered available.
+    pub connected: bool,
     /// Base address of the EQ module in process memory.
     pub eq_base: u64,
     /// Local player spawn info (populated after reading memory).
@@ -50,6 +52,7 @@ impl ClientState {
     pub fn new(pid: u32, eq_base: u64) -> Self {
         Self {
             pid,
+            connected: true,
             eq_base,
             local_player: None,
             target: None,
@@ -70,17 +73,8 @@ impl ClientState {
         }
     }
 
-    /// Best-effort slash-command delivery hook used by some TUI paths.
-    ///
-    /// Returns an error stub — the IPC dispatch path is owned by
-    /// `Orchestrator::send_ipc_command`, not `ClientState`. Callers that hit
-    /// this path are expected to surface the failure so operators know the
-    /// rule action did not run.
-    pub fn send_command(&self, _command: &str) -> anyhow::Result<()> {
-        Err(anyhow::anyhow!(
-            "ClientState::send_command is not wired; dispatch must go through Orchestrator for PID {}",
-            self.pid
-        ))
+    pub fn send_command(&self, command: &str) -> anyhow::Result<()> {
+        crate::command_dispatch::dispatch_local_command(self.pid, command)
     }
 }
 

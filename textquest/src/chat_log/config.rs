@@ -57,6 +57,7 @@ impl ChatChannel {
             _ => None,
         }
     }
+
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Say => "say",
@@ -126,6 +127,7 @@ impl LogLevel {
             _ => None,
         }
     }
+
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Trace => "TRACE",
@@ -210,6 +212,13 @@ mod tests {
 
     #[test]
     fn chat_channel_from_str() {
+        assert_eq!("say".parse::<ChatChannel>().ok(), Some(ChatChannel::Say));
+        assert_eq!("SAY".parse::<ChatChannel>().ok(), Some(ChatChannel::Say));
+        assert_eq!(
+            "guild".parse::<ChatChannel>().ok(),
+            Some(ChatChannel::Guild)
+        );
+        assert_eq!("unknown".parse::<ChatChannel>().ok(), None);
         assert_eq!(ChatChannel::parse("say"), Some(ChatChannel::Say));
         assert_eq!(ChatChannel::parse("SAY"), Some(ChatChannel::Say));
         assert_eq!(ChatChannel::parse("guild"), Some(ChatChannel::Guild));
@@ -232,6 +241,9 @@ mod tests {
 
     #[test]
     fn log_level_from_str() {
+        assert_eq!("debug".parse::<LogLevel>().ok(), Some(LogLevel::Debug));
+        assert_eq!("INFO".parse::<LogLevel>().ok(), Some(LogLevel::Info));
+        assert_eq!("invalid".parse::<LogLevel>().ok(), None);
         assert_eq!(LogLevel::parse("debug"), Some(LogLevel::Debug));
         assert_eq!(LogLevel::parse("INFO"), Some(LogLevel::Info));
         assert_eq!(LogLevel::parse("invalid"), None);

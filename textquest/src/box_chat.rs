@@ -1,7 +1,7 @@
 //! EQBC-style box-chat runtime for cross-machine slash-command relay.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     io::{BufRead, BufReader, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
@@ -15,7 +15,13 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow, bail};
-use textquest_common::box_chat::{BoxChatConfig, OutboundRoute, WireMessage, parse_slash_route};
+use textquest_common::{
+    box_chat::{BoxChatConfig, OutboundRoute, WireMessage, parse_slash_route},
+    box_controller::{
+        BoxControllerClientSnapshot, BoxControllerClientState, BoxControllerCommand,
+        BoxControllerSnapshot,
+    },
+};
 
 const IO_POLL_INTERVAL: Duration = Duration::from_millis(200);
 const RECONNECT_DELAY: Duration = Duration::from_secs(2);
@@ -33,6 +39,171 @@ struct LocalClient {
 #[derive(Debug, Default)]
 struct SharedState {
     local_clients: Mutex<Vec<LocalClient>>,
+    controller: Mutex<ControllerRegistry>,
+    connector_nodes: Mutex<HashSet<String>>,
+}
+
+#[derive(Debug, Default)]
+struct ControllerRegistry {
+    local_states: HashMap<String, BoxControllerClientState>,
+    remote_states: HashMap<String, RemoteControllerState>,
+    last_command: Option<BoxControllerCommand>,
+}
+
+#[derive(Debug, Default)]
+struct RemoteControllerState {
+    display_name: String,
+    clients: HashMap<String, BoxControllerClientState>,
+}
+
+impl ControllerRegistry {
+    fn normalize_node_key(node: &str) -> String {
+        node.to_ascii_lowercase()
+    }
+
+    fn has_local_clients(&self) -> bool {
+        !self.local_states.is_empty()
+    }
+
+    fn sync_local_clients(&mut self, clients: &[LocalClient]) {
+        let expected = clients
+            .iter()
+            .map(|client| client.name_lower.clone())
+            .collect::<HashSet<_>>();
+        self.local_states
+            .retain(|character, _| expected.contains(character));
+
+        for client in clients {
+            self.local_states
+                .entry(client.name_lower.clone())
+                .and_modify(|state| state.character_name = client.name.clone())
+                .or_insert_with(|| BoxControllerClientState::new(client.name.clone()));
+        }
+    }
+
+    fn apply_local_command(&mut self, command: &BoxControllerCommand) {
+        self.last_command = Some(command.clone());
+        for state in self.local_states.values_mut() {
+            state.apply_command(command);
+        }
+    }
+
+    fn update_remote_state(&mut self, node: &str, clients: Vec<BoxControllerClientState>) {
+        let key = Self::normalize_node_key(node);
+        let states = clients
+            .into_iter()
+            .map(|state| (state.character_name.to_ascii_lowercase(), state))
+            .collect::<HashMap<_, _>>();
+        if states.is_empty() {
+            self.remote_states.remove(&key);
+        } else {
+            self.remote_states.insert(
+                key,
+                RemoteControllerState {
+                    display_name: node.to_string(),
+                    clients: states,
+                },
+            );
+        }
+    }
+
+    fn seed_remote_characters(&mut self, node: &str, characters: &[String]) {
+        let key = Self::normalize_node_key(node);
+        let expected = characters
+            .iter()
+            .map(|name| name.to_ascii_lowercase())
+            .collect::<HashSet<_>>();
+        let state = self
+            .remote_states
+            .entry(key)
+            .or_insert_with(|| RemoteControllerState {
+                display_name: node.to_string(),
+                clients: HashMap::new(),
+            });
+        state.display_name = node.to_string();
+        let states = &mut state.clients;
+        states.retain(|character, _| expected.contains(character));
+
+        for character in characters {
+            let key = character.to_ascii_lowercase();
+            states
+                .entry(key)
+                .and_modify(|state| state.character_name = character.clone())
+                .or_insert_with(|| BoxControllerClientState::new(character.clone()));
+        }
+    }
+
+    fn remove_remote_node(&mut self, node: &str) {
+        self.remote_states.remove(&Self::normalize_node_key(node));
+    }
+
+    fn local_state_message(&self) -> WireMessage {
+        let mut clients = self.local_states.values().cloned().collect::<Vec<_>>();
+        clients.sort_by(|left, right| left.character_name.cmp(&right.character_name));
+        WireMessage::BoxControllerState {
+            node_name: node_name(),
+            clients,
+        }
+    }
+
+    fn all_state_messages(&self) -> Vec<WireMessage> {
+        let mut messages = Vec::new();
+        if self.has_local_clients() {
+            messages.push(self.local_state_message());
+        }
+        let mut nodes = self.remote_states.iter().collect::<Vec<_>>();
+        nodes.sort_by_key(|(node_name, _)| *node_name);
+
+        for (_, state) in nodes {
+            let mut clients = state.clients.values().cloned().collect::<Vec<_>>();
+            clients.sort_by(|left, right| left.character_name.cmp(&right.character_name));
+            messages.push(WireMessage::BoxControllerState {
+                node_name: state.display_name.clone(),
+                clients,
+            });
+        }
+
+        messages
+    }
+
+    fn snapshot(&self, relay_enabled: bool) -> BoxControllerSnapshot {
+        let local_node = node_name();
+        let mut clients = self
+            .local_states
+            .values()
+            .map(|state| BoxControllerClientSnapshot::from_state(local_node.clone(), state))
+            .collect::<Vec<_>>();
+
+        let mut remote_nodes = self.remote_states.iter().collect::<Vec<_>>();
+        remote_nodes.sort_by_key(|(node_name, _)| *node_name);
+        for (_, remote_state) in remote_nodes {
+            let mut next = remote_state
+                .clients
+                .values()
+                .map(|state| {
+                    BoxControllerClientSnapshot::from_state(
+                        remote_state.display_name.clone(),
+                        state,
+                    )
+                })
+                .collect::<Vec<_>>();
+            next.sort_by(|left, right| left.character_name.cmp(&right.character_name));
+            clients.extend(next);
+        }
+
+        clients.sort_by(|left, right| {
+            left.node_name
+                .cmp(&right.node_name)
+                .then_with(|| left.character_name.cmp(&right.character_name))
+        });
+
+        BoxControllerSnapshot {
+            connected_clients: clients.len(),
+            relay_enabled,
+            last_command: self.last_command.clone(),
+            clients,
+        }
+    }
 }
 
 struct ListenerHandle {
@@ -70,7 +241,19 @@ impl ConnectorHandle {
                 command: command.clone(),
             },
         };
-        let _ = self.tx.send(ConnectorCommand::Route(message));
+        self.send_message(message);
+    }
+
+    fn send_box_controller_command(&self, command: BoxControllerCommand) {
+        self.send_message(WireMessage::BoxControllerCommand { command });
+    }
+
+    fn send_box_controller_state(&self, message: WireMessage) {
+        self.send_message(message);
+    }
+
+    fn send_message(&self, message: WireMessage) {
+        let _ = self.tx.send(ConnectorCommand::Send(message));
     }
 
     fn is_connected(&self) -> bool {
@@ -86,7 +269,7 @@ impl ConnectorHandle {
 
 enum ConnectorCommand {
     UpdateCharacters(Vec<String>),
-    Route(WireMessage),
+    Send(WireMessage),
     Stop,
 }
 
@@ -94,6 +277,7 @@ enum ConnectorCommand {
 struct HubState {
     next_peer_id: AtomicUsize,
     peers: Mutex<HashMap<usize, mpsc::Sender<WireMessage>>>,
+    peer_nodes: Mutex<HashMap<usize, String>>,
 }
 
 impl HubState {
@@ -106,8 +290,15 @@ impl HubState {
         peer_id
     }
 
-    fn remove_peer(&self, peer_id: usize) {
+    fn remove_peer(&self, peer_id: usize) -> Option<(String, bool)> {
         self.peers.lock().expect("hub peer lock").remove(&peer_id);
+        let mut peer_nodes = self.peer_nodes.lock().expect("hub peer-node lock");
+        let node_name = peer_nodes.remove(&peer_id)?;
+        let normalized = ControllerRegistry::normalize_node_key(&node_name);
+        let still_connected = peer_nodes
+            .values()
+            .any(|other| ControllerRegistry::normalize_node_key(other) == normalized);
+        Some((node_name, still_connected))
     }
 
     fn relay_execute(&self, route: &OutboundRoute, skip_peer: Option<usize>) -> bool {
@@ -135,6 +326,49 @@ impl HubState {
             }
         }
         sent
+    }
+
+    fn send_to_peer(&self, peer_id: usize, message: WireMessage) -> bool {
+        self.peers
+            .lock()
+            .expect("hub peer lock")
+            .get(&peer_id)
+            .is_some_and(|sender| sender.send(message).is_ok())
+    }
+
+    fn set_peer_node_name(&self, peer_id: usize, node_name: String) {
+        self.peer_nodes
+            .lock()
+            .expect("hub peer-node lock")
+            .insert(peer_id, node_name);
+    }
+
+    fn peer_node_name(&self, peer_id: usize) -> Option<String> {
+        self.peer_nodes
+            .lock()
+            .expect("hub peer-node lock")
+            .get(&peer_id)
+            .cloned()
+    }
+}
+
+fn disconnect_peer(hub: &HubState, shared: &SharedState, peer_id: usize) {
+    if let Some((node_name, still_connected)) = hub.remove_peer(peer_id) {
+        if still_connected {
+            return;
+        }
+        shared
+            .controller
+            .lock()
+            .expect("controller registry lock")
+            .remove_remote_node(&node_name);
+        let _ = hub.broadcast(
+            WireMessage::BoxControllerState {
+                node_name,
+                clients: Vec::new(),
+            },
+            None,
+        );
     }
 }
 
@@ -324,6 +558,20 @@ impl BoxChatManager {
             .lock()
             .expect("box chat client lock") = next_clients;
 
+        {
+            let clients = self
+                .shared
+                .local_clients
+                .lock()
+                .expect("box chat client lock")
+                .clone();
+            self.shared
+                .controller
+                .lock()
+                .expect("box controller lock")
+                .sync_local_clients(&clients);
+        }
+
         let characters = self.character_names();
         if let Some(connector) = self
             .runtime
@@ -334,6 +582,8 @@ impl BoxChatManager {
         {
             connector.update_characters(characters);
         }
+
+        self.broadcast_local_controller_state();
     }
 
     fn dispatch_if_box_chat(&self, input: &str) -> Result<Option<DispatchReport>> {
@@ -389,6 +639,77 @@ impl BoxChatManager {
             .iter()
             .map(|client| client.name.clone())
             .collect()
+    }
+
+    fn dispatch_box_controller_command(&self, command: BoxControllerCommand) {
+        self.shared
+            .controller
+            .lock()
+            .expect("box controller lock")
+            .apply_local_command(&command);
+
+        let should_publish_state = self
+            .shared
+            .controller
+            .lock()
+            .expect("box controller lock")
+            .has_local_clients();
+        let state_message = should_publish_state.then(|| self.local_controller_state_message());
+        let runtime = self.runtime.lock().expect("box chat runtime lock");
+
+        if let Some(listener) = runtime.listener.as_ref() {
+            let _ = listener.hub.broadcast(
+                WireMessage::BoxControllerCommand {
+                    command: command.clone(),
+                },
+                None,
+            );
+            if let Some(state_message) = state_message.clone() {
+                let _ = listener.hub.broadcast(state_message, None);
+            }
+        }
+
+        if let Some(connector) = runtime.connector.as_ref() {
+            connector.send_box_controller_command(command);
+            if let Some(state_message) = state_message {
+                connector.send_box_controller_state(state_message);
+            }
+        }
+    }
+
+    fn local_controller_state_message(&self) -> WireMessage {
+        self.shared
+            .controller
+            .lock()
+            .expect("box controller lock")
+            .local_state_message()
+    }
+
+    fn broadcast_local_controller_state(&self) {
+        let state_message = self.local_controller_state_message();
+        let runtime = self.runtime.lock().expect("box chat runtime lock");
+
+        if let Some(listener) = runtime.listener.as_ref() {
+            let _ = listener.hub.broadcast(state_message.clone(), None);
+        }
+        if let Some(connector) = runtime.connector.as_ref() {
+            connector.send_box_controller_state(state_message);
+        }
+    }
+
+    fn controller_snapshot(&self) -> BoxControllerSnapshot {
+        let runtime = self.runtime.lock().expect("box chat runtime lock");
+        let relay_enabled = runtime.listener.is_some()
+            || runtime
+                .connector
+                .as_ref()
+                .is_some_and(ConnectorHandle::is_connected);
+        drop(runtime);
+        self.shared
+            .controller
+            .lock()
+            .expect("box controller lock")
+            .snapshot(relay_enabled)
     }
 }
 
@@ -468,6 +789,18 @@ pub fn dispatch_if_box_chat(input: &str) -> Result<Option<DispatchReport>> {
     BoxChatManager::global().dispatch_if_box_chat(input)
 }
 
+/// Broadcast a unified box-controller command to all local and connected box
+/// chat clients.
+pub fn dispatch_box_controller_command(command: BoxControllerCommand) {
+    BoxChatManager::global().dispatch_box_controller_command(command);
+}
+
+/// Snapshot the current unified box-controller state known to this process.
+#[must_use]
+pub fn controller_snapshot() -> BoxControllerSnapshot {
+    BoxChatManager::global().controller_snapshot()
+}
+
 fn load_box_chat_config(path: &Path) -> Result<BoxChatConfig> {
     if path.exists() {
         Ok(crate::config::AppConfig::load(path)?.box_chat)
@@ -536,6 +869,54 @@ fn execute_route_locally(shared: &SharedState, route: &OutboundRoute) -> Result<
     Ok((local_sent, local_failed))
 }
 
+fn local_controller_state_message(shared: &SharedState) -> WireMessage {
+    shared
+        .controller
+        .lock()
+        .expect("box controller lock")
+        .local_state_message()
+}
+
+fn apply_local_controller_command(shared: &SharedState, command: &BoxControllerCommand) {
+    shared
+        .controller
+        .lock()
+        .expect("box controller lock")
+        .apply_local_command(command);
+}
+
+fn update_remote_controller_state(
+    shared: &SharedState,
+    node_name: &str,
+    clients: Vec<BoxControllerClientState>,
+) {
+    shared
+        .controller
+        .lock()
+        .expect("box controller lock")
+        .update_remote_state(node_name, clients);
+}
+
+fn seed_remote_controller_characters(shared: &SharedState, node_name: &str, characters: &[String]) {
+    shared
+        .controller
+        .lock()
+        .expect("box controller lock")
+        .seed_remote_characters(node_name, characters);
+}
+
+fn send_known_controller_states_to_peer(hub: &HubState, shared: &SharedState, peer_id: usize) {
+    let messages = shared
+        .controller
+        .lock()
+        .expect("box controller lock")
+        .all_state_messages();
+
+    for message in messages {
+        let _ = hub.send_to_peer(peer_id, message);
+    }
+}
+
 fn start_listener(port: u16, shared: Arc<SharedState>) -> Result<ListenerHandle> {
     let stop = Arc::new(AtomicBool::new(false));
     let hub = Arc::new(HubState::default());
@@ -595,13 +976,14 @@ fn spawn_hub_peer(
         Ok(clone) => clone,
         Err(error) => {
             tracing::warn!(%error, "Failed to clone box-chat peer stream");
-            hub.remove_peer(peer_id);
+            disconnect_peer(&hub, &shared, peer_id);
             return;
         }
     };
     let _ = writer_stream.set_write_timeout(Some(IO_POLL_INTERVAL));
 
     let writer_hub = Arc::clone(&hub);
+    let writer_shared = Arc::clone(&shared);
     let writer_stop = Arc::clone(&stop);
     thread::spawn(move || {
         while !writer_stop.load(Ordering::Relaxed) {
@@ -616,7 +998,7 @@ fn spawn_hub_peer(
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
         }
-        writer_hub.remove_peer(peer_id);
+        disconnect_peer(&writer_hub, &writer_shared, peer_id);
     });
 
     let _ = stream.set_read_timeout(Some(IO_POLL_INTERVAL));
@@ -642,7 +1024,7 @@ fn spawn_hub_peer(
                 }
             }
         }
-        hub.remove_peer(peer_id);
+        disconnect_peer(&hub, &shared, peer_id);
     });
 }
 
@@ -658,6 +1040,19 @@ fn handle_hub_message(hub: &HubState, shared: &SharedState, peer_id: usize, mess
             let _ = execute_route_locally(shared, &route);
             let _ = hub.relay_execute(&route, Some(peer_id));
         }
+        WireMessage::BoxControllerCommand { command } => {
+            apply_local_controller_command(shared, &command);
+            let _ = hub.broadcast(WireMessage::BoxControllerCommand { command }, Some(peer_id));
+            let _ = hub.broadcast(local_controller_state_message(shared), None);
+        }
+        WireMessage::BoxControllerState { node_name, clients } => {
+            hub.set_peer_node_name(peer_id, node_name.clone());
+            update_remote_controller_state(shared, &node_name, clients.clone());
+            let _ = hub.broadcast(
+                WireMessage::BoxControllerState { node_name, clients },
+                Some(peer_id),
+            );
+        }
         WireMessage::ExecuteBroadcast { command } => {
             let _ = execute_route_locally(shared, &OutboundRoute::Broadcast { command });
         }
@@ -668,9 +1063,15 @@ fn handle_hub_message(hub: &HubState, shared: &SharedState, peer_id: usize, mess
             node_name,
             characters,
         } => {
+            hub.set_peer_node_name(peer_id, node_name.clone());
+            seed_remote_controller_characters(shared, &node_name, &characters);
+            send_known_controller_states_to_peer(hub, shared, peer_id);
             tracing::debug!(%node_name, ?characters, peer_id, "Box-chat hello received");
         }
         WireMessage::UpdateCharacters { characters } => {
+            if let Some(node_name) = hub.peer_node_name(peer_id) {
+                seed_remote_controller_characters(shared, &node_name, &characters);
+            }
             tracing::debug!(
                 ?characters,
                 peer_id,
@@ -745,6 +1146,21 @@ fn connector_loop(
                     continue;
                 }
 
+                let has_local_clients = shared
+                    .controller
+                    .lock()
+                    .expect("box controller lock")
+                    .has_local_clients();
+                if has_local_clients {
+                    let state_message = local_controller_state_message(&shared);
+                    if let Err(error) = write_message(&mut stream, &state_message) {
+                        tracing::warn!(%error, %endpoint, "Failed to send initial box-controller state");
+                        connected.store(false, Ordering::Relaxed);
+                        thread::sleep(RECONNECT_DELAY);
+                        continue;
+                    }
+                }
+
                 'connected: loop {
                     if stop.load(Ordering::Relaxed) {
                         break;
@@ -755,7 +1171,25 @@ fn connector_loop(
                         Ok(0) => break 'connected,
                         Ok(_) => {
                             if let Some(message) = parse_message(&line) {
+                                let publish_local_state =
+                                    matches!(message, WireMessage::BoxControllerCommand { .. });
                                 handle_connector_message(&shared, message);
+                                if publish_local_state {
+                                    let has_local_clients = shared
+                                        .controller
+                                        .lock()
+                                        .expect("box controller lock")
+                                        .has_local_clients();
+                                    if has_local_clients {
+                                        let state_message = local_controller_state_message(&shared);
+                                        if let Err(error) =
+                                            write_message(&mut stream, &state_message)
+                                        {
+                                            tracing::warn!(%error, %endpoint, "Failed to publish updated box-controller state");
+                                            break 'connected;
+                                        }
+                                    }
+                                }
                             }
                         }
                         Err(error)
@@ -781,15 +1215,21 @@ fn connector_loop(
                                     break 'connected;
                                 }
                             }
-                            Ok(ConnectorCommand::Route(message)) => {
+                            Ok(ConnectorCommand::Send(message)) => {
                                 if let Err(error) = write_message(&mut stream, &message) {
                                     tracing::warn!(%error, %endpoint, "Failed to send upstream box-chat route");
                                     break 'connected;
                                 }
                             }
-                            Ok(ConnectorCommand::Stop) => return,
+                            Ok(ConnectorCommand::Stop) => {
+                                prune_connector_remote_states(&shared);
+                                return;
+                            }
                             Err(mpsc::TryRecvError::Empty) => break,
-                            Err(mpsc::TryRecvError::Disconnected) => return,
+                            Err(mpsc::TryRecvError::Disconnected) => {
+                                prune_connector_remote_states(&shared);
+                                return;
+                            }
                         }
                     }
                 }
@@ -799,6 +1239,7 @@ fn connector_loop(
             }
         }
 
+        prune_connector_remote_states(&shared);
         connected.store(false, Ordering::Relaxed);
         if stop.load(Ordering::Relaxed) {
             break;
@@ -810,16 +1251,48 @@ fn connector_loop(
                 Ok(ConnectorCommand::UpdateCharacters(next)) => {
                     characters = next;
                 }
-                Ok(ConnectorCommand::Route(_)) => {}
-                Ok(ConnectorCommand::Stop) => return,
+                Ok(ConnectorCommand::Send(_)) => {}
+                Ok(ConnectorCommand::Stop) => {
+                    prune_connector_remote_states(&shared);
+                    return;
+                }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     if stop.load(Ordering::Relaxed) {
+                        prune_connector_remote_states(&shared);
                         return;
                     }
                 }
-                Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    prune_connector_remote_states(&shared);
+                    return;
+                }
             }
         }
+    }
+}
+
+fn track_connector_node(shared: &SharedState, node_name: &str) {
+    shared
+        .connector_nodes
+        .lock()
+        .expect("connector node lock")
+        .insert(ControllerRegistry::normalize_node_key(node_name));
+}
+
+fn prune_connector_remote_states(shared: &SharedState) {
+    let nodes = shared
+        .connector_nodes
+        .lock()
+        .expect("connector node lock")
+        .drain()
+        .collect::<Vec<_>>();
+    if nodes.is_empty() {
+        return;
+    }
+
+    let mut controller = shared.controller.lock().expect("controller registry lock");
+    for node in nodes {
+        controller.remote_states.remove(&node);
     }
 }
 
@@ -835,10 +1308,19 @@ fn handle_connector_message(shared: &SharedState, message: WireMessage) {
             node_name,
             characters,
         } => {
+            track_connector_node(shared, &node_name);
+            seed_remote_controller_characters(shared, &node_name, &characters);
             tracing::debug!(%node_name, ?characters, "Box-chat upstream hello received");
         }
         WireMessage::UpdateCharacters { characters } => {
             tracing::debug!(?characters, "Box-chat upstream character update received");
+        }
+        WireMessage::BoxControllerCommand { command } => {
+            apply_local_controller_command(shared, &command);
+        }
+        WireMessage::BoxControllerState { node_name, clients } => {
+            track_connector_node(shared, &node_name);
+            update_remote_controller_state(shared, &node_name, clients);
         }
         WireMessage::Broadcast { .. } | WireMessage::Target { .. } => {
             tracing::debug!("Ignoring routed box-chat payload from upstream");
@@ -896,6 +1378,7 @@ fn on_off(value: bool) -> &'static str {
 mod tests {
     use super::*;
     use std::fs;
+    use textquest_common::box_controller::BoxControllerMode;
 
     #[test]
     fn dispatch_report_summary_mentions_route_and_transport() {
@@ -927,5 +1410,232 @@ mod tests {
 
         let config = load_box_chat_config(&path).expect("missing file should default");
         assert_eq!(config, BoxChatConfig::default());
+    }
+
+    #[test]
+    fn controller_registry_normalizes_remote_node_names() {
+        let mut registry = ControllerRegistry::default();
+        registry.seed_remote_characters("Raid-PC", &["Cleric".to_string()]);
+
+        let mut paused = BoxControllerClientState::new("Cleric".to_string());
+        paused.apply_command(&BoxControllerCommand::Pause);
+        registry.update_remote_state("raid-pc", vec![paused]);
+
+        assert_eq!(registry.remote_states.len(), 1);
+
+        let snapshot = registry.snapshot(true);
+        assert_eq!(snapshot.connected_clients, 1);
+        assert_eq!(snapshot.clients[0].mode, BoxControllerMode::Paused);
+    }
+
+    #[test]
+    fn disconnecting_peer_clears_remote_controller_state() {
+        let mut registry = ControllerRegistry::default();
+        registry.seed_remote_characters("Raid-PC", &["Cleric".to_string()]);
+
+        let hub = HubState::default();
+        let peer_id = hub.register_peer(mpsc::channel::<WireMessage>().0);
+        hub.set_peer_node_name(peer_id, "RAID-pc".to_string());
+
+        let shared = SharedState::default();
+        {
+            let mut controller = shared.controller.lock().expect("controller registry lock");
+            controller.remote_states = registry.remote_states;
+        }
+
+        disconnect_peer(&hub, &shared, peer_id);
+
+        let snapshot = shared
+            .controller
+            .lock()
+            .expect("controller registry lock")
+            .snapshot(true);
+        assert_eq!(snapshot.connected_clients, 0);
+    }
+
+    #[test]
+    fn disconnecting_peer_broadcasts_empty_controller_state() {
+        let hub = HubState::default();
+        let remaining_rx = {
+            let (remaining_tx, remaining_rx) = mpsc::channel::<WireMessage>();
+            let _ = hub.register_peer(remaining_tx);
+            remaining_rx
+        };
+        let departing_peer = hub.register_peer(mpsc::channel::<WireMessage>().0);
+        hub.set_peer_node_name(departing_peer, "RAID-pc".to_string());
+
+        let shared = SharedState::default();
+        {
+            let mut controller = shared.controller.lock().expect("controller registry lock");
+            controller.seed_remote_characters("Raid-PC", &["Cleric".to_string()]);
+        }
+
+        disconnect_peer(&hub, &shared, departing_peer);
+
+        let message = remaining_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("peer tombstone broadcast");
+        let WireMessage::BoxControllerState { node_name, clients } = message else {
+            panic!("expected controller state tombstone");
+        };
+        assert_eq!(node_name, "RAID-pc");
+        assert!(clients.is_empty());
+    }
+
+    #[test]
+    fn prune_connector_remote_states_clears_tracked_nodes() {
+        let shared = SharedState::default();
+        seed_remote_controller_characters(&shared, "Upstream-A", &["Cleric".to_string()]);
+        update_remote_controller_state(
+            &shared,
+            "Upstream-A",
+            vec![BoxControllerClientState::new("Cleric".to_string())],
+        );
+        track_connector_node(&shared, "Upstream-A");
+
+        prune_connector_remote_states(&shared);
+
+        let snapshot = shared
+            .controller
+            .lock()
+            .expect("controller registry lock")
+            .snapshot(true);
+        assert_eq!(snapshot.connected_clients, 0);
+    }
+
+    #[test]
+    fn connector_updates_from_same_host_are_retained() {
+        let shared = SharedState::default();
+        let local_host = node_name();
+
+        seed_remote_controller_characters(&shared, &local_host, &["Cleric".to_string()]);
+        update_remote_controller_state(
+            &shared,
+            &local_host,
+            vec![BoxControllerClientState::new("Cleric".to_string())],
+        );
+
+        let snapshot = shared
+            .controller
+            .lock()
+            .expect("controller registry lock")
+            .snapshot(true);
+        assert_eq!(snapshot.connected_clients, 1);
+        assert_eq!(snapshot.clients[0].node_name, local_host);
+    }
+
+    #[test]
+    fn disconnecting_stale_duplicate_peer_preserves_active_node_state() {
+        let hub = HubState::default();
+        let (observer_tx, observer_rx) = mpsc::channel::<WireMessage>();
+        let _observer_id = hub.register_peer(observer_tx);
+        let departing_peer = hub.register_peer(mpsc::channel::<WireMessage>().0);
+        let active_peer = hub.register_peer(mpsc::channel::<WireMessage>().0);
+        hub.set_peer_node_name(departing_peer, "RAID-pc".to_string());
+        hub.set_peer_node_name(active_peer, "raid-PC".to_string());
+
+        let shared = SharedState::default();
+        {
+            let mut controller = shared.controller.lock().expect("controller registry lock");
+            controller.seed_remote_characters("Raid-PC", &["Cleric".to_string()]);
+        }
+
+        disconnect_peer(&hub, &shared, departing_peer);
+
+        let snapshot = shared
+            .controller
+            .lock()
+            .expect("controller registry lock")
+            .snapshot(true);
+        assert_eq!(snapshot.connected_clients, 1);
+        assert!(
+            observer_rx
+                .recv_timeout(Duration::from_millis(100))
+                .is_err(),
+            "stale duplicate disconnect should not broadcast a tombstone"
+        );
+    }
+
+    #[test]
+    fn dropping_last_local_client_broadcasts_empty_controller_state() {
+        let shared = Arc::new(SharedState::default());
+        let listener = start_listener(0, Arc::clone(&shared)).expect("listener");
+        let (peer_tx, peer_rx) = mpsc::channel::<WireMessage>();
+        let _peer_id = listener.hub.register_peer(peer_tx);
+
+        let manager = BoxChatManager {
+            runtime: Mutex::new(RuntimeState {
+                listener: Some(listener),
+                ..RuntimeState::default()
+            }),
+            shared,
+        };
+
+        manager.update_local_clients([(1_u32, "Frostreaver".to_string())].into_iter().collect());
+        let _ = peer_rx.recv_timeout(Duration::from_secs(1));
+
+        manager.update_local_clients(Vec::new());
+        let message = peer_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("empty controller state broadcast");
+
+        let WireMessage::BoxControllerState { clients, .. } = message else {
+            panic!("expected controller state message");
+        };
+        assert!(
+            clients.is_empty(),
+            "expected local state to clear on broadcast"
+        );
+
+        let listener = manager
+            .runtime
+            .lock()
+            .expect("box chat runtime lock")
+            .listener
+            .take()
+            .expect("listener handle");
+        listener.stop();
+    }
+
+    #[test]
+    fn controller_snapshot_reports_disconnected_runtime_as_offline() {
+        let manager = BoxChatManager {
+            runtime: Mutex::new(RuntimeState {
+                config: BoxChatConfig {
+                    enabled: true,
+                    ..BoxChatConfig::default()
+                },
+                ..RuntimeState::default()
+            }),
+            shared: Arc::new(SharedState::default()),
+        };
+
+        let snapshot = manager.controller_snapshot();
+        assert!(!snapshot.relay_enabled);
+    }
+
+    #[test]
+    fn controller_snapshot_reports_listener_runtime_as_online() {
+        let shared = Arc::new(SharedState::default());
+        let listener = start_listener(0, Arc::clone(&shared)).expect("listener");
+        let manager = BoxChatManager {
+            runtime: Mutex::new(RuntimeState {
+                listener: Some(listener),
+                ..RuntimeState::default()
+            }),
+            shared,
+        };
+
+        let snapshot = manager.controller_snapshot();
+        assert!(snapshot.relay_enabled);
+
+        let listener = manager
+            .runtime
+            .lock()
+            .expect("box chat runtime lock")
+            .listener
+            .take()
+            .expect("listener handle");
+        listener.stop();
     }
 }

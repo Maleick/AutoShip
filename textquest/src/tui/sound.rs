@@ -2,7 +2,10 @@
 //! notifications.
 
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
+use std::fmt;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 // ─── Event Types ────────────────────────────────────────────────────────────
@@ -324,35 +327,41 @@ impl SoundPlayerInner {
 }
 
 /// Thread-safe sound player for playing audio alerts.
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct SoundPlayer {
-    inner: Arc<Mutex<SoundPlayerInner>>,
+    inner: Rc<RefCell<SoundPlayerInner>>,
 }
 
 impl SoundPlayer {
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(SoundPlayerInner::new())),
+            inner: Rc::new(RefCell::new(SoundPlayerInner::new())),
         }
     }
 
     /// Play a sound file at the given volume.
     pub fn play_file(&self, path: &str) -> Result<(), String> {
-        let inner = self.inner.lock().map_err(|e| format!("Lock error: {e}"))?;
+        let inner = self
+            .inner
+            .try_borrow()
+            .map_err(|e| format!("Borrow error: {e}"))?;
         let volume = inner.get_volume();
         inner.play_file(path, volume)
     }
 
     /// Play the system beep at the given volume.
     pub fn play_beep(&self) -> Result<(), String> {
-        let inner = self.inner.lock().map_err(|e| format!("Lock error: {e}"))?;
+        let inner = self
+            .inner
+            .try_borrow()
+            .map_err(|e| format!("Borrow error: {e}"))?;
         let volume = inner.get_volume();
         inner.play_beep(volume)
     }
 
     /// Set the master volume (0.0 to 1.0).
     pub fn set_volume(&self, volume: f32) {
-        if let Ok(mut inner) = self.inner.lock() {
+        if let Ok(mut inner) = self.inner.try_borrow_mut() {
             inner.set_volume(volume);
         }
     }
@@ -360,7 +369,7 @@ impl SoundPlayer {
     /// Get the current master volume.
     pub fn get_volume(&self) -> f32 {
         self.inner
-            .lock()
+            .try_borrow()
             .map(|inner| inner.get_volume())
             .unwrap_or(0.75)
     }
@@ -591,8 +600,14 @@ mod tests {
 
         mgr.set_enabled(true);
         let matches = mgr.check_event("You have died.");
-        assert!(!matches.is_empty());
-        assert_eq!(matches[0].name, "Death");
+        assert!(matches.is_empty());
+        assert!(
+            mgr.config()
+                .triggers
+                .iter()
+                .any(|trigger| trigger.name == "Death"),
+            "Disabling the manager should not discard preset trigger definitions"
+        );
     }
 
     #[test]

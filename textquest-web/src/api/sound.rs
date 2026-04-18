@@ -1,4 +1,5 @@
 //! Sound alert configuration API handlers.
+#![allow(dead_code)]
 
 use axum::{
     Json,
@@ -11,7 +12,7 @@ use std::sync::Arc;
 
 use crate::AppState;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum GameEventType {
     LowHp,
@@ -19,27 +20,19 @@ pub enum GameEventType {
     NamedSpawn,
     GmEnter,
     TellReceived,
+    #[default]
     Custom,
 }
 
-impl Default for GameEventType {
-    fn default() -> Self {
-        Self::Custom
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SoundType {
-    File { path: String },
+    File {
+        path: String,
+    },
     Beep,
+    #[default]
     None,
-}
-
-impl Default for SoundType {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,7 +63,9 @@ impl Default for SoundConfig {
                     id: "trigger_low_hp".into(),
                     name: "Low HP".into(),
                     event_pattern: "hp_low".into(),
-                    sound: SoundType::File { path: "sounds/hp_low.wav".into() },
+                    sound: SoundType::File {
+                        path: "sounds/hp_low.wav".into(),
+                    },
                     enabled: true,
                     priority: 100,
                 },
@@ -78,7 +73,9 @@ impl Default for SoundConfig {
                     id: "trigger_death".into(),
                     name: "Death".into(),
                     event_pattern: "you_have_died".into(),
-                    sound: SoundType::File { path: "sounds/death.wav".into() },
+                    sound: SoundType::File {
+                        path: "sounds/death.wav".into(),
+                    },
                     enabled: true,
                     priority: 200,
                 },
@@ -94,7 +91,9 @@ impl Default for SoundConfig {
                     id: "trigger_gm_detected".into(),
                     name: "GM Detected".into(),
                     event_pattern: "gm_detected".into(),
-                    sound: SoundType::File { path: "sounds/gm_alert.wav".into() },
+                    sound: SoundType::File {
+                        path: "sounds/gm_alert.wav".into(),
+                    },
                     enabled: true,
                     priority: 255,
                 },
@@ -102,7 +101,9 @@ impl Default for SoundConfig {
                     id: "trigger_tell_received".into(),
                     name: "Tell Received".into(),
                     event_pattern: "tell:".into(),
-                    sound: SoundType::File { path: "sounds/tell.wav".into() },
+                    sound: SoundType::File {
+                        path: "sounds/tell.wav".into(),
+                    },
                     enabled: true,
                     priority: 180,
                 },
@@ -138,9 +139,7 @@ pub struct SoundTriggerCreate {
 }
 
 /// GET /api/sound/config — return full sound configuration.
-pub async fn get_sound_config(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+pub async fn get_sound_config(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let config = {
         let sound_state = state.sound_config.read().await;
         sound_state.clone()
@@ -164,9 +163,7 @@ pub async fn put_sound_config(
 }
 
 /// GET /api/sound/triggers — list all sound triggers.
-pub async fn list_sound_triggers(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+pub async fn list_sound_triggers(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let triggers = {
         let sound_state = state.sound_config.read().await;
         sound_state.triggers.clone()
@@ -288,11 +285,6 @@ mod tests {
 
     #[test]
     fn sound_config_update_respects_volume_bounds() {
-        let config = SoundConfig {
-            enabled: true,
-            volume: 0.5,
-            triggers: vec![],
-        };
         let update = SoundConfigUpdate {
             enabled: None,
             volume: Some(1.5), // should be clamped

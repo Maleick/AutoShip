@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::box_controller::{BoxControllerClientState, BoxControllerCommand};
+
 /// Configuration for the EQBC-style TCP relay used by TextQuest instances.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -51,6 +53,14 @@ pub enum WireMessage {
     Broadcast { command: String },
     /// Submit a targeted route to the hub.
     Target { character: String, command: String },
+    /// Broadcast a structured unified controller command to all connected
+    /// clients.
+    BoxControllerCommand { command: BoxControllerCommand },
+    /// Publish the latest automation state for one node's connected clients.
+    BoxControllerState {
+        node_name: String,
+        clients: Vec<BoxControllerClientState>,
+    },
     /// Execute a broadcast on the receiving peer.
     ExecuteBroadcast { command: String },
     /// Execute a targeted command on the receiving peer.

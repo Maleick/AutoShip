@@ -1,4 +1,5 @@
 //! REST API handlers for Rare Spawn Alert System.
+#![allow(dead_code)]
 
 use axum::Json;
 use axum::extract::{Path, Query, State};

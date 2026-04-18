@@ -139,10 +139,10 @@ pub enum ActivePanel {
     DebugInternals,
     /// Economy controls panel (vendor cycle, banking, loot queue).
     EconomyControls,
-    /// Spawn event feed panel.
-    SpawnEvents,
-    /// Orchestrator dashboard panel.
+    /// Orchestrator dashboard panel with internal parity tabs.
     OrchestratorDashboard,
+    /// Spawn event feed panel (zone in/out notifications).
+    SpawnEvents,
 }
 
 /// Layout preset for panel arrangement within a screen.
@@ -3437,6 +3437,9 @@ impl App {
         let tick = self.tick_count;
 
         for event in events {
+            if !self.should_record_spawn_event(&event) {
+                continue;
+            }
             let is_up = matches!(event.kind, textquest_common::ipc::SpawnEventKind::Created);
             let label = if is_up { "UP" } else { "DOWN" };
             let level = if is_up {
@@ -3459,6 +3462,25 @@ impl App {
                 format!("[Spawn] {} {} in {}", event.spawn_name, label, event.zone),
                 false,
             );
+        }
+    }
+
+    fn should_record_spawn_event(&self, event: &textquest_common::ipc::SpawnEvent) -> bool {
+        if event.spawn_type != 0 {
+            return false;
+        }
+
+        self.should_announce_player(&event.spawn_name)
+    }
+
+    fn should_announce_player(&self, name: &str) -> bool {
+        let is_friend = self
+            .player_notification_friends
+            .contains(&name.to_ascii_lowercase());
+        match self.player_notification_filter {
+            crate::config::PlayerFilterMode::All => true,
+            crate::config::PlayerFilterMode::StrangersOnly => !is_friend,
+            crate::config::PlayerFilterMode::FriendsOnly => is_friend,
         }
     }
 
@@ -4787,6 +4809,15 @@ impl App {
             }
             "alerts" => {
                 self.execute_alerts_command(&parts[1..]);
+            }
+            "pf" => {
+                self.execute_pf_command(&parts[1..]);
+            }
+            "sound" => {
+                self.execute_sound_command(&parts[1..]);
+            }
+            "friends" => {
+                self.execute_friends_command(&parts[1..]);
             }
             "mode" => match parts.get(1).copied() {
                 Some("camp") => {
@@ -7794,6 +7825,84 @@ mod tests {
         assert!(app.status_message.contains("Invalid mode 'raid'."));
         assert!(app.status_message.contains("Usage: mode <camp|hunt>."));
         assert!(app.status_message.contains("Example: :mode hunt"));
+    }
+
+    #[test]
+    fn pf_command_updates_player_notification_filter() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+
+        app.cmd_state.command_buffer = String::from("pf friends");
+        app.execute_command(&mut orchestrator);
+
+        assert_eq!(
+            app.player_notification_filter,
+            crate::config::PlayerFilterMode::FriendsOnly
+        );
+        assert!(app.status_message.contains("FRIENDS only"));
+    }
+
+    #[test]
+    fn friends_command_add_and_list_updates_filter_state() {
+        let mut app = App::new();
+        let mut orchestrator = Orchestrator::new();
+
+        app.cmd_state.command_buffer = String::from("friends add Guildie");
+        app.execute_command(&mut orchestrator);
+        assert!(app.player_notification_friends.contains("guildie"));
+
+        app.cmd_state.command_buffer = String::from("friends list");
+        app.execute_command(&mut orchestrator);
+        assert!(app.status_message.contains("guildie"));
+    }
+
+    #[test]
+    fn apply_spawn_events_skips_non_player_deltas() {
+        let mut app = App::new();
+
+        app.apply_spawn_events(vec![textquest_common::ipc::SpawnEvent {
+            client_id: 7,
+            zone: "greatdivide".into(),
+            spawn_name: "a restless wyvern".into(),
+            spawn_type: 1,
+            kind: textquest_common::ipc::SpawnEventKind::Created,
+            timestamp_ms: 1,
+        }]);
+
+        assert!(app.spawn_alert_feed.is_empty());
+        assert!(!app.status_message.contains("restless wyvern"));
+    }
+
+    #[test]
+    fn apply_spawn_events_respects_player_friend_filter() {
+        let mut app = App::new();
+        app.player_notification_filter = crate::config::PlayerFilterMode::FriendsOnly;
+        app.player_notification_friends
+            .insert("guildie".to_string());
+
+        app.apply_spawn_events(vec![
+            textquest_common::ipc::SpawnEvent {
+                client_id: 7,
+                zone: "greatdivide".into(),
+                spawn_name: "Guildie".into(),
+                spawn_type: 0,
+                kind: textquest_common::ipc::SpawnEventKind::Created,
+                timestamp_ms: 1,
+            },
+            textquest_common::ipc::SpawnEvent {
+                client_id: 7,
+                zone: "greatdivide".into(),
+                spawn_name: "Stranger".into(),
+                spawn_type: 0,
+                kind: textquest_common::ipc::SpawnEventKind::Created,
+                timestamp_ms: 2,
+            },
+        ]);
+
+        let events = app.spawn_alert_feed.events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].spawn_name, "Guildie");
+        assert!(app.status_message.contains("Guildie"));
     }
 
     #[test]

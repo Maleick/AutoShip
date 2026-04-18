@@ -274,6 +274,16 @@ function statusTone(status: "online" | "offline" | "stuck" | "healthy" | "warnin
   return "border-rose-400/25 bg-rose-400/10 text-rose-100";
 }
 
+function automationTone(mode: "automatic" | "paused" | "camp" | "chase" | "manual") {
+  if (mode === "automatic" || mode === "chase") {
+    return "border-emerald-400/25 bg-emerald-400/10 text-emerald-200";
+  }
+  if (mode === "paused" || mode === "manual") {
+    return "border-amber-300/25 bg-amber-300/10 text-amber-100";
+  }
+  return "border-cyan-300/25 bg-cyan-300/10 text-cyan-100";
+}
+
 function parseWaypoints(raw: string): Waypoint[] {
   return raw
     .split("\n")
@@ -468,6 +478,15 @@ export default function OperatorDashboard() {
       group_id: group.id,
       formation: group.formation,
       members: nextMembers,
+    });
+  }
+
+  async function issueAutomationCommand(
+    command: "pause" | "unpause" | "camp" | "chase"
+  ) {
+    await runAction({
+      type: "issue_automation_command",
+      command: { type: command },
     });
   }
 
@@ -742,6 +761,119 @@ export default function OperatorDashboard() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </Panel>
+
+            <Panel
+              title="Unified Box Control"
+              subtitle="Global commands with per-client automation state"
+              icon={<Broadcast size={20} />}
+              accent="amber"
+              actions={
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void issueAutomationCommand("pause")}
+                    className="rounded-full border border-amber-300/25 bg-amber-300/10 px-4 py-2 text-sm text-amber-100 transition hover:bg-amber-300/20"
+                  >
+                    Pause All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void issueAutomationCommand("unpause")}
+                    className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-100 transition hover:bg-emerald-400/20"
+                  >
+                    Unpause All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void issueAutomationCommand("camp")}
+                    className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-300/20"
+                  >
+                    Camp All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void issueAutomationCommand("chase")}
+                    className="rounded-full border border-fuchsia-400/25 bg-fuchsia-400/10 px-4 py-2 text-sm text-fuchsia-100 transition hover:bg-fuchsia-400/20"
+                  >
+                    Chase All
+                  </button>
+                </div>
+              }
+            >
+              <div className="grid gap-3 sm:grid-cols-3">
+                <StatChip
+                  label="Connected"
+                  value={String(snapshot.automation.connectedClients)}
+                  tone={snapshot.automation.connectedClients > 0 ? "good" : "warning"}
+                />
+                <StatChip
+                  label="Relay"
+                  value={snapshot.automation.relayEnabled ? "Online" : "Offline"}
+                  tone={snapshot.automation.relayEnabled ? "good" : "critical"}
+                />
+                <StatChip
+                  label="Last Command"
+                  value={
+                    snapshot.automation.lastCommand
+                      ? titleCase(snapshot.automation.lastCommand.type)
+                      : "Idle"
+                  }
+                  tone="neutral"
+                />
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {snapshot.automation.clients.length === 0 ? (
+                  <div className="rounded-3xl border border-dashed border-white/10 bg-[#0d0715] p-4 text-sm text-white/45">
+                    No automation clients have published controller state yet.
+                  </div>
+                ) : (
+                  snapshot.automation.clients.map((client) => (
+                    <div
+                      key={`${client.nodeName}:${client.characterName}`}
+                      className="rounded-3xl border border-white/10 bg-[#0d0715] p-4"
+                    >
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-archaic text-xl text-white">
+                              {client.characterName}
+                            </h3>
+                            <span
+                              className={`rounded-full border px-3 py-1 font-tech text-[11px] uppercase tracking-[0.3em] ${automationTone(
+                                client.mode
+                              )}`}
+                            >
+                              {titleCase(client.mode)}
+                            </span>
+                          </div>
+                          <p className="mt-1 font-tech text-xs uppercase tracking-[0.28em] text-white/40">
+                            {client.nodeName}
+                          </p>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          <StatChip
+                            label="Burn Requests"
+                            value={String(client.burnRequests)}
+                            tone={client.burnRequests > 0 ? "warning" : "neutral"}
+                          />
+                          <StatChip
+                            label="Raid Assist"
+                            value={
+                              client.raidAssistNum === null
+                                ? "Unset"
+                                : String(client.raidAssistNum)
+                            }
+                          />
+                          <StatChip label="Node" value={client.nodeName} />
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </Panel>
 

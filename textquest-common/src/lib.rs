@@ -11,6 +11,9 @@ pub use paste;
 pub mod bindings;
 /// Box-chat config, slash-route parsing, and TCP relay wire types.
 pub mod box_chat;
+/// Unified box-controller command and state types shared by the runtime, DLL,
+/// and web dashboard.
+pub mod box_controller;
 /// Shared character configuration schema and persistence helpers.
 pub mod character_config;
 /// Chat channel types, STML stripping, and structured chat event parsing.

@@ -42,6 +42,9 @@ use textquest_common::{
     spawn_finder::{LiveSpawnObserver, LiveSpawnSnapshot},
     types::GameState,
 };
+use xassist::XAssist;
+
+use self::{cross_group::CrossGroupCoordinator, session_control::SessionControl};
 
 /// Generate a cryptographically random 32-byte session token using OS entropy.
 #[allow(dead_code)] // Used when IPC is wired up in later milestones
@@ -264,6 +267,43 @@ impl Orchestrator {
         };
         orchestrator.persist_admin_session_inventory();
         orchestrator
+    }
+
+    fn build_shared_client_states(&self) -> Vec<SharedClientState> {
+        let include_extended = extended_state_enabled();
+        self.client_pids
+            .iter()
+            .filter_map(|pid| {
+                let state = self.game_states.get(pid)?;
+                SharedClientState::from_game_state(
+                    self.client_names.get(pid).map(String::as_str),
+                    state,
+                    include_extended,
+                )
+            })
+            .collect()
+    }
+
+    fn sync_shared_client_states(&mut self) {
+        let states = self.build_shared_client_states();
+        if states == self.last_shared_client_states {
+            return;
+        }
+
+        let recipients = self.client_pids.clone();
+        let mut all_sent = true;
+        for pid in recipients {
+            all_sent &= self.send_ipc_command(
+                pid,
+                Command::UpdateSharedClientStates {
+                    states: states.clone(),
+                },
+            );
+        }
+
+        if all_sent {
+            self.last_shared_client_states = states;
+        }
     }
 
     /// Get the latest game state for a client PID.
@@ -547,16 +587,13 @@ impl Orchestrator {
         self.last_dispatched.clear();
 
         self.poll_game_states();
-        if self.tick_count.is_multiple_of(REWARD_CONFIG_SYNC_INTERVAL) {
+        if self.tick_count == 1 || self.tick_count.is_multiple_of(REWARD_CONFIG_SYNC_INTERVAL) {
             self.sync_reward_automation_configs();
         }
         self.sync_runtime_snapshots();
         self.poll_trade_chat_if_due();
         self.poll_chat_log_if_due();
         let say_matches = self.poll_and_evaluate_say_detection();
-        if self.tick_count.is_multiple_of(REWARD_CONFIG_SYNC_INTERVAL) {
-            self.sync_reward_automation_configs();
-        }
 
         let commands = match self.operating_mode {
             OperatingMode::Camp => self.tick_camp(),
@@ -570,7 +607,7 @@ impl Orchestrator {
             .filter(|(pid, _)| in_scope.is_empty() || in_scope.contains(pid))
             .collect();
         let xassist_commands = self.xassist.tick(&self.game_states);
-        let _emergency = self.cross_group.tick(
+        let emergency = self.cross_group.tick(
             &self.session_controls,
             &self.client_names,
             &self.client_class_names,
@@ -579,29 +616,28 @@ impl Orchestrator {
             self.tick_count,
         );
 
-        let count = scoped.len();
-        let xassist_count = xassist_commands.len();
+        let count = scoped.len() + emergency.len() + xassist_commands.len();
         for (pid, action) in &scoped {
             self.dispatch_action(*pid, action);
         }
+        for (pid, action) in &emergency {
+            self.dispatch_action(*pid, action);
+        }
         for (pid, cmd) in &xassist_commands {
-            if let xassist::AssistCommand::Target(spawn_id) = cmd {
-                self.send_ipc_command(
-                    *pid,
-                    Command::SetTarget {
-                        spawn_id: *spawn_id,
-                    },
-                );
-            }
+            let xassist::AssistCommand::Target(spawn_id) = cmd;
+            self.send_ipc_command(
+                *pid,
+                Command::SetTarget {
+                    spawn_id: *spawn_id,
+                },
+            );
         }
         self.last_dispatched = scoped;
+        self.last_dispatched.extend(emergency);
         self.last_dispatched
-            .extend(xassist_commands.iter().filter_map(|(pid, cmd)| {
-                if let xassist::AssistCommand::Target(spawn_id) = cmd {
-                    Some((*pid, CampAction::Slash(format!("/target spawn:{spawn_id}"))))
-                } else {
-                    None
-                }
+            .extend(xassist_commands.iter().map(|(pid, cmd)| {
+                let xassist::AssistCommand::Target(spawn_id) = cmd;
+                (*pid, CampAction::Slash(format!("/target spawn:{spawn_id}")))
             }));
         count + say_matches + xassist_count
     }
@@ -2163,6 +2199,23 @@ mod tests {
         let orch = Orchestrator::new();
         assert!(orch.game_states.is_empty());
         assert!(orch.state_readers.is_empty());
+    }
+
+    #[test]
+    fn sync_shared_client_states_retries_after_send_failure() {
+        let mut orch = Orchestrator::new();
+        let player = make_spawn_named("Tank", 1, 100, 100);
+        orch.client_pids.push(100);
+        orch.client_names.insert(100, "Tank".into());
+        orch.game_states
+            .insert(100, make_game_state(100, "crushbone", player, None));
+
+        orch.sync_shared_client_states();
+
+        assert!(
+            orch.last_shared_client_states.is_empty(),
+            "failed IPC sends should not advance the shared-state cache"
+        );
     }
 
     #[test]

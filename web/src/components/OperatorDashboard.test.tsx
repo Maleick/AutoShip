@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DashboardSnapshot } from "../dashboard";
@@ -123,6 +123,20 @@ const SNAPSHOT: DashboardSnapshot = {
         groupName: "Fire Core",
         command: "camp",
         status: "applied",
+      },
+    ],
+  },
+  automation: {
+    connectedClients: 1,
+    relayEnabled: true,
+    lastCommand: { type: "camp" },
+    clients: [
+      {
+        characterName: "Frostreaver",
+        nodeName: "operator-1",
+        mode: "camp",
+        burnRequests: 0,
+        raidAssistNum: null,
       },
     ],
   },
@@ -274,4 +288,36 @@ describe("OperatorDashboard relocation panel", () => {
     },
     15000
   );
+
+  it("renders unified box controls and per-client automation state", () => {
+    render(<OperatorDashboard />);
+
+    expect(screen.getByRole("button", { name: /^Pause All$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Unpause All$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Camp All$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Chase All$/i })).toBeInTheDocument();
+    expect(screen.getAllByText("Frostreaver").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("operator-1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/camp/i).length).toBeGreaterThan(0);
+  });
+
+  it("submits a pause-all automation command", () => {
+    const submitAction = vi.fn().mockResolvedValue(SNAPSHOT);
+    vi.mocked(useDashboard).mockReturnValue({
+      snapshot: SNAPSHOT,
+      loading: false,
+      error: null,
+      connected: true,
+      refresh: vi.fn().mockResolvedValue(undefined),
+      submitAction,
+    });
+
+    render(<OperatorDashboard />);
+    fireEvent.click(screen.getByRole("button", { name: /^Pause All$/i }));
+
+    expect(submitAction).toHaveBeenCalledWith({
+      type: "issue_automation_command",
+      command: { type: "pause" },
+    });
+  });
 });

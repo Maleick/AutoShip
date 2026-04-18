@@ -4,6 +4,7 @@ export interface DashboardSnapshot {
   sessions: SessionSection;
   spawnFinder: SpawnFinderSection;
   groups: GroupSection;
+  automation: AutomationSection;
   navigation: NavigationSection;
   relocation: RelocationSection;
   economy: EconomySection;
@@ -93,6 +94,33 @@ export interface GroupCommandLogEntry {
   command: string;
   status: string;
 }
+
+export interface AutomationSection {
+  connectedClients: number;
+  relayEnabled: boolean;
+  lastCommand: AutomationCommand | null;
+  clients: AutomationClientState[];
+}
+
+export interface AutomationClientState {
+  characterName: string;
+  nodeName: string;
+  mode: "automatic" | "paused" | "camp" | "chase" | "manual";
+  burnRequests: number;
+  raidAssistNum: number | null;
+}
+
+export type AutomationCommand =
+  | { type: "pause" }
+  | { type: "unpause" }
+  | { type: "camp" }
+  | { type: "chase" }
+  | { type: "manual" }
+  | { type: "burn_now" }
+  | {
+      type: "raid_assist_num";
+      assist_num: number;
+    };
 
 export interface NavigationSection {
   currentZone: string;
@@ -257,6 +285,10 @@ export type DashboardActionRequest =
       type: "issue_group_command";
       group_id: string;
       command: string;
+    }
+  | {
+      type: "issue_automation_command";
+      command: AutomationCommand;
     }
   | {
       type: "create_route";

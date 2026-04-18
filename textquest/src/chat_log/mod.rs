@@ -524,6 +524,60 @@ mod tests {
     }
 
     #[test]
+    fn size_rotation_archives_before_reopening_log_file() {
+        let dir = temp_log_dir();
+        let mut config = default_config();
+        config.rotation_strategy = RotationStrategy::Size(32);
+        config.max_file_size_bytes = 32;
+        let mut manager = ChatLogManager::new(config, dir.clone()).unwrap();
+
+        let first = ChatMessageInfo {
+            text: "first rotation trigger line".to_string(),
+            color: 273,
+            timestamp_ms: 1700000000000,
+        };
+        let second = ChatMessageInfo {
+            text: "second line after rotate".to_string(),
+            color: 273,
+            timestamp_ms: 1700000001000,
+        };
+
+        manager
+            .log_message("Firiona Vie", "TestChar", &first, Some(ChatChannel::Say))
+            .unwrap();
+        manager
+            .log_message("Firiona Vie", "TestChar", &second, Some(ChatChannel::Say))
+            .unwrap();
+
+        let log_path = dir.join("Firiona Vie_TestChar.log");
+        let mut current = String::new();
+        std::fs::File::open(&log_path)
+            .unwrap()
+            .read_to_string(&mut current)
+            .unwrap();
+        assert!(current.contains("second line after rotate"));
+        assert!(!current.contains("first rotation trigger line"));
+
+        let archived = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .find(|entry| {
+                let file_name = entry.file_name();
+                let file_name = file_name.to_string_lossy();
+                file_name.starts_with("Firiona Vie_TestChar.")
+                    && file_name.ends_with(".log")
+                    && file_name != "Firiona Vie_TestChar.log"
+            })
+            .expect("rotated archive");
+        let mut archived_contents = String::new();
+        std::fs::File::open(archived.path())
+            .unwrap()
+            .read_to_string(&mut archived_contents)
+            .unwrap();
+        assert!(archived_contents.contains("first rotation trigger line"));
+    }
+
+    #[test]
     fn size_rotation_archives_before_reopening_active_log() {
         let dir = temp_log_dir();
         let mut config = default_config();

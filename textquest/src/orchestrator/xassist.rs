@@ -71,8 +71,8 @@ impl XAssist {
                 continue;
             };
 
-            let ma_spawn_id = find_spawn_by_name(state, ma_name);
-            let new_target = ma_spawn_id.and_then(|id| get_spawn_target(state, id));
+            let new_target = find_ma_state(game_states, ma_name)
+                .and_then(|ma_state| ma_target_for_client(state, ma_state));
 
             let current = self.current_targets.get(&client_id).copied();
 
@@ -135,16 +135,36 @@ fn normalize_spawn_name(name: &str) -> String {
     name.trim().to_ascii_lowercase()
 }
 
-fn get_spawn_target(state: &GameState, spawn_id: u32) -> Option<u32> {
-    let local_player = state.local_player.as_ref()?;
-    if local_player.spawn_id != spawn_id {
+fn find_ma_state<'a>(
+    game_states: &'a HashMap<ClientId, GameState>,
+    ma_name: &str,
+) -> Option<&'a GameState> {
+    game_states
+        .values()
+        .find(|state| find_spawn_by_name(state, ma_name).is_some())
+}
+
+fn ma_target_for_client(client_state: &GameState, ma_state: &GameState) -> Option<u32> {
+    if client_state.zone_short_name != ma_state.zone_short_name {
         return None;
     }
-    state
+
+    let target_id = ma_state
         .target
         .as_ref()
         .map(|t| t.spawn_id)
-        .filter(|&id| id != 0)
+        .filter(|&id| id != 0)?;
+
+    let visible_to_client = client_state
+        .target
+        .as_ref()
+        .is_some_and(|target| target.spawn_id == target_id)
+        || client_state
+            .nearby_spawns
+            .iter()
+            .any(|spawn| spawn.spawn_id == target_id);
+
+    visible_to_client.then_some(target_id)
 }
 
 #[cfg(test)]
@@ -202,24 +222,25 @@ mod tests {
         }
     }
 
-    fn make_game_state(
+    fn make_state(
         client_id: u32,
         local_player: SpawnData,
+        target: Option<SpawnData>,
         nearby_spawns: Vec<SpawnData>,
     ) -> GameState {
         GameState {
             client_id,
             local_player: Some(local_player),
-            target: None,
+            target,
             nearby_spawns,
             timestamp_ms: 0,
             nav_status: NavStatus::Idle,
             combat_status: CombatStatus::Idle,
             zone_short_name: "test".into(),
             zone_long_name: "Test Zone".into(),
-            actual_version: None,
             active_buffs: vec![],
             pet: None,
+            actual_version: None,
         }
     }
 
@@ -255,7 +276,7 @@ mod tests {
             actual_version: None,
         };
 
-        let commands = xassist.tick(&[(100, state)].into_iter().collect());
+        let commands = xassist.tick(&[(100, state), (200, ma_state)].into_iter().collect());
         assert!(commands.is_empty());
     }
 
@@ -296,6 +317,10 @@ mod tests {
             !commands.is_empty(),
             "Should have assist commands when targeting MA"
         );
+        let state = make_state(100, make_player_spawn(100, "BoxDPS"), None, nearby);
+
+        let commands = xassist.tick(&[(100, state), (200, ma_state)].into_iter().collect());
+        assert_eq!(commands, vec![(100, AssistCommand::Target(300))]);
     }
 
     #[test]
@@ -332,7 +357,7 @@ mod tests {
             actual_version: None,
         };
 
-        let commands = xassist.tick(&[(100, state)].into_iter().collect());
+        let commands = xassist.tick(&[(100, state), (200, ma_state)].into_iter().collect());
         assert!(
             commands.is_empty(),
             "Should not re-target when already tracking MA's target"
@@ -379,6 +404,10 @@ mod tests {
             !commands.is_empty(),
             "Should track MA's new target when targeting MA"
         );
+        let state = make_state(100, make_player_spawn(100, "BoxDPS"), None, nearby);
+
+        let commands = xassist.tick(&[(100, state), (200, ma_state)].into_iter().collect());
+        assert_eq!(commands, vec![(100, AssistCommand::Target(301))]);
     }
 
     #[test]
@@ -420,6 +449,15 @@ mod tests {
 
     #[test]
     fn xassist_name_matching_is_case_insensitive() {
+        let mut xassist = XAssist::new();
+        xassist.set_config(
+            100,
+            XAssistConfig {
+                ma_name: Some("maInTaNk".into()),
+                enabled: true,
+            },
+        );
+
         let nearby = vec![
             make_player_spawn(200, "MainTank"),
             make_npc_spawn(300, "an_orc"),
@@ -439,7 +477,11 @@ mod tests {
             actual_version: None,
         };
 
-        assert_eq!(find_spawn_by_name(&state, "  MaInTaNk  "), Some(200));
+        let state_for_find = make_state(100, make_player_spawn(100, "BoxDPS"), None, nearby);
+        assert_eq!(
+            find_spawn_by_name(&state_for_find, "  MaInTaNk  "),
+            Some(200)
+        );
     }
 
     #[test]
