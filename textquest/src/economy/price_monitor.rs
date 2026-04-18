@@ -32,6 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_trade_price_zone_ts
 
 const DEDUPE_WINDOW_MS: i64 = 5_000;
 const DEDUPE_RETENTION_MS: i64 = 60_000;
+const MAX_STORED_OBSERVATIONS: i64 = 50_000;
 
 /// A normalized buy/sell/trade intent extracted from market chatter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -129,8 +130,27 @@ impl TradePriceStore {
                 ],
             )
             .context("Failed to insert trade-price observation")?;
+        self.prune_observations_over_limit()
+            .context("Failed to enforce trade-price retention limit")?;
 
         Ok(self.conn.last_insert_rowid())
+    }
+
+    fn prune_observations_over_limit(&self) -> Result<()> {
+        self.conn
+            .execute(
+                "DELETE FROM trade_price_observations
+                 WHERE id NOT IN (
+                    SELECT id
+                    FROM trade_price_observations
+                    ORDER BY id DESC
+                    LIMIT ?1
+                 )",
+                params![MAX_STORED_OBSERVATIONS],
+            )
+            .context("Failed to prune old trade-price observations")?;
+
+        Ok(())
     }
 
     /// Return the newest trade-price observations first.
@@ -542,5 +562,58 @@ mod tests {
             .expect_err("invalid pid should fail conversion");
         let message = format!("{error:#}");
         assert!(message.contains("trade-price rows"));
+    }
+
+    #[test]
+    fn insert_observation_enforces_max_row_limit() {
+        let store = TradePriceStore::open_memory().expect("in-memory trade store");
+        let base_observation = TradePriceObservation {
+            source_pid: 7,
+            zone: "nexus".to_string(),
+            channel: ChatChannel::Auction,
+            speaker: "Trader".to_string(),
+            intent: TradeIntent::Sell,
+            item_name: "Fungi Tunic".to_string(),
+            price_milli_krono: 3_000,
+            observed_at_ms: 0,
+            raw_message: "WTS Fungi Tunic 3 krono".to_string(),
+        };
+
+        for observed_at_ms in 0..MAX_STORED_OBSERVATIONS {
+            store
+                .conn
+                .execute(
+                    "INSERT INTO trade_price_observations (
+                        observed_at_ms, source_pid, zone, channel, speaker, intent,
+                        item_name, price_milli_krono, raw_message
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    params![
+                        observed_at_ms,
+                        i64::from(base_observation.source_pid),
+                        &base_observation.zone,
+                        base_observation.channel.as_str(),
+                        &base_observation.speaker,
+                        base_observation.intent.as_str(),
+                        &base_observation.item_name,
+                        base_observation.price_milli_krono,
+                        format!("WTS Fungi Tunic {observed_at_ms} krono"),
+                    ],
+                )
+                .expect("seed trade observation inserted");
+        }
+
+        let mut observation = base_observation.clone();
+        observation.observed_at_ms = MAX_STORED_OBSERVATIONS;
+        observation.raw_message = format!("WTS Fungi Tunic {} krono", MAX_STORED_OBSERVATIONS);
+        store
+            .insert_observation(&observation)
+            .expect("trade observation inserted");
+        let history = store
+            .recent_observations((MAX_STORED_OBSERVATIONS + 1) as u32)
+            .expect("recent trade observation query");
+
+        assert_eq!(history.len() as i64, MAX_STORED_OBSERVATIONS);
+        assert_eq!(history[0].observed_at_ms, MAX_STORED_OBSERVATIONS);
+        assert_eq!(history.last().map(|obs| obs.observed_at_ms), Some(1));
     }
 }
