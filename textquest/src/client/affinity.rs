@@ -73,9 +73,7 @@ impl AffinityController {
             return compute_affinity_assignments(client_pids.len(), total_cpus);
         }
 
-        let focused_idx = focused_pid.and_then(|fp| {
-            client_pids.iter().position(|&p| p == fp)
-        });
+        let focused_idx = focused_pid.and_then(|fp| client_pids.iter().position(|&p| p == fp));
 
         let mut assignments = Vec::with_capacity(client_pids.len());
         let available_cpus = if total_cpus > 1 { total_cpus - 1 } else { 1 };
@@ -87,7 +85,11 @@ impl AffinityController {
                     priority: ProcessPriority::Normal,
                 }
             } else {
-                let bg_idx = if focused_idx.is_some() { i } else { i.saturating_sub(1) };
+                let bg_idx = if focused_idx.is_some() {
+                    i
+                } else {
+                    i.saturating_sub(1)
+                };
                 let cpu_index = ((bg_idx % (available_cpus.saturating_sub(1)).max(1))
                     + self.background_cpu_start as usize)
                     .min(total_cpus.saturating_sub(1));
