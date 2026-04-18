@@ -1,11 +1,12 @@
 import { useState } from "react";
 
 import AdminDashboard from "./components/AdminDashboard";
+import AdminDashboardPage from "./components/AdminDashboardPage";
 import AlertsPanel from "./components/AlertsPanel";
-import AdminDashboard from "./components/AdminDashboard";
 import BoxChatPanel from "./components/BoxChatPanel";
 import CenterContent from "./components/CenterContent";
 import ChatPatternRules from "./components/ChatPatternRules";
+import CredentialsPage from "./components/CredentialsPage";
 import EconomyPanel from "./components/EconomyPanel";
 import ExtensionCatalogPanel from "./components/ExtensionCatalogPanel";
 import GroupBuilder from "./components/GroupBuilder";
@@ -18,10 +19,9 @@ import SayDetectionPanel from "./components/SayDetectionPanel";
 import SoulPanel from "./components/SoulPanel";
 import SpawnAlerts from "./components/SpawnAlerts";
 import XAssistPanel from "./components/XAssistPanel";
-import AdminDashboardPage from "./components/AdminDashboardPage";
 
 function App() {
-  const [activeView, setActiveView] = useState<ActiveView>("default");
+  const [activeView, setActiveView] = useState<ActiveView>("engagements");
 
   if (window.location.pathname === "/admin") {
     return <AdminDashboardPage />;
@@ -62,6 +62,8 @@ function App() {
           <XAssistPanel />
         ) : activeView === "boxchat" ? (
           <BoxChatPanel />
+        ) : activeView === "credentials" ? (
+          <CredentialsPage />
         ) : activeView === "admin" ? (
           <AdminDashboard />
         ) : (

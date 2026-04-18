@@ -10,6 +10,7 @@ import {
   Crosshair,
   Eye,
   Globe,
+  Key,
   ShieldWarning,
   Skull,
   Sword,
@@ -33,6 +34,7 @@ export type ActiveView =
   | "say"
   | "chat_pattern_rules"
   | "xassist"
+  | "credentials"
   | "admin";
 
 const navItems: {
@@ -56,6 +58,7 @@ const navItems: {
   { icon: Broadcast, label: "Network Box Chat", id: "boxchat" },
   { icon: Cpu, label: "Extension Catalog", id: "extensions", pulse: true },
   { icon: ChatCircle, label: "Chat Pattern Rules", id: "chat_pattern_rules" },
+  { icon: Key, label: "Credentials Management", id: "credentials" },
   { icon: Wrench, label: "Admin Tools", id: "admin" },
 ];
 
