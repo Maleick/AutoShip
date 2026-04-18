@@ -1,21 +1,90 @@
-# Research baseline for issue #1720. Runtime only consumes the TOML fields
-# below. Waypoints, no-pull geometry, and multibox route notes live in
-# docs/wiki/Velketors-Labyrinth-Frenzy-Camp.md until the camp schema can model
-# them directly.
+#==============================================================================
+# Velketor's Labyrinth Frenzy Camp Configuration
+#==============================================================================
+# Issue: #1720 — Camp config: Velketor's Labyrinth waypoint, pull, and route definition
+#
+# Reference Documentation:
+# - Full route details, waypoint lattice, and restriction zones are documented in
+#   docs/wiki/Velketors-Labyrinth-Frenzy-Camp.md
+# - Live validation results (when available) go in Velketors-Labyrinth-Validation.md
+#
+# Zone Context:
+# - Giant spiders, geonids, snowdrift golems, dark areas with teleports and pit traps.
+# - Access: From Great Divide at (-6770, +3130); Return exit at (581, -65).
+# - Levitation does NOT work here; the dungeon uses narrow slippery ledges and pit traps.
+# - Trains move constantly, aggro radius is inconsistent, spiders can path off
+#   random corners and return with extra mobs.
+# - Frenzy progression sits in the 57-59 bracket; all zone mobs are blue to level 60.
+# - Named Icepaw kobolds treat this as faction-neutral farming.
+# - Spiders are rogue-types (backstab), see invis, and are NOT druid-charmable.
+
 name = "velketors_labyrinth_frenzy"
 zone = "velketor"
 
-# Safe med spot: the "safe hall" beside Frenzy and before the pit drop.
+#==============================================================================
+# Camp Layout: Primary Frenzy Medding / Pull Strategy
+#==============================================================================
+
+# Primary camp anchor: "safe hall" med stack beside the Frenzy named cluster and
+# before the pit drop. This is the safest medding position that keeps line-of-sight
+# to the Frenzy handoff without widening into pit, upper-dogs, Bled/Bledrek, or
+# Lord Bob's undead wing.
+# Confidence: Derived from Frenzy named spawns and map labels.
 camp_center = [360.0, 40.0, 0.0]
-# Pull handoff: edge of the Frenzy ramp that still keeps the spider cluster in
-# line-of-sight without widening into upper dogs, Bled/Bledrek, or Lord Bob.
+
+# Pull handoff: The edge of the Frenzy ramp that keeps the spider cluster in
+# line-of-sight without widening into upper-dogs, Bled/Bledrek, or Lord Bob.
+# This is the primary pull point for Frenzy trash and named spider cycles.
+# Confidence: Derived from Crystal Eyes and Frenzied Broodling positions.
 pull_point = [405.0, 60.0, 0.0]
+
+# Pull radius covers the Frenzy shelf plus the upper-spider lip without reaching
+# Bled/Bledrek golem pocket or Lord Bob's undead wing. Tuned for safe, contained
+# spider pulls that can reset toward camp without cascading into protected zones.
+# NOTE: This is the first knob to revisit after live validation. Do not widen
+# without a separate note documenting the extended territory.
 pull_radius = 165
+
+# Tight camp radius to keep a 6-box stack out of the slippery ramp lane that
+# leads to Crystal Fang and the upper-dog pit drop.
 camp_radius = 30
+
+# Short leash so bad spider pulls reset before the pit or upper-dogs ramps,
+# preventing unintended extensions into named-heavy or faction-restricted zones.
 leash_radius = 110
+
+#==============================================================================
+# Mana Thresholds: Med Recovery and Pull Initiation
+#==============================================================================
+
+# Rest until healer reaches this mana percentage. Set to 70% to allow the
+# cleric and support healer to recover after spike spider pulls or a bad
+# pathing bounce. Frenzy pulls can backload damage when rogue spiders land
+# backstabs at the handoff.
 rest_mana_pct = 70
+
+# Do not start a new Frenzy pull below this floor. Set to 45% because Frenzy
+# trash can escalate quickly and bad positioning can force a healer into an
+# emergency recovery cycle. This threshold gives the group breathing room for
+# the next pull's opening burst.
 pull_mana_pct = 45
+
+#==============================================================================
+# Faction and Level Range
+#==============================================================================
+
+# Level progression: Matches Project 1999 hunting guidance for the Velketor
+# entrance and Frenzy progression band. All mobs in the Frenzy zone are blue to
+# level 60, but spiders hit harder than standard blue-con encounters.
 level_range = [57, 60]
+
+#==============================================================================
+# Pull Targets: Frenzy Spiders and Icepaw Kobolds
+#==============================================================================
+# These mobs form the core of the Frenzy pulling loop. The Frenzy zone spawns
+# a variety of spider types and occasional Icepaw kobolds that mix with the
+# primary spider trash.
+
 pull_mob_names = [
   "a blizzard spider",
   "a blizzard hunter",
@@ -29,26 +98,60 @@ pull_mob_names = [
   "an Icepaw kobold priest",
   "an Icepaw kobold warrior",
 ]
+
+#==============================================================================
+# Protected Named Mobs: Do Not Engage (faction or difficulty)
+#==============================================================================
+# These are zone named mobs, bosses, or faction-critical spawns that should
+# never be pulled in the Frenzy routine. Many have special mechanics (summons,
+# CH, dispels, or see-invis) that are beyond the scope of a standard 6-box
+# hunting session.
+
 ignore_mob_names = [
-  "Bled",
-  "Bledrek",
-  "Gregendek Icepaw",
-  "Jelek Icepaw",
-  "Khelkar Icepaw",
-  "Lord Doljonijiarnimorinar",
-  "The Brood Master",
-  "The Brood Mother",
-  "Tpos Icepaw",
-  "Velketor the Sorcerer",
+  "Bled",              # Summons and respawns into Bledrek; golem pocket is out of bounds
+  "Bledrek",           # Hard-stop at (-75, 253); never widen Frenzy pulls here
+  "Gregendek Icepaw",  # CH-capable cleric in upper-dogs; requires healer preparation
+  "Jelek Icepaw",      # Upper-dogs named; optional CH target only with active driver
+  "Khelkar Icepaw",    # Upper-dogs named; ramp-down room with five dogs
+  "Lord Doljonijiarnimorinar",  # Level 65 undead lord; hard-stop at (-30, -133)
+  "The Brood Master",  # Named boss; optional BM-side scouting only with CC ready
+  "The Brood Mother",  # Named boss; optional BM-side scouting only with CC ready
+  "Tpos Icepaw",       # Upper-dogs shadowknight; optional named with active driver
+  "Velketor the Sorcerer",  # Zone boss; never engaged
 ]
+
+#==============================================================================
+# Burn List: Named Rare Spawns (Harvest on Sight)
+#==============================================================================
+# These named mobs are valuable and should be burned (fought and looted) whenever
+# encountered during Frenzy pulls. They include the primary Frenzy named cycle
+# and other high-value rare spawns on the main shelf.
+
 burn_mob_names = [
-  "a Frenzied Velium Broodling",
-  "a Frenzied Velium Stalker",
-  "Crystal Eyes",
-  "Crystal Fang",
-  "Marlek Icepaw",
-  "Ular Icepaw",
-  "Venar Icepaw",
+  "a Frenzied Velium Broodling",  # Frenzied variant; rare spider named on the Frenzy shelf
+  "a Frenzied Velium Stalker",    # Frenzied variant; rare spider named on the Frenzy shelf
+  "Crystal Eyes",                 # Named spider on the lower Frenzy shelf; exact spawn at (479, 2)
+  "Crystal Fang",                 # Upper-spider named at the top of the slippery ramp (440, 154, 88)
+  "Marlek Icepaw",                # Upper-dogs named; alternate room on the pit branch
+  "Ular Icepaw",                  # Upper-dogs named; has two spawn locations
+  "Venar Icepaw",                 # Upper-dogs named; optional pull with active driver
 ]
+
+#==============================================================================
+# Return Behavior
+#==============================================================================
+
+# Prevent the puller from trying to snap back across slippery geometry while
+# still carrying spider aggro. Set to true because Velketor's slippery ramps
+# and pit traps are unforgiving; a returning puller with hot mobs can easily
+# wipe the med stack or trigger cascading pulls into protected zones.
 return_no_aggro = true
+
+#==============================================================================
+# Progression Chain
+#==============================================================================
+
+# Fallback camp if the group needs to reset or recover after a wipe. Sebilis
+# disco provides a safer stepping stone for lower-level or undergeared characters
+# before attempting the full Frenzy rotation.
 prev_camp = "sebilis_disco"
