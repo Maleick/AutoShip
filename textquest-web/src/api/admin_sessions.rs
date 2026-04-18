@@ -9,7 +9,7 @@ use axum::{
     Json,
     Router,
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::post,
 };
@@ -64,7 +64,16 @@ fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Js
 pub async fn start_session(
     State(state): State<Arc<AppState>>,
     Path(id): Path<u32>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
+    if !crate::api::loot::is_trusted_origin(&headers) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "Forbidden: untrusted origin for session lifecycle mutation",
+        )
+        .into_response();
+    }
+
     // Validate that the session exists by reading live sessions
     if let Err(e) = validate_session_exists(&state, id).await {
         return e.into_response();
@@ -144,9 +153,17 @@ async fn validate_session_exists(
     session_id: u32,
 ) -> Result<(), impl IntoResponse> {
     // Try to read live sessions from snapshot
-    if let Ok(sessions) = read_live_sessions(&state.live_session_snapshot_path) {
-        if sessions.iter().any(|s| s.client_id == session_id) {
-            return Ok(());
+    match read_live_sessions(&state.live_session_snapshot_path) {
+        Ok(sessions) => {
+            if sessions.iter().any(|s| s.client_id == session_id) {
+                return Ok(());
+            }
+        }
+        Err(err) => {
+            return Err(json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to read live sessions: {}", err),
+            ));
         }
     }
 

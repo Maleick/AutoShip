@@ -49,6 +49,10 @@ use toml_edit::{Array, DocumentMut, Item, Table, value};
 use crate::AppState;
 use textquest_common::shared_client_state::SharedClientState;
 
+pub fn mount_admin_sessions(router: axum::Router<AppState>) -> axum::Router<AppState> {
+    router.nest("/admin/sessions", admin_sessions::router())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ErrorResponse {
     pub error: String,
