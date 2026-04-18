@@ -7,9 +7,31 @@ use argon2::{Algorithm, Argon2, Params, Version};
 use rand::RngCore;
 use zeroize::Zeroizing;
 
+#[cfg(test)]
+const ARGON2_MEMORY_KIB: u32 = 8 * 1024;
+#[cfg(test)]
+const ARGON2_TIME_COST: u32 = 1;
+#[cfg(test)]
+const ARGON2_PARALLELISM: u32 = 1;
+
+#[cfg(not(test))]
+const ARGON2_MEMORY_KIB: u32 = 65_536;
+#[cfg(not(test))]
+const ARGON2_TIME_COST: u32 = 3;
+#[cfg(not(test))]
+const ARGON2_PARALLELISM: u32 = 4;
+
 fn argon2_instance() -> Result<Argon2<'static>> {
-    let params = Params::new(65536, 3, 4, Some(32))
-        .map_err(|e| anyhow::anyhow!("invalid argon2 params: {e}"))?;
+    // Test builds hit this path repeatedly under cargo-tarpaulin; use a much
+    // smaller work factor there so coverage stays bounded without changing
+    // production credentials.
+    let params = Params::new(
+        ARGON2_MEMORY_KIB,
+        ARGON2_TIME_COST,
+        ARGON2_PARALLELISM,
+        Some(32),
+    )
+    .map_err(|e| anyhow::anyhow!("invalid argon2 params: {e}"))?;
     Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
 }
 

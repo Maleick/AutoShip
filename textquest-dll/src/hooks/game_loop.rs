@@ -3932,7 +3932,7 @@ mod tests {
             next,
             [
                 (2u32, ("a_bear".to_string(), 1)),
-                (3u32, ("a_ox".to_string(), 1))
+                (3u32, ("a_ox".to_string(), 2))
             ]
             .into_iter()
             .collect()
@@ -3943,7 +3943,7 @@ mod tests {
             .find(|event| event.kind == textquest_common::ipc::SpawnEventKind::Created)
             .expect("created event should exist");
         assert_eq!(created.spawn_name, "a_ox");
-        assert_eq!(created.spawn_type, 1);
+        assert_eq!(created.spawn_type, 2);
         let destroyed = events
             .iter()
             .find(|event| event.kind == textquest_common::ipc::SpawnEventKind::Destroyed)

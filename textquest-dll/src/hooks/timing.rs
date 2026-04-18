@@ -173,6 +173,16 @@ mod inner {
 pub use inner::{install, remove};
 
 #[cfg(test)]
+static TEST_STATE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+fn test_state_guard() -> std::sync::MutexGuard<'static, ()> {
+    TEST_STATE_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+#[cfg(test)]
 pub(crate) fn reset_test_state() {
     TIMING_CORRECTION_ENABLED.store(false, Ordering::Release);
     GAME_LOOP_OVERHEAD_NS.store(0, Ordering::Release);
@@ -211,7 +221,8 @@ mod tests {
 
     #[test]
     fn adjusts_tick_count_without_panic() {
-        let _guard = setup();
+        let _guard = test_state_guard();
+        reset_test_state();
         set_enabled(true);
         let result = adjust_tick_count(150);
         assert!(result <= 150);
@@ -219,7 +230,8 @@ mod tests {
 
     #[test]
     fn adjusts_qpc_without_panic() {
-        let _guard = setup();
+        let _guard = test_state_guard();
+        reset_test_state();
         set_enabled(true);
         GAME_LOOP_OVERHEAD_NS.store(100, Ordering::Release);
         // 100 ns * 10_000_000 Hz / 1_000_000_000 = 1 tick; 1000 - 1 = 999
@@ -229,7 +241,8 @@ mod tests {
 
     #[test]
     fn does_not_adjust_when_disabled() {
-        let _guard = setup();
+        let _guard = test_state_guard();
+        reset_test_state();
         let tick = adjust_tick_count(1234);
         let qpc = adjust_qpc(1234);
         assert_eq!(tick, 1234);
@@ -238,7 +251,8 @@ mod tests {
 
     #[test]
     fn adjust_qpc_saturates_at_zero() {
-        let _guard = setup();
+        let _guard = test_state_guard();
+        reset_test_state();
         set_enabled(true);
         GAME_LOOP_OVERHEAD_NS.store(10_000_000_000, Ordering::Release);
         let adjusted = adjust_qpc(5_000);
@@ -247,7 +261,8 @@ mod tests {
 
     #[test]
     fn adjust_qpc_zero_or_negative_returns_zero() {
-        let _guard = setup();
+        let _guard = test_state_guard();
+        reset_test_state();
         set_enabled(true);
         GAME_LOOP_OVERHEAD_NS.store(1_000_000, Ordering::Release);
         assert_eq!(adjust_qpc(0), 0);
@@ -257,7 +272,8 @@ mod tests {
 
     #[test]
     fn record_game_loop_hook_overhead_affects_adjustment() {
-        let _guard = setup();
+        let _guard = test_state_guard();
+        reset_test_state();
         set_enabled(true);
 
         // Record 10ms = 10_000_000 ns overhead
@@ -271,7 +287,8 @@ mod tests {
 
     #[test]
     fn record_game_loop_hook_overhead_zero_duration() {
-        let _guard = setup();
+        let _guard = test_state_guard();
+        reset_test_state();
         set_enabled(true);
         record_game_loop_hook_overhead(std::time::Duration::ZERO);
         // Zero overhead → no adjustment
@@ -280,7 +297,8 @@ mod tests {
 
     #[test]
     fn adjust_tick_count_saturates_at_zero() {
-        let _guard = setup();
+        let _guard = test_state_guard();
+        reset_test_state();
         set_enabled(true);
         // Large overhead → should saturate at 0
         GAME_LOOP_OVERHEAD_NS.store(u64::MAX, Ordering::Release);
@@ -290,7 +308,8 @@ mod tests {
 
     #[test]
     fn overhead_as_qpc_ticks_uses_frequency() {
-        let _guard = setup();
+        let _guard = test_state_guard();
+        reset_test_state();
         set_enabled(true);
         // freq = 1 Hz, overhead = 1_000_000_000 ns → 1 tick
         QPC_FREQUENCY_HZ.store(1, Ordering::Release);

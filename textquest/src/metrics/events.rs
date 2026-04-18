@@ -221,6 +221,52 @@ impl PlatTracker {
     }
 }
 
+/// Session totals for vendor-driven platinum changes.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct VendorPlatMetrics {
+    gross_plat: i64,
+    net_plat: i64,
+    items_sold: u32,
+}
+
+impl VendorPlatMetrics {
+    /// Record a successful vendor sale.
+    pub fn record_sale(&mut self, plat_delta: i64) {
+        if plat_delta <= 0 {
+            return;
+        }
+        self.gross_plat += plat_delta;
+        self.net_plat += plat_delta;
+        self.items_sold += 1;
+    }
+
+    /// Record vendor-cycle spending (e.g. supplies bought while vendoring).
+    pub fn record_expense(&mut self, plat_spent: i64) {
+        if plat_spent <= 0 {
+            return;
+        }
+        self.net_plat -= plat_spent;
+    }
+
+    /// Gross plat earned from vendor sales this session.
+    #[must_use]
+    pub fn gross_plat(&self) -> i64 {
+        self.gross_plat
+    }
+
+    /// Net plat earned after vendor-cycle expenses.
+    #[must_use]
+    pub fn net_plat(&self) -> i64 {
+        self.net_plat
+    }
+
+    /// Number of sale actions recorded this session.
+    #[must_use]
+    pub fn items_sold(&self) -> u32 {
+        self.items_sold
+    }
+}
+
 /// Bounded ring buffer of fleet events with query helpers.
 pub struct FleetEventLog {
     events: VecDeque<FleetEvent>,
@@ -516,5 +562,31 @@ mod tests {
     fn tracker_session_start() {
         let tracker = PlatTracker::new(12345);
         assert_eq!(tracker.session_start(), 12345);
+    }
+
+    #[test]
+    fn vendor_plat_tracks_gross_and_net() {
+        let mut metrics = VendorPlatMetrics::default();
+
+        metrics.record_sale(45);
+        metrics.record_sale(30);
+        metrics.record_expense(10);
+
+        assert_eq!(metrics.gross_plat(), 75);
+        assert_eq!(metrics.net_plat(), 65);
+        assert_eq!(metrics.items_sold(), 2);
+    }
+
+    #[test]
+    fn vendor_plat_ignores_zero_or_negative_sale_values() {
+        let mut metrics = VendorPlatMetrics::default();
+
+        metrics.record_sale(0);
+        metrics.record_sale(-5);
+        metrics.record_expense(0);
+
+        assert_eq!(metrics.gross_plat(), 0);
+        assert_eq!(metrics.net_plat(), 0);
+        assert_eq!(metrics.items_sold(), 0);
     }
 }

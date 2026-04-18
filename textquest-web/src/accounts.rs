@@ -33,6 +33,21 @@ use zeroize::Zeroizing;
 use crate::{AppState, api::ErrorResponse};
 
 type ApiResult<T> = Result<Json<T>, (StatusCode, Json<ErrorResponse>)>;
+
+#[cfg(test)]
+const ARGON2_MEMORY_KIB: u32 = 8 * 1024;
+#[cfg(test)]
+const ARGON2_TIME_COST: u32 = 1;
+#[cfg(test)]
+const ARGON2_PARALLELISM: u32 = 1;
+
+#[cfg(not(test))]
+const ARGON2_MEMORY_KIB: u32 = 65_536;
+#[cfg(not(test))]
+const ARGON2_TIME_COST: u32 = 3;
+#[cfg(not(test))]
+const ARGON2_PARALLELISM: u32 = 4;
+
 #[derive(Debug, Deserialize)]
 pub struct ImportAccountsRequest {
     pub accounts: Vec<AccountRecord>,
@@ -240,8 +255,16 @@ fn argon2_instance() -> Result<Argon2<'static>> {
     // memory cost)   t_cost  = 3     (time / iteration count)
     //   p_cost  = 4     (parallelism)
     //   output  = 32    bytes (256-bit key for AES-256-GCM)
-    let params = Params::new(65536, 3, 4, Some(32))
-        .map_err(|e| anyhow::anyhow!("invalid argon2 params: {e}"))?;
+    //
+    // Test builds exercise password routes end-to-end and become extremely
+    // slow under tarpaulin with the production KDF settings.
+    let params = Params::new(
+        ARGON2_MEMORY_KIB,
+        ARGON2_TIME_COST,
+        ARGON2_PARALLELISM,
+        Some(32),
+    )
+    .map_err(|e| anyhow::anyhow!("invalid argon2 params: {e}"))?;
     Ok(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
 }
 

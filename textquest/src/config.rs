@@ -589,11 +589,11 @@ pub struct GroupConfig {
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(default)]
 pub struct AutoCampOnDeathConfig {
-    /// Enable automatic `/camp desktop` plus relog scheduling after death.
+    /// Whether the death-camp workflow is enabled for this toon.
     pub enabled: bool,
-    /// Seconds to wait after death before camping to allow a rez attempt.
+    /// Delay before camping the character out after death.
     pub camp_delay_secs: u64,
-    /// Seconds to wait after logout before relogging.
+    /// Delay before attempting an automated relog after the camp-out.
     pub relog_wait_secs: u64,
 }
 
@@ -601,7 +601,7 @@ impl Default for AutoCampOnDeathConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            camp_delay_secs: 60,
+            camp_delay_secs: 30,
             relog_wait_secs: 900,
         }
     }

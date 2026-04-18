@@ -19,7 +19,7 @@ use crate::{
         hunt::{HuntLoop, HuntSnapshot, OperatingMode, Pos2D},
         progression::{CampDatabase, CampProgressionEvent, check_progression},
         state::{CampAction, CampEvent, CampLoop, CampMember, CampSnapshot, CampState, Role},
-        vendor::{SellCycle, SellState, VendorConfig},
+        vendor::{SellCycle, SellState, VendorConfig, VendorObservation},
     },
     chat_log::{ChatChannel, ChatLogConfig, ChatLogManager},
     combat::coordinator::CombatCoordinator,
@@ -168,6 +168,8 @@ pub struct Orchestrator {
     pub active_hunt: Option<HuntLoop>,
     /// Vendor sell cycle (ticked during camp Idle/Medding).
     pub sell_cycle: Option<SellCycle>,
+    /// Latest inventory snapshot used to build vendor plans.
+    vendor_inventory: Vec<VendorInventoryItem>,
     /// Camp progression database for level-based camp advancement.
     pub camp_db: Option<CampDatabase>,
     /// Suggested camp from progression check (for TUI display).
@@ -250,6 +252,7 @@ impl Orchestrator {
             operating_mode: OperatingMode::Camp,
             active_hunt: None,
             sell_cycle: None,
+            vendor_inventory: Vec::new(),
             camp_db: None,
             suggested_camp: None,
             prev_cc_state: HashMap::new(),
@@ -781,16 +784,30 @@ impl Orchestrator {
 
         // Check if we need to start a sell cycle
         if sell_cycle.needs_sell(self.tick_count) {
+            if sell_cycle.sell_queue.is_empty() && !self.vendor_inventory.is_empty() {
+                sell_cycle.prepare_sell_plan(&self.vendor_inventory, chrono::Utc::now());
+            }
             sell_cycle.start_sell(self.tick_count);
         }
 
         // Only tick if actually selling
-        if sell_cycle.state == SellState::NotNeeded {
+        if sell_cycle.state == SellState::Idle {
             return Vec::new();
         }
 
         match seller_pid {
-            Some(pid) => sell_cycle.tick(pid, self.tick_count),
+            Some(pid) => {
+                let observation =
+                    self.game_states
+                        .get(&pid)
+                        .map_or_else(VendorObservation::default, |state| VendorObservation {
+                            nav_status: Some(state.nav_status.clone()),
+                            // Merchant-busy state is not yet surfaced through
+                            // `GameState`/shared-memory snapshots.
+                            vendor_busy: false,
+                        });
+                sell_cycle.tick_with_observation(pid, self.tick_count, &observation)
+            }
             None => Vec::new(),
         }
     }
@@ -985,6 +1002,11 @@ impl Orchestrator {
         self.sell_cycle = Some(SellCycle::new(config));
     }
 
+    /// Replace the inventory snapshot used for vendor plan generation.
+    pub fn set_vendor_inventory(&mut self, inventory: Vec<VendorInventoryItem>) {
+        self.vendor_inventory = inventory;
+    }
+
     /// Load the camp progression database from disk.
     pub fn load_camp_database(&mut self) {
         match CampDatabase::load() {
@@ -1043,7 +1065,7 @@ impl Orchestrator {
                         status.push_str(&format!(" [suggest: {suggestion}]"));
                     }
                     if let Some(ref sc) = self.sell_cycle
-                        && sc.state != SellState::NotNeeded
+                        && sc.state != SellState::Idle
                     {
                         status.push_str(" [selling]");
                     }
@@ -2624,6 +2646,11 @@ mod tests {
             sellable_items: vec![],
             sell_step_delay: 1,
             return_spell: None,
+            navigation_timeout_ticks: 10,
+            vendor_retry_ticks: 1,
+            max_busy_retries: 3,
+            backlog_days: 30,
+            watch_items: vec![],
         };
         orch.start_sell_cycle(vendor_config);
         assert!(orch.sell_cycle.is_some());
@@ -2641,6 +2668,11 @@ mod tests {
             sellable_items: vec![],
             sell_step_delay: 1,
             return_spell: None,
+            navigation_timeout_ticks: 10,
+            vendor_retry_ticks: 1,
+            max_busy_retries: 3,
+            backlog_days: 30,
+            watch_items: vec![],
         };
         orch.start_sell_cycle(vendor_config);
 
@@ -2663,6 +2695,11 @@ mod tests {
             sellable_items: vec![],
             sell_step_delay: 1,
             return_spell: None,
+            navigation_timeout_ticks: 10,
+            vendor_retry_ticks: 1,
+            max_busy_retries: 3,
+            backlog_days: 30,
+            watch_items: vec![],
         };
         orch.start_sell_cycle(vendor_config);
 
@@ -2926,6 +2963,67 @@ mod tests {
         let orch = Orchestrator::new();
         assert_eq!(orch.routing_scope, RoutingScope::AllSession);
         assert!(orch.scope_pids.is_empty());
+    }
+
+    #[test]
+    fn camp_integration_vendor_cycle_uses_inventory_plan() {
+        let mut orch = Orchestrator::new();
+        orch.start_camp(test_config(), test_members());
+        orch.set_vendor_inventory(vec![crate::loot::vendor_cycle::VendorInventoryItem::trash(
+            "Torn Cloth Sandal",
+            1,
+            9,
+        )]);
+        orch.start_sell_cycle(VendorConfig {
+            vendor_name: "Merchant_Leah".into(),
+            sell_interval_ticks: 1,
+            keep_items: vec![],
+            travel_ticks: 2,
+            sellable_items: vec![],
+            sell_step_delay: 1,
+            return_spell: None,
+            navigation_timeout_ticks: 10,
+            vendor_retry_ticks: 1,
+            max_busy_retries: 3,
+            backlog_days: 30,
+            watch_items: vec![],
+        });
+        orch.tick_count = 1;
+
+        let cmds = orch.tick_sell_cycle();
+
+        assert!(
+            cmds.iter().any(|(_, cmd)| cmd.contains("/nav target")),
+            "integration path should issue vendor navigation commands"
+        );
+    }
+
+    #[test]
+    fn camp_integration_vendor_cycle_preserves_timer_fallback_without_inventory() {
+        let mut orch = Orchestrator::new();
+        orch.start_camp(test_config(), test_members());
+        orch.start_sell_cycle(VendorConfig {
+            vendor_name: "Merchant_Leah".into(),
+            sell_interval_ticks: 1,
+            keep_items: vec![],
+            travel_ticks: 2,
+            sellable_items: vec![],
+            sell_step_delay: 1,
+            return_spell: None,
+            navigation_timeout_ticks: 10,
+            vendor_retry_ticks: 1,
+            max_busy_retries: 3,
+            backlog_days: 30,
+            watch_items: vec![],
+        });
+        orch.tick_count = 1;
+
+        let cmds = orch.tick_sell_cycle();
+
+        assert!(
+            cmds.iter().any(|(_, cmd)| cmd.contains("/nav target")),
+            "timer fallback should still enter the vendor cycle when inventory snapshots are absent"
+        );
     }
 
     #[test]
@@ -3311,5 +3409,37 @@ mod tests {
 
         assert_eq!(orch.tick(), 0, "stale groups must not request rescue");
         assert!(orch.last_dispatched.is_empty());
+    }
+
+    #[test]
+    fn camp_integration_vendor_cycle_uses_inventory_plan() {
+        let mut orch = Orchestrator::new();
+        orch.start_camp(test_config(), test_members());
+        orch.set_vendor_inventory(vec![crate::loot::vendor_cycle::VendorInventoryItem::trash(
+            "Torn Cloth Sandal",
+            1,
+            9,
+        )]);
+        orch.start_sell_cycle(VendorConfig {
+            vendor_name: "Merchant_Leah".into(),
+            sell_interval_ticks: 1,
+            keep_items: vec![],
+            travel_ticks: 2,
+            sellable_items: vec![],
+            sell_step_delay: 1,
+            return_spell: None,
+            navigation_timeout_ticks: 10,
+            vendor_retry_ticks: 1,
+            max_busy_retries: 3,
+            backlog_days: 30,
+        });
+        orch.tick_count = 1;
+
+        let cmds = orch.tick_sell_cycle();
+
+        assert!(
+            cmds.iter().any(|(_, cmd)| cmd.contains("/nav target")),
+            "integration path should issue vendor navigation commands"
+        );
     }
 }

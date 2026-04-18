@@ -206,13 +206,13 @@ This matters because the system is proactive, not reactive:
 
 ### Fallback Behavior Matrix
 
-| Trigger | Orchestrator-side response | DLL / class-layer response | Success condition |
-| ------- | -------------------------- | -------------------------- | ----------------- |
-| Main tank dies and a configured pickup tank exists | Stop new pulls, freeze aggressive retarget churn, promote the pickup tank, and keep the encounter local to camp instead of expanding the fight | Bard stays on defensive melody, cleric swaps to the pickup tank, paladin or shadowknight takes aggro, DPS drops burn priorities | Group stabilizes without a full wipe |
-| Main tank dies and no real pickup tank exists | Suppress new pulls and switch the group from kill mode to stall-and-recover mode | Bard peels, mezes, or kites if possible; secondary healer buys time; DPS stops chasing parse value and helps disengage | Corpse recovery or orderly reset happens before the whole group dies |
-| Primary healer dies | Mark the surviving healer as temporary primary, lower mana-floor restrictions for emergency healing, and defer any new pull decision until healer coverage is restored | Shaman or paladin takes direct-heal priority, bard keeps mana and resist songs up, DPS uses mana-light rotation | Encounter survives long enough to finish or disengage |
-| Unexpected add or mez resist | Pause assist churn, assign the first add to the configured control/pickup unit, and refuse to progress the pull loop until add state is stable | Bard handles first-line crowd control, paladin or shadowknight picks up if control fails, flex CC reinforces as needed | Kill target and add target are isolated instead of free-casting into the group |
-| Survivability core breaks completely (`no second healer`, `no pickup`, or `multiple uncontrolled adds`) | Abort greedy combat continuation and transition to the least-loss recovery path | Druid evac if available; otherwise disengage, regroup, and start corpse recovery | The automation avoids a cascading wipe even if the encounter is lost |
+| Trigger                                                                                                 | Orchestrator-side response                                                                                                                                             | DLL / class-layer response                                                                                                      | Success condition                                                              |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Main tank dies and a configured pickup tank exists                                                      | Stop new pulls, freeze aggressive retarget churn, promote the pickup tank, and keep the encounter local to camp instead of expanding the fight                         | Bard stays on defensive melody, cleric swaps to the pickup tank, paladin or shadowknight takes aggro, DPS drops burn priorities | Group stabilizes without a full wipe                                           |
+| Main tank dies and no real pickup tank exists                                                           | Suppress new pulls and switch the group from kill mode to stall-and-recover mode                                                                                       | Bard peels, mezes, or kites if possible; secondary healer buys time; DPS stops chasing parse value and helps disengage          | Corpse recovery or orderly reset happens before the whole group dies           |
+| Primary healer dies                                                                                     | Mark the surviving healer as temporary primary, lower mana-floor restrictions for emergency healing, and defer any new pull decision until healer coverage is restored | Shaman or paladin takes direct-heal priority, bard keeps mana and resist songs up, DPS uses mana-light rotation                 | Encounter survives long enough to finish or disengage                          |
+| Unexpected add or mez resist                                                                            | Pause assist churn, assign the first add to the configured control/pickup unit, and refuse to progress the pull loop until add state is stable                         | Bard handles first-line crowd control, paladin or shadowknight picks up if control fails, flex CC reinforces as needed          | Kill target and add target are isolated instead of free-casting into the group |
+| Survivability core breaks completely (`no second healer`, `no pickup`, or `multiple uncontrolled adds`) | Abort greedy combat continuation and transition to the least-loss recovery path                                                                                        | Druid evac if available; otherwise disengage, regroup, and start corpse recovery                                                | The automation avoids a cascading wipe even if the encounter is lost           |
 
 ### Design Consequences
 
@@ -227,11 +227,13 @@ This matters because the system is proactive, not reactive:
 - The orchestrator and DLL split is already real and important.
 - CH chain management is an active feature, not only a plan.
 - Buff checks, looting, medding, positioning, and pull/fight transitions all exist in current code.
+- Camp downtime now includes a bounded vendor-cycle controller with explicit `Idle -> Navigating -> Selling -> Returning` states, vendorable-item planning for trash, duplicate loot, and backlog items older than 30 days, and session gross/net plat accounting for sold items.
 
 ### Validation notes
 
 - Class strategy quality still needs live EQ validation class by class.
 - Vendor/sell and more advanced economy loops exist in module structure, but not every path should be treated as fully battle-tested.
+- Vendor-cycle recovery paths and planner rules are unit-tested in code, but live EQ validation is still required before treating vendor travel, busy-merchant handling, or return-home behavior as battle-tested.
 
 ## Auto Group Formation
 
@@ -239,13 +241,13 @@ The `AutoGroupController` automates the group formation sequence before a camp s
 
 ### Phase sequence
 
-| Phase | What happens |
-| ----- | ------------ |
-| `Idle` | Waiting for operator to start formation |
-| `Inviting` | Leader sends `/invite <name>` to each member in configured order; retries up to `max_retries` per slot |
-| `WaitingForMembers` | Polls live group membership until all members have joined or `member_wait_ticks` expires |
-| `AssigningRoles` | Sends `/grouprole set <name> <id>` for each member with a configured role |
-| `Done` | Dispatches the configurable completion command (e.g. start the camp loop) |
+| Phase               | What happens                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------ |
+| `Idle`              | Waiting for operator to start formation                                                                |
+| `Inviting`          | Leader sends `/invite <name>` to each member in configured order; retries up to `max_retries` per slot |
+| `WaitingForMembers` | Polls live group membership until all members have joined or `member_wait_ticks` expires               |
+| `AssigningRoles`    | Sends `/grouprole set <name> <id>` for each member with a configured role                              |
+| `Done`              | Dispatches the configurable completion command (e.g. start the camp loop)                              |
 
 ### Configuration
 
@@ -262,19 +264,19 @@ Configured via `PUT /api/auto-group` on the web dashboard. Fields:
 
 Roles map to EQ's numeric group role IDs:
 
-| Role | EQ ID |
-| ---- | ----- |
-| MainTank | 1 |
-| MainAssist | 2 |
-| Puller | 3 |
-| MarkNpc | 4 |
-| MasterLooter | 5 |
+| Role         | EQ ID |
+| ------------ | ----- |
+| MainTank     | 1     |
+| MainAssist   | 2     |
+| Puller       | 3     |
+| MarkNpc      | 4     |
+| MasterLooter | 5     |
 
 ### REST API
 
-| Method | Path | Description |
-| ------ | ---- | ----------- |
-| GET | `/api/auto-group` | Returns current config and phase label |
-| PUT | `/api/auto-group` | Updates config (rejected with 409 if formation is active) |
-| POST | `/api/auto-group/start` | Begins formation (requires `enabled: true` and non-empty `members`) |
-| POST | `/api/auto-group/reset` | Aborts formation and returns to Idle |
+| Method | Path                    | Description                                                         |
+| ------ | ----------------------- | ------------------------------------------------------------------- |
+| GET    | `/api/auto-group`       | Returns current config and phase label                              |
+| PUT    | `/api/auto-group`       | Updates config (rejected with 409 if formation is active)           |
+| POST   | `/api/auto-group/start` | Begins formation (requires `enabled: true` and non-empty `members`) |
+| POST   | `/api/auto-group/reset` | Aborts formation and returns to Idle                                |

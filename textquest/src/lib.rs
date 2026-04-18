@@ -28,6 +28,7 @@ pub mod client;
 pub mod combat;
 /// Local slash-command dispatch shared by box-chat relay execution and chat/UI
 /// entrypoints.
+#[cfg(windows)]
 pub mod command_dispatch;
 /// TOML configuration loading.
 pub mod config;
@@ -117,8 +118,6 @@ use anyhow::Result;
 /// Default path for the soul memory database.
 pub const SOUL_DB_PATH: &str = "data/soul_memory.db";
 
-/// Default path for the trade price SQLite cache.
-pub const TRADE_PRICE_DB_PATH: &str = "data/trade_prices.db";
 /// Default path for the Ghidra analysis SQLite cache.
 pub const GHIDRA_DB_PATH: &str = "data/ghidra.db";
 
