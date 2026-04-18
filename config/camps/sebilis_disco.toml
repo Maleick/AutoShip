@@ -1,19 +1,78 @@
+# Sebilis Disco Camp Configuration
 # Research baseline for issue #1718. Runtime only consumes the TOML fields
-# below. Waypoints, no-pull geometry, and multibox route notes live in
-# docs/wiki/Sebilis-Disco-Camp.md until the camp schema can model them directly.
+# below. Extended waypoint lattice, no-pull geometry, and multibox route notes
+# are documented in docs/wiki/Sebilis-Disco-Camp.md until the camp schema can
+# model them directly (see issue #1900 for planned schema expansion).
+#
+# CAMP OVERVIEW:
+# - Zone: Sebilis (Kunark era, Old World dragons)
+# - Primary farming route: "Disco 1+2" right-wing corridor loops
+# - Group minimum: 50, Recommended: 53+ (allow for variance, Disco-2 extension)
+# - Survival setup: Cleric/Shaman med pair; warrior tank + ADPS rotation
+# - Key item: Trakanon Idol (required for zone entry)
+#
+# FACTION NOTES:
+# - Trakanon (-30): sampled from right-wing named NPC pages
+# - Legion of Cabilis (+10): secondary from same source
+# - Treat as hostile loop until live logs narrow the profile
+#
+# REFERENCES:
+# See docs/wiki/Sebilis-Disco-Camp.md for:
+# - Complete waypoint lattice with coordinates and confidence ratings
+# - Restriction zones (e.g., trak_no_pull, pond_ground_only)
+# - Multibox route definitions (main loop, extensions, recovery paths)
+# - Spawn pattern notes and respawn timers
+
 name = "sebilis_disco"
 zone = "sebilis"
 
-# Safe med spot: bartender / armsman hallway in the right wing.
+# CAMP COORDINATES
+# Safe med spot: bartender / armsman hallway in the right wing (waypoint: safe_med_hall).
+# This position keeps the 6-box stack off the roam path and away from aggro lanes.
 camp_center = [-850.0, 700.0, 0.0]
-# Pull handoff: south hallway corner that keeps bar, Froggy, and ABC pulls
-# inside line-of-sight without widening into Trakanon or juggernaut space.
+
+# Pull handoff: south hallway corner (waypoint: pull_handoff_corner).
+# Line-of-sight handoff that keeps bar, Froggy, and ABC pulls inside bounds
+# without widening into Trakanon or juggernaut space.
 pull_point = [-810.0, 620.0, 0.0]
+
+# Pull Radius: 380 meters from pull_point.
+# Covers: bartender, armorer, armsman, chef, repairer, and Froggy rooms.
+# Excludes: Trakanon approach, juggernaut hallway, protector hard-stop area.
 pull_radius = 380
+
+# Camp Radius: 35 meters from camp_center.
+# Tight enough to keep the 6-box stack off roam paths and collapse distance.
 camp_radius = 35
+
+# Leash Radius: 160 meters from camp_center.
+# Short leash to drop bad pulls before bar / ABC rooms collapse.
+# Prevents chain-pulling and limits cascade risk if the puller dies.
 leash_radius = 160
+
+# MANA THRESHOLDS AND REST BEHAVIOR
+# rest_mana_pct: 70%
+# - Stop pulling when mana drops below this threshold
+# - Allows cleric/shaman pairs to settle and recover before next sweep
+# - Tuned to prevent mid-pull healer OOM and cascade damage
+#
+# pull_mana_pct: 40%
+# - Do not initiate a new right-wing pull below this floor
+# - Provides safety margin for mid-pull heals and emergency rotations
+# - Prevents starting pulls during healer recovery window
+#
+# return_no_aggro: true
+# - Do not auto-snap puller back to camp while still carrying live adds
+# - Prevents puller from derailing the med hallway on return
+# - Requires active driver for safe med + camp transitions
 rest_mana_pct = 70
 pull_mana_pct = 40
+
+# LEVEL RANGE
+# [50, 57]: Matches the lower Sebilis right-wing bracket (Disco 1+2)
+# - 50: Soft minimum for entry-level right-wing routing
+# - 57: Upper bound before transition to crypt/juggernaut money routes
+# - Variance: Allow +/- 1 level for group composition tolerance
 level_range = [50, 57]
 pull_mob_names = [
   "a froglok bok knight",
