@@ -13,6 +13,20 @@ export interface Session {
   pet_name?: string | null;
 }
 
+export interface AdminSessionRecord {
+  sessionId: string;
+  characterName: string;
+  profile: string | null;
+  groupId: string | null;
+  routingScope: string | null;
+  lifecycle: string | null;
+  status: string | null;
+  zone: string | null;
+  level: number | null;
+  className: string | null;
+  lastHeartbeat: string | null;
+}
+
 export interface Assault {
   id: string;
   zone: string;

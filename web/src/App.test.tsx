@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
@@ -347,7 +353,7 @@ function mockDashboardFetch(actionSnapshot = baseSnapshot) {
         expect.objectContaining({
           method: "POST",
           headers: { "Content-Type": "application/json" },
-        })
+        }),
       );
       return jsonResponse(actionSnapshot);
     }
@@ -361,6 +367,7 @@ function mockDashboardFetch(actionSnapshot = baseSnapshot) {
 describe("App dashboard integration", () => {
   beforeEach(() => {
     MockWebSocket.instances = [];
+    window.history.pushState({}, "", "/");
     vi.stubGlobal("WebSocket", MockWebSocket as unknown as typeof WebSocket);
     vi.stubGlobal("fetch", vi.fn());
   });
@@ -371,34 +378,34 @@ describe("App dashboard integration", () => {
     render(<App />);
 
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith("/api/dashboard")
+      expect(fetchMock).toHaveBeenCalledWith("/api/dashboard"),
     );
 
     await waitFor(() =>
       expect(
-        screen.getByRole("heading", { name: /session command center/i })
-      ).toBeInTheDocument()
+        screen.getByRole("heading", { name: /session command center/i }),
+      ).toBeInTheDocument(),
     );
 
     expect(
-      screen.getByRole("heading", { name: /group coordination/i })
+      screen.getByRole("heading", { name: /group coordination/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /navigation control/i })
+      screen.getByRole("heading", { name: /navigation control/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /economy monitoring/i })
+      screen.getByRole("heading", { name: /economy monitoring/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /combat analytics/i })
+      screen.getByRole("heading", { name: /combat analytics/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /system health/i })
+      screen.getByRole("heading", { name: /system health/i }),
     ).toBeInTheDocument();
     await waitFor(() =>
       expect(
-        screen.getByRole("heading", { name: /security wards/i })
-      ).toBeInTheDocument()
+        screen.getByRole("heading", { name: /security wards/i }),
+      ).toBeInTheDocument(),
     );
     expect(screen.getAllByText(/plane of fire/i).length).toBeGreaterThan(0);
   }, 15000);
@@ -431,8 +438,8 @@ describe("App dashboard integration", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /new session/i })
-      ).toBeInTheDocument()
+        screen.getByRole("button", { name: /new session/i }),
+      ).toBeInTheDocument(),
     );
 
     fireEvent.click(screen.getByRole("button", { name: /new session/i }));
@@ -450,8 +457,8 @@ describe("App dashboard integration", () => {
         expect.objectContaining({
           method: "POST",
           headers: { "Content-Type": "application/json" },
-        })
-      )
+        }),
+      ),
     );
 
     const nextSnapshot = {
@@ -482,13 +489,15 @@ describe("App dashboard integration", () => {
     fireEvent.click(screen.getByRole("button", { name: /extension catalog/i }));
 
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith("/api/extensions/catalog")
+      expect(fetchMock).toHaveBeenCalledWith("/api/extensions/catalog"),
     );
     expect(
-      screen.getByRole("heading", { name: /extension catalog/i })
+      screen.getByRole("heading", { name: /extension catalog/i }),
     ).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getAllByText(/relay integration/i).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/relay integration/i).length).toBeGreaterThan(
+        0,
+      ),
     );
   });
   it("navigates to awareness coordination panels from the main app shell", async () => {
@@ -524,16 +533,16 @@ describe("App dashboard integration", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole("heading", { name: /session command center/i })
-      ).toBeInTheDocument()
+        screen.getByRole("heading", { name: /session command center/i }),
+      ).toBeInTheDocument(),
     );
 
     fireEvent.click(screen.getByRole("button", { name: /player watch/i }));
 
     await waitFor(() =>
       expect(
-        screen.getByRole("heading", { name: /player watch/i })
-      ).toBeInTheDocument()
+        screen.getByRole("heading", { name: /player watch/i }),
+      ).toBeInTheDocument(),
     );
     expect(fetchMock).toHaveBeenCalledWith("/api/config/player-watch");
 
@@ -541,9 +550,51 @@ describe("App dashboard integration", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole("heading", { name: /x-assist configuration/i })
-      ).toBeInTheDocument()
+        screen.getByRole("heading", { name: /x-assist configuration/i }),
+      ).toBeInTheDocument(),
     );
     expect(fetchMock).toHaveBeenCalledWith("/api/xassist/configs");
   }, 15000);
+
+  it("renders the dedicated admin dashboard route and fetches admin sessions", async () => {
+    window.history.pushState({}, "", "/admin");
+
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (input) => {
+      if (input === "/api/admin/sessions") {
+        return jsonResponse([
+          {
+            sessionId: "session-7",
+            characterName: "Noxus",
+            profile: "Pull Squad",
+            groupId: "grp-1",
+            routingScope: "Group grp-1",
+            lifecycle: "recovering",
+            status: "paused",
+            zone: "Plane of Fire",
+            level: 60,
+          },
+        ]);
+      }
+
+      throw new Error(`Unexpected fetch call: ${String(input)}`);
+    });
+
+    render(<App />);
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/admin/sessions"),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: /admin dashboard/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /session overview/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/noxus/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/follow-up issues add diagnostics, logs, and backups/i),
+    ).toBeInTheDocument();
+  });
 });

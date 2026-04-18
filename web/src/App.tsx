@@ -17,9 +17,14 @@ import SayDetectionPanel from "./components/SayDetectionPanel";
 import SoulPanel from "./components/SoulPanel";
 import SpawnAlerts from "./components/SpawnAlerts";
 import XAssistPanel from "./components/XAssistPanel";
+import AdminDashboardPage from "./components/AdminDashboardPage";
 
 function App() {
-  const [activeView, setActiveView] = useState<ActiveView>("engagements");
+  const [activeView, setActiveView] = useState<ActiveView>("default");
+
+  if (window.location.pathname === "/admin") {
+    return <AdminDashboardPage />;
+  }
 
   return (
     <div className="relative flex h-screen w-screen selection:bg-magentaglow selection:text-void">

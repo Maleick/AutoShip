@@ -536,6 +536,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
         )
         .route("/sessions", get(api::list_sessions))
         .nest("/accounts", accounts::router())
+        .nest("/admin", api::admin::router())
         .nest("/dashboard", api::dashboard::router())
         .nest("/extensions", api::extensions::router())
         .route(
