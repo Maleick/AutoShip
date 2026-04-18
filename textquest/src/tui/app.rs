@@ -4755,6 +4755,9 @@ impl App {
             "profile" => {
                 self.execute_profile_command(&parts[1..]);
             }
+            "camera" | "cam" => {
+                self.execute_camera_command(&parts[1..], orchestrator);
+            }
             "stop" => {
                 self.execute_stop_command(&parts[1..], orchestrator);
             }
@@ -5996,6 +5999,98 @@ impl App {
                 } else {
                     // Maybe the client isn't connected but the account exists — just launch
                     self.execute_login_command(&[name]);
+                }
+            }
+        }
+    }
+
+    /// Handle `camera <preset|list|distance>` — apply camera preset or set distance.
+    fn execute_camera_command(&mut self, args: &[&str], orchestrator: &mut Orchestrator) {
+        let accounts = if let Some(cfg) = &self.accounts_config {
+            cfg.clone()
+        } else {
+            self.status_message = String::from("No accounts config — create config/accounts.toml");
+            return;
+        };
+
+        match args.first().copied() {
+            None | Some("list") => {
+                if accounts.camera_presets.is_empty() {
+                    self.status_message = String::from(
+                        "No camera presets configured. Add [[camera_presets]] to accounts.toml",
+                    );
+                    return;
+                }
+                let mut lines: Vec<String> = Vec::new();
+                for cp in &accounts.camera_presets {
+                    let hotkey_str = cp
+                        .hotkey
+                        .as_deref()
+                        .map_or(String::from("(no hotkey)"), |h| format!("[{h}]"));
+                    let dist_str = cp
+                        .distance
+                        .map_or(String::from("auto"), |d| format!("{d:.0}"));
+                    let default_str = if cp.is_default { " [default]" } else { "" };
+                    lines.push(format!(
+                        "  {} {} — distance={}{}",
+                        cp.name, hotkey_str, dist_str, default_str
+                    ));
+                }
+                self.status_message =
+                    format!("{} camera preset(s). Use :camera <name>", accounts.camera_presets.len());
+                for line in &lines {
+                    tracing::info!("{}", line);
+                }
+            }
+
+            Some(name) => {
+                let preset = accounts
+                    .camera_presets
+                    .iter()
+                    .find(|cp| cp.name.eq_ignore_ascii_case(name));
+
+                match preset {
+                    Some(cp) => {
+                        let cmd = textquest_common::ipc::Command::SetCamera {
+                            distance: cp.distance,
+                            pitch: cp.pitch,
+                            yaw: cp.yaw,
+                        };
+                        let ok = self.send_ipc_to_focused(&cmd);
+                        if ok {
+                            self.set_feedback(
+                                ToastLevel::Success,
+                                format!("Camera set to {}", cp.name),
+                                true,
+                            );
+                        } else {
+                            self.status_message =
+                                String::from("No client focused — cannot set camera");
+                        }
+                    }
+                    None => {
+                        if let Ok(dist) = name.parse::<f32>() {
+                            let cmd = textquest_common::ipc::Command::SetCamera {
+                                distance: Some(dist),
+                                pitch: None,
+                                yaw: None,
+                            };
+                            let ok = self.send_ipc_to_focused(&cmd);
+                            if ok {
+                                self.set_feedback(
+                                    ToastLevel::Success,
+                                    format!("Camera distance set to {dist}"),
+                                    true,
+                                );
+                            } else {
+                                self.status_message =
+                                    String::from("No client focused — cannot set camera");
+                            }
+                        } else {
+                            self.status_message =
+                                format!("Unknown preset '{name}'. Use :camera list");
+                        }
+                    }
                 }
             }
         }

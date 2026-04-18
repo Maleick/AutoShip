@@ -717,6 +717,22 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         summary: "Set the Debug panel hex dump address and trigger an immediate ReadMemory poll.",
         example: "addr 0x00A3B210",
     },
+    CommandEntry {
+        phrase: "camera",
+        aliases: &["cam"],
+        section: HelpSection::Navigation,
+        usage: "camera [preset|<distance>|list]",
+        summary: "Apply a camera preset or set camera distance.",
+        example: "camera Far",
+    },
+    CommandEntry {
+        phrase: "camera list",
+        aliases: &["cam list"],
+        section: HelpSection::Navigation,
+        usage: "camera list",
+        summary: "List all configured camera presets and hotkeys.",
+        example: "camera list",
+    },
 ];
 
 /// Return the full shared command metadata.

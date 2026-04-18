@@ -841,6 +841,19 @@ pub enum Command {
     // Zone graph
     /// Request the zone adjacency graph from `ZoneGuideManagerClient`.
     QueryZoneGraph,
+    // Camera
+    /// Set camera state from a preset (distance, pitch, yaw).
+    ///
+    /// Mirrors MQ2Camera preset behavior — applies camera parameters
+    /// from a named preset without coupling to combat logic.
+    SetCamera {
+        /// Camera distance or zoom level.
+        distance: Option<f32>,
+        /// Camera pitch angle in degrees.
+        pitch: Option<f32>,
+        /// Camera yaw angle in degrees.
+        yaw: Option<f32>,
+    },
     // Packet monitor
     /// Poll for accumulated captured packet events.
     /// The DLL drains its pending packet buffer and responds with

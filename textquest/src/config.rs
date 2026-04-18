@@ -81,6 +81,42 @@ pub struct AccountsConfig {
     /// multi-character launches.
     #[serde(default)]
     pub profile_groups: Vec<ProfileGroup>,
+    /// Camera presets for quick viewpoint actions.
+    #[serde(default)]
+    pub camera_presets: Vec<CameraPreset>,
+}
+
+/// A named camera preset for quick viewpoint actions.
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+pub struct CameraPreset {
+    /// Human-readable preset name (e.g., "Close", "Far", "First Person").
+    pub name: String,
+    /// Optional hotkey to activate this preset (e.g., "F5").
+    #[serde(default)]
+    pub hotkey: Option<String>,
+    /// Optional camera distance or zoom level (game-dependent).
+    #[serde(default)]
+    pub distance: Option<f32>,
+    /// Optional camera pitch angle in degrees.
+    #[serde(default)]
+    pub pitch: Option<f32>,
+    /// Optional camera yaw angle in degrees.
+    #[serde(default)]
+    pub yaw: Option<f32>,
+    /// Whether this preset is the default on startup.
+    #[serde(default)]
+    pub is_default: bool,
+}
+
+impl AccountsConfig {
+    /// Find a camera preset by hotkey (case-insensitive).
+    #[must_use]
+    pub fn camera_preset_by_hotkey(&self, hotkey: &str) -> Option<&CameraPreset> {
+        let lower = hotkey.to_lowercase();
+        self.camera_presets
+            .iter()
+            .find(|cp| cp.hotkey.as_ref().map_or(false, |h| h.to_lowercase() == lower))
+    }
 }
 
 impl AccountsConfig {
@@ -1403,6 +1439,28 @@ hotkey = "F2"
 [[profile_groups]]
 id = 3
 name = "AltGroup"
+
+[[camera_presets]]
+name = "First Person"
+hotkey = "F5"
+pitch = 0.0
+yaw = 0.0
+is_default = true
+
+[[camera_presets]]
+name = "Close"
+hotkey = "F6"
+distance = 15.0
+
+[[camera_presets]]
+name = "Far"
+hotkey = "F7"
+distance = 100.0
+
+[[camera_presets]]
+name = "Overhead"
+hotkey = "F8"
+pitch = 60.0
 "#;
 
     fn parse_with_profiles() -> AccountsConfig {
@@ -1482,5 +1540,26 @@ name = "AltGroup"
         // AltGroup (id=3) exists but no accounts have group=3
         let accts = cfg.accounts_for_profile_name("AltGroup").unwrap();
         assert!(accts.is_empty());
+    }
+
+    #[test]
+    fn parse_camera_presets() {
+        let cfg = parse_with_profiles();
+        assert_eq!(cfg.camera_presets.len(), 4);
+        assert_eq!(cfg.camera_presets[0].name, "First Person");
+        assert_eq!(cfg.camera_presets[0].hotkey, Some("F5".to_string()));
+        assert!(cfg.camera_presets[0].is_default);
+        assert_eq!(cfg.camera_presets[1].name, "Close");
+        assert_eq!(cfg.camera_presets[2].name, "Far");
+        assert_eq!(cfg.camera_presets[3].name, "Overhead");
+    }
+
+    #[test]
+    fn camera_preset_by_hotkey_case_insensitive() {
+        let cfg = parse_with_profiles();
+        assert!(cfg.camera_preset_by_hotkey("f5").is_some());
+        assert!(cfg.camera_preset_by_hotkey("F5").is_some());
+        assert_eq!(cfg.camera_preset_by_hotkey("F5").unwrap().name, "First Person");
+        assert!(cfg.camera_preset_by_hotkey("F9").is_none());
     }
 }

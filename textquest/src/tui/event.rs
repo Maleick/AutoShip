@@ -878,6 +878,27 @@ pub fn handle_events(
                 app.launch_profile_hotkey(&hotkey);
                 return Ok(true);
             }
+            (KeyCode::F(n), _) if (5..=9).contains(&n) => {
+                let hotkey = format!("F{n}");
+                if let Some(accounts) = &app.accounts_config {
+                    if let Some(cp) = accounts.camera_preset_by_hotkey(&hotkey) {
+                        let cmd = textquest_common::ipc::Command::SetCamera {
+                            distance: cp.distance,
+                            pitch: cp.pitch,
+                            yaw: cp.yaw,
+                        };
+                        let ok = app.send_ipc_to_focused(&cmd);
+                        if ok {
+                            app.set_feedback(
+                                ToastLevel::Success,
+                                format!("Camera: {}", cp.name),
+                                true,
+                            );
+                        }
+                        return Ok(true);
+                    }
+                }
+            }
             (KeyCode::F(10), _) => {
                 app.menu_state.toggle();
                 return Ok(true);

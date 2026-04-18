@@ -35,6 +35,7 @@ pub struct DashboardSnapshot {
     pub combat: CombatSection,
     pub health: HealthSection,
     pub affinity: Option<AffinitySection>,
+    pub camera: Option<CameraSection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +53,21 @@ pub struct AffinityAssignment {
     pub cpu_mask: u64,
     pub priority: String,
     pub is_focused: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CameraSection {
+    pub presets: Vec<CameraPresetCard>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CameraPresetCard {
+    pub name: String,
+    pub hotkey: Option<String>,
+    pub distance: Option<f32>,
+    pub is_default: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1184,6 +1200,34 @@ fn demo_snapshot() -> DashboardSnapshot {
                     cpu_mask: 4,
                     priority: "BelowNormal".to_string(),
                     is_focused: false,
+                },
+            ],
+        }),
+        camera: Some(CameraSection {
+            presets: vec![
+                CameraPresetCard {
+                    name: "First Person".to_string(),
+                    hotkey: Some("F5".to_string()),
+                    distance: None,
+                    is_default: true,
+                },
+                CameraPresetCard {
+                    name: "Close".to_string(),
+                    hotkey: Some("F6".to_string()),
+                    distance: Some(15.0),
+                    is_default: false,
+                },
+                CameraPresetCard {
+                    name: "Far".to_string(),
+                    hotkey: Some("F7".to_string()),
+                    distance: Some(100.0),
+                    is_default: false,
+                },
+                CameraPresetCard {
+                    name: "Overhead".to_string(),
+                    hotkey: Some("F8".to_string()),
+                    distance: None,
+                    is_default: false,
                 },
             ],
         }),
