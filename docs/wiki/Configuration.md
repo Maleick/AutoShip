@@ -164,6 +164,12 @@ Current example:
   lattice, pull lanes, restriction zones, and multibox route notes for that
   camp.
 
+- `config/camps/velketors_labyrinth_frenzy.toml` holds the loader-safe runtime
+  values.
+- [Velketors-Labyrinth-Frenzy-Camp](Velketors-Labyrinth-Frenzy-Camp.md)
+  carries the validation geometry, pull controls, and routing notes for that
+  camp.
+
 ## Class Configs
 
 `config/classes/*.toml` documents class-specific combat behavior and operator-facing default ability choices.

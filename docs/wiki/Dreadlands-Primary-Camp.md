@@ -25,7 +25,7 @@ the schema grows intentionally.
 - Primary anchor: Ancient Combine Outpost courtyard in Lost Valley
 - Camp center: `camp_center = [900, 9000, 0]`
 - Pull handoff: `pull_point = [970, 9050, 0]`
-- Pull controls: `pull_radius = 500`, `camp_radius = 60`, `leash_radius = 700`
+- Pull controls: `pull_radius = 500.0`, `camp_radius = 60.0`, `leash_radius = 700.0`
 - Mana controls: `rest_mana_pct = 70`, `pull_mana_pct = 45`
 - Recommended level band: `level_range = [45, 51]`
 - Primary targets: `greater plaguebone`, `greater spurbone`, `wraithbone champion`
