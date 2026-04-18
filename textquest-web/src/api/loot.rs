@@ -1007,6 +1007,7 @@ mod tests {
                     uuid::Uuid::new_v4()
                 )),
             ),
+            session_logs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             session_control_state: crate::api::session_control::SessionControlState::new(),
         });
 

@@ -599,6 +599,7 @@ mod tests {
             extension_catalog_state: api::extensions::ExtensionCatalogState::load(
                 std::path::PathBuf::from("/tmp/test-extension-catalog.json"),
             ),
+            session_logs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             session_control_state: SessionControlState::new(),
         })
     }

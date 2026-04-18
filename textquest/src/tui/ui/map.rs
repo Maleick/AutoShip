@@ -4111,318 +4111,312 @@ P 50.0, 50.0, 0.0, 0, 255, 255, 1, Point1
         // Note: We can't guarantee it won't render, but if it does, it should be outside bounds
         // So we just verify the rendering completes without error
         assert!(!rendered.is_empty());
+    }
 
-        #[test]
-        fn test_viewbounds_from_zone_map() {
-            // Create a mock ZoneMap with known bounds
-            use crate::eq::map_parser::Bounds;
-            use crate::eq::map_parser::ZoneMap;
+    #[test]
+    fn test_viewbounds_from_zone_map() {
+        // Create a mock ZoneMap with known bounds
+        use crate::eq::map_parser::Bounds;
+        use crate::eq::map_parser::ZoneMap;
 
-            let bounds = Bounds {
-                min_x: 0.0,
-                max_x: 100.0,
-                min_y: -50.0,
-                max_y: 50.0,
-            };
-            let zone_map = ZoneMap {
-                bounds,
-                lines: Vec::new(),
-            };
+        let bounds = Bounds {
+            min_x: 0.0,
+            max_x: 100.0,
+            min_y: -50.0,
+            max_y: 50.0,
+        };
+        let zone_map = ZoneMap {
+            bounds,
+            lines: Vec::new(),
+        };
 
-            let view_bounds = ViewBounds::from_zone_map(&zone_map);
+        let view_bounds = ViewBounds::from_zone_map(&zone_map);
 
-            assert_eq!(view_bounds.min_x, 0.0);
-            assert_eq!(view_bounds.max_x, 100.0);
-            assert_eq!(view_bounds.min_y, -50.0);
-            assert_eq!(view_bounds.max_y, 50.0);
-        }
+        assert_eq!(view_bounds.min_x, 0.0);
+        assert_eq!(view_bounds.max_x, 100.0);
+        assert_eq!(view_bounds.min_y, -50.0);
+        assert_eq!(view_bounds.max_y, 50.0);
+    }
 
-        #[test]
-        fn test_viewbounds_from_spawns() {
-            let spawns = vec![
-                test_spawn(1, "spawn1", 0.0, 0.0),
-                test_spawn(2, "spawn2", 50.0, 50.0),
-                test_spawn(3, "spawn3", -30.0, -30.0),
-            ];
+    #[test]
+    fn test_viewbounds_from_spawns() {
+        let spawns = vec![
+            test_spawn(1, "spawn1", 0.0, 0.0),
+            test_spawn(2, "spawn2", 50.0, 50.0),
+            test_spawn(3, "spawn3", -30.0, -30.0),
+        ];
 
-            let view_bounds = ViewBounds::from_spawns(&spawns).expect("bounds should be created");
+        let view_bounds = ViewBounds::from_spawns(&spawns).expect("bounds should be created");
 
-            // spawn1: x=0, y=0 → converts to (-0, -0) = (0, 0)
-            // spawn2: x=50, y=50 → converts to (-50, -50)
-            // spawn3: x=-30, y=-30 → converts to (30, 30)
-            // So the bounds should encompass all three points
-            assert_eq!(view_bounds.min_x, -50.0);
-            assert_eq!(view_bounds.max_x, 30.0);
-            assert_eq!(view_bounds.min_y, -50.0);
-            assert_eq!(view_bounds.max_y, 30.0);
-        }
+        // spawn1: x=0, y=0 → converts to (-0, -0) = (0, 0)
+        // spawn2: x=50, y=50 → converts to (-50, -50)
+        // spawn3: x=-30, y=-30 → converts to (30, 30)
+        // So the bounds should encompass all three points
+        assert_eq!(view_bounds.min_x, -50.0);
+        assert_eq!(view_bounds.max_x, 30.0);
+        assert_eq!(view_bounds.min_y, -50.0);
+        assert_eq!(view_bounds.max_y, 30.0);
+    }
 
-        #[test]
-        fn test_viewbounds_from_spawns_empty() {
-            let spawns = vec![];
-            let view_bounds = ViewBounds::from_spawns(&spawns);
+    #[test]
+    fn test_viewbounds_from_spawns_empty() {
+        let spawns = vec![];
+        let view_bounds = ViewBounds::from_spawns(&spawns);
 
-            assert!(view_bounds.is_none(), "Empty spawn list should return None");
-        }
+        assert!(view_bounds.is_none(), "Empty spawn list should return None");
+    }
 
-        #[test]
-        fn test_viewbounds_merge() {
-            let mut bounds1 = ViewBounds {
-                min_x: 0.0,
-                max_x: 100.0,
-                min_y: 0.0,
-                max_y: 100.0,
-            };
+    #[test]
+    fn test_viewbounds_merge() {
+        let mut bounds1 = ViewBounds {
+            min_x: 0.0,
+            max_x: 100.0,
+            min_y: 0.0,
+            max_y: 100.0,
+        };
 
-            let bounds2 = ViewBounds {
-                min_x: 50.0,
-                max_x: 150.0,
-                min_y: 50.0,
-                max_y: 150.0,
-            };
+        let bounds2 = ViewBounds {
+            min_x: 50.0,
+            max_x: 150.0,
+            min_y: 50.0,
+            max_y: 150.0,
+        };
 
-            bounds1.include(bounds2);
+        bounds1.include(bounds2);
 
-            assert_eq!(bounds1.min_x, 0.0);
-            assert_eq!(bounds1.max_x, 150.0);
-            assert_eq!(bounds1.min_y, 0.0);
-            assert_eq!(bounds1.max_y, 150.0);
-        }
+        assert_eq!(bounds1.min_x, 0.0);
+        assert_eq!(bounds1.max_x, 150.0);
+        assert_eq!(bounds1.min_y, 0.0);
+        assert_eq!(bounds1.max_y, 150.0);
+    }
 
-        #[test]
-        fn test_viewbounds_include_point() {
-            let mut bounds = ViewBounds {
-                min_x: 0.0,
-                max_x: 100.0,
-                min_y: 0.0,
-                max_y: 100.0,
-            };
+    #[test]
+    fn test_viewbounds_include_point() {
+        let mut bounds = ViewBounds {
+            min_x: 0.0,
+            max_x: 100.0,
+            min_y: 0.0,
+            max_y: 100.0,
+        };
 
-            // Include a point outside the bounds
-            bounds.include_point(150.0, 150.0);
+        // Include a point outside the bounds
+        bounds.include_point(150.0, 150.0);
 
-            assert_eq!(bounds.min_x, 0.0);
-            assert_eq!(bounds.max_x, 150.0);
-            assert_eq!(bounds.min_y, 0.0);
-            assert_eq!(bounds.max_y, 150.0);
+        assert_eq!(bounds.min_x, 0.0);
+        assert_eq!(bounds.max_x, 150.0);
+        assert_eq!(bounds.min_y, 0.0);
+        assert_eq!(bounds.max_y, 150.0);
 
-            // Include a point inside the bounds
-            bounds.include_point(50.0, 50.0);
+        // Include a point inside the bounds
+        bounds.include_point(50.0, 50.0);
 
-            assert_eq!(bounds.min_x, 0.0);
-            assert_eq!(bounds.max_x, 150.0);
-            assert_eq!(bounds.min_y, 0.0);
-            assert_eq!(bounds.max_y, 150.0);
+        assert_eq!(bounds.min_x, 0.0);
+        assert_eq!(bounds.max_x, 150.0);
+        assert_eq!(bounds.min_y, 0.0);
+        assert_eq!(bounds.max_y, 150.0);
 
-            // Include a point that extends the lower bounds
-            bounds.include_point(-50.0, -50.0);
+        // Include a point that extends the lower bounds
+        bounds.include_point(-50.0, -50.0);
 
-            assert_eq!(bounds.min_x, -50.0);
-            assert_eq!(bounds.min_y, -50.0);
-        }
+        assert_eq!(bounds.min_x, -50.0);
+        assert_eq!(bounds.min_y, -50.0);
+    }
 
-        #[test]
-        fn test_viewbounds_dimensions() {
-            let bounds = ViewBounds {
-                min_x: 0.0,
-                max_x: 100.0,
-                min_y: -50.0,
-                max_y: 50.0,
-            };
+    #[test]
+    fn test_viewbounds_dimensions() {
+        let bounds = ViewBounds {
+            min_x: 0.0,
+            max_x: 100.0,
+            min_y: -50.0,
+            max_y: 50.0,
+        };
 
-            assert_eq!(bounds.width(), 100.0);
-            assert_eq!(bounds.height(), 100.0);
-            assert_eq!(bounds.center_x(), 50.0);
-            assert_eq!(bounds.center_y(), 0.0);
-            assert_eq!(bounds.max_dimension(), 100.0);
-        }
+        assert_eq!(bounds.width(), 100.0);
+        assert_eq!(bounds.height(), 100.0);
+        assert_eq!(bounds.center_x(), 50.0);
+        assert_eq!(bounds.center_y(), 0.0);
+        assert_eq!(bounds.max_dimension(), 100.0);
+    }
 
-        #[test]
-        fn test_viewbounds_dimensions_minimum() {
-            // Bounds with zero width/height should return minimum value of 1.0
-            let bounds = ViewBounds {
-                min_x: 10.0,
-                max_x: 10.0,
-                min_y: 20.0,
-                max_y: 20.0,
-            };
+    #[test]
+    fn test_viewbounds_dimensions_minimum() {
+        // Bounds with zero width/height should return minimum value of 1.0
+        let bounds = ViewBounds {
+            min_x: 10.0,
+            max_x: 10.0,
+            min_y: 20.0,
+            max_y: 20.0,
+        };
 
-            assert_eq!(bounds.width(), 1.0);
-            assert_eq!(bounds.height(), 1.0);
-        }
+        assert_eq!(bounds.width(), 1.0);
+        assert_eq!(bounds.height(), 1.0);
+    }
 
-        #[test]
-        fn test_maptransform_xy_to_grid() {
-            let transform = MapTransform {
-                center_x: 0.0,
-                center_y: 0.0,
-                scale_x: 1.0,
-                scale_y: 1.0,
-                using_local_view: false,
-            };
+    #[test]
+    fn test_maptransform_xy_to_grid() {
+        let transform = MapTransform {
+            center_x: 0.0,
+            center_y: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            using_local_view: false,
+        };
 
-            // The to_grid closure is:
-            // col = ((mx - center_x) * scale_x + w / 2.0) as i32
-            // row = ((my - center_y) * scale_y + h / 2.0) as i32
+        // The to_grid closure is:
+        // col = ((mx - center_x) * scale_x + w / 2.0) as i32
+        // row = ((my - center_y) * scale_y + h / 2.0) as i32
 
-            let w = 100usize;
-            let h = 50usize;
+        let w = 100usize;
+        let h = 50usize;
 
-            let to_grid = |mx: f32, my: f32| -> (i32, i32) {
-                let col = ((mx - transform.center_x) * transform.scale_x + w as f32 / 2.0) as i32;
-                let row = ((my - transform.center_y) * transform.scale_y + h as f32 / 2.0) as i32;
-                (col, row)
-            };
+        let to_grid = |mx: f32, my: f32| -> (i32, i32) {
+            let col = ((mx - transform.center_x) * transform.scale_x + w as f32 / 2.0) as i32;
+            let row = ((my - transform.center_y) * transform.scale_y + h as f32 / 2.0) as i32;
+            (col, row)
+        };
 
-            // Test center of viewport
-            let (col, row) = to_grid(0.0, 0.0);
-            assert_eq!(col, 50); // 0 + 100/2
-            assert_eq!(row, 25); // 0 + 50/2
+        // Test center of viewport
+        let (col, row) = to_grid(0.0, 0.0);
+        assert_eq!(col, 50); // 0 + 100/2
+        assert_eq!(row, 25); // 0 + 50/2
 
-            // Test offset from center
-            let (col, row) = to_grid(10.0, 10.0);
-            assert_eq!(col, 60); // 10 + 100/2
-            assert_eq!(row, 35); // 10 + 50/2
-        }
+        // Test offset from center
+        let (col, row) = to_grid(10.0, 10.0);
+        assert_eq!(col, 60); // 10 + 100/2
+        assert_eq!(row, 35); // 10 + 50/2
+    }
 
-        #[test]
-        fn test_maptransform_zoom_affects_scale() {
-            let mut transform = MapTransform {
-                center_x: 0.0,
-                center_y: 0.0,
-                scale_x: 1.0,
-                scale_y: 1.0,
-                using_local_view: false,
-            };
+    #[test]
+    fn test_maptransform_zoom_affects_scale() {
+        let mut transform = MapTransform {
+            center_x: 0.0,
+            center_y: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            using_local_view: false,
+        };
 
-            let w = 100usize;
-            let h = 50usize;
+        let w = 100usize;
+        let h = 50usize;
 
-            let to_grid_with_transform = |transform: &MapTransform,
-                                          mx: f32,
-                                          my: f32|
-             -> (i32, i32) {
-                let col = ((mx - transform.center_x) * transform.scale_x + w as f32 / 2.0) as i32;
-                let row = ((my - transform.center_y) * transform.scale_y + h as f32 / 2.0) as i32;
-                (col, row)
-            };
+        let to_grid_with_transform = |transform: &MapTransform, mx: f32, my: f32| -> (i32, i32) {
+            let col = ((mx - transform.center_x) * transform.scale_x + w as f32 / 2.0) as i32;
+            let row = ((my - transform.center_y) * transform.scale_y + h as f32 / 2.0) as i32;
+            (col, row)
+        };
 
-            // Original grid position
-            let (col1, row1) = to_grid_with_transform(&transform, 10.0, 10.0);
+        // Original grid position
+        let (col1, row1) = to_grid_with_transform(&transform, 10.0, 10.0);
 
-            // Increase scale (zoom in)
-            transform.scale_x = 2.0;
-            transform.scale_y = 2.0;
+        // Increase scale (zoom in)
+        transform.scale_x = 2.0;
+        transform.scale_y = 2.0;
 
-            let (col2, row2) = to_grid_with_transform(&transform, 10.0, 10.0);
+        let (col2, row2) = to_grid_with_transform(&transform, 10.0, 10.0);
 
-            // Zoomed-in position should be further from center
-            assert!(col2 > col1, "Zoomed column should be further from center");
-            assert!(row2 > row1, "Zoomed row should be further from center");
+        // Zoomed-in position should be further from center
+        assert!(col2 > col1, "Zoomed column should be further from center");
+        assert!(row2 > row1, "Zoomed row should be further from center");
 
-            // The difference should be proportional to the zoom change
-            assert_eq!(col2 - col1, 10); // (10 * 2.0) - (10 * 1.0) = 10
-            assert_eq!(row2 - row1, 10); // (10 * 2.0) - (10 * 1.0) = 10
-        }
+        // The difference should be proportional to the zoom change
+        assert_eq!(col2 - col1, 10); // (10 * 2.0) - (10 * 1.0) = 10
+        assert_eq!(row2 - row1, 10); // (10 * 2.0) - (10 * 1.0) = 10
+    }
 
-        #[test]
-        fn test_maptransform_pan_shifts_output() {
-            let mut transform = MapTransform {
-                center_x: 0.0,
-                center_y: 0.0,
-                scale_x: 1.0,
-                scale_y: 1.0,
-                using_local_view: false,
-            };
+    #[test]
+    fn test_maptransform_pan_shifts_output() {
+        let mut transform = MapTransform {
+            center_x: 0.0,
+            center_y: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            using_local_view: false,
+        };
 
-            let w = 100usize;
-            let h = 50usize;
+        let w = 100usize;
+        let h = 50usize;
 
-            let to_grid_with_transform = |transform: &MapTransform,
-                                          mx: f32,
-                                          my: f32|
-             -> (i32, i32) {
-                let col = ((mx - transform.center_x) * transform.scale_x + w as f32 / 2.0) as i32;
-                let row = ((my - transform.center_y) * transform.scale_y + h as f32 / 2.0) as i32;
-                (col, row)
-            };
+        let to_grid_with_transform = |transform: &MapTransform, mx: f32, my: f32| -> (i32, i32) {
+            let col = ((mx - transform.center_x) * transform.scale_x + w as f32 / 2.0) as i32;
+            let row = ((my - transform.center_y) * transform.scale_y + h as f32 / 2.0) as i32;
+            (col, row)
+        };
 
-            // Original grid position for a world coordinate
-            let (col1, row1) = to_grid_with_transform(&transform, 0.0, 0.0);
+        // Original grid position for a world coordinate
+        let (col1, row1) = to_grid_with_transform(&transform, 0.0, 0.0);
 
-            // Pan the camera (shift center)
-            transform.center_x = 10.0;
-            transform.center_y = 5.0;
+        // Pan the camera (shift center)
+        transform.center_x = 10.0;
+        transform.center_y = 5.0;
 
-            let (col2, row2) = to_grid_with_transform(&transform, 0.0, 0.0);
+        let (col2, row2) = to_grid_with_transform(&transform, 0.0, 0.0);
 
-            // Panning moves objects in the opposite direction on screen
-            // When center moves right (+10), objects appear to move left
-            assert_eq!(col2, col1 - 10); // Negative shift in grid coordinates
-            assert_eq!(row2, row1 - 5); // Negative shift in grid coordinates
-        }
+        // Panning moves objects in the opposite direction on screen
+        // When center moves right (+10), objects appear to move left
+        assert_eq!(col2, col1 - 10); // Negative shift in grid coordinates
+        assert_eq!(row2, row1 - 5); // Negative shift in grid coordinates
+    }
 
-        #[test]
-        fn test_visible_map_region_from_transform() {
-            let transform = MapTransform {
-                center_x: 0.0,
-                center_y: 0.0,
-                scale_x: 1.0,
-                scale_y: 1.0,
-                using_local_view: false,
-            };
+    #[test]
+    fn test_visible_map_region_from_transform() {
+        let transform = MapTransform {
+            center_x: 0.0,
+            center_y: 0.0,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            using_local_view: false,
+        };
 
-            let region = VisibleMapRegion::from_transform(&transform, 100, 50);
+        let region = VisibleMapRegion::from_transform(&transform, 100, 50);
 
-            // half_width = (100 / (1.0 * 2.0)).max(1.0) = 50.0
-            // half_height = (50 / (1.0 * 2.0)).max(1.0) = 25.0
-            assert_eq!(region.min_x, -50.0);
-            assert_eq!(region.max_x, 50.0);
-            assert_eq!(region.min_y, -25.0);
-            assert_eq!(region.max_y, 25.0);
-        }
+        // half_width = (100 / (1.0 * 2.0)).max(1.0) = 50.0
+        // half_height = (50 / (1.0 * 2.0)).max(1.0) = 25.0
+        assert_eq!(region.min_x, -50.0);
+        assert_eq!(region.max_x, 50.0);
+        assert_eq!(region.min_y, -25.0);
+        assert_eq!(region.max_y, 25.0);
+    }
 
-        #[test]
-        fn test_visible_map_region_contains_point() {
-            let region = VisibleMapRegion {
-                min_x: 0.0,
-                max_x: 100.0,
-                min_y: 0.0,
-                max_y: 100.0,
-            };
+    #[test]
+    fn test_visible_map_region_contains_point() {
+        let region = VisibleMapRegion {
+            min_x: 0.0,
+            max_x: 100.0,
+            min_y: 0.0,
+            max_y: 100.0,
+        };
 
-            // Point inside
-            assert!(region.contains_point(50.0, 50.0));
+        // Point inside
+        assert!(region.contains_point(50.0, 50.0));
 
-            // Point on boundary
-            assert!(region.contains_point(0.0, 0.0));
-            assert!(region.contains_point(100.0, 100.0));
+        // Point on boundary
+        assert!(region.contains_point(0.0, 0.0));
+        assert!(region.contains_point(100.0, 100.0));
 
-            // Point outside
-            assert!(!region.contains_point(-1.0, 50.0));
-            assert!(!region.contains_point(101.0, 50.0));
-        }
+        // Point outside
+        assert!(!region.contains_point(-1.0, 50.0));
+        assert!(!region.contains_point(101.0, 50.0));
+    }
 
-        #[test]
-        fn test_visible_map_region_contains_line() {
-            let region = VisibleMapRegion {
-                min_x: 0.0,
-                max_x: 100.0,
-                min_y: 0.0,
-                max_y: 100.0,
-            };
+    #[test]
+    fn test_visible_map_region_contains_line() {
+        let region = VisibleMapRegion {
+            min_x: 0.0,
+            max_x: 100.0,
+            min_y: 0.0,
+            max_y: 100.0,
+        };
 
-            // Line completely inside
-            assert!(region.contains_line(10.0, 10.0, 90.0, 90.0));
+        // Line completely inside
+        assert!(region.contains_line(10.0, 10.0, 90.0, 90.0));
 
-            // Line that passes through region
-            assert!(region.contains_line(-10.0, 50.0, 50.0, 50.0));
+        // Line that passes through region
+        assert!(region.contains_line(-10.0, 50.0, 50.0, 50.0));
 
-            // Line completely outside
-            assert!(!region.contains_line(-100.0, -100.0, -50.0, -50.0));
+        // Line completely outside
+        assert!(!region.contains_line(-100.0, -100.0, -50.0, -50.0));
 
-            // Line on boundary
-            assert!(region.contains_line(0.0, 0.0, 100.0, 100.0));
-        }
+        // Line on boundary
+        assert!(region.contains_line(0.0, 0.0, 100.0, 100.0));
     }
 }

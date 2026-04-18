@@ -59,7 +59,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tail_logs_empty_session() {
-        let session_logs = Arc::new(RwLock::new(HashMap::new()));
+        let session_logs = Arc::new(RwLock::new(HashMap::<u32, Vec<String>>::new()));
         let logs_read = session_logs.read().await;
         let result = logs_read.get(&1);
         assert!(result.is_none());
@@ -67,7 +67,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tail_logs_returns_all_lines_when_fewer_than_requested() {
-        let session_logs = Arc::new(RwLock::new(HashMap::new()));
+        let session_logs = Arc::new(RwLock::new(HashMap::<u32, Vec<String>>::new()));
 
         let mut logs = session_logs.write().await;
         logs.insert(
@@ -87,7 +87,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tail_logs_returns_last_n_lines() {
-        let session_logs = Arc::new(RwLock::new(HashMap::new()));
+        let session_logs = Arc::new(RwLock::new(HashMap::<u32, Vec<String>>::new()));
 
         let mut logs = session_logs.write().await;
         let many_logs: Vec<String> = (0..100)
