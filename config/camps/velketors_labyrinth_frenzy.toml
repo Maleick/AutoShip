@@ -1,0 +1,54 @@
+# Research baseline for issue #1720. Runtime only consumes the TOML fields
+# below. Waypoints, no-pull geometry, and multibox route notes live in
+# docs/wiki/Velketors-Labyrinth-Frenzy-Camp.md until the camp schema can model
+# them directly.
+name = "velketors_labyrinth_frenzy"
+zone = "velketor"
+
+# Safe med spot: the "safe hall" beside Frenzy and before the pit drop.
+camp_center = [360.0, 40.0, 0.0]
+# Pull handoff: edge of the Frenzy ramp that still keeps the spider cluster in
+# line-of-sight without widening into upper dogs, Bled/Bledrek, or Lord Bob.
+pull_point = [405.0, 60.0, 0.0]
+pull_radius = 165
+camp_radius = 30
+leash_radius = 110
+rest_mana_pct = 70
+pull_mana_pct = 45
+level_range = [57, 60]
+pull_mob_names = [
+  "a blizzard spider",
+  "a blizzard hunter",
+  "a crystalline hunter",
+  "a crystalline watcher",
+  "a shard spider",
+  "a velium broodling",
+  "a velium stalker",
+  "an Icepaw champion",
+  "an Icepaw kobold",
+  "an Icepaw kobold priest",
+  "an Icepaw kobold warrior",
+]
+ignore_mob_names = [
+  "Bled",
+  "Bledrek",
+  "Gregendek Icepaw",
+  "Jelek Icepaw",
+  "Khelkar Icepaw",
+  "Lord Doljonijiarnimorinar",
+  "The Brood Master",
+  "The Brood Mother",
+  "Tpos Icepaw",
+  "Velketor the Sorcerer",
+]
+burn_mob_names = [
+  "a Frenzied Velium Broodling",
+  "a Frenzied Velium Stalker",
+  "Crystal Eyes",
+  "Crystal Fang",
+  "Marlek Icepaw",
+  "Ular Icepaw",
+  "Venar Icepaw",
+]
+return_no_aggro = true
+prev_camp = "sebilis_disco"

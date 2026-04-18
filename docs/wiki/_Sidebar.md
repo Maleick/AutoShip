@@ -13,6 +13,8 @@
 - [Map Hotkeys and Controls](Map-Hotkeys-and-Controls)
 - [Sebilis Disco Camp](Sebilis-Disco-Camp)
 - [Sebilis Farming Validation](Sebilis-Farming-Validation)
+- [Velketor's Labyrinth Frenzy Camp](Velketors-Labyrinth-Frenzy-Camp)
+- [Velketor's Labyrinth Validation](Velketors-Labyrinth-Validation)
 - [Navigation and Maps](Navigation-and-Maps)
 - [Login Automation](Login-Automation)
 - [Soul Engine](Soul-Engine)

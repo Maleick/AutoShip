@@ -182,6 +182,14 @@ automation risk. Use [Sebilis Farming
 Validation](Sebilis-Farming-Validation.md) as the canonical ledger before
 treating the zone as a solved overnight farm.
 
+Velketor's Labyrinth Frenzy is now research-backed for the safe-hall baseline,
+but it still needs live proof for 6-box leash behavior, pit or upper-dogs
+branch safety, and actual spawn cadence. Use [Velketor's Labyrinth Frenzy
+Camp](Velketors-Labyrinth-Frenzy-Camp.md) for the documented route baseline
+and [Velketor's Labyrinth
+Validation](Velketors-Labyrinth-Validation.md) as the canonical ledger before
+treating the zone as a solved unattended lane.
+
 | Zone                          | Level Range | Why                                | Multi-Group? | Notable Loot                                                                                         | Notes                                                                                                              |
 | ----------------------------- | ----------- | ---------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | **Old Sebilis**               | 50-60       | Best XP in the game for Kunark     | 4-6 groups   | Box of Nil Space, Cone of Mystics, Froglok Bonecaster's Robe, Hierophant's Cloak, Runebranded Girdle | Right wing (Disco 1+2) for lower; juggs/myconids underneath for money AND XP. Can easily absorb your entire 36-box |
