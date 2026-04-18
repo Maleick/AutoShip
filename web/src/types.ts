@@ -1303,3 +1303,27 @@ export interface UpdateCampConfigPayload {
   pull_targets?: PullTarget[];
   safe_zone_markers?: SafeZoneMarker[];
 }
+
+// ── Admin diagnostics & operations types ────────────────────────────────────
+
+export interface MetricsData {
+  response_time_ms: number;
+  uptime_secs: number;
+  memory_usage_mb: number;
+  timestamp: string;
+}
+
+export interface LogEntry {
+  timestamp: string;
+  level: string;
+  message: string;
+  source?: string;
+}
+
+export interface BackupEntry {
+  id: string;
+  created_at: string;
+  size_bytes: number;
+  status: "pending" | "completed" | "failed";
+  description?: string;
+}

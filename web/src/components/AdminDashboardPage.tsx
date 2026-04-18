@@ -1,35 +1,10 @@
-import { Archive, Cpu, Notepad, ShieldChevron } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import { ShieldChevron } from "@phosphor-icons/react";
 
 import { useAdminSessions } from "../hooks/useAdminSessions";
 import { AdminSessionOverview } from "./AdminSessionOverview";
-
-function PlaceholderPanel({
-  title,
-  detail,
-  icon,
-}: {
-  title: string;
-  detail: string;
-  icon: ReactNode;
-}) {
-  return (
-    <section className="rounded-[1.5rem] border border-dashed border-white/10 bg-[#120a1d]/72 p-5">
-      <div className="mb-3 flex items-center gap-3 text-white">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
-          {icon}
-        </div>
-        <div>
-          <h2 className="font-archaic text-xl">{title}</h2>
-          <p className="font-tech text-xs uppercase tracking-[0.24em] text-white/45">
-            Planned follow-up slice
-          </p>
-        </div>
-      </div>
-      <p className="text-sm leading-6 text-white/60">{detail}</p>
-    </section>
-  );
-}
+import { PerformancePanel } from "./PerformancePanel";
+import { LogViewerPanel } from "./LogViewerPanel";
+import { BackupBrowserPanel } from "./BackupBrowserPanel";
 
 export function AdminDashboardPage() {
   const { sessions, loading, error } = useAdminSessions();
@@ -67,21 +42,9 @@ export function AdminDashboardPage() {
         />
 
         <div className="grid gap-4 lg:grid-cols-3">
-          <PlaceholderPanel
-            title="Diagnostics"
-            detail="Performance metrics, IPC latency, and per-session health remain out of scope for this first admin slice."
-            icon={<Cpu className="text-cyan-200" size={22} />}
-          />
-          <PlaceholderPanel
-            title="Log Stream"
-            detail="Unified log browsing lands in the next dashboard issue so this route can stay focused on session inventory first."
-            icon={<Notepad className="text-fuchsia-200" size={22} />}
-          />
-          <PlaceholderPanel
-            title="Backups"
-            detail="Backup browsing and restore actions are intentionally parked behind later admin API and UI issues."
-            icon={<Archive className="text-amber-200" size={22} />}
-          />
+          <PerformancePanel />
+          <LogViewerPanel />
+          <BackupBrowserPanel />
         </div>
 
         <footer className="pb-2 text-xs uppercase tracking-[0.24em] text-white/35">
