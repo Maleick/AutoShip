@@ -15,7 +15,7 @@ pub mod shared;
 use std::{
     sync::{
         Mutex, OnceLock,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread,
 };
@@ -149,6 +149,11 @@ const MAX_PENDING_CHAT: usize = 2048;
 /// falls behind polling.
 const MAX_PENDING_RESPONSES: usize = 4096;
 
+/// Counter tracking the total number of `PacketEvent` responses dropped due to
+/// bounded queue overflow. Incremented when the response queue fills and a
+/// `PacketEvent` is discarded. Used to surface packet validation observability.
+static PACKET_EVENT_DROPS: AtomicU64 = AtomicU64::new(0);
+
 /// Enqueue a response to be sent to the orchestrator.
 /// Called from the game loop thread (e.g., login FSM phase updates).
 pub fn send_response(response: Response) {
@@ -161,6 +166,7 @@ pub fn send_response(response: Response) {
             // Keep command/status responses preferred under packet flood by
             // treating packet events as lossy once the bounded queue is full.
             if matches!(response, Response::PacketEvent { .. }) {
+                PACKET_EVENT_DROPS.fetch_add(1, Ordering::SeqCst);
                 return;
             }
 
@@ -286,6 +292,14 @@ pub fn drain_chat_messages() -> Vec<textquest_common::ipc::ChatMessageInfo> {
         return Vec::new();
     };
     std::mem::take(&mut *queue)
+}
+
+/// Get the total count of `PacketEvent` responses that have been dropped due to
+/// bounded response queue overflow. Exposed to consumers so the packet monitor
+/// can detect when validation runs are under-reporting zoning traffic due to
+/// IPC queue saturation.
+pub fn get_packet_event_drop_count() -> u64 {
+    PACKET_EVENT_DROPS.load(Ordering::SeqCst)
 }
 
 /// Handle commands that must work even before the game loop runs
@@ -613,5 +627,93 @@ mod tests {
         stop();
         // Restore invariant: ensure is_running stays consistent with the stored flag.
         assert!(!is_running());
+    }
+
+    // ─── Packet event drop tracking ─────────────────────────────────────────────
+
+    #[test]
+    fn packet_event_drops_counter_increments_on_queue_overflow() {
+        // Simulate the queue-full condition by manually filling PENDING_RESPONSES
+        // and enqueuing a PacketEvent while IPC is marked as running.
+        // We can only test this if PENDING_RESPONSES is already initialized.
+        let old_running = IPC_RUNNING.swap(true, std::sync::atomic::Ordering::SeqCst);
+        let old_drops = PACKET_EVENT_DROPS.load(std::sync::atomic::Ordering::SeqCst);
+
+        // Initialize PENDING_RESPONSES if not already present.
+        let pending = PENDING_RESPONSES.get_or_init(|| Mutex::new(Vec::new()));
+        let mut queue = pending.lock().unwrap();
+
+        // Fill the queue to MAX_PENDING_RESPONSES.
+        for _ in 0..MAX_PENDING_RESPONSES {
+            queue.push(textquest_common::ipc::Response::Pong {
+                client_id: 0,
+                timestamp_ms: 0,
+            });
+        }
+        drop(queue);
+
+        // Now call send_response with a PacketEvent; it should be dropped and
+        // the counter should increment.
+        send_response(textquest_common::ipc::Response::PacketEvent {
+            client_id: 1,
+            opcode: 100,
+            direction: textquest_common::ipc::PacketDirection::Inbound,
+            timestamp_ms: 12345,
+            payload_size: 256,
+        });
+
+        let new_drops = PACKET_EVENT_DROPS.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            new_drops,
+            old_drops + 1,
+            "expected drop counter to increment by 1"
+        );
+
+        // Restore state.
+        IPC_RUNNING.store(old_running, std::sync::atomic::Ordering::SeqCst);
+        let mut queue = pending.lock().unwrap();
+        queue.clear();
+    }
+
+    #[test]
+    fn get_packet_event_drop_count_reflects_drops() {
+        let old_running = IPC_RUNNING.swap(true, std::sync::atomic::Ordering::SeqCst);
+        let baseline = get_packet_event_drop_count();
+
+        // Initialize PENDING_RESPONSES.
+        let pending = PENDING_RESPONSES.get_or_init(|| Mutex::new(Vec::new()));
+        let mut queue = pending.lock().unwrap();
+
+        // Fill the queue.
+        for _ in 0..MAX_PENDING_RESPONSES {
+            queue.push(textquest_common::ipc::Response::Pong {
+                client_id: 0,
+                timestamp_ms: 0,
+            });
+        }
+        drop(queue);
+
+        // Enqueue multiple packet events; each should be dropped.
+        for i in 0..3 {
+            send_response(textquest_common::ipc::Response::PacketEvent {
+                client_id: i,
+                opcode: 100 + i as u16,
+                direction: textquest_common::ipc::PacketDirection::Inbound,
+                timestamp_ms: 10000 + i as u64,
+                payload_size: 256,
+            });
+        }
+
+        let current = get_packet_event_drop_count();
+        assert_eq!(
+            current,
+            baseline + 3,
+            "expected drop counter to reflect all 3 dropped packets"
+        );
+
+        // Restore state.
+        IPC_RUNNING.store(old_running, std::sync::atomic::Ordering::SeqCst);
+        let mut queue = pending.lock().unwrap();
+        queue.clear();
     }
 }
