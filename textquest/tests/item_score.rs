@@ -356,3 +356,145 @@ fn loot_store_classify_item_for_loot_ignores_when_class_weights_are_missing() {
 
     assert_eq!(action, Some(ItemAction::Ignore));
 }
+
+// ── Slot matching edge cases ──────────────────────────────────────────────────
+
+#[test]
+fn compare_item_upgrade_slot_mismatch_yields_non_upgrade() {
+    let config = warrior_config();
+    let equipped = scoreable_item(
+        "Dragonhide Belt",
+        "Waist",
+        &["Warrior"],
+        &[("AC", 20.0), ("STR", 5.0)],
+    );
+    let candidate = scoreable_item(
+        "Warden Sword",
+        "Primary",
+        &["Warrior"],
+        &[("DAMAGE", 15.0), ("STR", 10.0)],
+    );
+
+    let comparison = compare_item_upgrade("WAR", &config, &candidate, Some(&equipped));
+
+    assert!(!comparison.slot_match);
+    assert!(!comparison.is_upgrade);
+}
+
+#[test]
+fn compare_item_upgrade_slot_names_are_case_insensitive_and_normalized() {
+    let config = warrior_config();
+    let equipped = scoreable_item("Old Blade", "primary", &["Warrior"], &[("DAMAGE", 5.0)]);
+    let candidate = scoreable_item("New Blade", "Primary", &["Warrior"], &[("DAMAGE", 12.0)]);
+
+    let comparison = compare_item_upgrade("WAR", &config, &candidate, Some(&equipped));
+
+    assert!(
+        comparison.slot_match,
+        "slot names should match case-insensitively"
+    );
+    assert!(comparison.is_upgrade);
+}
+
+// ── All-class item usability ─────────────────────────────────────────────────
+
+#[test]
+fn compare_item_upgrade_all_class_item_is_usable_by_any_class() {
+    let config = warrior_config();
+    // Empty `classes` means any class can use it.
+    let candidate = scoreable_item("Plain Bag", "Primary", &[], &[("AC", 5.0), ("STR", 3.0)]);
+
+    let comparison = compare_item_upgrade("WAR", &config, &candidate, None);
+
+    assert!(
+        comparison.candidate_usable,
+        "item with empty class list should be usable by everyone"
+    );
+    assert!(comparison.is_upgrade);
+}
+
+// ── can_drive_loot_fallback ───────────────────────────────────────────────────
+
+#[test]
+fn can_drive_loot_fallback_false_when_breakdown_empty() {
+    let comparison = ItemScoreComparison {
+        class_name: "Warrior".to_string(),
+        slot: Some("Primary".to_string()),
+        candidate_item_name: "Rusty Dagger".to_string(),
+        equipped_item_name: None,
+        candidate_score: 0.0,
+        equipped_score: 0.0,
+        score_delta: 0.0,
+        is_upgrade: false,
+        candidate_usable: true,
+        slot_match: true,
+        breakdown: vec![],
+    };
+    assert!(!comparison.can_drive_loot_fallback());
+}
+
+#[test]
+fn can_drive_loot_fallback_false_when_slot_does_not_match() {
+    let comparison = ItemScoreComparison {
+        class_name: "Warrior".to_string(),
+        slot: Some("Waist".to_string()),
+        candidate_item_name: "Sword".to_string(),
+        equipped_item_name: None,
+        candidate_score: 10.0,
+        equipped_score: 5.0,
+        score_delta: 5.0,
+        is_upgrade: true,
+        candidate_usable: true,
+        slot_match: false,
+        breakdown: vec![WeightedStatDelta {
+            stat: "DAMAGE".to_string(),
+            candidate: 10.0,
+            equipped: 5.0,
+            delta: 5.0,
+            weight: 2.0,
+            weighted_delta: 10.0,
+        }],
+    };
+    assert!(!comparison.can_drive_loot_fallback());
+}
+
+// ── Default class weights completeness ───────────────────────────────────────
+
+#[test]
+fn default_item_score_config_has_weights_for_all_sixteen_classes() {
+    let config = ItemScoreConfig::default();
+    let classes = [
+        "Warrior",
+        "Cleric",
+        "Paladin",
+        "Ranger",
+        "Shadow Knight",
+        "Druid",
+        "Monk",
+        "Bard",
+        "Rogue",
+        "Shaman",
+        "Necromancer",
+        "Wizard",
+        "Magician",
+        "Enchanter",
+        "Beastlord",
+        "Berserker",
+    ];
+    for class in classes {
+        assert!(
+            config.weights_for_class(class).is_some(),
+            "missing weights for {class}"
+        );
+    }
+}
+
+#[test]
+fn weights_for_class_accepts_short_alias() {
+    let config = ItemScoreConfig::default();
+    // "WAR" should resolve to "Warrior" weights via canonical_class_name fallback.
+    let weights_long = config.weights_for_class("Warrior");
+    let weights_short = config.weights_for_class("WAR");
+    assert!(weights_long.is_some());
+    assert_eq!(weights_long, weights_short);
+}

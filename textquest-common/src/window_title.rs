@@ -138,3 +138,153 @@ pub fn class_short_name(class_id: u8) -> Option<&'static str> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn full_ctx<'a>() -> WindowTitleContext<'a> {
+        WindowTitleContext {
+            server: Some("Firiona Vie"),
+            character: Some("Aelrindel"),
+            level: Some(65),
+            class_id: Some(2), // Cleric
+            zone_long_name: Some("The Nexus"),
+            zone_short_name: Some("nexus"),
+        }
+    }
+
+    // ── class_long_name ──────────────────────────────────────────────────
+
+    #[test]
+    fn class_long_name_covers_all_sixteen_classes() {
+        let expected = [
+            (1u8, "Warrior"),
+            (2, "Cleric"),
+            (3, "Paladin"),
+            (4, "Ranger"),
+            (5, "Shadow Knight"),
+            (6, "Druid"),
+            (7, "Monk"),
+            (8, "Bard"),
+            (9, "Rogue"),
+            (10, "Shaman"),
+            (11, "Necromancer"),
+            (12, "Wizard"),
+            (13, "Magician"),
+            (14, "Enchanter"),
+            (15, "Beastlord"),
+            (16, "Berserker"),
+        ];
+        for (id, name) in expected {
+            assert_eq!(class_long_name(id), Some(name), "class id {id}");
+        }
+    }
+
+    #[test]
+    fn class_long_name_returns_none_for_unknown_id() {
+        assert_eq!(class_long_name(0), None);
+        assert_eq!(class_long_name(17), None);
+        assert_eq!(class_long_name(255), None);
+    }
+
+    // ── class_short_name ─────────────────────────────────────────────────
+
+    #[test]
+    fn class_short_name_covers_all_sixteen_classes() {
+        let expected = [
+            (1u8, "WAR"),
+            (2, "CLR"),
+            (3, "PAL"),
+            (4, "RNG"),
+            (5, "SK"),
+            (6, "DRU"),
+            (7, "MNK"),
+            (8, "BRD"),
+            (9, "ROG"),
+            (10, "SHM"),
+            (11, "NEC"),
+            (12, "WIZ"),
+            (13, "MAG"),
+            (14, "ENC"),
+            (15, "BST"),
+            (16, "BER"),
+        ];
+        for (id, abbrev) in expected {
+            assert_eq!(class_short_name(id), Some(abbrev), "class id {id}");
+        }
+    }
+
+    #[test]
+    fn class_short_name_returns_none_for_unknown_id() {
+        assert_eq!(class_short_name(0), None);
+        assert_eq!(class_short_name(255), None);
+    }
+
+    // ── render_window_title ──────────────────────────────────────────────
+
+    #[test]
+    fn render_window_title_default_format() {
+        let ctx = full_ctx();
+        let title = render_window_title(&default_window_title_format(), &ctx);
+        assert_eq!(title, "[Firiona Vie] Aelrindel (65 CLR)");
+    }
+
+    #[test]
+    fn render_window_title_expands_all_tokens() {
+        let ctx = full_ctx();
+        let template =
+            "{server} {character} {level} {class} {class_short} {zone} {zone_long} {zone_short}";
+        let title = render_window_title(template, &ctx);
+        assert_eq!(
+            title,
+            "Firiona Vie Aelrindel 65 Cleric CLR The Nexus The Nexus nexus"
+        );
+    }
+
+    #[test]
+    fn render_window_title_zone_falls_back_to_short_name() {
+        let ctx = WindowTitleContext {
+            server: Some("Antonica"),
+            character: Some("Bryndas"),
+            level: Some(20),
+            class_id: Some(1),
+            zone_long_name: None,
+            zone_short_name: Some("ecommons"),
+        };
+        let title = render_window_title("{zone}", &ctx);
+        assert_eq!(title, "ecommons");
+    }
+
+    #[test]
+    fn render_window_title_unknown_token_preserved_verbatim() {
+        let ctx = full_ctx();
+        let title = render_window_title("prefix {unknown_token} suffix", &ctx);
+        assert_eq!(title, "prefix {unknown_token} suffix");
+    }
+
+    #[test]
+    fn render_window_title_missing_context_uses_empty_string() {
+        let ctx = WindowTitleContext::default();
+        // The literal "] " and " (" each contribute a space, so two spaces appear
+        // between the server and character sections when both are empty strings.
+        let title = render_window_title("[{server}] {character} ({level} {class_short})", &ctx);
+        assert_eq!(title, "[]  ( )");
+    }
+
+    #[test]
+    fn render_window_title_unclosed_brace_emits_remaining_literal() {
+        let ctx = full_ctx();
+        // An unclosed `{` causes the renderer to stop resolving tokens; the
+        // tail of the template (including the `{`) is appended verbatim.
+        let title = render_window_title("text {unclosed", &ctx);
+        assert_eq!(title, "text {unclosed");
+    }
+
+    #[test]
+    fn render_window_title_plain_string_passes_through() {
+        let ctx = full_ctx();
+        let title = render_window_title("No tokens here", &ctx);
+        assert_eq!(title, "No tokens here");
+    }
+}

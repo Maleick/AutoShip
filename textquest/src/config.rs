@@ -550,7 +550,7 @@ pub struct GroupConfig {
 }
 
 /// Per-character unattended death handling.
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(default)]
 pub struct AutoCampOnDeathConfig {
     /// Enable automatic `/camp desktop` plus relog scheduling after death.

@@ -663,3 +663,178 @@ mod tests {
         std::fs::remove_dir_all(&temp_root).ok();
     }
 }
+
+#[cfg(test)]
+mod cross_platform_tests {
+    use super::*;
+    use textquest_common::ipc::ChatMessageInfo;
+
+    fn enabled_config(channels: Vec<ChatChannel>) -> ChatLogConfig {
+        ChatLogConfig {
+            enabled: true,
+            channels,
+            rotation_strategy: RotationStrategy::None,
+            max_file_size_bytes: 10 * 1024 * 1024,
+            min_level: LogLevel::Trace,
+            log_eq_chat: false,
+        }
+    }
+
+    // ── Pure-function tests ──────────────────────────────────────────────
+
+    #[test]
+    fn is_leap_year_divisible_by_4_but_not_100() {
+        assert!(ChatLogManager::is_leap_year(2024));
+        assert!(ChatLogManager::is_leap_year(2000));
+        assert!(!ChatLogManager::is_leap_year(1900));
+        assert!(!ChatLogManager::is_leap_year(2023));
+    }
+
+    #[test]
+    fn format_timestamp_unix_epoch() {
+        // Epoch (0 ms) is 1970-01-01 00:00:00.000
+        let formatted = ChatLogManager::format_timestamp(0);
+        assert_eq!(formatted, "1970-01-01 00:00:00.000");
+    }
+
+    #[test]
+    fn format_timestamp_known_date() {
+        // 2023-11-14 22:13:20.000 UTC → 1700000000 seconds
+        let formatted = ChatLogManager::format_timestamp(1_700_000_000_000);
+        assert!(
+            formatted.starts_with("2023-11-14"),
+            "expected 2023-11-14, got {formatted}"
+        );
+    }
+
+    #[test]
+    fn format_timestamp_preserves_milliseconds() {
+        // 1 second + 500 ms past epoch
+        let formatted = ChatLogManager::format_timestamp(1_500);
+        assert!(
+            formatted.ends_with(".500"),
+            "expected .500 suffix, got {formatted}"
+        );
+    }
+
+    #[test]
+    fn log_path_sanitizes_special_characters() {
+        let dir = tempfile::tempdir().unwrap();
+        let manager = ChatLogManager::new(
+            enabled_config(vec![ChatChannel::Say]),
+            dir.path().to_path_buf(),
+        )
+        .unwrap();
+        let path = manager.log_path("Firiona|Vie", "Test:Char*");
+        let name = path.file_name().unwrap().to_string_lossy();
+        assert!(!name.contains('|'), "pipe not sanitized: {name}");
+        assert!(!name.contains(':'), "colon not sanitized: {name}");
+        assert!(!name.contains('*'), "asterisk not sanitized: {name}");
+    }
+
+    // ── I/O behaviour tests ──────────────────────────────────────────────
+
+    #[test]
+    fn log_message_writes_to_file_when_enabled() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = enabled_config(vec![ChatChannel::Say]);
+        let mut manager = ChatLogManager::new(config, dir.path().to_path_buf()).unwrap();
+
+        let msg = ChatMessageInfo {
+            text: "Hello world".to_string(),
+            color: 0,
+            timestamp_ms: 0,
+        };
+        manager
+            .log_message("Server", "Char", &msg, Some(ChatChannel::Say))
+            .unwrap();
+
+        let content = std::fs::read_to_string(dir.path().join("Server_Char.log")).unwrap();
+        assert!(content.contains("Hello world"));
+    }
+
+    #[test]
+    fn log_message_skips_write_when_disabled() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = enabled_config(vec![ChatChannel::Say]);
+        config.enabled = false;
+        let mut manager = ChatLogManager::new(config, dir.path().to_path_buf()).unwrap();
+
+        let msg = ChatMessageInfo {
+            text: "Should not appear".to_string(),
+            color: 0,
+            timestamp_ms: 0,
+        };
+        manager
+            .log_message("Server", "Char", &msg, Some(ChatChannel::Say))
+            .unwrap();
+
+        assert!(!dir.path().join("Server_Char.log").exists());
+    }
+
+    #[test]
+    fn log_message_skips_write_for_filtered_channel() {
+        let dir = tempfile::tempdir().unwrap();
+        // Only Guild is in the allow-list.
+        let config = enabled_config(vec![ChatChannel::Guild]);
+        let mut manager = ChatLogManager::new(config, dir.path().to_path_buf()).unwrap();
+
+        let msg = ChatMessageInfo {
+            text: "Say message".to_string(),
+            color: 0,
+            timestamp_ms: 0,
+        };
+        // Sending on Say (not in allow-list) should be silently dropped.
+        manager
+            .log_message("Server", "Char", &msg, Some(ChatChannel::Say))
+            .unwrap();
+
+        assert!(!dir.path().join("Server_Char.log").exists());
+    }
+
+    #[test]
+    fn log_mq2_output_skips_write_below_min_level() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = enabled_config(vec![]);
+        config.min_level = LogLevel::Error;
+        let mut manager = ChatLogManager::new(config, dir.path().to_path_buf()).unwrap();
+
+        manager
+            .log_mq2_output("Server", "Char", "debug output", LogLevel::Debug)
+            .unwrap();
+
+        assert!(!dir.path().join("Server_Char.log").exists());
+    }
+
+    #[test]
+    fn log_mq2_output_writes_at_or_above_min_level() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = enabled_config(vec![]);
+        config.min_level = LogLevel::Warn;
+        let mut manager = ChatLogManager::new(config, dir.path().to_path_buf()).unwrap();
+
+        manager
+            .log_mq2_output("Server", "Char", "warning output", LogLevel::Warn)
+            .unwrap();
+
+        let content = std::fs::read_to_string(dir.path().join("Server_Char.log")).unwrap();
+        assert!(content.contains("warning output"));
+    }
+
+    #[test]
+    fn update_config_changes_enabled_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut config = enabled_config(vec![ChatChannel::MQ2]);
+        config.enabled = false;
+        let mut manager = ChatLogManager::new(config, dir.path().to_path_buf()).unwrap();
+
+        let new_config = ChatLogConfig {
+            enabled: true,
+            channels: vec![ChatChannel::MQ2],
+            ..ChatLogConfig::default()
+        };
+        manager.update_config(new_config);
+
+        assert!(manager.get_config().enabled);
+    }
+}

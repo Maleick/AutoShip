@@ -153,3 +153,133 @@ impl From<TimestampConfigFile> for TimestampConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn make_config_file(enabled: bool, format: &str) -> TimestampConfigFile {
+        TimestampConfigFile {
+            enabled,
+            format: format.to_string(),
+        }
+    }
+
+    #[test]
+    fn config_file_converts_date_time_24() {
+        let cfg = TimestampConfig::from(make_config_file(true, "date_time_24"));
+        assert!(cfg.enabled);
+        assert_eq!(cfg.format, CommonTimestampFormat::DateTime24);
+    }
+
+    #[test]
+    fn config_file_converts_time_24() {
+        let cfg = TimestampConfig::from(make_config_file(false, "time_24"));
+        assert!(!cfg.enabled);
+        assert_eq!(cfg.format, CommonTimestampFormat::Time24);
+    }
+
+    #[test]
+    fn config_file_converts_date_time_12() {
+        let cfg = TimestampConfig::from(make_config_file(true, "date_time_12"));
+        assert_eq!(cfg.format, CommonTimestampFormat::DateTime12);
+    }
+
+    #[test]
+    fn config_file_converts_time_12() {
+        let cfg = TimestampConfig::from(make_config_file(true, "time_12"));
+        assert_eq!(cfg.format, CommonTimestampFormat::Time12);
+    }
+
+    #[test]
+    fn config_file_unknown_format_falls_back_to_default() {
+        let cfg = TimestampConfig::from(make_config_file(true, "not_a_real_format"));
+        assert_eq!(cfg.format, CommonTimestampFormat::default());
+    }
+
+    #[test]
+    fn get_config_returns_default_for_unknown_character() {
+        let runtime = TimestampRuntime::new();
+        let cfg = runtime.get_config("Aelrindel");
+        assert_eq!(cfg, TimestampConfig::default());
+    }
+
+    #[test]
+    fn load_from_disk_missing_file_returns_empty_map() {
+        // Use a known-nonexistent path inside the system temp dir to avoid
+        // platform differences between /tmp (Unix) and %TEMP% (Windows).
+        let path = std::env::temp_dir().join("__tq_nonexistent_timestamp_config_file.toml");
+        let result = load_from_disk(&path).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn load_from_disk_valid_toml_parses_all_characters() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("timestamp.toml");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(
+            file,
+            r#"
+[Aelrindel]
+enabled = true
+format = "time_24"
+
+[Bryndas]
+enabled = false
+format = "date_time_12"
+"#
+        )
+        .unwrap();
+
+        let result = load_from_disk(&path).unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(
+            result["Aelrindel"],
+            TimestampConfig {
+                enabled: true,
+                format: CommonTimestampFormat::Time24,
+            }
+        );
+        assert_eq!(
+            result["Bryndas"],
+            TimestampConfig {
+                enabled: false,
+                format: CommonTimestampFormat::DateTime12,
+            }
+        );
+    }
+
+    #[test]
+    fn should_check_returns_true_when_never_run() {
+        let runtime = TimestampRuntime::new();
+        assert!(runtime.should_check());
+    }
+
+    #[test]
+    fn tick_skips_reload_when_recently_checked() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("timestamp.toml");
+        // Write initial config so tick has something to read on first call.
+        std::fs::write(&path, "[Aelrindel]\nenabled = true\nformat = \"time_24\"\n").unwrap();
+
+        let mut runtime = TimestampRuntime {
+            config_path: path,
+            last_check: None,
+            last_mtime: None,
+            active_configs: HashMap::new(),
+        };
+
+        // First tick loads config.
+        let first = runtime.tick();
+        assert!(first.is_some(), "first tick should load config");
+
+        // Immediate second tick should be suppressed by the rate-limit guard.
+        let second = runtime.tick();
+        assert!(
+            second.is_none(),
+            "second tick within interval should be None"
+        );
+    }
+}
