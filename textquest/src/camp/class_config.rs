@@ -806,169 +806,129 @@ mod tests {
             .find(|ability| ability.name == "Malos")
             .unwrap();
         assert_eq!(level_65_malos.order, 2);
-        fn shipped_ranger_config_tracks_level_rotation_overrides() {
-            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .unwrap()
-                .join("config/classes/ranger.toml");
-            let config = ClassConfig::load(&path).expect("ranger config should parse");
+    }
 
-            let at_60 = config.profile_for_level(Some(60));
-            assert_eq!(at_60.buff_abilities[0].name, "Call of the Predator");
-            assert_eq!(at_60.combat_abilities[0].name, "Trueshot Discipline");
-            assert_eq!(
-                at_60.emergency_abilities[1].name,
-                "Weapon Shield Discipline"
-            );
+    #[test]
+    fn shipped_necromancer_config_matches_live_breakpoints() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("config/classes/necromancer.toml");
+        let config = ClassConfig::load(&path)
+            .unwrap_or_else(|error| panic!("Failed to parse {}: {error}", path.display()));
 
-            let at_61 = config.profile_for_level(Some(61));
-            assert!(
-                at_61
-                    .combat_abilities
-                    .iter()
-                    .any(|ability| ability.name == "Circle of Winter")
-            );
+        let override_ranges: Vec<(Option<u8>, Option<u8>)> = config
+            .level_overrides
+            .iter()
+            .map(|profile| (profile.min_level, profile.max_level))
+            .collect();
+        assert_eq!(
+            override_ranges,
+            vec![
+                (Some(60), Some(60)),
+                (Some(61), Some(61)),
+                (Some(62), Some(64)),
+                (Some(65), Some(65)),
+            ]
+        );
 
-            let at_62 = config.profile_for_level(Some(62));
-            assert_eq!(at_62.buff_abilities[1].name, "Call of the Rathe");
-            assert!(
-                at_62
-                    .combat_abilities
-                    .iter()
-                    .any(|ability| ability.name == "Drifting Death")
-            );
-            assert_eq!(at_62.debuff_abilities[0].name, "Ensnare");
+        let base = config.profile_for_level(None);
+        assert_eq!(base.combat_abilities[0].name, "Resist Debuff");
+        assert_eq!(base.combat_abilities[1].name, "Disease DoT");
+        assert_eq!(base.emergency_abilities[1].name, "Feign Death");
 
-            let at_64 = config.profile_for_level(Some(64));
-            assert_eq!(at_64.debuff_abilities[0].name, "Nature's Rebuke");
+        let level_60 = config.profile_for_level(Some(60));
+        assert_eq!(level_60.combat_abilities[0].name, "Scent of Terris");
+        assert_eq!(level_60.combat_abilities[1].name, "Splurt");
+        assert_eq!(level_60.combat_abilities[2].name, "Funeral Pyre of Kelador");
+        assert_eq!(level_60.combat_abilities[4].name, "Touch of Night");
+        assert_eq!(level_60.buff_abilities[0].name, "Arch Lich");
 
-            let at_65 = config.profile_for_level(Some(65));
-            assert_eq!(at_65.buff_abilities[0].name, "Natureskin");
-            assert_eq!(at_65.combat_abilities[1].name, "Sylvan Burn");
-        }
+        let level_61 = config.profile_for_level(Some(61));
+        assert_eq!(level_61.combat_abilities[1].name, "Dark Plague");
 
-        #[test]
-        fn shipped_necromancer_config_matches_live_breakpoints() {
-            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .unwrap()
-                .join("config/classes/necromancer.toml");
-            let config = ClassConfig::load(&path)
-                .unwrap_or_else(|error| panic!("Failed to parse {}: {error}", path.display()));
+        let level_62 = config.profile_for_level(Some(62));
+        assert_eq!(level_62.combat_abilities[3].name, "Legacy of Zek");
+        assert_eq!(level_62.combat_abilities[5].name, "Touch of Mujaki");
+        assert_eq!(level_62.buff_abilities[1].name, "Rune of Death");
 
-            let override_ranges: Vec<(Option<u8>, Option<u8>)> = config
-                .level_overrides
+        let level_65 = config.profile_for_level(Some(65));
+        assert_eq!(level_65.combat_abilities[2].name, "Night Fire");
+        assert_eq!(level_65.combat_abilities[3].name, "Blood of Thule");
+        assert_eq!(
+            level_65.combat_abilities[5].name,
+            "Gangrenous Touch of Zum'uul"
+        );
+        assert_eq!(level_65.emergency_abilities[1].name, "Death Peace");
+    }
+
+    #[test]
+    fn shipped_ranger_config_tracks_level_rotation_overrides() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("config/classes/ranger.toml");
+        let config = ClassConfig::load(&path).expect("ranger config should parse");
+
+        let at_60 = config.profile_for_level(Some(60));
+        assert_eq!(at_60.buff_abilities[0].name, "Call of the Predator");
+        assert_eq!(at_60.combat_abilities[0].name, "Trueshot Discipline");
+        assert_eq!(
+            at_60.emergency_abilities[1].name,
+            "Weapon Shield Discipline"
+        );
+
+        let at_61 = config.profile_for_level(Some(61));
+        assert!(
+            at_61
+                .combat_abilities
                 .iter()
-                .map(|profile| (profile.min_level, profile.max_level))
-                .collect();
+                .any(|ability| ability.name == "Circle of Winter")
+        );
+
+        let at_62 = config.profile_for_level(Some(62));
+        assert_eq!(at_62.buff_abilities[1].name, "Call of the Rathe");
+        assert!(
+            at_62
+                .combat_abilities
+                .iter()
+                .any(|ability| ability.name == "Drifting Death")
+        );
+        assert_eq!(at_62.debuff_abilities[0].name, "Ensnare");
+
+        let at_64 = config.profile_for_level(Some(64));
+        assert_eq!(at_64.debuff_abilities[0].name, "Nature's Rebuke");
+
+        let at_65 = config.profile_for_level(Some(65));
+        assert_eq!(at_65.buff_abilities[0].name, "Natureskin");
+        assert_eq!(at_65.combat_abilities[1].name, "Sylvan Burn");
+    }
+
+    #[test]
+    fn cleric_live_config_profiles_fall_back_to_base_when_no_level_override_exists() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("config/classes/cleric.toml");
+        let config = ClassConfig::load(&path).expect("load cleric class config");
+
+        let base_profile = config.profile_for_level(None);
+        assert!(
+            !base_profile.combat_abilities.is_empty()
+                || !base_profile.buff_abilities.is_empty(),
+            "live cleric config should define at least one ability"
+        );
+
+        for level in [1_u8, 60, 61, 62, 65] {
+            let profile = config.profile_for_level(Some(level));
             assert_eq!(
-                override_ranges,
-                vec![
-                    (Some(60), Some(60)),
-                    (Some(61), Some(61)),
-                    (Some(62), Some(64)),
-                    (Some(65), Some(65)),
-                ]
+                profile.combat_abilities, base_profile.combat_abilities,
+                "cleric combat profile at level {level} should fall back to base config"
             );
-
-            let base = config.profile_for_level(None);
-            assert_eq!(base.combat_abilities[0].name, "Resist Debuff");
-            assert_eq!(base.combat_abilities[1].name, "Disease DoT");
-            assert_eq!(base.emergency_abilities[1].name, "Feign Death");
-
-            let level_60 = config.profile_for_level(Some(60));
-            assert_eq!(level_60.combat_abilities[0].name, "Scent of Terris");
-            assert_eq!(level_60.combat_abilities[1].name, "Splurt");
-            assert_eq!(level_60.combat_abilities[2].name, "Funeral Pyre of Kelador");
-            assert_eq!(level_60.combat_abilities[4].name, "Touch of Night");
-            assert_eq!(level_60.buff_abilities[0].name, "Arch Lich");
-
-            let level_61 = config.profile_for_level(Some(61));
-            assert_eq!(level_61.combat_abilities[1].name, "Dark Plague");
-
-            let level_62 = config.profile_for_level(Some(62));
-            assert_eq!(level_62.combat_abilities[3].name, "Legacy of Zek");
-            assert_eq!(level_62.combat_abilities[5].name, "Touch of Mujaki");
-            assert_eq!(level_62.buff_abilities[1].name, "Rune of Death");
-
-            let level_65 = config.profile_for_level(Some(65));
-            assert_eq!(level_65.combat_abilities[2].name, "Night Fire");
-            assert_eq!(level_65.combat_abilities[3].name, "Blood of Thule");
             assert_eq!(
-                level_65.combat_abilities[5].name,
-                "Gangrenous Touch of Zum'uul"
+                profile.buff_abilities, base_profile.buff_abilities,
+                "cleric buff profile at level {level} should fall back to base config"
             );
-            assert_eq!(level_65.emergency_abilities[1].name, "Death Peace");
-        }
-
-        #[test]
-        fn shipped_ranger_config_tracks_level_rotation_overrides() {
-            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .unwrap()
-                .join("config/classes/ranger.toml");
-            let config = ClassConfig::load(&path).expect("ranger config should parse");
-
-            let at_60 = config.profile_for_level(Some(60));
-            assert_eq!(at_60.buff_abilities[0].name, "Call of the Predator");
-            assert_eq!(at_60.combat_abilities[0].name, "Trueshot Discipline");
-            assert_eq!(
-                at_60.emergency_abilities[1].name,
-                "Weapon Shield Discipline"
-            );
-
-            let at_61 = config.profile_for_level(Some(61));
-            assert!(
-                at_61
-                    .combat_abilities
-                    .iter()
-                    .any(|ability| ability.name == "Circle of Winter")
-            );
-
-            let at_62 = config.profile_for_level(Some(62));
-            assert_eq!(at_62.buff_abilities[1].name, "Call of the Rathe");
-            assert!(
-                at_62
-                    .combat_abilities
-                    .iter()
-                    .any(|ability| ability.name == "Drifting Death")
-            );
-            assert_eq!(at_62.debuff_abilities[0].name, "Ensnare");
-
-            let at_64 = config.profile_for_level(Some(64));
-            assert_eq!(at_64.debuff_abilities[0].name, "Nature's Rebuke");
-
-            let at_65 = config.profile_for_level(Some(65));
-            assert_eq!(at_65.buff_abilities[0].name, "Natureskin");
-            assert_eq!(at_65.combat_abilities[1].name, "Sylvan Burn");
-        }
-
-        #[test]
-        fn cleric_live_config_profiles_fall_back_to_base_when_no_level_override_exists() {
-            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .unwrap()
-                .join("config/classes/cleric.toml");
-            let config = ClassConfig::load(&path).expect("load cleric class config");
-
-            let base_profile = config.profile_for_level(None);
-            assert!(
-                !base_profile.combat_abilities.is_empty()
-                    || !base_profile.buff_abilities.is_empty(),
-                "live cleric config should define at least one ability"
-            );
-
-            for level in [1_u8, 60, 61, 62, 65] {
-                let profile = config.profile_for_level(Some(level));
-                assert_eq!(
-                    profile.combat_abilities, base_profile.combat_abilities,
-                    "cleric combat profile at level {level} should fall back to base config"
-                );
-                assert_eq!(
-                    profile.buff_abilities, base_profile.buff_abilities,
-                    "cleric buff profile at level {level} should fall back to base config"
-                );
-            }
         }
     }
 }
