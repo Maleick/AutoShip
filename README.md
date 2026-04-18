@@ -15,10 +15,12 @@
   <a href="https://github.com/sponsors/Maleick"><img src="https://img.shields.io/github/sponsors/Maleick?label=Sponsor&logo=GitHub&color=EA4AAA&style=flat" alt="Sponsor"></a>
 </p>
 
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-208%2C654-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-~4%2C870-brightgreen?style=flat-square)](#testing)
-
-
+<p align="center">
+  <img src="https://img.shields.io/badge/Rust%20LOC-246%2C693-blue?style=flat-square" alt="Rust LOC">
+  <img src="https://img.shields.io/badge/Tests-~5%2C492-brightgreen?style=flat-square" alt="Tests">
+  <img src="https://img.shields.io/badge/Crates-6-purple?style=flat-square" alt="Crates">
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey?style=flat-square" alt="Platform">
+</p>
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> •
@@ -185,11 +187,11 @@ Full guide: [`docs/wiki/Configuration.md`](docs/wiki/Configuration.md)
 
 ## CI / Automation
 
-| Trigger                | Jobs                                                             |
-| ---------------------- | ---------------------------------------------------------------- |
+| Trigger                    | Jobs                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------- |
 | Pull request / master push | `Merge gate` — one Linux job for secret scan, docs validation, tests, fmt, and clippy |
-| Manual/nightly validation | `nightly-release.yml` — broader Windows release-style validation |
-| `v*` tag               | Windows release build + GitHub Release artifacts                 |
+| Manual/nightly validation  | `nightly-release.yml` — broader Windows release-style validation                      |
+| `v*` tag                   | Windows release build + GitHub Release artifacts                                      |
 
 - **Windows runners** (Frostreaver, Tailscale): release, nightly, patch-sensitive validation
 - **Linux runners** (DigitalOcean): merge gate, agent automation
