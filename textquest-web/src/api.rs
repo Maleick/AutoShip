@@ -5,6 +5,7 @@ pub mod alerts;
 pub mod auto_group;
 pub mod chat_log;
 pub mod chat_pattern_rules;
+pub mod control;
 pub mod dashboard;
 pub mod discord;
 pub mod economy;

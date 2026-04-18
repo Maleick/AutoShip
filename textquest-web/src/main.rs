@@ -119,6 +119,8 @@ pub struct AppState {
     pub chat_pattern_rules: tokio::sync::RwLock<ChatPatternRuleEngine>,
     /// Say detection state for /say channel pattern matching.
     pub say_detection: Option<Arc<api::say_detection::SayDetectionState>>,
+    /// In-memory session control state for external SDK control endpoints.
+    pub session_controls: tokio::sync::RwLock<HashMap<u32, api::control::SessionControlState>>,
     /// Auto-group formation state — MQ2AutoGroup parity.
     pub auto_group_state: Arc<api::auto_group::AutoGroupState>,
     /// Persisted extension catalog metadata, overrides, and runtime status.
@@ -384,6 +386,7 @@ fn build_state() -> Arc<AppState> {
         xassist_configs: api::xassist::demo_xassist_configs(),
         chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
+        session_controls: tokio::sync::RwLock::new(HashMap::new()),
         auto_group_state: api::auto_group::AutoGroupState::new_demo(),
         extension_catalog_state: api::extensions::ExtensionCatalogState::load(
             api::extensions::extension_catalog_path(),
@@ -437,6 +440,7 @@ pub(crate) fn test_app_state() -> AppState {
         xassist_configs: api::xassist::demo_xassist_configs(),
         chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
+        session_controls: tokio::sync::RwLock::new(HashMap::new()),
         auto_group_state: api::auto_group::AutoGroupState::new_demo(),
         extension_catalog_state: api::extensions::ExtensionCatalogState::load(
             std::env::temp_dir().join(format!(
@@ -599,6 +603,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .nest("/gm-alerts", api::gm_alerts::router())
         .nest("/say-detection", api::say_detection::router())
         .nest("/auto-group", api::auto_group::router())
+        .nest("/control", api::control::router())
         .route("/xassist/configs", get(api::xassist::list_xassist_configs))
         .route(
             "/xassist/config/{character}",
@@ -761,6 +766,7 @@ mod tests {
             xassist_configs: api::xassist::demo_xassist_configs(),
             chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
             say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
+            session_controls: tokio::sync::RwLock::new(HashMap::new()),
             auto_group_state: api::auto_group::AutoGroupState::new_demo(),
             extension_catalog_state: api::extensions::ExtensionCatalogState::load(
                 std::env::temp_dir().join(format!(

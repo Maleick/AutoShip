@@ -1,0 +1,24 @@
+{
+  "name": "@textquest/client",
+  "version": "0.1.0",
+  "description": "TypeScript client library for TextQuest web API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": ["textquest", "everquest", "multibox", "automation"],
+  "author": "TextQuest Team <textquest@example.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  }
+}

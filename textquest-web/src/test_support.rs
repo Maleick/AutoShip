@@ -55,6 +55,7 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         xassist_configs: api::xassist::demo_xassist_configs(),
         chat_pattern_rules: api::chat_pattern_rules::load_rules_state(),
         say_detection: Some(Arc::new(api::say_detection::SayDetectionState::new_demo())),
+        session_controls: tokio::sync::RwLock::new(HashMap::new()),
         auto_group_state: api::auto_group::AutoGroupState::new_demo(),
         extension_catalog_state: api::extensions::ExtensionCatalogState::load(
             std::env::temp_dir().join(format!(

@@ -1,210 +1,170 @@
 # API Reference
 
-## Rust SDK (`textquest-common`)
+This document describes the HTTP and WebSocket API endpoints provided by the TextQuest web server.
 
-### Core Types
+## Base URL
 
-#### `ipc::IpcCommand`
-
-Wraps a command with an optional correlation ID for request-response tracking.
-
-```rust
-pub struct IpcCommand {
-    pub command: Command,
-    pub correlation_id: Option<u64>,
-}
-
-impl IpcCommand {
-    pub fn new(command: Command) -> Self
-    pub fn with_correlation(command: Command, correlation_id: u64) -> Self
-}
+```
+http://localhost:3001
 ```
 
-#### `ipc::IpcResponse`
+**WebSocket URL**: `ws://localhost:3001/ws`
 
-Response wrapper that echoes the correlation ID from the originating command.
+## Authentication
 
-```rust
-pub struct IpcResponse {
-    pub response: Response,
-    pub correlation_id: Option<u64>,
-}
+All endpoints support optional token authentication via the `X-API-Token` header:
+
+```bash
+curl -H "X-API-Token: your-token" http://localhost:3001/api/health
 ```
 
-#### `ipc::CorrelationIdGenerator`
+Set `TEXTQUEST_API_TOKEN` environment variable to enable auth on the server.
 
-Generates monotonically increasing correlation IDs.
+## Endpoints
 
-```rust
-pub struct CorrelationIdGenerator {
-    next: AtomicU64,
-}
+### Health Check
 
-impl CorrelationIdGenerator {
-    pub fn new() -> Self
-    pub fn next_id(&self) -> u64
+#### GET /api/health
+
+Returns server health status.
+
+**Response**: 200 OK
+
+```json
+{
+  "status": "ok",
+  "version": "0.1.0"
 }
 ```
 
-### IPC Endpoints
+---
 
-#### Named Pipe Format
+### Sessions
 
-```
-\\.\pipe\{session_id:x}_cmd_{client_id}
-```
+#### GET /api/sessions
 
-#### Shared Memory Format
+List all active sessions.
 
-```
-{session_id:x}_state_{client_id}
-```
+**Response**: 200 OK
 
-### Serialization
-
-- **Format**: bincode (binary serde)
-- **Byte Order**: Little-endian
-- **Wire Framing**: 4-byte length prefix
-
-## Python SDK (`textquest`)
-
-### Classes
-
-#### `Client`
-
-Synchronous client for TextQuest IPC.
-
-```python
-class Client:
-    def __init__(self, session: Session)
-    def nav_loc(self, x: float, y: float, z: float) -> None
-    def cast_spell(self, slot: int, target_id: int | None = None) -> None
-    def sit(self) -> None
-    def get_state(self) -> GameState
-    def close(self) -> None
+```json
+[
+  {
+    "client_id": 1,
+    "character_name": "Frostreaver",
+    "zone": "South Karana",
+    "level": 60,
+    "hp_pct": 95.5,
+    "mana_pct": 87.0,
+    "status": "idle"
+  }
+]
 ```
 
-#### `AsyncClient`
+---
 
-Asynchronous client for high-throughput applications.
+### Session Control
 
-```python
-class AsyncClient:
-    async def __aenter__(self) -> AsyncClient
-    async def __aexit__(self, *args) -> None
-    async def nav_loc(self, x: float, y: float, z: float) -> None
-    async def cast_spell(self, slot: int, target_id: int | None = None) -> None
-    async def get_state(self) -> GameState
-```
+#### PUT /api/control/pause/:session_id
 
-#### `Session`
+Pause a session.
 
-IPC session configuration derived from token files.
+**Response**: 200 OK
 
-```python
-class Session:
-    @classmethod
-    def from_token_file(cls, path: str) -> Session
-    @property
-    def session_id(self) -> int
-    @property
-    def client_id(self) -> int
-```
+#### PUT /api/control/resume/:session_id
 
-#### `GameState`
+Resume a paused session.
 
-Current game state snapshot from shared memory.
+**Response**: 200 OK
 
-```python
-class GameState:
-    zone_name: str
-    x: float
-    y: float
-    z: float
-    heading: float
-    zone_id: int
-    spawn_id: int
-```
+#### PUT /api/control/group/:session_id
 
-### Exceptions
+Set session group assignment.
 
-```python
-class TextQuestError(Exception):
-    """Base exception for TextQuest SDK errors."""
-    pass
-
-class ConnectionError(TextQuestError):
-    """Failed to connect to IPC endpoint."""
-    pass
-
-class TimeoutError(TextQuestError):
-    """Command timed out."""
-    pass
-```
-
-## TypeScript SDK (`@textquest/client`)
-
-### Classes
-
-#### `Client`
-
-Main client for TextQuest IPC communication.
-
-```typescript
-class Client {
-  constructor(session: Session);
-  navLoc(params: { x: number; y: number; z: number }): Promise<void>;
-  castSpell(params: { spellSlot: number; targetId?: number }): Promise<void>;
-  sit(): Promise<void>;
-  getState(): Promise<GameState>;
-  close(): void;
+```json
+{
+  "group_id": 1
 }
 ```
 
-#### `Session`
+**Response**: 200 OK
 
-IPC session configuration.
+#### PUT /api/control/broadcast-all/:session_id
 
-```typescript
-class Session {
-  static fromTokenFile(path: string): Session;
-  get sessionId(): bigint;
-  get clientId(): number;
+Set session to receive all broadcast commands.
+
+**Response**: 200 OK
+
+---
+
+### Command Relay
+
+#### POST /api/command
+
+Relay a slash command to sessions.
+
+```json
+{
+  "command": "/target frostreaver",
+  "target": "Frostreaver"
 }
 ```
 
-#### `GameState`
+**Response**: 200 OK
 
-Current game state snapshot.
-
-```typescript
-interface GameState {
-  zoneName: string;
-  x: number;
-  y: number;
-  z: number;
-  heading: number;
-  zoneId: number;
-  spawnId: number;
+```json
+{
+  "success": true,
+  "message": "Command '/target frostreaver' relayed"
 }
 ```
 
-### Enums
+---
 
-```typescript
-enum SayChannel {
-  Say = 0,
-  Tell = 1,
-  Group = 2,
-  Raid = 3,
-  Shout = 4,
-}
-```
+### Character Config
 
-### Events
+#### GET /api/config/characters
 
-```typescript
-client.on('stateUpdate', (state: GameState) => void);
-client.on('chat', (message: ChatMessage) => void);
-client.on('error', (error: Error) => void);
-```
+List character configs.
+
+**Response**: 200 OK
+
+#### PUT /api/config/characters/:name
+
+Upsert character config.
+
+**Request**: `CharacterConfig` object
+
+**Response**: 200 OK
+
+---
+
+### Economy
+
+#### GET /api/economy/settings
+
+Get economy settings.
+
+**Response**: 200 OK
+
+#### PUT /api/economy/settings
+
+Update economy settings.
+
+**Request**: `EconomySettings` object
+
+**Response**: 204 No Content
+
+---
+
+### WebSocket Events
+
+Connect to `ws://localhost:3001/ws` for real-time session updates.
+
+**Authentication**: Pass `token` query param: `ws://localhost:3001/ws?token=your-token`
+
+**Event Types**:
+
+- `session_update`: Session state change
+- `command`: Command execution result
+- `error`: Error condition

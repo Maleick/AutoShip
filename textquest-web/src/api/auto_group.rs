@@ -392,6 +392,7 @@ mod tests {
             say_detection: Some(Arc::new(
                 crate::api::say_detection::SayDetectionState::new_demo(),
             )),
+            session_controls: RwLock::new(std::collections::HashMap::new()),
             auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
             tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
             auto_group_state: AutoGroupState::new_demo(),

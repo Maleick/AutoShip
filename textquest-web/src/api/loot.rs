@@ -986,6 +986,7 @@ mod tests {
             say_detection: Some(Arc::new(
                 crate::api::say_detection::SayDetectionState::new_demo(),
             )),
+            session_controls: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             auto_group_state: crate::api::auto_group::AutoGroupState::new_demo(),
             extension_catalog_state: crate::api::extensions::ExtensionCatalogState::load(
                 std::env::temp_dir().join(format!(
