@@ -25,6 +25,7 @@ use crate::{
     combat::coordinator::CombatCoordinator,
     economy::price_monitor::TradePriceMonitor,
     ipc::{pipe::CommandPipe, shared::SharedStateReader},
+    metrics::{AdminMonitoringStore, SessionErrorKind, SessionMonitoringSnapshot},
     say_detection::{SayAction, SayDetector, SayPattern, SayRule},
 };
 use std::{
@@ -40,7 +41,7 @@ use textquest_common::{
     routing::RoutingScope,
     shared_client_state::{SharedClientState, extended_state_enabled},
     spawn_finder::{LiveSpawnObserver, LiveSpawnSnapshot},
-    types::GameState,
+    types::{ClientId, GameState},
 };
 use xassist::XAssist;
 
@@ -154,6 +155,8 @@ pub struct Orchestrator {
     last_live_spawn_snapshot: LiveSpawnSnapshot,
     /// Tracks whether the current process has persisted the live spawn file.
     persisted_live_spawn_snapshot: bool,
+    /// Stable admin-monitoring store reused by later diagnostics surfaces.
+    monitoring: AdminMonitoringStore,
     // Pipe connections are created per-command (connect → token → command → drop).
     // The DLL's pipe server disconnects after each command, so persistent
     // connections would fail on the second write.
@@ -243,6 +246,7 @@ impl Orchestrator {
             persisted_shared_client_states: false,
             last_live_spawn_snapshot: LiveSpawnSnapshot::default(),
             persisted_live_spawn_snapshot: false,
+            monitoring: AdminMonitoringStore::new(),
             operating_mode: OperatingMode::Camp,
             active_hunt: None,
             sell_cycle: None,
@@ -1071,6 +1075,34 @@ impl Orchestrator {
         token
     }
 
+    /// Bind a stable managed session ID to a live PID for monitoring.
+    pub fn bind_monitored_client(&mut self, client_id: ClientId, pid: u32) {
+        self.monitoring.register_session(client_id, pid);
+    }
+
+    /// Record a memory sample for a managed session.
+    pub fn record_memory_sample(&mut self, client_id: ClientId, pid: u32, memory_bytes: u64) {
+        self.bind_monitored_client(client_id, pid);
+        self.monitoring
+            .record_memory_sample(client_id, memory_bytes);
+    }
+
+    /// Record an operational error against a managed session.
+    pub fn record_session_error(&mut self, client_id: ClientId, kind: SessionErrorKind) {
+        self.monitoring.record_error(client_id, kind);
+    }
+
+    /// Mark a managed session as exited while preserving retained samples.
+    pub fn mark_session_exited(&mut self, client_id: ClientId) {
+        self.monitoring.mark_session_exited(client_id);
+    }
+
+    /// Build a monitoring snapshot for a managed session using the current time.
+    #[must_use]
+    pub fn monitoring_snapshot(&self, client_id: ClientId) -> Option<SessionMonitoringSnapshot> {
+        self.monitoring.snapshot(client_id, Instant::now())
+    }
+
     /// Cache the character name used by admin inventory and cross-group
     /// coordination.
     pub fn set_client_name(&mut self, pid: u32, name: impl Into<String>) {
@@ -1181,7 +1213,7 @@ impl Orchestrator {
     /// Each call connects, authenticates, and returns an owned pipe that is
     /// dropped after the caller sends one command (matching the DLL's
     /// per-command disconnect model).
-    fn get_pipe(&mut self, pid: u32) -> Option<CommandPipe> {
+    fn get_pipe(&mut self, pid: u32) -> Result<CommandPipe, SessionErrorKind> {
         let name = self
             .client_names
             .get(&pid)
@@ -1191,7 +1223,8 @@ impl Orchestrator {
             *t
         } else {
             tracing::warn!(pid, name, "No session token for client — skipping");
-            return None;
+            self.record_ipc_error_for_pid(pid, SessionErrorKind::MissingSessionToken);
+            return Err(SessionErrorKind::MissingSessionToken);
         };
 
         // Connect fresh for each command. The DLL's pipe server disconnects
@@ -1202,15 +1235,38 @@ impl Orchestrator {
             Ok(pipe) => {
                 if let Err(e) = pipe.send_raw_token(&token) {
                     tracing::warn!(pid, name, error = %e, "Failed to send token");
-                    return None;
+                    self.record_ipc_error_for_pid(pid, SessionErrorKind::PipeAuth);
+                    return Err(SessionErrorKind::PipeAuth);
                 }
-                Some(pipe)
+                Ok(pipe)
             }
             Err(e) => {
                 tracing::warn!(pid, name, error = %e, "Failed to connect pipe");
-                None
+                self.record_ipc_error_for_pid(pid, SessionErrorKind::PipeConnect);
+                Err(SessionErrorKind::PipeConnect)
             }
         }
+    }
+
+    fn record_ipc_latency_for_pid(&mut self, pid: u32, started_at: Instant) {
+        let Some(client_id) = self.monitoring.client_id_for_pid(pid) else {
+            return;
+        };
+        let finished_at = Instant::now();
+        let latency_ms = finished_at
+            .checked_duration_since(started_at)
+            .unwrap_or_default()
+            .as_millis()
+            .max(1) as u64;
+        self.monitoring
+            .record_ipc_latency_at(client_id, latency_ms, finished_at);
+    }
+
+    fn record_ipc_error_for_pid(&mut self, pid: u32, kind: SessionErrorKind) {
+        let Some(client_id) = self.monitoring.client_id_for_pid(pid) else {
+            return;
+        };
+        self.monitoring.record_error(client_id, kind);
     }
 
     /// Send a structured IPC command to a client via named pipe.
@@ -1230,8 +1286,9 @@ impl Orchestrator {
             .get(&pid)
             .map_or("?", std::string::String::as_str)
             .to_string();
+        let started_at = Instant::now();
 
-        let Some(pipe) = self.get_pipe(pid) else {
+        let Ok(pipe) = self.get_pipe(pid) else {
             return false;
         };
         match pipe.send(&cmd) {
@@ -1239,6 +1296,8 @@ impl Orchestrator {
                 success: false,
                 message,
             }) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
+                self.record_ipc_error_for_pid(pid, SessionErrorKind::IpcDispatch);
                 tracing::warn!(
                     pid,
                     name = %name,
@@ -1249,10 +1308,12 @@ impl Orchestrator {
                 false
             }
             Ok(_response) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
                 tracing::debug!(pid, name = %name, ?cmd, "Dispatched IPC command");
                 true
             }
             Err(e) => {
+                self.record_ipc_error_for_pid(pid, SessionErrorKind::IpcDispatch);
                 tracing::warn!(pid, name = %name, ?cmd, error = %e, "Failed to send command");
                 false
             }
@@ -1263,13 +1324,21 @@ impl Orchestrator {
     /// Poll a client for accumulated packet events.
     /// Sends `PollPackets` and returns any `PacketEventInfo` entries.
     pub fn poll_packets(&mut self, pid: u32) -> Vec<textquest_common::ipc::PacketEventInfo> {
-        let Some(pipe) = self.get_pipe(pid) else {
+        let started_at = Instant::now();
+        let Ok(pipe) = self.get_pipe(pid) else {
             return Vec::new();
         };
         match pipe.send(&Command::PollPackets) {
-            Ok(Response::PacketBatch { events }) => events,
-            Ok(_) => Vec::new(),
+            Ok(Response::PacketBatch { events }) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
+                events
+            }
+            Ok(_) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
+                Vec::new()
+            }
             Err(e) => {
+                self.record_ipc_error_for_pid(pid, SessionErrorKind::IpcDispatch);
                 tracing::debug!(pid, error = %e, "Failed to poll packets");
                 Vec::new()
             }
@@ -1279,13 +1348,21 @@ impl Orchestrator {
     /// Poll a client for accumulated spawn list delta events.
     /// Sends `PollSpawnEvents` and returns any `SpawnEvent` delta entries.
     pub fn poll_spawn_events(&mut self, pid: u32) -> Vec<textquest_common::ipc::SpawnEvent> {
-        let Some(pipe) = self.get_pipe(pid) else {
+        let started_at = Instant::now();
+        let Ok(pipe) = self.get_pipe(pid) else {
             return Vec::new();
         };
         match pipe.send(&Command::PollSpawnEvents) {
-            Ok(Response::SpawnEventBatch { events }) => events,
-            Ok(_) => Vec::new(),
+            Ok(Response::SpawnEventBatch { events }) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
+                events
+            }
+            Ok(_) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
+                Vec::new()
+            }
             Err(e) => {
+                self.record_ipc_error_for_pid(pid, SessionErrorKind::IpcDispatch);
                 tracing::debug!(pid, error = %e, "Failed to poll spawn events");
                 Vec::new()
             }
@@ -1294,13 +1371,21 @@ impl Orchestrator {
 
     /// Poll a client for accumulated chat messages captured by the DLL.
     pub fn poll_chat(&mut self, pid: u32) -> Vec<ChatMessageInfo> {
-        let Some(pipe) = self.get_pipe(pid) else {
+        let started_at = Instant::now();
+        let Ok(pipe) = self.get_pipe(pid) else {
             return Vec::new();
         };
         match pipe.send(&Command::PollChat) {
-            Ok(Response::ChatBatch { messages }) => messages,
-            Ok(_) => Vec::new(),
+            Ok(Response::ChatBatch { messages }) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
+                messages
+            }
+            Ok(_) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
+                Vec::new()
+            }
             Err(e) => {
+                self.record_ipc_error_for_pid(pid, SessionErrorKind::IpcDispatch);
                 tracing::debug!(pid, error = %e, "Failed to poll chat");
                 Vec::new()
             }
@@ -1316,11 +1401,19 @@ impl Orchestrator {
         address: usize,
         size: usize,
     ) -> Option<(usize, Vec<u8>)> {
-        let pipe = self.get_pipe(pid)?;
+        let started_at = Instant::now();
+        let pipe = self.get_pipe(pid).ok()?;
         match pipe.send(&Command::ReadMemory { address, size }) {
-            Ok(Response::MemoryData { address, bytes }) => Some((address, bytes)),
-            Ok(_) => None,
+            Ok(Response::MemoryData { address, bytes }) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
+                Some((address, bytes))
+            }
+            Ok(_) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
+                None
+            }
             Err(e) => {
+                self.record_ipc_error_for_pid(pid, SessionErrorKind::IpcDispatch);
                 tracing::debug!(pid, address, error = %e, "Failed to read memory");
                 None
             }
@@ -1354,6 +1447,7 @@ impl Orchestrator {
         self.session_controls.remove(&pid);
         self.state_timestamps.remove(&pid);
         self.last_sent_reward_configs.remove(&pid);
+        self.monitoring.detach_process(pid);
         self.xassist.remove_client(pid);
         self.persist_admin_session_inventory();
         tracing::info!(pid, "Client removed from orchestrator");
@@ -1739,7 +1833,8 @@ impl Orchestrator {
             }
         }
 
-        let Some(pipe) = self.get_pipe(pid) else {
+        let started_at = Instant::now();
+        let Ok(pipe) = self.get_pipe(pid) else {
             return;
         };
         let cmd = Command::SlashCommand {
@@ -1747,9 +1842,11 @@ impl Orchestrator {
         };
         match pipe.send(&cmd) {
             Ok(_response) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
                 tracing::debug!(pid, name = %name, %command, "Dispatched command");
             }
             Err(e) => {
+                self.record_ipc_error_for_pid(pid, SessionErrorKind::IpcDispatch);
                 tracing::warn!(pid, name = %name, %command, error = %e, "Failed to send command");
             }
         }
@@ -2344,6 +2441,31 @@ mod tests {
         assert!(orch.client_pids.contains(&101));
         // Token should be stored
         assert_eq!(orch.session_tokens[&100], token_a);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn failed_ipc_dispatch_records_error_for_monitored_session() {
+        let mut orch = Orchestrator::new();
+        orch.bind_monitored_client(7, 100);
+        let _token = orch.register_client(100);
+        orch.client_names.insert(100, "Test".to_string());
+
+        orch.send_ipc_command(100, textquest_common::ipc::Command::CombatDisengage);
+
+        let snapshot = orch
+            .monitoring_snapshot(7)
+            .expect("monitoring snapshot should exist");
+        assert_eq!(
+            snapshot.state,
+            crate::metrics::MonitoredSessionState::Active
+        );
+        assert_eq!(snapshot.errors.total_errors, 1);
+        assert_eq!(
+            snapshot.errors.last_error_kind,
+            Some(crate::metrics::SessionErrorKind::IpcDispatch)
+        );
+        assert_eq!(snapshot.ipc_latency.sample_count, 0);
     }
 
     #[test]

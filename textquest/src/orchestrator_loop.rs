@@ -14,6 +14,7 @@ use crate::{
     credentials::store::CredentialStore,
     discord::webhook::WebhookSender,
     launcher::coordinator::{CoordinatorEvent, LaunchCoordinator},
+    metrics::{SessionErrorKind, sample_process_memory_bytes},
     orchestrator::Orchestrator,
 };
 use std::{
@@ -557,6 +558,25 @@ impl OrchestratorLoop {
     /// - Crashed clients are re-enqueued for relaunch.
     fn tick_health_checks(&mut self) -> Vec<LoopEvent> {
         let mut events = Vec::new();
+        let memory_samples = self
+            .client_manager
+            .all_sessions()
+            .map(|session| {
+                (
+                    session.client_id,
+                    session.pid,
+                    sample_process_memory_bytes(session.pid),
+                )
+            })
+            .collect::<Vec<_>>();
+        for (client_id, pid, memory_bytes) in memory_samples {
+            if let Some(memory_bytes) = memory_bytes {
+                self.orchestrator
+                    .record_memory_sample(client_id, pid, memory_bytes);
+            } else {
+                self.orchestrator.bind_monitored_client(client_id, pid);
+            }
+        }
 
         let needs_restart = self.client_manager.check_health();
         let total = self.client_manager.session_count();
@@ -575,6 +595,9 @@ impl OrchestratorLoop {
                     tracing::warn!(pid, client_id, "Client crashed — marking for relaunch");
                     session.slot_lifecycle = SlotLifecycle::Recovering;
                     session.health_monitor.record_restart();
+                    self.orchestrator
+                        .record_session_error(client_id, SessionErrorKind::HealthCheck);
+                    self.orchestrator.mark_session_exited(client_id);
 
                     // Re-enqueue for relaunch if we have account info
                     if let Some(account) = session.bound_toon.clone() {
@@ -592,6 +615,8 @@ impl OrchestratorLoop {
                         "Client unresponsive — sending /camp desktop"
                     );
                     session.slot_lifecycle = SlotLifecycle::Recovering;
+                    self.orchestrator
+                        .record_session_error(client_id, SessionErrorKind::HealthCheck);
 
                     // Best-effort: tell the client to camp out
                     self.send_camp_desktop(pid);
@@ -626,6 +651,7 @@ impl OrchestratorLoop {
             match event {
                 CoordinatorEvent::ClientLaunched { client_id, pid } => {
                     self.client_manager.track_client(client_id, pid);
+                    self.orchestrator.bind_monitored_client(client_id, pid);
                     tracing::info!(client_id, pid, "Client launched");
                     if let Some(session) = self.client_manager.get_mut(client_id) {
                         session.slot_lifecycle = SlotLifecycle::Launching;
@@ -636,6 +662,7 @@ impl OrchestratorLoop {
                         let pid = session.pid;
                         session.slot_lifecycle = SlotLifecycle::Live;
                         self.orchestrator.register_client(pid);
+                        self.orchestrator.bind_monitored_client(client_id, pid);
 
                         let mut ready_group_id = None;
                         let mut ready_class_name = None;
@@ -679,6 +706,8 @@ impl OrchestratorLoop {
                 }
                 CoordinatorEvent::ClientFailed { client_id, error } => {
                     tracing::error!(client_id, ?error, "Client login failed");
+                    self.orchestrator
+                        .record_session_error(client_id, SessionErrorKind::LaunchFailure);
                     if let Some(session) = self.client_manager.get_mut(client_id) {
                         session.slot_lifecycle = SlotLifecycle::Blocked;
                     }
@@ -711,33 +740,8 @@ impl OrchestratorLoop {
         let cmd = textquest_common::ipc::Command::SlashCommand {
             command: "/camp desktop".to_string(),
         };
-        // Use the pipe directly
-        let session_id = self
-            .orchestrator
-            .session_tokens_get(pid)
-            .map(textquest_common::ipc::session_id_from_token);
-        if let Some(session_id) = session_id {
-            match crate::ipc::pipe::CommandPipe::connect(pid, session_id) {
-                Ok(pipe) => {
-                    if let Some(token) = self.orchestrator.session_tokens_get(pid)
-                        && let Err(e) = pipe.send_raw_token(token)
-                    {
-                        tracing::warn!(pid, error = %e, "Failed to auth for /camp desktop");
-                        return;
-                    }
-                    if let Err(e) = pipe.send(&cmd) {
-                        tracing::warn!(pid, error = %e, "Failed to send /camp desktop");
-                    } else {
-                        tracing::info!(pid, "Sent /camp desktop to unhealthy client");
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(pid, error = %e, "Failed to connect pipe for /camp desktop");
-                }
-            }
-        } else {
-            tracing::warn!(pid, "No session token — cannot send /camp desktop");
-        }
+        self.orchestrator.send_ipc_command(pid, cmd);
+        tracing::info!(pid, "Requested /camp desktop for unhealthy client");
     }
 }
 
