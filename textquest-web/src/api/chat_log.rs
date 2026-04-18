@@ -1,6 +1,7 @@
 //! Chat log settings API handlers.
 
 use std::path::PathBuf;
+use axum::{Json, http::StatusCode, response::IntoResponse};
 use textquest_common::chat::{ChatLogConfig, ChatChannel, LogRotation, LogLevel};
 
 pub fn textquest_config_path() -> PathBuf {
@@ -62,7 +63,8 @@ fn write_chat_log_settings_to_disk(settings: &ChatLogConfig) -> Result<(), Strin
         ChatChannel::Ooc => "ooc",
         ChatChannel::Auction => "auction",
     }).collect();
-    table["channels"] = toml_edit::value(channels);
+    let arr: toml_edit::Array = channels.into_iter().collect();
+    table["channels"] = toml_edit::value(arr);
     doc["chat_log"] = toml_edit::Item::Table(table);
 
     if let Some(parent) = path.parent() {
@@ -100,16 +102,14 @@ fn write_chat_log_settings_to_disk(settings: &ChatLogConfig) -> Result<(), Strin
     Ok(())
 }
 
-pub async fn get_chat_log_settings() -> axum::response::impl IntoResponse {
-    use axum::{Json, http::StatusCode};
+pub async fn get_chat_log_settings() -> impl IntoResponse {
     match read_chat_log_settings_from_disk() {
         Ok(settings) => (StatusCode::OK, Json(settings)).into_response(),
         Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, Json(crate::api::ErrorResponse { error })).into_response(),
     }
 }
 
-pub async fn put_chat_log_settings(Json(settings): Json<ChatLogConfig>) -> axum::response::impl IntoResponse {
-    use axum::{Json, http::StatusCode};
+pub async fn put_chat_log_settings(Json(settings): Json<ChatLogConfig>) -> impl IntoResponse {
     match write_chat_log_settings_to_disk(&settings) {
         Ok(()) => (StatusCode::OK, Json(settings)).into_response(),
         Err(error) => (StatusCode::BAD_REQUEST, Json(crate::api::ErrorResponse { error })).into_response(),

@@ -40,23 +40,6 @@ fn shared_family(skill_id: u32) -> &'static [u32] {
     }
 }
 
-const KICK_FAMILY: &[u32] = &[
-    skill_timers::KICK.0,
-    skill_timers::FLYING_KICK.0,
-    skill_timers::ROUND_KICK.0,
-];
-const PUNCH_FAMILY: &[u32] = &[skill_timers::TIGER_CLAW.0, skill_timers::EAGLE_STRIKE.0];
-
-fn shared_family(skill_id: u32) -> &'static [u32] {
-    if KICK_FAMILY.contains(&skill_id) {
-        KICK_FAMILY
-    } else if PUNCH_FAMILY.contains(&skill_id) {
-        PUNCH_FAMILY
-    } else {
-        &[]
-    }
-}
-
 /// Tracks per-skill cooldown timers using a fixed-capacity array.
 /// Each skill has its own independent timer that counts down every tick.
 /// Uses linear scan over a small array instead of HashMap for zero-allocation

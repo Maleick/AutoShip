@@ -170,7 +170,7 @@ impl From<ToonRotationEntry> for RotationEntry {
             post_activate: None,
             enabled: value.enabled,
             cooldown_key: value.cooldown_key,
-            cooldown_ticks: value.cooldown_ticks,
+            cooldown_ticks: None,
             shared_cooldown_key: None,
         }
     }
