@@ -223,7 +223,7 @@ impl CaptureSession {
         self.total_seen += 1;
 
         // Validate packet structure before filter processing
-        if let Err(_) = packet.validate() {
+        if packet.validate().is_err() {
             return false;
         }
 
