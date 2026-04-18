@@ -36,6 +36,10 @@ enum Commands {
         #[command(subcommand)]
         action: SessionAction,
     },
+    Backup {
+        #[command(subcommand)]
+        action: BackupAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -58,6 +62,13 @@ enum SessionAction {
     Start { profile: u32 },
     Stop { session_id: u32 },
     Restart { session_id: u32 },
+}
+
+#[derive(Subcommand)]
+enum BackupAction {
+    Create { session_id: u32 },
+    List { session_id: u32 },
+    Restore { session_id: u32, backup_id: String },
 }
 
 fn main() -> ExitCode {
@@ -184,6 +195,47 @@ fn main() -> ExitCode {
                 Err(e) => {
                     eprintln!("Error: {}", e);
                     ExitCode::FAILURE
+                }
+            },
+        },
+        Commands::Backup { action } => match action {
+            BackupAction::Create { session_id } => match client.create_backup(session_id) {
+                Ok(backup) => {
+                    println!("{}", backup.backup_id);
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    ExitCode::FAILURE
+                }
+            },
+            BackupAction::List { session_id } => match client.list_backups(session_id) {
+                Ok(backups) => {
+                    if backups.backups.is_empty() {
+                        println!("No backups available for session {}", session_id);
+                    } else {
+                        println!("=== Backups for Session {} ===", session_id);
+                        for backup in backups.backups {
+                            println!("{}", backup.backup_id);
+                        }
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    ExitCode::FAILURE
+                }
+            },
+            BackupAction::Restore { session_id, backup_id } => {
+                match client.restore_backup(session_id, &backup_id) {
+                    Ok(resp) => {
+                        println!("{}", resp.message);
+                        ExitCode::SUCCESS
+                    }
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        ExitCode::FAILURE
+                    }
                 }
             },
         },

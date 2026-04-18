@@ -61,6 +61,23 @@ pub struct SessionLifecycleResponse {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct BackupId {
+    pub backup_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BackupList {
+    pub backups: Vec<BackupId>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BackupRestoreResponse {
+    pub session_id: u32,
+    pub backup_id: String,
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct ErrorResponse {
     pub error: String,
 }
@@ -144,6 +161,57 @@ impl AdminClient {
 
     pub fn restart_session(&self, session_id: u32) -> Result<SessionLifecycleResponse, String> {
         self.post(&format!("/api/admin/sessions/{}/restart", session_id))
+    }
+
+    pub fn create_backup(&self, session_id: u32) -> Result<BackupId, String> {
+        self.post(&format!("/api/admin/sessions/{}/backups", session_id))
+    }
+
+    pub fn list_backups(&self, session_id: u32) -> Result<BackupList, String> {
+        self.get(&format!("/api/admin/sessions/{}/backups", session_id))
+    }
+
+    pub fn restore_backup(&self, session_id: u32, backup_id: &str) -> Result<BackupRestoreResponse, String> {
+        self.post(&format!("/api/admin/sessions/{}/backups/{}/restore", session_id, backup_id))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_backup_id_deserialization() {
+        let json = r#"{"backup_id":"backup-2024-04-18-123456"}"#;
+        let backup: BackupId = serde_json::from_str(json).expect("parse backup_id");
+        assert_eq!(backup.backup_id, "backup-2024-04-18-123456");
+    }
+
+    #[test]
+    fn test_backup_list_deserialization() {
+        let json = r#"{
+            "backups": [
+                {"backup_id":"backup-2024-04-18-123456"},
+                {"backup_id":"backup-2024-04-17-654321"}
+            ]
+        }"#;
+        let list: BackupList = serde_json::from_str(json).expect("parse backup list");
+        assert_eq!(list.backups.len(), 2);
+        assert_eq!(list.backups[0].backup_id, "backup-2024-04-18-123456");
+        assert_eq!(list.backups[1].backup_id, "backup-2024-04-17-654321");
+    }
+
+    #[test]
+    fn test_backup_restore_response_deserialization() {
+        let json = r#"{
+            "session_id":42,
+            "backup_id":"backup-2024-04-18-123456",
+            "message":"Restore request queued for session 42"
+        }"#;
+        let resp: BackupRestoreResponse = serde_json::from_str(json).expect("parse restore response");
+        assert_eq!(resp.session_id, 42);
+        assert_eq!(resp.backup_id, "backup-2024-04-18-123456");
+        assert!(resp.message.contains("Restore"));
     }
 }
 
