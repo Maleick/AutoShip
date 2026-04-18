@@ -20,8 +20,8 @@ env:
 jobs:
   merge_gate:
     name: PR gate (fmt + clippy + test + python)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: [self-hosted, Linux, X64, textquest]
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -179,7 +179,7 @@ jobs:
 
   secrets_scan:
     name: Secret scan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -194,7 +194,7 @@ jobs:
   advisory_checks:
     name: Advisory dependency checks (manual)
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 15
     continue-on-error: true
     steps:

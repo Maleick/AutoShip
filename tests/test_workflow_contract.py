@@ -54,7 +54,7 @@ class WorkflowContractTests(unittest.TestCase):
         secrets_scan = self._job_block(text, "secrets_scan")
         advisory_checks = self._job_block(text, "advisory_checks")
 
-        self.assertIn("    runs-on: ubuntu-latest", merge_gate)
+        self.assertIn("    runs-on: [self-hosted, Linux, X64, textquest]", merge_gate)
         self.assertNotIn("        run: cargo fmt --all --check", merge_gate)
         self.assertIn("    name: Secret scan", secrets_scan)
         self.assertIn("    name: Advisory dependency checks (manual)", advisory_checks)

@@ -192,6 +192,16 @@ pub(crate) fn test_state_lock() -> std::sync::MutexGuard<'static, ()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, MutexGuard};
+
+    // Serializes tests that mutate module-level atomics to prevent races under tarpaulin.
+    static TEST_MUTEX: Mutex<()> = Mutex::new(());
+
+    fn locked_reset() -> MutexGuard<'static, ()> {
+        let guard = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        reset_test_state();
+        guard
+    }
 
     fn setup() -> std::sync::MutexGuard<'static, ()> {
         let guard = test_state_lock();

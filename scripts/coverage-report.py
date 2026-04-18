@@ -24,7 +24,7 @@ import re
 from pathlib import Path
 from typing import Optional, Tuple
 
-COMMAND_TIMEOUT_SECONDS = 1800
+COMMAND_TIMEOUT_SECONDS = 3000
 
 def run_command(cmd: list, capture_output: bool = True) -> Tuple[int, str, str]:
     """Run a command and return (exit_code, stdout, stderr)."""

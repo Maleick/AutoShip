@@ -735,6 +735,40 @@ async fn read_game_state() -> Result<GameState> {
 // NOT: Mixing block_on and await, or sync I/O in async context
 ```
 
+### 9. No Duplicate Declarations in `lib.rs`
+
+`textquest/src/lib.rs` declares all public modules and shared constants. Agent merges occasionally introduce duplicate `pub mod` or `pub const` entries, which break `cargo fmt --check` and compilation for the entire workspace.
+
+Two patterns to watch for:
+
+**Duplicate module declaration** — the `#[cfg(windows)]`-gated version is canonical:
+
+```rust
+// WRONG — ungated duplicate shadows the gated one
+pub mod command_dispatch;        // <-- remove this
+#[cfg(windows)]
+pub mod command_dispatch;        // <-- keep only this
+
+// CORRECT
+#[cfg(windows)]
+pub mod command_dispatch;
+```
+
+**Duplicate constant** — keep whichever has the better doc comment:
+
+```rust
+// WRONG
+pub const TRADE_PRICE_DB_PATH: &str = "data/trade_prices.db";
+pub const GHIDRA_DB_PATH: &str = "data/ghidra.db";
+pub const TRADE_PRICE_DB_PATH: &str = "data/trade_prices.db";  // <-- duplicate, remove
+
+// CORRECT
+pub const TRADE_PRICE_DB_PATH: &str = "data/trade_prices.db";
+pub const GHIDRA_DB_PATH: &str = "data/ghidra.db";
+```
+
+If `cargo fmt --check` fails on CI with no other explanation, scan `lib.rs` for duplicates first.
+
 ---
 
 ## Debugging and Troubleshooting
@@ -862,11 +896,11 @@ External applications can interact with TextQuest-managed EQ clients via the IPC
 
 ### SDK Packages
 
-| Language | Package | Registry | Status |
-|----------|---------|----------|--------|
-| Rust | `textquest-common` | [crates.io](https://crates.io/crates/textquest-common) | Published |
-| Python | `textquest` | PyPI | Planned |
-| TypeScript | `@textquest/client` | npm | Planned |
+| Language   | Package             | Registry                                               | Status    |
+| ---------- | ------------------- | ------------------------------------------------------ | --------- |
+| Rust       | `textquest-common`  | [crates.io](https://crates.io/crates/textquest-common) | Published |
+| Python     | `textquest`         | PyPI                                                   | Planned   |
+| TypeScript | `@textquest/client` | npm                                                    | Planned   |
 
 ### SDK Documentation
 
@@ -895,10 +929,10 @@ Publication workflows are defined in:
 
 **Required secrets (not yet configured):**
 
-| Registry | Secret | Instructions |
-|----------|--------|--------------|
-| PyPI | `PYPI_API_TOKEN` | Generate at pypi.org/manage/account |
-| npm | `NPM_TOKEN` | Generate at npmjs.com/settings/tokens |
+| Registry | Secret           | Instructions                          |
+| -------- | ---------------- | ------------------------------------- |
+| PyPI     | `PYPI_API_TOKEN` | Generate at pypi.org/manage/account   |
+| npm      | `NPM_TOKEN`      | Generate at npmjs.com/settings/tokens |
 
 The `textquest-common` crate is already published to crates.io via the existing `release.yml` workflow.
 
