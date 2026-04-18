@@ -1,0 +1,22 @@
+# Primary Dreadlands planning anchor for issue #1719.
+# - Camp anchor: Ancient Combine Outpost courtyard in Lost Valley.
+# - Safe med / evac fallback: south of the wizard spires at approximately
+#   [2806, 9565, 0] per Project 1999 Dreadlands documentation.
+# - Current schema gap: waypoints, named pull points, restriction sectors,
+#   and route notes are documented in docs/wiki/Dreadlands-Primary-Camp.md
+#   because textquest/src/camp/config.rs does not yet load those fields.
+
+name = "dreadlands_primary"
+zone = "dreadlands"
+camp_center = [900.0, 9000.0, 0.0]
+pull_point = [970.0, 9050.0, 0.0]
+pull_radius = 500.0
+camp_radius = 60.0
+leash_radius = 700.0
+rest_mana_pct = 70
+pull_mana_pct = 45
+level_range = [45, 51]
+pull_mob_names = ["greater plaguebone", "greater spurbone", "wraithbone champion"]
+ignore_mob_names = ["Gorenaire", "a mountain giant patriarch", "a dread widow", "rotting skeleton"]
+burn_mob_names = ["wraithbone champion"]
+return_no_aggro = true
