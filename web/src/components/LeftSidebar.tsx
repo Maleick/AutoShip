@@ -19,9 +19,11 @@ import {
 } from "@phosphor-icons/react";
 
 export type ActiveView =
+  | "default"
   | "engagements"
   | "economy"
   | "formations"
+  | "groups"
   | "map"
   | "security"
   | "alerts"
@@ -46,6 +48,7 @@ const navItems: {
   { icon: Sword, label: "Active Engagements", id: "engagements", pulse: true },
   { icon: Coins, label: "Economy Ledger", id: "economy" },
   { icon: UsersThree, label: "Fleet Formations", id: "formations" },
+  { icon: UsersThree, label: "Groups & Camp Config", id: "groups" },
   { icon: Globe, label: "Realm Map (Norrath)", id: "map" },
   { icon: ShieldWarning, label: "Security Wards", id: "security" },
   { icon: BellRinging, label: "Alert Routing", id: "alerts", pulse: true },

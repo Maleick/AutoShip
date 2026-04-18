@@ -10,6 +10,7 @@ import CredentialsPage from "./components/CredentialsPage";
 import EconomyPanel from "./components/EconomyPanel";
 import ExtensionCatalogPanel from "./components/ExtensionCatalogPanel";
 import GroupBuilder from "./components/GroupBuilder";
+import GroupsPage from "./components/GroupsPage";
 import LeftSidebar, { type ActiveView } from "./components/LeftSidebar";
 import LootConfig from "./components/LootConfig";
 import OperatorDashboard from "./components/OperatorDashboard";
@@ -42,6 +43,8 @@ function App() {
           <EconomyPanel />
         ) : activeView === "formations" ? (
           <GroupBuilder />
+        ) : activeView === "groups" ? (
+          <GroupsPage />
         ) : activeView === "alerts" ? (
           <AlertsPanel />
         ) : activeView === "loot" ? (

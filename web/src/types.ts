@@ -1221,3 +1221,85 @@ export interface InventoryUtilityParityConfig {
   relocation_rules: RelocationRule[];
   auto_claim_rules: AutoClaimRule[];
 }
+
+// ── Groups & Camp Configuration types ────────────────────────────────────────
+
+export type GroupMemberRole =
+  | "main_tank"
+  | "main_assist"
+  | "puller"
+  | "healer"
+  | "dps"
+  | "support"
+  | "cc";
+
+export interface GroupMember {
+  character_name: string;
+  class: string;
+  role: GroupMemberRole;
+  order: number;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  zone: string | null;
+  members: GroupMember[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateGroupPayload {
+  name: string;
+  zone?: string | null;
+  members?: GroupMember[];
+}
+
+export interface UpdateGroupPayload {
+  name?: string;
+  zone?: string | null;
+  members?: GroupMember[];
+}
+
+export interface CampCoordinate {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface PullTarget {
+  name: string;
+  enabled: boolean;
+}
+
+export interface SafeZoneMarker {
+  name: string;
+  center: CampCoordinate;
+  radius: number;
+}
+
+export interface CampConfiguration {
+  id: string;
+  group_id: string;
+  camp_center: CampCoordinate;
+  pull_radius: number;
+  pull_targets: PullTarget[];
+  safe_zone_markers: SafeZoneMarker[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateCampConfigPayload {
+  group_id: string;
+  camp_center: CampCoordinate;
+  pull_radius: number;
+  pull_targets?: PullTarget[];
+  safe_zone_markers?: SafeZoneMarker[];
+}
+
+export interface UpdateCampConfigPayload {
+  camp_center?: CampCoordinate;
+  pull_radius?: number;
+  pull_targets?: PullTarget[];
+  safe_zone_markers?: SafeZoneMarker[];
+}
