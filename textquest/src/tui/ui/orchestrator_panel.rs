@@ -140,6 +140,30 @@ struct ClientTelemetry {
     error: Option<String>,
 }
 
+/// Signal feed entry for orchestrator status updates.
+#[derive(Debug, Clone)]
+pub struct SignalEntry {
+    /// ISO timestamp when the signal was generated.
+    pub timestamp: String,
+    /// Signal type (e.g., "route_complete", "client_death", "economy_update").
+    pub kind: String,
+    /// Human-readable signal message.
+    pub message: String,
+}
+
+/// Phase timeline entry for multi-phase operations.
+#[derive(Debug, Clone)]
+pub struct PhaseEntry {
+    /// Timestamp or duration marker for the phase.
+    pub time: String,
+    /// Phase name (e.g., "Regroup", "Engage", "Loot").
+    pub phase: String,
+    /// Additional notes about the phase.
+    pub note: String,
+    /// Whether this phase is currently active.
+    pub active: bool,
+}
+
 /// Mutable state for the orchestrator dashboard.
 #[derive(Debug, Clone)]
 pub struct OrchestratorDashboardState {
@@ -153,6 +177,10 @@ pub struct OrchestratorDashboardState {
     active_errors: HashSet<String>,
     death_log: VecDeque<DeathLogEntry>,
     error_log: VecDeque<String>,
+    /// Feed of operational signals (route complete, death, economy event).
+    pub signal_feed: Vec<SignalEntry>,
+    /// Timeline of multi-phase operation phases.
+    pub phase_timeline: Vec<PhaseEntry>,
 }
 
 impl OrchestratorDashboardState {
@@ -169,6 +197,8 @@ impl OrchestratorDashboardState {
             active_errors: HashSet::new(),
             death_log: VecDeque::new(),
             error_log: VecDeque::new(),
+            signal_feed: Vec::new(),
+            phase_timeline: Vec::new(),
         }
     }
 
@@ -326,938 +356,272 @@ pub fn draw_orchestrator_screen(frame: &mut Frame, area: Rect, app: &mut App) {
     let telemetry = capture_dashboard_telemetry(app);
     app.orchestrator_state.apply_telemetry(telemetry);
 
-    let sections = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(12),
-            Constraint::Length(4),
-        ])
+    // Main area (left ~101 cols) + Sidebar (right ~44 cols)
+    let main_sidebar = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(60), Constraint::Length(44)])
         .split(area);
 
-    draw_dashboard_header(frame, sections[0], app);
+    let main_area = main_sidebar[0];
+    let sidebar_area = main_sidebar[1];
 
-    match app.orchestrator_state.active_tab {
-        OrchestratorTab::Session => draw_session_tab(frame, sections[1], app),
-        OrchestratorTab::Group => draw_group_tab(frame, sections[1], app),
-        OrchestratorTab::Navigation => draw_navigation_tab(frame, sections[1], app),
-        OrchestratorTab::Economy => draw_economy_tab(frame, sections[1], app),
-        OrchestratorTab::Combat => draw_combat_tab(frame, sections[1], app),
-        OrchestratorTab::System => draw_system_tab(frame, sections[1], app),
-    }
-
-    draw_dashboard_footer(frame, sections[2], app);
-}
-
-fn draw_dashboard_header(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-    let title = format!(
-        " Operator Dashboard | {} | Zone {} | Time {} | Plat/Hr {} ",
-        app.group_focus_label(),
-        current_zone_label(app),
-        session_duration(app),
-        format_plat_rate(plat_per_hour(app)),
-    );
-    let tabs = Line::from(
-        OrchestratorTab::ALL
-            .iter()
-            .enumerate()
-            .flat_map(|(index, tab)| {
-                let style = if *tab == app.orchestrator_state.active_tab {
-                    t.tab_active
-                } else {
-                    t.tab_inactive
-                };
-                let mut spans = Vec::new();
-                if index > 0 {
-                    spans.push(Span::raw(" "));
-                }
-                spans.push(Span::styled(format!(" {} ", tab.label()), style));
-                spans
-            })
-            .collect::<Vec<_>>(),
-    );
-
-    frame.render_widget(
-        Paragraph::new(tabs)
-            .block(panel(title, t.border_active, t))
-            .wrap(Wrap { trim: true }),
-        area,
-    );
-}
-
-fn draw_dashboard_footer(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-    let base = Line::from(vec![
-        Span::styled("[←/→]", Style::default().fg(t.text_highlight)),
-        Span::styled(" tabs  ", Style::default().fg(t.text_muted)),
-        Span::styled("[↑/↓]", Style::default().fg(t.text_highlight)),
-        Span::styled(" client  ", Style::default().fg(t.text_muted)),
-        Span::styled("[Space]", Style::default().fg(t.text_highlight)),
-        Span::styled(" pause/resume  ", Style::default().fg(t.text_muted)),
-        Span::styled("[X]", Style::default().fg(t.hp_low)),
-        Span::styled(" terminate", Style::default().fg(t.text_muted)),
-    ]);
-
-    let detail = match app.orchestrator_state.active_tab {
-        OrchestratorTab::Session => Line::from(vec![
-            Span::styled("[E]", Style::default().fg(t.text_highlight)),
-            Span::styled(" engage  ", Style::default().fg(t.text_muted)),
-            Span::styled("[D]", Style::default().fg(t.text_highlight)),
-            Span::styled(" disengage", Style::default().fg(t.text_muted)),
-        ]),
-        OrchestratorTab::Group => Line::from(vec![
-            Span::styled("[E]", Style::default().fg(t.text_highlight)),
-            Span::styled(" pull  ", Style::default().fg(t.text_muted)),
-            Span::styled("[C]", Style::default().fg(t.text_highlight)),
-            Span::styled(" camp status  ", Style::default().fg(t.text_muted)),
-            Span::styled("[N]", Style::default().fg(t.text_highlight)),
-            Span::styled(" nav ui", Style::default().fg(t.text_muted)),
-        ]),
-        OrchestratorTab::Navigation => Line::from(vec![
-            Span::styled("[N]", Style::default().fg(t.text_highlight)),
-            Span::styled(" nav ui  ", Style::default().fg(t.text_muted)),
-            Span::styled("[C]", Style::default().fg(t.text_highlight)),
-            Span::styled(" camp status", Style::default().fg(t.text_muted)),
-        ]),
-        OrchestratorTab::Economy => Line::from(vec![
-            Span::styled("[6]", Style::default().fg(t.text_highlight)),
-            Span::styled(
-                " full economy controls  ",
-                Style::default().fg(t.text_muted),
-            ),
-            Span::styled("[C]", Style::default().fg(t.text_highlight)),
-            Span::styled(" camp status", Style::default().fg(t.text_muted)),
-        ]),
-        OrchestratorTab::Combat => Line::from(vec![
-            Span::styled("[E]", Style::default().fg(t.text_highlight)),
-            Span::styled(" engage  ", Style::default().fg(t.text_muted)),
-            Span::styled("[D]", Style::default().fg(t.text_highlight)),
-            Span::styled(" disengage", Style::default().fg(t.text_muted)),
-        ]),
-        OrchestratorTab::System => Line::from(vec![
-            Span::styled("[N]", Style::default().fg(t.text_highlight)),
-            Span::styled(" nav ui  ", Style::default().fg(t.text_muted)),
-            Span::styled("[C]", Style::default().fg(t.text_highlight)),
-            Span::styled(" camp status", Style::default().fg(t.text_muted)),
-        ]),
-    };
-
-    frame.render_widget(
-        Paragraph::new(vec![base, detail])
-            .block(panel(" Dashboard Shortcuts ", t.border_dim, t))
-            .wrap(Wrap { trim: true }),
-        area,
-    );
-}
-
-fn draw_session_tab(frame: &mut Frame, area: Rect, app: &App) {
-    let chunks = split_main_aside(area);
-    draw_session_table(frame, chunks[0], app);
-    draw_session_sidebar(frame, chunks[1], app);
-}
-
-fn draw_session_table(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-    let visible = app.visible_clients();
-    let selected_pid = app.active_client().map(|client| client.pid);
-    let header = themed_header_row(
-        &[
-            "", "Client", "Status", "Zone", "Lv", "Mana", "End", "DPS*", "Location",
-        ],
-        t,
-    );
-
-    let rows: Vec<Row<'_>> = visible
-        .iter()
-        .map(|client| {
-            let is_selected = Some(client.pid) == selected_pid;
-            let marker = if is_selected { "▶" } else { " " };
-            let (status_label, status_color) = client_status_label(app, client);
-            let (mana_label, end_label, level) = client_resource_summary(client);
-            let dps = estimated_client_dps(client, app);
-            let row_style = if is_selected {
-                Style::default()
-                    .bg(t.row_selected_bg)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default()
-            };
-
-            Row::new(vec![
-                Cell::from(marker).style(Style::default().fg(t.text_accent)),
-                Cell::from(app.client_command_target(client))
-                    .style(Style::default().fg(t.text_normal)),
-                Cell::from(status_label).style(Style::default().fg(status_color)),
-                Cell::from(client.zone_name.as_str()).style(Style::default().fg(t.text_secondary)),
-                Cell::from(level).style(Style::default().fg(t.text_normal)),
-                Cell::from(mana_label).style(Style::default().fg(t.mana_color)),
-                Cell::from(end_label).style(Style::default().fg(t.text_highlight)),
-                Cell::from(dps.to_string()).style(Style::default().fg(t.text_accent)),
-                Cell::from(client_location_label(app, client))
-                    .style(Style::default().fg(t.text_muted)),
-            ])
-            .style(row_style)
-        })
-        .collect();
-
-    frame.render_widget(
-        Table::new(
-            rows,
-            [
-                Constraint::Length(2),
-                Constraint::Min(12),
-                Constraint::Length(8),
-                Constraint::Min(12),
-                Constraint::Length(4),
-                Constraint::Length(6),
-                Constraint::Length(6),
-                Constraint::Length(5),
-                Constraint::Min(16),
-            ],
-        )
-        .header(header)
-        .block(panel(
-            " Session Fleet ",
-            if app.is_panel_focused(ActivePanel::OrchestratorDashboard) {
-                t.border_active
-            } else {
-                t.border_primary
-            },
-            t,
-        )),
-        area,
-    );
-}
-
-fn draw_session_sidebar(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-    let stats = app.orchestrator_state.relay_stats();
-    let total_dps = app
-        .visible_clients()
-        .iter()
-        .map(|client| estimated_client_dps(client, app))
-        .sum::<u64>();
-
-    let lines = if let Some(client) = app.active_client() {
-        let selected = app.client_command_target(client);
-        let target = client
-            .target
-            .as_ref()
-            .map(|spawn| app.redact_name(&spawn.displayed_name).into_owned())
-            .unwrap_or_else(|| String::from("No target"));
-        let formation = if let Some(player) = &client.local_player {
-            format!("({:.0}, {:.0}, {:.0})", player.x, player.y, player.z)
-        } else {
-            String::from("Offline")
-        };
-        vec![
-            Line::from(vec![
-                Span::styled("Selected ", Style::default().fg(t.text_muted)),
-                Span::styled(selected, Style::default().fg(t.text_normal)),
-            ]),
-            Line::from(vec![
-                Span::styled("Target   ", Style::default().fg(t.text_muted)),
-                Span::styled(target, Style::default().fg(t.text_highlight)),
-            ]),
-            Line::from(vec![
-                Span::styled("Group    ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    app.client_group_label(client).unwrap_or("—"),
-                    Style::default().fg(t.text_accent),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled("Pos      ", Style::default().fg(t.text_muted)),
-                Span::styled(formation, Style::default().fg(t.text_secondary)),
-            ]),
-            Line::from(vec![
-                Span::styled("Fleet DPS ", Style::default().fg(t.text_muted)),
-                Span::styled(total_dps.to_string(), Style::default().fg(t.text_accent)),
-            ]),
-            Line::from(vec![
-                Span::styled("IPC avg  ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    format!(
-                        "{}ms ({:.0}% ok)",
-                        stats.avg_latency_ms,
-                        stats.success_rate()
-                    ),
-                    Style::default().fg(t.text_secondary),
-                ),
-            ]),
-            Line::from(Span::styled(
-                "Space pause/resume • X terminate",
-                Style::default().fg(t.text_muted),
-            )),
-        ]
-    } else {
-        vec![Line::from(Span::styled(
-            "No client selected",
-            Style::default().fg(t.text_muted),
-        ))]
-    };
-
-    frame.render_widget(
-        Paragraph::new(lines)
-            .block(panel(" Session Detail ", t.border_primary, t))
-            .wrap(Wrap { trim: true }),
-        area,
-    );
-}
-
-fn draw_group_tab(frame: &mut Frame, area: Rect, app: &App) {
-    let chunks = split_main_aside(area);
-    draw_group_table(frame, chunks[0], app);
-    draw_group_sidebar(frame, chunks[1], app);
-}
-
-fn draw_group_table(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-    let header = themed_header_row(
-        &["Group", "Leader", "Members", "Formation", "Spell Sync"],
-        t,
-    );
-    let rows: Vec<Row<'_>> = dashboard_groups(app)
-        .into_iter()
-        .map(|group| {
-            let formation = group_formation_label(&group.members);
-            let spell_sync = group_spell_sync_label(&group.members);
-            Row::new(vec![
-                Cell::from(group.name).style(Style::default().fg(t.text_accent)),
-                Cell::from(group.leader).style(Style::default().fg(t.text_normal)),
-                Cell::from(group.members.len().to_string())
-                    .style(Style::default().fg(t.text_normal)),
-                Cell::from(formation.0).style(Style::default().fg(formation.1)),
-                Cell::from(spell_sync.0).style(Style::default().fg(spell_sync.1)),
-            ])
-        })
-        .collect();
-
-    frame.render_widget(
-        Table::new(
-            rows,
-            [
-                Constraint::Length(10),
-                Constraint::Min(12),
-                Constraint::Length(7),
-                Constraint::Min(14),
-                Constraint::Min(14),
-            ],
-        )
-        .header(header)
-        .block(panel(" Group Readiness ", t.border_primary, t)),
-        area,
-    );
-}
-
-fn draw_group_sidebar(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("Mode ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                app.operating_mode.to_string(),
-                Style::default().fg(t.text_highlight),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("Main Assist ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                app.main_assist.as_deref().unwrap_or("—"),
-                Style::default().fg(t.text_normal),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("Main Tank   ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                app.main_tank.as_deref().unwrap_or("—"),
-                Style::default().fg(t.text_normal),
-            ),
-        ]),
-    ];
-
-    if let Some(status) = &app.ch_chain_status {
-        lines.push(Line::from(vec![
-            Span::styled("Spell Sync ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format!(
-                    "{} clerics @ {:.1}s {}",
-                    status.members,
-                    status.interval_secs,
-                    if status.is_adaptive {
-                        "adaptive"
-                    } else {
-                        "fixed"
-                    }
-                ),
-                Style::default().fg(t.text_accent),
-            ),
-        ]));
-    }
-
-    lines.push(Line::from(Span::styled(
-        "Role snapshot",
-        Style::default()
-            .fg(t.text_secondary)
-            .add_modifier(Modifier::BOLD),
-    )));
-
-    if let Some(client) = app.active_client() {
-        lines.push(Line::from(vec![
-            Span::styled(
-                app.client_command_target(client),
-                Style::default().fg(t.text_normal),
-            ),
-            Span::styled(" → ", Style::default().fg(t.text_muted)),
-            Span::styled(role_label(client), Style::default().fg(t.text_highlight)),
-        ]));
-    }
-
-    lines.push(Line::from(Span::styled(
-        "E pull • C camp status • N nav ui",
-        Style::default().fg(t.text_muted),
-    )));
-
-    frame.render_widget(
-        Paragraph::new(lines)
-            .block(panel(" Group Controls ", t.border_primary, t))
-            .wrap(Wrap { trim: true }),
-        area,
-    );
-}
-
-fn draw_navigation_tab(frame: &mut Frame, area: Rect, app: &App) {
-    let chunks = split_main_aside(area);
-    draw_navigation_table(frame, chunks[0], app);
-    draw_navigation_sidebar(frame, chunks[1], app);
-}
-
-fn draw_navigation_table(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-    let selected_pid = app.active_client().map(|client| client.pid);
-    let header = themed_header_row(
-        &["", "Client", "Route", "Status", "Zone FSM", "Recovery"],
-        t,
-    );
-
-    let rows: Vec<Row<'_>> = app
-        .visible_clients()
-        .iter()
-        .map(|client| {
-            let is_selected = Some(client.pid) == selected_pid;
-            let marker = if is_selected { "▶" } else { " " };
-            let nav = app.nav_state.nav_statuses.get(&client.pid);
-            let zone = app.zone_status_state.zone_statuses.get(&client.pid);
-            let route = nav
-                .map(|status| status.destination.as_str())
-                .unwrap_or("No route");
-            let status = nav.map(|status| status.status.label()).unwrap_or("Idle");
-            let recovery = nav
-                .and_then(|status| status.recovery_state.as_deref())
-                .unwrap_or("—");
-            let row_style = if is_selected {
-                Style::default()
-                    .bg(t.row_selected_bg)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default()
-            };
-
-            Row::new(vec![
-                Cell::from(marker).style(Style::default().fg(t.text_accent)),
-                Cell::from(app.client_command_target(client))
-                    .style(Style::default().fg(t.text_normal)),
-                Cell::from(route).style(Style::default().fg(t.text_highlight)),
-                Cell::from(status).style(Style::default().fg(nav_status_color(nav, t))),
-                Cell::from(zone.map_or("Idle", |status| status.fsm_state.label()))
-                    .style(Style::default().fg(zone_fsm_color(zone, t))),
-                Cell::from(recovery).style(Style::default().fg(t.text_secondary)),
-            ])
-            .style(row_style)
-        })
-        .collect();
-
-    frame.render_widget(
-        Table::new(
-            rows,
-            [
-                Constraint::Length(2),
-                Constraint::Min(12),
-                Constraint::Min(14),
-                Constraint::Length(10),
-                Constraint::Length(11),
-                Constraint::Min(14),
-            ],
-        )
-        .header(header)
-        .block(panel(" Navigation Fleet ", t.border_primary, t)),
-        area,
-    );
-}
-
-fn draw_navigation_sidebar(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-    let lines = if let Some(client) = app.active_client() {
-        let nav = app.nav_state.nav_statuses.get(&client.pid);
-        let zone = app.zone_status_state.zone_statuses.get(&client.pid);
-        vec![
-            Line::from(vec![
-                Span::styled("Route ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    nav.map(|status| status.route_state.as_str())
-                        .unwrap_or("Standing by"),
-                    Style::default().fg(t.text_highlight),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled("Waypoint ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    nav.map(|status| status.progress_summary())
-                        .unwrap_or_else(|| String::from("No active path")),
-                    Style::default().fg(t.text_secondary),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled("Blockers ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    nav.and_then(|status| status.blocker_summary())
-                        .unwrap_or_else(|| String::from("None")),
-                    Style::default().fg(t.hp_low),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled("Zone FSM ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    zone.map_or("Idle", |status| status.fsm_state.label()),
-                    Style::default().fg(zone_fsm_color(zone, t)),
-                ),
-            ]),
-            Line::from(vec![
-                Span::styled("Timeout ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    zone.and_then(|status| status.timeout_secs)
-                        .map(|secs| format!("{secs}s"))
-                        .unwrap_or_else(|| String::from("—")),
-                    Style::default().fg(t.text_secondary),
-                ),
-            ]),
-            Line::from(Span::styled(
-                "N nav ui • C camp status",
-                Style::default().fg(t.text_muted),
-            )),
-        ]
-    } else {
-        vec![Line::from(Span::styled(
-            "No client selected",
-            Style::default().fg(t.text_muted),
-        ))]
-    };
-
-    frame.render_widget(
-        Paragraph::new(lines)
-            .block(panel(" Route Detail ", t.border_primary, t))
-            .wrap(Wrap { trim: true }),
-        area,
-    );
-}
-
-fn draw_economy_tab(frame: &mut Frame, area: Rect, app: &App) {
-    let chunks = split_main_aside(area);
-    draw_economy_metrics(frame, chunks[0], app);
-    draw_economy_sidebar(frame, chunks[1], app);
-}
-
-fn draw_economy_metrics(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-    let inner = Layout::default()
+    // Main: Fleet Header (top) + Slots Table (bottom)
+    let main_sections = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(7), Constraint::Min(8)])
-        .split(area);
+        .constraints([Constraint::Length(6), Constraint::Min(8)])
+        .split(main_area);
 
-    let vendor_lines = vec![
-        Line::from(vec![
-            Span::styled("Loot/hr ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format!("{:.1}", items_per_hour(app)),
-                Style::default().fg(t.text_highlight),
-            ),
-            Span::styled("  Plat/hr ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format_plat_rate(plat_per_hour(app)),
-                Style::default().fg(t.text_accent),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("Vendor ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                app.economy_state.vendor_status.label(),
-                Style::default().fg(vendor_status_color(app, t)),
-            ),
-            Span::styled("  Next ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format_countdown(app.economy_state.vendor_next_cycle_secs),
-                Style::default().fg(t.text_secondary),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("Last sell ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                app.economy_state.vendor_last_zone.as_deref().unwrap_or("—"),
-                Style::default().fg(t.text_normal),
-            ),
-            Span::styled("  Banking ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                app.economy_state.banking_status.label(),
-                Style::default().fg(t.text_highlight),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("Trend ", Style::default().fg(t.text_muted)),
-            render_sparkline(
-                &Sparkline::new(
-                    app.orchestrator_state
-                        .profit_samples
-                        .iter()
-                        .map(|value| *value as f64 / 10.0)
-                        .collect(),
-                )
-                .with_max(max_sample(app.orchestrator_state.profit_samples.iter().copied()) / 10.0),
-                t.text_accent,
-            ),
-        ]),
-    ];
+    draw_fleet_header(frame, main_sections[0], app);
+    draw_slots_table(frame, main_sections[1], app);
 
-    frame.render_widget(
-        Paragraph::new(vendor_lines)
-            .block(panel(" Economy Metrics ", t.border_primary, t))
-            .wrap(Wrap { trim: true }),
-        inner[0],
-    );
+    // Sidebar: Signal Feed (top) + Phase Timeline (bottom)
+    let sidebar_sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(8), Constraint::Min(8)])
+        .split(sidebar_area);
 
-    let wishlist_lines = wishlist_lines(app, inner[1].width as usize, t);
-    frame.render_widget(
-        Paragraph::new(wishlist_lines)
-            .block(panel(" Wishlist / Loot Watch ", t.border_primary, t))
-            .wrap(Wrap { trim: true }),
-        inner[1],
-    );
+    draw_signal_feed(frame, sidebar_sections[0], app);
+    draw_phase_timeline(frame, sidebar_sections[1], app);
 }
 
-fn draw_economy_sidebar(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_fleet_header(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
+
+    let intent = "Execute";
+    let phase = "Combat";
+    let hz = 10.0;
+    let last_tick = 12345u64;
+
     let lines = vec![
         Line::from(vec![
-            Span::styled("Items looted ", Style::default().fg(t.text_muted)),
+            Span::styled("Active Intent: ", Style::default().fg(t.text_normal)),
+            Span::styled(intent, Style::default().fg(t.text_server).add_modifier(Modifier::BOLD)),
+        ]),
+        Line::from(vec![
+            Span::styled("Phase: ", Style::default().fg(t.text_normal)),
             Span::styled(
-                total_loot_items(app).to_string(),
-                Style::default().fg(t.text_highlight),
+                phase,
+                Style::default()
+                    .fg(if phase == "Execute" {
+                        t.hp_high
+                    } else {
+                        t.text_accent
+                    })
+                    .add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(vec![
-            Span::styled("Queue ", Style::default().fg(t.text_muted)),
+            Span::styled("Cadence: ", Style::default().fg(t.text_normal)),
             Span::styled(
-                app.economy_state.loot_queue_size.to_string(),
-                Style::default().fg(t.text_accent),
+                format!("{} Hz", hz),
+                Style::default().fg(t.text_bright),
             ),
-            Span::styled("  Pending ", Style::default().fg(t.text_muted)),
+            Span::raw(" · "),
             Span::styled(
-                app.economy_state.loot_pending_distribute.to_string(),
-                Style::default().fg(t.text_secondary),
+                format!("tick {}", last_tick),
+                Style::default().fg(t.text_muted),
             ),
         ]),
+        Line::from(""),
         Line::from(vec![
-            Span::styled("Banking ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format!(
-                    "{}/{} chars",
-                    app.economy_state.banking_chars_done, app.economy_state.banking_chars_total
-                ),
-                Style::default().fg(t.text_secondary),
-            ),
+            Span::styled("p ", Style::default().fg(t.text_muted)),
+            Span::raw("pause · "),
+            Span::styled("r ", Style::default().fg(t.text_muted)),
+            Span::raw("resume · "),
+            Span::styled("A ", Style::default().fg(t.text_muted)),
+            Span::raw("abort intent · "),
+            Span::styled("enter ", Style::default().fg(t.text_muted)),
+            Span::raw("drill into slot"),
         ]),
-        Line::from(vec![
-            Span::styled("Consolidated ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format!("{} pp", app.economy_state.banking_consolidated_plat),
-                Style::default().fg(t.hp_high),
-            ),
-        ]),
-        Line::from(Span::styled(
-            "6 opens full economy controls",
-            Style::default().fg(t.text_muted),
-        )),
     ];
 
-    frame.render_widget(
-        Paragraph::new(lines)
-            .block(panel(" Economy Detail ", t.border_primary, t))
-            .wrap(Wrap { trim: true }),
-        area,
-    );
+    let content = Paragraph::new(lines).wrap(Wrap { trim: true });
+    let block = panel("Fleet Orchestrator", Style::default().fg(t.text_server), t);
+    frame.render_widget(content.block(block), area);
 }
 
-fn draw_combat_tab(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_slots_table(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(8),
-            Constraint::Length(8),
-            Constraint::Min(8),
+    let clients = app.visible_clients();
+
+    let live_count = clients.iter().filter(|c| !c.is_dead).count();
+    let configured_count = clients.len();
+    let blocked_count = clients.iter().filter(|c| c.is_dead).count();
+
+    let title = format!(
+        "Slots · {} live · {} configured · {} blocked",
+        live_count, configured_count, blocked_count
+    );
+
+    let rows = clients.iter().enumerate().map(|(idx, client)| {
+        let slot = format!("S{:02}", idx + 1);
+        let name = app.client_command_target(client);
+        let (state_label, state_color) = client_status_label(app, client);
+        let fsm = "—";
+        let latency = if let Some(stats) = app.relay_stats.as_ref() {
+            if stats.avg_latency_ms > 0 {
+                format!("{}ms", stats.avg_latency_ms)
+            } else {
+                "—".to_string()
+            }
+        } else {
+            "—".to_string()
+        };
+        let lat_style = if latency != "—" && latency.parse::<u64>().unwrap_or(0) > 30 {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(t.hp_high)
+        };
+
+        let health_bar = render_health_bar(state_label, t);
+        let profile = "—";
+
+        Row::new(vec![
+            Cell::from(slot),
+            Cell::from(name),
+            Cell::from(Span::styled(state_label, Style::default().fg(state_color))),
+            Cell::from(fsm),
+            Cell::from(Span::styled(latency, lat_style)),
+            Cell::from(health_bar),
+            Cell::from(profile),
         ])
-        .split(area);
+    });
 
-    draw_combat_overview(frame, rows[0], app);
-    draw_spell_usage(frame, rows[1], app);
-    draw_death_log(frame, rows[2], app, t);
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(5),
+            Constraint::Length(14),
+            Constraint::Length(12),
+            Constraint::Length(14),
+            Constraint::Length(6),
+            Constraint::Length(22),
+            Constraint::Min(10),
+        ],
+    )
+    .header(themed_header_row(
+        vec!["Slot", "Name", "State", "FSM", "Lat", "Health", "Profile"],
+        t,
+    ))
+    .block(panel(title, Style::default().fg(t.text_server), t));
+
+    frame.render_widget(table, area);
 }
 
-fn draw_combat_overview(frame: &mut Frame, area: Rect, app: &App) {
+fn signal_kind_color(kind: &str, t: &Theme) -> Color {
+    match kind {
+        "CH" | "CAST" => t.text_accent,
+        "NAV" => t.text_highlight,
+        "ALERT" => t.hp_low,
+        "XP" => t.hp_high,
+        "LOOT" => t.text_server,
+        "MED" => t.text_secondary,
+        _ => t.text_bright,
+    }
+}
+
+fn draw_signal_feed(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
-    let chunks = split_main_aside(area);
-    let total_dps = app
-        .visible_clients()
-        .iter()
-        .map(|client| estimated_client_dps(client, app))
-        .sum::<u64>();
-    let target = app
-        .active_client()
-        .and_then(|client| client.target.as_ref())
-        .map(|spawn| app.redact_name(&spawn.displayed_name).into_owned())
-        .unwrap_or_else(|| String::from("No combat target"));
+    let visible = area.height.saturating_sub(2) as usize;
 
-    let dps_lines = vec![
-        Line::from(vec![
-            Span::styled("Target ", Style::default().fg(t.text_muted)),
-            Span::styled(target, Style::default().fg(t.text_highlight)),
-        ]),
-        Line::from(vec![
-            Span::styled("Fleet DPS ", Style::default().fg(t.text_muted)),
-            Span::styled(total_dps.to_string(), Style::default().fg(t.text_accent)),
-        ]),
-        Line::from(vec![
-            Span::styled("60s ", Style::default().fg(t.text_muted)),
-            render_sparkline(
-                &Sparkline::new(
-                    app.orchestrator_state
-                        .total_dps_samples
-                        .iter()
-                        .map(|value| *value as f64)
-                        .collect(),
-                )
-                .with_max(max_sample(
-                    app.orchestrator_state.total_dps_samples.iter().copied(),
-                )),
-                t.text_accent,
-            ),
-        ]),
-    ];
-    frame.render_widget(
-        Paragraph::new(dps_lines)
-            .block(panel(" DPS Trend ", t.border_primary, t))
-            .wrap(Wrap { trim: true }),
-        chunks[0],
-    );
-
-    let header = themed_header_row(&["Client", "DPS*", "Status"], t);
-    let rows: Vec<Row<'_>> = app
-        .visible_clients()
-        .iter()
-        .take(6)
-        .map(|client| {
-            let (status_label, status_color) = client_status_label(app, client);
-            Row::new(vec![
-                Cell::from(app.client_command_target(client))
-                    .style(Style::default().fg(t.text_normal)),
-                Cell::from(estimated_client_dps(client, app).to_string())
-                    .style(Style::default().fg(t.text_accent)),
-                Cell::from(status_label).style(Style::default().fg(status_color)),
-            ])
-        })
-        .collect();
-
-    frame.render_widget(
-        Table::new(
-            rows,
-            [
-                Constraint::Min(12),
-                Constraint::Length(6),
-                Constraint::Length(10),
-            ],
-        )
-        .header(header)
-        .block(panel(" Combat Round ", t.border_primary, t)),
-        chunks[1],
-    );
-}
-
-fn draw_spell_usage(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-    let header = themed_header_row(&["Spell", "Seen"], t);
-    let rows: Vec<Row<'_>> = app
-        .orchestrator_state
-        .top_spells(8)
-        .into_iter()
-        .map(|(spell, count)| {
-            Row::new(vec![
-                Cell::from(truncate_inline(
-                    spell,
-                    area.width.saturating_sub(12) as usize,
-                )),
-                Cell::from(count.to_string()),
-            ])
-        })
-        .collect();
-
-    frame.render_widget(
-        Table::new(rows, [Constraint::Min(16), Constraint::Length(6)])
-            .header(header)
-            .block(panel(" Spell Usage Frequency ", t.border_primary, t)),
-        area,
-    );
-}
-
-fn draw_death_log(frame: &mut Frame, area: Rect, app: &App, t: &Theme) {
-    let lines = if app.orchestrator_state.recent_deaths(8).is_empty() {
+    let lines: Vec<Line<'static>> = if app.orchestrator_state.signal_feed.is_empty() {
         vec![Line::from(Span::styled(
-            "No death or recovery events yet",
+            "No signals yet",
             Style::default().fg(t.text_muted),
         ))]
     } else {
         app.orchestrator_state
-            .recent_deaths(8)
-            .into_iter()
-            .map(|entry| {
+            .signal_feed
+            .iter()
+            .rev()
+            .take(visible)
+            .map(|sig| {
+                let color = signal_kind_color(&sig.kind, t);
                 Line::from(vec![
+                    Span::styled(sig.timestamp.clone(), Style::default().fg(t.text_muted)),
+                    Span::raw("  "),
                     Span::styled(
-                        format!("T{:>4} ", entry.tick),
-                        Style::default().fg(t.text_muted),
+                        format!("{:<5}", sig.kind),
+                        Style::default().fg(color).add_modifier(Modifier::BOLD),
                     ),
-                    Span::styled(entry.message.as_str(), Style::default().fg(t.text_normal)),
+                    Span::raw("  "),
+                    Span::styled(sig.message.clone(), Style::default().fg(t.text_normal)),
                 ])
             })
             .collect()
     };
 
-    frame.render_widget(
-        Paragraph::new(lines)
-            .block(panel(" Death Log / Recovery ", t.border_primary, t))
-            .wrap(Wrap { trim: true }),
-        area,
-    );
+    let content = Paragraph::new(lines).wrap(Wrap { trim: true });
+    let block = panel("Signal Feed", Style::default().fg(t.text_accent), t);
+    frame.render_widget(content.block(block), area);
 }
 
-fn draw_system_tab(frame: &mut Frame, area: Rect, app: &App) {
-    let chunks = split_main_aside(area);
-    draw_system_table(frame, chunks[0], app);
-    draw_system_sidebar(frame, chunks[1], app);
-}
-
-fn draw_system_table(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_phase_timeline(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
-    let header = themed_header_row(&["Client", "RSS", "Fast", "Spawn", "Health"], t);
-    let rows: Vec<Row<'_>> = app
-        .visible_clients()
-        .iter()
-        .map(|client| {
-            let (status_label, status_color) = client_status_label(app, client);
-            Row::new(vec![
-                Cell::from(app.client_command_target(client))
-                    .style(Style::default().fg(t.text_normal)),
-                Cell::from(process_memory_label(client.pid))
-                    .style(Style::default().fg(t.text_secondary)),
-                Cell::from(refresh_age_label(client.last_fast_refresh))
-                    .style(Style::default().fg(t.text_secondary)),
-                Cell::from(refresh_age_label(client.last_spawn_refresh))
-                    .style(Style::default().fg(t.text_secondary)),
-                Cell::from(status_label).style(Style::default().fg(status_color)),
-            ])
-        })
-        .collect();
+    let visible = area.height.saturating_sub(2) as usize;
 
-    frame.render_widget(
-        Table::new(
-            rows,
-            [
-                Constraint::Min(12),
-                Constraint::Length(10),
-                Constraint::Length(8),
-                Constraint::Length(8),
-                Constraint::Length(10),
-            ],
-        )
-        .header(header)
-        .block(panel(" Client Health ", t.border_primary, t)),
-        area,
-    );
-}
-
-fn draw_system_sidebar(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-    let latencies: Vec<u64> = app
-        .orchestrator_state
-        .command_history
-        .iter()
-        .map(|entry| entry.latency_ms)
-        .collect();
-    let (p50, p95, p99) = latency_percentiles(&latencies);
-    let health = system_health_label(app);
-
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("Frame rate ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format!("{:.1} fps", 1000.0 / app.refresh_rate_ms.max(1) as f64),
-                Style::default().fg(t.text_accent),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("IPC p50/p95/p99 ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format!("{p50}/{p95}/{p99} ms"),
-                Style::default().fg(t.text_secondary),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("System ", Style::default().fg(t.text_muted)),
-            Span::styled(health.0, Style::default().fg(health.1)),
-        ]),
-        Line::from(Span::styled(
-            "Recent errors",
-            Style::default()
-                .fg(t.text_secondary)
-                .add_modifier(Modifier::BOLD),
-        )),
-    ];
-
-    if app.orchestrator_state.recent_errors(6).is_empty() {
-        lines.push(Line::from(Span::styled(
-            "No recent errors",
+    let lines: Vec<Line<'static>> = if app.orchestrator_state.phase_timeline.is_empty() {
+        vec![Line::from(Span::styled(
+            "No phases recorded",
             Style::default().fg(t.text_muted),
-        )));
+        ))]
     } else {
-        for entry in app.orchestrator_state.recent_errors(6) {
-            lines.push(Line::from(Span::styled(
-                truncate_inline(entry, area.width.saturating_sub(4) as usize),
-                Style::default().fg(t.hp_low),
-            )));
-        }
-    }
+        app.orchestrator_state
+            .phase_timeline
+            .iter()
+            .rev()
+            .take(visible)
+            .map(|entry| {
+                let phase_color = if entry.active {
+                    t.hp_high
+                } else {
+                    t.text_accent
+                };
+                Line::from(vec![
+                    Span::styled(entry.time.clone(), Style::default().fg(t.text_muted)),
+                    Span::raw("  "),
+                    Span::styled(
+                        entry.phase.clone(),
+                        Style::default().fg(phase_color).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw("  "),
+                    Span::styled(
+                        entry.note.clone(),
+                        Style::default().fg(if entry.active {
+                            t.text_bright
+                        } else {
+                            t.text_muted
+                        }),
+                    ),
+                ])
+            })
+            .collect()
+    };
 
-    frame.render_widget(
-        Paragraph::new(lines)
-            .block(panel(" System Detail ", t.border_primary, t))
-            .wrap(Wrap { trim: true }),
-        area,
-    );
+    let content = Paragraph::new(lines).wrap(Wrap { trim: true });
+    let block = panel("Phase Timeline", Style::default().fg(t.text_server), t);
+    frame.render_widget(content.block(block), area);
 }
 
-#[derive(Clone)]
-struct DashboardGroup<'a> {
-    name: String,
-    leader: String,
-    members: Vec<&'a ClientState>,
+fn render_health_bar(state: &str, t: &Theme) -> Line<'static> {
+    let (filled, empty, label, fill_color) = match state {
+        "Online" | "Combat" => (18, 0, "OK", t.hp_high),
+        "Paused" | "Stuck" => (11, 7, "RCV", t.text_highlight),
+        "Dead" => (2, 16, "BLK", t.hp_low),
+        _ => (0, 18, "OFF", t.text_muted),
+    };
+
+    let mut spans = Vec::new();
+    for _ in 0..filled {
+        spans.push(Span::styled("█", Style::default().fg(fill_color)));
+    }
+    for _ in 0..empty {
+        spans.push(Span::styled("·", Style::default().fg(t.text_muted)));
+    }
+    spans.push(Span::raw(" "));
+    spans.push(Span::styled(label, Style::default().fg(fill_color)));
+
+    Line::from(spans)
 }
 
 fn dashboard_groups(app: &App) -> Vec<DashboardGroup<'_>> {

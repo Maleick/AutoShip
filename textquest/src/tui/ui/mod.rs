@@ -121,7 +121,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Config panel overlay
     if app.config_panel_state.active {
         use crate::tui::config_panel::ConfigPanelWidget;
-        let popup_area = centered_popup(area, 68, 72, 36, 12, 96, 30, 1);
+        let popup_area = centered_popup(area, 92, 72, 96, 30, 96, 40, 1); // Fixed 96-wide
         frame.render_widget(Clear, popup_area);
         frame.render_widget(
             ConfigPanelWidget::new(&app.config_panel_state).accent_color(app.theme.text_accent),
@@ -132,10 +132,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // CH chain panel overlay
     if app.ch_chain_panel_state.active {
         use crate::tui::ui::ch_chain::ChChainWidget;
-        let popup_area = centered_popup(area, 80, 78, 48, 12, 104, 32, 1);
+        let popup_area = centered_popup(area, 92, 72, 96, 28, 96, 36, 1); // Fixed 96-wide
         frame.render_widget(Clear, popup_area);
         frame.render_widget(
-            ChChainWidget::new(&app.ch_chain_panel_state).accent_color(app.theme.text_accent),
+            ChChainWidget::new(&app.ch_chain_panel_state).accent_color(app.theme.text_server), // magenta
             popup_area,
         );
     }
@@ -154,42 +154,52 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         draw_alert_overlay(frame, area, app);
     }
 
-    // Toast notification (bottom-right floating overlay, above status bar)
+    // Toast notification (bottom-right centered overlay, 62 wide, 4 tall with borders)
     if let Some(toast) = app.toast.as_ref() {
-        let (label, style) = match toast.level {
-            ToastLevel::Info => (
-                "INFO",
-                Style::default().fg(Color::Black).bg(app.theme.text_accent),
-            ),
-            ToastLevel::Success => (
-                "OK",
-                Style::default().fg(Color::Black).bg(app.theme.hp_high),
-            ),
-            ToastLevel::Warning => (
-                "WARN",
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(app.theme.text_highlight),
-            ),
-            ToastLevel::Error => (
-                "ERR",
-                Style::default().fg(Color::White).bg(app.theme.hp_low),
-            ),
+        let t = &app.theme;
+        let toast_area = centered_popup(area, 45, 8, 62, 4, 62, 4, 1); // Fixed 62x4
+        let border_color = Style::default().fg(t.hp_high); // Green border
+
+        // Split message on newline or bullet separator for 2-line display
+        let lines: Vec<&str> = toast.message.split('\n').collect();
+        let line1 = lines.first().map(|s| s.as_ref()).unwrap_or("");
+        let line2 = lines.get(1).map(|s| s.as_ref()).unwrap_or("");
+
+        // Truncate each line to fit in the 62-wide panel (accounting for borders and padding)
+        let available_width = (62 - 4) as usize; // -4 for borders and padding
+        let line1_text = truncate_inline(line1, available_width);
+        let line2_text = if line2.is_empty() {
+            String::new()
+        } else {
+            truncate_inline(line2, available_width)
         };
-        let full_text = format!("{label} {}", toast.message);
-        let toast_text = truncate_inline(&full_text, area.width.saturating_sub(4) as usize);
-        let toast_width = (toast_text.chars().count() + 2).min(area.width as usize) as u16;
-        let toast_x = area.x + area.width.saturating_sub(toast_width).saturating_sub(1);
-        // Position toast at bottom-right, just above the status bar (which starts at
-        // outer[2]) outer[2] starts at outer[0].height + outer[1].height, so
-        // toast goes one row above that
-        let toast_y = outer[2].y.saturating_sub(1);
-        let toast_area = Rect::new(toast_x, toast_y, toast_width, 1);
+
         frame.render_widget(Clear, toast_area);
-        frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(format!(" {toast_text} "), style))),
-            toast_area,
-        );
+
+        let title = " Toast ";
+        let block = Block::default()
+            .title(title)
+            .borders(Borders::ALL)
+            .border_style(border_color)
+            .border_type(t.border_type);
+
+        let inner = block.inner(toast_area);
+        block.render(toast_area, frame.buffer_mut());
+
+        // Render lines within the inner area
+        let lines_to_render = vec![
+            Line::from(Span::styled(
+                format!("● {}", line1_text),
+                Style::default().fg(t.hp_high).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                format!("  {}", line2_text),
+                Style::default().fg(t.text_muted),
+            )),
+        ];
+
+        let para = Paragraph::new(lines_to_render);
+        para.render(inner, frame.buffer_mut());
     }
 }
 
@@ -237,14 +247,42 @@ fn build_header_tabs(app: &App, width_class: WidthClass) -> Line<'static> {
     let mut spans = Vec::new();
     for (index, screen) in ActiveScreen::ALL.iter().enumerate() {
         if index > 0 {
-            spans.push(Span::raw(" "));
+            spans.push(Span::raw(""));
         }
         let label = header_tab_label(*screen, width_class);
-        spans.push(if *screen == app.active_screen {
-            Span::styled(format!(" {label} "), t.tab_active)
+        let idx = index + 1;
+        if *screen == app.active_screen {
+            // Active tab: [inverse label] with magenta brackets
+            spans.push(Span::styled(
+                "[",
+                Style::default().fg(t.border_primary.fg.unwrap_or(Color::Magenta)),
+            ));
+            spans.push(Span::styled(
+                format!(" {idx} {label} "),
+                Style::default()
+                    .fg(t.text_bright)
+                    .bg(t.row_selected_bg)
+                    .add_modifier(Modifier::BOLD),
+            ));
+            spans.push(Span::styled(
+                "]",
+                Style::default().fg(t.border_primary.fg.unwrap_or(Color::Magenta)),
+            ));
         } else {
-            Span::styled(format!(" {label} "), t.tab_inactive)
-        });
+            // Inactive tab: [label] with muted brackets, secondary label
+            spans.push(Span::styled(
+                "[",
+                Style::default().fg(t.text_muted),
+            ));
+            spans.push(Span::styled(
+                format!(" {idx} {label} "),
+                Style::default().fg(t.text_secondary),
+            ));
+            spans.push(Span::styled(
+                "]",
+                Style::default().fg(t.text_muted),
+            ));
+        }
     }
     Line::from(spans)
 }
@@ -252,43 +290,106 @@ fn build_header_tabs(app: &App, width_class: WidthClass) -> Line<'static> {
 fn build_header_meta(app: &App, width_class: WidthClass, max_width: usize) -> Vec<Span<'static>> {
     let t = &app.theme;
     let client_count = app.clients.len();
-    let client_label = if client_count > 0 {
-        match width_class {
-            WidthClass::Narrow => format!("{client_count} EQ"),
-            _ => format!("{client_count}x EQ"),
-        }
+
+    // Left-side metadata segments, built from the design mock
+    let mut spans = Vec::new();
+
+    // 1. Client count: "{count}x EQ" in cyan + secondary
+    if client_count > 0 {
+        let _ = push_segment_if_fits(
+            &mut spans,
+            vec![
+                Span::styled(
+                    format!("{}x", client_count),
+                    Style::default()
+                        .fg(t.text_accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" EQ", Style::default().fg(t.text_secondary)),
+            ],
+            max_width,
+        );
     } else {
-        String::from("Not attached")
-    };
-    let selected_name_budget = match width_class {
-        WidthClass::Narrow => 10,
-        WidthClass::Medium => 16,
-        WidthClass::Wide => 24,
-    };
-    let selected_label = if let Some(client) = app.active_client() {
+        let _ = push_segment_if_fits(
+            &mut spans,
+            vec![Span::styled(
+                "Not attached",
+                Style::default().fg(t.text_secondary),
+            )],
+            max_width,
+        );
+    }
+
+    // 2. Selected client: "1/6 Name" separator + index/total in bright + name in highlight
+    if let Some(client) = app.active_client() {
         let name = client.local_player.as_ref().map_or_else(
             || String::from("???"),
             |player| app.redact_name(&player.displayed_name).into_owned(),
         );
-        format!(
-            "{}/{} {}",
-            app.selected_client + 1,
-            client_count.max(1),
-            truncate_inline(&name, selected_name_budget)
-        )
-    } else {
-        String::from("No client")
-    };
+        let selected_name_budget = match width_class {
+            WidthClass::Narrow => 10,
+            WidthClass::Medium => 16,
+            WidthClass::Wide => 24,
+        };
+        let _ = push_segment_if_fits(
+            &mut spans,
+            vec![
+                Span::styled(" │ ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    format!("{}/{}", app.selected_client + 1, client_count.max(1)),
+                    Style::default()
+                        .fg(t.text_bright)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(" ", Style::default()),
+                Span::styled(
+                    truncate_inline(&name, selected_name_budget),
+                    Style::default().fg(t.text_highlight),
+                ),
+            ],
+            max_width,
+        );
+    }
+
+    // 3. Focus group: "G2 Fear Core" separator + id in accent + label in secondary
     let group_budget = match width_class {
         WidthClass::Narrow => 10,
         WidthClass::Medium => 14,
         WidthClass::Wide => 18,
     };
+    let _ = push_segment_if_fits(
+        &mut spans,
+        vec![
+            Span::styled(" │ ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                app.group_focus_label(),
+                Style::default().fg(t.text_accent),
+            ),
+        ],
+        max_width,
+    );
+
+    // 4. Server: separator + server name in server color (bold)
     let server_budget = match width_class {
         WidthClass::Narrow => 8,
         WidthClass::Medium => 12,
         WidthClass::Wide => 18,
     };
+    let _ = push_segment_if_fits(
+        &mut spans,
+        vec![
+            Span::styled(" │ ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                truncate_inline(app.display_server(), server_budget),
+                Style::default()
+                    .fg(t.text_server)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ],
+        max_width,
+    );
+
+    // 5. Zone: separator + zone name in bright
     let zone_budget = match width_class {
         WidthClass::Narrow => 10,
         WidthClass::Medium => 14,
@@ -304,98 +405,108 @@ fn build_header_meta(app: &App, width_class: WidthClass, max_width: usize) -> Ve
             }
         },
     );
-    let group_style = if app.active_group.is_some() {
-        t.header_group_active.add_modifier(Modifier::BOLD)
-    } else {
-        t.header_group
-    };
-    let separator = Style::default().fg(t.border_dim.fg.unwrap_or(Color::DarkGray));
-    let mut spans = Vec::new();
-    let _ = push_segment_if_fits(
-        &mut spans,
-        vec![Span::styled(client_label, t.header_client_count)],
-        max_width,
-    );
     let _ = push_segment_if_fits(
         &mut spans,
         vec![
-            Span::styled(" | ", separator),
-            Span::styled(selected_label, t.header_selected),
-        ],
-        max_width,
-    );
-    let _ = push_segment_if_fits(
-        &mut spans,
-        vec![
-            Span::styled(" | ", separator),
+            Span::styled(" │ ", Style::default().fg(t.text_muted)),
             Span::styled(
-                truncate_inline(&app.group_focus_label(), group_budget),
-                group_style,
+                truncate_inline(&zone_label, zone_budget),
+                Style::default().fg(t.text_bright),
             ),
         ],
         max_width,
     );
-    let _ = push_segment_if_fits(
-        &mut spans,
-        vec![
-            Span::styled(" | ", separator),
-            Span::styled(
-                truncate_inline(app.display_server(), server_budget),
-                Style::default().fg(t.text_server),
-            ),
-        ],
-        max_width,
-    );
-    let _ = push_segment_if_fits(
-        &mut spans,
-        vec![
-            Span::styled(" | ", separator),
-            Span::styled(truncate_inline(&zone_label, zone_budget), t.header_zone),
-        ],
-        max_width,
-    );
+
     spans
 }
 
 fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
-    let block = widgets::panel(" TextQuest ", t.border_dim, t);
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    if inner.width == 0 || inner.height == 0 {
-        return;
-    }
 
-    let width_class = classify_width(inner.width);
+    // Header layout: 3 lines total
+    // Line 1: top border with title
+    // Line 2: left meta + padding + right tabs
+    // Line 3: bottom border
+    let lines = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(area);
+
+    let width = area.width as usize;
+    let width_class = classify_width(area.width);
+
+    // ─── Line 1: Top border with title inset ───
+    let title = "TextQuest";
+    let border_char = "─";
+    let left_border = "╭";
+    let right_border = "╮";
+    let left_lead = format!("{}{}{}", left_border, border_char, border_char);
+    let right_tail = format!("{}{}", border_char, right_border);
+    let title_styled = format!(" {} ", title);
+    let title_width = title_styled.len();
+
+    let left_lead_width = left_border.len() + 2;
+    let right_tail_width = 1 + right_border.len();
+    let filler_width = width
+        .saturating_sub(left_lead_width)
+        .saturating_sub(title_width)
+        .saturating_sub(right_tail_width);
+    let filler = border_char.repeat(filler_width);
+
+    let top_line = format!("{}{}{}{}", left_lead, title_styled, filler, right_tail);
+    let top_spans = vec![Span::styled(
+        top_line,
+        Style::default()
+            .fg(t.border_primary.fg.unwrap_or(Color::Magenta))
+            .add_modifier(Modifier::BOLD),
+    )];
+    frame.render_widget(Paragraph::new(Line::from(top_spans)), lines[0]);
+
+    // ─── Line 2: Meta + Tabs ───
     let tabs = build_header_tabs(app, width_class);
-    let tabs_width = line_width(&tabs).min(inner.width as usize) as u16;
+    let tabs_width = line_width(&tabs).min(width) as u16;
+    let left_meta = build_header_meta(app, width_class, width);
 
-    if inner.width > tabs_width.saturating_add(12) {
-        let cols = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(10), Constraint::Length(tabs_width)])
-            .split(inner);
-        let header_spans = build_header_meta(app, width_class, cols[0].width as usize);
-        frame.render_widget(Paragraph::new(Line::from(header_spans)), cols[0]);
-        frame.render_widget(Paragraph::new(tabs).alignment(Alignment::Right), cols[1]);
-    } else {
-        let mut header_spans = build_header_meta(app, width_class, inner.width as usize);
-        let _ = push_segment_if_fits(
-            &mut header_spans,
-            vec![
-                Span::styled(
-                    " | ",
-                    Style::default().fg(t.border_dim.fg.unwrap_or(Color::DarkGray)),
-                ),
-                Span::styled(
-                    header_tab_label(app.active_screen, width_class),
-                    t.tab_active,
-                ),
-            ],
-            inner.width as usize,
-        );
-        frame.render_widget(Paragraph::new(Line::from(header_spans)), inner);
+    let left_width = spans_width(&left_meta);
+    let gap_width = width.saturating_sub(left_width).saturating_sub(tabs_width as usize);
+
+    let mut mid_spans = vec![Span::styled(
+        "│",
+        Style::default()
+            .fg(t.border_primary.fg.unwrap_or(Color::Magenta))
+            .add_modifier(Modifier::BOLD),
+    )];
+    mid_spans.extend(left_meta);
+    if gap_width > 0 {
+        mid_spans.push(Span::raw(" ".repeat(gap_width)));
     }
+    // Add tabs from the line
+    mid_spans.extend(tabs.spans);
+    mid_spans.push(Span::styled(
+        "│",
+        Style::default()
+            .fg(t.border_primary.fg.unwrap_or(Color::Magenta))
+            .add_modifier(Modifier::BOLD),
+    ));
+
+    frame.render_widget(Paragraph::new(Line::from(mid_spans)), lines[1]);
+
+    // ─── Line 3: Bottom border ───
+    let bottom_border = "╰";
+    let bottom_end = "╯";
+    let bottom_fill = border_char.repeat(width.saturating_sub(2));
+    let bottom_line = format!("{}{}{}", bottom_border, bottom_fill, bottom_end);
+    let bot_spans = vec![Span::styled(
+        bottom_line,
+        Style::default()
+            .fg(t.border_primary.fg.unwrap_or(Color::Magenta))
+            .add_modifier(Modifier::BOLD),
+    )];
+    frame.render_widget(Paragraph::new(Line::from(bot_spans)), lines[2]);
 }
 
 // ─── Status bar ──────────────────────────────────────────────────────────────
@@ -480,26 +591,31 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
 
 fn build_status_left(app: &App, width_class: WidthClass, max_width: usize) -> Vec<Span<'static>> {
     let t = &app.theme;
-    let message_cap = match width_class {
-        WidthClass::Narrow => max_width.saturating_sub(1),
-        WidthClass::Medium => max_width.min(38),
-        WidthClass::Wide => max_width.min(48),
+    let mut spans = vec![Span::raw(" ")];
+
+    // SCREEN_NAME in bright bold
+    let screen_name = match app.active_screen {
+        ActiveScreen::Overview => "Characters",
+        ActiveScreen::Tactical => "Tactical",
+        ActiveScreen::Navigation => "Navigation",
+        ActiveScreen::Debug => "Debug",
+        ActiveScreen::PacketMonitor => "Packets",
+        ActiveScreen::Economy => "Economy",
+        ActiveScreen::Orchestrator => "Orchestra",
     };
-    let mut spans = vec![
-        Span::raw(" "),
-        Span::styled(
-            truncate_inline(&app.status_message, message_cap.saturating_sub(1)),
-            t.statusbar_message,
-        ),
-    ];
+    spans.push(Span::styled(
+        screen_name,
+        Style::default()
+            .fg(t.text_bright)
+            .add_modifier(Modifier::BOLD),
+    ));
+
+    // " ▸ " in muted
+    spans.push(Span::styled(" ▸ ", Style::default().fg(t.text_muted)));
+
+    // Keybind hints in secondary
     for (key, desc) in status_hints(app, width_class) {
-        let segment = if spans.len() == 2 {
-            let mut items = vec![Span::styled(" | ", t.statusbar_dim)];
-            items.extend(widgets::keybinding_hint(key, desc, t));
-            items
-        } else {
-            widgets::keybinding_hint(key, desc, t)
-        };
+        let segment = widgets::keybinding_hint(key, desc, t);
         if !push_segment_if_fits(&mut spans, segment, max_width) {
             break;
         }
@@ -509,19 +625,28 @@ fn build_status_left(app: &App, width_class: WidthClass, max_width: usize) -> Ve
 
 fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> Vec<Span<'static>> {
     let t = &app.theme;
+    let mut spans = Vec::new();
+
+    // Mode pill: inverse style (magenta bg for HUNT, cyan bg for CAMP)
     let mode_str = format!("{}", app.operating_mode);
     let mode_bg = match mode_str.as_str() {
         "Camp" => t.mode_camp,
         "Hunt" => t.mode_hunt,
         _ => t.text_muted,
     };
-    let mut spans = vec![Span::styled(
-        format!(" {mode_str} "),
-        Style::default()
-            .fg(Color::Black)
-            .bg(mode_bg)
-            .add_modifier(Modifier::BOLD),
-    )];
+    let _ = push_segment_if_fits(
+        &mut spans,
+        vec![Span::styled(
+            format!(" {} ", mode_str),
+            Style::default()
+                .fg(Color::Black)
+                .bg(mode_bg)
+                .add_modifier(Modifier::BOLD),
+        )],
+        max_width,
+    );
+
+    // Separator and MA
     let ma_label = app.main_assist.as_deref().map(|name| {
         truncate_inline(
             name,
@@ -532,6 +657,19 @@ fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> V
             },
         )
     });
+    if let Some(ma) = ma_label {
+        let _ = push_segment_if_fits(
+            &mut spans,
+            vec![
+                Span::styled(" │ ", Style::default().fg(t.text_muted)),
+                Span::styled("MA ", Style::default().fg(t.text_secondary)),
+                Span::styled(ma, Style::default().fg(t.text_bright)),
+            ],
+            max_width,
+        );
+    }
+
+    // MT
     let mt_label = app.main_tank.as_deref().map(|name| {
         truncate_inline(
             name,
@@ -542,169 +680,136 @@ fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> V
             },
         )
     });
-    let ch_label = app.ch_chain_status.as_ref().map(|chain| {
-        format!(
-            "{}x@{:.1}s{}",
-            chain.members,
-            chain.interval_secs,
-            if chain.is_adaptive { "A" } else { "" }
-        )
-    });
-
-    let filter = app.spawns_state.spawn_type_filter.label();
-    let unread_alerts = app.unread_alert_count();
-    if let Some(ma) = ma_label {
-        let _ = push_segment_if_fits(
-            &mut spans,
-            vec![
-                Span::raw(" "),
-                Span::styled(format!(" MA {ma} "), Style::default().fg(t.text_highlight)),
-            ],
-            max_width,
-        );
-    }
     if let Some(mt) = mt_label {
         let _ = push_segment_if_fits(
             &mut spans,
             vec![
-                Span::raw(" "),
-                Span::styled(format!(" MT {mt} "), Style::default().fg(t.hp_low)),
+                Span::styled(" │ ", Style::default().fg(t.text_muted)),
+                Span::styled("MT ", Style::default().fg(t.text_secondary)),
+                Span::styled(mt, Style::default().fg(t.text_bright)),
             ],
             max_width,
         );
     }
+
+    // CH chain: "CH {members}x@{interval}s {adaptive}"
+    let ch_label = app.ch_chain_status.as_ref().map(|chain| {
+        format!(
+            "{}x@{:.1}s",
+            chain.members,
+            chain.interval_secs,
+        )
+    });
     if let Some(ch) = ch_label {
-        let _ = push_segment_if_fits(
-            &mut spans,
-            vec![
-                Span::raw(" "),
-                Span::styled(format!(" CH {ch} "), Style::default().fg(t.text_accent)),
-            ],
-            max_width,
-        );
-    }
-    if app.active_group.is_some() {
-        let _ = push_segment_if_fits(
-            &mut spans,
-            vec![
-                Span::raw(" "),
-                Span::styled(
-                    format!(" {} ", truncate_inline(&app.group_focus_label(), 10)),
-                    Style::default().fg(Color::Black).bg(t.text_accent),
-                ),
-            ],
-            max_width,
-        );
-    }
-    if filter != "All" && width_class != WidthClass::Narrow {
-        let _ = push_segment_if_fits(
-            &mut spans,
-            vec![
-                Span::raw(" "),
-                Span::styled(
-                    format!(" {filter} "),
-                    Style::default()
-                        .fg(Color::Black)
-                        .bg(t.text_accent)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ],
-            max_width,
-        );
-    }
-    if unread_alerts > 0 {
-        let badge_style = if unread_alerts >= 5 {
-            Style::default()
-                .fg(Color::White)
-                .bg(t.hp_low)
-                .add_modifier(Modifier::BOLD)
+        let adaptive_char = if app.ch_chain_status.as_ref().map(|c| c.is_adaptive).unwrap_or(false) {
+            "A"
         } else {
-            Style::default()
-                .fg(Color::Black)
-                .bg(t.text_highlight)
-                .add_modifier(Modifier::BOLD)
+            "·"
+        };
+        let adaptive_style = if app.ch_chain_status.as_ref().map(|c| c.is_adaptive).unwrap_or(false) {
+            Style::default().fg(t.hp_high) // green for adaptive
+        } else {
+            Style::default().fg(t.text_muted) // muted for non-adaptive
         };
         let _ = push_segment_if_fits(
             &mut spans,
             vec![
+                Span::styled(" │ ", Style::default().fg(t.text_muted)),
+                Span::styled("CH ", Style::default().fg(t.text_accent)),
+                Span::styled(ch, Style::default().fg(t.text_bright)),
                 Span::raw(" "),
-                Span::styled(format!(" Alerts {unread_alerts} "), badge_style),
+                Span::styled(adaptive_char, adaptive_style),
             ],
             max_width,
         );
     }
-    if app.automation_paused {
+
+    // Focus group pill: "[G2]" with inverse styling
+    if app.active_group.is_some() {
         let _ = push_segment_if_fits(
             &mut spans,
             vec![
-                Span::raw(" "),
+                Span::styled(" │ ", Style::default().fg(t.text_muted)),
                 Span::styled(
-                    " \u{23f8} PAUSED ",
+                    "[",
+                    Style::default().fg(t.border_primary.fg.unwrap_or(Color::Magenta)),
+                ),
+                Span::styled(
+                    format!(" {} ", app.group_focus_label()),
                     Style::default()
-                        .fg(Color::Black)
-                        .bg(Color::Yellow)
+                        .fg(t.text_bright)
+                        .bg(t.row_selected_bg)
                         .add_modifier(Modifier::BOLD),
                 ),
-            ],
-            max_width,
-        );
-    }
-    if app.privacy_mode {
-        let _ = push_segment_if_fits(
-            &mut spans,
-            vec![Span::raw(" "), Span::styled(" PRIVATE ", t.statusbar_badge)],
-            max_width,
-        );
-    }
-
-    // Zone blocker count
-    let zone_blocker_count: usize = app
-        .zone_status_state
-        .zone_statuses
-        .values()
-        .filter(|s| {
-            s.stuck
-                || (s.timeout_secs.is_some_and(|t| t == 0))
-                || matches!(
-                    s.fsm_state,
-                    crate::tui::ui::zone_status_panel::ZoneFsmState::Zoning
-                )
-        })
-        .count();
-
-    if zone_blocker_count > 0 && width_class != WidthClass::Narrow {
-        let _ = push_segment_if_fits(
-            &mut spans,
-            vec![
-                Span::raw(" "),
                 Span::styled(
-                    format!(" Zone Blockers: {} ", zone_blocker_count),
-                    Style::default()
-                        .fg(Color::Black)
-                        .bg(t.hp_low)
-                        .add_modifier(Modifier::BOLD),
+                    "]",
+                    Style::default().fg(t.border_primary.fg.unwrap_or(Color::Magenta)),
                 ),
             ],
             max_width,
         );
     }
 
+    // Alerts badge
+    let unread_alerts = app.unread_alert_count();
+    let _ = push_segment_if_fits(
+        &mut spans,
+        vec![
+            Span::styled(" │ ", Style::default().fg(t.text_muted)),
+            Span::styled("Alerts ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                format!("{}", unread_alerts),
+                if unread_alerts > 0 {
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD) // amber
+                } else {
+                    Style::default().fg(t.text_muted)
+                },
+            ),
+        ],
+        max_width,
+    );
+
+    // Theme name in muted (right-aligned)
     if width_class != WidthClass::Narrow {
         let _ = push_segment_if_fits(
             &mut spans,
             vec![
-                Span::raw(" "),
-                Span::styled(format!(" {} ", app.theme_kind.label()), t.statusbar_dim),
+                Span::styled(" │ ", Style::default().fg(t.text_muted)),
+                Span::styled(
+                    app.theme_kind.label(),
+                    Style::default().fg(t.text_muted),
+                ),
             ],
             max_width,
         );
     }
+
     spans
 }
 
 fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
 
+    // Split area into rule (1 line) + status (1 line) + padding (1 line)
+    let lines = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(area);
+
+    // Line 1: Dashed rule
+    let rule_width = area.width as usize;
+    let dashed_rule = "─".repeat(rule_width);
+    let rule_spans = vec![Span::styled(
+        dashed_rule,
+        Style::default().fg(t.text_muted),
+    )];
+    frame.render_widget(Paragraph::new(Line::from(rule_spans)), lines[0]);
+
+    // Line 2: Status bar content
     // Command mode: full-width input line with syntax hint
     if app.cmd_state.command_mode {
         let chars: Vec<char> = app.cmd_state.command_buffer.chars().collect();
@@ -749,7 +854,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
 
         frame.render_widget(
             Paragraph::new(Line::from(spans)).block(widgets::panel("", t.border_active, t)),
-            area,
+            lines[1],
         );
         return;
     }
@@ -762,7 +867,7 @@ fn draw_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Min(10), Constraint::Length(right_width)])
-        .split(area);
+        .split(lines[1]);
     let left_spans = build_status_left(app, width_class, cols[0].width.saturating_sub(2) as usize);
 
     frame.render_widget(
@@ -794,7 +899,7 @@ fn alert_severity_style(t: &crate::tui::theme::Theme, severity: AlertSeverity) -
 }
 
 fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
-    let popup = centered_popup(area, 86, 82, 26, 12, 118, 38, 1);
+    let popup = centered_popup(area, 92, 72, 96, 28, 96, 36, 1); // Fixed 96x28
     let t = &app.theme;
     let sections = Layout::default()
         .direction(Direction::Vertical)
@@ -809,19 +914,19 @@ fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(
         Paragraph::new(vec![
             Line::from(vec![
-                Span::styled(" Operational Alerts ", t.statusbar_badge),
-                Span::raw(" "),
                 Span::styled(
-                    format!("Unread {}", app.unread_alert_count()),
-                    Style::default().fg(t.text_secondary),
+                    format!("Alert Feed · {} unread", app.unread_alert_count()),
+                    Style::default()
+                        .fg(t.text_bright)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(Span::styled(
-                "F8/Esc close  j/k move  Enter or a acknowledge  Shift+A acknowledge all",
+                "↑↓ select · a acknowledge · A ack all · F8 close",
                 t.statusbar_dim,
             )),
         ])
-        .block(widgets::panel("Alert Feed", t.border_active, t)),
+        .block(widgets::panel("", Style::default().fg(t.border_warn), t)),
         sections[0],
     );
 
@@ -841,54 +946,64 @@ fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         for (idx, alert) in app.alert_history[start..end].iter().enumerate() {
             let absolute_idx = start + idx;
-            let selector = if absolute_idx == app.alert_selected {
-                ">"
+
+            // Severity-colored dot: ● for unread, ○ for acknowledged
+            let (dot, dot_style) = if alert.unread() {
+                let severity_color = match alert.severity {
+                    AlertSeverity::Critical => t.hp_low,   // red
+                    AlertSeverity::Warning => t.text_highlight, // amber
+                    AlertSeverity::Info => t.text_accent,  // cyan
+                };
+                ("●", Style::default().fg(severity_color).add_modifier(Modifier::BOLD))
             } else {
-                " "
+                ("○", Style::default().fg(t.text_muted))
             };
-            let ack = if alert.unread() { "NEW" } else { "ACK" };
+
+            let timestamp = alert.created_at.format("%H:%M:%S").to_string();
             let message = truncate_inline(
                 &alert.message,
-                sections[1].width.saturating_sub(24) as usize,
+                sections[1].width.saturating_sub(40) as usize,
             );
-            let line = Line::from(vec![
+
+            // Line 1: {dot} {Severity} {timestamp} {message}
+            let line1 = Line::from(vec![
+                Span::styled(format!("{} ", dot), dot_style),
                 Span::styled(
-                    format!("{selector} "),
-                    if absolute_idx == app.alert_selected {
+                    format!("{:<10}", alert.severity.as_str().to_uppercase()),
+                    if alert.unread() {
                         Style::default()
                             .fg(t.text_bright)
                             .add_modifier(Modifier::BOLD)
                     } else {
-                        t.statusbar_dim
+                        t.text_secondary
                     },
                 ),
                 Span::styled(
-                    format!(" {} ", alert.severity.as_str().to_uppercase()),
-                    alert_severity_style(t, alert.severity),
+                    format!("{:<10}", timestamp),
+                    t.text_secondary,
                 ),
-                Span::raw(" "),
-                Span::styled(
-                    format!("{ack:>3} "),
-                    if alert.unread() {
-                        Style::default().fg(t.text_highlight)
-                    } else {
-                        t.statusbar_dim
-                    },
-                ),
-                Span::styled(
-                    truncate_inline(alert.kind.display_name(), 20),
-                    Style::default().fg(t.text_secondary),
-                ),
-                Span::raw(" "),
                 Span::styled(message, Style::default().fg(t.text_bright)),
             ]);
-            lines.push(line);
+            lines.push(line1);
+
+            // Line 2: kind and source in muted
+            let line2 = Line::from(vec![
+                Span::styled("  ", t.text_muted),
+                Span::styled(
+                    format!("kind={} ", alert.kind.display_name()),
+                    t.text_muted,
+                ),
+                Span::styled(
+                    format!("source={}", alert.kind.display_name()),
+                    t.text_muted,
+                ),
+            ]);
+            lines.push(line2);
         }
     }
 
     frame.render_widget(
         Paragraph::new(lines)
-            .block(widgets::panel("History", t.border_dim, t))
             .wrap(Wrap { trim: false }),
         sections[1],
     );
@@ -1250,7 +1365,7 @@ pub fn help_scroll_for_focus(app: &App, focus: HelpFocus) -> Option<usize> {
 
 fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
     let t = &app.theme;
-    let popup_area = centered_popup(area, 80, 85, 50, 18, 100, 50, 1);
+    let popup_area = centered_popup(area, 92, 72, 96, 36, 96, 50, 1); // Fixed 96-wide
     let compact_rows = popup_area.width < 64;
     let rendered_rows = render_help_outline(build_help_outline(app), compact_rows, app);
 
@@ -1270,9 +1385,9 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
     let scroll = app.help_scroll.min(max_scroll);
 
     let title = if max_scroll > 0 {
-        format!(" Help [{}%] ", (scroll * 100) / max_scroll.max(1))
+        format!(" Help · Keybinds [{}%] (press ? to close) ", (scroll * 100) / max_scroll.max(1))
     } else {
-        String::from(" Help ")
+        String::from(" Help · Keybinds (press ? to close) ")
     };
 
     frame.render_widget(
@@ -1283,8 +1398,8 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
                 Block::default()
                     .borders(Borders::ALL)
                     .border_type(t.border_type)
-                    .title(Span::styled(title, t.help_heading))
-                    .border_style(t.help_border)
+                    .title(Span::styled(title, t.text_bright))
+                    .border_style(Style::default().fg(t.text_accent)) // cyan border
                     .style(Style::default().bg(t.help_bg)),
             ),
         popup_area,
@@ -1509,6 +1624,10 @@ mod tests {
                     "No cached navmesh for poknowledge; using straight-line fallback.",
                 )],
                 is_demo_scripted: false,
+                blocker_description: None,
+                retry_count: 0,
+                fallback_route: None,
+                progress_pct: 0.0,
             },
         );
         app

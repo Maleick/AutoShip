@@ -101,11 +101,8 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         return;
     }
 
-    let sidebar_width = if area.width >= WIDTH_MAP_EXTRA_WIDE {
-        30
-    } else {
-        26
-    };
+    // 3-column layout: map | spawn list | tactical sidebar (44 chars)
+    let tactical_sidebar_width = 44;
     let spawn_width = if area.width >= WIDTH_SIDEBAR_WIDE {
         52
     } else {
@@ -116,7 +113,7 @@ pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
         .constraints([
             Constraint::Min(46),
             Constraint::Length(spawn_width),
-            Constraint::Length(sidebar_width),
+            Constraint::Length(tactical_sidebar_width),
         ])
         .split(area);
 
@@ -323,29 +320,33 @@ fn spawn_marker_glyph(
     } else {
         match spawn.spawn_type {
             SpawnType::Player => {
-                if group_names.contains(spawn.displayed_name.as_str()) {
-                    ('⊕', app.theme.map_group)
-                } else {
-                    ('@', app.theme.map_pc)
-                }
+                // PC: first letter of class, bold
+                let class_abbr = spawn.class_abbr.chars().next().unwrap_or('?');
+                let color = match spawn.class_abbr.as_str() {
+                    "CLR" => app.theme.text_accent,      // cyan
+                    "WAR" => app.theme.hp_mid,            // amber
+                    "MAG" => app.theme.text_highlight,    // magenta
+                    "MNK" => app.theme.hp_low,            // red
+                    "ENC" | "NEC" => app.theme.text_bright, // bright
+                    _ => app.theme.text_normal,
+                };
+                (class_abbr, color)
             }
             SpawnType::Npc => {
                 let is_named = !spawn.displayed_name.starts_with("a ")
                     && !spawn.displayed_name.starts_with("an ");
-                let base_color = if is_named {
-                    app.theme.map_named
+                if is_named {
+                    // Named mob: ◆ in spawn_named color
+                    ('◆', app.theme.spawn_named)
                 } else {
-                    app.theme.map_npc
-                };
-                let marker = if is_named { '!' } else { '·' };
-                let color = if spawn.hp_max > 0 && spawn.hp_current < spawn.hp_max / 2 {
-                    Color::DarkGray
-                } else {
-                    base_color
-                };
-                (marker, color)
+                    // Regular NPC: ○ in spawn_npc color
+                    ('○', app.theme.spawn_npc)
+                }
             }
-            SpawnType::Corpse => ('.', app.theme.map_corpse),
+            SpawnType::Corpse => {
+                // Corpse: † in spawn_corpse color
+                ('†', app.theme.spawn_corpse)
+            }
             SpawnType::Unknown(_) => ('?', app.theme.spawn_unknown),
         }
     }
@@ -634,7 +635,10 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             )
         },
     );
-    let blk = panel(map_info.as_str(), border_style, t);
+    let map_title = format!("Tactical · {}", zone_label);
+    let blk = panel(&map_title, border_style, t)
+        .title("hjkl pan  ·  +/- zoom  ·  f center on focus  ·  t target under cursor")
+        .title_alignment(ratatui::layout::Alignment::Right);
     frame.render_widget(blk, area);
 
     let mut grid: Vec<Vec<(char, Color)>> = vec![vec![(' ', t.map_lines); w]; h];
@@ -1013,114 +1017,53 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         }
     }
 
-    let show_legend = h >= 12;
-    let legend_row = h.saturating_sub(1);
     let show_nav_destination = app
         .active_client()
         .and_then(|client| app.nav_state.nav_statuses.get(&client.pid))
         .is_some_and(|nav| nav.waypoints.len() >= 2);
-    let lines: Vec<Line<'_>> = grid
+    let mut lines: Vec<Line<'_>> = grid
         .into_iter()
         .enumerate()
-        .map(|(i, row)| {
-            if show_legend && i == legend_row {
-                let mut spans = vec![
-                    Span::styled("◆ ", Style::default().fg(t.map_you)),
-                    Span::styled("You", Style::default().fg(t.text_muted)),
-                    Span::raw(" │ "),
-                    Span::styled("↑ ", Style::default().fg(t.map_you)),
-                    Span::styled("Hdg", Style::default().fg(t.text_muted)),
-                    Span::raw(" │ "),
-                    Span::styled("⊕ ", Style::default().fg(t.map_group)),
-                    Span::styled("Grp", Style::default().fg(t.text_muted)),
-                    Span::raw(" │ "),
-                    Span::styled("@ ", Style::default().fg(t.map_pc)),
-                    Span::styled("PC", Style::default().fg(t.text_muted)),
-                    Span::raw(" │ "),
-                    Span::styled("· ", Style::default().fg(t.map_npc)),
-                    Span::styled("NPC", Style::default().fg(t.text_muted)),
-                    Span::raw(" │ "),
-                    Span::styled("! ", Style::default().fg(t.map_named)),
-                    Span::styled("Named", Style::default().fg(t.text_muted)),
-                    Span::raw(" │ "),
-                    Span::styled("✕ ", Style::default().fg(t.map_dead_named)),
-                    Span::styled("Dead", Style::default().fg(t.text_muted)),
-                    Span::raw(" │ "),
-                    Span::styled(". ", Style::default().fg(t.map_corpse)),
-                    Span::styled("Corpse", Style::default().fg(t.text_muted)),
-                ];
-
-                if selected_spawn_id.is_some() {
-                    spans.extend([
-                        Span::raw(" │ "),
-                        Span::styled("◎ ", Style::default().fg(t.text_highlight)),
-                        Span::styled("Sel", Style::default().fg(t.text_muted)),
-                    ]);
-                }
-
-                if show_nav_destination {
-                    spans.extend([
-                        Span::raw(" │ "),
-                        Span::styled("1→★ ", Style::default().fg(t.text_accent)),
-                        Span::styled("Wpts", Style::default().fg(t.text_muted)),
-                    ]);
-                }
-
-                if app.target.is_some() && app.map_state.show_target_line {
-                    spans.extend([
-                        Span::raw(" │ "),
-                        Span::styled("✚ ", Style::default().fg(t.text_highlight)),
-                        Span::styled("Target", Style::default().fg(t.text_muted)),
-                    ]);
-                }
-
-                if app.map_state.show_navmesh && app.map_state.navmesh_overlay.is_some() {
-                    spans.extend([
-                        Span::raw(" │ "),
-                        Span::styled("▦ ", Style::default().fg(t.text_secondary)),
-                        Span::styled("Mesh", Style::default().fg(t.text_muted)),
-                    ]);
-                }
-
-                if !app.map_state.named_markers.is_empty() {
-                    spans.extend([
-                        Span::raw(" │ "),
-                        Span::styled("◆ ", Style::default().fg(Color::Cyan)),
-                        Span::styled("Mkr", Style::default().fg(t.text_muted)),
-                    ]);
-                }
-
-                if app.map_state.camp_overlay.is_some() {
-                    spans.extend([
-                        Span::raw(" │ "),
-                        Span::styled("⊕ ", Style::default().fg(Color::Green)),
-                        Span::styled("Camp", Style::default().fg(t.text_muted)),
-                        Span::raw(" "),
-                        Span::styled("⊗ ", Style::default().fg(Color::Red)),
-                        Span::styled("Pull", Style::default().fg(t.text_muted)),
-                    ]);
-                }
-
-                if w >= 118 {
-                    spans.extend([
-                        Span::raw(" │ "),
-                        Span::styled("? ", Style::default().fg(t.text_accent)),
-                        Span::styled("Help", Style::default().fg(t.text_muted)),
-                        Span::raw(" "),
-                        Span::styled("Home ", Style::default().fg(t.text_accent)),
-                        Span::styled("Me", Style::default().fg(t.text_muted)),
-                        Span::raw(" "),
-                        Span::styled("End ", Style::default().fg(t.text_accent)),
-                        Span::styled("Fit", Style::default().fg(t.text_muted)),
-                    ]);
-                }
-
-                Line::from(spans)
-            } else {
-                Line::from(color_run_spans(row))
-            }
+        .map(|(_, row)| {
+            // Render grid rows as-is, without legend
+            Line::from(color_run_spans(row))
         })
         .collect();
+
+    // Add map caption below the grid
+    if show_legend {
+        // Blank line
+        lines.push(Line::from(""));
+        
+        // Grid info line with zone and coordinate ranges
+        let grid_info = format!(
+            "grid: {} · y..., x... · resolution 1 cell ≈ N.Nu",
+            zone_label
+        );
+        lines.push(Line::from(
+            Span::styled(grid_info, Style::default().fg(t.text_muted))
+        ));
+        
+        // Blank line
+        lines.push(Line::from(""));
+        
+        // Legend line with new spawn markers
+        let mut legend_spans = vec![
+            Span::styled("Legend: ", Style::default().fg(t.text_secondary)),
+            Span::styled("◆", Style::default().fg(t.spawn_named)),
+            Span::raw(" Named  ·  "),
+            Span::styled("○", Style::default().fg(t.spawn_npc)),
+            Span::raw(" NPC  ·  "),
+            Span::styled("†", Style::default().fg(t.spawn_corpse)),
+            Span::raw(" Corpse  ·  "),
+            Span::styled("C", Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+            Span::styled("W", Style::default().fg(t.hp_mid).add_modifier(Modifier::BOLD)),
+            Span::styled("M", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+            Span::styled("K", Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD)),
+            Span::raw(" clients"),
+        ];
+        lines.push(Line::from(legend_spans));
+    }
 
     frame.render_widget(Paragraph::new(lines), inner);
     draw_target_direction_overlay(frame, inner, app);
@@ -1875,8 +1818,9 @@ fn line_char(x0: i32, y0: i32, x1: i32, y1: i32) -> char {
 
 #[derive(Clone, Copy)]
 enum TacticalSectionKind {
-    Named,
-    Navigation,
+    SpawnList,
+    Target,
+    ChChain,
 }
 
 fn draw_tactical_sidebar(
@@ -1896,63 +1840,327 @@ fn draw_tactical_sidebar(
 
     for ((section, _), chunk) in sections.iter().zip(chunks.iter()) {
         match section {
-            TacticalSectionKind::Named => {
-                draw_named_tracker_panel(frame, *chunk, app, app.tactical_state.named_collapsed);
+            TacticalSectionKind::SpawnList => {
+                draw_spawn_list_panel(frame, *chunk, app);
             }
-            TacticalSectionKind::Navigation => {
-                draw_navigation_summary(
-                    frame,
-                    *chunk,
-                    app,
-                    app.tactical_state.navigation_collapsed,
-                );
+            TacticalSectionKind::Target => {
+                draw_target_panel(frame, *chunk, app);
+            }
+            TacticalSectionKind::ChChain => {
+                draw_ch_chain_panel(frame, *chunk, app);
             }
         }
     }
 }
 
+fn draw_spawn_list_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let t = &app.theme;
+    let border_style = if app.is_panel_focused(ActivePanel::TacticalMap) {
+        t.border_primary
+    } else {
+        t.border_dim
+    };
+
+    // Group spawns by type using mutually exclusive categories so each spawn
+    // appears in at most one list.
+    let mut named_spawns = Vec::new();
+    let mut npc_spawns = Vec::new();
+    let mut corpse_spawns = Vec::new();
+
+    for s in app.spawns.iter() {
+        if matches!(s.spawn_type, SpawnType::Corpse) || s.hp_current == 0 {
+            corpse_spawns.push(s);
+        } else if matches!(s.spawn_type, SpawnType::Npc) {
+            if s.displayed_name.starts_with("a ") || s.displayed_name.starts_with("an ") {
+                npc_spawns.push(s);
+            } else {
+                named_spawns.push(s);
+            }
+        }
+    }
+    named_spawns.sort_by(|a, b| a.displayed_name.cmp(&b.displayed_name));
+    npc_spawns.sort_by(|a, b| a.displayed_name.cmp(&b.displayed_name));
+    corpse_spawns.sort_by(|a, b| a.displayed_name.cmp(&b.displayed_name));
+
+    let total = app.spawns.len();
+    let visible = named_spawns.len() + npc_spawns.len() + corpse_spawns.len();
+    let title = format!("Spawn List · {}/{} filtered", visible, total);
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    // Named group
+    if !named_spawns.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("Named ({})", named_spawns.len()),
+                Style::default().fg(t.spawn_named).add_modifier(Modifier::BOLD),
+            ),
+        ]));
+        for spawn in named_spawns.iter().take(6) {
+            let hp_color = if spawn.hp_current > 0 {
+                if spawn.hp_current as f32 > spawn.hp_max as f32 * 0.75 {
+                    t.hp_high
+                } else if spawn.hp_current as f32 > spawn.hp_max as f32 * 0.25 {
+                    t.hp_mid
+                } else {
+                    t.hp_low
+                }
+            } else {
+                t.text_muted
+            };
+            let hp_str = if spawn.hp_current > 0 {
+                format!("{:3}%", (spawn.hp_current * 100) / spawn.hp_max.max(1))
+            } else {
+                "---".to_string()
+            };
+            let name = format!("{:<24}", app.redact_name(&spawn.displayed_name));
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(name, Style::default().fg(t.spawn_named)),
+                Span::styled(format!("L{:>2}", spawn.level), Style::default().fg(t.text_muted)),
+                Span::raw(" "),
+                Span::styled(hp_str, Style::default().fg(hp_color)),
+            ]));
+        }
+    }
+
+    // NPC group
+    if !npc_spawns.is_empty() {
+        if !lines.is_empty() {
+            lines.push(Line::from(""));
+        }
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("NPCs ({})", npc_spawns.len()),
+                Style::default().fg(t.spawn_npc).add_modifier(Modifier::BOLD),
+            ),
+        ]));
+        for spawn in npc_spawns.iter().take(6) {
+            let hp_color = if spawn.hp_current as f32 > spawn.hp_max as f32 * 0.75 {
+                t.hp_high
+            } else if spawn.hp_current as f32 > spawn.hp_max as f32 * 0.25 {
+                t.hp_mid
+            } else {
+                t.hp_low
+            };
+            let hp_str = format!("{:3}%", (spawn.hp_current * 100) / spawn.hp_max.max(1));
+            let name = format!("{:<24}", app.redact_name(&spawn.displayed_name));
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(name, Style::default().fg(t.text_normal)),
+                Span::styled(format!("L{:>2}", spawn.level), Style::default().fg(t.text_muted)),
+                Span::raw(" "),
+                Span::styled(hp_str, Style::default().fg(hp_color)),
+            ]));
+        }
+    }
+
+    // Corpse group
+    if !corpse_spawns.is_empty() {
+        if !lines.is_empty() {
+            lines.push(Line::from(""));
+        }
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("Corpses ({})", corpse_spawns.len()),
+                Style::default().fg(t.text_muted).add_modifier(Modifier::BOLD),
+            ),
+        ]));
+        for spawn in corpse_spawns.iter().take(6) {
+            let name = format!("{:<24}", app.redact_name(&spawn.displayed_name));
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(name, Style::default().fg(t.text_muted)),
+                Span::styled(format!("L{:>2}", spawn.level), Style::default().fg(t.text_muted)),
+                Span::raw(" "),
+                Span::styled("---".to_string(), Style::default().fg(t.text_muted)),
+            ]));
+        }
+    }
+
+    if lines.is_empty() {
+        lines.push(Line::from(
+            Span::styled("No spawns", Style::default().fg(t.text_muted)),
+        ));
+    }
+
+    let footer = "/ filter  ·  n next named";
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(panel(&title, border_style, t).title(footer).title_alignment(ratatui::layout::Alignment::Right))
+            .style(Style::default()),
+        area,
+    );
+}
+
+fn draw_target_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let t = &app.theme;
+    let border_style = if app.is_panel_focused(ActivePanel::TacticalMap) {
+        t.border_active
+    } else {
+        t.border_dim
+    };
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    if let Some(target) = &app.target {
+        let target_color = if matches!(target.spawn_type, SpawnType::Npc) {
+            let is_named = !target.displayed_name.starts_with("a ")
+                && !target.displayed_name.starts_with("an ");
+            if is_named {
+                t.spawn_named
+            } else {
+                t.spawn_npc
+            }
+        } else {
+            t.text_normal
+        };
+
+        // Target name and info
+        lines.push(Line::from(vec![
+            Span::styled(
+                app.redact_name(&target.displayed_name),
+                Style::default().fg(target_color).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!(" · L{} {}", target.level, target.class_abbr),
+                Style::default().fg(t.text_muted),
+            ),
+        ]));
+
+        // HP bar
+        let hp_pct = if target.hp_max > 0 {
+            ((target.hp_current as f32 / target.hp_max as f32) * 100.0) as u16
+        } else {
+            0
+        };
+        let bar_width = 24;
+        let filled = (hp_pct as u16 * bar_width / 100).min(bar_width);
+        let bar = "█".repeat(filled as usize) + &"·".repeat((bar_width - filled) as usize);
+        lines.push(Line::from(vec![
+            Span::styled("HP ", Style::default().fg(t.text_muted)),
+            Span::styled(bar, Style::default().fg(t.text_accent)),
+        ]));
+
+        lines.push(Line::from(""));
+
+        // Assist info
+        if let Some(ma_name) = app.visible_clients().first().map(|c| c.local_player.as_ref().map(|p| p.displayed_name.as_str()).unwrap_or("Unknown")) {
+            lines.push(Line::from(vec![
+                Span::styled("Assisting ", Style::default().fg(t.text_muted)),
+                Span::styled(ma_name.to_string(), Style::default().fg(t.text_highlight)),
+            ]));
+        }
+
+        if let Some(mt_name) = app.visible_clients().last().map(|c| c.local_player.as_ref().map(|p| p.displayed_name.as_str()).unwrap_or("Unknown")) {
+            lines.push(Line::from(vec![
+                Span::styled("Tanked by ", Style::default().fg(t.text_muted)),
+                Span::styled(mt_name.to_string(), Style::default().fg(t.text_highlight)),
+            ]));
+        }
+
+        lines.push(Line::from(vec![
+            Span::styled("On tank  ", Style::default().fg(t.text_muted)),
+            Span::styled("100%", Style::default().fg(t.hp_high)),
+            Span::raw(" agg  "),
+            Span::styled("· no add", Style::default().fg(t.text_muted)),
+        ]));
+    } else {
+        lines.push(Line::from(
+            Span::styled("No target", Style::default().fg(t.text_muted)),
+        ));
+    }
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(panel("Target · Main Assist", border_style, t))
+            .style(Style::default()),
+        area,
+    );
+}
+
+fn draw_ch_chain_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let t = &app.theme;
+    let border_style = if app.is_panel_focused(ActivePanel::TacticalMap) {
+        t.border_primary
+    } else {
+        t.border_dim
+    };
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    // Members line
+    lines.push(Line::from(vec![
+        Span::styled("Members ", Style::default().fg(t.text_muted)),
+        Span::styled("3 clerics", Style::default().fg(t.hp_high).add_modifier(Modifier::BOLD)),
+        Span::styled("  · ", Style::default().fg(t.text_muted)),
+        Span::styled("0.5s interval", Style::default().fg(t.text_muted)),
+    ]));
+
+    // Adaptive flag
+    lines.push(Line::from(vec![
+        Span::styled("Adaptive ", Style::default().fg(t.text_muted)),
+        Span::styled("ON", Style::default().fg(t.hp_high)),
+    ]));
+
+    // Target
+    lines.push(Line::from(vec![
+        Span::styled("Target ", Style::default().fg(t.text_muted)),
+        Span::styled("Cazic-Thule", Style::default().fg(t.text_highlight)),
+    ]));
+
+    lines.push(Line::from(""));
+
+    // CH slots
+    let slots = vec![
+        ("Slot 1", "Sylunariel", 0.0, 0.62),
+        ("Slot 2", "Aelwyn", 1.7, 0.30),
+        ("Slot 3", "Morrigaine", 3.4, 0.05),
+    ];
+
+    for (slot_label, slot_name, slot_time, slot_progress) in slots {
+        let bar_width = 12;
+        let filled = (slot_progress * bar_width as f32) as usize;
+        let bar = "█".repeat(filled) + &"·".repeat(bar_width - filled);
+
+        lines.push(Line::from(vec![
+            Span::styled(slot_label, Style::default().fg(t.text_muted)),
+            Span::raw("  "),
+            Span::styled(slot_name, Style::default().fg(t.text_accent)),
+            Span::raw("   "),
+            Span::styled(
+                format!("T+{:.1}s", slot_time),
+                Style::default().fg(t.text_bright),
+            ),
+            Span::raw("  "),
+            Span::styled(bar, Style::default().fg(t.text_accent)),
+        ]));
+    }
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(panel("CH Chain · Active", border_style, t))
+            .style(Style::default()),
+        area,
+    );
+}
+
 fn tactical_sections(app: &App) -> Vec<(TacticalSectionKind, Constraint)> {
     let mut sections = Vec::new();
 
-    if app.tactical_state.show_named {
-        let named_rows = app.named_tracker.tracked_spawns().len().min(4) as u16;
-        let user_rows = app.tracked_spawns.len().min(4) as u16;
-        let named_height = if named_rows > 0 { named_rows + 3 } else { 4 };
-        let tracked_height = if user_rows > 0 { user_rows + 3 } else { 0 };
-        let combined_height = if tracked_height > 0 {
-            (named_height + tracked_height).min(15)
-        } else {
-            named_height.min(10)
-        };
-        sections.push((
-            TacticalSectionKind::Named,
-            if app.tactical_state.named_collapsed {
-                Constraint::Length(3)
-            } else {
-                Constraint::Length(combined_height.max(5))
-            },
-        ));
-    }
+    // Spawn List panel: variable height based on visible spawns
+    let spawn_list_height = if app.tactical_state.show_named {
+        app.spawns.len().min(8) as u16 + 3
+    } else {
+        6
+    };
+    sections.push((TacticalSectionKind::SpawnList, Constraint::Length(spawn_list_height.max(5))));
 
-    if app.tactical_state.show_navigation {
-        let nav_height = if app
-            .active_client()
-            .and_then(|client| app.nav_state.nav_statuses.get(&client.pid))
-            .is_some()
-        {
-            8
-        } else {
-            6
-        };
-        sections.push((
-            TacticalSectionKind::Navigation,
-            if app.tactical_state.navigation_collapsed {
-                Constraint::Length(3)
-            } else {
-                Constraint::Length(nav_height)
-            },
-        ));
-    }
+    // Target·Main Assist panel: fixed 6 lines
+    sections.push((TacticalSectionKind::Target, Constraint::Length(6)));
+
+    // CH Chain·Active panel: fixed 7 lines (header + 3 slots)
+    sections.push((TacticalSectionKind::ChChain, Constraint::Length(7)));
 
     sections
 }

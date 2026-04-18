@@ -410,9 +410,9 @@ impl Widget for MenuBar<'_> {
         for (i, cat) in MENU_CATEGORIES.iter().enumerate() {
             let label = format!(" {} ", cat.name);
             let style = if self.state.active && i == self.state.selected_category {
-                self.highlight_style
+                self.highlight_style // active = inverse magenta
             } else {
-                self.normal_style
+                self.normal_style // inactive = secondary
             };
 
             let width = label.len() as u16;
@@ -424,9 +424,17 @@ impl Widget for MenuBar<'_> {
             x += width;
         }
 
-        // Fill remaining space
+        // Fill remaining space and add separator line
         for col in x..area.x + area.width {
             buf.set_string(col, area.y, " ", self.normal_style);
+        }
+
+        // Add separator line below menu bar if we have space
+        if area.height > 1 {
+            let sep_y = area.y + 1;
+            for col in area.x..area.x + area.width {
+                buf.set_string(col, sep_y, "─", self.normal_style);
+            }
         }
     }
 }

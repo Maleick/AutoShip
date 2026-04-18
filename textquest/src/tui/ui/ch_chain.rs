@@ -211,9 +211,9 @@ impl<'a> ChChainWidget<'a> {
 impl Widget for ChChainWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let block = Block::default()
-            .title(" CH Chain Management ")
+            .title(" CH Chain · panel ")
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.accent_color));
+            .border_style(Style::default().fg(self.accent_color)); // magenta border
 
         let inner = block.inner(area);
         block.render(area, buf);

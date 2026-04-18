@@ -6,10 +6,10 @@
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{Cell, Paragraph, Row, Table},
 };
 
 use super::widgets::panel;
@@ -90,34 +90,33 @@ impl BankingStatus {
 }
 
 /// Draw the Economy Controls screen.
-pub fn draw_economy_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+pub fn draw_economy_screen(frame: &mut Frame, area: Rect, app: &App) {
+    // Main layout: main area (~60%) + sidebar (44 cols)
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([Constraint::Min(101), Constraint::Length(44)])
         .split(area);
 
-    // ── Left: status panels ────────────────────────────────────────────
-    let rows = Layout::default()
+    // ── Main area: Vendor/Bank + Roster ────────────────────────────────
+    let main_rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(10), // vendor cycle
-            Constraint::Length(8),  // banking
-            Constraint::Length(9),  // session tracker
-            Constraint::Min(4),     // loot queue
-        ])
+        .constraints([Constraint::Length(15), Constraint::Min(8)])
         .split(cols[0]);
 
-    draw_vendor_cycle_panel(frame, rows[0], app);
-    draw_banking_panel(frame, rows[1], app);
-    draw_session_tracker_panel(frame, rows[2], app);
-    draw_loot_queue_panel(frame, rows[3], app);
+    draw_vendor_bank_panel(frame, main_rows[0], app);
+    draw_roster_panel(frame, main_rows[1], app);
 
-    // ── Right: controls reference ──────────────────────────────────────
-    draw_controls_panel(frame, cols[1], app);
+    // ── Sidebar: Rules + Ledger ────────────────────────────────────────
+    let sidebar_rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(12), Constraint::Min(8)])
+        .split(cols[1]);
+
+    draw_rules_panel(frame, sidebar_rows[0], app);
+    draw_ledger_panel(frame, sidebar_rows[1], app);
 }
 
-/// Render the vendor cycle status panel.
-fn draw_vendor_cycle_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+fn draw_vendor_bank_panel(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
     let econ = &app.economy_state;
 
@@ -125,9 +124,9 @@ fn draw_vendor_cycle_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: 
     let border_style = if is_focused {
         t.border_active
     } else {
-        t.border_primary
+        Style::default().fg(t.text_server) // magenta border
     };
-    let blk = panel(" Vendor Cycle ", border_style, t);
+    let blk = panel(" Vendor / Bank Cycle ", border_style, t);
 
     let status_color = vendor_cycle_color(&econ.vendor_status, t);
     let countdown_color = if econ.vendor_next_cycle_secs < 60 {
@@ -137,313 +136,271 @@ fn draw_vendor_cycle_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: 
     } else {
         t.hp_high
     };
-
     let countdown_str = format_countdown(econ.vendor_next_cycle_secs);
 
-    let lines = vec![
+    let mut lines = vec![
         Line::from(vec![
-            Span::styled("  Status:      ", Style::default().fg(t.text_muted)),
+            Span::styled("Cycle State: ", Style::default().fg(t.text_muted)),
             Span::styled(
                 econ.vendor_status.label(),
                 Style::default()
                     .fg(status_color)
                     .add_modifier(Modifier::BOLD),
             ),
+            Span::raw(" · "),
+            Span::styled("—", Style::default().fg(t.text_muted)), // stage placeholder
         ]),
         Line::from(vec![
-            Span::styled("  Next Cycle:  ", Style::default().fg(t.text_muted)),
-            Span::styled(countdown_str, Style::default().fg(countdown_color)),
+            Span::styled("Current Slot: ", Style::default().fg(t.text_muted)),
+            Span::styled("—", Style::default().fg(t.text_normal)),
         ]),
         Line::from(vec![
-            Span::styled("  Cycles Done: ", Style::default().fg(t.text_muted)),
+            Span::styled("Stage Started: ", Style::default().fg(t.text_muted)),
+            Span::styled("—", Style::default().fg(t.text_normal)),
+        ]),
+        Line::from(vec![
+            Span::styled("Cycle Started: ", Style::default().fg(t.text_muted)),
+            Span::styled("—", Style::default().fg(t.text_normal)),
+        ]),
+        Line::from(vec![
+            Span::styled("Cycles Today: ", Style::default().fg(t.text_muted)),
             Span::styled(
                 econ.vendor_cycles_completed.to_string(),
                 Style::default().fg(t.text_secondary),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  Last Zone:   ", Style::default().fg(t.text_muted)),
+            Span::styled("Next Cycle In: ", Style::default().fg(t.text_muted)),
+            Span::styled(countdown_str, Style::default().fg(countdown_color)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Vendor: ", Style::default().fg(t.text_muted)),
             Span::styled(
-                econ.vendor_last_zone.as_deref().unwrap_or("\u{2014}"),
+                econ.vendor_last_zone.as_deref().unwrap_or("—"),
                 Style::default().fg(t.text_normal),
             ),
         ]),
         Line::from(vec![
-            Span::styled("  Items Sold:  ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                econ.vendor_items_sold.to_string(),
-                Style::default().fg(t.text_secondary),
-            ),
+            Span::styled("Bank: ", Style::default().fg(t.text_muted)),
+            Span::styled("—", Style::default().fg(t.text_normal)),
         ]),
+        Line::from(""),
         Line::from(vec![
-            Span::styled("  Plat Earned: ", Style::default().fg(t.text_muted)),
+            Span::styled("Plat (pocket): ", Style::default().fg(t.text_muted)),
             Span::styled(
                 format!("{} pp", econ.vendor_plat_earned),
                 Style::default().fg(t.hp_high),
             ),
         ]),
-    ];
-
-    frame.render_widget(Paragraph::new(lines).block(blk), area);
-}
-
-/// Render the banking status panel.
-fn draw_banking_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let t = &app.theme;
-    let econ = &app.economy_state;
-
-    let blk = panel(" Banking ", t.border_primary, t);
-    let status_color = banking_status_color(&econ.banking_status, t);
-
-    let lines = vec![
         Line::from(vec![
-            Span::styled("  Status:          ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                econ.banking_status.label(),
-                Style::default()
-                    .fg(status_color)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("  Consolidated pp: ", Style::default().fg(t.text_muted)),
+            Span::styled("Plat (banked): ", Style::default().fg(t.text_muted)),
             Span::styled(
                 format!("{} pp", econ.banking_consolidated_plat),
                 Style::default().fg(t.hp_high),
             ),
         ]),
-        Line::from(vec![
-            Span::styled("  Characters:      ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format!("{}/{}", econ.banking_chars_done, econ.banking_chars_total),
-                Style::default().fg(t.text_secondary),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("  Last Bank Run:   ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                econ.banking_last_run.as_deref().unwrap_or("\u{2014}"),
-                Style::default().fg(t.text_normal),
-            ),
-        ]),
     ];
 
-    frame.render_widget(Paragraph::new(lines).block(blk), area);
-}
-
-/// Render the session plat tracker panel (MQ2PlatTracker parity).
-fn draw_session_tracker_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let t = &app.theme;
-    let summary = app.economy_state.plat_tracker.summary();
-
-    let net_plat = summary.net_change.plat;
-    let net_color = if net_plat >= 0 { t.hp_high } else { t.hp_low };
-
-    let rate = summary.plat_per_hour();
-    let rate_color = if rate >= 0.0 { t.hp_high } else { t.hp_low };
-
-    let gained = summary.total_gained.plat;
-    let spent = summary.total_spent.plat.abs();
-
-    let blk = panel(" Session Economy ", t.border_primary, t);
-
-    let lines = vec![
-        Line::from(vec![
-            Span::styled("  Net:           ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format!("{}p", net_plat),
-                Style::default().fg(net_color).add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("  Rate:          ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                format!("{:.1}p/h", rate),
-                Style::default().fg(rate_color).add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("  Gained:        ", Style::default().fg(t.text_muted)),
-            Span::styled(format!("{}p", gained), Style::default().fg(t.hp_high)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Spent:         ", Style::default().fg(t.text_muted)),
-            Span::styled(format!("{}p", spent), Style::default().fg(t.hp_low)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Duration:      ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                summary.format_duration(),
-                Style::default().fg(t.text_secondary),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("  Transactions:  ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                summary.transaction_count.to_string(),
-                Style::default().fg(t.text_normal),
-            ),
-        ]),
-    ];
-
-    frame.render_widget(Paragraph::new(lines).block(blk), area);
-}
-
-/// Render the loot queue panel.
-fn draw_loot_queue_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let t = &app.theme;
-    let econ = &app.economy_state;
-
-    let queue_color = if econ.loot_queue_size == 0 {
-        t.text_muted
-    } else if econ.loot_queue_size > 50 {
-        t.hp_low
-    } else if econ.loot_queue_size > 20 {
-        t.text_highlight
-    } else {
-        t.hp_high
-    };
-
-    let blk = panel(" Loot Queue ", t.border_primary, t);
-
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled("  Queue Size:    ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                econ.loot_queue_size.to_string(),
-                Style::default()
-                    .fg(queue_color)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("  Items Looted:  ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                econ.loot_items_total.to_string(),
-                Style::default().fg(t.text_secondary),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("  Pending:       ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                econ.loot_pending_distribute.to_string(),
-                Style::default().fg(if econ.loot_pending_distribute > 0 {
-                    t.text_highlight
-                } else {
-                    t.text_muted
-                }),
-            ),
-        ]),
-    ];
-
-    if !econ.loot_recent_items.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(Line::from(Span::styled(
-            "  Recent Loot:",
-            Style::default().fg(t.text_accent),
-        )));
-        for item in econ.loot_recent_items.iter().take(3) {
-            lines.push(Line::from(vec![
-                Span::styled("    ", Style::default()),
-                Span::styled(item.as_str(), Style::default().fg(t.text_normal)),
-            ]));
-        }
-    }
-
-    frame.render_widget(Paragraph::new(lines).block(blk), area);
-}
-
-/// Render the controls reference panel.
-fn draw_controls_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
-    let t = &app.theme;
-    let econ = &app.economy_state;
-
-    let cmd_s = Style::default().fg(t.text_highlight);
-    let lbl_s = Style::default().fg(t.text_secondary);
-    let key_s = Style::default()
-        .fg(t.text_accent)
-        .add_modifier(Modifier::BOLD);
-
-    let automation_label = if econ.automation_paused {
-        "Paused"
-    } else {
-        "Running"
-    };
-    let automation_color = if econ.automation_paused {
-        t.hp_low
-    } else {
-        t.hp_high
-    };
-
-    let mut lines = vec![
-        Line::from(Span::styled(
-            "Economy Operator Controls",
-            Style::default()
-                .fg(t.text_accent)
-                .add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  Automation: ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                automation_label,
-                Style::default()
-                    .fg(automation_color)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(""),
-        Line::from(Span::styled(
-            "Keybindings",
-            Style::default()
-                .fg(t.text_accent)
-                .add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-    ];
-
-    for (key, desc) in &[
-        ("P", "Pause vendor/bank cycle"),
-        ("R", "Resume vendor/bank cycle"),
-        ("A", "Abort current cycle"),
-        ("S", "Skip current cycle"),
-    ] {
-        lines.push(Line::from(vec![
-            Span::styled(format!("  [{key}] "), key_s),
-            Span::styled(*desc, lbl_s),
-        ]));
-    }
-
+    // Footer with control hints
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "Commands",
-        Style::default()
-            .fg(t.text_accent)
-            .add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("s", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::raw(" start · "),
+        Span::styled("S", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::raw(" stop · "),
+        Span::styled("x", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::raw(" skip client · "),
+        Span::styled("r", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::raw(" reload rules"),
+    ]));
 
-    for (cmd, desc) in &[
-        (":econ status  ", "Show economy summary"),
-        (":econ pause   ", "Pause all economy ops"),
-        (":econ resume  ", "Resume economy ops"),
-        (":econ vendor  ", "Trigger vendor cycle now"),
-        (":econ bank    ", "Trigger bank consolidation"),
-        (":econ loot    ", "Process loot queue"),
-        (":econ skip    ", "Skip current cycle"),
-        (":econ abort   ", "Abort current operation"),
-    ] {
-        lines.push(Line::from(vec![
-            Span::styled(*cmd, cmd_s),
-            Span::raw("  "),
-            Span::styled(*desc, lbl_s),
-        ]));
-    }
+    frame.render_widget(Paragraph::new(lines).block(blk), area);
+}
 
+
+
+
+
+
+
+
+
+/// Render the roster table with client status.
+fn draw_roster_panel(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
+
+    let blk = panel(" Roster ", Style::default().fg(t.text_server), t); // magenta border
+
+    // Column headers
+    let header_cells = vec![
+        Cell::from("Slot").style(Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+        Cell::from("Status").style(Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+        Cell::from("Plat").style(Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+        Cell::from("Bags").style(Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+        Cell::from("Reason/Notes").style(Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+    ];
+
+    let header = Row::new(header_cells)
+        .style(Style::default())
+        .bottom_margin(1);
+
+    // Build rows from app.clients
+    let rows: Vec<Row> = app
+        .clients
+        .iter()
+        .enumerate()
+        .map(|(idx, client)| {
+            let slot_color = t.text_normal;
+            let slot = format!("{}", idx + 1);
+            let status = client.state.name.as_str();
+
+            // Status coloring: Active=amber/inverse, Done=green, Queued=cyan, Skipped=muted
+            let status_color = match client.state.name.as_str() {
+                "Active" => t.text_highlight, // amber
+                "Done" => t.hp_high,           // green
+                "Queued" => t.text_accent,    // cyan
+                _ => t.text_muted,
+            };
+
+            let cells = vec![
+                Cell::from(slot).style(Style::default().fg(slot_color)),
+                Cell::from(status).style(Style::default().fg(status_color)),
+                Cell::from("0").style(Style::default().fg(t.text_normal)),
+                Cell::from("0").style(Style::default().fg(t.text_normal)),
+                Cell::from("—").style(Style::default().fg(t.text_muted)),
+            ];
+
+            Row::new(cells)
+        })
+        .collect();
+
+    let constraints = vec![
+        Constraint::Length(16),  // Slot
+        Constraint::Length(10),  // Status
+        Constraint::Length(6),   // Plat (right-aligned)
+        Constraint::Length(6),   // Bags
+        Constraint::Min(34),     // Reason/Notes
+    ];
+
+    let inner = blk.inner(area);
     frame.render_widget(
-        Paragraph::new(lines).block(panel(" Controls ", t.border_warn, t)),
+        Table::new(rows, constraints)
+            .header(header)
+            .block(blk),
         area,
     );
+}
+
+/// Render the Rules panel (cyan border, sidebar).
+fn draw_rules_panel(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
+
+    let border_style = Style::default().fg(t.text_accent); // cyan
+    let blk = panel(" Rules ", border_style, t);
+
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled(
+                "active rule set default.ron",
+                Style::default().fg(t.text_normal),
+            ),
+            Span::raw(" "),
+            Span::styled("(0 rules)", Style::default().fg(t.text_muted)),
+        ]),
+        Line::from(""),
+    ];
+
+    // Placeholder: show "No rules loaded"
+    lines.push(Line::from(Span::styled(
+        "No rules loaded",
+        Style::default().fg(t.text_muted),
+    )));
+
+    // Footer hints
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "rules load from ~/.config/textquest/economy/",
+        Style::default().fg(t.text_muted),
+    )));
+    lines.push(Line::from(vec![
+        Span::styled("e", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::raw(" edit · "),
+        Span::styled("r", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::raw(" reload · "),
+        Span::styled("t", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD)),
+        Span::raw(" test"),
+    ]));
+
+    frame.render_widget(Paragraph::new(lines).block(blk), area);
+}
+
+/// Render the Ledger panel (magenta border, sidebar).
+fn draw_ledger_panel(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
+    let econ = &app.economy_state;
+
+    let blk = panel(" Ledger ", Style::default().fg(t.text_server), t); // magenta border
+
+    let mut lines = vec![
+        Line::from(Span::styled(
+            "Today",
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(vec![
+            Span::styled("  Earned  ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("+{} pp", if econ.ledger_earned_today > 0 { econ.ledger_earned_today } else { econ.vendor_plat_earned }),
+                Style::default().fg(t.hp_high),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Vendor  ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("+{} pp", if econ.ledger_vendor_today > 0 { econ.ledger_vendor_today } else { econ.vendor_plat_earned }),
+                Style::default().fg(t.text_accent),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Loot    ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("+{} pp", econ.ledger_loot_today),
+                Style::default().fg(t.text_highlight),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Last Cycle",
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(vec![
+            Span::styled("  Sold    ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("{} items", if econ.ledger_last_sold > 0 { econ.ledger_last_sold } else { econ.vendor_items_sold }),
+                Style::default().fg(t.text_normal),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Banked  ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                format!("{} pp", if econ.ledger_last_banked > 0 { econ.ledger_last_banked } else { econ.banking_consolidated_plat }),
+                Style::default().fg(t.text_normal),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Skipped ", Style::default().fg(t.text_muted)),
+            Span::styled(
+                if econ.ledger_last_skipped > 0 { format!("{} (combat)", econ.ledger_last_skipped) } else { String::from("0") },
+                Style::default().fg(if econ.ledger_last_skipped > 0 { t.text_highlight } else { t.text_muted }),
+            ),
+        ]),
+    ];
+
+    frame.render_widget(Paragraph::new(lines).block(blk), area);
 }
 
 /// Format a countdown in seconds to a human-readable string.

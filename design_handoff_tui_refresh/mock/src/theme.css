@@ -1,0 +1,75 @@
+/* TextQuest TUI — Neriak theme (from src/tui/theme.rs::neriak) */
+:root {
+  /* Core palette — RGB values lifted verbatim from theme.rs */
+  --void: #0d0618;
+  --violet: #1a0a2e;
+  --magenta: #cc44ff;
+  --magenta-hot: #ff00ff;
+  --cyan: #00e5ff;
+  --lavender: #e2d7f4;
+  --lavender-dim: rgb(160, 150, 180);
+  --shadow: rgb(80, 60, 110);
+  --deep: rgb(45, 30, 65);
+  --green: #34d399;
+  --red: #ef4444;
+  --amber: #fbbf24;
+  --blue: #60a5fa;
+
+  /* Semantic (matching theme.rs field names) */
+  --border-dim: var(--shadow);
+  --border-primary: var(--magenta);
+  --border-active: var(--cyan);
+  --border-warn: var(--amber);
+  --border-danger: var(--red);
+  --border-server: var(--magenta-hot);
+
+  --text-bright: var(--lavender);
+  --text-normal: var(--lavender);
+  --text-secondary: var(--lavender-dim);
+  --text-muted: var(--shadow);
+  --text-accent: var(--cyan);
+  --text-highlight: var(--magenta);
+  --text-server: var(--magenta-hot);
+
+  --hp-high: var(--green);
+  --hp-mid: var(--amber);
+  --hp-low: var(--red);
+  --mana: var(--blue);
+  --bar-empty: var(--deep);
+
+  --spawn-pc: var(--green);
+  --spawn-npc: var(--lavender);
+  --spawn-named: var(--magenta);
+  --spawn-corpse: var(--shadow);
+  --spawn-unknown: var(--red);
+
+  --row-selected: var(--violet);
+  --panel-bg: var(--void);
+  --overlay-bg: var(--void);
+
+  /* Con colors (mob level-relative difficulty) */
+  --con-red: var(--red);
+  --con-yellow: var(--amber);
+  --con-white: var(--lavender);
+  --con-light-blue: var(--cyan);
+  --con-blue: var(--blue);
+  --con-green: var(--green);
+
+  /* Typography — a proper monospaced grid */
+  --mono: "JetBrains Mono", "Fira Code", "IBM Plex Mono", "SFMono-Regular",
+    Menlo, Consolas, monospace;
+  --cell-w: 9.6px; /* character cell width at 16px */
+  --cell-h: 22px; /* line height */
+  --fs-base: 16px;
+}
+
+/* Width-class override (toggled by tweak) */
+:root[data-width="narrow"] {
+  --term-cols: 80;
+}
+:root[data-width="medium"] {
+  --term-cols: 110;
+}
+:root[data-width="wide"] {
+  --term-cols: 160;
+}

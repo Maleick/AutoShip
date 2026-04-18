@@ -847,10 +847,10 @@ pub fn render_command_palette(
     let filtered = palette.filtered_commands();
     let item_count = filtered.len() as u16;
     let popup_h = (item_count + 4)
-        .min(area.height * 70 / 100)
-        .max(6)
+        .min(area.height * 72 / 100)
+        .max(10)
         .min(area.height);
-    let popup_w = (area.width * 60 / 100).clamp(40.min(area.width), 60.min(area.width));
+    let popup_w = 96_u16.min(area.width); // Fixed 96-wide
     let x = area.x + area.width.saturating_sub(popup_w) / 2;
     let y = area.y + area.height.saturating_sub(popup_h) / 2;
     let popup_area = ratatui::layout::Rect::new(x, y, popup_w, popup_h);
@@ -871,11 +871,16 @@ pub fn render_command_palette(
         ])
         .split(inner);
 
-    // Filter input
+    // Filter input: `: ` prefix in magenta bold, text in bright, `█` cursor in magenta
     let filter_line = Line::from(vec![
-        Span::styled("> ", Style::default().fg(t.text_accent)),
         Span::styled(
-            format!("{}_", palette.filter),
+            ": ",
+            Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            format!("{}█", palette.filter),
             Style::default().fg(t.text_bright),
         ),
     ]);
@@ -895,15 +900,16 @@ pub fn render_command_palette(
         .iter()
         .enumerate()
         .map(|(i, hint)| {
-            let style = if i == palette.selected {
+            let is_selected = i == palette.selected;
+            let style = if is_selected {
                 Style::default()
                     .fg(Color::Black)
                     .bg(t.text_accent)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(t.text_normal)
+                Style::default().fg(Color::Cyan) // cyan for commands
             };
-            let desc_style = if i == palette.selected {
+            let desc_style = if is_selected {
                 Style::default().fg(Color::Black).bg(t.text_accent)
             } else {
                 Style::default().fg(t.text_muted)
@@ -925,12 +931,12 @@ pub fn render_command_palette(
             .borders(Borders::ALL)
             .border_type(t.border_type)
             .title(Span::styled(
-                " Command Palette ",
+                " Command mode ",
                 Style::default()
                     .fg(t.text_bright)
                     .add_modifier(Modifier::BOLD),
             ))
-            .border_style(t.border_active)
+            .border_style(Style::default().fg(Color::Magenta)) // magenta border
             .style(Style::default().bg(t.help_bg)),
         popup_area,
     );

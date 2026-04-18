@@ -1679,6 +1679,13 @@ pub struct PacketRecord {
     pub payload_size: u32,
 }
 
+/// Entry for a decoded packet with field names and values.
+#[derive(Debug, Clone)]
+pub struct PacketEntry {
+    /// Pairs of (field_name, field_value) decoded from the packet.
+    pub decoded_fields: Vec<(String, String)>,
+}
+
 /// State for the packet/opcode monitor panel.
 pub struct PacketMonitorState {
     /// Ring buffer of captured packets (newest at the end).
@@ -1989,6 +1996,19 @@ pub struct EconomyState {
 
     /// Session plat tracker (MQ2PlatTracker parity).
     pub plat_tracker: crate::economy::plat_tracker::PlatTracker,
+
+    /// Total plat earned today (ledger).
+    pub ledger_earned_today: u64,
+    /// Total plat sold to vendor today (ledger).
+    pub ledger_vendor_today: u64,
+    /// Total plat from loot today (ledger).
+    pub ledger_loot_today: u64,
+    /// Timestamp of last item sold (ledger).
+    pub ledger_last_sold: u32,
+    /// Last plat amount banked (ledger).
+    pub ledger_last_banked: u64,
+    /// Timestamp of last item skipped (ledger).
+    pub ledger_last_skipped: u32,
 }
 
 impl Default for EconomyState {
@@ -2015,6 +2035,13 @@ impl Default for EconomyState {
             automation_paused: false,
 
             plat_tracker: crate::economy::plat_tracker::PlatTracker::new(),
+
+            ledger_earned_today: 0,
+            ledger_vendor_today: 0,
+            ledger_loot_today: 0,
+            ledger_last_sold: 0,
+            ledger_last_banked: 0,
+            ledger_last_skipped: 0,
         }
     }
 }

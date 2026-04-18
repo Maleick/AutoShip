@@ -622,6 +622,9 @@ pub struct App {
     /// log).
     pub orchestrator_state: super::ui::orchestrator_panel::OrchestratorDashboardState,
 
+    /// Top loot items by value or frequency for session display.
+    pub top_loot: Vec<(String, u32)>,
+
     /// GM detector — zone-wide Game Master detection and alerting.
     pub gm_detector: GmDetector,
     /// Whether automation was auto-paused due to GM presence.
@@ -664,6 +667,15 @@ pub struct NavClientStatus {
     pub blockers: Vec<String>,
     /// Whether this status was injected by the deterministic demo script.
     pub is_demo_scripted: bool,
+
+    /// Enriched description of the blocker (if any).
+    pub blocker_description: Option<String>,
+    /// Number of retries attempted for this navigation.
+    pub retry_count: u8,
+    /// Fallback route if primary pathfinding failed.
+    pub fallback_route: Option<String>,
+    /// Navigation progress as a percentage (0.0-100.0).
+    pub progress_pct: f32,
 }
 
 impl NavClientStatus {
@@ -909,6 +921,7 @@ impl App {
             priority_snapshots: Vec::new(),
             economy_state: super::state::EconomyState::default(),
             orchestrator_state: super::ui::orchestrator_panel::OrchestratorDashboardState::new(),
+            top_loot: Vec::new(),
             gm_detector: GmDetector::new(GmAlertConfig::default()),
             gm_auto_paused: false,
             kill_reporter: crate::metrics::KillReporter::default(),
@@ -3999,6 +4012,10 @@ impl App {
                             focused_client.zone_short, expected_zone
                         )],
                         is_demo_scripted: false,
+                        blocker_description: None,
+                        retry_count: 0,
+                        fallback_route: None,
+                        progress_pct: 0.0,
                     },
                 );
                 skipped += 1;
@@ -4118,6 +4135,10 @@ impl App {
                         recovery_state,
                         blockers,
                         is_demo_scripted: false,
+                        blocker_description: None,
+                        retry_count: 0,
+                        fallback_route: None,
+                        progress_pct: 0.0,
                     },
                 );
             }

@@ -538,6 +538,10 @@ fn apply_demo_scenario(app: &mut App) {
                             _ => Vec::new(),
                         },
                         is_demo_scripted: true,
+                        blocker_description: None,
+                        retry_count: 0,
+                        fallback_route: None,
+                        progress_pct: 0.0,
                     },
                 );
             }
@@ -982,6 +986,10 @@ fn build_live_nav_client_status(status: &NavStatus, zone_name: &str) -> NavClien
         recovery_state: live_nav_recovery_state(status),
         blockers: live_nav_blockers(status, zone_name),
         is_demo_scripted: false,
+        blocker_description: None,
+        retry_count: 0,
+        fallback_route: None,
+        progress_pct: 0.0,
     }
 }
 

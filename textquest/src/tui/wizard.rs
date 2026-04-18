@@ -225,9 +225,9 @@ impl<'a> WizardWidget<'a> {
 
 impl Widget for WizardWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // Center the wizard popup (70% width, 80% height)
-        let w = (area.width as f32 * 0.7).max(40.0).min(area.width as f32) as u16;
-        let h = (area.height as f32 * 0.8).max(20.0).min(area.height as f32) as u16;
+        // Center the wizard popup (96 cols wide, 36 high)
+        let w = 96_u16.min(area.width);
+        let h = 36_u16.min(area.height);
         let x = area.x + (area.width.saturating_sub(w)) / 2;
         let y = area.y + (area.height.saturating_sub(h)) / 2;
         let popup = Rect::new(x, y, w, h);
@@ -243,12 +243,12 @@ impl Widget for WizardWidget<'_> {
 
         let block = Block::default()
             .title(format!(
-                " TextQuest Setup Wizard — Step {} of {}",
+                " Fleet Setup · wizard · Step {} of {} ",
                 self.state.step.number(),
                 WizardStep::ALL.len()
             ))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.accent_color))
+            .border_style(Style::default().fg(self.accent_color)) // magenta border
             .style(Style::default().bg(Color::Black));
 
         let inner = block.inner(popup);
@@ -280,14 +280,22 @@ impl Widget for WizardWidget<'_> {
         // Progress bar
         self.render_progress(layout[2], buf);
 
-        // Navigation hints
-        let nav_hint = match self.state.step {
-            WizardStep::Welcome => " Enter: Start  │  Esc: Skip ",
-            WizardStep::ReviewConfirm => " Enter: Confirm & Save  │  Esc: Back ",
-            _ => " Enter: Next  │  Esc: Back  │  Tab: Next Field  │  F1: Help ",
-        };
-        let hint_style = Style::default().fg(Color::DarkGray);
-        buf.set_string(layout[3].x, layout[3].y, nav_hint, hint_style);
+        // Navigation hints with styled buttons
+        let nav_style = Style::default().fg(Color::DarkGray);
+        match self.state.step {
+            WizardStep::Welcome => {
+                let hint = "◀ Skip  │  Next ▶";
+                buf.set_string(layout[3].x, layout[3].y, hint, nav_style);
+            }
+            WizardStep::ReviewConfirm => {
+                let hint = "◀ Back  │  Confirm ▶";
+                buf.set_string(layout[3].x, layout[3].y, hint, nav_style);
+            }
+            _ => {
+                let hint = "◀ Back  │  Next ▶  │  esc cancel";
+                buf.set_string(layout[3].x, layout[3].y, hint, nav_style);
+            }
+        }
     }
 }
 

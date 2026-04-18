@@ -122,8 +122,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
     let visible = app.visible_clients();
     let title = format!(
-        " Ops Roster — {} ({}) ",
-        app.group_focus_label(),
+        " Ops Roster · {} clients · sorted by Group ",
         visible.len()
     );
 
@@ -144,22 +143,8 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
-    let show_group = app.active_group.is_none() && roster_area.width >= WIDTH_SHOW_GROUP_COL;
-    let show_class = roster_area.width >= WIDTH_SHOW_CLASS_COL;
-    let show_zone = roster_area.width >= WIDTH_SHOW_ZONE_COL;
-
-    let mut headers = vec!["", "Name"];
-    if show_group {
-        headers.push("Grp");
-    }
-    if show_class {
-        headers.push("Cls");
-    }
-    if show_zone {
-        headers.push("Zone");
-    }
-    headers.extend(["HP", "Cond", "State"]);
-
+    // Fixed column layout matching design mock
+    let headers = vec!["", "Name", "Grp", "Cls", "Lvl", "Zone", "HP", "Mana", "Cond", "State", "Activity"];
     let header = themed_header_row(headers.as_slice(), t);
     let highlight_style = Style::default()
         .bg(t.row_selected_bg)
@@ -174,43 +159,63 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                 .position(|candidate| candidate.pid == client.pid)
                 .unwrap_or(usize::MAX);
             let is_sel = global_idx == app.selected_client;
+            let marker_style = if is_sel {
+                Style::default()
+                    .fg(t.text_accent)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.text_accent)
+            };
             let marker = if is_sel { "▶" } else { " " };
 
             if let Some(player) = &client.local_player {
                 let hp_pct = player.hp_pct();
+                let mana_pct = player.mana_pct();
                 let name = app.redact_name(&player.displayed_name).into_owned();
                 let (condition_label, condition_style) = client_condition(client, t);
-                let compact_activity =
-                    roster_area.width < WIDTH_SHOW_ZONE_COL || area.width < WIDTH_OVERVIEW_STACK;
-                let (activity_label, activity_style) =
-                    client_activity(app, client, compact_activity);
+                let (activity_label, activity_style) = client_activity(app, client, false);
 
                 let mut cells = vec![
-                    Cell::from(marker).style(Style::default().fg(t.text_accent)),
-                    Cell::from(name).style(Style::default().fg(t.text_normal)),
+                    Cell::from(marker).style(marker_style),
+                    Cell::from(name).style(if is_sel {
+                        Style::default()
+                            .fg(t.text_accent)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        Style::default().fg(t.text_bright)
+                    }),
+                    Cell::from(app.client_group_label(client).unwrap_or("--"))
+                        .style(Style::default().fg(t.text_accent)),
+                    Cell::from(player.class_str()).style(Style::default().fg(t.text_highlight)),
+                    Cell::from(format!("{:>3}", player.level))
+                        .style(Style::default().fg(t.text_bright)),
+                    Cell::from(truncate_inline(&client.zone_name, 22))
+                        .style(Style::default().fg(t.text_secondary)),
                 ];
-                if show_group {
-                    cells.push(
-                        Cell::from(app.client_group_label(client).unwrap_or("--"))
-                            .style(Style::default().fg(t.text_secondary)),
-                    );
+
+                // HP bar: "96% ███▌···"
+                let hp_bar = render_hp_bar(hp_pct, t);
+                cells.push(Cell::from(hp_bar).style(Style::default().fg(hp_color(hp_pct, t))));
+
+                // Mana bar (melee classes show --)
+                let is_melee = matches!(player.class, EqClass::Warrior | EqClass::Monk | EqClass::Rogue | EqClass::Berserker);
+                if is_melee {
+                    cells.push(Cell::from("  --  ").style(Style::default().fg(t.text_muted)));
+                } else {
+                    let mana_bar = render_mana_bar(mana_pct, t);
+                    cells.push(Cell::from(mana_bar).style(Style::default().fg(t.text_accent)));
                 }
-                if show_class {
-                    cells.push(
-                        Cell::from(player.class_str()).style(Style::default().fg(t.text_accent)),
-                    );
-                }
-                if show_zone {
-                    cells.push(
-                        Cell::from(client.zone_name.as_str())
-                            .style(Style::default().fg(t.text_muted)),
-                    );
-                }
-                cells.push(
-                    Cell::from(format!("{hp_pct:>3.0}%"))
-                        .style(Style::default().fg(hp_color(hp_pct, t))),
-                );
+
                 cells.push(Cell::from(condition_label).style(condition_style));
+
+                let state_label = match client.stand_state {
+                    StandState::Stand => "Stand",
+                    StandState::Sit => "Sit",
+                    StandState::Feign => "FD",
+                };
+                let state_style = stand_state_color(&client.stand_state, t);
+                cells.push(Cell::from(state_label).style(state_style));
+
                 cells.push(Cell::from(activity_label).style(activity_style));
 
                 Row::new(cells).style(if is_sel {
@@ -220,26 +225,24 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                 })
             } else {
                 let mut cells = vec![
-                    Cell::from(marker).style(Style::default().fg(t.text_accent)),
+                    Cell::from(marker).style(marker_style),
                     Cell::from(if client.client_status.is_empty() {
                         format!("PID {}", client.pid)
                     } else {
                         client.client_status.clone()
                     })
                     .style(Style::default().fg(t.hp_low)),
+                    Cell::from("--").style(Style::default().fg(t.text_muted)),
+                    Cell::from("--").style(Style::default().fg(t.text_muted)),
+                    Cell::from("--").style(Style::default().fg(t.text_muted)),
+                    Cell::from("--").style(Style::default().fg(t.text_muted)),
+                    Cell::from("--").style(Style::default().fg(t.hp_low)),
+                    Cell::from("--").style(Style::default().fg(t.text_muted)),
+                    Cell::from("Offline").style(Style::default().fg(t.hp_low)),
+                    Cell::from("—").style(Style::default().fg(t.text_muted)),
+                    Cell::from("• Wait").style(Style::default().fg(t.text_muted)),
                 ];
-                if show_group {
-                    cells.push(Cell::from("--"));
-                }
-                if show_class {
-                    cells.push(Cell::from("--"));
-                }
-                if show_zone {
-                    cells.push(Cell::from(client.zone_name.as_str()));
-                }
-                cells.push(Cell::from(" --"));
-                cells.push(Cell::from("Offline").style(Style::default().fg(t.hp_low)));
-                cells.push(Cell::from("• Waiting").style(Style::default().fg(t.text_muted)));
+
                 Row::new(cells).style(if is_sel {
                     highlight_style
                 } else {
@@ -249,22 +252,25 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
         })
         .collect();
 
-    let mut constraints = vec![Constraint::Length(2), Constraint::Min(14)];
-    if show_group {
-        constraints.push(Constraint::Length(4));
-    }
-    if show_class {
-        constraints.push(Constraint::Length(4));
-    }
-    if show_zone {
-        constraints.push(Constraint::Min(12));
-    }
-    constraints.extend([
-        Constraint::Length(5),
-        Constraint::Length(8),
-        Constraint::Min(12),
-    ]);
+    // Fixed column constraints matching design widths
+    let constraints = vec![
+        Constraint::Length(2),   // cursor
+        Constraint::Length(14),  // Name
+        Constraint::Length(3),   // Grp
+        Constraint::Length(4),   // Cls
+        Constraint::Length(3),   // Lvl
+        Constraint::Length(22),  // Zone
+        Constraint::Length(16),  // HP
+        Constraint::Length(12),  // Mana
+        Constraint::Length(9),   // Cond
+        Constraint::Length(8),   // State
+        Constraint::Min(10),     // Activity
+    ];
 
+    // Build activity legend footer
+    let activity_legend_lines = build_activity_legend_lines(t);
+
+    let inner = blk.inner(roster_area);
     frame.render_widget(
         Table::new(rows, constraints)
             .header(header)
@@ -272,6 +278,81 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
             .row_highlight_style(highlight_style),
         roster_area,
     );
+
+    // Render activity legend at bottom
+    if inner.height > 2 {
+        let legend_area = Rect {
+            x: inner.x,
+            y: inner.y + inner.height.saturating_sub(2),
+            width: inner.width,
+            height: 2,
+        };
+        frame.render_widget(
+            Paragraph::new(activity_legend_lines),
+            legend_area,
+        );
+    }
+}
+
+fn render_hp_bar(hp_pct: f64, t: &crate::tui::theme::Theme) -> String {
+    let width = 10;
+    let filled = (hp_pct * width as f64 / 100.0).round() as usize;
+    let mut bar = String::new();
+    bar.push_str(&format!("{:>3.0}% ", hp_pct));
+    for i in 0..width {
+        if i < filled {
+            bar.push('█');
+        } else {
+            bar.push('·');
+        }
+    }
+    bar
+}
+
+fn render_mana_bar(mana_pct: f64, t: &crate::tui::theme::Theme) -> String {
+    let width = 6;
+    let filled = (mana_pct * width as f64 / 100.0).round() as usize;
+    let mut bar = String::new();
+    bar.push_str(&format!("{:>3.0}% ", mana_pct));
+    for i in 0..width {
+        if i < filled {
+            bar.push('█');
+        } else {
+            bar.push('·');
+        }
+    }
+    bar
+}
+
+fn build_activity_legend_lines(t: &crate::tui::theme::Theme) -> Vec<Line<'static>> {
+    let activity_glyphs = vec![
+        ("➜", "Nav", t.text_accent),
+        ("✓", "Arr", t.text_success),
+        ("!", "Stk", t.text_warning),
+        ("☠", "Ded", t.hp_low),
+        ("⇣", "FD", t.text_info),
+        ("☾", "Sit", t.text_secondary),
+        ("⌕", "Lot", t.text_accent),
+        ("✦", "Cst", t.text_accent),
+        ("⚔", "Fgt", t.text_warning),
+        ("●", "Rdy", t.text_success),
+    ];
+
+    let mut legend = vec![
+        Span::styled(
+            "Activity glyphs:  ",
+            Style::default().fg(t.text_muted),
+        ),
+    ];
+
+    for (glyph, label, color) in activity_glyphs {
+        legend.push(Span::styled(glyph, Style::default().fg(color)));
+        legend.push(Span::raw(" "));
+        legend.push(Span::styled(label, Style::default().fg(t.text_secondary)));
+        legend.push(Span::raw("  "));
+    }
+
+    vec![Line::from(legend)]
 }
 
 struct GroupScopeEntry {
@@ -327,7 +408,8 @@ fn group_scope_entries(app: &App) -> Vec<GroupScopeEntry> {
 
 fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
-    let blk = panel(" Group Scope [Shift+0-6] ", t.border_dim, t);
+    let title = format!(" Group Focus · {} ", app.group_focus_label());
+    let blk = panel(title.as_str(), t.border_active, t);
     let inner = blk.inner(area);
     frame.render_widget(blk, area);
 
@@ -335,61 +417,104 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
-    let mut cards = vec![Span::styled(
-        format!("[All {}]", app.clients.len()),
-        if app.active_group.is_none() {
-            Style::default()
-                .fg(t.text_bright)
-                .bg(t.row_selected_bg)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(t.text_secondary)
-        },
-    )];
+    // Build the stats line with separators: Uptime │ Kills/Deaths │ XP │ Plat │ TopLoot
+    let mut line_spans = Vec::new();
 
-    for entry in group_scope_entries(app) {
-        cards.push(Span::raw(" "));
-        cards.push(Span::styled(
-            format!("[{} {}/{}]", entry.label, entry.connected, entry.members),
-            if entry.active {
-                Style::default()
-                    .fg(t.text_bright)
-                    .bg(t.row_selected_bg)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(t.text_secondary)
-            },
-        ));
-    }
+    // Uptime
+    let uptime_str = if let Some(uptime) = &app.session_uptime {
+        format!("{:02}:{:02}:{:02}", uptime.hours, uptime.minutes, uptime.seconds)
+    } else {
+        "00:00:00".to_string()
+    };
+    line_spans.push(Span::styled(
+        "Uptime ",
+        Style::default().fg(t.text_secondary),
+    ));
+    line_spans.push(Span::styled(
+        uptime_str,
+        Style::default().fg(t.text_bright),
+    ));
+    line_spans.push(Span::raw(" │ "));
 
-    let selected = app
-        .active_client()
-        .and_then(|client| {
-            client
-                .local_player
-                .as_ref()
-                .map(|player| app.redact_name(&player.displayed_name).into_owned())
-                .or_else(|| Some(app.client_command_target(client)))
-        })
-        .unwrap_or_else(|| String::from("none"));
+    // Kills / Deaths
+    let kills = app.combat_stats.kills.unwrap_or(0);
+    let deaths = app.combat_stats.deaths.unwrap_or(0);
+    line_spans.push(Span::styled(
+        "Kills ",
+        Style::default().fg(t.text_secondary),
+    ));
+    line_spans.push(Span::styled(
+        format!("{} ", kills),
+        Style::default().fg(t.text_bright),
+    ));
+    line_spans.push(Span::styled(
+        format!("/ Deaths {}", deaths),
+        Style::default().fg(t.text_bright),
+    ));
+    line_spans.push(Span::raw(" │ "));
 
-    let compact = inner.width < 60;
-    let mut lines = vec![Line::from(cards)];
-    if inner.height > 1 && !compact {
-        lines.push(Line::from(vec![
-            Span::styled("Focus ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                app.group_focus_label(),
-                Style::default()
-                    .fg(t.text_accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("  Selected ", Style::default().fg(t.text_muted)),
-            Span::styled(selected, Style::default().fg(t.text_normal)),
-        ]));
-    }
+    // XP info
+    let xp_total = app.combat_stats.xp_total.unwrap_or(0) as f64 / 1_000_000.0;
+    let xp_per_hour = app.combat_stats.xp_per_hour.unwrap_or(0.0);
+    let xp_per_15m = app.combat_stats.xp_per_15m.unwrap_or(0.0);
+    line_spans.push(Span::styled(
+        "XP ",
+        Style::default().fg(t.text_secondary),
+    ));
+    line_spans.push(Span::styled(
+        format!("{:.2}M", xp_total),
+        Style::default().fg(t.text_bright),
+    ));
+    line_spans.push(Span::styled(
+        format!(" · +{:.0}k/h · +{:.0}k/15m", xp_per_hour / 1000.0, xp_per_15m / 1000.0),
+        Style::default().fg(t.text_bright),
+    ));
+    line_spans.push(Span::raw(" │ "));
 
-    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
+    // Platinum
+    let plat = app.platinum_balance.unwrap_or(0.0);
+    let plat_per_hour = app.platinum_per_hour.unwrap_or(0.0);
+    line_spans.push(Span::styled(
+        "Plat ",
+        Style::default().fg(t.text_secondary),
+    ));
+    line_spans.push(Span::styled(
+        format!("{:.1}", plat),
+        Style::default().fg(t.text_bright),
+    ));
+    line_spans.push(Span::styled(
+        format!(" · +{:.1}/h", plat_per_hour),
+        Style::default().fg(t.text_bright),
+    ));
+    line_spans.push(Span::raw(" │ "));
+
+    // Top Loot
+    line_spans.push(Span::styled(
+        "Top Loot ",
+        Style::default().fg(t.text_secondary),
+    ));
+    let loot_preview = if app.loot_database.items.is_empty() {
+        "—".to_string()
+    } else {
+        // Get top 2-3 items by count
+        let mut items: Vec<_> = app.loot_database.items.iter().collect();
+        items.sort_by(|a, b| b.1.count.cmp(&a.1.count));
+        items
+            .iter()
+            .take(2)
+            .map(|(name, info)| format!("{}×{}", name, info.count))
+            .collect::<Vec<_>>()
+            .join(" · ")
+    };
+    line_spans.push(Span::styled(
+        loot_preview,
+        Style::default().fg(t.text_bright),
+    ));
+
+    frame.render_widget(
+        Paragraph::new(Line::from(line_spans)).wrap(Wrap { trim: true }),
+        inner,
+    );
 }
 
 fn group_focus_strip_height(area: Rect) -> u16 {
@@ -555,15 +680,10 @@ fn is_debuffer_class(class: Option<EqClass>) -> bool {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum OverviewSectionKind {
     Character,
+    Target,
     Groups,
-    Filters,
     Combat,
     Session,
-    /// Launch profile, session preset, and slot lifecycle for the selected
-    /// client.
-    SlotProfile,
-    /// Kill tracker stats — kills, KPH, top mobs.
-    Kills,
 }
 
 #[derive(Clone, Copy)]
@@ -595,112 +715,54 @@ fn draw_dashboard_sidebar(
     for (section, chunk) in sections.iter().zip(chunks.iter()) {
         match section.kind {
             OverviewSectionKind::Character => {
-                draw_character_summary(frame, *chunk, app, section.collapsed);
+                draw_character_summary(frame, *chunk, app);
+            }
+            OverviewSectionKind::Target => {
+                draw_target_cast_summary(frame, *chunk, app);
             }
             OverviewSectionKind::Groups => {
-                draw_group_ops_summary(frame, *chunk, app, section.collapsed);
-            }
-            OverviewSectionKind::Filters => {
-                draw_scope_summary(frame, *chunk, app, section.collapsed);
+                draw_group_ops_summary(frame, *chunk, app);
             }
             OverviewSectionKind::Combat => {
-                draw_combat_status(frame, *chunk, app, section.collapsed);
+                draw_combat_status(frame, *chunk, app);
             }
             OverviewSectionKind::Session => {
-                draw_session_stats(frame, *chunk, app, section.collapsed);
-            }
-            OverviewSectionKind::SlotProfile => {
-                draw_slot_profile(frame, *chunk, app, section.collapsed);
-            }
-            OverviewSectionKind::Kills => {
-                draw_kill_stats(frame, *chunk, app, section.collapsed);
+                draw_session_stats(frame, *chunk, app);
             }
         }
     }
 }
 
 fn overview_sections(app: &App, area: Rect, stacked: bool) -> Vec<OverviewSectionLayout> {
-    let mut sections = vec![OverviewSectionLayout {
-        kind: OverviewSectionKind::Character,
-        height: if app.overview_state.character_collapsed {
-            3
-        } else {
-            7
+    // Five fixed sidebar sections: Character, Target, Groups, Session, Combat
+    // Heights are designed for 44-wide sidebar with balanced visibility
+    let sections = vec![
+        OverviewSectionLayout {
+            kind: OverviewSectionKind::Character,
+            height: 7,
+            collapsed: false,
         },
-        collapsed: app.overview_state.character_collapsed,
-    }];
-
-    if app.overview_state.show_groups {
-        let group_rows = group_scope_entries(app).len().min(6) as u16;
-        sections.push(OverviewSectionLayout {
+        OverviewSectionLayout {
+            kind: OverviewSectionKind::Target,
+            height: 6,
+            collapsed: false,
+        },
+        OverviewSectionLayout {
             kind: OverviewSectionKind::Groups,
-            height: if app.overview_state.groups_collapsed {
-                3
-            } else {
-                group_rows.saturating_add(2).max(5)
-            },
-            collapsed: app.overview_state.groups_collapsed,
-        });
-    }
-
-    if app.overview_state.show_filters {
-        sections.push(OverviewSectionLayout {
-            kind: OverviewSectionKind::Filters,
-            height: if app.overview_state.filters_collapsed {
-                3
-            } else {
-                5
-            },
-            collapsed: app.overview_state.filters_collapsed,
-        });
-    }
-
-    sections.push(OverviewSectionLayout {
-        kind: OverviewSectionKind::Combat,
-        height: if app.overview_state.combat_collapsed {
-            3
-        } else if app.ch_chain_status.is_some() {
-            6
-        } else {
-            5
+            height: 7,
+            collapsed: false,
         },
-        collapsed: app.overview_state.combat_collapsed,
-    });
-    sections.push(OverviewSectionLayout {
-        kind: OverviewSectionKind::Session,
-        height: if app.overview_state.session_collapsed {
-            3
-        } else if app.loot_database.items.is_empty() {
-            6
-        } else {
-            8
+        OverviewSectionLayout {
+            kind: OverviewSectionKind::Session,
+            height: 8,
+            collapsed: false,
         },
-        collapsed: app.overview_state.session_collapsed,
-    });
-
-    if app.overview_state.show_profile {
-        sections.push(OverviewSectionLayout {
-            kind: OverviewSectionKind::SlotProfile,
-            height: if app.overview_state.profile_collapsed {
-                3
-            } else {
-                6
-            },
-            collapsed: app.overview_state.profile_collapsed,
-        });
-    }
-
-    if app.overview_state.show_kills {
-        sections.push(OverviewSectionLayout {
-            kind: OverviewSectionKind::Kills,
-            height: if app.overview_state.kills_collapsed {
-                3
-            } else {
-                8
-            },
-            collapsed: app.overview_state.kills_collapsed,
-        });
-    }
+        OverviewSectionLayout {
+            kind: OverviewSectionKind::Combat,
+            height: 8,
+            collapsed: false,
+        },
+    ];
 
     if stacked {
         stacked_overview_sections(app, area, &sections)
@@ -776,13 +838,11 @@ fn stacked_overview_sections(
 fn stacked_priority(app: &App, kind: OverviewSectionKind, order: usize) -> (u8, usize) {
     let priority = match kind {
         OverviewSectionKind::Character => 0,
-        OverviewSectionKind::Combat if app.ch_chain_status.is_some() => 1,
-        OverviewSectionKind::SlotProfile => 2,
+        OverviewSectionKind::Target => 1,
+        OverviewSectionKind::Combat if app.ch_chain_status.is_some() => 2,
         OverviewSectionKind::Groups => 3,
-        OverviewSectionKind::Filters => 4,
-        OverviewSectionKind::Combat => 5,
-        OverviewSectionKind::Session => 6,
-        OverviewSectionKind::Kills => 7,
+        OverviewSectionKind::Combat => 4,
+        OverviewSectionKind::Session => 5,
     };
     (priority, order)
 }
@@ -790,12 +850,10 @@ fn stacked_priority(app: &App, kind: OverviewSectionKind, order: usize) -> (u8, 
 fn natural_section_order(kind: OverviewSectionKind) -> u8 {
     match kind {
         OverviewSectionKind::Character => 0,
-        OverviewSectionKind::SlotProfile => 1,
+        OverviewSectionKind::Target => 1,
         OverviewSectionKind::Groups => 2,
-        OverviewSectionKind::Filters => 3,
-        OverviewSectionKind::Combat => 4,
-        OverviewSectionKind::Session => 5,
-        OverviewSectionKind::Kills => 6,
+        OverviewSectionKind::Combat => 3,
+        OverviewSectionKind::Session => 4,
     }
 }
 
@@ -807,19 +865,18 @@ fn section_title(label: &str, key_hint: Option<&str>, collapsed: bool) -> String
     }
 }
 
-fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
+fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
     let border_style = if app.is_panel_focused(ActivePanel::OverviewCharacter) {
         t.border_active
     } else {
         t.border_primary
     };
-    let title = section_title("Character", Some("Enter"), collapsed);
-    let blk = panel(title.as_str(), border_style, t);
-    let inner = blk.inner(area);
-    frame.render_widget(blk, area);
 
     let Some(client) = app.active_client() else {
+        let blk = panel(" Character · — ", border_style, t);
+        let inner = blk.inner(area);
+        frame.render_widget(blk, area);
         frame.render_widget(
             Paragraph::new("No character selected").style(Style::default().fg(t.text_muted)),
             inner,
@@ -827,6 +884,9 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
         return;
     };
     let Some(player) = &client.local_player else {
+        let blk = panel(" Character · — ", border_style, t);
+        let inner = blk.inner(area);
+        frame.render_widget(blk, area);
         frame.render_widget(
             Paragraph::new("Selected client has no player data")
                 .style(Style::default().fg(t.text_muted)),
@@ -834,6 +894,12 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
         );
         return;
     };
+
+    let name = app.redact_name(&player.displayed_name).into_owned();
+    let title = format!(" Character · {} ", name);
+    let blk = panel(&title, border_style, t);
+    let inner = blk.inner(area);
+    frame.render_widget(blk, area);
 
     let name = app.redact_name(&player.displayed_name).into_owned();
     let group_label = app.client_group_label(client).unwrap_or("--");
@@ -1047,7 +1113,7 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
-fn draw_group_ops_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
+fn draw_group_ops_summary(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
     let border_style = if app.is_panel_focused(ActivePanel::OverviewGroups) {
         t.border_active
@@ -1125,7 +1191,123 @@ fn draw_group_ops_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
-fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
+fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
+    let border_style = if app.is_panel_focused(ActivePanel::OverviewCharacter) {
+        t.border_active
+    } else {
+        t.border_primary
+    };
+    let title = " Target · Cast ";
+    let blk = panel(title, border_style, t);
+    let inner = blk.inner(area);
+    frame.render_widget(blk, area);
+
+    let Some(client) = app.active_client() else {
+        frame.render_widget(
+            Paragraph::new("No character selected").style(Style::default().fg(t.text_muted)),
+            inner,
+        );
+        return;
+    };
+
+    let mut lines = Vec::new();
+
+    // Target info
+    if let Some(target) = &client.target {
+        let target_name = app.redact_name(&target.displayed_name).into_owned();
+        let target_type_color = match target.npc_type_id {
+            0 => t.text_success, // PC
+            _ => t.text_accent,  // NPC (assume named if special ID)
+        };
+        lines.push(Line::from(vec![
+            Span::styled("Target   ", Style::default().fg(t.text_secondary)),
+            Span::styled(target_name, Style::default().fg(target_type_color).add_modifier(Modifier::BOLD)),
+        ]));
+
+        let target_hp_pct = (target.cur_hp as f64 / target.max_hp.max(1) as f64) * 100.0;
+        let hp_bar_str = render_hp_bar_long(target_hp_pct);
+        lines.push(Line::from(vec![
+            Span::styled("Target HP", Style::default().fg(t.text_secondary)),
+            Span::raw(" "),
+            Span::styled(hp_bar_str, Style::default().fg(hp_color(target_hp_pct, t))),
+        ]));
+    } else {
+        lines.push(Line::from(Span::styled(
+            "Target   —",
+            Style::default().fg(t.text_muted),
+        )));
+    }
+
+    lines.push(Line::raw(""));
+
+    // Casting info
+    if let Some(cast_info) = &client.casting_info {
+        let spell_label = &cast_info.spell_name;
+        lines.push(Line::from(vec![
+            Span::styled("Casting  ", Style::default().fg(t.text_secondary)),
+            Span::styled(spell_label, Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+            Span::raw(" "),
+            Span::styled(&cast_info.gem_slot, Style::default().fg(t.text_muted)),
+        ]));
+
+        let total_time = cast_info.total_time;
+        let elapsed = cast_info.elapsed;
+        let progress = if total_time > 0.0 {
+            (elapsed / total_time).min(1.0)
+        } else {
+            0.0
+        };
+        let remaining = (total_time - elapsed).max(0.0);
+
+        let bar_width = 22;
+        let filled = (progress * bar_width as f64).round() as usize;
+        let mut progress_bar = String::new();
+        for i in 0..bar_width {
+            if i < filled {
+                progress_bar.push('█');
+            } else {
+                progress_bar.push('·');
+            }
+        }
+
+        lines.push(Line::from(vec![
+            Span::styled("Progress ", Style::default().fg(t.text_secondary)),
+            Span::styled(progress_bar, Style::default().fg(t.text_accent)),
+            Span::raw(" "),
+            Span::styled(format!("{:.0}%", progress * 100.0), Style::default().fg(t.text_bright)),
+        ]));
+
+        lines.push(Line::from(vec![
+            Span::styled("Remaining", Style::default().fg(t.text_secondary)),
+            Span::raw(" "),
+            Span::styled(format!("{:.1}s", remaining), Style::default().fg(t.text_bright)),
+        ]));
+    } else {
+        lines.push(Line::from(Span::styled(
+            "Casting  idle",
+            Style::default().fg(t.text_muted),
+        )));
+    }
+
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+fn render_hp_bar_long(hp_pct: f64) -> String {
+    let width = 18;
+    let filled = (hp_pct * width as f64 / 100.0).round() as usize;
+    let mut bar = String::new();
+    for i in 0..width {
+        if i < filled {
+            bar.push('█');
+        } else {
+            bar.push('·');
+        }
+    }
+    bar
+}
+
+fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
     let border_style = if app.is_panel_focused(ActivePanel::OverviewFilters) {
         t.border_active
@@ -1198,7 +1380,7 @@ fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
 }
 
 /// Combat status summary — MA/MT, operating mode, CH chain status.
-fn draw_combat_status(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
+fn draw_combat_status(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
     let border_style = if app.is_panel_focused(ActivePanel::OverviewCombat) {
         t.border_active
@@ -1301,7 +1483,7 @@ fn draw_combat_status(frame: &mut Frame, area: Rect, app: &App, collapsed: bool)
     );
 }
 
-fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
+fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
     let border_style = if app.is_panel_focused(ActivePanel::OverviewSession) {
         t.border_active
@@ -1800,27 +1982,19 @@ mod tests {
     fn section_order_is_deterministic() {
         assert!(
             natural_section_order(OverviewSectionKind::Character)
-                < natural_section_order(OverviewSectionKind::SlotProfile)
+                < natural_section_order(OverviewSectionKind::Target)
         );
         assert!(
-            natural_section_order(OverviewSectionKind::SlotProfile)
+            natural_section_order(OverviewSectionKind::Target)
                 < natural_section_order(OverviewSectionKind::Groups)
         );
         assert!(
             natural_section_order(OverviewSectionKind::Groups)
-                < natural_section_order(OverviewSectionKind::Filters)
-        );
-        assert!(
-            natural_section_order(OverviewSectionKind::Filters)
                 < natural_section_order(OverviewSectionKind::Combat)
         );
         assert!(
             natural_section_order(OverviewSectionKind::Combat)
                 < natural_section_order(OverviewSectionKind::Session)
-        );
-        assert!(
-            natural_section_order(OverviewSectionKind::Session)
-                < natural_section_order(OverviewSectionKind::Kills)
         );
     }
 
@@ -1828,12 +2002,10 @@ mod tests {
     fn section_order_unique_per_kind() {
         let orders: Vec<u8> = [
             OverviewSectionKind::Character,
-            OverviewSectionKind::SlotProfile,
+            OverviewSectionKind::Target,
             OverviewSectionKind::Groups,
-            OverviewSectionKind::Filters,
             OverviewSectionKind::Combat,
             OverviewSectionKind::Session,
-            OverviewSectionKind::Kills,
         ]
         .iter()
         .map(|k| natural_section_order(*k))

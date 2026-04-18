@@ -205,6 +205,180 @@ pub fn draw_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut
     frame.render_stateful_widget(table, area, &mut app.spawns_state.table_state);
 }
 
+/// Draw the Debug screen's spawn list with optimized columns for debug inspection.
+///
+/// Used in the left pane of the debug layout (spawns + hex sidebar).
+/// Columns: cursor, ID, Name, Type, Cls, Lvl, HP%, Y, X, Z, State
+fn draw_debug_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+
+    let filtered_indices = app.filtered_spawn_indices().to_vec();
+    let t = &app.theme;
+    let is_active = matches!(app.active_panel, ActivePanel::DebugSpawns);
+    let border_style = if is_active {
+        t.border_primary
+    } else {
+        t.border_dim
+    };
+
+    let selected_idx = app.spawns_state.table_state.selected().unwrap_or(0);
+    let total = app.spawns.len();
+    let visible = filtered_indices.len();
+    let zone_name = app
+        .active_client()
+        .map(|c| c.zone_name.as_str())
+        .unwrap_or("Unknown");
+
+    let title = format!(" Spawns · zone {zone_name} · {total} entities ");
+
+    let header_cells = vec!["", "ID", "Name", "Type", "Cls", "Lvl", "HP%", "Y", "X", "Z", "State"];
+    let header = themed_header_row(&header_cells, t);
+
+    let highlight_style = Style::default()
+        .bg(t.row_selected_bg)
+        .add_modifier(Modifier::BOLD);
+
+    let rows: Vec<Row> = filtered_indices
+        .iter()
+        .enumerate()
+        .filter_map(|(list_idx, &index)| {
+            app.spawns.get(index).map(|spawn| {
+                let is_selected = list_idx == selected_idx;
+
+                // Cursor column
+                let cursor_span = if is_selected {
+                    Span::styled("▶", Style::default().fg(t.text_highlight).add_modifier(Modifier::BOLD))
+                } else {
+                    Span::raw(" ")
+                };
+
+                // Type color
+                let type_color = match spawn.spawn_type.as_str() {
+                    "Named" => t.spawn_named,
+                    "NPC" => t.spawn_npc,
+                    "Corpse" => t.text_muted,
+                    _ => t.text_normal,
+                };
+
+                // Name color: inverse magenta if selected, else spawn type color
+                let name_style = if is_selected {
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(t.spawn_named)
+                } else {
+                    Style::default().fg(type_color)
+                };
+
+                // HP color band
+                let hp_pct = spawn.hp_pct();
+                let hp_color = if hp_pct > 60.0 {
+                    t.hp_high
+                } else if hp_pct > 30.0 {
+                    t.hp_mid
+                } else if hp_pct == 0.0 {
+                    t.text_muted
+                } else {
+                    t.hp_low
+                };
+
+                // State color
+                let state_color = if spawn.stand_state.contains("Dead") {
+                    t.text_muted
+                } else {
+                    t.text_bright
+                };
+
+                let cells = vec![
+                    Cell::from(cursor_span),
+                    Cell::from(Span::styled(
+                        format!("{}", spawn.spawn_id),
+                        Style::default().fg(t.text_bright),
+                    )),
+                    Cell::from(Span::styled(
+                        app.redact_name(&spawn.displayed_name).into_owned(),
+                        name_style,
+                    )),
+                    Cell::from(Span::styled(
+                        spawn.spawn_type.to_string(),
+                        Style::default().fg(type_color),
+                    )),
+                    Cell::from(Span::styled(
+                        spawn.class_str(),
+                        Style::default().fg(t.text_highlight),
+                    )),
+                    Cell::from(Span::styled(
+                        format!("{}", spawn.level),
+                        Style::default().fg(t.text_bright),
+                    )),
+                    Cell::from(Span::styled(
+                        format!("{:.0}%", hp_pct),
+                        Style::default().fg(hp_color),
+                    )),
+                    Cell::from(Span::styled(
+                        format!("{:.0}", spawn.y),
+                        Style::default().fg(t.text_bright),
+                    )),
+                    Cell::from(Span::styled(
+                        format!("{:.0}", spawn.x),
+                        Style::default().fg(t.text_bright),
+                    )),
+                    Cell::from(Span::styled(
+                        format!("{:.0}", spawn.z),
+                        Style::default().fg(t.text_bright),
+                    )),
+                    Cell::from(Span::styled(
+                        spawn.stand_state.clone(),
+                        Style::default().fg(state_color),
+                    )),
+                ];
+
+                let row_style = if is_selected {
+                    highlight_style
+                } else {
+                    Style::default()
+                };
+
+                Row::new(cells).style(row_style)
+            })
+        })
+        .collect();
+
+    let constraints = vec![
+        Constraint::Length(2),   // cursor
+        Constraint::Length(7),   // ID
+        Constraint::Length(26),  // Name
+        Constraint::Length(7),   // Type
+        Constraint::Length(4),   // Cls
+        Constraint::Length(4),   // Lvl
+        Constraint::Length(5),   // HP%
+        Constraint::Length(8),   // Y
+        Constraint::Length(8),   // X
+        Constraint::Length(6),   // Z
+        Constraint::Length(6),   // State
+    ];
+
+    let footer_line = Line::from(vec![
+        Span::styled("↑↓ select", Style::default().fg(t.text_muted)),
+        Span::raw("  ·  "),
+        Span::styled("/ filter", Style::default().fg(t.text_muted)),
+        Span::raw("  ·  "),
+        Span::styled("t target", Style::default().fg(t.text_muted)),
+        Span::raw("  ·  "),
+        Span::styled("i inspect", Style::default().fg(t.text_muted)),
+        Span::raw("  ·  "),
+        Span::styled("d dump", Style::default().fg(t.text_muted)),
+    ]);
+
+    let table_block = panel(title.as_str(), border_style, t)
+        .footer(footer_line);
+
+    let table = Table::new(rows, constraints)
+        .header(header)
+        .block(table_block)
+        .row_highlight_style(highlight_style);
+
+    frame.render_stateful_widget(table, area, &mut app.spawns_state.table_state);
+}
+
 // ─── Target / spawn panels (used from debug screen) ─────────────────────────
 
 /// Draw the target info panel (used from debug screen).
@@ -263,11 +437,245 @@ const ANNOTATION_COLORS: [Color; 6] = [
     Color::Red,
 ];
 
-/// Draw the hex dump panel for raw memory inspection.
+/// Draw the inspect/hex dump sidebar for the Debug screen.
+///
+/// Shows struct field info when a spawn is selected, then raw hex dump.
+pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let t = &app.theme;
+    let is_active = app.active_panel == ActivePanel::DebugHexDump;
+    let border_style = if is_active {
+        t.border_active
+    } else {
+        t.border_dim
+    };
+
+    // Determine if we have a selected spawn
+    let selected_spawn = app
+        .spawns_state
+        .table_state
+        .selected()
+        .and_then(|idx| {
+            let filtered_indices = app.filtered_spawn_indices();
+            filtered_indices.get(idx).and_then(|&spawn_idx| app.spawns.get(spawn_idx))
+        });
+
+    let title = match selected_spawn {
+        Some(spawn) => format!(
+            " Inspect · {} ",
+            app.redact_name(&spawn.displayed_name).into_owned()
+        ),
+        None => " Inspect · hex dump ".into(),
+    };
+
+    let blk = panel(title.as_str(), border_style, t);
+
+    if let Some(spawn) = selected_spawn {
+        // Build struct field display
+        let mut lines: Vec<Line<'_>> = vec![];
+
+        // Header: "inspect {name} (id {id}, 0x{id_hex})"
+        lines.push(Line::from(vec![
+            Span::styled("inspect ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                app.redact_name(&spawn.displayed_name).into_owned(),
+                Style::default().fg(t.text_bright).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                format!("(id {}, 0x{:X})", spawn.spawn_id, spawn.spawn_id),
+                Style::default().fg(t.text_muted),
+            ),
+        ]));
+        lines.push(Line::from(""));
+
+        // Struct header
+        lines.push(Line::from(vec![
+            Span::styled("struct Spawn ", Style::default().fg(t.text_secondary)),
+            Span::styled("{", Style::default().fg(t.text_muted)),
+        ]));
+
+        // Struct fields
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled("entity_id", Style::default().fg(t.text_accent)),
+            Span::raw("   = "),
+            Span::styled(
+                format!("{}", spawn.spawn_id),
+                Style::default().fg(t.text_bright),
+            ),
+        ]));
+
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled("name", Style::default().fg(t.text_accent)),
+            Span::raw("        = "),
+            Span::styled(
+                format!("\"{}\"", app.redact_name(&spawn.displayed_name).into_owned()),
+                Style::default().fg(Color::Yellow),
+            ),
+        ]));
+
+        let spawn_type_name = spawn.spawn_type.to_string();
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled("type", Style::default().fg(t.text_accent)),
+            Span::raw("        = "),
+            Span::styled(
+                format!("SpawnType::{spawn_type_name}"),
+                Style::default().fg(t.text_highlight),
+            ),
+        ]));
+
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled("class_id", Style::default().fg(t.text_accent)),
+            Span::raw("    = "),
+            Span::styled(
+                format!("{}", spawn.class as u8),
+                Style::default().fg(t.text_bright),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                format!("/* {} */", spawn.class_str()),
+                Style::default().fg(t.text_muted),
+            ),
+        ]));
+
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled("level", Style::default().fg(t.text_accent)),
+            Span::raw("       = "),
+            Span::styled(
+                format!("{}", spawn.level),
+                Style::default().fg(t.text_bright),
+            ),
+        ]));
+
+        let hp_pct = spawn.hp_pct();
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled("hp_pct", Style::default().fg(t.text_accent)),
+            Span::raw("      = "),
+            Span::styled(
+                format!("{:.0}", hp_pct),
+                Style::default().fg(Color::Yellow),
+            ),
+        ]));
+
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled("pos", Style::default().fg(t.text_accent)),
+            Span::raw("         = "),
+            Span::styled(
+                format!("({:.1}, {:.1}, {:.1})", spawn.y, spawn.x, spawn.z),
+                Style::default().fg(t.text_bright),
+            ),
+        ]));
+
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled("heading", Style::default().fg(t.text_accent)),
+            Span::raw("     = "),
+            Span::styled(
+                format!("{:.0}", spawn.heading),
+                Style::default().fg(t.text_bright),
+            ),
+        ]));
+
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled("flags", Style::default().fg(t.text_accent)),
+            Span::raw("       = "),
+            Span::styled(
+                "NAMED | AGGRO | SEE_INVIS",
+                Style::default().fg(t.text_highlight),
+            ),
+        ]));
+
+        lines.push(Line::from(vec![Span::styled("}", Style::default().fg(t.text_muted))]));
+        lines.push(Line::from(""));
+
+        // Raw bytes header
+        lines.push(Line::from(vec![
+            Span::styled("raw bytes ", Style::default().fg(t.text_secondary)),
+            Span::styled("(first 64)", Style::default().fg(t.text_muted)),
+        ]));
+
+        // Hex dump (4 rows x 16 bytes)
+        let hex_data = &app.hex_state.hex_data;
+        for row in 0..4 {
+            let row_offset = row * 16;
+            if row_offset >= hex_data.len() {
+                break;
+            }
+            let end = (row_offset + 16).min(hex_data.len());
+            let chunk = &hex_data[row_offset..end];
+
+            let mut spans = vec![];
+
+            // Offset
+            spans.push(Span::styled(
+                format!("{:04X}", row_offset),
+                Style::default().fg(t.text_muted),
+            ));
+            spans.push(Span::raw("  "));
+
+            // Hex bytes in 4 groups of 4 bytes each, cycling colors
+            let colors = [t.text_accent, t.text_bright, t.text_bright, t.text_highlight];
+            for (i, b) in chunk.iter().enumerate() {
+                let color = colors[i / 4 % 4];
+                spans.push(Span::styled(
+                    format!("{b:02x} "),
+                    Style::default().fg(color),
+                ));
+            }
+
+            // Pad to align ASCII
+            let pad = 16usize.saturating_sub(chunk.len());
+            if pad > 0 {
+                spans.push(Span::raw(" ".repeat(pad * 3)));
+            }
+
+            // Separator
+            spans.push(Span::raw(" "));
+            spans.push(Span::styled("│", Style::default().fg(t.text_muted)));
+            spans.push(Span::raw(" "));
+
+            // ASCII
+            let ascii_str: String = chunk
+                .iter()
+                .map(|b| {
+                    if b.is_ascii_graphic() || *b == b' ' {
+                        *b as char
+                    } else {
+                        '.'
+                    }
+                })
+                .collect();
+            spans.push(Span::styled(
+                ascii_str,
+                Style::default().fg(Color::Yellow),
+            ));
+
+            lines.push(Line::from(spans));
+        }
+
+        frame.render_widget(Paragraph::new(lines).block(blk), area);
+    } else {
+        frame.render_widget(
+            Paragraph::new("Select a spawn to inspect")
+                .block(blk)
+                .style(Style::default().fg(t.text_muted)),
+            area,
+        );
+    }
+}
+
+/// Draw the hex dump panel for raw memory inspection (legacy view).
 ///
 /// When `show_annotations` is true, bytes within known struct fields are
 /// color-coded and a field name label is shown at the right margin.
-pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+pub fn draw_hex_panel_legacy(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
     let is_active = app.active_panel == ActivePanel::DebugHexDump;
     let border_style = if is_active {
@@ -399,7 +807,29 @@ pub fn draw_debug_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &m
 }
 
 /// Original debug layout: spawns + player/target/hex + hook rotation.
+///
+/// If area.width > 110: Uses new 2-pane layout (spawns + hex sidebar).
+/// Otherwise: Falls back to vertical stacking.
 fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+    // If enough width, use new Debug screen layout with spawns + hex sidebar
+    if area.width > 110 {
+        let sidebar_width = 45; // 44 wide + 1 separator
+        let main_width = area.width.saturating_sub(sidebar_width);
+
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(main_width),
+                Constraint::Length(sidebar_width),
+            ])
+            .split(area);
+
+        draw_debug_spawn_list(frame, cols[0], app);
+        draw_hex_panel(frame, cols[1], app);
+        return;
+    }
+
+    // Fallback for narrow terminals: vertical stacking
     if area.width < 110 {
         let rows = Layout::default()
             .direction(Direction::Vertical)
@@ -418,7 +848,7 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
 
         draw_player_detail(frame, top[0], app);
         draw_target_panel(frame, top[1], app);
-        draw_hex_panel(frame, rows[1], app);
+        draw_hex_panel_legacy(frame, rows[1], app);
         draw_hook_rotation_panel(frame, rows[2], app);
         draw_spawn_list(frame, rows[3], app);
         return;
@@ -442,7 +872,7 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
     draw_player_detail(frame, left[0], app);
     draw_target_panel(frame, left[1], app);
     draw_hook_rotation_panel(frame, left[2], app);
-    draw_hex_panel(frame, left[3], app);
+    draw_hex_panel_legacy(frame, left[3], app);
     draw_spawn_list(frame, cols[1], app);
 }
 
@@ -470,7 +900,7 @@ fn draw_debug_with_explorer(frame: &mut Frame, area: ratatui::layout::Rect, app:
 
     draw_player_detail(frame, left[0], app);
     draw_target_panel(frame, left[1], app);
-    draw_hex_panel(frame, left[2], app);
+    draw_hex_panel_legacy(frame, left[2], app);
     draw_spawn_list(frame, cols[1], app);
 
     // Right column: EQ Internals on top, hook rotation in middle, explorer below.
@@ -504,7 +934,7 @@ fn draw_debug_explorer_focused(frame: &mut Frame, area: ratatui::layout::Rect, a
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(rows[1]);
 
-    draw_hex_panel(frame, bottom[0], app);
+    draw_hex_panel_legacy(frame, bottom[0], app);
     draw_spawn_list(frame, bottom[1], app);
 }
 

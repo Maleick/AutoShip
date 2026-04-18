@@ -95,3 +95,6 @@ config/accounts.csv
 # Local runtime state and operator-managed caches. Canonical immutable Ghidra evidence lives in TextQuest-Ghidra.
 data/
 CLAUDE.md
+textquest-web/src/api/admin_sessions.rs
+tools/python-sdk/.coverage
+.worktrees/

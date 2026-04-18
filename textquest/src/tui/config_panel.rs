@@ -646,15 +646,15 @@ impl<'a> ConfigPanelWidget<'a> {
 impl Widget for ConfigPanelWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let title = if self.state.has_pending_changes {
-            " Configuration [modified] "
+            " Config · ~/.config/textquest/config.ron [modified] "
         } else {
-            " Configuration "
+            " Config · ~/.config/textquest/config.ron "
         };
 
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.border_color));
+            .border_style(Style::default().fg(self.accent_color)) // cyan border
 
         let inner = block.inner(area);
         block.render(area, buf);
@@ -725,30 +725,41 @@ impl Widget for ConfigPanelWidget<'_> {
             let indent = "  ".repeat(node.depth as usize);
             let is_selected = node_idx == self.state.selected && !self.state.scope_selector_focused;
 
-            // Branch indicator
-            let branch_char = if node.value.is_none() {
-                if node.expanded { "▾ " } else { "▸ " }
+            // Branch indicator: ▾ (expanded), ▸ (collapsed), · (leaf) — in magenta
+            let (branch_char, branch_style) = if node.value.is_none() {
+                let glyph = if node.expanded { "▾" } else { "▸" };
+                (glyph, Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
             } else {
-                "  "
+                ("·", Style::default().fg(Color::Magenta))
             };
 
+            // Label styling: section names in cyan, leaf items in secondary
             let label_style = if is_selected {
                 Style::default()
                     .fg(Color::Black)
                     .bg(self.accent_color)
                     .add_modifier(Modifier::BOLD)
             } else if node.value.is_none() {
+                // Section header (branch node)
                 Style::default()
-                    .fg(Color::White)
+                    .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                // Leaf item
+                Style::default().fg(Color::DarkGray)
             };
 
-            let label_text = format!("{indent}{branch_char}{}", node.label);
-            buf.set_string(inner.x, y, &label_text, label_style);
+            // Render indent + branch glyph + label
+            let indent_text = format!("{}{} ", indent, branch_char);
+            buf.set_string(inner.x, y, &indent_text, branch_style);
+            buf.set_string(
+                inner.x + indent_text.len() as u16,
+                y,
+                &node.label,
+                label_style,
+            );
 
-            // Render value
+            // Render value on the right: {key} = {value}
             if let Some(ref val) = node.value {
                 let display_val = if self.state.editing && is_selected {
                     format!("{}_", self.state.edit_buffer)
@@ -757,7 +768,7 @@ impl Widget for ConfigPanelWidget<'_> {
                 };
 
                 let val_style = if is_selected && self.state.editing {
-                    Style::default().fg(Color::Yellow).bg(Color::DarkGray)
+                    Style::default().fg(Color::White).bg(Color::DarkGray)
                 } else if node.is_toggle {
                     if val == "On" {
                         Style::default().fg(Color::Green)
@@ -769,14 +780,29 @@ impl Widget for ConfigPanelWidget<'_> {
                         .fg(Color::DarkGray)
                         .add_modifier(Modifier::ITALIC)
                 } else {
-                    Style::default().fg(Color::DarkGray)
+                    Style::default().fg(Color::White) // bright
                 };
 
                 let val_x = inner.x + inner.width.saturating_sub(display_val.len() as u16 + 1);
-                if val_x > inner.x + label_text.len() as u16 {
-                    buf.set_string(val_x, y, &display_val, val_style);
+                if val_x > inner.x + 20 {
+                    // Render {key} = {value}
+                    buf.set_string(val_x, y, " = ", Style::default().fg(Color::DarkGray));
+                    buf.set_string(
+                        val_x + 3,
+                        y,
+                        &display_val,
+                        val_style,
+                    );
                 }
             }
+        }
+
+        // Footer with keybinds
+        let footer_y = inner.y + inner.height.saturating_sub(1);
+        if footer_y < buf.area().height {
+            let footer_text = "↑↓ navigate · enter edit · s save · r reload";
+            let footer_style = Style::default().fg(Color::DarkGray);
+            buf.set_string(inner.x, footer_y, footer_text, footer_style);
         }
     }
 }

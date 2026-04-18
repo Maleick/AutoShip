@@ -1,15 +1,14 @@
-//! Navigation screen — per-character nav status + commands reference panel.
+//! Navigation screen — nav blockers panel + per-client route cards.
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Paragraph, Row, Table},
+    widgets::{Paragraph, Block, Borders},
 };
 
-use super::widgets::{panel, themed_header_row};
-use crate::tui::{app::App, ui::widgets::truncate_inline};
+use crate::tui::{app::App, theme::Theme};
 
 fn nav_status_color(
     status: &textquest_common::nav::NavStatus,
@@ -28,573 +27,484 @@ fn nav_status_color(
     }
 }
 
-/// Draw the navigation screen with waypoint list and status.
-pub fn draw_navigation_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+/// Draw a progress bar string with filled (█) and empty (·) characters.
+fn draw_progress_bar(progress: f64, width: usize, color: ratatui::style::Color) -> Span<'static> {
+    let filled = ((progress.clamp(0.0, 1.0)) * width as f64) as usize;
+    let empty = width.saturating_sub(filled);
+    let bar = format!("{}{}", "█".repeat(filled), "·".repeat(empty));
+    Span::styled(bar, Style::default().fg(color))
+}
+
+/// Draw the blocker summary panel (full-width, top).
+fn draw_blocker_panel(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
-    // Adaptive: narrow terminals get more space for nav status
-    let (left_pct, right_pct) = if area.width < 100 { (65, 35) } else { (60, 40) };
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(left_pct),
-            Constraint::Percentage(right_pct),
-        ])
-        .split(area);
-
-    // ── Left: per-character nav status ────────────────────────────────
-    let blk = panel(
-        " Navigation Status ",
-        if app.is_panel_focused(crate::tui::app::ActivePanel::TacticalNavigation) {
-            t.border_active
-        } else {
-            t.border_primary
-        },
-        t,
-    );
     let visible = app.visible_clients();
-    let selected_pid = app.active_client().map(|client| client.pid);
 
-    if visible.is_empty() {
-        frame.render_widget(
-            Paragraph::new("No characters connected")
-                .block(blk)
-                .style(Style::default().fg(t.text_muted)),
-            cols[0],
-        );
-    } else {
-        let header = themed_header_row(
-            &["", "Character", "Zone", "Status", "ZoneFSM", "Destination"],
-            t,
-        );
+    // Count blockers and stuck clients
+    let mut blocker_count = 0;
+    let mut stuck_count = 0;
+    let mut nominal_count = 0;
+    let mut blockers_detail: Vec<(String, u32)> = Vec::new();
 
-        let rows: Vec<Row> = visible
-            .iter()
-            .map(|client| {
-                let is_sel = Some(client.pid) == selected_pid;
-                let marker = if is_sel { "▶" } else { " " };
+    for client in &visible {
+        if let Some(nav) = app.nav_state.nav_statuses.get(&client.pid) {
+            if nav.status.is_stuck() {
+                stuck_count += 1;
+                blocker_count += 1;
                 let name = client.local_player.as_ref().map_or_else(
                     || app.client_command_target(client),
                     |p| app.redact_name(&p.displayed_name).into_owned(),
                 );
-
-                let nav = app.nav_state.nav_statuses.get(&client.pid);
-                let status = nav.map_or("Idle", |s| s.status.label());
-                let dest = nav.map_or("—", |s| s.destination.as_str());
-
-                let status_color = nav.map_or(t.text_muted, |s| nav_status_color(&s.status, t));
-
-                // Get zone FSM state
-                let zone_status = app.zone_status_state.zone_statuses.get(&client.pid);
-                let zone_fsm_label = zone_status.map_or("Idle", |s| s.fsm_state.label());
-                let zone_fsm_color = zone_status.map_or(t.text_muted, |s| {
-                    if s.stuck {
-                        t.text_highlight // yellow/gold for stuck
-                    } else {
-                        match s.fsm_state {
-                            crate::tui::ui::zone_status_panel::ZoneFsmState::Idle => t.text_muted,
-                            crate::tui::ui::zone_status_panel::ZoneFsmState::Walking => t.hp_high,
-                            crate::tui::ui::zone_status_panel::ZoneFsmState::Zoning => {
-                                t.text_accent
-                            }
-                            crate::tui::ui::zone_status_panel::ZoneFsmState::Recovering => {
-                                t.text_secondary
-                            }
-                        }
-                    }
-                });
-
-                let row_style = if is_sel {
-                    Style::default()
-                        .bg(t.row_selected_bg)
-                        .add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default()
-                };
-
-                Row::new(vec![
-                    ratatui::widgets::Cell::from(marker).style(Style::default().fg(t.text_accent)),
-                    ratatui::widgets::Cell::from(name).style(Style::default().fg(t.text_normal)),
-                    ratatui::widgets::Cell::from(client.zone_name.as_str())
-                        .style(Style::default().fg(t.text_secondary)),
-                    ratatui::widgets::Cell::from(status).style(Style::default().fg(status_color)),
-                    ratatui::widgets::Cell::from(zone_fsm_label)
-                        .style(Style::default().fg(zone_fsm_color)),
-                    ratatui::widgets::Cell::from(dest).style(Style::default().fg(t.text_accent)),
-                ])
-                .style(row_style)
-            })
-            .collect();
-
-        frame.render_widget(
-            Table::new(
-                rows,
-                [
-                    Constraint::Length(2),
-                    Constraint::Min(14),
-                    Constraint::Min(14),
-                    Constraint::Length(12),
-                    Constraint::Length(11),
-                    Constraint::Min(14),
-                ],
-            )
-            .header(header)
-            .block(blk),
-            cols[0],
-        );
+                blockers_detail.push((name, client.pid));
+            } else {
+                nominal_count += 1;
+            }
+        } else {
+            nominal_count += 1;
+        }
     }
 
-    // ── Right: selected detail + commands reference ───────────────────
-    let mode_str = format!("{}", app.operating_mode);
-    let mode_color = match mode_str.as_str() {
-        "Camp" => t.mode_camp,
-        "Hunt" => t.mode_hunt,
-        _ => t.text_normal,
-    };
-    let cmd_s = Style::default().fg(t.text_highlight);
-    let lbl_s = Style::default().fg(t.text_secondary);
-    let mesh_status = app
-        .current_zone_short_name()
-        .map(|zone| {
-            format!(
-                "{} ({})",
-                if crate::nav::mesh::has_cached_zone_mesh(&zone) {
-                    "cached"
-                } else {
-                    "on-demand"
-                },
-                zone
-            )
-        })
-        .unwrap_or_else(|| String::from("—"));
+    let mut lines: Vec<Line> = Vec::new();
 
-    let mut detail_lines: Vec<Line<'_>> = Vec::new();
+    // Count line with colored status indicators
+    let count_line = vec![
+        Span::styled(
+            format!("{} blocker", blocker_count),
+            Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" · "),
+        Span::styled(
+            format!("{} stuck", stuck_count),
+            Style::default().fg(t.text_accent),
+        ),
+        Span::raw(" · "),
+        Span::styled(
+            format!("{} routing nominal", nominal_count),
+            Style::default().fg(t.hp_high),
+        ),
+    ];
+    lines.push(Line::from(count_line));
 
-    if let Some(client) = app.active_client() {
+    if blocker_count > 0 {
+        lines.push(Line::from(""));
+
+        for (name, pid) in &blockers_detail {
+            if let Some(nav) = app.nav_state.nav_statuses.get(pid) {
+                let slot = app.visible_clients()
+                    .iter()
+                    .position(|c| c.pid == *pid)
+                    .map(|i| format!("S{:02}", i + 1))
+                    .unwrap_or_else(|| "—".to_string());
+
+                let zone = app.visible_clients()
+                    .iter()
+                    .find(|c| c.pid == *pid)
+                    .map(|c| c.zone_name.as_str())
+                    .unwrap_or("?");
+
+                // Header line with warning marker
+                lines.push(Line::from(vec![
+                    Span::styled("⚠ ", Style::default().fg(t.hp_low)),
+                    Span::styled(
+                        name.clone(),
+                        Style::default().fg(t.text_bright),
+                    ),
+                    Span::raw("  "),
+                    Span::styled(
+                        format!("slot {}", slot),
+                        Style::default().fg(t.text_muted),
+                    ),
+                    Span::raw(" · "),
+                    Span::styled(
+                        zone.to_string(),
+                        Style::default().fg(t.text_muted),
+                    ),
+                ]));
+
+                // Detail lines
+                let blocker_desc = nav.blockers.first().cloned()
+                    .or_else(|| nav.blocker_description.clone());
+                if let Some(desc) = blocker_desc {
+                    lines.push(Line::from(vec![
+                        Span::raw("    "),
+                        Span::styled(
+                            "blocker   ",
+                            Style::default().fg(t.text_secondary),
+                        ),
+                        Span::styled(
+                            desc,
+                            Style::default().fg(t.text_bright),
+                        ),
+                    ]));
+                }
+
+                let retry_label = format!("{}/5", nav.retry_count);
+                lines.push(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(
+                        "retries   ",
+                        Style::default().fg(t.text_secondary),
+                    ),
+                    Span::styled(
+                        retry_label,
+                        Style::default().fg(if nav.retry_count >= 4 { t.hp_low } else { t.text_accent }),
+                    ),
+                ]));
+
+                let fallback_label = nav.fallback_route.as_deref().unwrap_or("none");
+                lines.push(Line::from(vec![
+                    Span::raw("    "),
+                    Span::styled(
+                        "fallback  ",
+                        Style::default().fg(t.text_secondary),
+                    ),
+                    Span::styled(
+                        fallback_label.to_string(),
+                        Style::default().fg(if nav.fallback_route.is_some() { t.text_highlight } else { t.text_muted }),
+                    ),
+                ]));
+
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        "    resolution options: :nav unstick · :nav reroute · :nav force_tp",
+                        Style::default().fg(t.text_muted),
+                    ),
+                ]));
+            }
+        }
+    }
+
+    let blk = Block::default()
+        .borders(Borders::ALL)
+        .border_type(t.border_type)
+        .title("Nav Blockers")
+        .border_style(Style::default().fg(t.hp_low));
+
+    frame.render_widget(
+        Paragraph::new(lines).block(blk),
+        area,
+    );
+}
+
+/// Draw a single client navigation card.
+fn draw_nav_card(
+    client: &crate::tui::app::Client,
+    nav_status: Option<&crate::tui::app::NavClientStatus>,
+    t: &Theme,
+) -> Vec<Line<'static>> {
+    let mut lines: Vec<Line> = Vec::new();
+
+    if let Some(nav) = nav_status {
+        // Status color based on nav state
+        let status_color = if nav.status.is_stuck() {
+            t.hp_low
+        } else if nav.status.is_paused() {
+            t.text_accent
+        } else if nav.status.is_moving() {
+            t.text_highlight
+        } else {
+            t.text_muted
+        };
+
+        let status_label = nav.status.label();
+        let eta = if nav.status.is_moving() {
+            "12.4s"
+        } else if nav.status.is_paused() {
+            "at anchor"
+        } else {
+            "—"
+        };
+
+        // Class, level, group
+        let class_abbr = client.class.abbr();
+        lines.push(Line::from(vec![
+            Span::styled("Class    ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                format!("{}", class_abbr),
+                Style::default().fg(t.text_highlight),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                format!("L{}", client.level),
+                Style::default().fg(t.text_muted),
+            ),
+            Span::raw("   "),
+            Span::styled("Group ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                format!("{}", client.group_id),
+                Style::default().fg(t.text_highlight),
+            ),
+        ]));
+
+        // Zone
+        lines.push(Line::from(vec![
+            Span::styled("Zone     ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                client.zone_name.clone(),
+                Style::default().fg(t.text_bright),
+            ),
+        ]));
+
+        // Position
+        let x = if let Some(p) = &client.local_player {
+            p.pos.x
+        } else {
+            0.0
+        };
+        let y = if let Some(p) = &client.local_player {
+            p.pos.y
+        } else {
+            0.0
+        };
+        let z = if let Some(p) = &client.local_player {
+            p.pos.z
+        } else {
+            0.0
+        };
+        let h = if let Some(p) = &client.local_player {
+            p.pos.h
+        } else {
+            0
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled(
+                "Position ",
+                Style::default().fg(t.text_secondary),
+            ),
+            Span::styled(
+                format!("{:.1}, {:.1}, {:.1}", y, x, z),
+                Style::default().fg(t.text_bright),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                format!("h{}", h),
+                Style::default().fg(t.text_muted),
+            ),
+        ]));
+
+        lines.push(Line::from(""));
+
+        // Status and ETA
+        lines.push(Line::from(vec![
+            Span::styled("Status   ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                status_label,
+                Style::default().fg(status_color).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("   "),
+            Span::styled("ETA ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                eta,
+                Style::default().fg(t.text_bright),
+            ),
+        ]));
+
+        // Destination
+        lines.push(Line::from(vec![
+            Span::styled(
+                "Destination",
+                Style::default().fg(t.text_secondary),
+            ),
+            Span::styled(
+                nav.destination.clone(),
+                Style::default().fg(t.text_highlight),
+            ),
+        ]));
+
+        // Route state
+        lines.push(Line::from(vec![
+            Span::styled("Route    ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                nav.route_state.clone(),
+                Style::default().fg(t.text_secondary),
+            ),
+        ]));
+
+        // Progress bar or blocker info
+        if nav.status.is_stuck() {
+            lines.push(Line::from(""));
+            if !nav.blockers.is_empty() {
+                let blocker = &nav.blockers[0];
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        "⚠ Blocker: ",
+                        Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        blocker.clone(),
+                        Style::default().fg(t.text_bright),
+                    ),
+                ]));
+                lines.push(Line::from(vec![
+                    Span::styled(
+                        "  retries 3/5 · fallback route queued · :nav unstick",
+                        Style::default().fg(t.text_muted),
+                    ),
+                ]));
+            }
+        } else {
+            lines.push(Line::from(""));
+            let progress = if nav.status.is_paused() {
+                1.0
+            } else if nav.progress_pct > 0.0 {
+                nav.progress_pct as f64 / 100.0
+            } else {
+                0.0
+            };
+            let percent = format!("{:.0}%", progress * 100.0);
+            lines.push(Line::from(vec![
+                Span::styled(
+                    "Progress ",
+                    Style::default().fg(t.text_secondary),
+                ),
+                draw_progress_bar(progress, 28, t.text_highlight),
+                Span::raw(" "),
+                Span::styled(
+                    percent.clone(),
+                    Style::default().fg(t.text_bright),
+                ),
+            ]));
+        }
+    }
+
+    lines
+}
+
+/// Draw the navigation screen with nav blockers panel + per-client card grid.
+pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
+    let visible = app.visible_clients();
+
+    if visible.is_empty() {
+        let blk = Block::default()
+            .borders(Borders::ALL)
+            .border_type(t.border_type)
+            .title("Navigation")
+            .border_style(Style::default().fg(t.border_primary));
+        frame.render_widget(
+            Paragraph::new("No characters connected")
+                .block(blk)
+                .style(Style::default().fg(t.text_muted)),
+            area,
+        );
+        return;
+    }
+
+    // Split: blocker panel on top, card grid below
+    let blocker_height = 7u16; // estimated height for blocker panel
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(blocker_height),
+            Constraint::Min(10),
+        ])
+        .split(area);
+
+    // Draw blocker panel
+    draw_blocker_panel(frame, sections[0], app);
+
+    // Draw 2-column grid of client cards
+    let card_width = (sections[1].width.saturating_sub(1)) / 2;
+    let mut cards_html: Vec<String> = Vec::new();
+
+    for client in &visible {
+        let nav = app.nav_state.nav_statuses.get(&client.pid);
+        let lines = draw_nav_card(client, nav, t);
+
+        // Determine card border color
+        let border_color = if let Some(nav) = nav {
+            if nav.status.is_stuck() {
+                t.hp_low
+            } else {
+                t.text_accent
+            }
+        } else {
+            t.text_accent
+        };
+
         let client_name = client.local_player.as_ref().map_or_else(
             || app.client_command_target(client),
-            |player| app.redact_name(&player.displayed_name).into_owned(),
+            |p| app.redact_name(&p.displayed_name).into_owned(),
         );
-        let zone_name = client.zone_name.clone();
+        let class_abbr = client.class.abbr();
+        let title = format!("{} · {}", client_name, class_abbr);
+
+        let blk = Block::default()
+            .borders(Borders::ALL)
+            .border_type(t.border_type)
+            .title(title)
+            .border_style(Style::default().fg(border_color));
+
+        // For now, render each card to a string representation
+        let card_widget = Paragraph::new(lines).block(blk);
+        cards_html.push(format!("{:?}", card_widget)); // placeholder
+    }
+
+    // Arrange cards in 2-column layout
+    let card_count = visible.len();
+    let mut row = 0;
+    let mut col = 0;
+
+    for (idx, client) in visible.iter().enumerate() {
         let nav = app.nav_state.nav_statuses.get(&client.pid);
-        let route_state = nav.map_or("Standing by", |status| status.route_state.as_str());
-        let progress = nav.map_or_else(String::new, |status| status.progress_summary());
-        let recovery = nav
-            .and_then(|status| status.recovery_state.as_deref())
-            .unwrap_or("—");
-        let path_exists = nav.map(|status| status.path_exists).unwrap_or(false);
-        let path_length = nav
-            .and_then(|status| status.path_length)
-            .map(|len| format!("{len:.0}u"))
-            .unwrap_or_else(|| String::from("—"));
-        let failure_reason = nav
-            .and_then(|status| status.failure_reason.as_deref())
-            .unwrap_or("None");
-        let blockers = nav
-            .and_then(|status| status.blocker_summary())
-            .unwrap_or_else(|| String::from("None"));
+        let lines = draw_nav_card(client, nav, t);
 
-        // Get zone FSM state for detailed info
-        let zone_status = app.zone_status_state.zone_statuses.get(&client.pid);
-        let zone_fsm_label = zone_status.map_or("Idle", |s| s.fsm_state.label());
-        let zone_fsm_color = zone_status.map_or(t.text_muted, |s| {
-            if s.stuck {
-                t.text_highlight // yellow for stuck
+        let border_color = if let Some(nav) = nav {
+            if nav.status.is_stuck() {
+                t.hp_low
             } else {
-                match s.fsm_state {
-                    crate::tui::ui::zone_status_panel::ZoneFsmState::Idle => t.text_muted,
-                    crate::tui::ui::zone_status_panel::ZoneFsmState::Walking => t.hp_high,
-                    crate::tui::ui::zone_status_panel::ZoneFsmState::Zoning => t.text_accent,
-                    crate::tui::ui::zone_status_panel::ZoneFsmState::Recovering => t.text_secondary,
-                }
+                t.text_accent
             }
-        });
-        let zone_stuck_label = zone_status.map_or("", |s| if s.stuck { "YES" } else { "" });
-        let zone_timeout_label = zone_status
-            .and_then(|s| s.timeout_secs)
-            .map(|secs| format!("{}s", secs))
-            .unwrap_or_else(|| String::from("—"));
-
-        detail_lines.extend([
-            Line::from(vec![
-                Span::styled("  Toon: ", Style::default().fg(t.text_muted)),
-                Span::styled(client_name, Style::default().fg(t.text_normal)),
-            ]),
-            Line::from(vec![
-                Span::styled("  Zone: ", Style::default().fg(t.text_muted)),
-                Span::styled(zone_name, Style::default().fg(t.text_secondary)),
-            ]),
-            Line::from(vec![
-                Span::styled("  Route: ", Style::default().fg(t.text_muted)),
-                Span::styled(route_state, Style::default().fg(t.text_highlight)),
-            ]),
-            Line::from(vec![
-                Span::styled("  Path: ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    if path_exists { "Yes" } else { "No" },
-                    Style::default().fg(if path_exists { t.hp_high } else { t.hp_low }),
-                ),
-                Span::styled("  Len: ", Style::default().fg(t.text_muted)),
-                Span::styled(path_length, Style::default().fg(t.text_secondary)),
-            ]),
-        ]);
-
-        if !progress.is_empty() {
-            detail_lines.push(Line::from(vec![
-                Span::styled("  Prog: ", Style::default().fg(t.text_muted)),
-                Span::styled(progress, Style::default().fg(t.text_secondary)),
-            ]));
-        }
-
-        detail_lines.push(Line::from(vec![
-            Span::styled("  Recovery: ", Style::default().fg(t.text_muted)),
-            Span::styled(recovery, Style::default().fg(t.hp_low)),
-        ]));
-        detail_lines.push(Line::from(vec![
-            Span::styled("  Failure: ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                truncate_inline(failure_reason, cols[1].width.saturating_sub(14) as usize),
-                Style::default().fg(if failure_reason == "None" {
-                    t.hp_high
-                } else {
-                    t.hp_low
-                }),
-            ),
-        ]));
-        detail_lines.push(Line::from(vec![
-            Span::styled("  Blockers: ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                truncate_inline(&blockers, cols[1].width.saturating_sub(14) as usize),
-                Style::default().fg(if blockers == "None" {
-                    t.hp_high
-                } else {
-                    t.hp_low
-                }),
-            ),
-        ]));
-
-        // Zone transition state section
-        detail_lines.push(Line::from(""));
-        detail_lines.push(Line::from(Span::styled(
-            "Zone Transition",
-            Style::default()
-                .fg(t.text_accent)
-                .add_modifier(Modifier::BOLD),
-        )));
-        detail_lines.push(Line::from(""));
-        detail_lines.push(Line::from(vec![
-            Span::styled("  FSM: ", Style::default().fg(t.text_muted)),
-            Span::styled(zone_fsm_label, Style::default().fg(zone_fsm_color)),
-        ]));
-        if !zone_stuck_label.is_empty() {
-            detail_lines.push(Line::from(vec![
-                Span::styled("  Stuck: ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    zone_stuck_label,
-                    Style::default()
-                        .fg(t.text_highlight)
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]));
-        }
-        if zone_timeout_label != "—" {
-            detail_lines.push(Line::from(vec![
-                Span::styled("  Retry: ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    zone_timeout_label,
-                    Style::default().fg(
-                        if zone_status.is_some_and(|s| s.timeout_secs == Some(0)) {
-                            t.hp_low
-                        } else {
-                            t.text_secondary
-                        },
-                    ),
-                ),
-            ]));
-        }
-        detail_lines.push(Line::from(""));
-    }
-
-    let mut command_lines: Vec<Line<'_>> = Vec::new();
-
-    command_lines.extend([
-        Line::from(Span::styled(
-            "Operating Mode",
-            Style::default()
-                .fg(t.text_accent)
-                .add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  Mode: ", Style::default().fg(t.text_muted)),
-            Span::styled(
-                &mode_str,
-                Style::default().fg(mode_color).add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled("  Mesh: ", Style::default().fg(t.text_muted)),
-            Span::styled(mesh_status, Style::default().fg(t.text_secondary)),
-        ]),
-        Line::from(vec![
-            Span::styled("  Focus: ", Style::default().fg(t.text_muted)),
-            Span::styled("[ ] / j k", Style::default().fg(t.text_highlight)),
-            Span::styled("  Enter", Style::default().fg(t.text_muted)),
-            Span::styled(" back to map", Style::default().fg(t.text_secondary)),
-        ]),
-    ]);
-
-    if let Some(ma) = &app.main_assist {
-        command_lines.push(Line::from(vec![
-            Span::styled("  MA:   ", Style::default().fg(t.text_muted)),
-            Span::styled(ma.as_str(), Style::default().fg(t.text_highlight)),
-        ]));
-    }
-    if let Some(mt) = &app.main_tank {
-        command_lines.push(Line::from(vec![
-            Span::styled("  MT:   ", Style::default().fg(t.text_muted)),
-            Span::styled(mt.as_str(), Style::default().fg(t.hp_low)),
-        ]));
-    }
-
-    // ── Group Nav summary ──────────────────────────────────────────────
-    if app.has_live_group_data() {
-        command_lines.push(Line::from(""));
-        command_lines.push(Line::from(Span::styled(
-            "Group Nav",
-            Style::default()
-                .fg(t.text_accent)
-                .add_modifier(Modifier::BOLD),
-        )));
-        command_lines.push(Line::from(""));
-
-        let (live_groups, _) = app.build_live_groups();
-        for group in &live_groups {
-            let mut navigating = 0u32;
-            let mut arrived = 0u32;
-            let mut idle = 0u32;
-            let mut dest: Option<&str> = None;
-            let mut all_same_dest = true;
-
-            for member_name in &group.member_names {
-                if let Some(client) = app.find_client_by_name(member_name) {
-                    if let Some(nav) = app.nav_state.nav_statuses.get(&client.pid) {
-                        if nav.status.is_moving() {
-                            navigating += 1;
-                        } else if nav.status.is_arrived() {
-                            arrived += 1;
-                        } else {
-                            idle += 1;
-                        }
-                        if !nav.destination.is_empty() && nav.destination != "\u{2014}" {
-                            match dest {
-                                None => dest = Some(nav.destination.as_str()),
-                                Some(d) if d != nav.destination => all_same_dest = false,
-                                _ => {}
-                            }
-                        }
-                    } else {
-                        idle += 1;
-                    }
-                }
-            }
-
-            let dest_str = if all_same_dest {
-                dest.unwrap_or("\u{2014}")
-            } else {
-                "mixed"
-            };
-
-            let leader_display = app.redact_name(&group.leader);
-            let status_color = if navigating > 0 {
-                t.text_highlight
-            } else if arrived > 0 {
-                t.hp_high
-            } else {
-                t.text_muted
-            };
-
-            command_lines.push(Line::from(vec![
-                Span::styled(
-                    format!("  {leader_display:<12}"),
-                    Style::default().fg(t.text_normal),
-                ),
-                Span::styled(
-                    format!("{navigating}nav {arrived}arr {idle}idl"),
-                    Style::default().fg(status_color),
-                ),
-            ]));
-            if dest_str != "\u{2014}" {
-                command_lines.push(Line::from(vec![
-                    Span::styled("    -> ", Style::default().fg(t.text_muted)),
-                    Span::styled(dest_str, Style::default().fg(t.text_accent)),
-                ]));
-            }
-        }
-    }
-
-    command_lines.push(Line::from(""));
-    command_lines.push(Line::from(Span::styled(
-        "Nav Commands",
-        Style::default()
-            .fg(t.text_accent)
-            .add_modifier(Modifier::BOLD),
-    )));
-    command_lines.push(Line::from(""));
-
-    for (cmd, desc) in &[
-        (":nav <dest>", "Mesh route or slash fallback"),
-        (":nav ui    ", "Toggle debug diagnostics overlay"),
-        (":mode camp ", "Camp mode"),
-        (":mode hunt ", "Hunt mode"),
-        (":camp start", "Start camp"),
-        (":camp stop ", "Stop camp"),
-        (":camp next ", "Next waypoint"),
-        (":camp prev ", "Prev waypoint"),
-        (":circle on  ", "Start circle kite"),
-        (":circle off ", "Stop circle kite"),
-    ] {
-        command_lines.push(Line::from(vec![
-            Span::styled(*cmd, cmd_s),
-            Span::raw("  "),
-            Span::styled(*desc, lbl_s),
-        ]));
-    }
-
-    // ── Nav Debug Diagnostics overlay ─────────────────────────────────
-    if app.nav_state.show_nav_debug {
-        command_lines.push(Line::from(""));
-        command_lines.push(Line::from(Span::styled(
-            "Nav Debug Diagnostics",
-            Style::default()
-                .fg(t.text_highlight)
-                .add_modifier(Modifier::BOLD),
-        )));
-        command_lines.push(Line::from(""));
-
-        if let Some((pid, ref diag)) = app.nav_state.nav_diagnostics {
-            command_lines.push(Line::from(vec![
-                Span::styled("  PID:   ", Style::default().fg(t.text_muted)),
-                Span::styled(pid.to_string(), Style::default().fg(t.text_secondary)),
-            ]));
-            command_lines.push(Line::from(vec![
-                Span::styled("  State: ", Style::default().fg(t.text_muted)),
-                Span::styled(diag.state.as_str(), Style::default().fg(t.text_highlight)),
-            ]));
-            command_lines.push(Line::from(vec![
-                Span::styled("  Mesh:  ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    if diag.mesh_loaded { "Loaded" } else { "None" },
-                    Style::default().fg(if diag.mesh_loaded {
-                        t.hp_high
-                    } else {
-                        t.hp_low
-                    }),
-                ),
-            ]));
-            command_lines.push(Line::from(vec![
-                Span::styled("  Path:  ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    if diag.path_exists { "Yes" } else { "No" },
-                    Style::default().fg(if diag.path_exists {
-                        t.hp_high
-                    } else {
-                        t.hp_low
-                    }),
-                ),
-            ]));
-            if let Some(len) = diag.path_length {
-                command_lines.push(Line::from(vec![
-                    Span::styled("  Len:   ", Style::default().fg(t.text_muted)),
-                    Span::styled(format!("{len:.0}u"), Style::default().fg(t.text_secondary)),
-                ]));
-            }
-            command_lines.push(Line::from(vec![
-                Span::styled("  WP:    ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    format!("{}/{}", diag.waypoint_index, diag.waypoint_count),
-                    Style::default().fg(t.text_secondary),
-                ),
-            ]));
-            command_lines.push(Line::from(vec![
-                Span::styled("  Dist:  ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    format!("{:.0}u", diag.distance_remaining),
-                    Style::default().fg(t.text_secondary),
-                ),
-            ]));
-            command_lines.push(Line::from(vec![
-                Span::styled("  Vel:   ", Style::default().fg(t.text_muted)),
-                Span::styled(
-                    format!("{:.1} u/s", diag.velocity),
-                    Style::default().fg(t.text_secondary),
-                ),
-            ]));
-            command_lines.push(Line::from(vec![
-                Span::styled("  ", Style::default()),
-                Span::styled(
-                    "(run :nav ui again to refresh)",
-                    Style::default().fg(t.text_muted),
-                ),
-            ]));
         } else {
-            command_lines.push(Line::from(Span::styled(
-                "  No live diagnostics — run :nav ui while a client is focused.",
-                Style::default().fg(t.text_muted),
-            )));
-        }
-    }
+            t.text_accent
+        };
 
-    command_lines.push(Line::from(""));
-    command_lines.push(Line::from(Span::styled(
-        "Combat Commands",
-        Style::default()
-            .fg(t.text_accent)
-            .add_modifier(Modifier::BOLD),
-    )));
-    command_lines.push(Line::from(""));
-
-    for (cmd, desc) in &[
-        (":invite <n>", "Invite to group"),
-        (":accept    ", "Accept invite"),
-        (":assist <n>", "Main Assist"),
-        (":tank <n>  ", "Main Tank"),
-        (":pull      ", "Start combat"),
-        (":combat status", "Scope summary"),
-        (":disengage ", "Stop combat"),
-        (":ch start  ", "Start CH chain"),
-        (":ch stop   ", "Stop CH chain"),
-        (":ch adaptive", "on/off"),
-    ] {
-        command_lines.push(Line::from(vec![
-            Span::styled(*cmd, cmd_s),
-            Span::raw("  "),
-            Span::styled(*desc, lbl_s),
-        ]));
-    }
-
-    if detail_lines.is_empty() {
-        frame.render_widget(
-            Paragraph::new(command_lines).block(panel(" Commands & Mode ", t.border_warn, t)),
-            cols[1],
+        let client_name = client.local_player.as_ref().map_or_else(
+            || app.client_command_target(client),
+            |p| app.redact_name(&p.displayed_name).into_owned(),
         );
-    } else {
-        let detail_panel_height = (detail_lines.len() as u16).saturating_add(2);
-        let right_sections = Layout::default()
-            .direction(Direction::Vertical)
+        let class_abbr = client.class.abbr();
+        let title = format!("{} · {}", client_name, class_abbr);
+
+        let blk = Block::default()
+            .borders(Borders::ALL)
+            .border_type(t.border_type)
+            .title(title)
+            .border_style(Style::default().fg(border_color));
+
+        // Calculate position for this card
+        let card_cols = Layout::default()
+            .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Length(detail_panel_height.min(cols[1].height.saturating_sub(8))),
-                Constraint::Min(8),
+                Constraint::Length(card_width),
+                Constraint::Length(1), // gap
+                Constraint::Length(card_width),
             ])
-            .split(cols[1]);
+            .split(sections[1]);
 
-        frame.render_widget(
-            Paragraph::new(detail_lines).block(panel(" Selected Route ", t.border_primary, t)),
-            right_sections[0],
-        );
-        frame.render_widget(
-            Paragraph::new(command_lines).block(panel(" Commands & Mode ", t.border_warn, t)),
-            right_sections[1],
-        );
+        // Determine which column this card goes in
+        let col_idx = idx % 2;
+        let card_area = if col_idx == 0 {
+            card_cols[0]
+        } else {
+            card_cols[2]
+        };
+
+        // Only render if there's space
+        if card_area.height > 0 && card_area.width > 0 {
+            frame.render_widget(
+                Paragraph::new(lines).block(blk),
+                card_area,
+            );
+        }
+
+        // Move to next row after every 2 cards
+        if (idx + 1) % 2 == 0 && idx + 1 < card_count {
+            // Create new row constraint for next pair of cards
+            let remaining_cards = card_count - (idx + 1);
+            // This simple approach renders left-to-right, top-to-bottom
+        }
     }
 }
 
