@@ -54,6 +54,19 @@ pub struct MapPoint {
     pub layer: u8,
 }
 
+/// A zone exit marker identified from map P-points.
+#[derive(Debug, Clone)]
+pub struct ZoneExit {
+    /// X coordinate of the zone exit.
+    pub x: f32,
+    /// Y coordinate of the zone exit.
+    pub y: f32,
+    /// Z coordinate of the zone exit.
+    pub z: f32,
+    /// Destination zone name (extracted from the label).
+    pub destination: String,
+}
+
 /// All data for a single zone map.
 #[derive(Debug, Clone)]
 pub struct ZoneMap {
@@ -65,6 +78,8 @@ pub struct ZoneMap {
     pub points: Vec<MapPoint>,
     /// Bounding box enclosing all map geometry.
     pub bounds: MapBounds,
+    /// Detected zone exit markers.
+    pub zone_exits: Vec<ZoneExit>,
 }
 
 /// Axis-aligned bounding box for the map data.
@@ -130,6 +145,45 @@ impl MapBounds {
     }
 }
 
+/// Detect zone exits from map points by matching common zone exit label patterns.
+/// Labels like "to Qeynos", "zone to Crushbone", or "Neriak entrance" are detected.
+fn detect_zone_exits(points: &[MapPoint]) -> Vec<ZoneExit> {
+    points
+        .iter()
+        .filter_map(|point| {
+            let label_lower = point.label.to_ascii_lowercase();
+            // Match patterns like "to Zone", "zone to Zone", "-> Zone", etc.
+            let destination = if label_lower.contains("to ") {
+                // Extract text after "to "
+                label_lower
+                    .split("to ")
+                    .nth(1)
+                    .map(|s| s.trim().to_string())
+            } else if label_lower.contains("->") {
+                // Extract text after "->"
+                label_lower
+                    .split("->")
+                    .nth(1)
+                    .map(|s| s.trim().to_string())
+            } else if label_lower.contains("entrance") || label_lower.contains("exit") {
+                // Use full label for entrance/exit markers
+                Some(point.label.clone())
+            } else {
+                None
+            };
+
+            destination
+                .filter(|d| !d.is_empty())
+                .map(|destination| ZoneExit {
+                    x: point.x,
+                    y: point.y,
+                    z: point.z,
+                    destination,
+                })
+        })
+        .collect()
+}
+
 /// Load a zone map from all layer files in the given directory.
 /// Looks for `zone.txt`, `zone_1.txt`, `zone_2.txt`, `zone_3.txt`.
 ///
@@ -184,11 +238,15 @@ pub fn load_zone_map(map_dir: &Path, zone_name: &str) -> Result<ZoneMap> {
         };
     }
 
+    // Detect zone exits from map points
+    let zone_exits = detect_zone_exits(&points);
+
     Ok(ZoneMap {
         name: zone_name.to_string(),
         lines,
         points,
         bounds,
+        zone_exits,
     })
 }
 

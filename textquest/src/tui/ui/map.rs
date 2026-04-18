@@ -795,6 +795,48 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         }
     }
 
+    // Render zone exit markers (always visible if geometry shown)
+    if app.map_state.show_geometry
+        && let Some(map) = &app.map_state.zone_map
+    {
+        let show_zone_exit_labels = app.map_state.zoom >= 0.7;
+        for zone_exit in &map.zone_exits {
+            if !visible_region.contains_point(zone_exit.x, zone_exit.y) {
+                continue;
+            }
+            let (col, row) = to_grid(zone_exit.x, zone_exit.y);
+            if grid_in_bounds(col, row, w, h) {
+                // Render distinct zone exit marker glyph
+                grid[row as usize][col as usize] = ('◇', t.accent);
+
+                // Render destination label if zoom sufficient
+                if show_zone_exit_labels {
+                    let label_budget = if app.map_state.zoom > 1.8 {
+                        20
+                    } else if app.map_state.zoom > 1.1 {
+                        16
+                    } else if w > 120 {
+                        10
+                    } else {
+                        6
+                    };
+                    let max_label_len = w.saturating_sub(col as usize + 2);
+                    for (i, c) in zone_exit
+                        .destination
+                        .chars()
+                        .take(max_label_len.min(label_budget))
+                        .enumerate()
+                    {
+                        let lc = col as usize + 2 + i;
+                        if lc < w && grid[row as usize][lc].0 == ' ' {
+                            grid[row as usize][lc] = (c, t.accent);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     if app.map_state.show_navmesh
         && let Some(overlay) = &app.map_state.navmesh_overlay
     {
