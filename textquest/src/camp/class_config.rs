@@ -806,6 +806,9 @@ mod tests {
             .find(|ability| ability.name == "Malos")
             .unwrap();
         assert_eq!(level_65_malos.order, 2);
+    }
+
+    #[test]
     fn shipped_necromancer_config_matches_live_breakpoints() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()

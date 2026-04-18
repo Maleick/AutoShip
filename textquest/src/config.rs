@@ -595,7 +595,7 @@ pub struct GroupConfig {
 #[deprecated(
     note = "auto_camp_on_death has been retired; this compatibility type remains for backward compatibility"
 )]
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(default)]
 pub struct AutoCampOnDeathConfig {
     /// Whether the death-camp workflow is enabled for this toon.
