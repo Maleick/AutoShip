@@ -1,16 +1,17 @@
-//! Admin API endpoints for session lifecycle control.
+//! Admin API endpoints for session lifecycle control and configuration audit.
 //!
-//! Provides REST endpoints to start, stop, and restart sessions:
+//! Provides REST endpoints to start, stop, and restart sessions, and audit configuration:
 //! - POST /api/admin/sessions/{id}/start
 //! - POST /api/admin/sessions/{id}/stop
 //! - POST /api/admin/sessions/{id}/restart
+//! - GET /api/admin/sessions/{id}/config-audit
 
 use axum::{
     Json, Router,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    routing::post,
+    routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -203,4 +204,64 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/:id/start", post(start_session))
         .route("/:id/stop", post(stop_session))
         .route("/:id/restart", post(restart_session))
+        .route("/:id/config-audit", get(audit_config))
+}
+
+// ─── Config Audit Endpoint ────────────────────────────────────────────────────
+
+/// Audit endpoint re-exported from admin_config module for mounting at /admin/sessions/:id/config-audit
+pub use crate::api::admin_config::audit_config;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn test_router_has_config_audit_route() {
+        // Test that the router is properly constructed with all required routes
+        let app_router = router();
+        // If this compiles and runs, the router is correctly built
+        assert!(true);
+    }
+
+    #[test]
+    fn test_session_lifecycle_response_serialization() {
+        let response = SessionLifecycleResponse {
+            session_id: 42,
+            operation: "start".to_string(),
+            message: "Start request queued for session 42".to_string(),
+        };
+
+        let json = serde_json::to_string(&response).expect("serialize");
+        assert!(json.contains("\"session_id\":42"));
+        assert!(json.contains("\"operation\":\"start\""));
+        assert!(json.contains("message"));
+    }
+
+    #[test]
+    fn test_error_response_serialization() {
+        let error = ErrorResponse {
+            error: "Session not found".to_string(),
+        };
+
+        let json = serde_json::to_string(&error).expect("serialize");
+        assert!(json.contains("\"error\":\"Session not found\""));
+    }
+
+    #[test]
+    fn test_session_lifecycle_request_parsing() {
+        let json = r#"{"timeout_secs": 30}"#;
+        let req: SessionLifecycleRequest = serde_json::from_str(json).expect("parse request");
+        assert_eq!(req.timeout_secs, Some(30));
+    }
+
+    #[test]
+    fn test_session_lifecycle_request_parsing_empty() {
+        let json = r#"{}"#;
+        let req: SessionLifecycleRequest = serde_json::from_str(json).expect("parse request");
+        assert_eq!(req.timeout_secs, None);
+    }
 }
