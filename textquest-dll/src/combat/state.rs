@@ -2129,6 +2129,55 @@ mod tests {
     }
 
     #[test]
+    fn necromancer_rotation_resolves_and_casts_resist_debuff_first() {
+        let mut c = Combatant::new(11, 0, test_config());
+        let player = necro_player(90.0, 90.0);
+        let target = necro_target(100.0);
+        let known = necro_known_abilities();
+        let expected_spell_id = known[0].spell_id;
+        c.resolve_abilities(&known, 65);
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), &[]);
+
+        match c.state {
+            CombatState::Casting {
+                spell_id,
+                target_id,
+                ..
+            } => {
+                assert_eq!(spell_id, expected_spell_id);
+                assert_eq!(target_id, target.spawn_id);
+            }
+            _ => panic!("expected Necromancer opener to start casting"),
+        }
+    }
+
+    #[test]
+    fn necromancer_reserves_mana_and_skips_dot_loading() {
+        let mut c = Combatant::new(11, 0, test_config());
+        let player = necro_player(90.0, 24.0);
+        let target = necro_target(100.0);
+        c.resolve_abilities(&necro_known_abilities(), 65);
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), &[]);
+
+        assert!(matches!(
+            c.status(),
+            CombatStatus::Engaging { target_id } if target_id == target.spawn_id
+        ));
+        assert!(
+            c.gcd.is_ready(),
+            "No spell should have been cast while mana was reserved"
+        );
+    }
+
+    #[test]
     fn zone_disconnect_auto_disengages() {
         let mut c = Combatant::new(1, 0, test_config());
         let player = test_player();

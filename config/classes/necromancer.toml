@@ -3,40 +3,370 @@ role = "dps"
 rest_command = "/sit"
 
 [[combat_abilities]]
-name = "Lifetap"
+name = "Resist Debuff"
 command = "/cast 1"
-cooldown_secs = 6.0
+cooldown_secs = 30.0
 priority = 1
+condition = "target_hp_above_95 && mana_above_40"
 
 [[combat_abilities]]
-name = "DoT"
+name = "Disease DoT"
 command = "/cast 2"
-cooldown_secs = 30.0
+cooldown_secs = 24.0
 priority = 2
+condition = "target_hp_above_85 && mana_above_35"
+
+[[combat_abilities]]
+name = "Fire DoT"
+command = "/cast 3"
+cooldown_secs = 24.0
+priority = 3
+condition = "target_hp_above_75 && mana_above_30"
+
+[[combat_abilities]]
+name = "Poison DoT"
+command = "/cast 4"
+cooldown_secs = 24.0
+priority = 4
+condition = "target_hp_above_65 && mana_above_25"
 
 [[combat_abilities]]
 name = "Pet Attack"
-command = "/cast 3"
+command = "/pet attack"
 cooldown_secs = 0.0
-priority = 3
-
-[[combat_abilities]]
-name = "Feign Death"
-command = "/cast 4"
-cooldown_secs = 12.0
 priority = 5
 
 [[combat_abilities]]
-name = "Mana Tap"
+name = "Lifetap"
 command = "/cast 5"
-cooldown_secs = 60.0
-priority = 4
-condition = "mana_below_30"
+cooldown_secs = 12.0
+priority = 6
+condition = "target_hp_below_55 && mana_above_15"
+
+[[emergency_abilities]]
+name = "Lifetap"
+command = "/cast 5"
+cooldown_secs = 12.0
+priority = 1
+condition = "hp_below_45 && mana_above_15"
+
+[[emergency_abilities]]
+name = "Feign Death"
+command = "/cast 6"
+cooldown_secs = 18.0
+priority = 2
+condition = "hp_below_18"
+
+[[buff_abilities]]
+name = "Lich"
+command = "/cast 8"
+cooldown_secs = 600.0
+priority = 1
+
+[[buff_abilities]]
+name = "Pet Buff"
+command = "/cast 9"
+cooldown_secs = 600.0
+priority = 2
 
 [[cc_abilities]]
 name = "Root"
 cc_type = "root"
-command = "/cast 6"
+command = "/cast 7"
 cooldown_secs = 3.0
-duration_secs = 30.0
+duration_secs = 60.0
+priority = 1
+
+[[level_overrides]]
+name = "level-60"
+min_level = 60
+max_level = 60
+
+[[level_overrides.combat_abilities]]
+name = "Scent of Terris"
+command = "/cast 1"
+cooldown_secs = 30.0
+priority = 1
+condition = "target_hp_above_95 && mana_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Splurt"
+command = "/cast 2"
+cooldown_secs = 24.0
+priority = 2
+condition = "target_hp_above_85 && mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Funeral Pyre of Kelador"
+command = "/cast 3"
+cooldown_secs = 24.0
+priority = 3
+condition = "target_hp_above_75 && mana_above_30"
+
+[[level_overrides.combat_abilities]]
+name = "Pet Attack"
+command = "/pet attack"
+cooldown_secs = 0.0
+priority = 4
+
+[[level_overrides.combat_abilities]]
+name = "Touch of Night"
+command = "/cast 5"
+cooldown_secs = 12.0
 priority = 5
+condition = "target_hp_below_55 && mana_above_15"
+
+[[level_overrides.emergency_abilities]]
+name = "Touch of Night"
+command = "/cast 5"
+cooldown_secs = 12.0
+priority = 1
+condition = "hp_below_45 && mana_above_15"
+
+[[level_overrides.emergency_abilities]]
+name = "Death Peace"
+command = "/cast 6"
+cooldown_secs = 18.0
+priority = 2
+condition = "hp_below_18"
+
+[[level_overrides.buff_abilities]]
+name = "Arch Lich"
+command = "/cast 8"
+cooldown_secs = 600.0
+priority = 1
+
+[[level_overrides.cc_abilities]]
+name = "Petrifying Earth"
+cc_type = "root"
+command = "/cast 7"
+cooldown_secs = 3.0
+duration_secs = 60.0
+priority = 1
+
+[[level_overrides]]
+name = "level-61"
+min_level = 61
+max_level = 61
+
+[[level_overrides.combat_abilities]]
+name = "Scent of Terris"
+command = "/cast 1"
+cooldown_secs = 30.0
+priority = 1
+condition = "target_hp_above_95 && mana_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Dark Plague"
+command = "/cast 2"
+cooldown_secs = 24.0
+priority = 2
+condition = "target_hp_above_85 && mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Funeral Pyre of Kelador"
+command = "/cast 3"
+cooldown_secs = 24.0
+priority = 3
+condition = "target_hp_above_75 && mana_above_30"
+
+[[level_overrides.combat_abilities]]
+name = "Pet Attack"
+command = "/pet attack"
+cooldown_secs = 0.0
+priority = 4
+
+[[level_overrides.combat_abilities]]
+name = "Touch of Night"
+command = "/cast 5"
+cooldown_secs = 12.0
+priority = 5
+condition = "target_hp_below_55 && mana_above_15"
+
+[[level_overrides.emergency_abilities]]
+name = "Touch of Night"
+command = "/cast 5"
+cooldown_secs = 12.0
+priority = 1
+condition = "hp_below_45 && mana_above_15"
+
+[[level_overrides.emergency_abilities]]
+name = "Death Peace"
+command = "/cast 6"
+cooldown_secs = 18.0
+priority = 2
+condition = "hp_below_18"
+
+[[level_overrides.buff_abilities]]
+name = "Arch Lich"
+command = "/cast 8"
+cooldown_secs = 600.0
+priority = 1
+
+[[level_overrides.cc_abilities]]
+name = "Petrifying Earth"
+cc_type = "root"
+command = "/cast 7"
+cooldown_secs = 3.0
+duration_secs = 60.0
+priority = 1
+
+[[level_overrides]]
+name = "level-62"
+min_level = 62
+max_level = 64
+
+[[level_overrides.combat_abilities]]
+name = "Scent of Terris"
+command = "/cast 1"
+cooldown_secs = 30.0
+priority = 1
+condition = "target_hp_above_95 && mana_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Dark Plague"
+command = "/cast 2"
+cooldown_secs = 24.0
+priority = 2
+condition = "target_hp_above_85 && mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Funeral Pyre of Kelador"
+command = "/cast 3"
+cooldown_secs = 24.0
+priority = 3
+condition = "target_hp_above_75 && mana_above_30"
+
+[[level_overrides.combat_abilities]]
+name = "Legacy of Zek"
+command = "/cast 4"
+cooldown_secs = 24.0
+priority = 4
+condition = "target_hp_above_65 && mana_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Pet Attack"
+command = "/pet attack"
+cooldown_secs = 0.0
+priority = 5
+
+[[level_overrides.combat_abilities]]
+name = "Touch of Mujaki"
+command = "/cast 5"
+cooldown_secs = 12.0
+priority = 6
+condition = "target_hp_below_55 && mana_above_15"
+
+[[level_overrides.emergency_abilities]]
+name = "Touch of Mujaki"
+command = "/cast 5"
+cooldown_secs = 12.0
+priority = 1
+condition = "hp_below_45 && mana_above_15"
+
+[[level_overrides.emergency_abilities]]
+name = "Death Peace"
+command = "/cast 6"
+cooldown_secs = 18.0
+priority = 2
+condition = "hp_below_18"
+
+[[level_overrides.buff_abilities]]
+name = "Arch Lich"
+command = "/cast 8"
+cooldown_secs = 600.0
+priority = 1
+
+[[level_overrides.buff_abilities]]
+name = "Rune of Death"
+command = "/cast 9"
+cooldown_secs = 600.0
+priority = 2
+
+[[level_overrides.cc_abilities]]
+name = "Petrifying Earth"
+cc_type = "root"
+command = "/cast 7"
+cooldown_secs = 3.0
+duration_secs = 60.0
+priority = 1
+
+[[level_overrides]]
+name = "level-65"
+min_level = 65
+max_level = 65
+
+[[level_overrides.combat_abilities]]
+name = "Scent of Terris"
+command = "/cast 1"
+cooldown_secs = 30.0
+priority = 1
+condition = "target_hp_above_95 && mana_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Dark Plague"
+command = "/cast 2"
+cooldown_secs = 24.0
+priority = 2
+condition = "target_hp_above_85 && mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Night Fire"
+command = "/cast 3"
+cooldown_secs = 24.0
+priority = 3
+condition = "target_hp_above_75 && mana_above_30"
+
+[[level_overrides.combat_abilities]]
+name = "Blood of Thule"
+command = "/cast 4"
+cooldown_secs = 24.0
+priority = 4
+condition = "target_hp_above_65 && mana_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Pet Attack"
+command = "/pet attack"
+cooldown_secs = 0.0
+priority = 5
+
+[[level_overrides.combat_abilities]]
+name = "Gangrenous Touch of Zum'uul"
+command = "/cast 5"
+cooldown_secs = 12.0
+priority = 6
+condition = "target_hp_below_55 && mana_above_15"
+
+[[level_overrides.emergency_abilities]]
+name = "Gangrenous Touch of Zum'uul"
+command = "/cast 5"
+cooldown_secs = 12.0
+priority = 1
+condition = "hp_below_45 && mana_above_15"
+
+[[level_overrides.emergency_abilities]]
+name = "Death Peace"
+command = "/cast 6"
+cooldown_secs = 18.0
+priority = 2
+condition = "hp_below_18"
+
+[[level_overrides.buff_abilities]]
+name = "Arch Lich"
+command = "/cast 8"
+cooldown_secs = 600.0
+priority = 1
+
+[[level_overrides.buff_abilities]]
+name = "Rune of Death"
+command = "/cast 9"
+cooldown_secs = 600.0
+priority = 2
+
+[[level_overrides.cc_abilities]]
+name = "Petrifying Earth"
+cc_type = "root"
+command = "/cast 7"
+cooldown_secs = 3.0
+duration_secs = 60.0
+priority = 1

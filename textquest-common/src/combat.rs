@@ -488,6 +488,8 @@ pub enum ConditionExpr {
     ManaAbove(f32),
     /// Character endurance is above the given percentage.
     EnduranceAbove(f32),
+    /// Character level is at or above the given value.
+    PlayerLevelAtLeast(u8),
     /// The character has aggro from a mob.
     AggroOnMe,
     /// Character is in combat.

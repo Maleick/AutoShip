@@ -760,13 +760,17 @@ Force multiplier. Bard makes every group member better. Haste for melee, mana re
 
 ### DOT Rotation Priority (Group)
 
-1. **Splurt** (best DPM in game; cast first, it escalates each tick)
-2. **Ignite Blood** / Pyrocruor (fire DOT; long duration, high total damage)
-3. **Plague** or disease DOT (separate resist check from fire)
-4. **Envenomed Bolt** (poison DOT; stacks with above)
+The current Live-safe automation path is intentionally conservative and only
+loads long-duration DoTs while the mob is still healthy enough to pay back the
+mana cost.
+
+1. **Scent of Terris** at the top of the pull (resist debuff; only while target HP is near full)
+2. **Splurt** / **Dark Plague** (disease line; `Dark Plague` takes over at 61)
+3. **Funeral Pyre of Kelador** / **Night Fire** (fire line; `Night Fire` takes over at 65)
+4. **Legacy of Zek** / **Blood of Thule** when available (poison line; enabled from 62, upgraded at 65)
 5. **Send Pet** to attack
-6. **Lifetap** (Bond of Death) if you need self-healing or mob is near 60% HP
-7. **Feign Death** if aggro gets too high
+6. **Touch** lifetap line only after the target is partly burned down or when HP drops into the emergency band
+7. **Death Peace** when HP is critical and a lifetap would be too risky or too expensive
 
 ### DOT Stacking Rules
 
@@ -790,11 +794,10 @@ Sustained DPS through DOTs. Pet provides additional damage. Utility: summon corp
 
 ### Automation Notes
 
-- DOT loading sequence: Splurt > Fire DOT > Poison DOT > Pet attack
-- FD aggro dump after DOT loading
-- Lich always on; lifetap when HP drops below 60%
-- Pet management: send pet, heal pet if needed (pet heals are bad pre-Luclin)
-- Summon Corpse macro for raids
+- Runtime rotation order is `ResistDebuff -> DiseaseDot -> FireDot -> PoisonDot`, with each DoT line gated by target HP and a minimum mana reserve.
+- Emergency behavior is split from the sustained rotation: lifetap at roughly the 45% self-HP band, then `Death Peace` as the critical-hp bailout.
+- Level tuning currently has explicit shipped profiles for **60**, **61**, **62-64**, and **65** so the operator-facing class config matches the DLL ability-line resolution.
+- Pet management is limited to `/pet attack` in the combat loop; self-buff and pet-buff lines remain documented in the class config for operator slot planning.
 
 ---
 
