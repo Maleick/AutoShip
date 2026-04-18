@@ -27,6 +27,17 @@
         "cargo test -p textquest --no-run"
       ],
       "notes": "Session compile-repair pass reduced `cargo test -p textquest --no-run` errors from 167 to 0 and restored missing orchestrator/config/runtime surfaces needed for test compilation."
+    },
+    {
+      "id": "issue-1733-textquest-admin-backup-commands",
+      "name": "textquest-admin backup commands",
+      "status": "blocked",
+      "acceptance_tests": [
+        "cargo fmt --all --check",
+        "cargo test -p textquest",
+        "python3 scripts/dev-preflight.py"
+      ],
+      "notes": "Blocked on missing prerequisite work from issues #1729 and #1730. This branch has no `textquest-admin` binary, no `textquest/src/admin/` module, and no admin backup API/client/models to wire. Issue #1733 is marked `agent:ready`, but the required scaffolding is not present in `origin/master` or this worktree."
     }
   ]
 }
