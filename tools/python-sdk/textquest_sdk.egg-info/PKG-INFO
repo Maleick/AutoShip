@@ -1,0 +1,406 @@
+Metadata-Version: 2.4
+Name: textquest-sdk
+Version: 0.1.0
+Summary: Python SDK for the TextQuest Web API
+Author-email: TextQuest Contributors <contact@textquest.io>
+License: MIT
+Project-URL: Homepage, https://github.com/yourusername/textquest
+Project-URL: Repository, https://github.com/yourusername/textquest
+Project-URL: Documentation, https://textquest.readthedocs.io
+Project-URL: Issues, https://github.com/yourusername/textquest/issues
+Keywords: textquest,everquest,api,client
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: requests>=2.25.0
+Requires-Dist: httpx>=0.23.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.20.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Requires-Dist: black>=22.0.0; extra == "dev"
+Requires-Dist: isort>=5.0.0; extra == "dev"
+Requires-Dist: flake8>=4.0.0; extra == "dev"
+Requires-Dist: mypy>=0.990; extra == "dev"
+Requires-Dist: types-requests; extra == "dev"
+
+# TextQuest Python SDK
+
+A clean, type-hinted Python SDK for the TextQuest Web API with support for both sync and async usage patterns.
+
+## Installation
+
+```bash
+pip install textquest-sdk
+```
+
+Or install from source:
+
+```bash
+cd tools/python-sdk
+pip install -e .
+```
+
+## Quick Start
+
+### Synchronous Usage
+
+```python
+from textquest_sdk import TextQuestClient
+
+# Create a client
+client = TextQuestClient("http://localhost:3001")
+
+# Check API health
+health = client.health()
+print(f"API Status: {health['status']}")
+
+# List all accounts
+accounts = client.list_accounts()
+for account in accounts:
+    print(f"Account: {account['name']} - {account['character']}")
+
+# Create a new account
+new_account = client.create_account({
+    "name": "wizard1",
+    "server": "Teek",
+    "character": "Starfire",
+    "class": "WIZ",
+    "group": 2,
+    "status": "active",
+    "password": "hunter2"
+})
+
+# Get economy settings
+economy = client.get_economy_settings()
+print(f"Krono farming enabled: {economy.get('krono_farming_enabled')}")
+
+# Don't forget to close the client
+client.close()
+```
+
+### Using Context Manager (Recommended)
+
+```python
+from textquest_sdk import TextQuestClient
+
+with TextQuestClient("http://localhost:3001") as client:
+    health = client.health()
+    print(f"API Status: {health['status']}")
+
+    sessions = client.list_sessions()
+    print(f"Active sessions: {len(sessions)}")
+```
+
+### Asynchronous Usage
+
+```python
+import asyncio
+from textquest_sdk import AsyncTextQuestClient
+
+async def main():
+    async with AsyncTextQuestClient("http://localhost:3001") as client:
+        # Check API health
+        health = await client.health()
+        print(f"API Status: {health['status']}")
+
+        # List all accounts
+        accounts = await client.list_accounts()
+        print(f"Total accounts: {len(accounts)}")
+
+        # Get wealth snapshot
+        wealth = await client.get_wealth()
+        print(f"Total wealth: {wealth}")
+
+        # Create loot rule
+        rules = {
+            "auto_split_stackables": True,
+            "reserve_for_crafting": False,
+            "master_looter_enabled": False
+        }
+        await client.set_loot_rules(rules)
+
+asyncio.run(main())
+```
+
+## API Token Authentication
+
+If your TextQuest API requires authentication via `X-API-Token`:
+
+```python
+from textquest_sdk import TextQuestClient
+
+client = TextQuestClient(
+    "http://localhost:3001",
+    api_token="your-secret-token-here"
+)
+```
+
+## Common Operations
+
+### Account Management
+
+```python
+with TextQuestClient() as client:
+    # List all accounts
+    accounts = client.list_accounts()
+
+    # Get specific account
+    account = client.get_account("wizard1")
+
+    # Update account
+    client.update_account("wizard1", {"group": 3, "status": "paused"})
+
+    # Set password
+    client.set_account_password("wizard1", "newpassword")
+
+    # Delete account
+    client.delete_account("wizard1")
+
+    # Export/Import
+    exported = client.export_accounts()
+    client.import_accounts(exported["accounts"])
+```
+
+### Economy Management
+
+```python
+with AsyncTextQuestClient() as client:
+    # Get economy settings
+    settings = await client.get_economy_settings()
+
+    # Update settings
+    await client.set_economy_settings({
+        "krono_farming_enabled": True,
+        "restock_interval_minutes": 60,
+        "target_wealth_platinum": 10000
+    })
+
+    # Manage vendor routes
+    routes = await client.list_vendor_routes()
+
+    new_route = await client.create_vendor_route({
+        "name": "Qeynos Route",
+        "vendors": ["Merchant1", "Merchant2"],
+        "priority": 1
+    })
+
+    await client.update_vendor_route(new_route["id"], {"priority": 2})
+    await client.delete_vendor_route(new_route["id"])
+
+    # Get wealth info
+    wealth = await client.get_wealth()
+```
+
+### Loot Management
+
+```python
+with TextQuestClient() as client:
+    # Get loot rules
+    rules = client.get_loot_rules()
+
+    # Update loot rules
+    client.set_loot_rules({
+        "auto_split_stackables": True,
+        "master_looter_enabled": True
+    })
+
+    # Set character-specific filters
+    client.set_loot_filter("Starfire", {
+        "include_patterns": ["*Spell*", "*Mana*"],
+        "exclude_patterns": ["*trash*"]
+    })
+
+    # Get loot history
+    history = client.get_loot_history()
+```
+
+### Alert Management
+
+```python
+with TextQuestClient() as client:
+    # Get alert configuration
+    config = client.get_alert_config()
+
+    # Update alert settings
+    client.set_alert_config({
+        "enabled": True,
+        "alert_on_gm": True,
+        "alert_on_rare_spawn": True,
+        "discord_webhook": "https://discord.com/api/webhooks/..."
+    })
+
+    # List spawn alerts
+    alerts = client.list_spawn_alerts()
+
+    # Manage spawn watch list
+    client.add_spawn_watch_pattern("*rare*")
+    client.remove_spawn_watch_pattern("*trash*")
+```
+
+### Character Configuration
+
+```python
+with TextQuestClient() as client:
+    # Get all character configs
+    configs = client.list_character_configs()
+
+    # Set character config
+    client.set_character_config("Starfire", {
+        "enabled": True,
+        "rotation": ["spell1", "spell2", "spell3"]
+    })
+
+    # Manage auto-accept settings
+    settings = client.get_auto_accept_settings()
+    client.set_auto_accept_settings({
+        "enabled": True,
+        "accept_all": False,
+        "group_leaders": ["MainLeader", "SecondaryLeader"]
+    })
+```
+
+### Soul/Character State Monitoring
+
+```python
+with AsyncTextQuestClient() as client:
+    # List all soul states
+    souls = await client.list_soul_states()
+
+    # Get specific character state
+    soul = await client.get_soul_state("wizard1")
+
+    # Get audit trail
+    audit = await client.get_soul_audit()
+
+    # Export audit as CSV
+    csv_data = await client.export_audit_csv()
+    with open("audit.csv", "w") as f:
+        f.write(csv_data)
+```
+
+### Chat Pattern Rules
+
+```python
+with TextQuestClient() as client:
+    # List all rules
+    rules = client.list_chat_pattern_rules()
+
+    # Create a rule
+    rule = client.create_chat_pattern_rule({
+        "pattern": "sell (.*)",
+        "action": "sell_item",
+        "enabled": True,
+        "cooldown_seconds": 30
+    })
+
+    # Update a rule
+    client.update_chat_pattern_rule(rule["id"], {
+        "cooldown_seconds": 60
+    })
+
+    # Toggle rule
+    client.toggle_chat_pattern_rule(rule["id"], False)
+
+    # Delete a rule
+    client.delete_chat_pattern_rule(rule["id"])
+
+    # Get statistics
+    stats = client.get_chat_pattern_rules_stats()
+```
+
+## Error Handling
+
+```python
+from textquest_sdk import TextQuestClient
+import requests
+
+try:
+    with TextQuestClient("http://localhost:3001") as client:
+        account = client.get_account("nonexistent")
+except requests.exceptions.HTTPError as e:
+    print(f"HTTP Error: {e.response.status_code}")
+    print(f"Message: {e.response.json()}")
+except requests.exceptions.RequestException as e:
+    print(f"Request failed: {e}")
+```
+
+For async:
+
+```python
+from textquest_sdk import AsyncTextQuestClient
+import httpx
+
+try:
+    async with AsyncTextQuestClient("http://localhost:3001") as client:
+        account = await client.get_account("nonexistent")
+except httpx.HTTPError as e:
+    print(f"HTTP Error: {e}")
+```
+
+## Type Hints
+
+The SDK includes comprehensive type hints for all operations:
+
+```python
+from textquest_sdk import TextQuestClient
+from typing import List, Dict, Any
+
+def process_accounts(client: TextQuestClient) -> None:
+    accounts: List[Dict[str, Any]] = client.list_accounts()
+    for account in accounts:
+        print(f"{account['name']}: {account['character']}")
+```
+
+## Testing
+
+Run the test suite:
+
+```bash
+pytest tests/
+```
+
+Run with coverage:
+
+```bash
+pytest --cov=textquest_sdk tests/
+```
+
+## Development
+
+Install development dependencies:
+
+```bash
+pip install -e ".[dev]"
+```
+
+Run linting:
+
+```bash
+black textquest_sdk/
+isort textquest_sdk/
+flake8 textquest_sdk/
+mypy textquest_sdk/
+```
+
+## License
+
+MIT License - see LICENSE file for details
+
+## Contributing
+
+Contributions are welcome! Please submit pull requests to the main repository.
+
+## Support
+
+For issues and feature requests, please visit the GitHub issue tracker.

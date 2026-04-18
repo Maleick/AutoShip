@@ -451,6 +451,7 @@ pub async fn put_chat_log_settings(
         Err(error) => json_error(StatusCode::BAD_REQUEST, error).into_response(),
     }
 }
+
 // ─── Sessions
 // ─────────────────────────────────────────────────────────────────
 

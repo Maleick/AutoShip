@@ -5,7 +5,7 @@ use std::path::Path;
 use textquest_common::box_chat::BoxChatConfig;
 use textquest_soul::config::SoulConfig;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlayerFilterMode {
     #[default]
@@ -550,7 +550,7 @@ pub struct GroupConfig {
 }
 
 /// Per-character unattended death handling.
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
 #[serde(default)]
 pub struct AutoCampOnDeathConfig {
     /// Enable automatic `/camp desktop` plus relog scheduling after death.
@@ -587,7 +587,7 @@ pub struct ToonConfig {
     /// Account name this toon belongs to.
     #[serde(default)]
     pub account: Option<String>,
-    /// Unattended death auto-camp and relog behavior.
+    /// Unattended camp-out + delayed relog settings after death.
     #[serde(default)]
     pub auto_camp_on_death: AutoCampOnDeathConfig,
 }

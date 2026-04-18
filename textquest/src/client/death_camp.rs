@@ -10,6 +10,16 @@ pub struct AutoCampOnDeathSettings {
     pub relog_wait_secs: u64,
 }
 
+impl Default for AutoCampOnDeathSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            camp_delay_secs: 30,
+            relog_wait_secs: 900,
+        }
+    }
+}
+
 /// Scheduler output emitted when a death transition needs action.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeathCampAction {

@@ -124,10 +124,14 @@ impl OrchestratorLoop {
         let log_dir = crate::paths::resolve_log_dir().join("chat");
         orchestrator.init_chat_log_manager(app_config.chat_log.clone(), log_dir);
         orchestrator.configure_say_detection(&app_config.say_detection);
-        // `ToonConfig` no longer carries per-character death-camp policy in
-        // the static TOML. Missing entries fall back to the disabled default
-        // in `tick_death_camp`.
-        let auto_camp_settings = HashMap::new();
+        let auto_camp_settings = app_config
+            .group
+            .iter()
+            .flat_map(|group| group.toon.iter())
+            .map(|toon| {
+                (toon.name.to_ascii_lowercase(), toon.auto_camp_on_death.clone())
+            })
+            .collect::<HashMap<_, _>>();
         let credential_store = std::env::var("TEXTQUEST_MASTER_PASSWORD")
             .ok()
             .filter(|password| !password.trim().is_empty())

@@ -124,8 +124,10 @@ pub struct Orchestrator {
     pub client_pids: Vec<u32>,
     /// Mapping of PID to character name for each client.
     pub client_names: HashMap<u32, String>,
-    /// Static class metadata learned from login/account bindings.
-    client_class_names: HashMap<u32, String>,
+    /// Mapping of PID to group ID for per-client coordination.
+    pub client_groups: HashMap<u32, u8>,
+    /// Mapping of PID to class name for per-client metadata.
+    pub client_class_names: HashMap<u32, String>,
     /// Active camp loop state machine, if a camp is running.
     pub active_camp: Option<CampLoop>,
     /// Group combat coordinator (assist, CC, CH chain).
@@ -226,6 +228,7 @@ impl Orchestrator {
         let orchestrator = Self {
             client_pids: Vec::new(),
             client_names: HashMap::new(),
+            client_groups: HashMap::new(),
             client_class_names: HashMap::new(),
             active_camp: None,
             combat: CombatCoordinator::new(),
@@ -1089,6 +1092,7 @@ impl Orchestrator {
         }
 
         if let Some(group_id) = group_id {
+            self.client_groups.insert(pid, group_id);
             self.session_controls
                 .entry(pid)
                 .or_insert_with(|| SessionControl::new(pid))
@@ -1104,6 +1108,7 @@ impl Orchestrator {
 
     /// Set or update the coordination group for a registered client.
     pub fn set_client_group(&mut self, pid: u32, group_id: u8) {
+        self.client_groups.insert(pid, group_id);
         let changed = self
             .session_controls
             .entry(pid)
@@ -1117,9 +1122,11 @@ impl Orchestrator {
     /// Return the current coordination group for a registered client.
     #[must_use]
     pub fn client_group(&self, pid: u32) -> Option<u8> {
-        self.session_controls
-            .get(&pid)
-            .map(|control| control.group_id)
+        self.client_groups.get(&pid).copied().or_else(|| {
+            self.session_controls
+                .get(&pid)
+                .map(|control| control.group_id)
+        })
     }
 
     /// Cache the class name used by cross-group role classification.
@@ -1339,6 +1346,7 @@ impl Orchestrator {
     pub fn remove_client(&mut self, pid: u32) {
         self.client_pids.retain(|&p| p != pid);
         self.client_names.remove(&pid);
+        self.client_groups.remove(&pid);
         self.client_class_names.remove(&pid);
         self.game_states.remove(&pid);
         self.state_readers.remove(&pid);
