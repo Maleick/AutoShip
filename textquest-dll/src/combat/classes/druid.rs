@@ -1,6 +1,12 @@
-use textquest_common::combat::{CombatRole, SpellEntry};
+use textquest_common::combat::{
+    AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+    SpellEntry, TargetSelector,
+};
 
-use crate::combat::strategy::{self, ClassStrategy, CombatContext};
+use crate::combat::{
+    rotation::{self, RotationGroup},
+    strategy::{self, ClassStrategy, CombatContext},
+};
 
 /// HP threshold for emergency heals.
 const EMERGENCY_HP: f32 = 45.0;
@@ -10,6 +16,12 @@ const MODERATE_HP: f32 = 65.0;
 
 /// HP threshold for snare (fleeing mob prevention).
 const SNARE_HP: f32 = 20.0;
+
+/// Mana threshold for heal casting.
+const HEAL_MANA: f32 = 25.0;
+
+/// Mana threshold for DoT/Nuke casting.
+const DPS_MANA: f32 = 20.0;
 
 /// Druid strategy: hybrid healer/nuker/snarer with resurrection and buff
 /// support.
@@ -85,6 +97,139 @@ impl DruidStrategy {
             let name = s.name.to_lowercase();
             keywords.iter().any(|kw| name.contains(kw))
         })
+    }
+
+    fn build_ability_sets() -> Vec<AbilitySet> {
+        vec![
+            AbilitySet {
+                name: "Heal".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Karana's Healing".into(),
+                        min_level: 65,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Karana's Cure".into(),
+                        min_level: 60,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Spirit of Nature".into(),
+                        min_level: 55,
+                        spell_id: -1,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "DoT".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Vengeful Wrath".into(),
+                        min_level: 65,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Regrowth of the Grove".into(),
+                        min_level: 60,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Ensnare".into(),
+                        min_level: 50,
+                        spell_id: -1,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "Snare".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Entangle".into(),
+                        min_level: 65,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Snare".into(),
+                        min_level: 55,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Root".into(),
+                        min_level: 50,
+                        spell_id: -1,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "Buff".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Spirit of the Wolf".into(),
+                        min_level: 60,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Damage Shield".into(),
+                        min_level: 65,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Protection of the Grove".into(),
+                        min_level: 55,
+                        spell_id: -1,
+                    },
+                ],
+            },
+        ]
+    }
+
+    fn build_rotations() -> Vec<RotationGroup> {
+        vec![
+            {
+                let mut g = rotation::group("Heal", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                g.steps_per_frame = 1;
+                g.entries = vec![
+                    rotation::entry_if(
+                        "EmergencyHeal",
+                        ActionType::Spell("Heal".into()),
+                        ConditionExpr::HpBelow(EMERGENCY_HP),
+                    ),
+                    rotation::entry_if(
+                        "ModerateHeal",
+                        ActionType::Spell("Heal".into()),
+                        ConditionExpr::And(vec![
+                            ConditionExpr::HpBelow(MODERATE_HP),
+                            ConditionExpr::ManaAbove(HEAL_MANA),
+                        ]),
+                    ),
+                ];
+                g
+            },
+            {
+                let mut g = rotation::group("Snare", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                g.steps_per_frame = 1;
+                g.entries = vec![rotation::entry_if(
+                    "Snare",
+                    ActionType::Spell("Snare".into()),
+                    ConditionExpr::And(vec![
+                        ConditionExpr::TargetHpBelow(SNARE_HP),
+                        ConditionExpr::ManaAbove(DPS_MANA),
+                    ]),
+                )];
+                g
+            },
+            {
+                let mut g = rotation::group("Nuke", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                g.steps_per_frame = 1;
+                g.entries = vec![rotation::entry_if(
+                    "DoT",
+                    ActionType::Spell("DoT".into()),
+                    ConditionExpr::ManaAbove(DPS_MANA),
+                )];
+                g
+            },
+        ]
     }
 }
 
@@ -240,12 +385,25 @@ impl ClassStrategy for DruidStrategy {
     fn role(&self) -> CombatRole {
         CombatRole::Healer
     }
+
+    fn rotation_groups(&self) -> Option<Vec<RotationGroup>> {
+        Some(Self::build_rotations())
+    }
+
+    fn ability_sets(&self) -> Vec<AbilitySet> {
+        Self::build_ability_sets()
+    }
+
+    fn uses_builtin_combat_drivers(&self) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::combat::strategy::GroupMemberState;
+    use textquest_common::combat::KnownAbility;
 
     fn make_member(spawn_id: u32, hp_pct: f32, is_dead: bool) -> GroupMemberState {
         GroupMemberState {
@@ -257,6 +415,47 @@ mod tests {
             name: format!("Player{spawn_id}"),
             has_detrimental: false,
         }
+    }
+
+
+    fn known_abilities() -> Vec<KnownAbility> {
+        vec![
+            KnownAbility {
+                name: "Karana's Healing".into(),
+                spell_id: 5000,
+                level: 65,
+            },
+            KnownAbility {
+                name: "Karana's Cure".into(),
+                spell_id: 5001,
+                level: 60,
+            },
+            KnownAbility {
+                name: "Spirit of Nature".into(),
+                spell_id: 5002,
+                level: 55,
+            },
+            KnownAbility {
+                name: "Vengeful Wrath".into(),
+                spell_id: 5003,
+                level: 65,
+            },
+            KnownAbility {
+                name: "Regrowth of the Grove".into(),
+                spell_id: 5004,
+                level: 60,
+            },
+            KnownAbility {
+                name: "Entangle".into(),
+                spell_id: 5005,
+                level: 65,
+            },
+            KnownAbility {
+                name: "Spirit of the Wolf".into(),
+                spell_id: 5006,
+                level: 60,
+            },
+        ]
     }
 
     #[test]
@@ -291,6 +490,37 @@ mod tests {
             extended_targets: None,
         };
         assert!(druid.should_assist(&ctx));
+    }
+
+    #[test]
+    fn druid_aoe_threshold() {
+        let druid = DruidStrategy::new(6);
+        assert_eq!(druid.aoe_threshold(), 3);
+    }
+
+    #[test]
+    fn druid_has_ability_sets() {
+        let druid = DruidStrategy::new(6);
+        let sets = druid.ability_sets();
+        let names: Vec<&str> = sets.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"Heal"));
+        assert!(names.contains(&"DoT"));
+        assert!(names.contains(&"Snare"));
+        assert!(names.contains(&"Buff"));
+    }
+
+    #[test]
+    fn druid_has_rotation_groups() {
+        let druid = DruidStrategy::new(6);
+        let groups = druid.rotation_groups().unwrap();
+        let names: Vec<&str> = groups.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(names, vec!["Heal", "Snare", "Nuke"]);
+    }
+
+    #[test]
+    fn druid_does_not_use_builtin_drivers() {
+        let druid = DruidStrategy::new(6);
+        assert!(!druid.uses_builtin_combat_drivers());
     }
 
     #[test]
@@ -403,5 +633,251 @@ mod tests {
 
         assert_eq!(druid.select_spell(&ctx).unwrap().name, "Radiant Cure");
         assert_eq!(druid.select_target(&ctx), Some(6));
+    }
+
+    #[test]
+    fn druid_emergency_heal_priority_at_low_hp() {
+        let druid = DruidStrategy::new(6);
+        let player = textquest_common::types::SpawnData {
+            hp_current: 3000,
+            hp_max: 10000,
+            mana_current: 80,
+            mana_max: 100,
+            ..Default::default()
+        };
+        let config = textquest_common::combat::CombatConfig {
+            spells: vec![
+                SpellEntry {
+                    slot: 1,
+                    spell_id: 200,
+                    name: "Healing".into(),
+                    min_mana_pct: 10.0,
+                    priority: 5,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    slot: 2,
+                    spell_id: 300,
+                    name: "Nuke".into(),
+                    min_mana_pct: 10.0,
+                    priority: 10,
+                    is_aoe: false,
+                },
+            ],
+            ..Default::default()
+        };
+        let members = vec![];
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        let spell = druid.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Healing");
+    }
+
+    #[test]
+    fn druid_snare_on_fleeing_mob() {
+        let druid = DruidStrategy::new(6);
+        let player = textquest_common::types::SpawnData {
+            hp_current: 9000,
+            hp_max: 10000,
+            mana_current: 70,
+            mana_max: 100,
+            ..Default::default()
+        };
+        let target = textquest_common::types::SpawnData {
+            spawn_id: 42,
+            hp_current: 1000,
+            hp_max: 10000,
+            ..Default::default()
+        };
+        let config = textquest_common::combat::CombatConfig {
+            spells: vec![
+                SpellEntry {
+                    slot: 1,
+                    spell_id: 400,
+                    name: "Ensnare".into(),
+                    min_mana_pct: 10.0,
+                    priority: 8,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    slot: 2,
+                    spell_id: 500,
+                    name: "DoT".into(),
+                    min_mana_pct: 10.0,
+                    priority: 10,
+                    is_aoe: false,
+                },
+            ],
+            ..Default::default()
+        };
+        let members = vec![];
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        let spell = druid.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Ensnare");
+    }
+
+    #[test]
+    fn druid_ability_resolution_at_60() {
+        let sets = DruidStrategy::build_ability_sets();
+        let resolved = textquest_common::combat::resolve_abilities(&sets, &known_abilities(), 60);
+
+        let heal = resolved
+            .get("Heal")
+            .expect("level 60 should resolve heal");
+        assert_eq!(heal.ability_name, "Karana's Cure");
+        assert_eq!(heal.spell_id, 5001);
+
+        let dot = resolved
+            .get("DoT")
+            .expect("level 60 should resolve DoT");
+        assert_eq!(dot.ability_name, "Regrowth of the Grove");
+        assert_eq!(dot.spell_id, 5004);
+    }
+
+    #[test]
+    fn druid_ability_resolution_at_65_prefers_newer_abilities() {
+        let sets = DruidStrategy::build_ability_sets();
+        let resolved = textquest_common::combat::resolve_abilities(&sets, &known_abilities(), 65);
+
+        let heal = resolved
+            .get("Heal")
+            .expect("level 65 should resolve heal");
+        assert_eq!(heal.ability_name, "Karana's Healing");
+        assert_eq!(heal.spell_id, 5000);
+
+        let dot = resolved
+            .get("DoT")
+            .expect("level 65 should resolve DoT");
+        assert_eq!(dot.ability_name, "Vengeful Wrath");
+        assert_eq!(dot.spell_id, 5003);
+    }
+
+    #[test]
+    fn druid_nuke_priority_when_high_hp() {
+        let druid = DruidStrategy::new(6);
+        let player = textquest_common::types::SpawnData {
+            hp_current: 9000,
+            hp_max: 10000,
+            mana_current: 80,
+            mana_max: 100,
+            ..Default::default()
+        };
+        let config = textquest_common::combat::CombatConfig {
+            spells: vec![
+                SpellEntry {
+                    slot: 1,
+                    spell_id: 200,
+                    name: "Healing".into(),
+                    min_mana_pct: 10.0,
+                    priority: 5,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    slot: 2,
+                    spell_id: 300,
+                    name: "DoT Nuke".into(),
+                    min_mana_pct: 10.0,
+                    priority: 10,
+                    is_aoe: false,
+                },
+            ],
+            ..Default::default()
+        };
+        let members = vec![];
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        let spell = druid.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "DoT Nuke");
+    }
+
+    #[test]
+    fn druid_buff_priority_out_of_combat() {
+        let druid = DruidStrategy::new(6);
+        let player = textquest_common::types::SpawnData {
+            hp_current: 10000,
+            hp_max: 10000,
+            mana_current: 100,
+            mana_max: 100,
+            ..Default::default()
+        };
+        let config = textquest_common::combat::CombatConfig {
+            spells: vec![
+                SpellEntry {
+                    slot: 1,
+                    spell_id: 600,
+                    name: "Spirit of the Wolf".into(),
+                    min_mana_pct: 10.0,
+                    priority: 5,
+                    is_aoe: false,
+                },
+                SpellEntry {
+                    slot: 2,
+                    spell_id: 700,
+                    name: "Damage Shield".into(),
+                    min_mana_pct: 10.0,
+                    priority: 3,
+                    is_aoe: false,
+                },
+            ],
+            ..Default::default()
+        };
+        let members = vec![];
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &members,
+            config: &config,
+            tick: 0,
+            in_combat: false,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+
+        let spell = druid.select_spell(&ctx).unwrap();
+        assert_eq!(spell.name, "Spirit of the Wolf");
     }
 }

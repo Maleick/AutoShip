@@ -20,27 +20,6 @@ const BERSERKER_TIMER_VOLLEY: u8 = 2;
 const BERSERKER_TIMER_BATTLE_CRY: u8 = 3;
 const BERSERKER_TIMER_CLEAVE: u8 = 4;
 
-/// Cooldown metadata for an activated ability used by `metadata_for_activated_ability`.
-pub struct AbilityReuseMetadata {
-    pub cooldown_ticks: Option<u32>,
-    pub shared_timer_id: Option<u8>,
-}
-
-/// Maximum number of tracked abilities before we stop tracking new ones inline.
-const MAX_TRACKED_ABILITIES: usize = 32;
-
-/// Base key for shared timer IDs. Shared timers use negative keys derived from this base.
-const SHARED_TIMER_KEY_BASE: i32 = -100_000;
-
-/// Berserker timer IDs for primary burn abilities.
-const BERSERKER_TIMER_PRIMARY_BURN: u8 = 1;
-/// Berserker timer ID for Volley ability.
-const BERSERKER_TIMER_VOLLEY: u8 = 2;
-/// Berserker timer ID for Battle Cry ability.
-const BERSERKER_TIMER_BATTLE_CRY: u8 = 3;
-/// Berserker timer ID for Cleave ability.
-const BERSERKER_TIMER_CLEAVE: u8 = 4;
-
 /// Metadata for an activated ability's cooldown and shared timer behavior.
 #[derive(Debug, Clone, Copy)]
 pub struct AbilityReuseMetadata {
