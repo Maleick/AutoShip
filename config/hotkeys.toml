@@ -1,0 +1,130 @@
+# TextQuest Hotkey Configuration
+#
+# This file defines hotkeys for the TUI dashboard. Hotkeys can be:
+# - Global (available to all characters)
+# - Character-specific (available only to that character)
+#
+# Key Format:
+#   - Single character: "a", "?", "@"
+#   - Function keys: "F1", "F2", ..., "F12"
+#   - Special keys: "Tab", "Enter", "Backspace", "Esc", "Left", "Right", "Up", "Down",
+#                   "Home", "End", "PageUp", "PageDown", "Delete", "Insert"
+#
+# Modifiers:
+#   - shift: bool (optional, default: false)
+#   - alt: bool (optional, default: false)
+#   - ctrl: bool (optional, default: false)
+#
+# Actions:
+#   - Command: Execute a TUI command (e.g., "engage", "disengage", "loot")
+#   - ToggleMode: Toggle a UI mode (e.g., "help", "privacy", "alert_panel")
+#   - OpenHelp: Open the help screen
+#   - SendAssist: Send an assist command
+#   - Custom: Custom action defined externally
+
+# Global hotkeys available to all characters
+[[global]]
+key = "e"
+type = "Command"
+value = "engage"
+description = "Start combat"
+
+[[global]]
+key = "d"
+type = "Command"
+value = "disengage"
+description = "Stop combat"
+
+[[global]]
+key = "l"
+type = "Command"
+value = "loot"
+description = "Loot corpses"
+
+[[global]]
+key = "r"
+type = "Command"
+value = "repeat"
+description = "Repeat last command"
+
+[[global]]
+key = "?"
+type = "ToggleMode"
+value = "help"
+description = "Open help screen"
+
+[[global]]
+key = "p"
+type = "ToggleMode"
+value = "privacy"
+description = "Toggle privacy mode"
+
+[[global]]
+key = "F8"
+type = "ToggleMode"
+value = "alert_panel"
+description = "Toggle alert panel"
+
+[[global]]
+key = "F1"
+type = "ToggleMode"
+value = "help"
+description = "Open help (alternate)"
+
+[[global]]
+key = "/"
+type = "Command"
+value = "search"
+description = "Search spawns"
+
+[[global]]
+key = "m"
+shift = false
+alt = false
+ctrl = false
+type = "ToggleMode"
+value = "map"
+description = "Toggle map visibility (in Overview screen)"
+
+[[global]]
+key = "Tab"
+type = "Command"
+value = "cycle_panel"
+description = "Cycle active panel"
+
+# Character-specific hotkeys
+[character_profiles.Warrior]
+# Override the 'e' key to engage, but with a different command
+[[character_profiles.Warrior.hotkeys]]
+key = "e"
+type = "Command"
+value = "warrior_stance"
+description = "Take defensive stance"
+
+[character_profiles.Wizard]
+# Wizard-specific hotkeys
+[[character_profiles.Wizard.hotkeys]]
+key = "m"
+type = "Command"
+value = "cast_mana_shield"
+description = "Cast mana shield"
+
+[[character_profiles.Wizard.hotkeys]]
+key = "F2"
+type = "Command"
+value = "evocation"
+description = "Cast evocation (favorite spell)"
+
+[character_profiles.Cleric]
+# Cleric-specific hotkeys
+[[character_profiles.Cleric.hotkeys]]
+key = "h"
+type = "Command"
+value = "cast_heal"
+description = "Cast heal on focus target"
+
+[[character_profiles.Cleric.hotkeys]]
+key = "g"
+type = "Command"
+value = "cast_group_heal"
+description = "Cast group heal"

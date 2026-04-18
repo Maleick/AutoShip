@@ -26,6 +26,8 @@ pub mod dps;
 pub mod event;
 /// Group builder — dynamic templates, slot assignment, and auto-fill.
 pub mod group_builder;
+/// Hotkey registry and keyboard event routing for custom key bindings.
+pub mod hotkeys;
 /// Env-gated live cast capture helpers for validating real EQ clients.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) mod live_cast_capture;
