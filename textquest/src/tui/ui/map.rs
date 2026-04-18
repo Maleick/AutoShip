@@ -3838,4 +3838,173 @@ mod tests {
         // Regular NPC should render as ○
         assert!(rendered.contains('○'), "Regular NPC should render as ○");
     }
+
+    /// Integration test for complete map rendering pipeline.
+    ///
+    /// Verifies the entire flow: load map → transform coordinates → render output.
+    /// Tests with a minimal zone map file containing lines and points.
+    #[test]
+    fn complete_map_rendering_pipeline_integration() {
+        use std::fs;
+        use std::path::PathBuf;
+        use tempfile::TempDir;
+
+        // Create a temporary directory for test map files
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let map_dir = temp_dir.path().to_path_buf();
+
+        // Create a minimal test zone map file
+        let map_content = r#"# Test zone map
+L -100.0, -100.0, 0.0, 100.0, -100.0, 0.0, 255, 0, 0
+L 100.0, -100.0, 0.0, 100.0, 100.0, 0.0, 0, 255, 0
+L 100.0, 100.0, 0.0, -100.0, 100.0, 0.0, 0, 0, 255
+L -100.0, 100.0, 0.0, -100.0, -100.0, 0.0, 255, 255, 0
+P 0.0, 0.0, 0.0, 255, 255, 255, 2, Camp
+P 50.0, 50.0, 0.0, 0, 255, 255, 1, Point1
+"#;
+
+        let map_file = map_dir.join("testzone.txt");
+        fs::write(&map_file, map_content).expect("Failed to write test map file");
+
+        // Load the zone map
+        let map = crate::eq::map_parser::load_zone_map(&map_dir, "testzone")
+            .expect("Failed to load test zone map");
+
+        // Verify map file loaded without errors
+        assert_eq!(map.name, "testzone", "Map name should be 'testzone'");
+        assert!(!map.lines.is_empty(), "Map should have loaded lines");
+        assert!(!map.points.is_empty(), "Map should have loaded points");
+
+        // Verify lines/points parsed correctly
+        assert_eq!(map.lines.len(), 4, "Should have 4 line segments");
+        assert_eq!(map.points.len(), 2, "Should have 2 labeled points");
+
+        // Check first line: -100,-100,0 to 100,-100,0 with red (255,0,0)
+        let line1 = &map.lines[0];
+        assert_eq!(line1.x1, -100.0);
+        assert_eq!(line1.y1, -100.0);
+        assert_eq!(line1.z1, 0.0);
+        assert_eq!(line1.x2, 100.0);
+        assert_eq!(line1.y2, -100.0);
+        assert_eq!(line1.z2, 0.0);
+        assert_eq!(line1.r, 255);
+        assert_eq!(line1.g, 0);
+        assert_eq!(line1.b, 0);
+
+        // Check first point: 0,0,0 white Camp
+        let point1 = &map.points[0];
+        assert_eq!(point1.x, 0.0);
+        assert_eq!(point1.y, 0.0);
+        assert_eq!(point1.z, 0.0);
+        assert_eq!(point1.label, "Camp");
+
+        // Verify coordinate transforms work
+        let bounds = crate::tui::ui::map::ViewBounds::from_zone_map(&map);
+        assert_eq!(bounds.min_x, -100.0);
+        assert_eq!(bounds.max_x, 100.0);
+        assert_eq!(bounds.min_y, -100.0);
+        assert_eq!(bounds.max_y, 100.0);
+        assert_eq!(bounds.width(), 200);
+        assert_eq!(bounds.height(), 200);
+
+        // Create test app state with loaded map
+        let mut app = App::new();
+        let mut client = ClientState::new(77, 0);
+        client.spawn_revision = 1;
+        client.zone_name = "testzone".to_string();
+
+        // Set player at known position (100, 200, 0)
+        let mut player = test_spawn(99, "Player", 100.0, 200.0);
+        player.heading = 0.0; // North
+        client.local_player = Some(player.clone());
+
+        // Add various spawns at different positions
+        client.spawns = vec![
+            test_spawn(1, "orc pawn", 120.0, 210.0),       // Near player
+            test_spawn(2, "orc centurion", 150.0, 250.0), // Farther away
+            spawn_with_type(3, "corpse", 110.0, 205.0, SpawnType::Corpse), // Corpse
+        ];
+
+        app.clients.push(client);
+        app.sync_from_selected_client();
+
+        // Load the map into the app
+        app.map_state.zone_map = Some(map);
+        app.map_state.map_dir = map_dir.clone();
+
+        // Set up camp configuration
+        app.map_state.camp_overlay = Some(crate::tui::state::CampOverlay {
+            center_x: 100.0,
+            center_y: 200.0,
+            radius: 30.0,
+            label: "Camp".to_string(),
+        });
+
+        // Enable various overlay settings
+        app.map_state.show_geometry = true;
+        app.map_state.show_spawns = true;
+        app.map_state.show_labels = true;
+        app.map_state.show_annotations = false;
+        app.map_state.show_navmesh = false;
+        app.map_state.z_filter_range = 50.0;
+
+        // Set a target
+        app.target = Some(test_spawn(500, "target", 150.0, 250.0));
+        app.map_state.show_target_line = true;
+
+        // Render the map to verify it produces output
+        let backend = ratatui::backend::TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).expect("Failed to create terminal");
+
+        let render_result = terminal.draw(|frame| {
+            let area = frame.area();
+            draw_map_view(frame, area, &mut app);
+        });
+
+        assert!(
+            render_result.is_ok(),
+            "Map rendering should complete without errors"
+        );
+
+        // Verify rendering produces non-empty output
+        let buffer = terminal.backend().buffer();
+        let buffer_content = buffer.content();
+        assert!(
+            !buffer_content.is_empty(),
+            "Rendered map should produce non-empty output"
+        );
+
+        // Verify overlays rendered (camp circle, player marker)
+        let rendered_text = buffer_content
+            .iter()
+            .flat_map(|row| row.iter().map(|cell| cell.symbol.to_string()).collect::<Vec<_>>())
+            .collect::<String>();
+
+        // Should contain player marker (◆)
+        assert!(
+            rendered_text.contains('◆'),
+            "Rendered output should contain player marker ◆"
+        );
+
+        // Should contain some spawn markers (at least one of the NPCs/corpses)
+        let has_spawn_markers = rendered_text.contains('○') // NPC marker
+            || rendered_text.contains('†') // Corpse marker
+            || rendered_text.contains('*'); // Generic marker
+
+        assert!(
+            has_spawn_markers,
+            "Rendered output should contain spawn markers"
+        );
+
+        // Should contain camp overlay indicator or geometry from loaded map
+        let has_geometry_or_camp = rendered_text.contains('─') // Horizontal line
+            || rendered_text.contains('│') // Vertical line
+            || rendered_text.contains('·') // Point or circle element
+            || rendered_text.contains('□'); // Rectangle element
+
+        assert!(
+            has_geometry_or_camp,
+            "Rendered output should contain map geometry or camp overlay elements"
+        );
+    }
 }
