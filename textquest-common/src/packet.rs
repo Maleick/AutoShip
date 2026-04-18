@@ -56,6 +56,50 @@ impl CapturedPacket {
     pub fn data_len(&self) -> usize {
         self.payload.len().saturating_sub(2)
     }
+
+    /// Validate packet structure. Returns `Ok(())` if valid, `Err` if malformed.
+    ///
+    /// # Validation Rules
+    /// 1. Payload must be at least 2 bytes (minimum opcode header)
+    /// 2. Payload cannot exceed 65536 bytes (EQ protocol limit)
+    /// 3. Opcode must match the first 2 bytes of payload (little-endian consistency)
+    pub fn validate(&self) -> io::Result<()> {
+        // Rule 1: Minimum payload size
+        if self.payload.len() < 2 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "packet payload too small: {} bytes (minimum 2 required)",
+                    self.payload.len()
+                ),
+            ));
+        }
+
+        // Rule 2: Maximum payload size (EQ packet limit)
+        if self.payload.len() > 65536 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "packet payload exceeds 65536 byte limit: {} bytes",
+                    self.payload.len()
+                ),
+            ));
+        }
+
+        // Rule 3: Opcode consistency check
+        let encoded_opcode = u16::from_le_bytes([self.payload[0], self.payload[1]]);
+        if encoded_opcode != self.opcode {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "opcode mismatch: stored 0x{:04X} vs payload 0x{:04X}",
+                    self.opcode, encoded_opcode
+                ),
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -173,9 +217,16 @@ impl CaptureSession {
         self
     }
 
-    /// Record a packet. Returns `true` if the packet passed the filter.
+    /// Record a packet. Returns `true` if packet passed validation and filter.
+    /// Returns `false` if packet is malformed, oversized, truncated, or rejected by filter.
     pub fn record(&mut self, packet: CapturedPacket) -> bool {
         self.total_seen += 1;
+
+        // Validate packet structure before filter processing
+        if let Err(_) = packet.validate() {
+            return false;
+        }
+
         if !self.filter.matches(&packet) {
             return false;
         }
@@ -399,22 +450,32 @@ pub fn load_binary<R: Read>(mut reader: R) -> io::Result<CaptureSession> {
 
         reader.read_exact(&mut buf4)?;
         let payload_len = u32::from_le_bytes(buf4) as usize;
-        // Cap individual payload at 64 KiB — EQ packets shouldn't exceed this.
+
+        // Validate payload size constraints before reading
         if payload_len > 65536 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "payload too large",
+                "payload exceeds 64 KiB limit",
             ));
         }
+        if payload_len < 2 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "payload too small (minimum 2 bytes for opcode)",
+            ));
+        }
+
         let mut payload = vec![0u8; payload_len];
         reader.read_exact(&mut payload)?;
 
-        session.record(CapturedPacket {
+        let packet = CapturedPacket {
             timestamp_ms,
             direction,
             opcode,
             payload,
-        });
+        };
+
+        session.record(packet);
     }
 
     Ok(session)
@@ -514,11 +575,8 @@ mod tests {
     #[test]
     fn filter_whitelist_with_direction() {
         let f = PacketFilter::whitelist([0x1234]).with_direction(PacketDirection::ClientToServer);
-        // Right opcode, right direction.
         assert!(f.matches(&make_packet(0, PacketDirection::ClientToServer, 0x1234)));
-        // Right opcode, wrong direction.
         assert!(!f.matches(&make_packet(0, PacketDirection::ServerToClient, 0x1234)));
-        // Wrong opcode, right direction.
         assert!(!f.matches(&make_packet(0, PacketDirection::ClientToServer, 0x9999)));
     }
 
@@ -535,7 +593,6 @@ mod tests {
         assert_eq!(s.len(), 3);
         assert_eq!(s.total_seen, 5);
         assert_eq!(s.evicted(), 2);
-        // Oldest should be packet with opcode 2 (first two evicted).
         assert_eq!(s.get(0).unwrap().opcode, 2);
     }
 
@@ -622,7 +679,7 @@ mod tests {
     fn binary_bad_version_rejected() {
         let mut data = Vec::new();
         data.extend_from_slice(MAGIC);
-        data.push(99); // bad version
+        data.push(99);
         assert!(load_binary(&data[..]).is_err());
     }
 
@@ -636,7 +693,7 @@ mod tests {
         let output = String::from_utf8(buf).unwrap();
 
         let lines: Vec<&str> = output.trim().lines().collect();
-        assert_eq!(lines.len(), 2); // header + 1 packet
+        assert_eq!(lines.len(), 2);
         assert!(lines[0].contains("\"type\":\"session\""));
         assert!(lines[1].contains("\"opcode\":\"0x00FF\""));
         assert!(lines[1].contains("\"dir\":\"C2S\""));
@@ -645,7 +702,6 @@ mod tests {
     #[test]
     fn packet_data_len() {
         let p = make_packet(0, PacketDirection::ClientToServer, 0x0001);
-        // Payload is 2 (opcode) + 2 (DE AD) = 4 bytes, data_len = 2.
         assert_eq!(p.data_len(), 2);
     }
 
@@ -682,7 +738,7 @@ mod tests {
         let mut data = Vec::new();
         data.extend_from_slice(MAGIC);
         data.push(FORMAT_VERSION);
-        data.extend_from_slice(&5000u16.to_le_bytes()); // > 4096
+        data.extend_from_slice(&5000u16.to_le_bytes());
         assert!(load_binary(&data[..]).is_err());
     }
 
@@ -691,18 +747,221 @@ mod tests {
         let mut s = CaptureSession::new("x", 1);
         s.record(make_packet(0, PacketDirection::ClientToServer, 0x0001));
 
-        // Manually craft a binary with oversized payload.
         let mut data = Vec::new();
         data.extend_from_slice(MAGIC);
         data.push(FORMAT_VERSION);
-        data.extend_from_slice(&1u16.to_le_bytes()); // label len
-        data.push(b'x'); // label
-        data.extend_from_slice(&0u64.to_le_bytes()); // started_at
-        data.extend_from_slice(&1u32.to_le_bytes()); // pkt count
-        data.extend_from_slice(&0u64.to_le_bytes()); // timestamp
-        data.push(0); // direction
-        data.extend_from_slice(&0u16.to_le_bytes()); // opcode
-        data.extend_from_slice(&100_000u32.to_le_bytes()); // payload > 64K
+        data.extend_from_slice(&1u16.to_le_bytes());
+        data.push(b'x');
+        data.extend_from_slice(&0u64.to_le_bytes());
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&0u64.to_le_bytes());
+        data.push(0);
+        data.extend_from_slice(&0u16.to_le_bytes());
+        data.extend_from_slice(&100_000u32.to_le_bytes());
+        assert!(load_binary(&data[..]).is_err());
+    }
+
+    // =====================================================================
+    // Packet Validation Tests
+    // =====================================================================
+
+    #[test]
+    fn packet_validate_minimum_size() {
+        let p = CapturedPacket {
+            timestamp_ms: 0,
+            direction: PacketDirection::ClientToServer,
+            opcode: 0x0001,
+            payload: vec![0x01, 0x00],
+        };
+        assert!(p.validate().is_ok());
+    }
+
+    #[test]
+    fn packet_validate_truncated_payload() {
+        let p = CapturedPacket {
+            timestamp_ms: 0,
+            direction: PacketDirection::ClientToServer,
+            opcode: 0x0001,
+            payload: vec![0x01],
+        };
+        assert!(p.validate().is_err());
+    }
+
+    #[test]
+    fn packet_validate_empty_payload() {
+        let p = CapturedPacket {
+            timestamp_ms: 0,
+            direction: PacketDirection::ClientToServer,
+            opcode: 0x0001,
+            payload: vec![],
+        };
+        assert!(p.validate().is_err());
+    }
+
+    #[test]
+    fn packet_validate_oversized() {
+        let p = CapturedPacket {
+            timestamp_ms: 0,
+            direction: PacketDirection::ClientToServer,
+            opcode: 0x0001,
+            payload: vec![0u8; 70000],
+        };
+        assert!(p.validate().is_err());
+    }
+
+    #[test]
+    fn packet_validate_at_max_size() {
+        let mut payload = vec![0u8; 65536];
+        payload[0] = 0x01;
+        payload[1] = 0x00;
+        let p = CapturedPacket {
+            timestamp_ms: 0,
+            direction: PacketDirection::ClientToServer,
+            opcode: 0x0001,
+            payload,
+        };
+        assert!(p.validate().is_ok());
+    }
+
+    #[test]
+    fn packet_validate_just_over_max() {
+        let p = CapturedPacket {
+            timestamp_ms: 0,
+            direction: PacketDirection::ClientToServer,
+            opcode: 0x0001,
+            payload: vec![0u8; 65537],
+        };
+        assert!(p.validate().is_err());
+    }
+
+    #[test]
+    fn packet_validate_opcode_mismatch() {
+        let p = CapturedPacket {
+            timestamp_ms: 0,
+            direction: PacketDirection::ClientToServer,
+            opcode: 0x1234,
+            payload: vec![0x78, 0x56], // 0x5678 != 0x1234
+        };
+        assert!(p.validate().is_err());
+    }
+
+    #[test]
+    fn packet_validate_opcode_consistent() {
+        let p = CapturedPacket {
+            timestamp_ms: 0,
+            direction: PacketDirection::ClientToServer,
+            opcode: 0x1234,
+            payload: vec![0x34, 0x12, 0xDE, 0xAD], // 0x1234 in little-endian
+        };
+        assert!(p.validate().is_ok());
+    }
+
+    #[test]
+    fn record_rejects_truncated_packet() {
+        let mut s = CaptureSession::new("test", 100);
+        let truncated = CapturedPacket {
+            timestamp_ms: 0,
+            direction: PacketDirection::ClientToServer,
+            opcode: 0x0001,
+            payload: vec![0x01],
+        };
+        assert!(!s.record(truncated));
+        assert_eq!(s.len(), 0);
+        assert_eq!(s.total_seen, 1);
+    }
+
+    #[test]
+    fn record_rejects_oversized_packet() {
+        let mut s = CaptureSession::new("test", 100);
+        let oversized = CapturedPacket {
+            timestamp_ms: 0,
+            direction: PacketDirection::ClientToServer,
+            opcode: 0x0001,
+            payload: vec![0u8; 100000],
+        };
+        assert!(!s.record(oversized));
+        assert_eq!(s.len(), 0);
+        assert_eq!(s.total_seen, 1);
+    }
+
+    #[test]
+    fn record_rejects_opcode_mismatch() {
+        let mut s = CaptureSession::new("test", 100);
+        let mismatched = CapturedPacket {
+            timestamp_ms: 0,
+            direction: PacketDirection::ClientToServer,
+            opcode: 0x1234,
+            payload: vec![0x56, 0x78], // 0x7856 != 0x1234
+        };
+        assert!(!s.record(mismatched));
+        assert_eq!(s.len(), 0);
+    }
+
+    #[test]
+    fn record_accepts_valid_packet() {
+        let mut s = CaptureSession::new("test", 100);
+        let valid = CapturedPacket {
+            timestamp_ms: 0,
+            direction: PacketDirection::ClientToServer,
+            opcode: 0x0001,
+            payload: vec![0x01, 0x00, 0xDE, 0xAD],
+        };
+        assert!(s.record(valid));
+        assert_eq!(s.len(), 1);
+        assert_eq!(s.total_seen, 1);
+    }
+
+    #[test]
+    fn binary_load_rejects_truncated_payload() {
+        let mut data = Vec::new();
+        data.extend_from_slice(MAGIC);
+        data.push(FORMAT_VERSION);
+        data.extend_from_slice(&1u16.to_le_bytes());
+        data.push(b'x');
+        data.extend_from_slice(&0u64.to_le_bytes());
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&0u64.to_le_bytes());
+        data.push(0);
+        data.extend_from_slice(&0u16.to_le_bytes());
+        data.extend_from_slice(&100u32.to_le_bytes());
+        data.extend_from_slice(&[0xAA; 10]);
+        assert!(load_binary(&data[..]).is_err());
+    }
+
+    #[test]
+    fn binary_load_rejects_undersized_payload() {
+        let mut data = Vec::new();
+        data.extend_from_slice(MAGIC);
+        data.push(FORMAT_VERSION);
+        data.extend_from_slice(&1u16.to_le_bytes());
+        data.push(b'x');
+        data.extend_from_slice(&0u64.to_le_bytes());
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&0u64.to_le_bytes());
+        data.push(0);
+        data.extend_from_slice(&0u16.to_le_bytes());
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.push(0xAA);
+        assert!(load_binary(&data[..]).is_err());
+    }
+
+    #[test]
+    fn binary_load_detects_incomplete_header() {
+        let data = b"DM";
+        assert!(load_binary(&data[..]).is_err());
+    }
+
+    #[test]
+    fn binary_load_detects_incomplete_packet_data() {
+        let mut data = Vec::new();
+        data.extend_from_slice(MAGIC);
+        data.push(FORMAT_VERSION);
+        data.extend_from_slice(&1u16.to_le_bytes());
+        data.push(b'x');
+        data.extend_from_slice(&0u64.to_le_bytes());
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&0u64.to_le_bytes());
+        // Missing direction byte
         assert!(load_binary(&data[..]).is_err());
     }
 }

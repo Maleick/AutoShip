@@ -23,6 +23,7 @@ pub mod orchestrator_panel;
 pub mod packets;
 pub mod spawns;
 pub mod widgets;
+pub mod zone_blocker_panel;
 pub mod zone_status_panel;
 
 use ratatui::{

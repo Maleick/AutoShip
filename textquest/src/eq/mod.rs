@@ -13,6 +13,8 @@ pub mod log_parser;
 pub mod log_watcher;
 /// SOE `.map` file parser — lines and points for zone map overlays.
 pub mod map_parser;
+/// Map data population — terrain, spawns, portals, blockers.
+pub mod map_data;
 /// Named mob database — spawn names, respawn timers, loot tables.
 pub mod named_db;
 /// Named mob tracker — live tracking of named spawns across zones.

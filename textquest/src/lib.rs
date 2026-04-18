@@ -13,6 +13,8 @@ pub mod auto_group;
 /// EQBC-style cross-machine TCP relay and dispatch manager.
 #[cfg(windows)]
 pub mod box_chat;
+/// MQ2Log-style per-character chat output logging.
+pub mod chat_log;
 /// Camp loop state machine — pulls, fights, loots, meds, buffs.
 #[allow(dead_code)]
 pub mod camp;
@@ -121,6 +123,8 @@ use anyhow::Result;
 /// Default path for the soul memory database.
 pub const SOUL_DB_PATH: &str = "data/soul_memory.db";
 
+/// Default path for the trade price SQLite cache.
+pub const TRADE_PRICE_DB_PATH: &str = "data/trade_prices.db";
 /// Default path for the Ghidra analysis SQLite cache.
 pub const GHIDRA_DB_PATH: &str = "data/ghidra.db";
 

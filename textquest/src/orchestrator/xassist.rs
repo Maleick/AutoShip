@@ -276,8 +276,6 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
         };
 
         let commands = xassist.tick(&[(100, state), (200, ma_state)].into_iter().collect());
@@ -314,8 +312,6 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
         };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
@@ -361,8 +357,6 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
         };
 
         let commands = xassist.tick(&[(100, state), (200, ma_state)].into_iter().collect());

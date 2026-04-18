@@ -1,6 +1,6 @@
 # Result: #1164 — Example Lua Scripts & Library
 
-## Status: DONE
+## Status: COMPLETE
 
 ## Summary
 

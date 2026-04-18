@@ -38,6 +38,30 @@ fn draw_progress_bar(progress: f64, width: usize, color: ratatui::style::Color) 
 /// Draw the blocker summary panel (full-width, top).
 fn draw_blocker_panel(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
+
+    // Check if there are active blockers - if so, show blocker panel instead of commands panel
+    let has_active_blockers = super::zone_blocker_panel::count_active_blockers(app) > 0;
+
+    // Adaptive: narrow terminals get more space for nav status
+    let (left_pct, right_pct) = if area.width < 100 { (65, 35) } else { (60, 40) };
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(left_pct),
+            Constraint::Percentage(right_pct),
+        ])
+        .split(area);
+
+    // ── Left: per-character nav status ────────────────────────────────
+    let blk = panel(
+        " Navigation Status ",
+        if app.is_panel_focused(crate::tui::app::ActivePanel::TacticalNavigation) {
+            t.border_active
+        } else {
+            t.border_primary
+        },
+        t,
+    );
     let visible = app.visible_clients();
 
     // Count blockers and stuck clients

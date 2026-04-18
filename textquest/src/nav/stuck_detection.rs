@@ -358,4 +358,111 @@ mod tests {
         // Should trigger exactly once
         assert_eq!(recovery_count, 1);
     }
+
+    /// Issue #1268 integration test: Verify all three core scenarios pass
+    /// 1. Normal movement (not stuck)
+    /// 2. Temporary stuck (recovers within 30s)
+    /// 3. Permanent stuck (timeout expires, recovery triggered)
+    #[test]
+    fn issue_1268_scenario_1_normal_movement() {
+        let mut detector = StuckDetector::new();
+        let mut position = Waypoint::new(0.0, 0.0, 0.0);
+        let start = Instant::now();
+
+        // Move continuously with >1 unit per 5s
+        while Instant::now().duration_since(start) < Duration::from_secs(35) {
+            detector.record_position(position);
+            position.x += 0.04; // ~2 units per 5s
+            std::thread::sleep(Duration::from_millis(50));
+        }
+
+        let mut recovery_triggered = false;
+        for _ in 0..10 {
+            if detector.update() {
+                recovery_triggered = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+
+        assert!(!recovery_triggered, "Normal movement should not trigger recovery");
+        assert_eq!(detector.stuck_window_count(), 0, "Stuck counter should remain 0");
+    }
+
+    /// Issue #1268 scenario 2: Temporary stuck (within 30s threshold)
+    #[test]
+    fn issue_1268_scenario_2_temporary_stuck() {
+        let mut detector = StuckDetector::new();
+        let stuck_pos = Waypoint::new(100.0, 100.0, 0.0);
+        let start = Instant::now();
+
+        // Stay stuck for 20 seconds (< 30s threshold)
+        while Instant::now().duration_since(start) < Duration::from_secs(20) {
+            detector.record_position(stuck_pos);
+            std::thread::sleep(Duration::from_millis(100));
+        }
+
+        // Check for recovery (should not trigger)
+        let mut recovery_triggered = false;
+        for _ in 0..5 {
+            if detector.update() {
+                recovery_triggered = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+        }
+
+        assert!(
+            !recovery_triggered,
+            "Stuck < 30s should not trigger recovery"
+        );
+
+        // Now move away — recovery should reset
+        let mut new_pos = stuck_pos;
+        new_pos.x += 2.0;
+        detector.record_position(new_pos);
+        std::thread::sleep(Duration::from_secs(1));
+        let _ = detector.update();
+
+        assert_eq!(
+            detector.stuck_window_count(),
+            0,
+            "Stuck counter should reset on movement"
+        );
+    }
+
+    /// Issue #1268 scenario 3: Permanent stuck (triggers recovery at 30s+)
+    #[test]
+    fn issue_1268_scenario_3_permanent_stuck() {
+        let mut detector = StuckDetector::new();
+        let stuck_pos = Waypoint::new(50.0, 75.0, 10.0);
+        let start = Instant::now();
+
+        // Stay stuck for 35+ seconds (triggers recovery)
+        while Instant::now().duration_since(start) < Duration::from_secs(35) {
+            detector.record_position(stuck_pos);
+            std::thread::sleep(Duration::from_millis(100));
+        }
+
+        // Poll for recovery event
+        let mut recovery_triggered = false;
+        let mut attempts = 0;
+        while attempts < 50 && !recovery_triggered {
+            if detector.update() {
+                recovery_triggered = true;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+            attempts += 1;
+        }
+
+        assert!(recovery_triggered, "Stuck > 30s should trigger recovery");
+        assert!(
+            detector.recovery_triggered(),
+            "recovery_triggered flag should be set"
+        );
+        assert!(
+            detector.stuck_window_count() >= 6,
+            "stuck_window_count should be >= 6 (30s+)"
+        );
+    }
 }

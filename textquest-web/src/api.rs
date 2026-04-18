@@ -682,6 +682,11 @@ impl From<TimestampFormat> for textquest_common::chat::TimestampFormat {
     }
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TimestampConfig {
+    pub enabled: bool,
+    pub format: TimestampFormat,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CharacterConfigUpdate {
     pub character_name: String,
@@ -1336,21 +1341,6 @@ impl From<PlayerWatchConfigFile> for PlayerWatchConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TimestampConfig {
-    pub enabled: bool,
-    pub format: TimestampFormat,
-}
-
-impl Default for TimestampConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            format: TimestampFormat::DateTime24,
-        }
-    }
-}
-
 pub(crate) fn read_player_watch_config_from_disk() -> Result<PlayerWatchConfig, String> {
     let path = textquest_config_path();
     if !path.exists() {
@@ -1417,6 +1407,31 @@ fn timestamp_config_path() -> PathBuf {
     config_sidecar_path("timestamp.toml")
 }
 
+pub(crate) fn load_timestamp_configs_from_path(path: &StdPath) -> HashMap<String, TimestampConfig> {
+    match std::fs::read_to_string(path) {
+        Ok(content) => match toml::from_str::<HashMap<String, TimestampConfig>>(&content) {
+            Ok(configs) => configs,
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    path = %path.display(),
+                    "Failed to parse timestamp config; using defaults"
+                );
+                HashMap::new()
+            }
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => HashMap::new(),
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                path = %path.display(),
+                "Failed to read timestamp config; using defaults"
+            );
+            HashMap::new()
+        }
+    }
+}
+
 pub(crate) fn load_timestamp_configs_from_disk() -> Result<HashMap<String, TimestampConfig>, String>
 {
     let path = timestamp_config_path();
@@ -1432,16 +1447,72 @@ pub(crate) fn load_timestamp_configs_from_disk() -> Result<HashMap<String, Times
 fn write_timestamp_configs_to_disk(
     configs: &HashMap<String, TimestampConfig>,
 ) -> Result<(), String> {
-    let path = timestamp_config_path();
+    write_timestamp_configs_to_path(&timestamp_config_path(), configs)
+}
+
+fn write_timestamp_configs_to_path(
+    path: &StdPath,
+    configs: &HashMap<String, TimestampConfig>,
+) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|error| format!("Failed to create {}: {error}", parent.display()))?;
     }
 
     let content = toml::to_string_pretty(configs)
-        .map_err(|error| format!("Failed to serialize timestamp config: {error}"))?;
-    std::fs::write(&path, content)
-        .map_err(|error| format!("Failed to write {}: {error}", path.display()))
+        .map_err(|error| format!("Failed to serialize timestamp configs: {error}"))?;
+    let temp_path = path.with_extension("toml.tmp");
+    std::fs::write(&temp_path, content)
+        .map_err(|error| format!("Failed to write temp file {}: {error}", temp_path.display()))?;
+    replace_timestamp_file_with_overwrite_fallback(
+        &temp_path,
+        path,
+        |from: &StdPath, to: &StdPath| std::fs::rename(from, to),
+        |target: &StdPath| std::fs::remove_file(target),
+    )?;
+    Ok(())
+}
+
+fn replace_timestamp_file_with_overwrite_fallback<Rename, Remove>(
+    temp_path: &StdPath,
+    path: &StdPath,
+    mut rename: Rename,
+    mut remove_file: Remove,
+) -> Result<(), String>
+where
+    Rename: FnMut(&StdPath, &StdPath) -> std::io::Result<()>,
+    Remove: FnMut(&StdPath) -> std::io::Result<()>,
+{
+    match rename(temp_path, path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            remove_file(path).map_err(|remove_error| {
+                let _ = remove_file(temp_path);
+                format!(
+                    "Failed to replace {} with {} after destination already existed: {remove_error}",
+                    path.display(),
+                    temp_path.display()
+                )
+            })?;
+
+            rename(temp_path, path).map_err(|rename_error| {
+                let _ = remove_file(temp_path);
+                format!(
+                    "Failed to replace {} with {} after removing the existing destination: {rename_error}",
+                    path.display(),
+                    temp_path.display()
+                )
+            })
+        }
+        Err(error) => {
+            let _ = remove_file(temp_path);
+            Err(format!(
+                "Failed to replace {} with {}: {error}",
+                path.display(),
+                temp_path.display()
+            ))
+        }
+    }
 }
 
 /// GET /api/config/player-watch — return the current player watch filter config.
@@ -1533,8 +1604,12 @@ pub async fn put_timestamp_config(
         snapshot
     };
 
-    write_timestamp_configs_to_disk(&snapshot)
-        .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+    write_timestamp_configs_to_disk(&snapshot).map_err(|error| {
+        json_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to persist timestamp config: {error}"),
+        )
+    })?;
 
     *state.timestamp_configs.write().await = snapshot;
 
@@ -2035,6 +2110,112 @@ mod tests {
         assert_eq!(
             body,
             serde_json::json!({ "error": "Trusted player names must not be blank" })
+        );
+    }
+
+    #[test]
+    fn load_timestamp_configs_from_path_round_trips_saved_data() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let path = temp_dir.path().join("timestamp.toml");
+        let expected = HashMap::from([(
+            "Frostreaver".to_string(),
+            TimestampConfig {
+                enabled: true,
+                format: TimestampFormat::Time24,
+            },
+        )]);
+
+        write_timestamp_configs_to_path(&path, &expected).expect("write timestamp configs");
+        let loaded = load_timestamp_configs_from_path(&path);
+        assert_eq!(loaded, expected);
+    }
+
+    #[test]
+    fn replace_timestamp_config_retries_after_destination_exists_error() {
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let path = temp_dir.path().join("timestamp.toml");
+        let temp_path = temp_dir.path().join("timestamp.toml.tmp");
+        std::fs::write(&path, "old").expect("write destination");
+        std::fs::write(&temp_path, "new").expect("write temp");
+
+        let rename_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let remove_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+        let rename_counter = Arc::clone(&rename_calls);
+        let remove_counter = Arc::clone(&remove_calls);
+        replace_timestamp_file_with_overwrite_fallback(
+            &temp_path,
+            &path,
+            move |from: &StdPath, to: &StdPath| {
+                let attempt = rename_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if attempt == 0 {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::AlreadyExists,
+                        format!("{} already exists", to.display()),
+                    ));
+                }
+                std::fs::rename(from, to)
+            },
+            move |target: &StdPath| {
+                remove_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                std::fs::remove_file(target)
+            },
+        )
+        .expect("replace timestamp file");
+
+        assert_eq!(rename_calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert_eq!(remove_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read destination"),
+            "new"
+        );
+        assert!(!temp_path.exists());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn put_timestamp_config_returns_error_when_persist_fails() {
+        let _lock = config_env_lock().lock().await;
+        let state = Arc::new(test_state("api-timestamp-persist-error.json"));
+        let temp_dir = tempfile::tempdir().expect("tempdir");
+        let blocker = temp_dir.path().join("not-a-directory");
+        std::fs::write(&blocker, "blocker").expect("write blocker");
+        let _guard = ConfigPathGuard::set(&blocker.join("textquest.toml"));
+
+        let mut configs = state.timestamp_configs.write().await;
+        configs.insert(
+            "Existing".into(),
+            TimestampConfig {
+                enabled: true,
+                format: TimestampFormat::DateTime12,
+            },
+        );
+        drop(configs);
+
+        let response = put_timestamp_config(
+            State(state.clone()),
+            Path("Frostreaver".into()),
+            Json(TimestampConfig {
+                enabled: true,
+                format: TimestampFormat::Time12,
+            }),
+        )
+        .await
+        .expect_err("persist failure should return an error");
+
+        assert_eq!(response.0, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(
+            response
+                .1
+                .0
+                .error
+                .contains("Failed to persist timestamp config: Failed to create")
+        );
+        assert!(
+            !state
+                .timestamp_configs
+                .read()
+                .await
+                .contains_key("Frostreaver")
         );
     }
 

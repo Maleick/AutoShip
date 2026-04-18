@@ -93,6 +93,10 @@ pub struct MapBounds {
     pub min_y: f32,
     /// Maximum Y coordinate in the map.
     pub max_y: f32,
+    /// Minimum Z coordinate in the map.
+    pub min_z: f32,
+    /// Maximum Z coordinate in the map.
+    pub max_z: f32,
 }
 
 impl MapBounds {
@@ -102,10 +106,12 @@ impl MapBounds {
             max_x: f32::MIN,
             min_y: f32::MAX,
             max_y: f32::MIN,
+            min_z: f32::MAX,
+            max_z: f32::MIN,
         }
     }
 
-    fn expand(&mut self, x: f32, y: f32) {
+    fn expand(&mut self, x: f32, y: f32, z: f32) {
         if x < self.min_x {
             self.min_x = x;
         }
@@ -117,6 +123,12 @@ impl MapBounds {
         }
         if y > self.max_y {
             self.max_y = y;
+        }
+        if z < self.min_z {
+            self.min_z = z;
+        }
+        if z > self.max_z {
+            self.max_z = z;
         }
     }
 
@@ -210,11 +222,11 @@ pub fn load_zone_map(map_dir: &Path, zone_name: &str) -> Result<ZoneMap> {
     // Compute bounding box from all line endpoints
     let mut bounds = MapBounds::empty();
     for line in &lines {
-        bounds.expand(line.x1, line.y1);
-        bounds.expand(line.x2, line.y2);
+        bounds.expand(line.x1, line.y1, line.z1);
+        bounds.expand(line.x2, line.y2, line.z2);
     }
     for point in &points {
-        bounds.expand(point.x, point.y);
+        bounds.expand(point.x, point.y, point.z);
     }
 
     lines.sort_by(|a, b| {
@@ -235,6 +247,8 @@ pub fn load_zone_map(map_dir: &Path, zone_name: &str) -> Result<ZoneMap> {
             max_x: 100.0,
             min_y: -100.0,
             max_y: 100.0,
+            min_z: -100.0,
+            max_z: 100.0,
         };
     }
 
@@ -492,7 +506,7 @@ mod tests {
     #[test]
     fn map_bounds_expand_first_point() {
         let mut bounds = MapBounds::empty();
-        bounds.expand(10.0, 20.0);
+        bounds.expand(10.0, 20.0, 0.0);
         assert!((bounds.min_x - 10.0).abs() < f32::EPSILON);
         assert!((bounds.max_x - 10.0).abs() < f32::EPSILON);
         assert!((bounds.min_y - 20.0).abs() < f32::EPSILON);
@@ -502,9 +516,9 @@ mod tests {
     #[test]
     fn map_bounds_expand_multiple_points() {
         let mut bounds = MapBounds::empty();
-        bounds.expand(-100.0, -50.0);
-        bounds.expand(200.0, 150.0);
-        bounds.expand(0.0, 0.0);
+        bounds.expand(-100.0, -50.0, 0.0);
+        bounds.expand(200.0, 150.0, 0.0);
+        bounds.expand(0.0, 0.0, 0.0);
         assert!((bounds.min_x - (-100.0)).abs() < f32::EPSILON);
         assert!((bounds.max_x - 200.0).abs() < f32::EPSILON);
         assert!((bounds.min_y - (-50.0)).abs() < f32::EPSILON);
@@ -514,8 +528,8 @@ mod tests {
     #[test]
     fn map_bounds_width_and_height() {
         let mut bounds = MapBounds::empty();
-        bounds.expand(-50.0, -30.0);
-        bounds.expand(50.0, 70.0);
+        bounds.expand(-50.0, -30.0, 0.0);
+        bounds.expand(50.0, 70.0, 0.0);
         assert!((bounds.width() - 100.0).abs() < f32::EPSILON);
         assert!((bounds.height() - 100.0).abs() < f32::EPSILON);
     }
@@ -523,7 +537,7 @@ mod tests {
     #[test]
     fn map_bounds_width_minimum_is_one() {
         let mut bounds = MapBounds::empty();
-        bounds.expand(5.0, 10.0);
+        bounds.expand(5.0, 10.0, 0.0);
         // Same point, width/height would be 0, but max(1.0) applies
         assert!((bounds.width() - 1.0).abs() < f32::EPSILON);
         assert!((bounds.height() - 1.0).abs() < f32::EPSILON);
@@ -532,8 +546,8 @@ mod tests {
     #[test]
     fn map_bounds_center() {
         let mut bounds = MapBounds::empty();
-        bounds.expand(-100.0, -50.0);
-        bounds.expand(100.0, 50.0);
+        bounds.expand(-100.0, -50.0, 0.0);
+        bounds.expand(100.0, 50.0, 0.0);
         assert!((bounds.center_x()).abs() < f32::EPSILON);
         assert!((bounds.center_y()).abs() < f32::EPSILON);
     }
@@ -541,8 +555,8 @@ mod tests {
     #[test]
     fn map_bounds_center_offset() {
         let mut bounds = MapBounds::empty();
-        bounds.expand(100.0, 200.0);
-        bounds.expand(200.0, 400.0);
+        bounds.expand(100.0, 200.0, 0.0);
+        bounds.expand(200.0, 400.0, 0.0);
         assert!((bounds.center_x() - 150.0).abs() < f32::EPSILON);
         assert!((bounds.center_y() - 300.0).abs() < f32::EPSILON);
     }

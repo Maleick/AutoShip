@@ -1,36 +1,7 @@
 import { useEffect, useState } from "react";
-import { FloppyDisk, FileText, Clock, Warning } from "@phosphor-icons/react";
-import type { ChatLogConfig, ChatChannel, LogLevel, RotationStrategy } from "../types";
-
-const DEFAULT_CONFIG: ChatLogConfig = {
-  enabled: false,
-  channels: ["mq2"],
-  rotation_strategy: { size: 10 * 1024 * 1024 },
-  max_file_size_bytes: 10 * 1024 * 1024,
-  min_level: "info",
-  log_eq_chat: false,
-};
-
-const ALL_CHANNELS: { id: ChatChannel; label: string }[] = [
-  { id: "mq2", label: "MQ2 Output" },
-  { id: "say", label: "Say" },
-  { id: "tell", label: "Tell" },
-  { id: "group", label: "Group" },
-  { id: "raid", label: "Raid" },
-  { id: "guild", label: "Guild" },
-  { id: "ooc", label: "OOC" },
-  { id: "shout", label: "Shout" },
-  { id: "auction", label: "Auction" },
-  { id: "pet", label: "Pet" },
-];
-
-const LOG_LEVELS: { id: LogLevel; label: string }[] = [
-  { id: "trace", label: "Trace" },
-  { id: "debug", label: "Debug" },
-  { id: "info", label: "Info" },
-  { id: "warn", label: "Warn" },
-  { id: "error", label: "Error" },
-];
+import { FloppyDisk, Notepad } from "@phosphor-icons/react";
+import type { ChatChannel, ChatLogSettings, LogLevel, LogRotation } from "../types";
+import { useChatLogSettings } from "../hooks/useChatLogSettings";
 
 function StatusBanner({
   tone,
@@ -72,7 +43,7 @@ function ToggleField({
         type="checkbox"
         checked={value}
         onChange={(event) => onChange(event.target.checked)}
-        className="mt-1 h-4 w-4 accent-cyan-400"
+        className="mt-1 h-4 w-4 accent-magentaglow"
       />
     </label>
   );
@@ -87,18 +58,20 @@ function SelectField({
   label: string;
   value: string;
   onChange: (value: string) => void;
-  options: { id: string; label: string }[];
+  options: { value: string; label: string }[];
 }) {
   return (
     <label className="flex flex-col gap-2">
-      <span className="text-xs uppercase tracking-[0.18em] text-white/45">{label}</span>
+      <span className="text-xs uppercase tracking-[0.18em] text-white/45">
+        {label}
+      </span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="rounded-2xl border border-white/15 bg-[#0d0715] px-3 py-2 text-white outline-none transition-colors focus:border-cyan-300/40"
       >
         {options.map((opt) => (
-          <option key={opt.id} value={opt.id}>
+          <option key={opt.value} value={opt.value}>
             {opt.label}
           </option>
         ))}
@@ -107,137 +80,77 @@ function SelectField({
   );
 }
 
-function NumberField({
-  label,
-  value,
-  onChange,
-  suffix,
-}: {
-  label: string;
-  value: number;
-  onChange: (value: number) => void;
-  suffix?: string;
-}) {
-  return (
-    <label className="flex flex-col gap-2">
-      <span className="text-xs uppercase tracking-[0.18em] text-white/45">
-        {label}
-      </span>
-      <div className="flex items-center gap-2">
-        <input
-          type="number"
-          value={value}
-          onChange={(event) => onChange(Number(event.target.value))}
-          className="flex-1 rounded-2xl border border-white/15 bg-[#0d0715] px-3 py-2 text-white outline-none transition-colors focus:border-cyan-300/40"
-        />
-        {suffix && <span className="text-sm text-white/45">{suffix}</span>}
-      </div>
-    </label>
-  );
-}
+const ALL_CHANNELS: { value: ChatChannel; label: string }[] = [
+  { value: "say", label: "Say" },
+  { value: "tell", label: "Tell (incoming)" },
+  { value: "tell_out", label: "Tell (outgoing)" },
+  { value: "group", label: "Group" },
+  { value: "guild", label: "Guild" },
+  { value: "raid", label: "Raid" },
+  { value: "shout", label: "Shout" },
+  { value: "ooc", label: "OOC" },
+  { value: "auction", label: "Auction" },
+];
 
 export default function ChatLogPanel() {
-  const [config, setConfig] = useState<ChatLogConfig>(DEFAULT_CONFIG);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const { settings, loading, saving, error, savedAt, save, toggleChannel } =
+    useChatLogSettings();
+  const [draft, setDraft] = useState<ChatLogSettings>(settings);
 
   useEffect(() => {
-    async function loadConfig() {
-      setLoading(true);
-      try {
-        const res = await fetch("/api/chat-log/settings");
-        if (res.ok) {
-          const data = await res.json();
-          setConfig(data);
-        }
-      } catch {
-        // Use defaults
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadConfig();
-  }, []);
+    setDraft(settings);
+  }, [settings]);
+
+  const canSave = !loading && !saving;
 
   async function handleSave() {
-    setSaving(true);
-    setError(null);
+    if (!canSave) {
+      return;
+    }
+
     try {
-      const res = await fetch("/api/chat-log/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `HTTP ${res.status}`);
-      }
-      setSavedAt(Date.now());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save chat log settings");
-    } finally {
-      setSaving(false);
+      await save(draft);
+    } catch {
+      // Error is handled by the hook
     }
   }
 
-  function toggleChannel(channel: ChatChannel) {
-    setConfig((prev) => ({
-      ...prev,
-      channels: prev.channels.includes(channel)
-        ? prev.channels.filter((c) => c !== channel)
-        : [...prev.channels, channel],
-    }));
+  function updateRotation(rotation: LogRotation) {
+    setDraft((prev) => ({ ...prev, rotation }));
   }
 
-  function formatRotationStrategy(strategy: RotationStrategy): string {
-    if (strategy === "none") return "none";
-    if ("daily" in strategy) return "daily";
-    if ("size" in strategy) {
-      const mb = Math.round(strategy.size / (1024 * 1024));
-      return `size:${mb}`;
-    }
-    return "daily";
+  function updateLevel(level: LogLevel) {
+    setDraft((prev) => ({ ...prev, level }));
   }
 
-  function parseRotationStrategy(value: string): RotationStrategy {
-    if (value === "none") return "none";
-    if (value === "daily") return { daily: null };
-    if (value.startsWith("size:")) {
-      const mb = parseInt(value.replace("size:", ""), 10);
-      return { size: mb * 1024 * 1024 };
-    }
-    return { size: 10 * 1024 * 1024 };
-  }
-
-  const rotationDisplay = formatRotationStrategy(config.rotation_strategy);
+  const rotationType =
+    draft.rotation.type === "by_size" ? "by_size" : draft.rotation.type;
 
   return (
-    <section className="rounded-[1.5rem] border border-cyan-400/20 bg-[#120a1d]/88 p-5 shadow-[0_12px_40px_rgba(34,211,238,0.08)] backdrop-blur">
+    <section className="rounded-[1.5rem] border border-fuchsia-400/20 bg-[#120a1d]/88 p-5 shadow-[0_12px_40px_rgba(217,70,239,0.08)] backdrop-blur">
       <div className="flex items-center justify-between gap-6 border-b border-white/10 pb-6">
         <div>
-          <div className="flex items-center gap-3 text-cyan-200">
-            <FileText size={20} weight="fill" />
+          <div className="flex items-center gap-3 text-fuchsia-200">
+            <Notepad size={20} weight="fill" />
             <span className="text-xs uppercase tracking-[0.32em] text-white/45">
-              Chat Logging
+              MQ2Log Parity
             </span>
           </div>
           <h2 className="mt-3 font-archaic text-3xl uppercase tracking-[0.12em] text-white">
-            Per-Character Chat Log
+            Chat Output Logging
           </h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-white/65">
-            Write chat output to <code>logs/server_charname.log</code> files.
-            Log rotation and level filtering supported. Config persisted to{" "}
-            <code>config/textquest.toml</code>.
+            Persist per-character chat logs to <code>logs/server_charname.log</code>.{" "}
+            Configure rotation strategy and channel filtering to control what gets
+            logged.
           </p>
         </div>
 
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
-          className="inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-300/20 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={!canSave}
+          className="inline-flex items-center gap-2 rounded-full border border-fuchsia-300/30 bg-fuchsia-300/10 px-4 py-2 text-sm font-semibold text-fuchsia-100 transition-colors hover:bg-fuchsia-300/20 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <FloppyDisk size={16} />
           {saving ? "Saving..." : "Save Settings"}
@@ -246,121 +159,82 @@ export default function ChatLogPanel() {
 
       <div className="mt-6 space-y-4">
         {loading ? (
-          <StatusBanner tone="neutral" text="Loading chat log settings..." />
+          <StatusBanner tone="neutral" text="Loading persisted chat log settings..." />
         ) : error ? (
           <StatusBanner tone="error" text={error} />
         ) : savedAt ? (
           <StatusBanner tone="success" text={`Saved ${new Date(savedAt).toLocaleTimeString()}`} />
-        ) : null}
+        ) : (
+          <StatusBanner
+            tone="neutral"
+            text="Enable chat logging, choose your rotation strategy, and select which channels to capture."
+          />
+        )}
       </div>
 
-      <div className="mt-8 space-y-6">
-        <ToggleField
-          label="Enable chat logging"
-          value={config.enabled}
-          onChange={(enabled) => setConfig((prev) => ({ ...prev, enabled }))}
-          detail="Write chat output to log files per character"
-        />
+      <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_1.2fr]">
+        <div className="space-y-4">
+          <ToggleField
+            label="Enable chat output logging"
+            value={draft.enabled}
+            onChange={(enabled) => setDraft((prev) => ({ ...prev, enabled }))}
+            detail="Writes all captured chat to logs/server_charname.log"
+          />
 
-        <ToggleField
-          label="Log EQ chat channels"
-          value={config.log_eq_chat}
-          onChange={(log_eq_chat) => setConfig((prev) => ({ ...prev, log_eq_chat }))}
-          detail="Capture regular game chat (say, tell, group, etc.) in addition to MQ2 output"
-        />
-
-        <div className="rounded-3xl border border-white/10 bg-[#0d0715] p-5">
-          <h3 className="mb-4 font-archaic text-lg uppercase tracking-[0.16em] text-white">
-            Channels to Log
-          </h3>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
-            {ALL_CHANNELS.map((ch) => (
-              <label
-                key={ch.id}
-                className={`flex items-center gap-2 rounded-xl border px-3 py-2 cursor-pointer transition-colors ${
-                  config.channels.includes(ch.id)
-                    ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"
-                    : "border-white/10 bg-white/5 text-white/60 hover:border-white/20"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={config.channels.includes(ch.id)}
-                  onChange={() => toggleChannel(ch.id)}
-                  className="h-3 w-3 accent-cyan-400"
-                />
-                <span className="text-sm">{ch.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
           <SelectField
-            label="Rotation Strategy"
-            value={rotationDisplay}
-            onChange={(value) =>
-              setConfig((prev) => ({
-                ...prev,
-                rotation_strategy: parseRotationStrategy(value),
-              }))
-            }
+            label="Log Rotation"
+            value={rotationType}
+            onChange={(value) => {
+              if (value === "none") {
+                updateRotation({ type: "none" });
+              } else if (value === "daily") {
+                updateRotation({ type: "daily" });
+              } else {
+                updateRotation({ type: "by_size", size: 5 * 1024 * 1024 });
+              }
+            }}
             options={[
-              { id: "daily", label: "Daily" },
-              { id: "size:10", label: "10 MB" },
-              { id: "size:25", label: "25 MB" },
-              { id: "size:50", label: "50 MB" },
-              { id: "none", label: "None (append)" },
+              { value: "none", label: "No rotation (append indefinitely)" },
+              { value: "daily", label: "Daily rotation" },
+              { value: "by_size", label: "By file size (5 MB)" },
             ]}
           />
 
           <SelectField
-            label="Minimum Log Level"
-            value={config.min_level}
-            onChange={(value) =>
-              setConfig((prev) => ({ ...prev, min_level: value as LogLevel }))
-            }
-            options={LOG_LEVELS}
-          />
-
-          <NumberField
-            label="Max File Size (MB)"
-            value={Math.round(config.max_file_size_bytes / (1024 * 1024))}
-            onChange={(value) =>
-              setConfig((prev) => ({
-                ...prev,
-                max_file_size_bytes: value * 1024 * 1024,
-              }))
-            }
-            suffix="MB"
+            label="Log Level"
+            value={draft.level}
+            onChange={(value) => updateLevel(value as LogLevel)}
+            options={[
+              { value: "info", label: "Info (standard output)" },
+              { value: "debug", label: "Debug (with server/character metadata)" },
+            ]}
           />
         </div>
 
-        <div className="rounded-3xl border border-white/10 bg-[#0d0715] p-5">
-          <div className="flex items-center gap-3 text-cyan-200">
-            <Clock size={18} weight="bold" />
-            <h3 className="font-archaic text-xl uppercase tracking-[0.16em] text-white">
-              Log File Format
-            </h3>
+        <div className="space-y-4">
+          <div className="text-xs uppercase tracking-[0.18em] text-white/45">
+            Chat Channels
           </div>
-          <ul className="mt-4 space-y-3 text-sm leading-6 text-white/65">
-            <li>
-              Files are written to the <code>logs/</code> directory relative to the
-              TextQuest executable.
-            </li>
-            <li>
-              File naming: <code>server_character.log</code> (e.g.,{" "}
-              <code>Firiona Vie_Kira.log</code>).
-            </li>
-            <li>
-              Each log entry is timestamped with millisecond precision:{" "}
-              <code>2024-01-15 14:32:05.123 [INFO] message</code>.
-            </li>
-            <li>
-              <Warning size={14} className="inline text-amber-400" /> Log files can grow
-              large during long sessions. Use rotation to manage disk usage.
-            </li>
-          </ul>
+          <div className="grid grid-cols-2 gap-2">
+            {ALL_CHANNELS.map((channel) => (
+              <label
+                key={channel.value}
+                className="flex items-center gap-2 rounded-xl border border-white/10 bg-[#0d0715] px-3 py-2 cursor-pointer hover:border-white/20 transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={draft.channels.length === 0 || draft.channels.includes(channel.value)}
+                  onChange={() => toggleChannel(channel.value)}
+                  className="h-4 w-4 accent-magentaglow"
+                />
+                <span className="text-sm text-white/80">{channel.label}</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-white/40">
+            Leave all unchecked to log all channels. Selected channels are
+            included when list is non-empty.
+          </p>
         </div>
       </div>
     </section>

@@ -5,7 +5,7 @@ use std::path::Path;
 use textquest_common::box_chat::BoxChatConfig;
 use textquest_soul::config::SoulConfig;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlayerFilterMode {
     #[default]
@@ -13,6 +13,7 @@ pub enum PlayerFilterMode {
     StrangersOnly,
     FriendsOnly,
 }
+
 // ─── Account Configuration ───────────────────────────────────────────────
 
 /// A single account entry from config/accounts.toml.
@@ -283,9 +284,6 @@ pub struct AppConfig {
     /// Kill tracker configuration for auto-reporting and session tracking.
     #[serde(default)]
     pub kill_tracker: KillTrackerConfig,
-    /// Weighted item upgrade scoring configuration (MQ2ItemScore parity).
-    #[serde(default)]
-    pub item_score: crate::loot::ItemScoreConfig,
 
     /// Say detection and alerting configuration.
     #[serde(default)]
@@ -632,7 +630,7 @@ pub struct ToonConfig {
     /// Account name this toon belongs to.
     #[serde(default)]
     pub account: Option<String>,
-    /// Unattended camp-out + delayed relog settings after death.
+    /// Unattended death auto-camp and relog behavior.
     #[serde(default)]
     pub auto_camp_on_death: AutoCampOnDeathConfig,
 }
@@ -828,7 +826,6 @@ impl AppConfig {
             chat_log: crate::chat_log::ChatLogConfig::default(),
             timing_correction: false,
             kill_tracker: KillTrackerConfig::default(),
-            item_score: crate::loot::ItemScoreConfig::default(),
             say_detection: SayDetectionConfig::default(),
         }
     }
