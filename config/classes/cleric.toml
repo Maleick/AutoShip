@@ -2,33 +2,264 @@ class_name = "cleric"
 role = "healer"
 rest_command = "/sit"
 
+# Base combat abilities for levels 1+
 [[combat_abilities]]
-name = "Complete Heal"
-command = "/cast 1"
-cooldown_secs = 10.0
-priority = 1
+name = "Cure Poison"
+command = "/cast cure_poison"
+cooldown_secs = 8.0
+priority = 4
 
 [[combat_abilities]]
-name = "Fast Heal"
-command = "/cast 2"
+name = "Cure Disease"
+command = "/cast cure_disease"
+cooldown_secs = 8.0
+priority = 5
+
+# Base buff abilities for levels 1+
+[[buff_abilities]]
+name = "Spirit of the Shaman"
+command = "/cast spirit_shaman"
+cooldown_secs = 600.0
+priority = 1
+duration_secs = 600.0
+
+[[buff_abilities]]
+name = "Divine Blessing"
+command = "/cast divine_blessing"
+cooldown_secs = 600.0
+priority = 2
+duration_secs = 600.0
+
+# Base emergency abilities for levels 1+
+[[emergency_abilities]]
+name = "Healing of the Champion"
+command = "/cast heal_champion"
+cooldown_secs = 12.0
+priority = 0
+
+# ============================================================================
+# Level tier: 1-29 (Novice healing)
+# ============================================================================
+[[level_overrides]]
+name = "Novice (1-29)"
+min_level = 1
+max_level = 29
+
+[[level_overrides.combat_abilities]]
+name = "Light Healing"
+command = "/cast light_heal"
+cooldown_secs = 4.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Cure Light Wounds"
+command = "/cast cure_light"
+cooldown_secs = 6.0
+priority = 2
+
+[[level_overrides.emergency_abilities]]
+name = "Divine Intervention"
+command = "/cast divine_interv"
+cooldown_secs = 20.0
+priority = 0
+condition = "target_hp_below_25"
+
+# ============================================================================
+# Level tier: 30-49 (Apprentice healing with group support)
+# ============================================================================
+[[level_overrides]]
+name = "Apprentice (30-49)"
+min_level = 30
+max_level = 49
+
+[[level_overrides.combat_abilities]]
+name = "Greater Healing"
+command = "/cast greater_heal"
+cooldown_secs = 5.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Healing Light"
+command = "/cast healing_light"
 cooldown_secs = 3.0
 priority = 2
 
-[[emergency_abilities]]
+[[level_overrides.combat_abilities]]
+name = "Cure Poison"
+command = "/cast cure_poison"
+cooldown_secs = 8.0
+priority = 4
+
+[[level_overrides.buff_abilities]]
+name = "Group Haste"
+command = "/cast group_haste"
+cooldown_secs = 600.0
+priority = 3
+duration_secs = 600.0
+
+[[level_overrides.emergency_abilities]]
 name = "Divine Arbitration"
-command = "/cast 3"
-cooldown_secs = 30.0
+command = "/cast divine_arb"
+cooldown_secs = 25.0
 priority = 0
 condition = "target_hp_below_20"
 
-[[buff_abilities]]
-name = "HP Buff"
-command = "/cast 7"
-cooldown_secs = 600.0
+# ============================================================================
+# Level tier: 50-60 (Veteran healing with nukes)
+# ============================================================================
+[[level_overrides]]
+name = "Veteran (50-60)"
+min_level = 50
+max_level = 60
+
+[[level_overrides.combat_abilities]]
+name = "Complete Heal"
+command = "/cast complete_heal"
+cooldown_secs = 8.0
 priority = 1
 
-[[buff_abilities]]
-name = "AC Buff"
-command = "/cast 8"
+[[level_overrides.combat_abilities]]
+name = "Fast Heal"
+command = "/cast fast_heal"
+cooldown_secs = 3.5
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Holy Strike"
+command = "/cast holy_strike"
+cooldown_secs = 10.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Cure Poison"
+command = "/cast cure_poison"
+cooldown_secs = 8.0
+priority = 5
+
+[[level_overrides.buff_abilities]]
+name = "Plate of Protection"
+command = "/cast plate_protect"
 cooldown_secs = 600.0
+priority = 1
+duration_secs = 600.0
+
+[[level_overrides.buff_abilities]]
+name = "Spirit of the Shaman"
+command = "/cast spirit_shaman"
+cooldown_secs = 600.0
+priority = 2
+duration_secs = 600.0
+
+[[level_overrides.buff_abilities]]
+name = "Divine Blessing"
+command = "/cast divine_blessing"
+cooldown_secs = 600.0
+priority = 3
+duration_secs = 600.0
+
+[[level_overrides.emergency_abilities]]
+name = "Divine Arbitration"
+command = "/cast divine_arb"
+cooldown_secs = 30.0
+priority = 0
+condition = "target_hp_below_15"
+
+[[level_overrides.emergency_abilities]]
+name = "Group Heal"
+command = "/cast group_heal"
+cooldown_secs = 60.0
+priority = 1
+condition = "group_avg_hp_below_50"
+
+# ============================================================================
+# Level tier: 61-65 (Master healing with full rotation)
+# ============================================================================
+[[level_overrides]]
+name = "Master (61-65)"
+min_level = 61
+max_level = 65
+
+[[level_overrides.combat_abilities]]
+name = "Complete Heal"
+command = "/cast complete_heal"
+cooldown_secs = 7.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Fast Heal"
+command = "/cast fast_heal"
+cooldown_secs = 3.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Holy Strike"
+command = "/cast holy_strike"
+cooldown_secs = 8.0
+priority = 3
+
+[[level_overrides.combat_abilities]]
+name = "Celestial Fury"
+command = "/cast celestial_fury"
+cooldown_secs = 15.0
+priority = 4
+
+[[level_overrides.combat_abilities]]
+name = "Cure Poison"
+command = "/cast cure_poison"
+cooldown_secs = 8.0
+priority = 6
+
+[[level_overrides.buff_abilities]]
+name = "Holy Protection"
+command = "/cast holy_protect"
+cooldown_secs = 600.0
+priority = 1
+duration_secs = 600.0
+
+[[level_overrides.buff_abilities]]
+name = "Plate of Protection"
+command = "/cast plate_protect"
+cooldown_secs = 600.0
+priority = 2
+duration_secs = 600.0
+
+[[level_overrides.buff_abilities]]
+name = "Spirit of the Shaman"
+command = "/cast spirit_shaman"
+cooldown_secs = 600.0
+priority = 3
+duration_secs = 600.0
+
+[[level_overrides.buff_abilities]]
+name = "Divine Blessing"
+command = "/cast divine_blessing"
+cooldown_secs = 600.0
+priority = 4
+duration_secs = 600.0
+
+[[level_overrides.buff_abilities]]
+name = "Resist Magic"
+command = "/cast resist_magic"
+cooldown_secs = 600.0
+priority = 5
+duration_secs = 600.0
+
+[[level_overrides.emergency_abilities]]
+name = "Divine Arbitration"
+command = "/cast divine_arb"
+cooldown_secs = 25.0
+priority = 0
+condition = "target_hp_below_10"
+
+[[level_overrides.emergency_abilities]]
+name = "Group Heal"
+command = "/cast group_heal"
+cooldown_secs = 45.0
+priority = 1
+condition = "group_avg_hp_below_40"
+
+[[level_overrides.emergency_abilities]]
+name = "Healing of the Champion"
+command = "/cast heal_champion"
+cooldown_secs = 12.0
 priority = 2
