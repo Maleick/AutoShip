@@ -206,6 +206,7 @@ mod tests {
         assert_eq!(default_cooldown(30), Some(140)); // kick
         assert_eq!(default_cooldown(10), Some(200)); // bash
         assert_eq!(default_cooldown(73), Some(120)); // taunt
+        assert_eq!(default_cooldown(56), Some(240)); // frenzy
         assert_eq!(default_cooldown(999), None); // unknown
     }
 

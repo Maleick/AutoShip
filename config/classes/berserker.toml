@@ -3,25 +3,118 @@ role = "dps"
 rest_command = "/sit"
 
 [[combat_abilities]]
-name = "Attack"
-command = "/attack"
-cooldown_secs = 0.0
-priority = 1
-
-[[combat_abilities]]
 name = "Frenzy"
-command = "/disc 1"
-cooldown_secs = 6.0
+command = "/doability frenzy"
+cooldown_secs = 12.0
 priority = 2
+condition = "endurance_above_15"
 
-[[combat_abilities]]
-name = "Volley"
-command = "/disc 2"
-cooldown_secs = 30.0
+[[level_overrides]]
+name = "berserker-60"
+min_level = 60
+max_level = 60
+
+[[level_overrides.combat_abilities]]
+name = "Burning Rage Discipline"
+command = "/disc \"Burning Rage Discipline\""
+cooldown_secs = 1800.0
+priority = 1
+condition = "endurance_above_60 and target_hp_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Frenzy"
+command = "/doability frenzy"
+cooldown_secs = 12.0
+priority = 2
+condition = "endurance_above_15"
+
+[[level_overrides]]
+name = "berserker-61"
+min_level = 61
+max_level = 61
+
+[[level_overrides.combat_abilities]]
+name = "Burning Rage Discipline"
+command = "/disc \"Burning Rage Discipline\""
+cooldown_secs = 1800.0
+priority = 1
+condition = "endurance_above_60 and target_hp_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Rage Volley"
+command = "/disc \"Rage Volley\""
+cooldown_secs = 12.0
+priority = 2
+condition = "endurance_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Frenzy"
+command = "/doability frenzy"
+cooldown_secs = 12.0
 priority = 3
+condition = "endurance_above_15"
 
-[[combat_abilities]]
-name = "Rage"
-command = "/disc 3"
-cooldown_secs = 120.0
+[[level_overrides]]
+name = "berserker-62"
+min_level = 62
+max_level = 64
+
+[[level_overrides.combat_abilities]]
+name = "Burning Rage Discipline"
+command = "/disc \"Burning Rage Discipline\""
+cooldown_secs = 1800.0
+priority = 1
+condition = "endurance_above_60 and target_hp_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Rage Volley"
+command = "/disc \"Rage Volley\""
+cooldown_secs = 12.0
+priority = 2
+condition = "endurance_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Frenzy"
+command = "/doability frenzy"
+cooldown_secs = 12.0
+priority = 3
+condition = "endurance_above_15"
+
+[[level_overrides]]
+name = "berserker-65"
+min_level = 65
+
+[[level_overrides.combat_abilities]]
+name = "Ancient: Cry of Chaos"
+command = "/disc \"Ancient: Cry of Chaos\""
+cooldown_secs = 1800.0
+priority = 1
+condition = "endurance_above_70 and target_hp_above_60"
+
+[[level_overrides.combat_abilities]]
+name = "Burning Rage Discipline"
+command = "/disc \"Burning Rage Discipline\""
+cooldown_secs = 1800.0
+priority = 2
+condition = "endurance_above_60 and target_hp_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Cleaving Anger Discipline"
+command = "/disc \"Cleaving Anger Discipline\""
+cooldown_secs = 1320.0
+priority = 3
+condition = "endurance_above_45 and target_hp_above_40"
+
+[[level_overrides.combat_abilities]]
+name = "Rage Volley"
+command = "/disc \"Rage Volley\""
+cooldown_secs = 12.0
 priority = 4
+condition = "endurance_above_25"
+
+[[level_overrides.combat_abilities]]
+name = "Frenzy"
+command = "/doability frenzy"
+cooldown_secs = 12.0
+priority = 5
+condition = "endurance_above_15"

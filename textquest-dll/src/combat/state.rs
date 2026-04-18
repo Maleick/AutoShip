@@ -18,7 +18,7 @@ use textquest_common::{
 };
 
 use super::{
-    ability_cooldowns::AbilityCooldownTracker,
+    ability_cooldowns::{AbilityCooldownTracker, metadata_for_activated_ability},
     dot_tracker::DotTracker,
     gcd::GcdTracker,
     holyshit::HolyShitEvaluator,
@@ -480,6 +480,7 @@ fn execute_rotation_action(
 const COMBAT_SKILL_ID_TAUNT: u32 = 73;
 const COMBAT_SKILL_ID_BASH: u32 = 10;
 const COMBAT_SKILL_ID_KICK: u32 = 30;
+const COMBAT_SKILL_ID_FRENZY: u32 = 56;
 const COMBAT_SKILL_ID_FLYING_KICK: u32 = 26;
 const COMBAT_SKILL_ID_ROUND_KICK: u32 = 38;
 const COMBAT_SKILL_ID_TIGER_CLAW: u32 = 52;
@@ -492,6 +493,7 @@ const COMBAT_SKILL_IDS: &[(&str, u32)] = &[
     ("taunt", COMBAT_SKILL_ID_TAUNT),
     ("bash", COMBAT_SKILL_ID_BASH),
     ("kick", COMBAT_SKILL_ID_KICK),
+    ("frenzy", COMBAT_SKILL_ID_FRENZY),
     ("flyingkick", COMBAT_SKILL_ID_FLYING_KICK),
     ("roundkick", COMBAT_SKILL_ID_ROUND_KICK),
     ("tigerclaw", COMBAT_SKILL_ID_TIGER_CLAW),
@@ -849,7 +851,9 @@ impl Combatant {
         }
 
         // Fire melee skills when engaging (independent of GCD/spell casting)
-        if matches!(self.state, CombatState::Engaging { .. }) {
+        if matches!(self.state, CombatState::Engaging { .. })
+            && self.strategy.uses_builtin_combat_drivers()
+        {
             let class_id = self.strategy.class_id();
             if !self.strategy.manages_melee_skills_in_rotation() {
                 self.tick_melee_skills(class_id, player);
@@ -2846,6 +2850,7 @@ mod tests {
     fn combat_skill_id_maps_known_rotation_skills() {
         assert_eq!(combat_skill_id("Taunt"), Some(73));
         assert_eq!(combat_skill_id("Kick"), Some(30));
+        assert_eq!(combat_skill_id("Frenzy"), Some(56));
         assert_eq!(combat_skill_id("Flying Kick"), Some(26));
         assert_eq!(combat_skill_id("Mend"), Some(53));
         assert_eq!(combat_skill_id("Feign Death"), Some(25));

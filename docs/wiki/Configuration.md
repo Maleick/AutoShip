@@ -174,6 +174,12 @@ For Bard, unit tests keep the live-safe runtime rotation data synchronized with 
 
 Rogue ships explicit level breakpoints for 60, 61, 62, and 65 so the operator-facing TOML stays aligned with the injected DLL's burn and utility tuning.
 
+Class configs can also define `[[level_overrides]]` with nested
+`combat_abilities`, `buff_abilities`, `emergency_abilities`, `cc_abilities`,
+and `debuff_abilities` sections when a class needs explicit breakpoint tuning.
+The Berserker profile now uses level-gated 60/61/62/65 combat overrides to
+keep its endurance-aware burn order aligned with the runtime rotation.
+
 Current repo coverage includes classes such as:
 
 - bard

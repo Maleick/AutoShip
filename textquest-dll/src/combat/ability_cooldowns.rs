@@ -153,6 +153,19 @@ impl AbilityCooldownTracker {
         })
     }
 
+    /// Whether an ability is ready, accounting for both its direct cooldown
+    /// and an optional shared timer lockout.
+    #[inline]
+    pub fn can_use_with_shared(
+        &self,
+        ability_id: i32,
+        shared_timer_id: Option<u8>,
+        now: u32,
+    ) -> bool {
+        self.can_use(ability_id, now)
+            && shared_timer_id.is_none_or(|timer_id| self.can_use(shared_timer_key(timer_id), now))
+    }
+
     /// Mark an ability as consumed with a known cooldown, or fall back to a
     /// retry window when metadata is missing or invalid.
     pub fn consume(
@@ -174,6 +187,105 @@ impl AbilityCooldownTracker {
             );
             self.upsert(Self::shared_timer_id(shared_timer_key), shared_state);
         }
+    }
+
+    /// Mark a shared timer as consumed without shortening an existing lockout.
+    fn consume_shared_timer(&mut self, timer_key: i32, cooldown_ticks: Option<u32>, now: u32) {
+        let new_state = match cooldown_ticks {
+            Some(ticks) if ticks > 0 => AbilityAvailability::CoolingDown(ticks),
+            _ => AbilityAvailability::WaitingForRetry {
+                retry_at: now.saturating_add(self.fallback_retry_ticks),
+            },
+        };
+
+        for i in 0..self.len {
+            if self.entries[i].0 == timer_key {
+                self.entries[i].1 = match (self.entries[i].1, new_state) {
+                    (
+                        AbilityAvailability::CoolingDown(existing_ticks),
+                        AbilityAvailability::CoolingDown(new_ticks),
+                    ) => AbilityAvailability::CoolingDown(existing_ticks.max(new_ticks)),
+                    (
+                        AbilityAvailability::WaitingForRetry {
+                            retry_at: existing_retry_at,
+                        },
+                        AbilityAvailability::WaitingForRetry {
+                            retry_at: new_retry_at,
+                        },
+                    ) => AbilityAvailability::WaitingForRetry {
+                        retry_at: existing_retry_at.max(new_retry_at),
+                    },
+                    (AbilityAvailability::CoolingDown(existing_ticks), _) => {
+                        AbilityAvailability::CoolingDown(existing_ticks)
+                    }
+                    (_, AbilityAvailability::CoolingDown(new_ticks)) => {
+                        AbilityAvailability::CoolingDown(new_ticks)
+                    }
+                };
+                return;
+            }
+        }
+
+        if self.len < MAX_TRACKED_ABILITIES {
+            self.entries[self.len] = (timer_key, new_state);
+            self.len += 1;
+        }
+    }
+
+    /// Consume an ability and its shared timer bucket together.
+    pub fn consume_with_shared(
+        &mut self,
+        ability_id: i32,
+        cooldown_ticks: Option<u32>,
+        shared_timer_id: Option<u8>,
+        now: u32,
+    ) {
+        self.consume(ability_id, cooldown_ticks, now);
+        if let Some(timer_id) = shared_timer_id {
+            self.consume_shared_timer(shared_timer_key(timer_id), cooldown_ticks, now);
+        }
+    }
+}
+
+#[inline]
+fn shared_timer_key(timer_id: u8) -> i32 {
+    SHARED_TIMER_KEY_BASE - i32::from(timer_id)
+}
+
+/// Lookup cooldown metadata for known live-safe activated ability lines.
+///
+/// The rotation engine resolves the set name and the concrete ability name
+/// separately. Matching both lets us keep stable timer metadata across
+/// multiple ranks in the same line without hard-coding spell IDs.
+#[must_use]
+pub fn metadata_for_activated_ability(
+    entry_name: &str,
+    ability_name: &str,
+) -> Option<AbilityReuseMetadata> {
+    match (entry_name, ability_name) {
+        ("PrimaryBurn", "Burning Rage Discipline") => Some(AbilityReuseMetadata {
+            cooldown_ticks: Some(36_000),
+            shared_timer_id: Some(BERSERKER_TIMER_PRIMARY_BURN),
+        }),
+        ("PrimaryBurn", "Blind Rage Discipline") => Some(AbilityReuseMetadata {
+            cooldown_ticks: Some(6_000),
+            shared_timer_id: Some(BERSERKER_TIMER_PRIMARY_BURN),
+        }),
+        ("Volley", "Rage Volley") => Some(AbilityReuseMetadata {
+            cooldown_ticks: Some(240),
+            shared_timer_id: Some(BERSERKER_TIMER_VOLLEY),
+        }),
+        ("BattleCry", "Ancient: Cry of Chaos" | "Battle Cry of the Mastruq") => {
+            Some(AbilityReuseMetadata {
+                cooldown_ticks: Some(36_000),
+                shared_timer_id: Some(BERSERKER_TIMER_BATTLE_CRY),
+            })
+        }
+        ("Cleave", "Cleaving Anger Discipline") => Some(AbilityReuseMetadata {
+            cooldown_ticks: Some(26_400),
+            shared_timer_id: Some(BERSERKER_TIMER_CLEAVE),
+        }),
+        _ => None,
     }
 }
 
