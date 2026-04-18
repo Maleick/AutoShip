@@ -351,4 +351,243 @@ mod tests {
             Some(None)
         );
     }
+
+    #[test]
+    fn from_game_state_returns_none_when_no_local_player() {
+        let state = GameState {
+            client_id: 1,
+            local_player: None,
+            target: None,
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status: CombatStatus::Idle,
+            zone_short_name: "nexus".into(),
+            zone_long_name: "The Nexus".into(),
+            active_buffs: Vec::new(),
+            pet: None,
+            actual_version: None,
+        };
+
+        assert!(SharedClientState::from_game_state(None, &state, false).is_none());
+    }
+
+    #[test]
+    fn from_game_state_falls_back_to_name_when_displayed_name_whitespace() {
+        let mut spawn = make_spawn();
+        spawn.displayed_name = "   ".into();
+        spawn.name = "Iceclaw".into();
+        let state = GameState {
+            client_id: 2,
+            local_player: Some(spawn),
+            target: None,
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status: CombatStatus::Idle,
+            zone_short_name: "velke".into(),
+            zone_long_name: "Velketor's Labyrinth".into(),
+            active_buffs: Vec::new(),
+            pet: None,
+            actual_version: None,
+        };
+
+        let shared = SharedClientState::from_game_state(None, &state, false).expect("state");
+        assert_eq!(shared.character_name, "Iceclaw");
+    }
+
+    #[test]
+    fn from_game_state_uses_fallback_name_when_both_names_empty() {
+        let mut spawn = make_spawn();
+        spawn.displayed_name = "".into();
+        spawn.name = "".into();
+        let state = GameState {
+            client_id: 3,
+            local_player: Some(spawn),
+            target: None,
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status: CombatStatus::Idle,
+            zone_short_name: "nexus".into(),
+            zone_long_name: "The Nexus".into(),
+            active_buffs: Vec::new(),
+            pet: None,
+            actual_version: None,
+        };
+
+        let shared =
+            SharedClientState::from_game_state(Some("MyFallback"), &state, false).expect("state");
+        assert_eq!(shared.character_name, "MyFallback");
+    }
+
+    #[test]
+    fn from_game_state_uses_unknown_when_both_names_empty_and_no_fallback() {
+        let mut spawn = make_spawn();
+        spawn.displayed_name = "".into();
+        spawn.name = "".into();
+        let state = GameState {
+            client_id: 4,
+            local_player: Some(spawn),
+            target: None,
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status: CombatStatus::Idle,
+            zone_short_name: "nexus".into(),
+            zone_long_name: "The Nexus".into(),
+            active_buffs: Vec::new(),
+            pet: None,
+            actual_version: None,
+        };
+
+        let shared = SharedClientState::from_game_state(None, &state, false).expect("state");
+        assert_eq!(shared.character_name, "Unknown");
+    }
+
+    #[test]
+    fn is_dead_when_hp_current_is_zero() {
+        let mut spawn = make_spawn();
+        spawn.hp_current = 0;
+        let state = GameState {
+            client_id: 5,
+            local_player: Some(spawn),
+            target: None,
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status: CombatStatus::Idle,
+            zone_short_name: "nexus".into(),
+            zone_long_name: "The Nexus".into(),
+            active_buffs: Vec::new(),
+            pet: None,
+            actual_version: None,
+        };
+
+        let shared = SharedClientState::from_game_state(None, &state, false).expect("state");
+        assert!(shared.is_dead);
+    }
+
+    #[test]
+    fn is_dead_when_combat_status_dead() {
+        let state = GameState {
+            client_id: 6,
+            local_player: Some(make_spawn()),
+            target: None,
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status: CombatStatus::Dead,
+            zone_short_name: "nexus".into(),
+            zone_long_name: "The Nexus".into(),
+            active_buffs: Vec::new(),
+            pet: None,
+            actual_version: None,
+        };
+
+        let shared = SharedClientState::from_game_state(None, &state, false).expect("state");
+        assert!(shared.is_dead);
+        assert_eq!(shared.status, "dead");
+    }
+
+    #[test]
+    fn combat_status_label_covers_all_variants() {
+        assert_eq!(combat_status_label(CombatStatus::Idle), "idle");
+        assert_eq!(combat_status_label(CombatStatus::Recovering), "idle");
+        assert_eq!(combat_status_label(CombatStatus::Dead), "dead");
+        assert_eq!(
+            combat_status_label(CombatStatus::Pulling { target_id: 1 }),
+            "pulling"
+        );
+        assert_eq!(
+            combat_status_label(CombatStatus::Engaging { target_id: 1 }),
+            "active"
+        );
+        assert_eq!(
+            combat_status_label(CombatStatus::Casting {
+                spell_slot: 0,
+                target_id: 1
+            }),
+            "active"
+        );
+        assert_eq!(combat_status_label(CombatStatus::OnGcd), "active");
+        assert_eq!(combat_status_label(CombatStatus::Fleeing), "fleeing");
+    }
+
+    #[test]
+    fn shared_buff_state_from_buff_info_with_extended() {
+        let buff = BuffInfo {
+            spell_id: 5678,
+            duration_ticks: 20,
+            initial_duration: 30,
+            hit_count: 0,
+            category: BuffCategory::ShortBuff,
+            caster_level: 55,
+            slot_index: 2,
+        };
+
+        let state = SharedBuffState::from_buff_info(&buff, true);
+        assert_eq!(state.spell_id, 5678);
+        assert_eq!(state.duration_ticks, Some(20));
+        assert_eq!(state.category, Some(BuffCategory::ShortBuff));
+    }
+
+    #[test]
+    fn shared_buff_state_from_buff_info_without_extended() {
+        let buff = BuffInfo {
+            spell_id: 5678,
+            duration_ticks: 20,
+            initial_duration: 30,
+            hit_count: 0,
+            category: BuffCategory::ShortBuff,
+            caster_level: 55,
+            slot_index: 2,
+        };
+
+        let state = SharedBuffState::from_buff_info(&buff, false);
+        assert_eq!(state.spell_id, 5678);
+        assert_eq!(state.duration_ticks, None);
+        assert_eq!(state.category, None);
+    }
+
+    #[test]
+    fn shared_pet_state_from_pet_data_with_extended_buffs() {
+        let pet = PetData {
+            spawn_id: 42,
+            name: "Fido".into(),
+            target_id: Some(10),
+            target_name: Some("an orc".into()),
+            buffs: vec![BuffInfo {
+                spell_id: 9999,
+                duration_ticks: 5,
+                initial_duration: 10,
+                hit_count: 0,
+                category: BuffCategory::LongBuff,
+                caster_level: 60,
+                slot_index: 0,
+            }],
+        };
+
+        let state = SharedPetState::from_pet_data(&pet, true);
+        assert_eq!(state.spawn_id, 42);
+        assert_eq!(state.name, "Fido");
+        assert_eq!(state.target_id, Some(10));
+        assert_eq!(state.buffs.len(), 1);
+        assert_eq!(state.buffs[0].duration_ticks, Some(5));
+    }
+
+    #[test]
+    fn shared_pet_state_from_pet_data_no_target_no_extended() {
+        let pet = PetData {
+            spawn_id: 11,
+            name: "Rex".into(),
+            target_id: None,
+            target_name: None,
+            buffs: Vec::new(),
+        };
+
+        let state = SharedPetState::from_pet_data(&pet, false);
+        assert_eq!(state.target_id, None);
+        assert!(state.buffs.is_empty());
+    }
 }

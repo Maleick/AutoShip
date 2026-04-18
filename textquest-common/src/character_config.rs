@@ -402,4 +402,95 @@ mod tests {
         let loaded = load_character_configs(&path).expect("load should succeed");
         assert!(loaded.is_empty());
     }
+
+    #[test]
+    fn reward_preference_for_task_returns_none_when_rules_empty() {
+        assert!(reward_preference_for_task(&[], "Any Task").is_none());
+    }
+
+    #[test]
+    fn reward_preference_for_task_uses_wildcard_fallback_when_no_exact_match() {
+        let rules = vec![
+            TaskRewardPreference {
+                task_matcher: "*".into(),
+                preference: RewardPreference::ByPosition { reward_position: 1 },
+            },
+            TaskRewardPreference {
+                task_matcher: "Specific Task".into(),
+                preference: RewardPreference::ByPosition { reward_position: 2 },
+            },
+        ];
+
+        let pref = reward_preference_for_task(&rules, "Other Task").expect("wildcard should match");
+        assert_eq!(pref, &RewardPreference::ByPosition { reward_position: 1 });
+    }
+
+    #[test]
+    fn reward_preference_for_task_prefers_exact_match_over_wildcard() {
+        let rules = vec![
+            TaskRewardPreference {
+                task_matcher: "*".into(),
+                preference: RewardPreference::ByPosition { reward_position: 1 },
+            },
+            TaskRewardPreference {
+                task_matcher: "Special Mission".into(),
+                preference: RewardPreference::ByPosition { reward_position: 3 },
+            },
+        ];
+
+        let pref =
+            reward_preference_for_task(&rules, "special mission").expect("exact match should win");
+        assert_eq!(pref, &RewardPreference::ByPosition { reward_position: 3 });
+    }
+
+    #[test]
+    fn resolve_reward_index_returns_none_when_rewards_empty() {
+        let config = RewardAutomationConfig {
+            rules: vec![TaskRewardPreference {
+                task_matcher: "*".into(),
+                preference: RewardPreference::ByPosition { reward_position: 1 },
+            }],
+        };
+        assert_eq!(resolve_reward_index("Any Task", &[], &config), None);
+    }
+
+    #[test]
+    fn resolve_reward_index_returns_first_when_no_rule_matches() {
+        let config = RewardAutomationConfig { rules: vec![] };
+        let rewards = vec!["A".to_string(), "B".to_string()];
+        assert_eq!(resolve_reward_index("Any Task", &rewards, &config), Some(0));
+    }
+
+    #[test]
+    fn resolve_reward_index_by_position_one_based_at_boundary() {
+        let config = RewardAutomationConfig {
+            rules: vec![TaskRewardPreference {
+                task_matcher: "Quest".into(),
+                preference: RewardPreference::ByPosition { reward_position: 1 },
+            }],
+        };
+        let rewards = vec!["First".to_string(), "Second".to_string()];
+        // Position 1 → index 0
+        assert_eq!(resolve_reward_index("Quest", &rewards, &config), Some(0));
+    }
+
+    #[test]
+    fn tribute_status_default_is_expired_and_inactive() {
+        let status = TributeStatus::default();
+        assert!(!status.active);
+        assert_eq!(status.remaining_secs, 0);
+        assert_eq!(status.point_balance, 0);
+        assert!(status.active_tributes.is_empty());
+        assert_eq!(status.alert_state, TributeAlertState::Expired);
+    }
+
+    #[test]
+    fn reward_preference_by_name_json_round_trip() {
+        let pref = RewardPreference::ByName {
+            reward_name: "Shiny Gem".into(),
+        };
+        let encoded = serde_json::to_string(&pref).expect("serialize");
+        let decoded: RewardPreference = serde_json::from_str(&encoded).expect("deserialize");
+        assert_eq!(decoded, pref);
+    }
 }

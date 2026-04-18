@@ -853,4 +853,107 @@ mod tests {
             Some("/squelch /nomodkey /shiftkey /itemnotify \"Master Smith Trophy\" leftmouseup")
         );
     }
+
+    #[test]
+    fn settings_is_configured_requires_enabled_and_nonempty_name() {
+        let mut s = TradeskillTrophySettings {
+            enabled: false,
+            trophy_item_name: "My Trophy".into(),
+        };
+        assert!(!s.is_configured(), "disabled should not be configured");
+
+        s.enabled = true;
+        assert!(s.is_configured(), "enabled with a name should be configured");
+
+        s.trophy_item_name = "   ".into();
+        assert!(
+            !s.is_configured(),
+            "enabled with whitespace-only name should not be configured"
+        );
+
+        s.trophy_item_name = String::new();
+        assert!(
+            !s.is_configured(),
+            "enabled with empty name should not be configured"
+        );
+    }
+
+    #[test]
+    fn settings_sanitized_trims_whitespace_from_name() {
+        let s = TradeskillTrophySettings {
+            enabled: true,
+            trophy_item_name: "  My Trophy  ".into(),
+        };
+        let sanitized = s.sanitized();
+        assert_eq!(sanitized.trophy_item_name, "My Trophy");
+        assert!(sanitized.enabled);
+    }
+
+    #[test]
+    fn settings_sanitized_preserves_disabled_flag() {
+        let s = TradeskillTrophySettings {
+            enabled: false,
+            trophy_item_name: " Trophy ".into(),
+        };
+        let sanitized = s.sanitized();
+        assert!(!sanitized.enabled);
+        assert_eq!(sanitized.trophy_item_name, "Trophy");
+    }
+
+    #[test]
+    fn trophy_equip_slot_itemnotify_names() {
+        assert_eq!(TrophyEquipSlot::Ammo.itemnotify_name(), "Ammo");
+        assert_eq!(TrophyEquipSlot::Mainhand.itemnotify_name(), "Mainhand");
+    }
+
+    #[test]
+    fn preferred_trophy_slot_uses_ammo_for_non_fishing_containers() {
+        for ct in [
+            TradeskillContainerType::Baking,
+            TradeskillContainerType::Brewing,
+            TradeskillContainerType::Blacksmithing,
+            TradeskillContainerType::Alchemy,
+            TradeskillContainerType::Jewelry,
+            TradeskillContainerType::Research,
+            TradeskillContainerType::Tinkering,
+        ] {
+            assert_eq!(
+                preferred_trophy_slot("Any Trophy", ct),
+                TrophyEquipSlot::Ammo,
+                "expected Ammo slot for {ct:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn detect_tradeskill_container_type_all_variants() {
+        let cases = [
+            ("Alchemy Table", TradeskillContainerType::Alchemy),
+            ("Mixing Bowl", TradeskillContainerType::Baking),
+            ("Oven", TradeskillContainerType::Baking),
+            ("Ice Cream", TradeskillContainerType::Baking),
+            ("Brewing Barrel", TradeskillContainerType::Brewing),
+            ("Forge", TradeskillContainerType::Blacksmithing),
+            ("Fletching Table", TradeskillContainerType::Fletching),
+            ("Fly Making Bench", TradeskillContainerType::Fishing),
+            ("Jewelry Making Table", TradeskillContainerType::Jewelry),
+            ("Poisoncrafting Table", TradeskillContainerType::Poison),
+            ("Kiln", TradeskillContainerType::Pottery),
+            ("Pottery Wheel", TradeskillContainerType::Pottery),
+            ("Spell Research Table", TradeskillContainerType::Research),
+            ("Loom", TradeskillContainerType::Tailoring),
+            ("Tinkering", TradeskillContainerType::Tinkering),
+        ];
+
+        for (name, expected) in cases {
+            assert_eq!(
+                detect_tradeskill_container_type(name),
+                Some(expected),
+                "failed for container '{name}'"
+            );
+        }
+
+        assert_eq!(detect_tradeskill_container_type("Merchant"), None);
+        assert_eq!(detect_tradeskill_container_type(""), None);
+    }
 }

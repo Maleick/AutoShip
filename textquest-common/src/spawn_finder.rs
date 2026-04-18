@@ -107,4 +107,139 @@ mod tests {
         assert_eq!(observer.target_spawn_id, Some(900));
         assert_eq!(observer.nearby_spawns.len(), 1);
     }
+
+    #[test]
+    fn from_game_state_returns_none_when_no_local_player() {
+        let state = GameState {
+            client_id: 1,
+            local_player: None,
+            target: None,
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: crate::nav::NavStatus::Idle,
+            combat_status: crate::combat::CombatStatus::Idle,
+            zone_short_name: "nexus".into(),
+            zone_long_name: "The Nexus".into(),
+            active_buffs: Vec::new(),
+            pet: None,
+            actual_version: None,
+        };
+
+        assert!(LiveSpawnObserver::from_game_state(Some("Fallback"), &state).is_none());
+    }
+
+    #[test]
+    fn from_game_state_falls_back_to_name_when_displayed_name_empty() {
+        let mut spawn = make_spawn(5, "Iceclaw");
+        spawn.displayed_name = "  ".into();
+        let state = GameState {
+            client_id: 2,
+            local_player: Some(spawn),
+            target: None,
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: crate::nav::NavStatus::Idle,
+            combat_status: crate::combat::CombatStatus::Idle,
+            zone_short_name: "velke".into(),
+            zone_long_name: "Velketor's Labyrinth".into(),
+            active_buffs: Vec::new(),
+            pet: None,
+            actual_version: None,
+        };
+
+        let observer = LiveSpawnObserver::from_game_state(Some("Fallback"), &state).expect("observer");
+        assert_eq!(observer.character_name, "Iceclaw");
+    }
+
+    #[test]
+    fn from_game_state_uses_provided_fallback_when_both_names_empty() {
+        let mut spawn = make_spawn(6, "");
+        spawn.displayed_name = "".into();
+        let state = GameState {
+            client_id: 3,
+            local_player: Some(spawn),
+            target: None,
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: crate::nav::NavStatus::Idle,
+            combat_status: crate::combat::CombatStatus::Idle,
+            zone_short_name: "nexus".into(),
+            zone_long_name: "The Nexus".into(),
+            active_buffs: Vec::new(),
+            pet: None,
+            actual_version: None,
+        };
+
+        let observer =
+            LiveSpawnObserver::from_game_state(Some("MyFallback"), &state).expect("observer");
+        assert_eq!(observer.character_name, "MyFallback");
+    }
+
+    #[test]
+    fn from_game_state_uses_unknown_when_both_names_empty_and_no_fallback() {
+        let mut spawn = make_spawn(7, "");
+        spawn.displayed_name = "".into();
+        let state = GameState {
+            client_id: 4,
+            local_player: Some(spawn),
+            target: None,
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: crate::nav::NavStatus::Idle,
+            combat_status: crate::combat::CombatStatus::Idle,
+            zone_short_name: "nexus".into(),
+            zone_long_name: "The Nexus".into(),
+            active_buffs: Vec::new(),
+            pet: None,
+            actual_version: None,
+        };
+
+        let observer = LiveSpawnObserver::from_game_state(None, &state).expect("observer");
+        assert_eq!(observer.character_name, "Unknown");
+    }
+
+    #[test]
+    fn from_game_state_no_target_gives_none_target_spawn_id() {
+        let state = GameState {
+            client_id: 5,
+            local_player: Some(make_spawn(10, "Ranger")),
+            target: None,
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: crate::nav::NavStatus::Idle,
+            combat_status: crate::combat::CombatStatus::Idle,
+            zone_short_name: "gfay".into(),
+            zone_long_name: "Greater Faydark".into(),
+            active_buffs: Vec::new(),
+            pet: None,
+            actual_version: None,
+        };
+
+        let observer = LiveSpawnObserver::from_game_state(None, &state).expect("observer");
+        assert_eq!(observer.target_spawn_id, None);
+        assert!(observer.nearby_spawns.is_empty());
+    }
+
+    #[test]
+    fn from_game_state_populates_zone_and_client_id() {
+        let state = GameState {
+            client_id: 99,
+            local_player: Some(make_spawn(1, "Paladin")),
+            target: None,
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: crate::nav::NavStatus::Idle,
+            combat_status: crate::combat::CombatStatus::Idle,
+            zone_short_name: "qeynos".into(),
+            zone_long_name: "South Qeynos".into(),
+            active_buffs: Vec::new(),
+            pet: None,
+            actual_version: None,
+        };
+
+        let observer = LiveSpawnObserver::from_game_state(None, &state).expect("observer");
+        assert_eq!(observer.client_id, 99);
+        assert_eq!(observer.zone_short_name, "qeynos");
+        assert_eq!(observer.zone_long_name, "South Qeynos");
+    }
 }
