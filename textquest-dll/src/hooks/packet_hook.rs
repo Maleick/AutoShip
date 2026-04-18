@@ -254,6 +254,41 @@ pub fn install(_client_id: ClientId) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+
+/// Activate packet hooks for validation mode.
+///
+/// This is an explicit entry point for validating the packet capture system
+/// without assuming hooks are installed during normal startup. Useful for
+/// testing the packet monitor on current master without depending on the
+/// default initialization flow.
+///
+/// On Windows: Activates WSASend/WSARecv hooks by calling the internal
+/// install logic.
+/// On non-Windows: Returns Ok(()) as a no-op stub.
+///
+/// # Returns
+///
+/// - `Ok(())` if hooks are successfully activated or already active
+/// - `Err(...)` if hook installation fails (Windows only)
+///
+/// # Example
+///
+/// ```ignore
+/// // From validation mode or test orchestrator
+/// let result = textquest_dll::hooks::packet_hook::activate_packet_hooks(pid);
+/// assert!(result.is_ok());
+/// ```
+#[cfg(windows)]
+pub fn activate_packet_hooks(client_id: ClientId) -> Result<(), Box<dyn std::error::Error>> {
+    inner::install(client_id)
+}
+
+#[cfg(not(windows))]
+pub fn activate_packet_hooks(_client_id: ClientId) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::debug!("Packet hooks: activate_packet_hooks is a no-op on non-Windows");
+    Ok(())
+}
+
 /// Remove WSASend/WSARecv hooks and restore original function bytes.
 #[cfg(windows)]
 pub fn remove() {

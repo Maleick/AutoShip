@@ -698,6 +698,41 @@ fn graceful_shutdown() {
     tracing::info!("TextQuest DLL graceful shutdown complete");
 }
 
+
+/// Activate packet hooks for validation mode.
+///
+/// This is the explicit entry point for validating the packet capture system
+/// without depending on packet hooks being installed during normal DLL startup.
+/// Useful for testing the packet monitor on current master or validating
+/// packet hook functionality in isolation.
+///
+/// On Windows: Activates WSASend/WSARecv hooks targeting the current process.
+/// On non-Windows: Returns Ok(()) as a no-op stub.
+///
+/// # Arguments
+///
+/// * `client_id` — typically the current process ID or a test ID for validation
+///
+/// # Returns
+///
+/// - `Ok(())` if hooks are successfully activated or already active
+/// - `Err(...)` if hook installation fails (Windows only)
+///
+/// # Example
+///
+/// ```ignore
+/// // From validation mode handler (not part of normal startup)
+/// let pid = std::process::id();
+/// let result = activate_packet_validation(pid);
+/// if result.is_ok() {
+///     tracing::info!("Packet hooks activated for validation");
+/// }
+/// ```
+#[allow(dead_code)] // Called via IPC command handler or operator request
+pub fn activate_packet_validation(client_id: u32) -> Result<(), Box<dyn std::error::Error>> {
+    hooks::packet_hook::activate_packet_hooks(client_id)
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
