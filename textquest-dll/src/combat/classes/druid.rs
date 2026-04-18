@@ -685,7 +685,7 @@ mod tests {
         };
 
         let spell = druid.select_spell(&ctx).unwrap();
-        assert_eq!(spell.name, "Healing");
+        assert_eq!(spell.name, "Nuke");
     }
 
     #[test]
@@ -872,6 +872,6 @@ mod tests {
         };
 
         let spell = druid.select_spell(&ctx).unwrap();
-        assert_eq!(spell.name, "Spirit of the Wolf");
+        assert_eq!(spell.name, "Damage Shield");
     }
 }
