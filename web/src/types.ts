@@ -1150,3 +1150,74 @@ export interface XAssistConfigUpdate {
   ma_name: string | null;
   enabled: boolean;
 }
+
+// ── Inventory utility parity types ───────────────────────────────────────────
+
+export type PluginSupportLevel = "native" | "adapted" | "deferred";
+
+export interface PluginMapping {
+  plugin_name: string;
+  owner: string;
+  support_level: PluginSupportLevel;
+  native_surface: string;
+  notes: string;
+}
+
+export interface LegacyAdapterProvenance {
+  plugin_name: string;
+  support_level: PluginSupportLevel;
+  source: string;
+  imported_records: number;
+  unsupported_fields: string[];
+}
+
+export type CursorOverflowAction = "keep" | "bank" | "sell" | "destroy" | "consume" | "route" | "claim";
+
+export interface CursorRule {
+  item_name: string;
+  max_quantity: number;
+  overflow_action: CursorOverflowAction;
+}
+
+export type RewardRoutingTarget = "keep" | "bank" | "sell" | "tribute" | "trophy";
+
+export interface RewardRoutingRule {
+  task_matcher: string;
+  reward_name: string;
+  target: RewardRoutingTarget;
+}
+
+export interface CollectionRoutingRule {
+  set_name: string;
+  item_name: string;
+  target: RewardRoutingTarget;
+}
+
+export interface FoodRule {
+  item_name: string;
+  consume_below_pct: number;
+  hydrate: boolean;
+}
+
+export interface RelocationRule {
+  item_name: string;
+  destination: string;
+  keep_on_hand: number;
+}
+
+export interface AutoClaimRule {
+  claim_name: string;
+  target: RewardRoutingTarget;
+  enabled: boolean;
+}
+
+export interface InventoryUtilityParityConfig {
+  plugin_mappings: PluginMapping[];
+  provenance: LegacyAdapterProvenance[];
+  reward_routing_rules: RewardRoutingRule[];
+  collection_routing_rules: CollectionRoutingRule[];
+  cursor_rules: CursorRule[];
+  food_rules: FoodRule[];
+  relocation_rules: RelocationRule[];
+  auto_claim_rules: AutoClaimRule[];
+}

@@ -396,6 +396,11 @@ mod tests {
             auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
             tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
             auto_group_state: AutoGroupState::new_demo(),
+            inventory_utility_parity: tokio::sync::RwLock::new(
+                textquest_common::inventory_utility::InventoryUtilityConfig::default(),
+            ),
+            inventory_utility_parity_path: std::env::temp_dir().join("tq-test-inventory-utility.json"),
+            inventory_utility_parity_write_lock: tokio::sync::Mutex::new(()),
             extension_catalog_state: crate::api::extensions::ExtensionCatalogState::load(
                 std::env::temp_dir().join(format!(
                     "textquest-auto-group-test-extension-catalog-{}.json",

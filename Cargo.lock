@@ -3945,6 +3945,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "textquest",
+ "textquest-common",
  "tokio",
  "tokio-tungstenite 0.28.0",
  "toml",

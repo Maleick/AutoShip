@@ -43,6 +43,13 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
         vendor_watch_state: api::vendor_watch::VendorWatchState::new_demo(),
+        inventory_utility_parity: tokio::sync::RwLock::new(
+            textquest_common::inventory_utility::InventoryUtilityConfig::default(),
+        ),
+        inventory_utility_parity_path: test_live_session_snapshot_path(
+            "test-inventory-utility-parity.json",
+        ),
+        inventory_utility_parity_write_lock: tokio::sync::Mutex::new(()),
         timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
         timestamp_config_write_lock: tokio::sync::Mutex::new(()),
         kill_tracker_state: api::kill_tracker::KillTrackerState::new_empty(),

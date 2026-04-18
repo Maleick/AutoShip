@@ -90,6 +90,14 @@ pub struct AppState {
     pub spawn_alerts: Arc<api::spawn_alerts::SpawnAlertState>,
     /// In-memory vendor item watch configuration and alert history.
     pub vendor_watch_state: Arc<api::vendor_watch::VendorWatchState>,
+    /// Inventory-utility parity pack config for RedGuides extension mappings,
+    /// rule editing, and legacy provenance reporting.
+    pub inventory_utility_parity:
+        tokio::sync::RwLock<textquest_common::inventory_utility::InventoryUtilityConfig>,
+    /// Disk location where the inventory-utility parity config persists.
+    pub inventory_utility_parity_path: PathBuf,
+    /// Serializes writes to [`inventory_utility_parity_path`].
+    pub inventory_utility_parity_write_lock: tokio::sync::Mutex<()>,
     /// In-memory timestamp config store per character.
     pub timestamp_configs: tokio::sync::RwLock<HashMap<String, api::TimestampConfig>>,
     /// Serializes timestamp sidecar writes so acknowledged edits persist in the
@@ -191,6 +199,10 @@ fn live_session_snapshot_path() -> PathBuf {
 
 fn admin_session_snapshot_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/runtime/admin_sessions.json")
+}
+
+fn inventory_utility_parity_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/inventory-utility-parity.json")
 }
 
 fn character_config_path() -> PathBuf {
@@ -395,6 +407,14 @@ fn build_state() -> Arc<AppState> {
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
         vendor_watch_state: api::vendor_watch::VendorWatchState::new_from_disk_or_default(),
+        inventory_utility_parity: tokio::sync::RwLock::new(
+            api::inventory_utility_parity::load_config_from_disk().unwrap_or_else(|error| {
+                tracing::warn!(%error, "Failed to load inventory utility parity config");
+                textquest_common::inventory_utility::InventoryUtilityConfig::default()
+            }),
+        ),
+        inventory_utility_parity_path: inventory_utility_parity_path(),
+        inventory_utility_parity_write_lock: tokio::sync::Mutex::new(()),
         timestamp_configs: tokio::sync::RwLock::new(
             api::load_timestamp_configs_from_disk().unwrap_or_else(|error| {
                 tracing::warn!(%error, "Failed to load timestamp configs");
@@ -447,6 +467,14 @@ pub(crate) fn test_app_state() -> AppState {
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
         spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
         vendor_watch_state: api::vendor_watch::VendorWatchState::new_demo(),
+        inventory_utility_parity: tokio::sync::RwLock::new(
+            textquest_common::inventory_utility::InventoryUtilityConfig::default(),
+        ),
+        inventory_utility_parity_path: std::env::temp_dir().join(format!(
+            "textquest-web-test-inventory-utility-parity-{}.json",
+            uuid::Uuid::new_v4()
+        )),
+        inventory_utility_parity_write_lock: tokio::sync::Mutex::new(()),
         timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
         timestamp_config_write_lock: tokio::sync::Mutex::new(()),
         kill_tracker_state: api::kill_tracker::KillTrackerState::new_empty(),
@@ -599,6 +627,11 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .route(
             "/config/player-watch",
             get(api::get_player_watch_config).put(api::put_player_watch_config),
+        )
+        .route(
+            "/config/inventory-utility-parity",
+            get(api::inventory_utility_parity::get_config)
+                .put(api::inventory_utility_parity::put_config),
         )
         // Spawn Alerts API
         .route(
@@ -799,6 +832,11 @@ mod tests {
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
             spawn_alerts: api::spawn_alerts::SpawnAlertState::new_demo(),
             vendor_watch_state: api::vendor_watch::VendorWatchState::new_demo(),
+            inventory_utility_parity: tokio::sync::RwLock::new(
+                textquest_common::inventory_utility::InventoryUtilityConfig::default(),
+            ),
+            inventory_utility_parity_path: path.with_file_name("inventory-utility-parity.json"),
+            inventory_utility_parity_write_lock: tokio::sync::Mutex::new(()),
             timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
             timestamp_config_write_lock: tokio::sync::Mutex::new(()),
             kill_tracker_state: api::kill_tracker::KillTrackerState::new_empty(),

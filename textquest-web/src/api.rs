@@ -15,6 +15,7 @@ pub mod discord;
 pub mod economy;
 pub mod extensions;
 pub mod gm_alerts;
+pub mod inventory_utility_parity;
 pub mod kill_tracker;
 pub mod loot;
 pub mod player_watch;

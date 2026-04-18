@@ -992,6 +992,13 @@ mod tests {
             say_detection: Some(Arc::new(
                 crate::api::say_detection::SayDetectionState::new_demo(),
             )),
+            inventory_utility_parity: tokio::sync::RwLock::new(
+                textquest_common::inventory_utility::InventoryUtilityConfig::default(),
+            ),
+            inventory_utility_parity_path: crate::test_support::test_live_session_snapshot_path(
+                "loot-test-inventory-utility.json",
+            ),
+            inventory_utility_parity_write_lock: tokio::sync::Mutex::new(()),
             session_controls: tokio::sync::RwLock::new(std::collections::HashMap::new()),
             auto_group_state: crate::api::auto_group::AutoGroupState::new_demo(),
             extension_catalog_state: crate::api::extensions::ExtensionCatalogState::load(
