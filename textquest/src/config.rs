@@ -587,8 +587,15 @@ pub struct GroupConfig {
     pub toon: Vec<ToonConfig>,
 }
 
-/// Per-character unattended death handling.
-#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+/// Backward-compatible placeholder for legacy unattended camp-out settings.
+///
+/// This type is kept public to avoid breaking downstream code and to allow
+/// older configuration files that still contain the `auto_camp_on_death`
+/// section to continue deserializing successfully.
+#[deprecated(
+    note = "auto_camp_on_death has been retired; this compatibility type remains for backward compatibility"
+)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
 #[serde(default)]
 pub struct AutoCampOnDeathConfig {
     /// Whether the death-camp workflow is enabled for this toon.
