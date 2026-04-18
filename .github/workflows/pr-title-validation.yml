@@ -10,7 +10,7 @@ permissions:
 jobs:
   validate_title:
     name: Validate PR title format
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     steps:
       - name: Validate conventional commit format
         uses: amannn/action-semantic-pull-request@v5.4.0
