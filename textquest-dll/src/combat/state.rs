@@ -18,7 +18,7 @@ use textquest_common::{
 };
 
 use super::{
-    ability_cooldowns::AbilityCooldownTracker,
+    ability_cooldowns::{AbilityCooldownTracker, metadata_for_activated_ability},
     dot_tracker::DotTracker,
     gcd::GcdTracker,
     holyshit::HolyShitEvaluator,
@@ -1310,7 +1310,7 @@ impl Combatant {
                                         action = ?action.action_type,
                                         "Skipping unresolved spell/song from rotation"
                                     );
-                                    return;
+                                    continue;
                                 }
                                 let memorized_spells = crate::eq::read_memorized_spells();
                                 let Some(cast_plan) =
@@ -1322,7 +1322,7 @@ impl Combatant {
                                         action = ?action.action_type,
                                         "Skipping spell/song from rotation because no valid cast plan was found"
                                     );
-                                    return;
+                                    continue;
                                 };
                                 crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
                                 if let Some(key) = &action.cooldown_key {
@@ -1344,6 +1344,7 @@ impl Combatant {
                                     backoff_ticks: 0,
                                     retry_count: 0,
                                 };
+                                break;
                             }
                             ActionType::Disc(_) | ActionType::AA(_) => {
                                 if spell_id <= 0 {
@@ -1352,7 +1353,7 @@ impl Combatant {
                                         action = ?action.action_type,
                                         "Skipping unresolved activated ability from rotation"
                                     );
-                                    return;
+                                    continue;
                                 }
                                 if !self
                                     .ability_cooldowns
@@ -1363,7 +1364,7 @@ impl Combatant {
                                         spell_id,
                                         "Activated rotation ability blocked by cooldown metadata"
                                     );
-                                    return;
+                                    continue;
                                 }
                                 crate::eq::do_combat_ability(spell_id, true);
                                 self.ability_cooldowns.consume(
@@ -1397,6 +1398,7 @@ impl Combatant {
                                 }
                                 self.gcd.consume();
                                 self.state = CombatState::OnGcd;
+                                break;
                             }
                             ActionType::Ability(ability_name) => {
                                 let Some(skill_id) = combat_skill_id(ability_name) else {
@@ -1405,7 +1407,7 @@ impl Combatant {
                                         entry = %action.entry_name,
                                         "Skipping unknown combat skill from rotation"
                                     );
-                                    return;
+                                    continue;
                                 };
                                 if !self.skill_cooldowns.is_ready(skill_id) {
                                     tracing::debug!(
@@ -1413,7 +1415,7 @@ impl Combatant {
                                         ability = %ability_name,
                                         "Rotation skill blocked by cooldown"
                                     );
-                                    return;
+                                    continue;
                                 }
                                 crate::eq::use_skill(skill_id, None);
                                 if let Some(cooldown) = default_cooldown(skill_id) {
@@ -1421,6 +1423,7 @@ impl Combatant {
                                 }
                                 self.gcd.consume();
                                 self.state = CombatState::OnGcd;
+                                break;
                             }
                             ActionType::Item(item_name) => {
                                 let Some(command) = use_item_command(item_name) else {
@@ -1428,7 +1431,7 @@ impl Combatant {
                                         entry = %action.entry_name,
                                         "Skipping item rotation with empty sanitized name"
                                     );
-                                    return;
+                                    continue;
                                 };
                                 let item_key = item_action_key(item_name);
                                 if !self
@@ -1440,7 +1443,7 @@ impl Combatant {
                                         item = %item_name,
                                         "Rotation item blocked by cooldown metadata"
                                     );
-                                    return;
+                                    continue;
                                 }
                                 crate::eq::slash_command(&command);
                                 self.ability_cooldowns.consume(
@@ -1461,6 +1464,7 @@ impl Combatant {
                                 }
                                 self.gcd.consume();
                                 self.state = CombatState::OnGcd;
+                                break;
                             }
                         }
                         return;

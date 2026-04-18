@@ -188,6 +188,12 @@ and `debuff_abilities` sections when a class needs explicit breakpoint tuning.
 The Berserker profile now uses level-gated 60/61/62/65 combat overrides to
 keep its endurance-aware burn order aligned with the runtime rotation.
 
+Class configs can also define `[[level_overrides]]` with nested
+`combat_abilities`, `buff_abilities`, `emergency_abilities`, `cc_abilities`,
+and `debuff_abilities` sections when a class needs explicit breakpoint tuning.
+The Berserker profile now uses level-gated 60/61/62/65 combat overrides to
+keep its endurance-aware burn order aligned with the runtime rotation.
+
 Current repo coverage includes classes such as:
 
 - bard

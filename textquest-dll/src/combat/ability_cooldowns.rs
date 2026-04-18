@@ -29,6 +29,13 @@ pub struct AbilityReuseMetadata {
     pub shared_timer_id: Option<u8>,
 }
 
+const SHARED_TIMER_KEY_BASE: i32 = -10_000;
+
+const BERSERKER_TIMER_VOLLEY: u8 = 2;
+const BERSERKER_TIMER_CLEAVE: u8 = 3;
+const BERSERKER_TIMER_PRIMARY_BURN: u8 = 4;
+const BERSERKER_TIMER_BATTLE_CRY: u8 = 9;
+
 /// Public view of an ability's availability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AbilityAvailability {
@@ -203,6 +210,19 @@ impl AbilityCooldownTracker {
         })
     }
 
+    /// Whether an ability is ready, accounting for both its direct cooldown
+    /// and an optional shared timer lockout.
+    #[inline]
+    pub fn can_use_with_shared(
+        &self,
+        ability_id: i32,
+        shared_timer_id: Option<u8>,
+        now: u32,
+    ) -> bool {
+        self.can_use(ability_id, now)
+            && shared_timer_id.map_or(true, |timer_id| self.can_use(shared_timer_key(timer_id), now))
+    }
+
     /// Mark an ability as consumed with a known cooldown, or fall back to a
     /// retry window when metadata is missing or invalid.
     pub fn consume(
@@ -287,6 +307,62 @@ impl AbilityCooldownTracker {
                 now,
             );
             self.upsert(shared_timer_key(timer_id), shared_state);
+        }
+    }
+}
+
+#[inline]
+fn shared_timer_key(timer_id: u8) -> i32 {
+    SHARED_TIMER_KEY_BASE - i32::from(timer_id)
+}
+
+/// Lookup cooldown metadata for known live-safe activated ability lines.
+///
+/// The rotation engine resolves the set name and the concrete ability name
+/// separately. Matching both lets us keep stable timer metadata across
+/// multiple ranks in the same line without hard-coding spell IDs.
+#[must_use]
+pub fn metadata_for_activated_ability(
+    entry_name: &str,
+    ability_name: &str,
+) -> Option<AbilityReuseMetadata> {
+    match (entry_name, ability_name) {
+        ("PrimaryBurn", "Burning Rage Discipline") => Some(AbilityReuseMetadata {
+            cooldown_ticks: Some(36_000),
+            shared_timer_id: Some(BERSERKER_TIMER_PRIMARY_BURN),
+        }),
+        ("PrimaryBurn", "Blind Rage Discipline") => Some(AbilityReuseMetadata {
+            cooldown_ticks: Some(6_000),
+            shared_timer_id: Some(BERSERKER_TIMER_PRIMARY_BURN),
+        }),
+        ("Volley", "Rage Volley") => Some(AbilityReuseMetadata {
+            cooldown_ticks: Some(240),
+            shared_timer_id: Some(BERSERKER_TIMER_VOLLEY),
+        }),
+        ("BattleCry", "Ancient: Cry of Chaos" | "Battle Cry of the Mastruq") => {
+            Some(AbilityReuseMetadata {
+                cooldown_ticks: Some(36_000),
+                shared_timer_id: Some(BERSERKER_TIMER_BATTLE_CRY),
+            })
+        }
+        ("Cleave", "Cleaving Anger Discipline") => Some(AbilityReuseMetadata {
+            cooldown_ticks: Some(26_400),
+            shared_timer_id: Some(BERSERKER_TIMER_CLEAVE),
+        }),
+        _ => None,
+    }
+
+    /// Consume an ability and its shared timer bucket together.
+    pub fn consume_with_shared(
+        &mut self,
+        ability_id: i32,
+        cooldown_ticks: Option<u32>,
+        shared_timer_id: Option<u8>,
+        now: u32,
+    ) {
+        self.consume(ability_id, cooldown_ticks, now);
+        if let Some(timer_id) = shared_timer_id {
+            self.consume(shared_timer_key(timer_id), cooldown_ticks, now);
         }
     }
 }
