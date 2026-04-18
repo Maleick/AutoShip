@@ -1,42 +1,145 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 
-export function useWebSocket(url: string) {
+export interface UseWebSocketOptions<T = string> {
+  /** Interval in milliseconds between reconnect attempts. Default: 3000 */
+  reconnectInterval?: number;
+  /** Maximum number of reconnect attempts. Default: Infinity */
+  maxReconnectAttempts?: number;
+  /** Called when WebSocket connection opens */
+  onOpen?: () => void;
+  /** Called when WebSocket connection closes */
+  onClose?: () => void;
+  /** Called when a WebSocket error occurs */
+  onError?: (error: Event) => void;
+  /** Called when a message is received */
+  onMessage?: (data: T) => void;
+}
+
+export interface UseWebSocketReturn<T = string> {
+  /** Whether the WebSocket is currently connected */
+  isConnected: boolean;
+  /** The last received message */
+  lastMessage: T | null;
+  /** Send a message over the WebSocket */
+  send: (data: T | string) => void;
+  /** Close the WebSocket connection */
+  close: () => void;
+}
+
+/**
+ * React hook for WebSocket connection management with auto-reconnect.
+ *
+ * @template T - The type of messages handled by this hook (default: string)
+ * @param url - The WebSocket URL to connect to
+ * @param options - Configuration options for the hook
+ * @returns Object with connection state, send function, and close function
+ *
+ * @example
+ * const { isConnected, lastMessage, send } = useWebSocket<MyMessageType>(
+ *   'wss://example.com/ws',
+ *   {
+ *     reconnectInterval: 5000,
+ *     maxReconnectAttempts: 5,
+ *     onOpen: () => console.log('Connected'),
+ *     onMessage: (data) => console.log('Message:', data),
+ *   }
+ * );
+ */
+export function useWebSocket<T = string>(
+  url: string,
+  options?: UseWebSocketOptions<T>
+): UseWebSocketReturn<T> {
+  const {
+    reconnectInterval = 3000,
+    maxReconnectAttempts = Infinity,
+    onOpen,
+    onClose,
+    onError,
+    onMessage,
+  } = options || {};
+
   const wsRef = useRef<WebSocket | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [lastMessage, setLastMessage] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [lastMessage, setLastMessage] = useState<T | null>(null);
+  const reconnectCountRef = useRef(0);
+  const timeoutIdRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeRef = useRef(true);
 
-  useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    let active = true;
-
-    function connect() {
-      const ws = new WebSocket(url);
-      wsRef.current = ws;
-      ws.onopen = () => {
-        if (active) setConnected(true);
-      };
-      ws.onclose = () => {
-        if (!active) return;
-        setConnected(false);
-        timeoutId = setTimeout(connect, 3000);
-      };
-      ws.onmessage = (e) =>
-        setLastMessage(typeof e.data === "string" ? e.data : String(e.data));
-      ws.onerror = () => ws.close();
-    }
-
-    connect();
-    return () => {
-      active = false;
-      if (timeoutId !== null) clearTimeout(timeoutId);
-      wsRef.current?.close();
+  const closeWebSocket = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
       wsRef.current = null;
-    };
-  }, [url]);
-
-  const send = useCallback((data: string) => {
-    wsRef.current?.send(data);
+    }
   }, []);
 
-  return { connected, lastMessage, send };
+  const connect = useCallback(() => {
+    const ws = new WebSocket(url);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      if (!activeRef.current) return;
+      setIsConnected(true);
+      onOpen?.();
+    };
+
+    ws.onclose = () => {
+      if (!activeRef.current) return;
+      setIsConnected(false);
+      onClose?.();
+
+      if (reconnectCountRef.current < maxReconnectAttempts) {
+        reconnectCountRef.current++;
+        timeoutIdRef.current = setTimeout(connect, reconnectInterval);
+      }
+    };
+
+    ws.onmessage = (e) => {
+      if (!activeRef.current) return;
+      try {
+        const data: T = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+        setLastMessage(data);
+        onMessage?.(data);
+      } catch {
+        // If JSON parsing fails, treat data as string
+        setLastMessage(e.data as unknown as T);
+        onMessage?.(e.data as unknown as T);
+      }
+    };
+
+    ws.onerror = (error) => {
+      if (!activeRef.current) return;
+      onError?.(error);
+      ws.close();
+    };
+  }, [url, reconnectInterval, maxReconnectAttempts, onOpen, onClose, onError, onMessage]);
+
+  useEffect(() => {
+    activeRef.current = true;
+    connect();
+
+    return () => {
+      activeRef.current = false;
+      if (timeoutIdRef.current !== null) {
+        clearTimeout(timeoutIdRef.current);
+      }
+      closeWebSocket();
+    };
+  }, [connect, closeWebSocket]);
+
+  const send = useCallback(
+    (data: T | string) => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        const payload = typeof data === "string" ? data : JSON.stringify(data);
+        wsRef.current.send(payload);
+      }
+    },
+    []
+  );
+
+  return {
+    isConnected,
+    lastMessage,
+    send,
+    close: closeWebSocket,
+  };
 }
