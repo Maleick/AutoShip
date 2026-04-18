@@ -16,7 +16,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use textquest_common::ipc::{AutoAcceptSettings, AutoRezConfig};
+use textquest_common::ipc::{
+    AutoAcceptRequestKind, AutoAcceptSettings, AutoAcceptTrustMode, AutoRezConfig,
+};
 
 /// Whether auto-accept is enabled. Disabled by default; toggled via IPC
 /// `SetAutoAccept`.
@@ -126,6 +128,25 @@ fn clear_rez_runtime_state() {
     *RECENT_REZ_CONTEXT
         .lock()
         .expect("recent rez context lock poisoned") = None;
+}
+
+fn current_auto_accept_settings() -> AutoAcceptSettings {
+    AUTO_ACCEPT_SETTINGS
+        .lock()
+        .expect("auto accept settings lock poisoned")
+        .clone()
+}
+
+fn allows_unverified_generic_auto_accept(settings: &AutoAcceptSettings) -> bool {
+    settings.enabled && matches!(settings.trust_mode, AutoAcceptTrustMode::Anyone)
+}
+
+fn generic_dialog_kind(parent_sidl: &str) -> Option<AutoAcceptRequestKind> {
+    match parent_sidl {
+        "TradeWnd" => Some(AutoAcceptRequestKind::Trade),
+        "TaskSelectWnd" => Some(AutoAcceptRequestKind::TaskAdd),
+        _ => None,
+    }
 }
 
 fn mark_recent_rez_context(at: Instant) {
@@ -269,7 +290,34 @@ pub unsafe fn check_dialogs() {
         return;
     }
 
-    for &(parent_sidl, button_sidl) in GENERIC_DIALOG_ACCEPT_PAIRS {
+    let settings = current_auto_accept_settings();
+    if !allows_unverified_generic_auto_accept(&settings) {
+        tracing::debug!(
+            trust_mode = ?settings.trust_mode,
+            trusted_players = settings.trusted_players.len(),
+            "Skipping generic dialog auto-accept because trusted sender cannot be validated"
+        );
+        return;
+    }
+
+    const GENERIC_DIALOG_ACCEPT_SPECS: &[(AutoAcceptRequestKind, &str, &str)] = &[
+        (
+            AutoAcceptRequestKind::Trade,
+            "TRDW_TradeRequestWnd",
+            "TRDW_Trade_Button",
+        ),
+        (
+            AutoAcceptRequestKind::Task,
+            "TaskSelectWnd",
+            "TASKSEL_AcceptButton",
+        ),
+    ];
+
+    for &(kind, parent_sidl, button_sidl) in GENERIC_DIALOG_ACCEPT_SPECS {
+        if !settings.is_kind_enabled(kind) {
+            continue;
+        }
+
         // Find the parent dialog window by SIDL name (must be visible)
         let parent = crate::eq::widgets::find_visible_window_by_sidl_name(
             mgr,
@@ -697,5 +745,31 @@ mod tests {
         );
 
         assert_eq!(action, RezDecision::Ignore);
+    }
+
+    #[test]
+    fn generic_dialog_kind_maps_known_dialogs() {
+        assert_eq!(
+            generic_dialog_kind("TradeWnd"),
+            Some(AutoAcceptRequestKind::Trade)
+        );
+        assert_eq!(
+            generic_dialog_kind("TaskSelectWnd"),
+            Some(AutoAcceptRequestKind::TaskAdd)
+        );
+        assert_eq!(generic_dialog_kind("UnknownWnd"), None);
+    }
+
+    #[test]
+    fn allows_unverified_generic_auto_accept_requires_anyone_trust_mode() {
+        let mut settings = AutoAcceptSettings {
+            enabled: true,
+            ..AutoAcceptSettings::default()
+        };
+        assert!(allows_unverified_generic_auto_accept(&settings));
+
+        settings.trust_mode = AutoAcceptTrustMode::TrustList;
+        settings.trusted_players = vec!["Leader".into()];
+        assert!(!allows_unverified_generic_auto_accept(&settings));
     }
 }
