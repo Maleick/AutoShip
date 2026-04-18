@@ -684,4 +684,193 @@ mod tests {
         let err = load_zone_map(dir.path(), "qeynos/cat").unwrap_err();
         assert!(err.to_string().contains("invalid characters"));
     }
+
+    // ── Zone Exit Identification Tests ──────────────────────────────────
+
+    #[test]
+    fn test_zone_exit_identified_by_keyword() {
+        // Test that zone exits are identified when labels contain common keywords
+        let points = vec![
+            MapPoint {
+                x: 100.0,
+                y: 200.0,
+                z: 0.0,
+                r: 255,
+                g: 0,
+                b: 0,
+                size: 2,
+                label: "to Qeynos".to_string(),
+                layer: 0,
+            },
+            MapPoint {
+                x: 150.0,
+                y: 250.0,
+                z: 0.0,
+                r: 255,
+                g: 0,
+                b: 0,
+                size: 2,
+                label: "zone to Crushbone".to_string(),
+                layer: 0,
+            },
+            MapPoint {
+                x: 200.0,
+                y: 300.0,
+                z: 0.0,
+                r: 255,
+                g: 0,
+                b: 0,
+                size: 2,
+                label: "Neriak entrance".to_string(),
+                layer: 0,
+            },
+        ];
+
+        let exits = detect_zone_exits(&points);
+
+        assert_eq!(exits.len(), 3);
+        assert_eq!(exits[0].destination, "qeynos");
+        assert_eq!(exits[1].destination, "crushbone");
+        assert_eq!(exits[2].destination, "neriak entrance");
+    }
+
+    #[test]
+    fn test_zone_exit_identified_by_case_insensitive() {
+        // Test that zone exit detection is case-insensitive
+        let points = vec![
+            MapPoint {
+                x: 100.0,
+                y: 200.0,
+                z: 0.0,
+                r: 255,
+                g: 0,
+                b: 0,
+                size: 2,
+                label: "TO QEYNOS".to_string(),
+                layer: 0,
+            },
+            MapPoint {
+                x: 150.0,
+                y: 250.0,
+                z: 0.0,
+                r: 255,
+                g: 0,
+                b: 0,
+                size: 2,
+                label: "Zone EXIT".to_string(),
+                layer: 0,
+            },
+        ];
+
+        let exits = detect_zone_exits(&points);
+
+        assert_eq!(exits.len(), 2);
+        // The first exit is identified by "to " pattern
+        assert_eq!(exits[0].destination, "qeynos");
+        // The second exit is identified by "exit" keyword
+        assert_eq!(exits[1].destination, "Zone EXIT");
+    }
+
+    #[test]
+    fn test_zone_exit_not_identified_by_unrelated_label() {
+        // Test that unrelated labels do not create zone exits
+        let points = vec![
+            MapPoint {
+                x: 100.0,
+                y: 200.0,
+                z: 0.0,
+                r: 255,
+                g: 0,
+                b: 0,
+                size: 2,
+                label: "Random Spawn".to_string(),
+                layer: 0,
+            },
+            MapPoint {
+                x: 150.0,
+                y: 250.0,
+                z: 0.0,
+                r: 255,
+                g: 0,
+                b: 0,
+                size: 2,
+                label: "Treasure Chest".to_string(),
+                layer: 0,
+            },
+        ];
+
+        let exits = detect_zone_exits(&points);
+
+        assert_eq!(exits.len(), 0);
+    }
+
+    // ── Zone Exit Label Parsing Tests ──────────────────────────────────
+
+    #[test]
+    fn test_zone_exit_label_parsed_from_bracket() {
+        // Test that labels with "to " format extract the destination correctly
+        let points = vec![MapPoint {
+            x: 100.0,
+            y: 200.0,
+            z: 0.0,
+            r: 255,
+            g: 0,
+            b: 0,
+            size: 2,
+            label: "to Qeynos".to_string(),
+            layer: 0,
+        }];
+
+        let exits = detect_zone_exits(&points);
+
+        assert_eq!(exits.len(), 1);
+        assert_eq!(exits[0].destination, "qeynos");
+        assert_eq!(exits[0].x, 100.0);
+        assert_eq!(exits[0].y, 200.0);
+        assert_eq!(exits[0].z, 0.0);
+    }
+
+    #[test]
+    fn test_zone_exit_label_preserved_as_is() {
+        // Test that labels without parsing keywords are kept verbatim
+        let points = vec![MapPoint {
+            x: 100.0,
+            y: 200.0,
+            z: 0.0,
+            r: 255,
+            g: 0,
+            b: 0,
+            size: 2,
+            label: "Secret Entrance".to_string(),
+            layer: 0,
+        }];
+
+        let exits = detect_zone_exits(&points);
+
+        assert_eq!(exits.len(), 1);
+        assert_eq!(exits[0].destination, "Secret Entrance");
+    }
+
+    // ── Zone Exit Arrow Format Tests ────────────────────────────────────
+
+    #[test]
+    fn test_zone_exit_arrow_format_parsing() {
+        // Test that labels with -> format are parsed correctly
+        let points = vec![MapPoint {
+            x: 100.0,
+            y: 200.0,
+            z: 0.0,
+            r: 255,
+            g: 0,
+            b: 0,
+            size: 2,
+            label: "->Splitpaw".to_string(),
+            layer: 0,
+        }];
+
+        let exits = detect_zone_exits(&points);
+
+        assert_eq!(exits.len(), 1);
+        assert_eq!(exits[0].destination, "splitpaw");
+    }
 }
