@@ -1,0 +1,102 @@
+# Plane of Innovation primary research camp for issue #1721.
+#
+# Zone: Plane of Innovation (PoP expansion, requires "Plane of Knowledge" key or access)
+#
+# Camp Location Strategy:
+# - Primary camp anchor: Factory zone, east ledge area near construct spawns
+#   Safe med point provides line-of-sight to main factory floor without direct
+#   aggro radius from roaming constructs.
+# - Pull handoff: North factory corner allows pulls to reset toward camp
+#   without widening into the Machinery sector (planar construct bosses).
+# - Mana thresholds tuned for construct spam (DoT-heavy, moderate DPS).
+#
+# Zone Notes:
+# - Plane of Innovation is an open-world PoP zone requiring:
+#   * Level 50+ (soft minimum, 55+ recommended for primary factory)
+#   * Plane of Knowledge key in possession (or alternate access method)
+#   * Kunark-era+ faction standing for some NPCs
+# - Main pull classes: animated constructs, unstable servomechanisms
+# - Avoid: Planar bosses (Planar Fissure, Gorgoleth), quest mobs, zone-locked instances
+# - Multibox farming: Druid box healing + Warrior primary tank in standard ADPS rotation
+#
+# References:
+# - Waypoints, pull sectors, and respawn patterns documented in
+#   docs/wiki/Plane-of-Innovation-Primary-Camp.md (when schema v2 ready)
+# - EverQuest coordinate system: XY plane is horizontal, Z is vertical
+# - Factory floor constructs spawn in ~400-unit waves; safe mana thresholds prevent adds
+
+name = "plane_of_innovation_primary"
+zone = "poknowledge"
+
+# Primary camp anchor: factory east ledge, sitting safe from main floor aggro.
+camp_center = [150.0, -280.0, -45.0]
+
+# Pull handoff: north factory corner, safe line-of-sight for pull resets.
+pull_point = [180.0, -320.0, -45.0]
+
+# Pull radius tuned for factory construct density without pulling machinery zone.
+pull_radius = 280
+
+# Tight camp radius for multibox kiting back to med point.
+camp_radius = 40
+
+# Leash radius prevents adds from drifting into adjacent factory sectors.
+leash_radius = 420
+
+# Mana thresholds: constructs spam moderate DoT, need frequent heals.
+rest_mana_pct = 70
+pull_mana_pct = 50
+
+# Level range: PoP primary factory, 55-65 (soft progression, TLP-era grouping)
+level_range = [55, 65]
+
+# Pull targets: factory constructs and servomechanisms.
+pull_mob_names = [
+  "an animated construct",
+  "a clockwork servomechanism",
+  "a gear construct",
+  "a whirring golem",
+  "a mechanical champion",
+  "an unstable construct",
+  "a brass guardian",
+  "a steam golem",
+]
+
+# Ignore named/boss constructs and zone NPCs.
+ignore_mob_names = [
+  "Gorgoleth",
+  "Planar Fissure",
+  "a planar construct lord",
+  "Mechanotus",
+  "Sovereign of Machinery",
+  "Maestro of Rancor",
+  "Master of Fetid Gloom",
+  "Prophet of Decay",
+  "Quillmane",
+  "a sentinel construct",
+  "a guardian of machinery",
+  "Taskmaster of Trusag",
+  "Taskmaster of Rathe",
+  "an imprisoned prophet",
+]
+
+# Burn named rare spawns and mechanic bosses on sight.
+burn_mob_names = [
+  "Gorgoleth",
+  "Planar Fissure",
+  "a planar construct lord",
+  "Mechanotus",
+  "Sovereign of Machinery",
+  "Maestro of Rancor",
+  "Master of Fetid Gloom",
+  "Prophet of Decay",
+]
+
+# Suppress return-to-camp while aggro active; prevents chain-pulling machinery zone.
+return_no_aggro = true
+
+# Progression: move to high-PoP zones after outleveling factory.
+next_camp = "plane_of_innovation_machinery"
+
+# Fallback: return to lower-PoP camp if group gets low.
+prev_camp = "dreadlands_primary"
