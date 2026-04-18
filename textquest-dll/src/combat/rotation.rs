@@ -49,6 +49,9 @@ pub struct RotationEntry {
     /// Spell entries default to target-scoped cooldown tracking so debuffs can
     /// land once per target instead of spamming every frame.
     pub cooldown_ticks: Option<u32>,
+    /// Optional shared cooldown key used to model reuse lockouts shared across
+    /// multiple actions.
+    pub cooldown_key: Option<String>,
 }
 
 /// Hook action to execute before or after a rotation entry fires.
@@ -198,6 +201,9 @@ pub struct SelectedAction {
     pub cooldown_key: Option<String>,
     /// Optional cooldown window for the selected action.
     pub cooldown_ticks: Option<u32>,
+    /// Optional shared cooldown key carried through from the source rotation
+    /// entry.
+    pub cooldown_key: Option<String>,
 }
 
 /// Execute a single rotation group for one frame, returning selected actions.
@@ -206,11 +212,29 @@ pub struct SelectedAction {
 /// `full_rotation`), testing each entry's condition. Entries that pass get
 /// added to the result up to `steps_per_frame`. The group's `current_step`
 /// is advanced for next frame.
+pub fn execute_group(group: &mut RotationGroup, ctx: &CombatContext) -> RotationResult {
+    execute_group_with(group, ctx, &mut |_, _| true)
+}
+
+/// Execute a single rotation group while letting the caller reject actions
+/// that are not ready at runtime (for example, unresolved abilities or active
+/// cooldowns).
+pub fn execute_group_with<F>(
+    group: &mut RotationGroup,
+    ctx: &CombatContext,
+    is_action_ready: &mut F,
+) -> RotationResult
+where
+    F: FnMut(&RotationEntry, u32) -> bool,
+{
+    execute_group_inner(group, ctx, None, is_action_ready)
+}
+
 fn execute_group_inner<F>(
     group: &mut RotationGroup,
     ctx: &CombatContext,
     strategy_target_id: Option<u32>,
-    is_ready: &mut F,
+    is_action_ready: &mut F,
 ) -> RotationResult
 where
     F: FnMut(&RotationEntry, u32) -> bool,
@@ -303,7 +327,7 @@ where
             continue;
         }
 
-        if !is_ready(entry, target_id) {
+        if !is_action_ready(entry, target_id) {
             continue;
         }
 
@@ -318,6 +342,7 @@ where
             target_id,
             cooldown_key: entry.cooldown_key.clone(),
             cooldown_ticks: entry.cooldown_ticks,
+            cooldown_key: entry.cooldown_key.clone(),
         });
 
         // Run post-activation hook
@@ -336,18 +361,6 @@ where
     result
 }
 
-pub fn execute_group(group: &mut RotationGroup, ctx: &CombatContext) -> RotationResult {
-    execute_group_inner(group, ctx, None, &mut |_, _| true)
-}
-
-pub fn execute_group_with_strategy_target(
-    group: &mut RotationGroup,
-    ctx: &CombatContext,
-    strategy_target_id: Option<u32>,
-) -> RotationResult {
-    execute_group_inner(group, ctx, strategy_target_id, &mut |_, _| true)
-}
-
 /// Execute all rotation groups in order, returning the first non-empty result.
 ///
 /// This is the main entry point for the rotation system. Groups are evaluated
@@ -358,9 +371,24 @@ pub fn execute_rotations(
     groups: &mut [RotationGroup],
     ctx: &CombatContext,
 ) -> Option<SelectedAction> {
-    execute_rotations_with_strategy_target(groups, ctx, None)
+    execute_rotations_with(groups, ctx, |_, _| true)
 }
 
+/// Execute all rotation groups in order while applying a caller-supplied
+/// readiness filter.
+pub fn execute_rotations_with<F>(
+    groups: &mut [RotationGroup],
+    ctx: &CombatContext,
+    mut is_action_ready: F,
+) -> Option<SelectedAction>
+where
+    F: FnMut(&RotationEntry, u32) -> bool,
+{
+    execute_rotations_filtered_with_strategy_target(groups, ctx, None, &mut is_action_ready)
+}
+
+/// Execute rotations with a specific strategy target (e.g., for enchanters
+/// targeting adds for mez/CC while the assist target is different).
 pub fn execute_rotations_with_strategy_target(
     groups: &mut [RotationGroup],
     ctx: &CombatContext,
@@ -371,6 +399,7 @@ pub fn execute_rotations_with_strategy_target(
     })
 }
 
+/// Execute rotations with both a strategy target and a readiness filter.
 pub fn execute_rotations_filtered_with_strategy_target<F>(
     groups: &mut [RotationGroup],
     ctx: &CombatContext,
@@ -426,6 +455,7 @@ pub fn entry(name: &str, action_type: ActionType) -> RotationEntry {
         enabled: true,
         cooldown_key: None,
         cooldown_ticks: None,
+        cooldown_key: None,
     }
 }
 
@@ -441,6 +471,7 @@ pub fn entry_if(name: &str, action_type: ActionType, cond: ConditionExpr) -> Rot
         enabled: true,
         cooldown_key: None,
         cooldown_ticks: None,
+        cooldown_key: None,
     }
 }
 
@@ -460,6 +491,7 @@ pub fn entry_unless_active(
         enabled: true,
         cooldown_key: None,
         cooldown_ticks: None,
+        cooldown_key: None,
     }
 }
 
@@ -813,6 +845,24 @@ mod tests {
 
         let action = execute_rotations(&mut groups, &ctx);
         assert_eq!(action.unwrap().entry_name, "Defensive");
+    }
+
+    #[test]
+    fn execute_rotations_with_skips_entries_rejected_by_readiness_filter() {
+        let (player, target, config) = make_ctx(true, 80.0, 80.0);
+        let ctx = build_ctx(&player, Some(&target), &config, true);
+
+        let mut groups = vec![{
+            let mut g = group("Combat", TargetSelector::AutoTarget, CombatStateReq::Combat);
+            g.entries
+                .push(entry("Blocked", ActionType::Disc("Blocked".into())));
+            g.entries
+                .push(entry("Ready", ActionType::Spell("Ready".into())));
+            g
+        }];
+
+        let action = execute_rotations_with(&mut groups, &ctx, |entry, _| entry.name == "Ready");
+        assert_eq!(action.unwrap().entry_name, "Ready");
     }
 
     #[test]

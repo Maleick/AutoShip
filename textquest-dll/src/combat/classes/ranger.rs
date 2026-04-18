@@ -1,10 +1,19 @@
 use textquest_common::{
-    combat::{CombatRole, SpellEntry},
+    combat::{
+        AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+        SpellEntry, TargetSelector,
+    },
     nav::Waypoint,
     types::SpawnData,
 };
 
-use crate::combat::strategy::{self, ClassStrategy, CombatContext};
+use crate::combat::{
+    rotation::{self, RotationGroup},
+    strategy::{self, ClassStrategy, CombatContext},
+};
+
+const RANGER_MELEE_RANGE: f32 = 30.0;
+const RANGER_DISC_LOCKOUT_TICKS: u32 = 86_400;
 
 /// Ranger strategy: ranged/melee hybrid DPS with tracking and bow pulling.
 ///
@@ -26,8 +35,300 @@ impl RangerStrategy {
     pub fn new(class_id: u8) -> Self {
         Self {
             class_id,
-            melee_range: 30.0, // Switch to melee within 30 units
+            melee_range: RANGER_MELEE_RANGE,
         }
+    }
+
+    fn build_ability_sets() -> Vec<AbilitySet> {
+        vec![
+            AbilitySet {
+                name: "SelfBuff".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Natureskin".into(),
+                        min_level: 65,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Strength of Tunare".into(),
+                        min_level: 62,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Call of the Predator".into(),
+                        min_level: 60,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Strength of Nature".into(),
+                        min_level: 51,
+                        spell_id: -1,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "ProcBuff".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Call of the Rathe".into(),
+                        min_level: 62,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Call of Fire".into(),
+                        min_level: 55,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Call of Sky".into(),
+                        min_level: 39,
+                        spell_id: -1,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "PrimaryNuke".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Sylvan Burn".into(),
+                        min_level: 65,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Calefaction".into(),
+                        min_level: 59,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Firestrike".into(),
+                        min_level: 52,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Call of Flame".into(),
+                        min_level: 49,
+                        spell_id: -1,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "ColdNuke".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Circle of Winter".into(),
+                        min_level: 61,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Chill of the Wildtide".into(),
+                        min_level: 56,
+                        spell_id: -1,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "Dot".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Drifting Death".into(),
+                        min_level: 62,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Drones of Doom".into(),
+                        min_level: 54,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Immolate".into(),
+                        min_level: 49,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Stinging Swarm".into(),
+                        min_level: 18,
+                        spell_id: -1,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "Debuff".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Nature's Rebuke".into(),
+                        min_level: 64,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Ensnare".into(),
+                        min_level: 51,
+                        spell_id: -1,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "EmergencyHeal".into(),
+                candidates: vec![
+                    AbilityCandidate {
+                        name: "Chloroblast".into(),
+                        min_level: 62,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Greater Healing".into(),
+                        min_level: 57,
+                        spell_id: -1,
+                    },
+                    AbilityCandidate {
+                        name: "Healing".into(),
+                        min_level: 39,
+                        spell_id: -1,
+                    },
+                ],
+            },
+            AbilitySet {
+                name: "BurnDisc".into(),
+                candidates: vec![AbilityCandidate {
+                    name: "Trueshot Discipline".into(),
+                    min_level: 55,
+                    spell_id: -1,
+                }],
+            },
+            AbilitySet {
+                name: "DefenseDisc".into(),
+                candidates: vec![AbilityCandidate {
+                    name: "Weapon Shield Discipline".into(),
+                    min_level: 60,
+                    spell_id: -1,
+                }],
+            },
+        ]
+    }
+
+    fn build_rotations() -> Vec<RotationGroup> {
+        vec![
+            {
+                let mut group = rotation::group(
+                    "Downtime",
+                    TargetSelector::SelfOnly,
+                    CombatStateReq::Downtime,
+                );
+                group.steps_per_frame = 2;
+                group.entries = vec![
+                    rotation::entry_if(
+                        "SelfBuff",
+                        ActionType::Spell("SelfBuff".into()),
+                        ConditionExpr::ManaAbove(35.0),
+                    ),
+                    rotation::entry_if(
+                        "ProcBuff",
+                        ActionType::Spell("ProcBuff".into()),
+                        ConditionExpr::ManaAbove(40.0),
+                    ),
+                ];
+                group
+            },
+            {
+                let mut group = rotation::group(
+                    "Emergency",
+                    TargetSelector::SelfOnly,
+                    CombatStateReq::Combat,
+                );
+                group.hp_threshold = Some(35.0);
+                group.full_rotation = true;
+                group.entries = vec![
+                    rotation::entry_if(
+                        "EmergencyHeal",
+                        ActionType::Spell("EmergencyHeal".into()),
+                        ConditionExpr::ManaAbove(30.0),
+                    ),
+                    rotation::RotationEntry {
+                        cooldown_ticks: Some(RANGER_DISC_LOCKOUT_TICKS),
+                        cooldown_key: Some("ranger-discipline-lockout".into()),
+                        ..rotation::entry_if(
+                            "DefenseDisc",
+                            ActionType::Disc("DefenseDisc".into()),
+                            ConditionExpr::EnduranceAbove(15.0),
+                        )
+                    },
+                ];
+                group
+            },
+            {
+                let mut group =
+                    rotation::group("Debuff", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                group.entries = vec![rotation::entry_if(
+                    "Debuff",
+                    ActionType::Spell("Debuff".into()),
+                    ConditionExpr::And(vec![
+                        ConditionExpr::TargetHpAbove(35.0),
+                        ConditionExpr::ManaAbove(25.0),
+                    ]),
+                )];
+                group
+            },
+            {
+                let mut group =
+                    rotation::group("Burn", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                group.full_rotation = true;
+                group.entries = vec![
+                    rotation::RotationEntry {
+                        cooldown_ticks: Some(RANGER_DISC_LOCKOUT_TICKS),
+                        cooldown_key: Some("ranger-discipline-lockout".into()),
+                        ..rotation::entry_if(
+                            "BurnDisc",
+                            ActionType::Disc("BurnDisc".into()),
+                            ConditionExpr::And(vec![
+                                ConditionExpr::TargetHpAbove(70.0),
+                                ConditionExpr::EnduranceAbove(20.0),
+                            ]),
+                        )
+                    },
+                    rotation::entry_if(
+                        "ProcBuff",
+                        ActionType::Spell("ProcBuff".into()),
+                        ConditionExpr::And(vec![
+                            ConditionExpr::TargetHpAbove(45.0),
+                            ConditionExpr::ManaAbove(40.0),
+                        ]),
+                    ),
+                ];
+                group
+            },
+            {
+                let mut group =
+                    rotation::group("Combat", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                group.entries = vec![
+                    rotation::entry_if(
+                        "Dot",
+                        ActionType::Spell("Dot".into()),
+                        ConditionExpr::And(vec![
+                            ConditionExpr::TargetHpAbove(60.0),
+                            ConditionExpr::ManaAbove(55.0),
+                        ]),
+                    ),
+                    rotation::entry_if(
+                        "PrimaryNuke",
+                        ActionType::Spell("PrimaryNuke".into()),
+                        ConditionExpr::ManaAbove(45.0),
+                    ),
+                    rotation::entry_if(
+                        "ColdNuke",
+                        ActionType::Spell("ColdNuke".into()),
+                        ConditionExpr::ManaAbove(35.0),
+                    ),
+                    rotation::entry_if(
+                        "Kick",
+                        ActionType::Ability("Kick".into()),
+                        ConditionExpr::And(vec![
+                            ConditionExpr::TargetDistanceBelow(RANGER_MELEE_RANGE),
+                            ConditionExpr::EnduranceAbove(15.0),
+                        ]),
+                    ),
+                ];
+                group
+            },
+        ]
     }
 
     /// Calculate distance to target.
@@ -111,6 +412,14 @@ impl ClassStrategy for RangerStrategy {
 
     fn role(&self) -> CombatRole {
         CombatRole::DpsRanged
+    }
+
+    fn rotation_groups(&self) -> Option<Vec<RotationGroup>> {
+        Some(Self::build_rotations())
+    }
+
+    fn ability_sets(&self) -> Vec<AbilitySet> {
+        Self::build_ability_sets()
     }
 }
 
@@ -378,5 +687,119 @@ mod tests {
         ];
         let nearest = strategy::nearest_enemy(&player, &enemies).unwrap();
         assert_eq!(nearest.spawn_id, 2);
+    }
+
+    #[test]
+    fn ranger_has_rotation_groups_in_priority_order() {
+        let ranger = RangerStrategy::new(4);
+        let groups = ranger
+            .rotation_groups()
+            .expect("ranger should use rotations");
+        let names: Vec<&str> = groups.iter().map(|group| group.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["Downtime", "Emergency", "Debuff", "Burn", "Combat"]
+        );
+    }
+
+    #[test]
+    fn ranger_level_overrides_resolve_expected_lines() {
+        let ranger = RangerStrategy::new(4);
+        let sets = ranger.ability_sets();
+        let known: Vec<textquest_common::combat::KnownAbility> = sets
+            .iter()
+            .flat_map(|set| set.candidates.iter())
+            .enumerate()
+            .map(
+                |(index, candidate)| textquest_common::combat::KnownAbility {
+                    name: candidate.name.clone(),
+                    spell_id: 10_000 + index as i32,
+                    level: candidate.min_level,
+                },
+            )
+            .collect();
+
+        let at_60 = textquest_common::combat::resolve_abilities(&sets, &known, 60);
+        assert_eq!(
+            at_60
+                .get("SelfBuff")
+                .map(|ability| ability.ability_name.as_str()),
+            Some("Call of the Predator")
+        );
+        assert_eq!(
+            at_60
+                .get("DefenseDisc")
+                .map(|ability| ability.ability_name.as_str()),
+            Some("Weapon Shield Discipline")
+        );
+
+        let at_61 = textquest_common::combat::resolve_abilities(&sets, &known, 61);
+        assert_eq!(
+            at_61
+                .get("ColdNuke")
+                .map(|ability| ability.ability_name.as_str()),
+            Some("Circle of Winter")
+        );
+
+        let at_62 = textquest_common::combat::resolve_abilities(&sets, &known, 62);
+        assert_eq!(
+            at_62
+                .get("Dot")
+                .map(|ability| ability.ability_name.as_str()),
+            Some("Drifting Death")
+        );
+        assert_eq!(
+            at_62
+                .get("ProcBuff")
+                .map(|ability| ability.ability_name.as_str()),
+            Some("Call of the Rathe")
+        );
+        assert_eq!(
+            textquest_common::combat::resolve_abilities(&sets, &known, 64)
+                .get("Debuff")
+                .map(|ability| ability.ability_name.as_str()),
+            Some("Nature's Rebuke")
+        );
+
+        let at_65 = textquest_common::combat::resolve_abilities(&sets, &known, 65);
+        assert_eq!(
+            at_65
+                .get("PrimaryNuke")
+                .map(|ability| ability.ability_name.as_str()),
+            Some("Sylvan Burn")
+        );
+        assert_eq!(
+            at_65
+                .get("SelfBuff")
+                .map(|ability| ability.ability_name.as_str()),
+            Some("Natureskin")
+        );
+    }
+
+    #[test]
+    fn ranger_low_hp_rotation_prefers_emergency_heal() {
+        let ranger = RangerStrategy::new(4);
+        let mut groups = ranger
+            .rotation_groups()
+            .expect("ranger should use rotations");
+        let player = SpawnData {
+            hp_current: 2_000,
+            hp_max: 10_000,
+            mana_current: 8_000,
+            mana_max: 10_000,
+            ..SpawnData::default()
+        };
+        let target = SpawnData {
+            spawn_id: 77,
+            hp_current: 9_000,
+            hp_max: 10_000,
+            ..SpawnData::default()
+        };
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, Some(&target), &[], &config, true);
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)
+            .expect("expected an emergency rotation action");
+        assert_eq!(action.entry_name, "EmergencyHeal");
     }
 }

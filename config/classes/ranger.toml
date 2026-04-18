@@ -3,26 +3,376 @@ role = "dps"
 rest_command = "/sit"
 
 [[combat_abilities]]
-name = "Attack"
-command = "/attack"
-cooldown_secs = 0.0
-priority = 1
-
-[[combat_abilities]]
 name = "Kick"
-command = "/kick"
+command = "/doability kick"
 cooldown_secs = 6.0
-priority = 2
-
-[[combat_abilities]]
-name = "Snare"
-command = "/cast 1"
-cooldown_secs = 12.0
-priority = 3
-condition = "mob_fleeing"
+priority = 4
+condition = "target_distance_below_30_and_endurance_above_15"
 
 [[buff_abilities]]
-name = "Strength"
-command = "/cast 5"
-cooldown_secs = 600.0
+name = "Strength of Nature"
+command = "/cast SelfBuff"
+cooldown_secs = 360.0
 priority = 1
+condition = "out_of_combat_and_mana_above_35"
+
+[[emergency_abilities]]
+name = "Greater Healing"
+command = "/cast EmergencyHeal"
+cooldown_secs = 4.0
+priority = 1
+condition = "hp_below_35_and_mana_above_30"
+
+[[debuff_abilities]]
+name = "Ensnare"
+command = "/cast Debuff"
+cooldown_secs = 24.0
+order = 1
+
+[[level_overrides]]
+name = "ranger-60"
+min_level = 60
+max_level = 60
+
+[[level_overrides.combat_abilities]]
+name = "Trueshot Discipline"
+command = "/discipline Trueshot Discipline"
+cooldown_secs = 4320.0
+priority = 1
+condition = "target_hp_above_70_and_endurance_above_20"
+
+[[level_overrides.combat_abilities]]
+name = "Calefaction"
+command = "/cast PrimaryNuke"
+cooldown_secs = 3.0
+priority = 2
+condition = "mana_above_45"
+
+[[level_overrides.combat_abilities]]
+name = "Immolate"
+command = "/cast Dot"
+cooldown_secs = 24.0
+priority = 3
+condition = "target_hp_above_60_and_mana_above_55"
+
+[[level_overrides.combat_abilities]]
+name = "Kick"
+command = "/doability kick"
+cooldown_secs = 6.0
+priority = 4
+condition = "target_distance_below_30_and_endurance_above_15"
+
+[[level_overrides.buff_abilities]]
+name = "Call of the Predator"
+command = "/cast SelfBuff"
+cooldown_secs = 360.0
+priority = 1
+condition = "out_of_combat_and_mana_above_35"
+
+[[level_overrides.emergency_abilities]]
+name = "Greater Healing"
+command = "/cast EmergencyHeal"
+cooldown_secs = 4.0
+priority = 1
+condition = "hp_below_35_and_mana_above_30"
+
+[[level_overrides.emergency_abilities]]
+name = "Weapon Shield Discipline"
+command = "/discipline Weapon Shield Discipline"
+cooldown_secs = 4320.0
+priority = 2
+condition = "hp_below_35_and_endurance_above_15"
+
+[[level_overrides.debuff_abilities]]
+name = "Ensnare"
+command = "/cast Debuff"
+cooldown_secs = 24.0
+order = 1
+
+[[level_overrides]]
+name = "ranger-61"
+min_level = 61
+max_level = 61
+
+[[level_overrides.combat_abilities]]
+name = "Trueshot Discipline"
+command = "/discipline Trueshot Discipline"
+cooldown_secs = 4320.0
+priority = 1
+condition = "target_hp_above_70_and_endurance_above_20"
+
+[[level_overrides.combat_abilities]]
+name = "Calefaction"
+command = "/cast PrimaryNuke"
+cooldown_secs = 3.0
+priority = 2
+condition = "mana_above_45"
+
+[[level_overrides.combat_abilities]]
+name = "Circle of Winter"
+command = "/cast ColdNuke"
+cooldown_secs = 3.0
+priority = 3
+condition = "mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Immolate"
+command = "/cast Dot"
+cooldown_secs = 24.0
+priority = 4
+condition = "target_hp_above_60_and_mana_above_55"
+
+[[level_overrides.combat_abilities]]
+name = "Kick"
+command = "/doability kick"
+cooldown_secs = 6.0
+priority = 5
+condition = "target_distance_below_30_and_endurance_above_15"
+
+[[level_overrides.buff_abilities]]
+name = "Call of the Predator"
+command = "/cast SelfBuff"
+cooldown_secs = 360.0
+priority = 1
+condition = "out_of_combat_and_mana_above_35"
+
+[[level_overrides.emergency_abilities]]
+name = "Greater Healing"
+command = "/cast EmergencyHeal"
+cooldown_secs = 4.0
+priority = 1
+condition = "hp_below_35_and_mana_above_30"
+
+[[level_overrides.emergency_abilities]]
+name = "Weapon Shield Discipline"
+command = "/discipline Weapon Shield Discipline"
+cooldown_secs = 4320.0
+priority = 2
+condition = "hp_below_35_and_endurance_above_15"
+
+[[level_overrides.debuff_abilities]]
+name = "Ensnare"
+command = "/cast Debuff"
+cooldown_secs = 24.0
+order = 1
+
+[[level_overrides]]
+name = "ranger-62-63"
+min_level = 62
+max_level = 63
+
+[[level_overrides.combat_abilities]]
+name = "Trueshot Discipline"
+command = "/discipline Trueshot Discipline"
+cooldown_secs = 4320.0
+priority = 1
+condition = "target_hp_above_70_and_endurance_above_20"
+
+[[level_overrides.combat_abilities]]
+name = "Calefaction"
+command = "/cast PrimaryNuke"
+cooldown_secs = 3.0
+priority = 2
+condition = "mana_above_45"
+
+[[level_overrides.combat_abilities]]
+name = "Circle of Winter"
+command = "/cast ColdNuke"
+cooldown_secs = 3.0
+priority = 3
+condition = "mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Drifting Death"
+command = "/cast Dot"
+cooldown_secs = 24.0
+priority = 4
+condition = "target_hp_above_60_and_mana_above_55"
+
+[[level_overrides.combat_abilities]]
+name = "Kick"
+command = "/doability kick"
+cooldown_secs = 6.0
+priority = 5
+condition = "target_distance_below_30_and_endurance_above_15"
+
+[[level_overrides.buff_abilities]]
+name = "Strength of Tunare"
+command = "/cast SelfBuff"
+cooldown_secs = 360.0
+priority = 1
+condition = "out_of_combat_and_mana_above_35"
+
+[[level_overrides.buff_abilities]]
+name = "Call of the Rathe"
+command = "/cast ProcBuff"
+cooldown_secs = 360.0
+priority = 2
+condition = "target_hp_above_45_and_mana_above_40"
+
+[[level_overrides.emergency_abilities]]
+name = "Chloroblast"
+command = "/cast EmergencyHeal"
+cooldown_secs = 4.0
+priority = 1
+condition = "hp_below_35_and_mana_above_30"
+
+[[level_overrides.emergency_abilities]]
+name = "Weapon Shield Discipline"
+command = "/discipline Weapon Shield Discipline"
+cooldown_secs = 4320.0
+priority = 2
+condition = "hp_below_35_and_endurance_above_15"
+
+[[level_overrides.debuff_abilities]]
+name = "Ensnare"
+command = "/cast Debuff"
+cooldown_secs = 24.0
+order = 1
+
+[[level_overrides]]
+name = "ranger-64"
+min_level = 64
+max_level = 64
+
+[[level_overrides.combat_abilities]]
+name = "Trueshot Discipline"
+command = "/discipline Trueshot Discipline"
+cooldown_secs = 4320.0
+priority = 1
+condition = "target_hp_above_70_and_endurance_above_20"
+
+[[level_overrides.combat_abilities]]
+name = "Calefaction"
+command = "/cast PrimaryNuke"
+cooldown_secs = 3.0
+priority = 2
+condition = "mana_above_45"
+
+[[level_overrides.combat_abilities]]
+name = "Circle of Winter"
+command = "/cast ColdNuke"
+cooldown_secs = 3.0
+priority = 3
+condition = "mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Drifting Death"
+command = "/cast Dot"
+cooldown_secs = 24.0
+priority = 4
+condition = "target_hp_above_60_and_mana_above_55"
+
+[[level_overrides.combat_abilities]]
+name = "Kick"
+command = "/doability kick"
+cooldown_secs = 6.0
+priority = 5
+condition = "target_distance_below_30_and_endurance_above_15"
+
+[[level_overrides.buff_abilities]]
+name = "Strength of Tunare"
+command = "/cast SelfBuff"
+cooldown_secs = 360.0
+priority = 1
+condition = "out_of_combat_and_mana_above_35"
+
+[[level_overrides.buff_abilities]]
+name = "Call of the Rathe"
+command = "/cast ProcBuff"
+cooldown_secs = 360.0
+priority = 2
+condition = "target_hp_above_45_and_mana_above_40"
+
+[[level_overrides.emergency_abilities]]
+name = "Chloroblast"
+command = "/cast EmergencyHeal"
+cooldown_secs = 4.0
+priority = 1
+condition = "hp_below_35_and_mana_above_30"
+
+[[level_overrides.emergency_abilities]]
+name = "Weapon Shield Discipline"
+command = "/discipline Weapon Shield Discipline"
+cooldown_secs = 4320.0
+priority = 2
+condition = "hp_below_35_and_endurance_above_15"
+
+[[level_overrides.debuff_abilities]]
+name = "Nature's Rebuke"
+command = "/cast Debuff"
+cooldown_secs = 24.0
+order = 1
+
+[[level_overrides]]
+name = "ranger-65"
+min_level = 65
+
+[[level_overrides.combat_abilities]]
+name = "Trueshot Discipline"
+command = "/discipline Trueshot Discipline"
+cooldown_secs = 4320.0
+priority = 1
+condition = "target_hp_above_70_and_endurance_above_20"
+
+[[level_overrides.combat_abilities]]
+name = "Sylvan Burn"
+command = "/cast PrimaryNuke"
+cooldown_secs = 3.0
+priority = 2
+condition = "mana_above_45"
+
+[[level_overrides.combat_abilities]]
+name = "Circle of Winter"
+command = "/cast ColdNuke"
+cooldown_secs = 3.0
+priority = 3
+condition = "mana_above_35"
+
+[[level_overrides.combat_abilities]]
+name = "Drifting Death"
+command = "/cast Dot"
+cooldown_secs = 24.0
+priority = 4
+condition = "target_hp_above_60_and_mana_above_55"
+
+[[level_overrides.combat_abilities]]
+name = "Kick"
+command = "/doability kick"
+cooldown_secs = 6.0
+priority = 5
+condition = "target_distance_below_30_and_endurance_above_15"
+
+[[level_overrides.buff_abilities]]
+name = "Natureskin"
+command = "/cast SelfBuff"
+cooldown_secs = 360.0
+priority = 1
+condition = "out_of_combat_and_mana_above_35"
+
+[[level_overrides.buff_abilities]]
+name = "Call of the Rathe"
+command = "/cast ProcBuff"
+cooldown_secs = 360.0
+priority = 2
+condition = "target_hp_above_45_and_mana_above_40"
+
+[[level_overrides.emergency_abilities]]
+name = "Chloroblast"
+command = "/cast EmergencyHeal"
+cooldown_secs = 4.0
+priority = 1
+condition = "hp_below_35_and_mana_above_30"
+
+[[level_overrides.emergency_abilities]]
+name = "Weapon Shield Discipline"
+command = "/discipline Weapon Shield Discipline"
+cooldown_secs = 4320.0
+priority = 2
+condition = "hp_below_35_and_endurance_above_15"
+
+[[level_overrides.debuff_abilities]]
+name = "Nature's Rebuke"
+command = "/cast Debuff"
+cooldown_secs = 24.0
+order = 1

@@ -1047,6 +1047,32 @@ With 36 characters across 6 groups:
 
 ---
 
+## 8. Ranger (Hybrid DPS / Utility Puller)
+
+### Live-Safe Rotation Bands
+
+- **Level 60**: maintain `Call of the Predator`, use `Calefaction` as the primary nuke, `Immolate` only on healthier targets, and reserve `Weapon Shield Discipline` for the emergency bucket.
+- **Level 61**: add `Circle of Winter` as the cold nuke line without changing the Trueshot / Weapon Shield discipline pairing.
+- **Level 62-63**: upgrade the self-buff and proc package to `Strength of Tunare` plus `Call of the Rathe`, swap the dot line to `Drifting Death`, and move emergency healing to `Chloroblast`.
+- **Level 64**: keep the 62-era DPS package but promote the debuff line to `Nature's Rebuke`.
+- **Level 65+**: promote `Sylvan Burn` to the primary nuke slot and `Natureskin` to the main downtime buff while keeping the 62-era proc and dot lines.
+
+### Rotation Priority
+
+1. **Downtime**: refresh `SelfBuff` before pulls, then `ProcBuff` when mana permits.
+2. **Emergency**: cast the emergency heal first below the HP floor; fall through to `Weapon Shield Discipline` only when the heal path is insufficient.
+3. **Debuff**: apply the snare / debuff line early on stable, healthy targets.
+4. **Burn**: fire `Trueshot Discipline` only on long-lived targets with enough endurance to justify the shared discipline lockout.
+5. **Combat**: `Drifting Death` on durable targets, then the primary nuke, then `Circle of Winter`, and finally `Kick` inside melee range when endurance is still healthy.
+
+### Resource Rules
+
+- Spell casts are gated so Rangers stop spending mana on low-value nukes before they starve the emergency heal or downtime buff refresh.
+- `Kick` stays behind an endurance threshold so melee utility does not crowd out the long-lockout discipline buttons.
+- `Trueshot Discipline` and `Weapon Shield Discipline` should be treated as sharing the Ranger discipline lockout; once one fires, the other is unavailable until the reuse window expires.
+
+---
+
 ## Automation Priority Summary
 
 Classes ranked by automation complexity (simplest to hardest):

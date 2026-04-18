@@ -1100,6 +1100,228 @@ impl Combatant {
             }
 
             CombatState::Engaging { .. } => {
+                if !self.gcd.is_ready() {
+                    return;
+                }
+
+                let selected_spell_target = self.strategy.select_target(&ctx);
+
+                // Ask strategy for a spell target (may differ from assist target).
+                // Healers target lowest-HP group member, enchanters target off-mobs
+                // for mez, etc. This only influences spell targeting — it does NOT
+                // override the assist target for auto-attack.
+                if let Some(spell_target) = selected_spell_target
+                    && target.is_none_or(|t| t.spawn_id != spell_target)
+                {
+                    tracing::debug!(
+                        spell_target,
+                        assist = ?self.assist_target,
+                        "Strategy selected different spell target"
+                    );
+                    crate::eq::slash_command(&format!("/target id {spell_target}"));
+                }
+
+                // Range check — don't cast if target is too far away
+                if let Some(t) = target {
+                    let dist = Waypoint::new(player.x, player.y, player.z)
+                        .distance_3d(&Waypoint::new(t.x, t.y, t.z));
+                    if dist > MAX_SPELL_RANGE {
+                        tracing::debug!(dist, "Target out of spell range, waiting");
+                        return;
+                    }
+                }
+
+                // Check mana governor
+                let mana_pct = player.mana_pct();
+
+                if !self.mana_governor.can_cast(mana_pct) {
+                    tracing::debug!(mana_pct, "Mana too low, transitioning to Recovering");
+                    self.state = CombatState::Recovering;
+                    return;
+                }
+
+                // --- Rotation engine path ---
+                // When the class defines data-driven rotation groups, use the
+                // rotation engine instead of the legacy `select_spell()` path.
+                if let Some(ref mut groups) = self.rotation_groups {
+                    if let Some(action) =
+                        rotation::execute_rotations_with(groups, &ctx, |entry, _| {
+                            match &entry.action_type {
+                                ActionType::Spell(_) | ActionType::Song(_) => self
+                                    .resolved_abilities
+                                    .get(&entry.name)
+                                    .is_some_and(|resolved| resolved.spell_id > 0),
+                                ActionType::Disc(_) | ActionType::AA(_) => {
+                                    let Some(resolved) = self.resolved_abilities.get(&entry.name)
+                                    else {
+                                        return false;
+                                    };
+                                    if resolved.spell_id <= 0
+                                        || !self
+                                            .ability_cooldowns
+                                            .can_use(resolved.spell_id, None, self.tick_count)
+                                    {
+                                        return false;
+                                    }
+                                    entry.cooldown_key.as_ref().is_none_or(|key| {
+                                        self.ability_cooldowns
+                                            .can_use(shared_cooldown_key(key), None, self.tick_count)
+                                    })
+                                }
+                                ActionType::Ability(ability_name) => combat_skill_id(ability_name)
+                                    .is_some_and(|skill_id| {
+                                        self.skill_cooldowns.is_ready(skill_id)
+                                    }),
+                                ActionType::Item(item_name) => {
+                                    use_item_command(item_name).is_some()
+                                        && self
+                                            .ability_cooldowns
+                                            .can_use(item_action_key(item_name), None, self.tick_count)
+                                        && entry.cooldown_key.as_ref().is_none_or(|key| {
+                                            self.ability_cooldowns
+                                                .can_use(shared_cooldown_key(key), None, self.tick_count)
+                                        })
+                                }
+                            }
+                        })
+                    {
+                        // Resolve the action's spell line name to a concrete spell ID
+                        // via the pre-resolved ability map. If no resolution exists,
+                        // the action name is treated as a literal and spell_id=0.
+                        let (spell_id, resolved_name) = if let Some(resolved) =
+                            self.resolved_abilities.get(&action.entry_name)
+                        {
+                            (resolved.spell_id, resolved.ability_name.as_str())
+                        } else {
+                            (0, action.entry_name.as_str())
+                        };
+
+                        tracing::debug!(
+                            entry = %action.entry_name,
+                            resolved = %resolved_name,
+                            spell_id,
+                            target = action.target_id,
+                            "Rotation engine selected action"
+                        );
+                        match &action.action_type {
+                            ActionType::Spell(_) | ActionType::Song(_) => {
+                                if spell_id <= 0 {
+                                    tracing::warn!(
+                                        entry = %action.entry_name,
+                                        action = ?action.action_type,
+                                        "Skipping unresolved spell/song from rotation"
+                                    );
+                                    return;
+                                }
+                                let memorized_spells = crate::eq::read_memorized_spells();
+                                let Some(cast_plan) =
+                                    plan_spell_cast(None, spell_id, &memorized_spells)
+                                else {
+                                    tracing::warn!(
+                                        entry = %action.entry_name,
+                                        spell_id,
+                                        action = ?action.action_type,
+                                        "Skipping spell/song from rotation because no valid cast plan was found"
+                                    );
+                                    return;
+                                };
+                                crate::eq::cast_spell(cast_plan.gem_id, cast_plan.spell_id);
+                                let cast_delay = u32::from(self.personality.next_cast_delay());
+                                self.gcd.consume();
+                                self.state = CombatState::Casting {
+                                    spell_slot: cast_plan.gem_id,
+                                    spell_id: cast_plan.spell_id,
+                                    target_id: action.target_id,
+                                    ticks_remaining: 20 + cast_delay,
+                                    backoff_ticks: 0,
+                                    retry_count: 0,
+                                };
+                            }
+                            ActionType::Disc(_) | ActionType::AA(_) => {
+                                if spell_id <= 0 {
+                                    tracing::warn!(
+                                        entry = %action.entry_name,
+                                        action = ?action.action_type,
+                                        "Skipping unresolved activated ability from rotation"
+                                    );
+                                    return;
+                                }
+                                if !self.ability_cooldowns.can_use(spell_id, None, self.tick_count) {
+                                    tracing::debug!(
+                                        entry = %action.entry_name,
+                                        spell_id,
+                                        "Activated rotation ability blocked by cooldown metadata"
+                                    );
+                                    return;
+                                }
+                                crate::eq::do_combat_ability(spell_id, true);
+                                self.ability_cooldowns.consume(
+                                    spell_id,
+                                    action.cooldown_ticks,
+                                    action.cooldown_key.as_deref(),
+                                    action.cooldown_ticks,
+                                    self.tick_count,
+                                );
+                                self.gcd.consume();
+                                self.state = CombatState::OnGcd;
+                            }
+                            ActionType::Ability(ability_name) => {
+                                let Some(skill_id) = combat_skill_id(ability_name) else {
+                                    tracing::warn!(
+                                        ability = %ability_name,
+                                        entry = %action.entry_name,
+                                        "Skipping unknown combat skill from rotation"
+                                    );
+                                    return;
+                                };
+                                if !self.skill_cooldowns.is_ready(skill_id) {
+                                    tracing::debug!(
+                                        skill_id,
+                                        ability = %ability_name,
+                                        "Rotation skill blocked by cooldown"
+                                    );
+                                    return;
+                                }
+                                crate::eq::use_skill(skill_id, None);
+                                if let Some(cooldown) = default_cooldown(skill_id) {
+                                    self.skill_cooldowns.consume(skill_id, cooldown);
+                                }
+                                self.gcd.consume();
+                                self.state = CombatState::OnGcd;
+                            }
+                            ActionType::Item(item_name) => {
+                                let Some(command) = use_item_command(item_name) else {
+                                    tracing::warn!(
+                                        entry = %action.entry_name,
+                                        "Skipping item rotation with empty sanitized name"
+                                    );
+                                    return;
+                                };
+                                let item_key = item_action_key(item_name);
+                                if !self.ability_cooldowns.can_use(item_key, None, self.tick_count) {
+                                    tracing::debug!(
+                                        entry = %action.entry_name,
+                                        item = %item_name,
+                                        "Rotation item blocked by cooldown metadata"
+                                    );
+                                    return;
+                                }
+                                crate::eq::slash_command(&command);
+                                self.ability_cooldowns.consume(
+                                    item_key,
+                                    action.cooldown_ticks,
+                                    action.cooldown_key.as_deref(),
+                                    action.cooldown_ticks,
+                                    self.tick_count,
+                                );
+                                self.gcd.consume();
+                                self.state = CombatState::OnGcd;
+                            }
+                        }
+                    }
+                    return;
+                }
+
                 // --- Legacy select_spell() path ---
                 // Ask strategy for next spell
                 if let Some(spell) = self.strategy.select_spell(&ctx) {
@@ -2860,6 +3082,58 @@ mod tests {
     #[test]
     fn combat_skill_id_rejects_unknown_rotation_skills() {
         assert_eq!(combat_skill_id("Mystery Skill"), None);
+    }
+
+    #[test]
+    fn rotation_disc_uses_entry_cooldown_metadata() {
+        let mut c = Combatant::new(4, 0, test_config());
+        c.rotation_groups = Some(vec![RotationGroup {
+            name: "Burn".into(),
+            target_selector: textquest_common::combat::TargetSelector::AutoTarget,
+            combat_state_req: textquest_common::combat::CombatStateReq::Combat,
+            steps_per_frame: 1,
+            full_rotation: false,
+            hp_threshold: None,
+            entries: vec![rotation::RotationEntry {
+                name: "BurnDisc".into(),
+                action_type: ActionType::Disc("BurnDisc".into()),
+                condition: Some(textquest_common::combat::ConditionExpr::TargetHpAbove(75.0)),
+                active_condition: None,
+                pre_activate: None,
+                post_activate: None,
+                enabled: true,
+                cooldown_ticks: Some(77),
+                cooldown_key: None,
+            }],
+            current_step: 0,
+        }]);
+        c.resolved_abilities.insert(
+            "BurnDisc".into(),
+            ResolvedAbility {
+                set_name: "BurnDisc".into(),
+                ability_name: "Trueshot Discipline".into(),
+                spell_id: 4_694,
+                min_level: 60,
+            },
+        );
+
+        let mut player = test_player();
+        player.mana_current = 8_000;
+        player.mana_max = 10_000;
+
+        let mut target = test_target();
+        target.hp_current = 9_000;
+        target.hp_max = 10_000;
+
+        c.state = CombatState::Engaging {
+            target_id: target.spawn_id,
+        };
+        c.tick(&player, Some(&target), &[]);
+
+        assert_eq!(
+            c.ability_cooldowns.availability(4_694, c.tick_count),
+            AbilityAvailability::CoolingDown(77)
+        );
     }
 
     #[test]
