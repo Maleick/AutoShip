@@ -914,8 +914,7 @@ mod tests {
 
         let base_profile = config.profile_for_level(None);
         assert!(
-            !base_profile.combat_abilities.is_empty()
-                || !base_profile.buff_abilities.is_empty(),
+            !base_profile.combat_abilities.is_empty() || !base_profile.buff_abilities.is_empty(),
             "live cleric config should define at least one ability"
         );
 

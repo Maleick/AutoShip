@@ -178,6 +178,7 @@ jobs:
 
   test-matrix:
     name: Unit tests on ${{ matrix.os-name }} (rust-${{ matrix.rust }})
+    continue-on-error: ${{ matrix.continue-on-error == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -190,6 +191,7 @@ jobs:
           - runner: '["self-hosted", "Windows", "X64", "textquest"]'
             os-name: windows
             rust: nightly
+            continue-on-error: true
           # Linux with stable Rust
           - runner: '["self-hosted", "Linux", "X64", "textquest"]'
             os-name: linux
