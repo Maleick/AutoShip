@@ -279,7 +279,7 @@ await client.deleteChatPatternRule("rule-1");
 
 ```typescript
 // Get kill tracker data
-const kills = await client.getKillTracker();
+const killTracker = await client.getKillTrackerSettings();
 
 // Get kill statistics
 const stats = await client.getKillTrackerStats();

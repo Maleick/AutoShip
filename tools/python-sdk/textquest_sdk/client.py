@@ -5,6 +5,7 @@ This module provides a sync wrapper around the TextQuest web API using requests.
 
 from typing import Any, Dict, List, Optional
 import json
+from urllib.parse import quote
 import requests
 from requests.exceptions import RequestException
 
@@ -72,6 +73,29 @@ class TextQuestClient:
         if response.text:
             return response.json()
         return None
+
+    @staticmethod
+    def _summarize_kill_tracker_history(history: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Build a lightweight stats view from kill-tracker history."""
+        total_kills = 0
+        kills_by_zone: Dict[str, int] = {}
+        total_sessions = 0
+
+        for character_history in history:
+            for session in character_history.get("sessions", []):
+                total_sessions += 1
+                kills = int(session.get("total_kills", 0))
+                total_kills += kills
+                zone = session.get("zone", "Unknown")
+                kills_by_zone[zone] = kills_by_zone.get(zone, 0) + kills
+
+        return {
+            "total_kills": total_kills,
+            "kills_by_zone": kills_by_zone,
+            "total_loot_value": 0,
+            "average_kill_value": 0.0,
+            "session_count": total_sessions,
+        }
 
     # ─── Health & Status ─────────────────────────────────────────────────
 
@@ -402,7 +426,8 @@ class TextQuestClient:
         Returns:
             Alert configuration
         """
-        return self._make_request("GET", "/api/alerts/config")
+        response = self._make_request("GET", "/api/alerts/config")
+        return response["config"]
 
     def set_alert_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Update alert configuration.
@@ -413,13 +438,14 @@ class TextQuestClient:
         Returns:
             Updated configuration
         """
-        return self._make_request("PUT", "/api/alerts/config", json_data=config)
+        response = self._make_request("PUT", "/api/alerts/config", json_data=config)
+        return response["config"]
 
-    def list_alerts(self) -> List[Dict[str, Any]]:
+    def list_alerts(self) -> Dict[str, Any]:
         """List all alerts.
 
         Returns:
-            List of alerts
+            Alert envelope with alerts and unread count
         """
         return self._make_request("GET", "/api/alerts")
 
@@ -492,7 +518,7 @@ class TextQuestClient:
         Returns:
             Updated watch list
         """
-        return self._make_request("PUT", f"/api/spawn-alerts/watch-list/{pattern}")
+        return self._make_request("PUT", "/api/spawn-alerts/watch-list", json_data={"pattern": pattern})
 
     def remove_spawn_watch_pattern(self, pattern: str) -> None:
         """Remove a spawn watch pattern.
@@ -500,19 +526,20 @@ class TextQuestClient:
         Args:
             pattern: Pattern to remove
         """
+        encoded_pattern = quote(pattern, safe="")
         self.session.delete(
-            f"{self.base_url}/api/spawn-alerts/watch-list/{pattern}", timeout=10
+            f"{self.base_url}/api/spawn-alerts/watch-list/{encoded_pattern}", timeout=10
         ).raise_for_status()
 
     # ─── GM Alerts ───────────────────────────────────────────────────────
 
-    def list_gm_alerts(self) -> List[Dict[str, Any]]:
-        """List GM detection alerts.
+    def list_gm_alerts(self) -> Dict[str, Any]:
+        """Get the live GM alert status.
 
         Returns:
-            List of GM alerts
+            GM alert status envelope
         """
-        return self._make_request("GET", "/api/gm-alerts")
+        return self.get_gm_alert_status()
 
     def get_gm_alert_state(self) -> Dict[str, Any]:
         """Get current GM alert state.
@@ -520,7 +547,23 @@ class TextQuestClient:
         Returns:
             GM alert state
         """
-        return self._make_request("GET", "/api/gm-alerts/state")
+        return self.get_gm_alert_status()
+
+    def get_gm_alert_config(self) -> Dict[str, Any]:
+        """Get the persisted GM alert configuration."""
+        return self._make_request("GET", "/api/gm-alerts/config")
+
+    def set_gm_alert_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Update the persisted GM alert configuration."""
+        return self._make_request("PUT", "/api/gm-alerts/config", json_data=config)
+
+    def get_gm_alert_status(self) -> Dict[str, Any]:
+        """Get the live GM alert status."""
+        return self._make_request("GET", "/api/gm-alerts/status")
+
+    def sync_gm_alert_status(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Push live GM alert status into the server-side cache."""
+        return self._make_request("POST", "/api/gm-alerts/sync", json_data=payload)
 
     def acknowledge_gm_alert(self, alert_id: str) -> None:
         """Acknowledge a GM alert.
@@ -631,7 +674,7 @@ class TextQuestClient:
         Returns:
             List of kill records
         """
-        return self._make_request("GET", "/api/kill-tracker/records")
+        return self._make_request("GET", "/api/kill-tracker/sessions")
 
     def get_kill_tracker_stats(self) -> Dict[str, Any]:
         """Get kill tracker statistics.
@@ -639,7 +682,28 @@ class TextQuestClient:
         Returns:
             Kill tracker stats
         """
-        return self._make_request("GET", "/api/kill-tracker/stats")
+        history = self._make_request("GET", "/api/kill-tracker/history")
+        return self._summarize_kill_tracker_history(history)
+
+    def get_kill_tracker_settings(self) -> Dict[str, Any]:
+        """Get kill tracker settings."""
+        return self._make_request("GET", "/api/kill-tracker/settings")
+
+    def set_kill_tracker_settings(self, settings: Dict[str, Any]) -> Dict[str, Any]:
+        """Update kill tracker settings."""
+        return self._make_request("PUT", "/api/kill-tracker/settings", json_data=settings)
+
+    def list_kill_tracker_sessions(self) -> List[Dict[str, Any]]:
+        """List the latest kill tracker session for each character."""
+        return self._make_request("GET", "/api/kill-tracker/sessions")
+
+    def get_kill_tracker_character_sessions(self, character: str) -> List[Dict[str, Any]]:
+        """Get all kill tracker sessions for a single character."""
+        return self._make_request("GET", f"/api/kill-tracker/sessions/{character}")
+
+    def get_kill_tracker_history(self) -> List[Dict[str, Any]]:
+        """Get the kill tracker history grouped by character."""
+        return self._make_request("GET", "/api/kill-tracker/history")
 
     def clear_kill_tracker(self) -> None:
         """Clear all kill tracker records."""

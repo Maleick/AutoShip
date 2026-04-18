@@ -61,10 +61,36 @@ export class TextQuestClient {
         return await this.requestWithFetch<T>(url, method, headers, body);
       }
     } catch (error) {
+      if (error instanceof TextQuestClientError) {
+        throw error;
+      }
       throw new TextQuestClientError(
         `Failed to ${method} ${path}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+  }
+
+  private summarizeKillTrackerHistory(
+    history: Array<{ sessions?: Array<{ total_kills?: number; zone?: string }> }>
+  ): Types.KillTrackerStatsResponse {
+    const killsByZone: Record<string, number> = {};
+    let totalKills = 0;
+
+    for (const characterHistory of history) {
+      for (const session of characterHistory.sessions ?? []) {
+        const kills = Number(session.total_kills ?? 0);
+        const zone = session.zone ?? "Unknown";
+        totalKills += kills;
+        killsByZone[zone] = (killsByZone[zone] ?? 0) + kills;
+      }
+    }
+
+    return {
+      total_kills: totalKills,
+      kills_by_zone: killsByZone,
+      total_loot_value: 0,
+      average_kill_value: 0,
+    };
   }
 
   /**
@@ -461,15 +487,26 @@ export class TextQuestClient {
   /**
    * Get kill tracker data
    */
-  async getKillTracker(): Promise<Types.KillTrackerResponse> {
-    return this.request<Types.KillTrackerResponse>("GET", "/kill-tracker");
+  async getKillTracker(): Promise<Types.KillTrackerSettings> {
+    return this.request<Types.KillTrackerSettings>("GET", "/kill-tracker/settings");
+  }
+
+  /**
+   * Get kill tracker settings
+   */
+  async getKillTrackerSettings(): Promise<Types.KillTrackerSettings> {
+    return this.request<Types.KillTrackerSettings>("GET", "/kill-tracker/settings");
   }
 
   /**
    * Get kill tracker statistics
    */
   async getKillTrackerStats(): Promise<Types.KillTrackerStatsResponse> {
-    return this.request<Types.KillTrackerStatsResponse>("GET", "/kill-tracker/stats");
+    const history = await this.request<Array<{ sessions?: Array<{ total_kills?: number; zone?: string }> }>>(
+      "GET",
+      "/kill-tracker/history"
+    );
+    return this.summarizeKillTrackerHistory(history);
   }
 
   // ─── Spawn Alerts ─────────────────────────────────────────────────────
@@ -524,7 +561,7 @@ export class TextQuestClient {
   async addSpawnAlertWatchPattern(pattern: string): Promise<Types.SpawnAlertWatchListResponse> {
     return this.request<Types.SpawnAlertWatchListResponse>(
       "PUT",
-      `/spawn-alerts/watch-list/${encodeURIComponent(pattern)}`,
+      "/spawn-alerts/watch-list",
       { pattern }
     );
   }
@@ -575,7 +612,7 @@ export class TextQuestClient {
    * Get GM alert status
    */
   async getGmAlerts(): Promise<Types.GmAlertsResponse> {
-    return this.request<Types.GmAlertsResponse>("GET", "/gm-alerts");
+    return this.request<Types.GmAlertsResponse>("GET", "/gm-alerts/status");
   }
 
   // ─── Operational Alerts ───────────────────────────────────────────────
@@ -607,7 +644,7 @@ export class TextQuestClient {
    * Acknowledge an alert
    */
   async acknowledgeAlert(id: number, acknowledgedBy: string): Promise<Types.OperationalAlert> {
-    return this.request<Types.OperationalAlert>("PUT", `/alerts/${id}/acknowledge`, {
+    return this.request<Types.OperationalAlert>("POST", `/alerts/${id}/ack`, {
       acknowledged_by: acknowledgedBy,
     });
   }

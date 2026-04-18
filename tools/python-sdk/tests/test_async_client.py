@@ -217,14 +217,96 @@ class TestAsyncTextQuestClient:
     async def test_alert_config(self, client):
         """Test async alert configuration endpoints."""
         mock_response = Mock()
-        mock_response.text = '{"enabled": true}'
-        mock_response.json.return_value = {"enabled": True}
+        mock_response.text = '{"config": {"enabled": true}}'
+        mock_response.json.return_value = {"config": {"enabled": True}}
 
         with patch('textquest_sdk.async_client.httpx.AsyncClient.request', new_callable=AsyncMock) as mock_request:
             mock_request.return_value = mock_response
 
             result = await client.get_alert_config()
+            mock_request.assert_awaited_once_with(
+                "GET",
+                "/api/alerts/config",
+                json=None,
+                params=None,
+            )
             assert result["enabled"] is True
+
+    @pytest.mark.asyncio
+    async def test_spawn_watch_pattern_request_shape(self, client):
+        """Test that spawn watch updates send the expected JSON body."""
+        mock_response = Mock()
+        mock_response.text = ""
+        mock_response.json.return_value = None
+
+        with patch('textquest_sdk.async_client.httpx.AsyncClient.request', new_callable=AsyncMock) as mock_request:
+            mock_request.return_value = mock_response
+
+            result = await client.add_spawn_watch_pattern("Ancient Dragon")
+
+            mock_request.assert_awaited_once_with(
+                "PUT",
+                "/api/spawn-alerts/watch-list",
+                json={"pattern": "Ancient Dragon"},
+                params=None,
+            )
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_gm_alert_status_routes(self, client):
+        """Test that GM alert helpers hit the live status endpoint."""
+        mock_response = Mock()
+        mock_response.text = '{"config": {"enabled": true}, "presence": {"is_gm_in_zone": false, "gm_count": 0, "gm_names": []}, "automation_paused": false}'
+        mock_response.json.return_value = {
+            "config": {"enabled": True},
+            "presence": {"is_gm_in_zone": False, "gm_count": 0, "gm_names": []},
+            "automation_paused": False,
+        }
+
+        with patch('textquest_sdk.async_client.httpx.AsyncClient.request', new_callable=AsyncMock) as mock_request:
+            mock_request.return_value = mock_response
+
+            result = await client.get_gm_alert_state()
+
+            mock_request.assert_awaited_once_with(
+                "GET",
+                "/api/gm-alerts/status",
+                json=None,
+                params=None,
+            )
+            assert result["presence"]["is_gm_in_zone"] is False
+
+    @pytest.mark.asyncio
+    async def test_kill_tracker_stats_are_derived_from_history(self, client):
+        """Test that kill tracker stats are derived from history data."""
+        records_response = Mock()
+        records_response.text = "[]"
+        records_response.json.return_value = []
+        history_response = Mock()
+        history_response.text = '[{"sessions": [{"total_kills": 4, "zone": "Dreadlands"}, {"total_kills": 2, "zone": "Dreadlands"}]}]'
+        history_response.json.return_value = [
+            {
+                "sessions": [
+                    {"total_kills": 4, "zone": "Dreadlands"},
+                    {"total_kills": 2, "zone": "Dreadlands"},
+                ]
+            }
+        ]
+
+        async def request_side_effect(method, endpoint, json=None, params=None):
+            if endpoint == "/api/kill-tracker/history":
+                return history_response
+            return records_response
+
+        with patch('textquest_sdk.async_client.httpx.AsyncClient.request', new_callable=AsyncMock) as mock_request:
+            mock_request.side_effect = request_side_effect
+
+            records = await client.list_kill_tracker_records()
+            stats = await client.get_kill_tracker_stats()
+
+            assert records == []
+            assert stats["total_kills"] == 6
+            assert stats["kills_by_zone"]["Dreadlands"] == 6
 
     @pytest.mark.asyncio
     async def test_chat_pattern_rules(self, client):

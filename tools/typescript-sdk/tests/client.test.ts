@@ -352,6 +352,119 @@ describe("TextQuestClient", () => {
       const result = await client.addSpawnAlertWatchPattern(pattern);
 
       expect(result.patterns).toContain(pattern);
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${baseUrl}/api/spawn-alerts/watch-list`,
+        expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify({ pattern }),
+        })
+      );
+    });
+  });
+
+  describe("gm alerts endpoints", () => {
+    it("should fetch GM alert status", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          config: { enabled: true, soundEnabled: true, soundFile: null, toastEnabled: true, autoPauseEnabled: false, discordWebhookUrl: null, broadcastAllClients: true },
+          presence: { isGmInZone: false, gmCount: 0, gmNames: [] },
+          automationPaused: false,
+        }),
+      });
+
+      const client = new TextQuestClient({ baseUrl });
+      await client.getGmAlerts();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${baseUrl}/api/gm-alerts/status`,
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+  });
+
+  describe("kill tracker endpoints", () => {
+    it("should fetch kill tracker settings", async () => {
+      const mockSettings: Types.KillTrackerSettings = {
+        enabled: true,
+        auto_report_interval_minutes: 10,
+        auto_report_channel: "group",
+        auto_report_include_mobs: true,
+        auto_report_include_kph: true,
+        track_per_character: true,
+        max_session_history: 100,
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockSettings,
+      });
+
+      const client = new TextQuestClient({ baseUrl });
+      const result = await client.getKillTrackerSettings();
+
+      expect(result).toEqual(mockSettings);
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${baseUrl}/api/kill-tracker/settings`,
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it("should derive kill tracker stats from history", async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => [
+            {
+              sessions: [
+                { total_kills: 4, zone: "Dreadlands" },
+                { total_kills: 2, zone: "Dreadlands" },
+              ],
+            },
+          ],
+        });
+
+      const client = new TextQuestClient({ baseUrl });
+      const result = await client.getKillTrackerStats();
+
+      expect(result.total_kills).toBe(6);
+      expect(result.kills_by_zone.Dreadlands).toBe(6);
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${baseUrl}/api/kill-tracker/history`,
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+  });
+
+  describe("operational alerts", () => {
+    it("should acknowledge alerts with the ack route", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 1,
+          created_at: "2026-04-17T00:00:00Z",
+          severity: "info",
+          kind: "config_changed",
+          message: "saved",
+          source: null,
+          actor: null,
+          zone: null,
+          metadata_json: null,
+          acknowledged_at: null,
+          acknowledged_by: null,
+        }),
+      });
+
+      const client = new TextQuestClient({ baseUrl });
+      await client.acknowledgeAlert(1, "admin");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${baseUrl}/api/alerts/1/ack`,
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ acknowledged_by: "admin" }),
+        })
+      );
     });
   });
 
@@ -646,6 +759,7 @@ describe("TextQuestClient", () => {
 
       const client = new TextQuestClient({ baseUrl });
       const result = await client.updateCharacterConfig("Mage1", {
+        strategy_class: "EvocationMage",
         auto_combat: false,
       });
 

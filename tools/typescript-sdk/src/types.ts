@@ -303,6 +303,16 @@ export interface LootHistoryResponse {
 
 // ─── Kill Tracker ──────────────────────────────────────────────────────
 
+export interface KillTrackerSettings {
+  enabled: boolean;
+  auto_report_interval_minutes: number;
+  auto_report_channel: string;
+  auto_report_include_mobs: boolean;
+  auto_report_include_kph: boolean;
+  track_per_character: boolean;
+  max_session_history: number;
+}
+
 export interface KillEntry {
   mob_id: string;
   mob_name: string;

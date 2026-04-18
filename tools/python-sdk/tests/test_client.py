@@ -192,12 +192,90 @@ class TestTextQuestClient:
     def test_alert_config(self, client, mock_session):
         """Test alert configuration endpoints."""
         mock_response = Mock()
-        mock_response.text = '{"enabled": true}'
-        mock_response.json.return_value = {"enabled": True}
+        mock_response.text = '{"config": {"enabled": true}}'
+        mock_response.json.return_value = {"config": {"enabled": True}}
         mock_session.request.return_value = mock_response
 
         result = client.get_alert_config()
+
+        mock_session.request.assert_called_once_with(
+            "GET",
+            "http://localhost:3001/api/alerts/config",
+            json=None,
+            params=None,
+            timeout=10,
+        )
         assert result["enabled"] is True
+
+    def test_spawn_watch_pattern_request_shape(self, client, mock_session):
+        """Test that spawn watch updates send the expected JSON body."""
+        mock_response = Mock()
+        mock_response.text = ""
+        mock_response.json.return_value = None
+        mock_session.request.return_value = mock_response
+
+        result = client.add_spawn_watch_pattern("Ancient Dragon")
+
+        mock_session.request.assert_called_once_with(
+            "PUT",
+            "http://localhost:3001/api/spawn-alerts/watch-list",
+            json={"pattern": "Ancient Dragon"},
+            params=None,
+            timeout=10,
+        )
+        assert result is None
+
+    def test_gm_alert_status_routes(self, client, mock_session):
+        """Test that GM alert helpers hit the live status endpoint."""
+        mock_response = Mock()
+        mock_response.text = '{"config": {"enabled": true}, "presence": {"is_gm_in_zone": false, "gm_count": 0, "gm_names": []}, "automation_paused": false}'
+        mock_response.json.return_value = {
+            "config": {"enabled": True},
+            "presence": {"is_gm_in_zone": False, "gm_count": 0, "gm_names": []},
+            "automation_paused": False,
+        }
+        mock_session.request.return_value = mock_response
+
+        result = client.get_gm_alert_state()
+
+        mock_session.request.assert_called_once_with(
+            "GET",
+            "http://localhost:3001/api/gm-alerts/status",
+            json=None,
+            params=None,
+            timeout=10,
+        )
+        assert result["presence"]["is_gm_in_zone"] is False
+
+    def test_kill_tracker_stats_are_derived_from_history(self, client, mock_session):
+        """Test that kill tracker stats are derived from history data."""
+        history_response = Mock()
+        history_response.text = '[{"sessions": [{"total_kills": 4, "zone": "Dreadlands"}, {"total_kills": 2, "zone": "Dreadlands"}]}]'
+        history_response.json.return_value = [
+            {
+                "sessions": [
+                    {"total_kills": 4, "zone": "Dreadlands"},
+                    {"total_kills": 2, "zone": "Dreadlands"},
+                ]
+            }
+        ]
+
+        def request_side_effect(method, url, json=None, params=None, timeout=None):
+            if url.endswith("/api/kill-tracker/history"):
+                return history_response
+            records_response = Mock()
+            records_response.text = "[]"
+            records_response.json.return_value = []
+            return records_response
+
+        mock_session.request.side_effect = request_side_effect
+
+        records = client.list_kill_tracker_records()
+        stats = client.get_kill_tracker_stats()
+
+        assert records == []
+        assert stats["total_kills"] == 6
+        assert stats["kills_by_zone"]["Dreadlands"] == 6
 
     def test_chat_pattern_rules(self, client, mock_session):
         """Test chat pattern rules endpoints."""
