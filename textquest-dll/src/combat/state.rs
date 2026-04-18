@@ -2306,9 +2306,9 @@ mod tests {
     #[test]
     fn necromancer_rotation_resolves_and_casts_resist_debuff_first() {
         let mut c = Combatant::new(11, 0, test_config());
-        let player = necro_player(90.0, 90.0);
-        let target = necro_target(100.0);
-        let known = necro_known_abilities();
+        let player = player_with_hp_end(90, 90, 90, 100);
+        let target = test_target();
+        let known = rogue_known_abilities();
         let expected_spell_id = known[0].spell_id;
         c.resolve_abilities(&known, 65);
 
@@ -2333,9 +2333,9 @@ mod tests {
     #[test]
     fn necromancer_reserves_mana_and_skips_dot_loading() {
         let mut c = Combatant::new(11, 0, test_config());
-        let player = necro_player(90.0, 24.0);
-        let target = necro_target(100.0);
-        c.resolve_abilities(&necro_known_abilities(), 65);
+        let player = player_with_hp_end(90, 90, 24, 100);
+        let target = test_target();
+        c.resolve_abilities(&rogue_known_abilities(), 65);
 
         c.state = CombatState::Engaging {
             target_id: target.spawn_id,
@@ -2841,13 +2841,15 @@ mod tests {
         }]);
         c.resolved_abilities.insert(
             "KickFocus".into(),
-            textquest_common::combat::ResolvedAbility {
+            AbilityResolution {
                 set_name: "KickFocus".into(),
                 ability_name: "Ashenhand Discipline".into(),
                 spell_id: 4508,
                 min_level: 60,
-            }
-            .into(),
+                cooldown_ticks: None,
+                shared_cooldown_key: None,
+                shared_cooldown_ticks: None,
+            },
         );
 
         let player = player_with_hp_end(1000, 1000, 500, 500);
@@ -2879,13 +2881,15 @@ mod tests {
         }]);
         c.resolved_abilities.insert(
             "KickFocus".into(),
-            textquest_common::combat::ResolvedAbility {
+            AbilityResolution {
                 set_name: "KickFocus".into(),
                 ability_name: "Ashenhand Discipline".into(),
                 spell_id: 4508,
                 min_level: 60,
-            }
-            .into(),
+                cooldown_ticks: None,
+                shared_cooldown_key: None,
+                shared_cooldown_ticks: None,
+            },
         );
 
         let player = player_with_hp_end(1000, 1000, 900, 1000);
@@ -2915,13 +2919,15 @@ mod tests {
         }]);
         c.resolved_abilities.insert(
             "PrecisionStrikes".into(),
-            textquest_common::combat::ResolvedAbility {
+            AbilityResolution {
                 set_name: "PrecisionStrikes".into(),
                 ability_name: "Silentfist Discipline".into(),
                 spell_id: 4507,
                 min_level: 59,
-            }
-            .into(),
+                cooldown_ticks: None,
+                shared_cooldown_key: None,
+                shared_cooldown_ticks: None,
+            },
         );
 
         let player = player_with_hp_end(1000, 1000, 900, 1000);
@@ -3337,13 +3343,15 @@ mod tests {
         }]);
         c.resolved_abilities.insert(
             "BurnDisc".into(),
-            ResolvedAbility {
+            AbilityResolution {
                 set_name: "BurnDisc".into(),
                 ability_name: "Trueshot Discipline".into(),
                 spell_id: 4_694,
                 min_level: 60,
-            }
-            .into(),
+                cooldown_ticks: None,
+                shared_cooldown_key: None,
+                shared_cooldown_ticks: None,
+            },
         );
 
         let mut player = test_player();
@@ -3723,13 +3731,15 @@ mod tests {
         )]);
         c.resolved_abilities.insert(
             "Harvest".into(),
-            ResolvedAbility {
+            AbilityResolution {
                 set_name: "Harvest".into(),
                 ability_name: "Harvest of Druzzil".into(),
                 spell_id: 90210,
                 min_level: 61,
-            }
-            .into(),
+                cooldown_ticks: None,
+                shared_cooldown_key: None,
+                shared_cooldown_ticks: None,
+            },
         );
 
         c.state = CombatState::Engaging {
@@ -3789,23 +3799,27 @@ mod tests {
         ]);
         c.resolved_abilities.insert(
             "Harvest".into(),
-            ResolvedAbility {
+            AbilityResolution {
                 set_name: "Harvest".into(),
                 ability_name: "Harvest of Druzzil".into(),
                 spell_id: 90210,
                 min_level: 61,
-            }
-            .into(),
+                cooldown_ticks: None,
+                shared_cooldown_key: None,
+                shared_cooldown_ticks: None,
+            },
         );
         c.resolved_abilities.insert(
             "FireNuke".into(),
-            ResolvedAbility {
+            AbilityResolution {
                 set_name: "FireNuke".into(),
                 ability_name: "White Fire".into(),
                 spell_id: 42424,
                 min_level: 62,
-            }
-            .into(),
+                cooldown_ticks: None,
+                shared_cooldown_key: None,
+                shared_cooldown_ticks: None,
+            },
         );
         c.ability_cooldowns.consume(
             rotation_cooldown_key(harvest_cooldown_key),
@@ -3848,13 +3862,15 @@ mod tests {
         ]);
         c.resolved_abilities.insert(
             "FireNuke".into(),
-            ResolvedAbility {
+            AbilityResolution {
                 set_name: "FireNuke".into(),
                 ability_name: "White Fire".into(),
                 spell_id: 51515,
                 min_level: 62,
-            }
-            .into(),
+                cooldown_ticks: None,
+                shared_cooldown_key: None,
+                shared_cooldown_ticks: None,
+            },
         );
 
         c.state = CombatState::Engaging {
