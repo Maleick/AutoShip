@@ -42,6 +42,9 @@ static PERF_TRACE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
 });
 
 /// Draw the zone map screen with spawn positions and navigation overlay.
+///
+/// This function manages the layout and dispatch to tactical views based on available space.
+/// The actual map rendering is delegated to `draw_map_view()`.
 pub fn draw_map_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     let sections = tactical_sections(app);
     let sidebar_height = sections
@@ -526,34 +529,33 @@ fn place_heading_arrow(
     }
 }
 
-/// Renders the entire tactical map view including geometry, spawns, overlays, and tactical sidebars.
+/// Render the main tactical map view with all visible layers.
 ///
-/// This is the main rendering entry point for the map UI. It handles:
-/// - Building the map transform (world→screen projection) based on viewport mode and zoom
-/// - Rendering zone geometry, navigation paths, and navmesh data
-/// - Placing spawn markers with color-coded glyphs
-/// - Drawing cast radius circles, spell radius overlays, and aggro radius indicators
-/// - Rendering combat state overlays (named markers, camp markers)
-/// - Composing the tactical sidebar with spawn list, target panel, and chain-casting indicators
-/// - Building and displaying the information header with player position, zoom level, and filters
+/// The rendering pipeline (back-to-front):
+/// 1. Zone geometry (lines, labels) with Z-clipping
+/// 2. Navigation mesh outline and details
+/// 3. Spawn markers (cached) with glyph selection
+/// 4. Navigation paths and target line
+/// 5. Player marker with FOV cone and heading arrow
+/// 6. Overlays: radius circles, camp markers, named trackers, highlights
 ///
-/// # Parameters
-/// - `frame`: Mutable reference to the ratatui Frame for drawing primitives
-/// - `area`: The rectangular area in the terminal where the map should be rendered
-/// - `app`: Mutable reference to the App state (required for state updates during rendering)
+/// # Layers (toggleable)
+/// - **G** (Geometry) — Zone map lines and points
+/// - **S** (Spawns) — NPC/PC/corpse markers
+/// - **P** (Paths) — Navigation waypoints and target line
+/// - **M** (Mesh) — Navmesh boundaries
+/// - **L** (Labels) — Zone map point labels
+/// - **A** (Annotations) — Layer 2 (typically decorative geometry)
 ///
-/// # Performance Notes
-/// - The map transform computation is relatively expensive; it's cached and only recalculated
-///   when viewport mode, zoom, or visible bounds change.
-/// - Spawn filtering and color-run coalescing (via `color_run_spans`) amortize line composition cost.
-/// - Line drawing uses Bresenham's algorithm with bounds checking to minimize invalid cells.
-/// - Z-clipping (via `clip_line_z`) prevents off-range geometry from being rendered.
+/// # Coordinate Transformation
+/// - EQ world to map: `(-player.y, -player.x)` (180° rotation)
+/// - Map to grid: via `MapTransform` and `to_grid()` closure
+/// - Z-clipping removes geometry outside `player.z ± z_filter_range`
 ///
-/// # Example
-/// ```ignore
-/// let area = ratatui::layout::Rect::new(0, 0, 80, 24);
-/// draw_map_view(&mut frame, area, &mut app);
-/// ```
+/// # Performance
+/// - Spawn positions cached (rebuild only on filter/zoom/transform change)
+/// - Visible region culling skips off-screen geometry
+/// - Bresenham line drawing limits to 10,000 cells max per line
 pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     use ratatui::style::Color;
     let theme = app.theme.clone();
@@ -1398,6 +1400,15 @@ impl VisibleMapRegion {
     }
 }
 
+/// Compute the bounding box that encompasses all visible map layers.
+///
+/// Merges bounds from three sources in order of preference:
+/// 1. Zone map geometry bounds (if map data loaded)
+/// 2. Navigation mesh overlay bounds (if visible)
+/// 3. Spawn positions (fallback if no map data)
+///
+/// Returns `None` only if all three sources are empty or unavailable.
+/// The combined bounds are later used by `map_transform()` to fit the view.
 fn combined_bounds(app: &App) -> Option<ViewBounds> {
     let mut bounds = app
         .map_state
@@ -1423,6 +1434,23 @@ fn combined_bounds(app: &App) -> Option<ViewBounds> {
     bounds
 }
 
+/// Calculate the transformation from map coordinates to grid coordinates.
+///
+/// Determines the camera position, scale factor, and viewport mode (local vs. global).
+///
+/// # Inputs
+/// - `bounds` — Bounding box of visible content in map coordinates
+/// - `w`, `h` — Grid width and height in characters
+///
+/// # Viewport Mode Selection
+/// - **Auto** — Uses local view if player is in bounds and map is large (>1200 units)
+/// - **Local** — Centers camera on player position (if available)
+/// - **Global** — Fits entire bounds in view
+///
+/// # Returns
+/// `Some(MapTransform)` with `center_x`, `center_y`, `scale_x`, `scale_y`, and
+/// `using_local_view` flag. Used by the `to_grid()` closure to convert map
+/// coordinates to grid indices.
 fn map_transform(app: &App, bounds: &ViewBounds, w: usize, h: usize) -> Option<MapTransform> {
     let player_pos = app
         .local_player

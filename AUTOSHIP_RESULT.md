@@ -1,120 +1,74 @@
-# Issue #1149 - Ban/Suspension Detection Implementation
+# GitHub Issue #1195 Implementation Result
 
-## Summary
+## Issue Summary
+Document the map rendering internals with pipeline documentation and doc comments for key functions.
 
-Successfully implemented comprehensive ban/suspension detection functionality for the TextQuest automation platform. The implementation detects account bans, suspensions, and lockouts across multiple message sources (login screen, chat, disconnect messages) and halts further login attempts for affected accounts.
+## Work Completed
 
-## Changes Made
+### 1. Created Documentation File
+- **File**: `docs/wiki/Map-Rendering-Pipeline.md`
+- **Content**: Comprehensive guide covering:
+  - **Overview**: Map rendering pipeline stages (bounds → transform → cull → paint → display)
+  - **Coordinate Systems**: EQ world coords, map coords, screen coords with transformation sequence
+  - **Transformation Pipeline**: Four-step process from world space to screen grid
+  - **Rendering Layers**: Eight layers drawn back-to-front with cull optimizations
+  - **Z-Clipping**: Detailed explanation of `clip_line_z()` algorithm for height-based culling
+  - **Color Mapping**: RGB conversion strategy for zone map colors
+  - **Performance Optimizations**: Spawn caching, frustum culling, Bresenham bounds, lazy rendering
+  - **Key Data Structures**: ViewBounds, MapTransform, VisibleMapRegion, MapSpawnPresentationCell
+  - **Common Patterns**: Overlay drawing, Z-clipped rendering, heading/direction conversion
+  - **Testing & Debugging**: Map legend interpretation, troubleshooting guide
 
-### 1. New Module: `textquest-common/src/account_safety.rs`
+### 2. Added Doc Comments to Key Functions
 
-Created a new module providing:
+#### `combined_bounds()`
+Documents the three-source priority for computing bounding boxes and when each fallback applies.
 
-- **`detect_ban_message(text: &str) -> bool`** — Pattern matching function that detects ban/suspension keywords in message text
-  - Case-insensitive matching
-  - Detects 20+ ban-related patterns including:
-    - "Your account has been suspended/banned"
-    - "Account locked"
-    - "You have been removed from the server"
-    - "Account terminated"
-    - "Terms of service violation"
-    - And similar variations
+#### `map_transform()`
+Explains viewport mode selection (Auto/Local/Global) and the complete transformation calculation including zoom/pan clamping.
 
-- **`BanDetection` struct** — Tracks ban detection metadata
-  - Client ID affected
-  - Full message text that triggered detection
-  - Timestamp of detection
-  - Context (login_screen, chat, disconnect, etc.)
+#### `draw_map_view()`
+Comprehensive doc comment covering:
+- Rendering pipeline order (8 layers)
+- Layer toggle flags (G/S/P/M/L/A)
+- Coordinate transformation details
+- Performance characteristics
 
-- **`BannedAccountRegistry` struct** — Global registry of banned accounts
-  - Prevents duplicate login attempts for banned accounts
-  - Maintains audit history of all ban detections
-  - Supports querying detections by client ID
+#### `clip_line_z()` (enhanced existing)
+Extended the existing doc comment with:
+- Algorithm explanation with interpolation formula
+- Input/output specification with parameter meanings
+- Two-endpoint clipping logic
 
-- **`handle_ban_detection()` function** — Handler for ban events
-  - Marks client as banned in registry
-  - Prevents re-processing of already-banned accounts
-  - Returns structured result with reason for halting
-
-### 2. Module Registration
-
-Updated `textquest-common/src/lib.rs` to include the new account_safety module in the public API.
-
-## Test Coverage
-
-Comprehensive unit tests covering:
-
-- **Ban detection patterns** (32 tests)
-  - Detects all supported ban message variants
-  - Case-insensitive matching
-  - Handles messages with extra context/timestamps
-  - False positive avoidance for non-ban messages
-
-- **BanDetection struct** (4 tests)
-  - Construction and field validation
-  - Serialization/deserialization roundtrips
-
-- **BannedAccountRegistry** (11 tests)
-  - Empty registry behavior
-  - Marking clients as banned
-  - Multiple ban tracking
-  - Detection history queries
-  - Cloning and clearing
-
-- **handle_ban_detection()** (8 tests)
-  - Correct marking of banned accounts
-  - Already-banned client handling
-  - Multiple client tracking
-  - Message and context preservation
-
-- **Stress tests** (1 test)
-  - Registry with 1000 banned accounts
-
-**Total: 56 new unit tests** - All passing (1044 tests in textquest-common, 0 failures)
-
-## Integration Points
-
-The module is ready for integration with:
-
-1. **Login DLL** (`textquest-dll/src/login/mod.rs`) — Monitor login screen messages
-2. **Chat message handler** (`textquest-dll/src/eq/chat.rs`) — Monitor system chat
-3. **Disconnect handler** — Monitor disconnect messages
-4. **IPC protocol** — Report ban detections to orchestrator
-5. **TUI dashboard** — Display banned accounts with timestamps
-
-## Design Decisions
-
-1. **No chrono dependency** — Uses `std::time::SystemTime` for timestamp generation to avoid adding new external dependencies
-2. **Serializable types** — All structs derive `Serialize`/`Deserialize` for IPC communication
-3. **Hashable ClientId** — Uses `HashSet` for O(1) ban lookups
-4. **Audit trail** — Maintains full detection history even if client is already banned (for forensics)
-5. **Pattern-based detection** — Simple, maintainable pattern matching over complex NLP
+#### `bresenham_line()` (added)
+Documents the line drawing algorithm, paint modes, and bounds safety.
 
 ## Files Modified
+- `docs/wiki/Map-Rendering-Pipeline.md` — NEW
+- `textquest/src/tui/ui/map.rs` — 56 insertions of doc comments
 
-- `textquest-common/src/account_safety.rs` (new, 900 lines)
-- `textquest-common/src/lib.rs` (added module declaration)
+## Testing
+- Documentation file created and formatted correctly
+- Doc comments added to all specified functions
+- Code changes committed to branch `autoship/issue-1195`
+- No breaking changes; all edits are non-functional additions
 
-## Verification
+## Key Insights Documented
 
-```bash
-cd .autoship/workspaces/issue-1149
-cargo test --lib --package textquest-common
-# Result: ok. 1044 passed; 0 failed
-```
+1. **Coordinate System Insight**: The (-y, -x) axis swap for map coordinates is a 180-degree rotation that preserves angular direction, critical for heading-based overlays (FOV cone, heading arrows).
 
-## Next Steps for Integration
+2. **Z-Clipping Strategy**: Uses linear interpolation at boundaries to maintain geometric accuracy while respecting visibility ranges. Handles cases where lines cross the cull window.
 
-1. Hook `detect_ban_message()` in login screen parser
-2. Hook `detect_ban_message()` in chat event processor
-3. Integrate `handle_ban_detection()` into login state machine
-4. Add `BannedAccountRegistry` to shared orchestrator state
-5. Send ban notifications via IPC to operator
-6. Display ban status in TUI dashboard (red alert with timestamp)
+3. **Performance Pattern**: Spawn cache key includes transform, zoom, filters, and selection state—rebuild only triggers on actual view changes, not every frame.
 
-## Notes
+4. **Rendering Order Matters**: Geometry → Labels → Navmesh → Spawns → Paths → Target → Player → Overlays ensures proper visual layering and occlusion semantics.
 
-- Detection is defensive: errs on side of caution (false positives are better than missed bans)
-- Registry is in-memory; persists for session duration
-- Timestamps use Unix epoch (seconds) format for simplicity
-- Ready for live testing on Teek/Frostreaver accounts
+## Documentation Location
+All documentation accessible via:
+- `docs/wiki/Map-Rendering-Pipeline.md` — Primary reference guide
+- `textquest/src/tui/ui/map.rs` — In-code function documentation (via `/// doc comments`)
+
+## Related Code References
+- Zone map loading: `textquest/src/eq/map_parser.rs`
+- Navigation types: `textquest_common/src/nav.rs`
+- Theme colors: `textquest/src/tui/theme.rs`
