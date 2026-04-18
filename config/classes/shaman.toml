@@ -2,45 +2,245 @@ class_name = "shaman"
 role = "healer"
 rest_command = "/sit"
 
+# Level 60 Live-safe baseline:
+# 1. Slow every new target.
+# 2. Cast Malo only after a resisted slow.
+# 3. Use Torpor for emergency recovery and Chloroblast for normal triage.
+# 4. Convert HP to mana with Cannibalize only when the group is stable.
+# 5. Spend excess mana on a single efficient DoT once slow is secure.
+
 [[combat_abilities]]
-name = "Slow"
+name = "Turgur's Insects"
 command = "/cast 1"
-cooldown_secs = 12.0
+cooldown_secs = 6.0
 priority = 1
+condition = "target_not_slowed"
 
 [[combat_abilities]]
-name = "Heal"
+name = "Malo"
 command = "/cast 2"
-cooldown_secs = 4.0
+cooldown_secs = 6.0
 priority = 2
+condition = "target_slow_resisted"
 
 [[combat_abilities]]
-name = "Canni"
+name = "Torpor"
+command = "/cast 3"
+cooldown_secs = 8.0
+priority = 3
+condition = "target_hp_below_40"
+
+[[combat_abilities]]
+name = "Chloroblast"
 command = "/cast 4"
-cooldown_secs = 12.0
+cooldown_secs = 8.0
+priority = 4
+condition = "target_hp_below_70"
+
+[[combat_abilities]]
+name = "Cannibalize IV"
+command = "/cast 5"
+cooldown_secs = 24.0
 priority = 5
-condition = "mana_below_50"
+condition = "mana_below_55_and_group_stable"
+
+[[combat_abilities]]
+name = "Ancient: Scourge of Nife"
+command = "/cast 6"
+cooldown_secs = 60.0
+priority = 6
+condition = "target_slowed_and_target_hp_above_40_and_mana_above_60"
 
 [[debuff_abilities]]
 name = "Malo"
-command = "/cast 3"
-cooldown_secs = 3.0
+command = "/cast 2"
+cooldown_secs = 6.0
 order = 2
 
 [[buff_abilities]]
-name = "Haste"
-command = "/cast 5"
-cooldown_secs = 600.0
-priority = 1
-
-[[buff_abilities]]
-name = "HP Buff"
-command = "/cast 6"
-cooldown_secs = 600.0
-priority = 2
-
-[[buff_abilities]]
-name = "Stat Buff"
+name = "Focus of the Sixth"
 command = "/cast 7"
-cooldown_secs = 600.0
+cooldown_secs = 1800.0
+priority = 1
+duration_secs = 1800.0
+
+[[buff_abilities]]
+name = "Regrowth of the Grove"
+command = "/cast 8"
+cooldown_secs = 1800.0
+priority = 2
+duration_secs = 1800.0
+
+[[level_overrides]]
+name = "level-61"
+min_level = 61
+max_level = 61
+
+[[level_overrides.combat_abilities]]
+name = "Turgur's Insects"
+command = "/cast 1"
+cooldown_secs = 6.0
+priority = 1
+condition = "target_not_slowed"
+
+[[level_overrides.combat_abilities]]
+name = "Malo"
+command = "/cast 2"
+cooldown_secs = 6.0
+priority = 2
+condition = "target_slow_resisted"
+
+[[level_overrides.combat_abilities]]
+name = "Torpor"
+command = "/cast 3"
+cooldown_secs = 8.0
 priority = 3
+condition = "target_hp_below_40"
+
+[[level_overrides.combat_abilities]]
+name = "Chloroblast"
+command = "/cast 4"
+cooldown_secs = 8.0
+priority = 4
+condition = "target_hp_below_70"
+
+[[level_overrides.combat_abilities]]
+name = "Cannibalize IV"
+command = "/cast 5"
+cooldown_secs = 24.0
+priority = 5
+condition = "mana_below_55_and_group_stable"
+
+[[level_overrides.combat_abilities]]
+name = "Cloud of Grummus"
+command = "/cast 6"
+cooldown_secs = 60.0
+priority = 6
+condition = "target_slowed_and_target_hp_above_40_and_mana_above_60"
+
+[[level_overrides]]
+name = "level-62-to-64"
+min_level = 62
+max_level = 64
+
+[[level_overrides.combat_abilities]]
+name = "Turgur's Insects"
+command = "/cast 1"
+cooldown_secs = 6.0
+priority = 1
+condition = "target_not_slowed"
+
+[[level_overrides.combat_abilities]]
+name = "Malo"
+command = "/cast 2"
+cooldown_secs = 6.0
+priority = 2
+condition = "target_slow_resisted"
+
+[[level_overrides.combat_abilities]]
+name = "Torpor"
+command = "/cast 3"
+cooldown_secs = 8.0
+priority = 3
+condition = "target_hp_below_40"
+
+[[level_overrides.combat_abilities]]
+name = "Tnarg's Mending"
+command = "/cast 4"
+cooldown_secs = 8.0
+priority = 4
+condition = "target_hp_below_70"
+
+[[level_overrides.combat_abilities]]
+name = "Cannibalize IV"
+command = "/cast 5"
+cooldown_secs = 24.0
+priority = 5
+condition = "mana_below_55_and_group_stable"
+
+[[level_overrides.combat_abilities]]
+name = "Cloud of Grummus"
+command = "/cast 6"
+cooldown_secs = 60.0
+priority = 6
+condition = "target_slowed_and_target_hp_above_40_and_mana_above_60"
+
+[[level_overrides.buff_abilities]]
+name = "Focus of Soul"
+command = "/cast 7"
+cooldown_secs = 1800.0
+priority = 1
+duration_secs = 1800.0
+
+[[level_overrides.buff_abilities]]
+name = "Regrowth of the Grove"
+command = "/cast 8"
+cooldown_secs = 1800.0
+priority = 2
+duration_secs = 1800.0
+
+[[level_overrides]]
+name = "level-65-plus"
+min_level = 65
+
+[[level_overrides.combat_abilities]]
+name = "Turgur's Insects"
+command = "/cast 1"
+cooldown_secs = 6.0
+priority = 1
+condition = "target_not_slowed"
+
+[[level_overrides.combat_abilities]]
+name = "Malos"
+command = "/cast 2"
+cooldown_secs = 6.0
+priority = 2
+condition = "target_slow_resisted"
+
+[[level_overrides.combat_abilities]]
+name = "Torpor"
+command = "/cast 3"
+cooldown_secs = 8.0
+priority = 3
+condition = "target_hp_below_40"
+
+[[level_overrides.combat_abilities]]
+name = "Quiescence"
+command = "/cast 4"
+cooldown_secs = 8.0
+priority = 4
+condition = "target_hp_below_70"
+
+[[level_overrides.combat_abilities]]
+name = "Cannibalize IV"
+command = "/cast 5"
+cooldown_secs = 24.0
+priority = 5
+condition = "mana_below_55_and_group_stable"
+
+[[level_overrides.combat_abilities]]
+name = "Cloud of Grummus"
+command = "/cast 6"
+cooldown_secs = 60.0
+priority = 6
+condition = "target_slowed_and_target_hp_above_40_and_mana_above_60"
+
+[[level_overrides.debuff_abilities]]
+name = "Malos"
+command = "/cast 2"
+cooldown_secs = 6.0
+order = 2
+
+[[level_overrides.buff_abilities]]
+name = "Focus of the Seventh"
+command = "/cast 7"
+cooldown_secs = 1800.0
+priority = 1
+duration_secs = 1800.0
+
+[[level_overrides.buff_abilities]]
+name = "Regrowth of the Grove"
+command = "/cast 8"
+cooldown_secs = 1800.0
+priority = 2
+duration_secs = 1800.0

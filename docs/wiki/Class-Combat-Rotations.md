@@ -55,17 +55,6 @@ Primary tank. Establish and hold aggro. Call for heals. Position mobs facing awa
 - Disc usage is situational -- trigger Defensive/Fortitude when HP drops below threshold
 - No spell gem management needed
 
-### Live-Safe Warrior Runtime Note
-
-The modern Live-safe Warrior automation in `config/classes/warrior.toml` is
-explicitly level-gated for 60, 61, 62, and 65. The runtime order is
-`HateTools -> Emergency -> Defenses -> Burn -> Combat`, with endurance floors
-to keep low-value bash/kick spam from starving defensive and burn discs. The
-burn line upgrades from `Aggressive Discipline` to `Spirit of Rage Discipline`
-and then `Fellstrike Discipline`, while the emergency line upgrades from
-`Fortitude Discipline` to `Deflection Discipline` and then `Stonewall
-Discipline`.
-
 ---
 
 ## 2. Cleric (Healer)
@@ -229,23 +218,6 @@ Crowd control is the #1 priority. One missed mez can wipe the group. Secondary: 
 - Haste buff tracking per group member
 - Clarity buff tracking per caster
 - The DLL now tracks successful **Enchanter** charm casts, detects a break when the former pet drops out of `MyPet` and shows back up as hostile, and immediately re-casts the resolved charm spell.
-
-### Live-Safe Rotation Profile
-
-- Emergency CC: fire `ColorStun` only when the pull has 4 or more enemies total and mana is above 45%.
-- Add control: on strategy-selected off-targets, cast `Tash` first and then `Mez` once there are 2 or more enemies total and mana is above the respective 35% / 25% floors.
-- Kill target debuffs: once adds are stable, apply `Tash` above 95% target HP and `Slow` above 80% target HP, with 35% / 50% mana floors.
-- Nuke: cast the configured direct-damage line only when mana is above 65%.
-- Charm remains available as a utility/control line, but it is not part of the default unattended DPS rotation.
-
-### Live Breakpoints
-
-| Level | Mez               | Tash            | Slow         | Haste                | Clarity    | Nuke     | Charm               |
-| ----- | ----------------- | --------------- | ------------ | -------------------- | ---------- | -------- | ------------------- |
-| 60    | Glamour of Kintaz | Tashanian       | Dreary Deeds | Speed of the Shissar | Clarity II | Dementia | Boltran's Agacerie  |
-| 61    | Glamour of Kintaz | Tashanian       | Dreary Deeds | Speed of the Shissar | Clarity II | Dementia | Boltran's Agacerie  |
-| 62    | Glamour of Kintaz | Wind of Tashani | Dreary Deeds | Speed of the Shissar | Clarity II | Dementia | Boltran's Agacerie  |
-| 65    | Bliss             | Wind of Tashani | Dreary Deeds | Speed of Vallon      | Clarity II | Dementia | Command of Druzzil  |
 - Retryable re-charm failures (for example cooldown/pending-style outcomes) still use the normal cast retry policy; terminal failures such as resists/immunity are counted separately and stop after 3 attempts so the group can fall back to killing the mob.
 - Current scope is the resolved `Charm` line in the DLL combat FSM; Druid/Necromancer animal/undead charm extensions still need explicit spell-line support before they get the same automation path.
 - Color Flux (PBAE stun) is the emergency "everything broke" button
@@ -298,12 +270,21 @@ Crowd control is the #1 priority. One missed mez can wipe the group. Secondary: 
 
 ### Combat Rotation Priority (Group)
 
-1. **Slow** the current target (highest priority -- reduces damage by 60-75%)
-2. **Malo/Malosini** magic resist debuff if slow is being resisted
-3. **Canni** between casts to regenerate mana
-4. **Heal** the tank with Superior Healing or Torpor
-5. **DOT** (Envenomed Bolt / Bane of Nife) if mana allows
-6. **Re-slow** if it wears off mid-fight
+1. **Slow** the current target immediately. The Live-safe automation treats slow as mandatory for every new target.
+2. **Malo / Malos** only after a resisted slow, then retry slow. Avoid spending the debuff slot when slow already landed cleanly.
+3. **Emergency heal** below 40% with **Torpor**, then use the direct-heal line for normal recovery below 70%.
+4. **Cannibalize** only when mana is below 55% and the group is stable (everyone at or above roughly 80% HP).
+5. **DOT** only after slow is secure, the target still has meaningful HP left, and mana is above 60%.
+6. Do not re-cast slow, Malo, heals, Canni, or the active DOT early just because a gem is available; let the cooldown and target-state gates drive the next action.
+
+### Live Automation Breakpoints
+
+| Level | Slow / Debuff        | Heal Pair                    | Mana Tool        | Primary DOT                 | Key Buff Upgrade         |
+| ----- | -------------------- | ---------------------------- | ---------------- | --------------------------- | ------------------------ |
+| 60    | Turgur's Insects + Malo | Torpor + Chloroblast         | Cannibalize IV   | Ancient: Scourge of Nife    | Focus of the Sixth       |
+| 61    | Turgur's Insects + Malo | Torpor + Chloroblast         | Cannibalize IV   | Cloud of Grummus            | Focus of the Sixth       |
+| 62-64 | Turgur's Insects + Malo | Torpor + Tnarg's Mending     | Cannibalize IV   | Cloud of Grummus            | Focus of Soul            |
+| 65+   | Turgur's Insects + Malos | Torpor + Quiescence          | Cannibalize IV   | Cloud of Grummus            | Focus of the Seventh     |
 
 ### Buff Priority (Pre-Combat)
 
@@ -331,9 +312,9 @@ Slow is the single most impactful debuff in the game. A slowed mob does 60-75% l
 ### Automation Notes
 
 - Slow must land on every mob; if resisted, Malo then re-slow
-- Canni loop is highly automatable (cast, sit, wait for tick, stand, repeat)
+- Canni loop is highly automatable (cast, sit, wait for tick, stand, repeat), but only when the group is already safe
 - Torpor on tank is a "set and forget" HoT
-- Buff tracking: Haste, Focus, Regen on all group members
+- Buff tracking: Focus and Regen are the durable defaults; add Avatar-style melee buffs when a dedicated gem or clicky is available
 
 ---
 
@@ -590,52 +571,105 @@ Primary puller. Use FD to split camps and deliver single mobs. Secondary: melee 
 
 ---
 
-## 8. Bard (Live-Safe Pure DPS Rotation)
+## 8. Bard (Buffs / Puller / CC / Jack-of-All-Trades)
 
-The Live-safe Bard automation now uses resolved song lines plus a round-robin combat rotation instead of relying on a single hard-coded `/melody` string.
-The operator-facing source of truth is `config/classes/bard.toml`, and the runtime parity is enforced by Bard unit tests.
+### Key Songs
 
-### Level Overrides
+**Haste:**
 
-| Line             | Level 60                    | Level 61                    | Level 62                     | Level 65                     |
-| ---------------- | --------------------------- | --------------------------- | ---------------------------- | ---------------------------- |
-| BattleSong       | Warsong of the Vah Shir     | Warsong of the Vah Shir     | Warsong of Zek               | War March of the Mastruq     |
-| ManaSong         | Composition of Ervaj        | Composition of Ervaj        | Wind of Marr                 | Echo of the Trusik           |
-| FocusSong        | Aura of Insight             | Aura of Insight             | Druzzil's Disillusionment    | Harmony of Sound             |
-| ProcSong         | Ervaj's Lost Composition    | Ervaj's Lost Composition    | Melody of Mischief           | Call of the Muse             |
-| DebuffSong       | Fufil's Diminishing Dirge   | Fufil's Diminishing Dirge   | Dreams of Thule              | Requiem of Time              |
-| InsultSong       | Brusco's Bombastic Bellow   | Saryrn's Scream of Pain     | Saryrn's Scream of Pain      | Dark Echo                    |
-| CrowdControlSong | Kelin's Lugubrious Lament   | Silent Song of Quellious    | Silent Song of Quellious     | Lullaby of Morell            |
+| Song                          | Level | Haste%    | Notes                           |
+| ----------------------------- | ----- | --------- | ------------------------------- |
+| Anthem de Arms                | 10    | 10%       | First haste song                |
+| McVaxius' Berserker Crescendo | 40    | 33%       | Primary melee haste             |
+| Vilia's Verses of Celerity    | 49    | 40%       | Classic best haste              |
+| Battlecry of the Vah Shir     | 55    | Overhaste | Breaks 100% haste cap (Velious) |
 
-### Combat Priority
+**Mana Regen:**
 
-1. `BattleSong` always stays at the top of the round-robin.
-2. `ManaSong` stays in the core loop so Bard does not starve sustained group output.
-3. `FocusSong` remains a fixed core buff slot.
-4. `ProcSong` is only attempted when mana is above 15%.
-5. `DebuffSong` is only attempted when mana is above 25% and the target is above 60% HP, so it is not wasted on short-lived kills.
-6. `InsultSong` is only attempted when mana is above 35%, making it the first low-value DPS song to drop under pressure.
-7. `Kick` runs through the shared melee cooldown tracker and is suppressed below 10% endurance.
+| Song                          | Level | Regen  | Notes                  |
+| ----------------------------- | ----- | ------ | ---------------------- |
+| Cassindra's Chorus of Clarity | 33    | 3/tick | Mana regen for casters |
+| Cassindra's Chant of Clarity  | 47    | 5/tick | Upgrade                |
 
-### Downtime / Utility
+**Damage (Chants/DOTs):**
 
-1. `TravelSong` uses Selo's Song of Travel out of combat.
-2. `ManaSong` remains the out-of-combat fallback when no travel pulse is needed.
-3. `CrowdControlSong` is exposed for manual or higher-level CC flows, but the Live-safe combat loop does not auto-mez the kill target.
+| Song             | Level | Notes                         |
+| ---------------- | ----- | ----------------------------- |
+| Chant of Battle  | 6     | DD proc on melee (group buff) |
+| Chant of Flame   | 16    | Fire DOT on target            |
+| Chant of Frost   | 26    | Cold DOT on target            |
+| Chant of Disease | 36    | Disease DOT on target         |
+| Chant of Poison  | 46    | Poison DOT on target          |
 
-### Resource Thresholds
+**Movement:**
 
-- `mana_floor_pct = 20` remains the global stop-casting floor for Bard combat.
-- `proc_mana_pct = 15` preserves the core battle, mana, and focus songs before proc filler.
-- `debuff_mana_pct = 25` prevents slow or utility songs from displacing the core melody on low mana.
-- `insult_mana_pct = 35` keeps direct damage from starving higher-priority support songs.
-- `melee_endurance_pct = 10` prevents Kick from draining endurance below the shared melee floor.
+| Song               | Level | Notes                                       |
+| ------------------ | ----- | ------------------------------------------- |
+| Selo's Accelerando | 5     | Run speed buff (fastest in game with drums) |
+
+**Crowd Control:**
+
+| Song                       | Level | Notes             |
+| -------------------------- | ----- | ----------------- |
+| Kelin's Lucid Lullaby      | 15    | Single target mez |
+| Solon's Song of the Sirens | 30    | AoE mez           |
+
+**Slow:**
+
+| Song                    | Level | Slow% | Notes                 |
+| ----------------------- | ----- | ----- | --------------------- |
+| Largo's Melodic Binding | 20    | 25%   | Weak slow, but stacks |
+
+**Resist Debuffs:**
+
+| Song                   | Level | Notes                            |
+| ---------------------- | ----- | -------------------------------- |
+| Selo's Consonant Chain | 20    | -MR debuff (like Tash for bards) |
+
+### Song Twisting Mechanics
+
+- Bard songs have a 12-second duration and 3-second casting time
+- You can maintain **4 songs** simultaneously by constantly cycling through them
+- The `/melody` command automates this: `/melody 1 2 3 4` plays gems 1-2-3-4 in rotation
+- DOT songs last 18 seconds (3 ticks), so you can twist **5 DOTs** if only running DOTs
+- Songs are instant-on when recast before expiration (no gap in effect)
+
+### Standard Twist Rotations
+
+**Melee Group (default):**
+
+1. Haste song (McVaxius/Vilia's/Battlecry)
+2. Mana regen (Cassindra's Chant of Clarity)
+3. HP regen or resist song
+4. Chant of Battle (melee DD proc) or Selo's for movement
+
+**Caster Group:**
+
+1. Mana regen (Cassindra's)
+2. Resist debuff on mob (Selo's Consonant Chain)
+3. Damage DOT chant
+4. HP regen or haste (some casters benefit from haste for procs)
+
+**Pulling Twist:**
+
+1. Selo's Accelerando (run speed to outrun mobs)
+2. Snare song (if available; prevents runners)
+3. Mez (Kelin's Lucid Lullaby for splitting)
+
+### Mana Management
+
+Bards use mana for songs but regenerate it while singing (unlike casters who must sit). Bard mana management is largely trivial -- songs cost little mana and regen is constant. The real "resource" is song slots and twist timing.
+
+### Group Role
+
+Force multiplier. Bard makes every group member better. Haste for melee, mana regen for casters, resist debuffs for nuke-heavy groups. Can off-tank, off-pull, mez adds in emergencies. Best puller in open zones (SoW speed + mez).
 
 ### Automation Notes
 
-- The runtime Bard strategy resolves song lines by level at 60, 61, 62, and 65, then feeds the resolved names into the combat rotation engine.
-- Legacy twist or weaving helpers still exist for manual or test coverage, but `build_strategy()` now instantiates the Live-safe rotation path by default.
-- Shared melee cooldown handling is in `state.rs`; Bard uses the same Kick timer behavior as other melee classes.
+- `/melody` command is the automation foundation -- set it and forget it
+- Swap songs based on group composition (melee vs. caster heavy)
+- Pulling: automate Selo's + tag + run + mez add sequence
+- Bard is one of the easiest classes to automate due to `/melody`
 
 ---
 
@@ -794,13 +828,11 @@ Sustained DPS through DOTs. Pet provides additional damage. Utility: summon corp
 
 1. **Summon pet** before group starts (water pet default)
 2. **Gear pet**: give summoned weapons and shield, cast Burnout (pet haste/damage)
-3. **Send pet** to attack immediately on engage (pet is primary DPS source)
-4. **Debuff** healthy targets with **Mala** once per target before spending mana on direct damage
-5. **AoE nuke** with **Sun Storm** only when 3+ enemies are present and mana is healthy
-6. **Primary nuke** with **Seeking Flame of Seukor** when mana is above the main burn threshold
-7. **Fallback nuke** with **Shock of Steel** when mana is only high enough for the cheaper line
-8. **Stop direct damage casting** below the low-mana floor and let pet DPS carry the fight
-9. **Downtime utility**: click **Rod of Mystical Transvergence** out of combat when mana drops below 40%
+3. **Send pet** to attack (pet is primary DPS source)
+4. **Nuke** with Shock of Swords / Seeking Flame (secondary DPS)
+5. **Pet heal** if pet is taking damage (pet heals are weak pre-Luclin; earth pet can tank light hits)
+6. **Re-summon pet** if pet dies (keep reagents stocked)
+7. **Rain nukes** only on stationary mobs (AoE; risk of breaking mez)
 
 ### Pet Management
 
@@ -825,11 +857,11 @@ Pet class DPS. Pet provides consistent melee damage. Supplemental nuking. Utilit
 
 ### Automation Notes
 
-- Pet summon + equip + buff is still a startup macro, but the DLL now tracks a newly detected pet and casts the best available **Burnout** line exactly once during downtime.
-- Resolved Magician spell lines are explicit at the Live-safe level breakpoints: `Mala`, `Seeking Flame of Seukor`, `Shock of Steel`, `Burnout IV`, `Burnout V`, `Sun Storm`, `Greater Vocaration: Water`, and `Call of the Arch Mage`.
-- Runtime damage priority is `Mala` once per target, then `Sun Storm` for 3+ enemies, then `Seeking Flame of Seukor`, then `Shock of Steel`.
-- The mod rod click path is handled through the shared activated-ability cooldown tracker with a 300 second reuse window, so downtime mana recovery does not spam item use every tick.
-- Direct damage casting stops below the secondary mana floor; when mana is low, automation leans on pet damage and medding instead of wasting casts.
+- Pet summon + equip + buff is a startup macro (do once per session or on pet death)
+- Pet attack on current target when tank establishes aggro
+- Nuke on cooldown (with mana threshold check)
+- Pet recall if pet is about to die
+- Mod Rod distribution to casters between pulls
 
 ---
 

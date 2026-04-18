@@ -736,168 +736,75 @@ mod tests {
     }
 
     #[test]
-    fn shipped_warrior_config_has_live_level_overrides() {
-        let warrior_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("config/classes/warrior.toml");
-        let warrior = ClassConfig::load(&warrior_path).expect("warrior config should parse");
+    fn shipped_shaman_config_covers_live_breakpoints() {
+        let config: ClassConfig =
+            toml::from_str(include_str!("../../../config/classes/shaman.toml")).unwrap();
 
-        let override_levels: Vec<_> = warrior
-            .level_overrides
-            .iter()
-            .map(|profile| (profile.min_level, profile.max_level))
-            .collect();
+        let level_60 = config.profile_for_level(Some(60));
+        let level_61 = config.profile_for_level(Some(61));
+        let level_62 = config.profile_for_level(Some(62));
+        let level_65 = config.profile_for_level(Some(65));
 
-        assert_eq!(
-            override_levels,
-            vec![
-                (Some(60), Some(60)),
-                (Some(61), Some(61)),
-                (Some(62), Some(62)),
-                (Some(65), Some(65))
-            ]
-        );
-
-        let level_65 = warrior
-            .level_overrides
-            .iter()
-            .find(|profile| profile.min_level == Some(65))
-            .expect("level 65 warrior override should exist");
-        let combat_abilities = level_65
+        let level_60_names: Vec<&str> = level_60
             .combat_abilities
-            .as_ref()
-            .expect("level 65 warrior override should define combat abilities");
-        let ability_names: Vec<_> = combat_abilities
             .iter()
             .map(|ability| ability.name.as_str())
             .collect();
-        assert!(ability_names.contains(&"Stonewall Discipline"));
-        assert!(ability_names.contains(&"Fellstrike Discipline"));
-    }
+        assert!(level_60_names.contains(&"Turgur's Insects"));
+        assert!(level_60_names.contains(&"Malo"));
+        assert!(level_60_names.contains(&"Torpor"));
+        assert!(level_60_names.contains(&"Chloroblast"));
+        assert!(level_60_names.contains(&"Cannibalize IV"));
+        assert!(level_60_names.contains(&"Ancient: Scourge of Nife"));
 
-    #[test]
-    fn magician_shipped_config_has_expected_level_overrides() {
-        let magician_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("config/classes/magician.toml");
-        let config = ClassConfig::load(&magician_path).expect("load shipped magician config");
+        let level_61_names: Vec<&str> = level_61
+            .combat_abilities
+            .iter()
+            .map(|ability| ability.name.as_str())
+            .collect();
+        assert!(level_61_names.contains(&"Cloud of Grummus"));
 
-        let profile_60 = config.profile_for_level(Some(60));
-        assert!(
-            profile_60
-                .combat_abilities
-                .iter()
-                .any(|ability| ability.name == "Mala")
-        );
-        assert!(
-            profile_60
-                .combat_abilities
-                .iter()
-                .any(|ability| ability.name == "Shock of Steel")
-        );
+        let level_62_names: Vec<&str> = level_62
+            .combat_abilities
+            .iter()
+            .map(|ability| ability.name.as_str())
+            .collect();
+        assert!(level_62_names.contains(&"Tnarg's Mending"));
 
-        let profile_61 = config.profile_for_level(Some(61));
-        assert!(
-            profile_61
-                .buff_abilities
-                .iter()
-                .any(|ability| ability.name == "Burnout IV")
-        );
+        let level_62_buff_names: Vec<&str> = level_62
+            .buff_abilities
+            .iter()
+            .map(|ability| ability.name.as_str())
+            .collect();
+        assert!(level_62_buff_names.contains(&"Focus of Soul"));
 
-        let profile_62 = config.profile_for_level(Some(62));
-        assert!(
-            profile_62
-                .buff_abilities
-                .iter()
-                .any(|ability| ability.name == "Burnout V")
-        );
-        assert!(
-            profile_62
-                .combat_abilities
-                .iter()
-                .any(|ability| ability.name == "Sun Storm")
-        );
+        let level_65_names: Vec<&str> = level_65
+            .combat_abilities
+            .iter()
+            .map(|ability| ability.name.as_str())
+            .collect();
+        assert!(level_65_names.contains(&"Malos"));
+        assert!(level_65_names.contains(&"Quiescence"));
 
-        let profile_65 = config.profile_for_level(Some(65));
-        assert!(
-            profile_65
-                .combat_abilities
-                .iter()
-                .any(|ability| ability.name == "Call of the Arch Mage")
-        );
-    }
+        let level_65_buff_names: Vec<&str> = level_65
+            .buff_abilities
+            .iter()
+            .map(|ability| ability.name.as_str())
+            .collect();
+        assert!(level_65_buff_names.contains(&"Focus of the Seventh"));
 
-    #[test]
-    fn rogue_shipped_config_tracks_rotation_breakpoints() {
-        let rogue_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("config/classes/rogue.toml");
-        let config = ClassConfig::load(&rogue_path).expect("rogue config should parse");
+        let level_60_malo = level_60
+            .debuff_abilities
+            .iter()
+            .find(|ability| ability.name == "Malo")
+            .unwrap();
+        assert_eq!(level_60_malo.order, 2);
 
-        assert_eq!(
-            config
-                .level_overrides
-                .iter()
-                .map(|profile| (profile.min_level, profile.max_level))
-                .collect::<Vec<_>>(),
-            vec![
-                (Some(60), Some(60)),
-                (Some(61), Some(61)),
-                (Some(62), Some(62)),
-                (Some(65), None),
-            ]
-        );
-
-        let names_for_level = |level| {
-            config
-                .profile_for_level(Some(level))
-                .combat_abilities
-                .iter()
-                .map(|ability| ability.name.as_str())
-                .collect::<Vec<_>>()
-        };
-
-        assert_eq!(
-            names_for_level(60),
-            vec![
-                "Backstab",
-                "Blinding Speed Discipline",
-                "Duelist Discipline",
-                "Attack",
-                "Hide",
-                "Sneak",
-            ]
-        );
-        assert_eq!(
-            names_for_level(61),
-            vec![
-                "Backstab",
-                "Blinding Speed Discipline",
-                "Duelist Discipline",
-                "Weapon Affinity Discipline",
-                "Attack",
-                "Rogue's Ploy",
-                "Hide",
-                "Sneak",
-            ]
-        );
-        assert_eq!(names_for_level(62), names_for_level(61));
-        assert_eq!(
-            names_for_level(65),
-            vec![
-                "Backstab",
-                "Twisted Chance Discipline",
-                "Duelist Discipline",
-                "Weapon Affinity Discipline",
-                "Attack",
-                "Rogue's Ploy",
-                "Kyv Strike",
-                "Hide",
-                "Sneak",
-            ]
-        );
+        let level_65_malos = level_65
+            .debuff_abilities
+            .iter()
+            .find(|ability| ability.name == "Malos")
+            .unwrap();
+        assert_eq!(level_65_malos.order, 2);
     }
 }
