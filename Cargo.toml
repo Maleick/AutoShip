@@ -7,7 +7,7 @@ members = [
     "textquest-web",
     "textquest-web-sdk",
     "tools/llm-client",
-    "tools/eqdiff",
+    "tools/eqdiff", "textquest-web-sdk",
 ]
 resolver = "2"
 
