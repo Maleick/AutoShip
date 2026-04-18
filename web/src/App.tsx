@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import AdminDashboard from "./components/AdminDashboard";
 import AlertsPanel from "./components/AlertsPanel";
 import AdminDashboard from "./components/AdminDashboard";
 import BoxChatPanel from "./components/BoxChatPanel";

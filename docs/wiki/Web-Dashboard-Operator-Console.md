@@ -122,6 +122,18 @@ spawn list without leaving the browser.
   `extension.runtime` websocket event so the panel can refresh health and
   degraded warnings without a page reload.
 
+## Admin Dashboard Panels
+
+Issue `#1735` adds three dedicated admin panels accessible via the left sidebar:
+
+| Panel | Path | Purpose |
+|---|---|---|
+| **Performance** | Admin → Performance | CPU, memory, frame rate, IPC latency trends per client |
+| **Log Viewer** | Admin → Logs | Streaming log output with severity filter and search |
+| **Backup Browser** | Admin → Backups | Browse, download, and restore configuration snapshots |
+
+Backend hooks: `useAdminMetrics`, `useAdminLogs`, `useAdminBackups` poll `/api/admin/*` endpoints on a configurable interval. The sidebar entry `Admin` appears in `LeftSidebar` only when `VITE_ADMIN_ENABLED=true` or the `api_token` header is present.
+
 ## Review Artifact
 
 Figma was not available in-session, so this page is the in-repo mockup artifact for review. The implemented React layout matches the section ordering and interaction model documented here.
