@@ -1,0 +1,45 @@
+# Research baseline for issue #1722. Runtime only consumes the TOML fields
+# below. Named waypoints, pull sectors, restriction geometry, and spawn notes
+# live in docs/wiki/Foundation-Underquarry-Scouts-Camp.md until issue #1900
+# expands the camp schema intentionally.
+name = "foundation_underquarry_scouts"
+zone = "foundation"
+
+# Active stack: northwest scout shelf below the Underquarry ramp.
+camp_center = [-1263.0, 637.0, -205.0]
+# Pull handoff: east edge of the same shelf so bad pulls reset toward the camp
+# instead of drifting through the quest hub.
+pull_point = [-1235.0, 590.0, -205.0]
+pull_radius = 380
+camp_radius = 35
+leash_radius = 520
+rest_mana_pct = 75
+pull_mana_pct = 55
+level_range = [84, 85]
+ignore_mob_names = [
+  "Foreman Gribblebitz",
+  "Trullica",
+  "Dorillis",
+  "Darott",
+  "Dermott Satllagger",
+  "Greph",
+  "Borgar Rominstomp",
+  "Saunk the Shaman",
+  "Genati of Saunk",
+  "a brass golem",
+  "a flint genati",
+  "a master hunter",
+  "a master scout",
+  "a master soldier",
+  "a red gold golem",
+  "a sand genati",
+  "Agriculturist Spong",
+  "Arabella",
+  "Creeping Mold",
+  "Fetid Boring Beetle",
+  "Merl",
+  "Ragbeard the Morose",
+  "Tilda Grintwisdom",
+  "Trag",
+]
+return_no_aggro = true
