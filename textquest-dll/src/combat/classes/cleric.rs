@@ -388,6 +388,21 @@ impl ClassStrategy for ClericStrategy {
     fn ability_sets(&self) -> Vec<AbilitySet> {
         Self::build_ability_sets()
     }
+
+    fn heal_cancel_threshold(&self) -> Option<f32> {
+        Some(HEAL_CANCEL_THRESHOLD)
+    }
+
+    fn is_heal_cast(&self, ctx: &CombatContext, spell_slot: u8, spell_id: i32) -> bool {
+        strategy::spell_for_cast(ctx, spell_slot, spell_id).is_some_and(|spell| {
+            let name = spell.name.to_ascii_lowercase();
+            name.contains("heal")
+                || name.contains("remedy")
+                || name.contains("restoration")
+                || name.contains("replenishment")
+                || name.starts_with("word of ")
+        })
+    }
 }
 
 /// Check if a spell entry is a resurrection spell.

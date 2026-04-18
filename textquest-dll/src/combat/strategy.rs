@@ -301,6 +301,28 @@ pub trait ClassStrategy: Send {
         _resolved_abilities: &HashMap<String, AbilityResolution>,
     ) {
     }
+
+    /// Receive the current resolved ability map after spell-book resolution.
+    ///
+    /// Strategies that need line-aware spell selection can cache these results
+    /// locally without widening `CombatContext` for every class.
+    fn on_resolved_abilities(&mut self, _resolved: &HashMap<String, ResolvedAbility>) {}
+    /// Whether the current cast should participate in heal-cancel logic.
+    ///
+    /// The default heuristic only treats explicitly configured `*heal*` spells
+    /// as cancelable. Classes with line-based healing can override this.
+    fn is_heal_cast(&self, ctx: &CombatContext, spell_slot: u8, spell_id: i32) -> bool {
+        spell_for_cast(ctx, spell_slot, spell_id)
+            .is_some_and(|spell| spell_name_contains_heal(&spell.name))
+    }
+
+    /// HP threshold above which an in-flight heal should be canceled.
+    ///
+    /// Healer-role classes inherit the legacy 85% threshold unless they
+    /// override it explicitly. Non-healers return `None`.
+    fn heal_cancel_threshold(&self) -> Option<f32> {
+        matches!(self.role(), CombatRole::Healer).then_some(85.0)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -370,6 +392,34 @@ pub fn pet_attack() {
 /// Common pet single-target focus helper for pet classes.
 pub fn pet_focus() {
     crate::eq::slash_command("/pet focus");
+}
+
+/// Find the configured spell entry backing an active cast.
+#[inline]
+pub fn spell_for_cast<'a>(
+    ctx: &'a CombatContext<'a>,
+    spell_slot: u8,
+    spell_id: i32,
+) -> Option<&'a SpellEntry> {
+    ctx.config
+        .spells
+        .iter()
+        .find(|spell| spell.slot == spell_slot)
+        .or_else(|| {
+            (spell_id > 0)
+                .then(|| {
+                    ctx.config
+                        .spells
+                        .iter()
+                        .find(|spell| spell.spell_id == spell_id)
+                })
+                .flatten()
+        })
+}
+
+#[inline]
+pub fn spell_name_contains_heal(name: &str) -> bool {
+    name.to_ascii_lowercase().contains("heal")
 }
 
 /// Common pet engage helper: attack the current target and focus it.

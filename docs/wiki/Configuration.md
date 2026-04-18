@@ -193,6 +193,14 @@ Current repo coverage includes classes such as:
 - warrior
 - wizard
 
+Class configs can carry more than the legacy `command` / `cooldown_secs` / `priority` triplet when a class needs tighter tuning. Recent Live-safe profiles also document:
+
+- `[resource_thresholds]` for HP, mana, endurance, and stop-cast floors
+- `[[level_overrides]]` for explicit level breakpoints
+- extra per-ability metadata such as `line` and `surface`
+
+The operator-facing file should stay aligned with the runtime strategy. When a class rotation changes in code, update the corresponding `config/classes/*.toml` file in the same PR.
+
 ## Per-Toon Combat Configs
 
 `config/toons/<toon>.toml` can override the injected DLL combat action tables for one specific character.

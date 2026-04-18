@@ -919,6 +919,47 @@ Secondary slow support plus steady melee/pet DPS. Beastlords should not be treat
 - Slow is modeled as an opener-only action because the DLL does not yet track target debuff state
 - Beastlord spell DPS upgrades from **Scorpion Venom** at 61-64 to **Trushar's Frost** at 65, with both lines held behind the mana reserve threshold
 - Optional resist-debuff clickies remain operator-specific and belong in per-toon overrides rather than as hard-coded runtime item assumptions
+## 16. Paladin (Hybrid Tank / Off-Healer)
+
+### Live-Safe Rotation Priorities
+
+1. **Emergency heal** when a group member drops below `35%`
+2. **Group heal** when `2+` members are at or below `55%`
+3. **Cure** only when the group is otherwise stable above the `55%` floor
+4. **Support heal** for sustained damage up to `60%`
+5. **Stun** for pickup control and interrupts when mana is above the support reserve
+6. **Holy nuke** only when no heal/cure/stun action is needed and mana is above the DPS floor
+7. **Rebuff self** out of combat with Yaulp / HP buffs
+
+### Level Tuning Breakpoints
+
+| Level | Main change |
+| ----- | ----------- |
+| 60 | `Superior Healing`, `Healing Wave of Prexus`, `Brell's Mountainous Barrier`, `Yaulp IV` |
+| 61 | `Touch of Nife` replaces the older single-target heal line |
+| 62 | `Crusader's Touch` becomes the preferred cure and `Force of Akilae` replaces `Force` |
+| 63 | `Light of Nife` and `Pious Might` become the main heal / DPS lines |
+| 64 | `Quellious' Word of Serenity` and `Supernal Cleansing` upgrade the stun / cure package |
+| 65 | `Wave of Marr` and `Brell's Stalwart Shield` finish the Live-safe group profile |
+
+### Resource Floors
+
+- Hold **at least `15%` endurance** before spending Paladin melee skills; this preserves pickup tools during long fights.
+- Reserve **`22%` mana** before using stun as a low-value control action.
+- Reserve **`40%` mana** before casting the DPS nuke line.
+- Only spend cure mana when the group is already stable; healing beats cure when the HP floor is collapsing.
+- Cancel long heals if the group has recovered above **`82%`** before the cast lands.
+
+### Group Role
+
+Secondary tank and stabilization support. The Paladin should not be treated like a primary nuker; unattended value comes from keeping bad pulls recoverable through pickup aggro, stuns, off-heals, and selective cure coverage.
+
+### Automation Notes
+
+- Keep the heal package conservative: Paladins bridge damage spikes so clerics and shamans can stay on their primary jobs.
+- Use the stun line as an **interrupt / pickup** tool, not as a spammed DPS button.
+- Prefer single-target heals for true emergencies; only pivot to the group heal line when multiple members are meaningfully low.
+- Rebuff Yaulp and HP buffs only out of combat.
 
 ---
 

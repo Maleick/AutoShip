@@ -511,6 +511,13 @@ const ROGUE_MELEE_SKILLS: &[u32] = &[COMBAT_SKILL_ID_BACKSTAB];
 const BEASTLORD_MELEE_SKILLS: &[u32] = &[COMBAT_SKILL_ID_KICK, COMBAT_SKILL_ID_FLYING_KICK];
 const DEFAULT_MELEE_SKILLS: &[u32] = &[COMBAT_SKILL_ID_KICK];
 
+fn melee_endurance_floor_pct(class_id: u8) -> f32 {
+    match class_id {
+        3 => 15.0, // Paladin preserves more endurance for pickup tools and stuns.
+        _ => 10.0,
+    }
+}
+
 fn lookup_combat_skill_id(normalized_action_name: &str) -> Option<u32> {
     COMBAT_SKILL_IDS
         .iter()
@@ -1146,16 +1153,22 @@ impl Combatant {
                     self.gcd.consume();
                 }
 
-                // Healer heal-cancel: if lowest HP member recovered above 85%,
-                // duck to interrupt the heal and save mana.
-                if matches!(self.config.role, CombatRole::Healer) && *ticks_remaining > 5 {
+                // Heal-cancel: classes with long reactive heals can duck
+                // when the group has recovered to preserve mana.
+                if let Some(cancel_threshold) = self.strategy.heal_cancel_threshold()
+                    && *ticks_remaining > 5
+                    && self.strategy.is_heal_cast(&ctx, *spell_slot, *spell_id)
+                {
                     let all_healthy = ctx
                         .group_members
                         .iter()
                         .filter(|m| m.hp_pct > 0.0)
-                        .all(|m| m.hp_pct >= 85.0);
+                        .all(|m| m.hp_pct >= cancel_threshold);
                     if all_healthy && !ctx.group_members.is_empty() {
-                        tracing::info!("Healer: canceling heal — group HP recovered above 85%");
+                        tracing::info!(
+                            threshold = cancel_threshold,
+                            "Canceling heal — group HP recovered above threshold"
+                        );
                         // Duck to interrupt cast (write STANDSTATE=4 briefly)
                         crate::eq::slash_command("/duck");
                         let (ss, sid, tid) = (*spell_slot, *spell_id, *target_id);
@@ -1495,7 +1508,7 @@ impl Combatant {
         } else {
             100.0
         };
-        if end_pct < 10.0 {
+        if end_pct < melee_endurance_floor_pct(class_id) {
             return; // conserve endurance
         }
 
@@ -1700,6 +1713,17 @@ mod tests {
         }
     }
 
+    fn test_config_with_spells(spells: Vec<SpellEntry>) -> CombatConfig {
+        CombatConfig {
+            spells,
+            cast_retry_policy: CastRetryPolicy {
+                max_tries: Some(1),
+                base_backoff_ticks: 0,
+            },
+            ..CombatConfig::default()
+        }
+    }
+
     fn test_player() -> SpawnData {
         let mut p = SpawnData::default();
         p.name = "TestPlayer".into();
@@ -1737,6 +1761,18 @@ mod tests {
                 level: 65,
             },
         ]
+    }
+
+    fn test_group_member(spawn_id: u32, hp_pct: f32) -> GroupMemberState {
+        GroupMemberState {
+            spawn_id,
+            hp_pct,
+            mana_pct: 100.0,
+            class_id: 2,
+            is_dead: false,
+            name: format!("Member{spawn_id}"),
+            has_detrimental: false,
+        }
     }
 
     fn item_rotation_group_with(
@@ -1809,6 +1845,98 @@ mod tests {
         // Should have auto-disengaged back to Idle
         assert!(matches!(c.status(), CombatStatus::Idle));
         assert!(c.assist_target.is_none());
+    }
+
+    #[test]
+    fn paladin_melee_skills_respect_higher_endurance_floor() {
+        let mut paladin = Combatant::new(3, 0, test_config());
+        let mut player = test_player();
+        player.endurance_current = 14;
+        player.endurance_max = 100;
+
+        paladin.tick_melee_skills(3, &player);
+
+        assert!(paladin.skill_cooldowns.is_ready(COMBAT_SKILL_ID_TAUNT));
+        assert!(paladin.skill_cooldowns.is_ready(COMBAT_SKILL_ID_BASH));
+        assert!(paladin.skill_cooldowns.is_ready(COMBAT_SKILL_ID_KICK));
+
+        let mut warrior = Combatant::new(1, 0, test_config());
+        warrior.tick_melee_skills(1, &player);
+
+        assert!(!warrior.skill_cooldowns.is_ready(COMBAT_SKILL_ID_TAUNT));
+        assert!(!warrior.skill_cooldowns.is_ready(COMBAT_SKILL_ID_KICK));
+    }
+
+    #[test]
+    fn paladin_heal_cancel_uses_class_threshold_even_as_offtank() {
+        let mut paladin = Combatant::new(
+            3,
+            0,
+            test_config_with_spells(vec![SpellEntry {
+                slot: 1,
+                spell_id: 3430,
+                name: "Light of Nife".into(),
+                min_mana_pct: 0.0,
+                priority: 1,
+                is_aoe: false,
+            }]),
+        );
+        let player = test_player();
+        let target = test_target();
+
+        paladin.group_members = vec![test_group_member(10, 90.0), test_group_member(11, 88.0)];
+        paladin.state = CombatState::Casting {
+            spell_slot: 1,
+            spell_id: 3430,
+            target_id: 10,
+            ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
+        };
+
+        paladin.tick(&player, Some(&target), &[]);
+
+        assert!(
+            matches!(paladin.status(), CombatStatus::OnGcd),
+            "paladin heal should be duck-cancelled once the group is back above threshold"
+        );
+        assert_eq!(paladin.last_cast_result, Some(CastResult::Aborted));
+    }
+
+    #[test]
+    fn paladin_non_heal_casts_do_not_duck_when_group_is_healthy() {
+        let mut paladin = Combatant::new(
+            3,
+            0,
+            test_config_with_spells(vec![SpellEntry {
+                slot: 1,
+                spell_id: 124,
+                name: "Force".into(),
+                min_mana_pct: 0.0,
+                priority: 1,
+                is_aoe: false,
+            }]),
+        );
+        let player = test_player();
+        let target = test_target();
+
+        paladin.group_members = vec![test_group_member(10, 95.0), test_group_member(11, 92.0)];
+        paladin.state = CombatState::Casting {
+            spell_slot: 1,
+            spell_id: 124,
+            target_id: target.spawn_id,
+            ticks_remaining: 10,
+            retry_count: 0,
+            backoff_ticks: 0,
+        };
+
+        paladin.tick(&player, Some(&target), &[]);
+
+        assert!(
+            matches!(paladin.status(), CombatStatus::Casting { .. }),
+            "non-heal Paladin casts should not be duck-cancelled just because the group is healthy"
+        );
+        assert_eq!(paladin.last_cast_result, None);
     }
 
     #[test]

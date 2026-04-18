@@ -2,35 +2,343 @@ class_name = "paladin"
 role = "tank"
 rest_command = "/sit"
 
+[resource_thresholds]
+emergency_heal_hp_pct = 35.0
+group_heal_hp_pct = 55.0
+group_heal_member_count = 2
+support_heal_hp_pct = 60.0
+cure_min_mana_pct = 15.0
+stun_min_mana_pct = 22.0
+dps_min_mana_pct = 40.0
+buff_min_mana_pct = 30.0
+melee_endurance_floor_pct = 15.0
+stop_cast_hp_pct = 82.0
+
 [[combat_abilities]]
 name = "Taunt"
+line = "Taunt"
+surface = "skill"
 command = "/taunt"
-cooldown_secs = 8.0
+cooldown_secs = 6.0
+priority = 0
+
+[[combat_abilities]]
+name = "Bash"
+line = "Bash"
+surface = "skill"
+command = "/doability 1"
+cooldown_secs = 10.0
 priority = 1
 
 [[combat_abilities]]
-name = "Heal"
+name = "Celestial Cleansing"
+line = "Celestial Cleansing"
+surface = "spell"
+command = "/cast 3"
+cooldown_secs = 2.5
+priority = 2
+condition = "afflicted_member_when_group_stable"
+
+[[combat_abilities]]
+name = "Wave of Healing"
+line = "Wave of Healing"
+surface = "spell"
 command = "/cast 2"
-cooldown_secs = 10.0
+cooldown_secs = 4.0
 priority = 3
+condition = "two_members_below_55"
+
+[[combat_abilities]]
+name = "Holy Might"
+line = "Holy Might"
+surface = "spell"
+command = "/cast 4"
+cooldown_secs = 6.0
+priority = 6
+condition = "hostile_target_and_mana_above_40"
+
+[[emergency_abilities]]
+name = "Superior Healing"
+line = "Superior Healing"
+surface = "spell"
+command = "/cast 1"
+cooldown_secs = 5.0
+priority = 0
+condition = "lowest_group_hp_below_35"
 
 [[emergency_abilities]]
 name = "Lay on Hands"
-command = "/cast 3"
+line = "Lay on Hands"
+surface = "ability"
+command = "/useability Lay on Hands"
 cooldown_secs = 3600.0
-priority = 0
-condition = "hp_below_15"
+priority = 1
+condition = "self_hp_below_15"
 
 [[cc_abilities]]
-name = "Stun"
+name = "Force"
+line = "Force"
+surface = "spell"
 cc_type = "stun"
-command = "/cast 1"
-cooldown_secs = 6.0
+command = "/cast 5"
+cooldown_secs = 18.0
 duration_secs = 4.0
+priority = 0
+
+[[buff_abilities]]
+name = "Shield of Words"
+line = "Shield of Words"
+surface = "spell"
+command = "/cast 6"
+cooldown_secs = 180.0
 priority = 1
 
 [[buff_abilities]]
-name = "HP Buff"
-command = "/cast 5"
-cooldown_secs = 600.0
-priority = 1
+name = "Yaulp III"
+line = "Yaulp III"
+surface = "spell"
+command = "/cast 7"
+cooldown_secs = 18.0
+priority = 0
+
+[[level_overrides]]
+name = "Paladin 60"
+min_level = 60
+max_level = 60
+
+  [[level_overrides.combat_abilities]]
+  name = "Taunt"
+  line = "Taunt"
+  surface = "skill"
+  command = "/taunt"
+  cooldown_secs = 6.0
+  priority = 0
+
+  [[level_overrides.combat_abilities]]
+  name = "Bash"
+  line = "Bash"
+  surface = "skill"
+  command = "/doability 1"
+  cooldown_secs = 10.0
+  priority = 1
+
+  [[level_overrides.combat_abilities]]
+  name = "Celestial Cleansing"
+  line = "Celestial Cleansing"
+  surface = "spell"
+  command = "/cast 3"
+  cooldown_secs = 2.5
+  priority = 2
+  condition = "afflicted_member_when_group_stable"
+
+  [[level_overrides.combat_abilities]]
+  name = "Healing Wave of Prexus"
+  line = "Healing Wave of Prexus"
+  surface = "spell"
+  command = "/cast 2"
+  cooldown_secs = 4.0
+  priority = 3
+  condition = "two_members_below_55"
+
+  [[level_overrides.combat_abilities]]
+  name = "Holy Might"
+  line = "Holy Might"
+  surface = "spell"
+  command = "/cast 4"
+  cooldown_secs = 6.0
+  priority = 6
+  condition = "hostile_target_and_mana_above_40"
+
+  [[level_overrides.emergency_abilities]]
+  name = "Superior Healing"
+  line = "Superior Healing"
+  surface = "spell"
+  command = "/cast 1"
+  cooldown_secs = 5.0
+  priority = 0
+  condition = "lowest_group_hp_below_35"
+
+  [[level_overrides.emergency_abilities]]
+  name = "Lay on Hands"
+  line = "Lay on Hands"
+  surface = "ability"
+  command = "/useability Lay on Hands"
+  cooldown_secs = 3600.0
+  priority = 1
+  condition = "self_hp_below_15"
+
+  [[level_overrides.cc_abilities]]
+  name = "Force"
+  line = "Force"
+  surface = "spell"
+  cc_type = "stun"
+  command = "/cast 5"
+  cooldown_secs = 18.0
+  duration_secs = 4.0
+  priority = 0
+
+  [[level_overrides.buff_abilities]]
+  name = "Brell's Mountainous Barrier"
+  line = "Brell's Mountainous Barrier"
+  surface = "spell"
+  command = "/cast 6"
+  cooldown_secs = 180.0
+  priority = 1
+
+  [[level_overrides.buff_abilities]]
+  name = "Yaulp IV"
+  line = "Yaulp IV"
+  surface = "spell"
+  command = "/cast 7"
+  cooldown_secs = 18.0
+  priority = 0
+
+[[level_overrides]]
+name = "Paladin 61"
+min_level = 61
+max_level = 61
+
+  [[level_overrides.emergency_abilities]]
+  name = "Touch of Nife"
+  line = "Touch of Nife"
+  surface = "spell"
+  command = "/cast 1"
+  cooldown_secs = 5.0
+  priority = 0
+  condition = "lowest_group_hp_below_35"
+
+  [[level_overrides.buff_abilities]]
+  name = "Yaulp IV"
+  line = "Yaulp IV"
+  surface = "spell"
+  command = "/cast 7"
+  cooldown_secs = 18.0
+  priority = 0
+
+[[level_overrides]]
+name = "Paladin 62"
+min_level = 62
+max_level = 62
+
+  [[level_overrides.combat_abilities]]
+  name = "Crusader's Touch"
+  line = "Crusader's Touch"
+  surface = "spell"
+  command = "/cast 3"
+  cooldown_secs = 2.5
+  priority = 2
+  condition = "afflicted_member_when_group_stable"
+
+  [[level_overrides.cc_abilities]]
+  name = "Force of Akilae"
+  line = "Force of Akilae"
+  surface = "spell"
+  cc_type = "stun"
+  command = "/cast 5"
+  cooldown_secs = 18.0
+  duration_secs = 4.0
+  priority = 0
+
+[[level_overrides]]
+name = "Paladin 63"
+min_level = 63
+max_level = 63
+
+  [[level_overrides.combat_abilities]]
+  name = "Pious Might"
+  line = "Pious Might"
+  surface = "spell"
+  command = "/cast 4"
+  cooldown_secs = 6.0
+  priority = 6
+  condition = "hostile_target_and_mana_above_40"
+
+  [[level_overrides.emergency_abilities]]
+  name = "Light of Nife"
+  line = "Light of Nife"
+  surface = "spell"
+  command = "/cast 1"
+  cooldown_secs = 5.0
+  priority = 0
+  condition = "lowest_group_hp_below_35"
+
+[[level_overrides]]
+name = "Paladin 64"
+min_level = 64
+max_level = 64
+
+  [[level_overrides.combat_abilities]]
+  name = "Supernal Cleansing"
+  line = "Supernal Cleansing"
+  surface = "spell"
+  command = "/cast 3"
+  cooldown_secs = 2.5
+  priority = 2
+  condition = "afflicted_member_when_group_stable"
+
+  [[level_overrides.cc_abilities]]
+  name = "Quellious' Word of Serenity"
+  line = "Quellious' Word of Serenity"
+  surface = "spell"
+  cc_type = "stun"
+  command = "/cast 5"
+  cooldown_secs = 18.0
+  duration_secs = 4.0
+  priority = 0
+
+[[level_overrides]]
+name = "Paladin 65"
+min_level = 65
+
+  [[level_overrides.combat_abilities]]
+  name = "Wave of Marr"
+  line = "Wave of Marr"
+  surface = "spell"
+  command = "/cast 2"
+  cooldown_secs = 4.0
+  priority = 3
+  condition = "two_members_below_55"
+
+  [[level_overrides.combat_abilities]]
+  name = "Pious Might"
+  line = "Pious Might"
+  surface = "spell"
+  command = "/cast 4"
+  cooldown_secs = 6.0
+  priority = 6
+  condition = "hostile_target_and_mana_above_40"
+
+  [[level_overrides.emergency_abilities]]
+  name = "Light of Nife"
+  line = "Light of Nife"
+  surface = "spell"
+  command = "/cast 1"
+  cooldown_secs = 5.0
+  priority = 0
+  condition = "lowest_group_hp_below_35"
+
+  [[level_overrides.cc_abilities]]
+  name = "Quellious' Word of Serenity"
+  line = "Quellious' Word of Serenity"
+  surface = "spell"
+  cc_type = "stun"
+  command = "/cast 5"
+  cooldown_secs = 18.0
+  duration_secs = 4.0
+  priority = 0
+
+  [[level_overrides.buff_abilities]]
+  name = "Brell's Stalwart Shield"
+  line = "Brell's Stalwart Shield"
+  surface = "spell"
+  command = "/cast 6"
+  cooldown_secs = 180.0
+  priority = 1
+
+  [[level_overrides.buff_abilities]]
+  name = "Yaulp IV"
+  line = "Yaulp IV"
+  surface = "spell"
+  command = "/cast 7"
+  cooldown_secs = 18.0
+  priority = 0
