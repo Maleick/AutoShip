@@ -9,6 +9,7 @@ rest_command = "/sit"
 # 4. Convert HP to mana with Cannibalize only when the group is stable.
 # 5. Spend excess mana on a single efficient DoT once slow is secure.
 
+# Base (default) combat rotation — applied when no level override matches
 [[combat_abilities]]
 name = "Turgur's Insects"
 command = "/cast 1"
@@ -57,6 +58,20 @@ command = "/cast 2"
 cooldown_secs = 6.0
 order = 2
 
+[[debuff_abilities]]
+name = "Malo (Magic Resist Down)"
+command = "/cast 8"
+cooldown_secs = 3.0
+order = 2
+
+[[cc_abilities]]
+name = "Mesmerize"
+cc_type = "mez"
+command = "/cast 9"
+cooldown_secs = 3.0
+duration_secs = 18.0
+priority = 1
+
 [[buff_abilities]]
 name = "Focus of the Sixth"
 command = "/cast 7"
@@ -70,6 +85,174 @@ command = "/cast 8"
 cooldown_secs = 1800.0
 priority = 2
 duration_secs = 1800.0
+
+# ─────────────────────────────────────────────────────────────────
+# Level 1–29: Early-game Shaman (novice healing, basic slows)
+# ─────────────────────────────────────────────────────────────────
+[[level_overrides]]
+name = "early-game"
+min_level = 1
+max_level = 29
+
+[[level_overrides.combat_abilities]]
+name = "Minor Slow"
+command = "/cast 10"
+cooldown_secs = 12.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Minor Heal"
+command = "/cast 11"
+cooldown_secs = 5.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Weak DoT"
+command = "/cast 12"
+cooldown_secs = 30.0
+priority = 4
+
+[[level_overrides.buff_abilities]]
+name = "Minor AC Buff"
+command = "/cast 13"
+cooldown_secs = 300.0
+priority = 1
+
+# ─────────────────────────────────────────────────────────────────
+# Level 30–49: Mid-game Shaman (improved heals, first cannibalize)
+# ─────────────────────────────────────────────────────────────────
+[[level_overrides]]
+name = "mid-game"
+min_level = 30
+max_level = 49
+
+[[level_overrides.combat_abilities]]
+name = "Slow"
+command = "/cast 1"
+cooldown_secs = 12.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Heal"
+command = "/cast 2"
+cooldown_secs = 4.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "DoT"
+command = "/cast 4"
+cooldown_secs = 30.0
+priority = 4
+
+[[level_overrides.combat_abilities]]
+name = "Cannibalize Mana"
+command = "/cast 3"
+cooldown_secs = 12.0
+priority = 5
+condition = "mana_below_50"
+
+[[level_overrides.buff_abilities]]
+name = "Haste"
+command = "/cast 5"
+cooldown_secs = 600.0
+priority = 1
+
+[[level_overrides.buff_abilities]]
+name = "HP Buff"
+command = "/cast 6"
+cooldown_secs = 600.0
+priority = 2
+
+[[level_overrides.buff_abilities]]
+name = "Stat Buff"
+command = "/cast 7"
+cooldown_secs = 600.0
+priority = 3
+
+[[level_overrides.debuff_abilities]]
+name = "Malo (Magic Resist Down)"
+command = "/cast 8"
+cooldown_secs = 3.0
+order = 1
+
+# ─────────────────────────────────────────────────────────────────
+# Level 50–60: Late-game Shaman (powerful heals, multi-debuff setup)
+# ─────────────────────────────────────────────────────────────────
+[[level_overrides]]
+name = "late-game"
+min_level = 50
+max_level = 60
+
+[[level_overrides.combat_abilities]]
+name = "Turgur's Insects (Slow)"
+command = "/cast 1"
+cooldown_secs = 12.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Greater Healing"
+command = "/cast 2"
+cooldown_secs = 4.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Envenomed Bolt (DoT)"
+command = "/cast 4"
+cooldown_secs = 30.0
+priority = 4
+
+[[level_overrides.combat_abilities]]
+name = "Cannibalize Mana"
+command = "/cast 3"
+cooldown_secs = 12.0
+priority = 5
+condition = "mana_below_50"
+
+[[level_overrides.buff_abilities]]
+name = "Spirit of the Spiritualist"
+command = "/cast 5"
+cooldown_secs = 600.0
+priority = 1
+
+[[level_overrides.buff_abilities]]
+name = "Enduring Breath"
+command = "/cast 6"
+cooldown_secs = 600.0
+priority = 2
+
+[[level_overrides.buff_abilities]]
+name = "Shamanistic Trance"
+command = "/cast 7"
+cooldown_secs = 600.0
+priority = 3
+
+[[level_overrides.debuff_abilities]]
+name = "Malo IV (Magic Resist Down)"
+command = "/cast 8"
+cooldown_secs = 3.0
+order = 1
+
+[[level_overrides.debuff_abilities]]
+name = "Shaman Debuff"
+command = "/cast 14"
+cooldown_secs = 2.5
+order = 2
+
+[[level_overrides.cc_abilities]]
+name = "Mezzamor"
+cc_type = "mez"
+command = "/cast 9"
+cooldown_secs = 3.0
+duration_secs = 24.0
+priority = 1
+
+[[level_overrides.cc_abilities]]
+name = "Turgur's Swarm"
+cc_type = "snare"
+command = "/cast 15"
+cooldown_secs = 12.0
+duration_secs = 24.0
+priority = 3
 
 [[level_overrides]]
 name = "level-61"
@@ -178,6 +361,109 @@ command = "/cast 8"
 cooldown_secs = 1800.0
 priority = 2
 duration_secs = 1800.0
+
+# ─────────────────────────────────────────────────────────────────
+# Level 61+: Endgame Shaman (epic gear, full arsenal)
+# ─────────────────────────────────────────────────────────────────
+[[level_overrides]]
+name = "endgame"
+min_level = 61
+
+[[level_overrides.combat_abilities]]
+name = "Turgur's Insects (Slow)"
+command = "/cast 1"
+cooldown_secs = 12.0
+priority = 1
+
+[[level_overrides.combat_abilities]]
+name = "Master's Healing Touch"
+command = "/cast 2"
+cooldown_secs = 3.0
+priority = 2
+
+[[level_overrides.combat_abilities]]
+name = "Envenomed Bolt (DoT)"
+command = "/cast 4"
+cooldown_secs = 30.0
+priority = 4
+
+[[level_overrides.combat_abilities]]
+name = "Cannibalize Mana"
+command = "/cast 3"
+cooldown_secs = 12.0
+priority = 5
+condition = "mana_below_50"
+
+[[level_overrides.combat_abilities]]
+name = "Poison DoT"
+command = "/cast 16"
+cooldown_secs = 25.0
+priority = 6
+
+[[level_overrides.buff_abilities]]
+name = "Spirit of the Spiritualist"
+command = "/cast 5"
+cooldown_secs = 600.0
+priority = 1
+
+[[level_overrides.buff_abilities]]
+name = "Ethereal Breath"
+command = "/cast 6"
+cooldown_secs = 600.0
+priority = 2
+
+[[level_overrides.buff_abilities]]
+name = "Shamanistic Trance V"
+command = "/cast 7"
+cooldown_secs = 600.0
+priority = 3
+
+[[level_overrides.buff_abilities]]
+name = "Regen Buff"
+command = "/cast 17"
+cooldown_secs = 600.0
+priority = 4
+
+[[level_overrides.debuff_abilities]]
+name = "Malo V (Magic Resist Down)"
+command = "/cast 8"
+cooldown_secs = 3.0
+order = 1
+
+[[level_overrides.debuff_abilities]]
+name = "Advanced Debuff"
+command = "/cast 14"
+cooldown_secs = 2.5
+order = 2
+
+[[level_overrides.cc_abilities]]
+name = "Mezzamor V"
+cc_type = "mez"
+command = "/cast 9"
+cooldown_secs = 3.0
+duration_secs = 30.0
+priority = 1
+
+[[level_overrides.cc_abilities]]
+name = "Turgur's Insects (Snare)"
+cc_type = "snare"
+command = "/cast 15"
+cooldown_secs = 12.0
+duration_secs = 36.0
+priority = 3
+
+[[level_overrides.emergency_abilities]]
+name = "Group Heal"
+command = "/cast 18"
+cooldown_secs = 20.0
+priority = 0
+condition = "group_avg_hp_below_40"
+
+[[level_overrides.emergency_abilities]]
+name = "Curing Radiance"
+command = "/cast 19"
+cooldown_secs = 10.0
+priority = 1
 
 [[level_overrides]]
 name = "level-65-plus"
