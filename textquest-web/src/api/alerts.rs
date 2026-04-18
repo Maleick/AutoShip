@@ -61,6 +61,7 @@ pub fn router() -> axum::Router<Arc<AppState>> {
         .route("/", get(list_alerts))
         .route("/config", get(get_alert_config).put(put_alert_config))
         .route("/ack-all", post(ack_all_alerts))
+        .route("/{id}", get(get_alert))
         .route("/{id}/ack", post(ack_alert))
 }
 
@@ -82,6 +83,25 @@ pub async fn list_alerts(State(state): State<Arc<AppState>>) -> impl IntoRespons
             json_error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to read alert history",
+            )
+            .into_response()
+        }
+    }
+}
+
+pub async fn get_alert(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    match state.alert_store.get(id) {
+        Ok(Some(alert)) => (StatusCode::OK, Json(alert)).into_response(),
+        Ok(None) => json_error(StatusCode::NOT_FOUND, format!("Alert {id} was not found"))
+            .into_response(),
+        Err(error) => {
+            tracing::error!(%error, alert_id = id, "Failed to fetch alert");
+            json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch alert",
             )
             .into_response()
         }
