@@ -6,6 +6,7 @@
 //! operational snapshots.
 
 pub mod admin_monitoring;
+pub mod baseline_scorecard;
 pub mod events;
 pub mod kill_reporter;
 pub mod kill_session_store;
@@ -16,6 +17,10 @@ pub mod xp_tracker;
 pub use admin_monitoring::{
     AdminMonitoringRetention, AdminMonitoringStore, MonitoredSessionState, SessionErrorKind,
     SessionMonitoringSnapshot, sample_process_memory_bytes,
+};
+pub use baseline_scorecard::{
+    BaselineScorecard, CombatDelta, CombatMetrics, CoordinationDelta, EconomyDelta,
+    EconomyMetrics, GroupCoordinationMetrics, MovementDelta, MovementMetrics, ScorecardDelta,
 };
 pub use events::{FleetEvent, FleetEventLog};
 pub use kill_reporter::KillReporter;
