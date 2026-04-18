@@ -1,0 +1,131 @@
+# Underfoot primary farming camp for issue #1722.
+#
+# Zone: The Foundation (Underfoot expansion, requires Brell's Rest access)
+#
+# Camp Location Strategy:
+# - Primary camp anchor: Northwest scout shelf below the Underquarry ramp
+#   (Scouting for Land farm marker 5). This location provides stable trash
+#   density, safe retreat to the Underquarry zoneline, and avoids problematic
+#   cross-zone pathing in the eastern and southern basins.
+# - Pull handoff: East edge of the scout shelf, away from the quest hub to
+#   prevent bad pulls from drifting through the protected NPC triangle
+#   (Foreman, Trullica, Dorillis, Dermott).
+# - Mana thresholds tuned conservatively for Underfoot spike damage and pathing
+#   resets; this is a late-expansion camp requiring geared 84-85 characters.
+#
+# Zone Notes:
+# - The Foundation is an Underfoot zone requiring:
+#   * Level 84+ (soft minimum; level cap is 85)
+#   * Access to Brell's Rest (typically via The Underquarry)
+#   * Kunark+ era faction standing for safe NPC access
+# - Primary pull targets: trash constructs, golems, genati, and hunters
+# - Avoid: Named roamers (Ragbeard, Tilda, Trag, Merl, brass golem),
+#   protected quest NPCs, and the southern/eastern basins (poor pathing)
+# - Multibox farming: Recommended 84-85 geared group; unattended at this tier
+#   only after live validation of route and leash behavior
+#
+# References:
+# - Detailed waypoint lattice, restriction geometry, and multibox routes
+#   documented in docs/wiki/Foundation-Underquarry-Scouts-Camp.md
+# - Brewall map lineage: config/maps/foundation_1.txt, issue #1396
+# - EverQuest coordinate system: XY plane is horizontal, Z is vertical
+# - Approximate trash respawn cadence: ~6 minutes (community baseline, unverified)
+
+name = "underfoot_primary"
+zone = "foundation"
+
+# Primary camp anchor: northwest scout shelf (Scouting for Land marker 5).
+# Safe stacking point with line-of-sight to pull contacts and quick retreat
+# to Underquarry zoneline.
+camp_center = [-1263.0, 637.0, -205.0]
+
+# Pull handoff: east edge of the scout shelf. Keeps bad pulls resetting toward
+# camp instead of drifting through the quest hub (Foreman/Trullica/Dorillis/Dermott).
+pull_point = [-1235.0, 590.0, -205.0]
+
+# Pull radius covers the scout shelf, Ragbeard line, and quest-hub north edge
+# without widening into central/eastern basins or the dangerous west plateau.
+pull_radius = 380
+
+# Tight camp radius to keep the 6-box stack off the ramp lip and away from
+# wander-paths and social pockets.
+camp_radius = 35
+
+# Leash radius long enough to recover to the shelf or Underquarry retreat line,
+# short enough to prevent cross-zone drags through the southern basin.
+leash_radius = 520
+
+# Conservative mana thresholds for Underfoot spike damage and sloppy pathing resets.
+rest_mana_pct = 75
+pull_mana_pct = 55
+
+# Level range: Underfoot keeps level cap at 85. Treat as geared late-expansion
+# group content only; not a progression stepping-stone.
+level_range = [84, 85]
+
+# Primary pull targets: trash constructs and combat spawns within the scout shelf
+# and quest-hub corridor. The loader remains conservative here pending live validation.
+pull_mob_names = [
+  "a constructed sentinel",
+  "a forge guardian",
+  "a rock elemental",
+  "a stone golem",
+  "a clockwork guardian",
+  "a mechanical defender",
+  "a buried guardian",
+  "an earthen construct",
+  "a goldenbound defender",
+  "a stonework guardian",
+]
+
+# Ignore named roamers, protected quest NPCs, and other hazards that would
+# destabilize the route. Include both rare spawns and intentional no-pulls.
+ignore_mob_names = [
+  "Foreman Gribblebitz",
+  "Trullica",
+  "Dorillis",
+  "Darott",
+  "Dermott Satllagger",
+  "Ragbeard the Morose",
+  "Tilda Grintwisdom",
+  "Trag",
+  "Merl",
+  "Saunk the Shaman",
+  "Genati of Saunk",
+  "Greph",
+  "Borgar Rominstomp",
+  "a brass golem",
+  "a flint genati",
+  "a red gold golem",
+  "a sand genati",
+  "a master hunter",
+  "a master scout",
+  "a master soldier",
+  "Agriculturist Spong",
+  "Arabella",
+  "Creeping Mold",
+  "Fetid Boring Beetle",
+]
+
+# Burn (accept as valid targets) rare spawns when encountered, but only in
+# the scout shelf and quest-hub corridor. Do not chase named into west plateau
+# or southern basin.
+burn_mob_names = [
+  "Ragbeard the Morose",
+  "Tilda Grintwisdom",
+  "Trag",
+  "Merl",
+  "a brass golem",
+  "a flint genati",
+  "a red gold golem",
+  "a sand genati",
+]
+
+# Prevent return-to-camp while aggro active. The scout shelf sits beside a ramp
+# and multiple social pockets; returning while hot is how bad pathing becomes a wipe.
+return_no_aggro = true
+
+# Progression: Underfoot is the highest tier in scope for TextQuest; no next_camp
+# is defined here.
+# prev_camp: Return to Dreadlands or similar PoP camp for fallback/reset if needed.
+prev_camp = "plane_of_innovation_primary"
