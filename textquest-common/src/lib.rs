@@ -31,6 +31,8 @@ pub mod errors;
 pub mod etw_ti_detect;
 /// SQLite-backed database for Ghidra binary analysis data.
 pub mod ghidra_db;
+/// GM interaction detection and account safety warning alerts.
+pub mod gm_detection;
 /// External integration infrastructure for notifications and alerts.
 pub mod integrations;
 /// Shared inventory-utility parity config, provenance, and rule helpers.

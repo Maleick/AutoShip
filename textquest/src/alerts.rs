@@ -135,6 +135,7 @@ pub enum AlertKind {
     DpsDrop,
     DailySummary,
     ConfigChanged,
+    GmInteraction,
 }
 
 impl AlertKind {
@@ -154,6 +155,7 @@ impl AlertKind {
             Self::DpsDrop => "dps_drop",
             Self::DailySummary => "daily_summary",
             Self::ConfigChanged => "config_changed",
+            Self::GmInteraction => "gm_interaction",
         }
     }
 
@@ -172,6 +174,7 @@ impl AlertKind {
             "dps_drop" => Ok(Self::DpsDrop),
             "daily_summary" => Ok(Self::DailySummary),
             "config_changed" => Ok(Self::ConfigChanged),
+            "gm_interaction" => Ok(Self::GmInteraction),
             other => bail!("Unknown alert kind: {other}"),
         }
     }
@@ -192,6 +195,7 @@ impl AlertKind {
             Self::DpsDrop => "DPS Drop",
             Self::DailySummary => "Daily Summary",
             Self::ConfigChanged => "Config Changed",
+            Self::GmInteraction => "GM Interaction",
         }
     }
 }
@@ -553,6 +557,22 @@ impl AlertThresholdEvaluator {
             .with_source("observability")
             .with_actor(actor),
         )
+    }
+
+    #[must_use]
+    pub fn gm_interaction_alert(
+        &self,
+        actor: &str,
+        sender: &str,
+        message: &str,
+    ) -> NewAlert {
+        NewAlert::new(
+            AlertSeverity::Warning,
+            AlertKind::GmInteraction,
+            format!("GM/CSR interaction detected: {sender} tells {actor}, '{message}'"),
+        )
+        .with_source("chat")
+        .with_actor(actor)
     }
 }
 

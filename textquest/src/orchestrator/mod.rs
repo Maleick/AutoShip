@@ -1627,6 +1627,13 @@ impl Orchestrator {
 
                 let channel: ChatChannel = chat.channel.into();
 
+                // Check for GM tells and CSR interactions
+                if matches!(channel, ChatChannel::Tell) {
+                    if textquest_common::gm_detection::detect_gm_tell(&chat.sender, &chat.message) {
+                        self.emit_gm_alert(&character, &chat.sender, &chat.message);
+                    }
+                }
+
                 if let Err(error) =
                     manager.log_message(&server, &character, &message, Some(channel))
                 {
@@ -1826,6 +1833,16 @@ impl Orchestrator {
                 .with_field("Speaker", &event.sender, true),
             );
         }
+    }
+
+    /// Emit a GM interaction alert and log the event.
+    fn emit_gm_alert(&self, actor: &str, sender: &str, message: &str) {
+        tracing::warn!(
+            actor = %actor,
+            sender = %sender,
+            message = %message,
+            "**SECURITY ALERT** GM/CSR interaction detected — operator review required"
+        );
     }
 
     /// Send a slash command to all registered clients.
