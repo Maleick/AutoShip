@@ -19,7 +19,7 @@ env:
 
 jobs:
   merge_gate:
-    name: PR gate (fmt + clippy + test + python)
+    name: PR gate (fmt + clippy + coverage) on Linux
     runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 90
     steps:
@@ -160,10 +160,6 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Run Rust tests
-        if: steps.scope.outputs.docs_only != 'true'
-        run: cargo test --all --all-features
-
       - name: Cache cargo-tarpaulin binary
         if: steps.scope.outputs.docs_only != 'true'
         id: cache-tarpaulin
@@ -179,6 +175,48 @@ jobs:
       - name: Run coverage (threshold 80%)
         if: steps.scope.outputs.docs_only != 'true'
         run: python3 scripts/coverage-report.py --threshold 80
+
+  test-matrix:
+    name: Unit tests on ${{ matrix.os }} (rust-${{ matrix.rust }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS with stable Rust
+          - os: macos-latest
+            rust: stable
+          # Windows with stable Rust (primary target)
+          - os: windows-latest
+            rust: stable
+          # Windows with nightly Rust (for unsafe hooks testing)
+          - os: windows-latest
+            rust: nightly
+          # Ubuntu with stable Rust
+          - os: ubuntu-latest
+            rust: stable
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: clippy
+
+      - name: Install Linux dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang libclang-dev llvm-dev pkg-config libssl-dev libasound2-dev
+          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
+
+      - name: Cache cargo registry
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run unit tests
+        run: cargo test --lib --all-features
 
   secrets_scan:
     name: Secret scan
