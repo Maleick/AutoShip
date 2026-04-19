@@ -24,107 +24,82 @@
 
 # Global hotkeys available to all characters
 [[global]]
-key = "e"
-type = "Command"
-value = "engage"
+binding = { key = "e", shift = false, alt = false, ctrl = false }
+action = { type = "Command", value = "engage" }
 description = "Start combat"
 
 [[global]]
-key = "d"
-type = "Command"
-value = "disengage"
+binding = { key = "d", shift = false, alt = false, ctrl = false }
+action = { type = "Command", value = "disengage" }
 description = "Stop combat"
 
 [[global]]
-key = "l"
-type = "Command"
-value = "loot"
+binding = { key = "l", shift = false, alt = false, ctrl = false }
+action = { type = "Command", value = "loot" }
 description = "Loot corpses"
 
 [[global]]
-key = "r"
-type = "Command"
-value = "repeat"
+binding = { key = "r", shift = false, alt = false, ctrl = false }
+action = { type = "Command", value = "repeat" }
 description = "Repeat last command"
 
 [[global]]
-key = "?"
-type = "ToggleMode"
-value = "help"
+binding = { key = "?", shift = false, alt = false, ctrl = false }
+action = { type = "ToggleMode", value = "help" }
 description = "Open help screen"
 
 [[global]]
-key = "p"
-type = "ToggleMode"
-value = "privacy"
+binding = { key = "p", shift = false, alt = false, ctrl = false }
+action = { type = "ToggleMode", value = "privacy" }
 description = "Toggle privacy mode"
 
 [[global]]
-key = "F8"
-type = "ToggleMode"
-value = "alert_panel"
+binding = { key = "F8", shift = false, alt = false, ctrl = false }
+action = { type = "ToggleMode", value = "alert_panel" }
 description = "Toggle alert panel"
 
 [[global]]
-key = "F1"
-type = "ToggleMode"
-value = "help"
+binding = { key = "F1", shift = false, alt = false, ctrl = false }
+action = { type = "ToggleMode", value = "help" }
 description = "Open help (alternate)"
 
 [[global]]
-key = "/"
-type = "Command"
-value = "search"
+binding = { key = "/", shift = false, alt = false, ctrl = false }
+action = { type = "Command", value = "search" }
 description = "Search spawns"
 
 [[global]]
-key = "m"
-shift = false
-alt = false
-ctrl = false
-type = "ToggleMode"
-value = "map"
+binding = { key = "m", shift = false, alt = false, ctrl = false }
+action = { type = "ToggleMode", value = "map" }
 description = "Toggle map visibility (in Overview screen)"
 
 [[global]]
-key = "Tab"
-type = "Command"
-value = "cycle_panel"
+binding = { key = "Tab", shift = false, alt = false, ctrl = false }
+action = { type = "Command", value = "cycle_panel" }
 description = "Cycle active panel"
 
 # Character-specific hotkeys
-[character_profiles.Warrior]
-# Override the 'e' key to engage, but with a different command
-[[character_profiles.Warrior.hotkeys]]
-key = "e"
-type = "Command"
-value = "warrior_stance"
+[[character_profiles.Warrior]]
+binding = { key = "e", shift = false, alt = false, ctrl = false }
+action = { type = "Command", value = "warrior_stance" }
 description = "Take defensive stance"
 
-[character_profiles.Wizard]
-# Wizard-specific hotkeys
-[[character_profiles.Wizard.hotkeys]]
-key = "m"
-type = "Command"
-value = "cast_mana_shield"
+[[character_profiles.Wizard]]
+binding = { key = "m", shift = false, alt = false, ctrl = false }
+action = { type = "Command", value = "cast_mana_shield" }
 description = "Cast mana shield"
 
-[[character_profiles.Wizard.hotkeys]]
-key = "F2"
-type = "Command"
-value = "evocation"
+[[character_profiles.Wizard]]
+binding = { key = "F2", shift = false, alt = false, ctrl = false }
+action = { type = "Command", value = "evocation" }
 description = "Cast evocation (favorite spell)"
 
-[character_profiles.Cleric]
-# Cleric-specific hotkeys
-[[character_profiles.Cleric.hotkeys]]
-key = "h"
-type = "Command"
-value = "cast_heal"
+[[character_profiles.Cleric]]
+binding = { key = "h", shift = false, alt = false, ctrl = false }
+action = { type = "Command", value = "cast_heal" }
 description = "Cast heal on focus target"
 
-[[character_profiles.Cleric.hotkeys]]
-key = "g"
-type = "Command"
-value = "cast_group_heal"
+[[character_profiles.Cleric]]
+binding = { key = "g", shift = false, alt = false, ctrl = false }
+action = { type = "Command", value = "cast_group_heal" }
 description = "Cast group heal"

@@ -434,6 +434,8 @@ impl Default for HotkeyRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::PathBuf;
 
     #[test]
     fn key_binding_simple() {
@@ -635,5 +637,20 @@ mod tests {
         assert_eq!(profiles.len(), 2);
         assert!(profiles.contains(&"Warrior".to_string()));
         assert!(profiles.contains(&"Wizard".to_string()));
+    }
+
+    #[test]
+    fn shipped_hotkeys_config_deserializes() {
+        let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        config_path.push("../config/hotkeys.toml");
+
+        let content = fs::read_to_string(&config_path).expect("failed to read config/hotkeys.toml");
+        let config: HotkeyConfig =
+            toml::from_str(&content).expect("shipped hotkeys config should deserialize");
+
+        assert!(!config.global.is_empty());
+        assert!(config.character_profiles.contains_key("Warrior"));
+        assert!(config.character_profiles.contains_key("Wizard"));
+        assert!(config.character_profiles.contains_key("Cleric"));
     }
 }
