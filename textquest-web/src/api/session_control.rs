@@ -88,15 +88,40 @@ impl SessionControlRecord {
 }
 
 /// In-memory store of per-session control records.
-#[derive(Default)]
 pub struct SessionControlState {
     pub records: Mutex<HashMap<u32, SessionControlRecord>>,
+    max_records: usize,
 }
 
 impl SessionControlState {
     pub fn new() -> Arc<Self> {
-        Arc::new(Self::default())
+        Arc::new(Self::with_max_records(10_000))
     }
+
+    fn with_max_records(max_records: usize) -> Self {
+        Self {
+            records: Mutex::new(HashMap::new()),
+            max_records,
+        }
+    }
+}
+
+fn get_or_create_record<'a>(
+    records: &'a mut HashMap<u32, SessionControlRecord>,
+    session_id: u32,
+    max_records: usize,
+) -> Result<&'a mut SessionControlRecord, &'static str> {
+    if records.contains_key(&session_id) {
+        return records
+            .get_mut(&session_id)
+            .ok_or("failed to load existing session control record");
+    }
+    if records.len() >= max_records {
+        return Err("session control capacity reached");
+    }
+    Ok(records
+        .entry(session_id)
+        .or_insert_with(|| SessionControlRecord::new(session_id)))
 }
 
 // ─── Request / response types ─────────────────────────────────────────────────
@@ -184,10 +209,20 @@ pub async fn get_session_control(
             .records
             .lock()
             .expect("session_control_state lock poisoned");
-        records
-            .entry(session_id)
-            .or_insert_with(|| SessionControlRecord::new(session_id))
-            .clone()
+        match get_or_create_record(
+            &mut records,
+            session_id,
+            state.session_control_state.max_records,
+        ) {
+            Ok(record) => record.clone(),
+            Err(_) => {
+                return json_error(
+                    StatusCode::INSUFFICIENT_STORAGE,
+                    "session control capacity reached",
+                )
+                .into_response();
+            }
+        }
     };
 
     (
@@ -223,9 +258,20 @@ pub async fn pause_session(
             .records
             .lock()
             .expect("session_control_state lock poisoned");
-        let record = records
-            .entry(session_id)
-            .or_insert_with(|| SessionControlRecord::new(session_id));
+        let record = match get_or_create_record(
+            &mut records,
+            session_id,
+            state.session_control_state.max_records,
+        ) {
+            Ok(record) => record,
+            Err(_) => {
+                return json_error(
+                    StatusCode::INSUFFICIENT_STORAGE,
+                    "session control capacity reached",
+                )
+                .into_response();
+            }
+        };
         let was_active = record.state == SessionState::Active;
         if was_active {
             record.state = SessionState::Paused;
@@ -272,9 +318,20 @@ pub async fn resume_session(
             .records
             .lock()
             .expect("session_control_state lock poisoned");
-        let record = records
-            .entry(session_id)
-            .or_insert_with(|| SessionControlRecord::new(session_id));
+        let record = match get_or_create_record(
+            &mut records,
+            session_id,
+            state.session_control_state.max_records,
+        ) {
+            Ok(record) => record,
+            Err(_) => {
+                return json_error(
+                    StatusCode::INSUFFICIENT_STORAGE,
+                    "session control capacity reached",
+                )
+                .into_response();
+            }
+        };
         let was_paused = record.state == SessionState::Paused;
         if was_paused {
             record.state = SessionState::Active;
@@ -324,9 +381,20 @@ pub async fn set_session_group(
             .records
             .lock()
             .expect("session_control_state lock poisoned");
-        let record = records
-            .entry(session_id)
-            .or_insert_with(|| SessionControlRecord::new(session_id));
+        let record = match get_or_create_record(
+            &mut records,
+            session_id,
+            state.session_control_state.max_records,
+        ) {
+            Ok(record) => record,
+            Err(_) => {
+                return json_error(
+                    StatusCode::INSUFFICIENT_STORAGE,
+                    "session control capacity reached",
+                )
+                .into_response();
+            }
+        };
         record.group_id = body.group_id;
         record.routing_scope = if body.group_id == 0 {
             RoutingScope::AllSession
@@ -377,9 +445,20 @@ pub async fn set_broadcast_all(
             .records
             .lock()
             .expect("session_control_state lock poisoned");
-        let record = records
-            .entry(session_id)
-            .or_insert_with(|| SessionControlRecord::new(session_id));
+        let record = match get_or_create_record(
+            &mut records,
+            session_id,
+            state.session_control_state.max_records,
+        ) {
+            Ok(record) => record,
+            Err(_) => {
+                return json_error(
+                    StatusCode::INSUFFICIENT_STORAGE,
+                    "session control capacity reached",
+                )
+                .into_response();
+            }
+        };
         record.routing_scope = RoutingScope::AllSession;
         record.clone()
     };
@@ -434,10 +513,20 @@ pub async fn relay_command(
             .records
             .lock()
             .expect("session_control_state lock poisoned");
-        records
-            .entry(session_id)
-            .or_insert_with(|| SessionControlRecord::new(session_id))
-            .clone()
+        match get_or_create_record(
+            &mut records,
+            session_id,
+            state.session_control_state.max_records,
+        ) {
+            Ok(record) => record.clone(),
+            Err(_) => {
+                return json_error(
+                    StatusCode::INSUFFICIENT_STORAGE,
+                    "session control capacity reached",
+                )
+                .into_response();
+            }
+        }
     };
 
     let scope_used = match &body.scope {
@@ -548,6 +637,10 @@ mod tests {
     use crate::{AppState, accounts::AccountStore, api};
 
     fn test_state() -> Arc<AppState> {
+        test_state_with_session_control_limit(10_000)
+    }
+
+    fn test_state_with_session_control_limit(limit: usize) -> Arc<AppState> {
         use textquest::{alerts::AlertStore, config::AlertingConfig};
         let (event_tx, _) = tokio::sync::broadcast::channel::<String>(8);
         Arc::new(AppState {
@@ -946,5 +1039,27 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body["scope_used"], "group");
         assert_eq!(body["accepted"], true);
+    }
+
+    #[tokio::test]
+    async fn new_session_record_rejected_when_capacity_reached() {
+        let state = test_state_with_session_control_limit(1);
+        {
+            let mut records = state.session_control_state.records.lock().unwrap();
+            records.insert(1, SessionControlRecord::new(1));
+        }
+
+        let app = test_app(state);
+        let (status, body) = json_response(
+            app,
+            Request::builder()
+                .uri("/api/sessions/2/control")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::INSUFFICIENT_STORAGE);
+        assert!(body["error"].as_str().unwrap().contains("capacity reached"));
     }
 }
