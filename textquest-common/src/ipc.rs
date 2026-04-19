@@ -911,11 +911,6 @@ pub enum Command {
         /// Auto-accept settings to apply in the DLL.
         settings: AutoAcceptSettings,
     },
-    /// Update per-character task reward automation preferences.
-    SetRewardAutomation {
-        /// Reward selection rules keyed by task title matching.
-        config: RewardAutomationConfig,
-    },
     /// Set the rendering mode for this client.
     ///
     /// `Normal` = full rendering (the "eyes" client).
@@ -1057,6 +1052,11 @@ pub enum Command {
     },
     /// Query the current tradeskill trophy runtime status from the DLL.
     QueryTradeskillTrophyStatus,
+    /// Update per-character task reward automation preferences.
+    SetRewardAutomation {
+        /// Reward selection rules keyed by task title matching.
+        config: RewardAutomationConfig,
+    },
 }
 
 impl std::fmt::Debug for Command {
