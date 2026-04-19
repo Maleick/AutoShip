@@ -43,7 +43,8 @@ impl Note {
     /// Update note content.
     pub fn update_content(&mut self, content: impl Into<String>) {
         self.content = content.into();
-        self.modified_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        self.modified_at =
+            chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     }
 }
 
@@ -67,8 +68,8 @@ impl Scratchpad {
 
         // Load existing data or start with empty
         let data = if config_path.exists() {
-            let json_str =
-                fs::read_to_string(&config_path).context("Failed to read scratchpad.json")?;
+            let json_str = fs::read_to_string(&config_path)
+                .context("Failed to read scratchpad.json")?;
             serde_json::from_str(&json_str).context("Failed to parse scratchpad.json")?
         } else {
             ScratchpadData::default()
@@ -173,7 +174,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(10));
         note.update_content("Updated");
         assert_eq!(note.content, "Updated");
-        assert!(note.modified_at >= original_modified); // May be same if very fast
+        assert!(note.modified_at > original_modified || note.modified_at == original_modified); // May be same if very fast
     }
 
     #[test]
