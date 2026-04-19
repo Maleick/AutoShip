@@ -132,9 +132,14 @@ impl OrchestratorLoop {
             .iter()
             .flat_map(|group| group.toon.iter())
             .map(|toon| {
+                let cfg = &toon.auto_camp_on_death;
                 (
                     toon.name.to_ascii_lowercase(),
-                    toon.auto_camp_on_death.clone(),
+                    AutoCampOnDeathSettings {
+                        enabled: cfg.enabled,
+                        camp_delay_secs: cfg.camp_delay_secs,
+                        relog_wait_secs: cfg.relog_wait_secs,
+                    },
                 )
             })
             .collect::<HashMap<_, _>>();

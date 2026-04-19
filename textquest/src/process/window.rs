@@ -24,7 +24,7 @@ pub fn get_foreground_pid(known_pids: &[u32]) -> Option<u32> {
 
     unsafe {
         let fg: HWND = GetForegroundWindow();
-        if fg.is_invalid() {
+        if fg == HWND::default() {
             return None;
         }
 

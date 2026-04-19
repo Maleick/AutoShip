@@ -199,7 +199,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                 // Mana bar (melee classes show --)
                 let is_melee = matches!(
                     player.class,
-                    EqClass::Warrior | EqClass::Monk | EqClass::Rogue | EqClass::Berserker
+                    Some(EqClass::Warrior) | Some(EqClass::Monk) | Some(EqClass::Rogue) | Some(EqClass::Berserker)
                 );
                 if is_melee {
                     cells.push(Cell::from("  --  ").style(Style::default().fg(t.text_muted)));
@@ -210,12 +210,21 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
 
                 cells.push(Cell::from(condition_label).style(condition_style));
 
-                let state_label = match client.stand_state {
-                    StandState::Stand => "Stand",
-                    StandState::Sit => "Sit",
-                    StandState::Feign => "FD",
+                let state_label = if let Some(player) = &client.local_player {
+                    match player.stand_state {
+                        StandState::Standing => "Stand",
+                        StandState::Sitting => "Sit",
+                        StandState::Feigned => "FD",
+                        _ => player.stand_state.label(),
+                    }
+                } else {
+                    "???"
                 };
-                let state_style = stand_state_color(&client.stand_state, t);
+                let state_style = if let Some(player) = &client.local_player {
+                    stand_state_color(&player.stand_state, t)
+                } else {
+                    Style::default().fg(t.text_muted)
+                };
                 cells.push(Cell::from(state_label).style(state_style));
 
                 cells.push(Cell::from(activity_label).style(activity_style));
@@ -326,15 +335,15 @@ fn render_mana_bar(mana_pct: f64, t: &crate::tui::theme::Theme) -> String {
 fn build_activity_legend_lines(t: &crate::tui::theme::Theme) -> Vec<Line<'static>> {
     let activity_glyphs = vec![
         ("➜", "Nav", t.text_accent),
-        ("✓", "Arr", t.text_success),
-        ("!", "Stk", t.text_warning),
+        ("✓", "Arr", t.hp_high),
+        ("!", "Stk", t.hp_mid),
         ("☠", "Ded", t.hp_low),
-        ("⇣", "FD", t.text_info),
+        ("⇣", "FD", t.text_muted),
         ("☾", "Sit", t.text_secondary),
         ("⌕", "Lot", t.text_accent),
         ("✦", "Cst", t.text_accent),
-        ("⚔", "Fgt", t.text_warning),
-        ("●", "Rdy", t.text_success),
+        ("⚔", "Fgt", t.hp_mid),
+        ("●", "Rdy", t.hp_high),
     ];
 
     let mut legend = vec![Span::styled(
@@ -418,14 +427,9 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
     let mut line_spans = Vec::new();
 
     // Uptime
-    let uptime_str = if let Some(uptime) = &app.session_uptime {
-        format!(
-            "{:02}:{:02}:{:02}",
-            uptime.hours, uptime.minutes, uptime.seconds
-        )
-    } else {
-        "00:00:00".to_string()
-    };
+    let elapsed = app.session_start.elapsed();
+    let uptime_secs = elapsed.as_secs();
+    let uptime_str = format!("{:02}:{:02}:{:02}", uptime_secs / 3600, (uptime_secs % 3600) / 60, uptime_secs % 60);
     line_spans.push(Span::styled(
         "Uptime ",
         Style::default().fg(t.text_secondary),
@@ -434,8 +438,8 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
     line_spans.push(Span::raw(" │ "));
 
     // Kills / Deaths
-    let kills = app.combat_stats.kills.unwrap_or(0);
-    let deaths = app.combat_stats.deaths.unwrap_or(0);
+    let kills: u32 = app.loot_database.kills.values().sum();
+    let deaths = app.loot_database.deaths;
     line_spans.push(Span::styled(
         "Kills ",
         Style::default().fg(t.text_secondary),
@@ -451,9 +455,9 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
     line_spans.push(Span::raw(" │ "));
 
     // XP info
-    let xp_total = app.combat_stats.xp_total.unwrap_or(0) as f64 / 1_000_000.0;
-    let xp_per_hour = app.combat_stats.xp_per_hour.unwrap_or(0.0);
-    let xp_per_15m = app.combat_stats.xp_per_15m.unwrap_or(0.0);
+    let xp_total: f64 = 0.0;
+    let xp_per_hour: f64 = 0.0;
+    let xp_per_15m: f64 = 0.0;
     line_spans.push(Span::styled("XP ", Style::default().fg(t.text_secondary)));
     line_spans.push(Span::styled(
         format!("{:.2}M", xp_total),
@@ -470,8 +474,11 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
     line_spans.push(Span::raw(" │ "));
 
     // Platinum
-    let plat = app.platinum_balance.unwrap_or(0.0);
-    let plat_per_hour = app.platinum_per_hour.unwrap_or(0.0);
+    let plat = app.loot_database.total_plat as f64
+        + app.loot_database.total_gold as f64 / 10.0
+        + app.loot_database.total_silver as f64 / 100.0
+        + app.loot_database.total_copper as f64 / 1000.0;
+    let plat_per_hour: f64 = 0.0;
     line_spans.push(Span::styled("Plat ", Style::default().fg(t.text_secondary)));
     line_spans.push(Span::styled(
         format!("{:.1}", plat),
@@ -493,11 +500,11 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         // Get top 2-3 items by count
         let mut items: Vec<_> = app.loot_database.items.iter().collect();
-        items.sort_by(|a, b| b.1.count.cmp(&a.1.count));
+        items.sort_by(|a, b| b.1.cmp(a.1));
         items
             .iter()
             .take(2)
-            .map(|(name, info)| format!("{}×{}", name, info.count))
+            .map(|(name, count)| format!("{}×{}", name, count))
             .collect::<Vec<_>>()
             .join(" · ")
     };
@@ -892,7 +899,7 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
 
     let name = app.redact_name(&player.displayed_name).into_owned();
     let title = format!(" Character · {} ", name);
-    let blk = panel(&title, border_style, t);
+    let blk = panel(title.as_str(), border_style, t);
     let inner = blk.inner(area);
     frame.render_widget(blk, area);
 
@@ -1211,8 +1218,8 @@ fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
     // Target info
     if let Some(target) = &client.target {
         let target_name = app.redact_name(&target.displayed_name).into_owned();
-        let target_type_color = match target.npc_type_id {
-            0 => t.text_success, // PC
+        let target_type_color = match target.spawn_type {
+            crate::eq::structs::SpawnType::Player => t.hp_high, // PC
             _ => t.text_accent,  // NPC (assume named if special ID)
         };
         lines.push(Line::from(vec![
@@ -1225,7 +1232,7 @@ fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
             ),
         ]));
 
-        let target_hp_pct = (target.cur_hp as f64 / target.max_hp.max(1) as f64) * 100.0;
+        let target_hp_pct = (target.hp_current as f64 / target.hp_max.max(1) as f64) * 100.0;
         let hp_bar_str = render_hp_bar_long(target_hp_pct);
         lines.push(Line::from(vec![
             Span::styled("Target HP", Style::default().fg(t.text_secondary)),
@@ -1242,7 +1249,8 @@ fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
     lines.push(Line::raw(""));
 
     // Casting info
-    if let Some(cast_info) = &client.casting_info {
+    if let Some(player) = &client.local_player {
+        if let Some(cast_info) = &player.cast_state {
         let spell_label = &cast_info.spell_name;
         lines.push(Line::from(vec![
             Span::styled("Casting  ", Style::default().fg(t.text_secondary)),
@@ -1294,9 +1302,15 @@ fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
                 Style::default().fg(t.text_bright),
             ),
         ]));
+        } else {
+            lines.push(Line::from(Span::styled(
+                "Casting  idle",
+                Style::default().fg(t.text_muted),
+            )));
+        }
     } else {
         lines.push(Line::from(Span::styled(
-            "Casting  idle",
+            "Casting  —",
             Style::default().fg(t.text_muted),
         )));
     }

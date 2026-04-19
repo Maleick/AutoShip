@@ -8,6 +8,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
+use super::widgets::panel;
 use crate::tui::{app::App, theme::Theme};
 
 fn nav_status_color(
@@ -199,7 +200,7 @@ fn draw_blocker_panel(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Draw a single client navigation card.
 fn draw_nav_card(
-    client: &crate::tui::app::Client,
+    client: &crate::tui::client::ClientState,
     nav_status: Option<&crate::tui::app::NavClientStatus>,
     t: &Theme,
 ) -> Vec<Line<'static>> {
@@ -368,7 +369,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
             .borders(Borders::ALL)
             .border_type(t.border_type)
             .title("Navigation")
-            .border_style(Style::default().fg(t.border_primary));
+            .border_style(t.border_primary);
         frame.render_widget(
             Paragraph::new("No characters connected")
                 .block(blk)
@@ -411,7 +412,10 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
             || app.client_command_target(client),
             |p| app.redact_name(&p.displayed_name).into_owned(),
         );
-        let class_abbr = client.class.abbr();
+        let class_abbr = client.local_player.as_ref()
+            .and_then(|p| p.class)
+            .map(|c| c.short_name())
+            .unwrap_or("?");
         let title = format!("{} · {}", client_name, class_abbr);
 
         let blk = Block::default()
@@ -448,7 +452,10 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
             || app.client_command_target(client),
             |p| app.redact_name(&p.displayed_name).into_owned(),
         );
-        let class_abbr = client.class.abbr();
+        let class_abbr = client.local_player.as_ref()
+            .and_then(|p| p.class)
+            .map(|c| c.short_name())
+            .unwrap_or("?");
         let title = format!("{} · {}", client_name, class_abbr);
 
         let blk = Block::default()

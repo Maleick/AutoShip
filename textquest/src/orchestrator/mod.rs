@@ -102,7 +102,7 @@ fn persist_live_spawn_snapshot_to_path(
     persist_json_to_path(path, snapshot)
 }
 
-fn persist_json_to_path<T: serde::Serialize>(path: &Path, payload: &T) -> io::Result<()> {
+fn persist_json_to_path<T: serde::Serialize + ?Sized>(path: &Path, payload: &T) -> io::Result<()> {
     let payload =
         serde_json::to_vec(payload).map_err(|error| io::Error::other(error.to_string()))?;
     if let Some(parent) = path.parent() {
@@ -1613,7 +1613,12 @@ impl Orchestrator {
                 // Check for GM tells and CSR interactions
                 if matches!(channel, ChatChannel::Tell) {
                     if textquest_common::gm_detection::detect_gm_tell(&chat.sender, &chat.message) {
+                        // Drop the mutable borrow before calling emit_gm_alert
+                        drop(manager);
                         self.emit_gm_alert(&character, &chat.sender, &chat.message);
+                        let Some(manager) = self.chat_log_manager.as_mut() else {
+                            continue;
+                        };
                     }
                 }
 

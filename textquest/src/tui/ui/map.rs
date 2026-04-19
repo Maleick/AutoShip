@@ -350,8 +350,9 @@ fn spawn_marker_glyph(
         match spawn.spawn_type {
             SpawnType::Player => {
                 // PC: first letter of class, bold
-                let class_abbr = spawn.class_abbr.chars().next().unwrap_or('?');
-                let color = match spawn.class_abbr.as_str() {
+                let class_label = spawn.class_label();
+                let class_abbr = class_label.chars().next().unwrap_or('?');
+                let color = match class_label.as_ref() {
                     "CLR" => app.theme.text_accent,         // cyan
                     "WAR" => app.theme.hp_mid,              // amber
                     "MAG" => app.theme.text_highlight,      // magenta
@@ -693,7 +694,7 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         },
     );
     let map_title = format!("Tactical · {}", zone_label);
-    let blk = panel(&map_title, border_style, t)
+    let blk = panel(map_title.as_str(), border_style, t)
         .title("hjkl pan  ·  +/- zoom  ·  f center on focus  ·  t target under cursor")
         .title_alignment(ratatui::layout::Alignment::Right);
     frame.render_widget(blk, area);
@@ -808,7 +809,7 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             let (col, row) = to_grid(zone_exit.x, zone_exit.y);
             if grid_in_bounds(col, row, w, h) {
                 // Render distinct zone exit marker glyph
-                grid[row as usize][col as usize] = ('◇', t.accent);
+                grid[row as usize][col as usize] = ('◇', t.text_accent);
 
                 // Render destination label if zoom sufficient
                 if show_zone_exit_labels {
@@ -830,7 +831,7 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
                     {
                         let lc = col as usize + 2 + i;
                         if lc < w && grid[row as usize][lc].0 == ' ' {
-                            grid[row as usize][lc] = (c, t.accent);
+                            grid[row as usize][lc] = (c, t.text_accent);
                         }
                     }
                 }
@@ -1120,6 +1121,7 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         .active_client()
         .and_then(|client| app.nav_state.nav_statuses.get(&client.pid))
         .is_some_and(|nav| nav.waypoints.len() >= 2);
+    let show_legend = app.map_state.show_annotations;
     let mut lines: Vec<Line<'_>> = grid
         .into_iter()
         .enumerate()
@@ -2284,7 +2286,7 @@ fn draw_spawn_list_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &A
     frame.render_widget(
         Paragraph::new(lines)
             .block(
-                panel(&title, border_style, t)
+                panel(title.as_str(), border_style, t)
                     .title(footer)
                     .title_alignment(ratatui::layout::Alignment::Right),
             )
@@ -2321,7 +2323,7 @@ fn draw_target_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) 
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                format!(" · L{} {}", target.level, target.class_abbr),
+                format!(" · L{} {}", target.level, target.class_label()),
                 Style::default().fg(t.text_muted),
             ),
         ]));

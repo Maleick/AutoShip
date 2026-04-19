@@ -29,6 +29,7 @@ pub mod zone_status_panel;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
+    prelude::Widget,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
@@ -921,7 +922,7 @@ fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 t.statusbar_dim,
             )),
         ])
-        .block(widgets::panel("", Style::default().fg(t.border_warn), t)),
+        .block(widgets::panel("", t.border_warn, t)),
         sections[0],
     );
 
@@ -959,7 +960,9 @@ fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 ("○", Style::default().fg(t.text_muted))
             };
 
-            let timestamp = alert.created_at.format("%H:%M:%S").to_string();
+            let elapsed = alert.created_at.elapsed();
+            let secs = elapsed.as_secs();
+            let timestamp = format!("{:02}:{:02}:{:02}", secs / 3600, (secs % 3600) / 60, secs % 60);
             let message = truncate_inline(
                 &alert.message,
                 sections[1].width.saturating_sub(40) as usize,
@@ -975,7 +978,7 @@ fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
                             .fg(t.text_bright)
                             .add_modifier(Modifier::BOLD)
                     } else {
-                        t.text_secondary
+                        Style::default().fg(t.text_secondary)
                     },
                 ),
                 Span::styled(format!("{:<10}", timestamp), t.text_secondary),

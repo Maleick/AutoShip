@@ -308,7 +308,7 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 /// Get the color style for an opcode based on its type.
-fn get_opcode_color_style(opcode: u16, t: &ratatui::style::Theme) -> Style {
+fn get_opcode_color_style(opcode: u16, t: &crate::tui::theme::Theme) -> Style {
     let name = format_opcode_name(opcode);
     if name.contains("HP") || name.contains("Mana") {
         Style::default().fg(ratatui::style::Color::Yellow) // amber

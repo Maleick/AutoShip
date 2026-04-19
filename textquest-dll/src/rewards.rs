@@ -175,7 +175,7 @@ pub unsafe fn check_reward_window() {
         return;
     };
 
-    let current_index = *((tab_wnd + eqg::CTABWND_CUR_TAB_INDEX) as *const i32).max(0) as usize;
+    let current_index = (*((tab_wnd + eqg::CTABWND_CUR_TAB_INDEX) as *const i32)).max(0) as usize;
     if current_index != target_index {
         click_tab(tab_wnd, reward_names.len(), target_index);
         tracing::info!(

@@ -446,9 +446,9 @@ fn draw_slots_table(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
     let clients = app.visible_clients();
 
-    let live_count = clients.iter().filter(|c| !c.is_dead).count();
+    let live_count = clients.iter().filter(|c| c.connected).count();
     let configured_count = clients.len();
-    let blocked_count = clients.iter().filter(|c| c.is_dead).count();
+    let blocked_count = clients.iter().filter(|c| !c.connected).count();
 
     let title = format!(
         "Slots · {} live · {} configured · {} blocked",
@@ -460,14 +460,7 @@ fn draw_slots_table(frame: &mut Frame, area: Rect, app: &App) {
         let name = app.client_command_target(client);
         let (state_label, state_color) = client_status_label(app, client);
         let fsm = "—";
-        let latency = if let Some(stats) = app.relay_stats.as_ref() {
-            if stats.avg_latency_ms > 0 {
-                format!("{}ms", stats.avg_latency_ms)
-            } else {
-                "—".to_string()
-            }
-        } else {
-            "—".to_string()
+        let latency = "—".to_string();
         };
         let lat_style = if latency != "—" && latency.parse::<u64>().unwrap_or(0) > 30 {
             Style::default().fg(Color::Yellow)
@@ -502,7 +495,7 @@ fn draw_slots_table(frame: &mut Frame, area: Rect, app: &App) {
         ],
     )
     .header(themed_header_row(
-        vec!["Slot", "Name", "State", "FSM", "Lat", "Health", "Profile"],
+        &["Slot", "Name", "State", "FSM", "Lat", "Health", "Profile"],
         t,
     ))
     .block(panel(title, Style::default().fg(t.text_server), t));
@@ -628,7 +621,13 @@ fn render_health_bar(state: &str, t: &Theme) -> Line<'static> {
     Line::from(spans)
 }
 
-fn dashboard_groups(app: &App) -> Vec<DashboardGroup<'_>> {
+struct DashboardGroup {
+    name: String,
+    leader: String,
+    members: Vec<&'static str>,
+}
+
+fn dashboard_groups(app: &App) -> Vec<DashboardGroup> {
     if app.has_live_group_data() {
         let (live_groups, _) = app.build_live_groups();
         return live_groups
@@ -636,11 +635,7 @@ fn dashboard_groups(app: &App) -> Vec<DashboardGroup<'_>> {
             .map(|group| DashboardGroup {
                 name: group.name(),
                 leader: group.leader,
-                members: group
-                    .member_names
-                    .into_iter()
-                    .filter_map(|name| app.find_client_by_name(&name))
-                    .collect(),
+                members: vec![],
             })
             .collect();
     }
@@ -655,7 +650,7 @@ fn dashboard_groups(app: &App) -> Vec<DashboardGroup<'_>> {
                 .first()
                 .map(|client| app.client_command_target(client))
                 .unwrap_or_else(|| String::from("—")),
-            members: app.clients_in_group_idx(idx),
+            members: vec![],
         })
         .filter(|group| !group.members.is_empty())
         .collect()

@@ -2063,7 +2063,7 @@ impl App {
     }
 
     /// Send an IPC command to all focused clients, returning the success count.
-    fn send_ipc_to_focused(&self, cmd: &textquest_common::ipc::Command) -> usize {
+    pub fn send_ipc_to_focused(&self, cmd: &textquest_common::ipc::Command) -> usize {
         self.focused_pids()
             .iter()
             .filter(|pid| send_ipc_command(**pid, cmd).is_ok())
@@ -6257,7 +6257,7 @@ impl App {
                             pitch: cp.pitch,
                             yaw: cp.yaw,
                         };
-                        let ok = self.send_ipc_to_focused(&cmd);
+                        let ok = self.send_ipc_to_focused(&cmd) > 0;
                         if ok {
                             self.set_feedback(
                                 ToastLevel::Success,
@@ -6276,7 +6276,7 @@ impl App {
                                 pitch: None,
                                 yaw: None,
                             };
-                            let ok = self.send_ipc_to_focused(&cmd);
+                            let ok = self.send_ipc_to_focused(&cmd) > 0;
                             if ok {
                                 self.set_feedback(
                                     ToastLevel::Success,

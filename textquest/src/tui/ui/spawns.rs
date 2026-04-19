@@ -285,10 +285,9 @@ fn draw_debug_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &m
                 };
 
                 // State color
-                let state_color = if spawn.stand_state.contains("Dead") {
-                    t.text_muted
-                } else {
-                    t.text_bright
+                let state_color = match spawn.stand_state {
+                    StandState::Dead => t.text_muted,
+                    _ => t.text_bright,
                 };
 
                 let cells = vec![
@@ -330,7 +329,7 @@ fn draw_debug_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &m
                         Style::default().fg(t.text_bright),
                     )),
                     Cell::from(Span::styled(
-                        spawn.stand_state.clone(),
+                        spawn.stand_state.label(),
                         Style::default().fg(state_color),
                     )),
                 ];
@@ -372,7 +371,7 @@ fn draw_debug_spawn_list(frame: &mut Frame, area: ratatui::layout::Rect, app: &m
         Span::styled("d dump", Style::default().fg(t.text_muted)),
     ]);
 
-    let table_block = panel(title.as_str(), border_style, t).footer(footer_line);
+    let table_block = panel(title.as_str(), border_style, t);
 
     let table = Table::new(rows, constraints)
         .header(header)
@@ -537,7 +536,7 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
             Span::styled("class_id", Style::default().fg(t.text_accent)),
             Span::raw("    = "),
             Span::styled(
-                format!("{}", spawn.class as u8),
+                format!("{}", spawn.class_id),
                 Style::default().fg(t.text_bright),
             ),
             Span::raw(" "),

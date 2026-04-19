@@ -32,8 +32,6 @@ pub struct ClientState {
     pub group_info: Option<GroupInfo>,
     /// Status message specific to this client.
     pub client_status: String,
-    /// Whether the client currently has an active IPC/control connection.
-    pub connected: bool,
     /// Whether this client was created from demo data (not a real process).
     pub is_demo: bool,
     /// Last logged live cast snapshot when `TEXTQUEST_CAST_CAPTURE=1`.
@@ -64,7 +62,6 @@ impl ClientState {
             character_name: String::new(),
             group_info: None,
             client_status: format!("Attached to PID {pid}"),
-            connected: true,
             is_demo: false,
             last_live_cast_capture: None,
             slot_lifecycle: SlotLifecycle::Configured,

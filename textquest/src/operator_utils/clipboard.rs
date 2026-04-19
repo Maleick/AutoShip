@@ -28,41 +28,29 @@ pub fn copy_to_clipboard(text: &str) -> Result<()> {
 
     unsafe {
         // Open clipboard
-        if !OpenClipboard(HWND::default()).as_bool() {
-            anyhow::bail!("Failed to open clipboard");
-        }
+        OpenClipboard(HWND::default()).ok()?;
 
         // Allocate memory for the text
         let size = text.len() + 1; // +1 for null terminator
-        let hglobal = GlobalAlloc(GMEM_MOVEABLE, size);
-        if hglobal.0 == 0 {
-            let _ = CloseClipboard();
-            anyhow::bail!("Failed to allocate global memory for clipboard");
-        }
+        let hglobal = GlobalAlloc(GMEM_MOVEABLE, size)?;
 
         // Lock and copy data
         let ptr = GlobalLock(hglobal);
-        if ptr.0 == std::ptr::null_mut() {
+        if ptr.is_null() {
             let _ = CloseClipboard();
             anyhow::bail!("Failed to lock global memory");
         }
 
         // Copy text to allocated memory
-        std::ptr::copy_nonoverlapping(text.as_ptr() as *const u8, ptr.0 as *mut u8, text.len());
+        std::ptr::copy_nonoverlapping(text.as_ptr() as *const u8, ptr as *mut u8, text.len());
         // Write null terminator
-        *(ptr.0.add(text.len()) as *mut u8) = 0;
+        *(ptr.add(text.len()) as *mut u8) = 0;
 
-        GlobalUnlock(hglobal);
+        let _ = GlobalUnlock(hglobal);
 
         // Set clipboard data (CF_TEXT = 1 for ANSI text)
         const CF_TEXT: u32 = 1;
-        if SetClipboardData(CF_TEXT, hglobal.0 as *mut std::ffi::c_void)
-            .0
-            .is_null()
-        {
-            let _ = CloseClipboard();
-            anyhow::bail!("Failed to set clipboard data");
-        }
+        SetClipboardData(CF_TEXT, hglobal as *mut std::ffi::c_void).ok()?;
 
         CloseClipboard();
     }
