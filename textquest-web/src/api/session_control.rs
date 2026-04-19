@@ -106,11 +106,11 @@ impl SessionControlState {
     }
 }
 
-fn get_or_create_record<'a>(
-    records: &'a mut HashMap<u32, SessionControlRecord>,
+fn get_or_create_record(
+    records: &mut HashMap<u32, SessionControlRecord>,
     session_id: u32,
     max_records: usize,
-) -> Result<&'a mut SessionControlRecord, &'static str> {
+) -> Result<&mut SessionControlRecord, &'static str> {
     if records.contains_key(&session_id) {
         return records
             .get_mut(&session_id)

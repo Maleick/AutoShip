@@ -219,10 +219,10 @@ fn read_live_sessions(
 /// Build the admin sessions sub-router.
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/:id/start", post(start_session))
-        .route("/:id/stop", post(stop_session))
-        .route("/:id/restart", post(restart_session))
-        .route("/:id/config-audit", get(audit_config))
+        .route("/{id}/start", post(start_session))
+        .route("/{id}/stop", post(stop_session))
+        .route("/{id}/restart", post(restart_session))
+        .route("/{id}/config-audit", get(audit_config))
 }
 
 // ─── Config Audit Endpoint ────────────────────────────────────────────────────

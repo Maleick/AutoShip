@@ -344,7 +344,7 @@ mod tests {
 
         assert!(fairness.is_some());
         let f = fairness.unwrap();
-        assert!(f >= 0.0 && f <= 1.0);
+        assert!((0.0..=1.0).contains(&f));
         // With 2 items appearing 2 times each, entropy should be high (fair)
         assert!(f > 0.5);
     }

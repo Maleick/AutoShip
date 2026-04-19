@@ -1,7 +1,7 @@
 //! Mock implementations for EQ process reading.
 
-use std::collections::HashMap;
 use crate::process::memory::ProcessHandle;
+use std::collections::HashMap;
 
 /// Trait for reading EQ process memory.
 /// Implementors can provide real process reading (Windows) or mocks (tests).
@@ -74,11 +74,7 @@ impl MockProcessReader {
 
         let mut value = std::mem::MaybeUninit::<T>::uninit();
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                bytes.as_ptr(),
-                value.as_mut_ptr() as *mut u8,
-                size,
-            );
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), value.as_mut_ptr() as *mut u8, size);
             Ok(value.assume_init())
         }
     }

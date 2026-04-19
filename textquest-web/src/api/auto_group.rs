@@ -445,7 +445,11 @@ mod tests {
             .await
             .expect("body collect")
             .to_bytes();
-        let value = serde_json::from_slice(&bytes).expect("valid json");
+        let value = if bytes.is_empty() {
+            serde_json::Value::Null
+        } else {
+            serde_json::from_slice(&bytes).expect("valid json")
+        };
         (status, value)
     }
 

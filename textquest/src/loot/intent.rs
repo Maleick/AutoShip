@@ -163,6 +163,7 @@ impl IntentTracker {
 
     /// Update the intent for an existing entry.
     /// Returns `Ok(())` if updated, `Err(())` if item_id not found.
+    #[allow(clippy::result_unit_err)]
     pub fn update_intent(&mut self, item_id: u32, new_intent: ItemIntent) -> Result<(), ()> {
         if let Some(entry) = self.entries.get_mut(&item_id) {
             entry.intent = new_intent;
@@ -175,6 +176,7 @@ impl IntentTracker {
 
     /// Update the note for an existing entry.
     /// Returns `Ok(())` if updated, `Err(())` if item_id not found.
+    #[allow(clippy::result_unit_err)]
     pub fn update_note(&mut self, item_id: u32, note: impl Into<String>) -> Result<(), ()> {
         if let Some(entry) = self.entries.get_mut(&item_id) {
             entry.note = note.into();
@@ -187,6 +189,7 @@ impl IntentTracker {
 
     /// Update the reserved_for character for an existing entry.
     /// Returns `Ok(())` if updated, `Err(())` if item_id not found.
+    #[allow(clippy::result_unit_err)]
     pub fn update_reserved_for(
         &mut self,
         item_id: u32,

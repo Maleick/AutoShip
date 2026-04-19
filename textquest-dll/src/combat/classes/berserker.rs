@@ -91,7 +91,7 @@ impl BerserkerStrategy {
                         "BattleCry",
                         ActionType::Disc("BattleCry".into()),
                         ConditionExpr::And(vec![
-                            ConditionExpr::ManaAbove(70.0),
+                            ConditionExpr::EnduranceAbove(70.0),
                             ConditionExpr::TargetHpAbove(60.0),
                         ]),
                     ),
@@ -99,7 +99,7 @@ impl BerserkerStrategy {
                         "PrimaryBurn",
                         ActionType::Disc("PrimaryBurn".into()),
                         ConditionExpr::And(vec![
-                            ConditionExpr::ManaAbove(60.0),
+                            ConditionExpr::EnduranceAbove(60.0),
                             ConditionExpr::TargetHpAbove(40.0),
                         ]),
                     ),
@@ -107,7 +107,7 @@ impl BerserkerStrategy {
                         "Cleave",
                         ActionType::Disc("Cleave".into()),
                         ConditionExpr::And(vec![
-                            ConditionExpr::ManaAbove(45.0),
+                            ConditionExpr::EnduranceAbove(45.0),
                             ConditionExpr::TargetHpAbove(40.0),
                         ]),
                     ),
@@ -376,8 +376,8 @@ mod tests {
         let ber = BerserkerStrategy::new(16);
         let mut groups = ber.rotation_groups().unwrap();
         let player = SpawnData {
-            mana_current: 90,
-            mana_max: 100,
+            endurance_current: 90,
+            endurance_max: 100,
             ..SpawnData::default()
         };
         let target = SpawnData {
@@ -397,8 +397,8 @@ mod tests {
         let ber = BerserkerStrategy::new(16);
         let mut groups = ber.rotation_groups().unwrap();
         let player = SpawnData {
-            mana_current: 20,
-            mana_max: 100,
+            endurance_current: 20,
+            endurance_max: 100,
             ..SpawnData::default()
         };
         let target = SpawnData {
@@ -418,8 +418,8 @@ mod tests {
         let ber = BerserkerStrategy::new(16);
         let mut groups = ber.rotation_groups().unwrap();
         let player = SpawnData {
-            mana_current: 10,
-            mana_max: 100,
+            endurance_current: 10,
+            endurance_max: 100,
             ..SpawnData::default()
         };
         let target = SpawnData {
