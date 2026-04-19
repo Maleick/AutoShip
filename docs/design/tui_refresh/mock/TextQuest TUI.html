@@ -1,0 +1,2794 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>TextQuest · TUI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* TextQuest TUI — Neriak theme (from src/tui/theme.rs::neriak) */
+:root {
+  /* Core palette — RGB values lifted verbatim from theme.rs */
+  --void: #0d0618;
+  --violet: #1a0a2e;
+  --magenta: #cc44ff;
+  --magenta-hot: #ff00ff;
+  --cyan: #00e5ff;
+  --lavender: #e2d7f4;
+  --lavender-dim: rgb(160, 150, 180);
+  --shadow: rgb(80, 60, 110);
+  --deep: rgb(45, 30, 65);
+  --green: #34d399;
+  --red: #ef4444;
+  --amber: #fbbf24;
+  --blue: #60a5fa;
+
+  /* Semantic (matching theme.rs field names) */
+  --border-dim: var(--shadow);
+  --border-primary: var(--magenta);
+  --border-active: var(--cyan);
+  --border-warn: var(--amber);
+  --border-danger: var(--red);
+  --border-server: var(--magenta-hot);
+
+  --text-bright: var(--lavender);
+  --text-normal: var(--lavender);
+  --text-secondary: var(--lavender-dim);
+  --text-muted: var(--shadow);
+  --text-accent: var(--cyan);
+  --text-highlight: var(--magenta);
+  --text-server: var(--magenta-hot);
+
+  --hp-high: var(--green);
+  --hp-mid: var(--amber);
+  --hp-low: var(--red);
+  --mana: var(--blue);
+  --bar-empty: var(--deep);
+
+  --spawn-pc: var(--green);
+  --spawn-npc: var(--lavender);
+  --spawn-named: var(--magenta);
+  --spawn-corpse: var(--shadow);
+  --spawn-unknown: var(--red);
+
+  --row-selected: var(--violet);
+  --panel-bg: var(--void);
+  --overlay-bg: var(--void);
+
+  /* Con colors (mob level-relative difficulty) */
+  --con-red: var(--red);
+  --con-yellow: var(--amber);
+  --con-white: var(--lavender);
+  --con-light-blue: var(--cyan);
+  --con-blue: var(--blue);
+  --con-green: var(--green);
+
+  /* Typography — a proper monospaced grid */
+  --mono: "JetBrains Mono", "Fira Code", "IBM Plex Mono", "SFMono-Regular",
+    Menlo, Consolas, monospace;
+  --cell-w: 9.6px; /* character cell width at 16px */
+  --cell-h: 22px; /* line height */
+  --fs-base: 16px;
+}
+
+/* Width-class override (toggled by tweak) */
+:root[data-width="narrow"] {
+  --term-cols: 80;
+}
+:root[data-width="medium"] {
+  --term-cols: 110;
+}
+:root[data-width="wide"] {
+  --term-cols: 160;
+}
+
+/* TextQuest TUI — monospace terminal rendering */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  color: var(--text-normal);
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  line-height: var(--cell-h);
+  -webkit-font-smoothing: antialiased;
+  font-variant-ligatures: none;
+}
+
+body {
+  min-height: 100vh;
+  padding: 48px 0 64px;
+  background: radial-gradient(
+      ellipse at 50% 40%,
+      #140826 0%,
+      #080312 45%,
+      #000 100%
+    );
+}
+
+/* ───── CRT monitor shell ─────────────────────────────────────────────── */
+
+.crt {
+  position: relative;
+  width: min(1480px, calc(100vw - 64px));
+  margin: 0 auto;
+  background: var(--void);
+  padding: 28px 28px 40px;
+  border-radius: 22px;
+  box-shadow:
+    0 0 0 2px rgba(204, 68, 255, 0.12),
+    0 0 0 10px #0a0414,
+    0 0 0 12px #1a0a2e,
+    0 40px 120px rgba(204, 68, 255, 0.18),
+    0 0 240px rgba(0, 229, 255, 0.08) inset;
+  overflow: hidden;
+}
+
+.crt::before {
+  /* faint scanline pattern, togglable */
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.25) 2px,
+    rgba(0, 0, 0, 0.25) 3px
+  );
+  mix-blend-mode: multiply;
+  opacity: 1;
+  z-index: 50;
+}
+
+.crt::after {
+  /* vignette */
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 55%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+  z-index: 49;
+}
+
+body[data-scanlines="off"] .crt::before {
+  opacity: 0;
+}
+body[data-glow="off"] .term * {
+  text-shadow: none !important;
+}
+body[data-vignette="off"] .crt::after {
+  opacity: 0;
+}
+
+/* ───── Terminal body ─────────────────────────────────────────────────── */
+
+.term {
+  position: relative;
+  z-index: 1;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  line-height: var(--cell-h);
+  color: var(--text-normal);
+  white-space: pre;
+  text-shadow:
+    0 0 1px rgba(226, 215, 244, 0.35),
+    0 0 6px rgba(204, 68, 255, 0.18);
+}
+
+.term a {
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+/* ───── Type primitives ──────────────────────────────────────────────── */
+
+.bright {
+  color: var(--text-bright);
+}
+.normal {
+  color: var(--text-normal);
+}
+.secondary {
+  color: var(--text-secondary);
+}
+.muted {
+  color: var(--text-muted);
+}
+.accent {
+  color: var(--text-accent);
+}
+.highlight {
+  color: var(--text-highlight);
+}
+.server {
+  color: var(--text-server);
+}
+.bold {
+  font-weight: 700;
+}
+
+.green {
+  color: var(--green);
+}
+.red {
+  color: var(--red);
+}
+.amber {
+  color: var(--amber);
+}
+.blue {
+  color: var(--blue);
+}
+.magenta {
+  color: var(--magenta);
+}
+.cyan {
+  color: var(--cyan);
+}
+.lav {
+  color: var(--lavender);
+}
+.dim {
+  color: var(--shadow);
+}
+
+.hp-high {
+  color: var(--hp-high);
+}
+.hp-mid {
+  color: var(--hp-mid);
+}
+.hp-low {
+  color: var(--hp-low);
+}
+.mana {
+  color: var(--mana);
+}
+
+/* Con colors */
+.con-red {
+  color: var(--con-red);
+}
+.con-yellow {
+  color: var(--con-yellow);
+}
+.con-white {
+  color: var(--con-white);
+}
+.con-lblue {
+  color: var(--con-light-blue);
+}
+.con-blue {
+  color: var(--con-blue);
+}
+.con-green {
+  color: var(--con-green);
+}
+
+/* Inverted tabs / badges */
+.inv {
+  color: #0d0618;
+  font-weight: 700;
+}
+.inv-cyan {
+  background: var(--cyan);
+  color: #0d0618;
+  font-weight: 700;
+  padding: 0 2px;
+}
+.inv-magenta {
+  background: var(--magenta);
+  color: #0d0618;
+  font-weight: 700;
+  padding: 0 2px;
+}
+.inv-amber {
+  background: var(--amber);
+  color: #0d0618;
+  font-weight: 700;
+  padding: 0 2px;
+}
+.inv-green {
+  background: var(--green);
+  color: #0d0618;
+  font-weight: 700;
+  padding: 0 2px;
+}
+.inv-red {
+  background: var(--red);
+  color: #fff;
+  font-weight: 700;
+  padding: 0 2px;
+}
+
+/* Row highlight — matches theme.rs row_selected_bg */
+.rowsel {
+  background: var(--row-selected);
+  font-weight: 700;
+}
+
+/* ───── Layout ───────────────────────────────────────────────────────── */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.screen {
+  scroll-margin-top: 24px;
+}
+
+.screen-caption {
+  font-family: var(--mono);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 18px;
+  padding: 0 2px 6px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.screen-caption .label {
+  color: var(--lavender-dim);
+}
+.screen-caption .key {
+  color: var(--text-muted);
+}
+
+/* ───── Box-drawing panel chrome ──────────────────────────────────────── */
+
+.panel {
+  display: block;
+  font-family: var(--mono);
+  white-space: pre;
+}
+
+/* ───── Splash / boot ────────────────────────────────────────────────── */
+
+.boot {
+  padding: 24px 0 32px;
+  border-bottom: 1px dashed rgba(204, 68, 255, 0.22);
+  margin-bottom: 24px;
+}
+
+.wordmark {
+  font-family: var(--mono);
+  color: var(--magenta);
+  font-size: 14px;
+  line-height: 16px;
+  text-shadow:
+    0 0 8px rgba(255, 0, 255, 0.4),
+    0 0 18px rgba(204, 68, 255, 0.25);
+  white-space: pre;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.boot-log {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--lavender-dim);
+  max-width: 720px;
+  margin: 0 auto;
+}
+.boot-log .ok {
+  color: var(--green);
+}
+.boot-log .warn {
+  color: var(--amber);
+}
+.boot-log .addr {
+  color: var(--cyan);
+}
+
+/* ───── Tweaks panel ─────────────────────────────────────────────────── */
+
+.tweaks {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  width: 320px;
+  max-height: 72vh;
+  background: #0b0517;
+  border: 1px solid var(--magenta);
+  box-shadow:
+    0 0 0 1px #1a0a2e,
+    0 8px 32px rgba(204, 68, 255, 0.28);
+  z-index: 200;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--lavender);
+  padding: 10px 12px 12px;
+  overflow: auto;
+  display: none;
+}
+body[data-tweaks="on"] .tweaks {
+  display: block;
+}
+.tweaks h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--magenta);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.tweaks h3 .tag {
+  color: var(--cyan);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+}
+.tweaks section {
+  border-top: 1px dashed rgba(204, 68, 255, 0.22);
+  margin-top: 8px;
+  padding-top: 6px;
+}
+.tweaks section:first-of-type {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+.tweaks label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  cursor: pointer;
+  color: var(--lavender-dim);
+}
+.tweaks label:hover {
+  color: var(--lavender);
+}
+.tweaks label .hint {
+  margin-left: auto;
+  color: var(--shadow);
+  font-size: 11px;
+}
+.tweaks .row {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0;
+}
+.tweaks button {
+  flex: 1;
+  background: #140826;
+  border: 1px solid var(--shadow);
+  color: var(--lavender-dim);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 4px 6px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tweaks button:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+.tweaks button.active {
+  background: var(--magenta);
+  color: #0d0618;
+  border-color: var(--magenta);
+  font-weight: 700;
+}
+
+/* Floating “tweaks on/off” badge */
+.tweaks-toggle {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 199;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--magenta);
+  background: #0b0517;
+  border: 1px solid var(--magenta);
+  padding: 4px 8px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+body[data-tweaks="on"] .tweaks-toggle {
+  display: none;
+}
+
+/* ───── Overlays ─────────────────────────────────────────────────────── */
+
+.overlay-layer {
+  position: relative;
+}
+
+/* Each overlay inlines into the terminal flow as a centered panel */
+.overlay {
+  display: none;
+  margin-top: 14px;
+}
+.overlay.on {
+  display: block;
+}
+
+/* ───── Misc ─────────────────────────────────────────────────────────── */
+
+.hidden {
+  display: none !important;
+}
+
+/* Screen navigation anchor chips on the left edge */
+.sidemarker {
+  display: none;
+}
+
+/* At narrow width we let text wrap inside chrome so reflow is visible */
+body[data-width="narrow"] .term {
+  font-size: 13px;
+}
+body[data-width="medium"] .term {
+  font-size: 14.5px;
+}
+
+</style></head>
+<body data-scanlines="on" data-glow="on" data-vignette="on" data-tweaks="off" data-width="wide">
+<div class="crt">
+  <!-- Boot splash + wordmark -->
+  <div class="boot term">
+    <pre class="wordmark" id="wordmark"></pre>
+    <div class="boot-log" id="bootlog">
+      <div>[<span class="ok">  OK  </span>] loading config <span class="addr">~/.config/textquest/config.ron</span></div>
+      <div>[<span class="ok">  OK  </span>] attaching to 6 clients on server <span class="addr">Bertoxxulous</span> · pid 4821..4834</div>
+      <div>[<span class="ok">  OK  </span>] loading zone meshes <span class="addr">fear.mesh</span>, <span class="addr">neriak.mesh</span> (2/2)</div>
+      <div>[<span class="ok">  OK  </span>] orchestrator online · intent <span class="addr">fear.ch_chain.alpha</span></div>
+      <div>[<span class="warn"> WARN </span>] slot S08 login_fail — account throttled; retrying in 120s</div>
+      <div>[<span class="ok">  OK  </span>] theme <span class="addr">neriak</span> · width <span class="addr">wide (146 cols)</span> · tty /dev/pts/3</div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <pre class="term" id="header"></pre>
+
+  <!-- Screens stack -->
+  <div class="stack">
+    <section class="screen" id="screen-1" data-screen-label="01 Overview">
+      <div class="screen-caption"><span class="label">Screen 1 · Soul Tethers</span><span class="key">key 1 · the default view — operator roster, group focus, session rollup</span></div>
+      <pre class="term" id="body-1"></pre>
+      <pre class="term" id="status-1"></pre>
+    </section>
+
+    <section class="screen" id="screen-2" data-screen-label="02 Tactical">
+      <div class="screen-caption"><span class="label">Screen 2 · Cartography</span><span class="key">key 2 · zone map + spawn list + target / CH status</span></div>
+      <pre class="term" id="body-2"></pre>
+      <pre class="term" id="status-2"></pre>
+    </section>
+
+    <section class="screen" id="screen-3" data-screen-label="03 Navigation">
+      <div class="screen-caption"><span class="label">Screen 3 · Waypath</span><span class="key">key 3 · per-client route cards + blocker summary</span></div>
+      <pre class="term" id="body-3"></pre>
+      <pre class="term" id="status-3"></pre>
+    </section>
+
+    <section class="screen" id="screen-4" data-screen-label="04 Debug">
+      <div class="screen-caption"><span class="label">Screen 4 · Oracle</span><span class="key">key 4 · filterable spawn table + hex dump</span></div>
+      <pre class="term" id="body-4"></pre>
+      <pre class="term" id="status-4"></pre>
+    </section>
+
+    <section class="screen" id="screen-5" data-screen-label="05 Packets">
+      <div class="screen-caption"><span class="label">Screen 5 · Aethergram</span><span class="key">key 5 · live packet stream + decoded payload</span></div>
+      <pre class="term" id="body-5"></pre>
+      <pre class="term" id="status-5"></pre>
+    </section>
+
+    <section class="screen" id="screen-6" data-screen-label="06 Economy">
+      <div class="screen-caption"><span class="label">Screen 6 · Coinmark</span><span class="key">key 6 · vendor / bank cycle with ruleset</span></div>
+      <pre class="term" id="body-6"></pre>
+      <pre class="term" id="status-6"></pre>
+    </section>
+
+    <section class="screen" id="screen-7" data-screen-label="07 Orchestrator">
+      <div class="screen-caption"><span class="label">Screen 7 · Third Gate</span><span class="key">key 7 · intent / phase / slot lifecycle / signal feed</span></div>
+      <pre class="term" id="body-7"></pre>
+      <pre class="term" id="status-7"></pre>
+    </section>
+
+    <!-- Overlays (stacked so a reviewer can see them all at once) -->
+    <section class="screen" id="screen-overlays" data-screen-label="08 Overlays">
+      <div class="screen-caption"><span class="label">Overlays</span><span class="key">rendered inline so every one is visible — in the app these float over the active screen</span></div>
+      <pre class="term" id="ov-help"></pre>
+      <pre class="term" id="ov-cmd" style="margin-top:18px"></pre>
+      <pre class="term" id="ov-cfg" style="margin-top:18px"></pre>
+      <pre class="term" id="ov-ch"  style="margin-top:18px"></pre>
+      <pre class="term" id="ov-alerts" style="margin-top:18px"></pre>
+      <pre class="term" id="ov-menu" style="margin-top:18px"></pre>
+      <pre class="term" id="ov-wiz"  style="margin-top:18px"></pre>
+      <pre class="term" id="ov-toast" style="margin-top:18px"></pre>
+    </section>
+  </div>
+</div>
+
+<!-- Tweaks -->
+<button class="tweaks-toggle" id="tweaks-open">▸ Tweaks</button>
+<div class="tweaks">
+  <h3>Tweaks <span class="tag">TextQuest</span></h3>
+
+  <section>
+    <div class="row"><span class="muted" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;">CRT</span></div>
+    <label><input type="checkbox" id="tw-scanlines" checked /> Scanlines <span class="hint">repeating lines</span></label>
+    <label><input type="checkbox" id="tw-glow" checked /> Phosphor glow <span class="hint">text-shadow</span></label>
+    <label><input type="checkbox" id="tw-vignette" checked /> Vignette <span class="hint">corner fade</span></label>
+  </section>
+
+  <section>
+    <div class="row"><span class="muted" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;">Width class</span></div>
+    <div class="row">
+      <button data-tw-width="narrow">Narrow 80</button>
+      <button data-tw-width="medium">Med 110</button>
+      <button data-tw-width="wide" class="active">Wide 146</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="row"><span class="muted" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;">Mode</span></div>
+    <div class="row">
+      <button data-tw-mode="Hunt" class="active">Hunt</button>
+      <button data-tw-mode="Camp">Camp</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="row"><span class="muted" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;">Close-up</span></div>
+    <div class="row">
+      <button data-tw-focus="1" class="active">Screen 1</button>
+      <button data-tw-focus="2">2</button>
+      <button data-tw-focus="3">3</button>
+    </div>
+    <div class="row">
+      <button data-tw-focus="4">4</button>
+      <button data-tw-focus="5">5</button>
+      <button data-tw-focus="6">6</button>
+      <button data-tw-focus="7">7</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="row"><span class="muted" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;">Overlays panel</span></div>
+    <label><input type="checkbox" id="tw-ov" checked /> Show overlay gallery</label>
+  </section>
+
+  <section style="display:flex;justify-content:space-between;">
+    <button id="tweaks-close" style="flex:0 0 auto;padding:4px 10px;">Close</button>
+    <span class="muted" style="font-size:11px;">editmode@neriak</span>
+  </section>
+</div>
+
+<!-- Tweakable defaults -->
+<script>
+const TWEAK_DEFAULS = /*EDITMODE-BEGIN*/{
+  "scanlines": false,
+  "glow": true,
+  "vignette": true,
+  "width": "narrow",
+  "mode": "Camp",
+  "focus": 1,
+  "showOverlays": true
+}/*EDITMODE-END*/;
+</script>
+
+<script>
+var TQ = {};
+// --- data.js ---
+(function(){
+// TextQuest TUI mock — placeholder demo data, EverQuest-flavored.
+// Names, zones, spells, classes all hand-picked to match the vibe.
+
+// Six operator slots — a typical 6-box EQ setup
+const CLIENTS = [
+  {
+    pid: 4821,
+    name: "Venkhadrei",
+    cls: "ENC",
+    clsFull: "Enchanter",
+    lvl: 65,
+    zone: "Neriak Third Gate",
+    hp: 96,
+    mana: 88,
+    endu: 100,
+    group: "G1",
+    cond: "Stable",
+    state: "Stand",
+    activity: "● Ready",
+    pos: { y: 142.3, x: -88.7, z: 14.2, h: 248 },
+    target: null,
+    cast: null,
+    offline: false,
+    profile: "enc-crowd-control-v2",
+  },
+  {
+    pid: 4823,
+    name: "Mórdrek",
+    cls: "NEC",
+    clsFull: "Necromancer",
+    lvl: 65,
+    zone: "Neriak Third Gate",
+    hp: 84,
+    mana: 62,
+    endu: 100,
+    group: "G1",
+    cond: "Stable",
+    state: "Sit",
+    activity: "☾ Sit",
+    pos: { y: 148.1, x: -84.9, z: 14.2, h: 248 },
+    target: null,
+    cast: null,
+    offline: false,
+    profile: "nec-solo-dot-v1",
+  },
+  {
+    pid: 4826,
+    name: "Sylunariel",
+    cls: "CLR",
+    clsFull: "Cleric",
+    lvl: 65,
+    zone: "Plane of Fear",
+    hp: 78,
+    mana: 41,
+    endu: 100,
+    group: "G2",
+    cond: "Stable",
+    state: "Stand",
+    activity: "✦ Cast",
+    pos: { y: 812.0, x: -1420.3, z: 3.1, h: 112 },
+    target: { name: "Cazic-Thule", hp: 64, type: "Named" },
+    cast: {
+      label: "Complete Healing",
+      gem: "G8",
+      elapsed: 6.2,
+      remaining: 3.8,
+      exact: true,
+    },
+    offline: false,
+    profile: "clr-ch-chain-alpha",
+  },
+  {
+    pid: 4829,
+    name: "Thurgrek",
+    cls: "WAR",
+    clsFull: "Warrior",
+    lvl: 65,
+    zone: "Plane of Fear",
+    hp: 52,
+    mana: 0,
+    endu: 71,
+    group: "G2",
+    cond: "Hurt",
+    state: "Stand",
+    activity: "⚔ Fight",
+    pos: { y: 820.1, x: -1418.7, z: 3.1, h: 94 },
+    target: { name: "Cazic-Thule", hp: 64, type: "Named" },
+    cast: null,
+    offline: false,
+    profile: "war-mt-ch-anchor",
+  },
+  {
+    pid: 4832,
+    name: "Izzlewink",
+    cls: "MAG",
+    clsFull: "Magician",
+    lvl: 64,
+    zone: "Plane of Fear",
+    hp: 100,
+    mana: 93,
+    endu: 100,
+    group: "G2",
+    cond: "Stable",
+    state: "Stand",
+    activity: "✦ Cast",
+    pos: { y: 816.4, x: -1412.8, z: 3.1, h: 88 },
+    target: { name: "Cazic-Thule", hp: 64, type: "Named" },
+    cast: {
+      label: "Elemental Maelstrom",
+      gem: "G5",
+      elapsed: 0.4,
+      remaining: 4.6,
+      exact: false,
+    },
+    offline: false,
+    profile: "mag-nuker-v3",
+  },
+  {
+    pid: 4834,
+    name: "Kardek",
+    cls: "MNK",
+    clsFull: "Monk",
+    lvl: 65,
+    zone: "Plane of Fear",
+    hp: 22,
+    mana: 0,
+    endu: 18,
+    group: "G2",
+    cond: "Critical",
+    state: "FD",
+    activity: "⇣ FD",
+    pos: { y: 819.8, x: -1422.1, z: 3.1, h: 94 },
+    target: null,
+    cast: null,
+    offline: false,
+    profile: "mnk-puller-v2",
+  },
+];
+
+const GROUPS = [
+  {
+    id: 1,
+    label: "G1 Neriak Camp",
+    zone: "Neriak Third Gate",
+    connected: 2,
+    members: 2,
+    leader: "Venkhadrei",
+  },
+  {
+    id: 2,
+    label: "G2 Fear Core",
+    zone: "Plane of Fear",
+    connected: 4,
+    members: 4,
+    leader: "Sylunariel",
+  },
+];
+
+// Server + session
+const SESSION = {
+  server: "Bertoxxulous",
+  mode: "Hunt", // Camp | Hunt
+  mainAssist: "Thurgrek",
+  mainTank: "Thurgrek",
+  chChain: { members: 3, intervalSecs: 5.0, adaptive: true, target: 18421 },
+  focusGroup: "G2",
+  elapsed: { h: 3, m: 47, s: 12 },
+  kills: 148,
+  deaths: 2,
+  xp: 1_842_300,
+  xpPerHour: 489_200,
+  xp15m: 512_400,
+  plat: 384.6,
+  platPerHour: 101.4,
+  topLoot: [
+    ["Diamond", 4],
+    ["Platinum Bar", 3],
+    ["Fiery Avenger", 1],
+  ],
+  unreadAlerts: 2,
+};
+
+// Nav statuses — one per client
+const NAV = {
+  4821: { status: "Idle", dest: "—", route: "", stuck: false, blocker: null },
+  4823: { status: "Idle", dest: "—", route: "", stuck: false, blocker: null },
+  4826: {
+    status: "Holding",
+    dest: "fear.ch_anchor",
+    route: "mesh/37wp",
+    stuck: false,
+    blocker: null,
+  },
+  4829: {
+    status: "Holding",
+    dest: "fear.mt_spot",
+    route: "mesh/37wp",
+    stuck: false,
+    blocker: null,
+  },
+  4832: {
+    status: "Holding",
+    dest: "fear.nuker_spot",
+    route: "mesh/37wp",
+    stuck: false,
+    blocker: null,
+  },
+  4834: {
+    status: "Stuck",
+    dest: "fear.zone_in",
+    route: "mesh/fallback",
+    stuck: true,
+    blocker: "obstacle: corpse pile @ (821,-1420)",
+  },
+};
+
+// Spawn list for the Fear zone map + debug screens
+const SPAWNS = [
+  {
+    id: 18421,
+    name: "Cazic-Thule",
+    type: "Named",
+    cls: "SHD",
+    lvl: 66,
+    hp: 64,
+    y: 812,
+    x: -1420,
+    z: 3,
+    state: "Stand",
+  },
+  {
+    id: 18207,
+    name: "a fear dragoon",
+    type: "NPC",
+    cls: "WAR",
+    lvl: 58,
+    hp: 100,
+    y: 801,
+    x: -1402,
+    z: 3,
+    state: "Stand",
+  },
+  {
+    id: 18208,
+    name: "a fear dragoon",
+    type: "NPC",
+    cls: "WAR",
+    lvl: 58,
+    hp: 100,
+    y: 799,
+    x: -1408,
+    z: 3,
+    state: "Stand",
+  },
+  {
+    id: 18412,
+    name: "Dracoliche",
+    type: "Named",
+    cls: "NEC",
+    lvl: 62,
+    hp: 88,
+    y: 690,
+    x: -1380,
+    z: 3,
+    state: "Stand",
+  },
+  {
+    id: 18301,
+    name: "an amygdalan monk",
+    type: "NPC",
+    cls: "MNK",
+    lvl: 55,
+    hp: 100,
+    y: 720,
+    x: -1340,
+    z: 3,
+    state: "Stand",
+  },
+  {
+    id: 18302,
+    name: "an amygdalan monk",
+    type: "NPC",
+    cls: "MNK",
+    lvl: 55,
+    hp: 0,
+    y: 718,
+    x: -1338,
+    z: 3,
+    state: "Dead",
+  },
+  {
+    id: 14004,
+    name: "a phantom",
+    type: "NPC",
+    cls: "SHM",
+    lvl: 51,
+    hp: 100,
+    y: 640,
+    x: -1260,
+    z: 3,
+    state: "Stand",
+  },
+  {
+    id: 14005,
+    name: "a phantom",
+    type: "NPC",
+    cls: "SHM",
+    lvl: 51,
+    hp: 38,
+    y: 645,
+    x: -1268,
+    z: 3,
+    state: "Stand",
+  },
+  {
+    id: 20101,
+    name: "Thurgrek's corpse",
+    type: "Corpse",
+    cls: "--",
+    lvl: 65,
+    hp: 0,
+    y: 820,
+    x: -1419,
+    z: 3,
+    state: "—",
+  },
+];
+
+// Packet monitor — a sampling of EQ protocol opcodes
+const PACKETS = [
+  { t: "12:04:17.004", dir: "S→C", op: "OP_HPUpdate", size: 16, hex: "02 00 08 00 f5 01 00 00 40 00 00 00 00 00 00 00" },
+  { t: "12:04:17.012", dir: "S→C", op: "OP_ManaUpdate", size: 12, hex: "02 00 08 00 f5 01 00 00 a4 01 00 00" },
+  { t: "12:04:17.020", dir: "S→C", op: "OP_MobUpdate", size: 24, hex: "04 00 0c 00 fa 47 20 42 00 00 c0 c1 80 3f 40 c0 e8 03 00 00 00 00 00 00" },
+  { t: "12:04:17.031", dir: "C→S", op: "OP_TargetMouse", size: 8, hex: "01 00 04 00 f5 47 00 00" },
+  { t: "12:04:17.033", dir: "S→C", op: "OP_TargetHoTT", size: 8, hex: "01 00 04 00 f5 47 00 00" },
+  { t: "12:04:17.048", dir: "S→C", op: "OP_BeginCast", size: 20, hex: "02 00 10 00 f5 01 00 00 c0 01 00 00 e8 03 00 00 00 00 00 00" },
+  { t: "12:04:17.061", dir: "S→C", op: "OP_FormattedMessage", size: 96, hex: "07 00 5c 00 9e 00 00 00 02 00 00 00 53 79 6c 75 6e 61 72 69 65 6c" },
+  { t: "12:04:17.072", dir: "C→S", op: "OP_ClientUpdate", size: 40, hex: "04 00 24 00 00 80 4b 44 00 00 88 c3 00 00 40 40 00 00 00 00 66 66 66 3f" },
+  { t: "12:04:17.089", dir: "S→C", op: "OP_MemorizeSpell", size: 8, hex: "05 00 04 00 05 00 16 01" },
+  { t: "12:04:17.110", dir: "S→C", op: "OP_Damage", size: 28, hex: "03 00 18 00 f5 01 00 00 f5 47 00 00 00 00 00 00 2c 01 00 00 00 00 00 00 01 00 00 00" },
+  { t: "12:04:17.122", dir: "S→C", op: "OP_HPUpdate", size: 16, hex: "02 00 08 00 f5 01 00 00 38 00 00 00 00 00 00 00" },
+  { t: "12:04:17.140", dir: "C→S", op: "OP_CombatAbility", size: 12, hex: "06 00 08 00 f5 47 00 00 05 00 00 00" },
+];
+
+// Economy — vendor/bank cycle
+const ECONOMY = {
+  state: "Active",
+  stage: "Selling",
+  currentSlot: "Izzlewink",
+  stageStarted: "12:01:03",
+  cycleStarted: "11:42:18",
+  cyclesToday: 4,
+  vendor: "Sarsk the Provisioner",
+  bank: "The Bank of Bertoxxulous",
+  plat: 384.6,
+  bankedPlat: 12_480,
+  nextCycleIn: "22:41",
+  rules: [
+    "Keep 2 stacks Distilled Mana Potion",
+    "Vendor all 0pp items > 1lb",
+    "Bank overflow > 100pp",
+    "Skip on combat flag",
+  ],
+  roster: [
+    { name: "Venkhadrei", status: "Done", plat: 42, bags: "14/24" },
+    { name: "Mórdrek", status: "Done", plat: 38, bags: "12/24" },
+    { name: "Sylunariel", status: "Skipped", plat: 0, bags: "8/24", reason: "combat" },
+    { name: "Thurgrek", status: "Skipped", plat: 0, bags: "18/24", reason: "combat" },
+    { name: "Izzlewink", status: "Active", plat: 24, bags: "20/24" },
+    { name: "Kardek", status: "Queued", plat: 0, bags: "16/24" },
+  ],
+};
+
+// Orchestrator — fleet intents + slot lifecycle
+const ORCHESTRATOR = {
+  intent: "fear.ch_chain.alpha",
+  phase: "Execute",
+  cadence: 2.0, // Hz
+  lastTick: "12:04:17.980",
+  slots: [
+    { slot: "S01", name: "Venkhadrei", state: "Live", fsm: "idle", latencyMs: 12, profile: "enc-crowd-control-v2" },
+    { slot: "S02", name: "Mórdrek", state: "Live", fsm: "meditate", latencyMs: 18, profile: "nec-solo-dot-v1" },
+    { slot: "S03", name: "Sylunariel", state: "Live", fsm: "ch_cast", latencyMs: 9, profile: "clr-ch-chain-alpha" },
+    { slot: "S04", name: "Thurgrek", state: "Live", fsm: "tanking", latencyMs: 14, profile: "war-mt-ch-anchor" },
+    { slot: "S05", name: "Izzlewink", state: "Live", fsm: "nuking", latencyMs: 21, profile: "mag-nuker-v3" },
+    { slot: "S06", name: "Kardek", state: "Recovering", fsm: "fd_hold", latencyMs: 42, profile: "mnk-puller-v2" },
+    { slot: "S07", name: "—", state: "Configured", fsm: "offline", latencyMs: 0, profile: "drd-track-scout" },
+    { slot: "S08", name: "—", state: "Blocked", fsm: "login_fail", latencyMs: 0, profile: "brd-twist-v1" },
+  ],
+  signals: [
+    { t: "12:04:16.5", kind: "CH", msg: "CH#142 fired — Thurgrek healed to 100%" },
+    { t: "12:04:16.1", kind: "NAV", msg: "Kardek: obstacle blocker on fallback route" },
+    { t: "12:04:14.0", kind: "MED", msg: "Mórdrek mana 62% — holding med" },
+    { t: "12:04:12.3", kind: "CAST", msg: "Izzlewink queued Elemental Maelstrom" },
+    { t: "12:04:09.8", kind: "XP", msg: "+2.14% AA — a phantom (lvl 51)" },
+    { t: "12:04:07.1", kind: "LOOT", msg: "Diamond ×1 → Thurgrek" },
+    { t: "12:04:04.4", kind: "ALERT", msg: "Kardek HP 22% — auto FD triggered" },
+    { t: "12:04:02.2", kind: "PULL", msg: "Kardek: pull request acknowledged" },
+  ],
+};
+
+// Alerts feed
+const ALERTS = [
+  { sev: "Warning", kind: "CharacterHP", msg: "Kardek HP dropped to 22% — auto FD fired", source: "slot/S06", when: "12:04:04", ack: false },
+  { sev: "Warning", kind: "NavBlocker", msg: "Kardek stuck on fallback route — obstacle detected", source: "nav/S06", when: "12:04:01", ack: false },
+  { sev: "Info", kind: "CHChain", msg: "CH chain adaptive interval adjusted 4.8s → 5.0s", source: "combat/ch", when: "12:03:58", ack: true },
+  { sev: "Info", kind: "Zone", msg: "Sylunariel entered Plane of Fear", source: "zone/S03", when: "11:42:02", ack: true },
+  { sev: "Critical", kind: "ClientLogin", msg: "Slot S08 login_fail — account throttled by server", source: "orch/S08", when: "11:38:47", ack: false },
+];
+
+// Menu bar (F10)
+const MENUBAR = {
+  active: "Ops",
+  bar: ["File", "Ops", "View", "Group", "Combat", "Debug", "Help"],
+  items: [
+    { key: "a", label: "Assist Main Assist", hint: ":assist" },
+    { key: "p", label: "Pull Target", hint: ":pull" },
+    { key: "e", label: "Engage All", hint: "e" },
+    { key: "d", label: "Disengage", hint: "d" },
+    { key: "—", label: "—", hint: "" },
+    { key: "c", label: "Start CH Chain", hint: ":ch start" },
+    { key: "s", label: "Stop CH Chain", hint: ":ch stop" },
+    { key: "—", label: "—", hint: "" },
+    { key: "m", label: "Set Operating Mode", hint: ":mode" },
+    { key: "l", label: "Loot All Corpses", hint: "l" },
+  ],
+};
+
+TQ.CLIENTS = CLIENTS;
+TQ.GROUPS = GROUPS;
+TQ.SESSION = SESSION;
+TQ.NAV = NAV;
+TQ.SPAWNS = SPAWNS;
+TQ.PACKETS = PACKETS;
+TQ.ECONOMY = ECONOMY;
+TQ.ORCHESTRATOR = ORCHESTRATOR;
+TQ.ALERTS = ALERTS;
+TQ.MENUBAR = MENUBAR;
+})();
+
+// --- widgets.js ---
+(function(){
+// widgets.js — box-drawing panel helpers, bars, and misc TUI primitives.
+//
+// All panels render as <pre>-style text: the visual border is literal
+// Unicode box characters, not CSS borders. This matches how the real app
+// draws with ratatui's Block widget.
+
+const BOX = {
+  // Thin rounded — primary
+  rounded: { tl: "╭", tr: "╮", bl: "╰", br: "╯", h: "─", v: "│", tLeft: "├", tRight: "┤", tUp: "┴", tDown: "┬", cross: "┼" },
+  // Double — server / strong emphasis
+  double: { tl: "╔", tr: "╗", bl: "╚", br: "╝", h: "═", v: "║", tLeft: "╠", tRight: "╣", tUp: "╩", tDown: "╦", cross: "╬" },
+  // Thick — active / highlight
+  thick: { tl: "┏", tr: "┓", bl: "┗", br: "┛", h: "━", v: "┃", tLeft: "┣", tRight: "┫", tUp: "┻", tDown: "┳", cross: "╋" },
+};
+
+// Strip HTML tags when counting visible width. We build rows with inline
+// <span> for color — the width math must ignore the tags.
+function vlen(s) {
+  return String(s).replace(/<[^>]*>/g, "").length;
+}
+
+// Pad a (possibly-tagged) string to a visible width.
+function pad(s, width, align = "left") {
+  const n = vlen(s);
+  if (n >= width) return s;
+  const diff = width - n;
+  if (align === "right") return " ".repeat(diff) + s;
+  if (align === "center") {
+    const l = Math.floor(diff / 2);
+    return " ".repeat(l) + s + " ".repeat(diff - l);
+  }
+  return s + " ".repeat(diff);
+}
+
+function trunc(s, width) {
+  const plain = String(s).replace(/<[^>]*>/g, "");
+  if (plain.length <= width) return s;
+  // Hard-truncate the plain form — cheap and fine for our mock
+  return plain.slice(0, width - 1) + "…";
+}
+
+// Build a top/bottom border with an optional title inset on the top.
+// style: "rounded" | "double" | "thick"
+// color: CSS class for the border characters
+// title: plain string; its characters appear at their natural color, but
+//        the surrounding border stays in `color`.
+function borderTop(width, title, style = "rounded", color = "magenta", titleColor = "bright") {
+  const b = BOX[style];
+  if (!title) {
+    return `<span class="${color}">${b.tl}${b.h.repeat(width - 2)}${b.tr}</span>`;
+  }
+  // Fancy format: "▸CATEGORY·NAME·META" → two-part colored header with right meta
+  if (typeof title === "string" && title.startsWith("\u25B8")) {
+    const parts = title.slice(1).split("\u00B7").map((s) => s.trim());
+    const cat  = parts[0] || "";
+    const name = parts[1] || "";
+    const meta = parts[2] || "";
+    const left = `<span class="${color}">\u25B8 ${cat}</span> <span class="${color} bold">${name.toUpperCase()}</span>`;
+    const right = meta ? `<span class="${color}">${meta.toUpperCase()}</span>` : "";
+    // Build: ╭── ▸ CAT NAME ···meta ─╮ as one line
+    const visible = 1 + cat.length + 1 + name.length + (meta ? 1 + meta.length : 0) + 2; // spaces + arrow
+    const fill = Math.max(1, width - 4 - visible);
+    return (
+      `<span class="${color}">${b.tl}${b.h}${b.h}</span>` +
+      ` ${left} ` +
+      `<span class="${color}">${b.h.repeat(fill - 2)}</span>` +
+      (right ? ` ${right} ` : "  ") +
+      `<span class="${color}">${b.tr}</span>`
+    );
+  }
+  const lead = 2;
+  const label = ` ${title} `;
+  const fill = width - 2 - lead - label.length;
+  return (
+    `<span class="${color}">${b.tl}${b.h.repeat(lead)}</span>` +
+    `<span class="${titleColor}">${label}</span>` +
+    `<span class="${color}">${b.h.repeat(Math.max(0, fill))}${b.tr}</span>`
+  );
+}
+
+function borderBottom(width, style = "rounded", color = "magenta", foot) {
+  const b = BOX[style];
+  if (!foot) {
+    return `<span class="${color}">${b.bl}${b.h.repeat(width - 2)}${b.br}</span>`;
+  }
+  const lead = 2;
+  const label = ` ${foot} `;
+  const fill = width - 2 - lead - label.length;
+  return (
+    `<span class="${color}">${b.bl}${b.h.repeat(lead)}</span>` +
+    `<span class="muted">${label}</span>` +
+    `<span class="${color}">${b.h.repeat(Math.max(0, fill))}${b.br}</span>`
+  );
+}
+
+function borderMid(width, style = "rounded", color = "magenta") {
+  const b = BOX[style];
+  return `<span class="${color}">${b.tLeft}${b.h.repeat(width - 2)}${b.tRight}</span>`;
+}
+
+// A row inside a panel — pads content to `width - 2` and adds side walls.
+function row(content, width, style = "rounded", color = "magenta") {
+  const b = BOX[style];
+  return (
+    `<span class="${color}">${b.v}</span>` +
+    pad(content, width - 2) +
+    `<span class="${color}">${b.v}</span>`
+  );
+}
+
+// Build a whole panel from an array of inner rows.
+function panel(innerRows, { width, title, style = "rounded", color = "magenta", titleColor = "bright", foot } = {}) {
+  const lines = [borderTop(width, title, style, color, titleColor)];
+  for (const r of innerRows) lines.push(row(r, width, style, color));
+  lines.push(borderBottom(width, style, color, foot));
+  return lines.join("\n");
+}
+
+// Progress bar in a fixed char width. Returns colored block chars.
+// Bar chars: █ ▉ ▊ ▋ ▌ ▍ ▎ ▏
+function bar(value, max, width, opts = {}) {
+  const pct = Math.max(0, Math.min(1, max ? value / max : 0));
+  const filled = Math.floor(pct * width);
+  const partial = pct * width - filled;
+  const steps = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉"];
+  const stepIdx = Math.min(7, Math.floor(partial * 8));
+  const head = steps[stepIdx];
+
+  let color = opts.color;
+  if (!color) {
+    if (opts.hp) {
+      color = pct > 0.6 ? "hp-high" : pct > 0.3 ? "hp-mid" : "hp-low";
+    } else if (opts.mana) {
+      color = "mana";
+    } else {
+      color = "accent";
+    }
+  }
+  const full = "█".repeat(filled);
+  const empty = "·".repeat(Math.max(0, width - filled - (head ? 1 : 0)));
+  return `<span class="${color}">${full}${head}</span><span class="dim">${empty}</span>`;
+}
+
+// HP cell: `96% ████▌···` in HP color
+function hpCell(pct, barWidth = 8) {
+  const cls = pct > 60 ? "hp-high" : pct > 30 ? "hp-mid" : "hp-low";
+  const label = `${String(pct).padStart(3)}%`;
+  return `<span class="${cls}">${label}</span> ${bar(pct, 100, barWidth, { hp: true })}`;
+}
+
+// Small pill badge, inverse-colored
+function pill(label, color = "inv-magenta") {
+  return `<span class="${color}"> ${label} </span>`;
+}
+
+// Multi-column header row — accepts [{label,width,align,cls}]
+function headerRow(cols, { sep = " " } = {}) {
+  return cols
+    .map((c) => {
+      const s = `<span class="${c.cls || "secondary"}">${c.label}</span>`;
+      return pad(s, c.width, c.align || "left");
+    })
+    .join(sep);
+}
+
+// Same, for data rows.
+function dataRow(cols, { sep = " " } = {}) {
+  return cols
+    .map((c) => pad(c.v, c.width, c.align || "left"))
+    .join(sep);
+}
+
+TQ.vlen = vlen;
+TQ.pad = pad;
+TQ.trunc = trunc;
+TQ.borderTop = borderTop;
+TQ.borderBottom = borderBottom;
+TQ.borderMid = borderMid;
+TQ.row = row;
+TQ.panel = panel;
+TQ.bar = bar;
+TQ.hpCell = hpCell;
+TQ.pill = pill;
+TQ.headerRow = headerRow;
+TQ.dataRow = dataRow;
+TQ.BOX = BOX;
+})();
+
+// --- shell.js ---
+(function(){
+// shell.js — the header bar, tab strip, and status bar that wrap every screen.
+
+const CLIENTS = TQ.CLIENTS;
+const SESSION = TQ.SESSION;
+const ALERTS = TQ.ALERTS;
+const BOX = TQ.BOX;
+const pad = TQ.pad;
+const vlen = TQ.vlen;
+
+const W = 146; // overall terminal width in chars
+const SIDEBAR_W = 44; // right-hand column for Overview / Tactical
+const MAIN_W = W - SIDEBAR_W - 1; // -1 for the gap
+
+// ─── Header: `╭─ TextQuest ─────...────╮` with inline tab strip ────────
+function renderHeader(activeTab) {
+  const tabs = [
+    { n: 1, short: "Tethers", long: "Soul Tethers" },
+    { n: 2, short: "Carto",   long: "Cartography" },
+    { n: 3, short: "Waypath", long: "Waypath" },
+    { n: 4, short: "Oracle",  long: "Oracle" },
+    { n: 5, short: "Aether",  long: "Aethergram" },
+    { n: 6, short: "Coin",    long: "Coinmark" },
+    { n: 7, short: "Gate",    long: "Third Gate" },
+  ];
+
+  const b = BOX.rounded;
+  const titleText = ` TextQuest `;
+
+  // Build the tab strip: `[ 1 Char ][ 2 Map ]...`
+  const tabStr = tabs
+    .map((t) => {
+      const active = t.n === activeTab;
+      const inner = `${t.n} ${t.short}`;
+      if (active) {
+        return `<span class="magenta">[</span><span class="inv-magenta"> ${inner} </span><span class="magenta">]</span>`;
+      }
+      return `<span class="muted">[</span><span class="secondary"> ${inner} </span><span class="muted">]</span>`;
+    })
+    .join("");
+
+  // Top border with title
+  const topLead = `<span class="magenta">${b.tl}${b.h}${b.h}</span><span class="bright bold">${titleText}</span>`;
+  const topLeadW = 2 + titleText.length;
+  const topTrailW = W - topLeadW - 2; // minus the corners counted above
+  const topLine = topLead + `<span class="magenta">${b.h.repeat(topTrailW)}${b.tr}</span>`;
+
+  // Middle line: left meta + right tabs
+  const left =
+    ` <span class="cyan bold">${CLIENTS.length}x</span><span class="secondary"> EQ</span>` +
+    ` <span class="muted">│</span> ` +
+    `<span class="bright">1/${CLIENTS.length}</span> <span class="highlight">${CLIENTS[0].name}</span>` +
+    ` <span class="muted">│</span> ` +
+    `<span class="cyan">${SESSION.focusGroup}</span> <span class="secondary">${GROUP_LABEL(SESSION.focusGroup)}</span>` +
+    ` <span class="muted">│</span> ` +
+    `<span class="server bold">${SESSION.server}</span>` +
+    ` <span class="muted">│</span> ` +
+    `<span class="bright">${CLIENTS[0].zone}</span> `;
+
+  const right = ` ${tabStr} `;
+  const wLeft = vlen(left);
+  const wRight = vlen(right);
+  const mid = wLeft + wRight + 2 > W ? "" : " ".repeat(W - 2 - wLeft - wRight);
+  const midLine =
+    `<span class="magenta">${b.v}</span>` + left + mid + right + `<span class="magenta">${b.v}</span>`;
+
+  // Bottom border of header panel — we'll continue into the screen body below
+  // so use ├───┤ so the screen panels beneath can visually attach. But simpler:
+  // draw a closed header and leave a blank line before the body.
+  const botLine = `<span class="magenta">${b.bl}${b.h.repeat(W - 2)}${b.br}</span>`;
+
+  return [topLine, midLine, botLine].join("\n");
+}
+
+function GROUP_LABEL(id) {
+  return id === "G1" ? "Neriak Camp" : id === "G2" ? "Fear Core" : id;
+}
+
+// ─── Status bar at the bottom of every screen ────────────────────────
+function renderStatusBar({ hint, screen, activeTab }) {
+  const unread = ALERTS.filter((a) => !a.ack).length;
+  const chBadge =
+    `<span class="cyan">CH </span>` +
+    `<span class="bright">${SESSION.chChain.members}x@${SESSION.chChain.intervalSecs.toFixed(1)}s</span> ` +
+    `<span class="${SESSION.chChain.adaptive ? "green" : "muted"}">${SESSION.chChain.adaptive ? "A" : "·"}</span>`;
+
+  const modeBadge = SESSION.mode === "Hunt"
+    ? `<span class="inv-magenta"> HUNT </span>`
+    : `<span class="inv-cyan"> CAMP </span>`;
+
+  const focusPill = `<span class="magenta">[</span><span class="inv-magenta"> ${SESSION.focusGroup} </span><span class="magenta">]</span>`;
+
+  const left =
+    ` <span class="bright bold">${screen}</span> ` +
+    `<span class="muted">▸</span> ` +
+    `<span class="secondary">${hint}</span>`;
+
+  const right =
+    ` ${modeBadge} ` +
+    `<span class="muted">│</span> ` +
+    `<span class="secondary">MA </span><span class="bright">${SESSION.mainAssist}</span> ` +
+    `<span class="muted">│</span> ` +
+    `<span class="secondary">MT </span><span class="bright">${SESSION.mainTank}</span> ` +
+    `<span class="muted">│</span> ` +
+    `${chBadge} ` +
+    `<span class="muted">│</span> ` +
+    `${focusPill} ` +
+    `<span class="muted">│</span> ` +
+    `<span class="secondary">Alerts </span><span class="${unread ? "amber" : "muted"}">${unread}</span> ` +
+    `<span class="muted">│</span> ` +
+    `<span class="muted">neriak</span> `;
+
+  const wLeft = vlen(left);
+  const wRight = vlen(right);
+  const fill = Math.max(1, W - wLeft - wRight);
+  return `<span class="dim">${"─".repeat(W)}</span>\n` + left + " ".repeat(fill) + right;
+}
+
+// ─── Session strip (Group Focus bar) — pinned above Overview ─────────
+function renderFocusStrip() {
+  const b = BOX.rounded;
+  const title = ` Group Focus · ${SESSION.focusGroup} ${GROUP_LABEL(SESSION.focusGroup)} `;
+  const topLead = `<span class="cyan">${b.tl}${b.h}${b.h}</span>` + `<span class="bright bold">${title}</span>`;
+  const topLeadW = 2 + title.length;
+  const top = topLead + `<span class="cyan">${b.h.repeat(W - topLeadW - 1)}${b.tr}</span>`;
+
+  const uptime = `${String(SESSION.elapsed.h).padStart(2, "0")}:${String(SESSION.elapsed.m).padStart(2, "0")}:${String(SESSION.elapsed.s).padStart(2, "0")}`;
+  const inner =
+    ` <span class="secondary">Uptime </span><span class="bright">${uptime}</span>` +
+    `   <span class="muted">│</span>   ` +
+    `<span class="secondary">Kills </span><span class="bright bold">${SESSION.kills}</span>` +
+    ` <span class="muted">/</span> <span class="secondary">Deaths </span><span class="red">${SESSION.deaths}</span>` +
+    `   <span class="muted">│</span>   ` +
+    `<span class="secondary">XP </span><span class="bright">${(SESSION.xp / 1_000_000).toFixed(2)}M</span>` +
+    ` <span class="secondary">·</span> <span class="green">+${(SESSION.xpPerHour / 1000).toFixed(0)}k/h</span>` +
+    ` <span class="secondary">·</span> <span class="cyan">+${(SESSION.xp15m / 1000).toFixed(0)}k/15m</span>` +
+    `   <span class="muted">│</span>   ` +
+    `<span class="secondary">Plat </span><span class="bright">${SESSION.plat.toFixed(1)}</span>` +
+    ` <span class="secondary">·</span> <span class="green">+${SESSION.platPerHour.toFixed(1)}/h</span>` +
+    `   <span class="muted">│</span>   ` +
+    `<span class="secondary">Top Loot </span>` +
+    SESSION.topLoot.map(([n, q]) => `<span class="bright">${n}</span><span class="muted">×${q}</span>`).join(" <span class=muted>·</span> ") +
+    ` `;
+
+  const bot = `<span class="cyan">${b.bl}${b.h.repeat(W - 2)}${b.br}</span>`;
+
+  const vlenInner = vlen(inner);
+  const fill = Math.max(1, W - 2 - vlenInner);
+  return [
+    top,
+    `<span class="cyan">${b.v}</span>` + inner + " ".repeat(fill) + `<span class="cyan">${b.v}</span>`,
+    bot,
+  ].join("\n");
+}
+
+TQ.renderHeader = renderHeader;
+TQ.renderStatusBar = renderStatusBar;
+TQ.renderFocusStrip = renderFocusStrip;
+TQ.W = W;
+TQ.SIDEBAR_W = SIDEBAR_W;
+TQ.MAIN_W = MAIN_W;
+})();
+
+// --- screen_overview.js ---
+(function(){
+// screen_overview.js — Screen 1: Characters / Ops Roster.
+//
+// Layout:
+//   ┌ Group Focus strip ────────────────────────────────────────────┐
+//   ┌ Ops Roster ────────────────────────┬ Character · Venkhadrei ──┐
+//   │  ▶ Name       Grp Cls  Zone   HP   │  [ Condition box ]       │
+//   │    ...rows...                      │  [ Target / Cast box ]   │
+//   │                                    │  [ Groups box ]          │
+//   │                                    │  [ Session box ]         │
+//   │                                    │  [ Combat box ]          │
+//   └────────────────────────────────────┴──────────────────────────┘
+
+const CLIENTS = TQ.CLIENTS;
+const GROUPS = TQ.GROUPS;
+const SESSION = TQ.SESSION;
+const BOX = TQ.BOX;
+const panel = TQ.panel;
+const pad = TQ.pad;
+const vlen = TQ.vlen;
+const hpCell = TQ.hpCell;
+const bar = TQ.bar;
+const W = TQ.W;
+const MAIN_W = TQ.MAIN_W;
+const SIDEBAR_W = TQ.SIDEBAR_W;
+
+const ACTIVITY_LEGEND = [
+  ["➜", "Nav", "cyan"],
+  ["✓", "Arr", "green"],
+  ["!", "Stk", "amber"],
+  ["☠", "Ded", "red"],
+  ["⇣", "FD ", "blue"],
+  ["☾", "Sit", "secondary"],
+  ["⌕", "Lot", "magenta"],
+  ["✦", "Cst", "cyan"],
+  ["⚔", "Fgt", "amber"],
+  ["●", "Rdy", "green"],
+];
+
+// ─── Roster table ────────────────────────────────────────────────────
+function rosterTable(selectedIdx) {
+  const cols = [
+    { label: "",      w: 2  },  // cursor
+    { label: "Name",  w: 14 },
+    { label: "Grp",   w: 3  },
+    { label: "Cls",   w: 4  },
+    { label: "Lvl",   w: 3, align: "right" },
+    { label: "Zone",  w: 22 },
+    { label: "HP",    w: 16 },
+    { label: "Mana",  w: 12 },
+    { label: "Cond",  w: 9  },
+    { label: "State", w: 8  },
+    { label: "Activity", w: 10 },
+  ];
+  const usedW = cols.reduce((a, c) => a + c.w, 0) + (cols.length - 1); // 1-space gaps
+  const innerW = MAIN_W - 2;
+
+  const header = cols
+    .map((c) => pad(`<span class="secondary">${c.label}</span>`, c.w, c.align || "left"))
+    .join(" ");
+
+  const rows = [header, `<span class="dim">${"─".repeat(innerW)}</span>`];
+
+  CLIENTS.forEach((c, i) => {
+    const sel = i === selectedIdx;
+    const cur = sel ? `<span class="magenta bold">▶</span> ` : `  `;
+    const name = sel
+      ? `<span class="inv-magenta">${pad(c.name, 14)}</span>`
+      : `<span class="bright">${pad(c.name, 14)}</span>`;
+    const grp = `<span class="cyan">${pad(c.group, 3)}</span>`;
+    const cls = `<span class="highlight">${pad(c.cls, 4)}</span>`;
+    const lvl = pad(`<span class="bright">${c.lvl}</span>`, 3, "right");
+    const zone = pad(`<span class="secondary">${c.zone}</span>`, 22);
+
+    // HP: "96% ███▌···"
+    const hpStr = hpCell(c.hp, 10);
+    const hpW = 16;
+    const hpCell2 = pad(hpStr, hpW);
+
+    // Mana (only for caster classes — WAR/MNK show --)
+    const hasMana = !["WAR", "MNK", "ROG", "BER"].includes(c.cls);
+    const manaStr = hasMana
+      ? `<span class="mana">${String(c.mana).padStart(3)}%</span> ${bar(c.mana, 100, 6, { mana: true })}`
+      : `<span class="muted">  -- </span>`;
+    const manaW = 12;
+    const manaC = pad(manaStr, manaW);
+
+    const condColor =
+      c.cond === "Critical" ? "red" :
+      c.cond === "Hurt" ? "amber" :
+      c.cond === "Stable" ? "green" : "secondary";
+    const cond = pad(`<span class="${condColor}">${c.cond}</span>`, 9);
+
+    const stateColor = c.state === "FD" ? "blue" : c.state === "Sit" ? "secondary" : "bright";
+    const state = pad(`<span class="${stateColor}">${c.state}</span>`, 8);
+
+    const actColor =
+      c.activity.startsWith("⚔") ? "amber" :
+      c.activity.startsWith("✦") ? "cyan" :
+      c.activity.startsWith("⇣") ? "blue" :
+      c.activity.startsWith("●") ? "green" :
+      c.activity.startsWith("☾") ? "secondary" : "bright";
+    const act = pad(`<span class="${actColor}">${c.activity}</span>`, 10);
+
+    const line = `${cur}${name} ${grp} ${cls} ${lvl} ${zone} ${hpCell2} ${manaC} ${cond} ${state} ${act}`;
+    rows.push(line);
+  });
+
+  // Legend footer inside the panel
+  rows.push("");
+  const legend = ACTIVITY_LEGEND
+    .map(([g, l, col]) => `<span class="${col}">${g}</span> <span class="secondary">${l}</span>`)
+    .join("  ");
+  rows.push(`<span class="muted">Activity glyphs:</span>  ${legend}`);
+
+  return panel(rows, {
+    width: MAIN_W,
+    title: `▸ROSTER·OPS ROSTER·${CLIENTS.length} CLIENTS`,
+    color: "magenta",
+    foot: "↑↓ select  ·  Enter focus  ·  g cycle group  ·  [ ] prev/next client",
+  });
+}
+
+// ─── Sidebar sections ────────────────────────────────────────────────
+function condBox(c) {
+  const lines = [];
+  const hasMana = !["WAR", "MNK"].includes(c.cls);
+  lines.push(`<span class="secondary">HP  </span>${hpCell(c.hp, 18)}`);
+  if (hasMana) {
+    lines.push(`<span class="secondary">Mana</span> <span class="mana">${String(c.mana).padStart(3)}%</span> ${bar(c.mana, 100, 18, { mana: true })}`);
+  } else {
+    lines.push(`<span class="secondary">Mana</span> <span class="muted">— (melee) —</span>`);
+  }
+  lines.push(`<span class="secondary">End </span> <span class="green">${String(c.endu).padStart(3)}%</span> ${bar(c.endu, 100, 18, { color: "green" })}`);
+  lines.push("");
+  lines.push(`<span class="secondary">State</span>     <span class="bright">${c.state}</span>`);
+  lines.push(`<span class="secondary">Activity</span>  <span class="bright">${c.activity}</span>`);
+  lines.push(`<span class="secondary">Condition</span> <span class="${c.cond === "Critical" ? "red" : c.cond === "Hurt" ? "amber" : "green"} bold">${c.cond}</span>`);
+  lines.push(`<span class="secondary">Position</span>  <span class="bright">${c.pos.y.toFixed(1)}, ${c.pos.x.toFixed(1)}, ${c.pos.z.toFixed(1)}</span> <span class="muted">h${c.pos.h}</span>`);
+  return panel(lines, {
+    width: SIDEBAR_W,
+    title: `▸PROFILE·${c.name}·CONDITION`,
+    color: "cyan",
+    titleColor: "bright",
+  });
+}
+
+function castBox(c) {
+  const lines = [];
+  if (c.target) {
+    const tCol = c.target.type === "Named" ? "magenta" : c.target.type === "PC" ? "green" : "bright";
+    lines.push(`<span class="secondary">Target</span>    <span class="${tCol} bold">${c.target.name}</span>`);
+    lines.push(`<span class="secondary">Target HP</span> ${hpCell(c.target.hp, 18)}`);
+  } else {
+    lines.push(`<span class="secondary">Target</span>    <span class="muted">none</span>`);
+  }
+  lines.push("");
+  if (c.cast) {
+    const pct = Math.min(1, c.cast.elapsed / (c.cast.elapsed + c.cast.remaining));
+    const exact = c.cast.exact ? "" : ` <span class="muted">±</span>`;
+    lines.push(`<span class="secondary">Casting</span>   <span class="cyan bold">${c.cast.label}</span> <span class="muted">${c.cast.gem}</span>`);
+    lines.push(`<span class="secondary">Progress</span>  ${bar(pct, 1, 22, { color: "cyan" })} <span class="bright">${Math.round(pct * 100)}%</span>`);
+    lines.push(`<span class="secondary">Remaining</span> <span class="bright">${c.cast.remaining.toFixed(1)}s</span>${exact}`);
+  } else {
+    lines.push(`<span class="secondary">Casting</span>   <span class="muted">idle</span>`);
+  }
+  return panel(lines, {
+    width: SIDEBAR_W,
+    title: `▸COMBAT·TARGET CAST·LIVE`,
+    color: "magenta",
+  });
+}
+
+function groupsBox() {
+  const lines = [];
+  GROUPS.forEach((g) => {
+    const active = g.id === 2;
+    const marker = active ? `<span class="inv-magenta"> ${g.id === 1 ? "G1" : "G2"} </span>` : `<span class="muted">[${g.id === 1 ? "G1" : "G2"}]</span>`;
+    lines.push(`${marker} <span class="bright bold">${g.label.slice(3)}</span>`);
+    lines.push(`   <span class="secondary">Zone </span><span class="bright">${g.zone}</span>`);
+    lines.push(`   <span class="secondary">Conn </span><span class="${g.connected === g.members ? "green" : "amber"}">${g.connected}/${g.members}</span>   <span class="secondary">Lead </span><span class="highlight">${g.leader}</span>`);
+  });
+  return panel(lines, { width: SIDEBAR_W, title: "▸FORMATION·GROUPS·2 ACTIVE", color: "magenta" });
+}
+
+function sessionBox() {
+  const uptime = `${String(SESSION.elapsed.h).padStart(2, "0")}:${String(SESSION.elapsed.m).padStart(2, "0")}:${String(SESSION.elapsed.s).padStart(2, "0")}`;
+  const lines = [
+    `<span class="secondary">Server  </span> <span class="server bold">${SESSION.server}</span>`,
+    `<span class="secondary">Mode    </span> <span class="${SESSION.mode === "Hunt" ? "magenta" : "cyan"} bold">${SESSION.mode}</span>`,
+    `<span class="secondary">Uptime  </span> <span class="bright">${uptime}</span>`,
+    "",
+    `<span class="secondary">Kills   </span> <span class="bright bold">${SESSION.kills}</span>  <span class="secondary">Deaths </span><span class="red">${SESSION.deaths}</span>`,
+    `<span class="secondary">XP      </span> <span class="bright">${(SESSION.xp / 1_000_000).toFixed(2)}M</span>   <span class="green">+${(SESSION.xpPerHour / 1000).toFixed(0)}k/h</span>`,
+    `<span class="secondary">XP 15m  </span> <span class="cyan">+${(SESSION.xp15m / 1000).toFixed(0)}k</span>`,
+    `<span class="secondary">Plat    </span> <span class="bright">${SESSION.plat.toFixed(1)}</span>    <span class="green">+${SESSION.platPerHour.toFixed(1)}/h</span>`,
+  ];
+  return panel(lines, { width: SIDEBAR_W, title: `▸LEDGER·SESSION·${SESSION.mode.toUpperCase()}`, color: "magenta" });
+}
+
+function combatBox() {
+  const ch = SESSION.chChain;
+  const lines = [
+    `<span class="secondary">Main Assist</span>  <span class="highlight bold">${SESSION.mainAssist}</span>`,
+    `<span class="secondary">Main Tank  </span>  <span class="highlight bold">${SESSION.mainTank}</span>`,
+    "",
+    `<span class="secondary">CH Chain</span>     <span class="${ch.members >= 3 ? "green" : "amber"} bold">${ch.members} clerics</span> <span class="muted">@</span> <span class="bright">${ch.intervalSecs.toFixed(1)}s</span>`,
+    `<span class="secondary">Adaptive</span>     <span class="${ch.adaptive ? "green" : "muted"}">${ch.adaptive ? "ON" : "off"}</span>`,
+    `<span class="secondary">Chain Target</span> <span class="highlight">${SESSION.mainTank}</span>`,
+    "",
+    `<span class="secondary">Last CH</span>      <span class="bright">CH#142</span> <span class="muted">fired 12:04:16.5</span>`,
+    `<span class="secondary">Next CH</span>      <span class="cyan">CH#143</span> <span class="muted">in 2.4s</span>`,
+  ];
+  return panel(lines, { width: SIDEBAR_W, title: "▸TACTICS·COMBAT·CH CHAIN", color: "magenta" });
+}
+
+// ─── Side-by-side composition ────────────────────────────────────────
+function composeTwoColumn(left, right) {
+  const L = left.split("\n");
+  const R = right.split("\n");
+  const rows = Math.max(L.length, R.length);
+  const blankL = " ".repeat(MAIN_W);
+  const blankR = " ".repeat(SIDEBAR_W);
+  const out = [];
+  for (let i = 0; i < rows; i++) {
+    const l = L[i] ?? blankL;
+    const r = R[i] ?? blankR;
+    // Pad left to MAIN_W visible chars (it already is, but safety)
+    out.push(l + " " + r);
+  }
+  return out.join("\n");
+}
+
+function renderOverview(selectedIdx = 2) {
+  const c = CLIENTS[selectedIdx];
+  const sidebar = [condBox(c), castBox(c), groupsBox(), sessionBox(), combatBox()].join("\n");
+  return composeTwoColumn(rosterTable(selectedIdx), sidebar);
+}
+
+TQ.renderOverview = renderOverview;
+})();
+
+// --- screen_tactical.js ---
+(function(){
+// screen_tactical.js — Screen 2: Tactical map + camp intel.
+// Chunky magenta architecture + flavored right rail.
+
+const CLIENTS = TQ.CLIENTS;
+const SESSION = TQ.SESSION;
+const panel = TQ.panel;
+const pad = TQ.pad;
+const vlen = TQ.vlen;
+const row = TQ.row;
+const bar = TQ.bar;
+const BOX = TQ.BOX;
+const W = TQ.W, MAIN_W = TQ.MAIN_W, SIDEBAR_W = TQ.SIDEBAR_W;
+
+const TILE_W = 2;
+const COLS = Math.floor((MAIN_W - 6) / TILE_W);
+const ROWS = 22;
+
+function buildLayout() {
+  const g = Array.from({ length: ROWS }, () => Array(COLS).fill(" "));
+  const rect = (r0, c0, r1, c1, fill = ".") => {
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (g[r] && c<COLS) g[r][c] = fill;
+  };
+  const wall = (r0, c0, r1, c1) => {
+    for (let c = c0; c <= c1; c++) { if(g[r0]&&c<COLS) g[r0][c] = "#"; if(g[r1]&&c<COLS) g[r1][c] = "#"; }
+    for (let r = r0; r <= r1; r++) { if(g[r]&&c0<COLS) g[r][c0] = "#"; if(g[r]&&c1<COLS) g[r][c1] = "#"; }
+  };
+
+  // Main chamber (Fear Camp anchor)
+  rect(6, 4, 14, 18);  wall(6, 4, 14, 18);
+  // Corridor east
+  rect(9, 18, 11, 26); wall(9, 18, 11, 26);
+  // Ritual chamber
+  rect(6, 26, 14, 38); wall(6, 26, 14, 38);
+  // North antechamber
+  rect(2, 10, 6, 16);  wall(2, 10, 6, 16);
+  // North corridor
+  rect(2, 16, 4, 30);  wall(2, 16, 4, 30);
+  // North-east shrine
+  rect(1, 30, 5, 40);  wall(1, 30, 5, 40);
+  // South alcove
+  rect(14, 8, 18, 14); wall(14, 8, 18, 14);
+  // South-east pit
+  rect(14, 30, 19, 42); wall(14, 30, 19, 42);
+  // East ring
+  rect(10, 38, 14, 46); wall(10, 38, 14, 46);
+  // West stash
+  rect(8, 0, 12, 4);    wall(8, 0, 12, 4);
+
+  // Doors
+  if(g[10]) g[10][18] = "D";
+  if(g[10]) g[10][26] = "D";
+  if(g[6])  g[6][12]  = "D";
+  if(g[6])  g[6][32]  = "D";
+  if(g[4])  g[4][16]  = "D";
+  if(g[4])  g[4][30]  = "D";
+  if(g[14]) g[14][11] = "D";
+  if(g[14]) g[14][34] = "D";
+  if(g[12]) g[12][38] = "D";
+  if(g[10]) g[10][4]  = "D";
+
+  return g;
+}
+
+function placeTokens() {
+  const t = {};
+  const put = (r, c, ch, color) => { t[r+","+c] = { ch, color }; };
+  // Allies in main chamber
+  put(10, 10, "●", "cyan");
+  put( 9, 11, "●", "cyan");
+  put(11, 11, "●", "cyan");
+  put(10,  9, "●", "cyan");
+  put( 8,  9, "●", "cyan");
+  put(12, 11, "●", "cyan");
+  // Player
+  put(10, 14, "▲", "amber");
+  // Foes in ritual chamber
+  put(10, 30, "●", "red");
+  put( 9, 31, "●", "red");
+  put(11, 32, "●", "red");
+  put(10, 34, "●", "red");
+  put( 8, 32, "●", "red");
+  put(12, 30, "●", "red");
+  // Scattered
+  put( 3, 34, "●", "red");
+  put(16, 36, "●", "red");
+  put(17, 40, "●", "red");
+  put( 3, 12, "●", "red");
+  // Chest marker
+  put(12, 36, "◆", "amber");
+  put( 2, 36, "◆", "amber");
+  return t;
+}
+
+function renderMap() {
+  const g = buildLayout();
+  const tok = placeTokens();
+  const lines = [];
+  for (let r = 0; r < ROWS; r++) {
+    let out = "";
+    let lastColor = null;
+    let buf = "";
+    const flush = () => { if (buf) { out += '<span class="'+lastColor+'">'+buf+'</span>'; buf = ""; } };
+    for (let c = 0; c < COLS; c++) {
+      const cell = g[r][c];
+      const tk = tok[r+","+c];
+      let ch, color;
+      if (tk) { ch = tk.ch + " "; color = tk.color + " bold"; }
+      else if (cell === "#") { ch = "██"; color = "magenta"; }
+      else if (cell === "D") { ch = "† "; color = "amber bold"; }
+      else if (cell === ".") { ch = "· "; color = "dim"; }
+      else { ch = "  "; color = "dim"; }
+      if (color !== lastColor) { flush(); lastColor = color; }
+      buf += ch;
+    }
+    flush();
+    lines.push(out);
+  }
+  return lines;
+}
+
+function mapPanel() {
+  const mapLines = renderMap();
+  const titleInner = "· TACTICAL · PLANE OF FEAR · FEAR CAMP ·";
+  const titlePad = Math.max(0, Math.floor((MAIN_W - titleInner.length - 4) / 2));
+  const titleRow = " ".repeat(titlePad) + '<span class="magenta bold">' + titleInner + '</span>';
+
+  const metaLeft  = '<span class="muted">◂ ZONE 240</span>';
+  const metaRight = '<span class="muted">SCRY RANGE 240 UNITS ▸</span>';
+  const metaFill  = Math.max(1, MAIN_W - 4 - vlen(metaLeft) - vlen(metaRight));
+  const metaRow   = " " + metaLeft + " ".repeat(metaFill) + metaRight + " ";
+
+  const legend =
+    '<span class="amber bold">▲</span> <span class="secondary">you</span>' +
+    '   <span class="cyan bold">●</span> <span class="secondary">ally</span>' +
+    '   <span class="red bold">●</span> <span class="secondary">foe</span>' +
+    '   <span class="amber bold">◆</span> <span class="secondary">chest</span>' +
+    '   <span class="amber bold">†</span> <span class="secondary">door</span>' +
+    '   <span class="magenta">██</span> <span class="secondary">wall</span>';
+  const legendPad = Math.max(0, Math.floor((MAIN_W - vlen(legend) - 2) / 2));
+  const legendRow = " ".repeat(legendPad) + legend;
+
+  const indent = "   ";
+  const mapRendered = mapLines.map((l) => indent + l);
+
+  const b = BOX.rounded;
+  const out = [];
+  out.push('<span class="magenta">' + b.tl + b.h.repeat(MAIN_W - 2) + b.tr + '</span>');
+  out.push(row(metaRow, MAIN_W, "rounded", "magenta"));
+  out.push(row(titleRow, MAIN_W, "rounded", "magenta"));
+  out.push(row("", MAIN_W, "rounded", "magenta"));
+  for (const l of mapRendered) out.push(row(l, MAIN_W, "rounded", "magenta"));
+  out.push(row("", MAIN_W, "rounded", "magenta"));
+  out.push(row(legendRow, MAIN_W, "rounded", "magenta"));
+  out.push('<span class="magenta">' + b.bl + b.h.repeat(MAIN_W - 2) + b.br + '</span>');
+  return out.join("\n");
+}
+
+function headerRow(width, left, right) {
+  const b = BOX.rounded;
+  const top = '<span class="magenta">' + b.tl + b.h.repeat(width - 2) + b.tr + '</span>';
+  const fill = Math.max(1, width - 4 - vlen(left) - vlen(right));
+  const inner = " " + left + " ".repeat(fill) + right + " ";
+  const midLine = '<span class="magenta">' + b.v + '</span>' + inner + '<span class="magenta">' + b.v + '</span>';
+  const sep = '<span class="magenta">' + b.tLeft + b.h.repeat(width - 2) + b.tRight + '</span>';
+  return top + "\n" + midLine + "\n" + sep;
+}
+
+function kv(key, val) {
+  return '  <span class="secondary">' + pad(key, 8) + '</span> ' + val;
+}
+
+function scripturePanel() {
+  const W_ = SIDEBAR_W;
+  const b = BOX.rounded;
+  const left  = '<span class="magenta">▸ ROOM</span> <span class="magenta bold">CHAMBER SCRIPTURE</span>';
+  const right = '<span class="magenta">RITUAL HALL</span>';
+  const header = headerRow(W_, left, right);
+  const rows = [
+    kv("Zone",    '<span class="cyan">Plane of Fear</span>'),
+    kv("Room",    '<span class="bright">Ritual Hall of Cazic</span>'),
+    kv("Coords",  '<span class="secondary">(-1342, 788, 12)</span>'),
+    kv("Faction", '<span class="red">Fearlings</span> <span class="muted">·</span> <span class="red">KoS</span>'),
+    kv("Respawn", '<span class="amber">22 minutes</span>'),
+    kv("Zone-in", '<span class="secondary">Gate of Echoes · 62m</span>'),
+    "",
+    '  <span class="magenta">▸ GLYPHS ◂</span>',
+    "",
+    '  <span class="lav"><i>"Where obsidian meets</i></span>',
+    '  <span class="lav"><i>breath turns to stone.</i></span>',
+    '  <span class="lav"><i>The chamber\'s mouth</i></span>',
+    '  <span class="lav"><i>speaks in opcodes no</i></span>',
+    '  <span class="lav"><i>scribe should read</i></span>',
+    '  <span class="lav"><i>aloud."</i></span>',
+  ];
+  const out = [header];
+  for (const r of rows) out.push(row(r, W_, "rounded", "magenta"));
+  out.push('<span class="magenta">' + b.bl + b.h.repeat(W_ - 2) + b.br + '</span>');
+  return out.join("\n");
+}
+
+function glyphsPanel() {
+  const W_ = SIDEBAR_W;
+  const b = BOX.rounded;
+  const left  = '<span class="magenta">▸ WAYSTONES</span> <span class="magenta bold">MARKED GLYPHS</span>';
+  const right = '<span class="magenta">3 SET</span>';
+  const header = headerRow(W_, left, right);
+  const glyphRow = (g, label, coords) =>
+    '  <span class="magenta bold">' + g + '</span>  ' +
+    pad('<span class="secondary">' + label + '</span>', 22) +
+    '<span class="muted">' + coords + '</span>';
+  const rows = [
+    glyphRow("α", "Camp heart",   "(-1342,  788, 12)"),
+    glyphRow("β", "Loot pile",    "(-1298,  840, 12)"),
+    glyphRow("γ", "Safe exit",    "(-1410,  698, 12)"),
+    "",
+    '  <span class="muted">m·1 mark · m·2 jump · m·3 clear</span>',
+  ];
+  const out = [header];
+  for (const r of rows) out.push(row(r, W_, "rounded", "magenta"));
+  out.push('<span class="magenta">' + b.bl + b.h.repeat(W_ - 2) + b.br + '</span>');
+  return out.join("\n");
+}
+
+function fogPanel() {
+  const W_ = SIDEBAR_W;
+  const b = BOX.rounded;
+  const left  = '<span class="magenta">▸ VISION</span> <span class="magenta bold">FOG OF SCRYING</span>';
+  const right = '<span class="cyan">79% KNOWN</span>';
+  const header = headerRow(W_, left, right);
+  const revealed = bar(0.79, 1, 16, { color: "cyan" });
+  const rows = [
+    '  <span class="secondary">Revealed</span>    ' + revealed + ' <span class="cyan">79%</span>',
+    '  <span class="secondary">Rooms</span>       <span class="bright">11</span><span class="muted">/14 known</span>',
+    '  <span class="secondary">Traps</span>       <span class="amber">2 flagged</span>',
+    '  <span class="secondary">Chests</span>      <span class="bright">2 unsealed</span>',
+  ];
+  const out = [header];
+  for (const r of rows) out.push(row(r, W_, "rounded", "magenta"));
+  out.push('<span class="magenta">' + b.bl + b.h.repeat(W_ - 2) + b.br + '</span>');
+  return out.join("\n");
+}
+
+function composeTwoColumn(left, right) {
+  const L = left.split("\n");
+  const R = right.split("\n");
+  const rows = Math.max(L.length, R.length);
+  const blankL = " ".repeat(MAIN_W);
+  const blankR = " ".repeat(SIDEBAR_W);
+  const out = [];
+  for (let i = 0; i < rows; i++) out.push((L[i] ?? blankL) + " " + (R[i] ?? blankR));
+  return out.join("\n");
+}
+
+function renderTactical() {
+  const sidebar = [scripturePanel(), glyphsPanel(), fogPanel()].join("\n");
+  return composeTwoColumn(mapPanel(), sidebar);
+}
+
+TQ.renderTactical = renderTactical;
+})();
+
+// --- screen_navigation.js ---
+(function(){
+// screen_navigation.js — Screen 3: per-client route cards + blocker summary.
+
+const CLIENTS = TQ.CLIENTS;
+const NAV = TQ.NAV;
+const panel = TQ.panel;
+const pad = TQ.pad;
+const bar = TQ.bar;
+const W = TQ.W;
+
+const CARD_W = Math.floor((W - 2) / 2); // two cards per row, -2 for gap
+
+function navCard(c) {
+  const nav = NAV[c.pid];
+  const statusColor =
+    nav.status === "Stuck" ? "red" :
+    nav.status === "Holding" ? "amber" :
+    nav.status === "Moving" ? "cyan" : "secondary";
+  const eta = nav.status === "Moving" ? "12.4s" : nav.status === "Holding" ? "at anchor" : "—";
+
+  const lines = [
+    `<span class="secondary">Class    </span> <span class="highlight">${c.clsFull}</span>  <span class="muted">L${c.lvl}</span>   <span class="secondary">Group </span><span class="cyan">${c.group}</span>`,
+    `<span class="secondary">Zone     </span> <span class="bright">${c.zone}</span>`,
+    `<span class="secondary">Position </span> <span class="bright">${c.pos.y.toFixed(1)}, ${c.pos.x.toFixed(1)}, ${c.pos.z.toFixed(1)}</span>  <span class="muted">h${c.pos.h}</span>`,
+    "",
+    `<span class="secondary">Status   </span> <span class="${statusColor} bold">${nav.status}</span>   <span class="secondary">ETA </span><span class="bright">${eta}</span>`,
+    `<span class="secondary">Destination</span> <span class="cyan">${nav.dest}</span>`,
+    `<span class="secondary">Route    </span> <span class="secondary">${nav.route || "—"}</span>`,
+  ];
+
+  if (nav.stuck) {
+    lines.push("");
+    lines.push(`<span class="red bold">⚠ Blocker:</span> <span class="bright">${nav.blocker}</span>`);
+    lines.push(`<span class="muted">  retries 3/5 · fallback route queued · :nav unstick</span>`);
+  } else {
+    // Mini route progress
+    lines.push("");
+    lines.push(`<span class="secondary">Progress</span> ${bar(nav.status === "Holding" ? 1.0 : 0.42, 1, 28, { color: "cyan" })} <span class="bright">${nav.status === "Holding" ? "100%" : "42%"}</span>`);
+  }
+
+  const titleColor = nav.status === "Stuck" ? "red" : "magenta";
+  return panel(lines, { width: CARD_W, title: `▸CLIENT·${c.name}·${c.cls}`, color: titleColor });
+}
+
+function composeGrid(cards) {
+  // Pair cards two per row, left + " " + right
+  const rows = [];
+  for (let i = 0; i < cards.length; i += 2) {
+    const L = cards[i].split("\n");
+    const R = (cards[i + 1] || "").split("\n");
+    const h = Math.max(L.length, R.length);
+    const out = [];
+    for (let j = 0; j < h; j++) {
+      const l = L[j] ?? " ".repeat(CARD_W);
+      const r = R[j] ?? " ".repeat(CARD_W);
+      out.push(l + " " + r);
+    }
+    rows.push(out.join("\n"));
+  }
+  return rows.join("\n");
+}
+
+function blockerSummary() {
+  const lines = [
+    `<span class="red bold">1 blocker</span> · <span class="amber">1 stuck</span> · <span class="green">5 routing nominal</span>`,
+    "",
+    `<span class="red">⚠</span> <span class="bright">Kardek</span> <span class="muted">slot S06 · Plane of Fear</span>`,
+    `    <span class="secondary">blocker   </span> <span class="bright">obstacle: corpse pile @ (821,-1420)</span>`,
+    `    <span class="secondary">last move </span> <span class="bright">3.2s ago</span>   <span class="secondary">retries </span><span class="amber">3/5</span>`,
+    `    <span class="secondary">fallback  </span> <span class="cyan">mesh/fallback → fear.zone_in</span>`,
+    `    <span class="muted">resolution options: :nav unstick · :nav reroute · :nav force_tp</span>`,
+  ];
+  return panel(lines, { width: W, title: "▸WARDS·NAV BLOCKERS·1 ACTIVE", color: "red" });
+}
+
+function renderNavigation() {
+  const cards = CLIENTS.map(navCard);
+  return blockerSummary() + "\n" + composeGrid(cards);
+}
+
+TQ.renderNavigation = renderNavigation;
+})();
+
+// --- screen_debug.js ---
+(function(){
+// screen_debug.js — Screen 4: Spawns table + hex dump pane.
+const SPAWNS = TQ.SPAWNS;
+const panel = TQ.panel;
+const pad = TQ.pad;
+const W = TQ.W;
+const MAIN_W = TQ.MAIN_W;
+const SIDEBAR_W = TQ.SIDEBAR_W;
+
+function spawnsTable(selIdx = 0) {
+  const cols = [
+    { label: "", w: 2 },
+    { label: "ID", w: 7, align: "right" },
+    { label: "Name", w: 26 },
+    { label: "Type", w: 7 },
+    { label: "Cls", w: 4 },
+    { label: "Lvl", w: 4, align: "right" },
+    { label: "HP%", w: 5, align: "right" },
+    { label: "Y", w: 8, align: "right" },
+    { label: "X", w: 8, align: "right" },
+    { label: "Z", w: 6, align: "right" },
+    { label: "State", w: 6 },
+  ];
+  const innerW = MAIN_W - 2;
+  const header = cols.map((c) => pad(`<span class="secondary">${c.label}</span>`, c.w, c.align)).join(" ");
+  const rows = [header, `<span class="dim">${"─".repeat(innerW)}</span>`];
+  SPAWNS.forEach((s, i) => {
+    const sel = i === selIdx;
+    const cur = sel ? `<span class="magenta bold">▶</span> ` : `  `;
+    const typeCol = s.type === "Named" ? "spawn-named" : s.type === "Corpse" ? "muted" : "spawn-npc";
+    const name = sel
+      ? `<span class="inv-magenta">${pad(s.name, 26)}</span>`
+      : `<span class="${typeCol}">${pad(s.name, 26)}</span>`;
+    const hpCol = s.hp > 60 ? "hp-high" : s.hp > 30 ? "hp-mid" : s.hp === 0 ? "muted" : "hp-low";
+    rows.push(
+      `${cur}` +
+      pad(`<span class="bright">${s.id}</span>`, 7, "right") + " " +
+      name + " " +
+      pad(`<span class="${typeCol}">${s.type}</span>`, 7) + " " +
+      pad(`<span class="highlight">${s.cls}</span>`, 4) + " " +
+      pad(`<span class="bright">${s.lvl}</span>`, 4, "right") + " " +
+      pad(`<span class="${hpCol}">${s.hp}</span>`, 5, "right") + " " +
+      pad(`<span class="bright">${s.y}</span>`, 8, "right") + " " +
+      pad(`<span class="bright">${s.x}</span>`, 8, "right") + " " +
+      pad(`<span class="bright">${s.z}</span>`, 6, "right") + " " +
+      pad(`<span class="${s.state === "Dead" ? "muted" : "bright"}">${s.state}</span>`, 6)
+    );
+  });
+  rows.push("");
+  rows.push(`<span class="muted">filter:</span> <span class="cyan">type=*</span> <span class="muted">·</span> <span class="cyan">hp>0</span> <span class="muted">·</span> showing 9 / 47`);
+  return panel(rows, { width: MAIN_W, title: `▸ORACLE·SPAWNS·${SPAWNS.length} TRACKED`, color: "magenta", foot: "↑↓ select  ·  / filter  ·  t target  ·  i inspect  ·  d dump" });
+}
+
+function hexDump() {
+  const s = SPAWNS[0];
+  const lines = [
+    `<span class="secondary">inspect</span> <span class="bright bold">${s.name}</span> <span class="muted">(id ${s.id}, 0x${s.id.toString(16).toUpperCase()})</span>`,
+    "",
+    `<span class="secondary">struct Spawn</span> <span class="muted">{</span>`,
+    `  <span class="cyan">entity_id</span>   = <span class="bright">${s.id}</span>`,
+    `  <span class="cyan">name</span>        = <span class="amber">"${s.name}"</span>`,
+    `  <span class="cyan">type</span>        = <span class="magenta">SpawnType::Named</span>`,
+    `  <span class="cyan">class_id</span>    = <span class="bright">7</span> <span class="muted">/* SHD */</span>`,
+    `  <span class="cyan">level</span>       = <span class="bright">${s.lvl}</span>`,
+    `  <span class="cyan">hp_pct</span>      = <span class="amber">${s.hp}</span>`,
+    `  <span class="cyan">pos</span>         = <span class="bright">(${s.y}.0, ${s.x}.0, ${s.z}.0)</span>`,
+    `  <span class="cyan">heading</span>     = <span class="bright">112</span>`,
+    `  <span class="cyan">flags</span>       = <span class="magenta">NAMED | AGGRO | SEE_INVIS</span>`,
+    `<span class="muted">}</span>`,
+    "",
+    `<span class="secondary">raw bytes</span> <span class="muted">(first 64)</span>`,
+    `<span class="muted">0000</span>  <span class="cyan">f5 47 00 00</span> <span class="bright">43 61 7a 69</span> <span class="bright">63 2d 54 68</span> <span class="bright">75 6c 65 00</span>  <span class="muted">│</span> <span class="amber">.G..Cazic-Thule.</span>`,
+    `<span class="muted">0010</span>  <span class="cyan">00 00 00 00</span> <span class="cyan">07 00 00 00</span> <span class="cyan">42 00 00 00</span> <span class="cyan">40 00 00 00</span>  <span class="muted">│</span> <span class="amber">........B...@...</span>`,
+    `<span class="muted">0020</span>  <span class="bright">00 00 4b 44</span> <span class="bright">00 00 ae c3</span> <span class="bright">00 00 40 40</span> <span class="bright">70 00 00 00</span>  <span class="muted">│</span> <span class="amber">..KD......@@p...</span>`,
+    `<span class="muted">0030</span>  <span class="magenta">0e 00 00 00</span> <span class="magenta">00 00 00 00</span> <span class="magenta">00 00 00 00</span> <span class="magenta">00 00 00 00</span>  <span class="muted">│</span> <span class="amber">................</span>`,
+  ];
+  return panel(lines, { width: SIDEBAR_W, title: "▸SCRIBE·HEX DUMP·0x1F24", color: "cyan", titleColor: "bright" });
+}
+
+function composeTwo(left, right) {
+  const L = left.split("\n"), R = right.split("\n");
+  const h = Math.max(L.length, R.length);
+  const out = [];
+  for (let i = 0; i < h; i++) out.push((L[i] ?? " ".repeat(MAIN_W)) + " " + (R[i] ?? " ".repeat(SIDEBAR_W)));
+  return out.join("\n");
+}
+
+function renderDebug() {
+  return composeTwo(spawnsTable(0), hexDump());
+}
+
+TQ.renderDebug = renderDebug;
+})();
+
+// --- screen_packets.js ---
+(function(){
+// screen_packets.js — Screen 5: Packet stream + filter bar + detail.
+const PACKETS = TQ.PACKETS;
+const panel = TQ.panel;
+const pad = TQ.pad;
+const W = TQ.W;
+const MAIN_W = TQ.MAIN_W;
+const SIDEBAR_W = TQ.SIDEBAR_W;
+
+function streamTable(selIdx = 5) {
+  const cols = [
+    { label: "", w: 2 },
+    { label: "Time", w: 13 },
+    { label: "Dir", w: 4 },
+    { label: "Opcode", w: 22 },
+    { label: "Size", w: 5, align: "right" },
+    { label: "Payload (first 16 bytes)", w: 50 },
+  ];
+  const innerW = MAIN_W - 2;
+  const header = cols.map((c) => pad(`<span class="secondary">${c.label}</span>`, c.w, c.align)).join(" ");
+  const rows = [header, `<span class="dim">${"─".repeat(innerW)}</span>`];
+  PACKETS.forEach((p, i) => {
+    const sel = i === selIdx;
+    const cur = sel ? `<span class="magenta bold">▶</span> ` : `  `;
+    const dirCol = p.dir === "S→C" ? "cyan" : "green";
+    const opCol = p.op.includes("HP") || p.op.includes("Mana") ? "amber" : p.op.includes("Cast") ? "magenta" : p.op.includes("Damage") ? "red" : "bright";
+    const name = sel
+      ? `<span class="inv-magenta">${pad(p.op, 22)}</span>`
+      : `<span class="${opCol}">${pad(p.op, 22)}</span>`;
+    rows.push(
+      `${cur}` +
+      pad(`<span class="secondary">${p.t}</span>`, 13) + " " +
+      pad(`<span class="${dirCol}">${p.dir}</span>`, 4) + " " +
+      name + " " +
+      pad(`<span class="bright">${p.size}</span>`, 5, "right") + " " +
+      pad(`<span class="muted">${p.hex}</span>`, 50)
+    );
+  });
+  rows.push("");
+  rows.push(`<span class="secondary">filter:</span> <span class="cyan">op=*</span> <span class="muted">·</span> <span class="cyan">dir=any</span> <span class="muted">·</span> <span class="cyan">client=*</span> <span class="muted">·</span> <span class="green">▶ live</span>  <span class="muted">(${PACKETS.length} rows · 1,248 since 11:42)</span>`);
+  return panel(rows, { width: MAIN_W, title: "▸WHISPERS·PACKET STREAM·1,248 CAPTURED", color: "magenta", foot: "↑↓ select  ·  / filter  ·  p pause  ·  space mark  ·  e export" });
+}
+
+function packetDetail() {
+  const p = PACKETS[5];
+  const lines = [
+    `<span class="secondary">captured</span> <span class="bright">${p.t}</span>   <span class="secondary">dir</span> <span class="cyan">${p.dir}</span>`,
+    `<span class="secondary">opcode  </span> <span class="magenta bold">${p.op}</span> <span class="muted">(0x${(0x4100).toString(16).toUpperCase()})</span>`,
+    `<span class="secondary">size    </span> <span class="bright">${p.size} bytes</span>`,
+    `<span class="secondary">client  </span> <span class="highlight">Sylunariel</span> <span class="muted">(pid 4826)</span>`,
+    "",
+    `<span class="secondary">decoded</span>`,
+    `  <span class="cyan">caster_id</span>    = <span class="bright">4826</span>  <span class="muted">// Sylunariel</span>`,
+    `  <span class="cyan">target_id</span>    = <span class="bright">4829</span>  <span class="muted">// Thurgrek</span>`,
+    `  <span class="cyan">spell_id</span>     = <span class="bright">1000</span>  <span class="muted">// Complete Healing</span>`,
+    `  <span class="cyan">cast_time_ms</span> = <span class="bright">10000</span>`,
+    `  <span class="cyan">gem_slot</span>     = <span class="bright">7</span>`,
+    "",
+    `<span class="secondary">hex</span>`,
+    `<span class="muted">0000</span>  ${p.hex}`,
+  ];
+  return panel(lines, { width: SIDEBAR_W, title: "▸VISION·PACKET DETAIL·DECODED", color: "cyan", titleColor: "bright" });
+}
+
+function composeTwo(left, right) {
+  const L = left.split("\n"), R = right.split("\n");
+  const h = Math.max(L.length, R.length);
+  const out = [];
+  for (let i = 0; i < h; i++) out.push((L[i] ?? " ".repeat(MAIN_W)) + " " + (R[i] ?? " ".repeat(SIDEBAR_W)));
+  return out.join("\n");
+}
+
+function renderPackets() { return composeTwo(streamTable(), packetDetail()); }
+
+TQ.renderPackets = renderPackets;
+})();
+
+// --- screen_economy.js ---
+(function(){
+// screen_economy.js — Screen 6: Vendor / Bank cycle controls.
+const ECONOMY = TQ.ECONOMY;
+const panel = TQ.panel;
+const pad = TQ.pad;
+const bar = TQ.bar;
+const W = TQ.W;
+const MAIN_W = TQ.MAIN_W;
+const SIDEBAR_W = TQ.SIDEBAR_W;
+
+function cycleStatus() {
+  const lines = [
+    `<span class="secondary">Cycle State</span>   <span class="green bold">${ECONOMY.state}</span> · <span class="bright">${ECONOMY.stage}</span>`,
+    `<span class="secondary">Current Slot</span>  <span class="highlight bold">${ECONOMY.currentSlot}</span>`,
+    `<span class="secondary">Stage Started</span> <span class="bright">${ECONOMY.stageStarted}</span>`,
+    `<span class="secondary">Cycle Started</span> <span class="bright">${ECONOMY.cycleStarted}</span>`,
+    `<span class="secondary">Cycles Today</span>  <span class="bright">${ECONOMY.cyclesToday}</span>`,
+    `<span class="secondary">Next Cycle In</span> <span class="cyan">${ECONOMY.nextCycleIn}</span>`,
+    "",
+    `<span class="secondary">Vendor</span>  <span class="magenta">${ECONOMY.vendor}</span>`,
+    `<span class="secondary">Bank  </span>  <span class="magenta">${ECONOMY.bank}</span>`,
+    "",
+    `<span class="secondary">Plat (pocket)</span>  <span class="bright bold">${ECONOMY.plat.toFixed(1)}</span>`,
+    `<span class="secondary">Plat (banked)</span>  <span class="bright">${ECONOMY.bankedPlat.toLocaleString()}</span>`,
+  ];
+  return panel(lines, { width: MAIN_W, title: "▸LEDGER·VENDOR CYCLE·RUNNING", color: "magenta", foot: "s start  ·  S stop  ·  x skip client  ·  r reload rules" });
+}
+
+function rosterTable() {
+  const cols = [
+    { label: "Slot", w: 16 },
+    { label: "Status", w: 10 },
+    { label: "Plat", w: 6, align: "right" },
+    { label: "Bags", w: 6 },
+    { label: "Reason / Notes", w: 34 },
+  ];
+  const innerW = MAIN_W - 2;
+  const header = cols.map((c) => pad(`<span class="secondary">${c.label}</span>`, c.w, c.align)).join("  ");
+  const rows = [header, `<span class="dim">${"─".repeat(innerW)}</span>`];
+  ECONOMY.roster.forEach((r) => {
+    const statusCol =
+      r.status === "Active" ? "amber" :
+      r.status === "Done" ? "green" :
+      r.status === "Queued" ? "cyan" :
+      r.status === "Skipped" ? "muted" : "bright";
+    const nameCol = r.status === "Active" ? "inv-amber" : "bright";
+    const name = r.status === "Active" ? `<span class="inv-amber"> ${pad(r.name, 14)} </span>` : `<span class="${nameCol}">${pad(r.name, 16)}</span>`;
+    const notes = r.reason ? `<span class="muted">skip: </span><span class="amber">${r.reason}</span>` : r.status === "Done" ? `<span class="muted">cycle complete · bagged 3 lore items</span>` : r.status === "Active" ? `<span class="cyan">selling 14 items · 20% through</span>` : `<span class="muted">waiting in queue</span>`;
+    rows.push(
+      name + "  " +
+      pad(`<span class="${statusCol}">${r.status}</span>`, 10) + "  " +
+      pad(`<span class="bright">${r.plat}</span>`, 6, "right") + "  " +
+      pad(`<span class="secondary">${r.bags}</span>`, 6) + "  " +
+      pad(notes, 34)
+    );
+  });
+  return panel(rows, { width: MAIN_W, title: "▸FORMATION·ROSTER·ECONOMY", color: "magenta" });
+}
+
+function rulesBox() {
+  const lines = ECONOMY.rules.map((r, i) => `  <span class="cyan">${i + 1}.</span> <span class="bright">${r}</span>`);
+  lines.unshift(`<span class="secondary">active rule set</span> <span class="bright">default.ron</span>  <span class="muted">(4 rules)</span>`);
+  lines.push("");
+  lines.push(`<span class="muted">rules load from ~/.config/textquest/economy/</span>`);
+  lines.push(`<span class="muted">press e to edit · r to reload · t to test</span>`);
+  return panel(lines, { width: SIDEBAR_W, title: "▸CODEX·RULES·~/.config", color: "cyan", titleColor: "bright" });
+}
+
+function ledgerBox() {
+  const lines = [
+    `<span class="secondary">Today</span>`,
+    `  <span class="secondary">Earned </span>  <span class="green">+2,418 pp</span>`,
+    `  <span class="secondary">Vendor </span>  <span class="cyan">+1,902 pp</span>`,
+    `  <span class="secondary">Loot   </span>  <span class="amber">+516 pp</span>`,
+    "",
+    `<span class="secondary">Last Cycle</span>`,
+    `  <span class="secondary">Sold   </span>  <span class="bright">42 items</span>`,
+    `  <span class="secondary">Banked </span>  <span class="bright">12,480 pp</span>`,
+    `  <span class="secondary">Skipped</span>  <span class="amber">2 (combat)</span>`,
+  ];
+  return panel(lines, { width: SIDEBAR_W, title: "▸TREASURY·LEDGER·SESSION", color: "magenta" });
+}
+
+function composeTwo(left, right) {
+  const L = left.split("\n"), R = right.split("\n");
+  const h = Math.max(L.length, R.length);
+  const out = [];
+  for (let i = 0; i < h; i++) out.push((L[i] ?? " ".repeat(MAIN_W)) + " " + (R[i] ?? " ".repeat(SIDEBAR_W)));
+  return out.join("\n");
+}
+
+function renderEconomy() {
+  const main = cycleStatus() + "\n" + rosterTable();
+  const right = rulesBox() + "\n" + ledgerBox();
+  return composeTwo(main, right);
+}
+
+TQ.renderEconomy = renderEconomy;
+})();
+
+// --- screen_orchestrator.js ---
+(function(){
+// screen_orchestrator.js — Screen 7: Fleet ops board (slot lifecycle + signals).
+const ORCHESTRATOR = TQ.ORCHESTRATOR;
+const panel = TQ.panel;
+const pad = TQ.pad;
+const bar = TQ.bar;
+const W = TQ.W;
+const MAIN_W = TQ.MAIN_W;
+const SIDEBAR_W = TQ.SIDEBAR_W;
+
+function intentHeader() {
+  const lines = [
+    `<span class="secondary">Active Intent</span>   <span class="magenta bold">${ORCHESTRATOR.intent}</span>`,
+    `<span class="secondary">Phase        </span>   <span class="${ORCHESTRATOR.phase === "Execute" ? "green" : "cyan"} bold">${ORCHESTRATOR.phase}</span>`,
+    `<span class="secondary">Cadence      </span>   <span class="bright">${ORCHESTRATOR.cadence.toFixed(1)} Hz</span>   <span class="muted">tick ${ORCHESTRATOR.lastTick}</span>`,
+  ];
+  return panel(lines, { width: MAIN_W, title: "▸FLEET·ORCHESTRATOR·LIVE", color: "magenta", foot: "p pause  ·  r resume  ·  A abort intent  ·  enter drill into slot" });
+}
+
+function slotsTable() {
+  const cols = [
+    { label: "Slot", w: 5 },
+    { label: "Name", w: 14 },
+    { label: "State", w: 12 },
+    { label: "FSM", w: 14 },
+    { label: "Lat", w: 6, align: "right" },
+    { label: "Health", w: 22 },
+    { label: "Profile", w: 26 },
+  ];
+  const innerW = MAIN_W - 2;
+  const header = cols.map((c) => pad(`<span class="secondary">${c.label}</span>`, c.w, c.align)).join("  ");
+  const rows = [header, `<span class="dim">${"─".repeat(innerW)}</span>`];
+  ORCHESTRATOR.slots.forEach((s) => {
+    const stateCol =
+      s.state === "Live" ? "green" :
+      s.state === "Recovering" ? "amber" :
+      s.state === "Blocked" ? "red" :
+      s.state === "Configured" ? "cyan" : "muted";
+    const health = s.state === "Live"
+      ? `<span class="green">${"█".repeat(18)}</span> <span class="bright">OK</span>`
+      : s.state === "Recovering"
+      ? `<span class="amber">${"█".repeat(11)}</span><span class="dim">${"·".repeat(7)}</span> <span class="amber">RCV</span>`
+      : s.state === "Blocked"
+      ? `<span class="red">${"█".repeat(2)}</span><span class="dim">${"·".repeat(16)}</span> <span class="red">BLK</span>`
+      : `<span class="dim">${"·".repeat(18)}</span> <span class="muted">OFF</span>`;
+    rows.push(
+      pad(`<span class="highlight">${s.slot}</span>`, 5) + "  " +
+      pad(`<span class="bright">${s.name}</span>`, 14) + "  " +
+      pad(`<span class="${stateCol} bold">${s.state}</span>`, 12) + "  " +
+      pad(`<span class="cyan">${s.fsm}</span>`, 14) + "  " +
+      pad(s.latencyMs ? `<span class="${s.latencyMs > 30 ? "amber" : "green"}">${s.latencyMs}ms</span>` : `<span class="muted">—</span>`, 6, "right") + "  " +
+      pad(health, 22) + "  " +
+      pad(`<span class="secondary">${s.profile}</span>`, 26)
+    );
+  });
+  return panel(rows, { width: MAIN_W, title: "▸SLOTS·SLOT LIFECYCLE·6 LIVE", color: "magenta" });
+}
+
+function signalsFeed() {
+  const lines = ORCHESTRATOR.signals.map((s) => {
+    const kCol =
+      s.kind === "CH" ? "cyan" :
+      s.kind === "NAV" ? "amber" :
+      s.kind === "ALERT" ? "red" :
+      s.kind === "XP" ? "green" :
+      s.kind === "LOOT" ? "magenta" :
+      s.kind === "CAST" ? "cyan" : "bright";
+    return `<span class="muted">${s.t}</span>  <span class="${kCol} bold">${pad(s.kind, 5)}</span>  <span class="bright">${s.msg}</span>`;
+  });
+  return panel(lines, { width: SIDEBAR_W, title: "▸AETHER·SIGNAL FEED·LIVE", color: "cyan", titleColor: "bright" });
+}
+
+function phaseTimelineBox() {
+  const lines = [
+    `<span class="muted">11:42</span>  <span class="cyan">Initialize</span>   <span class="muted">── attach to fleet (6/6 slots)</span>`,
+    `<span class="muted">11:43</span>  <span class="cyan">Plan</span>         <span class="muted">── loaded ch-chain.alpha</span>`,
+    `<span class="muted">11:44</span>  <span class="cyan">Prepare</span>      <span class="muted">── nav to fear.camp (all)</span>`,
+    `<span class="muted">11:52</span>  <span class="green">Execute</span>      <span class="bright">── running (2h 12m)</span>`,
+    "",
+    `<span class="secondary">next: </span><span class="magenta">Checkpoint</span> <span class="muted">at kills=150</span>`,
+  ];
+  return panel(lines, { width: SIDEBAR_W, title: "▸PULSE·PHASE TIMELINE·KILLS", color: "magenta" });
+}
+
+function composeTwo(left, right) {
+  const L = left.split("\n"), R = right.split("\n");
+  const h = Math.max(L.length, R.length);
+  const out = [];
+  for (let i = 0; i < h; i++) out.push((L[i] ?? " ".repeat(MAIN_W)) + " " + (R[i] ?? " ".repeat(SIDEBAR_W)));
+  return out.join("\n");
+}
+
+function renderOrchestrator() {
+  const main = intentHeader() + "\n" + slotsTable();
+  const right = signalsFeed() + "\n" + phaseTimelineBox();
+  return composeTwo(main, right);
+}
+
+TQ.renderOrchestrator = renderOrchestrator;
+})();
+
+// --- overlays.js ---
+(function(){
+// overlays.js — Help, Command, Config, CH-Chain, Wizard, Menu bar, Alert feed, Toast.
+const ALERTS = TQ.ALERTS;
+const MENUBAR = TQ.MENUBAR;
+const SESSION = TQ.SESSION;
+const CLIENTS = TQ.CLIENTS;
+const panel = TQ.panel;
+const pad = TQ.pad;
+const W = TQ.W;
+
+// Centered width for dialog overlays
+const DLG_W = 96;
+
+function renderHelp() {
+  const sections = [
+    ["Navigation", [
+      ["1-7",        "Jump to screen (Char / Map / Nav / Dbg / Pkt / Eco / Orc)"],
+      ["Tab / ⇧Tab", "Cycle pane within current screen"],
+      ["[ / ]",      "Previous / next client"],
+      ["g",          "Cycle focus group"],
+      ["F10",        "Open menu bar"],
+    ]],
+    ["Overlays", [
+      ["?",  "Toggle this help"],
+      [":",  "Command mode (:assist, :pull, :ch, :mode, :nav)"],
+      ["F2", "Open config tree"],
+      ["F3", "Open CH-chain panel"],
+      ["F8", "Toggle alert feed"],
+      ["F4", "Launch fleet wizard"],
+    ]],
+    ["Combat / Ops", [
+      ["a",  "Assist main assist"],
+      ["p",  "Pull current target"],
+      ["e / d", "Engage all / disengage"],
+      ["c / s", "Start / stop CH chain"],
+      ["l",  "Loot all corpses in range"],
+    ]],
+    ["Roster / Debug", [
+      ["↑ ↓", "Select row"],
+      ["/",  "Filter current list"],
+      ["t",  "Set target from selection"],
+      ["i",  "Inspect raw packet / spawn"],
+      ["m",  "Toggle Camp ↔ Hunt mode"],
+    ]],
+  ];
+  const lines = [];
+  for (const [title, pairs] of sections) {
+    lines.push(`<span class="magenta bold">${title}</span>`);
+    for (const [k, v] of pairs) {
+      lines.push(`  <span class="inv-cyan"> ${pad(k, 8)} </span>  <span class="bright">${v}</span>`);
+    }
+    lines.push("");
+  }
+  lines.pop();
+  return panel(lines, { width: DLG_W, title: "Help · Keybinds (press ? to close)", color: "cyan", titleColor: "bright" });
+}
+
+function renderCommand() {
+  const lines = [
+    `<span class="secondary">suggestions</span>`,
+    `  <span class="cyan">:assist</span>         <span class="muted">assist the main assist</span>`,
+    `  <span class="cyan">:pull [target]</span>  <span class="muted">send puller to target or selected</span>`,
+    `  <span class="cyan">:ch start|stop|adaptive on|off</span>`,
+    `  <span class="cyan">:mode camp|hunt</span>`,
+    `  <span class="cyan">:nav &lt;dest&gt;</span>  <span class="muted">move all / focus group to named location</span>`,
+    `  <span class="cyan">:vendor run|skip|abort</span>`,
+    "",
+    `<span class="magenta bold">: </span><span class="bright">nav fear.ch_anchor focus=G2</span><span class="magenta">█</span>`,
+  ];
+  return panel(lines, { width: DLG_W, title: "Command mode", color: "magenta" });
+}
+
+function renderConfig() {
+  const tree = [
+    [0, "▾", "textquest", "bright"],
+    [1, "▾", "fleet", "cyan"],
+    [2, "·", "roster_path", "secondary", "/home/op/eq/roster.ron"],
+    [2, "·", "profile_dir", "secondary", "~/.config/textquest/profiles"],
+    [1, "▾", "combat", "cyan"],
+    [2, "·", "ch_chain.members", "secondary", "3"],
+    [2, "·", "ch_chain.interval_secs", "secondary", "5.0"],
+    [2, "▸", "ch_chain.adaptive", "green", "true"],
+    [2, "·", "engage_on_assist", "secondary", "true"],
+    [1, "▾", "nav", "cyan"],
+    [2, "·", "mesh_file", "secondary", "fear.mesh"],
+    [2, "·", "stuck_retry_limit", "secondary", "5"],
+    [1, "▾", "economy", "cyan"],
+    [2, "·", "rules_file", "secondary", "default.ron"],
+    [2, "·", "cycle_interval", "secondary", "3600s"],
+    [1, "▾", "ui", "cyan"],
+    [2, "·", "theme", "secondary", "neriak"],
+    [2, "·", "width_class", "secondary", "auto"],
+    [2, "▸", "privacy_mode", "amber", "false"],
+  ];
+  const lines = tree.map(([depth, glyph, key, col, val]) => {
+    const indent = "  ".repeat(depth);
+    const g = `<span class="magenta">${glyph}</span>`;
+    const k = `<span class="${col}">${key}</span>`;
+    const v = val ? ` <span class="muted">=</span> <span class="bright">${val}</span>` : "";
+    return `${indent}${g} ${k}${v}`;
+  });
+  return panel(lines, { width: DLG_W, title: "Config · ~/.config/textquest/config.ron", color: "cyan", titleColor: "bright", foot: "↑↓ navigate  ·  enter edit  ·  s save  ·  r reload" });
+}
+
+function renderChChain() {
+  const lines = [
+    `<span class="secondary">Status  </span>  <span class="green bold">Active</span>   <span class="secondary">Adaptive</span>  <span class="green">ON</span>`,
+    `<span class="secondary">Members </span>  <span class="bright">3 clerics</span> <span class="muted">·</span> interval <span class="bright">5.0s</span>`,
+    `<span class="secondary">Chained </span>  target <span class="highlight">${SESSION.mainTank}</span>`,
+    "",
+    `<span class="bright bold">Slot schedule</span>`,
+    `  <span class="cyan">Sylunariel</span>   T+0.0s   <span class="muted">CH #142</span>  <span class="green">✓ 12:04:16.5</span>`,
+    `  <span class="cyan">Aelwyn</span>       T+1.7s   <span class="muted">CH #143</span>  <span class="amber">◷ 0.6s out</span>`,
+    `  <span class="cyan">Morrigaine</span>   T+3.4s   <span class="muted">CH #144</span>  <span class="dim">queued</span>`,
+    "",
+    `<span class="secondary">Adaptive</span> expanded interval 4.8s → 5.0s on last safety check.`,
+    `<span class="muted">Configured failsafes: resist-retry, OOM-fallback, tank-death abort.</span>`,
+  ];
+  return panel(lines, { width: DLG_W, title: "▸TACTICS·CH CHAIN·ACTIVE", color: "magenta" });
+}
+
+function renderWizard() {
+  const lines = [
+    `<span class="cyan bold">Step 2 of 5</span> · <span class="bright">Choose fleet profile</span>`,
+    "",
+    `  <span class="magenta">◉</span> <span class="bright">6-box Cleric Core</span>     <span class="muted">CH chain, MT war, 1 puller, 1 mez, 2 DPS</span>`,
+    `  <span class="muted">○</span> <span class="secondary">Molo Pair</span>              <span class="muted">necro + chanter, light automation</span>`,
+    `  <span class="muted">○</span> <span class="secondary">Raid Cleric (12)</span>       <span class="muted">heavy CH rotation, no tanks</span>`,
+    `  <span class="muted">○</span> <span class="secondary">Vendor Mule</span>             <span class="muted">economy-only, no combat</span>`,
+    `  <span class="muted">○</span> <span class="secondary">Custom...</span>              <span class="muted">blank slate</span>`,
+    "",
+    `<span class="muted">──────────────────────────────────────────────────────────────────────────────────────────</span>`,
+    ``,
+    `<span class="secondary">Zone  </span>  <span class="bright">Plane of Fear</span>`,
+    `<span class="secondary">Server</span>  <span class="server">Bertoxxulous</span>`,
+    `<span class="secondary">Slots </span>  <span class="bright">6</span>  <span class="muted">(drawn from roster.ron — edit with F2)</span>`,
+    "",
+    `  <span class="inv-magenta"> ◀ Back </span>   <span class="inv-cyan"> Next ▶ </span>   <span class="muted">esc cancel</span>`,
+  ];
+  return panel(lines, { width: DLG_W, title: "▸FLEET·SETUP WIZARD·STEP 2/5", color: "magenta" });
+}
+
+function renderAlertFeed() {
+  const lines = [];
+  ALERTS.forEach((a, i) => {
+    const sevCol = a.sev === "Critical" ? "red" : a.sev === "Warning" ? "amber" : "cyan";
+    const mark = a.ack ? `<span class="muted">○</span>` : `<span class="${sevCol} bold">●</span>`;
+    lines.push(`${mark} <span class="${sevCol} bold">${pad(a.sev, 9)}</span> <span class="secondary">${a.when}</span>  <span class="bright">${a.msg}</span>`);
+    lines.push(`  <span class="muted">kind=${a.kind} source=${a.source}</span>`);
+    if (i < ALERTS.length - 1) lines.push("");
+  });
+  return panel(lines, { width: DLG_W, title: `▸WARDS·ALERT FEED·${ALERTS.filter((a) => !a.ack).length} UNREAD`, color: "amber", foot: "↑↓ select  ·  a acknowledge  ·  A ack all  ·  F8 close" });
+}
+
+function renderMenuBar() {
+  const b = "─";
+  const lines = [];
+  const bar = MENUBAR.bar
+    .map((m) => m === MENUBAR.active
+      ? `<span class="inv-magenta"> ${m} </span>`
+      : `<span class="secondary"> ${m} </span>`)
+    .join(" ");
+  lines.push(bar);
+  lines.push(`<span class="dim">${"─".repeat(DLG_W - 2)}</span>`);
+  MENUBAR.items.forEach((it) => {
+    if (it.key === "—") {
+      lines.push(`<span class="dim">${"─".repeat(DLG_W - 2)}</span>`);
+    } else {
+      const left = `  <span class="magenta bold">${it.key}</span>  <span class="bright">${it.label}</span>`;
+      const right = `<span class="muted">${it.hint}</span>`;
+      const fill = Math.max(1, DLG_W - 2 - (left.replace(/<[^>]*>/g, "").length) - (right.replace(/<[^>]*>/g, "").length));
+      lines.push(left + " ".repeat(fill) + right);
+    }
+  });
+  return panel(lines, { width: DLG_W, title: "Menu · F10", color: "cyan", titleColor: "bright" });
+}
+
+function renderToast() {
+  const lines = [
+    `<span class="green bold">●</span> <span class="bright bold">CH #142 landed</span> on <span class="highlight">Thurgrek</span>`,
+    `  <span class="muted">Sylunariel · Complete Healing · 10,000 hp · 12:04:16.5</span>`,
+  ];
+  return panel(lines, { width: 62, title: "Toast", color: "green" });
+}
+
+TQ.renderHelp = renderHelp;
+TQ.renderCommand = renderCommand;
+TQ.renderConfig = renderConfig;
+TQ.renderChChain = renderChChain;
+TQ.renderWizard = renderWizard;
+TQ.renderAlertFeed = renderAlertFeed;
+TQ.renderMenuBar = renderMenuBar;
+TQ.renderToast = renderToast;
+})();
+
+/* --- main --- */
+
+const CLIENTS = TQ.CLIENTS;
+const SESSION = TQ.SESSION;
+const renderHeader = TQ.renderHeader;
+const renderStatusBar = TQ.renderStatusBar;
+const renderFocusStrip = TQ.renderFocusStrip;
+const W = TQ.W;
+const renderOverview = TQ.renderOverview;
+const renderTactical = TQ.renderTactical;
+const renderNavigation = TQ.renderNavigation;
+const renderDebug = TQ.renderDebug;
+const renderPackets = TQ.renderPackets;
+const renderEconomy = TQ.renderEconomy;
+const renderOrchestrator = TQ.renderOrchestrator;
+const renderHelp = TQ.renderHelp;
+const renderCommand = TQ.renderCommand;
+const renderConfig = TQ.renderConfig;
+const renderChChain = TQ.renderChChain;
+const renderAlertFeed = TQ.renderAlertFeed;
+const renderMenuBar = TQ.renderMenuBar;
+const renderWizard = TQ.renderWizard;
+const renderToast = TQ.renderToast;
+
+// Wordmark — big block letters
+const WORDMARK = String.raw`
+  ▗▄▄▄▖▄▄▄▖▗▖  ▗▖▗▄▄▄▖ ▄▄▄  ▗▖ ▗▖▗▄▄▄▖ ▄▄▄   ■
+    █ ▐▌    ▝▚▞▘   █   █▀▀█ ▐▌ ▐▌▐▌   ▐▌ █ ▗▄▟▙▄▖
+    █ ▐▛▀▀▘  ▐▌    █   █▄▄█ ▐▌ ▐▌▐▛▀▀▘ ▀▀▀█  ▝▜▛▘
+    █ ▐▙▄▄▖▗▞▘▝▚▖  █   ▝▄▄█ ▝▙▄▟▘▐▙▄▄▖▝▄▄▞▘   ▀
+`;
+document.getElementById("wordmark").textContent = WORDMARK;
+
+// Header + focus strip into screen 1
+document.getElementById("header").innerHTML = renderHeader(1);
+
+function renderScreenBody(n, html) {
+  document.getElementById(`body-${n}`).innerHTML = html;
+}
+
+// Compose focus strip into screen 1
+const strip = renderFocusStrip();
+document.getElementById("body-1").innerHTML = strip + "\n" + renderOverview(2);
+document.getElementById("body-2").innerHTML = renderTactical();
+document.getElementById("body-3").innerHTML = renderNavigation();
+document.getElementById("body-4").innerHTML = renderDebug();
+document.getElementById("body-5").innerHTML = renderPackets();
+document.getElementById("body-6").innerHTML = renderEconomy();
+document.getElementById("body-7").innerHTML = renderOrchestrator();
+
+const hints = {
+  1: "↑↓ roster · Enter focus · [ ] client · g group · ? help",
+  2: "hjkl pan · +/− zoom · f center focus · t target",
+  3: "↑↓ select client · :nav unstick · r reroute",
+  4: "↑↓ select · / filter · i inspect · d dump",
+  5: "↑↓ select · / filter · p pause · e export",
+  6: "s start · S stop · x skip client · r reload rules",
+  7: "↑↓ select slot · p pause · r resume · A abort intent",
+};
+const names = { 1: "Soul Tethers", 2: "Cartography", 3: "Waypath", 4: "Oracle", 5: "Aethergram", 6: "Coinmark", 7: "Third Gate" };
+for (let i = 1; i <= 7; i++) {
+  document.getElementById(`status-${i}`).innerHTML = renderStatusBar({ hint: hints[i], screen: names[i], activeTab: i });
+}
+
+// Overlay gallery
+document.getElementById("ov-help").innerHTML   = renderHelp();
+document.getElementById("ov-cmd").innerHTML    = renderCommand();
+document.getElementById("ov-cfg").innerHTML    = renderConfig();
+document.getElementById("ov-ch").innerHTML     = renderChChain();
+document.getElementById("ov-alerts").innerHTML = renderAlertFeed();
+document.getElementById("ov-menu").innerHTML   = renderMenuBar();
+document.getElementById("ov-wiz").innerHTML    = renderWizard();
+document.getElementById("ov-toast").innerHTML  = renderToast();
+
+// ─── Tweaks wiring ──────────────────────────────────────────────────
+const body = document.body;
+const state = Object.assign({}, TWEAK_DEFAULS);
+
+function applyState() {
+  body.dataset.scanlines = state.scanlines ? "on" : "off";
+  body.dataset.glow = state.glow ? "on" : "off";
+  body.dataset.vignette = state.vignette ? "on" : "off";
+  document.documentElement.dataset.width = state.width;
+  body.dataset.width = state.width;
+  document.getElementById("tw-scanlines").checked = state.scanlines;
+  document.getElementById("tw-glow").checked = state.glow;
+  document.getElementById("tw-vignette").checked = state.vignette;
+  document.getElementById("tw-ov").checked = state.showOverlays;
+  document.querySelectorAll("[data-tw-width]").forEach((b) => b.classList.toggle("active", b.dataset.twWidth === state.width));
+  document.querySelectorAll("[data-tw-mode]").forEach((b) => b.classList.toggle("active", b.dataset.twMode === state.mode));
+  document.querySelectorAll("[data-tw-focus]").forEach((b) => b.classList.toggle("active", +b.dataset.twFocus === +state.focus));
+  document.getElementById("screen-overlays").style.display = state.showOverlays ? "" : "none";
+
+  // Focus screen — scroll to it
+  const el = document.getElementById(`screen-${state.focus}`);
+  if (el) el.scrollIntoView({ block: "start", behavior: "auto" });
+}
+
+function persist(edits) {
+  Object.assign(state, edits);
+  try { window.parent.postMessage({ type: "__edit_mode_set_keys", edits }, "*"); } catch {}
+  applyState();
+}
+
+// Edit-mode plumbing
+window.addEventListener("message", (e) => {
+  if (!e?.data?.type) return;
+  if (e.data.type === "__activate_edit_mode") body.dataset.tweaks = "on";
+  if (e.data.type === "__deactivate_edit_mode") body.dataset.tweaks = "off";
+});
+try { window.parent.postMessage({ type: "__edit_mode_available" }, "*"); } catch {}
+
+document.getElementById("tweaks-open").addEventListener("click", () => body.dataset.tweaks = "on");
+document.getElementById("tweaks-close").addEventListener("click", () => body.dataset.tweaks = "off");
+
+document.getElementById("tw-scanlines").addEventListener("change", (e) => persist({ scanlines: e.target.checked }));
+document.getElementById("tw-glow").addEventListener("change", (e) => persist({ glow: e.target.checked }));
+document.getElementById("tw-vignette").addEventListener("change", (e) => persist({ vignette: e.target.checked }));
+document.getElementById("tw-ov").addEventListener("change", (e) => persist({ showOverlays: e.target.checked }));
+document.querySelectorAll("[data-tw-width]").forEach((btn) => btn.addEventListener("click", () => persist({ width: btn.dataset.twWidth })));
+document.querySelectorAll("[data-tw-mode]").forEach((btn) => btn.addEventListener("click", () => persist({ mode: btn.dataset.twMode })));
+document.querySelectorAll("[data-tw-focus]").forEach((btn) => btn.addEventListener("click", () => persist({ focus: +btn.dataset.twFocus })));
+
+// Keyboard quick-nav
+window.addEventListener("keydown", (e) => {
+  if (e.target.matches?.("input,textarea")) return;
+  if ("1234567".includes(e.key)) {
+    persist({ focus: +e.key });
+  } else if (e.key === "?") {
+    body.dataset.tweaks = body.dataset.tweaks === "on" ? "off" : "on";
+  }
+});
+
+applyState();
+
+</script>
+</body>
+</html>
