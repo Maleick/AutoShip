@@ -573,6 +573,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
             get(api::admin_config::audit_config),
         )
         .route("/sessions", get(api::list_sessions))
+        .route("/command", post(api::control::relay_command))
         // Session and group control — SDK-facing control surface
         .nest("/sessions", api::session_control::router())
         .nest("/accounts", accounts::router())

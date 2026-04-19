@@ -171,21 +171,11 @@ pub async fn relay_command(
 
 pub fn router() -> axum::Router<Arc<AppState>> {
     axum::Router::new()
+        .route("/pause/{session_id}", axum::routing::put(pause_session))
+        .route("/resume/{session_id}", axum::routing::put(resume_session))
+        .route("/group/{session_id}", axum::routing::put(set_session_group))
         .route(
-            "/control/pause/{session_id}",
-            axum::routing::put(pause_session),
-        )
-        .route(
-            "/control/resume/{session_id}",
-            axum::routing::put(resume_session),
-        )
-        .route(
-            "/control/group/{session_id}",
-            axum::routing::put(set_session_group),
-        )
-        .route(
-            "/control/broadcast-all/{session_id}",
+            "/broadcast-all/{session_id}",
             axum::routing::put(broadcast_all),
         )
-        .route("/command", axum::routing::post(relay_command))
 }
