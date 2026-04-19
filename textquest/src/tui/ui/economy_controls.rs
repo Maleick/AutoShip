@@ -285,7 +285,11 @@ fn draw_roster_panel(frame: &mut Frame, area: Rect, app: &App) {
         .map(|(idx, client)| {
             let slot_color = t.text_normal;
             let slot = format!("{}", idx + 1);
-            let status = if client.connected { "Online" } else { "Offline" };
+            let status = if client.connected {
+                "Online"
+            } else {
+                "Offline"
+            };
 
             // Status coloring: Active=amber/inverse, Done=green, Queued=cyan, Skipped=muted
             let status_color = if client.connected {

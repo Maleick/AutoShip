@@ -71,21 +71,21 @@ fn bench_config_struct_deser(c: &mut Criterion) {
     #[derive(serde::Deserialize)]
     struct SimpleAccount {
         #[serde(rename = "name")]
-        _name: String,
+        name: String,
         #[serde(rename = "server")]
-        _server: String,
+        server: String,
         #[serde(rename = "character")]
-        _character: String,
+        character: String,
         #[serde(rename = "class")]
-        _class: String,
+        class: String,
         #[serde(rename = "group")]
-        _group: u32,
+        group: u32,
     }
 
     #[derive(serde::Deserialize)]
     struct SimpleConfig {
         #[serde(rename = "accounts")]
-        _accounts: Vec<SimpleAccount>,
+        accounts: Vec<SimpleAccount>,
     }
 
     let json_data = r#"{"accounts":[{"name":"account1","server":"Firiona Vie","character":"MainChar","class":"WAR","group":1},{"name":"account2","server":"Firiona Vie","character":"OffChar","class":"CLR","group":1}]}"#;

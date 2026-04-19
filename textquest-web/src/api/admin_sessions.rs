@@ -215,16 +215,12 @@ pub use crate::api::admin_config::audit_config;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::Body;
-    use axum::http::Request;
-    use tower::ServiceExt;
 
     #[tokio::test]
     async fn test_router_has_config_audit_route() {
         // Test that the router is properly constructed with all required routes
-        let app_router = router();
+        let _app_router = router();
         // If this compiles and runs, the router is correctly built
-        assert!(true);
     }
 
     #[test]

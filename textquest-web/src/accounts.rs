@@ -387,20 +387,6 @@ fn aes_encrypt(plaintext: &[u8], key: &[u8; 32]) -> Result<(Vec<u8>, Vec<u8>)> {
     Ok((ciphertext, nonce_bytes.to_vec()))
 }
 
-#[allow(dead_code)]
-fn aes_decrypt(ciphertext: &[u8], key: &[u8; 32], nonce_bytes: &[u8]) -> Result<Vec<u8>> {
-    let cipher = Aes256Gcm::new(key.into());
-    if nonce_bytes.len() != 12 {
-        anyhow::bail!("nonce must be exactly 12 bytes, got {}", nonce_bytes.len());
-    }
-    let mut arr = [0u8; 12];
-    arr.copy_from_slice(nonce_bytes);
-    let nonce = Nonce::from(arr);
-    cipher
-        .decrypt(&nonce, ciphertext)
-        .map_err(|e| anyhow::anyhow!("Decryption failed: {e}"))
-}
-
 /// Thin wrapper around a shared SQLite credential database.
 pub struct CredentialStore {
     conn: Mutex<Connection>,

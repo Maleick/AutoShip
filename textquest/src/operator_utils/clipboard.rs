@@ -19,10 +19,8 @@ pub fn copy_to_clipboard(text: &str) -> Result<()> {
     use anyhow::Context;
     use windows::Win32::{
         Foundation::{HANDLE, HWND},
-        System::DataExchange::{
-            CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
-        },
-        System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE},
+        System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData},
+        System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock},
     };
 
     unsafe {
@@ -45,8 +43,7 @@ pub fn copy_to_clipboard(text: &str) -> Result<()> {
         EmptyClipboard().context("EmptyClipboard failed")?;
 
         const CF_TEXT: u32 = 1;
-        SetClipboardData(CF_TEXT, HANDLE(hglobal.0 as isize))
-            .context("SetClipboardData failed")?;
+        SetClipboardData(CF_TEXT, HANDLE(hglobal.0 as isize)).context("SetClipboardData failed")?;
 
         CloseClipboard().context("CloseClipboard failed")?;
     }

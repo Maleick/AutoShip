@@ -30,7 +30,7 @@ pub async fn tail_logs(
     AxumPath(session_id): AxumPath<u32>,
     Query(query): Query<LogQuery>,
 ) -> impl IntoResponse {
-    let lines_requested = query.lines.max(1).min(10000) as usize;
+    let lines_requested = query.lines.clamp(1, 10000) as usize;
 
     // Read session logs from the in-memory store
     let session_logs = state.session_logs.read().await;

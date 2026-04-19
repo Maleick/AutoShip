@@ -1612,11 +1612,10 @@ impl Orchestrator {
 
                 let channel: ChatChannel = chat.channel.into();
 
-                // Check for GM tells and CSR interactions
-                if matches!(channel, ChatChannel::Tell) {
-                    if textquest_common::gm_detection::detect_gm_tell(&chat.sender, &chat.message) {
-                        self.emit_gm_alert(&character, &chat.sender, &chat.message);
-                    }
+                if matches!(channel, ChatChannel::Tell)
+                    && textquest_common::gm_detection::detect_gm_tell(&chat.sender, &chat.message)
+                {
+                    gm_tells.push((chat.sender.clone(), chat.message.clone()));
                 }
 
                 if let Err(error) =

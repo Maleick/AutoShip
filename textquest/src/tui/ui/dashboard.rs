@@ -199,7 +199,10 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                 // Mana bar (melee classes show --)
                 let is_melee = matches!(
                     player.class,
-                    Some(EqClass::Warrior) | Some(EqClass::Monk) | Some(EqClass::Rogue) | Some(EqClass::Berserker)
+                    Some(EqClass::Warrior)
+                        | Some(EqClass::Monk)
+                        | Some(EqClass::Rogue)
+                        | Some(EqClass::Berserker)
                 );
                 if is_melee {
                     cells.push(Cell::from("  --  ").style(Style::default().fg(t.text_muted)));
@@ -429,7 +432,12 @@ fn draw_group_focus_strip(frame: &mut Frame, area: Rect, app: &App) {
     // Uptime
     let elapsed = app.session_start.elapsed();
     let uptime_secs = elapsed.as_secs();
-    let uptime_str = format!("{:02}:{:02}:{:02}", uptime_secs / 3600, (uptime_secs % 3600) / 60, uptime_secs % 60);
+    let uptime_str = format!(
+        "{:02}:{:02}:{:02}",
+        uptime_secs / 3600,
+        (uptime_secs % 3600) / 60,
+        uptime_secs % 60
+    );
     line_spans.push(Span::styled(
         "Uptime ",
         Style::default().fg(t.text_secondary),
@@ -1220,7 +1228,7 @@ fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
         let target_name = app.redact_name(&target.displayed_name).into_owned();
         let target_type_color = match target.spawn_type {
             crate::eq::structs::SpawnType::Player => t.hp_high, // PC
-            _ => t.text_accent,  // NPC (assume named if special ID)
+            _ => t.text_accent,                                 // NPC (assume named if special ID)
         };
         lines.push(Line::from(vec![
             Span::styled("Target   ", Style::default().fg(t.text_secondary)),
@@ -1251,63 +1259,64 @@ fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
     // Casting info
     if let Some(player) = &client.local_player {
         if let Some(cast_info) = &player.cast_state {
-        let spell_label = cast_info.spell_name.as_deref().unwrap_or("Unknown");
-        lines.push(Line::from(vec![
-            Span::styled("Casting  ", Style::default().fg(t.text_secondary)),
-            Span::styled(
-                spell_label,
-                Style::default()
-                    .fg(t.text_accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                cast_info.spell_gem()
-                    .map(|g| format!("G{}", g))
-                    .unwrap_or_else(|| "item".to_string()),
-                Style::default().fg(t.text_muted),
-            ),
-        ]));
+            let spell_label = cast_info.spell_name.as_deref().unwrap_or("Unknown");
+            lines.push(Line::from(vec![
+                Span::styled("Casting  ", Style::default().fg(t.text_secondary)),
+                Span::styled(
+                    spell_label,
+                    Style::default()
+                        .fg(t.text_accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(" "),
+                Span::styled(
+                    cast_info
+                        .spell_gem()
+                        .map(|g| format!("G{}", g))
+                        .unwrap_or_else(|| "item".to_string()),
+                    Style::default().fg(t.text_muted),
+                ),
+            ]));
 
-        let total_ms = cast_info.total_cast_ms.unwrap_or(0);
-        let remaining_ms = cast_info.remaining_ms.unwrap_or(0);
-        let progress = if total_ms > 0 {
-            let elapsed_ms = total_ms.saturating_sub(remaining_ms);
-            (elapsed_ms as f64 / total_ms as f64).min(1.0)
-        } else {
-            0.0
-        };
-        let remaining = remaining_ms;
-
-        let bar_width = 22;
-        let filled = (progress * bar_width as f64).round() as usize;
-        let mut progress_bar = String::new();
-        for i in 0..bar_width {
-            if i < filled {
-                progress_bar.push('█');
+            let total_ms = cast_info.total_cast_ms.unwrap_or(0);
+            let remaining_ms = cast_info.remaining_ms.unwrap_or(0);
+            let progress = if total_ms > 0 {
+                let elapsed_ms = total_ms.saturating_sub(remaining_ms);
+                (elapsed_ms as f64 / total_ms as f64).min(1.0)
             } else {
-                progress_bar.push('·');
+                0.0
+            };
+            let remaining = remaining_ms;
+
+            let bar_width = 22;
+            let filled = (progress * bar_width as f64).round() as usize;
+            let mut progress_bar = String::new();
+            for i in 0..bar_width {
+                if i < filled {
+                    progress_bar.push('█');
+                } else {
+                    progress_bar.push('·');
+                }
             }
-        }
 
-        lines.push(Line::from(vec![
-            Span::styled("Progress ", Style::default().fg(t.text_secondary)),
-            Span::styled(progress_bar, Style::default().fg(t.text_accent)),
-            Span::raw(" "),
-            Span::styled(
-                format!("{:.0}%", progress * 100.0),
-                Style::default().fg(t.text_bright),
-            ),
-        ]));
+            lines.push(Line::from(vec![
+                Span::styled("Progress ", Style::default().fg(t.text_secondary)),
+                Span::styled(progress_bar, Style::default().fg(t.text_accent)),
+                Span::raw(" "),
+                Span::styled(
+                    format!("{:.0}%", progress * 100.0),
+                    Style::default().fg(t.text_bright),
+                ),
+            ]));
 
-        lines.push(Line::from(vec![
-            Span::styled("Remaining", Style::default().fg(t.text_secondary)),
-            Span::raw(" "),
-            Span::styled(
-                format!("{:.1}s", remaining),
-                Style::default().fg(t.text_bright),
-            ),
-        ]));
+            lines.push(Line::from(vec![
+                Span::styled("Remaining", Style::default().fg(t.text_secondary)),
+                Span::raw(" "),
+                Span::styled(
+                    format!("{:.1}s", remaining),
+                    Style::default().fg(t.text_bright),
+                ),
+            ]));
         } else {
             lines.push(Line::from(Span::styled(
                 "Casting  idle",

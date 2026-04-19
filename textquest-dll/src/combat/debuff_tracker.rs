@@ -261,7 +261,7 @@ impl DebuffTracker {
     pub fn has_debuff(&self, spell_id: i32, now: u64) -> bool {
         self.debuffs
             .get(&spell_id)
-            .map_or(false, |d| !d.is_expired(now))
+            .is_some_and(|d| !d.is_expired(now))
     }
 
     /// Get the number of active debuffs.

@@ -20,7 +20,6 @@ fn client_class_abbr(client: &crate::tui::client::ClientState) -> &'static str {
         .unwrap_or("?")
 }
 
-
 fn nav_status_color(
     status: &textquest_common::nav::NavStatus,
     t: &crate::tui::theme::Theme,
@@ -247,13 +246,20 @@ fn draw_nav_card(
             ),
             Span::raw("  "),
             Span::styled(
-                format!("L{}", client.local_player.as_ref().map(|p| p.level).unwrap_or(0)),
+                format!(
+                    "L{}",
+                    client.local_player.as_ref().map(|p| p.level).unwrap_or(0)
+                ),
                 Style::default().fg(t.text_muted),
             ),
             Span::raw("   "),
             Span::styled("Group ", Style::default().fg(t.text_secondary)),
             Span::styled(
-                client.group_info.as_ref().map(|g| g.member_count.to_string()).unwrap_or_else(|| "—".to_string()),
+                client
+                    .group_info
+                    .as_ref()
+                    .map(|g| g.member_count.to_string())
+                    .unwrap_or_else(|| "—".to_string()),
                 Style::default().fg(t.text_highlight),
             ),
         ]));
