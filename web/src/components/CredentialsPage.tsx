@@ -18,7 +18,8 @@ import type { Account, AccountStatus, CreateAccountPayload, UpdateAccountPayload
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: AccountStatus }) {\n  if (status === "active") {
+function StatusBadge({ status }: { status: AccountStatus }) {
+  if (status === "active") {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] uppercase tracking-widest border border-green-500/40 bg-green-900/20 text-green-400 font-rune">
         <CheckCircle size={10} weight="fill" /> Online
