@@ -279,7 +279,6 @@ mod tests {
         assert_eq!(req.timeout_secs, None);
     }
 
-
     use axum::{
         body::Body,
         http::{Request, StatusCode, header},

@@ -464,7 +464,7 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
             " Inspect · {} ",
             app.redact_name(&spawn.displayed_name).into_owned()
         ),
-        None => " Inspect · hex dump ".into(),
+        None => " Inspect · spawn ".into(),
     };
 
     let blk = panel(title.as_str(), border_style, t);
@@ -598,74 +598,6 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
             "}",
             Style::default().fg(t.text_muted),
         )]));
-        lines.push(Line::from(""));
-
-        // Raw bytes header
-        lines.push(Line::from(vec![
-            Span::styled("raw bytes ", Style::default().fg(t.text_secondary)),
-            Span::styled("(first 64)", Style::default().fg(t.text_muted)),
-        ]));
-
-        // Hex dump (4 rows x 16 bytes)
-        let hex_data = &app.hex_state.hex_data;
-        for row in 0..4 {
-            let row_offset = row * 16;
-            if row_offset >= hex_data.len() {
-                break;
-            }
-            let end = (row_offset + 16).min(hex_data.len());
-            let chunk = &hex_data[row_offset..end];
-
-            let mut spans = vec![];
-
-            // Offset
-            spans.push(Span::styled(
-                format!("{:04X}", row_offset),
-                Style::default().fg(t.text_muted),
-            ));
-            spans.push(Span::raw("  "));
-
-            // Hex bytes in 4 groups of 4 bytes each, cycling colors
-            let colors = [
-                t.text_accent,
-                t.text_bright,
-                t.text_bright,
-                t.text_highlight,
-            ];
-            for (i, b) in chunk.iter().enumerate() {
-                let color = colors[i / 4 % 4];
-                spans.push(Span::styled(
-                    format!("{b:02x} "),
-                    Style::default().fg(color),
-                ));
-            }
-
-            // Pad to align ASCII
-            let pad = 16usize.saturating_sub(chunk.len());
-            if pad > 0 {
-                spans.push(Span::raw(" ".repeat(pad * 3)));
-            }
-
-            // Separator
-            spans.push(Span::raw(" "));
-            spans.push(Span::styled("│", Style::default().fg(t.text_muted)));
-            spans.push(Span::raw(" "));
-
-            // ASCII
-            let ascii_str: String = chunk
-                .iter()
-                .map(|b| {
-                    if b.is_ascii_graphic() || *b == b' ' {
-                        *b as char
-                    } else {
-                        '.'
-                    }
-                })
-                .collect();
-            spans.push(Span::styled(ascii_str, Style::default().fg(Color::Yellow)));
-
-            lines.push(Line::from(spans));
-        }
 
         frame.render_widget(Paragraph::new(lines).block(blk), area);
     } else {

@@ -224,13 +224,13 @@ fn header_tab_label(screen: ActiveScreen, width_class: WidthClass) -> &'static s
     match width_class {
         WidthClass::Wide => screen.label(),
         WidthClass::Medium => match screen {
-            ActiveScreen::Overview => "Char",
-            ActiveScreen::Tactical => "Map",
-            ActiveScreen::Navigation => "Nav",
-            ActiveScreen::Debug => "Dbg",
-            ActiveScreen::PacketMonitor => "Pkt",
-            ActiveScreen::Economy => "Eco",
-            ActiveScreen::Orchestrator => "Orc",
+            ActiveScreen::Overview => "Teth",
+            ActiveScreen::Tactical => "Cart",
+            ActiveScreen::Navigation => "Way",
+            ActiveScreen::Debug => "Ora",
+            ActiveScreen::PacketMonitor => "Aeth",
+            ActiveScreen::Economy => "Coin",
+            ActiveScreen::Orchestrator => "Gate",
         },
         WidthClass::Narrow => match screen {
             ActiveScreen::Overview => "1",
@@ -510,14 +510,14 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
     if app.active_screen == ActiveScreen::Tactical {
         match width_class {
             WidthClass::Narrow => &[
-                ("1-4", "screen"),
+                ("1-7", "screen"),
                 ("+/-", "zoom"),
                 ("n", "mesh"),
                 ("v", "view"),
                 ("?", "help"),
             ],
             WidthClass::Medium => &[
-                ("1-4", "screen"),
+                ("1-7", "screen"),
                 ("+/-", "zoom"),
                 ("g", "geo"),
                 ("s", "spawns"),
@@ -528,7 +528,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
                 ("?", "help"),
             ],
             WidthClass::Wide => &[
-                ("1-4", "screen"),
+                ("1-7", "screen"),
                 ("Tab", "pane"),
                 ("+/-", "zoom"),
                 ("g", "geo"),
@@ -546,7 +546,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
     } else {
         match width_class {
             WidthClass::Narrow => &[
-                ("1-4", "screen"),
+                ("1-7", "screen"),
                 ("Tab", "pane"),
                 ("[ ]", "client"),
                 ("/", "search"),
@@ -555,7 +555,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
                 ("?", "help"),
             ],
             WidthClass::Medium => &[
-                ("1-4", "screen"),
+                ("1-7", "screen"),
                 ("Shift+1-6", "group"),
                 ("Tab", "pane"),
                 ("[ ]", "client"),
@@ -567,7 +567,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
                 ("?", "help"),
             ],
             WidthClass::Wide => &[
-                ("1-4", "screen"),
+                ("1-7", "screen"),
                 ("Shift+1-6", "group"),
                 ("Tab", "pane"),
                 ("[ ]", "client"),
@@ -590,13 +590,13 @@ fn build_status_left(app: &App, width_class: WidthClass, max_width: usize) -> Ve
 
     // SCREEN_NAME in bright bold
     let screen_name = match app.active_screen {
-        ActiveScreen::Overview => "Characters",
-        ActiveScreen::Tactical => "Tactical",
-        ActiveScreen::Navigation => "Navigation",
-        ActiveScreen::Debug => "Debug",
-        ActiveScreen::PacketMonitor => "Packets",
-        ActiveScreen::Economy => "Economy",
-        ActiveScreen::Orchestrator => "Orchestra",
+        ActiveScreen::Overview => "SOUL TETHERS",
+        ActiveScreen::Tactical => "CARTOGRAPHY",
+        ActiveScreen::Navigation => "WAYPATH",
+        ActiveScreen::Debug => "ORACLE",
+        ActiveScreen::PacketMonitor => "AETHERGRAM",
+        ActiveScreen::Economy => "COINMARK",
+        ActiveScreen::Orchestrator => "THIRD GATE",
     };
     spans.push(Span::styled(
         screen_name,
@@ -1118,7 +1118,7 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
     rows.push(help_row(None, HelpCell::Text(String::new())));
     match app.active_screen {
         ActiveScreen::Overview => {
-            push_heading(&mut rows, None, "Dashboard Controls");
+            push_heading(&mut rows, None, "Soul Tethers Controls");
             push_kv(&mut rows, None, "j/k", "Navigate the client roster");
             push_kv(
                 &mut rows,
@@ -1137,7 +1137,7 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
             push_kv(&mut rows, None, "r", "Repeat last command");
         }
         ActiveScreen::Tactical => {
-            push_heading(&mut rows, None, "Map Controls");
+            push_heading(&mut rows, None, "Cartography Controls");
             push_kv(&mut rows, None, "?", "Toggle this help overlay");
             push_kv(&mut rows, None, "+ / -", "Zoom in / out");
             push_kv(&mut rows, None, "Arrows", "Pan the map viewport");
@@ -1257,7 +1257,7 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
             );
         }
         ActiveScreen::Debug => {
-            push_heading(&mut rows, None, "Debug Controls");
+            push_heading(&mut rows, None, "Oracle Controls");
             push_kv(&mut rows, None, "j/k", "Navigate spawns or scroll hex dump");
             push_kv(&mut rows, None, "Enter", "Inspect the selected spawn");
             push_kv(&mut rows, None, "/", "Search spawns by name");
@@ -1271,14 +1271,14 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
             push_kv(&mut rows, None, "c", "Clear captured packets");
         }
         ActiveScreen::Economy => {
-            push_heading(&mut rows, None, "Economy Controls");
+            push_heading(&mut rows, None, "Coinmark Controls");
             push_kv(&mut rows, None, "P", "Pause vendor/bank cycle");
             push_kv(&mut rows, None, "R", "Resume vendor/bank cycle");
             push_kv(&mut rows, None, "A", "Abort current cycle");
             push_kv(&mut rows, None, "S", "Skip current cycle");
         }
         ActiveScreen::Orchestrator => {
-            push_heading(&mut rows, None, "Orchestrator Controls");
+            push_heading(&mut rows, None, "Third Gate Controls");
         }
     }
     rows.push(help_row(None, HelpCell::Text(String::new())));
@@ -1287,8 +1287,8 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
     push_kv(
         &mut rows,
         None,
-        "1-4",
-        "Switch screen: Dashboard / Map / Nav / Debug",
+        "1-7",
+        "Switch screen: Soul Tethers / Cartography / Waypath / Oracle / Aethergram / Coinmark / Third Gate",
     );
     push_kv(&mut rows, None, "[ ]", "Previous / next client");
     push_kv(&mut rows, None, "Tab", "Cycle panel focus");
@@ -1430,9 +1430,9 @@ mod tests {
     fn overview_render_medium_uses_compact_tabs_and_idle_character_card() {
         let rendered = render_app(sample_app(), 110, 30);
 
-        assert!(rendered.contains("Char"));
-        assert!(rendered.contains("Nav"));
-        assert!(rendered.contains("Dbg"));
+        assert!(rendered.contains("Teth"));
+        assert!(rendered.contains("Way"));
+        assert!(rendered.contains("Ora"));
         assert!(rendered.contains("Toon08"));
         assert!(!rendered.contains("y:"));
     }
@@ -1441,8 +1441,8 @@ mod tests {
     fn overview_render_wide_keeps_full_tabs_and_session_panel() {
         let rendered = render_app(sample_app(), 150, 36);
 
-        assert!(rendered.contains("Characters"));
-        assert!(rendered.contains("Navigation"));
+        assert!(rendered.contains("Soul Tethers"));
+        assert!(rendered.contains("Waypath"));
         assert!(rendered.contains("Session"));
         assert!(rendered.contains("Toon10"));
     }
@@ -1487,8 +1487,8 @@ mod tests {
         let rendered = render_app(app, 80, 24);
 
         assert!(rendered.contains("Help"));
-        assert!(rendered.contains("Active: Characters"));
-        assert!(rendered.contains("Dashboard Controls"));
+        assert!(rendered.contains("Active: Soul Tethers"));
+        assert!(rendered.contains("Soul Tethers Controls"));
     }
 
     #[test]

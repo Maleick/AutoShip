@@ -44,6 +44,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 tempfile = "3"
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "rustls-tls", "hostname"] }
 ureq = "2"
+bytemuck = { version = "1", features = ["derive"] }
 
 [build-dependencies]
 cc = "1"

@@ -50,7 +50,7 @@ fn take_test_ipc_response(client_id: ClientId, correlation_id: u64) -> Option<Re
     response
 }
 
-#[cfg(not(windows), test)]
+#[cfg(all(not(windows), test))]
 pub(crate) fn queue_test_ipc_response(
     client_id: ClientId,
     correlation_id: u64,
@@ -66,7 +66,7 @@ pub(crate) fn queue_test_ipc_response(
         .push_back(response);
 }
 
-#[cfg(not(windows), test)]
+#[cfg(all(not(windows), test))]
 pub(crate) fn clear_test_ipc_responses() {
     let mut queues = test_ipc_response_queues()
         .lock()

@@ -80,13 +80,13 @@ impl ActiveScreen {
     #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Overview => "Characters",
-            Self::Tactical => "Map",
-            Self::Navigation => "Navigation",
-            Self::Debug => "Debug",
-            Self::PacketMonitor => "Packets",
-            Self::Economy => "Economy",
-            Self::Orchestrator => "Orchestrator",
+            Self::Overview => "Soul Tethers",
+            Self::Tactical => "Cartography",
+            Self::Navigation => "Waypath",
+            Self::Debug => "Oracle",
+            Self::PacketMonitor => "Aethergram",
+            Self::Economy => "Coinmark",
+            Self::Orchestrator => "Third Gate",
         }
     }
 
