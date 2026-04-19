@@ -86,10 +86,6 @@ impl BerserkerStrategy {
                 let mut g =
                     rotation::group("Burn", TargetSelector::AutoTarget, CombatStateReq::Combat);
                 g.steps_per_frame = 1;
-                // For melee classes like Berserker, the runtime "mana" resource
-                // check is intentionally used as the endurance gate. This matches
-                // the config-facing `endurance_above_*` terminology without
-                // changing the shared rotation condition enum.
                 g.entries = vec![
                     rotation::entry_if(
                         "BattleCry",
@@ -126,12 +122,12 @@ impl BerserkerStrategy {
                     rotation::entry_if(
                         "Volley",
                         ActionType::Disc("Volley".into()),
-                        ConditionExpr::ManaAbove(25.0),
+                        ConditionExpr::EnduranceAbove(25.0),
                     ),
                     rotation::entry_if(
                         "Frenzy",
                         ActionType::Ability("Frenzy".into()),
-                        ConditionExpr::ManaAbove(15.0),
+                        ConditionExpr::EnduranceAbove(15.0),
                     ),
                 ];
                 g

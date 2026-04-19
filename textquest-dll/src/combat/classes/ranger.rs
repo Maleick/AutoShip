@@ -215,16 +215,22 @@ impl RangerStrategy {
                 );
                 group.steps_per_frame = 2;
                 group.entries = vec![
-                    rotation::entry_if(
-                        "SelfBuff",
-                        ActionType::Spell("SelfBuff".into()),
-                        ConditionExpr::ManaAbove(35.0),
-                    ),
-                    rotation::entry_if(
-                        "ProcBuff",
-                        ActionType::Spell("ProcBuff".into()),
-                        ConditionExpr::ManaAbove(40.0),
-                    ),
+                    rotation::RotationEntry {
+                        cooldown_ticks: Some(7_200),
+                        ..rotation::entry_if(
+                            "SelfBuff",
+                            ActionType::Spell("SelfBuff".into()),
+                            ConditionExpr::ManaAbove(35.0),
+                        )
+                    },
+                    rotation::RotationEntry {
+                        cooldown_ticks: Some(7_200),
+                        ..rotation::entry_if(
+                            "ProcBuff",
+                            ActionType::Spell("ProcBuff".into()),
+                            ConditionExpr::ManaAbove(40.0),
+                        )
+                    },
                 ];
                 group
             },

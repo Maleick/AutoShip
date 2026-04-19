@@ -51,7 +51,7 @@ export class TextQuestClient {
     };
 
     if (this.apiToken) {
-      headers["Authorization"] = `Bearer ${this.apiToken}`;
+      headers["X-API-Token"] = this.apiToken;
     }
 
     try {
@@ -558,11 +558,14 @@ export class TextQuestClient {
   /**
    * Add a pattern to the spawn alert watch list
    */
-  async addSpawnAlertWatchPattern(pattern: string): Promise<Types.SpawnAlertWatchListResponse> {
+  async addSpawnAlertWatchPattern(
+    pattern: string,
+    enabled: boolean = true,
+  ): Promise<Types.SpawnAlertWatchListResponse> {
     return this.request<Types.SpawnAlertWatchListResponse>(
       "PUT",
       "/spawn-alerts/watch-list",
-      { pattern }
+      { pattern, enabled }
     );
   }
 

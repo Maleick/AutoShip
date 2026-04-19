@@ -8,6 +8,7 @@ pub struct Client {
     base_url: String,
     http_client: ReqwestClient,
     api_token: Option<String>,
+    origin: Option<String>,
 }
 
 impl Client {
@@ -22,6 +23,7 @@ impl Client {
             base_url: base_url.into(),
             http_client: ReqwestClient::new(),
             api_token: token,
+            origin: None,
         }
     }
 
@@ -30,14 +32,26 @@ impl Client {
         self.api_token = token;
     }
 
+    /// Set the `Origin` header sent with mutation requests. Required for loot
+    /// mutation endpoints, which reject non-browser clients without a trusted
+    /// origin. See `is_trusted_origin` in `textquest-web/src/api/loot.rs`.
+    pub fn set_origin(&mut self, origin: Option<String>) {
+        self.origin = origin;
+    }
+
     fn build_url(&self, path: &str) -> String {
         let base = self.base_url.trim_end_matches('/');
         format!("{}/api{}", base, path)
     }
 
     fn add_token(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        if let Some(token) = &self.api_token {
+        let req = if let Some(token) = &self.api_token {
             req.header("X-API-Token", token)
+        } else {
+            req
+        };
+        if let Some(origin) = &self.origin {
+            req.header("Origin", origin)
         } else {
             req
         }

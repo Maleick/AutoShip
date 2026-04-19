@@ -58,6 +58,11 @@ impl BlockingClient {
         self.client.set_token(token);
     }
 
+    /// Set the `Origin` header. Required for loot mutation endpoints.
+    pub fn set_origin(&mut self, origin: Option<String>) {
+        self.client.set_origin(origin);
+    }
+
     /// Get API health status
     pub fn health(&self) -> Result<HealthResponse> {
         self.runtime.block_on(self.client.health())

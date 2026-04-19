@@ -356,7 +356,7 @@ describe("TextQuestClient", () => {
         `${baseUrl}/api/spawn-alerts/watch-list`,
         expect.objectContaining({
           method: "PUT",
-          body: JSON.stringify({ pattern }),
+          body: JSON.stringify({ pattern, enabled: true }),
         })
       );
     });
@@ -619,7 +619,7 @@ describe("TextQuestClient", () => {
         `${baseUrl}/api/health`,
         expect.objectContaining({
           headers: expect.objectContaining({
-            Authorization: `Bearer ${apiToken}`,
+            "X-API-Token": apiToken,
           }),
         })
       );
@@ -638,7 +638,7 @@ describe("TextQuestClient", () => {
         `${baseUrl}/api/health`,
         expect.not.objectContaining({
           headers: expect.objectContaining({
-            Authorization: expect.anything(),
+            "X-API-Token": expect.anything(),
           }),
         })
       );
