@@ -7,6 +7,7 @@
 
 pub mod admin_monitoring;
 pub mod baseline_scorecard;
+pub mod collector;
 pub mod events;
 pub mod kill_reporter;
 pub mod kill_session_store;
@@ -19,8 +20,13 @@ pub use admin_monitoring::{
     SessionMonitoringSnapshot, sample_process_memory_bytes,
 };
 pub use baseline_scorecard::{
-    BaselineScorecard, CombatDelta, CombatMetrics, CoordinationDelta, EconomyDelta,
-    EconomyMetrics, GroupCoordinationMetrics, MovementDelta, MovementMetrics, ScorecardDelta,
+    BaselineScorecard, CombatDelta, CombatMetrics, CoordinationDelta, EconomyDelta, EconomyMetrics,
+    GroupCoordinationMetrics, MovementDelta, MovementMetrics, ScorecardDelta,
+};
+pub use collector::{
+    AggregateMetrics, CharacterCombatMetrics, CharacterEconomyMetrics, CharacterMetrics,
+    CharacterMovementMetrics, FleetMetrics, LootEvent, MetricsCollector, TimeWindow,
+    TimeWindowMetrics,
 };
 pub use events::{FleetEvent, FleetEventLog};
 pub use kill_reporter::KillReporter;

@@ -187,7 +187,8 @@ impl DruidStrategy {
     fn build_rotations() -> Vec<RotationGroup> {
         vec![
             {
-                let mut g = rotation::group("Heal", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                let mut g =
+                    rotation::group("Heal", TargetSelector::AutoTarget, CombatStateReq::Combat);
                 g.steps_per_frame = 1;
                 g.entries = vec![
                     rotation::entry_if(
@@ -207,7 +208,8 @@ impl DruidStrategy {
                 g
             },
             {
-                let mut g = rotation::group("Snare", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                let mut g =
+                    rotation::group("Snare", TargetSelector::AutoTarget, CombatStateReq::Combat);
                 g.steps_per_frame = 1;
                 g.entries = vec![rotation::entry_if(
                     "Snare",
@@ -220,7 +222,8 @@ impl DruidStrategy {
                 g
             },
             {
-                let mut g = rotation::group("Nuke", TargetSelector::AutoTarget, CombatStateReq::Combat);
+                let mut g =
+                    rotation::group("Nuke", TargetSelector::AutoTarget, CombatStateReq::Combat);
                 g.steps_per_frame = 1;
                 g.entries = vec![rotation::entry_if(
                     "DoT",
@@ -286,10 +289,11 @@ impl ClassStrategy for DruidStrategy {
             }
         }
 
-        // Priority 2: Emergency heal
-        if let Some((_, hp)) = strategy::lowest_hp_member(ctx)
-            && hp < EMERGENCY_HP
-        {
+        // Priority 2: Emergency heal — self or lowest group member critically low
+        let self_hp = ctx.player.hp_pct();
+        let lowest_group_hp = strategy::lowest_hp_member(ctx).map(|(_, hp)| hp);
+        let min_hp = lowest_group_hp.map_or(self_hp, |g| g.min(self_hp));
+        if min_hp < EMERGENCY_HP {
             // Even if no heal spell is configured, do NOT fall through to snare
             // when a group member is critically low. Return the heal or None.
             return ctx
@@ -320,10 +324,11 @@ impl ClassStrategy for DruidStrategy {
             return Some(snare);
         }
 
-        // Priority 4: Heal if group member below moderate threshold
-        if let Some((_, hp)) = strategy::lowest_hp_member(ctx)
-            && hp < MODERATE_HP
-        {
+        // Priority 4: Heal if self or group member below moderate threshold
+        let min_moderate_hp = strategy::lowest_hp_member(ctx)
+            .map(|(_, hp)| hp)
+            .map_or(self_hp, |g| g.min(self_hp));
+        if min_moderate_hp < MODERATE_HP {
             return ctx
                 .config
                 .spells
@@ -357,17 +362,18 @@ impl ClassStrategy for DruidStrategy {
                 .cloned();
         }
 
-        // Priority 6: Out-of-combat buffs (regen, damage shield, resist buffs)
+        // Priority 6: Out-of-combat buffs — highest-priority non-combat spell
         ctx.config
             .spells
             .iter()
             .filter(|s| {
                 let name = s.name.to_lowercase();
-                name.contains("regen")
-                    || name.contains("skin")
-                    || name.contains("resist")
-                    || name.contains("shield")
-                    || name.contains("buff")
+                !name.contains("heal")
+                    && !name.contains("nuke")
+                    && !name.contains("snare")
+                    && !name.contains("ensnare")
+                    && !name.contains("resurrect")
+                    && !name.contains("rez")
             })
             .filter(|s| mana_pct >= s.min_mana_pct)
             .max_by_key(|s| s.priority)
@@ -416,7 +422,6 @@ mod tests {
             has_detrimental: false,
         }
     }
-
 
     fn known_abilities() -> Vec<KnownAbility> {
         vec![
@@ -748,15 +753,11 @@ mod tests {
         let sets = DruidStrategy::build_ability_sets();
         let resolved = textquest_common::combat::resolve_abilities(&sets, &known_abilities(), 60);
 
-        let heal = resolved
-            .get("Heal")
-            .expect("level 60 should resolve heal");
+        let heal = resolved.get("Heal").expect("level 60 should resolve heal");
         assert_eq!(heal.ability_name, "Karana's Cure");
         assert_eq!(heal.spell_id, 5001);
 
-        let dot = resolved
-            .get("DoT")
-            .expect("level 60 should resolve DoT");
+        let dot = resolved.get("DoT").expect("level 60 should resolve DoT");
         assert_eq!(dot.ability_name, "Regrowth of the Grove");
         assert_eq!(dot.spell_id, 5004);
     }
@@ -766,15 +767,11 @@ mod tests {
         let sets = DruidStrategy::build_ability_sets();
         let resolved = textquest_common::combat::resolve_abilities(&sets, &known_abilities(), 65);
 
-        let heal = resolved
-            .get("Heal")
-            .expect("level 65 should resolve heal");
+        let heal = resolved.get("Heal").expect("level 65 should resolve heal");
         assert_eq!(heal.ability_name, "Karana's Healing");
         assert_eq!(heal.spell_id, 5000);
 
-        let dot = resolved
-            .get("DoT")
-            .expect("level 65 should resolve DoT");
+        let dot = resolved.get("DoT").expect("level 65 should resolve DoT");
         assert_eq!(dot.ability_name, "Vengeful Wrath");
         assert_eq!(dot.spell_id, 5003);
     }

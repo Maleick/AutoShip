@@ -561,7 +561,7 @@ impl Client {
         let req = self.add_token(req);
 
         let response = req.send().await?;
-        self.handle_response::<HashMap<String, TimestampFormat>>(response)
+        self.handle_response::<HashMap<String, TimestampConfig>>(response)
             .await
     }
 
@@ -586,7 +586,7 @@ impl Client {
         let req = self.add_token(req);
 
         let response = req.send().await?;
-        self.handle_response::<TimestampConfig>(response).await
+        self.handle_response::<TimestampFormat>(response).await
     }
 
     // ─── Kill Tracker ──────────────────────────────────────────────────────

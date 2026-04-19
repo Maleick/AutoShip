@@ -2321,9 +2321,9 @@ mod tests {
     #[test]
     fn necromancer_rotation_resolves_and_casts_resist_debuff_first() {
         let mut c = Combatant::new(11, 0, test_config());
-        let player = player_with_hp_end(90, 90, 90, 100);
+        let player = necro_player(90.0, 90.0);
         let target = test_target();
-        let known = rogue_known_abilities();
+        let known = necro_known_abilities();
         let expected_spell_id = known[0].spell_id;
         c.resolve_abilities(&known, 65);
 

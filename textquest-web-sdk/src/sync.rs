@@ -289,12 +289,12 @@ impl BlockingClient {
     /// List timestamp configurations (returns a map of character name → config)
     pub fn list_timestamp_configs(
         &self,
-    ) -> Result<std::collections::HashMap<String, TimestampFormat>> {
+    ) -> Result<std::collections::HashMap<String, TimestampConfig>> {
         self.runtime.block_on(self.client.list_timestamp_configs())
     }
 
     /// Get timestamp configuration for a character
-    pub fn get_timestamp_config(&self, character: &str) -> Result<TimestampFormat> {
+    pub fn get_timestamp_config(&self, character: &str) -> Result<TimestampConfig> {
         self.runtime
             .block_on(self.client.get_timestamp_config(character))
     }

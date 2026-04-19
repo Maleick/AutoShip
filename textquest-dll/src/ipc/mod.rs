@@ -585,6 +585,7 @@ mod tests {
 
     #[test]
     fn send_response_is_safe_when_ipc_not_running() {
+        let _lock = TEST_IPC_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // Temporarily ensure IPC is marked as not running to check the early-return
         // path in send_response().  We restore the value afterward.
         let was_running = IPC_RUNNING.swap(false, std::sync::atomic::Ordering::SeqCst);
@@ -636,6 +637,7 @@ mod tests {
 
     #[test]
     fn packet_event_drops_counter_increments_on_queue_overflow() {
+        let _lock = TEST_IPC_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // Simulate the queue-full condition by manually filling PENDING_RESPONSES
         // and enqueuing a PacketEvent while IPC is marked as running.
         // We can only test this if PENDING_RESPONSES is already initialized.
@@ -680,6 +682,7 @@ mod tests {
 
     #[test]
     fn get_packet_event_drop_count_reflects_drops() {
+        let _lock = TEST_IPC_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let old_running = IPC_RUNNING.swap(true, std::sync::atomic::Ordering::SeqCst);
         let baseline = get_packet_event_drop_count();
 
