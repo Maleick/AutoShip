@@ -226,17 +226,16 @@ fn main() -> ExitCode {
                     ExitCode::FAILURE
                 }
             },
-            BackupAction::Restore {
-                session_id,
-                backup_id,
-            } => match client.restore_backup(session_id, &backup_id) {
-                Ok(resp) => {
-                    println!("{}", resp.message);
-                    ExitCode::SUCCESS
-                }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    ExitCode::FAILURE
+            BackupAction::Restore { session_id, backup_id } => {
+                match client.restore_backup(session_id, &backup_id) {
+                    Ok(resp) => {
+                        println!("{}", resp.message);
+                        ExitCode::SUCCESS
+                    }
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        ExitCode::FAILURE
+                    }
                 }
             },
         },
