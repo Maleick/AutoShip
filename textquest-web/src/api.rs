@@ -146,6 +146,7 @@ fn write_box_chat_settings_to_disk(settings: &BoxChatConfig) -> Result<(), Strin
     }
 
     let path = textquest_config_path();
+    let existing_permissions = std::fs::metadata(&path).ok().map(|meta| meta.permissions());
     let mut doc = if path.exists() {
         let content = std::fs::read_to_string(&path)
             .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
@@ -196,6 +197,16 @@ fn write_box_chat_settings_to_disk(settings: &BoxChatConfig) -> Result<(), Strin
         .sync_all()
         .map_err(|error| format!("Failed to sync temp file {}: {error}", temp_path.display()))?;
     drop(temp_file);
+
+    if let Some(permissions) = existing_permissions {
+        std::fs::set_permissions(&temp_path, permissions).map_err(|error| {
+            format!(
+                "Failed to copy permissions from {} to {}: {error}",
+                path.display(),
+                temp_path.display()
+            )
+        })?;
+    }
 
     std::fs::rename(&temp_path, &path).map_err(|error| {
         let _ = std::fs::remove_file(&temp_path);
@@ -2261,6 +2272,43 @@ mod tests {
                 "error": "Trophy item name must not be blank when tradeskill trophy automation is enabled"
             })
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn write_box_chat_settings_preserves_existing_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _guard = config_env_lock().lock().await;
+        let path = temp_config_path("box-chat-permissions");
+        let _config_guard = ConfigPathGuard::set(&path);
+
+        std::fs::write(
+            &path,
+            "[box_chat]\nenabled = false\nhost = \"127.0.0.1\"\nport = 1\n",
+        )
+        .expect("seed config should be writable");
+        let restrictive_mode = 0o600;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(restrictive_mode))
+            .expect("seed config permissions should be adjustable");
+
+        let settings = BoxChatConfig {
+            enabled: true,
+            host: "127.0.0.1".into(),
+            port: 2112,
+            auto_connect: true,
+        };
+        write_box_chat_settings_to_disk(&settings)
+            .expect("box chat settings write should preserve permissions");
+
+        let written_mode = std::fs::metadata(&path)
+            .expect("written config should have metadata")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(written_mode, restrictive_mode);
+
+        let _ = std::fs::remove_file(&path);
     }
 
     #[tokio::test]
