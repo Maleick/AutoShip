@@ -819,7 +819,6 @@ export default function GroupsPage() {
           <CampConfigPanel
             group={selectedGroup}
             campConfig={getCampConfigForGroup(selectedGroup.id)}
-            onSave={createCampConfig}
           />
         </div>
       )}
