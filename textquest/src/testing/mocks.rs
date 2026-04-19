@@ -1,0 +1,200 @@
+//! Mock implementations for EQ process reading.
+
+use std::collections::HashMap;
+use crate::process::memory::ProcessHandle;
+
+/// Trait for reading EQ process memory.
+/// Implementors can provide real process reading (Windows) or mocks (tests).
+pub trait EqProcessReader {
+    fn read<T: Copy + Default>(&mut self, address: usize) -> Result<T, String>;
+    fn read_string(&mut self, address: usize, max_len: usize) -> Result<String, String>;
+    fn read_ptr(&mut self, address: usize) -> Result<usize, String>;
+}
+
+/// Mock implementation for testing.
+/// Stores pre-configured values that are returned on reads.
+pub struct MockProcessReader {
+    pid: u32,
+    memory: HashMap<usize, Vec<u8>>,
+    base: u64,
+}
+
+impl MockProcessReader {
+    pub fn new(pid: u32) -> Self {
+        Self {
+            pid,
+            memory: HashMap::new(),
+            base: 0x140000000,
+        }
+    }
+
+    pub fn with_base(mut self, base: u64) -> Self {
+        self.base = base;
+        self
+    }
+
+    pub fn with_value<T: bytemuck::Pod>(mut self, address: usize, value: T) -> Self {
+        let bytes = bytemuck::bytes_of(&value).to_vec();
+        self.memory.insert(address, bytes);
+        self
+    }
+
+    pub fn with_string(mut self, address: usize, value: &str) -> Self {
+        let mut bytes = value.as_bytes().to_vec();
+        bytes.push(0);
+        self.memory.insert(address, bytes);
+        self
+    }
+
+    pub fn with_wide_string(mut self, address: usize, value: &str) -> Self {
+        let bytes: Vec<u8> = value
+            .encode_utf16()
+            .flat_map(|unit| unit.to_le_bytes())
+            .collect();
+        self.memory.insert(address, bytes);
+        self
+    }
+
+    fn memory_at(&self, address: usize) -> Option<&[u8]> {
+        self.memory.get(&address).map(Vec::as_slice)
+    }
+
+    fn decode_value<T: Copy + Default>(&self, address: usize) -> Result<T, String> {
+        let Some(bytes) = self.memory_at(address) else {
+            return Ok(T::default());
+        };
+
+        let size = std::mem::size_of::<T>();
+        if bytes.len() < size {
+            return Err(format!(
+                "configured value at 0x{address:X} is too short: expected at least {size} bytes, got {}",
+                bytes.len()
+            ));
+        }
+
+        let mut value = std::mem::MaybeUninit::<T>::uninit();
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                bytes.as_ptr(),
+                value.as_mut_ptr() as *mut u8,
+                size,
+            );
+            Ok(value.assume_init())
+        }
+    }
+
+    fn decode_string(&self, address: usize, max_len: usize) -> Result<String, String> {
+        let Some(bytes) = self.memory_at(address) else {
+            return Ok(String::new());
+        };
+
+        let truncated = &bytes[..bytes.len().min(max_len)];
+
+        if truncated.len() >= 2
+            && truncated.len() % 2 == 0
+            && truncated.iter().skip(1).step_by(2).any(|&b| b == 0)
+        {
+            let units: Vec<u16> = truncated
+                .chunks_exact(2)
+                .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                .take_while(|&unit| unit != 0)
+                .collect();
+            return String::from_utf16(&units).map_err(|e| e.to_string());
+        }
+
+        let end = truncated
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(truncated.len());
+        Ok(String::from_utf8_lossy(&truncated[..end]).into_owned())
+    }
+
+    fn decode_ptr(&self, address: usize) -> Result<usize, String> {
+        let Some(bytes) = self.memory_at(address) else {
+            return Ok(0);
+        };
+
+        let size = std::mem::size_of::<usize>();
+        if bytes.len() < size {
+            return Err(format!(
+                "configured pointer at 0x{address:X} is too short: expected at least {size} bytes, got {}",
+                bytes.len()
+            ));
+        }
+
+        let mut raw = [0u8; std::mem::size_of::<usize>()];
+        raw.copy_from_slice(&bytes[..size]);
+        Ok(usize::from_ne_bytes(raw))
+    }
+}
+
+impl EqProcessReader for MockProcessReader {
+    fn read<T: Copy + Default>(&mut self, address: usize) -> Result<T, String> {
+        self.decode_value(address)
+    }
+
+    fn read_string(&mut self, address: usize, max_len: usize) -> Result<String, String> {
+        self.decode_string(address, max_len)
+    }
+
+    fn read_ptr(&mut self, address: usize) -> Result<usize, String> {
+        self.decode_ptr(address)
+    }
+}
+
+pub struct RealProcessReader {
+    handle: ProcessHandle,
+}
+
+impl RealProcessReader {
+    pub fn new(pid: u32) -> Result<Self, String> {
+        Ok(Self {
+            handle: ProcessHandle::open(pid).map_err(|e| e.to_string())?,
+        })
+    }
+}
+
+impl EqProcessReader for RealProcessReader {
+    fn read<T: Copy + Default>(&mut self, address: usize) -> Result<T, String> {
+        self.handle.read(address).map_err(|e| e.to_string())
+    }
+
+    fn read_string(&mut self, address: usize, max_len: usize) -> Result<String, String> {
+        self.handle
+            .read_string(address, max_len)
+            .map_err(|e| e.to_string())
+    }
+
+    fn read_ptr(&mut self, address: usize) -> Result<usize, String> {
+        self.handle.read_ptr(address).map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mock_reader_returns_configured_values() {
+        let mut mock = MockProcessReader::new(1234).with_value(0x140000000, 0xCAFEBABEu32);
+
+        let value: u32 = mock.read(0x140000000).unwrap();
+        assert_eq!(value, 0xCAFEBABE);
+    }
+
+    #[test]
+    fn mock_reader_returns_configured_string() {
+        let mut mock = MockProcessReader::new(1234).with_string(0x140000000, "TestChar");
+
+        let value = mock.read_string(0x140000000, 32).unwrap();
+        assert_eq!(value, "TestChar");
+    }
+
+    #[test]
+    fn mock_reader_returns_default_for_unconfigured_address() {
+        let mut mock = MockProcessReader::new(1234);
+
+        let value: u32 = mock.read(0x99999999).unwrap();
+        assert_eq!(value, 0);
+    }
+}
