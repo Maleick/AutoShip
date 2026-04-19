@@ -13,6 +13,10 @@ use textquest_common::{
     ipc::{Command, CorrelationIdGenerator, IpcCommand, Response},
     types::ClientId,
 };
+#[cfg(test)]
+use std::collections::{HashMap, VecDeque};
+#[cfg(test)]
+use std::sync::{Mutex, OnceLock};
 
 /// Sends commands to an injected DLL via named pipe.
 pub struct CommandPipe {
@@ -20,6 +24,53 @@ pub struct CommandPipe {
     correlation_ids: CorrelationIdGenerator,
     #[cfg(windows)]
     handle: windows::Win32::Foundation::HANDLE,
+}
+
+#[cfg(test)]
+fn test_ipc_response_queues() -> &'static Mutex<HashMap<ClientId, HashMap<u64, VecDeque<Response>>>> {
+    static TEST_IPC_RESPONSES: OnceLock<
+        Mutex<HashMap<ClientId, HashMap<u64, VecDeque<Response>>>>,
+    > = OnceLock::new();
+    TEST_IPC_RESPONSES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[cfg(test)]
+fn take_test_ipc_response(client_id: ClientId, correlation_id: u64) -> Option<Response> {
+    let mut queues = test_ipc_response_queues().lock().ok()?;
+    let per_client = queues.get_mut(&client_id)?;
+    let queue = per_client.get_mut(&correlation_id)?;
+    let response = queue.pop_front();
+    if queue.is_empty() {
+        per_client.remove(&correlation_id);
+    }
+    if per_client.is_empty() {
+        queues.remove(&client_id);
+    }
+    response
+}
+
+#[cfg(not(windows), test)]
+pub(crate) fn queue_test_ipc_response(
+    client_id: ClientId,
+    correlation_id: u64,
+    response: Response,
+) {
+    let mut queues = test_ipc_response_queues()
+        .lock()
+        .expect("test IPC response queue mutex should be available");
+    let per_client = queues.entry(client_id).or_default();
+    per_client
+        .entry(correlation_id)
+        .or_default()
+        .push_back(response);
+}
+
+#[cfg(not(windows), test)]
+pub(crate) fn clear_test_ipc_responses() {
+    let mut queues = test_ipc_response_queues()
+        .lock()
+        .expect("test IPC response queue mutex should be available");
+    queues.clear();
 }
 
 impl CommandPipe {
@@ -119,6 +170,13 @@ impl CommandPipe {
     /// Internal: encode an `IpcCommand`, write it to the pipe, read back an
     /// `IpcResponse`, and return `(response, correlation_id)`.
     fn send_ipc(&self, ipc_cmd: &IpcCommand) -> Result<(Response, Option<u64>)> {
+        #[cfg(all(not(windows), test))]
+        if let Some(correlation_id) = ipc_cmd.correlation_id {
+            if let Some(response) = take_test_ipc_response(self.client_id, correlation_id) {
+                return Ok((response, Some(correlation_id)));
+            }
+        }
+
         #[cfg(windows)]
         {
             use windows::Win32::Storage::FileSystem::{ReadFile, WriteFile};

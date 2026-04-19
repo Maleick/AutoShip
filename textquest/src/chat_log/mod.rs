@@ -32,7 +32,7 @@ impl ChatLogWriter {
         let current_size_bytes = file.metadata()?.len();
         let last_rotation_date = Self::today_date();
         Ok(Self {
-            file: Some(BufWriter::new(file)),
+            file: Some(BufWriter::with_capacity(8 * 1024, file)),
             path,
             current_size_bytes,
             last_rotation_date,
@@ -106,7 +106,7 @@ impl ChatLogWriter {
             .write(true)
             .truncate(true)
             .open(&self.path)?;
-        self.file = Some(BufWriter::new(file));
+        self.file = Some(BufWriter::with_capacity(8 * 1024, file));
         self.current_size_bytes = 0;
         self.last_rotation_date = date_suffix.to_string();
         Ok(())
@@ -119,7 +119,6 @@ impl ChatLogWriter {
             .as_mut()
             .expect("chat log writer should always have an active file");
         file.write_all(formatted_line.as_bytes())?;
-        file.flush()?;
         self.current_size_bytes += formatted_line.len() as u64;
         Ok(())
     }
@@ -709,6 +708,7 @@ mod cross_platform_tests {
         manager
             .log_message("Server", "Char", &msg, Some(ChatChannel::Say))
             .unwrap();
+        manager.close_writer("Server", "Char");
 
         let content = std::fs::read_to_string(dir.path().join("Server_Char.log")).unwrap();
         assert!(content.contains("Hello world"));
@@ -777,6 +777,7 @@ mod cross_platform_tests {
         manager
             .log_mq2_output("Server", "Char", "warning output", LogLevel::Warn)
             .unwrap();
+        manager.close_writer("Server", "Char");
 
         let content = std::fs::read_to_string(dir.path().join("Server_Char.log")).unwrap();
         assert!(content.contains("warning output"));

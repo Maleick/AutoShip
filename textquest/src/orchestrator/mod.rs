@@ -1885,6 +1885,8 @@ impl Orchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(windows))]
+    use crate::ipc::pipe::{clear_test_ipc_responses, queue_test_ipc_response};
     use crate::camp::state::Role;
     use std::sync::{Mutex, OnceLock};
     use textquest_common::{
@@ -1975,8 +1977,6 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
         }
     }
 
@@ -3447,5 +3447,56 @@ mod tests {
             cmds.iter().any(|(_, cmd)| cmd.contains("/nav target")),
             "integration path should issue vendor navigation commands"
         );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn poll_chat_log_if_due_forwards_ipc_messages_to_disk() {
+        clear_test_ipc_responses();
+
+        let pid = 1000u32;
+        let mut orch = Orchestrator::new();
+        orch.register_client(pid);
+        orch.client_names.insert(pid, "ChatSink".into());
+        orch.game_states.insert(
+            pid,
+            make_game_state(
+                pid,
+                "qeynos",
+                make_spawn_named("ChatSink", 1, 1000, 1000),
+                None,
+            ),
+        );
+
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let mut chat_config = ChatLogConfig::default();
+        chat_config.enabled = true;
+        chat_config.channels = vec![ChatChannel::Say];
+        orch.init_chat_log_manager(chat_config, tempdir.path().to_path_buf());
+
+        queue_test_ipc_response(
+            pid,
+            1,
+            Response::ChatBatch {
+                messages: vec![ChatMessageInfo {
+                    text: "ChatSink says, 'hello from test'".to_string(),
+                    color: 273,
+                    timestamp_ms: 1_700_000_000_000,
+                }],
+            },
+        );
+
+        orch.poll_chat_log_if_due();
+
+        {
+            let manager = orch.chat_log_manager.as_mut().expect("chat log manager exists");
+            manager.close_writer("qeynos", "ChatSink");
+        }
+
+        let log_file = tempdir.path().join("qeynos_ChatSink.log");
+        let log_contents =
+            std::fs::read_to_string(&log_file).expect("chat log file should be written");
+
+        assert!(log_contents.contains("hello from test"));
     }
 }
