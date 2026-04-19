@@ -6,7 +6,7 @@ export function useAdminMetrics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetch = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/metrics");
@@ -27,10 +27,10 @@ export function useAdminMetrics() {
   }, []);
 
   useEffect(() => {
-    fetch();
-    const interval = setInterval(fetch, 5000);
+    fetchData();
+    const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
-  }, [fetch]);
+  }, [fetchData]);
 
   return { metrics, loading, error };
 }

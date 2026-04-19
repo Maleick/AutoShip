@@ -6,7 +6,7 @@ export function useAdminBackups() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetch = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/backups");
@@ -27,10 +27,10 @@ export function useAdminBackups() {
   }, []);
 
   useEffect(() => {
-    fetch();
-    const interval = setInterval(fetch, 10000);
+    fetchData();
+    const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
-  }, [fetch]);
+  }, [fetchData]);
 
   return { backups, loading, error };
 }

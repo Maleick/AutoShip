@@ -6,7 +6,7 @@ export function useAdminLogs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetch = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/logs");
       if (!res.ok) {
@@ -26,10 +26,10 @@ export function useAdminLogs() {
   }, []);
 
   useEffect(() => {
-    fetch();
-    const interval = setInterval(fetch, 3000);
+    fetchData();
+    const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
-  }, [fetch]);
+  }, [fetchData]);
 
   return { logs, loading, error };
 }
