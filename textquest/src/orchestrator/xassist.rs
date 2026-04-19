@@ -241,8 +241,6 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
         }
     }
 
@@ -399,8 +397,6 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
         };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
@@ -442,8 +438,6 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
         };
 
         let commands = xassist.tick(&[(100, state)].into_iter().collect());
@@ -481,8 +475,6 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
-            active_buffs: vec![],
-            pet: None,
         };
 
         let state_for_find = make_state(100, make_player_spawn(100, "BoxDPS"), None, nearby);

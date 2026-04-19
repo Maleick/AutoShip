@@ -2423,8 +2423,6 @@ mod tests {
                 active_buffs: vec![],
                 pet: None,
                 actual_version: None,
-                active_buffs: vec![],
-                pet: None,
             },
         );
 
@@ -2444,8 +2442,6 @@ mod tests {
                 active_buffs: vec![],
                 pet: None,
                 actual_version: None,
-                active_buffs: vec![],
-                pet: None,
             },
         );
 
@@ -2547,8 +2543,6 @@ mod tests {
                 active_buffs: vec![],
                 pet: None,
                 actual_version: None,
-                active_buffs: vec![],
-                pet: None,
             },
         );
         orch.game_states.insert(
@@ -2566,8 +2560,6 @@ mod tests {
                 active_buffs: vec![],
                 pet: None,
                 actual_version: None,
-                active_buffs: vec![],
-                pet: None,
             },
         );
 
@@ -2879,8 +2871,6 @@ mod tests {
                 active_buffs: vec![],
                 pet: None,
                 actual_version: None,
-                active_buffs: vec![],
-                pet: None,
             },
         );
 
