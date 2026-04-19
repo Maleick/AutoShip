@@ -13,9 +13,13 @@
 
 use std::ffi::c_void;
 
-// Valid kernel-mode pointer range for 64-bit Windows
+// Conservative user-mode pointer range guard for Windows.
+// On x64, canonical user virtual addresses top out at 0x0000_7FFF_FFFF_FFFF.
 const MIN_VALID_POINTER: usize = 0x1000;
-const MAX_VALID_POINTER: usize = 0x7FFFFFFF000;
+#[cfg(target_pointer_width = "64")]
+const MAX_VALID_POINTER: usize = 0x0000_7FFF_FFFF_FFFF;
+#[cfg(target_pointer_width = "32")]
+const MAX_VALID_POINTER: usize = 0x7FFF_FFFF;
 
 fn is_valid_pointer(ptr: usize) -> bool {
     ptr >= MIN_VALID_POINTER && ptr <= MAX_VALID_POINTER
