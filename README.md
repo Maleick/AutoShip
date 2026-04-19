@@ -147,9 +147,13 @@ flowchart TD
         Offsets["EQ Offsets\nrebased runtime addrs"]
     end
 
-    subgraph Web["textquest-web"]
+    subgraph Web["textquest-web (+ SDK)"]
         Axum["Axum REST API"]
         ReactSPA["React SPA\nconfiguration UI"]
+    end
+
+    subgraph Soul["textquest-soul"]
+        LLM["LLM Personalities\nPersistent Memory"]
     end
 
     TUI -->|ReadProcessMemory| EQ["EverQuest Clients"]
@@ -159,19 +163,23 @@ flowchart TD
     GameLoop --> NavState
     CombatEngine --> EQ
     NavState --> EQ
+    TUI --> LLM
     Orchestrator --- Common
     DLL --- Common
     Axum <--> ReactSPA
+    Soul --- Common
 ```
 
 ### Workspace crates
 
-| Crate              | Type   | Role                                                  |
-| ------------------ | ------ | ----------------------------------------------------- |
-| `textquest`        | bin    | Orchestrator — TUI, camp loop, login, nav, IPC client |
-| `textquest-dll`    | cdylib | Injected DLL — game hooks, combat, nav, IPC server    |
-| `textquest-common` | lib    | Shared types, offsets, IPC protocol, spawns           |
-| `textquest-web`    | bin    | Axum backend + React SPA for web dashboard            |
+| Crate                | Type   | Role                                                         |
+| -------------------- | ------ | ------------------------------------------------------------ |
+| `textquest`          | bin    | Orchestrator — TUI, camp loop, login, nav, IPC client        |
+| `textquest-dll`      | cdylib | Injected DLL — game hooks, combat, nav, IPC server           |
+| `textquest-common`   | lib    | Shared types, offsets, IPC protocol, spawns, enums           |
+| `textquest-client`   | lib    | Per-client session management and monitor coordination        |
+| `textquest-soul`     | lib    | LLM-backed personalities, persistent memory, social dynamics |
+| `textquest-web`      | bin    | Axum REST backend + React SPA for web dashboard and config   |
 
 ## Configuration
 

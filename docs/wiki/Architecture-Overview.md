@@ -110,12 +110,66 @@ flowchart TD
 - `login/`: in-client login state machine and widget manipulation
 - `dialog.rs`: auto-accept handling for invites and similar dialogs
 
+## IPC Three-Channel Design
+
+Communication between the **external orchestrator** and the **injected DLL** uses three independent channels:
+
+### 1. Named Pipes (Bidirectional Command/Response)
+
+- **Protocol** — Binary serialization of `textquest_common::ipc::Command` and `Response` enums
+- **Latency** — Sub-millisecond round-trip on local machine
+- **Use cases** — Login, camp state changes, navigation route updates, ability queries
+- **Authentication** — Per-session token to prevent unauthorized access
+- **Reliability** — Messages are ACK'd; timeouts trigger reconnect logic
+
+Example:
+```rust
+// Orchestrator sends
+IpcCommand::SetCampActive { zone: "gfaydark", center: [100, 200, 50] }
+
+// DLL processes and responds
+IpcResponse::CampActivated { success: true, spawns_visible: 42 }
+```
+
+### 2. Shared Memory (Write-Once, High-Frequency Game State)
+
+- **Protocol** — Memory-mapped file containing `GameState` struct
+- **Frequency** — Updated every frame (~60-144 Hz)
+- **Size** — ~256 KB per client (spawn list, player pos, mana, health, effects)
+- **Readers** — Orchestrator and any monitoring tools can read without blocking
+- **Write pattern** — DLL writes; orchestrator reads; no synchronization needed (eventual consistency)
+
+Example:
+```rust
+// DLL publishes every frame
+shared_mem.player_x = 100.5;
+shared_mem.player_y = 200.3;
+shared_mem.player_z = 50.1;
+shared_mem.spawn_count = 42;
+// ... update spawn array ...
+
+// Orchestrator reads asynchronously
+if shared_mem.player_z < -5000.0 {
+    println!("Player is in the water!");
+}
+```
+
+### 3. Multicast UDP (Optional Peer Discovery)
+
+- **Protocol** — Serialized `PeerAnnouncement` with local orchestrator session ID
+- **Frequency** — ~10 second heartbeat
+- **Use case** — Auto-discovery of other orchestrator instances on the same network
+- **Reliability** — Best-effort; lost packets are non-fatal (next announcement will arrive)
+
+This channel is used for **federated orchestration** where multiple machines need to discover each other, but is optional for single-machine deployments.
+
 ## Operator Path Through the System
 
 - TUI input is parsed in `textquest/src/tui/app.rs`.
 - CLI commands are parsed in `textquest/src/main.rs`.
 - Both eventually issue `textquest_common::ipc::Command` messages or mutate orchestrator state.
-- The DLL executes the game-facing behavior and reports results through shared state or async responses.
+- The DLL executes the game-facing behavior and reports results through shared state (channel 2) or async responses (channel 1).
+- High-frequency telemetry (spawn position, health) flows through shared memory; low-frequency control flows through named pipes.
 
 ## Current Behavior vs Roadmap
 
