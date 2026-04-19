@@ -1,145 +1,74 @@
-# AutoShip Result: Issue #1212
+# GitHub Issue #1195 Implementation Result
 
-## Summary
-Successfully implemented GM interaction detection and alerting for TextQuest. The system detects incoming tells from Game Masters and account safety warnings, logs them prominently for operator review, and continues testing (non-blocking).
+## Issue Summary
+Document the map rendering internals with pipeline documentation and doc comments for key functions.
 
-### Task
-Create an interactive troubleshooting guide in `docs/wiki/Troubleshooting-Decision-Tree.md` covering 15+ failure modes with diagnostic commands and remediation steps.
+## Work Completed
 
-### Deliverable
-**File:** `docs/wiki/Troubleshooting-Decision-Tree.md`  
-**Size:** 1,970 lines  
-**Coverage:** 26 distinct failure modes across 10 categories
+### 1. Created Documentation File
+- **File**: `docs/wiki/Map-Rendering-Pipeline.md`
+- **Content**: Comprehensive guide covering:
+  - **Overview**: Map rendering pipeline stages (bounds → transform → cull → paint → display)
+  - **Coordinate Systems**: EQ world coords, map coords, screen coords with transformation sequence
+  - **Transformation Pipeline**: Four-step process from world space to screen grid
+  - **Rendering Layers**: Eight layers drawn back-to-front with cull optimizations
+  - **Z-Clipping**: Detailed explanation of `clip_line_z()` algorithm for height-based culling
+  - **Color Mapping**: RGB conversion strategy for zone map colors
+  - **Performance Optimizations**: Spawn caching, frustum culling, Bresenham bounds, lazy rendering
+  - **Key Data Structures**: ViewBounds, MapTransform, VisibleMapRegion, MapSpawnPresentationCell
+  - **Common Patterns**: Overlay drawing, Z-clipped rendering, heading/direction conversion
+  - **Testing & Debugging**: Map legend interpretation, troubleshooting guide
 
-### Content Structure
+### 2. Added Doc Comments to Key Functions
 
-#### Categories Covered
-1. **Startup & Daemon Failures** (4 modes)
-   - Port Conflict
-   - Initialization Error
-   - Immediate Exit
-   - Deadlock / Hang
+#### `combined_bounds()`
+Documents the three-source priority for computing bounding boxes and when each fallback applies.
 
-2. **Injection & IPC Failures** (3 modes)
-   - Injection Rejected
-   - Pipe Connect Timeout
-   - DLL Crash / Segfault
+#### `map_transform()`
+Explains viewport mode selection (Auto/Local/Global) and the complete transformation calculation including zoom/pan clamping.
 
-3. **Login Failures** (4 modes)
-   - Missing Account
-   - UI Interaction Timeout
-   - Auth Failure / Ban
-   - Character Selection Error
+#### `draw_map_view()`
+Comprehensive doc comment covering:
+- Rendering pipeline order (8 layers)
+- Layer toggle flags (G/S/P/M/L/A)
+- Coordinate transformation details
+- Performance characteristics
 
-4. **Camp Loop Failures** (3 modes)
-   - Action Stuck / Timeout
-   - Rapid-Fire Loop
-   - State Machine Deadlock
+#### `clip_line_z()` (enhanced existing)
+Extended the existing doc comment with:
+- Algorithm explanation with interpolation formula
+- Input/output specification with parameter meanings
+- Two-endpoint clipping logic
 
-5. **Navigation & Zoning Failures** (4 modes)
-   - Navigation Blocked
-   - Incorrect Path
-   - Zone Line Issue
-   - Navmesh Download / Validation
+#### `bresenham_line()` (added)
+Documents the line drawing algorithm, paint modes, and bounds safety.
 
-6. **Combat & Rotation Failures** (4 modes)
-   - Combat Not Starting
-   - Rotation Halts Prematurely
-   - Ability Skipped
-   - Rotation Effectiveness
+## Files Modified
+- `docs/wiki/Map-Rendering-Pipeline.md` — NEW
+- `textquest/src/tui/ui/map.rs` — 56 insertions of doc comments
 
-7. **Circuit Breaker & Error Accumulation** (4 modes)
-   - Health Check Failure
-   - Launch / Spawn Failure
-   - IPC Pipe Reconnect
-   - Command Dispatch Timeout
+## Testing
+- Documentation file created and formatted correctly
+- Doc comments added to all specified functions
+- Code changes committed to branch `autoship/issue-1195`
+- No breaking changes; all edits are non-functional additions
 
-8. **Account Lockout & Ban Detection** (3 modes)
-   - Temporary Lockout
-   - Permanent Ban / Suspension
-   - Session Ban / Disconnect
+## Key Insights Documented
 
-9. **System & Environment Issues** (4 modes)
-   - Missing Configuration / Files
-   - File Permissions
-   - Resource Exhaustion
-   - Time Sync / Clock Issues
+1. **Coordinate System Insight**: The (-y, -x) axis swap for map coordinates is a 180-degree rotation that preserves angular direction, critical for heading-based overlays (FOV cone, heading arrows).
 
-### Key Features
+2. **Z-Clipping Strategy**: Uses linear interpolation at boundaries to maintain geometric accuracy while respecting visibility ranges. Handles cases where lines cross the cull window.
 
-#### Decision Trees
-- ASCII flow diagrams for each section
-- Clear YES/NO branching paths
-- Cross-referenced section numbers
-- Comprehensive summary tree at end
+3. **Performance Pattern**: Spawn cache key includes transform, zoom, filters, and selection state—rebuild only triggers on actual view changes, not every frame.
 
-#### Diagnostic Commands
-- `textquest status` — Check daemon health
-- `textquest client-status-all` — Query all EQ clients
-- `textquest config check` — Validate configuration
-- `textquest navmesh diagnostics` — Check navigation state
-- `textquest --dump` — Export raw event logs (JSON)
-- `textquest client-status <PID>` — Query individual client
-- Standard system tools: `ps`, `lsof`, `df`, `timedatectl`
+4. **Rendering Order Matters**: Geometry → Labels → Navmesh → Spawns → Paths → Target → Player → Overlays ensures proper visual layering and occlusion semantics.
 
-#### Remediation Coverage
-Each failure mode includes:
-- **Symptom:** What the user experiences
-- **Root Causes:** Why it happens (2-4 possibilities)
-- **Diagnostics:** Commands to identify root cause
-- **Fix:** Step-by-step remediation (3-5 options)
+## Documentation Location
+All documentation accessible via:
+- `docs/wiki/Map-Rendering-Pipeline.md` — Primary reference guide
+- `textquest/src/tui/ui/map.rs` — In-code function documentation (via `/// doc comments`)
 
-#### Real Codebase Integration
-Draws from actual TextQuest architecture:
-- `SessionErrorKind` enum from metrics/admin_monitoring.rs
-  - MissingSessionToken, PipeConnect, PipeAuth, IpcDispatch, HealthCheck, LaunchFailure
-- `FleetEvent` enum from metrics/events.rs
-  - Kill, Death, LootDrop, ZoneChange, LevelUp, CombatRound
-- CLI commands from textquest/src/main.rs
-  - Start, Stop, Status, Dashboard, Tui, Inject, Login, Autologin, Cmd, Nav, Navmesh, Config, Credential
-- Camp loop configuration patterns from docs/wiki/Combat-and-Camp-Loop.md
-- IPC protocol from textquest-common/src/protocol.rs
-
-### Git Commit
-```
-fa8ce3feb docs: create Troubleshooting Decision Tree with 15+ failure modes
-```
-
-- Branch: `autoship/issue-1212`
-- Commit message includes reference to GitHub issue #1212
-- Securescan passed (no credentials/PII leaked)
-
-### Testing
-- Documentation files do not require cargo test execution
-- Content verified against real commands in codebase
-- Cross-referenced with existing wiki pages
-- ASCII decision trees manually validated for clarity
-
-### Related Docs
-- [Command Reference](docs/wiki/Command-Reference.md)
-- [Configuration](docs/wiki/Configuration.md)
-- [Combat and Camp Loop](docs/wiki/Combat-and-Camp-Loop.md)
-- [DLL Injection and IPC](docs/wiki/DLL-Injection-and-IPC-Pipeline.md)
-
-### Escalation Section
-Includes GitHub issue template for unsupported problems with collection of:
-- Full event log export (`textquest --dump`)
-- Config validation output
-- All client status information
-- Error logs with timestamps
-
----
-
-## Notes for Reviewer
-
-1. **Completeness:** All 15+ failure modes covered with multiple paths through decision tree (26 distinct sections)
-
-2. **Real-world utility:** Commands are extracted directly from CLI source code, not invented. Users can copy-paste them.
-
-3. **Clarity:** Each section follows consistent format: Symptom → Root Causes → Diagnostics → Fix
-
-4. **Escalation path:** Includes when to stop troubleshooting and file GitHub issues with proper context.
-
-5. **Maintainability:** Document organized by category; easy to add new modes or update remediation steps.
-
-6. **Cross-references:** Links to related wiki pages for deeper dives into specific systems.
+## Related Code References
+- Zone map loading: `textquest/src/eq/map_parser.rs`
+- Navigation types: `textquest_common/src/nav.rs`
+- Theme colors: `textquest/src/tui/theme.rs`
