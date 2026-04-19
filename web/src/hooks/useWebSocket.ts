@@ -18,6 +18,8 @@ export interface UseWebSocketOptions<T = string> {
 export interface UseWebSocketReturn<T = string> {
   /** Whether the WebSocket is currently connected */
   isConnected: boolean;
+  /** @deprecated Use isConnected instead. */
+  connected: boolean;
   /** The last received message */
   lastMessage: T | null;
   /** Send a message over the WebSocket */
@@ -95,14 +97,21 @@ export function useWebSocket<T = string>(
 
     ws.onmessage = (e) => {
       if (!activeRef.current) return;
+
+      // Keep lastMessage as the raw payload for backward compatibility
+      // with existing consumers that parse string payloads themselves.
+      setLastMessage(e.data as unknown as T);
+
+      if (!onMessage) {
+        return;
+      }
+
       try {
-        const data: T = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
-        setLastMessage(data);
-        onMessage?.(data);
+        const callbackData: T =
+          typeof e.data === "string" ? (JSON.parse(e.data) as T) : (e.data as T);
+        onMessage(callbackData);
       } catch {
-        // If JSON parsing fails, treat data as string
-        setLastMessage(e.data as unknown as T);
-        onMessage?.(e.data as unknown as T);
+        onMessage(e.data as unknown as T);
       }
     };
 
@@ -138,6 +147,7 @@ export function useWebSocket<T = string>(
 
   return {
     isConnected,
+    connected: isConnected,
     lastMessage,
     send,
     close: closeWebSocket,
