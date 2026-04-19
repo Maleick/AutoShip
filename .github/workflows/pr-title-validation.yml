@@ -13,7 +13,7 @@ jobs:
     runs-on: [self-hosted, Linux, X64, textquest]
     steps:
       - name: Validate conventional commit format
-        uses: amannn/action-semantic-pull-request@v5.4.0
+        uses: amannn/action-semantic-pull-request@e9fabac35e210fea40ca5b14c0da95a099eff26f # v5.4.0
         with:
           # Pattern: type(scope): description
           # Valid types: feat, fix, docs, style, refactor, test, chore, ci
