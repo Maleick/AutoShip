@@ -78,7 +78,7 @@ class WorkflowContractTests(unittest.TestCase):
         text = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
 
         self.assertIn(
-            "docs/**|site/**|*.md|*.txt|.github/workflows/ci.yml|.github/workflows/docs-pages.yml|tests/test_*docs*.py|tests/test_workflow_contract.py",
+            "docs/**|site/**|*.md|*.txt|.github/workflows/docs-pages.yml|tests/test_*docs*.py|tests/test_workflow_contract.py",
             text,
         )
 
