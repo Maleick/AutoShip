@@ -761,42 +761,43 @@ mod tests {
     #[test]
     fn walk_kind_stores_destination() {
         let k = walk_kind(10.0, 20.0, 30.0);
-        if let TransitionKind::WalkTo { destination } = k {
-            assert_eq!(destination.x, 10.0);
-            assert_eq!(destination.y, 20.0);
-            assert_eq!(destination.z, 30.0);
-        } else {
-            panic!("expected WalkTo");
+        match k {
+            TransitionKind::WalkTo { destination } => {
+                assert_eq!(destination.x, 10.0);
+                assert_eq!(destination.y, 20.0);
+                assert_eq!(destination.z, 30.0);
+            }
+            other => assert!(false, "expected WalkTo, got {other:?}"),
         }
     }
 
     #[test]
     fn zone_kind_stores_name_and_pos() {
         let k = zone_kind("highpass", 1.0, 2.0, 3.0);
-        if let TransitionKind::ZoneTo {
-            zone_name,
-            zone_line_pos,
-        } = k
-        {
-            assert_eq!(zone_name, "highpass");
-            assert_eq!(zone_line_pos.x, 1.0);
-        } else {
-            panic!("expected ZoneTo");
+        match k {
+            TransitionKind::ZoneTo {
+                zone_name,
+                zone_line_pos,
+            } => {
+                assert_eq!(zone_name, "highpass");
+                assert_eq!(zone_line_pos.x, 1.0);
+            }
+            other => assert!(false, "expected ZoneTo, got {other:?}"),
         }
     }
 
     #[test]
     fn port_kind_stores_name_and_caster() {
         let k = port_kind("nexus", 77);
-        if let TransitionKind::PortTo {
-            zone_name,
-            caster_id,
-        } = k
-        {
-            assert_eq!(zone_name, "nexus");
-            assert_eq!(caster_id, 77);
-        } else {
-            panic!("expected PortTo");
+        match k {
+            TransitionKind::PortTo {
+                zone_name,
+                caster_id,
+            } => {
+                assert_eq!(zone_name, "nexus");
+                assert_eq!(caster_id, 77);
+            }
+            other => assert!(false, "expected PortTo, got {other:?}"),
         }
     }
 }

@@ -390,10 +390,9 @@ mod tests {
         let step = TravelStep::WalkTo {
             waypoints: vec![Waypoint::new(1.0, 2.0, 3.0), Waypoint::new(4.0, 5.0, 6.0)],
         };
-        if let TravelStep::WalkTo { waypoints } = step {
-            assert_eq!(waypoints.len(), 2);
-        } else {
-            panic!("expected WalkTo");
+        match step {
+            TravelStep::WalkTo { waypoints } => assert_eq!(waypoints.len(), 2),
+            other => assert!(false, "expected WalkTo, got {other:?}"),
         }
     }
 

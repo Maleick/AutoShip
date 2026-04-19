@@ -188,7 +188,7 @@ mod tests {
         let cmd = seq.next_command(&state);
         match cmd {
             Some(Command::JoinGroup { group_id }) => assert_eq!(group_id, 42),
-            other => panic!("expected JoinGroup, got {other:?}"),
+            other => assert!(false, "expected JoinGroup, got {other:?}"),
         }
     }
 
@@ -349,25 +349,22 @@ mod tests {
     fn group_invite_commands_multiple() {
         let cmds = group_invite_commands(&["Alice", "Bob", "Charlie"]);
         assert_eq!(cmds.len(), 3);
-        if let Command::SlashCommand { command } = &cmds[0] {
-            assert_eq!(command, "/invite Alice");
-        } else {
-            panic!("Expected SlashCommand");
+        match &cmds[0] {
+            Command::SlashCommand { command } => assert_eq!(command, "/invite Alice"),
+            other => assert!(false, "expected SlashCommand at [0], got {other:?}"),
         }
-        if let Command::SlashCommand { command } = &cmds[2] {
-            assert_eq!(command, "/invite Charlie");
-        } else {
-            panic!("Expected SlashCommand");
+        match &cmds[2] {
+            Command::SlashCommand { command } => assert_eq!(command, "/invite Charlie"),
+            other => assert!(false, "expected SlashCommand at [2], got {other:?}"),
         }
     }
 
     #[test]
     fn group_accept_command_format() {
         let cmd = group_accept_command();
-        if let Command::SlashCommand { command } = cmd {
-            assert_eq!(command, "/accept");
-        } else {
-            panic!("Expected SlashCommand");
+        match cmd {
+            Command::SlashCommand { command } => assert_eq!(command, "/accept"),
+            other => assert!(false, "expected SlashCommand, got {other:?}"),
         }
     }
 }

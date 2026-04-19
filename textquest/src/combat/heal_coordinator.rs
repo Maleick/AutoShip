@@ -544,7 +544,7 @@ mod tests {
         assert_eq!(cmds[0].0, 1); // healer 1
         match &cmds[0].1 {
             Command::CombatEmergencyHeal { target_id } => assert_eq!(*target_id, 11),
-            _ => panic!("Expected CombatEmergencyHeal"),
+            other => assert!(false, "expected CombatEmergencyHeal, got {other:?}"),
         }
     }
 
@@ -565,7 +565,7 @@ mod tests {
             .iter()
             .map(|(_, cmd)| match cmd {
                 Command::CombatEmergencyHeal { target_id } => *target_id,
-                _ => panic!("Expected CombatEmergencyHeal"),
+                other => panic!("expected CombatEmergencyHeal, got {other:?}"),
             })
             .collect();
         // Both targets should be assigned, no duplicates
@@ -589,7 +589,7 @@ mod tests {
             Command::CombatEmergencyHeal { target_id } => {
                 assert_eq!(*target_id, 11, "Should heal tank over DPS");
             }
-            _ => panic!("Expected CombatEmergencyHeal"),
+            other => assert!(false, "expected CombatEmergencyHeal, got {other:?}"),
         }
     }
 
@@ -609,7 +609,7 @@ mod tests {
             Command::CombatEmergencyHeal { target_id } => {
                 assert_eq!(*target_id, 11, "Should heal own group first");
             }
-            _ => panic!("Expected CombatEmergencyHeal"),
+            other => assert!(false, "expected CombatEmergencyHeal, got {other:?}"),
         }
     }
 
@@ -629,7 +629,7 @@ mod tests {
             Command::CombatEmergencyHeal { target_id } => {
                 assert_eq!(*target_id, 10, "Emergency should override group priority");
             }
-            _ => panic!("Expected CombatEmergencyHeal"),
+            other => assert!(false, "expected CombatEmergencyHeal, got {other:?}"),
         }
     }
 
@@ -755,7 +755,7 @@ mod tests {
         assert_eq!(cmds.len(), 1);
         match &cmds[0].1 {
             Command::SetTarget { spawn_id } => assert_eq!(*spawn_id, 10),
-            _ => panic!("Expected SetTarget for cure"),
+            other => assert!(false, "expected SetTarget for cure, got {other:?}"),
         }
     }
 
@@ -986,7 +986,7 @@ mod tests {
             Command::SetTarget { spawn_id } => {
                 assert_eq!(*spawn_id, 11, "Should cure own group first");
             }
-            _ => panic!("Expected SetTarget"),
+            other => assert!(false, "expected SetTarget, got {other:?}"),
         }
     }
 

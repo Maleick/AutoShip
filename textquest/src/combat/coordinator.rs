@@ -463,7 +463,7 @@ mod tests {
                 Command::CombatSetAssistTarget { spawn_id } => {
                     assert_eq!(*spawn_id, 100);
                 }
-                _ => panic!("Expected CombatSetAssistTarget command"),
+                _ => assert!(false, "expected CombatSetAssistTarget command, got {cmd:?}"),
             }
         }
     }
@@ -500,11 +500,11 @@ mod tests {
         assert_eq!(commands[1].0, 11);
         match &commands[0].1 {
             Command::CombatSetAssistTarget { spawn_id } => assert_eq!(*spawn_id, 101),
-            _ => panic!("Expected CombatSetAssistTarget"),
+            other => assert!(false, "expected CombatSetAssistTarget, got {other:?}"),
         }
         match &commands[1].1 {
             Command::CombatSetAssistTarget { spawn_id } => assert_eq!(*spawn_id, 102),
-            _ => panic!("Expected CombatSetAssistTarget"),
+            other => assert!(false, "expected CombatSetAssistTarget, got {other:?}"),
         }
     }
 
@@ -560,7 +560,7 @@ mod tests {
         assert_eq!(cmds[0].0, 10);
         match &cmds[0].1 {
             Command::SetTarget { spawn_id } => assert_eq!(*spawn_id, 99),
-            _ => panic!("Expected SetTarget, got {:?}", cmds[0].1),
+            other => assert!(false, "expected SetTarget, got {other:?}"),
         }
         match &cmds[1].1 {
             Command::CastSpell {
@@ -574,7 +574,7 @@ mod tests {
                 assert!(!kill);
                 assert_eq!(*recast, 0);
             }
-            _ => panic!("Expected CastSpell, got {:?}", cmds[1].1),
+            other => assert!(false, "expected CastSpell, got {other:?}"),
         }
 
         // Next 19 ticks produce no CH commands

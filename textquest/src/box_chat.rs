@@ -1476,7 +1476,7 @@ mod tests {
             .recv_timeout(Duration::from_secs(1))
             .expect("peer tombstone broadcast");
         let WireMessage::BoxControllerState { node_name, clients } = message else {
-            panic!("expected controller state tombstone");
+            assert!(false, "expected controller state tombstone");
         };
         assert_eq!(node_name, "RAID-pc");
         assert!(clients.is_empty());
@@ -1580,7 +1580,7 @@ mod tests {
             .expect("empty controller state broadcast");
 
         let WireMessage::BoxControllerState { clients, .. } = message else {
-            panic!("expected controller state message");
+            assert!(false, "expected controller state message");
         };
         assert!(
             clients.is_empty(),
