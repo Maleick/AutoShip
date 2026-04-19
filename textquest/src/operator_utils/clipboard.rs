@@ -23,8 +23,7 @@ pub fn copy_to_clipboard(text: &str) -> Result<()> {
         System::DataExchange::{
             CloseClipboard, GetClipboardOwner, OpenClipboard, SetClipboardData,
         },
-        System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock},
-        System::MemoryFlags::GMEM_MOVEABLE,
+        System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE},
     };
 
     unsafe {

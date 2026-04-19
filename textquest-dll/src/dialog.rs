@@ -307,7 +307,7 @@ pub unsafe fn check_dialogs() {
             "TRDW_Trade_Button",
         ),
         (
-            AutoAcceptRequestKind::Task,
+            AutoAcceptRequestKind::TaskAdd,
             "TaskSelectWnd",
             "TASKSEL_AcceptButton",
         ),

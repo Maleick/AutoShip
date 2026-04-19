@@ -710,19 +710,19 @@ fn draw_dashboard_sidebar(
     for (section, chunk) in sections.iter().zip(chunks.iter()) {
         match section.kind {
             OverviewSectionKind::Character => {
-                draw_character_summary(frame, *chunk, app);
+                draw_character_summary(frame, *chunk, app, app.overview_state.character_collapsed);
             }
             OverviewSectionKind::Target => {
                 draw_target_cast_summary(frame, *chunk, app);
             }
             OverviewSectionKind::Groups => {
-                draw_group_ops_summary(frame, *chunk, app);
+                draw_group_ops_summary(frame, *chunk, app, app.overview_state.groups_collapsed);
             }
             OverviewSectionKind::Combat => {
-                draw_combat_status(frame, *chunk, app);
+                draw_combat_status(frame, *chunk, app, app.overview_state.combat_collapsed);
             }
             OverviewSectionKind::Session => {
-                draw_session_stats(frame, *chunk, app);
+                draw_session_stats(frame, *chunk, app, app.overview_state.session_collapsed);
             }
         }
     }
@@ -860,7 +860,7 @@ fn section_title(label: &str, key_hint: Option<&str>, collapsed: bool) -> String
     }
 }
 
-fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
     let t = &app.theme;
     let border_style = if app.is_panel_focused(ActivePanel::OverviewCharacter) {
         t.border_active
@@ -1108,7 +1108,7 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
 }
 
-fn draw_group_ops_summary(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_group_ops_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
     let t = &app.theme;
     let border_style = if app.is_panel_focused(ActivePanel::OverviewGroups) {
         t.border_active
@@ -1318,7 +1318,7 @@ fn render_hp_bar_long(hp_pct: f64) -> String {
     bar
 }
 
-fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
     let t = &app.theme;
     let border_style = if app.is_panel_focused(ActivePanel::OverviewFilters) {
         t.border_active
@@ -1391,7 +1391,7 @@ fn draw_scope_summary(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 /// Combat status summary — MA/MT, operating mode, CH chain status.
-fn draw_combat_status(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_combat_status(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
     let t = &app.theme;
     let border_style = if app.is_panel_focused(ActivePanel::OverviewCombat) {
         t.border_active
@@ -1494,7 +1494,7 @@ fn draw_combat_status(frame: &mut Frame, area: Rect, app: &App) {
     );
 }
 
-fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_session_stats(frame: &mut Frame, area: Rect, app: &App, collapsed: bool) {
     let t = &app.theme;
     let border_style = if app.is_panel_focused(ActivePanel::OverviewSession) {
         t.border_active

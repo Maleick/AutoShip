@@ -25,6 +25,7 @@ use crate::{
     combat::coordinator::CombatCoordinator,
     economy::price_monitor::TradePriceMonitor,
     ipc::{pipe::CommandPipe, shared::SharedStateReader},
+    loot::vendor_cycle::VendorInventoryItem,
     metrics::{AdminMonitoringStore, SessionErrorKind, SessionMonitoringSnapshot},
     say_detection::{SayAction, SayDetector, SayPattern, SayRule},
 };
@@ -43,9 +44,6 @@ use textquest_common::{
     spawn_finder::{LiveSpawnObserver, LiveSpawnSnapshot},
     types::{ClientId, GameState},
 };
-use xassist::XAssist;
-
-use self::{cross_group::CrossGroupCoordinator, session_control::SessionControl};
 
 /// Generate a cryptographically random 32-byte session token using OS entropy.
 #[allow(dead_code)] // Used when IPC is wired up in later milestones
@@ -352,21 +350,6 @@ impl Orchestrator {
         }
     }
 
-    fn build_shared_client_states(&self) -> Vec<SharedClientState> {
-        let include_extended = extended_state_enabled();
-        self.client_pids
-            .iter()
-            .filter_map(|pid| {
-                let state = self.game_states.get(pid)?;
-                SharedClientState::from_game_state(
-                    self.client_names.get(pid).map(String::as_str),
-                    state,
-                    include_extended,
-                )
-            })
-            .collect()
-    }
-
     fn build_live_spawn_snapshot(&self) -> LiveSpawnSnapshot {
         LiveSpawnSnapshot {
             observers: self
@@ -649,7 +632,7 @@ impl Orchestrator {
                 let xassist::AssistCommand::Target(spawn_id) = cmd;
                 (*pid, CampAction::Slash(format!("/target spawn:{spawn_id}")))
             }));
-        count + say_matches + xassist_count
+        count + say_matches
     }
 
     /// Returns the PIDs that should receive camp/hunt loop dispatches under the

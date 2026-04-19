@@ -294,7 +294,7 @@ impl SoundPlayerInner {
         {
             use std::ptr::null_mut;
             #[link(name = "kernel32")]
-            extern "system" {
+            unsafe extern "system" {
                 fn Beep(dwFreq: u32, dwDuration: u32) -> i32;
             }
             let freq = 800u32;

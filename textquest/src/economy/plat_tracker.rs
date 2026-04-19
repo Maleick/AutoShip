@@ -112,7 +112,7 @@ impl Default for CoinStack {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionRecord {
     #[serde(skip, default = "Instant::now")]
     pub timestamp: Instant,
@@ -182,7 +182,7 @@ impl TransactionType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionSummary {
     #[serde(skip, default = "Instant::now")]
     pub session_start: Instant,

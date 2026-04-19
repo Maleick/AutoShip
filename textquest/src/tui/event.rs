@@ -2,7 +2,7 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::time::{Duration, Instant};
 
-use super::app::{ActivePanel, ActiveScreen, App, MapViewportMode};
+use super::app::{ActivePanel, ActiveScreen, App, MapViewportMode, ToastLevel};
 use crate::{
     orchestrator::Orchestrator,
     tui::{state::MapFilterKind, ui::ch_chain::ChPanelFocus},

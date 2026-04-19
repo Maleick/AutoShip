@@ -27,7 +27,7 @@ use crate::{
     },
     config::AccountsConfig,
     eq::{
-        gm_detector::{GmAlertConfig, GmDetector},
+        gm_detector::{GmAlertConfig, GmDetector, GmEventType},
         log_parser::{ChatEvent, LootDatabase},
         log_watcher::LogWatcher,
         named_db::NamedMobDatabase,
@@ -613,6 +613,9 @@ pub struct App {
     /// resume).
     pub automation_paused: bool,
 
+    /// Count of pending terminal bell notifications to play.
+    pub pending_terminal_bells: u8,
+
     /// Live priority queue snapshots per character (updated each tick).
     pub priority_snapshots: Vec<super::priorities::PrioritySnapshot>,
 
@@ -918,6 +921,7 @@ impl App {
             alert_selected: 0,
             alert_panel_visible: false,
             automation_paused: false,
+            pending_terminal_bells: 0,
             priority_snapshots: Vec::new(),
             economy_state: super::state::EconomyState::default(),
             orchestrator_state: super::ui::orchestrator_panel::OrchestratorDashboardState::new(),
@@ -3452,7 +3456,7 @@ impl App {
             .collect();
 
         #[link(name = "winmm")]
-        extern "system" {
+        unsafe extern "system" {
             fn PlaySoundW(pszSound: *const u16, hmod: *mut std::ffi::c_void, fdwSound: u32) -> i32;
         }
 

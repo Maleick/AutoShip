@@ -694,6 +694,36 @@ pub mod eqgame {
     pub const SLISTWNDCELL_SIZE: usize = 0x28;
     /// `SListWndCell::Text` (`CXStr` at +0x08)
     pub const SLISTWNDCELL_TEXT: usize = 0x08;
+
+    // ─── CXWnd offsets (additional) ───
+    /// `CXWnd::Location` — window location/rect
+    pub const CXWND_LOCATION: usize = 0x020;
+    /// `CXWnd::ClientRect` — client area rect
+    pub const CXWND_CLIENT_RECT: usize = 0x030;
+    /// `CXWnd::Enabled` — whether window is enabled (bool)
+    pub const CXWND_ENABLED: usize = 0x230;
+
+    // ─── CTabWnd offsets (for tab-based windows like rewards) ───
+    /// `CTabWnd::PageArray` — pointer to array of page windows
+    pub const CTABWND_PAGE_ARRAY: usize = 0x288;
+    /// `CTabWnd::PageCount` — number of pages (int)
+    pub const CTABWND_PAGE_COUNT: usize = 0x290;
+    /// `CTabWnd::TabWidth` — width of each tab button (int)
+    pub const CTABWND_TAB_WIDTH: usize = 0x298;
+    /// `CTabWnd::TabHeight` — height of tabs (int)
+    pub const CTABWND_TAB_HEIGHT: usize = 0x29c;
+    /// `CTabWnd::CurrentTabIndex` — currently selected tab (int)
+    pub const CTABWND_CUR_TAB_INDEX: usize = 0x2a0;
+
+    // ─── CPageWnd offsets (individual tab pages) ───
+    /// `CPageWnd::TabText` — tab label text (`CXStr`)
+    pub const CPAGEWND_TAB_TEXT: usize = 0x100;
+
+    // ─── CXWnd vtable offsets ───
+    /// CXWnd vtable offset for HandleLButtonDown
+    pub const CXWND_VTABLE_HANDLE_LBUTTON_DOWN: usize = 0x068;
+    /// CXWnd vtable offset for HandleLButtonUp
+    pub const CXWND_VTABLE_HANDLE_LBUTTON_UP: usize = 0x070;
 }
 
 /// Offsets within `CInvSlotMgr`.
