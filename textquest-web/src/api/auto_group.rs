@@ -11,7 +11,7 @@ use std::sync::Arc;
 use axum::{
     Json, Router,
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
@@ -223,8 +223,13 @@ pub async fn get_auto_group(State(state): State<Arc<AppState>>) -> Response {
 /// PUT /auto-group — replace config (only allowed while idle/done).
 pub async fn put_auto_group(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(body): Json<PutAutoGroupConfig>,
 ) -> Response {
+    if !crate::api::loot::is_trusted_origin(&headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
     let phase = state
         .auto_group_state
         .phase_label
@@ -281,7 +286,14 @@ pub async fn put_auto_group(
 /// In the web-only (no live orchestrator) context this just updates the phase
 /// label so the dashboard can display the intent. When the real orchestrator
 /// is connected it polls the phase label and initiates formation.
-pub async fn post_auto_group_start(State(state): State<Arc<AppState>>) -> Response {
+pub async fn post_auto_group_start(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Response {
+    if !crate::api::loot::is_trusted_origin(&headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
     let phase = state
         .auto_group_state
         .phase_label
@@ -324,7 +336,14 @@ pub async fn post_auto_group_start(State(state): State<Arc<AppState>>) -> Respon
 }
 
 /// POST /auto-group/reset — abort formation and return to idle.
-pub async fn post_auto_group_reset(State(state): State<Arc<AppState>>) -> Response {
+pub async fn post_auto_group_reset(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Response {
+    if !crate::api::loot::is_trusted_origin(&headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
     if let Ok(mut label) = state.auto_group_state.phase_label.lock() {
         *label = "idle".into();
     }
@@ -600,5 +619,63 @@ mod tests {
         .await;
 
         assert_eq!(status, StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn put_rejected_for_untrusted_origin() {
+        let state = make_test_state();
+        let app = make_router(state);
+
+        let (status, _) = json_response(
+            app,
+            Request::builder()
+                .method("PUT")
+                .uri("/")
+                .header("content-type", "application/json")
+                .header(axum::http::header::ORIGIN, "https://evil.example")
+                .body(Body::from(json!({ "enabled": false }).to_string()))
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn start_rejected_for_untrusted_origin() {
+        let state = make_test_state();
+        let app = make_router(state);
+
+        let (status, _) = json_response(
+            app,
+            Request::builder()
+                .method("POST")
+                .uri("/start")
+                .header(axum::http::header::ORIGIN, "https://evil.example")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn reset_rejected_for_untrusted_origin() {
+        let state = make_test_state();
+        let app = make_router(state);
+
+        let (status, _) = json_response(
+            app,
+            Request::builder()
+                .method("POST")
+                .uri("/reset")
+                .header(axum::http::header::ORIGIN, "https://evil.example")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::FORBIDDEN);
     }
 }
