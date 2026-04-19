@@ -23,9 +23,7 @@ const BERSERKER_TIMER_CLEAVE: u8 = 4;
 /// Metadata for an activated ability's cooldown and shared timer behavior.
 #[derive(Debug, Clone, Copy)]
 pub struct AbilityReuseMetadata {
-    /// Fixed cooldown in ticks, if known.
     pub cooldown_ticks: Option<u32>,
-    /// Shared timer ID if this ability participates in a shared timer group.
     pub shared_timer_id: Option<u8>,
 }
 
