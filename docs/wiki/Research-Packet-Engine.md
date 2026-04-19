@@ -129,6 +129,8 @@ Bazaar note: current `M10` price sampling is intentionally implemented as a pass
 
 Roadmap note: economy work is `M10`, while packet-backed chat ingest (`M11`) stays grouped with Soul Engine follow-on work in the canonical roadmap.
 
+Roadmap note: economy work is `M10`, while packet-backed chat ingest (`M11`) stays grouped with Soul Engine follow-on work in the canonical roadmap.
+
 ## Capability Boundary Summary
 
 The table below formalizes the M5 packet engine capability boundary for TextQuest. It answers the question: for each major packet surface, what does TextQuest support today and what is explicitly out of scope until further validation?
