@@ -44,6 +44,8 @@ pub mod session_monitor;
 pub mod sound;
 /// ASCII sprite definitions for the map overlay.
 pub mod sprites;
+/// Audio alert definitions and configurable playback controls.
+pub mod audio;
 /// Per-screen UI state — scroll positions, selections, input buffers.
 pub mod state;
 /// Color theme system — multiple themes with per-element color definitions.
