@@ -39,23 +39,32 @@ pub enum SayRuleAction {
 pub struct SayDetectionRule {
     pub name: String,
     pub pattern: String,
+    #[serde(alias = "pattern_type")]
     #[serde(default)]
     pub pattern_type: SayPatternType,
+    #[serde(alias = "action_type")]
     #[serde(default)]
     pub action_type: SayRuleAction,
+    #[serde(alias = "action_value")]
     #[serde(default)]
     pub action_value: Option<String>,
     pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct SayDetectionConfig {
     pub enabled: bool,
+    #[serde(alias = "sound_enabled")]
     pub sound_enabled: bool,
+    #[serde(alias = "sound_file")]
     pub sound_file: Option<String>,
+    #[serde(alias = "toast_enabled")]
     pub toast_enabled: bool,
+    #[serde(alias = "discord_webhook_url")]
     pub discord_webhook_url: Option<String>,
+    #[serde(alias = "broadcast_all_clients")]
     pub broadcast_all_clients: bool,
     pub rules: Vec<SayDetectionRule>,
 }
@@ -438,5 +447,41 @@ mod tests {
         assert_eq!(status.total_matches, 0);
         assert!(status.last_match.is_none());
         assert!(!status.config.enabled);
+    }
+
+    #[test]
+    fn say_detection_config_deserializes_snake_case_toml_keys() {
+        let parsed = toml_edit::de::from_str::<SayDetectionConfig>(
+            r#"
+enabled = true
+sound_enabled = false
+sound_file = "custom.wav"
+toast_enabled = false
+discord_webhook_url = "https://discord.example/webhook"
+broadcast_all_clients = true
+
+[[rules]]
+name = "test"
+pattern = "hello"
+pattern_type = "substring"
+action_type = "command"
+action_value = "/say matched"
+enabled = true
+"#,
+        )
+        .expect("snake_case TOML config should deserialize");
+
+        assert!(parsed.enabled);
+        assert!(!parsed.sound_enabled);
+        assert_eq!(parsed.sound_file.as_deref(), Some("custom.wav"));
+        assert!(!parsed.toast_enabled);
+        assert_eq!(
+            parsed.discord_webhook_url.as_deref(),
+            Some("https://discord.example/webhook")
+        );
+        assert!(parsed.broadcast_all_clients);
+        assert_eq!(parsed.rules.len(), 1);
+        assert_eq!(parsed.rules[0].pattern_type, SayPatternType::Substring);
+        assert_eq!(parsed.rules[0].action_type, SayRuleAction::Command);
     }
 }
