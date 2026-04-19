@@ -99,7 +99,16 @@ pub async fn start_session(
 pub async fn stop_session(
     State(state): State<Arc<AppState>>,
     Path(id): Path<u32>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
+    if !crate::api::loot::is_trusted_origin(&headers) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "Forbidden: untrusted origin for session lifecycle mutation",
+        )
+        .into_response();
+    }
+
     if let Err(e) = validate_session_exists(&state, id).await {
         return e.into_response();
     }
@@ -123,7 +132,16 @@ pub async fn stop_session(
 pub async fn restart_session(
     State(state): State<Arc<AppState>>,
     Path(id): Path<u32>,
+    headers: HeaderMap,
 ) -> impl IntoResponse {
+    if !crate::api::loot::is_trusted_origin(&headers) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "Forbidden: untrusted origin for session lifecycle mutation",
+        )
+        .into_response();
+    }
+
     if let Err(e) = validate_session_exists(&state, id).await {
         return e.into_response();
     }
