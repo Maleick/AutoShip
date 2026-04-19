@@ -420,8 +420,7 @@ mod inner {
             // valid for that many WSABUF entries. We iterate through and validate
             // each entry independently.
             for i in 0..dw_buffer_count as usize {
-                let wsabuf_addr =
-                    (lp_buffers as usize).saturating_add(i * std::mem::size_of::<WSABUF>());
+                let wsabuf_addr = (lp_buffers as usize).saturating_add(i * std::mem::size_of::<WSABUF>());
                 let wsabuf_size = std::mem::size_of::<WSABUF>();
 
                 if is_safe_packet_buffer(wsabuf_addr, wsabuf_size) {
@@ -740,11 +739,7 @@ mod tests {
         const WSABUF_SIZE: usize = 16;
         for i in 0..3usize {
             let offset = i.saturating_mul(WSABUF_SIZE);
-            assert_eq!(
-                offset,
-                i * 16,
-                "Buffer iteration offset should match expected value"
-            );
+            assert_eq!(offset, i * 16, "Buffer iteration offset should match expected value");
         }
     }
 
@@ -761,10 +756,7 @@ mod tests {
 
         // A buffer with zero length should not be processed
         let min_opcode_len = 4usize;
-        assert!(
-            zero_len < min_opcode_len,
-            "Zero-length buffers should be skipped"
-        );
+        assert!(zero_len < min_opcode_len, "Zero-length buffers should be skipped");
     }
 
     /// Test: Overlapped receive with WSA_IO_PENDING is detected and logged.
@@ -795,10 +787,7 @@ mod tests {
 
         // Asynchronous path: ret == WSA_IO_PENDING == -1
         let async_ret = -1i32;
-        assert_eq!(
-            async_ret, -1,
-            "Asynchronous receive returns WSA_IO_PENDING (-1)"
-        );
+        assert_eq!(async_ret, -1, "Asynchronous receive returns WSA_IO_PENDING (-1)");
 
         // The two cases are mutually exclusive and should not execute the same
         // buffer capture code. The synchronous path reads the buffer immediately;
@@ -851,9 +840,6 @@ mod tests {
     fn wsabuf_size_for_multi_buffer_iteration() {
         use super::inner::WSABUF;
         let wsabuf_size = std::mem::size_of::<WSABUF>();
-        assert_eq!(
-            wsabuf_size, 16,
-            "WSABUF must be 16 bytes for correct multi-buffer arithmetic"
-        );
+        assert_eq!(wsabuf_size, 16, "WSABUF must be 16 bytes for correct multi-buffer arithmetic");
     }
 }
