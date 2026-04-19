@@ -554,6 +554,8 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
 mod tests {
     use super::*;
 
+    static TEST_IPC_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     // ─── is_running() ──────────────────────────────────────────────────────────
 
     #[test]
@@ -622,6 +624,7 @@ mod tests {
 
     #[test]
     fn stop_is_idempotent() {
+        let _lock = TEST_IPC_LOCK.lock().unwrap();
         // Calling stop() multiple times must not panic.
         stop();
         stop();
@@ -633,6 +636,7 @@ mod tests {
 
     #[test]
     fn packet_event_drops_counter_increments_on_queue_overflow() {
+        let _lock = TEST_IPC_LOCK.lock().unwrap();
         // Simulate the queue-full condition by manually filling PENDING_RESPONSES
         // and enqueuing a PacketEvent while IPC is marked as running.
         // We can only test this if PENDING_RESPONSES is already initialized.
@@ -677,6 +681,7 @@ mod tests {
 
     #[test]
     fn get_packet_event_drop_count_reflects_drops() {
+        let _lock = TEST_IPC_LOCK.lock().unwrap();
         let old_running = IPC_RUNNING.swap(true, std::sync::atomic::Ordering::SeqCst);
         let baseline = get_packet_event_drop_count();
 
