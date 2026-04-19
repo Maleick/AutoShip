@@ -36,6 +36,12 @@ jobs:
       - name: Ensure cmake on PATH
         uses: ./.github/actions/ensure-cmake
 
+      - name: Run tests before release
+        run: |
+          echo [info] Running test suite...
+          cargo test --lib --all
+          echo [info] All tests passed.
+
       - name: Build release binaries
         run: cargo build --release
         env:
@@ -62,6 +68,32 @@ jobs:
       - name: Write release version file
         shell: pwsh
         run: Set-Content -Path release/VERSION.txt -NoNewline -Value ("TextQuest " + $env:GITHUB_REF_NAME)
+
+      - name: Extract changelog excerpt
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $changelogPath = "CHANGELOG.md"
+
+          # Extract changelog for this version
+          if (Test-Path $changelogPath) {
+            $content = Get-Content $changelogPath -Raw
+
+            # Match the version section: ## [X.Y.Z] - DATE ... until next ## or end of file
+            $pattern = "## \[$([regex]::Escape($version))\].*?(?=(## \[|\Z)"
+
+            if ($content -match $pattern) {
+              $excerpt = $matches[0] -replace '## \[' , '## [' # cleanup
+              $excerpt = $excerpt.Trim()
+              Set-Content -Path release/CHANGELOG_EXCERPT.txt -Value $excerpt
+              Write-Host "Extracted changelog for v$version"
+              Write-Host $excerpt
+            } else {
+              Write-Host "Warning: Could not extract changelog for version $version from CHANGELOG.md"
+            }
+          } else {
+            Write-Host "Warning: CHANGELOG.md not found"
+          }
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
