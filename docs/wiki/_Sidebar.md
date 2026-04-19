@@ -6,6 +6,8 @@
 - [Operating the TUI](Operating-the-TUI)
 - [Command Reference](Command-Reference)
 - [Troubleshooting](Troubleshooting)
+- [Advanced Topics](Advanced-Topics)
+- [Example Configurations](Example-Configurations)
 
 ## Operation
 

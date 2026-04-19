@@ -5,6 +5,8 @@
 pub mod achievements;
 /// Application state — tracks active screen, selections, and all runtime data.
 pub mod app;
+/// Audio alert definitions and configurable playback controls.
+pub mod audio;
 /// Shared cast presentation helpers for TUI surfaces.
 pub mod cast;
 /// TUI client wrapper — connects process reading to app state updates.
@@ -44,8 +46,6 @@ pub mod session_monitor;
 pub mod sound;
 /// ASCII sprite definitions for the map overlay.
 pub mod sprites;
-/// Audio alert definitions and configurable playback controls.
-pub mod audio;
 /// Per-screen UI state — scroll positions, selections, input buffers.
 pub mod state;
 /// Color theme system — multiple themes with per-element color definitions.

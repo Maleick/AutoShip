@@ -1884,9 +1884,9 @@ impl Orchestrator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::camp::state::Role;
     #[cfg(not(windows))]
     use crate::ipc::pipe::{clear_test_ipc_responses, queue_test_ipc_response};
-    use crate::camp::state::Role;
     use std::sync::{Mutex, OnceLock};
     use textquest_common::{
         combat::CombatStatus,
@@ -3488,7 +3488,10 @@ mod tests {
         orch.poll_chat_log_if_due();
 
         {
-            let manager = orch.chat_log_manager.as_mut().expect("chat log manager exists");
+            let manager = orch
+                .chat_log_manager
+                .as_mut()
+                .expect("chat log manager exists");
             manager.close_writer("qeynos", "ChatSink");
         }
 

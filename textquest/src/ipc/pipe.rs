@@ -5,6 +5,10 @@
 //! compile-only stub.
 
 use anyhow::Result;
+#[cfg(test)]
+use std::collections::{HashMap, VecDeque};
+#[cfg(test)]
+use std::sync::{Mutex, OnceLock};
 #[cfg(windows)]
 use textquest_common::ipc::IpcResponse;
 #[cfg(windows)]
@@ -13,10 +17,6 @@ use textquest_common::{
     ipc::{Command, CorrelationIdGenerator, IpcCommand, Response},
     types::ClientId,
 };
-#[cfg(test)]
-use std::collections::{HashMap, VecDeque};
-#[cfg(test)]
-use std::sync::{Mutex, OnceLock};
 
 /// Sends commands to an injected DLL via named pipe.
 pub struct CommandPipe {
@@ -27,7 +27,8 @@ pub struct CommandPipe {
 }
 
 #[cfg(test)]
-fn test_ipc_response_queues() -> &'static Mutex<HashMap<ClientId, HashMap<u64, VecDeque<Response>>>> {
+fn test_ipc_response_queues() -> &'static Mutex<HashMap<ClientId, HashMap<u64, VecDeque<Response>>>>
+{
     static TEST_IPC_RESPONSES: OnceLock<
         Mutex<HashMap<ClientId, HashMap<u64, VecDeque<Response>>>>,
     > = OnceLock::new();

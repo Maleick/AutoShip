@@ -693,7 +693,7 @@ mod tests {
                 std::path::PathBuf::from("/tmp/test-extension-catalog.json"),
             ),
             session_logs: tokio::sync::RwLock::new(std::collections::HashMap::new()),
-            session_control_state: SessionControlState::new(),
+            session_control_state: Arc::new(SessionControlState::with_max_records(limit)),
         })
     }
 

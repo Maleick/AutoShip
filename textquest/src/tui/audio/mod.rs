@@ -79,8 +79,7 @@ impl AudioPlayer {
             return Ok(());
         }
 
-        self.active_channels
-            .insert(alert_type.clone(), 1);
+        self.active_channels.insert(alert_type.clone(), 1);
 
         let result = self.play_alert_impl(&alert_type);
         match result {
@@ -129,7 +128,8 @@ impl AudioPlayer {
             }
         }
 
-        let config = toml::from_str::<AudioConfig>(&contents).context("Failed to parse audio config")?;
+        let config =
+            toml::from_str::<AudioConfig>(&contents).context("Failed to parse audio config")?;
         self.alerts = config
             .alerts
             .into_iter()
@@ -147,8 +147,9 @@ impl AudioPlayer {
             alerts: self.alerts.values().cloned().collect(),
         };
         if let Some(parent) = self.config_path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create config directory {}", parent.display()))?;
+            fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create config directory {}", parent.display())
+            })?;
         }
         let serialized =
             toml::to_string_pretty(&config).context("Failed to serialize audio config")?;
@@ -270,12 +271,8 @@ impl AudioPlayer {
             return Ok(());
         };
 
-        let file = fs::File::open(&alert.sound_file).with_context(|| {
-            format!(
-                "Failed to open audio file {}",
-                alert.sound_file.display()
-            )
-        })?;
+        let file = fs::File::open(&alert.sound_file)
+            .with_context(|| format!("Failed to open audio file {}", alert.sound_file.display()))?;
         let reader = BufReader::new(file);
         let source = Decoder::new(reader).context("Failed to decode audio alert")?;
 

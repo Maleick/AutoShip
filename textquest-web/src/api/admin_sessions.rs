@@ -278,11 +278,8 @@ mod tests {
         let req: SessionLifecycleRequest = serde_json::from_str(json).expect("parse request");
         assert_eq!(req.timeout_secs, None);
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+
     use axum::{
         body::Body,
         http::{Request, StatusCode, header},

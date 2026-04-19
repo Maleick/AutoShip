@@ -5,8 +5,10 @@
 
 pub mod bindings;
 pub mod error;
+pub mod loader;
 pub mod types;
 
 pub use bindings::LuaBindings;
 pub use error::LuaApiError;
+pub use loader::{create_loader, ScriptLoader};
 pub use types::*;
