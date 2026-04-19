@@ -176,7 +176,10 @@ mod tests {
             "Soandso",
             "You don't have enough mana"
         ));
-        assert!(!contains_account_safety_warning("Friend", "WTS some items"));
+        assert!(!contains_account_safety_warning(
+            "Friend",
+            "WTS some items"
+        ));
         assert!(!contains_account_safety_warning(
             "Guildie",
             "Let's go farming"
@@ -246,12 +249,18 @@ mod tests {
     fn edge_case_unknown_sender_with_single_keyword() {
         // Unknown sender with single keyword but not a GM-like name
         // should generally not trigger
-        assert!(!detect_gm_tell("RandomPlayer", "account"));
+        assert!(!detect_gm_tell(
+            "RandomPlayer",
+            "account"
+        ));
     }
 
     #[test]
     fn edge_case_suspiciously_named_player_with_keywords() {
         // Suspicious name + warning keywords = should trigger
-        assert!(detect_gm_tell("Admin_Bot", "your account needs review"));
+        assert!(detect_gm_tell(
+            "Admin_Bot",
+            "your account needs review"
+        ));
     }
 }
