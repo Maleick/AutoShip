@@ -555,7 +555,7 @@ impl Client {
     // ─── Timestamp Config ──────────────────────────────────────────────────
 
     /// List timestamp configurations (returns a map of character name → config)
-    pub async fn list_timestamp_configs(&self) -> Result<HashMap<String, TimestampFormat>> {
+    pub async fn list_timestamp_configs(&self) -> Result<HashMap<String, TimestampConfig>> {
         let url = self.build_url("/timestamp-config");
         let req = self.http_client.get(&url);
         let req = self.add_token(req);
@@ -566,13 +566,13 @@ impl Client {
     }
 
     /// Get timestamp configuration for a character
-    pub async fn get_timestamp_config(&self, character: &str) -> Result<TimestampFormat> {
+    pub async fn get_timestamp_config(&self, character: &str) -> Result<TimestampConfig> {
         let url = self.build_url(&format!("/timestamp-config/{}", character));
         let req = self.http_client.get(&url);
         let req = self.add_token(req);
 
         let response = req.send().await?;
-        self.handle_response::<TimestampFormat>(response).await
+        self.handle_response::<TimestampConfig>(response).await
     }
 
     /// Update timestamp configuration for a character
@@ -586,7 +586,7 @@ impl Client {
         let req = self.add_token(req);
 
         let response = req.send().await?;
-        self.handle_response::<TimestampFormat>(response).await
+        self.handle_response::<TimestampConfig>(response).await
     }
 
     // ─── Kill Tracker ──────────────────────────────────────────────────────
