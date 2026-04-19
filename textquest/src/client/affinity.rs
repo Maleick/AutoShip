@@ -85,15 +85,16 @@ impl AffinityController {
                     priority: ProcessPriority::Normal,
                 }
             } else {
-                let bg_idx = if focused_idx.is_some() {
-                    i
+                let bg_idx = if let Some(focused) = focused_idx {
+                    if i > focused { i - 1 } else { i }
                 } else {
-                    i.saturating_sub(1)
+                    i
                 };
                 let cpu_index = ((bg_idx % (available_cpus.saturating_sub(1)).max(1))
                     + self.background_cpu_start as usize)
-                    .min(total_cpus.saturating_sub(1));
-                let mask = 1u64 << (cpu_index + 1);
+                    .min(total_cpus.saturating_sub(1))
+                    .min(u64::BITS as usize - 1);
+                let mask = 1u64 << cpu_index;
                 AffinityConfig {
                     cpu_mask: if mask == 1u64 << self.foreground_cpu {
                         1u64 << self.background_cpu_start
@@ -399,6 +400,9 @@ mod tests {
         let assignments = ctrl.compute_assignments(&pids, None, 8);
 
         assert_eq!(assignments.len(), 3);
+        assert_eq!(assignments[0].cpu_mask, 1 << 2);
+        assert_eq!(assignments[1].cpu_mask, 1 << 3);
+        assert_eq!(assignments[2].cpu_mask, 1 << 4);
     }
 
     #[test]
@@ -430,5 +434,18 @@ mod tests {
 
         assert_eq!(assignments[0].cpu_mask, 1 << 1);
         assert_eq!(assignments[0].priority, ProcessPriority::Normal);
+    }
+
+    #[test]
+    fn affinity_controller_background_masks_stay_in_range_on_64_cpus() {
+        let ctrl = AffinityController::new(1, 2);
+        let pids: Vec<u32> = (0..62).map(|i| 1000 + i).collect();
+        let assignments = ctrl.compute_assignments(&pids, None, 64);
+
+        assert_eq!(assignments.len(), pids.len());
+        for config in assignments {
+            assert_eq!(config.cpu_mask.count_ones(), 1);
+            assert_ne!(config.cpu_mask, 0);
+        }
     }
 }
