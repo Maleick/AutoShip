@@ -26,9 +26,9 @@ def mock_api_server() -> tuple[str, dict[str, object]]:
     }
 
     async def require_auth(request: web.Request) -> web.StreamResponse | None:
-        expected = state["token"]
-        provided = request.headers.get("Authorization", "")
-        if provided != f"Bearer {expected}":
+        expected = str(state["token"])
+        provided = request.headers.get("X-API-Token", "")
+        if provided != expected:
             return web.json_response(
                 {"error": "missing or invalid api token"},
                 status=401,

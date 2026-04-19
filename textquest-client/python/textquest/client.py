@@ -67,7 +67,7 @@ class _ClientConfig:
     def headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json"}
         if self.api_token:
-            headers["Authorization"] = f"Bearer {self.api_token}"
+            headers["X-API-Token"] = self.api_token
         return headers
 
 
