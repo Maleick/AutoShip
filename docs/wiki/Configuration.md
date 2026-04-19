@@ -388,3 +388,4 @@ channels = ["say", "tell", "tell_out", "group", "guild", "raid", "shout", "ooc",
 - Toon-specific combat overrides live in `config/toons/<ToonName>.toml` (see `Class-Combat-Rotations.md`).
 - The live orchestrator polls each registered client with `PollChat`, writes any returned `ChatBatch` messages through `ChatLogManager`, and updates per-character files under the configured `log_dir`.
 - The chat writer uses a shared 8KB `BufWriter` per file. Messages are appended to the file buffer and flushed on rotation or explicit close, not on every message write.
+- Log files are named `<server_charactername>.log` and stored in the configured log directory (default `logs/`).

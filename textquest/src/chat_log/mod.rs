@@ -777,7 +777,7 @@ mod cross_platform_tests {
         manager
             .log_mq2_output("Server", "Char", "warning output", LogLevel::Warn)
             .unwrap();
-        manager.close_writer("Server", "Char");
+        manager.close_all();
 
         let content = std::fs::read_to_string(dir.path().join("Server_Char.log")).unwrap();
         assert!(content.contains("warning output"));
