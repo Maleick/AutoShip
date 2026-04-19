@@ -148,7 +148,8 @@ export function useSpawnAlerts() {
 
   const addPattern = useCallback(async (pattern: string): Promise<void> => {
     try {
-      const res = await fetch("/api/spawn-alerts/watch-list", {
+      const encoded = encodeURIComponent(pattern);
+      const res = await fetch(`/api/spawn-alerts/watch-list/${encoded}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pattern, enabled: true }),
@@ -181,7 +182,8 @@ export function useSpawnAlerts() {
 
   const togglePattern = useCallback(async (pattern: string, enabled: boolean): Promise<void> => {
     try {
-      const res = await fetch("/api/spawn-alerts/watch-list", {
+      const encoded = encodeURIComponent(pattern);
+      const res = await fetch(`/api/spawn-alerts/watch-list/${encoded}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pattern, enabled }),
