@@ -442,7 +442,7 @@ const ANNOTATION_COLORS: [Color; 6] = [
 /// Draw the inspect/hex dump sidebar for the Debug screen.
 ///
 /// Shows struct field info when a spawn is selected, then raw hex dump.
-pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     let t = &app.theme;
     let is_active = app.active_panel == ActivePanel::DebugHexDump;
     let border_style = if is_active {

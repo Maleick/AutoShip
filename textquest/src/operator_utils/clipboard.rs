@@ -17,43 +17,38 @@ use anyhow::Result;
 #[cfg(windows)]
 pub fn copy_to_clipboard(text: &str) -> Result<()> {
     use anyhow::Context;
-    use std::ffi::CStr;
     use windows::Win32::{
-        Foundation::HWND,
+        Foundation::{HANDLE, HWND},
         System::DataExchange::{
-            CloseClipboard, GetClipboardOwner, OpenClipboard, SetClipboardData,
+            CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
         },
         System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE},
     };
 
     unsafe {
-        // Open clipboard
-        OpenClipboard(HWND::default()).ok()?;
+        OpenClipboard(HWND::default()).context("OpenClipboard failed")?;
 
-        // Allocate memory for the text
-        let size = text.len() + 1; // +1 for null terminator
-        let hglobal = GlobalAlloc(GMEM_MOVEABLE, size)
-            .ok_or_else(|| anyhow::anyhow!("GlobalAlloc failed"))?;
+        let size = text.len() + 1;
+        let hglobal = GlobalAlloc(GMEM_MOVEABLE, size).context("GlobalAlloc failed")?;
 
-        // Lock and copy data
         let ptr = GlobalLock(hglobal);
         if ptr.is_null() {
             let _ = CloseClipboard();
-            anyhow::bail!("Failed to lock global memory");
+            anyhow::bail!("GlobalLock failed");
         }
 
-        // Copy text to allocated memory
-        std::ptr::copy_nonoverlapping(text.as_ptr() as *const u8, ptr as *mut u8, text.len());
-        // Write null terminator
-        *(ptr.add(text.len()) as *mut u8) = 0;
+        std::ptr::copy_nonoverlapping(text.as_ptr(), ptr.cast::<u8>(), text.len());
+        *(ptr.cast::<u8>().add(text.len())) = 0;
 
         let _ = GlobalUnlock(hglobal);
 
-        // Set clipboard data (CF_TEXT = 1 for ANSI text)
-        const CF_TEXT: u32 = 1;
-        SetClipboardData(CF_TEXT, hglobal as isize).map_err(|e| anyhow::anyhow!("SetClipboardData failed: {}", e))?;
+        EmptyClipboard().context("EmptyClipboard failed")?;
 
-        CloseClipboard();
+        const CF_TEXT: u32 = 1;
+        SetClipboardData(CF_TEXT, HANDLE(hglobal as isize))
+            .context("SetClipboardData failed")?;
+
+        CloseClipboard().context("CloseClipboard failed")?;
     }
 
     tracing::info!(len = text.len(), "Copied text to clipboard");

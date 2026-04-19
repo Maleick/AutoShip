@@ -1600,6 +1600,8 @@ impl Orchestrator {
                 continue;
             };
 
+            let mut gm_tells: Vec<(String, String)> = Vec::new();
+
             for message in messages {
                 let Some(chat) = textquest_common::chat::parse_chat_text(&message.text) else {
                     if manager.get_config().log_eq_chat {
@@ -1610,16 +1612,13 @@ impl Orchestrator {
 
                 let channel: ChatChannel = chat.channel.into();
 
-                // Check for GM tells and CSR interactions
-                if matches!(channel, ChatChannel::Tell) {
-                    if textquest_common::gm_detection::detect_gm_tell(&chat.sender, &chat.message) {
-                        // Drop the mutable borrow before calling emit_gm_alert
-                        drop(manager);
-                        self.emit_gm_alert(&character, &chat.sender, &chat.message);
-                        let Some(manager) = self.chat_log_manager.as_mut() else {
-                            continue;
-                        };
-                    }
+                if matches!(channel, ChatChannel::Tell)
+                    && textquest_common::gm_detection::detect_gm_tell(
+                        &chat.sender,
+                        &chat.message,
+                    )
+                {
+                    gm_tells.push((chat.sender.clone(), chat.message.clone()));
                 }
 
                 if let Err(error) =
@@ -1633,6 +1632,10 @@ impl Orchestrator {
                         "Failed to log chat message"
                     );
                 }
+            }
+
+            for (sender, msg_text) in gm_tells {
+                self.emit_gm_alert(&character, &sender, &msg_text);
             }
         }
     }
