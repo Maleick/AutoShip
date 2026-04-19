@@ -119,8 +119,8 @@ impl ShadowKnightStrategy {
                     rotation::group("Combat", TargetSelector::AutoTarget, CombatStateReq::Combat);
                 g.steps_per_frame = 1;
                 g.entries = vec![rotation::entry_if(
-                    "Attack",
-                    ActionType::Ability("Attack".into()),
+                    "Kick",
+                    ActionType::Ability("Kick".into()),
                     ConditionExpr::ManaAbove(20.0),
                 )];
                 g

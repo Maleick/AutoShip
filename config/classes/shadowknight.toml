@@ -236,6 +236,6 @@ combat_state_req = "Combat"
 steps_per_frame = 1
 
 [[rotation_groups.entries]]
-name = "Attack"
-action_type = { Ability = "Attack" }
+name = "Kick"
+action_type = { Ability = "Kick" }
 condition = { ManaAbove = 20.0 }
