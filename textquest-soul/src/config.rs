@@ -137,43 +137,32 @@ impl LlmConfig {
 
         let url = self.base_url.trim();
 
-        // Check if it starts with http:// or https://
-        if !url.starts_with("http://") && !url.starts_with("https://") {
+        // Parse with URL parser to avoid RFC 3986 edge-case bypasses (e.g.
+        // userinfo like localhost@evil.com).
+        let parsed = match reqwest::Url::parse(url) {
+            Ok(parsed) => parsed,
+            Err(_) => return Some("base_url could not be parsed".to_string()),
+        };
+
+        // Check URL scheme.
+        if parsed.scheme() != "http" && parsed.scheme() != "https" {
             return Some("base_url must start with 'http://' or 'https://'".to_string());
         }
 
-        // Extract the host portion (between :// and the next /)
-        let after_scheme = if let Some(pos) = url.find("://") {
-            &url[pos + 3..]
+        // Prevent userinfo-based host confusion (e.g. localhost@evil.com).
+        if !parsed.username().is_empty() || parsed.password().is_some() {
+            return Some("base_url must not contain URL userinfo (username/password)".to_string());
+        }
+
+        let host = if let Some(host) = parsed.host_str() {
+            host
         } else {
             return Some("base_url could not be parsed".to_string());
         };
 
-        // Get just the host:port part (before any /)
-        let host_port = if let Some(pos) = after_scheme.find('/') {
-            &after_scheme[..pos]
-        } else {
-            after_scheme
-        };
-
-        // Extract just the host (before any : for port).
-        // IPv6 addresses use bracket notation per RFC 3986: [::1]:port
-        let host = if host_port.starts_with('[') {
-            // Bracketed IPv6: extract content between [ and ]
-            if let Some(end) = host_port.find(']') {
-                &host_port[1..end]
-            } else {
-                host_port // malformed — will fail validation below
-            }
-        } else if let Some(pos) = host_port.find(':') {
-            &host_port[..pos]
-        } else {
-            host_port
-        };
-
         // Validate that host is only localhost, 127.0.0.1, or ::1 (IPv6 localhost)
         match host {
-            "localhost" | "127.0.0.1" | "::1" => None,
+            "localhost" | "127.0.0.1" | "::1" | "[::1]" => None,
             _ => Some(format!(
                 "base_url must use localhost, 127.0.0.1, or ::1; got: {}",
                 host
@@ -773,5 +762,27 @@ mod tests {
             ..LlmConfig::default()
         };
         assert!(config.validate_base_url().is_none());
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_with_userinfo_is_invalid() {
+        let config = LlmConfig {
+            base_url: "http://localhost:11434@evil.com".to_string(),
+            ..LlmConfig::default()
+        };
+        let err = config.validate_base_url();
+        assert!(err.is_some());
+        assert!(err.unwrap().contains("userinfo"));
+    }
+
+    #[test]
+    fn llm_config_validate_base_url_with_password_userinfo_is_invalid() {
+        let config = LlmConfig {
+            base_url: "http://user:pass@localhost:11434".to_string(),
+            ..LlmConfig::default()
+        };
+        let err = config.validate_base_url();
+        assert!(err.is_some());
+        assert!(err.unwrap().contains("userinfo"));
     }
 }
