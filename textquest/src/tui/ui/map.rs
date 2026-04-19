@@ -2111,8 +2111,7 @@ fn line_char(x0: i32, y0: i32, x1: i32, y1: i32) -> char {
 #[derive(Clone, Copy)]
 enum TacticalSectionKind {
     SpawnList,
-    Target,
-    ChChain,
+    Tracking,
 }
 
 fn draw_tactical_sidebar(
@@ -2135,11 +2134,8 @@ fn draw_tactical_sidebar(
             TacticalSectionKind::SpawnList => {
                 draw_spawn_list_panel(frame, *chunk, app);
             }
-            TacticalSectionKind::Target => {
-                draw_target_panel(frame, *chunk, app);
-            }
-            TacticalSectionKind::ChChain => {
-                draw_ch_chain_panel(frame, *chunk, app);
+            TacticalSectionKind::Tracking => {
+                draw_named_tracker_panel(frame, *chunk, app, false);
             }
         }
     }
@@ -2477,11 +2473,8 @@ fn tactical_sections(app: &App) -> Vec<(TacticalSectionKind, Constraint)> {
         Constraint::Length(spawn_list_height.max(5)),
     ));
 
-    // Target·Main Assist panel: fixed 6 lines
-    sections.push((TacticalSectionKind::Target, Constraint::Length(6)));
-
-    // CH Chain·Active panel: fixed 7 lines (header + 3 slots)
-    sections.push((TacticalSectionKind::ChChain, Constraint::Length(7)));
+    // Tracking panel: named mob tracker, expands to fill remaining space
+    sections.push((TacticalSectionKind::Tracking, Constraint::Min(5)));
 
     sections
 }

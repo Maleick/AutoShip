@@ -507,7 +507,7 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
 // ─── Status bar ──────────────────────────────────────────────────────────────
 
 fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, &'static str)] {
-    if app.active_panel == ActivePanel::TacticalMap {
+    if app.active_screen == ActiveScreen::Tactical {
         match width_class {
             WidthClass::Narrow => &[
                 ("1-4", "screen"),
