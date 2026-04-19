@@ -1,147 +1,82 @@
-# Issue #1244: Code Quality Baseline — Autoship Result
+# AutoShip Result: Issue #1537 — M10 Economy Ledger and Trend Summaries
 
-## Completion Summary
-- Confirmed `PollChat` responses are already surfaced through `poll_chat -> Response::ChatBatch` and `poll_chat_log_if_due` forwards messages into `ChatLogManager`.
-- Added deterministic non-Windows IPC response injection for tests in `textquest/src/ipc/pipe.rs`:
-  - `queue_test_ipc_response`
-  - `clear_test_ipc_responses`
-  - Test-only `send_ipc` short-circuit when queued responses are available.
-- Added integration coverage in `textquest/src/orchestrator/mod.rs`:
-  - `poll_chat_log_if_due_forwards_ipc_messages_to_disk`.
-  - Simulates IPC chat batch arrival and asserts persisted message in temp file.
-- Preserved 8KB buffering behavior in `textquest/src/chat_log/mod.rs`:
-  - `BufWriter::with_capacity(8 * 1024)` for open/rotate.
-  - Removed per-write flush in `write_line`.
-  - Adjusted cross-platform chat log tests to close the writer before reading.
-- Added wiki note in `docs/wiki/Configuration.md` documenting orchestrator chat-poll forwarding and buffered flush behavior.
+## Status: COMPLETE
 
-Successfully implemented full code quality baseline for TextQuest Rust codebase. All quality gates passing: clippy -D warnings clean, cargo fmt normalized, dead code removed, and comprehensive code style guide created.
+### Implementation Summary
 
-## Work Completed
+Implemented M10 economy ledger infrastructure in `textquest-common/src/economy.rs` with full transaction logging and trend analysis capabilities.
 
-### 1. Clippy Compliance (`cargo clippy --all-targets --all-features -- -D warnings`)
+### Deliverables
 
-**Status**: ✅ PASSING
+#### 1. `TransactionType` Enum
+Six transaction categories with string conversion:
+- VendorSale, LootDrop, Expense, Deposit, Withdrawal, PoolTransfer
 
-Fixed all clippy warnings-as-errors:
+#### 2. `LedgerEntry` Struct (Acceptance Requirement)
+- `timestamp_secs: u64` — UNIX timestamp
+- `transaction_type: TransactionType` — transaction category
+- `item_name: String` — item involved (empty if N/A)
+- `delta_plat: i64` — platinum delta (positive=income, negative=expense)
+- `reason: String` — human-readable description
 
-| Issue | File | Fix |
-|-------|------|-----|
-| `unnecessary_map_or` | `textquest-dll/src/combat/debuff_tracker.rs:262` | Replaced `.map_or(false, \|d\| ...)` with `.is_some_and(\|d\| ...)` |
-| `manual_range_contains` | `textquest-common/src/economy.rs:347` | Changed `f >= 0.0 && f <= 1.0` to `(0.0..=1.0).contains(&f)` |
-| `clamp_like_pattern` | `textquest-web/src/api/admin_logs.rs:33` | Replaced `.max(1).min(10000)` with `.clamp(1, 10000)` |
-| Unused struct fields | `textquest-common/benches/config_parsing.rs:72-88` | Removed underscore prefix from `SimpleAccount` fields |
+#### 3. `EconomyLedger` API (Acceptance Requirement)
 
-### 2. Formatting (`cargo fmt --all -- --check`)
+**Append & Query:**
+- `append(entry)` — add single entry
+- `all_entries()` — retrieve all entries
+- `query_by_time_range(start, end)` — filter by timestamp
+- `query_by_type(tx_type)` — filter by transaction type
+- `query_by_time_and_type(start, end, tx_type)` — combined filter
 
-**Status**: ✅ PASSING
+**Trend Metrics (Acceptance Requirement):**
+- `rolling_profit(start, end)` — sum deltas over period (supports 7d/30d queries)
+- `item_distribution_summary()` — HashMap<String, usize> item frequency
+- `distribution_fairness()` → Option<f64> — entropy-based metric (0.0-1.0)
 
-Applied `cargo fmt` to all targets. Key changes:
-- Normalized import ordering in `admin_sessions.rs`
-- Fixed line wrapping in `dashboard.rs` for long match patterns
-- Reformatted multi-line format strings in `navigation.rs` and `economy_controls.rs`
-- Removed extra blank line in `navigation.rs`
+### Acceptance Criteria — All Met
 
-### 3. Unused Imports Cleaned
+✅ LedgerEntry struct with all 5 required fields
+✅ Ledger append and query API with time/type filtering
+✅ Trend metrics: rolling profit, item distribution, fairness analysis
+✅ 7 unit tests (exceeds requirement of 5)
 
-| File | Imports Removed |
-|------|-----------------|
-| `textquest-web/src/api/admin_sessions.rs` | `axum::body::Body`, `axum::http::Request`, `tower::ServiceExt` |
-| `textquest-web/src/api.rs` | `std::path::PathBuf` (duplicate global import) |
+### Test Results
 
-### 4. Dead Code Removed
+All tests PASS (exit code 0):
+```
+running 7 tests
+test economy::tests::test_append_and_all_entries ... ok
+test economy::tests::test_distribution_fairness ... ok
+test economy::tests::test_distribution_fairness_empty_ledger ... ok
+test economy::tests::test_item_distribution_summary ... ok
+test economy::tests::test_query_by_time_range ... ok
+test economy::tests::test_query_by_type ... ok
+test economy::tests::test_rolling_profit ... ok
 
-Removed `aes_decrypt()` function from `textquest-web/src/accounts.rs`:
-- Never called in codebase
-- No tests exist for it
-- `aes_encrypt()` is used but decrypt was never integrated
-- Safe to remove without losing functionality
-
-### 5. Test Status
-
-**Unit Tests**: ✅ 1352/1352 PASSING
-```bash
-cargo test --lib -- --test-threads=1
-test result: ok. 1352 passed; 0 failed
+test result: ok. 7 passed; 0 failed; 0 ignored
 ```
 
-### 6. Code Style Guide Created
+### Files Modified
 
-**File**: `docs/dev/code-style-guide.md`
+1. `textquest-common/src/economy.rs` — 353 lines (new module)
+2. `textquest-common/src/lib.rs` — 2 lines (module export)
 
-Comprehensive guide covering:
-- Quality standards checklist
-- Logging & tracing conventions
-- Error handling patterns
-- Platform-specific code
-- Module organization and naming
-- Testing patterns
-- Cooldown tracking
-- Async/concurrency
-- Performance considerations
-- Code review checklist
+### Design Decisions
 
-## Metrics
+- **Entropy-based fairness**: Normalized Shannon entropy quantifies distribution balance (0.0 = unfair monopoly, 1.0 = perfect distribution)
+- **UNIX seconds granularity**: Enables flexible aggregation windows (7d = 604800 secs, 30d = 2592000 secs)
+- **Serializable types**: All structs derive Serialize/Deserialize for persistence and API responses
+- **Zero external dependencies**: Uses only stdlib HashMap + serde (already in project)
 
-| Metric | Before | After |
-|--------|--------|-------|
-| Clippy errors | 8 | 0 |
-| Formatting violations | 4 files | 0 |
-| Unused imports | 4 | 0 |
-| Dead code functions | 1 | 0 |
+### Integration Ready
 
-## Quality Gate Status
+- Web API handlers can serialize LedgerEntry/EconomyLedger to JSON
+- TUI dashboard can display fairness scores and profit trends
+- Activity logs can be ingested as LedgerEntry batches
+- Orchestrator can calculate rolling 7d/30d ROI via rolling_profit()
 
-All quality gates passing:
-
-```bash
-✅ cargo clippy --all-targets --all-features -- -D warnings
-✅ cargo fmt --all -- --check
-✅ cargo test --lib
-✅ Code style guide created
-```
-
-## Git Commit
+### Commit Hash
 
 ```
-commit fb37838aa
-Author: Claude Code
-Date:   2026-04-18
-
-    polish: code quality baseline, clippy clean, style guide (#1244)
+7e1b86b59 feat: #1537 economy ledger schema and trend analysis
 ```
-
-## Files Modified
-
-13 files changed, 310 insertions(+), 98 deletions(-)
-
-Key changes:
-- `textquest-common/benches/config_parsing.rs` — Fixed struct field names
-- `textquest-common/src/economy.rs` — Fixed range check pattern
-- `textquest-dll/src/combat/debuff_tracker.rs` — Fixed map_or pattern
-- `textquest-web/src/accounts.rs` — Removed dead aes_decrypt function
-- `textquest-web/src/api.rs` — Removed duplicate import
-- `textquest-web/src/api/admin_logs.rs` — Fixed clamp pattern
-- `textquest-web/src/api/admin_sessions.rs` — Removed unused imports, fixed assertion
-- Multiple formatting fixes via cargo fmt
-- **NEW**: `docs/dev/code-style-guide.md` — Comprehensive style guide
-
-## Verification
-
-All quality gates verified and passing:
-
-```bash
-cargo clippy --all-targets --all-features -- -D warnings
-# → Finished successfully
-
-cargo fmt --all -- --check
-# → (no output = success)
-
-cargo test --lib -- --test-threads=1
-# → test result: ok. 1352 passed; 0 failed; 0 ignored
-```
-
----
-
-**Completed**: 2026-04-18 22:44 CDT  
-**Status**: ✅ READY FOR MERGE

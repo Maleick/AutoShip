@@ -3,8 +3,8 @@
 //! Provides a structured transaction log for tracking income/expenses across
 //! the farming operation, with filtering and trend analysis capabilities.
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
 /// Transaction type for ledger entries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -200,11 +200,7 @@ impl EconomyLedger {
             return None;
         }
 
-        let total = self
-            .entries
-            .iter()
-            .filter(|e| !e.item_name.is_empty())
-            .count();
+        let total = self.entries.iter().filter(|e| !e.item_name.is_empty()).count();
         if total == 0 {
             return None;
         }
@@ -218,7 +214,11 @@ impl EconomyLedger {
             .values()
             .map(|&count| {
                 let p = count as f64 / total as f64;
-                if p > 0.0 { -p * p.ln() } else { 0.0 }
+                if p > 0.0 {
+                    -p * p.ln()
+                } else {
+                    0.0
+                }
             })
             .sum::<f64>();
 
@@ -307,11 +307,7 @@ mod tests {
         let ledger = sample_ledger();
         let vendor_sales = ledger.query_by_type(TransactionType::VendorSale);
         assert_eq!(vendor_sales.len(), 2);
-        assert!(
-            vendor_sales
-                .iter()
-                .all(|e| e.transaction_type == TransactionType::VendorSale)
-        );
+        assert!(vendor_sales.iter().all(|e| e.transaction_type == TransactionType::VendorSale));
     }
 
     #[test]
@@ -344,7 +340,7 @@ mod tests {
 
         assert!(fairness.is_some());
         let f = fairness.unwrap();
-        assert!((0.0..=1.0).contains(&f));
+        assert!(f >= 0.0 && f <= 1.0);
         // With 2 items appearing 2 times each, entropy should be high (fair)
         assert!(f > 0.5);
     }
