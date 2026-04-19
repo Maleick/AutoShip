@@ -45,7 +45,7 @@ pub fn copy_to_clipboard(text: &str) -> Result<()> {
         EmptyClipboard().context("EmptyClipboard failed")?;
 
         const CF_TEXT: u32 = 1;
-        SetClipboardData(CF_TEXT, HANDLE(hglobal as isize))
+        SetClipboardData(CF_TEXT, HANDLE(hglobal.0 as isize))
             .context("SetClipboardData failed")?;
 
         CloseClipboard().context("CloseClipboard failed")?;

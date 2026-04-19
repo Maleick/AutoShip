@@ -443,6 +443,8 @@ const ANNOTATION_COLORS: [Color; 6] = [
 ///
 /// Shows struct field info when a spawn is selected, then raw hex dump.
 pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+    // Must call filtered_spawn_indices before borrowing app.theme (needs &mut App)
+    let filtered_indices = app.filtered_spawn_indices().to_vec();
     let t = &app.theme;
     let is_active = app.active_panel == ActivePanel::DebugHexDump;
     let border_style = if is_active {
@@ -451,8 +453,6 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
         t.border_dim
     };
 
-    // Determine if we have a selected spawn
-    let filtered_indices = app.filtered_spawn_indices();
     let selected_spawn = app.spawns_state.table_state.selected().and_then(|idx| {
         filtered_indices
             .get(idx)
