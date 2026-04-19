@@ -649,6 +649,7 @@ pub struct InstrumentSwapEngine {
     current_secondary: Option<u32>,
     last_swapped_type: Option<InstrumentType>,
     last_swapped_slot: Option<InstrumentSlot>,
+    last_original_item: Option<u32>,
     enabled: bool,
 }
 
@@ -666,6 +667,7 @@ impl InstrumentSwapEngine {
             current_secondary: None,
             last_swapped_type: None,
             last_swapped_slot: None,
+            last_original_item: None,
             enabled: true,
         }
     }
@@ -758,6 +760,7 @@ impl InstrumentSwapEngine {
             }
             self.last_swapped_type = Some(needed_type);
             self.last_swapped_slot = Some(slot);
+            self.last_original_item = current_item;
             InstrumentSwapAction::Equip {
                 slot,
                 item_id,
@@ -777,20 +780,18 @@ impl InstrumentSwapEngine {
             return InstrumentSwapAction::None;
         }
 
-        if let (Some(_type), Some(slot)) = (self.last_swapped_type, self.last_swapped_slot) {
-            let current_item = match slot {
-                InstrumentSlot::Primary => self.current_primary,
-                InstrumentSlot::Secondary => self.current_secondary,
+        if let (Some(_type), Some(slot), Some(restore_id)) = (
+            self.last_swapped_type,
+            self.last_swapped_slot,
+            self.last_original_item,
+        ) {
+            self.last_swapped_type = None;
+            self.last_swapped_slot = None;
+            self.last_original_item = None;
+            return InstrumentSwapAction::Restore {
+                slot,
+                item_id: restore_id,
             };
-
-            if let Some(restore_id) = current_item {
-                self.last_swapped_type = None;
-                self.last_swapped_slot = None;
-                return InstrumentSwapAction::Restore {
-                    slot,
-                    item_id: restore_id,
-                };
-            }
         }
         InstrumentSwapAction::None
     }
@@ -902,7 +903,7 @@ mod instrument_swap_tests {
         engine.set_equipped(InstrumentSlot::Primary, Some(1001));
         let action = engine.restore_after_cast();
         match action {
-            InstrumentSwapAction::Restore { item_id, .. } => assert_eq!(item_id, 1001),
+            InstrumentSwapAction::Restore { item_id, .. } => assert_eq!(item_id, 1002),
             _ => panic!("Expected Restore action"),
         }
     }
