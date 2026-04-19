@@ -16,6 +16,8 @@ pub fn query_bazaar_results(eq_base: u64, filter: &BazaarQuery) -> Vec<BazaarWin
 
 const MAX_BAZAAR_WINDOWS: usize = 8;
 const MAX_BAZAAR_ROWS: usize = 2000;
+/// Hard cap for rows returned over IPC so encoded frames stay below 64 KB.
+const MAX_BAZAAR_IPC_ROWS: usize = 256;
 const MAX_BAZAAR_COLUMNS: usize = 8;
 const MAX_WINDOW_COUNT: u32 = 500;
 const MAX_CHILD_WALK: u32 = 200;
@@ -201,7 +203,7 @@ fn match_limit_for_filter(filter: &BazaarQuery, row_count: usize) -> usize {
         .max_rows
         .map_or(row_count, usize::from)
         .min(row_count)
-        .min(MAX_BAZAAR_ROWS)
+        .min(MAX_BAZAAR_IPC_ROWS)
 }
 
 fn collect_matching_listings<F>(
@@ -487,5 +489,15 @@ mod tests {
 
         assert_eq!(listings.len(), 1);
         assert_eq!(listings[0].item_name.as_deref(), Some("Fungi Tunic"));
+    }
+
+    #[test]
+    fn collect_matching_listings_caps_results_for_ipc_frame_budget() {
+        let rows = vec![vec!["Fungi Tunic".into(), "2,000".into(), "Traderbob".into()]; 300];
+        let filter = BazaarQuery::default();
+
+        let listings = collect_matching_listings(rows.len(), &filter, |row| rows[row].clone());
+
+        assert_eq!(listings.len(), MAX_BAZAAR_IPC_ROWS);
     }
 }

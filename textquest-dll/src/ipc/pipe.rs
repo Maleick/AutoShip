@@ -299,7 +299,7 @@ pub fn validate_command(cmd: &Command) -> bool {
                 .is_none_or(|value| !value.is_empty() && value.len() <= 128)
                 && filter
                     .max_rows
-                    .is_none_or(|value| value > 0 && value <= 2000)
+                    .is_none_or(|value| value > 0 && value <= 256)
         }
         Command::QueryMerchantItems { filter } => {
             filter
@@ -567,7 +567,7 @@ mod tests {
         assert!(!validate_command(&Command::QueryBazaarResults {
             filter: BazaarQuery {
                 text_contains: None,
-                max_rows: Some(2001),
+                max_rows: Some(257),
             },
         }));
     }
