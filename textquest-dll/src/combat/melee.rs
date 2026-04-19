@@ -192,7 +192,7 @@ pub fn build_melee_skill_entries(
 
             let mut entry = super::rotation::entry_if(
                 &skill.name,
-                ActionType::MeleeSkill(skill.name.clone()),
+                ActionType::Ability(skill.name.clone()),
                 condition,
             );
 
