@@ -29,6 +29,7 @@ const STACKED_ROSTER_MIN_TALL: u16 = 15;
 const STACKED_ROSTER_MIN_MEDIUM: u16 = 13;
 const STACKED_ROSTER_MIN_COMPACT: u16 = 11;
 const STACKED_ROSTER_MIN_TINY: u16 = 8;
+const CAST_PROGRESS_BAR_WIDTH: usize = 22;
 
 /// Draw the main overview dashboard with roster and status panels.
 pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &mut App) {
@@ -1288,7 +1289,7 @@ fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
             };
             let remaining = remaining_ms;
 
-            let bar_width = 22;
+            let bar_width = CAST_PROGRESS_BAR_WIDTH;
             let filled = (progress * bar_width as f64).round() as usize;
             let mut progress_bar = String::new();
             for i in 0..bar_width {
@@ -1313,7 +1314,7 @@ fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
                 Span::styled("Remaining", Style::default().fg(t.text_secondary)),
                 Span::raw(" "),
                 Span::styled(
-                    format!("{:.1}s", remaining),
+                    format!("{:.1}s", remaining as f64 / 1000.0),
                     Style::default().fg(t.text_bright),
                 ),
             ]));
