@@ -11,6 +11,16 @@ use ratatui::{
 use super::widgets::panel;
 use crate::tui::{app::App, theme::Theme};
 
+fn client_class_abbr(client: &crate::tui::client::ClientState) -> &'static str {
+    client
+        .local_player
+        .as_ref()
+        .and_then(|p| p.class)
+        .map(|c| c.short_name())
+        .unwrap_or("?")
+}
+
+
 fn nav_status_color(
     status: &textquest_common::nav::NavStatus,
     t: &crate::tui::theme::Theme,
@@ -228,10 +238,7 @@ fn draw_nav_card(
         };
 
         // Class, level, group
-        let class_abbr = client.local_player.as_ref()
-            .and_then(|p| p.class.as_ref())
-            .map(|c| c.short_name())
-            .unwrap_or("?");
+        let class_abbr = client_class_abbr(client);
         lines.push(Line::from(vec![
             Span::styled("Class    ", Style::default().fg(t.text_secondary)),
             Span::styled(
@@ -415,10 +422,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
             || app.client_command_target(client),
             |p| app.redact_name(&p.displayed_name).into_owned(),
         );
-        let class_abbr = client.local_player.as_ref()
-            .and_then(|p| p.class)
-            .map(|c| c.short_name())
-            .unwrap_or("?");
+        let class_abbr = client_class_abbr(client);
         let title = format!("{} · {}", client_name, class_abbr);
 
         let blk = Block::default()
@@ -455,10 +459,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
             || app.client_command_target(client),
             |p| app.redact_name(&p.displayed_name).into_owned(),
         );
-        let class_abbr = client.local_player.as_ref()
-            .and_then(|p| p.class)
-            .map(|c| c.short_name())
-            .unwrap_or("?");
+        let class_abbr = client_class_abbr(client);
         let title = format!("{} · {}", client_name, class_abbr);
 
         let blk = Block::default()

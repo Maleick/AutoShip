@@ -159,8 +159,7 @@ fn draw_packet_stream(frame: &mut Frame, area: Rect, app: &App) {
         frame.render_widget(table, area);
 
         // Draw filter echo line below the table
-        let owned_filtered: Vec<crate::tui::state::PacketRecord> = filtered.iter().map(|r| (*r).clone()).collect();
-        let filter_line = format_filter_line(state, &owned_filtered);
+        let filter_line = format_filter_line(state, filtered);
         let filter_area = Rect {
             x: area.x,
             y: area.y + area.height.saturating_sub(2),
