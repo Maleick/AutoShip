@@ -461,7 +461,6 @@ fn draw_slots_table(frame: &mut Frame, area: Rect, app: &App) {
         let (state_label, state_color) = client_status_label(app, client);
         let fsm = "—";
         let latency = "—".to_string();
-        };
         let lat_style = if latency != "—" && latency.parse::<u64>().unwrap_or(0) > 30 {
             Style::default().fg(Color::Yellow)
         } else {
