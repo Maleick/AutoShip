@@ -404,7 +404,7 @@ fn group_scope_entries(app: &App) -> Vec<GroupScopeEntry> {
             let members = app.clients_in_group_idx(idx);
             let (lo, hi) = group.account_range;
             GroupScopeEntry {
-                label: format!("G{} {}", group.id, group.name),
+                label: format!("G{}", group.id),
                 zone: members
                     .first()
                     .map_or_else(|| String::from("—"), |client| client.zone_name.clone()),
