@@ -9,7 +9,6 @@
 
 pub mod intent;
 mod item_score;
-pub mod intent;
 pub mod ledger;
 mod store;
 pub mod vendor_cycle;
@@ -20,7 +19,6 @@ pub use item_score::{
     ItemScoreComparison, ItemScoreConfig, ScoreableItem, StatWeights, WeightedStatDelta,
     compare_item_upgrade,
 };
-pub use intent::{IntentTracker, ItemIntent, WishlistEntry};
 pub use ledger::{DaySummary, EconomyLedger, EntrySource, LedgerEntry, TrendReport};
 pub use store::{
     DropRateRow, ImportItem, ItemRow, ItemSearchFilter, LootHistoryRow, LootStore, LootTableRow,
