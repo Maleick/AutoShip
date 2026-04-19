@@ -16,10 +16,13 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Rust%20LOC-246%2C693-blue?style=flat-square" alt="Rust LOC">
-  <img src="https://img.shields.io/badge/Tests-~5%2C492-brightgreen?style=flat-square" alt="Tests">
-  <img src="https://img.shields.io/badge/Crates-6-purple?style=flat-square" alt="Crates">
-  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey?style=flat-square" alt="Platform">
+
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-252%2C266-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-~5%2C753-brightgreen?style=flat-square)](#testing)
+![Crates](https://img.shields.io/badge/Crates-6-purple?style=flat-square)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey?style=flat-square)
+![Accounts](https://img.shields.io/badge/Accounts-26%2F36-cyan?style=flat-square)
+
 </p>
 
 <p align="center">
@@ -36,7 +39,7 @@
 
 ---
 
-A Rust workspace that reads live game state from EverQuest via `ReadProcessMemory`, injects a DLL for direct in-process control, and coordinates multi-client sessions from a TUI-first operator workflow. Runs on macOS in demo mode; live injection, navigation, combat, and login automation run on Windows.
+A Rust workspace that reads live game state from EverQuest via `ReadProcessMemory`, injects a DLL for direct in-process control, and coordinates multi-client sessions from a TUI-first operator workflow. Compile and test on macOS; live injection, navigation, combat, and login automation require Windows.
 
 ```
 ┌──────────────────────────────────────────┐
@@ -59,7 +62,7 @@ A Rust workspace that reads live game state from EverQuest via `ReadProcessMemor
 | **Combat Engine**    | Class-driven rotation engine for all 16 classes, CH chain, CC handling       |
 | **Login Automation** | Credential store, staggered launch, login FSM, post-login sequencing         |
 | **Navigation**       | Navmesh pathfinding (MQ2Nav format), waypoint tooling, stuck detection       |
-| **TUI Dashboard**    | Five-screen operator surface with command mode, themes, privacy mode         |
+| **TUI Dashboard**    | Seven-screen operator surface with command mode, themes, privacy mode        |
 | **Soul Engine**      | LLM-backed character personalities, persistent memory, social dynamics       |
 | **Web Dashboard**    | Axum + React SPA for configuration and monitoring (`textquest-web`)          |
 | **Packet Monitor**   | Live WSASend/WSARecv capture with opcode filtering and decode                |
@@ -74,11 +77,10 @@ python3 scripts/dev-preflight.py
 
 Same checks as CI — runs fmt → clippy → test → Python in sequence.
 
-### Demo mode (any platform)
+### Build / test (macOS or Windows)
 
 ```bash
 cargo build
-cargo run          # TUI with demo data — no EQ client needed
 cargo test
 cargo clippy --all-targets --all-features -- -D warnings
 ```
@@ -104,13 +106,15 @@ textquest.exe navmesh diagnostics --pid 12345
 
 ## TUI Screens
 
-| Screen         | Key | What you see                                                |
-| -------------- | --- | ----------------------------------------------------------- |
-| **Characters** | `1` | Roster, group scope, selected character detail, DPS meters  |
-| **Map**        | `2` | Zone map, spawn positions, named tracker, HVT alerts        |
-| **Navigation** | `3` | Per-character nav status, waypoint queue, route commands    |
-| **Debug**      | `4` | Live hex dump, EQ internals offset browser, Ghidra explorer |
-| **Packets**    | `5` | Live send/receive opcode stream with filtering              |
+| Screen           | Key | What you see                                                |
+| ---------------- | --- | ----------------------------------------------------------- |
+| **Characters**   | `1` | Roster, group scope, selected character detail, DPS meters  |
+| **Map**          | `2` | Zone map, spawn positions, named tracker, HVT alerts        |
+| **Navigation**   | `3` | Per-character nav status, waypoint queue, route commands    |
+| **Debug**        | `4` | Live hex dump, EQ internals offset browser, Ghidra explorer |
+| **Packets**      | `5` | Live send/receive opcode stream with filtering              |
+| **Economy**      | `6` | Vendor cycle, ledger, plat tracking, loot distribution      |
+| **Orchestrator** | `7` | Fleet intent, slot states, signal feed, phase timeline      |
 
 TUI commands start with `:` in command mode. Key bindings:
 
@@ -127,7 +131,7 @@ Full reference: [`docs/wiki/Operating-the-TUI.md`](docs/wiki/Operating-the-TUI.m
 ```mermaid
 flowchart TD
     subgraph Orchestrator["textquest (orchestrator)"]
-        TUI["TUI Dashboard\n5 screens"]
+        TUI["TUI Dashboard\n7 screens"]
         CampLoop["Camp Loop FSM\npull→fight→loot→med→buff"]
         LoginSM["Login FSM\nstaggered launch"]
         NavRouter["Nav Router\nnavmesh + waypoints"]
@@ -172,14 +176,14 @@ flowchart TD
 
 ### Workspace crates
 
-| Crate                | Type   | Role                                                         |
-| -------------------- | ------ | ------------------------------------------------------------ |
-| `textquest`          | bin    | Orchestrator — TUI, camp loop, login, nav, IPC client        |
-| `textquest-dll`      | cdylib | Injected DLL — game hooks, combat, nav, IPC server           |
-| `textquest-common`   | lib    | Shared types, offsets, IPC protocol, spawns, enums           |
-| `textquest-client`   | lib    | Per-client session management and monitor coordination        |
-| `textquest-soul`     | lib    | LLM-backed personalities, persistent memory, social dynamics |
-| `textquest-web`      | bin    | Axum REST backend + React SPA for web dashboard and config   |
+| Crate              | Type   | Role                                                         |
+| ------------------ | ------ | ------------------------------------------------------------ |
+| `textquest`        | bin    | Orchestrator — TUI, camp loop, login, nav, IPC client        |
+| `textquest-dll`    | cdylib | Injected DLL — game hooks, combat, nav, IPC server           |
+| `textquest-common` | lib    | Shared types, offsets, IPC protocol, spawns, enums           |
+| `textquest-client` | lib    | Per-client session management and monitor coordination       |
+| `textquest-soul`   | lib    | LLM-backed personalities, persistent memory, social dynamics |
+| `textquest-web`    | bin    | Axum REST backend + React SPA for web dashboard and config   |
 
 ## Configuration
 
@@ -208,7 +212,7 @@ Full guide: [`docs/wiki/Configuration.md`](docs/wiki/Configuration.md)
 
 ## Testing
 
-Current workspace totals: 208,654 Rust lines and ~4,870 tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`.
+Current workspace totals: 252,266 Rust lines and ~5,753 tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`.
 
 ```bash
 cargo test                                    # full workspace
