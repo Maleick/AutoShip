@@ -1152,8 +1152,12 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         // Legend line with new spawn markers
         let mut legend_spans = vec![
             Span::styled("Legend: ", Style::default().fg(t.text_secondary)),
+            Span::styled("◆", Style::default().fg(t.map_you)),
+            Span::raw(" You  ·  "),
+            Span::styled("↑", Style::default().fg(t.map_you)),
+            Span::raw(" Hdg  ·  "),
             Span::styled("◆", Style::default().fg(t.spawn_named)),
-            Span::raw(" Named  ·  "),
+            Span::raw(" NPC  ·  "),
             Span::styled("○", Style::default().fg(t.spawn_npc)),
             Span::raw(" NPC  ·  "),
             Span::styled("†", Style::default().fg(t.spawn_corpse)),
