@@ -2,21 +2,21 @@
 
 ## Current Config Files
 
-| Path | Purpose |
-| --- | --- |
-| `config/textquest.toml` | Main TextQuest app config |
-| `config/accounts.toml` | Account and group-launch metadata |
-| `config/character-configs.json` | Web UI character tuning and task reward automation rules |
-| `data/credentials.db` | Encrypted account password store used by `textquest autologin` |
-| `config/camps/*.toml` | Saved camp locations and thresholds |
-| `config/classes/*.toml` | Per-class combat reference and parity config |
-| `config/toons/*.toml` | Per-toon combat action overrides for the injected DLL |
-| `config/hvt_watchlist.toml` | High-value target watchlist |
-| `config/named_mobs/*.toml` | Named spawn definitions by zone |
-| `config/maps/*.txt` | Brewall-style zone map data |
-| `config/offsets.json` | Checked-in offset data snapshot and schema reference |
-| `data/ghidra.db` | Local SQLite cache for runtime/debug Ghidra lookups |
-| `data/ghidra-export/` | Local JSON export cache used by import/debug tooling |
+| Path                            | Purpose                                                        |
+| ------------------------------- | -------------------------------------------------------------- |
+| `config/textquest.toml`         | Main TextQuest app config                                      |
+| `config/accounts.toml`          | Account and group-launch metadata                              |
+| `config/character-configs.json` | Web UI character tuning and task reward automation rules       |
+| `data/credentials.db`           | Encrypted account password store used by `textquest autologin` |
+| `config/camps/*.toml`           | Saved camp locations and thresholds                            |
+| `config/classes/*.toml`         | Per-class combat reference and parity config                   |
+| `config/toons/*.toml`           | Per-toon combat action overrides for the injected DLL          |
+| `config/hvt_watchlist.toml`     | High-value target watchlist                                    |
+| `config/named_mobs/*.toml`      | Named spawn definitions by zone                                |
+| `config/maps/*.txt`             | Brewall-style zone map data                                    |
+| `config/offsets.json`           | Checked-in offset data snapshot and schema reference           |
+| `data/ghidra.db`                | Local SQLite cache for runtime/debug Ghidra lookups            |
+| `data/ghidra-export/`           | Local JSON export cache used by import/debug tooling           |
 
 ## Main App Config
 
@@ -160,15 +160,15 @@ in a companion wiki page instead of inventing new untracked TOML keys.
 Current examples:
 
 - `config/camps/sebilis_disco.toml` holds the loader-safe runtime values.
-- [Sebilis Disco Camp](Sebilis-Disco-Camp.md) carries the research waypoint
+- [Sebilis Guide](Sebilis-Guide.md) carries the research waypoint
   lattice, pull lanes, restriction zones, and multibox route notes for that
   camp.
 - `config/camps/velketors_frenzy.toml` holds the loader-safe runtime values for the Velketor's Labyrinth frenzy route.
-- [Velketors Labyrinth Frenzy Camp](Velketors-Labyrinth-Frenzy-Camp.md) carries the waypoint lattice, pull lanes, and multibox route notes.
+- [Velketors Labyrinth Frenzy Camp](Camp-Runbooks.md) carries the waypoint lattice, pull lanes, and multibox route notes.
 
 - `config/camps/velketors_labyrinth_frenzy.toml` holds the loader-safe runtime
   values.
-- [Velketors-Labyrinth-Frenzy-Camp](Velketors-Labyrinth-Frenzy-Camp.md)
+- [Camp Runbooks](Camp-Runbooks.md)
   carries the validation geometry, pull controls, and routing notes for that
   camp.
 
@@ -340,6 +340,7 @@ Current behavior:
 
 See [Inventory Utility Parity](Inventory-Utility-Parity) for the per-plugin
 native versus adapted classification and ownership table.
+
 ## Maps and Offsets
 
 - `config/maps/*.txt` supplies zone linework and labels for the TUI map.

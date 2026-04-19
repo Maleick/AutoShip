@@ -77,7 +77,7 @@ The PowerShell script (`scripts/refresh-frostreaver-checkout.ps1`):
 4. **Records after state** — Captures new commit hash
 5. **Validates #1722 files**:
    - `config\camps\foundation_underquarry_scouts.toml`
-   - `docs\wiki\Foundation-Underquarry-Scouts-Camp.md`
+   - `docs\wiki\Camp-Runbooks.md`
    - `docs\wiki\assets\foundation-underquarry-validation-template.csv`
 6. **Checks scheduled tasks**:
    - Validates `LaunchEQ`, `LaunchEQ1`, `StartRunners` tasks exist and are accessible
@@ -134,7 +134,7 @@ Test-Path "C:\actions-runner\_work\TextQuest\TextQuest\config\accounts.toml"
 
 # Verify #1722 files
 Test-Path "C:\actions-runner\_work\TextQuest\TextQuest\config\camps\foundation_underquarry_scouts.toml"
-Test-Path "C:\actions-runner\_work\TextQuest\TextQuest\docs\wiki\Foundation-Underquarry-Scouts-Camp.md"
+Test-Path "C:\actions-runner\_work\TextQuest\TextQuest\docs\wiki\Camp-Runbooks.md"
 Test-Path "C:\actions-runner\_work\TextQuest\TextQuest\docs\wiki\assets\foundation-underquarry-validation-template.csv"
 ```
 
@@ -170,7 +170,7 @@ Once validation passes, document the refresh in the issue tracker:
 
    ```powershell
    dir "C:\actions-runner\_work\TextQuest\TextQuest\config\camps\foundation_underquarry_scouts.toml"
-   dir "C:\actions-runner\_work\TextQuest\TextQuest\docs\wiki\Foundation-Underquarry-Scouts-Camp.md"
+   dir "C:\actions-runner\_work\TextQuest\TextQuest\docs\wiki\Camp-Runbooks.md"
    dir "C:\actions-runner\_work\TextQuest\TextQuest\docs\wiki\assets\foundation-underquarry-validation-template.csv"
    ```
 

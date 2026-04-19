@@ -1,0 +1,464 @@
+/* TextQuest TUI — monospace terminal rendering */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  color: var(--text-normal);
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  line-height: var(--cell-h);
+  -webkit-font-smoothing: antialiased;
+  font-variant-ligatures: none;
+}
+
+body {
+  min-height: 100vh;
+  padding: 48px 0 64px;
+  background: radial-gradient(
+      ellipse at 50% 40%,
+      #140826 0%,
+      #080312 45%,
+      #000 100%
+    );
+}
+
+/* ───── CRT monitor shell ─────────────────────────────────────────────── */
+
+.crt {
+  position: relative;
+  width: min(1480px, calc(100vw - 64px));
+  margin: 0 auto;
+  background: var(--void);
+  padding: 28px 28px 40px;
+  border-radius: 22px;
+  box-shadow:
+    0 0 0 2px rgba(204, 68, 255, 0.12),
+    0 0 0 10px #0a0414,
+    0 0 0 12px #1a0a2e,
+    0 40px 120px rgba(204, 68, 255, 0.18),
+    0 0 240px rgba(0, 229, 255, 0.08) inset;
+  overflow: hidden;
+}
+
+.crt::before {
+  /* faint scanline pattern, togglable */
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.25) 2px,
+    rgba(0, 0, 0, 0.25) 3px
+  );
+  mix-blend-mode: multiply;
+  opacity: 1;
+  z-index: 50;
+}
+
+.crt::after {
+  /* vignette */
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 55%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+  z-index: 49;
+}
+
+body[data-scanlines="off"] .crt::before {
+  opacity: 0;
+}
+body[data-glow="off"] .term * {
+  text-shadow: none !important;
+}
+body[data-vignette="off"] .crt::after {
+  opacity: 0;
+}
+
+/* ───── Terminal body ─────────────────────────────────────────────────── */
+
+.term {
+  position: relative;
+  z-index: 1;
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  line-height: var(--cell-h);
+  color: var(--text-normal);
+  white-space: pre;
+  text-shadow:
+    0 0 1px rgba(226, 215, 244, 0.35),
+    0 0 6px rgba(204, 68, 255, 0.18);
+}
+
+.term a {
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+/* ───── Type primitives ──────────────────────────────────────────────── */
+
+.bright {
+  color: var(--text-bright);
+}
+.normal {
+  color: var(--text-normal);
+}
+.secondary {
+  color: var(--text-secondary);
+}
+.muted {
+  color: var(--text-muted);
+}
+.accent {
+  color: var(--text-accent);
+}
+.highlight {
+  color: var(--text-highlight);
+}
+.server {
+  color: var(--text-server);
+}
+.bold {
+  font-weight: 700;
+}
+
+.green {
+  color: var(--green);
+}
+.red {
+  color: var(--red);
+}
+.amber {
+  color: var(--amber);
+}
+.blue {
+  color: var(--blue);
+}
+.magenta {
+  color: var(--magenta);
+}
+.cyan {
+  color: var(--cyan);
+}
+.lav {
+  color: var(--lavender);
+}
+.dim {
+  color: var(--shadow);
+}
+
+.hp-high {
+  color: var(--hp-high);
+}
+.hp-mid {
+  color: var(--hp-mid);
+}
+.hp-low {
+  color: var(--hp-low);
+}
+.mana {
+  color: var(--mana);
+}
+
+/* Con colors */
+.con-red {
+  color: var(--con-red);
+}
+.con-yellow {
+  color: var(--con-yellow);
+}
+.con-white {
+  color: var(--con-white);
+}
+.con-lblue {
+  color: var(--con-light-blue);
+}
+.con-blue {
+  color: var(--con-blue);
+}
+.con-green {
+  color: var(--con-green);
+}
+
+/* Inverted tabs / badges */
+.inv {
+  color: #0d0618;
+  font-weight: 700;
+}
+.inv-cyan {
+  background: var(--cyan);
+  color: #0d0618;
+  font-weight: 700;
+  padding: 0 2px;
+}
+.inv-magenta {
+  background: var(--magenta);
+  color: #0d0618;
+  font-weight: 700;
+  padding: 0 2px;
+}
+.inv-amber {
+  background: var(--amber);
+  color: #0d0618;
+  font-weight: 700;
+  padding: 0 2px;
+}
+.inv-green {
+  background: var(--green);
+  color: #0d0618;
+  font-weight: 700;
+  padding: 0 2px;
+}
+.inv-red {
+  background: var(--red);
+  color: #fff;
+  font-weight: 700;
+  padding: 0 2px;
+}
+
+/* Row highlight — matches theme.rs row_selected_bg */
+.rowsel {
+  background: var(--row-selected);
+  font-weight: 700;
+}
+
+/* ───── Layout ───────────────────────────────────────────────────────── */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.screen {
+  scroll-margin-top: 24px;
+}
+
+.screen-caption {
+  font-family: var(--mono);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 18px;
+  padding: 0 2px 6px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.screen-caption .label {
+  color: var(--lavender-dim);
+}
+.screen-caption .key {
+  color: var(--text-muted);
+}
+
+/* ───── Box-drawing panel chrome ──────────────────────────────────────── */
+
+.panel {
+  display: block;
+  font-family: var(--mono);
+  white-space: pre;
+}
+
+/* ───── Splash / boot ────────────────────────────────────────────────── */
+
+.boot {
+  padding: 24px 0 32px;
+  border-bottom: 1px dashed rgba(204, 68, 255, 0.22);
+  margin-bottom: 24px;
+}
+
+.wordmark {
+  font-family: var(--mono);
+  color: var(--magenta);
+  font-size: 14px;
+  line-height: 16px;
+  text-shadow:
+    0 0 8px rgba(255, 0, 255, 0.4),
+    0 0 18px rgba(204, 68, 255, 0.25);
+  white-space: pre;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.boot-log {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--lavender-dim);
+  max-width: 720px;
+  margin: 0 auto;
+}
+.boot-log .ok {
+  color: var(--green);
+}
+.boot-log .warn {
+  color: var(--amber);
+}
+.boot-log .addr {
+  color: var(--cyan);
+}
+
+/* ───── Tweaks panel ─────────────────────────────────────────────────── */
+
+.tweaks {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  width: 320px;
+  max-height: 72vh;
+  background: #0b0517;
+  border: 1px solid var(--magenta);
+  box-shadow:
+    0 0 0 1px #1a0a2e,
+    0 8px 32px rgba(204, 68, 255, 0.28);
+  z-index: 200;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--lavender);
+  padding: 10px 12px 12px;
+  overflow: auto;
+  display: none;
+}
+body[data-tweaks="on"] .tweaks {
+  display: block;
+}
+.tweaks h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--magenta);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.tweaks h3 .tag {
+  color: var(--cyan);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+}
+.tweaks section {
+  border-top: 1px dashed rgba(204, 68, 255, 0.22);
+  margin-top: 8px;
+  padding-top: 6px;
+}
+.tweaks section:first-of-type {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+.tweaks label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  cursor: pointer;
+  color: var(--lavender-dim);
+}
+.tweaks label:hover {
+  color: var(--lavender);
+}
+.tweaks label .hint {
+  margin-left: auto;
+  color: var(--shadow);
+  font-size: 11px;
+}
+.tweaks .row {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0;
+}
+.tweaks button {
+  flex: 1;
+  background: #140826;
+  border: 1px solid var(--shadow);
+  color: var(--lavender-dim);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 4px 6px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tweaks button:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+.tweaks button.active {
+  background: var(--magenta);
+  color: #0d0618;
+  border-color: var(--magenta);
+  font-weight: 700;
+}
+
+/* Floating “tweaks on/off” badge */
+.tweaks-toggle {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 199;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--magenta);
+  background: #0b0517;
+  border: 1px solid var(--magenta);
+  padding: 4px 8px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+body[data-tweaks="on"] .tweaks-toggle {
+  display: none;
+}
+
+/* ───── Overlays ─────────────────────────────────────────────────────── */
+
+.overlay-layer {
+  position: relative;
+}
+
+/* Each overlay inlines into the terminal flow as a centered panel */
+.overlay {
+  display: none;
+  margin-top: 14px;
+}
+.overlay.on {
+  display: block;
+}
+
+/* ───── Misc ─────────────────────────────────────────────────────────── */
+
+.hidden {
+  display: none !important;
+}
+
+/* Screen navigation anchor chips on the left edge */
+.sidemarker {
+  display: none;
+}
+
+/* At narrow width we let text wrap inside chrome so reflow is visible */
+body[data-width="narrow"] .term {
+  font-size: 13px;
+}
+body[data-width="medium"] .term {
+  font-size: 14.5px;
+}

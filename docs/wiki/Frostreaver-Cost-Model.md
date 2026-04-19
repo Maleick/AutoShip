@@ -49,3 +49,10 @@ The model keeps the core math in CSV formulas so the sheet stays transparent aft
 - `steady grind`: smaller reserve, lower monthly monetization pressure, slower scaling assumptions.
 
 This keeps the cost accounting sheet aligned with the issue requirement without pretending the operator decision has already been made.
+
+---
+
+## See Also
+
+- **[Frostreaver Farming & XP Guide](Frostreaver-Farming-Guide.md)** — Complete leveling zone progression, plat farming locations, raid targets, encounter locking, and randomized loot meta
+- **[Frostreaver Starting City Logistics](Frostreaver-Starting-City-Logistics.md)** — Detailed 36-account matrix, city split strategy, early leveling routes, and gear handoff logistics for launch day

@@ -35,21 +35,21 @@ Detailed early-planar raid research now lives in [Research: Plane of Hate and Pl
 
 ### Class Totals (36)
 
-| Class | Count | Notes |
-| ----- | ----- | ----- |
-| Warrior | 3 | Defensive Discipline rotation for raid main-tank duty |
-| Shadowknight | 1 | Driver character, snap aggro, FD pulls, and snare coverage |
-| Paladin | 2 | Utility tanks for raid support and safer split-camp farming |
-| Cleric | 6 | One per group; raid Complete Heal chain backbone |
-| Bard | 6 | One per group; movement, pull control, ADPS, and resist coverage |
-| Shaman | 4 | Slow, buffs, spot heals, and AFK alchemy backbone |
-| Monk | 8 | Launch-era default melee DPS because they are effective before weapons stabilize |
-| Druid | 1 | Ports, evac, snare, and backup heals |
-| Enchanter | 1 | CC, mana utility, and jewelry crafting |
-| Beastlord | 1 | Utility melee DPS with slow backup and pet support |
-| Ranger | 1 | Tracking, outdoor pull utility, and ranged DPS |
-| Wizard | 1 | Burst caster DPS and port support |
-| Magician | 1 | Summons, Call of the Hero utility, and extra caster DPS |
+| Class        | Count | Notes                                                                            |
+| ------------ | ----- | -------------------------------------------------------------------------------- |
+| Warrior      | 3     | Defensive Discipline rotation for raid main-tank duty                            |
+| Shadowknight | 1     | Driver character, snap aggro, FD pulls, and snare coverage                       |
+| Paladin      | 2     | Utility tanks for raid support and safer split-camp farming                      |
+| Cleric       | 6     | One per group; raid Complete Heal chain backbone                                 |
+| Bard         | 6     | One per group; movement, pull control, ADPS, and resist coverage                 |
+| Shaman       | 4     | Slow, buffs, spot heals, and AFK alchemy backbone                                |
+| Monk         | 8     | Launch-era default melee DPS because they are effective before weapons stabilize |
+| Druid        | 1     | Ports, evac, snare, and backup heals                                             |
+| Enchanter    | 1     | CC, mana utility, and jewelry crafting                                           |
+| Beastlord    | 1     | Utility melee DPS with slow backup and pet support                               |
+| Ranger       | 1     | Tracking, outdoor pull utility, and ranged DPS                                   |
+| Wizard       | 1     | Burst caster DPS and port support                                                |
+| Magician     | 1     | Summons, Call of the Hero utility, and extra caster DPS                          |
 
 ### Farming-First Takeaway
 
@@ -62,17 +62,17 @@ This final roster does **not** maintain a separate raid-only bench. Instead, it 
 
 ### Farming/Raiding Overlap
 
-| Role | Farming job | Raid job | Flex verdict |
-| ---- | ----------- | -------- | ------------ |
-| Warriors | Named-camp tanks for the three hardest groups | Main tanks and Defensive rotation anchors | Mandatory in both modes |
-| Shadowknight | Driver, FD pulls, snap aggro, solo utility | Pull tank, aggro preload, pickup tank | High overlap, but not a warrior replacement |
-| Paladins | Utility tanks for safer camps and recovery | Off-tanks, stun utility, backup heals | Strong flex tanks |
-| Clerics | Group sustain and wipe recovery | Complete Heal chain backbone | Fixed-role backbone |
-| Shamans | Slow, buffs, alchemy, backup healing | Slow, buffs, hybrid heals | Highest overlap support class |
-| Bards | Pull speed, mana/song support, travel | Per-group ADPS, resists, movement | Mandatory in both modes |
-| Monks | Weapon-light launch DPS and backup pulling | Primary melee DPS | Cleanest pure flex DPS slot |
-| Druid / Enchanter | Travel, evac, tracking, CC, crafting | Utility healing, mana control, CC | Specialty flex slots |
-| Beastlord / Ranger / Wizard / Mage | Outdoor utility, tracking, summon, vendor support | Remaining DPS and utility flex | Raid-safe, but not core tank/heal infrastructure |
+| Role                               | Farming job                                       | Raid job                                  | Flex verdict                                     |
+| ---------------------------------- | ------------------------------------------------- | ----------------------------------------- | ------------------------------------------------ |
+| Warriors                           | Named-camp tanks for the three hardest groups     | Main tanks and Defensive rotation anchors | Mandatory in both modes                          |
+| Shadowknight                       | Driver, FD pulls, snap aggro, solo utility        | Pull tank, aggro preload, pickup tank     | High overlap, but not a warrior replacement      |
+| Paladins                           | Utility tanks for safer camps and recovery        | Off-tanks, stun utility, backup heals     | Strong flex tanks                                |
+| Clerics                            | Group sustain and wipe recovery                   | Complete Heal chain backbone              | Fixed-role backbone                              |
+| Shamans                            | Slow, buffs, alchemy, backup healing              | Slow, buffs, hybrid heals                 | Highest overlap support class                    |
+| Bards                              | Pull speed, mana/song support, travel             | Per-group ADPS, resists, movement         | Mandatory in both modes                          |
+| Monks                              | Weapon-light launch DPS and backup pulling        | Primary melee DPS                         | Cleanest pure flex DPS slot                      |
+| Druid / Enchanter                  | Travel, evac, tracking, CC, crafting              | Utility healing, mana control, CC         | Specialty flex slots                             |
+| Beastlord / Ranger / Wizard / Mage | Outdoor utility, tracking, summon, vendor support | Remaining DPS and utility flex            | Raid-safe, but not core tank/heal infrastructure |
 
 ### Raid-First Takeaway
 
@@ -99,12 +99,12 @@ Applied to the locked roster:
 
 > `TextQuest#1588` reviewed the repository and GitHub issue history on 2026-04-15. No tracked evidence currently confirms Dave's participation or any other named partner roster commitment, so the finalized `TextQuest#1521` 36-box baseline stays unchanged until a partner's attendance and class mix are explicitly recorded.
 
-| Scenario | Current evidence state | Planning rule | Composition impact |
-| -------- | ---------------------- | ------------- | ------------------ |
-| No confirmed partners | No GitHub/repo confirmation for Dave or any other partner | Keep the locked 36-box baseline exactly as documented above | No changes |
-| Stable tank/heal-heavy partner | Partner attendance is confirmed and the partner's class mix is recorded for full-raid nights | Re-open roster planning before changing any owned accounts; do not make speculative cuts while confirmation is still missing | Candidate future cuts are redundant recovery slots, but only after the partner proves reliable enough to replace them |
-| Stable DPS/utility-heavy partner | Partner attendance is confirmed, but they are not replacing the tank/heal backbone | Preserve the current tank/heal floor and treat partner DPS as bonus throughput first | Usually no baseline changes; partner accounts act as overflow |
-| Irregular or one-off partner attendance | Partner may join some nights but is not a dependable every-raid presence | Treat partner accounts as bonus bench only and keep the owned roster self-sufficient | No permanent changes |
+| Scenario                                | Current evidence state                                                                       | Planning rule                                                                                                                | Composition impact                                                                                                    |
+| --------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| No confirmed partners                   | No GitHub/repo confirmation for Dave or any other partner                                    | Keep the locked 36-box baseline exactly as documented above                                                                  | No changes                                                                                                            |
+| Stable tank/heal-heavy partner          | Partner attendance is confirmed and the partner's class mix is recorded for full-raid nights | Re-open roster planning before changing any owned accounts; do not make speculative cuts while confirmation is still missing | Candidate future cuts are redundant recovery slots, but only after the partner proves reliable enough to replace them |
+| Stable DPS/utility-heavy partner        | Partner attendance is confirmed, but they are not replacing the tank/heal backbone           | Preserve the current tank/heal floor and treat partner DPS as bonus throughput first                                         | Usually no baseline changes; partner accounts act as overflow                                                         |
+| Irregular or one-off partner attendance | Partner may join some nights but is not a dependable every-raid presence                     | Treat partner accounts as bonus bench only and keep the owned roster self-sufficient                                         | No permanent changes                                                                                                  |
 
 - The documented baseline remains the default because `TextQuest#1593` and `TextQuest#1594` both reinforce survivability-first automation over speculative DPS optimization.
 - If a partner roster is later confirmed in tracked evidence, update the linked planning issue first and only then revise the canonical roster docs.
@@ -178,14 +178,13 @@ For pre-launch rehearsal routes that intentionally avoid the most-camped mainstr
 
 Old Sebilis remains research-backed and still needs live proof for Scars-launch
 access, spawn cadence, camp overlap, Nodding Blue Lily forage rate, and
-automation risk. Use [Sebilis Farming
-Validation](Sebilis-Farming-Validation.md) as the canonical ledger before
+automation risk. Use [Sebilis Guide](Sebilis-Guide.md) as the canonical ledger before
 treating the zone as a solved overnight farm.
 
 Velketor's Labyrinth Frenzy is now research-backed for the safe-hall baseline,
 but it still needs live proof for 6-box leash behavior, pit or upper-dogs
 branch safety, and actual spawn cadence. Use [Velketor's Labyrinth Frenzy
-Camp](Velketors-Labyrinth-Frenzy-Camp.md) for the documented route baseline
+Camp](Camp-Runbooks.md) for the documented route baseline
 and [Velketor's Labyrinth
 Validation](Velketors-Labyrinth-Validation.md) as the canonical ledger before
 treating the zone as a solved unattended lane.
@@ -426,12 +425,12 @@ From easiest to hardest within NToV:
 
 ### Optimal Zone Assignments by Group Strength
 
-| Group | Best Role | Ideal Zones |
-| ----- | --------- | ----------- |
-| G1 (SK/CLR/BRD/SHM/MNK/MNK) | Driver group, FD pulls, controlled named farming | Howling Stones, Chardok, Sebilis camps that need precise pulls |
-| G2-G4 (WAR/CLR/BRD/SHM/MNK/MNK) | Interchangeable melee grind teams | Old Sebilis, Kael Drakkel, Crystal Caverns, Tower of Frozen Shadow |
-| G5 (PAL/CLR/BRD/DRU/BST/RNG) | Outdoor utility, evac insurance, tracking | Western Wastes, Cobalt Scar, Great Divide, open-world named routes |
-| G6 (PAL/CLR/BRD/ENC/WIZ/MAG) | Caster utility, CC, summon/vendor support | Velketor's, Siren's Grotto, support duty for contested named or recovery pulls |
+| Group                           | Best Role                                        | Ideal Zones                                                                    |
+| ------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| G1 (SK/CLR/BRD/SHM/MNK/MNK)     | Driver group, FD pulls, controlled named farming | Howling Stones, Chardok, Sebilis camps that need precise pulls                 |
+| G2-G4 (WAR/CLR/BRD/SHM/MNK/MNK) | Interchangeable melee grind teams                | Old Sebilis, Kael Drakkel, Crystal Caverns, Tower of Frozen Shadow             |
+| G5 (PAL/CLR/BRD/DRU/BST/RNG)    | Outdoor utility, evac insurance, tracking        | Western Wastes, Cobalt Scar, Great Divide, open-world named routes             |
+| G6 (PAL/CLR/BRD/ENC/WIZ/MAG)    | Caster utility, CC, summon/vendor support        | Velketor's, Siren's Grotto, support duty for contested named or recovery pulls |
 
 ### Raid Formation
 
@@ -489,3 +488,10 @@ See [P99 Wiki Zone Guide](P99-Zone-Guide.md) for the full P99 wiki-sourced zone 
 - [ZAM Zone Level Chart](https://everquest.allakhazam.com/db/zlvlchart.html)
 - [Cobalt Scar Leveling Guide (Almar's)](https://www.almarsguides.com/EQ/Leveling/Velious/Locations/CobaltScar.cfm)
 - [Raid Tiers (Classic EQ Wiki)](http://eqc.wikidot.com/raid-tiers)
+
+---
+
+## See Also
+
+- **[Frostreaver Starting City Logistics](Frostreaver-Starting-City-Logistics.md)** — Detailed 36-account matrix, city split strategy, early leveling routes, and gear handoff logistics for launch day
+- **[Frostreaver Cost Model](Frostreaver-Cost-Model.md)** — Financial breakdown: subscription costs, Krono budgeting, hardware/server costs, and 18-month break-even targets

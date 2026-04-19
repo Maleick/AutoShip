@@ -41,9 +41,7 @@ This site is the published public docs surface. The repo-side `docs/wiki/` tree 
 - [Soul Engine](Soul-Engine)
 - [Offsets, EQ Internals, and MacroQuest References](Offsets-EQ-Internals-and-MacroQuest-References)
 - [Development Workflow](Development-Workflow)
-- [AutoShip Phase 1 Handoff](AutoShip-Phase-1-Handoff)
 - [Roadmap and Known Gaps](Roadmap-and-Known-Gaps)
-- [Codebase Audit — 2026-04-13](Codebase-Audit-2026-04-13)
 - [Maintaining the Wiki](Maintaining-the-Wiki)
 
 ## Current Snapshot
@@ -81,11 +79,11 @@ TextQuest exposes its IPC protocol for external applications via multi-language 
 - [SDK Documentation](https://maleick.github.io/TextQuest/textquest-client/) — mdBook documentation for the SDK surface
 - [IPC Protocol Specification](Specs-and-Protocols/IPC-Protocol.md) — Detailed wire protocol documentation
 
-| Language | Package | Registry | Status |
-|----------|---------|----------|--------|
-| Rust | `textquest-common` | [crates.io](https://crates.io/crates/textquest-common) | Published (v0.6.0) |
-| Python | `textquest` | PyPI | Not yet published |
-| TypeScript | `@textquest/client` | npm | Not yet published |
+| Language   | Package             | Registry                                               | Status             |
+| ---------- | ------------------- | ------------------------------------------------------ | ------------------ |
+| Rust       | `textquest-common`  | [crates.io](https://crates.io/crates/textquest-common) | Published (v0.6.0) |
+| Python     | `textquest`         | PyPI                                                   | Not yet published  |
+| TypeScript | `@textquest/client` | npm                                                    | Not yet published  |
 
 ## Current Behavior vs Roadmap
 
@@ -100,7 +98,7 @@ TextQuest exposes its IPC protocol for external applications via multi-language 
 - The canonical active roadmap now resumes at `M5` Anti-Cheat and keeps economy execution work at `M10` plus Soul/LLM work at `M11`.
 - The current code keeps the queue and provider abstraction for Soul behavior, but routine provider-backed chat is not the claimed default operating mode.
 - Some live-client behavior still needs regular Windows validation after EQ patches, especially login selectors, offsets, and nav/combat edge cases.
-- Latest compile/gap audit snapshot: [Codebase Audit — 2026-04-13](Codebase-Audit-2026-04-13).
+- For recent compile and validation status, see [Roadmap and Known Gaps](Roadmap-and-Known-Gaps).
 - Old research docs may still say "Frostreaver"; treat the current product name as TextQuest and prefer code plus current top-level docs if anything conflicts.
 
 ## Documentation Policy

@@ -14,61 +14,61 @@ Planning reference for `TextQuest#1587`. This page turns the locked city allocat
 
 ### Cabilis (12)
 
-| Slot | Race | Class | Early Box | Final Roster Anchor |
-| ---- | ---- | ----- | --------- | ------------------- |
-| CAB-01 | Iksar | Shadowknight | CAB-A | G1 Driver tank |
-| CAB-02 | Iksar | Shaman | CAB-A | G1 slow / heals |
-| CAB-03 | Iksar | Shaman | CAB-A | G2 slow / heals |
-| CAB-04 | Iksar | Monk | CAB-A | G1 DPS |
-| CAB-05 | Iksar | Monk | CAB-A | G1 DPS |
-| CAB-06 | Iksar | Monk | CAB-A | G2 DPS |
-| CAB-07 | Iksar | Beastlord | CAB-B | G5 utility DPS |
-| CAB-08 | Iksar | Shaman | CAB-B | G3 slow / heals |
-| CAB-09 | Iksar | Shaman | CAB-B | G4 slow / heals |
-| CAB-10 | Iksar | Monk | CAB-B | G2 DPS |
-| CAB-11 | Iksar | Monk | CAB-B | G3 DPS |
-| CAB-12 | Iksar | Monk | CAB-B | G4 DPS |
+| Slot   | Race  | Class        | Early Box | Final Roster Anchor |
+| ------ | ----- | ------------ | --------- | ------------------- |
+| CAB-01 | Iksar | Shadowknight | CAB-A     | G1 Driver tank      |
+| CAB-02 | Iksar | Shaman       | CAB-A     | G1 slow / heals     |
+| CAB-03 | Iksar | Shaman       | CAB-A     | G2 slow / heals     |
+| CAB-04 | Iksar | Monk         | CAB-A     | G1 DPS              |
+| CAB-05 | Iksar | Monk         | CAB-A     | G1 DPS              |
+| CAB-06 | Iksar | Monk         | CAB-A     | G2 DPS              |
+| CAB-07 | Iksar | Beastlord    | CAB-B     | G5 utility DPS      |
+| CAB-08 | Iksar | Shaman       | CAB-B     | G3 slow / heals     |
+| CAB-09 | Iksar | Shaman       | CAB-B     | G4 slow / heals     |
+| CAB-10 | Iksar | Monk         | CAB-B     | G2 DPS              |
+| CAB-11 | Iksar | Monk         | CAB-B     | G3 DPS              |
+| CAB-12 | Iksar | Monk         | CAB-B     | G4 DPS              |
 
 ### Freeport Cluster (12)
 
 Keep the Freeport side as a 10-character Human core plus a 2-character Erudite satellite. That keeps the class totals aligned with the locked "Human/Erudite mix" without turning Antonica-west travel into the dominant day-one problem.
 
-| Slot | Race | Class | Early Box | Final Roster Anchor |
-| ---- | ---- | ----- | --------- | ------------------- |
-| FP-01 | Human | Warrior | FP-A | G2 tank |
-| FP-02 | Human | Paladin | FP-A | G5 tank |
-| FP-03 | Human | Cleric | FP-A | G1 healer |
-| FP-04 | Human | Bard | FP-A | G2 support |
-| FP-05 | Human | Monk | FP-A | G3 DPS |
-| FP-06 | Human | Cleric | FP-A | G5 healer |
-| FP-07 | Human | Bard | FP-B | G3 support |
-| FP-08 | Erudite | Paladin | FP-B | G6 tank |
-| FP-09 | Erudite | Cleric | FP-B | G6 healer |
-| FP-10 | Human | Monk | FP-B | G4 DPS |
-| FP-11 | Human | Bard | FP-B | G4 support |
-| FP-12 | Human | Warrior | FP-B | G3 tank |
+| Slot  | Race    | Class   | Early Box | Final Roster Anchor |
+| ----- | ------- | ------- | --------- | ------------------- |
+| FP-01 | Human   | Warrior | FP-A      | G2 tank             |
+| FP-02 | Human   | Paladin | FP-A      | G5 tank             |
+| FP-03 | Human   | Cleric  | FP-A      | G1 healer           |
+| FP-04 | Human   | Bard    | FP-A      | G2 support          |
+| FP-05 | Human   | Monk    | FP-A      | G3 DPS              |
+| FP-06 | Human   | Cleric  | FP-A      | G5 healer           |
+| FP-07 | Human   | Bard    | FP-B      | G3 support          |
+| FP-08 | Erudite | Paladin | FP-B      | G6 tank             |
+| FP-09 | Erudite | Cleric  | FP-B      | G6 healer           |
+| FP-10 | Human   | Monk    | FP-B      | G4 DPS              |
+| FP-11 | Human   | Bard    | FP-B      | G4 support          |
+| FP-12 | Human   | Warrior | FP-B      | G3 tank             |
 
 ### Greater Faydark (6)
 
-| Slot | Race | Class | Early Box | Final Roster Anchor |
-| ---- | ---- | ----- | --------- | ------------------- |
-| GFY-01 | Wood Elf | Ranger | GFY-A | G5 utility DPS |
-| GFY-02 | Wood Elf | Druid | GFY-A | G5 support / heals |
-| GFY-03 | High Elf | Enchanter | GFY-A | G6 support / CC |
-| GFY-04 | Wood Elf | Bard | GFY-A | G1 support |
-| GFY-05 | Wood Elf | Bard | GFY-A | G5 support |
-| GFY-06 | Wood Elf | Bard | GFY-A | G6 support |
+| Slot   | Race     | Class     | Early Box | Final Roster Anchor |
+| ------ | -------- | --------- | --------- | ------------------- |
+| GFY-01 | Wood Elf | Ranger    | GFY-A     | G5 utility DPS      |
+| GFY-02 | Wood Elf | Druid     | GFY-A     | G5 support / heals  |
+| GFY-03 | High Elf | Enchanter | GFY-A     | G6 support / CC     |
+| GFY-04 | Wood Elf | Bard      | GFY-A     | G1 support          |
+| GFY-05 | Wood Elf | Bard      | GFY-A     | G5 support          |
+| GFY-06 | Wood Elf | Bard      | GFY-A     | G6 support          |
 
 ### Neriak Feeder (6)
 
-| Slot | Race | Class | Early Box | Final Roster Anchor |
-| ---- | ---- | ----- | --------- | ------------------- |
-| NER-01 | Dark Elf | Warrior | NER-A | G4 tank |
-| NER-02 | Dark Elf | Cleric | NER-A | G2 healer |
-| NER-03 | Dark Elf | Cleric | NER-A | G3 healer |
-| NER-04 | Dark Elf | Cleric | NER-A | G4 healer |
-| NER-05 | Dark Elf | Wizard | NER-A | G6 DPS |
-| NER-06 | Dark Elf | Magician | NER-A | G6 DPS |
+| Slot   | Race     | Class    | Early Box | Final Roster Anchor |
+| ------ | -------- | -------- | --------- | ------------------- |
+| NER-01 | Dark Elf | Warrior  | NER-A     | G4 tank             |
+| NER-02 | Dark Elf | Cleric   | NER-A     | G2 healer           |
+| NER-03 | Dark Elf | Cleric   | NER-A     | G3 healer           |
+| NER-04 | Dark Elf | Cleric   | NER-A     | G4 healer           |
+| NER-05 | Dark Elf | Wizard   | NER-A     | G6 DPS              |
+| NER-06 | Dark Elf | Magician | NER-A     | G6 DPS              |
 
 ## Why This Split Works
 
@@ -82,13 +82,13 @@ Keep the Freeport side as a 10-character Human core plus a 2-character Erudite s
 
 Operationally there are five travel origins because the Freeport cluster includes a two-character Erudin satellite.
 
-| Origin | Levels 1-4 | Levels 4-8 | Levels 8-12 | Travel to Merge |
-| ------ | ---------- | ---------- | ----------- | --------------- |
-| Cabilis | Field of Bone | Field of Bone / Kurn's entry | Kurn's Tower | Field of Bone -> Lake of Ill Omen -> Frontier Mountains -> Firiona Vie docks -> boat to Butcherblock |
-| Freeport Human core | Freeport newbie yards | East Commonlands orcs / dervs | East Commonlands / West Commonlands / Befallen staging | East Freeport dock -> boat to Butcherblock |
-| Erudin satellite | Toxxulia Forest / Erudin yard | Boat to Qeynos side, then Qeynos Hills / Blackburrow | Karanas -> East Commonlands catch-up | Once linked with the Freeport core, use the same East Freeport -> Butcherblock boat |
-| Neriak feeder | Nektulos Forest | East Commonlands with the Freeport core | East Commonlands / West Commonlands / Befallen staging | Same East Freeport -> Butcherblock boat after the EC merge |
-| Greater Faydark | Greater Faydark ruins / orc hill | Crushbone entrance | Crushbone deeper / Greater Faydark cleanup | Walk to Butcherblock when the all-roster move is called |
+| Origin              | Levels 1-4                       | Levels 4-8                                           | Levels 8-12                                            | Travel to Merge                                                                                      |
+| ------------------- | -------------------------------- | ---------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Cabilis             | Field of Bone                    | Field of Bone / Kurn's entry                         | Kurn's Tower                                           | Field of Bone -> Lake of Ill Omen -> Frontier Mountains -> Firiona Vie docks -> boat to Butcherblock |
+| Freeport Human core | Freeport newbie yards            | East Commonlands orcs / dervs                        | East Commonlands / West Commonlands / Befallen staging | East Freeport dock -> boat to Butcherblock                                                           |
+| Erudin satellite    | Toxxulia Forest / Erudin yard    | Boat to Qeynos side, then Qeynos Hills / Blackburrow | Karanas -> East Commonlands catch-up                   | Once linked with the Freeport core, use the same East Freeport -> Butcherblock boat                  |
+| Neriak feeder       | Nektulos Forest                  | East Commonlands with the Freeport core              | East Commonlands / West Commonlands / Befallen staging | Same East Freeport -> Butcherblock boat after the EC merge                                           |
+| Greater Faydark     | Greater Faydark ruins / orc hill | Crushbone entrance                                   | Crushbone deeper / Greater Faydark cleanup             | Walk to Butcherblock when the all-roster move is called                                              |
 
 ### Earliest Practical Full-Roster Convergence
 
@@ -123,13 +123,13 @@ This is the earliest point where the convergence is still efficient instead of m
 
 Legacy Characters matter more for account planning than for day-one travel. The recommended policy for these 36 accounts is:
 
-| Phase | Trigger | Account Policy |
-| ----- | ------- | -------------- |
-| Seed phase | Launch through first cap | Each listed launch character is that account's Legacy seed. Do not detour into alts before the seed hits the current era cap. |
-| First bonus | Seed reaches cap | Mark the account as `+10% ready` and keep leveling the main roster until the core six groups are stable. |
-| Catch-up phase | Main is capped and frequently idle | Only then create or activate a same-account alt / persona. Prioritize healer, shaman, bard, and tank accounts first because they gain the most from faster catch-up when caps move. |
-| Stack discipline | Two or more capped characters on one account | Stop chasing stacks just because they exist. A second capped character for `+20%` is useful; racing toward the full `+100%` cap is not a launch priority for this 36-account plan. |
-| Expansion rollover | Level cap increases | Re-cap the seed character first. Legacy stacks disappear until that account has a character at the new era cap again. |
+| Phase              | Trigger                                      | Account Policy                                                                                                                                                                      |
+| ------------------ | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Seed phase         | Launch through first cap                     | Each listed launch character is that account's Legacy seed. Do not detour into alts before the seed hits the current era cap.                                                       |
+| First bonus        | Seed reaches cap                             | Mark the account as `+10% ready` and keep leveling the main roster until the core six groups are stable.                                                                            |
+| Catch-up phase     | Main is capped and frequently idle           | Only then create or activate a same-account alt / persona. Prioritize healer, shaman, bard, and tank accounts first because they gain the most from faster catch-up when caps move. |
+| Stack discipline   | Two or more capped characters on one account | Stop chasing stacks just because they exist. A second capped character for `+20%` is useful; racing toward the full `+100%` cap is not a launch priority for this 36-account plan.  |
+| Expansion rollover | Level cap increases                          | Re-cap the seed character first. Legacy stacks disappear until that account has a character at the new era cap again.                                                               |
 
 Additional rules worth keeping explicit:
 
@@ -151,3 +151,10 @@ Additional rules worth keeping explicit:
 - EverQuest: https://www.everquest.com/guides/eq-2025-tlp-ruleset-faq
 - EverQuest Fandom races reference: https://everquest.fandom.com/wiki/Races
 - Project 1999 Iksar faction reference: https://wiki.project1999.com/An_Iksar%27s_Guide_To_Love_and_Friendship_Through_Murder
+
+---
+
+## See Also
+
+- **[Frostreaver Farming & XP Guide](Frostreaver-Farming-Guide.md)** — Complete leveling zone progression, plat farming locations, raid targets, encounter locking, and randomized loot meta
+- **[Frostreaver Cost Model](Frostreaver-Cost-Model.md)** — Financial breakdown: subscription costs, Krono budgeting, hardware/server costs, and 18-month break-even targets
