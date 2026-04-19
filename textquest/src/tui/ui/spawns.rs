@@ -13,7 +13,7 @@ use super::widgets::{
     themed_header_row,
 };
 use crate::{
-    eq::structs::SpawnInfo,
+    eq::structs::{SpawnInfo, StandState},
     tui::app::{ActivePanel, App},
 };
 
@@ -452,8 +452,8 @@ pub fn draw_hex_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App)
     };
 
     // Determine if we have a selected spawn
+    let filtered_indices = app.filtered_spawn_indices();
     let selected_spawn = app.spawns_state.table_state.selected().and_then(|idx| {
-        let filtered_indices = app.filtered_spawn_indices();
         filtered_indices
             .get(idx)
             .and_then(|&spawn_idx| app.spawns.get(spawn_idx))

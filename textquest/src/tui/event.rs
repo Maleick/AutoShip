@@ -934,7 +934,7 @@ pub fn handle_events(
                             yaw: cp.yaw,
                         };
                         let ok = app.send_ipc_to_focused(&cmd);
-                        if ok {
+                        if ok != 0 {
                             app.set_feedback(
                                 ToastLevel::Success,
                                 format!("Camera: {}", cp.name),

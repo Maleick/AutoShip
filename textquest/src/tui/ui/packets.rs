@@ -63,11 +63,7 @@ fn draw_packet_stream(frame: &mut Frame, area: Rect, app: &App) {
         " Packet Stream · {} captured · {}/s peak ",
         captured_count, peak_rate
     );
-    let footer = " ↑↓ select  ·  / filter  ·  p pause  ·  space mark  ·  e export ";
-
-    let blk = panel(title, border_style, t).footer(
-        Line::from(Span::styled(footer, Style::default().fg(t.text_secondary))).right_aligned(),
-    );
+    let blk = panel(title, border_style, t);
 
     if filtered.is_empty() {
         let msg = if state.packets.is_empty() {
@@ -163,7 +159,8 @@ fn draw_packet_stream(frame: &mut Frame, area: Rect, app: &App) {
         frame.render_widget(table, area);
 
         // Draw filter echo line below the table
-        let filter_line = format_filter_line(state, &filtered);
+        let owned_filtered: Vec<PacketRecord> = filtered.iter().map(|r| (*r).clone()).collect();
+        let filter_line = format_filter_line(state, &owned_filtered);
         let filter_area = Rect {
             x: area.x,
             y: area.y + area.height.saturating_sub(2),

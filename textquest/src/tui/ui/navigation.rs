@@ -228,7 +228,10 @@ fn draw_nav_card(
         };
 
         // Class, level, group
-        let class_abbr = client.class.abbr();
+        let class_abbr = client.local_player.as_ref()
+            .and_then(|p| p.class.as_ref())
+            .map(|c| c.short_name())
+            .unwrap_or("?");
         lines.push(Line::from(vec![
             Span::styled("Class    ", Style::default().fg(t.text_secondary)),
             Span::styled(
@@ -237,13 +240,13 @@ fn draw_nav_card(
             ),
             Span::raw("  "),
             Span::styled(
-                format!("L{}", client.level),
+                format!("L{}", client.local_player.as_ref().map(|p| p.level).unwrap_or(0)),
                 Style::default().fg(t.text_muted),
             ),
             Span::raw("   "),
             Span::styled("Group ", Style::default().fg(t.text_secondary)),
             Span::styled(
-                format!("{}", client.group_id),
+                client.group_info.as_ref().map(|g| g.member_count.to_string()).unwrap_or_else(|| "—".to_string()),
                 Style::default().fg(t.text_highlight),
             ),
         ]));
@@ -256,24 +259,24 @@ fn draw_nav_card(
 
         // Position
         let x = if let Some(p) = &client.local_player {
-            p.pos.x
+            p.x
         } else {
             0.0
         };
         let y = if let Some(p) = &client.local_player {
-            p.pos.y
+            p.y
         } else {
             0.0
         };
         let z = if let Some(p) = &client.local_player {
-            p.pos.z
+            p.z
         } else {
             0.0
         };
         let h = if let Some(p) = &client.local_player {
-            p.pos.h
+            p.heading
         } else {
-            0
+            0.0
         };
 
         lines.push(Line::from(vec![

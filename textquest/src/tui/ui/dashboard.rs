@@ -221,7 +221,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                     "???"
                 };
                 let state_style = if let Some(player) = &client.local_player {
-                    stand_state_color(&player.stand_state, t)
+                    Style::default().fg(stand_state_color(&player.stand_state, t))
                 } else {
                     Style::default().fg(t.text_muted)
                 };
@@ -1251,7 +1251,7 @@ fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
     // Casting info
     if let Some(player) = &client.local_player {
         if let Some(cast_info) = &player.cast_state {
-        let spell_label = &cast_info.spell_name;
+        let spell_label = cast_info.spell_name.as_deref().unwrap_or("Unknown");
         lines.push(Line::from(vec![
             Span::styled("Casting  ", Style::default().fg(t.text_secondary)),
             Span::styled(
@@ -1261,17 +1261,23 @@ fn draw_target_cast_summary(frame: &mut Frame, area: Rect, app: &App) {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw(" "),
-            Span::styled(&cast_info.gem_slot, Style::default().fg(t.text_muted)),
+            Span::styled(
+                cast_info.spell_gem()
+                    .map(|g| format!("G{}", g))
+                    .unwrap_or_else(|| "item".to_string()),
+                Style::default().fg(t.text_muted),
+            ),
         ]));
 
-        let total_time = cast_info.total_time;
-        let elapsed = cast_info.elapsed;
-        let progress = if total_time > 0.0 {
-            (elapsed / total_time).min(1.0)
+        let total_ms = cast_info.total_cast_ms.unwrap_or(0);
+        let remaining_ms = cast_info.remaining_ms.unwrap_or(0);
+        let progress = if total_ms > 0 {
+            let elapsed_ms = total_ms.saturating_sub(remaining_ms);
+            (elapsed_ms as f64 / total_ms as f64).min(1.0)
         } else {
             0.0
         };
-        let remaining = (total_time - elapsed).max(0.0);
+        let remaining = remaining_ms;
 
         let bar_width = 22;
         let filled = (progress * bar_width as f64).round() as usize;

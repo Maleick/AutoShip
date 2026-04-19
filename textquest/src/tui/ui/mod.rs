@@ -960,9 +960,7 @@ fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
                 ("○", Style::default().fg(t.text_muted))
             };
 
-            let elapsed = alert.created_at.elapsed();
-            let secs = elapsed.as_secs();
-            let timestamp = format!("{:02}:{:02}:{:02}", secs / 3600, (secs % 3600) / 60, secs % 60);
+            let timestamp = alert.created_at.split('T').nth(1).unwrap_or("--:--:--");
             let message = truncate_inline(
                 &alert.message,
                 sections[1].width.saturating_sub(40) as usize,

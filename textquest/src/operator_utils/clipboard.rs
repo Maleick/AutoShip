@@ -32,7 +32,8 @@ pub fn copy_to_clipboard(text: &str) -> Result<()> {
 
         // Allocate memory for the text
         let size = text.len() + 1; // +1 for null terminator
-        let hglobal = GlobalAlloc(GMEM_MOVEABLE, size)?;
+        let hglobal = GlobalAlloc(GMEM_MOVEABLE, size)
+            .ok_or_else(|| anyhow::anyhow!("GlobalAlloc failed"))?;
 
         // Lock and copy data
         let ptr = GlobalLock(hglobal);
@@ -50,7 +51,7 @@ pub fn copy_to_clipboard(text: &str) -> Result<()> {
 
         // Set clipboard data (CF_TEXT = 1 for ANSI text)
         const CF_TEXT: u32 = 1;
-        SetClipboardData(CF_TEXT, hglobal as *mut std::ffi::c_void).ok()?;
+        SetClipboardData(CF_TEXT, hglobal as isize).map_err(|e| anyhow::anyhow!("SetClipboardData failed: {}", e))?;
 
         CloseClipboard();
     }
