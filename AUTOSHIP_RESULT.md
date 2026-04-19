@@ -1,110 +1,103 @@
-# Result: #1733 — textquest-admin backup commands
+# Issue #1536 — M10: Economy - Wishlist Intent Tracking
 
-## Status: DONE
+## Status: COMPLETE
 
-## Changes Made
+## Implementation Summary
 
-### textquest/src/bin/admin_client/mod.rs
-- Added `BackupId` response type to deserialize single backup ID
-- Added `BackupList` response type to deserialize backup list with array of BackupIds
-- Added `BackupRestoreResponse` type for restore operation responses
-- Added `create_backup(session_id: u32)` method to POST /api/admin/sessions/{id}/backups
-- Added `list_backups(session_id: u32)` method to GET /api/admin/sessions/{id}/backups
-- Added `restore_backup(session_id: u32, backup_id: &str)` method to POST /api/admin/sessions/{id}/backups/{backup_id}/restore
-- Added 3 unit tests for JSON deserialization:
-  - `test_backup_id_deserialization`: Validates BackupId parsing
-  - `test_backup_list_deserialization`: Validates BackupList parsing with multiple backups
-  - `test_backup_restore_response_deserialization`: Validates BackupRestoreResponse parsing
+Implemented intent-based item decision tracking for M10 economy automation.
 
-### textquest/src/bin/textquest_admin.rs
-- Added `BackupAction` enum with 3 subcommands:
-  - `Create { session_id: u32 }`: Creates a backup
-  - `List { session_id: u32 }`: Lists all backups
-  - `Restore { session_id: u32, backup_id: String }`: Restores a backup
-- Added `Backup` variant to the main `Commands` enum
-- Implemented backup command handlers in main():
-  - **Create**: Prints backup ID only (operator-friendly, suitable for piping)
-  - **List**: Prints header and one backup ID per line
-  - **Restore**: Prints the response message (includes session ID and operation status)
-- All commands follow standard error handling pattern with eprintln! and ExitCode
+### Files Created/Modified
 
-## Files Modified
+1. **textquest/src/loot/intent.rs** (461 lines)
+   - New module implementing the intent tracking system
+   - Located: `/Users/maleick/Projects/TextQuest/.autoship/workspaces/issue-1536/textquest/src/loot/intent.rs`
 
-### Unit Tests (in admin_client/mod.rs)
-- ✓ test_backup_id_deserialization
-- ✓ test_backup_list_deserialization
-- ✓ test_backup_restore_response_deserialization
+2. **textquest/src/loot/mod.rs**
+   - Updated to export intent module and types
+   - Added imports: `IntentTracker`, `ItemIntent`, `WishlistEntry`
 
-### Compilation & Build
-- ✓ `cargo build --lib -p textquest` - Builds without errors (7 deprecation warnings pre-existing)
-- ✓ `cargo build --bin textquest-admin` - Binary builds successfully
-- ✓ `cargo check --bin textquest-admin` - No errors, only pre-existing warnings
-- ✓ Binary help text shows all backup subcommands correctly
+### Acceptance Criteria — All Met
 
-### Pre-existing Test Status
-- Library tests: 221 passed, 2 failed (pre-existing failures in class_config tests, unrelated to backup feature)
+✓ **Define intent schema**: `ItemIntent` enum with 5 variants
+  - `Keep` — retain for personal use
+  - `Sell` — vendor for profit
+  - `Bank` — store in shared bank
+  - `DistributeToRole` — assign to character in role
+  - `Salvage` — disassemble for materials
 
-## CLI Verification
+✓ **Implement wishlist storage and retrieval**: `WishlistEntry` struct + `IntentTracker` struct
+  - Serde derives for JSON serialization/deserialization
+  - HashMap-based in-memory storage
+  - Per-item metadata: item_id, intent, reserved_for, note, updated_at timestamp
 
-The CLI works as expected:
-```bash
-$ ./target/debug/textquest-admin backup --help
-Commands:
-  create   
-  list     
-  restore  
+✓ **CRUD operations** via `IntentTracker`:
+  - **Create**: `add_entry()`, `add_item()`
+  - **Read**: `get()`, `get_by_intent()`, `contains()`, `count()`, `iter()`
+  - **Update**: `update_intent()`, `update_note()`, `update_reserved_for()`
+  - **Delete**: `remove()`, `clear()`
+  - **Merge**: `merge()` for combining trackers
 
-$ ./target/debug/textquest-admin backup create --help
-Usage: textquest-admin backup create <SESSION_ID>
+✓ **Tests**: 12 comprehensive unit tests (exceeds 4 minimum requirement)
 
-$ ./target/debug/textquest-admin backup list --help
-Usage: textquest-admin backup list <SESSION_ID>
+### Test Results
 
-$ ./target/debug/textquest-admin backup restore --help
-Usage: textquest-admin backup restore <SESSION_ID> <BACKUP_ID>
+All 12 tests passing:
+
+```
+test loot::intent::tests::test_add_and_get_entry ... ok
+test loot::intent::tests::test_update_intent ... ok
+test loot::intent::tests::test_full_crud_cycle ... ok
+test loot::intent::tests::test_get_by_intent ... ok
+test loot::intent::tests::test_reserved_for_tracking ... ok
+test loot::intent::tests::test_distribute_to_role_intent ... ok
+test loot::intent::tests::test_salvage_intent ... ok
+test loot::intent::tests::test_replace_entry ... ok
+test loot::intent::tests::test_clear_all ... ok
+test loot::intent::tests::test_iteration ... ok
+test loot::intent::tests::test_merge_trackers ... ok
+test loot::intent::tests::test_serde_round_trip ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured
 ```
 
-## API Endpoints Mapped
+### Key Features
 
-- ✓ `backup create <session_id>` → POST /api/admin/sessions/{id}/backups
-- ✓ `backup list <session_id>` → GET /api/admin/sessions/{id}/backups
-- ✓ `backup restore <session_id> <backup_id>` → POST /api/admin/sessions/{id}/backups/{backup_id}/restore
+1. **Complete CRUD API**: Full create/read/update/delete operations with builder pattern support
+2. **Serde serialization**: JSON round-trip for persistence and API integration
+3. **Intent labels**: Human-readable labels for each intent type
+4. **Timestamp tracking**: Auto-updated RFC3339 timestamps on create and modify
+5. **Query by intent**: Find all items with specific intent
+6. **Tracker merging**: Combine multiple intent trackers
+7. **Immutable and mutable access**: Support for both read and in-place modifications
 
-## Output Format
+### Testing Coverage
 
-All output is stable and terminal-friendly:
+- Basic CRUD cycle: create, read, update, delete
+- Intent variants: all 5 intent types tested
+- Character reservation tracking
+- Query by intent type
+- Tracker merging
+- Serialization round-trip with serde_json
+- Iterator interface
+- Duplicate item replacement
+- Full tracker clear
 
-**Create:** Returns backup ID only
-```
-backup-2024-04-18-123456
-```
+### Build & Compilation
 
-**List:** Shows header and one ID per line
-```
-=== Backups for Session 1 ===
-backup-2024-04-18-123456
-backup-2024-04-17-654321
-```
+- Compiled successfully (warnings: pre-existing deprecated config items)
+- No new errors or warnings introduced
+- All dependencies present: serde, chrono, ClientId type from textquest-common
 
-**Restore:** Shows operation message
-```
-Restore request queued for session 1
-```
+### Code Quality
 
-## Acceptance Criteria Met
+- Rust idiomatic: builder pattern, Iterator trait implementation
+- Comprehensive documentation with example usage in comments
+- Consistent with existing TextQuest codebase style
+- Properly integrated into loot module hierarchy
 
-- [x] `backup create <session_id>` calls POST /api/admin/sessions/{id}/backups and prints the backup ID
-- [x] `backup list` calls GET /api/admin/sessions/{id}/backups and lists backup IDs
-- [x] `backup restore <backup_id>` calls POST /api/admin/sessions/{id}/backups/{backup_id}/restore
-- [x] Output is stable, operator-friendly text format
-- [x] Compiles without errors
-- [x] At least 3 unit tests (exactly 3 tests for backup response types)
+## Commit
 
-## Notes
+Branch: `autoship/issue-1536`
+Commit: `f1e29ecd6` — "feat(economy): add ItemIntent wishlist tracking for M10 economy cycle"
 
-- All backup command parameters are properly wired through clap CLI framework
-- Error handling follows existing patterns in the admin CLI (eprintln! + ExitCode::FAILURE)
-- Response types are properly deserialized with serde
-- Implementation is minimal and focused (120 lines added)
-- No modifications to the API backend were needed (assumes it exists per issue #1566)
-- Tested with `cargo test --lib --package textquest` showing clean compilation with only pre-existing test failures
+Changes: +463 lines (2 files)
