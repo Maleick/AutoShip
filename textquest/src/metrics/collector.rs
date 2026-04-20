@@ -341,10 +341,7 @@ impl MetricsCollector {
             });
 
         char_metrics.combat.total_damage_dealt += metrics.dps as u64 * 100;
-        char_metrics.combat.total_dps_samples.push(metrics.dps);
-        if char_metrics.combat.dps_samples.len() > 3600 {
-            char_metrics.combat.dps_samples.remove(0);
-        }
+        char_metrics.combat.record_dps_sample(metrics.dps);
         char_metrics.combat.total_kills += metrics.total_kills;
         char_metrics.combat.active_combat_time_secs +=
             metrics.avg_pull_to_kill_secs as u64 * metrics.total_kills as u64;
