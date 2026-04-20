@@ -607,14 +607,14 @@ impl Client {
     pub async fn put_timestamp_config(
         &self,
         character: &str,
-        config: TimestampFormat,
-    ) -> Result<TimestampFormat> {
+        config: TimestampConfig,
+    ) -> Result<TimestampConfig> {
         let url = self.build_url(&format!("/timestamp-config/{}", character));
         let req = self.http_client.put(&url).json(&config);
         let req = self.add_token(req);
 
         let response = req.send().await?;
-        self.handle_response::<TimestampFormat>(response).await
+        self.handle_response::<TimestampConfig>(response).await
     }
 
     // ─── Kill Tracker ──────────────────────────────────────────────────────

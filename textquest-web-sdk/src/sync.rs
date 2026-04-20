@@ -313,8 +313,8 @@ impl BlockingClient {
     pub fn put_timestamp_config(
         &self,
         character: &str,
-        config: TimestampFormat,
-    ) -> Result<TimestampFormat> {
+        config: TimestampConfig,
+    ) -> Result<TimestampConfig> {
         self.runtime
             .block_on(self.client.put_timestamp_config(character, config))
     }
