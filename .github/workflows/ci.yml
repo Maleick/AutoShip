@@ -20,7 +20,7 @@ env:
 jobs:
   merge_gate:
     name: PR gate (fmt + clippy + coverage) on Linux
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -184,16 +184,16 @@ jobs:
       matrix:
         include:
           # Windows with stable Rust (primary target)
-          - runner: windows-latest
+          - runner: [self-hosted, Windows, X64, textquest]
             os-name: windows
             rust: stable
           # Windows with nightly Rust (for unsafe hooks testing)
-          - runner: windows-latest
+          - runner: [self-hosted, Windows, X64, textquest]
             os-name: windows
             rust: nightly
             continue-on-error: true
           # Linux with stable Rust
-          - runner: ubuntu-latest
+          - runner: [self-hosted, Linux, X64, textquest]
             os-name: linux
             rust: stable
     runs-on: ${{ matrix.runner }}
