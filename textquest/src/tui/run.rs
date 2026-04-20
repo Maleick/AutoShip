@@ -196,6 +196,7 @@ fn run_loop(
             }
             app.update_tracked_spawns();
             app.update_spawn_alerts();
+            app.update_gm_detection();
             if let Err(error) = app.service_alerts() {
                 tracing::warn!(%error, "Failed to service operational alerts");
             }
