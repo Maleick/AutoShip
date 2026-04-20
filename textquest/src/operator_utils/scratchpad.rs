@@ -173,7 +173,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(10));
         note.update_content("Updated");
         assert_eq!(note.content, "Updated");
-        assert!(note.modified_at >= original_modified); // May be same if very fast
+        assert!(note.modified_at >= original_modified);
     }
 
     #[test]

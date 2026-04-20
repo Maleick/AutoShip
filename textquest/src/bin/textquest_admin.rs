@@ -1,6 +1,7 @@
 //! TextQuest Admin CLI — operator tooling for session diagnostics and management.
 
 #![allow(dead_code)]
+#![allow(clippy::items_after_test_module)]
 
 mod admin_client;
 

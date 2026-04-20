@@ -9,7 +9,19 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt;
 use textquest_common::types::ClientId;
+
+#[derive(Debug)]
+pub struct ItemNotFound;
+
+impl fmt::Display for ItemNotFound {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "item not found")
+    }
+}
+
+impl std::error::Error for ItemNotFound {}
 
 /// The intent (decision) for what to do with a looted item.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -162,45 +174,42 @@ impl IntentTracker {
     // ── Update ────────────────────────────────────────────────────────────
 
     /// Update the intent for an existing entry.
-    /// Returns `Ok(())` if updated, `Err(())` if item_id not found.
-    #[allow(clippy::result_unit_err)]
-    pub fn update_intent(&mut self, item_id: u32, new_intent: ItemIntent) -> Result<(), ()> {
+    /// Returns `Ok(())` if updated, `Err(ItemNotFound)` if item_id not found.
+    pub fn update_intent(&mut self, item_id: u32, new_intent: ItemIntent) -> Result<(), ItemNotFound> {
         if let Some(entry) = self.entries.get_mut(&item_id) {
             entry.intent = new_intent;
             entry.touch();
             Ok(())
         } else {
-            Err(())
+            Err(ItemNotFound)
         }
     }
 
     /// Update the note for an existing entry.
-    /// Returns `Ok(())` if updated, `Err(())` if item_id not found.
-    #[allow(clippy::result_unit_err)]
-    pub fn update_note(&mut self, item_id: u32, note: impl Into<String>) -> Result<(), ()> {
+    /// Returns `Ok(())` if updated, `Err(ItemNotFound)` if item_id not found.
+    pub fn update_note(&mut self, item_id: u32, note: impl Into<String>) -> Result<(), ItemNotFound> {
         if let Some(entry) = self.entries.get_mut(&item_id) {
             entry.note = note.into();
             entry.touch();
             Ok(())
         } else {
-            Err(())
+            Err(ItemNotFound)
         }
     }
 
     /// Update the reserved_for character for an existing entry.
-    /// Returns `Ok(())` if updated, `Err(())` if item_id not found.
-    #[allow(clippy::result_unit_err)]
+    /// Returns `Ok(())` if updated, `Err(ItemNotFound)` if item_id not found.
     pub fn update_reserved_for(
         &mut self,
         item_id: u32,
         char_id: Option<ClientId>,
-    ) -> Result<(), ()> {
+    ) -> Result<(), ItemNotFound> {
         if let Some(entry) = self.entries.get_mut(&item_id) {
             entry.reserved_for = char_id;
             entry.touch();
             Ok(())
         } else {
-            Err(())
+            Err(ItemNotFound)
         }
     }
 
