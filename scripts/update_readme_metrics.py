@@ -15,6 +15,7 @@ README_PATH = REPO_ROOT / "README.md"
 METRICS_PAGE_PATH = REPO_ROOT / "docs" / "wiki" / "Project-Metrics.md"
 TEST_LIST_SUMMARY_RE = re.compile(r"^(\d+) tests?, \d+ benchmarks$", re.MULTILINE)
 TEST_ANNOTATION_RE = re.compile(r"^\s*#\[\s*(?:tokio::)?test(?:\s*\([^]]*\))?\s*\]")
+ACCOUNTS_BADGE_RE = re.compile(r"!\[Accounts\]\(https://img\.shields\.io/badge/Accounts-[^)]+\)")
 
 
 def tracked_rust_files() -> list[pathlib.Path]:
@@ -90,6 +91,19 @@ def test_count() -> tuple[int, bool]:
     return test_count_from_source(), False
 
 
+def commit_count() -> int:
+    result = subprocess.run(
+        ["git", "rev-list", "--count", "HEAD"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    try:
+        return int(result.stdout.strip())
+    except ValueError:
+        return 0
+
+
 def badge(label: str, value: str, color: str) -> str:
     return (
         f"[![{label}](https://img.shields.io/badge/"
@@ -140,6 +154,7 @@ def main() -> int:
     loc = rust_loc()
     tests, tests_exact = test_count()
     test_label = f"{tests:,} exact" if tests_exact else f"~{tests:,}"
+    commits = commit_count()
 
     updated = replace_line(
         readme,
@@ -151,6 +166,13 @@ def main() -> int:
         "[![Tests]",
         badge("Tests", test_label, "brightgreen"),
     )
+    # Update commit count badge if present
+    if "![Commits]" in updated:
+        updated = re.sub(
+            r"!\[Commits\]\(https://img\.shields\.io/badge/Commits-[^)]+\)",
+            f"![Commits](https://img.shields.io/badge/Commits-{commits:,}-informational?style=flat-square)",
+            updated,
+        )
     updated = replace_line(
         updated,
         "Current workspace totals:",
