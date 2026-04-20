@@ -4,6 +4,8 @@ The canonical roadmap source is `docs/implementation-roadmap.md`.
 
 This page summarizes the active milestone order, the evidence model, and the main validation gaps that still matter operationally.
 
+For feature parity comparison across codebase versions and MacroQuest, see [Feature Parity Matrix](../FEATURE_PARITY_MATRIX.md).
+
 README is intentionally the usage surface for TextQuest. Treat this page and `docs/implementation-roadmap.md` as the places for roadmap status and validation guidance.
 
 GitHub tracking for this roadmap lives in issues, linked PRs, and milestones. GitHub Projects are historical/retiring and should not be treated as active defaults.

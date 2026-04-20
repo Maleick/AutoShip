@@ -8,13 +8,13 @@ Operator and developer guide for running and interpreting the TextQuest test sui
 
 TextQuest uses a layered test strategy:
 
-| Layer | Location | Tool | When it runs |
-|---|---|---|---|
-| Unit tests | Inline `#[cfg(test)]` blocks in source files | `cargo test` | Every PR |
-| Integration tests | `textquest/tests/*.rs` | `cargo test -p textquest --test <name>` | Every PR |
-| Scenario tests | `textquest/tests/scenarios/` | `cargo test scenario_` | Every PR |
-| Coverage gate | `scripts/coverage-report.py` | cargo-tarpaulin | Every PR (60% baseline threshold) |
-| Python tests | `tests/test_*.py` | `python3 -m unittest` | Advisory only |
+| Layer             | Location                                     | Tool                                    | When it runs                      |
+| ----------------- | -------------------------------------------- | --------------------------------------- | --------------------------------- |
+| Unit tests        | Inline `#[cfg(test)]` blocks in source files | `cargo test`                            | Every PR                          |
+| Integration tests | `textquest/tests/*.rs`                       | `cargo test -p textquest --test <name>` | Every PR                          |
+| Scenario tests    | `textquest/tests/scenarios/`                 | `cargo test scenario_`                  | Every PR                          |
+| Coverage gate     | `scripts/coverage-report.py`                 | cargo-tarpaulin                         | Every PR (60% baseline threshold) |
+| Python tests      | `tests/test_*.py`                            | `python3 -m unittest`                   | Advisory only                     |
 
 ---
 
@@ -73,50 +73,50 @@ Requires `cargo install cargo-tarpaulin`.
 
 Tests the `LoginStateMachine` through all 8+ states and error recovery paths.
 
-| Test | Covers |
-|---|---|
-| `login_enter_world_navigate_pipeline` | Full login → post-login → navigation flow |
-| `multi_client_launch_coordination` | `LaunchCoordinator` queue management |
-| `coordinator_tick_attempts_launch_from_queue` | Single dequeue per tick |
-| `login_wrong_password_is_fatal` | Error branch: WrongPassword → Abort |
-| `login_server_full_retries_then_aborts` | Retry logic (3 attempts) |
-| `login_character_mismatch_aborts` | Character name validation |
-| `login_mass_failure_triggers_pause_all` | MassFailure → PauseAll action |
-| `dll_reported_in_world_triggers_post_login` | DLL-reported phase transitions |
-| `dll_reported_ready_sets_terminal` | Terminal state handling |
+| Test                                          | Covers                                    |
+| --------------------------------------------- | ----------------------------------------- |
+| `login_enter_world_navigate_pipeline`         | Full login → post-login → navigation flow |
+| `multi_client_launch_coordination`            | `LaunchCoordinator` queue management      |
+| `coordinator_tick_attempts_launch_from_queue` | Single dequeue per tick                   |
+| `login_wrong_password_is_fatal`               | Error branch: WrongPassword → Abort       |
+| `login_server_full_retries_then_aborts`       | Retry logic (3 attempts)                  |
+| `login_character_mismatch_aborts`             | Character name validation                 |
+| `login_mass_failure_triggers_pause_all`       | MassFailure → PauseAll action             |
+| `dll_reported_in_world_triggers_post_login`   | DLL-reported phase transitions            |
+| `dll_reported_ready_sets_terminal`            | Terminal state handling                   |
 
 ### Camp Loop / Combat FSM (`textquest/tests/integration.rs`)
 
 Tests the `CampLoop` state machine through farming cycles.
 
-| Test | Covers |
-|---|---|
-| `camp_loop_full_cycle_with_snapshot` | Idle → Pulling → Fighting → Looting → Medding → Idle |
-| `camp_loop_emergency_heal_on_low_tank_hp` | Emergency heal trigger (tank HP < 20%) |
-| `camp_idle_respects_healer_mana_threshold` | Mana gate on pull decisions |
-| `camp_snapshot_driven_fight_to_loot_on_target_death` | Snapshot-driven state transitions |
+| Test                                                 | Covers                                               |
+| ---------------------------------------------------- | ---------------------------------------------------- |
+| `camp_loop_full_cycle_with_snapshot`                 | Idle → Pulling → Fighting → Looting → Medding → Idle |
+| `camp_loop_emergency_heal_on_low_tank_hp`            | Emergency heal trigger (tank HP < 20%)               |
+| `camp_idle_respects_healer_mana_threshold`           | Mana gate on pull decisions                          |
+| `camp_snapshot_driven_fight_to_loot_on_target_death` | Snapshot-driven state transitions                    |
 
 ### Navigation / Zone Routing (`textquest/tests/integration.rs`)
 
 Tests `GroupRouter`, `TravelPlan`, and zone stagger logic.
 
-| Test | Covers |
-|---|---|
-| `zone_routing_generates_staggered_travel_plans` | Per-client staggered plans |
-| `zone_stagger_delays_are_within_range` | 36-client stagger bounds |
-| `zone_stagger_delays_are_deterministic` | Same seed = same delays |
-| `travel_plan_with_zone_transitions` | Multi-zone traversal |
-| `group_router_with_porters` | Druid/wizard porter routing |
+| Test                                            | Covers                      |
+| ----------------------------------------------- | --------------------------- |
+| `zone_routing_generates_staggered_travel_plans` | Per-client staggered plans  |
+| `zone_stagger_delays_are_within_range`          | 36-client stagger bounds    |
+| `zone_stagger_delays_are_deterministic`         | Same seed = same delays     |
+| `travel_plan_with_zone_transitions`             | Multi-zone traversal        |
+| `group_router_with_porters`                     | Druid/wizard porter routing |
 
 ### Scenarios (`textquest/tests/scenarios/`)
 
 End-to-end multibox workflow tests. See [Integration Scenario Testing Framework](../dev/testing-scenarios.md) for detailed documentation.
 
-| Scenario | Description |
-|---|---|
-| `SoloFarmingScenario` | Single client: pull → kill → loot → med → repeat (10 cycles) |
-| `GroupHealingScenario` | 6-person group: healer responds to tank HP changes |
-| `ZoneRecoveryScenario` | Zone transitions with camp stability verification |
+| Scenario               | Description                                                  |
+| ---------------------- | ------------------------------------------------------------ |
+| `SoloFarmingScenario`  | Single client: pull → kill → loot → med → repeat (10 cycles) |
+| `GroupHealingScenario` | 6-person group: healer responds to tank HP changes           |
+| `ZoneRecoveryScenario` | Zone transitions with camp stability verification            |
 
 ---
 
@@ -134,12 +134,12 @@ If coverage drops below 60%, the PR fails and cannot merge. Review expectations 
 
 Coverage targets by layer:
 
-| Layer | Target | Rationale |
-|---|---|---|
-| Pure logic (FSMs, parsers, data structures) | 90%+ | Highest value, runs everywhere |
-| Platform-independent orchestration | 80%+ | Decision logic; OS calls in `#[cfg(windows)]` |
-| Windows-only paths | Best-effort | Runs on Frostreaver self-hosted runner |
-| TUI rendering | Smoke-only | Pixel-exact output is fragile |
+| Layer                                       | Target      | Rationale                                     |
+| ------------------------------------------- | ----------- | --------------------------------------------- |
+| Pure logic (FSMs, parsers, data structures) | 90%+        | Highest value, runs everywhere                |
+| Platform-independent orchestration          | 80%+        | Decision logic; OS calls in `#[cfg(windows)]` |
+| Windows-only paths                          | Best-effort | Runs on Frostreaver self-hosted runner        |
+| TUI rendering                               | Smoke-only  | Pixel-exact output is fragile                 |
 
 ---
 
@@ -147,12 +147,12 @@ Coverage targets by layer:
 
 Test fixtures are defined inline in the test files using helper functions:
 
-| Fixture | Location | Usage |
-|---|---|---|
-| `make_account(name, character, class)` | `textquest/tests/integration.rs` | Creates `AccountInfo` for login tests |
-| `make_game_state()` | `textquest/tests/integration.rs` | Creates minimal `GameState` |
-| `test_camp_config()` | `textquest/tests/integration.rs` | Crushbone camp config for farming tests |
-| `test_camp_members()` | `textquest/tests/integration.rs` | 6-person group (tank, healer, CC, puller, 2 DPS) |
+| Fixture                                | Location                         | Usage                                            |
+| -------------------------------------- | -------------------------------- | ------------------------------------------------ |
+| `make_account(name, character, class)` | `textquest/tests/integration.rs` | Creates `AccountInfo` for login tests            |
+| `make_game_state()`                    | `textquest/tests/integration.rs` | Creates minimal `GameState`                      |
+| `test_camp_config()`                   | `textquest/tests/integration.rs` | Crushbone camp config for farming tests          |
+| `test_camp_members()`                  | `textquest/tests/integration.rs` | 6-person group (tank, healer, CC, puller, 2 DPS) |
 
 Example:
 
@@ -281,11 +281,13 @@ fn scenario_my_scenario() {
 TextQuest uses [cargo-tarpaulin](https://github.com/xd009642/tarpaulin) for coverage reporting.
 
 Install:
+
 ```bash
 cargo install cargo-tarpaulin
 ```
 
 Run locally:
+
 ```bash
 python3 scripts/coverage-report.py --threshold 60
 ```
@@ -296,6 +298,7 @@ The script parses tarpaulin output and exits with code 1 if coverage falls below
 
 ## Related Documentation
 
+- [Coverage Standards](../COVERAGE_STANDARDS.md) — Coverage targets and acceptance criteria
 - [Testing Best Practices](../dev/testing-scenarios.md)
 - [Unit Test Template](../dev/unit-test-template.md)
 - [Coverage Policy](../dev/coverage-policy.md)

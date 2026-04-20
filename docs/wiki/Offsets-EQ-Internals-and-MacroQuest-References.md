@@ -83,3 +83,7 @@ Use it for:
 
 - Offset work is inherently patch-sensitive.
 - Treat any successful build without live EQ validation as incomplete proof for offset changes.
+
+## Related References
+
+- [EQ Coordinate System](../eq-coordinate-system.md) — Mapping between game coordinates and navigation systems

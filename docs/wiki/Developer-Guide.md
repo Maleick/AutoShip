@@ -569,6 +569,8 @@ if config.my_new_option {
 
 ## Code Conventions
 
+See [Code Style Guide](../dev/code-style-guide.md) for detailed coding standards and patterns.
+
 ### 1. Logging: `tracing` not `log`
 
 TextQuest uses `tracing` for structured logging. Never use the `log` crate.
@@ -771,6 +773,17 @@ If `cargo fmt --check` fails on CI with no other explanation, scan `lib.rs` for 
 
 ---
 
+## Development Policies
+
+The following documents define development policies and standards:
+
+- **[Data Persistence](../dev/data-persistence.md)** — State management and persistence strategies
+- **[Evidence States](../dev/evidence-states.md)** — Tracking autonomy assumptions and game state validation
+- **[Performance Targets](../dev/performance-targets.md)** — Performance SLAs and metrics
+- **[Security Policy](../dev/security-policy.md)** — Security practices, credential handling, and anti-detection
+
+---
+
 ## Debugging and Troubleshooting
 
 ### Reading Logs
@@ -936,6 +949,12 @@ Publication workflows are defined in:
 
 The `textquest-common` crate is already published to crates.io via the existing `release.yml` workflow.
 
+## Specifications and Standards
+
+- **[IPC Protocol](../specs/ipc-protocol.md)** — Complete command/response reference for inter-process communication
+- **[Performance SLAs](../specs/performance-slas.md)** — Performance targets and benchmarks
+- **[Web API](../specs/web-api.md)** — REST API and web backend specification
+
 ## Further Reading
 
 - **[Architecture Overview](Architecture-Overview.md)** — Deep dive into data flow and module boundaries
@@ -944,6 +963,5 @@ The `textquest-common` crate is already published to crates.io via the existing 
 - **[Combat and Camp Loop](Combat-and-Camp-Loop.md)** — Combat FSM, class rotations, camp phases
 - **[Login Automation](Login-Automation.md)** — Widget manipulation and credential storage
 - **[Development Workflow](Development-Workflow.md)** — PR, CI, and wiki sync process
-- **[IPC Protocol Specification](Specs-and-Protocols/IPC-Protocol.md)** — Complete command/response reference
 
 For questions about the EQ memory layout or offsets, see [Offsets, EQ Internals, and MacroQuest References](Offsets-EQ-Internals-and-MacroQuest-References.md).

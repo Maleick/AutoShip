@@ -152,3 +152,7 @@ The JSON snapshot is mutable runtime state, not canonical evidence. It exists so
 
 - Any live EQ patch can invalidate offsets or widget assumptions, so injection and login behavior always need Windows validation after upstream changes.
 - If the DLL log stops updating or shared memory is unreadable, treat that as a real pipeline failure rather than a UI-only issue.
+
+## Further Reading
+
+- **[IPC Protocol Specification](../specs/ipc-protocol.md)** — Detailed message types, command/response formats, and naming conventions

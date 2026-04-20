@@ -8,6 +8,7 @@
 - `TextQuest-Ghidra` is canonical for immutable snapshots, manifests, baseline selection, curated Ghidra evidence, and Ghidra intake and analysis flow.
 - `TextQuest` is canonical for code, `docs/wiki/`, runbooks, automation, and lightweight references that point at canonical evidence.
 - `AGENTS.md` defines the autonomous issue-worker contract and master-safe migration rules.
+- [Claude Issue Worker Brief](../claude-issue-worker.md) details automation setup, responsibilities, and workflow for Claude-based workers.
 
 ## Daily Working Loop
 

@@ -37,14 +37,14 @@ Related M5 ledgers:
 
 These are EQ-internal functions that TextQuest already calls in-process via the DLL.
 
-| Function | Preferred-base address | Purpose | TextQuest status |
-| --- | --- | --- | --- |
-| `Cmd_UseSkill` | `0x140238640` | Self-only skills (Mend, Feign, Hide) | `In-process` — reached via `UseSkill` wrapper in `textquest-dll/src/eq/mod.rs` |
-| `CharacterZoneClient__UseSkill` | `0x1401015d0` | Skill execution with class checks | `In-process` — same path as above |
-| `DoCombatAbility` | `0x1401015d0` (mapped via `PcZoneClient`) | Combat abilities via `do_combat_ability` | `In-process` — reached via `do_combat_ability` in `textquest-dll/src/eq/mod.rs` |
-| `SendAttackPacketToServer` | `0x140249530` | Combat attack packets (opcode `0x612D`) | `Packet candidate` — opcode documented in import, but TextQuest does not call this address directly; combat loop uses in-process path instead |
-| `CEverQuest__SendZoneRequestPacket` | `0x1402906e0` | Zone transition requests | `Blocked` — no TextQuest dispatch; zoning is tracked in `M6/#50` |
-| `CEverQuest__SendEmoteOrSayPacket` | `0x140292c20` | Chat messages and emotes | `Blocked` — `Say`/`Emote` IPC commands exist in `textquest-common/src/ipc.rs` but the DLL dispatcher does not implement them |
+| Function                            | Preferred-base address                    | Purpose                                  | TextQuest status                                                                                                                              |
+| ----------------------------------- | ----------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Cmd_UseSkill`                      | `0x140238640`                             | Self-only skills (Mend, Feign, Hide)     | `In-process` — reached via `UseSkill` wrapper in `textquest-dll/src/eq/mod.rs`                                                                |
+| `CharacterZoneClient__UseSkill`     | `0x1401015d0`                             | Skill execution with class checks        | `In-process` — same path as above                                                                                                             |
+| `DoCombatAbility`                   | `0x1401015d0` (mapped via `PcZoneClient`) | Combat abilities via `do_combat_ability` | `In-process` — reached via `do_combat_ability` in `textquest-dll/src/eq/mod.rs`                                                               |
+| `SendAttackPacketToServer`          | `0x140249530`                             | Combat attack packets (opcode `0x612D`)  | `Packet candidate` — opcode documented in import, but TextQuest does not call this address directly; combat loop uses in-process path instead |
+| `CEverQuest__SendZoneRequestPacket` | `0x1402906e0`                             | Zone transition requests                 | `Blocked` — no TextQuest dispatch; zoning is tracked in `M6/#50`                                                                              |
+| `CEverQuest__SendEmoteOrSayPacket`  | `0x140292c20`                             | Chat messages and emotes                 | `Blocked` — `Say`/`Emote` IPC commands exist in `textquest-common/src/ipc.rs` but the DLL dispatcher does not implement them                  |
 
 Current evidence state: `Research-backed` for address and function identity; `Needs Live Proof` for current-build correctness and anti-cheat side effects.
 
@@ -52,13 +52,13 @@ Current evidence state: `Research-backed` for address and function identity; `Ne
 
 The import identifies `NetworkSend` at `0x140550030` as the primary send path for skills, abilities, and most packet types. It dispatches based on a `type` argument:
 
-| Type | Path | Used for |
-| --- | --- | --- |
-| 0 | `NetworkSend_QueuePacket` (queued reliable) | standard skill and ability packets |
-| 1 | `NetworkSend_EncryptAndTransmit` (immediate) | time-critical transmissions |
-| 2 | `NetworkSend_QueuePacket` (sequenced) | ordered reliable delivery |
-| 3 | `NetworkSend_EncryptAndTransmit` (sequenced) | ordered immediate |
-| 4–7 | `PacketFragment_AppendData` → `NetworkSend_TransmitToSocket` | fragmented large payloads |
+| Type | Path                                                         | Used for                           |
+| ---- | ------------------------------------------------------------ | ---------------------------------- |
+| 0    | `NetworkSend_QueuePacket` (queued reliable)                  | standard skill and ability packets |
+| 1    | `NetworkSend_EncryptAndTransmit` (immediate)                 | time-critical transmissions        |
+| 2    | `NetworkSend_QueuePacket` (sequenced)                        | ordered reliable delivery          |
+| 3    | `NetworkSend_EncryptAndTransmit` (sequenced)                 | ordered immediate                  |
+| 4–7  | `PacketFragment_AppendData` → `NetworkSend_TransmitToSocket` | fragmented large payloads          |
 
 TextQuest status: `Blocked` — TextQuest does not call `NetworkSend` directly. All current sends go through the high-level in-process helpers in Layer 1.
 
@@ -80,11 +80,11 @@ The import identifies two layers that any future packet-first implementation wou
 
 2. **Anti-cheat counters**:
 
-| Variable | Role |
-| --- | --- |
-| `_g_CounterA` | Receive counter, decremented on receive |
+| Variable      | Role                                                    |
+| ------------- | ------------------------------------------------------- |
+| `_g_CounterA` | Receive counter, decremented on receive                 |
 | `_g_CounterB` | Send counter, decremented after each `NetworkSend` call |
-| `_g_CounterC` | Teleport counter |
+| `_g_CounterC` | Teleport counter                                        |
 
 Counter behavior: each counter is decremented after the relevant event and refilled by `+0x37` (55) when the value drops below 2. The server validates synchronization. Any injected send that bypasses the game's `NetworkSend` path must decrement `_g_CounterB` or skip the game's decrement to stay in sync.
 
@@ -114,14 +114,14 @@ Current evidence state: `Research-backed` for existence and dual-instance patter
 
 ### Layer 3: Packet processors
 
-| Function | Address | Purpose | TextQuest status |
-| --- | --- | --- | --- |
-| `ProcessGroupPacket` | `0x1402de700` | Group membership and updates | `Blocked` — group state read from EQ structs, not from packet hook |
-| `ProcessEmotePacket` | `0x14020cea0` | Inbound emote handling | `Blocked` — no emote receive path in TextQuest |
-| `ProcessChannelMessagePacket` | `0x14020a1b0` | Chat channel messages | `Blocked` — no in-process chat receive path; candidates for `M11` Soul Engine chat |
-| `ProcessBazaarPacket` | `0x14020eab0` | Bazaar transaction data | `Blocked` — bazaar price capture uses passive UI memory reads from the populated bazaar window, not a packet receive hook |
-| `CEverQuest__ProcessWorldPacket` | `0x1401e6d00` | General world state updates | `Blocked` — world state read from EQ memory, not from packet hook |
-| `CEverQuest__ProcessZonePacket` | `0x1402802b0` | Zone-specific inbound packets | `Blocked` — zoning work is `M6` |
+| Function                         | Address       | Purpose                       | TextQuest status                                                                                                          |
+| -------------------------------- | ------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `ProcessGroupPacket`             | `0x1402de700` | Group membership and updates  | `Blocked` — group state read from EQ structs, not from packet hook                                                        |
+| `ProcessEmotePacket`             | `0x14020cea0` | Inbound emote handling        | `Blocked` — no emote receive path in TextQuest                                                                            |
+| `ProcessChannelMessagePacket`    | `0x14020a1b0` | Chat channel messages         | `Blocked` — no in-process chat receive path; candidates for `M11` Soul Engine chat                                        |
+| `ProcessBazaarPacket`            | `0x14020eab0` | Bazaar transaction data       | `Blocked` — bazaar price capture uses passive UI memory reads from the populated bazaar window, not a packet receive hook |
+| `CEverQuest__ProcessWorldPacket` | `0x1401e6d00` | General world state updates   | `Blocked` — world state read from EQ memory, not from packet hook                                                         |
+| `CEverQuest__ProcessZonePacket`  | `0x1402802b0` | Zone-specific inbound packets | `Blocked` — zoning work is `M6`                                                                                           |
 
 Current evidence state: `Research-backed` for address set; `Needs Live Proof` for current-build addresses and dispatch coverage.
 
@@ -135,16 +135,16 @@ Roadmap note: economy work is `M10`, while packet-backed chat ingest (`M11`) sta
 
 The table below formalizes the M5 packet engine capability boundary for TextQuest. It answers the question: for each major packet surface, what does TextQuest support today and what is explicitly out of scope until further validation?
 
-| Surface | Current TextQuest capability | Packet-first status | Requirement to unblock |
-| --- | --- | --- | --- |
-| Self-only skills (Mend, Feign, Hide) | `In-process` via `Cmd_UseSkill` / `UseSkill` wrapper | `Packet candidate` | Live-proof opcode, payload shape, and `_g_CounterB` handling |
-| Combat abilities (kick, bash, spells) | `In-process` via `DoCombatAbility` / `CastSpell` | `Packet candidate` | Live-proof opcode, target rules, counter handling, melee-range constraints |
-| Attack packets (Flying Kick, combat attacks) | `In-process` via combat FSM | `Packet candidate` (high-risk) | Live-proof stricter server validation noted in import; treat as last to promote |
-| Chat and emotes (Say, Emote) | `Blocked` — IPC enum exists, no DLL dispatch | `Blocked` | Map to `SlashCommand`/`InterpretCmd` first; packet path only after message encoding and target rules are explicit |
-| Zone requests | `Blocked` — no TextQuest zone send surface | `Blocked` — `M6` dependency | Complete M5 ability and control-matrix validation first |
-| Inbound packet observation | `Blocked` — game state read from EQ structs | `Blocked` | No M5 task currently requires hooking receive path |
-| Direct `NetworkSend` injection | `Blocked` | `Blocked` | Requires opcode scrambler call and counter handling before any use |
-| Anti-cheat counter tracking | `Blocked` | `Blocked` | Hard prerequisite for any packet-first send path |
+| Surface                                      | Current TextQuest capability                         | Packet-first status            | Requirement to unblock                                                                                            |
+| -------------------------------------------- | ---------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Self-only skills (Mend, Feign, Hide)         | `In-process` via `Cmd_UseSkill` / `UseSkill` wrapper | `Packet candidate`             | Live-proof opcode, payload shape, and `_g_CounterB` handling                                                      |
+| Combat abilities (kick, bash, spells)        | `In-process` via `DoCombatAbility` / `CastSpell`     | `Packet candidate`             | Live-proof opcode, target rules, counter handling, melee-range constraints                                        |
+| Attack packets (Flying Kick, combat attacks) | `In-process` via combat FSM                          | `Packet candidate` (high-risk) | Live-proof stricter server validation noted in import; treat as last to promote                                   |
+| Chat and emotes (Say, Emote)                 | `Blocked` — IPC enum exists, no DLL dispatch         | `Blocked`                      | Map to `SlashCommand`/`InterpretCmd` first; packet path only after message encoding and target rules are explicit |
+| Zone requests                                | `Blocked` — no TextQuest zone send surface           | `Blocked` — `M6` dependency    | Complete M5 ability and control-matrix validation first                                                           |
+| Inbound packet observation                   | `Blocked` — game state read from EQ structs          | `Blocked`                      | No M5 task currently requires hooking receive path                                                                |
+| Direct `NetworkSend` injection               | `Blocked`                                            | `Blocked`                      | Requires opcode scrambler call and counter handling before any use                                                |
+| Anti-cheat counter tracking                  | `Blocked`                                            | `Blocked`                      | Hard prerequisite for any packet-first send path                                                                  |
 
 ## M5 Exit Gate Contribution
 
@@ -157,13 +157,13 @@ This inventory contributes to the M5 exit gate as follows:
 
 ### Open (needs live validation to close)
 
-| Unknown | Required evidence | Current state |
-| --- | --- | --- |
-| Self-only skill opcode correctness on current build | Live client capture confirming opcode and payload shape | `Needs Live Proof` |
-| `_g_CounterB` current-build address and refill threshold | Live client inspection or pattern scan | `Needs Live Proof` |
-| `CEverQuest__HandleWorldMessage` current-build address | Pattern scan or live inspection | `Needs Live Proof` |
-| Combat ability packet acceptance without melee-state dependency | Live client test with a target-only skill | `Needs Live Proof` |
-| Chat packet encoding and tell-target rules | Live client test with `SendEmoteOrSayPacket` | `Needs Live Proof` |
+| Unknown                                                         | Required evidence                                       | Current state      |
+| --------------------------------------------------------------- | ------------------------------------------------------- | ------------------ |
+| Self-only skill opcode correctness on current build             | Live client capture confirming opcode and payload shape | `Needs Live Proof` |
+| `_g_CounterB` current-build address and refill threshold        | Live client inspection or pattern scan                  | `Needs Live Proof` |
+| `CEverQuest__HandleWorldMessage` current-build address          | Pattern scan or live inspection                         | `Needs Live Proof` |
+| Combat ability packet acceptance without melee-state dependency | Live client test with a target-only skill               | `Needs Live Proof` |
+| Chat packet encoding and tell-target rules                      | Live client test with `SendEmoteOrSayPacket`            | `Needs Live Proof` |
 
 ### Explicit provisional items (not proof of milestone completion)
 
@@ -181,3 +181,7 @@ This inventory contributes to the M5 exit gate as follows:
 That milestone boundary is intentional: economy work is `M10`, while packet-fed
 chat ingest (`M11`) remains part of the Soul Engine lane instead of the
 economy execution slice.
+
+## Related Research
+
+- [Zone Packet Audit](../research/zone-packet-audit.md) — Detailed analysis of zone transition packets and validation

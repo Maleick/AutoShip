@@ -14,15 +14,15 @@ Toast).
 Tabs are labeled with themed names in the header pills and status bar, but
 the underlying Rust modules keep their existing file names. Map:
 
-| # | Themed label (UI) | Module (code) | Purpose |
-|---|---|---|---|
-| 1 | **Soul Tethers** | `ui/dashboard.rs` (Characters) | Roster, selected client, groups, session |
-| 2 | **Cartography** | `ui/tactical.rs` (Tactical) | Zone map + spawn list + target + CH chain |
-| 3 | **Waypath** | `ui/nav.rs` (Navigation) | Route cards, blockers |
-| 4 | **Oracle** | `ui/debug.rs` (Debug) | Spawn table + inspect/hex dump |
-| 5 | **Aethergram** | `ui/packets.rs` (Packets) | Packet stream + detail |
-| 6 | **Coinmark** | `ui/economy.rs` (Economy) | Vendor cycle, roster, rules, ledger |
-| 7 | **Third Gate** | `ui/orchestrator.rs` | Fleet orchestrator, slots, signals, timeline |
+| #   | Themed label (UI) | Module (code)                  | Purpose                                      |
+| --- | ----------------- | ------------------------------ | -------------------------------------------- |
+| 1   | **Soul Tethers**  | `ui/dashboard.rs` (Characters) | Roster, selected client, groups, session     |
+| 2   | **Cartography**   | `ui/tactical.rs` (Tactical)    | Zone map + spawn list + target + CH chain    |
+| 3   | **Waypath**       | `ui/nav.rs` (Navigation)       | Route cards, blockers                        |
+| 4   | **Oracle**        | `ui/debug.rs` (Debug)          | Spawn table + inspect/hex dump               |
+| 5   | **Aethergram**    | `ui/packets.rs` (Packets)      | Packet stream + detail                       |
+| 6   | **Coinmark**      | `ui/economy.rs` (Economy)      | Vendor cycle, roster, rules, ledger          |
+| 7   | **Third Gate**    | `ui/orchestrator.rs`           | Fleet orchestrator, slots, signals, timeline |
 
 The tab pills in the header read `[1 Teth][2 Cart][3 Way][4 Orc*][5 Aeth][6 Coin][7 Gate]`.
 `Orc*` is the Oracle tab — the abbreviation is ambiguous with Orchestrator,
@@ -46,7 +46,7 @@ visual direction but **remove these duplications** when you port to Rust:
    sold, cycles completed) — nothing else.
 3. **Hex dump appears on both Oracle and Aethergram.** Hex is a wire-level
    concern; keep it on **Aethergram only**. Oracle's sidebar should be a
-   *structured* inspector — decoded spawn struct fields (entity_id, type,
+   _structured_ inspector — decoded spawn struct fields (entity_id, type,
    class, level, pos, flags) rendered as key/value rows, not bytes.
 4. **Combat + CH Chain on Soul Tethers are two panels about the same thing.**
    Merge into one sidebar panel titled `Combat · CH Chain` with MA/MT on
@@ -95,23 +95,23 @@ breakpoints in `ui/mod.rs`).
 All values come verbatim from `textquest/src/tui/theme.rs::neriak`. Do not
 introduce new constants; reference the theme.
 
-| Role                 | Theme field                | RGB         |
-|----------------------|----------------------------|-------------|
-| Background (panel)   | `panel_bg`                 | `#0d0618`   |
-| Background (row sel) | `row_selected_bg`          | `#1a0a2e`   |
-| Primary border       | `border_primary`           | `#cc44ff`   |
-| Active border        | `border_active`            | `#00e5ff`   |
-| Warn border          | `border_warn`              | `#fbbf24`   |
-| Danger border        | `border_danger`            | `#ef4444`   |
-| Server emphasis      | `border_server`            | `#ff00ff`   |
-| Bright text          | `text_bright` / `text_normal` | `#e2d7f4` |
-| Secondary text       | `text_secondary`           | `rgb(160,150,180)` |
-| Muted / border dim   | `text_muted` / `border_dim`| `rgb(80,60,110)`   |
-| Accent               | `text_accent` (cyan)       | `#00e5ff`   |
-| Highlight            | `text_highlight` (magenta) | `#cc44ff`   |
+| Role                 | Theme field                     | RGB                               |
+| -------------------- | ------------------------------- | --------------------------------- |
+| Background (panel)   | `panel_bg`                      | `#0d0618`                         |
+| Background (row sel) | `row_selected_bg`               | `#1a0a2e`                         |
+| Primary border       | `border_primary`                | `#cc44ff`                         |
+| Active border        | `border_active`                 | `#00e5ff`                         |
+| Warn border          | `border_warn`                   | `#fbbf24`                         |
+| Danger border        | `border_danger`                 | `#ef4444`                         |
+| Server emphasis      | `border_server`                 | `#ff00ff`                         |
+| Bright text          | `text_bright` / `text_normal`   | `#e2d7f4`                         |
+| Secondary text       | `text_secondary`                | `rgb(160,150,180)`                |
+| Muted / border dim   | `text_muted` / `border_dim`     | `rgb(80,60,110)`                  |
+| Accent               | `text_accent` (cyan)            | `#00e5ff`                         |
+| Highlight            | `text_highlight` (magenta)      | `#cc44ff`                         |
 | HP high / mid / low  | `hp_high` / `hp_mid` / `hp_low` | `#34d399` / `#fbbf24` / `#ef4444` |
-| Mana                 | `mana`                     | `#60a5fa`   |
-| Con colors           | `con_red` … `con_green`    | match theme |
+| Mana                 | `mana`                          | `#60a5fa`                         |
+| Con colors           | `con_red` … `con_green`         | match theme                       |
 
 The scanline / phosphor-glow / vignette in the HTML mock are CRT affordances
 only. They have no ratatui analog — do not attempt to emulate them.
@@ -121,7 +121,8 @@ only. They have no ratatui analog — do not attempt to emulate them.
 Above every screen: the header and status bar.
 
 ### Header (`ui/mod.rs::render_header`)
-Single rounded block, `border_primary`. Title inset: ` TextQuest `
+
+Single rounded block, `border_primary`. Title inset: `TextQuest`
 (bright+bold). Middle row left→right:
 
 ```
@@ -137,6 +138,7 @@ Single rounded block, `border_primary`. Title inset: ` TextQuest `
   Inactive tabs use `text_muted` brackets + `text_secondary` label.
 
 ### Status bar (`ui/mod.rs::render_status_bar`)
+
 Single row preceded by a dashed rule. Left: `SCREEN_NAME ▸ keybind hints`
 where `SCREEN_NAME` is the themed name uppercased (`SOUL TETHERS`,
 `CARTOGRAPHY`, `WAYPATH`, `ORACLE`, `AETHERGRAM`, `COINMARK`, `THIRD GATE`).
@@ -165,32 +167,34 @@ that owns them.
 Main pane:
 
 1. **Group Focus strip** — one-row block, `border_active` cyan.
-   Title: ` Group Focus · G2 Fear Core `. Content row:
+   Title: `Group Focus · G2 Fear Core`. Content row:
    ```
    Uptime 03:47:12 │ Kills 148 / Deaths 2 │ XP 1.84M · +489k/h · +512k/15m │ Plat 384.6 · +101.4/h │ Top Loot Diamond×4 · Platinum Bar×3 · Fiery Avenger×1
    ```
 2. **Ops Roster** — `border_primary`, title `Ops Roster · {n} clients · sorted by Group`.
    Columns, gap 1 space:
 
-   | Col | Width | Align | Source |
-   |---|---|---|---|
-   | cursor ▶ | 2 | left | selection |
-   | Name | 14 | left | `client.name` |
-   | Grp | 3 | left | `client.group_label()` (G1/G2) |
-   | Cls | 4 | left | `client.class_abbr()` |
-   | Lvl | 3 | right | `client.level` |
-   | Zone | 22 | left | `client.zone_short()` |
-   | HP | 16 | left | `"{hp:>3}% " + hp_bar(hp, 10)` |
-   | Mana | 12 | left | melee shows `<muted>  -- </muted>` |
-   | Cond | 9 | left | Stable/Hurt/Critical, color by severity |
-   | State | 8 | left | Stand/Sit/FD |
-   | Activity | 10 | left | glyph + tag (see legend below) |
+   | Col      | Width | Align | Source                                  |
+   | -------- | ----- | ----- | --------------------------------------- |
+   | cursor ▶ | 2     | left  | selection                               |
+   | Name     | 14    | left  | `client.name`                           |
+   | Grp      | 3     | left  | `client.group_label()` (G1/G2)          |
+   | Cls      | 4     | left  | `client.class_abbr()`                   |
+   | Lvl      | 3     | right | `client.level`                          |
+   | Zone     | 22    | left  | `client.zone_short()`                   |
+   | HP       | 16    | left  | `"{hp:>3}% " + hp_bar(hp, 10)`          |
+   | Mana     | 12    | left  | melee shows `<muted>  -- </muted>`      |
+   | Cond     | 9     | left  | Stable/Hurt/Critical, color by severity |
+   | State    | 8     | left  | Stand/Sit/FD                            |
+   | Activity | 10    | left  | glyph + tag (see legend below)          |
 
    Selected row uses `row_selected_bg` + bold. Last two lines of the panel
    are an empty spacer and an activity legend:
+
    ```
    Activity glyphs:  ➜ Nav  ✓ Arr  ! Stk  ☠ Ded  ⇣ FD   ☾ Sit  ⌕ Lot  ✦ Cst  ⚔ Fgt  ● Rdy
    ```
+
    Footer: `↑↓ select  ·  Enter focus  ·  g cycle group  ·  [ ] prev/next client`.
 
 Sidebar panels (top to bottom), all 44-wide:
@@ -308,19 +312,19 @@ For stuck clients replace the progress line with the red blocker callout:
 Main pane = **Spawns · zone {zone} · {n} entities**, title in
 `border_primary`. Columns, gap 1 space:
 
-| Col | Width | Align |
-|---|---|---|
-| cursor | 2 | left |
-| ID | 7 | right |
-| Name | 26 | left |
-| Type | 7 | left (color by type) |
-| Cls | 4 | left (highlight) |
-| Lvl | 4 | right |
-| HP% | 5 | right |
-| Y | 8 | right |
-| X | 8 | right |
-| Z | 6 | right |
-| State | 6 | left |
+| Col    | Width | Align                |
+| ------ | ----- | -------------------- |
+| cursor | 2     | left                 |
+| ID     | 7     | right                |
+| Name   | 26    | left                 |
+| Type   | 7     | left (color by type) |
+| Cls    | 4     | left (highlight)     |
+| Lvl    | 4     | right                |
+| HP%    | 5     | right                |
+| Y      | 8     | right                |
+| X      | 8     | right                |
+| Z      | 6     | right                |
+| State  | 6     | left                 |
 
 Footer line below the table:
 `filter: type=*  · hp>0 · showing 9 / 47`.
@@ -359,14 +363,14 @@ cyan / bright / bright / magenta; the ASCII gutter is amber.
 
 Main = **Packet Stream · {captured} captured · {peak}/s peak**. Columns:
 
-| Col | Width |
-|---|---|
-| cursor | 2 |
-| Time | 13 |
-| Dir (S→C/C→S) | 4 |
-| Opcode | 22 |
-| Size | 5 (right) |
-| Payload (first 16 bytes) | 50 |
+| Col                      | Width     |
+| ------------------------ | --------- |
+| cursor                   | 2         |
+| Time                     | 13        |
+| Dir (S→C/C→S)            | 4         |
+| Opcode                   | 22        |
+| Size                     | 5 (right) |
+| Payload (first 16 bytes) | 50        |
 
 Direction color: `S→C` cyan, `C→S` green. Opcode color:
 `OP_HPUpdate`/`OP_ManaUpdate` amber; `OP_BeginCast` / `OP_MemorizeSpell`
@@ -404,24 +408,26 @@ Footer: `s start · S stop · x skip client · r reload rules`.
 
 Main bottom panel — **Roster**:
 
-| Col | Width |
-|---|---|
-| Slot | 16 |
-| Status | 10 |
-| Plat | 6 (right) |
-| Bags | 6 |
-| Reason / Notes | 34 |
+| Col            | Width     |
+| -------------- | --------- |
+| Slot           | 16        |
+| Status         | 10        |
+| Plat           | 6 (right) |
+| Bags           | 6         |
+| Reason / Notes | 34        |
 
 Status coloring: `Active` amber + inverse on the slot cell; `Done` green;
 `Queued` cyan; `Skipped` muted. Notes templates:
+
 - skipped → `skip: <reason>` (amber)
-- done    → `cycle complete · bagged 3 lore items`
-- active  → `selling 14 items · 20% through`
-- queued  → `waiting in queue`
+- done → `cycle complete · bagged 3 lore items`
+- active → `selling 14 items · 20% through`
+- queued → `waiting in queue`
 
 Sidebar top — **Rules** (`border_active`). Shows active rule file name in
 the first line, then numbered rules from the current ruleset, then a
 trailing hint block:
+
 ```
 rules load from ~/.config/textquest/economy/
 press e to edit · r to reload · t to test
@@ -434,32 +440,34 @@ Sidebar bottom — **Ledger** — day + last-cycle totals.
 **Layout.** Main top+bottom; sidebar right.
 
 Main top — **Fleet Orchestrator**:
+
 ```
 Active Intent   fear.ch_chain.alpha
 Phase           Execute   ← green when Execute, cyan otherwise
 Cadence         2.0 Hz    tick 12:04:17.980
 ```
+
 Footer: `p pause · r resume · A abort intent · enter drill into slot`.
 
 Main bottom — **Slots · 6 live · 1 configured · 1 blocked**. Columns:
 
-| Col | Width |
-|---|---|
-| Slot | 5 |
-| Name | 14 |
-| State | 12 |
-| FSM | 14 |
-| Lat | 6 (right) |
-| Health | 22 |
-| Profile | 26 |
+| Col     | Width     |
+| ------- | --------- |
+| Slot    | 5         |
+| Name    | 14        |
+| State   | 12        |
+| FSM     | 14        |
+| Lat     | 6 (right) |
+| Health  | 22        |
+| Profile | 26        |
 
 State colors: `Live` green, `Recovering` amber, `Blocked` red,
 `Configured` cyan, anything else muted. Health column is a capped 18-char
 bar drawn with `█` + `·`, followed by one of `OK` / `RCV` / `BLK` / `OFF`:
 
-- Live       → 18 green blocks + `OK`
+- Live → 18 green blocks + `OK`
 - Recovering → 11 amber blocks + 7 dots + `RCV`
-- Blocked    →  2 red blocks   + 16 dots + `BLK`
+- Blocked → 2 red blocks + 16 dots + `BLK`
 - Configured/Blank → 18 dots + `OFF`
 
 Sidebar top — **Signal Feed**. Each line:
@@ -476,24 +484,27 @@ centered on the current screen. Dim the underlying screen with
 `Color::Black`-tinted `Style::default().fg(muted)` — use existing overlay
 plumbing in `ui/mod.rs`; do not reinvent it.
 
-| Key | Overlay | Border | Source module |
-|---|---|---|---|
-| `?` | **Help · Keybinds** | cyan | `ui/help.rs` |
-| `:` | **Command mode** | magenta | `ui/command.rs` |
-| `F2` | **Config · ~/.config/textquest/config.ron** | cyan | `ui/config.rs` |
-| `F3` | **CH Chain · panel** | magenta | `ui/ch_chain.rs` |
-| `F4` | **Fleet Setup · wizard** | magenta | `ui/setup_wizard.rs` |
-| `F8` | **Alert Feed · N unread** | amber | `ui/alerts.rs` |
-| `F10` | **Menu · F10** | cyan | `ui/menu.rs` |
-| transient | **Toast** | green | `ui/toast.rs` |
+| Key       | Overlay                                     | Border  | Source module        |
+| --------- | ------------------------------------------- | ------- | -------------------- |
+| `?`       | **Help · Keybinds**                         | cyan    | `ui/help.rs`         |
+| `:`       | **Command mode**                            | magenta | `ui/command.rs`      |
+| `F2`      | **Config · ~/.config/textquest/config.ron** | cyan    | `ui/config.rs`       |
+| `F3`      | **CH Chain · panel**                        | magenta | `ui/ch_chain.rs`     |
+| `F4`      | **Fleet Setup · wizard**                    | magenta | `ui/setup_wizard.rs` |
+| `F8`      | **Alert Feed · N unread**                   | amber   | `ui/alerts.rs`       |
+| `F10`     | **Menu · F10**                              | cyan    | `ui/menu.rs`         |
+| transient | **Toast**                                   | green   | `ui/toast.rs`        |
 
 ### Help overlay content structure
+
 Four sections — `Navigation`, `Overlays`, `Combat / Ops`,
 `Roster / Debug`. Each row = inverse-cyan key pill + description. See
 `mock/` for exact key→description pairs.
 
 ### Command overlay content structure
+
 Lines:
+
 ```
 suggestions
   :assist         assist the main assist
@@ -505,10 +516,13 @@ suggestions
 
 : nav fear.ch_anchor focus=G2█
 ```
+
 The `█` is the active cursor; rendered in `border_primary` color.
 
 ### Config overlay
+
 Tree, two-space indent per depth. Glyphs:
+
 - `▾` = expanded branch
 - `▸` = leaf with non-default override (colored by severity)
 - `·` = normal leaf
@@ -517,19 +531,24 @@ Leaf format: `{key} = {value}` (value in `text_bright`).
 Footer: `↑↓ navigate · enter edit · s save · r reload`.
 
 ### CH-Chain overlay
+
 Summary header + three cleric slots with T-offsets and status
 (`✓ {time}` green, `◷ Ns out` amber, `queued` muted).
 
 ### Alert Feed overlay
+
 Rows of two lines:
+
 ```
 ● CRITICAL 11:38:47  Slot S08 login_fail — account throttled by server
   kind=ClientLogin source=orch/S08
 ```
+
 Severity dot color: Critical red, Warning amber, Info cyan. Acknowledged
 rows render the dot as an empty muted `○`.
 
 ### Menu bar (F10)
+
 Top row: menu titles separated by spaces; the active one uses
 `row_selected_bg + text_bright`. Under the active title a dropdown:
 
@@ -542,12 +561,15 @@ Top row: menu titles separated by spaces; the active one uses
 ```
 
 ### Wizard (F4)
+
 Steps 1–5. Step 2 shown in the mock is the profile picker. Radio list with
 magenta `◉` for selected, muted `○` for unselected. Footer row with
 `[ ◀ Back ] [ Next ▶ ]` inverse buttons and `esc cancel` hint.
 
 ### Toast
+
 62-wide panel, green border. Two lines:
+
 ```
 ● CH #142 landed on Thurgrek
   Sylunariel · Complete Healing · 10,000 hp · 12:04:16.5
@@ -555,24 +577,24 @@ magenta `◉` for selected, muted `○` for unselected. Footer row with
 
 ## Interactions & keybinds (for parity with existing `tui::input`)
 
-| Key | Action |
-|---|---|
-| `1`–`7` | Jump to screen |
-| `Tab` / `Shift+Tab` | Cycle pane within screen |
-| `[` / `]` | Prev / next client |
-| `g` | Cycle focus group |
-| `?` | Toggle help |
-| `:` | Enter command mode |
-| `F2` / `F3` / `F4` / `F8` / `F10` | Open corresponding overlay |
-| `↑` `↓` | Select row |
-| `/` | Filter current list |
-| `t` | Target from selection |
-| `i` | Inspect packet/spawn |
-| `p` | Pull / Pause orchestrator (context-sensitive) |
-| `a` / `d` / `e` | Assist / Disengage / Engage all |
-| `c` / `s` / `S` | Start CH chain / Start cycle / Stop cycle |
-| `l` | Loot all corpses |
-| `m` | Toggle Camp ↔ Hunt |
+| Key                               | Action                                        |
+| --------------------------------- | --------------------------------------------- |
+| `1`–`7`                           | Jump to screen                                |
+| `Tab` / `Shift+Tab`               | Cycle pane within screen                      |
+| `[` / `]`                         | Prev / next client                            |
+| `g`                               | Cycle focus group                             |
+| `?`                               | Toggle help                                   |
+| `:`                               | Enter command mode                            |
+| `F2` / `F3` / `F4` / `F8` / `F10` | Open corresponding overlay                    |
+| `↑` `↓`                           | Select row                                    |
+| `/`                               | Filter current list                           |
+| `t`                               | Target from selection                         |
+| `i`                               | Inspect packet/spawn                          |
+| `p`                               | Pull / Pause orchestrator (context-sensitive) |
+| `a` / `d` / `e`                   | Assist / Disengage / Engage all               |
+| `c` / `s` / `S`                   | Start CH chain / Start cycle / Stop cycle     |
+| `l`                               | Loot all corpses                              |
+| `m`                               | Toggle Camp ↔ Hunt                            |
 
 These are the keybinds the mock advertises in its status-bar hints and Help
 overlay. Confirm against `input::KeyHandler` — if any already bind to a
@@ -615,6 +637,7 @@ in the renderer.
 ## Files in this bundle
 
 - `README.md` — this document
+- `HANDOFF_PROMPT.md` — detailed prompts and context for implementation
 - `mock/TextQuest TUI.html` — the single-file HTML mock (self-contained;
   open in a browser, no build)
 - `mock/src/` — the source modules the HTML is assembled from, included for

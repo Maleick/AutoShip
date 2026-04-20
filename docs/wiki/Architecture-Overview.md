@@ -123,6 +123,7 @@ Communication between the **external orchestrator** and the **injected DLL** use
 - **Reliability** — Messages are ACK'd; timeouts trigger reconnect logic
 
 Example:
+
 ```rust
 // Orchestrator sends
 IpcCommand::SetCampActive { zone: "gfaydark", center: [100, 200, 50] }
@@ -140,6 +141,7 @@ IpcResponse::CampActivated { success: true, spawns_visible: 42 }
 - **Write pattern** — DLL writes; orchestrator reads; no synchronization needed (eventual consistency)
 
 Example:
+
 ```rust
 // DLL publishes every frame
 shared_mem.player_x = 100.5;
@@ -183,3 +185,9 @@ This channel is used for **federated orchestration** where multiple machines nee
 - The current command/control boundary is still authenticated IPC into in-process DLL execution. Packet send-path seams remain research-backed candidates and are tracked in roadmap issues, not live repo capabilities.
 - Provider-backed Soul and LLM behavior now belongs to `M11` in the canonical roadmap, after packet, zoning, anti-cheat, orchestration, learning, and economy work.
 - Some higher-level flows such as fully automated post-login group formation are present as structure and IPC types, but still need live validation and continued wiring.
+
+## Specifications
+
+- **[Web API Specification](../specs/web-api.md)** — REST API design for the Axum web backend and React SPA
+- **[IPC Protocol](../specs/ipc-protocol.md)** — Complete message types and command/response formats
+- **[Performance SLAs](../specs/performance-slas.md)** — Performance targets and metrics

@@ -5,6 +5,8 @@
 > `PostLoginSequencer`, `HealthMonitor`, and `Orchestrator` into a single
 > autonomous lifecycle.
 
+**See also:** [JMB-Style Orchestration Patterns](../orchestration-patterns.md) — Command patterns and operator workflow expectations
+
 ## 1. Problem Statement
 
 All building blocks for autonomous multi-client operation exist as independent
