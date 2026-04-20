@@ -858,6 +858,10 @@ pub fn load_named_markers_pub(path: &PathBuf) -> Vec<NamedMapMarker> {
 
 /// Save markers to disk, creating parent directories as needed.
 ///
+/// NOTE: These markers are operator-local visual annotations only and do not
+/// drive fleet navigation routing (orchestrator / camp config / pathfinder).
+/// Fleet nav consumes `CampConfig` from `config/camps/*.toml` instead.
+///
 /// Returns `Ok(())` on success or an `anyhow::Error` on failure.
 pub fn save_named_markers(path: &PathBuf, markers: &[NamedMapMarker]) -> anyhow::Result<()> {
     validate_marker_store_path(path)?;
