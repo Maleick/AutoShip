@@ -17,8 +17,8 @@
 
 <p align="center">
 
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-252%2C266-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-~5%2C753-brightgreen?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-252%2C541-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-3%2C495%20exact-brightgreen?style=flat-square)](#testing)
 ![Crates](https://img.shields.io/badge/Crates-6-purple?style=flat-square)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey?style=flat-square)
 ![Accounts](https://img.shields.io/badge/Accounts-26%2F36-cyan?style=flat-square)
@@ -212,7 +212,7 @@ Full guide: [`docs/wiki/Configuration.md`](docs/wiki/Configuration.md)
 
 ## Testing
 
-Current workspace totals: 252,266 Rust lines and ~5,753 tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`.
+Current workspace totals: 252,541 Rust lines and 3,495 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`.
 
 ```bash
 cargo test                                    # full workspace

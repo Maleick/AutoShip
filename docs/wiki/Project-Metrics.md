@@ -1,6 +1,6 @@
 # Project Metrics
 
-Current workspace totals: 208,654 Rust lines across 367 files and ~4,870 tests (2,081 commits as of 2026-04-17). This page and the README badges are auto-refreshed by `scripts/update_readme_metrics.py`.
+Current workspace totals: 252,541 Rust lines and 3,495 exact tests. This page and the README badges are auto-refreshed by `scripts/update_readme_metrics.py`.
 
 ## What This Tracks
 
