@@ -53,8 +53,7 @@ export default function ConfigCopyPanel({ characterConfigs }: ConfigCopyPanelPro
   const [toChars, setToChars] = useState<string[]>([]);
   const [subset, setSubset] = useState<CopySubset>("both");
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const [toastType, setToastType] = useState<"ok" | "err">("ok");
+  const [toast, setToast] = useState<{ message: string; type: "ok" | "err" } | null>(null);
   const [results, setResults] = useState<ConfigCopyResponseEntry[]>([]);
 
   const sourceCharacter = characterConfigs.find(
@@ -89,6 +88,7 @@ export default function ConfigCopyPanel({ characterConfigs }: ConfigCopyPanelPro
     }
   }, [targetOptions, toChars]);
 
+  const selectedTargetSet = useMemo(() => new Set(toChars), [toChars]);
   const hasTargets = toChars.length > 0;
 
   async function handleCopy() {
@@ -109,8 +109,7 @@ export default function ConfigCopyPanel({ characterConfigs }: ConfigCopyPanelPro
       });
 
       if (response.status === 404 || response.status === 501) {
-        setToast("Config copy backend unavailable (demo mode)");
-        setToastType("err");
+        setToast({ message: "Config copy backend unavailable (demo mode)", type: "err" });
         setLoading(false);
         return;
       }
@@ -124,24 +123,22 @@ export default function ConfigCopyPanel({ characterConfigs }: ConfigCopyPanelPro
           copyResults.length > 0
             ? copyResults.map((result) => `${result.char}: ${result.diff_summary}`).join(" | ")
             : `Copy request failed with HTTP ${response.status}`;
-        setToast(message);
-        setToastType("err");
+        setToast({ message, type: "err" });
         return;
       }
 
       if (copyResults.every((result) => result.status === "success")) {
-        setToast("Copy completed successfully.");
-        setToastType("ok");
+        setToast({ message: "Copy completed successfully.", type: "ok" });
       } else if (copyResults.every((result) => result.status === "error")) {
-        setToast("Copy failed for all targets.");
-        setToastType("err");
+        setToast({ message: "Copy failed for all targets.", type: "err" });
       } else {
-        setToast("Copy completed with mixed results.");
-        setToastType("ok");
+        setToast({ message: "Copy completed with mixed results.", type: "ok" });
       }
     } catch (error) {
-      setToast(error instanceof Error ? error.message : "Copy request failed");
-      setToastType("err");
+      setToast({
+        message: error instanceof Error ? error.message : "Copy request failed",
+        type: "err",
+      });
     } finally {
       setLoading(false);
     }
@@ -205,7 +202,7 @@ export default function ConfigCopyPanel({ characterConfigs }: ConfigCopyPanelPro
               </p>
             ) : (
               targetOptions.map((character) => {
-                const isChecked = toChars.includes(character.character_name);
+                const isChecked = selectedTargetSet.has(character.character_name);
                 return (
                   <label
                     key={character.character_name}
@@ -292,12 +289,12 @@ export default function ConfigCopyPanel({ characterConfigs }: ConfigCopyPanelPro
       {toast && (
         <div
           className={`mt-4 border px-3 py-2 text-xs font-rune ${
-            toastType === "ok"
+            toast.type === "ok"
               ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
               : "border-rose-400/30 bg-rose-500/10 text-rose-200"
           }`}
         >
-          {toast}
+          {toast.message}
         </div>
       )}
 
