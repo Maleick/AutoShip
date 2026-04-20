@@ -1,6 +1,6 @@
 //! Admin API endpoints for session lifecycle control and configuration audit.
 //!
-//! Provides REST endpoints to start, stop, and restart sessions, and audit configuration:
+//! Provides REST endpoints to restart sessions and audit configuration:
 //! - POST /api/admin/sessions/{id}/start
 //! - POST /api/admin/sessions/{id}/stop
 //! - POST /api/admin/sessions/{id}/restart
@@ -55,75 +55,6 @@ fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Js
 }
 
 // ─── Session Lifecycle Handlers ────────────────────────────────────────────────
-
-/// Start a session by ID.
-///
-/// Emits a "session:start:{id}" event on the broadcast channel that the
-/// orchestrator subscribes to. Returns 404 if the session ID does not exist
-/// (based on live session snapshot).
-pub async fn start_session(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<u32>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    if !crate::api::loot::is_trusted_origin(&headers) {
-        return json_error(
-            StatusCode::FORBIDDEN,
-            "Forbidden: untrusted origin for session lifecycle mutation",
-        )
-        .into_response();
-    }
-
-    // Validate that the session exists by reading live sessions
-    if let Err(e) = validate_session_exists(&state, id).await {
-        return e.into_response();
-    }
-
-    // Emit event for orchestrator to handle
-    let event = format!("session:start:{}", id);
-    let _ = state.event_tx.send(event);
-
-    let response = SessionLifecycleResponse {
-        session_id: id,
-        operation: "start".to_string(),
-        message: format!("Start request queued for session {}", id),
-    };
-
-    (StatusCode::ACCEPTED, Json(response)).into_response()
-}
-
-/// Stop a session by ID.
-///
-/// Emits a "session:stop:{id}" event on the broadcast channel that the
-/// orchestrator subscribes to. Returns 404 if the session ID does not exist.
-pub async fn stop_session(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<u32>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    if !crate::api::loot::is_trusted_origin(&headers) {
-        return json_error(
-            StatusCode::FORBIDDEN,
-            "Forbidden: untrusted origin for session lifecycle mutation",
-        )
-        .into_response();
-    }
-
-    if let Err(e) = validate_session_exists(&state, id).await {
-        return e.into_response();
-    }
-
-    let event = format!("session:stop:{}", id);
-    let _ = state.event_tx.send(event);
-
-    let response = SessionLifecycleResponse {
-        session_id: id,
-        operation: "stop".to_string(),
-        message: format!("Stop request queued for session {}", id),
-    };
-
-    (StatusCode::ACCEPTED, Json(response)).into_response()
-}
 
 /// Restart a session by ID.
 ///
@@ -219,8 +150,6 @@ fn read_live_sessions(
 /// Build the admin sessions sub-router.
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
-        .route("/{id}/start", post(start_session))
-        .route("/{id}/stop", post(stop_session))
         .route("/{id}/restart", post(restart_session))
         .route("/{id}/config-audit", get(audit_config))
 }
@@ -284,26 +213,6 @@ mod tests {
         http::{Request, StatusCode, header},
     };
     use tower::ServiceExt;
-
-    #[tokio::test]
-    async fn stop_session_rejects_untrusted_origin() {
-        let state = crate::test_support::demo_app_state();
-        let app = router().with_state(state);
-
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/1/stop")
-                    .header(header::ORIGIN, "https://evil.example")
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    }
 
     #[tokio::test]
     async fn restart_session_rejects_untrusted_origin() {
