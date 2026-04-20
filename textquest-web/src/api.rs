@@ -1998,6 +1998,9 @@ mod tests {
     impl ConfigPathGuard {
         fn set(path: &std::path::Path) -> Self {
             let previous = std::env::var_os("TEXTQUEST_CONFIG_PATH");
+            // SAFETY: All tests that touch TEXTQUEST_CONFIG_PATH acquire `config_env_lock()`
+            // before calling `ConfigPathGuard::set`, serializing every mutation of this env
+            // var across the process. No other thread can read or write the var concurrently.
             unsafe { std::env::set_var("TEXTQUEST_CONFIG_PATH", path) };
             Self { previous }
         }
@@ -2005,6 +2008,9 @@ mod tests {
 
     impl Drop for ConfigPathGuard {
         fn drop(&mut self) {
+            // SAFETY: Same serialization guarantee as `ConfigPathGuard::set` — the lock held
+            // by the caller ensures exclusive access to TEXTQUEST_CONFIG_PATH for the duration
+            // of this guard's lifetime.
             unsafe {
                 if let Some(previous) = &self.previous {
                     std::env::set_var("TEXTQUEST_CONFIG_PATH", previous);
@@ -2020,11 +2026,6 @@ mod tests {
             "textquest-web-api-{name}-{}.toml",
             uuid::Uuid::new_v4()
         ))
-    }
-
-    fn env_lock() -> &'static tokio::sync::Mutex<()> {
-        static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
     }
 
     fn test_state(snapshot_name: &str) -> AppState {
