@@ -43,6 +43,9 @@ use textquest::chat_log::{
 use textquest_common::box_chat::BoxChatConfig;
 use textquest_common::character_config::{self as shared_character_config};
 use textquest_common::ipc::{AutoAcceptSettings, AutoRezConfig};
+use textquest_common::protocol::{
+    ConfigCopyRequest, ConfigCopyResult, ConfigCopyStatus, ConfigCopySubset,
+};
 use textquest_common::tradeskill_trophy::TradeskillTrophySettings;
 use toml_edit::{Array, DocumentMut, Item, Table, value};
 
@@ -714,6 +717,164 @@ pub struct CharacterConfigUpdate {
     pub window_title_format: Option<String>,
     pub reward_automation: Option<shared_character_config::RewardAutomationConfig>,
     pub tribute_preferences: Option<TributePreferences>,
+}
+
+fn copy_subset_requires_rotation(subset: &ConfigCopySubset) -> bool {
+    matches!(subset, ConfigCopySubset::Rotation | ConfigCopySubset::Both)
+}
+
+fn copy_subset_includes_class_params(subset: &ConfigCopySubset) -> bool {
+    matches!(
+        subset,
+        ConfigCopySubset::ClassParams | ConfigCopySubset::Both
+    )
+}
+
+fn build_config_copy_diff_summary(
+    before: &CharacterConfig,
+    after: &CharacterConfig,
+    subset: &ConfigCopySubset,
+) -> String {
+    let mut changed = Vec::new();
+    let class_params_changed = serde_json::to_value(&before.class_params)
+        .expect("serialize class params")
+        != serde_json::to_value(&after.class_params).expect("serialize class params");
+    let rotation_changed = serde_json::to_value(&before.rotation).expect("serialize rotation")
+        != serde_json::to_value(&after.rotation).expect("serialize rotation");
+
+    if copy_subset_includes_class_params(subset) && class_params_changed {
+        changed.push("class_params");
+    }
+    if copy_subset_requires_rotation(subset) && rotation_changed {
+        changed.push("rotation");
+    }
+
+    if changed.is_empty() {
+        "no changes".to_string()
+    } else {
+        format!("copied {}", changed.join(", "))
+    }
+}
+
+fn apply_config_copy(
+    source: &CharacterConfig,
+    target: &CharacterConfig,
+    subset: &ConfigCopySubset,
+) -> CharacterConfig {
+    let mut result = target.clone();
+    if copy_subset_includes_class_params(subset) {
+        result.class_params = source.class_params.clone();
+    }
+    if copy_subset_requires_rotation(subset) {
+        result.rotation = source.rotation.clone();
+    }
+    result
+}
+
+/// POST /api/config/copy — copy settings between character tuning configs.
+pub async fn post_config_copy(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ConfigCopyRequest>,
+) -> Result<Json<Vec<ConfigCopyResult>>, (StatusCode, Json<ErrorResponse>)> {
+    let from_char = request.from_char.trim().to_string();
+    if from_char.is_empty() {
+        return Err(json_error(
+            StatusCode::BAD_REQUEST,
+            "from_char must not be blank",
+        ));
+    }
+    if request.to_chars.is_empty() {
+        return Err(json_error(
+            StatusCode::BAD_REQUEST,
+            "to_chars must not be empty",
+        ));
+    }
+
+    let _write_guard = state.character_config_write_lock.lock().await;
+    let mut configs = state.character_configs.write().await;
+    let source = match configs.get(&from_char) {
+        Some(config) => config.clone(),
+        None => {
+            return Err(json_error(
+                StatusCode::BAD_REQUEST,
+                format!("Source character '{from_char}' was not found"),
+            ));
+        }
+    };
+
+    let mut results = Vec::new();
+    let mut next_configs = configs.clone();
+
+    for raw_target in request.to_chars {
+        let target_name = raw_target.trim().to_string();
+
+        if target_name.is_empty() {
+            results.push(ConfigCopyResult {
+                r#char: raw_target,
+                status: ConfigCopyStatus::Error,
+                diff_summary: "target character name must not be blank".to_string(),
+            });
+            continue;
+        }
+
+        let target = match next_configs.get(&target_name) {
+            Some(config) => config.clone(),
+            None => {
+                results.push(ConfigCopyResult {
+                    r#char: target_name,
+                    status: ConfigCopyStatus::Error,
+                    diff_summary: "target character not found".to_string(),
+                });
+                continue;
+            }
+        };
+
+        if copy_subset_requires_rotation(&request.subset)
+            && !source.class.eq_ignore_ascii_case(&target.class)
+        {
+            results.push(ConfigCopyResult {
+                r#char: target_name,
+                status: ConfigCopyStatus::Error,
+                diff_summary: "target class must match source class for rotation copy".to_string(),
+            });
+            continue;
+        }
+
+        let copied = apply_config_copy(&source, &target, &request.subset);
+        let diff_summary = build_config_copy_diff_summary(&target, &copied, &request.subset);
+
+        if let Some(entry) = next_configs.get_mut(&target_name) {
+            *entry = copied.clone();
+        }
+
+        results.push(ConfigCopyResult {
+            r#char: target_name,
+            status: ConfigCopyStatus::Success,
+            diff_summary,
+        });
+    }
+
+    if results.iter().any(|result| {
+        matches!(
+            result,
+            ConfigCopyResult {
+                status: ConfigCopyStatus::Success,
+                ..
+            }
+        )
+    }) {
+        if let Err(error) =
+            write_character_configs_to_path(&state.character_config_path, &next_configs)
+        {
+            return Err(json_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to persist character config copy: {error}"),
+            ));
+        }
+        *configs = next_configs;
+    }
+
+    Ok(Json(results))
 }
 
 fn tribute_preferences(
@@ -2079,6 +2240,149 @@ mod tests {
             updated.window_title_format,
             "[{server}] {character} ({level} {class_short})"
         );
+    }
+
+    #[tokio::test]
+    async fn config_copy_multi_target_class_params() {
+        let dir = tempdir().expect("tempdir should exist");
+        let mut state = test_state("api-config-copy-class-params.json");
+        state.character_config_path = dir.path().join("character-configs.json");
+        let state = Arc::new(state);
+
+        {
+            let mut configs = state.character_configs.write().await;
+            let source = configs
+                .get_mut("Aelrindel")
+                .expect("demo config should exist");
+            source.class_params.burn_at_hp_pct = Some(42);
+        }
+
+        let request = ConfigCopyRequest {
+            from_char: "Aelrindel".into(),
+            to_chars: vec!["Noxus".into(), "Grok".into()],
+            subset: ConfigCopySubset::ClassParams,
+        };
+
+        let Json(results) = post_config_copy(State(state.clone()), Json(request))
+            .await
+            .expect("copy should succeed");
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|result| {
+            result.status == ConfigCopyStatus::Success
+                && matches!(result.diff_summary.as_str(), "copied class_params")
+        }));
+
+        let configs = state.character_configs.read().await;
+        let source = configs
+            .get("Aelrindel")
+            .expect("source character should still exist");
+        let noxus = configs.get("Noxus").expect("target character should exist");
+        let grok = configs.get("Grok").expect("target character should exist");
+
+        assert_eq!(
+            serde_json::to_value(&source.class_params).expect("serialize class params"),
+            serde_json::to_value(&noxus.class_params).expect("serialize class params"),
+        );
+        assert_eq!(
+            serde_json::to_value(&source.class_params).expect("serialize class params"),
+            serde_json::to_value(&grok.class_params).expect("serialize class params"),
+        );
+        assert_eq!(noxus.rotation.len(), 1);
+        assert_eq!(noxus.rotation[0].id, "taunt");
+        assert_eq!(noxus.rotation[0].name, "Taunt");
+        assert_eq!(noxus.rotation[0].priority, 1);
+        assert!(noxus.rotation[0].enabled);
+        assert_eq!(grok.rotation.len(), 1);
+        assert_eq!(grok.rotation[0].id, "turgurs_insects");
+        assert_eq!(grok.rotation[0].name, "Turgur's Insects");
+        assert_eq!(grok.rotation[0].priority, 1);
+        assert!(grok.rotation[0].enabled);
+    }
+
+    #[tokio::test]
+    async fn config_copy_missing_target_reports_error() {
+        let dir = tempdir().expect("tempdir should exist");
+        let mut state = test_state("api-config-copy-missing-target.json");
+        state.character_config_path = dir.path().join("character-configs.json");
+        let state = Arc::new(state);
+
+        let request = ConfigCopyRequest {
+            from_char: "Aelrindel".into(),
+            to_chars: vec!["NoSuchCharacter".into()],
+            subset: ConfigCopySubset::Both,
+        };
+
+        let Json(results) = post_config_copy(State(state), Json(request))
+            .await
+            .expect("missing target should return structured error result");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].r#char, "NoSuchCharacter");
+        assert_eq!(results[0].status, ConfigCopyStatus::Error);
+        assert_eq!(results[0].diff_summary, "target character not found");
+    }
+
+    #[tokio::test]
+    async fn config_copy_rotation_rejects_class_mismatch() {
+        let dir = tempdir().expect("tempdir should exist");
+        let mut state = test_state("api-config-copy-class-mismatch.json");
+        state.character_config_path = dir.path().join("character-configs.json");
+        let state = Arc::new(state);
+
+        let request = ConfigCopyRequest {
+            from_char: "Aelrindel".into(),
+            to_chars: vec!["Noxus".into()],
+            subset: ConfigCopySubset::Rotation,
+        };
+
+        let Json(results) = post_config_copy(State(state.clone()), Json(request))
+            .await
+            .expect("mismatched class should return error result");
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].r#char, "Noxus");
+        assert_eq!(results[0].status, ConfigCopyStatus::Error);
+        assert_eq!(
+            results[0].diff_summary,
+            "target class must match source class for rotation copy"
+        );
+
+        let configs = state.character_configs.read().await;
+        let noxus_rotation: Vec<_> = configs
+            .get("Noxus")
+            .expect("target should exist")
+            .rotation
+            .iter()
+            .map(|entry| {
+                (
+                    entry.id.as_str(),
+                    entry.name.as_str(),
+                    entry.priority,
+                    entry.enabled,
+                )
+            })
+            .collect();
+        assert_eq!(noxus_rotation, vec![("taunt", "Taunt", 1, true)]);
+    }
+
+    #[tokio::test]
+    async fn config_copy_empty_to_chars_errors() {
+        let dir = tempdir().expect("tempdir should exist");
+        let mut state = test_state("api-config-copy-empty-targets.json");
+        state.character_config_path = dir.path().join("character-configs.json");
+        let state = Arc::new(state);
+
+        let request = ConfigCopyRequest {
+            from_char: "Aelrindel".into(),
+            to_chars: vec![],
+            subset: ConfigCopySubset::ClassParams,
+        };
+
+        let Err((status, error)) = post_config_copy(State(state), Json(request)).await else {
+            panic!("empty to_chars should fail");
+        };
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(error.0.error, "to_chars must not be empty");
     }
 
     #[tokio::test]

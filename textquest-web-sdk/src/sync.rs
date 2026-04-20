@@ -111,6 +111,11 @@ impl BlockingClient {
             .block_on(self.client.put_character_config(character, config))
     }
 
+    /// Copy configuration from one character to one or more target characters.
+    pub fn post_config_copy(&self, request: ConfigCopyRequest) -> Result<Vec<ConfigCopyResult>> {
+        self.runtime.block_on(self.client.post_config_copy(request))
+    }
+
     /// Get auto-accept settings
     pub fn get_auto_accept_settings(&self) -> Result<AutoAcceptSettings> {
         self.runtime

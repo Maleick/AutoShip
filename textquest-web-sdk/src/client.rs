@@ -154,6 +154,20 @@ impl Client {
         self.handle_response::<CharacterConfig>(response).await
     }
 
+    /// Copy configuration from one character to one or more target characters.
+    pub async fn post_config_copy(
+        &self,
+        request: ConfigCopyRequest,
+    ) -> Result<Vec<ConfigCopyResult>> {
+        let url = self.build_url("/config/copy");
+        let req = self.http_client.post(&url).json(&request);
+        let req = self.add_token(req);
+
+        let response = req.send().await?;
+        self.handle_response::<Vec<ConfigCopyResult>>(response)
+            .await
+    }
+
     // ─── Auto-Accept Settings ──────────────────────────────────────────────
 
     /// Get auto-accept settings

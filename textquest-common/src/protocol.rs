@@ -1,4 +1,4 @@
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::fmt;
 
 /// Maximum allowed message size (64 KB). Frames larger than this are rejected
@@ -122,6 +122,39 @@ pub fn decode_frame<T: DeserializeOwned>(
 #[must_use]
 pub fn decode<T: DeserializeOwned>(data: &[u8]) -> Option<(T, usize)> {
     decode_frame(data).ok().flatten()
+}
+
+/// Subsets available for character-configuration copy operations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigCopySubset {
+    ClassParams,
+    Rotation,
+    Both,
+}
+
+/// Request payload for `POST /api/config/copy`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfigCopyRequest {
+    pub from_char: String,
+    pub to_chars: Vec<String>,
+    pub subset: ConfigCopySubset,
+}
+
+/// Per-target copy status values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConfigCopyStatus {
+    Success,
+    Error,
+}
+
+/// Per-target copy result for `/api/config/copy`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigCopyResult {
+    pub r#char: String,
+    pub status: ConfigCopyStatus,
+    pub diff_summary: String,
 }
 
 #[cfg(test)]

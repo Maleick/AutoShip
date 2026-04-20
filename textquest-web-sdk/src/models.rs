@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+pub use textquest_common::protocol::{
+    ConfigCopyRequest, ConfigCopyResult, ConfigCopyStatus, ConfigCopySubset,
+};
 
 /// Health check response
 #[derive(Debug, Clone, Serialize, Deserialize)]

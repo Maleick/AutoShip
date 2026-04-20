@@ -609,6 +609,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
             get(api::raid_config_unavailable).put(api::raid_config_unavailable),
         )
         .route("/config/characters", get(api::list_character_configs))
+        .route("/config/copy", post(api::post_config_copy))
         .route(
             "/config/characters/{character}",
             put(api::put_character_config),
