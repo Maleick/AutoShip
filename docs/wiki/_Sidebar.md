@@ -30,6 +30,13 @@
 - [Architecture Overview](Architecture-Overview)
 - [DLL Injection and IPC Pipeline](DLL-Injection-and-IPC-Pipeline)
 - [Offsets, EQ Internals, and MacroQuest References](Offsets-EQ-Internals-and-MacroQuest-References)
+
+### Anti-Cheat & Injection
+
+- [VEH, UAF, and Injection Architecture](Anti-Cheat/VEH-UAF-Injection)
+- [Deep Dive: Injection, Memory, VEH](Anti-Cheat/Deep-Dive-Injection-Memory-VEH)
+- [Security and Anti-Detection Notes](Security-and-Anti-Detection-Notes)
+
 - [Development Workflow](Development-Workflow)
 - [Roadmap and Known Gaps](Roadmap-and-Known-Gaps)
 - [Maintaining the Wiki](Maintaining-the-Wiki)
