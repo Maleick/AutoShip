@@ -10,10 +10,7 @@
 
 #[cfg(windows)]
 mod inner {
-    use std::sync::{
-        Mutex,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-    };
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     use windows::Win32::System::{
         Diagnostics::Debug::{
@@ -47,8 +44,22 @@ mod inner {
     unsafe impl Send for PageEncryptionManager {}
     unsafe impl Sync for PageEncryptionManager {}
 
-    static MANAGER: Mutex<Option<PageEncryptionManager>> = Mutex::new(None);
+    // MANAGER_PTR holds a Box<PageEncryptionManager> raw pointer.
+    // The Box is allocated in init() via Box::into_raw and remains allocated
+    // until cleanup() reclaims it with Box::from_raw (it is never freed while
+    // LIVE_GATE is true). cleanup() is the only place that reclaims it, and
+    // only after RemoveVectoredExceptionHandler has returned (guaranteeing no
+    // in-flight VEH handler is still running).
     static MANAGER_PTR: AtomicUsize = AtomicUsize::new(0);
+
+    // LIVE_GATE is the authoritative liveness signal for the VEH handler.
+    // VEH: load gate (Acquire) → if false, bail; load ptr; re-check gate
+    // (Acquire double-check) → if false, bail. This prevents a TOCTOU
+    // window between the first gate check and the pointer dereference.
+    // cleanup(): store false with SeqCst AFTER RemoveVectoredExceptionHandler
+    // returns, ensuring no new VEH invocations can observe gate=true.
+    static LIVE_GATE: AtomicBool = AtomicBool::new(false);
+
     static ACTIVE: AtomicBool = AtomicBool::new(false);
     static VEH_HANDLE: AtomicUsize = AtomicUsize::new(0);
 
@@ -106,10 +117,27 @@ mod inner {
                 return EXCEPTION_CONTINUE_SEARCH;
             }
 
+            // First gate check: bail early if cleanup has started.
+            if !LIVE_GATE.load(Ordering::Acquire) {
+                return EXCEPTION_CONTINUE_SEARCH;
+            }
+
             let mgr_ptr = MANAGER_PTR.load(Ordering::Acquire);
             if mgr_ptr == 0 {
                 return EXCEPTION_CONTINUE_SEARCH;
             }
+
+            // Double-check gate after loading pointer to close the TOCTOU
+            // window between the first check and the dereference below.
+            if !LIVE_GATE.load(Ordering::Acquire) {
+                return EXCEPTION_CONTINUE_SEARCH;
+            }
+
+            // Safety: MANAGER_PTR is a Box<PageEncryptionManager> raw pointer
+            // allocated in init() and freed only in cleanup() after
+            // RemoveVectoredExceptionHandler has returned.  The double-check
+            // above ensures cleanup() has not yet zeroed the pointer or freed
+            // the Box while we hold a local copy of the address.
             let mgr = &mut *(mgr_ptr as *mut PageEncryptionManager);
 
             let fault_addr = record.ExceptionInformation[1];
@@ -184,27 +212,32 @@ mod inner {
             code_end,
         };
 
-        let mut guard = MANAGER.lock().map_err(|_| "failed to lock manager")?;
-        *guard = Some(mgr);
-        let mgr_ref = guard.as_mut().unwrap() as *mut PageEncryptionManager;
-        MANAGER_PTR.store(mgr_ref as usize, Ordering::Release);
+        // Allocate the manager on the heap permanently.  Box::into_raw
+        // transfers ownership; the memory is NOT freed until cleanup()
+        // explicitly calls Box::from_raw after tearing down the VEH.
+        let mgr_raw = Box::into_raw(Box::new(mgr));
 
         unsafe {
             let handle = AddVectoredExceptionHandler(1, Some(veh_handler));
             if handle.is_null() {
-                if let Some(ref mut m) = *guard {
-                    for page in m.pages.iter_mut() {
-                        let _ = decrypt_page(page);
-                    }
+                // Registration failed: decrypt all pages and release the Box.
+                let mgr_ref = &mut *mgr_raw;
+                for page in mgr_ref.pages.iter_mut() {
+                    let _ = decrypt_page(page);
                 }
-                MANAGER_PTR.store(0, Ordering::Release);
-                *guard = None;
+                drop(Box::from_raw(mgr_raw));
                 return Err("AddVectoredExceptionHandler failed");
             }
             VEH_HANDLE.store(handle as usize, Ordering::Release);
         }
 
+        // Publish pointer and open the live gate.  Ordering: Release on both
+        // so that any Acquire load in the VEH handler sees the fully
+        // initialised manager.
+        MANAGER_PTR.store(mgr_raw as usize, Ordering::Release);
+        LIVE_GATE.store(true, Ordering::Release);
         ACTIVE.store(true, Ordering::Release);
+
         tracing::info!(
             pages = num_pages,
             active = active_idx,
@@ -223,6 +256,11 @@ mod inner {
             return;
         }
 
+        // Step 1: Remove the VEH handler FIRST.
+        // RemoveVectoredExceptionHandler blocks until any currently executing
+        // handler invocation has returned.  This is the only guaranteed
+        // synchronisation point: after it returns, no new or in-flight VEH
+        // call can access the manager.
         let handle = VEH_HANDLE.swap(0, Ordering::AcqRel);
         if handle != 0 {
             unsafe {
@@ -230,19 +268,39 @@ mod inner {
             }
         }
 
-        MANAGER_PTR.store(0, Ordering::Release);
+        // Step 2: Close the live gate. The critical synchronization is the
+        // RemoveVectoredExceptionHandler call above: once it returns, no VEH
+        // handler invocation can still be running or start via that handler
+        // registration. This SeqCst store does not form a total order with
+        // Acquire loads in the handler; it simply publishes `false` with at
+        // least release semantics for any later observers.
+        LIVE_GATE.store(false, Ordering::SeqCst);
 
-        if let Ok(mut guard) = MANAGER.lock() {
-            if let Some(ref mut mgr) = *guard {
-                for page in mgr.pages.iter_mut() {
-                    if page.encrypted {
-                        unsafe {
-                            let _ = decrypt_page(page);
-                        }
-                    }
+        // Step 3: Zero the pointer so stale loads in any future (impossible
+        // after step 1) handler invocations see null. Use AcqRel so reading
+        // back the previously published pointer also synchronizes with its
+        // Release publication before dereferencing the manager below.
+        let mgr_raw = MANAGER_PTR.swap(0, Ordering::AcqRel) as *mut PageEncryptionManager;
+
+        if mgr_raw.is_null() {
+            tracing::info!("page encryption cleaned up — all pages restored");
+            return;
+        }
+
+        // Step 4: Decrypt all pages before dropping the manager.
+        // The Box is still valid here: step 1 guarantees no VEH handler is
+        // running, and step 3 has already zeroed MANAGER_PTR so nothing else
+        // can obtain a new reference.
+        unsafe {
+            let mgr_ref = &mut *mgr_raw;
+            for page in mgr_ref.pages.iter_mut() {
+                if page.encrypted {
+                    let _ = decrypt_page(page);
                 }
             }
-            *guard = None;
+
+            // Step 5: Drop the Box, reclaiming the heap allocation.
+            drop(Box::from_raw(mgr_raw));
         }
 
         tracing::info!("page encryption cleaned up — all pages restored");
