@@ -356,7 +356,7 @@ fn format_client_name(client_id: u32) -> String {
 /// Format the filter echo line.
 fn format_filter_line<'a>(
     state: &'a crate::tui::app::PacketMonitorState,
-    filtered: &'a [crate::tui::state::PacketRecord],
+    filtered: &'a [&'a crate::tui::state::PacketRecord],
 ) -> Line<'a> {
     let spans = vec![
         Span::styled("filter: ", Style::default().fg(ratatui::style::Color::Cyan)),
