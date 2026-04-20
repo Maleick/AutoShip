@@ -179,16 +179,25 @@ async fn api_token_auth(
 
 /// Constant-time string comparison to prevent timing oracle attacks on the API
 /// token.
+///
+/// Runs the full XOR-fold over the longer slice regardless of length so that
+/// an attacker cannot infer token length from wall-clock differences.
 fn constant_time_eq_str(a: &str, b: &str) -> bool {
     let ab = a.as_bytes();
     let bb = b.as_bytes();
-    if ab.len() != bb.len() {
-        return false;
-    }
-    ab.iter()
-        .zip(bb.iter())
-        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
-        == 0
+    let max_len = ab.len().max(bb.len());
+    // Pad shorter slice with a non-zero sentinel so a zero-length input never
+    // trivially matches a non-empty one through the length-mismatch flag alone.
+    let sentinel = 0xFFu8;
+    let acc = (0..max_len).fold(0u8, |acc, i| {
+        let x = ab.get(i).copied().unwrap_or(sentinel);
+        let y = bb.get(i).copied().unwrap_or(sentinel);
+        acc | (x ^ y)
+    });
+    // Also fold in a length-difference flag so strings of different lengths
+    // are never equal, even if the XOR of the padded bytes happened to cancel.
+    let length_diff = (ab.len() != bb.len()) as u8;
+    (acc | length_diff) == 0
 }
 
 fn credentials_db_path() -> PathBuf {
