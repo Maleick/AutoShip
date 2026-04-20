@@ -80,7 +80,7 @@ jobs:
             $content = Get-Content $changelogPath -Raw
 
             # Match the version section: ## [X.Y.Z] - DATE ... until next ## or end of file
-            $pattern = "## \[$([regex]::Escape($version))\].*?(?=(## \[|\Z)"
+            $pattern = "## \[$([regex]::Escape($version))\].*?(?=(## \[|\Z))"
 
             if ($content -match $pattern) {
               $excerpt = $matches[0] -replace '## \[' , '## [' # cleanup
