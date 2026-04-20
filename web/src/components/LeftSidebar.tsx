@@ -6,6 +6,7 @@ import {
   ChatCircle,
   ChatTeardropText,
   Coins,
+  Copy,
   Cpu,
   Crosshair,
   Eye,
@@ -38,6 +39,7 @@ export type ActiveView =
   | "chat_pattern_rules"
   | "xassist"
   | "credentials"
+  | "config_copy"
   | "sessions"
   | "admin";
 
@@ -64,6 +66,7 @@ const navItems: {
   { icon: Cpu, label: "Extension Catalog", id: "extensions", pulse: true },
   { icon: ChatCircle, label: "Chat Pattern Rules", id: "chat_pattern_rules" },
   { icon: Key, label: "Credentials Management", id: "credentials" },
+  { icon: Copy, label: "Config Copy", id: "config_copy" },
   { icon: Heartbeat, label: "Session Monitor", id: "sessions", pulse: true },
   { icon: Wrench, label: "Admin Tools", id: "admin" },
 ];

@@ -6,6 +6,7 @@ import AlertsPanel from "./components/AlertsPanel";
 import BoxChatPanel from "./components/BoxChatPanel";
 import CenterContent from "./components/CenterContent";
 import ChatPatternRules from "./components/ChatPatternRules";
+import ConfigCopyPage from "./components/ConfigCopyPage";
 import CredentialsPage from "./components/CredentialsPage";
 import EconomyPanel from "./components/EconomyPanel";
 import ExtensionCatalogPanel from "./components/ExtensionCatalogPanel";
@@ -68,6 +69,8 @@ function App() {
           <BoxChatPanel />
         ) : activeView === "credentials" ? (
           <CredentialsPage />
+        ) : activeView === "config_copy" ? (
+          <ConfigCopyPage />
         ) : activeView === "sessions" ? (
           <SessionMonitoringDashboard />
         ) : activeView === "admin" ? (
