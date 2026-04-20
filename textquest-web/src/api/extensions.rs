@@ -269,7 +269,7 @@ pub fn extension_catalog_path() -> PathBuf {
         return PathBuf::from(override_path);
     }
 
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/extensions-catalog.json")
+    crate::data_dir().join("config/extensions-catalog.json")
 }
 
 pub fn router() -> Router<Arc<AppState>> {

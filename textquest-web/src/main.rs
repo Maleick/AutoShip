@@ -200,24 +200,37 @@ fn constant_time_eq_str(a: &str, b: &str) -> bool {
     (acc | length_diff) == 0
 }
 
+/// Returns the runtime data root: `TEXTQUEST_DATA_DIR` env var → exe parent → `"."`.
+fn data_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("TEXTQUEST_DATA_DIR")
+        && !dir.trim().is_empty()
+    {
+        return PathBuf::from(dir);
+    }
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(PathBuf::from))
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
 fn credentials_db_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/credentials.db")
+    data_dir().join("data/credentials.db")
 }
 
 fn live_session_snapshot_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/runtime/live_sessions.json")
+    data_dir().join("data/runtime/live_sessions.json")
 }
 
 fn admin_session_snapshot_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/runtime/admin_sessions.json")
+    data_dir().join("data/runtime/admin_sessions.json")
 }
 
 fn inventory_utility_parity_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/inventory-utility-parity.json")
+    data_dir().join("config/inventory-utility-parity.json")
 }
 
 fn character_config_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/character-configs.json")
+    data_dir().join("config/character-configs.json")
 }
 
 fn alerts_db_path() -> PathBuf {
@@ -236,7 +249,7 @@ fn alerting_config_path() -> PathBuf {
     {
         return PathBuf::from(override_path);
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/alerting.toml")
+    data_dir().join("config/alerting.toml")
 }
 
 fn auto_group_config_path() -> PathBuf {
@@ -741,7 +754,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
 }
 
 fn build_app(state: Arc<AppState>) -> Router {
-    let spa_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../web/dist");
+    let spa_dir = data_dir().join("web/dist");
     let serve_spa =
         ServeDir::new(&spa_dir).not_found_service(ServeFile::new(spa_dir.join("index.html")));
 
