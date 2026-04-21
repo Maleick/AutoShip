@@ -175,7 +175,11 @@ impl IntentTracker {
 
     /// Update the intent for an existing entry.
     /// Returns `Ok(())` if updated, `Err(ItemNotFound)` if item_id not found.
-    pub fn update_intent(&mut self, item_id: u32, new_intent: ItemIntent) -> Result<(), ItemNotFound> {
+    pub fn update_intent(
+        &mut self,
+        item_id: u32,
+        new_intent: ItemIntent,
+    ) -> Result<(), ItemNotFound> {
         if let Some(entry) = self.entries.get_mut(&item_id) {
             entry.intent = new_intent;
             entry.touch();
@@ -187,7 +191,11 @@ impl IntentTracker {
 
     /// Update the note for an existing entry.
     /// Returns `Ok(())` if updated, `Err(ItemNotFound)` if item_id not found.
-    pub fn update_note(&mut self, item_id: u32, note: impl Into<String>) -> Result<(), ItemNotFound> {
+    pub fn update_note(
+        &mut self,
+        item_id: u32,
+        note: impl Into<String>,
+    ) -> Result<(), ItemNotFound> {
         if let Some(entry) = self.entries.get_mut(&item_id) {
             entry.note = note.into();
             entry.touch();

@@ -160,7 +160,7 @@ impl DispelPriority {
             .collect();
 
         // Sort by priority score descending (highest first)
-        prioritized.sort_by(|a, b| b.priority_score.cmp(&a.priority_score));
+        prioritized.sort_by_key(|b| std::cmp::Reverse(b.priority_score));
 
         prioritized.into_iter().map(|p| p.debuff).collect()
     }
@@ -273,7 +273,7 @@ impl DispelRecommendationEngine {
         }
 
         // Sort by urgency descending
-        recommendations.sort_by(|a, b| b.urgency.cmp(&a.urgency));
+        recommendations.sort_by_key(|b| std::cmp::Reverse(b.urgency));
         recommendations
     }
 }

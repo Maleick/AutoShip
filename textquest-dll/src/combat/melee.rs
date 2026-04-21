@@ -145,7 +145,7 @@ pub fn build_disc_rotation_group(
 
     // Sort discs by priority (highest first)
     let mut sorted_discs = discs.to_vec();
-    sorted_discs.sort_by(|a, b| b.priority.cmp(&a.priority));
+    sorted_discs.sort_by_key(|b| std::cmp::Reverse(b.priority));
 
     for disc in sorted_discs {
         // Build condition: check endurance threshold

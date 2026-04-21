@@ -186,5 +186,4 @@ mod tests {
         // Demo data has non-zero queue sizes
         assert!(queues.loot_queue_len > 0 || queues.vendor_backlog_len > 0);
     }
-
 }

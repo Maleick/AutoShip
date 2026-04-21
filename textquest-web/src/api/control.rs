@@ -8,12 +8,7 @@
 //! observability commands are accepted to prevent HTTP callers from issuing
 //! arbitrary fleet-control commands that bypass TUI-side authorization.
 
-use axum::{
-    Json,
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -108,7 +103,10 @@ pub async fn relay_command(
         return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to relay command")
             .into_response();
     }
-    tracing::info!(command = allowed_command.as_str(), "Command relayed via API");
+    tracing::info!(
+        command = allowed_command.as_str(),
+        "Command relayed via API"
+    );
     (
         StatusCode::OK,
         Json(CommandResponse {
@@ -135,7 +133,10 @@ mod tests {
         Arc::new(crate::test_app_state())
     }
 
-    async fn assert_status_and_body<T>(response: axum::response::Response, expected: StatusCode) -> T
+    async fn assert_status_and_body<T>(
+        response: axum::response::Response,
+        expected: StatusCode,
+    ) -> T
     where
         T: for<'a> serde::Deserialize<'a>,
     {
@@ -182,14 +183,16 @@ mod tests {
         )
         .await
         .into_response();
-        let body: CommandResponse = assert_status_and_body::<CommandResponse>(response, StatusCode::OK).await;
+        let body: CommandResponse =
+            assert_status_and_body::<CommandResponse>(response, StatusCode::OK).await;
         assert!(body.success);
 
         let event = events
             .try_recv()
             .expect("allowed command should emit one event")
             .replace(" ", "");
-        let event_value: serde_json::Value = serde_json::from_str(&event).expect("event should be json");
+        let event_value: serde_json::Value =
+            serde_json::from_str(&event).expect("event should be json");
         assert_eq!(event_value["command"], "GetLog");
         assert_eq!(event_value["type"], "command");
         assert_eq!(event_value["target"], "session-8");

@@ -133,7 +133,8 @@ pub struct AppState {
     /// Say detection state for /say channel pattern matching.
     pub say_detection: Option<Arc<api::say_detection::SayDetectionState>>,
     /// In-memory session control state for external SDK control endpoints.
-    pub session_controls: tokio::sync::RwLock<HashMap<u32, api::session_control::SessionControlState>>,
+    pub session_controls:
+        tokio::sync::RwLock<HashMap<u32, api::session_control::SessionControlState>>,
     /// Auto-group formation state — MQ2AutoGroup parity.
     pub auto_group_state: Arc<api::auto_group::AutoGroupState>,
     /// Persisted extension catalog metadata, overrides, and runtime status.
