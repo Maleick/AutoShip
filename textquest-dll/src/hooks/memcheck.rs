@@ -435,7 +435,7 @@ mod tests {
     use super::*;
 
     /// A block-aligned address near the known handler offset, used as a
-    /// stable test address. 0x1400B_5700 is the `BLOCK_SIZE`-aligned block
+    /// stable test address. 0x0001_400B_5700 is the `BLOCK_SIZE`-aligned block
     /// that contains `SERVER_MEMCHECK_HANDLER = 0x1400B_5720`.
     const TEST_BLOCK: usize = 0x0001_400B_5700;
 

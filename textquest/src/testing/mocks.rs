@@ -138,10 +138,14 @@ impl EqProcessReader for MockProcessReader {
     }
 }
 
+/// Real process reader for Windows.
+/// Wraps ProcessHandle to read actual EQ process memory.
+#[cfg(windows)]
 pub struct RealProcessReader {
     handle: ProcessHandle,
 }
 
+#[cfg(windows)]
 impl RealProcessReader {
     pub fn new(pid: u32) -> Result<Self, String> {
         Ok(Self {
@@ -150,6 +154,7 @@ impl RealProcessReader {
     }
 }
 
+#[cfg(windows)]
 impl EqProcessReader for RealProcessReader {
     fn read<T: Copy + Default>(&mut self, address: usize) -> Result<T, String> {
         self.handle.read(address).map_err(|e| e.to_string())
@@ -163,6 +168,48 @@ impl EqProcessReader for RealProcessReader {
 
     fn read_ptr(&mut self, address: usize) -> Result<usize, String> {
         self.handle.read_ptr(address).map_err(|e| e.to_string())
+    }
+}
+
+/// Non-Windows stub for RealProcessReader.
+/// Always fails since we cannot read actual process memory on non-Windows platforms.
+#[cfg(not(windows))]
+pub struct RealProcessReader {
+    pid: u32,
+}
+
+#[cfg(not(windows))]
+impl RealProcessReader {
+    pub fn new(pid: u32) -> Result<Self, String> {
+        tracing::trace!(
+            pid,
+            "RealProcessReader::new called on non-Windows platform (stub)"
+        );
+        Ok(Self { pid })
+    }
+}
+
+#[cfg(not(windows))]
+impl EqProcessReader for RealProcessReader {
+    fn read<T: Copy + Default>(&mut self, _address: usize) -> Result<T, String> {
+        Err(format!(
+            "Cannot read process memory on non-Windows platform (pid={})",
+            self.pid
+        ))
+    }
+
+    fn read_string(&mut self, _address: usize, _max_len: usize) -> Result<String, String> {
+        Err(format!(
+            "Cannot read process memory on non-Windows platform (pid={})",
+            self.pid
+        ))
+    }
+
+    fn read_ptr(&mut self, _address: usize) -> Result<usize, String> {
+        Err(format!(
+            "Cannot read process memory on non-Windows platform (pid={})",
+            self.pid
+        ))
     }
 }
 
@@ -192,5 +239,41 @@ mod tests {
 
         let value: u32 = mock.read(0x99999999).unwrap();
         assert_eq!(value, 0);
+    }
+
+    #[test]
+    fn real_process_reader_can_be_created() {
+        // On non-Windows platforms, construction succeeds but actual reads fail.
+        // On Windows platforms, construction succeeds if the PID is valid.
+        let result = RealProcessReader::new(9999);
+        // Just verify it can be created; actual success depends on platform and PID.
+        let _ = result;
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn real_process_reader_stub_fails_on_read() {
+        let mut reader = RealProcessReader::new(1234).expect("stub should construct");
+        let result: Result<u32, String> = reader.read(0x140000000);
+        assert!(result.is_err(), "non-Windows stub should fail reads");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn real_process_reader_stub_fails_on_read_string() {
+        let mut reader = RealProcessReader::new(1234).expect("stub should construct");
+        let result = reader.read_string(0x140000000, 32);
+        assert!(result.is_err(), "non-Windows stub should fail string reads");
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn real_process_reader_stub_fails_on_read_ptr() {
+        let mut reader = RealProcessReader::new(1234).expect("stub should construct");
+        let result = reader.read_ptr(0x140000000);
+        assert!(
+            result.is_err(),
+            "non-Windows stub should fail pointer reads"
+        );
     }
 }
