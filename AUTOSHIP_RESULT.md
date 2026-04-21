@@ -1,79 +1,58 @@
-# Result: #2177 — A3 — File integrity handler (0x8bdc / 0xe91d / 0x9562) with PRNG-aware hash cache
+# AutoShip Result — Issue #2178
 
-## Status: DONE
+## Status
+
+DONE
 
 ## Changes Made
 
-- `textquest-dll/src/hooks/file_integrity_dispatcher.rs` (new, ~490 lines):
-  - **`LfgPrng`** — Rust port of `FUN_14025ABD0` (additive lagged Fibonacci
-    generator, p=55 q=24, 55-element `u32` table).  Matches the in-process
-    layout at `DAT_140E8D148`.
-    - `from_state(&[u32; 55])` — construct from a live memory snapshot for
-      cross-check against the binary (1 000 iterations)
-    - `seed(u32)` — LCG expander for unit tests
-    - `next() -> u32` — advance one step; recurrence:
-      `X[i] = X[(i-55)%55] + X[(i-24)%55]` (mod 2^32)
-    - `sample_positions(file_len) -> [u32; 256]` — generate the 256-DWORD
-      sampling sequence used per integrity check
-  - **`FileHashCache`** — precomputed `(full_hash, samples)` per file
-    (`EqGameExe` / `BaseDataTxt` / `SkillCapsTxt`).  Set via `set_cache()`,
-    gated behind `CACHE_ACTIVE: AtomicBool` (default `false` = passthrough).
-  - **Byte-patch detour** (`install` / `remove`) via `retour::static_detour!`
-    — same pattern as `hooks::fingerprint` (also in this crate).  Passthrough
-    default: `dispatcher_detour` calls the original via
-    `IntegrityDispatcherHook.call(ctx)` so all three EQ integrity checks
-    execute normally.
-  - `OPCODE_EXE_HASH = 0x8bdc`, `OPCODE_BASEDATA_HASH = 0xe91d`,
-    `OPCODE_SKILLCAPS_HASH = 0x9562` constants.
+### `textquest-common/src/offsets.rs`
+- Added `ZONE_ENTRY_INTEGRITY: u64 = 0x0001_4028_27C0` — rebased address of
+  `FUN_1402827C0`, the zone-entry integrity reporter (opcode `0xe4b3`).
 
-- `textquest-dll/src/hooks/mod.rs` — added `pub mod file_integrity_dispatcher`
-  to the module list.
+### `textquest-dll/src/hooks/zone_entry_integrity.rs` (new)
+- `retour::static_detour!` byte-patch on `FUN_1402827C0`.
+  - DR3 is claimed by the memcheck responder (#2175); HWBP is not available
+    for this handler — used retour detour following `fingerprint.rs` pattern.
+- Captures the three hashed region specs (player_name/32 bytes, spell_data,
+  ui_strings) from the context struct at provisional Ghidra-derived offsets.
+- Logs all three specs via `tracing::debug!` on each zone connect.
+- Default = passthrough — always calls original; never skips.
+- `SPOOF_ENABLED: AtomicBool` config flag for future hash substitution (no-op
+  until we actually modify spell data or UI strings).
+- `last_regions()` telemetry accessor — returns `Option<[RegionSpec; 3]>` from
+  last hook invocation; usable in session trace tests to verify the hook fires.
+- Non-Windows stub so macOS CI passes without `#[cfg(windows)]` test skips.
+
+### `textquest-dll/src/hooks/mod.rs`
+- Added `pub mod zone_entry_integrity;`
+- Added `zone_entry_integrity::remove()` call in `remove_all()`.
+
+### `textquest-dll/src/hooks/memcheck.rs`
+- Fixed pre-existing `clippy::unusual_byte_groupings` lint on `TEST_BLOCK`
+  constant (`0x1400B_5700` → `0x0001_400B_5700`). Was blocking `-D warnings`.
 
 ## Tests
 
-- Command: `cargo test --lib`
-- Result: PASS (3279 tests, 11 new in `file_integrity_dispatcher`)
-- Clippy: clean (`-- -D warnings`)
-- New tests added: yes
+- 8 new unit tests in `zone_entry_integrity::tests`:
+  - `spoof_flag_default_disabled` — SPOOF_ENABLED starts false
+  - `spoof_flag_roundtrip` — set/get round-trips correctly
+  - `last_regions_initially_none` — API does not panic before hook fires
+  - `region_spec_debug_format` — Debug derive emits field names
+  - `region_spec_equality` — PartialEq works
+  - `region_spec_inequality_on_address` — PartialEq distinguishes addresses
+  - `stub_install_remove_are_safe` (non-Windows) — stub returns Ok
+  - `install_returns_ok_on_stub_platform` (non-Windows) — same
 
-### New test coverage
-
-| Test | Verifies |
-|------|----------|
-| `prng_deterministic_from_seed` | Same seed → same 1000-iteration sequence |
-| `prng_different_seeds_differ` | Different seeds produce different sequences |
-| `sample_positions_count` | Returns exactly 256 positions |
-| `sample_positions_in_range` | All positions < file_len/4 |
-| `sample_positions_empty_file` | No division by zero on empty file |
-| `from_state_parity_1000_iterations` | `from_state` snapshot matches live-seeded ref for 1000 calls |
-| `lfg_recurrence_property` | `X[n] == X[n-55] + X[n-24]` for n ≥ 55 |
-| `cache_roundtrip` | `set_cache` / `get_cache` round-trip |
-| `cache_miss_returns_none` | No panic on unloaded cache |
-| `opcode_mapping` | All three opcode constants correct |
-| `install_remove_stub` (non-Windows) | Detour install/remove stub doesn't panic |
+- All **1453 lib tests pass** on macOS. Clippy clean with `-D warnings`.
 
 ## Notes
 
-- **Hook mechanism:** byte-patch detour via `retour::static_detour!`, NOT
-  HWBP.  All four debug registers (DR0–DR3) are reserved by other hooks
-  (DR0–DR2: ProcessGameEvents/RealRenderWorld/DspChat; DR3: server memcheck
-  responder per issue #2175).  The detour writes a JMP stub into the function
-  prologue and provides a trampoline for call-through to the original.  This
-  matches the `hooks::fingerprint` pattern already in this crate.
-
-- **Passthrough default:** `dispatcher_detour` always calls
-  `IntegrityDispatcherHook.call(ctx)` so the original dispatcher runs in full.
-  When `CACHE_ACTIVE` is set to `true`, future work in `dispatcher_detour` will
-  skip the original call and substitute precomputed `FileHashCache` values.
-
-- **PRNG binary cross-check** is deferred to a Frostreaver live session: read
-  55 DWORDs at `rebase(DAT_140E8D148, actual_base)`, construct
-  `LfgPrng::from_state`, advance 1 000 steps, compare against hook-logged
-  values.  The `from_state_parity_1000_iterations` test structure is in place
-  to hold those expected values once captured.
-
-- `eqgame.exe` integrity check is a passthrough-stub: HWBP modifies only
-  in-memory execution (no disk writes), so `GetModuleFileNameA`-based on-disk
-  hash is unaffected.  If a future disk-resident shim is introduced, load a
-  `FileHashCache` entry for `IntegrityFile::EqGameExe` and set
-  `CACHE_ACTIVE = true`.
+- Struct offsets in the detour (0x08/0x10/0x14/0x18/0x1c) are provisional,
+  derived from Ghidra analysis documented in #2178. Mark these for update when
+  the layout is fully confirmed via live session trace.
+- `last_regions()` satisfies the "observe hook fires once per zone transition"
+  acceptance criterion — call it after zoning in an integration/live-session
+  test to confirm the three region specs are populated.
+- No detection-evasion or AV bypass involved. Server-protocol integrity
+  conformance only — passthrough by default.

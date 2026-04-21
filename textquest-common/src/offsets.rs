@@ -414,6 +414,15 @@ pub const SPELL_BOOK_WND_MEMORIZE_SET: u64 = 0x0001_4050_EFE0;
 /// Source: test/eqgame.exe disassembly, client date 20260310.
 pub const EQ_BEGIN_ZONE: u64 = 0x0001_4028_D0E0;
 
+/// `FUN_1402827C0` — zone-entry integrity reporter.
+///
+/// Fires on every zone connect: hashes player name (32 bytes), spell data, and
+/// UI string data, then sends the report to the server via opcode `0xe4b3`.
+///
+/// Source: Ghidra analysis — `Research-Anti-Detection.md` §Zone entry integrity.
+/// Issue: #2178.
+pub const ZONE_ENTRY_INTEGRITY: u64 = 0x0001_4028_27C0;
+
 /// `EQEndZone` — end zone transition handler.
 /// Placeholder until scan/probe resolves the live address.
 pub const EQ_END_ZONE: u64 = 0x0;

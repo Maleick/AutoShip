@@ -27,6 +27,7 @@ pub mod set_game_state;
 pub mod slot_manager;
 pub mod targeting;
 pub mod timing;
+pub mod zone_entry_integrity;
 
 use std::sync::{Mutex, OnceLock};
 
@@ -75,6 +76,7 @@ pub fn remove_all() {
     timing::remove();
     set_game_state::remove();
     timing::remove();
+    zone_entry_integrity::remove();
     tracing::info!("All hooks removed");
 }
 
