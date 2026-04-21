@@ -98,3 +98,11 @@ CLAUDE.md
 textquest-web/src/api/admin_sessions.rs
 tools/python-sdk/.coverage
 .worktrees/
+
+# Python tooling caches
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# Legacy tooling (obsolete)
+.symphony-opencode/

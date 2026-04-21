@@ -11,6 +11,33 @@ This guide is for operators who want to set up, configure, and run TextQuest to 
 5. [Common Troubleshooting](#common-troubleshooting)
 6. [Next Steps](#next-steps)
 
+## Operator runbook map
+
+Use this sequence for most operations:
+
+1. Load readiness using [Quick Start](Quick-Start.md).
+2. Keep one source of truth for action plans:
+   - [Operator Guide](#installation-prerequisites)
+   - [Operator Playbooks](Operator-Playbooks.md)
+3. For incident handling, follow playbooks first and return here for configuration-level remediation.
+
+### Canonical links
+
+- Anti-cheat and injection: `Anti-Cheat-VEH-UAF-Injection.md`
+- Deep-dive context: `Anti-Cheat-Deep-Dive-Injection-Memory-VEH.md`
+
+```mermaid
+flowchart TD
+  Start([Start]) --> Prep{Readiness checks}
+  Prep -- Pass --> Run[Execute operator task]
+  Prep -- Fail --> Stabilize[Pause and triage]
+  Stabilize --> Prep
+  Run --> Verify{Task succeeded?}
+  Verify -- Yes --> Handoff[Capture evidence + handoff]
+  Verify -- No --> Incident[Follow Operator-Playbooks incident path]
+  Incident --> Handoff
+```
+
 ---
 
 ## Installation Prerequisites

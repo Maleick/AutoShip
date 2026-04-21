@@ -2,6 +2,8 @@
 
 - [Home](Home)
 - [Quick Start](Quick-Start)
+- [Operator Guide](Operator-Guide)
+- [Operator Playbooks](Operator-Playbooks)
 - [Installation and Build](Installation-and-Build)
 - [Operating the TUI](Operating-the-TUI)
 - [Command Reference](Command-Reference)
@@ -34,8 +36,9 @@
 
 ### Anti-Cheat & Injection
 
-- [VEH, UAF, and Injection Architecture](Anti-Cheat/VEH-UAF-Injection)
-- [Deep Dive: Injection, Memory, VEH](Anti-Cheat/Deep-Dive-Injection-Memory-VEH)
+- [VEH, UAF, and Injection Architecture](Anti-Cheat-VEH-UAF-Injection)
+- [Deep Dive: Injection, Memory, VEH](Anti-Cheat-Deep-Dive-Injection-Memory-VEH)
+- [VEH, UAF, and Injection Cheat Sheet](Operator-Playbooks#anti-cheat--integrity-playbook)
 - [Security and Anti-Detection Notes](Security-and-Anti-Detection-Notes)
 
 - [Development Workflow](Development-Workflow)

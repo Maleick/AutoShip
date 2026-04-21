@@ -2,6 +2,18 @@
 
 This page is the fastest path to a useful TextQuest session.
 
+## 3-Step Operator Readiness Checklist
+
+1. Confirm branch and baseline
+   - Start from `master`-aligned repo state and expected runtime mode.
+   - Verify required manifests/assets are present.
+2. Start services and connect
+   - Launch in your intended mode (Demo or Live).
+   - Confirm UI and session status indicators are healthy.
+3. Validate the first signal
+   - Run one low-risk command.
+   - Capture initial status and ensure rollback paths are available.
+
 ## Current Behavior
 
 ### 1. Choose the runtime you are actually in

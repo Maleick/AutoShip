@@ -16,6 +16,14 @@ This site is the published public docs surface. The repo-side `docs/wiki/` tree 
 
 ## Start Here
 
+### Canonical Operator Surfaces
+
+- [Quick Start](Quick-Start.md)
+- [Operator Guide](Operator-Guide.md)
+- [Operator Playbooks](Operator-Playbooks.md)
+- [VEH & UAF Injection](Anti-Cheat-VEH-UAF-Injection.md)
+- [Deep Dive: Injection, Memory, VEH](Anti-Cheat-Deep-Dive-Injection-Memory-VEH.md)
+
 ### Operators
 
 - [Quick Start](Quick-Start.md)
