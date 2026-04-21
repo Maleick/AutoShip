@@ -185,7 +185,7 @@ fn use_item_command(item_name: &str) -> Option<String> {
 /// keyspace used elsewhere by the ability tracker.
 fn stable_cooldown_key(namespace: &str, key: &str) -> i32 {
     let mut hash = 0x811C_9DC5u32;
-    for byte in namespace.bytes().chain([b':']).chain(key.bytes()) {
+    for byte in namespace.bytes().chain(*b":").chain(key.bytes()) {
         hash ^= u32::from(byte);
         hash = hash.wrapping_mul(0x0100_0193);
     }

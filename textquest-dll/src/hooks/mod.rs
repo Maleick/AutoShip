@@ -16,6 +16,7 @@ pub mod fingerprint;
 pub mod game_loop;
 pub mod hwbp;
 pub mod integrity;
+pub mod memcheck;
 pub mod movement;
 pub mod overlay;
 pub mod packet_hook;
@@ -69,6 +70,7 @@ pub fn remove_all() {
     hwbp::remove_all();
     fingerprint::remove();
     chat::remove();
+    memcheck::remove();
     timing::remove();
     set_game_state::remove();
     timing::remove();
