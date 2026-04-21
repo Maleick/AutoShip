@@ -34,6 +34,8 @@ mod login;
 #[allow(dead_code)]
 mod nav;
 #[allow(dead_code)]
+pub mod overlay;
+#[allow(dead_code)]
 mod rewards;
 #[allow(dead_code)]
 mod stealth;
