@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -109,6 +110,31 @@ class WikiValidationTests(unittest.TestCase):
                 with mock.patch.object(self.module, "run", return_value=result):
                     with self.assertRaisesRegex(self.module.WikiSyncError, "did not return a token"):
                         self.module.github_token()
+
+    def test_sync_static_dirs_rejects_symlink_assets(self) -> None:
+        if os.name == "nt":
+            self.skipTest("symlink creation is not reliable in this Windows test environment")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            source_root = tmp_root / "source"
+            wiki_root = tmp_root / "wiki"
+            assets_dir = source_root / "assets"
+            assets_dir.mkdir(parents=True)
+            wiki_root.mkdir()
+
+            outside_file = tmp_root / "secret.txt"
+            outside_file.write_text("top secret\n", encoding="utf-8")
+            (assets_dir / "public.txt").write_text("public\n", encoding="utf-8")
+            (assets_dir / "leak.txt").symlink_to(outside_file)
+
+            original_source_dir = self.module.SOURCE_DIR
+            self.module.SOURCE_DIR = source_root
+            try:
+                with self.assertRaisesRegex(self.module.WikiSyncError, "Refusing to follow symlink"):
+                    self.module.sync_static_dirs(wiki_root)
+            finally:
+                self.module.SOURCE_DIR = original_source_dir
 
 
 if __name__ == "__main__":

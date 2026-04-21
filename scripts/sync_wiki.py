@@ -298,6 +298,19 @@ def sync_files(source_files: dict[str, Path], wiki_dir: Path) -> list[str]:
     return actions
 
 
+def regular_files_under(root: Path, *, label: str) -> dict[Path, Path]:
+    files: dict[Path, Path] = {}
+    root = root.resolve()
+
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            fail(f"Refusing to follow symlink in {label}: {path}")
+        if path.is_file():
+            files[path.relative_to(root)] = path
+
+    return files
+
+
 def sync_static_dirs(wiki_dir: Path) -> list[str]:
     actions: list[str] = []
     for directory_name in STATIC_DIRS:
@@ -306,16 +319,12 @@ def sync_static_dirs(wiki_dir: Path) -> list[str]:
             continue
 
         target_dir = wiki_dir / directory_name
-        source_files = {
-            path.relative_to(source_dir): path
-            for path in source_dir.rglob("*")
-            if path.is_file()
-        }
-        target_files = {
-            path.relative_to(target_dir): path
-            for path in target_dir.rglob("*")
-            if path.is_file()
-        } if target_dir.exists() else {}
+        source_files = regular_files_under(source_dir, label=f"{directory_name} source")
+        target_files = (
+            regular_files_under(target_dir, label=f"{directory_name} target")
+            if target_dir.exists()
+            else {}
+        )
 
         for relative_path, source in sorted(source_files.items()):
             target = target_dir / relative_path
