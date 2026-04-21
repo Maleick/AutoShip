@@ -72,6 +72,7 @@ plugins:
         _Sidebar.md
         Research-*.md
         Security-and-Anti-Detection-Notes.md
+        Stealth-Stack-Reference.md
         Offsets-EQ-Internals-and-MacroQuest-References.md
 nav:
   - Home: Home.md

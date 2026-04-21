@@ -1,5 +1,7 @@
 # Security and Anti-Detection Notes
 
+> **Developer reference:** See [`Stealth-Stack-Reference.md`](Stealth-Stack-Reference.md) for comprehensive module-by-module documentation of all stealth and anti-detection implementation.
+
 ## Canonical Inputs
 
 Use these sources in this order:
