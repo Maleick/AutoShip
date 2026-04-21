@@ -165,13 +165,14 @@ mod tests {
             flink: std::ptr::null_mut(),
             blink: std::ptr::null_mut(),
         };
+        let self_ptr = &mut e as *mut ListEntry;
         e.flink = &mut e;
         e.blink = &mut e;
         unsafe {
             unlink_entry(&mut e).expect("self-referential unlink should not fail");
         }
-        assert_eq!(e.flink, &mut e as *mut ListEntry);
-        assert_eq!(e.blink, &mut e as *mut ListEntry);
+        assert_eq!(e.flink, self_ptr);
+        assert_eq!(e.blink, self_ptr);
     }
     #[test]
     fn unlink_entry_removes_from_chain() {

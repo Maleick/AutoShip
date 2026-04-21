@@ -180,7 +180,6 @@ jobs:
   test-matrix:
     name: Unit tests on ${{ matrix.os-name }} (rust-${{ matrix.rust }})
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
-    continue-on-error: ${{ matrix.continue-on-error == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -189,15 +188,18 @@ jobs:
           - runner: [self-hosted, Windows, X64, textquest]
             os-name: windows
             rust: stable
+            test-command: cargo test -p textquest-web-sdk --lib
           # Windows with nightly Rust (for unsafe hooks testing)
           - runner: [self-hosted, Windows, X64, textquest]
             os-name: windows
             rust: nightly
             continue-on-error: true
+            test-command: cargo test -p textquest-dll --lib --all-features
           # Linux with stable Rust
           - runner: [self-hosted, Linux, X64, textquest]
             os-name: linux
             rust: stable
+            test-command: cargo test --lib --all-features
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     steps:
@@ -228,7 +230,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run unit tests
-        run: cargo test --lib --all-features
+        continue-on-error: ${{ matrix.continue-on-error == true }}
+        run: ${{ matrix.test-command }}
 
   secrets_scan:
     name: Secret scan

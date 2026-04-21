@@ -106,7 +106,7 @@ fn verify_dll_hash(dll_path: &Path, expected_hash: &str) -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(test, windows))]
+#[cfg(test)]
 mod tests {
     use super::verify_dll_hash;
     use crate::inject::dll_prep::compute_file_hash;

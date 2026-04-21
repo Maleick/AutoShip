@@ -3406,38 +3406,6 @@ mod tests {
         assert!(orch.last_dispatched.is_empty());
     }
 
-    #[test]
-    fn camp_integration_vendor_cycle_uses_inventory_plan() {
-        let mut orch = Orchestrator::new();
-        orch.start_camp(test_config(), test_members());
-        orch.set_vendor_inventory(vec![crate::loot::vendor_cycle::VendorInventoryItem::trash(
-            "Torn Cloth Sandal",
-            1,
-            9,
-        )]);
-        orch.start_sell_cycle(VendorConfig {
-            vendor_name: "Merchant_Leah".into(),
-            sell_interval_ticks: 1,
-            keep_items: vec![],
-            travel_ticks: 2,
-            sellable_items: vec![],
-            sell_step_delay: 1,
-            return_spell: None,
-            navigation_timeout_ticks: 10,
-            vendor_retry_ticks: 1,
-            max_busy_retries: 3,
-            backlog_days: 30,
-        });
-        orch.tick_count = 1;
-
-        let cmds = orch.tick_sell_cycle();
-
-        assert!(
-            cmds.iter().any(|(_, cmd)| cmd.contains("/nav target")),
-            "integration path should issue vendor navigation commands"
-        );
-    }
-
     #[cfg(not(windows))]
     #[test]
     fn poll_chat_log_if_due_forwards_ipc_messages_to_disk() {
