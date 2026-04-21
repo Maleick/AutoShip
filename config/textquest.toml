@@ -48,13 +48,13 @@ eq_path = "C:\\Path\\To\\EverQuest"
 # multicast_ttl = 1
 
 # ─── Optional Network Box Chat ───
-# Enable this to expose an EQBC-style TCP relay for `/bc`, `/bca`, `/bcaa`,
-# and `/bct` commands across multiple TextQuest machines.
-# Set `host` to the relay server machine. When `auto_connect` is false, the
-# local TextQuest instance only listens for inbound peers on `port`.
+# Enable this to expose a local EQBC-style TCP relay for `/bc`, `/bca`,
+# `/bcaa`, and `/bct` commands.
+# The listener is bound to localhost only. When `auto_connect` is false, the
+# local TextQuest instance only listens for peers on `port` from the same host.
 # [box_chat]
 # enabled = true
-# host = "192.168.1.25"
+# host = "127.0.0.1"
 # port = 2112
 # auto_connect = true
 

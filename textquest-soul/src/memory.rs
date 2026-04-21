@@ -25,6 +25,8 @@ const CIRCUIT_BREAKER_THRESHOLD: u32 = 5;
 
 /// Maximum number of entries held in the in-memory fallback cache.
 const FALLBACK_CACHE_MAX: usize = 256;
+/// Maximum number of memory rows summarized in one hourly pass.
+const SUMMARY_MEMORY_ROWS_MAX: usize = 100;
 
 /// Health state shared across retried operations.
 #[derive(Debug, Default)]
@@ -777,7 +779,8 @@ impl MemoryStore {
                AND decayed = 0
                AND created_at >= datetime(?2, 'unixepoch')
                AND created_at <= datetime(?3, 'unixepoch')
-             ORDER BY created_at ASC",
+             ORDER BY created_at ASC
+             LIMIT ?4",
         )?;
 
         struct MemSummaryRow {
@@ -788,14 +791,22 @@ impl MemoryStore {
         }
 
         let rows = stmt
-            .query_map(params![character_id, period_start, period_end], |row| {
-                Ok(MemSummaryRow {
-                    event_type: row.get(0)?,
-                    event_json: row.get(1)?,
-                    zone: row.get(2)?,
-                    mood: row.get(3)?,
-                })
-            })?
+            .query_map(
+                params![
+                    character_id,
+                    period_start,
+                    period_end,
+                    SUMMARY_MEMORY_ROWS_MAX as i64,
+                ],
+                |row| {
+                    Ok(MemSummaryRow {
+                        event_type: row.get(0)?,
+                        event_json: row.get(1)?,
+                        zone: row.get(2)?,
+                        mood: row.get(3)?,
+                    })
+                },
+            )?
             .collect::<std::result::Result<Vec<_>, _>>()
             .context("Failed to query memories for summary")?;
 
@@ -1622,6 +1633,52 @@ mod tests {
         let store = open_memory_store();
         let result = store.record_summary(1, "start", "end", "Did things.", None);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn generate_summary_limits_rows_per_hour() {
+        let store = open_memory_store();
+
+        for i in 0..150 {
+            let player_name = format!("Player{i}");
+            let event = SoulEvent::PlayerChat {
+                player_name: player_name.clone(),
+                sentiment: 0.0,
+            };
+            let event_json = serde_json::to_string(&event).unwrap();
+            store
+                .conn
+                .execute(
+                    "INSERT INTO memories (character_id, event_type, event_json, zone, \
+                     mood_at_time, importance, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime(?7, 'unixepoch'))",
+                    params![
+                        1,
+                        "PlayerChat",
+                        event_json,
+                        Option::<String>::None,
+                        "Neutral",
+                        1.0,
+                        i as i64,
+                    ],
+                )
+                .unwrap();
+        }
+
+        let summary = store.generate_summary(1, 0, 10_000).unwrap();
+        assert!(
+            summary.contains("chat with Player0"),
+            "summary should include the earliest row in the capped window"
+        );
+        assert!(
+            !summary.contains("chat with Player149"),
+            "summary should not include rows beyond the summary cap"
+        );
+        assert!(
+            summary.lines().count() <= SUMMARY_MEMORY_ROWS_MAX + 1,
+            "summary should contain at most {} memory lines plus the mood trend",
+            SUMMARY_MEMORY_ROWS_MAX
+        );
     }
 
     #[test]

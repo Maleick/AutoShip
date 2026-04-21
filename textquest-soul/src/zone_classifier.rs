@@ -88,7 +88,7 @@ impl ZoneDatabase {
     /// Look up a zone by its short name. Returns default for unknown zones.
     #[must_use]
     pub fn lookup(&self, zone: &str) -> &ZoneClassification {
-        self.zones.get(zone).unwrap_or_else(|| &DEFAULT_ZONE)
+        self.zones.get(zone).unwrap_or(&DEFAULT_ZONE)
     }
 
     fn load_defaults(&mut self) {
@@ -300,20 +300,14 @@ pub fn apply_zone_constraints(
 ) {
     for pb in weights.iter_mut() {
         match pb.behavior {
-            IdleBehaviorType::Fish => {
-                if !zone.has_water {
-                    pb.weight = 0.0;
-                }
+            IdleBehaviorType::Fish if !zone.has_water => {
+                pb.weight = 0.0;
             }
-            IdleBehaviorType::VendorBrowse => {
-                if !zone.has_vendors {
-                    pb.weight = 0.0;
-                }
+            IdleBehaviorType::VendorBrowse if !zone.has_vendors => {
+                pb.weight = 0.0;
             }
-            IdleBehaviorType::Craft => {
-                if !zone.has_tradeskill {
-                    pb.weight = 0.0;
-                }
+            IdleBehaviorType::Craft if !zone.has_tradeskill => {
+                pb.weight = 0.0;
             }
             IdleBehaviorType::Wander => {
                 if zone.dangerous {
@@ -345,10 +339,8 @@ pub fn apply_zone_constraints(
                     pb.weight *= 1.4;
                 }
             }
-            IdleBehaviorType::BioBrk => {
-                if zone.is_social_hub {
-                    pb.weight *= 1.5;
-                }
+            IdleBehaviorType::BioBrk if zone.is_social_hub => {
+                pb.weight *= 1.5;
             }
             IdleBehaviorType::Sit => {
                 // Anxious in dangerous zone → strongly prefer sitting

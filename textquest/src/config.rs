@@ -265,7 +265,7 @@ pub struct AppConfig {
     #[serde(default)]
     pub discovery: PeerDiscoveryConfig,
 
-    /// TCP relay settings for EQBC-style cross-machine box-chat commands.
+    /// TCP relay settings for EQBC-style box-chat commands on the local host.
     #[serde(default)]
     pub box_chat: BoxChatConfig,
 

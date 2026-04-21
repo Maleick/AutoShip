@@ -194,7 +194,7 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         aliases: &[],
         section: HelpSection::Targeting,
         usage: "bc /<slash command>",
-        summary: "Relay a slash command to local clients and connected box-chat peers.",
+        summary: "Relay a slash command to local clients and connected local box-chat peers.",
         example: "bc /assist MainTank",
     },
     CommandEntry {

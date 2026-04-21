@@ -1,9 +1,9 @@
-//! EQBC-style box-chat runtime for cross-machine slash-command relay.
+//! EQBC-style box-chat runtime for local-machine slash-command relay.
 
 use std::{
     collections::{HashMap, HashSet},
     io::{BufRead, BufReader, Write},
-    net::{TcpListener, TcpStream},
+    net::{SocketAddr, TcpListener, TcpStream},
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex, OnceLock,
@@ -210,6 +210,7 @@ struct ListenerHandle {
     stop: Arc<AtomicBool>,
     join: thread::JoinHandle<()>,
     hub: Arc<HubState>,
+    bind_addr: SocketAddr,
 }
 
 impl ListenerHandle {
@@ -920,8 +921,11 @@ fn send_known_controller_states_to_peer(hub: &HubState, shared: &SharedState, pe
 fn start_listener(port: u16, shared: Arc<SharedState>) -> Result<ListenerHandle> {
     let stop = Arc::new(AtomicBool::new(false));
     let hub = Arc::new(HubState::default());
-    let listener = TcpListener::bind(("0.0.0.0", port))
-        .with_context(|| format!("failed to bind box-chat listener on 0.0.0.0:{port}"))?;
+    let listener = TcpListener::bind(("127.0.0.1", port))
+        .with_context(|| format!("failed to bind box-chat listener on 127.0.0.1:{port}"))?;
+    let bind_addr = listener
+        .local_addr()
+        .context("failed to query box-chat listener local address")?;
     listener
         .set_nonblocking(true)
         .context("failed to set box-chat listener nonblocking")?;
@@ -933,7 +937,12 @@ fn start_listener(port: u16, shared: Arc<SharedState>) -> Result<ListenerHandle>
         .spawn(move || listener_loop(listener, stop_flag, hub_state, shared))
         .context("failed to spawn box-chat listener thread")?;
 
-    Ok(ListenerHandle { stop, join, hub })
+    Ok(ListenerHandle {
+        stop,
+        join,
+        hub,
+        bind_addr,
+    })
 }
 
 fn listener_loop(
@@ -945,6 +954,10 @@ fn listener_loop(
     while !stop.load(Ordering::Relaxed) {
         match listener.accept() {
             Ok((stream, addr)) => {
+                if !addr.ip().is_loopback() {
+                    tracing::warn!(%addr, "Rejected non-loopback box-chat peer");
+                    continue;
+                }
                 tracing::info!(%addr, "Box-chat peer connected");
                 spawn_hub_peer(
                     stream,
@@ -1554,6 +1567,17 @@ mod tests {
                 .is_err(),
             "stale duplicate disconnect should not broadcast a tombstone"
         );
+    }
+
+    #[test]
+    fn listener_binds_to_loopback_only() {
+        let shared = Arc::new(SharedState::default());
+        let listener = start_listener(0, Arc::clone(&shared)).expect("listener");
+        assert!(
+            listener.bind_addr.ip().is_loopback(),
+            "box-chat listener should bind to loopback only"
+        );
+        listener.stop();
     }
 
     #[test]

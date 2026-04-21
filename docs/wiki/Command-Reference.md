@@ -123,7 +123,7 @@ Top-level commands come from `KNOWN_COMMANDS` and the parser in `textquest/src/t
 - `:cfg` is normalized to `:config`
 - `:cmds` is normalized to `:commands`
 - `:launch` routes to the login flow
-- `:bc`, `:bca`, `:bcaa`, and `:bct` use the `[box_chat]` relay in `config/textquest.toml`
+- `:bc`, `:bca`, `:bcaa`, and `:bct` use the local `[box_chat]` relay in `config/textquest.toml`
 
 Important current caveat:
 
