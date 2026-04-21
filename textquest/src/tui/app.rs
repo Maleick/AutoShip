@@ -3498,33 +3498,35 @@ impl App {
             "automationPaused": self.gm_auto_paused,
         });
 
-        tokio::spawn(async move {
-            let client = match reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(2))
-                .build()
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::debug!(%e, "Failed to create HTTP client for GM sync");
-                    return;
-                }
-            };
+        let _ = std::thread::Builder::new()
+            .name("gm-state-sync".to_string())
+            .spawn(move || {
+                let client = match reqwest::blocking::Client::builder()
+                    .timeout(std::time::Duration::from_secs(2))
+                    .build()
+                {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::debug!(%e, "Failed to create HTTP client for GM sync");
+                        return;
+                    }
+                };
 
-            match client.post(&url).json(&payload).send().await {
-                Ok(resp) if resp.status().is_success() => {
-                    tracing::debug!("GM state synced to web dashboard");
+                match client.post(&url).json(&payload).send() {
+                    Ok(resp) if resp.status().is_success() => {
+                        tracing::debug!("GM state synced to web dashboard");
+                    }
+                    Ok(resp) => {
+                        tracing::debug!(
+                            status = %resp.status(),
+                            "GM state sync to web returned non-success"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::debug!(%e, "Failed to sync GM state to web");
+                    }
                 }
-                Ok(resp) => {
-                    tracing::debug!(
-                        status = %resp.status(),
-                        "GM state sync to web returned non-success"
-                    );
-                }
-                Err(e) => {
-                    tracing::debug!(%e, "Failed to sync GM state to web");
-                }
-            }
-        });
+            });
     }
 
     fn check_watched_spawn_changes(&mut self) {
