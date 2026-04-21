@@ -216,3 +216,16 @@ jobs:
             } catch (error) {
               core.warning(`Skipped deleting merged branch ${ref}: ${error.message}`);
             }
+
+      - name: Checkout merged branch
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Publish wiki changes to TextQuest.wiki
+        run: python3 scripts/sync_wiki.py --push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
