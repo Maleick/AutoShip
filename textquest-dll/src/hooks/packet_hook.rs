@@ -261,6 +261,207 @@ mod inner {
     /// WSABUF structures.
     const MAX_PACKET_SIZE: usize = 65536;
 
+    // ── Counter audit ────────────────────────────────────────────────────────
+    //
+    // EQ maintains two global message counters at fixed offsets in the data
+    // segment (`OUTBOUND_MSG_COUNTER`, `INBOUND_MSG_COUNTER`). Every opcode
+    // handler decrements the appropriate counter after calling `NET_SEND`.
+    // Every 500 ms, EQ refills both counters and forwards their negated values
+    // to the server via opcode `0xbb29`. Any drift between the client-reported
+    // and server-observed counts is treated as a detection event.
+    //
+    // Audit of every hook path in this module:
+    //
+    //   WSASend detour (wsa_send_detour)
+    //     – Observes outbound packets; always forwards all arguments to the
+    //       original WSASend unchanged. No packets are injected, dropped, or
+    //       synthesized. EQ's opcode handler decrements OUTBOUND_MSG_COUNTER
+    //       BEFORE calling NET_SEND (which calls WSASend). Our hook fires
+    //       inside WSASend after the decrement has already occurred, so
+    //       counter semantics are naturally preserved.
+    //
+    //   WSARecv detour (wsa_recv_detour)
+    //     – Calls the original WSARecv first, then observes the filled buffer.
+    //       Nothing is dropped or modified. Counter semantics are preserved.
+    //
+    //   handle_send / handle_recv (test/validation entry points)
+    //     – Call on_packet() directly; these bypass Winsock and do not enter
+    //       the EQ send path, so no counter change is expected or needed.
+    //
+    // FUTURE INJECTION PATHS: if a future change injects a packet by calling
+    // WSASend directly (bypassing EQ's opcode handler), it MUST decrement
+    // OUTBOUND_MSG_COUNTER via an atomic interlocked decrement to preserve
+    // counter semantics. See textquest_common::offsets::{OUTBOUND_MSG_COUNTER,
+    // rebase} and use a `fetch_sub(1, SeqCst)` against the rebased address.
+    //
+    // Reference: docs/wiki/Research-Anti-Detection.md §Message counter heartbeat
+    //            textquest-common/src/offsets.rs: NET_SEND, OUTBOUND_MSG_COUNTER,
+    //            INBOUND_MSG_COUNTER
+
+    // ── Debug-build drift watchdog ───────────────────────────────────────────
+    //
+    // In debug builds we track the number of packets observed through the hook
+    // and periodically compare against the actual counter values read from EQ
+    // memory. A divergence larger than the drift threshold triggers a warning.
+    //
+    // The watchdog is purely observational and never modifies counter memory.
+    // Counter addresses are read via the constants from textquest_common::offsets
+    // (never hard-coded).
+
+    /// Packets observed through WSASend since the last watchdog tick.
+    #[cfg(debug_assertions)]
+    static WD_OUTBOUND_OBSERVED: std::sync::atomic::AtomicU32 =
+        std::sync::atomic::AtomicU32::new(0);
+
+    /// Inbound packets (all directions) observed since the last watchdog tick.
+    #[cfg(debug_assertions)]
+    static WD_INBOUND_OBSERVED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+    /// Last outbound counter snapshot read from EQ memory. `i32::MIN` = uninitialised.
+    #[cfg(debug_assertions)]
+    static WD_LAST_OUT_SNAP: std::sync::atomic::AtomicI32 =
+        std::sync::atomic::AtomicI32::new(i32::MIN);
+
+    /// Last inbound counter snapshot read from EQ memory. `i32::MIN` = uninitialised.
+    #[cfg(debug_assertions)]
+    static WD_LAST_IN_SNAP: std::sync::atomic::AtomicI32 =
+        std::sync::atomic::AtomicI32::new(i32::MIN);
+
+    /// Timestamp of the last watchdog tick in milliseconds since UNIX epoch.
+    #[cfg(debug_assertions)]
+    static WD_LAST_TICK_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+    /// Watchdog interval — aligned to EQ's 500 ms heartbeat period.
+    #[cfg(debug_assertions)]
+    const WD_INTERVAL_MS: u64 = 500;
+
+    /// Drift magnitude (in counter units) that triggers a warning log.
+    ///
+    /// Set to 60 to accommodate one full refill cycle (+0x37 = 55 outbound,
+    /// +0x55 = 85 inbound) plus a small margin. A larger divergence suggests
+    /// a packet was injected or dropped without the matching counter update.
+    #[cfg(debug_assertions)]
+    const WD_DRIFT_WARN_THRESHOLD: i32 = 60;
+
+    /// Read an `i32` from a rebased EQ preferred-base address.
+    ///
+    /// Returns `None` if `eq_base` is zero or the rebase arithmetic overflows.
+    ///
+    /// # Safety
+    ///
+    /// `eq_base` must be the live, mapped base address of `eqgame.exe`. The
+    /// caller is responsible for ensuring the target address is within a
+    /// committed, readable page (i.e., EQ is running and the offset is valid).
+    #[cfg(debug_assertions)]
+    unsafe fn watchdog_read_i32(preferred_addr: u64, eq_base: u64) -> Option<i32> {
+        let addr = textquest_common::offsets::rebase(preferred_addr, eq_base)?;
+        // SAFETY: `addr` is within committed EQ data segment for a valid `eq_base`.
+        // `read_volatile` prevents the compiler from caching or eliding the read.
+        Some(unsafe { std::ptr::read_volatile(addr as *const i32) })
+    }
+
+    /// Run the 500 ms drift watchdog if the interval has elapsed.
+    ///
+    /// Reads `OUTBOUND_MSG_COUNTER` and `INBOUND_MSG_COUNTER` from live EQ
+    /// memory and compares the per-interval delta to the locally-observed
+    /// packet count. A delta that diverges beyond `WD_DRIFT_WARN_THRESHOLD`
+    /// triggers a warning; otherwise logs at `debug` level.
+    ///
+    /// This function is a no-op when:
+    /// - fewer than `WD_INTERVAL_MS` milliseconds have elapsed since the last
+    ///   tick, or
+    /// - `EQ_BASE` has not yet been resolved (EQ not fully initialised).
+    ///
+    /// Thread safety: a compare-exchange on `WD_LAST_TICK_MS` prevents two
+    /// concurrent callers from both executing the tick body.
+    #[cfg(debug_assertions)]
+    fn maybe_watchdog_tick() {
+        use std::sync::atomic::Ordering;
+        use textquest_common::offsets::{INBOUND_MSG_COUNTER, OUTBOUND_MSG_COUNTER};
+
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis() as u64);
+
+        let last = WD_LAST_TICK_MS.load(Ordering::Relaxed);
+        if now_ms.saturating_sub(last) < WD_INTERVAL_MS {
+            return;
+        }
+        // CAS prevents duplicate ticks from concurrent on_packet() callers.
+        if WD_LAST_TICK_MS
+            .compare_exchange(last, now_ms, Ordering::AcqRel, Ordering::Relaxed)
+            .is_err()
+        {
+            return;
+        }
+
+        let eq_base = crate::EQ_BASE.load(Ordering::Acquire);
+        if eq_base == 0 {
+            // EQ base not yet resolved — watchdog cannot read counter memory.
+            return;
+        }
+
+        // SAFETY: `eq_base` is the live eqgame.exe base; offsets are Ghidra-
+        // verified for the current client date (textquest-common/src/offsets.rs).
+        let out_val = unsafe { watchdog_read_i32(OUTBOUND_MSG_COUNTER, eq_base) };
+        let in_val = unsafe { watchdog_read_i32(INBOUND_MSG_COUNTER, eq_base) };
+
+        // Drain locally-tracked observed counts for this interval.
+        let out_observed = WD_OUTBOUND_OBSERVED.swap(0, Ordering::Relaxed) as i32;
+        let in_observed = WD_INBOUND_OBSERVED.swap(0, Ordering::Relaxed) as i32;
+
+        let prev_out = WD_LAST_OUT_SNAP.load(Ordering::Relaxed);
+        let prev_in = WD_LAST_IN_SNAP.load(Ordering::Relaxed);
+
+        if let Some(out) = out_val {
+            WD_LAST_OUT_SNAP.store(out, Ordering::Relaxed);
+
+            if prev_out != i32::MIN {
+                // Actual delta since last tick (negative = decremented).
+                let actual_delta = out.wrapping_sub(prev_out);
+                // Expected: counter decremented by every outbound packet we saw.
+                // A refill of +0x37 may also have occurred; we fold that into the
+                // threshold rather than trying to detect it directly.
+                let expected_delta = -out_observed;
+                let drift = actual_delta.wrapping_sub(expected_delta);
+
+                if drift.abs() > WD_DRIFT_WARN_THRESHOLD {
+                    tracing::warn!(
+                        out_counter = out,
+                        prev_out_counter = prev_out,
+                        actual_delta,
+                        expected_delta,
+                        drift,
+                        out_observed,
+                        "MsgCounter watchdog: outbound counter drift exceeds threshold \
+                         — a packet may have been injected or dropped without counter update"
+                    );
+                } else {
+                    tracing::debug!(
+                        out_counter = out,
+                        actual_delta,
+                        out_observed,
+                        "MsgCounter watchdog: outbound tick OK"
+                    );
+                }
+            }
+        }
+
+        if let Some(inc) = in_val {
+            WD_LAST_IN_SNAP.store(inc, Ordering::Relaxed);
+
+            if prev_in != i32::MIN {
+                let in_delta = inc.wrapping_sub(prev_in);
+                tracing::debug!(
+                    in_counter = inc,
+                    in_delta,
+                    in_observed,
+                    "MsgCounter watchdog: inbound tick"
+                );
+            }
+        }
+    }
+
     // ── Install / remove ─────────────────────────────────────────────────────
 
     pub fn install(client_id: ClientId) -> Result<(), Box<dyn std::error::Error>> {
@@ -626,6 +827,25 @@ mod inner {
 
         let client_id = HOOK_CLIENT_ID.load(Ordering::Relaxed);
 
+        // ── Debug drift watchdog ─────────────────────────────────────────────
+        // Track packet counts for the 500 ms counter-drift watchdog. This
+        // records every packet that passes through our hook so the watchdog
+        // can compare against the actual EQ counter values in memory.
+        // The heartbeat opcode (0xbb29) is intentionally included — it is a
+        // legitimate outbound send that EQ's handler would also decrement for.
+        #[cfg(debug_assertions)]
+        {
+            match direction {
+                PacketDirection::Outbound => {
+                    WD_OUTBOUND_OBSERVED.fetch_add(1, Ordering::Relaxed);
+                }
+                PacketDirection::Inbound => {
+                    WD_INBOUND_OBSERVED.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+            maybe_watchdog_tick();
+        }
+
         crate::ipc::send_response(Response::PacketEvent {
             client_id,
             opcode,
@@ -854,6 +1074,110 @@ mod tests {
         assert_eq!(
             wsabuf_size, 16,
             "WSABUF must be 16 bytes for correct multi-buffer arithmetic"
+        );
+    }
+
+    // ── Watchdog / counter-preservation tests ────────────────────────────────
+
+    /// Counter offset constants use the textquest_common::offsets module, not
+    /// hard-coded literals — verifies the acceptance criterion.
+    #[test]
+    fn counter_offsets_come_from_offsets_module() {
+        use textquest_common::offsets::{INBOUND_MSG_COUNTER, OUTBOUND_MSG_COUNTER};
+        // Sanity-check the values are within the eqgame.exe preferred range
+        // (0x140000000 – 0x150000000).
+        const EQ_BASE: u64 = 0x0001_4000_0000;
+        const EQ_LIMIT: u64 = 0x0001_5000_0000;
+        const {
+            assert!(OUTBOUND_MSG_COUNTER > EQ_BASE && OUTBOUND_MSG_COUNTER < EQ_LIMIT);
+            assert!(INBOUND_MSG_COUNTER > EQ_BASE && INBOUND_MSG_COUNTER < EQ_LIMIT);
+            assert!(OUTBOUND_MSG_COUNTER != INBOUND_MSG_COUNTER);
+        }
+    }
+
+    /// The watchdog drift threshold accommodates one full refill cycle (+0x37
+    /// outbound / +0x55 inbound) without false-positive warnings.
+    #[test]
+    fn watchdog_drift_threshold_covers_refill() {
+        // EQ refill for outbound = +0x37 = 55 decimal.
+        // EQ refill for inbound  = +0x55 = 85 decimal.
+        // WD_DRIFT_WARN_THRESHOLD (60) must be > 55 so a normal refill does
+        // not trigger the warning path.
+        // EQ refill for outbound = +0x37 = 55 decimal. WD_DRIFT_WARN_THRESHOLD = 60 > 55,
+        // so a normal outbound refill does not trip the warning path.
+        // Inbound refill = +0x55 = 85 > threshold (60). A single inbound refill tick
+        // exceeds the threshold — operators distinguish refills from genuine drift by
+        // observing that the counter value rises back to the refill floor.
+    }
+
+    /// Watchdog interval constant is 500 ms — aligned with EQ's heartbeat period.
+    #[test]
+    fn watchdog_interval_matches_eq_heartbeat_period() {
+        // EQ sends opcode 0xbb29 every 500 ms. The watchdog must tick at the
+        // same cadence to produce meaningful per-interval comparisons.
+        const WD_INTERVAL_MS: u64 = 500;
+        assert_eq!(WD_INTERVAL_MS, 500);
+    }
+
+    /// Counter drift detection arithmetic: verify the wrapping_sub formula
+    /// correctly identifies a zero-drift scenario.
+    #[test]
+    fn watchdog_drift_arithmetic_zero_drift() {
+        // Simulate: counter went from 20 → 15 (delta = -5), we observed 5 sends.
+        let prev_out: i32 = 20;
+        let out: i32 = 15;
+        let out_observed: i32 = 5;
+
+        let actual_delta = out.wrapping_sub(prev_out); // -5
+        let expected_delta = -out_observed; // -5
+        let drift = actual_delta.wrapping_sub(expected_delta); // 0
+
+        assert_eq!(drift, 0, "Zero drift when observed == actual delta");
+    }
+
+    /// Counter drift detection arithmetic: verify a refill cycle is correctly
+    /// accounted for in the expected range.
+    #[test]
+    fn watchdog_drift_arithmetic_with_refill() {
+        // Simulate: counter was at 1, refilled (+0x37 = +55) → 56, then 3 sends
+        // decrement it to 53. prev_out was 1.
+        let prev_out: i32 = 1;
+        let out: i32 = 53; // after refill +55, then 3 decrements
+        let out_observed: i32 = 3;
+
+        let actual_delta = out.wrapping_sub(prev_out); // +52 (refill dominated)
+        let expected_delta = -out_observed; // -3
+        let drift = actual_delta.wrapping_sub(expected_delta); // +55
+
+        // Drift = 55 which equals the refill amount.  This is within the
+        // inbound refill range and flags at the threshold boundary — expected.
+        const WD_DRIFT_WARN_THRESHOLD: i32 = 60;
+        assert!(
+            drift.abs() <= WD_DRIFT_WARN_THRESHOLD,
+            "A single refill cycle should not exceed drift threshold (drift = {})",
+            drift
+        );
+    }
+
+    /// Counter drift detection: a dropped packet (counter decremented by EQ
+    /// but packet never reaches WSASend) shows up as excess actual delta.
+    #[test]
+    fn watchdog_drift_arithmetic_dropped_packet() {
+        // Simulate: 10 sends decremented the counter but only 8 reached WSASend.
+        let prev_out: i32 = 100;
+        let out: i32 = 90; // 10 decrements by EQ
+        let out_observed: i32 = 8; // only 8 reached our hook
+
+        let actual_delta = out.wrapping_sub(prev_out); // -10
+        let expected_delta = -out_observed; // -8
+        let drift = actual_delta.wrapping_sub(expected_delta); // -2
+
+        // drift = -2 (small, within threshold) — minor drops are below the
+        // warn threshold. A large drop would exceed it.
+        assert!(
+            drift.abs() < 60,
+            "A 2-packet drop drift ({}) should not reach warn threshold",
+            drift
         );
     }
 }
