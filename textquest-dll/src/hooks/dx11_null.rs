@@ -265,6 +265,9 @@ unsafe extern "system" fn hooked_present(
     let original: PresentFn = unsafe { core::mem::transmute(ORIG_PRESENT.load(Ordering::Acquire)) };
     let result = unsafe { original(this, sync_interval, flags) };
 
+    // Tick overlay frame timing on every present.
+    super::overlay::tick();
+
     // Clear screenshot passthrough after the frame has been presented.
     if SCREENSHOT_FRAME.swap(false, Ordering::AcqRel) {
         tracing::debug!("Screenshot frame completed — draw suppression re-enabled");
@@ -750,7 +753,25 @@ mod inner {
         };
         unsafe { release(device_ptr) };
 
+        // Initialize the overlay with the current backbuffer dimensions.
+        if let Some((w, h)) = get_swap_chain_dims(swap_chain) {
+            super::super::overlay::initialize(w, h);
+        } else {
+            tracing::warn!("Could not read swap chain dims — overlay init skipped");
+        }
+
         Ok(())
+    }
+
+    /// Read backbuffer width and height from a swap chain pointer.
+    fn get_swap_chain_dims(swap_chain: *mut core::ffi::c_void) -> Option<(u32, u32)> {
+        use windows::{Win32::Graphics::Dxgi::IDXGISwapChain, core::Interface};
+        let sc: IDXGISwapChain = unsafe { IDXGISwapChain::from_raw_borrowed(&swap_chain)?.clone() };
+        let backbuffer: windows::Win32::Graphics::Direct3D11::ID3D11Texture2D =
+            unsafe { sc.GetBuffer(0).ok()? };
+        let mut desc = windows::Win32::Graphics::Direct3D11::D3D11_TEXTURE2D_DESC::default();
+        unsafe { backbuffer.GetDesc(&mut desc) };
+        Some((desc.Width, desc.Height))
     }
 
     /// Capture the swap chain's backbuffer to a BMP file.

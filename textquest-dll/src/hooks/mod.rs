@@ -17,6 +17,7 @@ pub mod game_loop;
 pub mod hwbp;
 pub mod integrity;
 pub mod movement;
+pub mod overlay;
 pub mod packet_hook;
 pub mod render;
 pub mod rotation;
