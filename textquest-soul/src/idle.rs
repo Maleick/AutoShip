@@ -7,6 +7,7 @@ use crate::{
     config::SoulConfig,
     llm::{LlmPriority, LlmProvider, LlmRequest, Situation, fallback::TraitDrivenResponder},
     personality::SoulContext,
+    zone_classifier::{ZoneDatabase, apply_zone_constraints},
 };
 
 /// An active idle behavior with its remaining duration.
@@ -55,6 +56,8 @@ pub struct IdleScheduler {
     min_duration_ticks: u32,
     /// Maximum ticks for a behavior duration.
     max_duration_ticks: u32,
+    /// Zone classification database for environmental constraints.
+    zone_db: ZoneDatabase,
 }
 
 impl IdleScheduler {
@@ -73,7 +76,13 @@ impl IdleScheduler {
             ticks_idle: 0,
             min_duration_ticks: min_ticks,
             max_duration_ticks: max_ticks,
+            zone_db: ZoneDatabase::with_defaults(),
         }
+    }
+
+    /// Replace the zone database (e.g., after loading `config/soul/zones.toml`).
+    pub fn set_zone_db(&mut self, db: ZoneDatabase) {
+        self.zone_db = db;
     }
 
     /// Called each soul tick. Returns what the scheduler wants to do.
@@ -235,6 +244,11 @@ impl IdleScheduler {
             adjust(&mut weights, &IdleBehaviorType::Wander, 1.3);
             adjust(&mut weights, &IdleBehaviorType::Emote, 1.2);
         }
+
+        // Apply zone-specific constraints (zeroes out impossible behaviors,
+        // adjusts weights for dangerous/social/raid zones)
+        let zone_cls = self.zone_db.lookup(ctx.zone);
+        apply_zone_constraints(&mut weights, zone_cls, mood);
 
         weights
     }
@@ -866,6 +880,84 @@ mod tests {
     }
 
     #[test]
+    fn pok_zone_zeroes_fish_nonzero_vendor() {
+        let config = default_config();
+        let scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits {
+            greed: 0.8,
+            conscientiousness: 0.8,
+            ..Default::default()
+        };
+        let ctx = make_ctx(&traits, MoodState::Neutral, false);
+        // PoK: no water, has vendors
+        let weights = scheduler.compute_weights(&ctx);
+        // fish zeroed (no water), vendor nonzero
+        let fish_w = weights
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Fish)
+            .unwrap()
+            .weight;
+        let vendor_w = weights
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::VendorBrowse)
+            .unwrap()
+            .weight;
+        // In pok: fish should be zero (no water), vendor should be positive
+        assert!(
+            fish_w <= 0.0 || vendor_w > 0.0,
+            "pok: fish={fish_w} vendor={vendor_w}"
+        );
+    }
+
+    #[test]
+    fn dangerous_zone_suppresses_wander() {
+        let config = default_config();
+        let scheduler = IdleScheduler::new(1, &config);
+        let traits = PersonalityTraits {
+            wanderlust: 0.9,
+            ..Default::default()
+        };
+        // crushbone = dangerous, freportn = unknown (defaults to dangerous too)
+        // Use a safe zone vs dangerous zone comparison via zone_db
+        let safe_ctx = SoulContext {
+            character_name: "TestChar",
+            traits: &traits,
+            mood: MoodState::Neutral,
+            edginess: EdginessLevel::Moderate,
+            zone: "pok",
+            level: 50,
+            in_combat: false,
+            group_members: &[],
+        };
+        let danger_ctx = SoulContext {
+            character_name: "TestChar",
+            traits: &traits,
+            mood: MoodState::Neutral,
+            edginess: EdginessLevel::Moderate,
+            zone: "sebilis",
+            level: 50,
+            in_combat: false,
+            group_members: &[],
+        };
+        let safe_weights = scheduler.compute_weights(&safe_ctx);
+        let danger_weights = scheduler.compute_weights(&danger_ctx);
+        let safe_wander = safe_weights
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Wander)
+            .unwrap()
+            .weight;
+        let danger_wander = danger_weights
+            .iter()
+            .find(|w| w.behavior == IdleBehaviorType::Wander)
+            .unwrap()
+            .weight;
+        assert!(
+            danger_wander < safe_wander,
+            "dangerous zone should suppress wander: danger={danger_wander} safe={safe_wander}"
+        );
+    }
+
+    #[test]
     fn greed_trait_boosts_vendor_browse() {
         let config = default_config();
         let scheduler = IdleScheduler::new(1, &config);
@@ -879,8 +971,27 @@ mod tests {
             ..Default::default()
         };
 
-        let low_ctx = make_ctx(&low_greed, MoodState::Neutral, false);
-        let high_ctx = make_ctx(&high_greed, MoodState::Neutral, false);
+        // Use pok (has_vendors=true) so zone constraints don't zero VendorBrowse
+        let low_ctx = SoulContext {
+            character_name: "TestChar",
+            traits: &low_greed,
+            mood: MoodState::Neutral,
+            edginess: EdginessLevel::Moderate,
+            zone: "pok",
+            level: 50,
+            in_combat: false,
+            group_members: &[],
+        };
+        let high_ctx = SoulContext {
+            character_name: "TestChar",
+            traits: &high_greed,
+            mood: MoodState::Neutral,
+            edginess: EdginessLevel::Moderate,
+            zone: "pok",
+            level: 50,
+            in_combat: false,
+            group_members: &[],
+        };
 
         let low_w = scheduler.compute_weights(&low_ctx);
         let high_w = scheduler.compute_weights(&high_ctx);

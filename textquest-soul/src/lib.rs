@@ -47,3 +47,6 @@ pub mod speech_evolution;
 /// Game-state suppression rules — prevent soul actions from interfering with
 /// orchestrator loops.
 pub mod suppression;
+/// Zone classification — environmental metadata that constrains idle behavior
+/// selection.
+pub mod zone_classifier;

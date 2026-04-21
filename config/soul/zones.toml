@@ -1,0 +1,153 @@
+# Zone classifications for Soul Engine idle behavior constraints.
+# Operator overrides — these merge with and override built-in defaults.
+#
+# Fields:
+#   safe          = guards/safe area, wandering encouraged
+#   dangerous     = aggressive mobs, wandering suppressed
+#   has_water     = fishing allowed
+#   has_vendors   = vendor browse allowed
+#   npc_density   = 0.0 (empty) .. 1.0 (packed) — affects chat scrutiny
+#   is_pvp        = suppress emotes and social behaviors
+#   is_social_hub = PoK/Bazaar-style hub — boosts BioBrk and LoreChatter
+#   is_raid_zone  = active encounter zone — suppress all idle except Sit
+#   has_tradeskill = forge/loom/kiln available — allows Craft behavior
+
+# ── Social Hubs ──────────────────────────────────────────────────────────────
+
+[zones.pok]
+safe = true
+dangerous = false
+has_water = false
+has_vendors = true
+npc_density = 0.9
+is_pvp = false
+is_social_hub = true
+is_raid_zone = false
+has_tradeskill = true
+
+[zones.bazaar]
+safe = true
+dangerous = false
+has_water = false
+has_vendors = true
+npc_density = 1.0
+is_pvp = false
+is_social_hub = true
+is_raid_zone = false
+has_tradeskill = false
+
+[zones.nexus]
+safe = true
+dangerous = false
+has_water = false
+has_vendors = true
+npc_density = 0.8
+is_pvp = false
+is_social_hub = true
+is_raid_zone = false
+has_tradeskill = false
+
+# ── Outdoor Zones ────────────────────────────────────────────────────────────
+
+[zones.eastkarana]
+safe = false
+dangerous = false
+has_water = true
+has_vendors = false
+npc_density = 0.2
+is_pvp = false
+is_social_hub = false
+is_raid_zone = false
+has_tradeskill = false
+
+[zones.northkarana]
+safe = false
+dangerous = false
+has_water = true
+has_vendors = false
+npc_density = 0.2
+is_pvp = false
+is_social_hub = false
+is_raid_zone = false
+has_tradeskill = false
+
+[zones.gfaydark]
+safe = false
+dangerous = false
+has_water = true
+has_vendors = false
+npc_density = 0.4
+is_pvp = false
+is_social_hub = false
+is_raid_zone = false
+has_tradeskill = false
+
+# ── Dangerous Dungeons ───────────────────────────────────────────────────────
+
+[zones.sebilis]
+safe = false
+dangerous = true
+has_water = false
+has_vendors = false
+npc_density = 0.8
+is_pvp = false
+is_social_hub = false
+is_raid_zone = false
+has_tradeskill = false
+
+[zones.lguk]
+safe = false
+dangerous = true
+has_water = false
+has_vendors = false
+npc_density = 0.7
+is_pvp = false
+is_social_hub = false
+is_raid_zone = false
+has_tradeskill = false
+
+[zones.velks]
+safe = false
+dangerous = true
+has_water = false
+has_vendors = false
+npc_density = 0.7
+is_pvp = false
+is_social_hub = false
+is_raid_zone = false
+has_tradeskill = false
+
+[zones.crushbone]
+safe = false
+dangerous = true
+has_water = false
+has_vendors = false
+npc_density = 0.6
+is_pvp = false
+is_social_hub = false
+is_raid_zone = false
+has_tradeskill = false
+
+# ── Raid Zones ────────────────────────────────────────────────────────────────
+
+[zones.sleeper]
+safe = false
+dangerous = true
+has_water = false
+has_vendors = false
+npc_density = 0.3
+is_pvp = false
+is_social_hub = false
+is_raid_zone = true
+has_tradeskill = false
+
+[zones.ntov]
+safe = false
+dangerous = true
+has_water = false
+has_vendors = false
+npc_density = 0.4
+is_pvp = false
+is_social_hub = false
+is_raid_zone = true
+has_tradeskill = false
