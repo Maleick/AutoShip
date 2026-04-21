@@ -12,6 +12,7 @@ pub mod chat;
 pub mod detours;
 pub mod dx11_null;
 pub mod eqmain_hook;
+pub mod file_integrity_dispatcher;
 pub mod fingerprint;
 pub mod game_loop;
 pub mod hwbp;
