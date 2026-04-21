@@ -12,6 +12,7 @@
 ## Operation
 
 - [Combat and Camp Loop](Combat-and-Camp-Loop)
+- [Vendor Cycle](Vendor-Cycle)
 - [Map Hotkeys and Controls](Map-Hotkeys-and-Controls)
 - [Sebilis Guide](Sebilis-Guide)
 - [Camp Runbooks](Camp-Runbooks)

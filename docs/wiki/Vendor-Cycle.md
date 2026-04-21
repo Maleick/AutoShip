@@ -1,335 +1,136 @@
-# Vendor Cycle: Loot Routing & Overnight Farming
+# Vendor Cycle: Loot Routing
 
 ## Overview
 
-The **Vendor Cycle** system automates the selling of unwanted loot to merchants, converting vendorable items into plat. It is the primary mechanism for converting overnight farming runs into currency, powering the economy layer alongside tradeskill trophy farming.
+The vendor cycle converts low-priority inventory into plat during camp downtime. It is implemented in three layers:
 
-This page documents:
-- How vendor cycling works operationally
-- Configuration options (keep-lists, allowlists, backlog thresholds)
-- Integration with overnight farming and the orchestration loop
-- Economic assumptions and plat projections
+- `textquest/src/loot/vendor_cycle.rs` (pure planning: which items are sellable)
+- `textquest/src/camp/vendor.rs` (sell FSM and runtime execution)
+- `textquest/src/orchestrator/mod.rs` (activation timing in camp mode)
 
----
+This page documents operator-visible behavior and configuration surfaces used by those components.
 
-## How It Works
+## Operator Guide: How it works
 
-### Operational Flow
+### What gets sold
 
-1. **Loot Acquisition** → Combat or farming activities produce items that land in character inventory
-2. **Inventory Snapshot** → The orchestrator captures current inventory state
-3. **Vendor Planning** → The `VendorCyclePlanner` evaluates each item against configured rules
-4. **Sale Execution** → Items marked for sale are vendored to an NPC merchant
-5. **Plat Conversion** → Inventory is converted to currency, logged, and tracked
+`VendorCyclePlanner::plan` evaluates each `VendorInventoryItem` and queues it when any rule matches:
 
-### Item Classification
+- `is_trash` is true
+- item age is older than `backlog_days`
+- item is a duplicate copy of another non-protected entry (only the newest copy per name is kept)
+- allowlist mode is active and the item is on the allowlist
 
-The planner classifies each item according to **why** it should be sold:
+The planner does not sell:
 
-| Reason | Criteria | Use Case |
-|--------|----------|----------|
-| **Trash** | Explicitly marked junk/vendor trash items | Vendor trash that has no other use; auto-detect via item naming patterns |
-| **Duplicate Loot** | Extra copies of the same item in inventory | Keep one copy, vendor all duplicates (by acquisition time) |
-| **Backlog** | Loot older than the backlog threshold | Keep items for N days (default 30); vendor anything beyond the age limit |
-| **Allowlist** | Operator-configured explicit sell list | Selective vending when an allowlist is defined; only these items sell |
-| **Manual** | Legacy queue entry (future use) | For operator-initiated vendoring outside the automatic planner |
+- protected items (`item.protected == true`)
+- items whose normalized name is in the keep-list
+- items with no active sell reason
 
-### Planner State
+`VendorPlan` includes `items` plus `estimated_gross_plat`, the sum of each selected item's `estimated_vendor_value`.
 
-The `VendorCyclePlanner` holds three configuration components:
+### When it activates
 
-1. **Keep-List** (`keep_names`) — Items to NEVER vendor (protected gear, quest items, crafting material, etc.)
-2. **Allowlist** (`allowlist`) — When active, ONLY items on this list will vendor (overrides trash/backlog/duplicate logic)
-3. **Backlog Threshold** (`backlog_days`) — Age in days beyond which old loot is vendored (default 30 days)
+Activation is hard-coded by orchestrator flow:
 
----
+1. A sell cycle must be configured by calling `Orchestrator::start_sell_cycle(...)`.
+2. Camp mode must be active and the current camp state must be `Idle` or `Medding`.
+3. The tick-based timer must be satisfied: `current_tick - last_sell_tick >= sell_interval_ticks` and state must be `SellState::Idle`.
+4. If `sell_queue` is empty and `vendor_inventory` is not, the controller builds a fresh plan with `SellCycle::prepare_sell_plan`.
+5. The state machine enters `Navigating -> Selling -> Returning`.
+
+The cycle still uses `seller_pid` from the active camp member list and only emits commands when those members are in routing scope.
 
 ## Configuration Reference
 
-### Creating a Planner
-
-```rust
-use textquest::loot::vendor_cycle::{VendorCyclePlanner, VendorInventoryItem};
-
-// Basic planner with a keep-list
-let planner = VendorCyclePlanner::new(vec!["Silk Silk", "Spells", "Trophy"]);
+### Planner surface (`VendorCyclePlanner`)
 
-// With all options
-let planner = VendorCyclePlanner::new(vec!["Silk Silk", "Spells", "Trophy"])
-    .with_allowlist(vec!["Junk", "Vendor Trash", "Worn Bone"])
-    .with_backlog_days(14);
-```
-
-### Keep-List (Protected Items)
+Located in `textquest/src/loot/vendor_cycle.rs`.
 
-The keep-list protects items from being vendored. Use this for:
-- **Quest items** (flags, components, currency)
-- **Crafting materials** (silk, bone, gems)
-- **Gear you're using** (armor, weapons, accessories)
-- **Future quest needs** (trophies, currency items)
+- `VendorCyclePlanner::new(keep_items)`
+  - Initializes the keep-list.
+  - Name normalization is `trim().to_ascii_lowercase()`.
+  - Protected items are never selected for sale.
+- `with_allowlist(sell_items)`
+  - Non-empty allowlist switches planner into allowlist mode.
+  - With allowlist active, non-matching names are skipped before any other selection logic.
+- `with_backlog_days(days)`
+  - Sets age-based cutoff in days.
+  - Negative values are clamped to `0`.
+  - Duplicate detection and trash checks still apply.
 
-**Name Matching:** Keep-list matches are **case-insensitive** and **whitespace-trimmed**. For example:
-- `"Silk Silk"` will protect "Silk Silk", " Silk Silk ", "SILK SILK", etc.
-- The exact item name does not need to be specified; the planner will match any item containing the protected name
+### Runtime cycle surface (`VendorConfig`)
 
-### Allowlist (Explicit Sell List)
+Defined in `textquest/src/camp/vendor.rs` and consumed by `SellCycle::new`.
 
-When an allowlist is defined, the planner enters **allowlist mode**:
-- Only items whose names match entries in the allowlist will vendor
-- Trash items, backlog, and duplicates are ignored unless they're also on the allowlist
-- Use this for strict control: "vendor ONLY these items, nothing else"
+- `vendor_name`: NPC used for targeting/interaction commands
+- `sell_interval_ticks`: minimum ticks between automatic cycles
+- `keep_items`: names passed into `VendorCyclePlanner::new`
+- `sellable_items`: names passed into `with_allowlist`
+- `travel_ticks`: fallback travel delay before opening the vendor window
+- `sell_step_delay`: delay between seller FSM sub-steps
+- `return_spell`: optional return spell/gem string
+- `navigation_timeout_ticks`: timeout while navigating to vendor
+- `vendor_retry_ticks` and `max_busy_retries`: handling for vendor window busy states
+- `backlog_days`: forwarded into planner
+- `watch_items`: vendor browse items (price watcher)
 
-**Example:** Overnight farming in Old Sebilis might configure:
-```rust
-.with_allowlist(vec![
-    "Silkfang Mane",
-    "Jug of Saltwater",
-    "Myconid Chitin",
-    "Ancient Silk",
-])
-```
-Only these four item types will vendor. Everything else stays in inventory.
-
-### Backlog Threshold
-
-The backlog threshold is the **age in days** beyond which old loot gets vendored automatically.
-
-- **Default:** 30 days
-- **Use cases:**
-  - `backlog_days(7)` — Aggressive cleanup; vendor anything over a week old
-  - `backlog_days(60)` — Conservative; keep loot for 2 months
-  - `backlog_days(0)` — No backlog vendoring; only trash/duplicates/allowlist sells
-
-**Example:** Quest trophy farming might use a high backlog threshold to keep trophies on hand longer:
-```rust
-.with_backlog_days(90)  // Keep loot for 90 days before auto-vending
-```
-
----
-
-## Integration with Overnight Farming
-
-### Farming Loop Integration
-
-The vendor cycle sits within the broader overnight farming orchestration:
-
-```
-1. Combat Loop (6-12 hours)
-   ↓ [loot drops to inventory]
-2. Inventory Snapshot
-   ↓ [captures item state]
-3. Vendor Planning
-   ↓ [evaluates each item]
-4. Vendor Execution
-   ↓ [sells marked items]
-5. Plat Logging
-   ↓ [records earned currency]
-6. Repeat (next session)
-```
-
-### Economic Input
-
-Each overnight farming run produces:
-- **XP gains** (leveling progress)
-- **Loot hauls** (items in inventory)
-- **Tradeskill trophies** (if enabled)
-- **Plat from vendors** (gross vendorable value)
-
-The planner estimates gross plat value for each cycle but does NOT execute sales—that responsibility remains with the orchestrator or TUI operator.
-
-### Plat Projection
-
-Given a VendorPlan, you can estimate nightly earnings:
-
-```rust
-let plan = planner.plan(&inventory, Utc::now());
-let gross_plat = plan.estimated_gross_plat;
-
-// Example: nightly farm in Old Sebilis
-// plan.estimated_gross_plat = 800pp per cycle
-// 6 farming cycles per overnight run = 4,800pp
-// 30 nights in a month = 144,000pp
-```
+### Inventory input paths
 
-### Interaction with Tradeskill Trophies
+- `VendorInventoryItem::try_from(&ContainerSlotInfo)` for live IPC inventory conversion.
+- `VendorInventoryItem::from_loot_history(row, estimated_value)` when replaying persisted loot rows.
+- `VendorInventoryItem::loot(...)` / `VendorInventoryItem::trash(...)` for constructed snapshots.
+- `VendorInventoryItem::protected()` to force keep behavior.
 
-Tradeskill trophies (alchemy, jewelry, etc.) should typically be on the keep-list so they accumulate during overnight runs. The vendor cycle will not touch them.
+## Overnight farming integration
 
-For trophy *disposal* (after you've farmed the target amount), you would:
-1. Move trophies off the keep-list manually
-2. Or create a new allowlist that includes trophy names
-3. Re-run vendor planning to liquidate
+There is no separate overnight controller in this module. The integration point is the camp downtime cadence:
 
----
+- During long camps, the cycle runs at most every `sell_interval_ticks` when in downtime.
+- This is the intended path for overnight farm cleanup and plat conversion.
 
-## Scenario Walkthrough
+Use this to reduce post-run manual sorting while preserving downtime availability for recovery tasks.
 
-### Scenario 1: Generic Overnight Farm (Sebilis)
+## Tradeskill trophy integration
 
-**Setup:**
-```rust
-let planner = VendorCyclePlanner::new(vec![
-    "Nodding Blue Lily",       // Quest item, keep
-    "Ancient Silkfang Mane",   // Trophy material, keep
-    "Tarnished Plate Armor",   // Unsorted gear, keep for now
-])
-.with_backlog_days(30)
-.with_allowlist(vec![]);  // No allowlist; use trash/backlog/duplicate logic
-```
+There is no dedicated trophy-specific branch in the planner.
 
-**Inventory snapshot contains:**
-- 3x Silkfang Mane (acquired 5 days ago)
-- 2x Silkfang Mane (acquired 12 days ago) — *duplicate*
-- 1x Jug of Saltwater (acquired 2 days ago) — *trash item*
-- 1x Nodding Blue Lily (acquired 3 days ago) — *protected*
-- 1x Worn Bone Armor (acquired 45 days ago) — *backlog item*
+Operators should protect trophies through normal keep-list behavior:
 
-**Planner decision:**
-- 3x Silkfang Mane (5 days) → PROTECTED (on keep-list)
-- 2x Silkfang Mane (12 days) → VENDOR (duplicate; keep newest)
-- 1x Jug of Saltwater → VENDOR (trash)
-- 1x Nodding Blue Lily → PROTECTED (on keep-list)
-- 1x Worn Bone Armor → VENDOR (over 30-day backlog)
+- Add known trophy names to `keep_items` while farming for stock.
+- Remove or change the keep-list once you intentionally want liquidation.
+- If using explicit sell logic, configure `sellable_items` to avoid accidental conversion of active trophy inventory.
 
-**Estimated vendor revenue:** (2×20pp) + (1×8pp) + (1×15pp) = **63pp gross**
+This pattern also applies to other persistent tradeskill materials.
 
----
+## Related runtime behavior notes
 
-### Scenario 2: Strict Allowlist (Trophy Farming)
+- `SellCycle` executes with fixed phases and bounded retries (`navigation_timeout_ticks`, `vendor_retry_ticks`, `max_busy_retries`).
+- `orchestrator::tick_sell_cycle` returns no commands when camp is not in downtime.
+- Vendor browsing alerts use `VendorConfig.watch_items` and appear in vendor scan processing.
 
-**Setup:**
-```rust
-let planner = VendorCyclePlanner::new(vec![
-    "Trophy of the Warlord",    // The trophy itself; keep until we hit target
-    "Silk Silk",                // Crafting material
-])
-.with_allowlist(vec![
-    "Worn Bone",
-    "Chipped Weapon",
-    "Tattered Hide",
-    "Junk Jewel",
-]);
-```
+## Known limitations
 
-**Inventory snapshot:**
-- 1x Trophy of the Warlord (protected, never sells)
-- 5x Silk Silk (protected)
-- 3x Worn Bone (on allowlist) → VENDOR
-- 2x Chipped Weapon (on allowlist) → VENDOR
-- 1x Fancy Silk Robe (NOT on allowlist, NOT protected) → IGNORE
-- 1x Ancient Spellbook (NOT on allowlist, NOT protected) → IGNORE
+- No dynamic market price lookup; `estimated_vendor_value` is static metadata.
+- No bazaar posting path in this planner/controller.
+- Merchant choice is external: operator controls the configured merchant target.
 
-**Planner decision:**
-Only the allowlist items vendor. Everything else stays in inventory for sorting or future use.
+## Test hooks
 
-**Estimated vendor revenue:** (3×5pp) + (2×3pp) = **21pp gross**
+- Planning behavior is covered by planner tests in `textquest/src/loot/mod.rs`.
+- Execution and integration behavior is covered by tests in `textquest/src/camp/vendor.rs` and `textquest/src/orchestrator/mod.rs`.
 
----
-
-## Implementation Details
-
-### Item Name Matching
-
-The planner normalizes all item names to **lowercase** and **trims whitespace**. This ensures:
-- `"Silk Silk"` matches `" SILK SILK "`, `"Silk Silk"`, `"silk silk"`, etc.
-- Keep-lists and allowlists are case-insensitive
-
-### Duplicate Detection
-
-For duplicate items, the planner:
-1. Groups items by normalized name
-2. Sorts each group by acquisition time (newest first)
-3. Marks all items EXCEPT the newest as duplicates for vendoring
-
-This ensures you always keep the **most recently acquired** copy and vendor older copies.
-
-### Backlog Age Calculation
-
-The backlog cutoff is calculated as:
-```
-backlog_cutoff = current_time - Duration::days(backlog_days)
-```
-
-Items with `acquired_at <= backlog_cutoff` are eligible for backlog vendoring.
-
-### Estimated Vendor Value
-
-Each item has an `estimated_vendor_value` field (in plat). The planner sums these for all sale items to produce `estimated_gross_plat`. This is a **projection**—actual merchant prices vary by NPC.
-
----
-
-## Integration Points
-
-### Orchestrator Loop
-
-The orchestrator should:
-1. Capture inventory state via IPC
-2. Build a `VendorCyclePlanner` from configuration
-3. Call `planner.plan(inventory_snapshot, now)` to get a `VendorPlan`
-4. Log or display the plan to the operator
-5. Execute the plan (vendor sale) based on operator approval or automation rules
-
-### IPC Container Slots
-
-Inventory comes from the DLL as `ContainerSlotInfo` structs. These can be converted to `VendorInventoryItem`:
-
-```rust
-let item = VendorInventoryItem::try_from(&container_slot)?;
-let plan = planner.plan(&[item], Utc::now());
-```
-
-### Loot History Integration
-
-If you're tracking loot acquisition timestamps in a database, use `VendorInventoryItem::from_loot_history`:
-
-```rust
-let row = loot_history.fetch_row(item_name)?;
-let item = VendorInventoryItem::from_loot_history(&row, estimated_price);
-let plan = planner.plan(&[item], Utc::now());
-```
-
----
-
-## Known Limitations & Future Work
-
-### Current Gaps
-
-1. **No merchant selection** — The planner does not evaluate NPC merchant types (poison, drink, spell). You must select the right NPC manually.
-2. **No auction house integration** — Currently assumes vendor NPC sales only; bazaar posting would require separate logic.
-3. **No price lookup** — `estimated_vendor_value` is static; no live price feed from game data.
-4. **No bag optimization** — Planner doesn't consider bag space; assumes inventory reorganization is handled separately.
-
-### Future Enhancements
-
-- **Per-NPC routing** — Different vendors (potions, spells, armor) routed to appropriate NPCs
-- **Bazaar posting** — Items above a plat threshold posted to bazaar instead of vendored
-- **Dynamic pricing** — Integration with market data feeds for real-time value estimation
-- **Inventory optimization** — Suggest bag/container rearrangement before vendoring
-- **Scarcity tracking** — Items on a "rarity watch list" are held longer before vendoring
-
----
-
-## Testing
-
-The vendor cycle planner is tested in `textquest/src/loot/vendor_cycle.rs` with comprehensive unit tests:
+### Suggested test command
 
 ```bash
-cargo test --lib loot::vendor_cycle
+cargo test -p textquest --lib loot::vendor_cycle
 ```
 
-Key test scenarios:
-- Trash item vendoring
-- Duplicate detection and aging
-- Keep-list protection
-- Allowlist mode
-- Backlog threshold calculation
-- Edge cases (empty inventory, zero backlog_days, all items protected, etc.)
-
----
+This repository also has dedicated integration tests under `textquest/src/camp/vendor.rs` and `textquest/src/orchestrator/mod.rs`.
 
 ## References
 
-- **Source:** `textquest/src/loot/vendor_cycle.rs`
-- **IPC Integration:** `textquest-common/src/ipc.rs` (ContainerSlotInfo)
-- **Orchestrator:** `textquest/src/orchestrator.rs`
-- **Related:** [Combat and Camp Loop](Combat-and-Camp-Loop.md), [Overnight Farming](Frostreaver-Farming-Guide.md)
+- Source: `textquest/src/loot/vendor_cycle.rs`
+- Runtime vendor controller: `textquest/src/camp/vendor.rs`
+- Orchestrator integration and timing: `textquest/src/orchestrator/mod.rs`
+- [Combat and Camp Loop](Combat-and-Camp-Loop)
