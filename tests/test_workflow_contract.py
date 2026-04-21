@@ -19,6 +19,7 @@ REMOVED_WORKFLOWS = (
     "fmt-autofix.yml",
     "branch-cleanup.yml",
     "cleanup-branches.yml",
+    "auto-branch-cleanup.yml",
     "readme-metrics.yml",
     "copilot-ci-dispatch.yml",
 )
@@ -28,7 +29,6 @@ FORBIDDEN_CI_STRINGS = (
     "listJobsForWorkflowRun",
     "PR gate (trusted path)",
     "PR gate (fork PR path)",
-    "[self-hosted, Windows, X64, textquest]",
     "run_release_build",
     "  clippy_autofix:",
     "  coverage:",
@@ -36,7 +36,6 @@ FORBIDDEN_CI_STRINGS = (
     "  unsafe_code_report:",
     "  cargo_deny:",
     "  windows:",
-    "  secrets_scan:",
 )
 
 
@@ -62,13 +61,31 @@ class WorkflowContractTests(unittest.TestCase):
         merge_gate = self._job_block(text, "merge_gate")
         secrets_scan = self._job_block(text, "secrets_scan")
         advisory_checks = self._job_block(text, "advisory_checks")
+        test_matrix = self._job_block(text, "test-matrix")
 
         self.assertIn("    runs-on: [self-hosted, Linux, X64, textquest]", merge_gate)
+        self.assertIn(
+            "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
+            merge_gate,
+        )
         self.assertNotIn("        run: cargo fmt --all --check", merge_gate)
         self.assertIn("    name: Secret scan", secrets_scan)
+        self.assertIn(
+            "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
+            secrets_scan,
+        )
         self.assertIn("    name: Advisory dependency checks (manual)", advisory_checks)
         self.assertIn("    if: github.event_name == 'workflow_dispatch'", advisory_checks)
         self.assertIn("    continue-on-error: true", advisory_checks)
+        self.assertIn(
+            "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
+            test_matrix,
+        )
+        self.assertIn("      - name: Setup Rust (Windows)", test_matrix)
+        self.assertIn("        if: runner.os == 'Windows'", test_matrix)
+        self.assertIn("        uses: ./.github/actions/setup-rust-toolchain-windows", test_matrix)
+        self.assertIn("      - name: Setup Rust (Linux)", test_matrix)
+        self.assertIn("        if: runner.os != 'Windows'", test_matrix)
         self.assertNotIn("\n  windows:\n", text)
         for forbidden in FORBIDDEN_CI_STRINGS:
             with self.subTest(forbidden=forbidden):
@@ -100,6 +117,26 @@ class WorkflowContractTests(unittest.TestCase):
             any(feature.get("id") == "ci-workflow-rationalization" for feature in features),
             "feature-list.json must include ci-workflow-rationalization",
         )
+
+    def test_windows_rust_setup_action_bootstraps_rustup(self) -> None:
+        text = (
+            REPO_ROOT / ".github" / "actions" / "setup-rust-toolchain-windows" / "action.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("shell: powershell", text)
+        self.assertIn("rustup.exe not found; bootstrapping rustup from the official installer.", text)
+        self.assertIn("https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe", text)
+        self.assertIn('throw "rustup.exe still not found at $rustup after bootstrap."', text)
+
+    def test_release_nightly_setup_action_bootstraps_rustup(self) -> None:
+        text = (REPO_ROOT / ".github" / "actions" / "setup-rust-nightly" / "action.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("shell: powershell", text)
+        self.assertIn("rustup.exe not found; bootstrapping rustup from the official installer.", text)
+        self.assertIn("https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe", text)
+        self.assertIn('Write-Host "[info] Nightly compiler confirmed for $env:NIGHTLY_TOOLCHAIN."', text)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ on:
   issues:
     types: [opened, edited, reopened, closed, labeled, unlabeled]
   pull_request_target:
-    types: [labeled, reopened, synchronize, ready_for_review]
+    types: [labeled, reopened, synchronize, ready_for_review, closed]
   workflow_dispatch:
 
 permissions:

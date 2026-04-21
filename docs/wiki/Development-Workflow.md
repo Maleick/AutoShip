@@ -57,6 +57,8 @@ When behavior or roadmap guidance changes:
 ## CI lanes
 
 - `ci.yml` is the only routine merge gate. It exposes one GitHub check and runs Linux-based secret scanning, wiki validation, Python tests, and Rust format/lint/test in that order.
+- `ci.yml` runs on the self-hosted runner fleet for pushes, manual dispatches, and same-repo PRs. Fork PRs are explicitly skipped from self-hosted execution until a maintainer rebases or replays the work on a trusted branch.
+- The Windows test matrix provisions Rust with native `rustup` on the self-hosted runner. If `rustup` is missing, the workflow bootstraps it from the official installer before activating the requested toolchain. It does not rely on WSL-backed `bash.exe`, so runner maintenance should focus on MSVC health rather than WSL patch level.
 - `nightly-release.yml` is the broader Windows/manual validation lane. Use it for release-like confidence and patch-sensitive pipeline checks.
 - `release.yml` remains the tagged release lane for shipping releases after merge safety has already passed.
 - Repo automation workflows are operational helpers, not product-health signals. `automation.yml` owns repo-side PR housekeeping such as label cleanup and merged-branch deletion, and failures there should be triaged separately from merge safety.

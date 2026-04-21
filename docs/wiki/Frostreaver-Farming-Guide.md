@@ -178,13 +178,15 @@ For pre-launch rehearsal routes that intentionally avoid the most-camped mainstr
 
 Old Sebilis remains research-backed and still needs live proof for Scars-launch
 access, spawn cadence, camp overlap, Nodding Blue Lily forage rate, and
-automation risk. Use [Sebilis Guide](Sebilis-Guide.md) as the canonical ledger before
+automation risk. Use [Sebilis Guide](Sebilis-Guide.md),
+[Sebilis Disco Camp](Sebilis-Disco-Camp.md), and
+[Sebilis Farming Validation](Sebilis-Farming-Validation.md) as the canonical ledger before
 treating the zone as a solved overnight farm.
 
 Velketor's Labyrinth Frenzy is now research-backed for the safe-hall baseline,
 but it still needs live proof for 6-box leash behavior, pit or upper-dogs
 branch safety, and actual spawn cadence. Use [Velketor's Labyrinth Frenzy
-Camp](Camp-Runbooks.md) for the documented route baseline
+Camp](Velketors-Labyrinth-Frenzy-Camp.md) for the documented route baseline
 and [Velketor's Labyrinth
 Validation](Velketors-Labyrinth-Validation.md) as the canonical ledger before
 treating the zone as a solved unattended lane.

@@ -253,18 +253,18 @@ class MainThresholdTests(unittest.TestCase):
                 result = self.module.main()
         self.assertEqual(result, 1)
 
-    def test_default_threshold_is_60(self) -> None:
-        # Default threshold is 60: 59.9% should fail, 60.0% should pass.
+    def test_default_threshold_is_80(self) -> None:
+        # Default threshold is 80: 79.9% should fail, 80.0% should pass.
         with mock.patch("sys.argv", ["coverage-report.py"]):
             with mock.patch.object(
-                self.module, "generate_coverage_report", return_value=(0, 59.9)
+                self.module, "generate_coverage_report", return_value=(0, 79.9)
             ):
                 result = self.module.main()
         self.assertEqual(result, 1)
 
         with mock.patch("sys.argv", ["coverage-report.py"]):
             with mock.patch.object(
-                self.module, "generate_coverage_report", return_value=(0, 60.0)
+                self.module, "generate_coverage_report", return_value=(0, 80.0)
             ):
                 result = self.module.main()
         self.assertEqual(result, 0)

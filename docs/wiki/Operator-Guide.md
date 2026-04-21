@@ -40,6 +40,16 @@ flowchart TD
 
 ---
 
+## Start flow for operators
+
+For the fastest operator onboarding path, follow this sequence:
+
+1. [Quick Start](Quick-Start.md) for the environment/runtime decision tree.
+2. [Operator Playbooks](Operator-Playbooks.md) for scenario-based checklists and incident flow.
+3. [Operator Guide](Operator-Guide.md) for configuration and long-form reference.
+
+That sequence keeps setup docs consolidated and reduces repetition across pages.
+
 ## Installation Prerequisites
 
 ### All Platforms

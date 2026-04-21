@@ -18,6 +18,7 @@
 - [Map Hotkeys and Controls](Map-Hotkeys-and-Controls)
 - [Sebilis Guide](Sebilis-Guide)
 - [Camp Runbooks](Camp-Runbooks)
+- [Velketor's Labyrinth Frenzy Camp](Velketors-Labyrinth-Frenzy-Camp)
 - [Velketor's Labyrinth Validation](Velketors-Labyrinth-Validation)
 - [Navigation and Maps](Navigation-and-Maps)
 - [Login Automation](Login-Automation)

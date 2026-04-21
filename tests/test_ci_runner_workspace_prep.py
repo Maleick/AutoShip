@@ -21,8 +21,8 @@ class CiRunnerWorkspacePrepTests(unittest.TestCase):
     def test_linux_checkout_workflows_prepare_workspace_before_checkout(self) -> None:
         # Local composite actions can't run before actions/checkout (chicken-and-egg).
         # The workspace prep is inlined as a bash step instead.
-        # ci.yml secrets_scan was moved to ubuntu-latest (GH-hosted) in PR #1493 —
-        # it no longer runs on self-hosted runners and does not need workspace prep.
+        # Only workflows that must clean persistent runner state before checkout
+        # should inline the prep step.
         checks = {
             "claude-agent.yml": (
                 REPO_ROOT / ".github" / "workflows" / "claude-agent.yml",

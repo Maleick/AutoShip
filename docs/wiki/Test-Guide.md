@@ -13,7 +13,7 @@ TextQuest uses a layered test strategy:
 | Unit tests        | Inline `#[cfg(test)]` blocks in source files | `cargo test`                            | Every PR                          |
 | Integration tests | `textquest/tests/*.rs`                       | `cargo test -p textquest --test <name>` | Every PR                          |
 | Scenario tests    | `textquest/tests/scenarios/`                 | `cargo test scenario_`                  | Every PR                          |
-| Coverage gate     | `scripts/coverage-report.py`                 | cargo-tarpaulin                         | Every PR (60% baseline threshold) |
+| Coverage gate     | `scripts/coverage-report.py`                 | cargo-tarpaulin                         | Every PR (80% baseline threshold) |
 | Python tests      | `tests/test_*.py`                            | `python3 -m unittest`                   | Advisory only                     |
 
 ---
@@ -122,15 +122,15 @@ End-to-end multibox workflow tests. See [Integration Scenario Testing Framework]
 
 ## CI Coverage Check
 
-The CI pipeline enforces a **60% workspace coverage baseline**:
+The CI pipeline enforces an **80% workspace coverage baseline**:
 
 ```yaml
-- name: Run coverage (threshold 60%)
+- name: Run coverage (threshold 80%)
   if: steps.scope.outputs.docs_only != 'true'
-  run: python3 scripts/coverage-report.py --threshold 60
+  run: python3 scripts/coverage-report.py --threshold 80
 ```
 
-If coverage drops below 60%, the PR fails and cannot merge. Review expectations for new and modified logic remain higher than the workspace baseline.
+If coverage drops below 80%, the PR fails and cannot merge. Review expectations for new and modified logic remain higher than the workspace baseline.
 
 Coverage targets by layer:
 

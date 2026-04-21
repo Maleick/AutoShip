@@ -42,7 +42,7 @@ class AutomationWorkflowTests(unittest.TestCase):
     def test_post_merge_sync_deletes_branch_inline(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("contents: write", text)
-        self.assertIn("DELETE /repos/{owner}/{repo}/git/refs/{ref}", text)
+        self.assertIn("github.rest.git.deleteRef", text)
 
     def test_ready_label_is_never_added_to_closed_issues(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")

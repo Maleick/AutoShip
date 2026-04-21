@@ -106,6 +106,7 @@ Common starting commands:
 - TUI usage details: [Operating the TUI](Operating-the-TUI.md)
 - Full command list: [Command Reference](Command-Reference.md)
 - Troubleshooting: [Troubleshooting](Troubleshooting.md)
+- Scenario runbooks: [Operator Playbooks](Operator-Playbooks.md)
 
 ## Current Behavior vs Roadmap
 

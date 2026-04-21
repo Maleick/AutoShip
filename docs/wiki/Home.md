@@ -27,6 +27,7 @@ This site is the published public docs surface. The repo-side `docs/wiki/` tree 
 ### Operators
 
 - [Quick Start](Quick-Start.md)
+- [Operator Playbooks](Operator-Playbooks.md)
 - [Installation and Build](Installation-and-Build.md)
 - [Operating the TUI](Operating-the-TUI.md)
 - [Map Hotkeys and Controls](Map-Hotkeys-and-Controls.md)

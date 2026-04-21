@@ -160,17 +160,17 @@ in a companion wiki page instead of inventing new untracked TOML keys.
 Current examples:
 
 - `config/camps/sebilis_disco.toml` holds the loader-safe runtime values.
-- [Sebilis Guide](Sebilis-Guide.md) carries the research waypoint
-  lattice, pull lanes, restriction zones, and multibox route notes for that
-  camp.
-- `config/camps/velketors_frenzy.toml` holds the loader-safe runtime values for the Velketor's Labyrinth frenzy route.
-- [Velketors Labyrinth Frenzy Camp](Camp-Runbooks.md) carries the waypoint lattice, pull lanes, and multibox route notes.
-
+- `docs/wiki/Sebilis-Disco-Camp.md` documents richer waypoint and restriction notes because the
+  runtime loader only consumes the baseline TOML fields.
+- [Sebilis Disco Camp](Sebilis-Disco-Camp.md) is the companion page for those notes.
+- `config/camps/dreadlands_primary.toml` holds the loader-safe runtime values.
+- [Dreadlands Primary Camp](Dreadlands-Primary-Camp.md) carries the planning waypoint lattice,
+  pull controls, and blocked validation notes for that camp.
 - `config/camps/velketors_labyrinth_frenzy.toml` holds the loader-safe runtime
   values.
-- [Camp Runbooks](Camp-Runbooks.md)
-  carries the validation geometry, pull controls, and routing notes for that
-  camp.
+- `docs/wiki/Velketors-Labyrinth-Frenzy-Camp.md` documents richer waypoint and restriction notes because the runtime loader
+  only consumes the baseline TOML fields.
+- [Velketor's Labyrinth Frenzy Camp](Velketors-Labyrinth-Frenzy-Camp.md) is the companion page for those notes.
 
 ## Class Configs
 

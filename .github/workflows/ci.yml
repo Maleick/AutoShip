@@ -20,6 +20,7 @@ env:
 jobs:
   merge_gate:
     name: PR gate (fmt + clippy + coverage) on Linux
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 90
     steps:
@@ -178,6 +179,7 @@ jobs:
 
   test-matrix:
     name: Unit tests on ${{ matrix.os-name }} (rust-${{ matrix.rust }})
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     continue-on-error: ${{ matrix.continue-on-error == true }}
     strategy:
       fail-fast: false
@@ -201,7 +203,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Rust
+      - name: Setup Rust (Windows)
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/setup-rust-toolchain-windows
+        with:
+          toolchain: ${{ matrix.rust == 'nightly' && 'nightly-x86_64-pc-windows-msvc' || 'stable-x86_64-pc-windows-msvc' }}
+          components: clippy
+
+      - name: Setup Rust (Linux)
+        if: runner.os != 'Windows'
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
@@ -222,6 +232,7 @@ jobs:
 
   secrets_scan:
     name: Secret scan
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 5
     steps:

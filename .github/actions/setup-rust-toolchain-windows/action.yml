@@ -1,21 +1,26 @@
-name: Setup Rust nightly
+name: Setup Rust toolchain on Windows
 description: >
-  Install or verify the nightly-x86_64-pc-windows-msvc toolchain, add rustfmt
-  and clippy, and confirm the active compiler reports nightly.
+  Install or verify a rustup-managed MSVC toolchain on a self-hosted Windows
+  runner, add requested components, and scope activation to the checked-out
+  workspace.
 
 inputs:
   toolchain:
     description: "Rustup toolchain identifier"
+    required: true
+  components:
+    description: "Space-delimited rustup components to add"
     required: false
-    default: "nightly-x86_64-pc-windows-msvc"
+    default: "clippy"
 
 runs:
   using: composite
   steps:
-    - name: Provision nightly toolchain via rustup
+    - name: Provision toolchain via rustup
       shell: powershell
       env:
-        NIGHTLY_TOOLCHAIN: ${{ inputs.toolchain }}
+        WINDOWS_TOOLCHAIN: ${{ inputs.toolchain }}
+        WINDOWS_COMPONENTS: ${{ inputs.components }}
       run: |
         $cargoHome = $env:CARGO_HOME
         if ([string]::IsNullOrWhiteSpace($cargoHome)) {
@@ -53,17 +58,22 @@ runs:
           throw "rustup.exe still not found at $rustup after bootstrap."
         }
 
-        Write-Host "[info] Ensuring Rust toolchain $env:NIGHTLY_TOOLCHAIN is available on this runner."
+        Write-Host "[info] Ensuring Rust toolchain $env:WINDOWS_TOOLCHAIN is available on this runner."
         & $rustup --version
-        & $rustup toolchain install $env:NIGHTLY_TOOLCHAIN --no-self-update --force
-        & $rustup default $env:NIGHTLY_TOOLCHAIN
-        & $rustup component add rustfmt clippy --toolchain $env:NIGHTLY_TOOLCHAIN
+        & $rustup toolchain install $env:WINDOWS_TOOLCHAIN --no-self-update --profile minimal
+        & $rustup override set $env:WINDOWS_TOOLCHAIN
 
-        $nightlyVersion = & $rustup run $env:NIGHTLY_TOOLCHAIN rustc -V
-        Write-Host $nightlyVersion
-        if ($nightlyVersion -notmatch "nightly") {
-          Write-Host "[fatal] rustc for $env:NIGHTLY_TOOLCHAIN is not reporting a nightly compiler."
+        if ($env:WINDOWS_COMPONENTS) {
+          & $rustup component add $env:WINDOWS_COMPONENTS --toolchain $env:WINDOWS_TOOLCHAIN
+        }
+
+        $activeToolchain = & $rustup show active-toolchain
+        if ($activeToolchain -notmatch [regex]::Escape($env:WINDOWS_TOOLCHAIN)) {
+          Write-Host "[fatal] rustup override did not activate $env:WINDOWS_TOOLCHAIN."
+          & $rustup show active-toolchain
           exit 1
         }
 
-        Write-Host "[info] Nightly compiler confirmed for $env:NIGHTLY_TOOLCHAIN."
+        & $rustup run $env:WINDOWS_TOOLCHAIN rustc -V
+        cargo -V
+        Write-Host "[info] Rust toolchain ready: $env:WINDOWS_TOOLCHAIN"

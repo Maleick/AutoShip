@@ -10,11 +10,11 @@ use textquest_common::auto_group::AutoGroupSettings;
 use crate::{AppState, accounts, api};
 
 pub(crate) fn test_live_session_snapshot_path(name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("textquest-web-test-runtime/{name}"))
+    std::env::temp_dir().join(format!("textquest-web-test-runtime/{name}/{name}"))
 }
 
 pub(crate) fn test_admin_session_snapshot_path(name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("textquest-web-test-runtime/{name}"))
+    std::env::temp_dir().join(format!("textquest-web-test-runtime/{name}/{name}"))
 }
 
 pub(crate) fn demo_app_state() -> Arc<AppState> {
@@ -50,9 +50,9 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
         inventory_utility_parity: tokio::sync::RwLock::new(
             textquest_common::inventory_utility::InventoryUtilityConfig::default(),
         ),
-        inventory_utility_parity_path: test_live_session_snapshot_path(
-            "test-inventory-utility-parity.json",
-        ),
+        inventory_utility_parity_path: test_live_session_snapshot_path(&format!(
+            "test-inventory-utility-parity-{name}"
+        )),
         inventory_utility_parity_write_lock: tokio::sync::Mutex::new(()),
         timestamp_configs: tokio::sync::RwLock::new(HashMap::new()),
         timestamp_config_write_lock: tokio::sync::Mutex::new(()),
