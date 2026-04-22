@@ -1009,6 +1009,7 @@ mod tests {
                 "loot-test-auto-group.toml",
             ),
             api_token: None,
+            auth_disabled: true, // Tests bypass auth
             live_session_snapshot_path: crate::test_support::test_live_session_snapshot_path(
                 "loot-test-live-sessions.json",
             ),

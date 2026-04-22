@@ -404,6 +404,7 @@ mod tests {
             alerting_config_path: std::env::temp_dir()
                 .join(format!("tq-test-alerting-{}.toml", uuid::Uuid::new_v4())),
             api_token: None,
+            auth_disabled: true, // Tests bypass auth
             live_session_snapshot_path: std::env::temp_dir().join("tq-test-sessions.json"),
             admin_session_snapshot_path: std::env::temp_dir().join("tq-test-admin-sessions.json"),
             xassist_configs: crate::api::xassist::demo_xassist_configs(),

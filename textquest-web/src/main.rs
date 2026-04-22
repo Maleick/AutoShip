@@ -115,11 +115,16 @@ pub struct AppState {
     pub alerting_config_path: PathBuf,
     /// Side-car file where dashboard-edited auto-group profiles persist.
     pub auto_group_config_path: PathBuf,
-    /// Optional static API token for protecting all `/api` endpoints.
+    /// Static API token for protecting all `/api` endpoints.
     /// Set via `TEXTQUEST_API_TOKEN` environment variable.
-    /// When `None`, API endpoints are unauthenticated (localhost-only
-    /// deployment).
+    /// Authentication is **required by default** — set `TEXTQUEST_DISABLE_AUTH=1`
+    /// to opt out (development only).  When `auth_disabled` is `false` and this
+    /// is `None`, all requests are rejected with `401 Unauthorized`.
     pub api_token: Option<String>,
+    /// When `true`, the auth middleware is a no-op regardless of `api_token`.
+    /// Set by `TEXTQUEST_DISABLE_AUTH=1`.  Always `true` in test helpers so unit
+    /// tests do not have to supply tokens.
+    pub auth_disabled: bool,
     /// Mutable runtime snapshot written by the orchestrator for live session
     /// monitoring.
     pub live_session_snapshot_path: PathBuf,
@@ -147,34 +152,63 @@ pub struct AppState {
     pub session_logs: tokio::sync::RwLock<HashMap<u32, Vec<String>>>,
 }
 
-/// Axum middleware: enforce `X-API-Token` header when `TEXTQUEST_API_TOKEN` is
-/// set.
+/// Axum middleware: enforce `X-API-Token` header on all `/api` routes.
 ///
-/// If the env var is unset, all requests pass through (backward-compatible
-/// default). When set, requests without a matching token receive `401
-/// Unauthorized`.
+/// Authentication is **on by default**.  The middleware behaviour depends on
+/// `AppState`:
+///
+/// | `auth_disabled` | `api_token`    | Behaviour                              |
+/// |-----------------|----------------|----------------------------------------|
+/// | `true`          | any            | Pass-through (dev / test opt-out)      |
+/// | `false`         | `Some(token)`  | Require matching `X-API-Token` header  |
+/// | `false`         | `None`         | Reject all requests (misconfiguration) |
+///
+/// To opt out of authentication set `TEXTQUEST_DISABLE_AUTH=1`.  This emits a
+/// `WARN` log at startup and on every request so the operator is aware.
 async fn api_token_auth(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
     req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    if let Some(ref expected_token) = state.api_token {
-        let provided = req
-            .headers()
-            .get("x-api-token")
-            .and_then(|v| v.to_str().ok());
+    // Explicit opt-out: auth disabled (dev / test mode).
+    if state.auth_disabled {
+        tracing::warn!(
+            path = req.uri().path(),
+            "Auth disabled (TEXTQUEST_DISABLE_AUTH=1) — request allowed without token"
+        );
+        return Ok(next.run(req).await);
+    }
 
-        match provided {
-            Some(token) if constant_time_eq_str(token, expected_token) => {}
-            _ => {
-                tracing::warn!(
-                    path = req.uri().path(),
-                    "API request rejected: missing or invalid X-API-Token"
-                );
-                return Err(StatusCode::UNAUTHORIZED);
+    match state.api_token {
+        Some(ref expected_token) => {
+            let provided = req
+                .headers()
+                .get("x-api-token")
+                .and_then(|v| v.to_str().ok());
+
+            match provided {
+                Some(token) if constant_time_eq_str(token, expected_token) => {}
+                _ => {
+                    tracing::warn!(
+                        path = req.uri().path(),
+                        "API request rejected: missing or invalid X-API-Token"
+                    );
+                    return Err(StatusCode::UNAUTHORIZED);
+                }
             }
         }
+        None => {
+            // No token configured and auth is not explicitly disabled —
+            // this is a misconfiguration.  Reject to avoid silently open APIs.
+            tracing::error!(
+                path = req.uri().path(),
+                "API request rejected: TEXTQUEST_API_TOKEN is not set and auth is not disabled. \
+                 Set TEXTQUEST_API_TOKEN or set TEXTQUEST_DISABLE_AUTH=1 for dev-only opt-out."
+            );
+            return Err(StatusCode::UNAUTHORIZED);
+        }
     }
+
     Ok(next.run(req).await)
 }
 
@@ -430,10 +464,21 @@ fn build_state() -> Arc<AppState> {
         .ok()
         .filter(|t| !t.trim().is_empty());
 
-    if api_token.is_none() {
+    let auth_disabled = std::env::var("TEXTQUEST_DISABLE_AUTH")
+        .map(|v| v.trim() == "1" || v.trim().eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    if auth_disabled {
         tracing::warn!(
-            "TEXTQUEST_API_TOKEN is not set — API endpoints are unauthenticated. Set this env var \
-             to enable token-based authentication."
+            "TEXTQUEST_DISABLE_AUTH is set — API authentication is DISABLED. \
+             This is only safe for local development. Do NOT use in production."
+        );
+    } else if api_token.is_none() {
+        tracing::error!(
+            "TEXTQUEST_API_TOKEN is not set and TEXTQUEST_DISABLE_AUTH is not enabled. \
+             All API requests will be rejected with 401 Unauthorized. \
+             Set TEXTQUEST_API_TOKEN=<secret> to enable authenticated access, \
+             or set TEXTQUEST_DISABLE_AUTH=1 for local development only."
         );
     }
 
@@ -519,6 +564,7 @@ fn build_state() -> Arc<AppState> {
         alerting_config_path: alerting_config_path(),
         auto_group_config_path,
         api_token,
+        auth_disabled,
         live_session_snapshot_path: live_session_snapshot_path(),
         admin_session_snapshot_path: admin_session_snapshot_path(),
         xassist_configs: api::xassist::demo_xassist_configs(),
@@ -582,6 +628,7 @@ pub(crate) fn test_app_state() -> AppState {
             uuid::Uuid::new_v4()
         )),
         api_token: None,
+        auth_disabled: true, // Tests bypass auth — no token needed in unit tests
         live_session_snapshot_path: std::env::temp_dir().join(format!(
             "textquest-web-test-live-sessions-{}.json",
             uuid::Uuid::new_v4()
@@ -890,6 +937,12 @@ mod tests {
     use serde_json::{Value, json};
     use tower::ServiceExt;
 
+    /// Build an `Arc<AppState>` suitable for unit tests: auth is disabled so
+    /// requests do not need to supply an `X-API-Token` header.
+    fn build_test_app_state() -> Arc<AppState> {
+        Arc::new(test_app_state())
+    }
+
     async fn json_response(app: Router, request: Request<Body>) -> (StatusCode, Value) {
         let response = app.oneshot(request).await.expect("request should succeed");
         let status = response.status();
@@ -942,7 +995,8 @@ mod tests {
                 uuid::Uuid::new_v4()
             )),
             auto_group_config_path: path.with_file_name("auto-group.toml"),
-            api_token: None, // No auth in tests — auth middleware is a no-op when None
+            api_token: None,
+            auth_disabled: true, // Tests bypass auth — no token needed in unit tests
             live_session_snapshot_path: path.with_file_name("live_sessions.json"),
             admin_session_snapshot_path: path.with_file_name("admin_sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),
@@ -963,7 +1017,7 @@ mod tests {
 
     #[tokio::test]
     async fn unknown_api_route_returns_json_404() {
-        let app = build_app(build_state());
+        let app = build_app(build_test_app_state());
         let (status, body) = json_response(
             app,
             Request::builder()
@@ -979,7 +1033,7 @@ mod tests {
 
     #[tokio::test]
     async fn known_unimplemented_and_live_config_routes_return_expected_statuses() {
-        let app = build_app(build_state());
+        let app = build_app(build_test_app_state());
         let (status, body) = json_response(
             app.clone(),
             Request::builder()
@@ -1446,7 +1500,7 @@ mod tests {
 
     #[tokio::test]
     async fn password_route_returns_501_without_credential_store() {
-        let app = build_app(build_state());
+        let app = build_app(build_test_app_state());
 
         let _ = json_response(
             app.clone(),

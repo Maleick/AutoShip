@@ -10,9 +10,23 @@ TextQuest provides a browser-based dashboard via a REST API + WebSocket interfac
 
 ## Authentication
 
-Currently **no authentication** is implemented. All endpoints are accessible without credentials.
+Authentication is **on by default**. All `/api` endpoints and the WebSocket connection require a static token.
 
-**Future**: Consider bearer token or API key authentication for production deployments.
+**Required** (production): Set `TEXTQUEST_API_TOKEN=<secret>` in the server environment. Every HTTP request must include the header:
+
+```
+X-API-Token: <secret>
+```
+
+WebSocket connections must supply the token as a query parameter:
+
+```
+ws://localhost:3001/ws?token=<secret>
+```
+
+**Dev opt-out**: Set `TEXTQUEST_DISABLE_AUTH=1` to disable authentication for local development. A `WARN` log is emitted on every request when this flag is active. **Never use in production.**
+
+If neither `TEXTQUEST_API_TOKEN` nor `TEXTQUEST_DISABLE_AUTH=1` is configured, all requests are rejected with `401 Unauthorized` and an `ERROR` log is emitted at startup.
 
 ## HTTP Status Codes
 
@@ -376,8 +390,7 @@ When dropped (session paused):
 | 400    | `session_id` is zero or `command` is empty |
 | 422    | Request body is missing or malformed       |
 
-**Authentication**: Subject to the same `X-API-Token` header enforcement as
-all other `/api` endpoints when `TEXTQUEST_API_TOKEN` is configured.
+**Authentication**: Requires `X-API-Token` header (see [Authentication](#authentication) section).
 
 ---
 

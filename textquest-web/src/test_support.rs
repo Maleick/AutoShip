@@ -68,6 +68,7 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
             uuid::Uuid::new_v4()
         )),
         api_token: None,
+        auth_disabled: true, // Tests bypass auth — no token needed in unit tests
         live_session_snapshot_path: test_live_session_snapshot_path(name),
         admin_session_snapshot_path: test_admin_session_snapshot_path(&admin_name),
         xassist_configs: api::xassist::demo_xassist_configs(),

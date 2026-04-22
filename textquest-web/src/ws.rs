@@ -29,22 +29,40 @@ use super::constant_time_eq_str;
 
 /// Upgrade HTTP connection to WebSocket for live session events.
 ///
-/// If `TEXTQUEST_API_TOKEN` is configured, requires a matching `?token=` query
-/// parameter. Rejects the upgrade with `401 Unauthorized` if token validation
-/// fails.
+/// Authentication is **on by default** (matching the REST API).  If
+/// `TEXTQUEST_DISABLE_AUTH=1` is set, the upgrade is allowed without a token
+/// but a `WARN` is emitted.  Otherwise a matching `?token=` query parameter is
+/// required; the upgrade is rejected with `401 Unauthorized` when:
+/// - the token is missing or incorrect, or
+/// - no token is configured and auth is not explicitly disabled.
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     Query(query): Query<WsQuery>,
     State(state): State<Arc<AppState>>,
 ) -> Response {
-    // Validate token if authentication is enabled
-    if let Some(ref expected_token) = state.api_token {
-        match &query.token {
-            Some(provided_token) if constant_time_eq_str(provided_token, expected_token) => {}
-            _ => {
-                tracing::warn!("WebSocket connection rejected: missing or invalid token");
-                return StatusCode::UNAUTHORIZED.into_response();
+    // Explicit dev opt-out.
+    if state.auth_disabled {
+        tracing::warn!("Auth disabled (TEXTQUEST_DISABLE_AUTH=1) — WebSocket allowed without token");
+        return ws.on_upgrade(move |socket| handle_socket(socket, state)).into_response();
+    }
+
+    match state.api_token {
+        Some(ref expected_token) => {
+            match &query.token {
+                Some(provided_token) if constant_time_eq_str(provided_token, expected_token) => {}
+                _ => {
+                    tracing::warn!("WebSocket connection rejected: missing or invalid token");
+                    return StatusCode::UNAUTHORIZED.into_response();
+                }
             }
+        }
+        None => {
+            // No token configured and auth not explicitly disabled — reject.
+            tracing::error!(
+                "WebSocket connection rejected: TEXTQUEST_API_TOKEN is not set and auth is not \
+                 disabled. Set TEXTQUEST_API_TOKEN or TEXTQUEST_DISABLE_AUTH=1."
+            );
+            return StatusCode::UNAUTHORIZED.into_response();
         }
     }
 
@@ -282,9 +300,12 @@ mod tests {
 
     #[tokio::test]
     async fn websocket_requires_valid_token_when_api_token_is_set() {
-        // Create state with a token set
+        // Create state with a token set and auth enforcement enabled.
+        // auth_disabled must be false here so the ws_handler actually rejects
+        // unauthenticated connections — test_app_state() defaults auth_disabled to true.
         let mut state = crate::test_app_state();
         state.api_token = Some("secret-token".to_string());
+        state.auth_disabled = false; // enforce auth for this test
         state.live_session_snapshot_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../data/runtime/ws-auth-test-live-sessions.json");
         let state_with_token = Arc::new(state);

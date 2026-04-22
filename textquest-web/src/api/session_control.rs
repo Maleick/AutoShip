@@ -669,6 +669,7 @@ mod tests {
             alert_config: tokio::sync::RwLock::new(AlertingConfig::default()),
             alerting_config_path: std::path::PathBuf::from("/tmp/test-alerting.toml"),
             api_token: None,
+            auth_disabled: true, // Tests bypass auth
             live_session_snapshot_path: std::path::PathBuf::from("/tmp/test-live-sessions.json"),
             admin_session_snapshot_path: std::path::PathBuf::from("/tmp/test-admin-sessions.json"),
             xassist_configs: api::xassist::demo_xassist_configs(),
