@@ -68,7 +68,7 @@ The main coordinator:
 
 Important current note from code:
 
-- player-chat sentiment is still treated as neutral by default, with richer sentiment analysis deferred to the future LLM phase.
+- player chat now uses the local keyword sentiment scorer to persist per-message sentiment, update player relationship faction/trust on strong positive or negative messages, and summarize notable prior chats into LLM context.
 
 ## Current Behavior vs Roadmap
 

@@ -301,6 +301,16 @@ pub struct SoulConfig {
     /// conservative.
     #[serde(default = "default_max_chat_memory_writes_per_hour")]
     pub max_chat_memory_writes_per_hour: u32,
+    /// Faction delta applied for strongly positive or negative player chat
+    /// sentiment.
+    #[serde(default = "default_sentiment_faction_delta")]
+    pub sentiment_faction_delta: i32,
+    /// Trust delta applied for strongly positive player chat sentiment.
+    ///
+    /// Negative sentiment uses twice this value as a penalty so the default
+    /// remains harsher for hostile interactions.
+    #[serde(default = "default_sentiment_trust_delta")]
+    pub sentiment_trust_delta: f32,
 }
 
 const fn default_max_requests_per_character() -> u32 {
@@ -317,6 +327,14 @@ const fn default_mood_decay_rate() -> f32 {
 
 const fn default_max_chat_memory_writes_per_hour() -> u32 {
     60
+}
+
+const fn default_sentiment_faction_delta() -> i32 {
+    5
+}
+
+const fn default_sentiment_trust_delta() -> f32 {
+    0.05
 }
 
 impl Default for SoulConfig {
@@ -339,6 +357,8 @@ impl Default for SoulConfig {
             memory_decay_days: default_memory_decay_days(),
             mood_decay_rate: default_mood_decay_rate(),
             max_chat_memory_writes_per_hour: default_max_chat_memory_writes_per_hour(),
+            sentiment_faction_delta: default_sentiment_faction_delta(),
+            sentiment_trust_delta: default_sentiment_trust_delta(),
         }
     }
 }
@@ -382,6 +402,8 @@ mod tests {
         assert!(config.relationship.is_empty());
         assert_eq!(config.llm.provider, LlmProviderKind::None);
         assert_eq!(config.llm.model, "gemma3:4b");
+        assert_eq!(config.sentiment_faction_delta, 5);
+        assert!((config.sentiment_trust_delta - 0.05).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -394,6 +416,8 @@ mod tests {
             max_chat_interval_secs = 120
             inter_character_chat = false
             player_chat_enabled = false
+            sentiment_faction_delta = 7
+            sentiment_trust_delta = 0.2
         "#;
 
         let config: SoulConfig = toml::from_str(toml_str).unwrap();
@@ -401,6 +425,8 @@ mod tests {
         assert_eq!(config.edginess, EdginessLevel::Spicy);
         assert_eq!(config.idle_tick_secs, 10);
         assert!(!config.inter_character_chat);
+        assert_eq!(config.sentiment_faction_delta, 7);
+        assert!((config.sentiment_trust_delta - 0.2).abs() < 0.0001);
     }
 
     #[test]

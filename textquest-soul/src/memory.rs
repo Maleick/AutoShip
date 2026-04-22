@@ -521,6 +521,58 @@ impl MemoryStore {
         Ok(rows)
     }
 
+    /// Summarize notable positive and negative player chat counts for one
+    /// speaker.
+    ///
+    /// Counts only messages whose stored sentiment crosses the same strong
+    /// thresholds used for relationship changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
+    pub fn summarize_player_chat_sentiment(
+        &self,
+        character_id: ClientId,
+        speaker: &str,
+    ) -> Result<Option<String>> {
+        let (positive_count, negative_count): (i64, i64) = self
+            .conn
+            .query_row(
+                "SELECT
+                    SUM(CASE WHEN sentiment > 0.5 THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN sentiment < -0.5 THEN 1 ELSE 0 END)
+                 FROM conversations
+                 WHERE character_id = ?1 AND speaker = ?2 AND is_player = 1",
+                params![character_id, speaker],
+                |row| {
+                    Ok((
+                        row.get::<_, Option<i64>>(0)?.unwrap_or(0),
+                        row.get::<_, Option<i64>>(1)?.unwrap_or(0),
+                    ))
+                },
+            )
+            .context("Failed to summarize player chat sentiment")?;
+
+        if positive_count == 0 && negative_count == 0 {
+            return Ok(None);
+        }
+
+        let positive_label = if positive_count == 1 {
+            "positive chat"
+        } else {
+            "positive chats"
+        };
+        let negative_label = if negative_count == 1 {
+            "negative chat"
+        } else {
+            "negative chats"
+        };
+
+        Ok(Some(format!(
+            "had {positive_count} {positive_label}, {negative_count} {negative_label}"
+        )))
+    }
+
     /// Get the speech style for a character.
     ///
     /// # Errors
@@ -1825,6 +1877,45 @@ mod tests {
 
         let convos = store.recall_conversations(1, 10).unwrap();
         assert_eq!(convos.len(), 2);
+    }
+
+    #[test]
+    fn summarize_player_chat_sentiment_counts_strong_messages() {
+        let store = open_memory_store();
+        store
+            .record_conversation(1, "Alice", true, "say", "great pull", 0.8)
+            .unwrap();
+        store
+            .record_conversation(1, "Alice", true, "say", "thanks", 0.9)
+            .unwrap();
+        store
+            .record_conversation(1, "Alice", true, "say", "you are trash", -0.7)
+            .unwrap();
+        store
+            .record_conversation(1, "Alice", true, "say", "neutral", 0.2)
+            .unwrap();
+
+        let summary = store.summarize_player_chat_sentiment(1, "Alice").unwrap();
+
+        assert_eq!(summary.as_deref(), Some("had 2 positive chats, 1 negative chat"));
+    }
+
+    #[test]
+    fn summarize_player_chat_sentiment_ignores_other_speakers_and_bots() {
+        let store = open_memory_store();
+        store
+            .record_conversation(1, "Alice", false, "group", "bot line", 0.9)
+            .unwrap();
+        store
+            .record_conversation(1, "Bob", true, "say", "bad", -0.9)
+            .unwrap();
+        store
+            .record_conversation(1, "Alice", true, "say", "neutral", 0.2)
+            .unwrap();
+
+        let summary = store.summarize_player_chat_sentiment(1, "Alice").unwrap();
+
+        assert!(summary.is_none());
     }
 
     #[test]
