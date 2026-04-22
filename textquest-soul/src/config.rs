@@ -319,6 +319,15 @@ pub struct SoulConfig {
     /// catchphrase from a trusted peer (faction >= 500).
     #[serde(default = "default_catchphrase_adoption_chance")]
     pub catchphrase_adoption_chance: f32,
+    /// Minimum cooldown in seconds between banter exchanges for the same
+    /// character pair. Prevents spam. Default: 300 (5 minutes).
+    #[serde(default = "default_banter_cooldown_secs")]
+    pub banter_cooldown_secs: u64,
+    /// Per-tick trigger probability for banter between friends.
+    /// Rivals use half this value; nemeses use 5% of it; neutrals use 25%.
+    /// Default: 0.20 (20% per tick when cooldown has elapsed).
+    #[serde(default = "default_banter_chance_friend")]
+    pub banter_chance_friend: f32,
 }
 
 const fn default_max_requests_per_character() -> u32 {
@@ -353,6 +362,14 @@ const fn default_catchphrase_adoption_chance() -> f32 {
     0.1
 }
 
+const fn default_banter_cooldown_secs() -> u64 {
+    300
+}
+
+const fn default_banter_chance_friend() -> f32 {
+    0.20
+}
+
 impl Default for SoulConfig {
     fn default() -> Self {
         Self {
@@ -377,6 +394,8 @@ impl Default for SoulConfig {
             sentiment_trust_delta: default_sentiment_trust_delta(),
             enable_speech_learning: default_enable_speech_learning(),
             catchphrase_adoption_chance: default_catchphrase_adoption_chance(),
+            banter_cooldown_secs: default_banter_cooldown_secs(),
+            banter_chance_friend: default_banter_chance_friend(),
         }
     }
 }

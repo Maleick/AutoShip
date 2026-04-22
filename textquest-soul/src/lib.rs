@@ -5,6 +5,9 @@
 pub mod alerts;
 /// Soul audit logging — append-only JSONL log of key state changes.
 pub mod audit;
+/// Inter-character banter — proximity and relationship-based dialogue
+/// triggering.
+pub mod banter;
 /// Soul Engine configuration — API keys, model settings, personality tuning.
 pub mod config;
 /// Soul Engine configuration validation — validates SoulConfig fields and

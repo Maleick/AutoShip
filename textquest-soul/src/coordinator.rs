@@ -14,6 +14,7 @@ use textquest_common::{
 use super::{
     alerts::{Alert, AnomalyDetector},
     audit::{AuditActionType, SoulAuditLogger},
+    banter::BanterEngine,
     config::{CharacterSoulConfig, EdginessLevel, SoulConfig},
     idle::{IdleScheduler, IdleTransition},
     llm::{
@@ -225,6 +226,8 @@ pub struct SoulCoordinator {
     chat_memory_write_timestamps: HashMap<ClientId, VecDeque<Instant>>,
     /// Global phrase frequency tracker for catchphrase candidate detection.
     phrase_tracker: PhraseFrequencyTracker,
+    /// Per-pair banter cooldown engine for inter-character dialogue.
+    banter: BanterEngine,
 }
 
 const MAX_PLAYER_CHAT_MESSAGE_BYTES: usize = 512;
@@ -260,6 +263,7 @@ impl SoulCoordinator {
             audit: None,
             chat_memory_write_timestamps: HashMap::new(),
             phrase_tracker: PhraseFrequencyTracker::new(),
+            banter: BanterEngine::new(),
         })
     }
 
@@ -462,6 +466,65 @@ impl SoulCoordinator {
             if self.tick_count.is_multiple_of(60) {
                 let _ = self.memory.decay_tick(client_id, 0.995);
                 let _ = self.memory.prune_low_importance(client_id, 0.05);
+            }
+        }
+
+        // Inter-character banter tick — find co-located pairs and queue LLM requests
+        if self.config.inter_character_chat {
+            // Build lightweight lookup maps from current soul state
+            let client_names: HashMap<ClientId, String> = self
+                .souls
+                .iter()
+                .map(|(&id, s)| (id, s.name.clone()))
+                .collect();
+            let client_zones: HashMap<ClientId, String> = states
+                .iter()
+                .map(|(&id, gs)| (id, zone_from_state(gs).to_string()))
+                .collect();
+            let soul_traits: HashMap<ClientId, textquest_common::soul::PersonalityTraits> = self
+                .souls
+                .iter()
+                .map(|(&id, s)| (id, s.traits.clone()))
+                .collect();
+            let soul_moods: HashMap<ClientId, textquest_common::soul::MoodState> = self
+                .souls
+                .iter()
+                .map(|(&id, s)| (id, s.mood))
+                .collect();
+            let soul_backstories: HashMap<ClientId, String> = self
+                .souls
+                .iter()
+                .map(|(&id, s)| (id, s.backstory.clone()))
+                .collect();
+
+            // Mix tick count into a non-zero seed (0 is a fixed point in xorshift).
+            let seed = (self.tick_count as u32).wrapping_mul(0x9E37_79B9).wrapping_add(1);
+            let mut rng = textquest_common::nav::Xorshift32::new(seed);
+
+            let banter_requests = self.banter.tick(
+                &client_names,
+                &client_zones,
+                &self.social,
+                &soul_traits,
+                &soul_moods,
+                &soul_backstories,
+                &self.config,
+                &mut || rng.next_f32(),
+            );
+
+            for (_client_id, request) in banter_requests {
+                // Record IdleTogether social event for the banter pair so the
+                // relationship graph is updated.
+                if let crate::llm::Situation::BotChat { character_name: ref responder_name, .. } =
+                    request.situation
+                {
+                    self.social.apply_event(
+                        &request.character_name,
+                        responder_name,
+                        &crate::social::SocialEvent::IdleTogether,
+                    );
+                }
+                self.llm_queue.enqueue(request);
             }
         }
 
