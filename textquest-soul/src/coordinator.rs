@@ -608,6 +608,7 @@ impl SoulCoordinator {
         let Some(soul) = self.souls.get_mut(&client_id) else {
             return;
         };
+        let soul_name = soul.name.clone();
 
         let message = message.trim();
         if message.is_empty() {
