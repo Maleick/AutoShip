@@ -699,4 +699,220 @@ priority = "high"
         };
         assert_ne!(a, c);
     }
+
+    // -----------------------------------------------------------------------
+    // Integration tests — multi-mob scenarios with real database
+    // -----------------------------------------------------------------------
+
+    /// Build a temporary NamedMobDatabase from inline TOML for integration tests.
+    fn build_db(toml_content: &str, zone_filename: &str) -> NamedMobDatabase {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let mut f = std::fs::File::create(dir.path().join(zone_filename)).unwrap();
+        f.write_all(toml_content.as_bytes()).unwrap();
+        NamedMobDatabase::load(dir.path()).unwrap()
+    }
+
+    /// Integration: three named mobs with different priorities.
+    /// Verifies priority_target returns the highest-priority alive mob when
+    /// multiple named NPCs are concurrently alive.
+    #[test]
+    fn test_integration_multi_priority_ordering() {
+        let toml = r#"
+zone = "lowerguk"
+
+[[named]]
+name = "Ghoul Lord"
+level = 45
+respawn_min_minutes = 28
+respawn_max_minutes = 36
+location = [-308.0, -868.0, -81.0]
+drops = ["Flowing Black Silk Sash"]
+priority = "high"
+
+[[named]]
+name = "King Tranix"
+level = 46
+respawn_min_minutes = 28
+respawn_max_minutes = 36
+location = [-170.0, -1015.0, -110.0]
+drops = ["Robe of the Ishva"]
+priority = "medium"
+
+[[named]]
+name = "Ritualist of Hate"
+level = 42
+respawn_min_minutes = 22
+respawn_max_minutes = 28
+location = [-280.0, -940.0, -81.0]
+drops = ["Idol of the Underking"]
+priority = "low"
+"#;
+        let db = build_db(toml, "lowerguk.toml");
+        let mut tracker = NamedTracker::with_db(db);
+        tracker.set_zone("lowerguk");
+
+        // All three spawn simultaneously.
+        let spawns = vec![
+            make_npc("Ghoul Lord", 100),
+            make_npc("King Tranix", 101),
+            make_npc("Ritualist of Hate", 102),
+        ];
+        let alerts = tracker.update(&spawns, 1);
+        // Each new named emits a SpawnUp.
+        assert_eq!(alerts.len(), 3);
+        assert!(alerts.iter().all(|a| matches!(a, NamedAlert::SpawnUp { .. })));
+
+        // priority_target must be the high-priority mob.
+        let target = tracker.priority_target().unwrap();
+        assert_eq!(target.name, "Ghoul Lord");
+        assert_eq!(target.priority, Some(NamedPriority::High));
+
+        // Kill the high-priority mob; medium should become top target.
+        let spawns = vec![
+            make_npc("King Tranix", 101),
+            make_npc("Ritualist of Hate", 102),
+        ];
+        tracker.update(&spawns, 50);
+        let target = tracker.priority_target().unwrap();
+        assert_eq!(target.name, "King Tranix");
+        assert_eq!(target.priority, Some(NamedPriority::Medium));
+    }
+
+    /// Integration: spawn-down alert carries correct respawn window from DB.
+    #[test]
+    fn test_integration_spawndown_alert_respawn_window() {
+        let toml = r#"
+zone = "unrest"
+
+[[named]]
+name = "Garanel Rucksif"
+level = 30
+respawn_min_minutes = 20
+respawn_max_minutes = 25
+location = [100.0, 200.0, 10.0]
+drops = ["Ghoulbane"]
+priority = "high"
+"#;
+        let db = build_db(toml, "unrest.toml");
+        let mut tracker = NamedTracker::with_db(db);
+        tracker.set_zone("unrest");
+
+        tracker.update(&[make_npc("Garanel Rucksif", 500)], 0);
+
+        // Die at tick 1000.
+        let alerts = tracker.update(&[], 1000);
+        assert_eq!(alerts.len(), 1);
+        let NamedAlert::SpawnDown { name, zone, respawn_estimate } = &alerts[0] else {
+            panic!("Expected SpawnDown");
+        };
+        assert_eq!(name, "Garanel Rucksif");
+        assert_eq!(zone, "unrest");
+        // 20 min * 60 * 4 = 4800 ticks.
+        assert_eq!(*respawn_estimate, 1000 + 4800);
+
+        let tracked = tracker.tracked_spawns();
+        assert_eq!(tracked.len(), 1);
+        assert!(!tracked[0].is_alive);
+        // Window end: 25 min * 60 * 4 = 6000 ticks.
+        assert_eq!(tracked[0].respawn_window_end_tick, Some(1000 + 6000));
+    }
+
+    /// Integration: simulated Discord alert relay.
+    /// Verifies that an upstream consumer can collect alerts emitted across
+    /// multiple ticks and build a notification log.
+    #[test]
+    fn test_integration_alert_relay_simulation() {
+        let toml = r#"
+zone = "mistmoore"
+
+[[named]]
+name = "Mayong Mistmoore"
+level = 52
+respawn_min_minutes = 60
+respawn_max_minutes = 90
+location = [0.0, 0.0, 0.0]
+drops = ["Flowing Black Robe"]
+priority = "high"
+"#;
+        let db = build_db(toml, "mistmoore.toml");
+        let mut tracker = NamedTracker::with_db(db);
+        tracker.set_zone("mistmoore");
+
+        struct RelayLog {
+            entries: Vec<String>,
+        }
+        impl RelayLog {
+            fn record(&mut self, alert: &NamedAlert) {
+                match alert {
+                    NamedAlert::SpawnUp { name, zone } => {
+                        self.entries.push(format!("UP: {name} in {zone}"));
+                    }
+                    NamedAlert::SpawnDown { name, zone, respawn_estimate } => {
+                        self.entries
+                            .push(format!("DOWN: {name} in {zone} (est tick {respawn_estimate})"));
+                    }
+                }
+            }
+        }
+
+        let mut log = RelayLog { entries: vec![] };
+
+        // Spawn
+        for a in tracker.update(&[make_npc("Mayong Mistmoore", 9999)], 0) {
+            log.record(&a);
+        }
+        // Stay alive one tick — no alerts
+        for a in tracker.update(&[make_npc("Mayong Mistmoore", 9999)], 1) {
+            log.record(&a);
+        }
+        // Die
+        for a in tracker.update(&[], 100) {
+            log.record(&a);
+        }
+        // Respawn
+        for a in tracker.update(&[make_npc("Mayong Mistmoore", 10001)], 15_000) {
+            log.record(&a);
+        }
+
+        assert_eq!(log.entries.len(), 3);
+        assert_eq!(log.entries[0], "UP: Mayong Mistmoore in mistmoore");
+        assert!(log.entries[1].starts_with("DOWN: Mayong Mistmoore in mistmoore"));
+        assert_eq!(log.entries[2], "UP: Mayong Mistmoore in mistmoore");
+    }
+
+    /// Integration: zone change mid-session clears state and new zone tracks correctly.
+    #[test]
+    fn test_integration_zone_transition_full_cycle() {
+        let toml = r#"
+zone = "crushbone"
+
+[[named]]
+name = "Emperor Crush"
+level = 15
+respawn_min_minutes = 28
+respawn_max_minutes = 32
+location = [-688.0, 118.0, 28.0]
+drops = ["Crushbone Belt"]
+priority = "high"
+"#;
+        let db = build_db(toml, "crushbone.toml");
+        let mut tracker = NamedTracker::with_db(db);
+        tracker.set_zone("crushbone");
+
+        tracker.update(&[make_npc("Emperor Crush", 1)], 1);
+        assert_eq!(tracker.len(), 1);
+
+        // Zone out — all state clears.
+        tracker.set_zone("freportw");
+        assert!(tracker.is_empty());
+        assert!(tracker.priority_target().is_none());
+
+        // Zone back in — fresh tracking.
+        tracker.set_zone("crushbone");
+        let alerts = tracker.update(&[make_npc("Emperor Crush", 2)], 500);
+        assert_eq!(alerts.len(), 1);
+        assert!(matches!(&alerts[0], NamedAlert::SpawnUp { name, .. } if name == "Emperor Crush"));
+        assert_eq!(tracker.tracked_spawns()[0].first_seen_tick, 500);
+    }
 }
