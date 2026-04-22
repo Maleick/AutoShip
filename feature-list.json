@@ -43,6 +43,17 @@
       "notes": "Blocked on missing prerequisite work from issues #1729 and #1730. This branch has no `textquest-admin` binary, no `textquest/src/admin/` module, and no admin backup API/client/models to wire. Issue #1733 is marked `agent:ready`, but the required scaffolding is not present in `origin/master` or this worktree."
     },
     {
+      "id": "issue-1003-lua-setup",
+      "name": "Issue #1003 Lua 5.4 dependency setup",
+      "status": "complete",
+      "acceptance_tests": [
+        "cargo build -p textquest",
+        "cargo test -p textquest",
+        "cargo clippy -p textquest --all-targets --all-features -- -D warnings"
+      ],
+      "notes": "Centralized the `mlua` version in the workspace manifest and kept `textquest` on Lua 5.4 with vendored Lua enabled so macOS and Windows builds do not depend on a preinstalled Lua runtime."
+    },
+    {
       "id": "issue-2172-stack-spoof-invalid-module-name",
       "name": "stack spoof invalid module name handling",
       "status": "complete",

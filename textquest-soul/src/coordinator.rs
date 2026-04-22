@@ -662,19 +662,17 @@ impl SoulCoordinator {
         };
 
         // Audit: memory record
-        if memory_written {
-            if let Some(audit) = &self.audit {
-                let _ = audit.log(
-                    client_id,
-                    AuditActionType::MemoryRecord,
-                    format!(
-                        "{} recorded player chat memory from {}",
-                        soul.name, player_name
-                    ),
-                    None,
-                    None,
-                );
-            }
+        if memory_written && let Some(audit) = &self.audit {
+            let _ = audit.log(
+                client_id,
+                AuditActionType::MemoryRecord,
+                format!(
+                    "{} recorded player chat memory from {}",
+                    soul.name, player_name
+                ),
+                None,
+                None,
+            );
         }
 
         // Queue an LLM response (high priority for real players)
