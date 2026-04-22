@@ -116,6 +116,11 @@ pub mod plugins;
 /// cleanup.
 pub mod registry;
 
+/// Built-in `/textquest` command surface — subcommand handlers registered at
+/// [`registry::Priority::BuiltIn`] for scripts, plugins, reload, enable/disable,
+/// debug verbosity, and orchestrator status.
+pub mod commands;
+
 /// Timestamp config runtime — loads per-character timestamp settings from disk
 /// and dispatches IPC commands to DLL clients.
 pub mod timestamp_runtime;
