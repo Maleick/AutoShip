@@ -126,6 +126,9 @@ pub mod registry;
 /// debug verbosity, and orchestrator status.
 pub mod commands;
 
+/// Travel planning subsystem — portal database, zone routing utilities.
+pub mod travel;
+
 /// Timestamp config runtime — loads per-character timestamp settings from disk
 /// and dispatches IPC commands to DLL clients.
 pub mod timestamp_runtime;
