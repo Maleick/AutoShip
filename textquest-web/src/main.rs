@@ -1004,7 +1004,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "depends on handler enrichment (group_id, routing_scope, class_name) not yet implemented; see admin.rs:104-116 TODOs"]
     async fn admin_sessions_endpoint_returns_persisted_inventory() {
         let tempdir = tempfile::tempdir().expect("tempdir");
         let state = test_state_with_credentials(&tempdir.path().join("creds.db"));
@@ -1040,12 +1039,16 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         let sessions = body.as_array().expect("sessions array");
         assert_eq!(sessions.len(), 1);
-        assert_eq!(sessions[0]["session_id"], 4242);
+        // session_id is formatted as "session-{id}" in AdminSessionRecord
+        assert_eq!(sessions[0]["session_id"], "session-4242");
         assert_eq!(sessions[0]["character_name"], "Cleric42");
         assert_eq!(sessions[0]["class_name"], "Cleric");
+        // group_id is enriched from admin snapshot
         assert_eq!(sessions[0]["group_id"], 2);
-        assert_eq!(sessions[0]["routing_scope"]["kind"], "group");
-        assert_eq!(sessions[0]["lifecycle_state"], "paused");
+        // routing_scope is the label string from AdminRoutingScopeSnapshot
+        assert_eq!(sessions[0]["routing_scope"], "G2");
+        // lifecycle maps to the lifecycle_state snake_case label
+        assert_eq!(sessions[0]["lifecycle"], "paused");
     }
 
     #[tokio::test]
