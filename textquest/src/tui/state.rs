@@ -3573,3 +3573,138 @@ mod tests {
         assert!(!filters.allows_spawn(&merchant_spawn));
     }
 }
+
+// ─── Help panel state ─────────────────────────────────────────────────────────
+
+/// Selectable category tabs in the help search panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HelpTab {
+    #[default]
+    Commands,
+    Faq,
+    Tips,
+    Results,
+}
+
+impl HelpTab {
+    /// Display label for the tab.
+    pub fn label(self) -> &'static str {
+        match self {
+            HelpTab::Commands => "Commands",
+            HelpTab::Faq => "FAQ",
+            HelpTab::Tips => "Tips",
+            HelpTab::Results => "Results",
+        }
+    }
+
+    /// All tabs in display order.
+    pub fn all() -> &'static [HelpTab] {
+        &[HelpTab::Commands, HelpTab::Faq, HelpTab::Tips, HelpTab::Results]
+    }
+}
+
+/// State for the searchable help panel overlay.
+#[derive(Debug, Clone, Default)]
+pub struct HelpPanelState {
+    /// Current search query entered by the operator.
+    pub query: String,
+    /// Cursor position within the query string (byte offset).
+    pub cursor: usize,
+    /// Active category tab.
+    pub tab: HelpTab,
+    /// Selected result row index (0-based within visible list).
+    pub selected: usize,
+    /// Scroll offset for the result list.
+    pub scroll: usize,
+}
+
+impl HelpPanelState {
+    /// Return a new zeroed state.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Move selection up by one row; clamp at 0.
+    pub fn select_prev(&mut self) {
+        self.selected = self.selected.saturating_sub(1);
+        if self.selected < self.scroll {
+            self.scroll = self.selected;
+        }
+    }
+
+    /// Move selection down by one row; clamp at `max`.
+    pub fn select_next(&mut self, max: usize) {
+        if self.selected + 1 < max {
+            self.selected += 1;
+        }
+    }
+
+    /// Adjust scroll so `selected` is always visible inside `page_height` rows.
+    pub fn ensure_visible(&mut self, page_height: usize) {
+        if page_height == 0 {
+            return;
+        }
+        if self.selected >= self.scroll + page_height {
+            self.scroll = self.selected - page_height + 1;
+        }
+        if self.selected < self.scroll {
+            self.scroll = self.selected;
+        }
+    }
+
+    /// Append a character to the query and advance the cursor.
+    pub fn push_char(&mut self, ch: char) {
+        self.query.push(ch);
+        self.cursor = self.query.len();
+        self.selected = 0;
+        self.scroll = 0;
+    }
+
+    /// Delete the last character before the cursor.
+    pub fn pop_char(&mut self) {
+        if !self.query.is_empty() {
+            self.query.pop();
+            self.cursor = self.query.len();
+            self.selected = 0;
+            self.scroll = 0;
+        }
+    }
+}
+
+#[cfg(test)]
+mod help_state_tests {
+    use super::*;
+
+    #[test]
+    fn help_panel_state_push_pop() {
+        let mut state = HelpPanelState::new();
+        state.push_char('n');
+        state.push_char('a');
+        state.push_char('v');
+        assert_eq!(state.query, "nav");
+        assert_eq!(state.cursor, 3);
+        state.pop_char();
+        assert_eq!(state.query, "na");
+    }
+
+    #[test]
+    fn help_panel_state_select_navigation() {
+        let mut state = HelpPanelState::new();
+        state.select_next(10);
+        assert_eq!(state.selected, 1);
+        state.select_prev();
+        assert_eq!(state.selected, 0);
+        state.select_prev(); // should not underflow
+        assert_eq!(state.selected, 0);
+    }
+
+    #[test]
+    fn help_panel_ensure_visible_scrolls_down() {
+        let mut state = HelpPanelState::new();
+        state.selected = 12;
+        state.ensure_visible(5);
+        assert!(state.selected >= state.scroll);
+        assert!(state.scroll + 5 > state.selected || state.scroll <= state.selected);
+    }
+}

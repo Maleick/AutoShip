@@ -543,6 +543,11 @@ pub struct App {
     /// State for the help search panel (query, selection, scroll).
     pub help_search_state: crate::tui::ui::help::HelpPanelState,
 
+    /// Whether the searchable help search panel is open.
+    pub help_search_visible: bool,
+    /// State for the help search panel (canonical type from `tui::state`).
+    pub help_search_state: crate::tui::state::HelpPanelState,
+
     /// Current operating mode (camp or hunt).
     pub operating_mode: crate::camp::hunt::OperatingMode,
 
@@ -891,6 +896,9 @@ impl App {
 
             help_search_visible: false,
             help_search_state: crate::tui::ui::help::HelpPanelState::new(),
+
+            help_search_visible: false,
+            help_search_state: crate::tui::state::HelpPanelState::new(),
 
             operating_mode: crate::camp::hunt::OperatingMode::Camp,
 
