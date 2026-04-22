@@ -107,3 +107,10 @@ tools/python-sdk/.coverage
 # Legacy tooling (obsolete)
 .symphony-opencode/
 dispatch.log
+
+# AutoShip runtime state — never commit (previously leaked)
+.autoship/
+issue.json
+pane.log
+dispatch.log
+.watcher.pid
