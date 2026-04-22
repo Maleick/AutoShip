@@ -62,6 +62,17 @@
         "python3 scripts/dev-preflight.py"
       ],
       "notes": "Rejected interior-NUL module names in `stack_spoof::find_gadgets` so `GetModuleHandleA` cannot silently resolve the calling module, added regression coverage, and documented that frame rewriting still operates on the live RBP chain heuristically rather than validating each original return address against a target module."
+    },
+    {
+      "id": "issue-1092-zone-awareness-location-based-behavior-constraints-and-mood-effects",
+      "name": "M11 zone awareness behavior constraints and mood effects",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo build -p textquest-soul",
+        "cargo test -p textquest-soul",
+        "python3 scripts/dev-preflight.py"
+      ],
+      "notes": "Add TOML-backed zone metadata, neutral fallback for unknown zones, coordinator-time zone loading, and zone-aware idle weighting for behavior and mood interactions."
     }
   ]
 }

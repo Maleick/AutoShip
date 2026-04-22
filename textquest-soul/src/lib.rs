@@ -50,3 +50,5 @@ pub mod suppression;
 /// Zone classification — environmental metadata that constrains idle behavior
 /// selection.
 pub mod zone_classifier;
+/// Zone metadata and environment-aware idle constraints.
+pub mod zones;

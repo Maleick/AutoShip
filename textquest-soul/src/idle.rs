@@ -7,7 +7,7 @@ use crate::{
     config::SoulConfig,
     llm::{LlmPriority, LlmProvider, LlmRequest, Situation, fallback::TraitDrivenResponder},
     personality::SoulContext,
-    zone_classifier::{ZoneDatabase, apply_zone_constraints},
+    zones::{ZoneDatabase, apply_zone_constraints},
 };
 
 /// An active idle behavior with its remaining duration.
@@ -76,7 +76,7 @@ impl IdleScheduler {
             ticks_idle: 0,
             min_duration_ticks: min_ticks,
             max_duration_ticks: max_ticks,
-            zone_db: ZoneDatabase::with_defaults(),
+            zone_db: ZoneDatabase::new(),
         }
     }
 
@@ -248,7 +248,7 @@ impl IdleScheduler {
         // Apply zone-specific constraints (zeroes out impossible behaviors,
         // adjusts weights for dangerous/social/raid zones)
         let zone_cls = self.zone_db.lookup(ctx.zone);
-        apply_zone_constraints(&mut weights, zone_cls, mood);
+        apply_zone_constraints(&mut weights, &zone_cls, mood);
 
         weights
     }
@@ -355,11 +355,37 @@ mod tests {
         config::{EdginessLevel, SoulConfig},
         llm::fallback::TraitDrivenResponder,
         personality::SoulContext,
+        zones::{NpcDensity, ZoneDatabase, ZoneMetadata},
     };
     use textquest_common::soul::{IdleBehaviorType, MoodState, PersonalityTraits};
 
     fn default_config() -> SoulConfig {
         SoulConfig::default()
+    }
+
+    fn scheduler_with_test_zones(client_id: u32) -> IdleScheduler {
+        let mut scheduler = IdleScheduler::new(client_id, &default_config());
+        let mut zone_db = ZoneDatabase::new();
+        zone_db.merge([
+            ZoneMetadata {
+                name: "pok".into(),
+                safe: true,
+                has_water: false,
+                has_vendors: true,
+                npc_density: NpcDensity::High,
+                raid_zone: false,
+            },
+            ZoneMetadata {
+                name: "sebilis".into(),
+                safe: false,
+                has_water: false,
+                has_vendors: false,
+                npc_density: NpcDensity::High,
+                raid_zone: false,
+            },
+        ]);
+        scheduler.set_zone_db(zone_db);
+        scheduler
     }
 
     fn make_ctx<'a>(
@@ -881,8 +907,7 @@ mod tests {
 
     #[test]
     fn pok_zone_zeroes_fish_nonzero_vendor() {
-        let config = default_config();
-        let scheduler = IdleScheduler::new(1, &config);
+        let scheduler = scheduler_with_test_zones(1);
         let traits = PersonalityTraits {
             greed: 0.8,
             conscientiousness: 0.8,
@@ -911,14 +936,11 @@ mod tests {
 
     #[test]
     fn dangerous_zone_suppresses_wander() {
-        let config = default_config();
-        let scheduler = IdleScheduler::new(1, &config);
+        let scheduler = scheduler_with_test_zones(1);
         let traits = PersonalityTraits {
             wanderlust: 0.9,
             ..Default::default()
         };
-        // crushbone = dangerous, freportn = unknown (defaults to dangerous too)
-        // Use a safe zone vs dangerous zone comparison via zone_db
         let safe_ctx = SoulContext {
             character_name: "TestChar",
             traits: &traits,
@@ -959,8 +981,7 @@ mod tests {
 
     #[test]
     fn greed_trait_boosts_vendor_browse() {
-        let config = default_config();
-        let scheduler = IdleScheduler::new(1, &config);
+        let scheduler = scheduler_with_test_zones(1);
 
         let low_greed = PersonalityTraits {
             greed: 0.1,

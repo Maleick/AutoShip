@@ -1,0 +1,90 @@
+[zones.poknowledge]
+safe = true
+has_water = false
+has_vendors = true
+npc_density = "high"
+raid_zone = false
+
+[zones.pok]
+safe = true
+has_water = false
+has_vendors = true
+npc_density = "high"
+raid_zone = false
+
+[zones.bazaar]
+safe = true
+has_water = false
+has_vendors = true
+npc_density = "high"
+raid_zone = false
+
+[zones.nexus]
+safe = true
+has_water = false
+has_vendors = true
+npc_density = "medium"
+raid_zone = false
+
+[zones.eastkarana]
+safe = false
+has_water = true
+has_vendors = false
+npc_density = "low"
+raid_zone = false
+
+[zones.northkarana]
+safe = false
+has_water = true
+has_vendors = false
+npc_density = "low"
+raid_zone = false
+
+[zones.gfaydark]
+safe = false
+has_water = true
+has_vendors = false
+npc_density = "medium"
+raid_zone = false
+
+[zones.sebilis]
+safe = false
+has_water = false
+has_vendors = false
+npc_density = "high"
+raid_zone = false
+
+[zones.lguk]
+safe = false
+has_water = false
+has_vendors = false
+npc_density = "high"
+raid_zone = false
+
+[zones.velks]
+safe = false
+has_water = false
+has_vendors = false
+npc_density = "high"
+raid_zone = false
+
+[zones.crushbone]
+safe = false
+has_water = false
+has_vendors = false
+npc_density = "high"
+raid_zone = false
+
+[zones.sleeper]
+safe = false
+has_water = false
+has_vendors = false
+npc_density = "medium"
+raid_zone = true
+
+[zones.ntov]
+safe = false
+has_water = false
+has_vendors = false
+npc_density = "medium"
+raid_zone = true

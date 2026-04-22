@@ -24,6 +24,7 @@ use super::{
     personality::{PersonalityEngine, SoulContext},
     social::SocialGraph,
     suppression::{GameStateContext, SuppressionRules},
+    zones::ZoneDatabase,
 };
 
 /// Maximum number of entries in the IPC command queue before overflow drops
@@ -220,6 +221,8 @@ pub struct SoulCoordinator {
     /// Sliding one-hour window of chat-derived memory write timestamps, keyed
     /// by client. Used to enforce `max_chat_memory_writes_per_hour`.
     chat_memory_write_timestamps: HashMap<ClientId, VecDeque<Instant>>,
+    /// Zone metadata used to constrain environment-aware idle behavior.
+    zone_db: ZoneDatabase,
 }
 
 const MAX_PLAYER_CHAT_MESSAGE_BYTES: usize = 512;
@@ -238,6 +241,11 @@ impl SoulCoordinator {
         let suppression = config.suppression.clone();
         // Phase 1: 0 token budget (fallback only, no real LLM calls)
         let llm_queue = LlmRequestQueue::new(0);
+        let mut zone_db = ZoneDatabase::new();
+        let zone_config_path = Path::new("config/soul_zones.toml");
+        if zone_config_path.exists() {
+            zone_db.load_from_toml(zone_config_path)?;
+        }
 
         Ok(Self {
             souls: HashMap::new(),
@@ -254,6 +262,7 @@ impl SoulCoordinator {
             anomaly_detector: AnomalyDetector::new(),
             audit: None,
             chat_memory_write_timestamps: HashMap::new(),
+            zone_db,
         })
     }
 
@@ -268,6 +277,8 @@ impl SoulCoordinator {
     /// Register a character with the coordinator.
     pub fn register_character(&mut self, client_id: ClientId, char_config: &CharacterSoulConfig) {
         let edginess = char_config.edginess.unwrap_or(self.config.edginess);
+        let mut idle = IdleScheduler::new(client_id, &self.config);
+        idle.set_zone_db(self.zone_db.clone());
 
         let soul = CharacterSoul {
             name: char_config.name.clone(),
@@ -277,7 +288,7 @@ impl SoulCoordinator {
             edginess,
             backstory: char_config.backstory.clone(),
             personality: PersonalityEngine::new(client_id),
-            idle: IdleScheduler::new(client_id, &self.config),
+            idle,
             responder: TraitDrivenResponder::new(client_id, edginess),
         };
 
