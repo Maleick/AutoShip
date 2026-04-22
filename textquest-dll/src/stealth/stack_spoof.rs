@@ -6,6 +6,39 @@
 //! our injected DLL.
 
 // ---------------------------------------------------------------------------
+// Error type
+// ---------------------------------------------------------------------------
+
+/// Errors returned by stack-spoof operations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StackSpoofError {
+    /// The supplied module name contains an interior NUL byte and cannot be
+    /// passed safely to `GetModuleHandleA`. Silently falling back to an empty
+    /// `CString` would cause the Windows API to return a handle to the
+    /// **calling process** instead of the intended target module, producing
+    /// incorrect spoofed frames without any error signal.
+    InvalidModuleName,
+    /// The module was not found in the process's loaded module list.
+    ModuleNotFound,
+    /// `GetModuleInformation` failed for the given module handle.
+    ModuleInfoFailed,
+}
+
+impl std::fmt::Display for StackSpoofError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidModuleName => {
+                f.write_str("module name contains an interior NUL byte")
+            }
+            Self::ModuleNotFound => f.write_str("module not found in process module list"),
+            Self::ModuleInfoFailed => f.write_str("GetModuleInformation failed"),
+        }
+    }
+}
+
+impl std::error::Error for StackSpoofError {}
+
+// ---------------------------------------------------------------------------
 // Windows implementation
 // ---------------------------------------------------------------------------
 
@@ -26,6 +59,8 @@ mod inner {
         core::PCSTR,
     };
 
+    use super::StackSpoofError;
+
     /// Cached gadgets from ntdll + kernel32.
     static GADGETS: OnceLock<Vec<usize>> = OnceLock::new();
 
@@ -33,26 +68,28 @@ mod inner {
     /// within a loaded module. We only keep addresses that sit right after
     /// a sequence of non-zero bytes (heuristic for "end of a real
     /// function").
-    pub fn find_gadgets(module_name: &str) -> Vec<usize> {
-        let c_name = match std::ffi::CString::new(module_name) {
-            Ok(name) => name,
-            Err(_) => {
-                warn!(
-                    "find_gadgets rejected module name containing interior NUL: {:?}",
-                    module_name
-                );
-                return Vec::new();
-            }
-        };
+    ///
+    /// # Errors
+    /// Returns [`StackSpoofError::InvalidModuleName`] if `module_name`
+    /// contains an interior NUL byte. Passing an empty `CString` to
+    /// `GetModuleHandleA` would silently return a handle to the calling
+    /// process rather than the intended target — this function rejects that
+    /// case explicitly so the caller receives an unambiguous error.
+    pub fn find_gadgets(module_name: &str) -> Result<Vec<usize>, StackSpoofError> {
+        let c_name = std::ffi::CString::new(module_name).map_err(|_| {
+            warn!(
+                "find_gadgets rejected module name containing interior NUL: {:?}",
+                module_name
+            );
+            StackSpoofError::InvalidModuleName
+        })?;
 
         let (base, size) = unsafe {
-            let handle: HMODULE = match GetModuleHandleA(PCSTR::from_raw(c_name.as_ptr().cast())) {
-                Ok(h) => h,
-                Err(e) => {
+            let handle: HMODULE =
+                GetModuleHandleA(PCSTR::from_raw(c_name.as_ptr().cast())).map_err(|e| {
                     warn!("GetModuleHandleA({module_name}) failed: {e}");
-                    return Vec::new();
-                }
-            };
+                    StackSpoofError::ModuleNotFound
+                })?;
 
             let mut info = MODULEINFO::default();
             if GetModuleInformation(
@@ -64,13 +101,13 @@ mod inner {
             .is_err()
             {
                 warn!("GetModuleInformation({module_name}) failed");
-                return Vec::new();
+                return Err(StackSpoofError::ModuleInfoFailed);
             }
             (info.lpBaseOfDll as usize, info.SizeOfImage as usize)
         };
 
         if base == 0 || size == 0 {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         let mut gadgets = Vec::new();
@@ -93,14 +130,14 @@ mod inner {
             "found {} ret gadgets in {module_name} (base=0x{base:X}, size=0x{size:X})",
             gadgets.len()
         );
-        gadgets
+        Ok(gadgets)
     }
 
     /// Initialise the gadget cache from ntdll.dll and kernel32.dll.
     pub fn init() {
         GADGETS.get_or_init(|| {
-            let mut g = find_gadgets("ntdll.dll");
-            g.extend(find_gadgets("kernel32.dll"));
+            let mut g = find_gadgets("ntdll.dll").unwrap_or_default();
+            g.extend(find_gadgets("kernel32.dll").unwrap_or_default());
             debug!("stack_spoof: cached {} total gadgets", g.len());
             g
         });
@@ -206,9 +243,15 @@ mod inner {
         f()
     }
 
-    /// Returns an empty vec on non-Windows.
-    pub fn find_gadgets(_module_name: &str) -> Vec<usize> {
-        Vec::new()
+    /// Returns an empty vec on non-Windows, but still validates the module name
+    /// so that callers receive `Err(InvalidModuleName)` for NUL-containing
+    /// names on all platforms (consistent API contract, cross-platform tests).
+    pub fn find_gadgets(module_name: &str) -> Result<Vec<usize>, super::StackSpoofError> {
+        // Validate even on non-Windows so callers get consistent error
+        // behaviour and regression tests run on macOS/Linux CI.
+        std::ffi::CString::new(module_name)
+            .map_err(|_| super::StackSpoofError::InvalidModuleName)?;
+        Ok(Vec::new())
     }
 
     /// Returns an empty slice on non-Windows.
@@ -236,7 +279,13 @@ pub fn with_spoofed_stack<F: FnOnce() -> R, R>(f: F) -> R {
 }
 
 /// Find `ret` instruction gadgets in a loaded module.
-pub fn find_gadgets(module_name: &str) -> Vec<usize> {
+///
+/// # Errors
+/// Returns [`StackSpoofError::InvalidModuleName`] if `module_name` contains
+/// an interior NUL byte. Passing an empty `CString` to `GetModuleHandleA`
+/// silently returns a handle to the **calling process**, producing incorrect
+/// spoofed frames — this function rejects that case with an explicit error.
+pub fn find_gadgets(module_name: &str) -> Result<Vec<usize>, StackSpoofError> {
     inner::find_gadgets(module_name)
 }
 
@@ -289,15 +338,29 @@ mod tests {
     }
 
     #[test]
-    fn find_gadgets_nonexistent_module_returns_empty() {
-        let gadgets = find_gadgets("nonexistent_module_12345.dll");
-        assert!(gadgets.is_empty());
+    fn find_gadgets_nonexistent_module_returns_empty_or_not_found() {
+        // On non-Windows this always returns Ok([]); on Windows it returns
+        // Err(ModuleNotFound) or Ok([]) depending on the loaded module list.
+        let result = find_gadgets("nonexistent_module_12345.dll");
+        match result {
+            Ok(gadgets) => assert!(gadgets.is_empty()),
+            Err(StackSpoofError::ModuleNotFound) => {} // expected on Windows
+            Err(e) => panic!("unexpected error for missing module: {e}"),
+        }
     }
 
+    /// Regression test: a module name with an embedded NUL byte must return
+    /// `Err(StackSpoofError::InvalidModuleName)` rather than silently passing
+    /// an empty `CString` to `GetModuleHandleA`, which would return a handle
+    /// to the calling process and fabricate wrong spoofed frames.
     #[test]
-    fn find_gadgets_module_name_with_nul_returns_empty() {
-        let gadgets = find_gadgets("kernel32.dll\0ntdll.dll");
-        assert!(gadgets.is_empty());
+    fn find_gadgets_nul_in_name_returns_invalid_module_name_error() {
+        let result = find_gadgets("kernel32.dll\0ntdll.dll");
+        assert_eq!(
+            result,
+            Err(StackSpoofError::InvalidModuleName),
+            "embedded NUL must be rejected with InvalidModuleName, not silently truncated"
+        );
     }
 
     #[test]
