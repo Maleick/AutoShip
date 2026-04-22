@@ -196,6 +196,69 @@ impl AccountsConfig {
             server_name: entry.server.clone(),
         }
     }
+
+    /// Resolve a profile name to a list of `AccountInfo` values.
+    ///
+    /// Loads `config/accounts.toml` from the given path, finds the named
+    /// profile group, and returns the accounts in that group as `AccountInfo`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the config file cannot be read or parsed, or if no
+    /// profile group with the given name exists.
+    pub fn load_accounts_for_profile(
+        accounts_path: &Path,
+        profile_name: &str,
+    ) -> Result<Vec<textquest_common::login::AccountInfo>> {
+        let cfg = Self::load(accounts_path)?;
+        let entries = cfg
+            .accounts_for_profile_name(profile_name)
+            .ok_or_else(|| {
+                anyhow::anyhow!("No profile group named '{profile_name}' found in accounts config")
+            })?;
+        Ok(entries.into_iter().map(Self::to_account_info).collect())
+    }
+
+    /// Load all accounts from the accounts config file as `AccountInfo` values.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the config file cannot be read or parsed.
+    pub fn load_all_accounts(
+        accounts_path: &Path,
+    ) -> Result<Vec<textquest_common::login::AccountInfo>> {
+        let cfg = Self::load(accounts_path)?;
+        Ok(cfg.accounts.iter().map(Self::to_account_info).collect())
+    }
+
+    /// Validate that every account in `accounts` has a credential entry in the
+    /// provided credential store.
+    ///
+    /// Returns `Ok(())` if all accounts are present.  Returns a descriptive
+    /// error listing the first missing account name on failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the credential store cannot be queried, or if any
+    /// account in `accounts` is missing from the store.
+    #[cfg(windows)]
+    pub fn validate_credentials_exist(
+        accounts: &[textquest_common::login::AccountInfo],
+        store: &crate::credentials::store::CredentialStore,
+    ) -> Result<()> {
+        let stored = store.list_accounts()?;
+        let stored_lower: std::collections::HashSet<String> =
+            stored.iter().map(|s| s.to_lowercase()).collect();
+        for acct in accounts {
+            if !stored_lower.contains(&acct.account_name.to_lowercase()) {
+                anyhow::bail!(
+                    "Account '{}' is not in the credential store",
+                    acct.account_name
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Top-level application configuration loaded from the TOML config file.
@@ -1594,5 +1657,142 @@ pitch = 60.0
             "First Person"
         );
         assert!(cfg.camera_preset_by_hotkey("F9").is_none());
+    }
+
+    // ─── Account Loader / Credential Validation Tests ──────────────────────
+
+    /// Write a temporary accounts.toml with the given TOML content and return
+    /// its path.
+    fn write_temp_accounts_toml(content: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("accounts.toml");
+        std::fs::write(&path, content).expect("write temp accounts.toml");
+        (dir, path)
+    }
+
+    #[test]
+    fn load_all_accounts_returns_all_entries() {
+        let (_dir, path) = write_temp_accounts_toml(SAMPLE_ACCOUNTS_TOML);
+        let accounts = AccountsConfig::load_all_accounts(&path).unwrap();
+        assert_eq!(accounts.len(), 3);
+        let names: Vec<&str> = accounts.iter().map(|a| a.account_name.as_str()).collect();
+        assert!(names.contains(&"dmft01"));
+        assert!(names.contains(&"dmft02"));
+        assert!(names.contains(&"dmft07"));
+    }
+
+    #[test]
+    fn load_all_accounts_empty_toml_returns_empty_vec() {
+        let (_dir, path) = write_temp_accounts_toml("");
+        let accounts = AccountsConfig::load_all_accounts(&path).unwrap();
+        assert!(accounts.is_empty());
+    }
+
+    #[test]
+    fn load_all_accounts_missing_file_returns_error() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("nonexistent.toml");
+        let result = AccountsConfig::load_all_accounts(&path);
+        assert!(result.is_err());
+        let msg = format!("{}", result.unwrap_err());
+        assert!(msg.contains("nonexistent.toml") || msg.contains("Failed to read"));
+    }
+
+    #[test]
+    fn load_accounts_for_profile_returns_correct_group() {
+        let (_dir, path) = write_temp_accounts_toml(SAMPLE_WITH_PROFILES);
+        let accounts = AccountsConfig::load_accounts_for_profile(&path, "MainRaid").unwrap();
+        assert_eq!(accounts.len(), 2);
+        assert!(accounts.iter().all(|a| a.group_id == 1));
+    }
+
+    #[test]
+    fn load_accounts_for_profile_case_insensitive() {
+        let (_dir, path) = write_temp_accounts_toml(SAMPLE_WITH_PROFILES);
+        let lower = AccountsConfig::load_accounts_for_profile(&path, "mainraid").unwrap();
+        let upper = AccountsConfig::load_accounts_for_profile(&path, "MAINRAID").unwrap();
+        assert_eq!(lower.len(), upper.len());
+    }
+
+    #[test]
+    fn load_accounts_for_profile_missing_profile_returns_error() {
+        let (_dir, path) = write_temp_accounts_toml(SAMPLE_WITH_PROFILES);
+        let result = AccountsConfig::load_accounts_for_profile(&path, "NoSuchProfile");
+        assert!(result.is_err());
+        let msg = format!("{}", result.unwrap_err());
+        assert!(msg.contains("NoSuchProfile"));
+    }
+
+    #[test]
+    fn load_accounts_for_profile_empty_group_returns_empty_vec() {
+        let (_dir, path) = write_temp_accounts_toml(SAMPLE_WITH_PROFILES);
+        // AltGroup (id=3) has no accounts assigned to it
+        let accounts = AccountsConfig::load_accounts_for_profile(&path, "AltGroup").unwrap();
+        assert!(accounts.is_empty());
+    }
+
+    // ─── validate_credentials_exist tests (Windows-only) ───────────────────
+
+    #[cfg(windows)]
+    fn make_account_info(name: &str) -> textquest_common::login::AccountInfo {
+        textquest_common::login::AccountInfo {
+            account_name: name.to_string(),
+            character_name: String::new(),
+            class_name: String::new(),
+            level: 1,
+            group_id: 0,
+            server_name: String::new(),
+        }
+    }
+
+    #[cfg(windows)]
+    fn open_test_store() -> crate::credentials::store::CredentialStore {
+        use std::path::PathBuf;
+        use crate::credentials::crypto;
+        let salt = crypto::generate_salt();
+        let key = crypto::derive_key("test_pw", &salt).unwrap();
+        crate::credentials::store::CredentialStore::open(&PathBuf::from(":memory:"), key).unwrap()
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn validate_credentials_exist_passes_when_all_present() {
+        let store = open_test_store();
+        store.add_account("dmft01", "pw1").unwrap();
+        store.add_account("dmft02", "pw2").unwrap();
+        let accounts = vec![make_account_info("dmft01"), make_account_info("dmft02")];
+        let result = AccountsConfig::validate_credentials_exist(&accounts, &store);
+        assert!(result.is_ok());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn validate_credentials_exist_fails_for_missing_account() {
+        let store = open_test_store();
+        store.add_account("dmft01", "pw1").unwrap();
+        let accounts = vec![make_account_info("dmft01"), make_account_info("dmft99")];
+        let result = AccountsConfig::validate_credentials_exist(&accounts, &store);
+        assert!(result.is_err());
+        let msg = format!("{}", result.unwrap_err());
+        assert!(msg.contains("dmft99"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn validate_credentials_exist_case_insensitive() {
+        let store = open_test_store();
+        store.add_account("DMFT01", "pw1").unwrap();
+        // Config might store it as lowercase — check case-insensitive match
+        let accounts = vec![make_account_info("dmft01")];
+        let result = AccountsConfig::validate_credentials_exist(&accounts, &store);
+        assert!(result.is_ok());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn validate_credentials_exist_passes_for_empty_account_list() {
+        let store = open_test_store();
+        let result = AccountsConfig::validate_credentials_exist(&[], &store);
+        assert!(result.is_ok());
     }
 }
