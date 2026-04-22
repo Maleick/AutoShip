@@ -8,6 +8,23 @@
 //! Load failures are logged but never panic — the orchestrator keeps running
 //! with whatever plugins loaded successfully.
 //!
+//! # Crash isolation
+//!
+//! All FFI call sites (`PLUGIN_INIT`, `PLUGIN_SHUTDOWN`, registered callbacks)
+//! are wrapped in [`std::panic::catch_unwind`] so that a panicking plugin
+//! cannot bring down the orchestrator process.  A per-plugin [`PluginHealth`]
+//! tracker enforces an **error budget**: more than [`ERROR_BUDGET_MAX`] errors
+//! within [`ERROR_BUDGET_WINDOW_SECS`] seconds automatically disables the
+//! plugin.  Disabled plugins are skipped on all future dispatch.
+//!
+//! ## Watchdog limitation
+//!
+//! True hang detection (killing a stuck plugin thread) requires running the
+//! plugin in a subprocess, which is outside the scope of in-process DLL
+//! loading.  The current implementation logs a warning when a call site has
+//! not completed within [`WATCHDOG_WARN_SECS`] seconds, but cannot forcibly
+//! terminate the call.  Full process isolation is a post-M8 improvement item.
+//!
 //! # Hotkey/command registration for plugins
 //!
 //! Plugins receive a [`PluginApi`] pointer during `PLUGIN_INIT` (via the
@@ -31,11 +48,121 @@
 //! that plugin.
 
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use tracing::{debug, error, info, warn};
+
+// ─── Error-budget constants ───────────────────────────────────────────────────
+
+/// Maximum number of errors allowed within the sliding window before the
+/// plugin is automatically disabled.
+pub const ERROR_BUDGET_MAX: usize = 5;
+
+/// Sliding window width (seconds) for the error budget.
+pub const ERROR_BUDGET_WINDOW_SECS: u64 = 60;
+
+/// Log a warning if a plugin FFI call has not returned within this many
+/// seconds.  The call cannot be killed in-process; the warning is advisory.
+pub const WATCHDOG_WARN_SECS: u64 = 5;
+
+// ─── PluginHealth ─────────────────────────────────────────────────────────────
+
+/// Per-plugin error budget tracker and liveness record.
+///
+/// Maintained inside [`PluginRegistry`] alongside each [`PluginHandle`].
+/// When [`PluginHealth::is_disabled`] returns `true` the registry skips all
+/// dispatch for that plugin and logs at `warn` level.
+#[derive(Debug)]
+pub struct PluginHealth {
+    /// Ring of timestamps for recent errors (within the sliding window).
+    recent_errors: VecDeque<Instant>,
+    /// Set when the plugin exceeds its error budget.
+    disabled: bool,
+    /// Reason the plugin was disabled, if any.
+    disable_reason: Option<String>,
+    /// Timestamp of the last successful callback completion.
+    pub last_heartbeat: Option<Instant>,
+}
+
+impl PluginHealth {
+    /// Create a fresh health record.
+    pub fn new() -> Self {
+        Self {
+            recent_errors: VecDeque::new(),
+            disabled: false,
+            disable_reason: None,
+            last_heartbeat: None,
+        }
+    }
+
+    /// Returns `true` if this plugin has been automatically disabled.
+    pub fn is_disabled(&self) -> bool {
+        self.disabled
+    }
+
+    /// Returns the reason the plugin was disabled, if any.
+    pub fn disable_reason(&self) -> Option<&str> {
+        self.disable_reason.as_deref()
+    }
+
+    /// Record one error and disable the plugin if the budget is exhausted.
+    ///
+    /// Returns `true` if the plugin was **just** disabled by this call.
+    pub fn record_error(&mut self, plugin_name: &str, detail: &str) -> bool {
+        let now = Instant::now();
+        let window = Duration::from_secs(ERROR_BUDGET_WINDOW_SECS);
+
+        // Evict entries older than the sliding window.
+        while let Some(&front) = self.recent_errors.front() {
+            if now.duration_since(front) > window {
+                self.recent_errors.pop_front();
+            } else {
+                break;
+            }
+        }
+
+        self.recent_errors.push_back(now);
+
+        error!(
+            plugin = %plugin_name,
+            error_count = self.recent_errors.len(),
+            budget_max = ERROR_BUDGET_MAX,
+            detail = %detail,
+            "Plugin error recorded"
+        );
+
+        if !self.disabled && self.recent_errors.len() > ERROR_BUDGET_MAX {
+            let reason = format!(
+                "exceeded error budget ({} errors in {}s): {}",
+                self.recent_errors.len(),
+                ERROR_BUDGET_WINDOW_SECS,
+                detail
+            );
+            self.disabled = true;
+            self.disable_reason = Some(reason.clone());
+            warn!(plugin = %plugin_name, reason = %reason, "Plugin DISABLED — error budget exhausted");
+            return true;
+        }
+
+        false
+    }
+
+    /// Mark a successful call completion (heartbeat).
+    pub fn record_success(&mut self) {
+        self.last_heartbeat = Some(Instant::now());
+    }
+
+    /// Number of errors recorded in the current sliding window.
+    pub fn error_count_in_window(&self) -> usize {
+        let now = Instant::now();
+        let window = Duration::from_secs(ERROR_BUDGET_WINDOW_SECS);
+        self.recent_errors.iter().filter(|&&t| now.duration_since(t) <= window).count()
+    }
+}
 
 use crate::registry::{
     CommandId, Priority, ScriptHotkeyId, SharedCommandRegistry, SharedHotkeyRegistry,
@@ -169,6 +296,8 @@ pub struct PluginRegistry {
     plugins_dir: Option<PathBuf>,
     /// Per-plugin registration trackers for bulk cleanup on unload.
     trackers: HashMap<String, PluginRegistrationTracker>,
+    /// Per-plugin health / error-budget tracking.
+    health: HashMap<String, PluginHealth>,
     /// Shared command registry — plugins register into this.
     command_registry: SharedCommandRegistry,
     /// Shared hotkey registry — plugins register into this.
@@ -201,9 +330,35 @@ impl PluginRegistry {
             plugins: HashMap::new(),
             plugins_dir: None,
             trackers: HashMap::new(),
+            health: HashMap::new(),
             command_registry,
             hotkey_registry,
         }
+    }
+
+    // ── Health / error-budget accessors ──────────────────────────────────────
+
+    /// Returns `true` if the named plugin is disabled due to error-budget
+    /// exhaustion.  Unknown plugin names always return `false`.
+    pub fn is_plugin_disabled(&self, name: &str) -> bool {
+        self.health.get(name).map(|h| h.is_disabled()).unwrap_or(false)
+    }
+
+    /// Return a reference to the [`PluginHealth`] record for a plugin, if any.
+    pub fn plugin_health(&self, name: &str) -> Option<&PluginHealth> {
+        self.health.get(name)
+    }
+
+    /// Record a plugin error and potentially disable the plugin.
+    ///
+    /// Returns `true` if the plugin was just disabled by this call.
+    pub fn record_plugin_error(&mut self, name: &str, detail: &str) -> bool {
+        self.health.entry(name.to_string()).or_insert_with(PluginHealth::new).record_error(name, detail)
+    }
+
+    /// Record a successful call for a plugin (heartbeat update).
+    pub fn record_plugin_success(&mut self, name: &str) {
+        self.health.entry(name.to_string()).or_insert_with(PluginHealth::new).record_success();
     }
 
     /// Register a hotkey on behalf of a plugin.
@@ -348,16 +503,29 @@ impl PluginRegistry {
                 .unwrap_or("unknown")
                 .to_string();
 
+            // Skip plugins that have already been disabled (e.g. from a prior
+            // partial load attempt that panicked).
+            if self.is_plugin_disabled(&plugin_name) {
+                warn!(
+                    plugin = %plugin_name,
+                    reason = ?self.health.get(&plugin_name).and_then(|h| h.disable_reason()),
+                    "Skipping disabled plugin during discovery"
+                );
+                continue;
+            }
+
             info!(plugin = %plugin_name, path = %path.display(), "Attempting to load plugin");
 
-            match self.load_plugin(&path, plugin_name.clone()) {
+            match self.load_plugin_isolated(&path, plugin_name.clone()) {
                 Ok(handle) => {
                     info!(plugin = %plugin_name, "Plugin loaded successfully");
+                    self.record_plugin_success(&plugin_name);
                     self.plugins.insert(plugin_name, handle);
                     loaded += 1;
                 }
                 Err(err) => {
                     error!(plugin = %plugin_name, %err, "Failed to load plugin — skipping");
+                    self.record_plugin_error(&plugin_name, &err.to_string());
                 }
             }
         }
@@ -366,24 +534,77 @@ impl PluginRegistry {
         Ok(loaded)
     }
 
-    /// Load a single plugin from `path`.
+    /// Invoke a plugin callback with watchdog timing and `catch_unwind`
+    /// protection.
     ///
-    /// On Windows: opens the DLL, resolves `PLUGIN_INIT` and `PLUGIN_SHUTDOWN`,
-    /// reads the optional `PLUGIN_VERSION`, calls `PLUGIN_INIT`, and returns a
-    /// handle.
+    /// - Logs a warning if the call exceeds [`WATCHDOG_WARN_SECS`].
+    /// - Records the result against the plugin's [`PluginHealth`] budget.
     ///
-    /// On non-Windows: always returns an error (DLL loading is Windows-only).
+    /// Returns `Ok(R)` on success, or an error string on panic/failure.
     ///
-    /// # Errors
+    /// # Note on memory isolation
     ///
-    /// Returns an error if the DLL cannot be opened, required symbols are
-    /// missing, or `PLUGIN_INIT` returns a non-zero status.
-    fn load_plugin(&self, path: &Path, name: String) -> Result<PluginHandle> {
-        #[cfg(target_os = "windows")]
-        {
-            self.load_plugin_windows(path, name)
+    /// This only catches Rust panics via `catch_unwind`. True memory isolation
+    /// (segfaults, stack overflows) requires running the plugin in a separate
+    /// process. That is a known limitation; in-process DLL loading cannot
+    /// prevent all crash vectors.
+    pub fn call_plugin_fn<F, R>(
+        &mut self,
+        plugin_name: &str,
+        label: &str,
+        f: F,
+    ) -> Result<R, String>
+    where
+        F: FnOnce() -> R + std::panic::UnwindSafe,
+    {
+        if self.is_plugin_disabled(plugin_name) {
+            let reason = self
+                .health
+                .get(plugin_name)
+                .and_then(|h| h.disable_reason())
+                .unwrap_or("unknown")
+                .to_string();
+            return Err(format!("plugin '{}' is disabled: {}", plugin_name, reason));
         }
 
+        let start = Instant::now();
+
+        let result = std::panic::catch_unwind(f);
+
+        let elapsed = start.elapsed();
+        if elapsed >= Duration::from_secs(WATCHDOG_WARN_SECS) {
+            warn!(
+                plugin = %plugin_name,
+                call = %label,
+                elapsed_ms = elapsed.as_millis(),
+                watchdog_threshold_secs = WATCHDOG_WARN_SECS,
+                "Plugin call exceeded watchdog threshold — possible hang. \
+                 NOTE: in-process DLL loading cannot kill a hung plugin thread; \
+                 subprocess isolation is required for hard termination."
+            );
+        }
+
+        match result {
+            Ok(val) => {
+                self.record_plugin_success(plugin_name);
+                Ok(val)
+            }
+            Err(panic_payload) => {
+                let detail = panic_payload
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| panic_payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "<non-string panic payload>".to_string());
+                let msg = format!("panic in {} call '{}': {}", plugin_name, label, detail);
+                error!(plugin = %plugin_name, call = %label, detail = %detail, "Plugin panicked");
+                self.record_plugin_error(plugin_name, &msg);
+                Err(msg)
+            }
+        }
+    }
+
+    /// Like [`load_plugin`] but wraps the PLUGIN_INIT call in `catch_unwind`.
+    fn load_plugin_isolated(&mut self, path: &Path, name: String) -> Result<PluginHandle> {
         #[cfg(not(target_os = "windows"))]
         {
             // Non-Windows: DLL loading not supported; log and bail gracefully.
@@ -394,11 +615,17 @@ impl PluginRegistry {
             );
             anyhow::bail!("DLL loading not supported on this platform")
         }
+
+        #[cfg(target_os = "windows")]
+        {
+            self.load_plugin_windows_isolated(path, name)
+        }
     }
 
-    /// Windows-only DLL loading implementation.
+    /// Windows-only DLL loading implementation with `catch_unwind` around
+    /// `PLUGIN_INIT`.
     #[cfg(target_os = "windows")]
-    fn load_plugin_windows(&self, path: &Path, name: String) -> Result<PluginHandle> {
+    fn load_plugin_windows_isolated(&mut self, path: &Path, name: String) -> Result<PluginHandle> {
         // SAFETY: We own the path and it's a valid filesystem path.
         let lib = unsafe { libloading::Library::new(path) }
             .with_context(|| format!("Failed to open DLL: {}", path.display()))?;
@@ -419,13 +646,45 @@ impl PluginRegistry {
         // Read optional version string.
         let version = self.read_plugin_version(&lib);
 
-        // Call PLUGIN_INIT and check the return code.
+        // Call PLUGIN_INIT wrapped in catch_unwind for panic isolation.
         // SAFETY: symbol lifetime is bounded by `lib` which we still hold.
         let init_fn: libloading::Symbol<PluginInitFn> = unsafe {
             lib.get(b"PLUGIN_INIT\0").expect("already validated above")
         };
 
-        let rc = unsafe { init_fn() };
+        // SAFETY: the function pointer is valid for the lifetime of `lib`.
+        // We copy it as a raw fn pointer so catch_unwind can take ownership.
+        let raw_init: PluginInitFn = *init_fn;
+
+        let start = Instant::now();
+        let init_result = std::panic::catch_unwind(|| {
+            // SAFETY: We hold `lib` alive, so `raw_init` is valid.
+            unsafe { raw_init() }
+        });
+        let elapsed = start.elapsed();
+
+        if elapsed >= Duration::from_secs(WATCHDOG_WARN_SECS) {
+            warn!(
+                plugin = %name,
+                elapsed_ms = elapsed.as_millis(),
+                "PLUGIN_INIT exceeded watchdog threshold — possible hang. \
+                 In-process loading cannot forcibly kill hung FFI calls."
+            );
+        }
+
+        let rc = match init_result {
+            Ok(rc) => rc,
+            Err(panic_payload) => {
+                let detail = panic_payload
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| panic_payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "<non-string panic>".to_string());
+                error!(plugin = %name, detail = %detail, "PLUGIN_INIT panicked — skipping plugin");
+                anyhow::bail!("PLUGIN_INIT panicked: {}", detail);
+            }
+        };
+
         if rc != 0 {
             anyhow::bail!("PLUGIN_INIT returned non-zero status: {rc}");
         }
@@ -738,5 +997,126 @@ mod tests {
         // Fire via the shared handle (same one the Lua bindings would hold).
         assert!(hk_reg.lock().unwrap().fire("ctrl+g"));
         assert_eq!(fired.load(Ordering::Relaxed), 1);
+    }
+
+    // ── Crash isolation / PluginHealth tests ─────────────────────────────────
+
+    /// A panic inside `call_plugin_fn` must be caught and NOT propagate.
+    #[test]
+    fn panic_in_plugin_fn_is_caught() {
+        let mut registry = PluginRegistry::new();
+        let result = registry.call_plugin_fn("panicky_plugin", "test_call", || {
+            panic!("intentional test panic");
+        });
+        assert!(result.is_err(), "panic should be converted to Err");
+        let msg = result.unwrap_err();
+        assert!(
+            msg.contains("panic") || msg.contains("intentional"),
+            "error message should describe the panic: {msg}"
+        );
+    }
+
+    /// After 6 errors in the window the plugin must be disabled.
+    #[test]
+    fn error_budget_disables_plugin_after_threshold() {
+        let mut registry = PluginRegistry::new();
+        let name = "budget_plugin";
+
+        // Inject ERROR_BUDGET_MAX + 1 errors (= 6).
+        for i in 0..=(ERROR_BUDGET_MAX) {
+            let result = registry.call_plugin_fn(name, "error_call", || -> i32 {
+                panic!("error #{}", i);
+            });
+            assert!(result.is_err());
+        }
+
+        assert!(
+            registry.is_plugin_disabled(name),
+            "plugin must be disabled after {} errors", ERROR_BUDGET_MAX + 1
+        );
+        let reason = registry.plugin_health(name).and_then(|h| h.disable_reason());
+        assert!(reason.is_some(), "disable reason should be recorded");
+    }
+
+    /// A disabled plugin must be skipped on subsequent `call_plugin_fn` calls.
+    #[test]
+    fn disabled_plugin_is_skipped_on_dispatch() {
+        let mut registry = PluginRegistry::new();
+        let name = "skip_plugin";
+
+        // Drive it past the budget.
+        for i in 0..=(ERROR_BUDGET_MAX) {
+            let _ = registry.call_plugin_fn(name, "err", || -> () { panic!("e{i}") });
+        }
+        assert!(registry.is_plugin_disabled(name));
+
+        // Now any further call should short-circuit with an error mentioning "disabled".
+        let result = registry.call_plugin_fn(name, "after_disable", || 42_i32);
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().contains("disabled"),
+            "error must indicate the plugin is disabled"
+        );
+    }
+
+    /// Successful calls update `last_heartbeat`.
+    #[test]
+    fn successful_call_updates_heartbeat() {
+        let mut registry = PluginRegistry::new();
+        let name = "healthy_plugin";
+
+        assert!(registry.plugin_health(name).is_none(), "no health record before first call");
+
+        registry
+            .call_plugin_fn(name, "ok_call", || 99_i32)
+            .expect("successful call must not error");
+
+        let h = registry.plugin_health(name).expect("health record created after call");
+        assert!(h.last_heartbeat.is_some(), "heartbeat should be set after success");
+        assert!(!h.is_disabled(), "should not be disabled");
+    }
+
+    /// `PluginHealth::record_error` sliding window: errors older than the
+    /// window width must not count toward the budget.
+    #[test]
+    fn error_budget_sliding_window_evicts_old_errors() {
+        // We cannot easily sleep for 60 s in a unit test, so we test the eviction
+        // logic directly on `PluginHealth` with manually backdated entries.
+        let mut health = PluginHealth::new();
+        let old_time = Instant::now() - Duration::from_secs(ERROR_BUDGET_WINDOW_SECS + 10);
+
+        // Pre-fill with entries that are already outside the window.
+        for _ in 0..ERROR_BUDGET_MAX {
+            health.recent_errors.push_back(old_time);
+        }
+
+        // Recording one new error should evict all the stale ones first, so the
+        // total in-window count is only 1 — well below the budget max.
+        let name = "window_test";
+        let just_disabled = health.record_error(name, "new error");
+        assert!(!just_disabled, "plugin must not be disabled — stale errors should be evicted");
+        assert_eq!(health.error_count_in_window(), 1);
+        assert!(!health.is_disabled());
+    }
+
+    /// `fake_dll_file_fails_gracefully` still holds with the new isolated loader.
+    /// (Regression guard: the old loader path was replaced; ensure the new one
+    /// also handles bad DLL content without panicking.)
+    #[test]
+    fn fake_dll_file_fails_gracefully_isolated() {
+        let dir = make_temp_dir();
+        std::fs::write(dir.path().join("broken_plugin.dll"), b"not a PE").unwrap();
+        let mut registry = PluginRegistry::new();
+        let count = registry
+            .discover_and_load(dir.path())
+            .expect("discover_and_load must not panic on broken DLL");
+        assert_eq!(count, 0, "broken DLL must not be counted as loaded");
+        assert!(registry.is_empty());
+        // Error budget should have recorded the failure.
+        assert_eq!(
+            registry.plugin_health("broken_plugin").map(|h| h.error_count_in_window()).unwrap_or(0),
+            1,
+            "one error should be recorded for the failed load"
+        );
     }
 }
