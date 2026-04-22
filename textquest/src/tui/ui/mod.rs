@@ -17,6 +17,7 @@ pub mod economy_controls;
 pub mod eq_internals;
 pub mod explorer;
 pub mod groups;
+pub mod help;
 pub mod map;
 pub mod navigation;
 pub mod orchestrator_panel;
@@ -118,6 +119,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Help overlay
     if app.help_visible {
         draw_help_overlay(frame, frame.area(), app);
+    }
+
+    // Help search panel overlay (#1117)
+    if app.help_search_visible {
+        help::draw_help_search_panel(frame, area, app);
     }
 
     // Config panel overlay

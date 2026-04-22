@@ -538,6 +538,11 @@ pub struct App {
     /// (`#1117`) can land independently.
     pub help_panel: HelpPanelState,
 
+    /// Whether the help search panel overlay is visible.
+    pub help_search_visible: bool,
+    /// State for the help search panel (query, selection, scroll).
+    pub help_search_state: crate::tui::ui::help::HelpPanelState,
+
     /// Current operating mode (camp or hunt).
     pub operating_mode: crate::camp::hunt::OperatingMode,
 
@@ -883,6 +888,9 @@ impl App {
             help_scroll: 0,
             help_focus: None,
             help_panel: HelpPanelState::with_topics(Self::build_help_topics()),
+
+            help_search_visible: false,
+            help_search_state: crate::tui::ui::help::HelpPanelState::new(),
 
             operating_mode: crate::camp::hunt::OperatingMode::Camp,
 
