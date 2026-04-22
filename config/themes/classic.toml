@@ -1,0 +1,81 @@
+# Classic — traditional terminal theme with named colors and plain box borders.
+# Designed for maximum compatibility with 8-color and 16-color terminals.
+
+[meta]
+name = "Classic"
+version = "1.0"
+border_style = "plain"
+
+[colors]
+# ── Borders ──────────────────────────────────────────────────────────────────
+border_dim     = "darkgray"
+border_primary = "green"
+border_active  = "cyan"
+border_warn    = "yellow"
+border_danger  = "red"
+border_server  = "magenta"
+
+# ── Tab bar ───────────────────────────────────────────────────────────────────
+tab_active_fg = "black"
+tab_active_bg = "cyan"
+tab_inactive  = "darkgray"
+
+# ── Text ──────────────────────────────────────────────────────────────────────
+text_bright    = "white"
+text_normal    = "white"
+text_secondary = "gray"
+text_muted     = "darkgray"
+text_accent    = "cyan"
+text_highlight = "yellow"
+text_server    = "magenta"
+
+# ── HP / resource bars ────────────────────────────────────────────────────────
+hp_high   = "green"
+hp_mid    = "yellow"
+hp_low    = "red"
+mana      = "blue"
+bar_empty = "darkgray"
+
+# ── Spawn type colors ─────────────────────────────────────────────────────────
+spawn_pc      = "green"
+spawn_npc     = "white"
+spawn_named   = "yellow"
+spawn_corpse  = "darkgray"
+spawn_unknown = "red"
+
+# ── Table / selection ─────────────────────────────────────────────────────────
+table_header    = "white"
+row_selected_bg = "darkgray"
+
+# ── Stand-state colors ────────────────────────────────────────────────────────
+state_dead    = "red"
+state_sitting = "yellow"
+state_feigned = "magenta"
+state_frozen  = "blue"
+state_normal  = "green"
+
+# ── Operating-mode colors ─────────────────────────────────────────────────────
+mode_camp = "green"
+mode_hunt = "yellow"
+
+# ── Map overlay ───────────────────────────────────────────────────────────────
+map_you        = "lightcyan"
+map_pc         = "green"
+map_group      = "cyan"
+map_npc        = "white"
+map_named      = "yellow"
+map_dead_named = "red"
+map_corpse     = "darkgray"
+map_lines      = "darkgray"
+map_geometry   = "gray"
+
+# ── Help overlay ──────────────────────────────────────────────────────────────
+help_bg = "black"
+
+# ── Con colors (level-relative mob difficulty) ────────────────────────────────
+con_red        = "red"
+con_yellow     = "yellow"
+con_white      = "white"
+con_light_blue = "lightcyan"
+con_blue       = "blue"
+con_green      = "green"

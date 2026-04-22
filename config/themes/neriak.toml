@@ -1,0 +1,82 @@
+# Neriak Third Gate — cyber-arcanepunk dark fantasy
+# Deep void blacks, magenta/purple accents, spectral cyan highlights, lavender text.
+# Based on the TextQuest Variant G web palette.
+
+[meta]
+name = "Neriak"
+version = "1.0"
+border_style = "rounded"
+
+[colors]
+# ── Borders ──────────────────────────────────────────────────────────────────
+border_dim     = "#503c6e"   # dim purple-gray shadow
+border_primary = "#cc44ff"   # magenta
+border_active  = "#00e5ff"   # spectral cyan
+border_warn    = "#fbbf24"   # warning amber
+border_danger  = "#ef4444"   # danger red
+border_server  = "#ff00ff"   # hot magenta glow
+
+# ── Tab bar ───────────────────────────────────────────────────────────────────
+tab_active_fg = "#0d0618"   # deep void (text on active tab)
+tab_active_bg = "#cc44ff"   # magenta background
+tab_inactive  = "#503c6e"   # dim purple-gray
+
+# ── Text ──────────────────────────────────────────────────────────────────────
+text_bright    = "#e2d7f4"   # lavender (near-white)
+text_normal    = "#e2d7f4"   # lavender
+text_secondary = "#a096b4"   # muted lavender
+text_muted     = "#503c6e"   # dim purple-gray
+text_accent    = "#00e5ff"   # spectral cyan
+text_highlight = "#cc44ff"   # magenta
+text_server    = "#ff00ff"   # hot magenta glow
+
+# ── HP / resource bars ────────────────────────────────────────────────────────
+hp_high   = "#34d399"   # emerald green
+hp_mid    = "#fbbf24"   # warning amber
+hp_low    = "#ef4444"   # danger red
+mana      = "#60a5fa"   # mana blue
+bar_empty = "#2d1e41"   # very dim violet
+
+# ── Spawn type colors ─────────────────────────────────────────────────────────
+spawn_pc      = "#34d399"   # emerald green
+spawn_npc     = "#e2d7f4"   # lavender
+spawn_named   = "#cc44ff"   # magenta
+spawn_corpse  = "#503c6e"   # dim purple-gray
+spawn_unknown = "#ef4444"   # danger red
+
+# ── Table / selection ─────────────────────────────────────────────────────────
+table_header    = "#00e5ff"   # spectral cyan
+row_selected_bg = "#1a0a2e"   # panel background violet
+
+# ── Stand-state colors ────────────────────────────────────────────────────────
+state_dead    = "#ef4444"   # danger red
+state_sitting = "#fbbf24"   # warning amber
+state_feigned = "#cc44ff"   # magenta
+state_frozen  = "#60a5fa"   # mana blue
+state_normal  = "#34d399"   # emerald green
+
+# ── Operating-mode colors ─────────────────────────────────────────────────────
+mode_camp = "#00e5ff"   # spectral cyan
+mode_hunt = "#cc44ff"   # magenta
+
+# ── Map overlay ───────────────────────────────────────────────────────────────
+map_you        = "#00e5ff"   # spectral cyan (player position)
+map_pc         = "#34d399"   # emerald green (other PCs)
+map_group      = "#00e5ff"   # spectral cyan (group members)
+map_npc        = "#e2d7f4"   # lavender (regular NPCs)
+map_named      = "#cc44ff"   # magenta (named mobs)
+map_dead_named = "#ef4444"   # danger red (dead named)
+map_corpse     = "#503c6e"   # dim purple-gray (corpses)
+map_lines      = "#2d1e41"   # very dim violet (zone geometry)
+map_geometry   = "#46375f"   # muted violet (walls/terrain)
+
+# ── Help overlay ──────────────────────────────────────────────────────────────
+help_bg = "#0d0618"   # deep void background
+
+# ── Con colors (level-relative mob difficulty) ────────────────────────────────
+con_red        = "#ef4444"   # red con — dangerous
+con_yellow     = "#fbbf24"   # yellow con — even
+con_white      = "#e2d7f4"   # white con — slightly below
+con_light_blue = "#00e5ff"   # light blue con — below
+con_blue       = "#60a5fa"   # blue con — trivial
+con_green      = "#34d399"   # green con — very low

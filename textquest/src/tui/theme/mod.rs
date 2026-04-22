@@ -3,6 +3,11 @@
 //! A `Theme` carries every semantic color and style used by the renderer.
 //! All `draw_*` functions read colors from `app.theme` instead of using
 //! inline `Color::*` literals, making it trivial to add new themes.
+//!
+//! Use [`loader`] to load themes from TOML files at runtime.
+
+/// TOML theme loader — parse `config/themes/*.toml` into [`Theme`] values.
+pub mod loader;
 
 use ratatui::{
     style::{Color, Modifier, Style},

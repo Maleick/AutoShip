@@ -1,0 +1,81 @@
+# High Contrast — accessibility theme for low-vision and high-ambient-light use.
+# Bold primary colors, no subtle gradients, maximum foreground/background separation.
+
+[meta]
+name = "High Contrast"
+version = "1.0"
+border_style = "plain"
+
+[colors]
+# ── Borders ──────────────────────────────────────────────────────────────────
+border_dim     = "#888888"   # medium gray (still visible)
+border_primary = "#00ff00"   # full bright green
+border_active  = "#ffff00"   # full bright yellow
+border_warn    = "#ff8800"   # vivid orange
+border_danger  = "#ff0000"   # full bright red
+border_server  = "#ff00ff"   # full bright magenta
+
+# ── Tab bar ───────────────────────────────────────────────────────────────────
+tab_active_fg = "#000000"   # pure black text
+tab_active_bg = "#ffff00"   # full bright yellow background
+tab_inactive  = "#888888"   # medium gray
+
+# ── Text ──────────────────────────────────────────────────────────────────────
+text_bright    = "#ffffff"   # pure white
+text_normal    = "#ffffff"   # pure white
+text_secondary = "#dddddd"   # near-white
+text_muted     = "#aaaaaa"   # light gray
+text_accent    = "#00ffff"   # full bright cyan
+text_highlight = "#ffff00"   # full bright yellow
+text_server    = "#ff00ff"   # full bright magenta
+
+# ── HP / resource bars ────────────────────────────────────────────────────────
+hp_high   = "#00ff00"   # full bright green
+hp_mid    = "#ff8800"   # vivid orange
+hp_low    = "#ff0000"   # full bright red
+mana      = "#00aaff"   # strong blue
+bar_empty = "#333333"   # dark gray
+
+# ── Spawn type colors ─────────────────────────────────────────────────────────
+spawn_pc      = "#00ff00"   # full bright green
+spawn_npc     = "#ffffff"   # pure white
+spawn_named   = "#ffff00"   # full bright yellow
+spawn_corpse  = "#888888"   # medium gray
+spawn_unknown = "#ff0000"   # full bright red
+
+# ── Table / selection ─────────────────────────────────────────────────────────
+table_header    = "#00ffff"   # full bright cyan
+row_selected_bg = "#003366"   # deep blue selection
+
+# ── Stand-state colors ────────────────────────────────────────────────────────
+state_dead    = "#ff0000"   # full bright red
+state_sitting = "#ffff00"   # full bright yellow
+state_feigned = "#ff00ff"   # full bright magenta
+state_frozen  = "#00aaff"   # strong blue
+state_normal  = "#00ff00"   # full bright green
+
+# ── Operating-mode colors ─────────────────────────────────────────────────────
+mode_camp = "#00ff00"   # full bright green
+mode_hunt = "#ff8800"   # vivid orange
+
+# ── Map overlay ───────────────────────────────────────────────────────────────
+map_you        = "#ffff00"   # full bright yellow (stand out)
+map_pc         = "#00ff00"   # full bright green
+map_group      = "#00ffff"   # full bright cyan
+map_npc        = "#ffffff"   # pure white
+map_named      = "#ff8800"   # vivid orange
+map_dead_named = "#ff0000"   # full bright red
+map_corpse     = "#888888"   # medium gray
+map_lines      = "#555555"   # dark gray
+map_geometry   = "#666666"   # medium-dark gray
+
+# ── Help overlay ──────────────────────────────────────────────────────────────
+help_bg = "#000000"   # pure black
+
+# ── Con colors (level-relative mob difficulty) ────────────────────────────────
+con_red        = "#ff0000"   # full bright red
+con_yellow     = "#ffff00"   # full bright yellow
+con_white      = "#ffffff"   # pure white
+con_light_blue = "#aaddff"   # light blue
+con_blue       = "#00aaff"   # strong blue
+con_green      = "#00ff00"   # full bright green
