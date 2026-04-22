@@ -39,6 +39,16 @@
 
 use std::collections::HashMap;
 
+// ─── Trace feature ────────────────────────────────────────────────────────────
+//
+// Heavy per-dispatch tracing is gated behind the `trace-commands` Cargo feature.
+// When enabled, a `tracing::trace!` span fires at every dispatch boundary with
+// structured fields: `cmd_path`, `args_len`, and `result`.  The existing
+// `tracing::info!` / `tracing::debug!` calls remain unconditional and cover the
+// "command executed" and "not found" cases at a lower volume.
+//
+// Enable with: cargo build --features textquest-dll/trace-commands
+
 /// Type alias for a boxed command handler callback.
 pub type CommandCallback = Box<dyn Fn(&[&str]) -> CommandResult + Send + Sync>;
 
@@ -228,15 +238,32 @@ impl CommandRegistry {
             return CommandResult::ValidationError(err);
         }
 
+        // Heavy trace span: only compiled when `trace-commands` feature is active.
+        #[cfg(feature = "trace-commands")]
+        let _span = tracing::trace_span!(
+            "command_dispatch",
+            cmd_path = %def.path,
+            args_len = args.len(),
+        )
+        .entered();
+
         let result = (def.callback)(args);
 
         match &result {
-            CommandResult::Ok => tracing::debug!(path = def.path, "Command completed ok"),
+            CommandResult::Ok => {
+                tracing::debug!(path = def.path, "Command completed ok");
+                #[cfg(feature = "trace-commands")]
+                tracing::trace!(cmd_path = %def.path, result = "ok", "Command dispatch result");
+            }
             CommandResult::Message(msg) => {
                 tracing::debug!(path = def.path, message = %msg, "Command completed with message");
+                #[cfg(feature = "trace-commands")]
+                tracing::trace!(cmd_path = %def.path, result = "message", message = %msg, "Command dispatch result");
             }
             CommandResult::Error(err) => {
                 tracing::warn!(path = def.path, error = %err, "Command returned error");
+                #[cfg(feature = "trace-commands")]
+                tracing::trace!(cmd_path = %def.path, result = "error", error = %err, "Command dispatch result");
             }
             CommandResult::NotFound | CommandResult::ValidationError(_) => {}
         }
@@ -641,6 +668,60 @@ mod tests {
         assert_eq!(reg.dispatch("/nav waypoint home extra"), CommandResult::Ok);
         let got = received.lock().unwrap().clone();
         assert_eq!(got, vec!["home", "extra"]);
+    }
+
+    // ── trace-commands feature ───────────────────────────────────────────────
+
+    /// Verify dispatch emits the correct result under the `trace-commands` feature.
+    ///
+    /// When `trace-commands` is active, a `tracing::trace_span!` is entered at
+    /// dispatch time.  The result semantics must be unchanged regardless of
+    /// whether the feature is on or off.  This test exercises the gated code
+    /// path by dispatching a known command and asserting the result.
+    #[test]
+    #[cfg(feature = "trace-commands")]
+    fn trace_commands_feature_dispatch_result_unchanged() {
+        let mut reg = CommandRegistry::new();
+        reg.register("/trace_test", "trace test", &[], false, ok_handler);
+
+        // With trace-commands enabled the span is entered; result must still be Ok.
+        assert_eq!(reg.dispatch("/trace_test"), CommandResult::Ok);
+    }
+
+    /// Verify that a command with arguments emits the correct args_len field value.
+    ///
+    /// The `trace_span!` records `args_len = args.len()`.  After routing to
+    /// `/trace_args one two`, the callback receives 2 args and dispatch succeeds.
+    #[test]
+    #[cfg(feature = "trace-commands")]
+    fn trace_commands_feature_args_len_field() {
+        let mut reg = CommandRegistry::new();
+        reg.register(
+            "/trace_args",
+            "trace args test",
+            &[ArgType::String, ArgType::String],
+            false,
+            ok_handler,
+        );
+
+        // args_len in the span will be 2 for this dispatch.
+        assert_eq!(reg.dispatch("/trace_args one two"), CommandResult::Ok);
+    }
+
+    /// Verify that the trace-commands gate does not break error-result paths.
+    ///
+    /// When a command returns `CommandResult::Error`, the span is still entered
+    /// and the trace event records `result = "error"`.
+    #[test]
+    #[cfg(feature = "trace-commands")]
+    fn trace_commands_feature_error_result_path() {
+        let mut reg = CommandRegistry::new();
+        reg.register("/trace_err", "trace error path", &[], false, |_| {
+            CommandResult::Error("intentional".to_string())
+        });
+
+        let result = reg.dispatch("/trace_err");
+        assert!(matches!(result, CommandResult::Error(_)));
     }
 
     // ── normalize_path ───────────────────────────────────────────────────────

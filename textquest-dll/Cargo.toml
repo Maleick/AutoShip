@@ -56,3 +56,13 @@ windows-dangerous-tests = []
 ## Enable spell-readiness API on MQ2Bridge::has_spell_ready().
 ## Requires a fully implemented spell timer system in master.
 spell-system = []
+## Enable per-dispatch tracing::trace! spans in the command registry.
+## Adds structured trace events at command dispatch boundaries with
+## cmd_path, args_len, and result fields. Off by default to avoid
+## overhead on every command call in production.
+trace-commands = []
+## Enable per-packet tracing::trace! spans in the packet hook.
+## Adds structured trace events at WSASend/WSARecv boundaries with
+## packet_op, direction, size, and client_id fields. Off by default
+## because it fires on every network packet (very high volume).
+trace-packets = []

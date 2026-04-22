@@ -889,6 +889,18 @@ mod inner {
             });
         }
 
+        // Heavy per-packet trace span: only compiled when `trace-packets` feature is active.
+        // This fires on every network packet and is very high volume — only enable for
+        // targeted debugging sessions.
+        #[cfg(feature = "trace-packets")]
+        tracing::trace!(
+            client_id,
+            packet_op = format!("{:#06x}", opcode),
+            direction = ?direction,
+            size = len,
+            "Packet captured at hook boundary"
+        );
+
         crate::ipc::send_response(Response::PacketEvent {
             client_id,
             opcode,
@@ -1245,6 +1257,45 @@ mod tests {
         let packet = [0x00u8, 0x00, 0x29, 0xbb, 0x00, 0x00, 0x00, 0x00]; // 0xbb29 heartbeat
         let opcode = u16::from_le_bytes([packet[2], packet[3]]);
         assert_ne!(opcode, 0xd799, "heartbeat opcode 0xbb29 must not match 0xd799");
+    }
+
+    // ── trace-packets feature ────────────────────────────────────────────────
+
+    /// Verify that the trace-packets feature gate compiles and the opcode
+    /// extraction logic is consistent with the trace field `packet_op`.
+    ///
+    /// The `tracing::trace!` span records `packet_op = format!("{:#06x}", opcode)`.
+    /// This test verifies that the format string produces the correct value for
+    /// known opcodes so the trace field carries the right information.
+    #[test]
+    #[cfg(feature = "trace-packets")]
+    fn trace_packets_feature_opcode_format_matches_expected() {
+        // The heartbeat opcode 0xbb29 should format as "0xbb29" (6 hex chars, 0x prefix).
+        let opcode: u16 = 0xbb29;
+        let formatted = format!("{:#06x}", opcode);
+        assert_eq!(formatted, "0xbb29", "packet_op field must use 0x-prefixed lowercase hex");
+
+        // The checksum-mismatch opcode 0xd799 should format as "0xd799".
+        let alert_opcode: u16 = 0xd799;
+        let alert_formatted = format!("{:#06x}", alert_opcode);
+        assert_eq!(alert_formatted, "0xd799");
+    }
+
+    /// Verify that the direction field used in the trace span is consistent
+    /// with the `PacketDirection` variants expected by the orchestrator.
+    #[test]
+    #[cfg(feature = "trace-packets")]
+    fn trace_packets_feature_direction_field_variants() {
+        use textquest_common::ipc::PacketDirection;
+
+        // `direction = ?direction` uses Debug formatting.  Verify the variants
+        // produce distinct, non-empty debug strings.
+        let outbound = format!("{:?}", PacketDirection::Outbound);
+        let inbound = format!("{:?}", PacketDirection::Inbound);
+
+        assert!(!outbound.is_empty(), "Outbound direction debug must be non-empty");
+        assert!(!inbound.is_empty(), "Inbound direction debug must be non-empty");
+        assert_ne!(outbound, inbound, "Direction variants must produce distinct debug output");
     }
 
     fn checksum_mismatch_opcode_for_test() -> u16 {
