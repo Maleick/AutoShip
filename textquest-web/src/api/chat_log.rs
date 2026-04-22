@@ -5,9 +5,7 @@ use std::path::PathBuf;
 use textquest_common::chat::{ChatChannel, ChatLogConfig, LogLevel, LogRotation};
 
 pub fn textquest_config_path() -> PathBuf {
-    std::env::var("TEXTQUEST_CONFIG_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
+    crate::api::textquest_config_path()
 }
 
 fn read_chat_log_settings_from_disk() -> Result<ChatLogConfig, String> {

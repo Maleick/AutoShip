@@ -328,9 +328,7 @@ fn demo_history() -> Vec<LootHistoryEntry> {
 }
 
 fn item_score_config_path() -> PathBuf {
-    std::env::var("TEXTQUEST_CONFIG_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
+    crate::api::textquest_config_path()
 }
 
 fn load_item_score_from_path(path: &FsPath) -> Result<ItemScoreConfigPayload, String> {

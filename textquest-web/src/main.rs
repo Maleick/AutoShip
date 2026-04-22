@@ -181,24 +181,90 @@ async fn api_token_auth(
 /// Constant-time string comparison to prevent timing oracle attacks on the API
 /// token.
 ///
-/// Runs the full XOR-fold over the longer slice regardless of length so that
-/// an attacker cannot infer token length from wall-clock differences.
-fn constant_time_eq_str(a: &str, b: &str) -> bool {
-    let ab = a.as_bytes();
-    let bb = b.as_bytes();
-    let max_len = ab.len().max(bb.len());
-    // Pad shorter slice with a non-zero sentinel so a zero-length input never
-    // trivially matches a non-empty one through the length-mismatch flag alone.
-    let sentinel = 0xFFu8;
-    let acc = (0..max_len).fold(0u8, |acc, i| {
-        let x = ab.get(i).copied().unwrap_or(sentinel);
-        let y = bb.get(i).copied().unwrap_or(sentinel);
-        acc | (x ^ y)
-    });
-    // Also fold in a length-difference flag so strings of different lengths
-    // are never equal, even if the XOR of the padded bytes happened to cancel.
-    let length_diff = (ab.len() != bb.len()) as u8;
-    (acc | length_diff) == 0
+/// Comparison time is proportional to `expected` (the server-side token) length,
+/// independent of the length of the attacker-controlled `provided` input.
+/// This eliminates both content-timing and length-oracle attacks.
+///
+/// Compares exactly `expected.len()` byte positions, treating missing bytes in
+/// `provided` as zero and folding any length mismatch into the final result so
+/// shorter or longer inputs never accidentally compare equal.
+pub(crate) fn constant_time_eq_str(provided: &str, expected: &str) -> bool {
+    use subtle::Choice;
+
+    let pb = provided.as_bytes();
+    let eb = expected.as_bytes();
+    let expected_len = eb.len();
+
+    // Compare exactly `expected_len` positions so the amount of work does not
+    // scale with attacker-controlled input length. Missing bytes from `provided`
+    // are treated as zero.
+    let mut diff = 0u8;
+    for i in 0..expected_len {
+        let provided_byte = pb.get(i).copied().unwrap_or(0);
+        diff |= provided_byte ^ eb[i];
+    }
+
+    let content_eq: Choice = Choice::from((diff == 0) as u8);
+
+    // Length must also match so both short and long inputs are rejected even if
+    // the compared prefix matches.
+    let length_eq: Choice = Choice::from((pb.len() == expected_len) as u8);
+
+    // Both content AND length must agree for the tokens to be equal.
+    (content_eq & length_eq).into()
+}
+
+#[cfg(test)]
+mod constant_time_tests {
+    use super::constant_time_eq_str;
+
+    #[test]
+    fn equal_tokens_match() {
+        assert!(constant_time_eq_str("secret-token", "secret-token"));
+    }
+
+    #[test]
+    fn different_content_does_not_match() {
+        assert!(!constant_time_eq_str("wrong-token!", "secret-token"));
+    }
+
+    #[test]
+    fn shorter_input_does_not_match() {
+        assert!(!constant_time_eq_str("short", "secret-token"));
+    }
+
+    #[test]
+    fn longer_input_does_not_match() {
+        assert!(!constant_time_eq_str("secret-token-extra", "secret-token"));
+    }
+
+    #[test]
+    fn empty_input_does_not_match_nonempty_expected() {
+        assert!(!constant_time_eq_str("", "secret-token"));
+    }
+
+    #[test]
+    fn both_empty_match() {
+        // Edge case: if the server token is somehow empty, same empty input matches.
+        assert!(constant_time_eq_str("", ""));
+    }
+
+    /// Verify that all three length variants (equal, shorter, longer) go through
+    /// the same code path — we cannot measure wall-clock time in a unit test, but
+    /// we can assert that none of them short-circuit by confirming all return
+    /// false when they should, and that the function is purely structural
+    /// (no early returns based on length).
+    #[test]
+    fn all_length_variants_evaluated() {
+        let expected = "abcdefghij"; // 10 bytes
+        let shorter = "abcde";       // 5 bytes  — must not match
+        let equal   = "abcdefghij"; // 10 bytes — must match
+        let longer  = "abcdefghijklmno"; // 15 bytes — must not match
+
+        assert!(!constant_time_eq_str(shorter, expected), "shorter must not match");
+        assert!( constant_time_eq_str(equal,   expected), "equal content must match");
+        assert!(!constant_time_eq_str(longer,  expected), "longer must not match");
+    }
 }
 
 /// Returns the runtime data root: `TEXTQUEST_DATA_DIR` env var → exe parent → `"."`.

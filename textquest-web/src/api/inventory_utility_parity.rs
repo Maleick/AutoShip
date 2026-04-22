@@ -24,9 +24,7 @@ fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Js
 }
 
 fn config_path() -> PathBuf {
-    std::env::var("TEXTQUEST_CONFIG_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
+    crate::api::textquest_config_path()
         .parent()
         .map(|parent| parent.join("inventory-utility-parity.json"))
         .unwrap_or_else(|| PathBuf::from("config/inventory-utility-parity.json"))

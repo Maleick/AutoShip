@@ -187,9 +187,7 @@ const fn default_enabled() -> bool {
 }
 
 fn textquest_config_path() -> PathBuf {
-    std::env::var("TEXTQUEST_CONFIG_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
+    crate::api::textquest_config_path()
 }
 
 fn normalize_item_name(item_name: &str) -> String {

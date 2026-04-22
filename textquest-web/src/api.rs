@@ -105,10 +105,30 @@ pub async fn health() -> Json<HealthResponse> {
 
 // ─── Box Chat Settings ──────────────────────────────────────────────────────
 
-fn textquest_config_path() -> PathBuf {
+/// Returns the active config path.
+///
+/// In tests, respects `TEST_CONFIG_OVERRIDE` (set via `ConfigPathGuard`) so
+/// parallel tests never mutate the process environment.  In production the
+/// override is always `None` and the env-var / default are used as before.
+pub(crate) fn textquest_config_path() -> PathBuf {
+    #[cfg(test)]
+    {
+        if let Ok(guard) = test_config_override().read() {
+            if let Some(ref p) = *guard {
+                return p.clone();
+            }
+        }
+    }
     std::env::var("TEXTQUEST_CONFIG_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
+}
+
+/// Returns the global in-process test-override lock.  Only compiled in `#[cfg(test)]`.
+#[cfg(test)]
+pub(crate) fn test_config_override() -> &'static std::sync::RwLock<Option<PathBuf>> {
+    static OVERRIDE: OnceLock<std::sync::RwLock<Option<PathBuf>>> = OnceLock::new();
+    OVERRIDE.get_or_init(|| std::sync::RwLock::new(None))
 }
 
 pub(crate) fn textquest_config_write_lock() -> &'static tokio::sync::Mutex<()> {
@@ -1982,43 +2002,46 @@ mod tests {
     use axum::response::IntoResponse;
     use http_body_util::BodyExt;
     use serde_json::Value;
-    use std::{collections::HashMap, ffi::OsString, sync::OnceLock};
+    use std::collections::HashMap;
     use tempfile::tempdir;
     use textquest_common::ipc::{AutoAcceptSettings, AutoAcceptTrustMode};
 
-    fn config_env_lock() -> &'static tokio::sync::Mutex<()> {
-        static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
-    }
-
+    /// Sets the in-process test config-path override and restores the previous
+    /// value on drop.  Panic-safe: if the test panics before drop runs, the
+    /// override is still restored when the stack unwinds — no env var is ever
+    /// mutated.
     struct ConfigPathGuard {
-        previous: Option<OsString>,
+        previous: Option<PathBuf>,
     }
 
     impl ConfigPathGuard {
         fn set(path: &std::path::Path) -> Self {
-            let previous = std::env::var_os("TEXTQUEST_CONFIG_PATH");
-            // SAFETY: All tests that touch TEXTQUEST_CONFIG_PATH acquire `config_env_lock()`
-            // before calling `ConfigPathGuard::set`, serializing every mutation of this env
-            // var across the process. No other thread can read or write the var concurrently.
-            unsafe { std::env::set_var("TEXTQUEST_CONFIG_PATH", path) };
+            let mut lock = crate::api::test_config_override()
+                .write()
+                .expect("test_config_override lock poisoned");
+            let previous = lock.take();
+            *lock = Some(path.to_path_buf());
             Self { previous }
         }
     }
 
     impl Drop for ConfigPathGuard {
         fn drop(&mut self) {
-            // SAFETY: Same serialization guarantee as `ConfigPathGuard::set` — the lock held
-            // by the caller ensures exclusive access to TEXTQUEST_CONFIG_PATH for the duration
-            // of this guard's lifetime.
-            unsafe {
-                if let Some(previous) = &self.previous {
-                    std::env::set_var("TEXTQUEST_CONFIG_PATH", previous);
-                } else {
-                    std::env::remove_var("TEXTQUEST_CONFIG_PATH");
-                }
-            }
+            let mut lock = crate::api::test_config_override()
+                .write()
+                .expect("test_config_override lock poisoned");
+            *lock = self.previous.take();
         }
+    }
+
+    // Shim so existing test call sites compile unchanged. The RwLock used by
+    // ConfigPathGuard only protects the individual set()/drop() mutations of
+    // the override; it is not held for the full guard lifetime. Tests that
+    // need the override to remain stable across a whole scope must still use
+    // this mutex (or another lifetime-long guard) for correctness.
+    fn config_env_lock() -> &'static tokio::sync::Mutex<()> {
+        static LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
     }
 
     fn temp_config_path(name: &str) -> std::path::PathBuf {
@@ -2908,5 +2931,47 @@ friends = ["OldFriend"]
         std::fs::set_permissions(&read_only_dir, std::fs::Permissions::from_mode(0o755))
             .expect("restore dir perms");
         std::fs::remove_dir_all(&temp_root).ok();
+    }
+
+    /// Validates that `ConfigPathGuard` is panic-safe: if a test panics while a
+    /// guard is active, the override is restored on unwind so sibling tests are
+    /// never poisoned.
+    #[test]
+    fn config_path_guard_cleans_up_on_panic() {
+        use tempfile::tempdir;
+
+        let dir = tempdir().expect("tempdir");
+        let sentinel = dir.path().join("sentinel.toml");
+
+        // Simulate a test that panics while holding a ConfigPathGuard.
+        let result = std::panic::catch_unwind(|| {
+            let _guard = ConfigPathGuard::set(&sentinel);
+            // The override is visible inside the panicking closure.
+            assert_eq!(
+                crate::api::textquest_config_path(),
+                sentinel,
+                "override should be active before panic"
+            );
+            panic!("intentional panic to test guard cleanup");
+        });
+        assert!(result.is_err(), "closure should have panicked");
+
+        // After unwind, the override must be gone.
+        let after_panic = crate::api::textquest_config_path();
+        assert_ne!(
+            after_panic, sentinel,
+            "override must be cleared after panic unwind — found: {}",
+            after_panic.display()
+        );
+
+        // A subsequent guard must work correctly, proving no lock poisoning.
+        let dir2 = tempdir().expect("tempdir2");
+        let sentinel2 = dir2.path().join("sentinel2.toml");
+        {
+            let _guard = ConfigPathGuard::set(&sentinel2);
+            assert_eq!(crate::api::textquest_config_path(), sentinel2);
+        }
+        // Restored after normal drop.
+        assert_ne!(crate::api::textquest_config_path(), sentinel2);
     }
 }

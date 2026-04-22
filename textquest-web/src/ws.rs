@@ -23,19 +23,9 @@ pub struct WsQuery {
     token: Option<String>,
 }
 
-/// Constant-time string comparison to prevent timing oracle attacks on the API
-/// token.
-fn constant_time_eq_str(a: &str, b: &str) -> bool {
-    let ab = a.as_bytes();
-    let bb = b.as_bytes();
-    if ab.len() != bb.len() {
-        return false;
-    }
-    ab.iter()
-        .zip(bb.iter())
-        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
-        == 0
-}
+// Re-use the canonical constant-time comparison from the crate root so there
+// is exactly one implementation to audit and maintain.
+use super::constant_time_eq_str;
 
 /// Upgrade HTTP connection to WebSocket for live session events.
 ///

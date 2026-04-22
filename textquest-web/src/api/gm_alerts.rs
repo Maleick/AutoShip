@@ -93,9 +93,7 @@ impl GmAlertState {
 }
 
 fn read_gm_config_from_disk() -> Result<GmAlertConfig, String> {
-    let path = std::env::var("TEXTQUEST_CONFIG_PATH")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| std::path::PathBuf::from("config/textquest.toml"));
+    let path = crate::api::textquest_config_path();
 
     if !path.exists() {
         return Ok(GmAlertConfig::default());
@@ -117,9 +115,7 @@ fn read_gm_config_from_disk() -> Result<GmAlertConfig, String> {
 }
 
 fn write_gm_config_to_disk(config: &GmAlertConfig) -> Result<(), String> {
-    let path = std::env::var("TEXTQUEST_CONFIG_PATH")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| std::path::PathBuf::from("config/textquest.toml"));
+    let path = crate::api::textquest_config_path();
 
     let mut doc = if path.exists() {
         let content = std::fs::read_to_string(&path)

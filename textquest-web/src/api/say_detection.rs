@@ -151,9 +151,7 @@ impl SayDetectionState {
 }
 
 fn textquest_config_path() -> std::path::PathBuf {
-    std::env::var("TEXTQUEST_CONFIG_PATH")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| std::path::PathBuf::from("config/textquest.toml"))
+    crate::api::textquest_config_path()
 }
 
 fn read_say_detection_config_from_disk() -> Result<SayDetectionConfig, String> {

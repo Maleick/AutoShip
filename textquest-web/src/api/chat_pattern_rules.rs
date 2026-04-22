@@ -76,9 +76,7 @@ pub struct RuleStats {
 }
 
 fn chat_pattern_rules_path() -> PathBuf {
-    std::env::var("TEXTQUEST_CONFIG_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("config/textquest.toml"))
+    crate::api::textquest_config_path()
         .parent()
         .map(|p| p.join("chat_pattern_rules.toml"))
         .unwrap_or_else(|| PathBuf::from("config/chat_pattern_rules.toml"))
