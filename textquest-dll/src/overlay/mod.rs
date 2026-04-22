@@ -7,6 +7,7 @@
 //! - [`layout`] — grid/flex layout for widget placement
 //! - [`theme::Theme`] — dark/light color scheme
 
+pub mod input;
 pub mod layout;
 pub mod manager;
 pub mod state;
