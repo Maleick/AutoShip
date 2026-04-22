@@ -670,7 +670,7 @@ impl SoulCoordinator {
                 AuditActionType::MemoryRecord,
                 format!(
                     "{} recorded player chat memory from {}",
-                    soul.name, player_name
+                    soul_name, player_name
                 ),
                 None,
                 None,
@@ -770,6 +770,9 @@ impl SoulCoordinator {
             _ => 1.0,
         };
 
+        // Capture name before releasing soul borrow (self.memory.record re-borrows self)
+        let soul_name = soul.name.clone();
+
         // Record memory with the mood as it was before the event changed it
         let _ = self
             .memory
@@ -782,7 +785,7 @@ impl SoulCoordinator {
                 AuditActionType::MemoryRecord,
                 format!(
                     "{} recorded game event memory (importance {importance})",
-                    soul.name
+                    soul_name
                 ),
                 None,
                 None,
