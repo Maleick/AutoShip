@@ -7,6 +7,8 @@
 #![allow(clippy::new_without_default)]
 #![allow(clippy::items_after_test_module)]
 
+/// Canonical exit codes and pre-exit error reporting for TextQuest binaries.
+pub mod exit_code;
 /// Operational alerting — persistence, routing, Discord/email delivery.
 pub mod alerts;
 /// Auto-group config persistence and runtime invite/role orchestration.
