@@ -970,6 +970,222 @@ mod tests {
         }
     }
 
+    // ── Charm / pet tests ─────────────────────────────────────────────────
+
+    /// Enchanter ability sets expose a "Charm" line with level-appropriate
+    /// candidates (level 12 base → Command of Druzzil at 65).
+    #[test]
+    fn enchanter_charm_ability_set_is_present() {
+        let sets = EnchanterStrategy::build_ability_sets();
+        let charm = sets.iter().find(|s| s.name == "Charm");
+        assert!(charm.is_some(), "Charm ability set must be defined");
+        let charm = charm.unwrap();
+        assert!(!charm.candidates.is_empty(), "Charm set must have candidates");
+        // Base spell available from level 12
+        let base = charm.candidates.iter().find(|c| c.name == "Charm");
+        assert!(base.is_some(), "base 'Charm' candidate (level 12) must be present");
+        assert_eq!(base.unwrap().min_level, 12);
+        // Top-tier spell at 65
+        let top = charm.candidates.iter().find(|c| c.name == "Command of Druzzil");
+        assert!(top.is_some(), "'Command of Druzzil' (level 65) must be present");
+        assert_eq!(top.unwrap().min_level, 65);
+    }
+
+    /// Resolve_abilities selects the strongest charm the character can cast.
+    #[test]
+    fn enchanter_charm_resolves_to_level_appropriate_spell() {
+        let sets = EnchanterStrategy::build_ability_sets();
+        let known = known_abilities();
+
+        let at_60 = textquest_common::combat::resolve_abilities(&sets, &known, 60);
+        assert_eq!(
+            at_60.get("Charm").expect("Charm resolves at 60").ability_name,
+            "Boltran's Agacerie",
+        );
+
+        let at_65 = textquest_common::combat::resolve_abilities(&sets, &known, 65);
+        assert_eq!(
+            at_65.get("Charm").expect("Charm resolves at 65").ability_name,
+            "Command of Druzzil",
+        );
+    }
+
+    /// A charmed mob appears as MyPet in the xtarget list.  When that slot is
+    /// populated the pet_status helper should see a live pet spawn.
+    #[test]
+    fn pet_status_detects_charmed_mob_via_xtarget_my_pet() {
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        let xtargets = ExtendedTargetList {
+            slots: vec![ExtendedTargetSlot {
+                slot_type: XTargetType::MyPet,
+                status: XTargetSlotStatus::CurrentZone,
+                spawn_id: 500,
+                name: "a goblin shaman".into(),
+            }],
+            auto_add_haters: false,
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: false,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: Some(&xtargets),
+        };
+        let status = ctx.pet_status();
+        assert!(status.has_pet(), "charmed mob in MyPet slot must register as active pet");
+        assert_eq!(status.spawn_id, Some(500));
+    }
+
+    /// When the charmed mob breaks charm it leaves the MyPet xtarget slot.
+    /// After the break, pet_status must report no active pet.
+    #[test]
+    fn pet_status_reflects_charm_break_when_my_pet_slot_empty() {
+        let player = SpawnData::default();
+        let config = CombatConfig::default();
+        // No xtargets at all (charm broke, mob returned to hostile)
+        let ctx = CombatContext {
+            player: &player,
+            target: None,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+        };
+        let status = ctx.pet_status();
+        assert!(!status.has_pet(), "no MyPet slot means charm is broken");
+        assert_eq!(status.spawn_id, None);
+    }
+
+    /// After charm breaks the formerly-charmed mob reappears as an enemy add.
+    /// The enchanter's select_target should pick it up for re-CC.
+    #[test]
+    fn enchanter_select_target_picks_up_recharm_candidate_after_break() {
+        let enc = EnchanterStrategy::new(14);
+        let player = SpawnData {
+            level: 60,
+            mana_current: 9_000,
+            mana_max: 10_000,
+            ..SpawnData::default()
+        };
+        // Primary target and a newly-hostile mob (former charmed pet)
+        let primary = make_enemy(1);
+        let broke_charm = make_enemy(2); // hostile again
+        let enemies = vec![primary.clone(), broke_charm];
+        let config = CombatConfig::default();
+        let ctx = make_ctx(&player, Some(&primary), &enemies, &config, 10);
+
+        // Enchanter should identify the second enemy as a CC candidate
+        let cc_target = enc.select_target(&ctx);
+        assert_eq!(
+            cc_target,
+            Some(2),
+            "enchanter must target re-appeared hostile mob for recharm/mez"
+        );
+    }
+
+    /// Pet commands: when a pet is active and idle the pet_attack_action helper
+    /// must request an Attack.
+    #[test]
+    fn pet_attack_action_requests_attack_when_pet_is_idle() {
+        use crate::combat::strategy::{PetAction, pet_attack_action};
+        let player = SpawnData::default();
+        let target = SpawnData { spawn_id: 99, ..SpawnData::default() };
+        let enemies = vec![target.clone()];
+        let config = CombatConfig::default();
+        let xtargets = ExtendedTargetList {
+            slots: vec![ExtendedTargetSlot {
+                slot_type: XTargetType::MyPet,
+                status: XTargetSlotStatus::CurrentZone,
+                spawn_id: 77,
+                name: "a charmed gnoll".into(),
+            }],
+            auto_add_haters: false,
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &enemies,
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: Some(&xtargets),
+        };
+        assert_eq!(
+            pet_attack_action(&ctx),
+            Some(PetAction::Attack),
+            "idle charmed pet should trigger /pet attack"
+        );
+    }
+
+    /// Pet commands: if the pet is already attacking the current target,
+    /// pet_attack_action must not send a redundant command.
+    #[test]
+    fn pet_attack_action_skips_when_pet_already_on_target() {
+        use crate::combat::strategy::pet_attack_action;
+        let player = SpawnData::default();
+        let target = SpawnData { spawn_id: 99, ..SpawnData::default() };
+        let enemies = vec![target.clone()];
+        let config = CombatConfig::default();
+        // Pet slot + PetTarget slot pointing at same target → already attacking
+        let xtargets = ExtendedTargetList {
+            slots: vec![
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPet,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 77,
+                    name: "a charmed gnoll".into(),
+                },
+                ExtendedTargetSlot {
+                    slot_type: XTargetType::MyPetTarget,
+                    status: XTargetSlotStatus::CurrentZone,
+                    spawn_id: 99,
+                    name: "a skeleton".into(),
+                },
+            ],
+            auto_add_haters: false,
+        };
+        let ctx = CombatContext {
+            player: &player,
+            target: Some(&target),
+            nearby_enemies: &enemies,
+            group_members: &[],
+            config: &config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: Some(&xtargets),
+        };
+        assert_eq!(
+            pet_attack_action(&ctx),
+            None,
+            "no redundant attack command when pet is already on current target"
+        );
+    }
+
+    // ── end charm / pet tests ──────────────────────────────────────────────
+
     #[test]
     fn enchanter_toml_level_60_rotation_order_and_thresholds_match_runtime() {
         let profile = ConfigProfile::load().profile_for_level(60);
