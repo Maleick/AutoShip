@@ -4188,6 +4188,7 @@ dependencies = [
  "flate2",
  "goblin",
  "lettre",
+ "libloading",
  "mlua",
  "prost",
  "rand 0.9.4",
