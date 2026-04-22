@@ -1,3 +1,9 @@
+# Node / frontend build artifacts
+node_modules/
+dist/
+.vite/
+textquest-web/frontend/.env.local
+
 # Rust build artifacts
 target/
 /logs/
