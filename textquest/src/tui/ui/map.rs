@@ -1171,6 +1171,8 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             Span::raw(" NPC  ·  "),
             Span::styled("†", Style::default().fg(t.spawn_corpse)),
             Span::raw(" Corpse  ·  "),
+            Span::styled("◇", Style::default().fg(t.text_accent)),
+            Span::raw(" Zone Exit  ·  "),
             Span::styled(
                 "C",
                 Style::default()
