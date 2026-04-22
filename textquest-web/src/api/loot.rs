@@ -655,6 +655,17 @@ mod tests {
         Arc::new(state)
     }
 
+    /// Build a HeaderMap pre-populated with a trusted local-dev Origin so that
+    /// mutation handlers pass `is_trusted_origin` in tests.
+    fn trusted_headers() -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(
+            axum::http::header::ORIGIN,
+            TRUSTED_ORIGINS[0].parse().unwrap(),
+        );
+        h
+    }
+
     #[tokio::test]
     async fn get_rules_returns_defaults() {
         let state = demo_state();
@@ -674,7 +685,7 @@ mod tests {
             loot_all: false,
             auto_split: false,
         };
-        let status = put_rules(State(state.clone()), HeaderMap::new(), Json(new_rules)).await;
+        let status = put_rules(State(state.clone()), trusted_headers(), Json(new_rules)).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
         let Json(rules) = get_rules(State(state)).await;
         assert!(!rules.loot_all);
@@ -706,7 +717,7 @@ mod tests {
         let status = put_filter(
             State(state.clone()),
             Path("Frostreaver".into()),
-            HeaderMap::new(),
+            trusted_headers(),
             Json(new_filter),
         )
         .await;
@@ -733,7 +744,7 @@ mod tests {
         let payload = MasterLooterPayload {
             character: Some("Frostreaver".into()),
         };
-        let status = put_master_looter(State(state.clone()), HeaderMap::new(), Json(payload)).await;
+        let status = put_master_looter(State(state.clone()), trusted_headers(), Json(payload)).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
         let Json(ml) = get_master_looter(State(state)).await;
         assert_eq!(ml.character, Some("Frostreaver".into()));
@@ -787,7 +798,7 @@ mod tests {
         let status = put_filter(
             State(state),
             Path("Frostreaver".into()),
-            HeaderMap::new(),
+            trusted_headers(),
             Json(new_filter),
         )
         .await;
@@ -937,7 +948,7 @@ mod tests {
 
         let status = put_item_score(
             State(state.clone()),
-            HeaderMap::new(),
+            trusted_headers(),
             Json(payload.clone()),
         )
         .await;
@@ -1050,7 +1061,7 @@ mod tests {
             std::collections::BTreeMap::from([("STR".into(), 2.0)]),
         );
 
-        let status = put_item_score(State(state.clone()), HeaderMap::new(), Json(payload)).await;
+        let status = put_item_score(State(state.clone()), trusted_headers(), Json(payload)).await;
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
 
         let saved = get_item_score(State(state.clone())).await.0;
@@ -1101,7 +1112,7 @@ mod tests {
 
         let status = put_inventory_utility(
             State(state.clone()),
-            HeaderMap::new(),
+            trusted_headers(),
             Json(payload.clone()),
         )
         .await;

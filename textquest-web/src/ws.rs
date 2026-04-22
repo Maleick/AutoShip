@@ -255,10 +255,15 @@ mod tests {
     async fn websocket_receives_extension_runtime_events() {
         let (state, server, mut socket) = connect_test_socket().await;
 
+        let mut trusted_h = axum::http::HeaderMap::new();
+        trusted_h.insert(
+            axum::http::header::ORIGIN,
+            crate::api::loot::TRUSTED_ORIGINS[0].parse().unwrap(),
+        );
         let response = crate::api::extensions::put_runtime_status(
             State(state.clone()),
             AxumPath("mq2eqbc".to_string()),
-            axum::http::HeaderMap::new(),
+            trusted_h,
             Json(crate::api::extensions::RuntimeUpdateRequest { enabled: true }),
         )
         .await;

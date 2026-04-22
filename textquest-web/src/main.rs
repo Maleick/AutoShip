@@ -233,9 +233,13 @@ pub(crate) fn constant_time_eq_str(provided: &str, expected: &str) -> bool {
     // scale with attacker-controlled input length. Missing bytes from `provided`
     // are treated as zero.
     let mut diff = 0u8;
-    for i in 0..expected_len {
-        let provided_byte = pb.get(i).copied().unwrap_or(0);
-        diff |= provided_byte ^ eb[i];
+    for (expected_byte, provided_byte) in eb.iter().zip(
+        pb.iter()
+            .copied()
+            .chain(std::iter::repeat(0u8))
+            .take(expected_len),
+    ) {
+        diff |= provided_byte ^ expected_byte;
     }
 
     let content_eq: Choice = Choice::from((diff == 0) as u8);
@@ -1205,6 +1209,7 @@ mod tests {
                 .method("PUT")
                 .uri("/api/extensions/catalog/mq2autoaccept/scopes/character/Frostreaver")
                 .header("content-type", "application/json")
+                .header("origin", crate::api::loot::TRUSTED_ORIGINS[0])
                 .body(Body::from(
                     json!({
                         "settings": {
@@ -1248,6 +1253,7 @@ mod tests {
                 Request::builder()
                     .method("DELETE")
                     .uri("/api/extensions/catalog/mq2autoaccept/scopes/character/Frostreaver")
+                    .header("origin", crate::api::loot::TRUSTED_ORIGINS[0])
                     .body(Body::empty())
                     .expect("request"),
             )
@@ -1266,6 +1272,7 @@ mod tests {
                 .method("PUT")
                 .uri("/api/extensions/catalog/mq2eqbc/settings")
                 .header("content-type", "application/json")
+                .header("origin", crate::api::loot::TRUSTED_ORIGINS[0])
                 .body(Body::from(
                     json!({
                         "settings": {
@@ -1377,6 +1384,74 @@ mod tests {
             .await
             .expect("request should succeed");
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    /// Verify that mutation routes deny requests with no Origin header.
+    ///
+    /// This is the canonical deny-default integration test: `is_trusted_origin`
+    /// must return `false` (and handlers must return 403) when no Origin header
+    /// is present — regardless of whether the binary was compiled in test mode.
+    /// A `cfg!(test)` fallback would silently pass these requests in a deployed
+    /// test binary, which is the bug this test guards against (issue #2278).
+    #[tokio::test]
+    async fn mutation_routes_deny_no_origin_header() {
+        let app = build_app(Arc::new(test_app_state()));
+
+        // PUT /api/loot/rules with no Origin header must be rejected.
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/loot/rules")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "keep_items": [],
+                            "sell_items": [],
+                            "destroy_items": [],
+                            "loot_all": false,
+                            "auto_split": false
+                        })
+                        .to_string(),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(
+            response.status(),
+            StatusCode::FORBIDDEN,
+            "mutation route must deny requests with no Origin header (issue #2278)"
+        );
+
+        // PUT /api/extensions/catalog/:id/settings with no Origin header must also be denied.
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/extensions/catalog/mq2eqbc/settings")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "settings": {
+                                "enabled": true,
+                                "host": "127.0.0.1",
+                                "port": 2112,
+                                "autoConnect": false
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(
+            response.status(),
+            StatusCode::FORBIDDEN,
+            "mutation route must deny requests with no Origin header (issue #2278)"
+        );
     }
 
     #[tokio::test]

@@ -1467,6 +1467,16 @@ mod tests {
         crate::test_support::demo_app_state()
     }
 
+    /// Build a HeaderMap with a trusted local-dev Origin for mutation tests.
+    fn trusted_headers() -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(
+            axum::http::header::ORIGIN,
+            crate::api::loot::TRUSTED_ORIGINS[0].parse().unwrap(),
+        );
+        h
+    }
+
     #[tokio::test]
     async fn get_dashboard_returns_snapshot_with_all_sections() {
         let state = test_state();
@@ -1504,7 +1514,7 @@ mod tests {
 
         let response = apply_dashboard_action(
             State(state.clone()),
-            HeaderMap::new(),
+            trusted_headers(),
             axum::Json(DashboardActionRequest::CreateSession {
                 profile: "Loot Crew".to_string(),
                 character_name: "Newpuller".to_string(),
@@ -1545,7 +1555,7 @@ mod tests {
         let state = test_state();
         let response = apply_dashboard_action(
             State(state),
-            HeaderMap::new(),
+            trusted_headers(),
             axum::Json(DashboardActionRequest::CreateSession {
                 profile: "Unknown".to_string(),
                 character_name: "   ".to_string(),

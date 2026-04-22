@@ -139,6 +139,16 @@ mod tests {
         crate::test_support::demo_app_state()
     }
 
+    /// Build a HeaderMap with a trusted local-dev Origin for mutation tests.
+    fn trusted_headers() -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(
+            axum::http::header::ORIGIN,
+            crate::api::loot::TRUSTED_ORIGINS[0].parse().unwrap(),
+        );
+        h
+    }
+
     #[tokio::test]
     async fn get_settings_returns_defaults() {
         let state = demo_state();
@@ -177,7 +187,7 @@ mod tests {
 
         let status = put_settings(
             State(state.clone()),
-            HeaderMap::new(),
+            trusted_headers(),
             Json(settings.clone()),
         )
         .await

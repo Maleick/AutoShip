@@ -113,10 +113,10 @@ pub async fn health() -> Json<HealthResponse> {
 pub(crate) fn textquest_config_path() -> PathBuf {
     #[cfg(test)]
     {
-        if let Ok(guard) = test_config_override().read() {
-            if let Some(ref p) = *guard {
-                return p.clone();
-            }
+        if let Ok(guard) = test_config_override().read()
+            && let Some(ref p) = *guard
+        {
+            return p.clone();
         }
     }
     std::env::var("TEXTQUEST_CONFIG_PATH")
