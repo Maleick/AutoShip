@@ -49,6 +49,8 @@ mod syscall;
 pub mod timestamp;
 #[allow(dead_code)]
 mod tradeskill_trophy;
+#[allow(dead_code)]
+pub mod mq2;
 
 use std::{
     path::PathBuf,

@@ -4681,11 +4681,14 @@ mod tests {
         // eqgame.exe preferred range: 0x140000000 – 0x150000000
         const EQ_BASE: u64 = 0x0001_4000_0000;
         const EQ_LIMIT: u64 = 0x0001_5000_0000;
-        assert!(
-            CHEATER_LD_FLAG_VAR > EQ_BASE && CHEATER_LD_FLAG_VAR < EQ_LIMIT,
-            "CHEATER_LD_FLAG_VAR ({:#x}) must be within eqgame.exe preferred range",
-            CHEATER_LD_FLAG_VAR
-        );
+        #[allow(clippy::assertions_on_constants)]
+        {
+            assert!(
+                CHEATER_LD_FLAG_VAR > EQ_BASE && CHEATER_LD_FLAG_VAR < EQ_LIMIT,
+                "CHEATER_LD_FLAG_VAR ({:#x}) must be within eqgame.exe preferred range",
+                CHEATER_LD_FLAG_VAR
+            );
+        }
     }
 
     /// Rising-edge detection: prev == 0 && current != 0 triggers an alert.
