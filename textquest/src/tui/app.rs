@@ -4629,6 +4629,275 @@ impl App {
         }
     }
 
+    // ─── rgmercs GUI window command dispatch ──────────────────────────────────
+
+    /// Handle `:loadout <sub-command>` — spell loadout window commands.
+    ///
+    /// Sub-commands:
+    /// - `toggle`        — toggle the selected spell in/out of rotation
+    /// - `up` / `down`   — move selection
+    /// - `gem <n> ready` — mark gem N as ready (recast = 0)
+    pub fn handle_loadout_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            Some("toggle") => {
+                self.spell_loadout_state.toggle_selected();
+                self.set_feedback(ToastLevel::Info, String::from("Spell slot toggled"), false);
+            }
+            Some("up") => {
+                self.spell_loadout_state.select_prev();
+            }
+            Some("down") => {
+                self.spell_loadout_state.select_next();
+            }
+            Some("gem") => {
+                let gem = args.get(1).and_then(|s| s.parse::<u8>().ok());
+                let action = args.get(2).copied();
+                if let (Some(gem), Some("ready")) = (gem, action) {
+                    self.spell_loadout_state.set_recast_ms(gem, 0);
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Gem {gem} marked ready"),
+                        false,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        String::from("Usage: loadout gem <n> ready"),
+                        true,
+                    );
+                }
+            }
+            _ => {
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from("loadout: toggle | up | down | gem <n> ready"),
+                    false,
+                );
+            }
+        }
+    }
+
+    /// Handle `:rotation <sub-command>` — rotation window commands.
+    ///
+    /// Sub-commands:
+    /// - `toggle`      — toggle the selected ability in/out of rotation
+    /// - `up` / `down` — move selection
+    /// - `cast <name>` — record a cast for the named ability
+    pub fn handle_rotation_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            Some("toggle") => {
+                self.rotation_window_state.toggle_selected();
+                self.set_feedback(ToastLevel::Info, String::from("Rotation entry toggled"), false);
+            }
+            Some("up") => {
+                self.rotation_window_state.select_prev();
+            }
+            Some("down") => {
+                self.rotation_window_state.select_next();
+            }
+            Some("cast") => {
+                if args.len() > 1 {
+                    let name = args[1..].join(" ");
+                    self.rotation_window_state.record_cast(&name);
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Recorded cast: {name}"),
+                        false,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        String::from("Usage: rotation cast <ability-name>"),
+                        true,
+                    );
+                }
+            }
+            _ => {
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from("rotation: toggle | up | down | cast <name>"),
+                    false,
+                );
+            }
+        }
+    }
+
+    /// Handle `:pull <sub-command>` — pull window commands.
+    ///
+    /// Sub-commands:
+    /// - `skip`        — skip the selected target (mark Done)
+    /// - `up` / `down` — move selection
+    /// - `auto on/off` — enable or disable auto-pull
+    pub fn handle_pull_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            Some("skip") => {
+                self.pull_window_state.skip_selected();
+                self.set_feedback(ToastLevel::Info, String::from("Pull target skipped"), false);
+            }
+            Some("up") => {
+                self.pull_window_state.select_prev();
+            }
+            Some("down") => {
+                self.pull_window_state.select_next();
+            }
+            Some("auto") => match args.get(1).copied() {
+                Some("on") => {
+                    self.pull_window_state.auto_pull_enabled = true;
+                    self.set_feedback(ToastLevel::Success, String::from("Auto-pull enabled"), true);
+                }
+                Some("off") => {
+                    self.pull_window_state.auto_pull_enabled = false;
+                    self.set_feedback(ToastLevel::Info, String::from("Auto-pull disabled"), true);
+                }
+                _ => {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        String::from("Usage: pull auto on|off"),
+                        true,
+                    );
+                }
+            },
+            _ => {
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from("pull: skip | up | down | auto on|off"),
+                    false,
+                );
+            }
+        }
+    }
+
+    /// Handle `:ft <sub-command>` — Force Target window commands.
+    ///
+    /// Sub-commands:
+    /// - `add <id> <name>` — add a force target
+    /// - `remove <id>`     — remove a force target by spawn ID
+    /// - `clear`           — remove the currently selected entry
+    /// - `up` / `down`     — move selection
+    pub fn handle_force_target_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            Some("add") => {
+                let id = args.get(1).and_then(|s| s.parse::<u32>().ok());
+                let name = if args.len() > 2 {
+                    args[2..].join(" ")
+                } else {
+                    String::from("Unknown")
+                };
+                if let Some(id) = id {
+                    self.force_target_state.add(id, &name);
+                    self.set_feedback(
+                        ToastLevel::Success,
+                        format!("Force target added: {name} ({id})"),
+                        true,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        String::from("Usage: ft add <spawn-id> <name>"),
+                        true,
+                    );
+                }
+            }
+            Some("remove") => {
+                if let Some(id) = args.get(1).and_then(|s| s.parse::<u32>().ok()) {
+                    self.force_target_state.remove(id);
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Force target removed: {id}"),
+                        true,
+                    );
+                } else {
+                    self.set_feedback(
+                        ToastLevel::Warning,
+                        String::from("Usage: ft remove <spawn-id>"),
+                        true,
+                    );
+                }
+            }
+            Some("clear") => {
+                self.force_target_state.remove_selected();
+                self.set_feedback(ToastLevel::Info, String::from("Force target removed"), false);
+            }
+            Some("up") => {
+                self.force_target_state.select_prev();
+            }
+            Some("down") => {
+                self.force_target_state.select_next();
+            }
+            _ => {
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from("ft: add <id> <name> | remove <id> | clear | up | down"),
+                    false,
+                );
+            }
+        }
+    }
+
+    /// Handle `:clicky <sub-command>` — clicky window commands.
+    ///
+    /// Sub-commands:
+    /// - `toggle`      — enable/disable the selected entry
+    /// - `up` / `down` — move selection
+    pub fn handle_clicky_command(&mut self, args: &[&str]) {
+        match args.first().copied() {
+            Some("toggle") => {
+                self.clicky_window_state.toggle_selected();
+                self.set_feedback(ToastLevel::Info, String::from("Clicky toggled"), false);
+            }
+            Some("up") => {
+                self.clicky_window_state.select_prev();
+            }
+            Some("down") => {
+                self.clicky_window_state.select_next();
+            }
+            _ => {
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from("clicky: toggle | up | down"),
+                    false,
+                );
+            }
+        }
+    }
+
+    /// Update all GUI window states from the current `CampSnapshot` + loop
+    /// state. Called each tick from the orchestrator update path.
+    pub fn update_gui_windows_from_camp_snapshot(
+        &mut self,
+        snapshot: &crate::camp::state::CampSnapshot,
+        phase: CampPhase,
+        pull_target_name: &str,
+    ) {
+        // Camp status window.
+        let members: Vec<CampMemberStatus> = snapshot
+            .member_hp
+            .iter()
+            .map(|(pid, hp)| {
+                let in_combat = snapshot
+                    .member_in_combat
+                    .iter()
+                    .find(|(p, _)| *p == *pid)
+                    .map(|(_, c)| *c)
+                    .unwrap_or(false);
+                // `snapshot.member_hp` already contains raw HP points, not a percentage.
+                // Preserve the raw value here instead of clamping it into a fake 0..100%.
+                let hp_points = *hp as f32;
+                let mut m = CampMemberStatus::new(format!("pid:{pid}"), hp_points, None);
+                m.in_combat = in_combat;
+                m.is_dead = *hp <= 0;
+                m
+            })
+            .collect();
+        self.camp_status_state.update_members(members);
+        self.camp_status_state.set_phase(phase);
+        self.camp_status_state.current_pull_target = pull_target_name.to_owned();
+
+        if !pull_target_name.is_empty() {
+            self.pull_window_state.last_pull_name = pull_target_name.to_owned();
+        }
+    }
+
     fn unknown_command_feedback(&mut self, input: &str) {
         if let Some(suggestion) = command::did_you_mean(input) {
             let alias_note = suggestion

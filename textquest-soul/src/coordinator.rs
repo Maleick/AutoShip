@@ -22,7 +22,6 @@ use super::{
     },
     memory::MemoryStore,
     personality::{PersonalityEngine, SoulContext},
-    sentiment::score_sentiment,
     social::SocialGraph,
     suppression::{GameStateContext, SuppressionRules},
 };
@@ -226,8 +225,6 @@ pub struct SoulCoordinator {
 const MAX_PLAYER_CHAT_MESSAGE_BYTES: usize = 512;
 const MAX_CONVERSATIONS_PER_CHARACTER: usize = 1000;
 const SUMMARY_INTERVAL_TICKS: u64 = 720; // 1 hour at 5s/tick
-const STRONG_POSITIVE_SENTIMENT_THRESHOLD: f32 = 0.5;
-const STRONG_NEGATIVE_SENTIMENT_THRESHOLD: f32 = -0.5;
 
 impl SoulCoordinator {
     /// Create a new `SoulCoordinator` from config.
@@ -592,57 +589,6 @@ impl SoulCoordinator {
         true
     }
 
-    fn apply_player_sentiment_relationship_update(
-        &mut self,
-        character_name: &str,
-        player_name: &str,
-        sentiment: f32,
-    ) {
-        if sentiment > STRONG_POSITIVE_SENTIMENT_THRESHOLD {
-            let relationship = self.social.get_or_create(character_name, player_name);
-            relationship.adjust_faction(self.config.sentiment_faction_delta);
-            relationship.adjust_trust(self.config.sentiment_trust_delta);
-        } else if sentiment < STRONG_NEGATIVE_SENTIMENT_THRESHOLD {
-            let relationship = self.social.get_or_create(character_name, player_name);
-            relationship.adjust_faction(-self.config.sentiment_faction_delta);
-            relationship.adjust_trust(-(self.config.sentiment_trust_delta * 2.0));
-        }
-    }
-
-    fn build_player_chat_memory_context(
-        &self,
-        client_id: ClientId,
-        character_name: &str,
-        player_name: &str,
-    ) -> Vec<String> {
-        let mut memory_context: Vec<String> = self
-            .memory
-            .recall_about(client_id, player_name, 5)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|row| row.event_json)
-            .collect();
-
-        if let Some(summary) = self
-            .memory
-            .summarize_player_chat_sentiment(client_id, player_name)
-            .ok()
-            .flatten()
-        {
-            memory_context.insert(0, format!("{player_name} {summary}"));
-        }
-
-        if self.social.get(character_name, player_name).is_some() {
-            memory_context.insert(
-                0,
-                self.social
-                    .build_relationship_summary(character_name, player_name),
-            );
-        }
-
-        memory_context
-    }
-
     /// Handle an incoming message from a real player.
     pub fn on_player_message(
         &mut self,
@@ -659,7 +605,7 @@ impl SoulCoordinator {
         // takes &mut self so it must not be called while soul is live.
         let chat_write_allowed = self.allow_chat_memory_write(client_id, Instant::now());
 
-        let Some(soul_name) = self.souls.get(&client_id).map(|soul| soul.name.clone()) else {
+        let Some(soul) = self.souls.get_mut(&client_id) else {
             return;
         };
 
@@ -668,62 +614,39 @@ impl SoulCoordinator {
             return;
         }
         let message = truncate_utf8(message, MAX_PLAYER_CHAT_MESSAGE_BYTES);
-        let sentiment = score_sentiment(message);
 
         // Record the conversation
-        let _ = self.memory.record_conversation(
-            client_id,
-            player_name,
-            true,
-            channel,
-            message,
-            sentiment,
-        );
+        let _ =
+            self.memory
+                .record_conversation(client_id, player_name, true, channel, message, 0.0);
         let _ = self
             .memory
             .prune_conversations(client_id, MAX_CONVERSATIONS_PER_CHARACTER);
 
-        self.apply_player_sentiment_relationship_update(&soul_name, player_name, sentiment);
+        // Capture mood before event processing for accurate memory recording
+        let mood_before = soul.mood;
 
-        let memory_context =
-            self.build_player_chat_memory_context(client_id, &soul_name, player_name);
-
+        // Process mood change from player interaction
         let event = SoulEvent::PlayerChat {
             player_name: player_name.to_string(),
-            sentiment,
+            sentiment: 0.0, // Neutral default; LLM-based sentiment analysis deferred to M6
         };
-
-        let (mood_before, mood_after, traits, speech_style, backstory) = {
-            let Some(soul) = self.souls.get_mut(&client_id) else {
-                return;
-            };
-
-            // Capture mood before event processing for accurate memory recording
-            let mood_before = soul.mood;
-            soul.mood = soul
-                .personality
-                .process_event(soul.mood, &event, &soul.traits);
-            (
-                mood_before,
-                soul.mood,
-                soul.traits.clone(),
-                soul.speech_style.clone(),
-                soul.backstory.clone(),
-            )
-        };
+        soul.mood = soul
+            .personality
+            .process_event(soul.mood, &event, &soul.traits);
 
         if let Some(audit) = &self.audit
-            && mood_before != mood_after
+            && mood_before != soul.mood
         {
             let _ = audit.log(
                 client_id,
                 AuditActionType::MoodChange,
                 format!(
                     "{} mood: {:?} -> {:?} (player chat from {})",
-                    soul_name, mood_before, mood_after, player_name
+                    soul.name, mood_before, soul.mood, player_name
                 ),
                 Some(serde_json::json!({"mood": format!("{:?}", mood_before)})),
-                Some(serde_json::json!({"mood": format!("{:?}", mood_after)})),
+                Some(serde_json::json!({"mood": format!("{:?}", soul.mood)})),
             );
         }
 
@@ -756,18 +679,24 @@ impl SoulCoordinator {
 
         // Queue an LLM response (high priority for real players)
         let request = LlmRequest {
-            character_name: soul_name.clone(),
-            traits,
-            mood: mood_after,
-            speech_style,
+            character_name: soul.name.clone(),
+            traits: soul.traits.clone(),
+            mood: soul.mood,
+            speech_style: soul.speech_style.clone(),
             situation: Situation::PlayerChat {
                 player_name: player_name.to_string(),
                 message: message.to_owned(),
                 channel: channel.to_string(),
             },
             priority: LlmPriority::High,
-            memory_context,
-            backstory,
+            memory_context: self
+                .memory
+                .recall_about(client_id, player_name, 5)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|row| row.event_json)
+                .collect(),
+            backstory: soul.backstory.clone(),
         };
 
         // Audit: LLM request enqueued
@@ -777,7 +706,7 @@ impl SoulCoordinator {
                 AuditActionType::LlmRequest,
                 format!(
                     "{} LLM request enqueued for player chat from {}",
-                    soul_name, player_name
+                    soul.name, player_name
                 ),
                 None,
                 Some(serde_json::json!({"priority": "High", "channel": channel})),
@@ -1156,134 +1085,6 @@ mod tests {
         coord.register_character(1, &make_char_config("Test"));
         coord.on_player_message(1, "Dave", "Hey there!", "say");
         assert_eq!(coord.llm_queue.pending_count(), 1);
-    }
-
-    #[test]
-    fn on_player_message_positive_sentiment_updates_faction_and_trust() {
-        let mut coord = make_coordinator(true);
-        coord.config.player_chat_enabled = true;
-        coord.register_character(1, &make_char_config("Test"));
-
-        coord.on_player_message(1, "Dave", "awesome great thanks", "say");
-
-        let relationship = coord.social_graph().get("Test", "Dave").unwrap();
-        assert_eq!(
-            relationship.faction_score,
-            coord.config.sentiment_faction_delta
-        );
-        assert!((relationship.trust - 0.55).abs() < 0.0001);
-    }
-
-    #[test]
-    fn on_player_message_negative_sentiment_updates_faction_and_trust() {
-        let mut coord = make_coordinator(true);
-        coord.config.player_chat_enabled = true;
-        coord.register_character(1, &make_char_config("Test"));
-
-        coord.on_player_message(1, "Dave", "you are trash and bad", "say");
-
-        let relationship = coord.social_graph().get("Test", "Dave").unwrap();
-        assert_eq!(
-            relationship.faction_score,
-            -coord.config.sentiment_faction_delta
-        );
-        assert!((relationship.trust - 0.4).abs() < 0.0001);
-    }
-
-    #[test]
-    fn on_player_message_accumulates_relationship_updates_over_time() {
-        let mut coord = make_coordinator(true);
-        coord.config.player_chat_enabled = true;
-        coord.register_character(1, &make_char_config("Test"));
-
-        coord.on_player_message(1, "Dave", "awesome great thanks", "say");
-        coord.on_player_message(1, "Dave", "nice thanks good", "say");
-        coord.on_player_message(1, "Dave", "trash bad fail", "say");
-
-        let relationship = coord.social_graph().get("Test", "Dave").unwrap();
-        assert_eq!(
-            relationship.faction_score,
-            coord.config.sentiment_faction_delta
-        );
-        assert!((relationship.trust - 0.5).abs() < 0.0001);
-    }
-
-    #[test]
-    fn on_player_message_clamps_relationship_faction_bounds() {
-        let mut coord = make_coordinator(true);
-        coord.config.player_chat_enabled = true;
-        coord.register_character(1, &make_char_config("Test"));
-
-        {
-            let relationship = coord.social.get_or_create("Test", "Dave");
-            relationship.faction_score = 998;
-        }
-        coord.on_player_message(1, "Dave", "awesome great thanks", "say");
-        assert_eq!(
-            coord
-                .social_graph()
-                .get("Test", "Dave")
-                .unwrap()
-                .faction_score,
-            1000
-        );
-
-        {
-            let relationship = coord.social.get_or_create("Test", "Griefer");
-            relationship.faction_score = -998;
-        }
-        coord.on_player_message(1, "Griefer", "trash bad fail", "say");
-        assert_eq!(
-            coord
-                .social_graph()
-                .get("Test", "Griefer")
-                .unwrap()
-                .faction_score,
-            -1000
-        );
-    }
-
-    #[test]
-    fn on_player_message_honors_sentiment_config_deltas() {
-        let mut coord = make_coordinator(true);
-        coord.config.player_chat_enabled = true;
-        coord.config.sentiment_faction_delta = 9;
-        coord.config.sentiment_trust_delta = 0.2;
-        coord.register_character(1, &make_char_config("Test"));
-
-        coord.on_player_message(1, "Dave", "awesome great thanks", "say");
-        coord.on_player_message(1, "Dave", "trash bad fail", "say");
-
-        let relationship = coord.social_graph().get("Test", "Dave").unwrap();
-        assert_eq!(relationship.faction_score, 0);
-        assert!((relationship.trust - 0.3).abs() < 0.0001);
-    }
-
-    #[test]
-    fn on_player_message_records_sentiment_summary_in_llm_context() {
-        let mut coord = make_coordinator(true);
-        coord.config.player_chat_enabled = true;
-        coord.register_character(1, &make_char_config("Test"));
-
-        coord.on_player_message(1, "Dave", "awesome great thanks", "say");
-        coord.on_player_message(1, "Dave", "nice good ty", "say");
-        coord.on_player_message(1, "Dave", "trash bad fail", "say");
-
-        // Drain all three enqueued requests; the last one is built after all
-        // three conversations are recorded and must contain the full summary.
-        let mut last_request = None;
-        while let Some(req) = coord.llm_queue.pop_next(0) {
-            last_request = Some(req);
-        }
-        let request = last_request.expect("expected at least one LLM request");
-        assert!(
-            request
-                .memory_context
-                .iter()
-                .any(|entry| entry.contains("had 2 positive chats, 1 negative chat")),
-            "expected sentiment summary in LLM context, got {:?}",
-            request.memory_context
-        );
     }
 
     #[test]
