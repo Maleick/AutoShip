@@ -223,6 +223,66 @@ impl SocialGraph {
             .map(|((_, to), rel)| (to.as_str(), rel))
             .collect()
     }
+
+    /// Apply a three-party gossip event.
+    ///
+    /// When `gossiper` tells `listener` something about `subject`, three
+    /// directed relationships are updated:
+    ///
+    /// - `gossiper → listener`: +faction bond (shared conversation).
+    /// - `gossiper → subject`: −faction (potential betrayal/disclosure).
+    /// - `listener → subject`: influenced by gossiper's current opinion of the
+    ///   subject, scaled by `tone` (−1.0 insulting … 1.0 praising) and a 30%
+    ///   propagation factor.  Clamped to [-1000, 1000].
+    ///
+    /// Self-gossip (`gossiper == subject` or `listener == subject`) is a no-op.
+    ///
+    /// Returns the faction delta applied to the `listener → subject` edge, or
+    /// `None` when the call is a no-op.
+    pub fn apply_gossip(
+        &mut self,
+        gossiper: &str,
+        listener: &str,
+        subject: &str,
+        tone: f32,
+    ) -> Option<i32> {
+        // Self-gossip guard
+        if gossiper == subject || listener == subject {
+            return None;
+        }
+
+        let tone = tone.clamp(-1.0, 1.0);
+
+        // Snapshot gossiper's opinion of subject BEFORE modifying any edges,
+        // so the propagation reflects the opinion at the moment of gossip.
+        let gossiper_opinion = self
+            .get(gossiper, subject)
+            .map_or(0, |r| r.faction_score);
+
+        // gossiper → listener: +20 faction (conversation bond)
+        {
+            let rel = self.get_or_create(gossiper, listener);
+            rel.adjust_faction(20);
+        }
+
+        // gossiper → subject: −15 faction (disclosure / betrayal)
+        {
+            let rel = self.get_or_create(gossiper, subject);
+            rel.adjust_faction(-15);
+        }
+
+        // listener → subject: 30% of gossiper's opinion of subject, scaled by tone
+        let propagated = (gossiper_opinion as f32 * tone * 0.30)
+            .round()
+            .clamp(FACTION_MIN as f32, FACTION_MAX as f32) as i32;
+
+        {
+            let rel = self.get_or_create(listener, subject);
+            rel.adjust_faction(propagated);
+        }
+
+        Some(propagated)
+    }
 }
 
 impl Default for SocialGraph {
@@ -631,5 +691,88 @@ mod tests {
         let rel = graph.get("A", "B").unwrap();
         assert_eq!(rel.faction_score, 1000);
         assert!((rel.trust - 1.0).abs() < 0.01);
+    }
+
+    // --- apply_gossip tests ---
+
+    #[test]
+    fn apply_gossip_propagates_negative_opinion_to_listener() {
+        let mut graph = SocialGraph::new();
+        // Seed: gossiper dislikes subject strongly
+        graph.get_or_create("Alice", "Charlie").faction_score = -600;
+
+        // Alice tells Bob something negative about Charlie (tone -1.0)
+        let delta = graph.apply_gossip("Alice", "Bob", "Charlie", -1.0);
+
+        assert!(delta.is_some());
+        // listener → subject gets 30% of -600 * -1.0 = +180 (tone flips sign)
+        let bob_charlie = graph.get("Bob", "Charlie").unwrap();
+        assert_eq!(bob_charlie.faction_score, 180);
+    }
+
+    #[test]
+    fn apply_gossip_bond_increases_gossiper_listener_faction() {
+        let mut graph = SocialGraph::new();
+        graph.apply_gossip("Alice", "Bob", "Charlie", 0.0);
+        let alice_bob = graph.get("Alice", "Bob").unwrap();
+        assert_eq!(alice_bob.faction_score, 20);
+    }
+
+    #[test]
+    fn apply_gossip_decreases_gossiper_subject_faction() {
+        let mut graph = SocialGraph::new();
+        graph.apply_gossip("Alice", "Bob", "Charlie", 0.0);
+        let alice_charlie = graph.get("Alice", "Charlie").unwrap();
+        assert_eq!(alice_charlie.faction_score, -15);
+    }
+
+    #[test]
+    fn apply_gossip_trust_weighted_propagation() {
+        let mut graph = SocialGraph::new();
+        // gossiper has +500 faction toward subject, tone +1.0 (praising)
+        graph.get_or_create("Alice", "Charlie").faction_score = 500;
+        graph.apply_gossip("Alice", "Bob", "Charlie", 1.0);
+
+        // listener → subject = 500 * 1.0 * 0.30 = 150
+        let bob_charlie = graph.get("Bob", "Charlie").unwrap();
+        assert_eq!(bob_charlie.faction_score, 150);
+    }
+
+    #[test]
+    fn apply_gossip_self_gossip_no_op_gossiper_is_subject() {
+        let mut graph = SocialGraph::new();
+        let result = graph.apply_gossip("Alice", "Bob", "Alice", 1.0);
+        assert!(result.is_none());
+        assert!(graph.get("Alice", "Bob").is_none());
+    }
+
+    #[test]
+    fn apply_gossip_self_gossip_no_op_listener_is_subject() {
+        let mut graph = SocialGraph::new();
+        let result = graph.apply_gossip("Alice", "Bob", "Bob", 1.0);
+        assert!(result.is_none());
+        assert!(graph.get("Alice", "Bob").is_none());
+    }
+
+    #[test]
+    fn apply_gossip_propagated_delta_capped_at_faction_max() {
+        let mut graph = SocialGraph::new();
+        // Pre-load listener→subject at near-max
+        graph.get_or_create("Bob", "Charlie").faction_score = 990;
+        // gossiper has max faction toward subject
+        graph.get_or_create("Alice", "Charlie").faction_score = 1000;
+        graph.apply_gossip("Alice", "Bob", "Charlie", 1.0);
+        let bob_charlie = graph.get("Bob", "Charlie").unwrap();
+        assert_eq!(bob_charlie.faction_score, 1000); // clamped
+    }
+
+    #[test]
+    fn apply_gossip_neutral_tone_zero_propagation() {
+        let mut graph = SocialGraph::new();
+        graph.get_or_create("Alice", "Charlie").faction_score = 800;
+        graph.apply_gossip("Alice", "Bob", "Charlie", 0.0);
+        // tone=0 → propagated = 800 * 0.0 * 0.30 = 0
+        let bob_charlie = graph.get("Bob", "Charlie").unwrap();
+        assert_eq!(bob_charlie.faction_score, 0);
     }
 }

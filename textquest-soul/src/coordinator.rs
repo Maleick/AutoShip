@@ -841,6 +841,50 @@ impl SoulCoordinator {
                 soul.speech_evolution.decay_slang(self.tick_count);
             }
         }
+
+        // Gossip detection: if the message mentions a known character by name
+        // and carries non-neutral sentiment, treat it as gossip about that
+        // character and propagate the relationship update.
+        if self.config.enable_gossip && (channel == "say" || channel == "group") {
+            // Collect known character names (excluding the listening bot itself
+            // and the player who sent the message).
+            let listener_name = self
+                .souls
+                .get(&client_id)
+                .map(|s| s.name.clone())
+                .unwrap_or_default();
+            let known_subjects: Vec<String> = self
+                .souls
+                .values()
+                .filter(|s| s.name != listener_name && s.name != player_name)
+                .map(|s| s.name.clone())
+                .collect();
+
+            let msg_lower = message.to_lowercase();
+            let sentiment = crate::sentiment::score_sentiment(message);
+
+            for subject in &known_subjects {
+                if msg_lower.contains(&subject.to_lowercase()) && sentiment.abs() >= 0.3 {
+                    // tone: +1.0 praising, -1.0 insulting
+                    let tone = if sentiment > 0.0 { 1.0_f32 } else { -1.0_f32 };
+                    self.social
+                        .apply_gossip(player_name, &listener_name, subject, tone);
+
+                    // Record a Witnessed memory for the listener.
+                    let gossip_event = SoulEvent::Witnessed {
+                        description: format!(
+                            "heard from {} that {} ...",
+                            player_name, subject
+                        ),
+                    };
+                    let _ = self.memory.record(client_id, &gossip_event, mood_before, 1.0);
+
+                    // Only process the first name match per message to avoid
+                    // multi-target noise.
+                    break;
+                }
+            }
+        }
     }
 
     /// Handle a game event (kill, death, loot, zone change, etc.).

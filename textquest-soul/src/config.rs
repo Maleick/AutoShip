@@ -338,6 +338,11 @@ pub struct SoulConfig {
     /// Default: 1.0.
     #[serde(default = "default_trait_drift_multiplier")]
     pub trait_drift_multiplier: f32,
+    /// Enable three-party gossip propagation. When true, player chat messages
+    /// that mention a known character name with sentiment are treated as gossip
+    /// and update the `listener → subject` relationship. Default: true.
+    #[serde(default = "default_enable_gossip")]
+    pub enable_gossip: bool,
 }
 
 const fn default_max_requests_per_character() -> u32 {
@@ -358,6 +363,10 @@ const fn default_max_chat_memory_writes_per_hour() -> u32 {
 
 const fn default_sentiment_faction_delta() -> i32 {
     5
+}
+
+const fn default_enable_gossip() -> bool {
+    true
 }
 
 const fn default_sentiment_trust_delta() -> f32 {
@@ -416,6 +425,7 @@ impl Default for SoulConfig {
             banter_chance_friend: default_banter_chance_friend(),
             enable_trait_drift: default_enable_trait_drift(),
             trait_drift_multiplier: default_trait_drift_multiplier(),
+            enable_gossip: default_enable_gossip(),
         }
     }
 }
