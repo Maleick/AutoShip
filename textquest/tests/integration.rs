@@ -852,7 +852,249 @@ fn camp_snapshot_driven_fight_to_loot_on_target_death() {
 }
 
 // ============================================================================
-// Test 9: Integration Scenario Tests
+// Test 10: Travel System — group travel, straggler handling, zone FSM
+// ============================================================================
+
+#[test]
+fn group_travel_all_clients_receive_plans() {
+    let client_ids: Vec<u32> = (1..=6).collect();
+    let class_map: HashMap<u32, u8> = client_ids.iter().map(|&id| (id, 1u8)).collect();
+    let plans = plan_group_travel(&client_ids, &class_map, "qeynos", "highkeep");
+    assert_eq!(plans.len(), 6, "every client must get a travel plan");
+    for plan in &plans {
+        assert!(plan.current().is_some(), "each plan must have at least one step");
+    }
+}
+
+#[test]
+fn group_travel_stagger_step_is_first() {
+    let client_ids = vec![1u32, 2, 3];
+    let class_map: HashMap<u32, u8> = client_ids.iter().map(|&id| (id, 1u8)).collect();
+    let plans = plan_group_travel(&client_ids, &class_map, "ecommons", "nro");
+    for plan in &plans {
+        assert!(
+            matches!(plan.current(), Some(TravelStep::StaggerWait { .. })),
+            "first step should be a stagger wait to avoid simultaneous zone"
+        );
+    }
+}
+
+#[test]
+fn stagger_delays_spread_across_clients() {
+    // With a wide window (5-60s) and 10 clients, we expect non-uniform delays.
+    let client_ids: Vec<u32> = (1..=10).collect();
+    let staggers = generate_zone_staggers(&client_ids, 5, 60, 7);
+    let mut unique_delays: std::collections::HashSet<u32> = std::collections::HashSet::new();
+    for &delay in staggers.values() {
+        assert!((5..=60).contains(&delay), "delay {delay} out of [5, 60] range");
+        unique_delays.insert(delay);
+    }
+    // At least 2 different delays expected across 10 clients.
+    assert!(
+        unique_delays.len() >= 2,
+        "stagger should produce varied delays, got {unique_delays:?}"
+    );
+}
+
+#[test]
+fn straggler_single_client_receives_solo_plan() {
+    // A "straggler" is a client that didn't make the group zone.
+    // The router should produce a valid plan for even a single client.
+    let client_ids = vec![42u32];
+    let class_map: HashMap<u32, u8> = [(42, 5u8)].into_iter().collect();
+    let plans = plan_group_travel(&client_ids, &class_map, "oasis", "sro");
+    assert_eq!(plans.len(), 1);
+    assert_eq!(plans[0].client_id, 42);
+    assert!(plans[0].current().is_some());
+}
+
+#[test]
+fn travel_plan_sequential_step_advancement() {
+    // A multi-step plan: stagger → walk → zone → stagger → walk → zone.
+    let steps = vec![
+        TravelStep::StaggerWait { min_secs: 10, max_secs: 10 },
+        TravelStep::WalkTo {
+            waypoints: vec![Waypoint::new(50.0, 0.0, 0.0), Waypoint::new(100.0, 0.0, 0.0)],
+        },
+        TravelStep::ZoneTo {
+            zone_name: "ecommons".to_string(),
+            zone_line_pos: Waypoint::new(100.0, 0.0, 0.0),
+        },
+        TravelStep::StaggerWait { min_secs: 5, max_secs: 15 },
+        TravelStep::ZoneTo {
+            zone_name: "nro".to_string(),
+            zone_line_pos: Waypoint::new(200.0, 0.0, 0.0),
+        },
+    ];
+    let mut plan = TravelPlan::new(99, steps);
+    assert!(!plan.is_complete());
+
+    // Advance through all steps and verify step types in order.
+    let expected_kinds = ["StaggerWait", "WalkTo", "ZoneTo", "StaggerWait", "ZoneTo"];
+    for expected in &expected_kinds {
+        let current = plan.current().expect("step should exist");
+        let kind = match current {
+            TravelStep::StaggerWait { .. } => "StaggerWait",
+            TravelStep::WalkTo { .. } => "WalkTo",
+            TravelStep::ZoneTo { .. } => "ZoneTo",
+            TravelStep::PortTo { .. } => "PortTo",
+            TravelStep::RelocateTo { .. } => "RelocateTo",
+        };
+        assert_eq!(kind, *expected, "unexpected step kind");
+        plan.advance();
+    }
+}
+
+#[test]
+fn group_router_with_porters_produces_plans_for_all() {
+    let mut router = GroupRouter::new();
+    // Druid (6) and Wizard (12) are porter classes.
+    router.set_porters(vec![10u32, 20]);
+
+    let client_ids = vec![1u32, 2, 3, 10, 20];
+    let class_map: HashMap<u32, u8> = vec![(1, 1), (2, 2), (3, 1), (10, 6), (20, 12)]
+        .into_iter()
+        .collect();
+
+    let plans = router.plan_travel(&client_ids, &class_map, "gfay", "wakening");
+    assert_eq!(plans.len(), 5, "each client must get a plan even with porters registered");
+    for plan in &plans {
+        assert!(plan.current().is_some(), "porter-aware plan must have at least one step");
+    }
+}
+
+#[test]
+fn zone_failure_stagger_retry_recovery_action() {
+    use textquest::zoning::{ZoneFailureCode, ZoneFailureState, RecoveryAction};
+
+    // GeneralFailure → RetryZone.
+    let state = ZoneFailureState::new(ZoneFailureCode::GeneralFailure, 3);
+    assert_eq!(
+        state.recovery_action,
+        RecoveryAction::RetryZone,
+        "GeneralFailure should produce RetryZone recovery"
+    );
+    assert_eq!(state.retry_count, 0, "fresh failure starts with 0 retries");
+    assert_eq!(state.max_retries, 3);
+}
+
+#[test]
+fn zone_failure_abandon_codes_map_correctly() {
+    use textquest::zoning::{ZoneFailureCode, ZoneFailureState, RecoveryAction};
+
+    for abandon_code in [
+        ZoneFailureCode::LevelTooLow,
+        ZoneFailureCode::LevelTooHigh,
+        ZoneFailureCode::RaidLockoutActive,
+        ZoneFailureCode::GuildHallUnavailable,
+        ZoneFailureCode::WrongType,
+    ] {
+        let state = ZoneFailureState::new(abandon_code, 3);
+        assert_eq!(
+            state.recovery_action,
+            RecoveryAction::Abandon,
+            "{abandon_code:?} should map to Abandon recovery"
+        );
+    }
+}
+
+#[test]
+fn zone_failure_retryable_codes_map_correctly() {
+    use textquest::zoning::{ZoneFailureCode, ZoneFailureState, RecoveryAction};
+
+    for retry_code in [
+        ZoneFailureCode::SpellResisted,
+        ZoneFailureCode::AlreadyZoning,
+        ZoneFailureCode::ZoneLoadTimeout,
+        ZoneFailureCode::PortSpellExpired,
+    ] {
+        let state = ZoneFailureState::new(retry_code, 3);
+        assert_eq!(
+            state.recovery_action,
+            RecoveryAction::RetryZone,
+            "{retry_code:?} should map to RetryZone"
+        );
+    }
+}
+
+#[test]
+fn zone_failure_combat_maps_to_wait_out_of_combat() {
+    use textquest::zoning::{ZoneFailureCode, ZoneFailureState, RecoveryAction};
+
+    let state = ZoneFailureState::new(ZoneFailureCode::PlayerInCombat, 3);
+    assert_eq!(state.recovery_action, RecoveryAction::WaitOutOfCombat);
+}
+
+#[test]
+fn zone_failure_mana_maps_to_wait_mana_regen() {
+    use textquest::zoning::{ZoneFailureCode, ZoneFailureState, RecoveryAction};
+
+    let state = ZoneFailureState::new(ZoneFailureCode::InsufficientMana, 3);
+    assert_eq!(state.recovery_action, RecoveryAction::WaitManaRegen);
+}
+
+#[test]
+fn zone_nav_fsm_starts_idle() {
+    use textquest::nav::zone_transition::ZoneTransitionFsm;
+
+    let fsm = ZoneTransitionFsm::new(1);
+    assert!(fsm.is_idle(), "freshly created FSM must be idle");
+    assert_eq!(fsm.client_id, 1);
+}
+
+#[test]
+fn zone_nav_fsm_walk_to_transition() {
+    use textquest::nav::zone_transition::{ZoneTransitionFsm, TransitionKind};
+
+    let mut fsm = ZoneTransitionFsm::new(2);
+    fsm.start(TransitionKind::WalkTo {
+        destination: Waypoint::new(100.0, 50.0, 0.0),
+    });
+    assert!(!fsm.is_idle(), "FSM should leave idle after start()");
+}
+
+#[test]
+fn zone_nav_fsm_zone_to_transition() {
+    use textquest::nav::zone_transition::{ZoneTransitionFsm, TransitionKind};
+
+    let mut fsm = ZoneTransitionFsm::new(3);
+    fsm.start(TransitionKind::ZoneTo {
+        zone_name: "highkeep".to_string(),
+        zone_line_pos: Waypoint::new(0.0, 0.0, 0.0),
+    });
+    assert!(!fsm.is_idle());
+}
+
+#[test]
+fn zone_nav_fsm_port_to_transition() {
+    use textquest::nav::zone_transition::{ZoneTransitionFsm, TransitionKind};
+
+    let mut fsm = ZoneTransitionFsm::new(4);
+    fsm.start(TransitionKind::PortTo {
+        zone_name: "poknowledge".to_string(),
+        caster_id: 99,
+    });
+    assert!(!fsm.is_idle());
+}
+
+#[test]
+fn zone_nav_fsm_restarting_replaces_transition() {
+    use textquest::nav::zone_transition::{ZoneTransitionFsm, TransitionKind};
+
+    let mut fsm = ZoneTransitionFsm::new(5);
+    fsm.start(TransitionKind::WalkTo {
+        destination: Waypoint::new(10.0, 0.0, 0.0),
+    });
+    // Replace with a different transition.
+    fsm.start(TransitionKind::ZoneTo {
+        zone_name: "nro".to_string(),
+        zone_line_pos: Waypoint::new(500.0, 0.0, 0.0),
+    });
+    assert!(!fsm.is_idle(), "restarted FSM should still be in-progress");
+}
+
+// ============================================================================
+// Test 11: Integration Scenario Tests
 // ============================================================================
 
 mod scenarios;
