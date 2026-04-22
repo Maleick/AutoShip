@@ -22,6 +22,8 @@
 #[allow(dead_code)]
 mod combat;
 #[allow(dead_code)]
+pub mod hotkeys;
+#[allow(dead_code)]
 mod dialog;
 #[allow(dead_code)]
 mod eq;

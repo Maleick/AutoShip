@@ -4675,6 +4675,7 @@ mod tests {
 
     /// CHEATER_LD_FLAG_VAR offset is within the eqgame.exe preferred address range.
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn cheater_ld_flag_var_offset_in_eq_range() {
         use textquest_common::offsets::CHEATER_LD_FLAG_VAR;
         // eqgame.exe preferred range: 0x140000000 – 0x150000000

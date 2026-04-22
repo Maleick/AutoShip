@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 textquest-common = { path = "../textquest-common" }
 bincode.workspace = true
 serde.workspace = true
+bitflags = "2"
 thiserror = "2"
 tracing.workspace = true
 tracing-subscriber.workspace = true

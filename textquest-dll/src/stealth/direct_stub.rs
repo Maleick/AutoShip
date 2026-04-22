@@ -202,6 +202,7 @@ pub unsafe fn call_direct(
 
 /// macOS stub — direct syscalls are Windows-only.
 #[cfg(not(windows))]
+#[allow(clippy::too_many_arguments)]
 pub unsafe fn call_direct(
     _hash: u32,
     _ssn: u16,
