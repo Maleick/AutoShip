@@ -1,0 +1,66 @@
+# TextQuest help — operator slash-command reference
+# Format: [[commands]] entries with name, aliases, usage, description, examples, tags
+
+[[commands]]
+name = "pull"
+aliases = ["p"]
+usage = "pull <npc_name>"
+description = "Pull the named NPC to the current camp location. The main assist broadcasts the assist to all characters before engaging."
+examples = ["pull golem", "pull a_skeleton_warrior", "pull all"]
+tags = ["combat", "targeting", "assist"]
+
+[[commands]]
+name = "camp"
+aliases = ["c"]
+usage = "camp <on|off|buff|hunt>"
+description = "Control camp mode. 'on' activates the camp loop, 'off' stops it, 'buff' enters buff-only mode, 'hunt' enables active pulling."
+examples = ["camp on", "camp off", "camp buff", "camp hunt"]
+tags = ["camp", "control", "loop"]
+
+[[commands]]
+name = "assist"
+aliases = ["a"]
+usage = "assist [<character_name>]"
+description = "Set the main assist target. All melee and caster DPS will switch to the assist target's current enemy."
+examples = ["assist Tankname", "assist"]
+tags = ["combat", "assist", "targeting"]
+
+[[commands]]
+name = "nav"
+aliases = ["n"]
+usage = "nav <zone_shortname|waypoint_name>"
+description = "Navigate all clients to the specified zone or waypoint. Uses navmesh pathfinding when available."
+examples = ["nav commonlands", "nav camp_A"]
+tags = ["navigation", "movement", "zone"]
+
+[[commands]]
+name = "pause"
+aliases = []
+usage = "pause [<seconds>]"
+description = "Pause all automation. Optional duration in seconds; if omitted, pauses until 'resume' is issued."
+examples = ["pause", "pause 30"]
+tags = ["control", "safety"]
+
+[[commands]]
+name = "resume"
+aliases = []
+usage = "resume"
+description = "Resume automation after a pause command."
+examples = ["resume"]
+tags = ["control"]
+
+[[commands]]
+name = "group"
+aliases = ["g"]
+usage = "group <build|disband|invite <name>>"
+description = "Manage group composition. 'build' assembles the configured group, 'disband' breaks the group, 'invite' adds a named character."
+examples = ["group build", "group disband", "group invite Bard"]
+tags = ["group", "control", "composition"]
+
+[[commands]]
+name = "loot"
+aliases = ["l"]
+usage = "loot [<on|off|mode>]"
+description = "Control looting behavior. Modes: on (auto-loot all), off (disable), currency (plat/coin only), wishlist (wishlist items only)."
+examples = ["loot on", "loot off", "loot wishlist"]
+tags = ["loot", "economy", "control"]

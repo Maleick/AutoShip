@@ -1,0 +1,105 @@
+# TextQuest help — FAQ and operator tips
+# Format: [[faqs]] and [[tips]] entries
+
+# ─── Frequently Asked Questions ──────────────────────────────────────────────
+
+[[faqs]]
+id = "setup-first-time"
+question = "How do I start TextQuest for the first time?"
+answer = """
+1. Copy config/textquest.toml.example to config/textquest.toml and edit your account list.
+2. Run: textquest launch --clients 6
+3. The TUI dashboard opens automatically.
+4. Use 'camp on' to begin automation.
+"""
+tags = ["setup", "quickstart", "launch"]
+
+[[faqs]]
+id = "setup-ranger"
+question = "How do I configure a ranger class?"
+answer = """
+Copy config/classes/ranger.toml.example to config/classes/ranger.toml.
+Set your character name, spell priority, and melee mode.
+Restart the client after editing — class configs are loaded at login.
+"""
+tags = ["setup", "ranger", "class", "config"]
+
+[[faqs]]
+id = "combat-assist-not-working"
+question = "My group is not assisting — what's wrong?"
+answer = """
+Check that:
+1. The main assist character name is set correctly in textquest.toml.
+2. The assist target has an NPC targeted (not a PC).
+3. 'camp on' is active and not paused.
+4. All clients are zoned in and not stuck on a loading screen.
+Run 'assist <name>' to re-broadcast the assist target.
+"""
+tags = ["combat", "assist", "troubleshooting"]
+
+[[faqs]]
+id = "loot-not-collecting"
+question = "My characters are not looting — why?"
+answer = """
+Common causes:
+- Loot mode may be off. Run 'loot on' to re-enable.
+- Looting may be blocked by a full inventory. Open a bag slot or add a bag.
+- The NPC corpse may belong to a different character (split loot rules).
+Check the loot panel in the TUI dashboard for per-character status.
+"""
+tags = ["loot", "troubleshooting"]
+
+[[faqs]]
+id = "zone-clients-stuck"
+question = "Some clients are stuck at the zone line — how do I recover?"
+answer = """
+1. Use 'pause' to stop automation.
+2. Select the stuck client in the roster panel (↑/↓, Enter).
+3. Press Z to trigger a manual zone recovery command.
+4. Run 'resume' once all clients are in the target zone.
+Zone recovery retries automatically up to 3 times before giving up.
+"""
+tags = ["navigation", "zone", "troubleshooting", "recovery"]
+
+[[faqs]]
+id = "economy-krono-farm"
+question = "How does the Krono farming loop work?"
+answer = """
+TextQuest automates vendor buying and reselling of TLP bottleneck items.
+Configure target items and profit thresholds in config/economy/watchlist.toml.
+The economy loop runs in the background while combat automation is active.
+Monitor live prices in the Economy tab (press E from the dashboard).
+"""
+tags = ["economy", "krono", "farm", "vendor"]
+
+# ─── Tips ─────────────────────────────────────────────────────────────────────
+
+[[tips]]
+id = "tip-dps-panel"
+text = "Enable DPS tracking in the metrics panel — press Tab from the dashboard to cycle panels, or press D to jump directly to DPS bars."
+context = "dashboard"
+tags = ["tips", "monitoring", "dps"]
+
+[[tips]]
+id = "tip-help-search"
+text = "Press ? from anywhere in the TUI to open the help search overlay. Type keywords to filter commands and FAQs instantly."
+context = "overview"
+tags = ["tips", "navigation", "help"]
+
+[[tips]]
+id = "tip-group-builder"
+text = "Use the Group Builder (press G from the dashboard) to drag-and-drop class roles before activating automation — it pre-validates your composition against encounter requirements."
+context = "groups"
+tags = ["tips", "group", "setup"]
+
+[[tips]]
+id = "tip-pause-safety"
+text = "If something looks wrong, press P or run 'pause' immediately. Automation halts within one game tick (~100ms). Always pause before manually controlling a client."
+context = "safety"
+tags = ["tips", "safety", "control"]
+
+[[tips]]
+id = "tip-economy-volatility"
+text = "TLP item prices spike on patch days (typically Wednesdays). Set wider buy/sell margins in your watchlist around those windows to avoid trading into thin spreads."
+context = "economy"
+tags = ["tips", "economy", "timing"]

@@ -112,6 +112,10 @@ pub mod operator_utils;
 /// Plugin discovery and loading — MQ2-compatible DLL plugin infrastructure.
 pub mod plugins;
 
+/// Help content TOML format and file loader — provides `HelpTopic` entries
+/// for the TUI help search panel.
+pub mod help;
+
 /// Shared hotkey/command registries — used by Lua and plugin subsystems for
 /// script/plugin-registered bindings with priority ordering and lifecycle
 /// cleanup.
