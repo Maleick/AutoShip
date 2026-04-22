@@ -1,13 +1,13 @@
 use std::{
     collections::{HashMap, VecDeque},
     path::Path,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
 use textquest_common::{
     ipc::Command,
-    soul::{MoodState, PersonalityTraits, SoulAction, SoulEvent, SpeechStyle},
+    soul::{IdleBehaviorType, MoodState, PersonalityTraits, SoulAction, SoulEvent, SpeechStyle},
     types::{ClientId, GameState},
 };
 
@@ -32,6 +32,30 @@ use super::{
 const IPC_QUEUE_MAX: usize = 512;
 /// Default time-to-live for buffered IPC commands.
 const IPC_QUEUE_TTL_SECS: u64 = 10;
+const RECENT_ACTION_HISTORY_LIMIT: usize = 3;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SoulActionKind {
+    Chat,
+    Emote,
+}
+
+#[derive(Debug, Clone)]
+pub struct SoulRecentAction {
+    pub kind: SoulActionKind,
+    pub label: String,
+    pub timestamp_secs: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct SoulCharacterSnapshot {
+    pub name: String,
+    pub traits: PersonalityTraits,
+    pub mood: MoodState,
+    pub current_idle: Option<IdleBehaviorType>,
+    pub recent_actions: Vec<SoulRecentAction>,
+    pub llm_pending_requests: usize,
+}
 
 /// Priority of a queued IPC command — determines drop order on overflow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -192,6 +216,7 @@ struct CharacterSoul {
     personality: PersonalityEngine,
     idle: IdleScheduler,
     responder: TraitDrivenResponder,
+    recent_actions: VecDeque<SoulRecentAction>,
 }
 
 /// Tick-driven orchestrator for all Soul Engine subsystems.
@@ -290,6 +315,7 @@ impl SoulCoordinator {
             personality: PersonalityEngine::new(client_id),
             idle,
             responder: TraitDrivenResponder::new(client_id, edginess),
+            recent_actions: VecDeque::with_capacity(RECENT_ACTION_HISTORY_LIMIT),
         };
 
         self.souls.insert(client_id, soul);
@@ -465,11 +491,21 @@ impl SoulCoordinator {
                             behavior: active.behavior.clone(),
                         };
                         commands.push((client_id, Command::SoulAction { action }));
+                        self.record_recent_action(
+                            client_id,
+                            SoulActionKind::Emote,
+                            format!("idle {}", active.behavior.label()),
+                        );
 
                         // If there's flavor text, emit it as chat (also subject to suppression)
                         if let Some(text) = active.flavor_text
                             && !self.suppression.should_suppress_chat(suppress_ctx)
                         {
+                            self.record_recent_action(
+                                client_id,
+                                SoulActionKind::Chat,
+                                text.clone(),
+                            );
                             commands.push((
                                 client_id,
                                 Command::Say {
@@ -493,6 +529,11 @@ impl SoulCoordinator {
                         behavior: textquest_common::soul::IdleBehaviorType::LogOffToSleep,
                     };
                     commands.push((client_id, Command::SoulAction { action }));
+                    self.record_recent_action(
+                        client_id,
+                        SoulActionKind::Emote,
+                        format!("idle {}", IdleBehaviorType::LogOffToSleep.label()),
+                    );
                 }
                 IdleTransition::Stop | IdleTransition::Continue => {}
             }
@@ -536,6 +577,11 @@ impl SoulCoordinator {
                 if let Some(state) = states.get(&cid) {
                     let suppress_ctx = GameStateContext::from_game_state(state);
                     if !self.suppression.should_suppress_chat(suppress_ctx) {
+                        self.record_recent_action(
+                            cid,
+                            SoulActionKind::Chat,
+                            response.text.clone(),
+                        );
                         commands.push((
                             cid,
                             Command::Say {
@@ -549,6 +595,11 @@ impl SoulCoordinator {
                     // queue it)
                 } else {
                     // No game state available — emit the response anyway
+                    self.record_recent_action(
+                        cid,
+                        SoulActionKind::Chat,
+                        response.text.clone(),
+                    );
                     commands.push((
                         cid,
                         Command::Say {
@@ -904,6 +955,29 @@ impl SoulCoordinator {
         self.souls.get(&client_id).map(|s| s.mood)
     }
 
+    #[must_use]
+    pub fn snapshot(&self, client_id: ClientId) -> Option<SoulCharacterSnapshot> {
+        let soul = self.souls.get(&client_id)?;
+        Some(SoulCharacterSnapshot {
+            name: soul.name.clone(),
+            traits: soul.traits.clone(),
+            mood: soul.mood,
+            current_idle: soul.idle.current_behavior().map(|active| active.behavior.clone()),
+            recent_actions: soul.recent_actions.iter().cloned().collect(),
+            // `pending_count()` is coordinator-global, so do not expose it as if it were
+            // character-specific data in `SoulCharacterSnapshot`.
+            llm_pending_requests: 0,
+        })
+    }
+
+    #[must_use]
+    pub fn snapshots(&self) -> HashMap<ClientId, SoulCharacterSnapshot> {
+        self.souls
+            .keys()
+            .filter_map(|client_id| self.snapshot(*client_id).map(|snapshot| (*client_id, snapshot)))
+            .collect()
+    }
+
     /// Get the social graph (for external queries/display).
     pub fn social_graph(&self) -> &SocialGraph {
         &self.social
@@ -967,6 +1041,28 @@ impl SoulCoordinator {
         priority: IpcCommandPriority,
     ) {
         self.ipc_queue.push(client_id, command, priority);
+    }
+
+    fn record_recent_action(
+        &mut self,
+        client_id: ClientId,
+        kind: SoulActionKind,
+        label: String,
+    ) {
+        let Some(soul) = self.souls.get_mut(&client_id) else {
+            return;
+        };
+        while soul.recent_actions.len() >= RECENT_ACTION_HISTORY_LIMIT {
+            soul.recent_actions.pop_front();
+        }
+        let timestamp_secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |duration| duration.as_secs());
+        soul.recent_actions.push_back(SoulRecentAction {
+            kind,
+            label,
+            timestamp_secs,
+        });
     }
 }
 
@@ -1142,6 +1238,28 @@ mod tests {
     fn mood_returns_none_for_unregistered() {
         let coord = make_coordinator(true);
         assert!(coord.mood(99).is_none());
+    }
+
+    #[test]
+    fn snapshot_includes_current_idle_and_recent_actions() {
+        let mut coord = make_coordinator(true);
+        coord.register_character(1, &make_char_config("Test"));
+        coord.record_recent_action(1, SoulActionKind::Chat, String::from("hello"));
+        coord.record_recent_action(1, SoulActionKind::Emote, String::from("wave"));
+        {
+            let soul = coord.souls.get_mut(&1).expect("registered soul");
+            soul.idle.set_current(crate::idle::ActiveBehavior {
+                behavior: IdleBehaviorType::Craft,
+                ticks_remaining: 3,
+                flavor_text: None,
+            });
+        }
+
+        let snapshot = coord.snapshot(1).expect("snapshot should exist");
+        assert_eq!(snapshot.current_idle, Some(IdleBehaviorType::Craft));
+        assert_eq!(snapshot.recent_actions.len(), 2);
+        assert_eq!(snapshot.recent_actions[0].label, "hello");
+        assert_eq!(snapshot.recent_actions[1].label, "wave");
     }
 
     #[test]

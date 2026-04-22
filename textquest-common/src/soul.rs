@@ -76,6 +76,24 @@ pub enum MoodState {
     Exhausted,
 }
 
+impl MoodState {
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Neutral => "Neutral",
+            Self::Happy => "Happy",
+            Self::Angry => "Angry",
+            Self::Anxious => "Anxious",
+            Self::Bored => "Bored",
+            Self::Excited => "Excited",
+            Self::Melancholy => "Melancholy",
+            Self::Focused => "Focused",
+            Self::Playful => "Playful",
+            Self::Exhausted => "Exhausted",
+        }
+    }
+}
+
 /// Types of idle behavior a character can perform when not in combat or
 /// traveling.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,6 +120,25 @@ pub enum IdleBehaviorType {
     RandomJump,
     /// Inspect a nearby player's gear.
     Inspect,
+}
+
+impl IdleBehaviorType {
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Sit => "Sit",
+            Self::Wander => "Wander",
+            Self::Emote => "Emote",
+            Self::Fish => "Fish",
+            Self::Craft => "Craft",
+            Self::VendorBrowse => "Vendor",
+            Self::LoreChatter => "Lore",
+            Self::BioBrk => "Bio",
+            Self::LogOffToSleep => "Sleep",
+            Self::RandomJump => "Jump",
+            Self::Inspect => "Inspect",
+        }
+    }
 }
 
 /// Tags for social relationships between characters.
@@ -282,6 +319,25 @@ pub enum SoulAction {
     },
     /// Stop current idle behavior and return to normal
     StopIdle,
+}
+
+/// Operator-issued soul control commands.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SoulControl {
+    /// Toggle the soul engine for the character.
+    Disable {
+        /// Whether the soul engine should be disabled.
+        disabled: bool,
+    },
+    /// Mute character chat for the specified duration.
+    Mute {
+        /// Mute duration in seconds.
+        duration_secs: u64,
+    },
+    /// Stop the active idle behavior immediately.
+    SuppressIdle,
+    /// Force mood back to neutral.
+    ResetMood,
 }
 
 #[cfg(test)]

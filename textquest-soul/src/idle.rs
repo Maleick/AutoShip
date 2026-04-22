@@ -149,6 +149,12 @@ impl IdleScheduler {
         self.ticks_idle = 0;
     }
 
+    /// Override the current active behavior (test-only).
+    #[cfg(test)]
+    pub fn set_current(&mut self, behavior: ActiveBehavior) {
+        self.current = Some(behavior);
+    }
+
     /// Compute weighted behavior list using personality engine's
     /// `idle_weights`.
     fn compute_weights(&self, ctx: &SoulContext<'_>) -> Vec<PrioritizedBehavior> {

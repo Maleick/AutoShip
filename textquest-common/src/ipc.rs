@@ -759,6 +759,11 @@ pub enum Command {
         /// The soul action to perform.
         action: crate::soul::SoulAction,
     },
+    /// Apply an operator-issued soul control action.
+    SoulControl {
+        /// The control action to apply.
+        control: crate::soul::SoulControl,
+    },
     /// Stick to a target — MQ2MoveUtils `/stick` equivalent.
     ///
     /// Supported modifiers (via `StickConfig`):
