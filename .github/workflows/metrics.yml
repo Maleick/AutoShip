@@ -6,7 +6,17 @@ on:
     paths:
       - "**/*.rs"
       - "scripts/update_readme_metrics.py"
+    paths-ignore:
+      - ".autoship/**"
+  schedule:
+    # Weekly self-healing fallback — ensures metrics refresh even if
+    # push triggers are lost (runner outages, flood cancellations).
+    - cron: "0 6 * * 1"
   workflow_dispatch:
+
+concurrency:
+  group: metrics-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write

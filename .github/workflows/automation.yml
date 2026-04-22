@@ -7,6 +7,10 @@ on:
     types: [labeled, reopened, synchronize, ready_for_review, closed]
   workflow_dispatch:
 
+concurrency:
+  group: automation-${{ github.event.issue.number || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

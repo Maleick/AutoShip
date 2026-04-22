@@ -3,6 +3,11 @@ name: Performance Benchmarks
 on:
   workflow_dispatch:
 
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: true
+
+
 permissions:
   contents: read
 
