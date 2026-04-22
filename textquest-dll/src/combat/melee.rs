@@ -123,16 +123,35 @@ pub fn check_endurance_threshold(endurance_pct: f32, threshold: f32) -> bool {
     endurance_pct >= threshold
 }
 
-/// Detect enrage state from target buff/debuff flags or visual indicators.
+/// Known EverQuest spell/buff IDs that indicate an enrage state on the target.
 ///
-/// In EQ, enrage is typically detected by:
-/// - Specific buff/debuff aura effects
-/// - Special visual effects
-/// - Behavior patterns (more damage taken, faster attacks)
+/// These are aura or proc effects that appear in a mob's buff window during enrage.
+/// Sources:
+///   529  — "Enrage" (classic NPC enrage aura; sub-20% HP trigger)
+///   13854 — "Frenzy" (high-level NPC frenzy variant, Planes-era+)
+///   3716  — "Primal Fury" (ToV/Luclin raid enrage variant)
+///   4822  — "Berserker Frenzy" (secondary frenzy proc seen on raid targets)
+///   8904  — "Enraged Assault" (GoD+ raid enrage aura)
+const ENRAGE_SPELL_IDS: &[i32] = &[529, 13854, 3716, 4822, 8904];
+
+/// Detect enrage state from target buff/debuff aura spell IDs.
 ///
-/// For now, this is a placeholder that can be extended with actual buff/effect checking.
-pub fn detect_enrage_state(_target_buffs: &[i32], _target_effects: &[u8]) -> EnrageState {
-    // TODO: Implement enrage buff detection once EQ aura parsing is available
+/// In EQ, NPC enrage is signalled by one of several aura buff IDs appearing in the
+/// target's active buff list (typically triggered when the mob drops below ~20% HP).
+/// When enraged, melee characters should cease auto-attack to avoid riposte deaths.
+///
+/// # Arguments
+/// * `target_buffs`  — slice of active buff/debuff spell IDs on the target (i32)
+/// * `target_effects` — raw effect bytes (reserved for future visual-effect parsing)
+///
+/// # Returns
+/// `EnrageState::Enraged` if any known enrage aura ID is present, otherwise `EnrageState::Normal`.
+pub fn detect_enrage_state(target_buffs: &[i32], _target_effects: &[u8]) -> EnrageState {
+    for &buff_id in target_buffs {
+        if ENRAGE_SPELL_IDS.contains(&buff_id) {
+            return EnrageState::Enraged;
+        }
+    }
     EnrageState::Normal
 }
 
@@ -241,8 +260,84 @@ mod tests {
     }
 
     #[test]
-    fn detect_enrage_state_returns_normal_for_now() {
+    fn detect_enrage_state_normal_when_no_buffs() {
         let state = detect_enrage_state(&[], &[]);
+        assert_eq!(state, EnrageState::Normal);
+    }
+
+    #[test]
+    fn detect_enrage_state_normal_when_no_enrage_buffs() {
+        // Non-enrage buff IDs should not trigger enrage detection
+        let buffs = [1, 42, 100, 9999];
+        let state = detect_enrage_state(&buffs, &[]);
+        assert_eq!(state, EnrageState::Normal);
+    }
+
+    #[test]
+    fn detect_enrage_state_enraged_with_classic_enrage_id() {
+        // Spell ID 529 — classic EQ "Enrage" aura
+        let buffs = [529];
+        let state = detect_enrage_state(&buffs, &[]);
+        assert_eq!(state, EnrageState::Enraged);
+    }
+
+    #[test]
+    fn detect_enrage_state_enraged_with_frenzy_id() {
+        // Spell ID 13854 — "Frenzy" high-level enrage variant
+        let buffs = [13854];
+        let state = detect_enrage_state(&buffs, &[]);
+        assert_eq!(state, EnrageState::Enraged);
+    }
+
+    #[test]
+    fn detect_enrage_state_enraged_with_primal_fury_id() {
+        // Spell ID 3716 — "Primal Fury" ToV/Luclin raid enrage
+        let buffs = [3716];
+        let state = detect_enrage_state(&buffs, &[]);
+        assert_eq!(state, EnrageState::Enraged);
+    }
+
+    #[test]
+    fn detect_enrage_state_enraged_with_berserker_frenzy_id() {
+        // Spell ID 4822 — "Berserker Frenzy"
+        let buffs = [4822];
+        let state = detect_enrage_state(&buffs, &[]);
+        assert_eq!(state, EnrageState::Enraged);
+    }
+
+    #[test]
+    fn detect_enrage_state_enraged_with_enraged_assault_id() {
+        // Spell ID 8904 — "Enraged Assault" GoD+ aura
+        let buffs = [8904];
+        let state = detect_enrage_state(&buffs, &[]);
+        assert_eq!(state, EnrageState::Enraged);
+    }
+
+    #[test]
+    fn detect_enrage_state_enraged_mixed_buffs() {
+        // Enrage ID present among many non-enrage IDs
+        let buffs = [1, 42, 529, 9999, 777];
+        let state = detect_enrage_state(&buffs, &[]);
+        assert_eq!(state, EnrageState::Enraged);
+    }
+
+    #[test]
+    fn detect_enrage_state_all_known_enrage_ids() {
+        // Every known enrage ID must trigger Enraged
+        for &id in ENRAGE_SPELL_IDS {
+            let state = detect_enrage_state(&[id], &[]);
+            assert_eq!(
+                state,
+                EnrageState::Enraged,
+                "spell ID {id} should produce EnrageState::Enraged"
+            );
+        }
+    }
+
+    #[test]
+    fn detect_enrage_state_ignores_target_effects_bytes() {
+        // target_effects is reserved; non-empty slice must not affect result
+        let state = detect_enrage_state(&[], &[1, 2, 3, 255]);
         assert_eq!(state, EnrageState::Normal);
     }
 
