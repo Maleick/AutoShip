@@ -7584,7 +7584,7 @@ impl App {
         let Some(layer) = parts.get(1) else {
             self.usage_feedback(
                 "maphide",
-                "Usage: maphide <geometry|spawns|paths|mesh|labels|annotations>",
+                "Usage: maphide <geometry|spawns|paths|mesh|labels|annotations|extended>",
             );
             return;
         };
@@ -7614,10 +7614,14 @@ impl App {
                 self.map_state.show_annotations = false;
                 "Annotations hidden"
             }
+            "extended" | "ext" => {
+                self.map_state.show_extended = false;
+                "Extended hidden"
+            }
             _ => {
                 self.usage_feedback(
                     "maphide",
-                    "Usage: maphide <geometry|spawns|paths|mesh|labels|annotations>",
+                    "Usage: maphide <geometry|spawns|paths|mesh|labels|annotations|extended>",
                 );
                 return;
             }
@@ -7665,6 +7669,7 @@ impl App {
             "mesh" | "navmesh" => 4,
             "labels" => 5,
             "annotations" => 6,
+            "extended" | "ext" => 7,
             _ => {
                 self.usage_feedback("map", "Usage: map <layer> [on|off]");
                 return;
@@ -7682,6 +7687,7 @@ impl App {
                 4 => self.map_state.show_navmesh = on,
                 5 => self.map_state.show_labels = on,
                 6 => self.map_state.show_annotations = on,
+                7 => self.map_state.show_extended = on,
                 _ => {}
             }
             let l = match num {
@@ -7690,7 +7696,8 @@ impl App {
                 3 => "Nav paths",
                 4 => "Navmesh",
                 5 => "Labels",
-                _ => "Annotations",
+                6 => "Annotations",
+                _ => "Extended",
             };
             self.map_spawn_cache.clear();
             self.set_feedback(

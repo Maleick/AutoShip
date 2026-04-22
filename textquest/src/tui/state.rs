@@ -1367,6 +1367,7 @@ pub struct MapFilterPreset {
     pub show_navmesh: bool,
     pub show_labels: bool,
     pub show_annotations: bool,
+    pub show_extended: bool,
 }
 
 /// What happens when the user presses Enter on the map.
@@ -1480,6 +1481,8 @@ pub struct MapScreenState {
     pub show_labels: bool,
     /// Show layer-2 annotations (compass roses, grid overlays).
     pub show_annotations: bool,
+    /// Show layer-3 extended geometry (decorative overlays, extra linework).
+    pub show_extended: bool,
     /// MQ2Map-style visibility toggles for map overlay entities.
     pub filters: MapFilters,
     /// Active spawn highlights.
@@ -1535,6 +1538,7 @@ impl MapScreenState {
             show_nav_paths: true,
             show_labels: false,
             show_annotations: false,
+            show_extended: false,
             filters: MapFilters::default(),
             highlights: Vec::new(),
             loc_marker: None,
@@ -1604,7 +1608,7 @@ impl MapScreenState {
     }
 
     /// Toggle a map layer by number:
-    /// 1=geometry, 2=spawns, 3=nav paths, 4=mesh, 5=labels.
+    /// 1=geometry, 2=spawns, 3=nav paths, 4=mesh, 5=labels, 6=annotations, 7=extended.
     pub fn toggle_layer(&mut self, layer: u8) -> &'static str {
         match layer {
             1 => {
@@ -1655,6 +1659,14 @@ impl MapScreenState {
                     "Annotations OFF"
                 }
             }
+            7 => {
+                self.show_extended = !self.show_extended;
+                if self.show_extended {
+                    "Extended ON"
+                } else {
+                    "Extended OFF"
+                }
+            }
             _ => "Unknown layer",
         }
     }
@@ -1668,6 +1680,7 @@ impl MapScreenState {
                 self.show_nav_paths = true;
                 self.show_labels = true;
                 self.show_annotations = true;
+                self.show_extended = true;
                 self.show_navmesh = true;
             }
             MapVisibilityPreset::Tactical => {
@@ -1676,6 +1689,7 @@ impl MapScreenState {
                 self.show_nav_paths = false;
                 self.show_labels = false;
                 self.show_annotations = false;
+                self.show_extended = false;
                 self.show_navmesh = false;
             }
             MapVisibilityPreset::Navigation => {
@@ -1684,6 +1698,7 @@ impl MapScreenState {
                 self.show_nav_paths = true;
                 self.show_labels = false;
                 self.show_annotations = false;
+                self.show_extended = false;
                 self.show_navmesh = true;
             }
             MapVisibilityPreset::GeometryOnly => {
@@ -1692,6 +1707,7 @@ impl MapScreenState {
                 self.show_nav_paths = false;
                 self.show_labels = false;
                 self.show_annotations = false;
+                self.show_extended = false;
                 self.show_navmesh = false;
             }
             MapVisibilityPreset::SpawnsOnly => {
@@ -1700,6 +1716,7 @@ impl MapScreenState {
                 self.show_nav_paths = false;
                 self.show_labels = false;
                 self.show_annotations = false;
+                self.show_extended = false;
                 self.show_navmesh = false;
             }
         }
@@ -1716,6 +1733,7 @@ impl MapScreenState {
             show_navmesh: self.show_navmesh,
             show_labels: self.show_labels,
             show_annotations: self.show_annotations,
+            show_extended: self.show_extended,
         };
         if let Some(existing) = self.saved_presets.iter_mut().find(|p| p.name == name) {
             *existing = preset;
@@ -1734,6 +1752,7 @@ impl MapScreenState {
             self.show_navmesh = preset.show_navmesh;
             self.show_labels = preset.show_labels;
             self.show_annotations = preset.show_annotations;
+            self.show_extended = preset.show_extended;
             true
         } else {
             false
@@ -3078,6 +3097,51 @@ mod tests {
         assert!(s.highlights.is_empty());
         assert_eq!(s.name_style, MapNameStyle::Off);
         assert_eq!(s.click_action, MapClickAction::None);
+    }
+
+    #[test]
+    fn toggle_layer_7_extended() {
+        let mut s = MapScreenState::new();
+        assert!(!s.show_extended);
+        assert_eq!(s.toggle_layer(7), "Extended ON");
+        assert!(s.show_extended);
+        assert_eq!(s.toggle_layer(7), "Extended OFF");
+        assert!(!s.show_extended);
+    }
+
+    #[test]
+    fn toggle_layer_extended_independent_of_annotations() {
+        let mut s = MapScreenState::new();
+        s.show_annotations = true;
+        assert_eq!(s.toggle_layer(7), "Extended ON");
+        assert!(s.show_annotations, "annotations should be unaffected");
+        assert!(s.show_extended);
+    }
+
+    #[test]
+    fn apply_visibility_preset_all_enables_extended() {
+        let mut s = MapScreenState::new();
+        s.show_extended = false;
+        s.apply_visibility_preset(MapVisibilityPreset::All);
+        assert!(s.show_extended);
+    }
+
+    #[test]
+    fn apply_visibility_preset_tactical_disables_extended() {
+        let mut s = MapScreenState::new();
+        s.show_extended = true;
+        s.apply_visibility_preset(MapVisibilityPreset::Tactical);
+        assert!(!s.show_extended);
+    }
+
+    #[test]
+    fn save_load_preset_preserves_extended() {
+        let mut s = MapScreenState::new();
+        s.show_extended = true;
+        s.save_preset("e_test".into());
+        s.show_extended = false;
+        assert!(s.load_preset("e_test"));
+        assert!(s.show_extended);
     }
 
     #[test]

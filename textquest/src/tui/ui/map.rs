@@ -592,7 +592,7 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         .unwrap_or_else(|| String::from(" | Sel none"));
     let filter_label = app.map_state.filters.inline_flags();
     let layer_label = format!(
-        " [{}{}{}{}{}{}]",
+        " [{}{}{}{}{}{}{}]",
         if app.map_state.show_geometry {
             "G"
         } else {
@@ -611,6 +611,7 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         } else {
             "-"
         },
+        if app.map_state.show_extended { "E" } else { "-" },
     );
 
     let border_style = if app.is_panel_focused(ActivePanel::TacticalMap) {
@@ -721,8 +722,12 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         && let Some(map) = &app.map_state.zone_map
     {
         let hide_annotations = !app.map_state.show_annotations;
+        let hide_extended = !app.map_state.show_extended;
         for ml in &map.lines {
             if hide_annotations && ml.layer == 2 {
+                continue;
+            }
+            if hide_extended && ml.layer == 3 {
                 continue;
             }
             if !visible_region.contains_line(ml.x1, ml.y1, ml.x2, ml.y2) {
@@ -752,9 +757,13 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         && let Some(map) = &app.map_state.zone_map
     {
         let hide_annotations = !app.map_state.show_annotations;
+        let hide_extended = !app.map_state.show_extended;
         let show_labels = app.map_state.zoom >= 0.8;
         for mp in &map.points {
             if hide_annotations && mp.layer == 2 {
+                continue;
+            }
+            if hide_extended && mp.layer == 3 {
                 continue;
             }
             if !visible_region.contains_point(mp.x, mp.y) {
@@ -1622,8 +1631,12 @@ fn draw_minimap_widget(
         && let Some(map) = &app.map_state.zone_map
     {
         let hide_annotations = !app.map_state.show_annotations;
+        let hide_extended = !app.map_state.show_extended;
         for segment in &map.lines {
             if hide_annotations && segment.layer == 2 {
+                continue;
+            }
+            if hide_extended && segment.layer == 3 {
                 continue;
             }
             if let Some((x1, y1)) = to_mini(segment.x1, segment.y1)
@@ -1649,8 +1662,12 @@ fn draw_minimap_widget(
         && let Some(map) = &app.map_state.zone_map
     {
         let hide_annotations = !app.map_state.show_annotations;
+        let hide_extended = !app.map_state.show_extended;
         for point in &map.points {
             if hide_annotations && point.layer == 2 {
+                continue;
+            }
+            if hide_extended && point.layer == 3 {
                 continue;
             }
             if let Some((col, row)) = to_mini(point.x, point.y) {
@@ -2112,6 +2129,7 @@ fn line_char(x0: i32, y0: i32, x1: i32, y1: i32) -> char {
 enum TacticalSectionKind {
     SpawnList,
     Tracking,
+    LayerVisibility,
 }
 
 fn draw_tactical_sidebar(
@@ -2137,8 +2155,54 @@ fn draw_tactical_sidebar(
             TacticalSectionKind::Tracking => {
                 draw_named_tracker_panel(frame, *chunk, app, false);
             }
+            TacticalSectionKind::LayerVisibility => {
+                draw_layer_visibility_panel(frame, *chunk, app);
+            }
         }
     }
+}
+
+fn draw_layer_visibility_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let t = &app.theme;
+    let border_style = if app.is_panel_focused(ActivePanel::TacticalMap) {
+        t.border_primary
+    } else {
+        t.border_dim
+    };
+
+    let check = |on: bool| if on { "✓" } else { "✗" };
+    let on_style = Style::default().fg(t.text_normal);
+    let off_style = Style::default().fg(t.text_muted);
+
+    let layers: &[(&str, bool, &str)] = &[
+        ("Base (G)",        app.map_state.show_geometry,    "g"),
+        ("Spawns (S)",      app.map_state.show_spawns,      "s"),
+        ("Nav paths (W)",   app.map_state.show_nav_paths,   "w"),
+        ("Navmesh (X)",     app.map_state.show_navmesh,     "x"),
+        ("Labels (L)",      app.map_state.show_labels,      "l"),
+        ("Annotations (A)", app.map_state.show_annotations, "a"),
+        ("Extended (E)",    app.map_state.show_extended,    "e"),
+    ];
+
+    let lines: Vec<Line> = layers
+        .iter()
+        .map(|(name, on, _key)| {
+            let style = if *on { on_style } else { off_style };
+            Line::from(vec![
+                Span::styled(format!(" {} ", check(*on)), style),
+                Span::styled(name.to_string(), style),
+            ])
+        })
+        .collect();
+
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            panel(" Layers ", border_style, t)
+                .title("g/l/a/e toggle")
+                .title_alignment(ratatui::layout::Alignment::Right),
+        ),
+        area,
+    );
 }
 
 fn draw_spawn_list_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
@@ -2472,6 +2536,9 @@ fn tactical_sections(app: &App) -> Vec<(TacticalSectionKind, Constraint)> {
         TacticalSectionKind::SpawnList,
         Constraint::Length(spawn_list_height.max(5)),
     ));
+
+    // Layer visibility panel: fixed height showing 7 layers
+    sections.push((TacticalSectionKind::LayerVisibility, Constraint::Length(9)));
 
     // Tracking panel: named mob tracker, expands to fill remaining space
     sections.push((TacticalSectionKind::Tracking, Constraint::Min(5)));

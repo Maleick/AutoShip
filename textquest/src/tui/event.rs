@@ -31,7 +31,7 @@ fn handle_tactical_map_global_shortcut(app: &mut App, key: KeyEvent) -> bool {
     }
 
     match key.code {
-        KeyCode::Char('1' | '2' | '3' | '4' | '5' | '6') => {
+        KeyCode::Char('1' | '2' | '3' | '4' | '5' | '6' | '7') => {
             let layer = match key.code {
                 KeyCode::Char('1') => 1,
                 KeyCode::Char('2') => 2,
@@ -39,6 +39,7 @@ fn handle_tactical_map_global_shortcut(app: &mut App, key: KeyEvent) -> bool {
                 KeyCode::Char('4') => 4,
                 KeyCode::Char('5') => 5,
                 KeyCode::Char('6') => 6,
+                KeyCode::Char('7') => 7,
                 _ => unreachable!(),
             };
             toggle_tactical_map_layer(app, layer);
@@ -78,7 +79,7 @@ fn handle_tactical_map_global_shortcut(app: &mut App, key: KeyEvent) -> bool {
 
 fn handle_tactical_map_panel_toggle(app: &mut App, key: KeyCode) -> bool {
     match key {
-        // Layer toggles — Mac-friendly alternatives to Alt+1-6
+        // Layer toggles — Mac-friendly alternatives to Alt+1-7
         KeyCode::Char('g') => toggle_tactical_map_layer(app, 1),
         KeyCode::Char('s') => toggle_tactical_map_layer(app, 2),
         KeyCode::Char('w') => toggle_tactical_map_layer(app, 3),
@@ -88,6 +89,7 @@ fn handle_tactical_map_panel_toggle(app: &mut App, key: KeyCode) -> bool {
         }
         KeyCode::Char('l') => toggle_tactical_map_layer(app, 5),
         KeyCode::Char('a') => toggle_tactical_map_layer(app, 6),
+        KeyCode::Char('e') => toggle_tactical_map_layer(app, 7),
         KeyCode::Char('N') => toggle_tactical_map_filter(app, MapFilterKind::Npc),
         KeyCode::Char('P') => toggle_tactical_map_filter(app, MapFilterKind::Pc),
         KeyCode::Char('C') => toggle_tactical_map_filter(app, MapFilterKind::Corpse),
@@ -1320,6 +1322,40 @@ mod tests {
         ));
         assert_eq!(app.status_message, "PC filter OFF");
         assert!(!app.map_state.filters.show_pc);
+    }
+
+    #[test]
+    fn tactical_map_panel_toggle_e_toggles_extended_layer() {
+        let mut app = App::new();
+        assert!(!app.map_state.show_extended);
+
+        assert!(handle_tactical_map_panel_toggle(
+            &mut app,
+            KeyCode::Char('e')
+        ));
+        assert!(app.map_state.show_extended);
+        assert_eq!(app.status_message, "Extended ON");
+
+        assert!(handle_tactical_map_panel_toggle(
+            &mut app,
+            KeyCode::Char('e')
+        ));
+        assert!(!app.map_state.show_extended);
+        assert_eq!(app.status_message, "Extended OFF");
+    }
+
+    #[test]
+    fn tactical_map_global_alt7_toggles_extended_layer() {
+        let mut app = App::new();
+        app.active_screen = ActiveScreen::Tactical;
+        assert!(!app.map_state.show_extended);
+
+        assert!(handle_tactical_map_global_shortcut(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('7'), KeyModifiers::ALT),
+        ));
+        assert!(app.map_state.show_extended);
+        assert_eq!(app.status_message, "Extended ON");
     }
 
     #[test]
