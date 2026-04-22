@@ -9,6 +9,9 @@ pub mod banking;
 /// Buff tracking and rebuffing logic.
 #[cfg(windows)]
 pub mod buffs;
+/// Clicky item automation — cooldown tracking, condition evaluation, and
+/// per-character item-use dispatch.
+pub mod clickies;
 /// Crowd control assignment and tracking.
 #[cfg(windows)]
 pub mod cc;
