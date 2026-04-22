@@ -31,6 +31,9 @@ pub mod combat;
 /// entrypoints.
 #[cfg(windows)]
 pub mod command_dispatch;
+/// Circuit breaker for mass failure protection — 3-state (Closed/Open/HalfOpen)
+/// with sliding-window failure counting and auto-reset timeout.
+pub mod circuit_breaker;
 /// TOML configuration loading.
 pub mod config;
 /// Crash reporting and session recovery — per-character context snapshots and

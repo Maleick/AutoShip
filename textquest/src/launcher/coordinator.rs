@@ -1,4 +1,5 @@
 use crate::{
+    circuit_breaker::CircuitBreaker,
     config::{LaunchConfig, RetryConfig, ServerConfig},
     launcher::{
         login_sm::{LoginAction, LoginEvent, LoginStateMachine},
@@ -22,7 +23,8 @@ pub struct LaunchCoordinator {
     server_config: ServerConfig,
     launch_queue: VecDeque<(ClientId, AccountInfo)>,
     active_logins: Vec<LoginStateMachine>,
-    failure_window: VecDeque<(Instant, ClientId)>,
+    /// 3-state circuit breaker — trips when mass failures exceed the threshold.
+    circuit_breaker: CircuitBreaker,
     /// Per-client earliest retry time, honoring backoff from
     /// `LoginAction::Retry`.
     retry_not_before: HashMap<ClientId, Instant>,
@@ -68,13 +70,21 @@ impl LaunchCoordinator {
     pub fn new(config: LaunchConfig, retry: RetryConfig, server: ServerConfig) -> Self {
         let next_stagger =
             compute_stagger_between(config.stagger_min_secs, config.stagger_max_secs);
+        let circuit_breaker = CircuitBreaker::new(
+            retry.mass_failure_threshold,
+            retry.mass_failure_window_secs,
+            // Default half-open probe: use window duration as reset pause
+            retry.mass_failure_window_secs,
+            // One success probe is enough to close after a pause
+            1,
+        );
         Self {
             config,
             retry_config: retry,
             server_config: server,
             launch_queue: VecDeque::new(),
             active_logins: Vec::new(),
-            failure_window: VecDeque::new(),
+            circuit_breaker,
             retry_not_before: HashMap::new(),
             paused: false,
             last_launch: None,
@@ -127,7 +137,8 @@ impl LaunchCoordinator {
                     let error = LoginError::Timeout {
                         phase: format!("spawn failed: {err}"),
                     };
-                    if self.detect_mass_failure(client_id) {
+                    self.circuit_breaker.record_failure();
+                    if self.circuit_breaker.is_open() {
                         self.paused = true;
                         events.push(CoordinatorEvent::AllPaused {
                             reason: "Mass failure threshold reached during spawn".to_string(),
@@ -154,7 +165,8 @@ impl LaunchCoordinator {
                         continue;
                     }
                     LoginAction::Abort { reason } => {
-                        if self.detect_mass_failure(client_id) {
+                        self.circuit_breaker.record_failure();
+                        if self.circuit_breaker.is_open() {
                             self.paused = true;
                             events.push(CoordinatorEvent::AllPaused {
                                 reason: "Mass failure threshold reached".to_string(),
@@ -182,6 +194,8 @@ impl LaunchCoordinator {
             ) && !self.active_logins[i].ready_event_emitted
             {
                 self.active_logins[i].ready_event_emitted = true;
+                // Successful login: allow the circuit breaker to probe recovery.
+                self.circuit_breaker.record_success();
                 events.push(CoordinatorEvent::ClientReady { client_id });
             }
             i += 1;
@@ -240,7 +254,8 @@ impl LaunchCoordinator {
                     }
                 }
                 LoginAction::Abort { reason } => {
-                    if self.detect_mass_failure(client_id) {
+                    self.circuit_breaker.record_failure();
+                    if self.circuit_breaker.is_open() {
                         self.paused = true;
                     }
                     tracing::warn!(client_id, ?reason, "Client login aborted");
@@ -320,23 +335,10 @@ impl LaunchCoordinator {
         true
     }
 
-    fn detect_mass_failure(&mut self, client_id: ClientId) -> bool {
-        let now = Instant::now();
-        let window = Duration::from_secs(self.retry_config.mass_failure_window_secs);
-
-        // Add this failure
-        self.failure_window.push_back((now, client_id));
-
-        // Prune old entries outside the window
-        while let Some(&(ts, _)) = self.failure_window.front() {
-            if now.duration_since(ts) > window {
-                self.failure_window.pop_front();
-            } else {
-                break;
-            }
-        }
-
-        self.failure_window.len() as u32 >= self.retry_config.mass_failure_threshold
+    /// Access the underlying circuit breaker for inspection or external probing.
+    #[must_use]
+    pub fn circuit_breaker(&self) -> &CircuitBreaker {
+        &self.circuit_breaker
     }
 }
 
