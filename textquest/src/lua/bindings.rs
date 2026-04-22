@@ -646,6 +646,189 @@ return removed and not fired
         assert!(result);
     }
 
+    // ── LuaBindings construction ──────────────────────────────────────────────
+
+    #[test]
+    fn new_does_not_panic() {
+        let _b = LuaBindings::new().expect("LuaBindings::new must not panic");
+    }
+
+    #[test]
+    fn default_does_not_panic() {
+        let _b = LuaBindings::default();
+    }
+
+    // ── API bindings: each domain callable from Lua ────────────────────────────
+
+    #[test]
+    fn player_api_all_fns_callable() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        let script = r#"
+            local hp = textquest.player.get_hp()
+            local hp_pct = textquest.player.get_hp_percent()
+            local mana = textquest.player.get_mana()
+            local mana_pct = textquest.player.get_mana_percent()
+            local end_ = textquest.player.get_endurance()
+            local end_pct = textquest.player.get_endurance_percent()
+            local name = textquest.player.get_name()
+            local lvl = textquest.player.get_level()
+            local class = textquest.player.get_class()
+            local class_id = textquest.player.get_class_id()
+            local race_id = textquest.player.get_race_id()
+            local x = textquest.player.get_x()
+            local y = textquest.player.get_y()
+            local z = textquest.player.get_z()
+            local hd = textquest.player.get_heading()
+            local spd = textquest.player.get_speed()
+            local moving = textquest.player.is_moving()
+            local feigned = textquest.player.is_feigned()
+            local dead = textquest.player.is_dead()
+            local gm = textquest.player.is_gm()
+            return true
+        "#;
+        let ok: bool = lua.load(script).eval().expect("player API callable");
+        assert!(ok);
+    }
+
+    #[test]
+    fn group_api_all_fns_callable() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        let script = r#"
+            local cnt = textquest.group.get_member_count()
+            local m = textquest.group.get_member(0)
+            local members = textquest.group.get_members()
+            local tank = textquest.group.get_tank()
+            local assist = textquest.group.get_assist()
+            local master = textquest.group.get_master()
+            return true
+        "#;
+        let ok: bool = lua.load(script).eval().expect("group API callable");
+        assert!(ok);
+    }
+
+    #[test]
+    fn nav_api_all_fns_callable_using_bracket_for_goto() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        // `goto` is a Lua 5.2+ reserved keyword — must use bracket notation.
+        let script = r#"
+            local r1 = textquest.nav['goto'](1.0, 2.0, 3.0)
+            local r2 = textquest.nav.stick("target")
+            local r3 = textquest.nav.stop()
+            local r4 = textquest.nav.follow("leader")
+            local r5 = textquest.nav.add_waypoint(0.0, 0.0, 0.0, "wp1")
+            local r6 = textquest.nav.clear_waypoints()
+            return r1 and r2 and r3 and r4 and r5 and r6
+        "#;
+        let ok: bool = lua.load(script).eval().expect("nav API callable");
+        assert!(ok, "all nav API functions must return true");
+    }
+
+    #[test]
+    fn combat_api_all_fns_callable() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        let script = r#"
+            local r1 = textquest.combat.cast("Fire Bolt", nil)
+            local r2 = textquest.combat.assist(nil)
+            local r3 = textquest.combat.attack(nil)
+            local r4 = textquest.combat.disengage()
+            local r5 = textquest.combat.rezz(nil)
+            return r1 and r2 and r3 and r4 and r5
+        "#;
+        let ok: bool = lua.load(script).eval().expect("combat API callable");
+        assert!(ok);
+    }
+
+    #[test]
+    fn state_api_all_fns_callable() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        let script = r#"
+            local spawns = textquest.state.get_spawns()
+            local sp = textquest.state.get_spawn("Mob")
+            local found = textquest.state.find_spawns("undead")
+            local tgt = textquest.state.get_target()
+            local ok = textquest.state.set_target("Rathyl")
+            local xt = textquest.state.get_xtargets()
+            return true
+        "#;
+        let ok: bool = lua.load(script).eval().expect("state API callable");
+        assert!(ok);
+    }
+
+    #[test]
+    fn config_api_all_fns_callable() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        let script = r#"
+            local v = textquest.config.get("key")
+            local ok1 = textquest.config.set("key", "value")
+            local ok2 = textquest.config.save()
+            local ok3 = textquest.config.reload()
+            return ok1 and ok2 and ok3
+        "#;
+        let ok: bool = lua.load(script).eval().expect("config API callable");
+        assert!(ok);
+    }
+
+    #[test]
+    fn log_api_all_fns_callable() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        let script = r#"
+            textquest.log.info("info message")
+            textquest.log.warn("warn message")
+            textquest.log.error("error message")
+            textquest.log.debug("debug message")
+            return true
+        "#;
+        let ok: bool = lua.load(script).eval().expect("log API callable");
+        assert!(ok);
+    }
+
+    #[test]
+    fn events_api_all_fns_callable() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        let script = r#"
+            textquest.events.on("combat_start", function() end)
+            textquest.events.off("combat_start")
+            textquest.events.emit("test_event", {data = 1})
+            return true
+        "#;
+        let ok: bool = lua.load(script).eval().expect("events API callable");
+        assert!(ok);
+    }
+
+    // ── Error conditions ───────────────────────────────────────────────────────
+
+    #[test]
+    fn malformed_syntax_returns_error() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        // Missing 'end' — syntax error
+        let result = lua.load("function broken(").eval::<mlua::Value>();
+        assert!(result.is_err(), "malformed Lua syntax must return Err");
+    }
+
+    #[test]
+    fn runtime_error_in_script_returns_error() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        let result = lua
+            .load("error('deliberate runtime error')")
+            .eval::<mlua::Value>();
+        assert!(result.is_err(), "runtime error must propagate as Err");
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("deliberate runtime error"),
+            "error message must propagate: {msg}"
+        );
+    }
+
     // ── Shared registries ─────────────────────────────────────────────────────
 
     #[test]

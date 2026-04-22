@@ -563,6 +563,85 @@ mod tests {
         );
     }
 
+    /// Syntax error on load → ScriptState::Error (not Running).
+    #[test]
+    fn test_syntax_error_transitions_to_error_state() {
+        let (loader, dir) = make_loader();
+        let path = write_script(dir.path(), "broken.lua", "function unclosed(");
+
+        let result = loader.load_script(&path);
+        assert!(result.is_err(), "syntax error must fail load");
+        assert!(
+            matches!(loader.script_state("broken"), Some(ScriptState::Error(_))),
+            "script must be in Error state after syntax failure"
+        );
+    }
+
+    /// Runtime error on load → ScriptState::Error.
+    #[test]
+    fn test_runtime_error_transitions_to_error_state() {
+        let (loader, dir) = make_loader();
+        let path = write_script(dir.path(), "rterr.lua", "error('deliberate runtime error')");
+
+        let result = loader.load_script(&path);
+        assert!(result.is_err(), "runtime error must fail load");
+        assert!(
+            matches!(loader.script_state("rterr"), Some(ScriptState::Error(_))),
+            "script must be in Error state after runtime failure"
+        );
+    }
+
+    /// After unload, repeated load/unload with large allocations must not error
+    /// with memory-limit violations — confirming cleanup allows reuse of the heap.
+    #[test]
+    fn test_unload_memory_cleanup_smoke() {
+        let (loader, dir) = make_loader();
+        // Each cycle allocates a moderately large table then unloads.
+        // If cleanup fails, the 64 MiB sandbox limit would be hit within a few cycles.
+        let path = write_script(
+            dir.path(),
+            "bigalloc.lua",
+            r#"
+_bigalloc_table = {}
+for i = 1, 500 do
+    _bigalloc_table[i] = string.rep("x", 100)
+end
+_bigalloc_table = nil
+"#,
+        );
+
+        for cycle in 0..10 {
+            loader
+                .load_script(&path)
+                .unwrap_or_else(|e| panic!("memory smoke cycle {cycle}: load failed: {e}"));
+            loader
+                .unload_script("bigalloc")
+                .unwrap_or_else(|e| panic!("memory smoke cycle {cycle}: unload failed: {e}"));
+        }
+    }
+
+    /// Rapid load/unload stress: 100 cycles must not panic or OOM.
+    #[test]
+    fn test_rapid_load_unload_stress_100_cycles() {
+        let (loader, dir) = make_loader();
+        let path = write_script(dir.path(), "stress.lua", "-- stress script");
+
+        for i in 0..100 {
+            loader
+                .load_script(&path)
+                .unwrap_or_else(|e| panic!("cycle {i}: load failed: {e}"));
+            loader
+                .unload_script("stress")
+                .unwrap_or_else(|e| panic!("cycle {i}: unload failed: {e}"));
+        }
+
+        assert_eq!(
+            loader.script_state("stress"),
+            Some(ScriptState::Unloaded),
+            "script must be Unloaded after stress cycles"
+        );
+    }
+
     /// Safe globals (math, string, table) must still be accessible.
     #[test]
     fn test_sandbox_allows_safe_globals() {

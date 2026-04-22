@@ -261,6 +261,45 @@ return #s
         );
     }
 
+    // ── Additional blocked globals ─────────────────────────────────────────────
+
+    #[test]
+    fn loadfile_is_blocked() {
+        let (lua, _) = sandboxed_lua();
+        let result = lua.load("loadfile('/etc/passwd')").eval::<mlua::Value>();
+        assert!(result.is_err(), "loadfile() must be blocked");
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("nil") || msg.contains("attempt") || msg.contains("global"),
+            "expected nil-index error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn package_is_blocked() {
+        let (lua, _) = sandboxed_lua();
+        // package is nil-ed out; accessing package.path should index nil.
+        let result = lua.load("return package.path").eval::<mlua::Value>();
+        assert!(result.is_err(), "package global must be blocked");
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("nil") || msg.contains("attempt") || msg.contains("package"),
+            "expected nil-index error, got: {msg}"
+        );
+    }
+
+    // ── Additional allowed globals ─────────────────────────────────────────────
+
+    #[test]
+    fn utf8_is_allowed() {
+        let (lua, _) = sandboxed_lua();
+        let result: i64 = lua
+            .load(r#"return utf8.len("hello")"#)
+            .eval()
+            .expect("utf8.len should be available");
+        assert_eq!(result, 5);
+    }
+
     #[test]
     fn instruction_counter_reset_works() {
         let (lua, counter) = sandboxed_lua();
