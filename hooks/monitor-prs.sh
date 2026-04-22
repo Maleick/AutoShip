@@ -100,7 +100,7 @@ while true; do
     while read -r num merged_at; do
       # Only emit for merges in the last 60 seconds.
       # macOS `date -j -f` treats input as local time unless -u is set; force UTC.
-      merged_epoch=$(TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "$merged_at" "+%s" 2>/dev/null || \
+      merged_epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$merged_at" "+%s" 2>/dev/null || \
                      date -u -d "$merged_at" "+%s" 2>/dev/null || echo 0)
       now_epoch=$(date -u +%s)
       age=$((now_epoch - merged_epoch))
