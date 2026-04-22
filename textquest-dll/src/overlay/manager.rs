@@ -353,4 +353,193 @@ mod tests {
         assert!(mgr.drag.is_none());
         assert!(mgr.resize.is_none());
     }
+
+    // ── Drag system integration tests ────────────────────────────────────────
+
+    /// Drag start: mouse_down on header sets drag state with correct offset.
+    #[test]
+    fn drag_start_records_offset() {
+        let mut mgr = make_mgr();
+        add_win(&mut mgr, "drag_start");
+        let win = mgr.get_window("drag_start").unwrap();
+        let (wx, wy) = (win.x, win.y);
+        let hdr = win.header_rect();
+        // Click 7px into the header from the left.
+        let click_x = hdr.x + 7.0;
+        let click_y = hdr.y + 4.0;
+
+        mgr.mouse_down(click_x, click_y);
+        let ds = mgr.drag.as_ref().expect("drag state must be set after header click");
+        assert_eq!(ds.window_idx, 0);
+        assert!((ds.offset_x - (click_x - wx)).abs() < f32::EPSILON);
+        assert!((ds.offset_y - (click_y - wy)).abs() < f32::EPSILON);
+    }
+
+    /// Drag continue: position tracks the cursor correctly across multiple moves.
+    #[test]
+    fn drag_continue_tracks_cursor() {
+        let mut mgr = make_mgr();
+        add_win(&mut mgr, "track");
+        let win = mgr.get_window("track").unwrap();
+        let hdr = win.header_rect();
+        let anchor_x = hdr.x + 5.0;
+        let anchor_y = hdr.y + 5.0;
+
+        mgr.mouse_down(anchor_x, anchor_y);
+
+        // First move.
+        mgr.mouse_move(anchor_x + 10.0, anchor_y + 8.0);
+        let pos1 = {
+            let w = mgr.get_window("track").unwrap();
+            (w.x, w.y)
+        };
+
+        // Second move — window should follow by cumulative delta from anchor.
+        mgr.mouse_move(anchor_x + 25.0, anchor_y + 15.0);
+        let pos2 = {
+            let w = mgr.get_window("track").unwrap();
+            (w.x, w.y)
+        };
+
+        assert!(pos2.0 > pos1.0, "window x should increase with cursor");
+        assert!(pos2.1 > pos1.1, "window y should increase with cursor");
+    }
+
+    /// Drag end: mouse_up terminates drag; subsequent moves do not move the window.
+    #[test]
+    fn drag_end_stops_movement() {
+        let mut mgr = make_mgr();
+        add_win(&mut mgr, "end");
+        let win = mgr.get_window("end").unwrap();
+        let hdr = win.header_rect();
+        let mx = hdr.x + 5.0;
+        let my = hdr.y + 5.0;
+
+        mgr.mouse_down(mx, my);
+        mgr.mouse_move(mx + 20.0, my + 20.0);
+        let (x_after_move, y_after_move) = {
+            let w = mgr.get_window("end").unwrap();
+            (w.x, w.y)
+        };
+
+        mgr.mouse_up(mx + 20.0, my + 20.0);
+        assert!(mgr.drag.is_none(), "drag must be cleared after mouse_up");
+
+        // Move again — window must stay put.
+        mgr.mouse_move(mx + 100.0, my + 100.0);
+        let w = mgr.get_window("end").unwrap();
+        assert!((w.x - x_after_move).abs() < f32::EPSILON, "x must not change after drag ended");
+        assert!((w.y - y_after_move).abs() < f32::EPSILON, "y must not change after drag ended");
+    }
+
+    /// Clamping: dragging past the top-left edge clamps window to (0, 0).
+    #[test]
+    fn drag_clamped_at_screen_top_left() {
+        let mut mgr = make_mgr();
+        add_win(&mut mgr, "clamp");
+        let win = mgr.get_window("clamp").unwrap();
+        let hdr = win.header_rect();
+        // Start drag near the header top-left.
+        let mx = hdr.x + 2.0;
+        let my = hdr.y + 2.0;
+
+        mgr.mouse_down(mx, my);
+        // Move far negative — window should clamp to x=0, y=0 (min allowed).
+        mgr.mouse_move(-500.0, -500.0);
+
+        let w = mgr.get_window("clamp").unwrap();
+        assert!(w.x >= 0.0, "x must not go negative: got {}", w.x);
+        assert!(w.y >= 0.0, "y must not go negative: got {}", w.y);
+    }
+
+    /// Body click: clicking inside the body (not header/buttons) does not start a drag.
+    #[test]
+    fn body_click_does_not_start_drag() {
+        let mut mgr = make_mgr();
+        add_win(&mut mgr, "body");
+        let win = mgr.get_window("body").unwrap();
+        let body = win.body_rect();
+        // Click dead-center of the body.
+        let mx = body.x + body.w / 2.0;
+        let my = body.y + body.h / 2.0;
+
+        mgr.mouse_down(mx, my);
+        assert!(mgr.drag.is_none(), "body click must not initiate drag");
+        assert!(mgr.resize.is_none(), "body click must not initiate resize");
+    }
+
+    /// Z-order: when two windows overlap, the topmost (last-added) wins the drag.
+    #[test]
+    fn drag_topmost_window_wins() {
+        let mut mgr = make_mgr();
+
+        // bottom window at (100, 100).
+        let mut bot = Window::new("bottom", "Bottom");
+        bot.x = 100.0;
+        bot.y = 100.0;
+        bot.width = 200.0;
+        bot.height = 150.0;
+        mgr.add_window(bot);
+
+        // Top window overlapping the bottom window's header — placed identically.
+        let mut top = Window::new("top", "Top");
+        top.x = 100.0;
+        top.y = 100.0;
+        top.width = 200.0;
+        top.height = 150.0;
+        mgr.add_window(top);
+
+        // Click at a point inside both windows' headers.
+        let click_x = 110.0;
+        let click_y = 105.0; // inside header (HEADER_H = 22)
+
+        mgr.mouse_down(click_x, click_y);
+        let ds = mgr.drag.as_ref().expect("drag must start");
+        // Top window was added last, so its index is 1.
+        assert_eq!(ds.window_idx, 1, "topmost (last-added) window must win drag");
+    }
+
+    /// Drag does not affect a second window that is not being dragged.
+    #[test]
+    fn drag_does_not_move_other_windows() {
+        let mut mgr = make_mgr();
+
+        let mut win_a = Window::new("a", "A");
+        win_a.x = 50.0;
+        win_a.y = 50.0;
+        win_a.width = 200.0;
+        win_a.height = 150.0;
+        mgr.add_window(win_a);
+
+        let mut win_b = Window::new("b", "B");
+        win_b.x = 400.0;
+        win_b.y = 400.0;
+        win_b.width = 200.0;
+        win_b.height = 150.0;
+        mgr.add_window(win_b);
+
+        // Drag window A's header.
+        let hdr_a = mgr.get_window("a").unwrap().header_rect();
+        mgr.mouse_down(hdr_a.x + 5.0, hdr_a.y + 5.0);
+        mgr.mouse_move(hdr_a.x + 5.0 + 30.0, hdr_a.y + 5.0 + 20.0);
+
+        let b = mgr.get_window("b").unwrap();
+        assert!((b.x - 400.0).abs() < f32::EPSILON, "window B must not move");
+        assert!((b.y - 400.0).abs() < f32::EPSILON, "window B must not move");
+    }
+
+    /// Load state clears any in-progress drag.
+    #[test]
+    fn load_state_cancels_drag() {
+        let mut mgr = make_mgr();
+        add_win(&mut mgr, "ld");
+        let hdr = mgr.get_window("ld").unwrap().header_rect();
+        mgr.mouse_down(hdr.x + 5.0, hdr.y + 5.0);
+        assert!(mgr.drag.is_some());
+
+        // Save/restore resets transient state.
+        let json = mgr.save_state().unwrap();
+        mgr.load_state(&json).unwrap();
+        assert!(mgr.drag.is_none(), "load_state must cancel in-progress drag");
+    }
 }

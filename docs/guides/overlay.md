@@ -191,6 +191,98 @@ mgr.theme = saved.theme;
 
 Or use `mgr.load_state(&json)` which does the full round-trip from a JSON string produced by `mgr.save_state()`.
 
+## Drag system
+
+Windows are dragged by clicking and holding on the **header strip** (the top 22 px of each window) and moving the mouse. The drag system is split across two types:
+
+| Layer | Type | Responsibility |
+|-------|------|---------------|
+| `Window` | `window.rs` | `drag(dx, dy)` — translates position; clamps to `(0, 0)` |
+| `WindowManager` | `manager.rs` | `DragState` — tracks which window is dragging and the cursor offset |
+
+### Lifecycle
+
+```
+mouse_down(mx, my)
+  └─ header_contains_point? → DragState { window_idx, offset_x, offset_y }
+
+mouse_move(mx, my)   [called every frame]
+  └─ DragState present?
+       new_x = mx - offset_x
+       new_y = my - offset_y
+       win.drag(new_x - win.x, new_y - win.y)
+
+mouse_up(mx, my)
+  └─ drag = None          ← drag ends; window stays at last position
+```
+
+### Offset anchoring
+
+The `offset_x` / `offset_y` stored in `DragState` is the cursor's position relative to the window's top-left corner at the moment the drag began:
+
+```rust
+offset_x = mx - win.x   // at mouse_down time
+offset_y = my - win.y
+```
+
+On every `mouse_move` the new window position is:
+
+```rust
+win.x = mx - offset_x   // equivalently: win.x += (mx - prev_mx)
+win.y = my - offset_y
+```
+
+This ensures the window doesn't jump on drag start regardless of where inside the header the user clicked.
+
+### Screen-edge clamping
+
+`Window::drag` clamps the final position to `x ≥ 0` and `y ≥ 0`, preventing windows from being dragged off the top or left edge of the screen. There is intentionally no right/bottom clamp — partially off-screen windows are allowed so the user can park them out of the way.
+
+```rust
+pub fn drag(&mut self, dx: f32, dy: f32) {
+    self.x = (self.x + dx).max(0.0);
+    self.y = (self.y + dy).max(0.0);
+}
+```
+
+### Z-order and focus
+
+`mouse_down` iterates windows in **reverse insertion order** so the topmost (most recently added) window wins when windows overlap. The winning window's header starts the drag; no other window moves.
+
+### Drag cancellation
+
+There is no explicit cancel gesture. The system resets `DragState` on:
+
+- `mouse_up` — normal drag end.
+- `load_state` — restores a saved snapshot; any in-progress drag is discarded.
+
+`Key::Escape` releases **keyboard focus** (via `FocusManager::blur`) but does **not** cancel an active drag — the user must release the mouse button.
+
+### Resize handle
+
+The bottom-right 10×10 px corner is the **resize handle**. It uses `ResizeState` (parallel to `DragState`) and enforces minimum dimensions of 80 × 40 px. Resize takes priority over body clicks but yields to the close and minimize buttons. The drag and resize states are mutually exclusive — only one can be active at a time.
+
+### Testing
+
+Drag behaviour is covered by module-local tests in `manager.rs` (`#[cfg(test)] mod tests`):
+
+| Test | What it verifies |
+|------|-----------------|
+| `drag_start_records_offset` | `DragState.offset_x/y` matches cursor-to-origin delta |
+| `drag_continue_tracks_cursor` | Position follows cursor correctly across multiple `mouse_move` calls |
+| `drag_end_stops_movement` | `mouse_up` clears `DragState`; further moves are no-ops |
+| `drag_clamped_at_screen_top_left` | `x ≥ 0` and `y ≥ 0` after dragging past the top-left edge |
+| `body_click_does_not_start_drag` | Body clicks do not initiate drag or resize |
+| `drag_topmost_window_wins` | Last-added window wins when two headers overlap |
+| `drag_does_not_move_other_windows` | Only the dragged window moves; siblings are unaffected |
+| `load_state_cancels_drag` | `load_state` resets in-progress drag to `None` |
+
+Run with:
+
+```bash
+cargo test --lib -p textquest-dll overlay::manager
+```
+
 ## Layout
 
 `LayoutKind` controls how widgets fill the window body:
