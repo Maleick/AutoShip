@@ -289,6 +289,7 @@ mod tests {
             zone_long_name: "South Qeynos".into(),
             spawn_epoch: epoch,
             actual_version: None,
+            is_zone_changing: false,
         }
     }
 

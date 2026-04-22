@@ -253,7 +253,7 @@ impl SoulCoordinator {
             ipc_available: true,
             anomaly_detector: AnomalyDetector::new(),
             audit: None,
-            chat_memory_write_counts: HashMap::new(),
+            chat_memory_write_timestamps: HashMap::new(),
         })
     }
 
@@ -562,7 +562,7 @@ impl SoulCoordinator {
         const WINDOW_SECS: u64 = 3600;
         let cap = self.config.max_chat_memory_writes_per_hour as usize;
         let window = self
-            .chat_memory_write_counts
+            .chat_memory_write_timestamps
             .entry(client_id)
             .or_default();
 

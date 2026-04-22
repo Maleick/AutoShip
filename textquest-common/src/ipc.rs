@@ -1509,6 +1509,7 @@ pub enum Response {
 ///   packet stream (server is disconnecting the client).
 /// - `"cheater_ld_flag"` — `CheaterLdFlag` memory location flipped from zero
 ///   to a non-zero value (character is persistently flagged across sessions).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChecksumMismatchAlert {
     /// PID of the client that triggered the alert.
     pub client_id: ClientId,

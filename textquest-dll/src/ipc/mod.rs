@@ -618,6 +618,7 @@ mod tests {
                 zone_long_name: String::new(),
                 spawn_epoch: 0,
                 actual_version: None,
+                is_zone_changing: false,
             };
             publish_state(&frame); // must not panic
         }

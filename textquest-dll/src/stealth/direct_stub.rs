@@ -27,7 +27,7 @@
 //! ```
 
 use super::super::syscall::hash;
-use std::sync::OnceLock;
+use once_cell::sync::OnceCell;
 
 /// Hashes blocked from direct-stub fallback. Fail-closed for these SSNs.
 const BLOCKED_HASHES: [u32; 2] = [
@@ -106,7 +106,7 @@ impl Drop for DirectStubPage {
 }
 
 /// Global direct-stub page, initialized alongside the syscall table.
-static STUB_PAGE: OnceLock<DirectStubPage> = OnceLock::new();
+static STUB_PAGE: OnceCell<DirectStubPage> = OnceCell::new();
 
 /// Initialize the direct-stub fallback page.
 ///
