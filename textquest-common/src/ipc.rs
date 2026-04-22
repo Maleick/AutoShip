@@ -1488,8 +1488,41 @@ pub enum Response {
         /// Live DLL state for tradeskill trophy automation.
         status: TradeskillTrophyStatus,
     },
+    /// HIGH-PRIORITY anti-cheat alert: server sent checksum-mismatch disconnect
+    /// (opcode `0xd799`), or `CheaterLdFlag` flipped to non-zero in memory.
+    ///
+    /// Both conditions indicate server-side detection. The operator must
+    /// investigate immediately — the character may be persistently flagged.
+    ///
+    /// This response is batched so it can be drained through a poll-based IPC
+    /// flow rather than being left queued as a standalone asynchronous event.
+    ChecksumMismatchAlertBatch {
+        /// Alerts raised since the previous alert poll/drain.
+        alerts: Vec<ChecksumMismatchAlert>,
+    },
 }
 
+/// Alert payload for checksum-mismatch and `CheaterLdFlag` detections.
+///
+/// `kind` distinguishes the two detection surfaces:
+/// - `"checksum_mismatch_packet"` — opcode `0xd799` observed in the inbound
+///   packet stream (server is disconnecting the client).
+/// - `"cheater_ld_flag"` — `CheaterLdFlag` memory location flipped from zero
+///   to a non-zero value (character is persistently flagged across sessions).
+pub struct ChecksumMismatchAlert {
+    /// PID of the client that triggered the alert.
+    pub client_id: ClientId,
+    /// Character name at the time of the alert (empty if unavailable).
+    pub character_name: String,
+    /// Detection surface: `"checksum_mismatch_packet"` or `"cheater_ld_flag"`.
+    pub kind: String,
+    /// Raw opcode that triggered the alert (0xd799 for packet alerts, 0 for flag alerts).
+    pub opcode: u16,
+    /// Current value of `CheaterLdFlag` in memory (0 for packet alerts).
+    pub cheater_ld_flag_value: i32,
+    /// Timestamp in milliseconds when the alert fired.
+    pub timestamp_ms: u64,
+}
 /// Wire-format for a single zone entry: (`zone_id`, name, `min_level`,
 /// `max_level`, connections). Each connection is (`dest_zone_id`,
 /// `transfer_type`, disabled).

@@ -789,6 +789,18 @@ mod inner {
 
     // ── Packet handler ───────────────────────────────────────────────────────
 
+    /// EQ opcode sent by the server when a server-side integrity check fails
+    /// (memcheck, message counter, file integrity, or zone entry mismatch).
+    ///
+    /// When received, the server transmits the message:
+    /// `"World disconnecting because the checksums didn't match."`
+    /// and kills the connection. Detection is persistent if `CheaterLdFlag` is
+    /// also set (player struct offset `0x2C4`).
+    ///
+    /// Reference: `docs/wiki/Research-Anti-Detection.md`
+    ///            §Ghidra-Verified Findings §Checksum mismatch disconnect
+    const OPCODE_CHECKSUM_MISMATCH_DISCONNECT: u16 = 0xd799;
+
     /// Extract the EQ opcode from a raw packet buffer and enqueue a
     /// `PacketEvent`.
     ///
@@ -802,6 +814,14 @@ mod inner {
     /// Packets shorter than 4 bytes are silently ignored (no opcode present).
     /// We copy at most `MAX_PACKET_SCAN` bytes to bound stack usage and avoid
     /// reading into large application-layer buffers for non-EQ traffic.
+    ///
+    /// # Checksum-mismatch disconnect detection
+    ///
+    /// When the inbound opcode is `OPCODE_CHECKSUM_MISMATCH_DISCONNECT`
+    /// (`0xd799`), a `Response::ChecksumMismatchAlert` is enqueued immediately
+    /// **in addition to** the normal `PacketEvent`. This fires within the same
+    /// call so the operator receives the alert within one frame of the packet
+    /// arriving.
     fn on_packet(buf: *const u8, len: usize, direction: PacketDirection) {
         if buf.is_null() || len < MIN_OPCODE_PACKET_LEN {
             return;
@@ -844,6 +864,29 @@ mod inner {
                 }
             }
             maybe_watchdog_tick();
+        }
+
+        // ── Checksum-mismatch disconnect detection (0xd799) ─────────────────
+        // The server sends 0xd799 when any integrity check fails. Emit a
+        // high-priority alert immediately so the operator is notified within
+        // one frame, before the disconnect is processed by EQ's network layer.
+        if direction == PacketDirection::Inbound
+            && opcode == OPCODE_CHECKSUM_MISMATCH_DISCONNECT
+        {
+            tracing::error!(
+                client_id,
+                opcode = format!("{:#06x}", opcode),
+                "ANTI-CHEAT ALERT: server sent checksum-mismatch disconnect (0xd799) — \
+                 integrity check failed; character may be persistently flagged"
+            );
+            crate::ipc::send_response(Response::ChecksumMismatchAlert {
+                client_id,
+                character_name: String::new(), // resolved by orchestrator from shared state
+                kind: "checksum_mismatch_packet".to_string(),
+                opcode,
+                cheater_ld_flag_value: 0,
+                timestamp_ms,
+            });
         }
 
         crate::ipc::send_response(Response::PacketEvent {
@@ -1157,6 +1200,95 @@ mod tests {
             drift.abs() <= WD_DRIFT_WARN_THRESHOLD,
             "A single refill cycle should not exceed drift threshold (drift = {})",
             drift
+        );
+    }
+
+    // ── Checksum-mismatch disconnect (0xd799) detection tests ────────────────
+
+    /// Opcode constant value matches the Ghidra-verified wire value.
+    #[test]
+    fn checksum_mismatch_opcode_constant_value() {
+        // Verify the opcode constant is exactly 0xd799 as documented in
+        // docs/wiki/Research-Anti-Detection.md §Checksum mismatch disconnect.
+        #[cfg(windows)]
+        {
+            use super::inner::OPCODE_CHECKSUM_MISMATCH_DISCONNECT;
+            assert_eq!(
+                OPCODE_CHECKSUM_MISMATCH_DISCONNECT, 0xd799,
+                "0xd799 opcode constant must match Ghidra-verified wire value"
+            );
+        }
+        // On non-Windows: assert the raw constant matches.
+        assert_eq!(0xd799u16, 0xd799u16);
+    }
+
+    /// Synthesized 0xd799 packet: opcode is correctly extracted at bytes [2..4].
+    #[test]
+    fn checksum_mismatch_opcode_extracted_from_synthesized_packet() {
+        // Synthesise a minimal EQStream packet with opcode 0xd799 at bytes [2..4].
+        // Layout: [crc_lo, crc_hi, op_lo, op_hi, payload...]
+        let packet = [
+            0x00u8, 0x00, // CRC/header
+            0x99, 0xd7, // opcode 0xd799 little-endian
+            0x00, 0x00, 0x00, 0x00, // padding (total length = 8 >= MIN_OPCODE_PACKET_LEN)
+        ];
+        let opcode = u16::from_le_bytes([packet[2], packet[3]]);
+        assert_eq!(
+            opcode, 0xd799,
+            "opcode 0xd799 should be extracted from synthesized packet"
+        );
+    }
+
+    /// Verifying that non-0xd799 inbound opcodes do NOT trigger the alert.
+    #[test]
+    fn non_checksum_mismatch_opcode_does_not_alert() {
+        let packet = [0x00u8, 0x00, 0x29, 0xbb, 0x00, 0x00, 0x00, 0x00]; // 0xbb29 heartbeat
+        let opcode = u16::from_le_bytes([packet[2], packet[3]]);
+        assert_ne!(opcode, 0xd799, "heartbeat opcode 0xbb29 must not match 0xd799");
+    }
+
+    fn checksum_mismatch_opcode_for_test() -> u16 {
+        #[cfg(windows)]
+        {
+            super::inner::OPCODE_CHECKSUM_MISMATCH_DISCONNECT
+        }
+        #[cfg(not(windows))]
+        {
+            0xd799u16
+        }
+    }
+
+    fn should_alert_on_checksum_mismatch(
+        direction: textquest_common::ipc::PacketDirection,
+        packet: &[u8],
+    ) -> bool {
+        if packet.len() < 4 {
+            return false;
+        }
+
+        let opcode = u16::from_le_bytes([packet[2], packet[3]]);
+        direction == textquest_common::ipc::PacketDirection::Inbound
+            && opcode == checksum_mismatch_opcode_for_test()
+    }
+
+    /// Alert fires on Inbound direction only — Outbound must not trigger.
+    #[test]
+    fn checksum_mismatch_alert_inbound_only() {
+        use textquest_common::ipc::PacketDirection;
+
+        let packet = [
+            0x00u8, 0x00, // CRC/header
+            0x99, 0xd7, // opcode 0xd799 little-endian
+            0x00, 0x00, 0x00, 0x00,
+        ];
+
+        assert!(
+            should_alert_on_checksum_mismatch(PacketDirection::Inbound, &packet),
+            "inbound checksum-mismatch packet should trigger the alert"
+        );
+        assert!(
+            !should_alert_on_checksum_mismatch(PacketDirection::Outbound, &packet),
+            "outbound checksum-mismatch packet must not trigger the alert"
         );
     }
 

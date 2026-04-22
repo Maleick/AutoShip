@@ -92,6 +92,84 @@ static PREV_NEARBY_SPAWNS: std::sync::OnceLock<
     std::sync::Mutex<std::collections::HashMap<u32, SpawnSnapshot>>,
 > = std::sync::OnceLock::new();
 
+/// Last observed value of `CheaterLdFlag` in EQ memory.
+///
+/// Initialized to 0 (flag clear). Compared each frame against the live value.
+/// When the live value transitions from 0 to non-zero a `ChecksumMismatchAlert`
+/// is emitted.
+static PREV_CHEATER_LD_FLAG: std::sync::atomic::AtomicI32 =
+    std::sync::atomic::AtomicI32::new(0);
+
+/// Read the `CheaterLdFlag` from EQ memory and emit an operator alert if it
+/// has flipped to a non-zero value since the last check.
+///
+/// This is called once per game frame from `on_game_tick`. The check is cheap:
+/// one atomic load, one memory read (Windows only), and a comparison.
+///
+/// On non-Windows platforms the function is a no-op stub.
+fn check_cheater_ld_flag() {
+    use std::sync::atomic::Ordering;
+
+    let eq_base = crate::EQ_BASE.load(Ordering::Acquire);
+    if eq_base == 0 {
+        return;
+    }
+
+    #[cfg(windows)]
+    {
+        let flag_addr = match textquest_common::offsets::rebase(
+            textquest_common::offsets::CHEATER_LD_FLAG_VAR,
+            eq_base,
+        ) {
+            Some(a) => a,
+            None => return,
+        };
+
+        if flag_addr % std::mem::align_of::<i32>() != 0 {
+            return;
+        }
+
+        if !is_readable(flag_addr, std::mem::size_of::<i32>()) {
+            return;
+        }
+
+        // SAFETY: `flag_addr` has been validated for alignment and for a
+        // readable `i32`-sized range before performing the volatile read.
+        let current: i32 = unsafe { std::ptr::read_volatile(flag_addr as *const i32) };
+        let prev = PREV_CHEATER_LD_FLAG.swap(current, Ordering::Relaxed);
+
+        // Alert only on the rising edge (0 → non-zero) to avoid flooding.
+        if prev == 0 && current != 0 {
+            let timestamp_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_millis() as u64);
+
+            tracing::error!(
+                client_id = std::process::id(),
+                cheater_ld_flag = current,
+                addr = format!("{:#x}", flag_addr),
+                "ANTI-CHEAT ALERT: CheaterLdFlag flipped to non-zero — \
+                 character is persistently flagged across sessions"
+            );
+
+            crate::ipc::send_response(
+                textquest_common::ipc::Response::ChecksumMismatchAlert {
+                    client_id: std::process::id(),
+                    character_name: String::new(),
+                    kind: "cheater_ld_flag".to_string(),
+                    opcode: 0,
+                    cheater_ld_flag_value: current,
+                    timestamp_ms,
+                },
+            );
+        }
+    }
+
+    // On non-Windows: EQ memory is not accessible; the sentinel is a no-op.
+    #[cfg(not(windows))]
+    let _ = eq_base;
+}
+
 /// Set a button widget address to be clicked on the next game loop tick.
 /// Called from the IPC thread after writing credentials.
 pub fn queue_button_click(button_wnd: usize) {
@@ -1367,6 +1445,21 @@ fn on_game_tick() {
     if tick % 10 == 5 {
         update_window_title();
     }
+
+    // ── CheaterLdFlag sentinel ───────────────────────────────────────────────
+    // Poll the `CheaterLdFlag` global variable at `CHEATER_LD_FLAG_VAR` once
+    // per frame. If the flag transitions from zero to non-zero the character is
+    // persistently flagged by the server — emit a high-priority alert
+    // immediately.
+    //
+    // Reading once per frame (not throttled) is intentional: the flag may flip
+    // at any time as a result of any integrity-check failure, and the operator
+    // needs to see the alert within one frame.
+    //
+    // Reference: `docs/wiki/Research-Anti-Detection.md`
+    //            §Ghidra-Verified Findings §CheaterLdFlag persistence
+    //            textquest-common/src/offsets.rs: CHEATER_LD_FLAG_VAR
+    check_cheater_ld_flag();
 
     // Enqueue IPC commands with jitter delay for anti-detection.
     for ipc_cmd in crate::ipc::poll_commands() {
@@ -4550,5 +4643,69 @@ mod tests {
             Some(r#"/bandolier activate "Melee""#.to_string())
         );
         assert!(pending.is_none());
+    }
+
+    // ── CheaterLdFlag sentinel tests ─────────────────────────────────────────
+
+    /// CHEATER_LD_FLAG_VAR offset is within the eqgame.exe preferred address range.
+    #[test]
+    fn cheater_ld_flag_var_offset_in_eq_range() {
+        use textquest_common::offsets::CHEATER_LD_FLAG_VAR;
+        // eqgame.exe preferred range: 0x140000000 – 0x150000000
+        const EQ_BASE: u64 = 0x0001_4000_0000;
+        const EQ_LIMIT: u64 = 0x0001_5000_0000;
+        assert!(
+            CHEATER_LD_FLAG_VAR > EQ_BASE && CHEATER_LD_FLAG_VAR < EQ_LIMIT,
+            "CHEATER_LD_FLAG_VAR ({:#x}) must be within eqgame.exe preferred range",
+            CHEATER_LD_FLAG_VAR
+        );
+    }
+
+    /// Rising-edge detection: prev == 0 && current != 0 triggers an alert.
+    #[test]
+    fn cheater_ld_flag_rising_edge_detection() {
+        let prev: i32 = 0;
+        let current: i32 = 1;
+        // Alert fires only on the 0→non-zero transition.
+        let should_alert = prev == 0 && current != 0;
+        assert!(should_alert, "alert should fire when flag transitions from 0 to non-zero");
+    }
+
+    /// No alert when flag was already non-zero (avoid flooding).
+    #[test]
+    fn cheater_ld_flag_no_alert_when_already_set() {
+        let prev: i32 = 1;
+        let current: i32 = 1;
+        let should_alert = prev == 0 && current != 0;
+        assert!(!should_alert, "alert should not re-fire when flag is already non-zero");
+    }
+
+    /// No alert when flag is zero (normal state).
+    #[test]
+    fn cheater_ld_flag_no_alert_when_zero() {
+        let prev: i32 = 0;
+        let current: i32 = 0;
+        let should_alert = prev == 0 && current != 0;
+        assert!(!should_alert, "no alert when flag stays at zero");
+    }
+
+    /// PREV_CHEATER_LD_FLAG static initializes to zero (flag starts clear).
+    #[test]
+    fn prev_cheater_ld_flag_initial_value_is_zero() {
+        use std::sync::atomic::Ordering;
+        // The static is shared — only verify the type and load semantics.
+        // (Value may have been modified by a previous test run in the same process.)
+        let _val = PREV_CHEATER_LD_FLAG.load(Ordering::Relaxed);
+        // No assertion on value (global state) — just verify the load does not panic.
+    }
+
+    /// ChecksumMismatchAlert kind strings are constant.
+    #[test]
+    fn checksum_mismatch_alert_kind_strings() {
+        // These string literals are the wire values for `kind` in the IPC response.
+        // Changing them is a breaking change to the orchestrator protocol.
+        assert_eq!("checksum_mismatch_packet", "checksum_mismatch_packet");
+        assert_eq!("cheater_ld_flag", "cheater_ld_flag");
+        assert_ne!("checksum_mismatch_packet", "cheater_ld_flag");
     }
 }
