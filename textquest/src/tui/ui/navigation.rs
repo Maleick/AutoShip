@@ -407,46 +407,8 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
 
     // Draw 2-column grid of client cards
     let card_width = (sections[1].width.saturating_sub(1)) / 2;
-    let mut cards_html: Vec<String> = Vec::new();
-
-    for client in &visible {
-        let nav = app.nav_state.nav_statuses.get(&client.pid);
-        let lines = draw_nav_card(client, nav, t);
-
-        // Determine card border color
-        let border_color = if let Some(nav) = nav {
-            if nav.status.is_stuck() {
-                t.hp_low
-            } else {
-                t.text_accent
-            }
-        } else {
-            t.text_accent
-        };
-
-        let client_name = client.local_player.as_ref().map_or_else(
-            || app.client_command_target(client),
-            |p| app.redact_name(&p.displayed_name).into_owned(),
-        );
-        let class_abbr = client_class_abbr(client);
-        let title = format!("{} · {}", client_name, class_abbr);
-
-        let blk = Block::default()
-            .borders(Borders::ALL)
-            .border_type(t.border_type)
-            .title(title)
-            .border_style(Style::default().fg(border_color));
-
-        // For now, render each card to a string representation
-        let card_widget = Paragraph::new(lines).block(blk);
-        cards_html.push(format!("{:?}", card_widget)); // placeholder
-    }
 
     // Arrange cards in 2-column layout
-    let card_count = visible.len();
-    let mut row = 0;
-    let mut col = 0;
-
     for (idx, client) in visible.iter().enumerate() {
         let nav = app.nav_state.nav_statuses.get(&client.pid);
         let lines = draw_nav_card(client, nav, t);
@@ -497,12 +459,6 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
             frame.render_widget(Paragraph::new(lines).block(blk), card_area);
         }
 
-        // Move to next row after every 2 cards
-        if (idx + 1) % 2 == 0 && idx + 1 < card_count {
-            // Create new row constraint for next pair of cards
-            let remaining_cards = card_count - (idx + 1);
-            // This simple approach renders left-to-right, top-to-bottom
-        }
     }
 }
 

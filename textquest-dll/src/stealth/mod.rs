@@ -23,6 +23,7 @@ pub mod peb_unlink;
 pub mod stack_spoof;
 pub mod text_encrypt;
 pub mod thread_pool;
+pub mod timer_queue_sleep;
 pub mod trampoline;
 
 use std::sync::atomic::{AtomicBool, Ordering};

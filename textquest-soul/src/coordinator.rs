@@ -920,10 +920,12 @@ fn is_in_combat(state: &GameState) -> bool {
     )
 }
 
-/// Extract zone name from game state (placeholder until zone tracking is
-/// added).
-fn zone_from_state(_state: &GameState) -> &'static str {
-    "unknown"
+/// Extract zone short name from game state.
+///
+/// Returns the zone short name if non-empty, otherwise falls back to "unknown".
+fn zone_from_state(state: &GameState) -> &str {
+    let zone = state.zone_short_name.as_str();
+    if zone.is_empty() { "unknown" } else { zone }
 }
 
 #[cfg(test)]
@@ -1135,8 +1137,18 @@ mod tests {
     }
 
     #[test]
-    fn zone_from_state_returns_unknown() {
+    fn zone_from_state_returns_zone_short_name() {
         let state = make_game_state(1);
+        // make_game_state sets zone_short_name = "test"
+        assert_eq!(zone_from_state(&state), "test");
+    }
+
+    #[test]
+    fn zone_from_state_falls_back_to_unknown_when_empty() {
+        let state = GameState {
+            zone_short_name: String::new(),
+            ..make_game_state(1)
+        };
         assert_eq!(zone_from_state(&state), "unknown");
     }
 
