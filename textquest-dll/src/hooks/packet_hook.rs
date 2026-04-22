@@ -851,7 +851,8 @@ mod inner {
             opcode,
             direction,
             timestamp_ms,
-            payload_size: len as u32,
+            payload_size: scan as u32,
+            payload: local[..scan].to_vec(),
         });
     }
 

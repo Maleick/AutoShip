@@ -96,7 +96,9 @@ Use this for:
 
 - inspecting captured packet rows when the current DLL build is emitting packet events
 - pausing the packet stream without leaving the screen
-- opcode decode and filter inspection
+- selecting individual packets with `j` / `k` or arrow keys
+- inspecting packet payloads in hex and ASCII text for the selected row
+- confirming the live and peak packet rates reported by the capture stream
 - validating packet-monitor output during attended troubleshooting runs
 
 Current limitation:
@@ -150,3 +152,7 @@ The status bar also shows an unread alert badge even when the overlay is closed.
 - If a new Characters-screen renderer regression appears, track it with a fresh issue against the current TUI surface instead of reusing the old PR #507 handoff note.
 - The TUI `:inject` command is still a placeholder instead of a full injection trigger.
 - Some map orientation and overlay behavior has comments in code noting that final live-client verification is still deferred in a few cases.
+
+## Fix #2171
+
+Packet monitor panel now displays live captured packets instead of 5 hardcoded stub entries.

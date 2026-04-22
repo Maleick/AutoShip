@@ -1118,6 +1118,29 @@ pub fn handle_events(
                 KeyCode::Char('a') => app.toggle_hex_annotations(),
                 _ => {}
             },
+            ActivePanel::PacketMonitorLog => match key.code {
+                KeyCode::Down | KeyCode::Char('j') => app.packet_monitor_state.select_next(),
+                KeyCode::Up | KeyCode::Char('k') => app.packet_monitor_state.select_prev(),
+                KeyCode::PageDown => app.packet_monitor_state.scroll_down(),
+                KeyCode::PageUp => app.packet_monitor_state.scroll_up(),
+                KeyCode::Home => {
+                    app.packet_monitor_state.auto_scroll = false;
+                    app.packet_monitor_state.table_state.select(Some(0));
+                }
+                KeyCode::End => {
+                    app.packet_monitor_state.auto_scroll = true;
+                    app.packet_monitor_state.scroll_offset = 0;
+                    let max = app
+                        .packet_monitor_state
+                        .filtered_packets()
+                        .len()
+                        .saturating_sub(1);
+                    app.packet_monitor_state.table_state.select(Some(max));
+                }
+                KeyCode::Char('p') => app.packet_monitor_state.toggle_pause(),
+                KeyCode::Char('c') => app.packet_monitor_state.clear(),
+                _ => {}
+            },
             ActivePanel::DebugInternals => {
                 if app.eq_internals_state.search_mode {
                     match key.code {

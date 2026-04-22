@@ -240,6 +240,7 @@ fn run_loop(
                             direction: evt.direction,
                             timestamp_ms: evt.timestamp_ms,
                             payload_size: evt.payload_size,
+                            payload: evt.payload,
                         });
                 }
 

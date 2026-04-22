@@ -266,6 +266,7 @@ pub fn drain_packet_responses() -> Vec<textquest_common::ipc::PacketEventInfo> {
                 direction,
                 timestamp_ms,
                 payload_size,
+                payload,
             } => {
                 packet_events.push(textquest_common::ipc::PacketEventInfo {
                     client_id,
@@ -273,6 +274,7 @@ pub fn drain_packet_responses() -> Vec<textquest_common::ipc::PacketEventInfo> {
                     direction,
                     timestamp_ms,
                     payload_size,
+                    payload,
                 });
             }
             _ => remaining.push(response),
@@ -665,6 +667,7 @@ mod tests {
             direction: textquest_common::ipc::PacketDirection::Inbound,
             timestamp_ms: 12345,
             payload_size: 256,
+            payload: vec![0x01, 0x02, 0x03, 0x04],
         });
 
         let new_drops = PACKET_EVENT_DROPS.load(std::sync::atomic::Ordering::SeqCst);
@@ -707,6 +710,7 @@ mod tests {
                 direction: textquest_common::ipc::PacketDirection::Inbound,
                 timestamp_ms: 10000 + i as u64,
                 payload_size: 256,
+                payload: vec![0xAA, 0xBB, 0xCC],
             });
         }
 

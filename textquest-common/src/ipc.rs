@@ -1131,6 +1131,8 @@ pub struct PacketEventInfo {
     pub timestamp_ms: u64,
     /// Size of the packet payload in bytes.
     pub payload_size: u32,
+    /// Raw packet payload bytes.
+    pub payload: Vec<u8>,
 }
 
 /// Spawn lifecycle event for near-by spawn list deltas.
@@ -1280,6 +1282,8 @@ pub enum Response {
         timestamp_ms: u64,
         /// Size of the packet payload in bytes.
         payload_size: u32,
+        /// Raw packet payload bytes.
+        payload: Vec<u8>,
     },
     /// Batched packet events in response to `Command::PollPackets`.
     PacketBatch {

@@ -1897,6 +1897,8 @@ pub struct PacketRecord {
     pub timestamp_ms: u64,
     /// Size of the packet payload in bytes.
     pub payload_size: u32,
+    /// Raw packet payload bytes.
+    pub payload: Vec<u8>,
 }
 
 /// Entry for a decoded packet with field names and values.
@@ -1910,6 +1912,8 @@ pub struct PacketEntry {
 pub struct PacketMonitorState {
     /// Ring buffer of captured packets (newest at the end).
     pub packets: Vec<PacketRecord>,
+    /// Packet table selection in the filtered view.
+    pub table_state: TableState,
     /// Maximum number of packets to retain.
     pub capacity: usize,
     /// Whether the view auto-scrolls to follow new packets.
@@ -1928,8 +1932,11 @@ pub struct PacketMonitorState {
 impl PacketMonitorState {
     #[must_use]
     pub fn new() -> Self {
+        let mut table_state = TableState::default();
+        table_state.select(Some(0));
         Self {
             packets: Vec::with_capacity(1024),
+            table_state,
             capacity: 10_000,
             auto_scroll: true,
             scroll_offset: 0,
@@ -1945,6 +1952,11 @@ impl PacketMonitorState {
             self.packets.remove(0);
         }
         self.packets.push(record);
+        if self.auto_scroll {
+            self.select_last_filtered();
+        } else {
+            self.clamp_selection();
+        }
     }
 
     /// Returns packets matching the current filters.
@@ -1969,6 +1981,7 @@ impl PacketMonitorState {
         self.scroll_offset = self.scroll_offset.saturating_sub(1);
         if self.scroll_offset == 0 {
             self.auto_scroll = true;
+            self.select_last_filtered();
         }
     }
 
@@ -1982,6 +1995,131 @@ impl PacketMonitorState {
         self.packets.clear();
         self.scroll_offset = 0;
         self.auto_scroll = true;
+        self.table_state.select(Some(0));
+    }
+
+    /// Move packet selection up in the filtered view.
+    pub fn select_prev(&mut self) {
+        self.auto_scroll = false;
+        let idx = self.table_state.selected().unwrap_or(0).saturating_sub(1);
+        self.table_state.select(Some(idx));
+    }
+
+    /// Move packet selection down in the filtered view.
+    pub fn select_next(&mut self) {
+        let max = self.filtered_packets().len().saturating_sub(1);
+        let next = self.table_state.selected().unwrap_or(0).saturating_add(1);
+        let idx = next.min(max);
+        self.table_state.select(Some(idx));
+        if idx == max {
+            self.auto_scroll = true;
+            self.scroll_offset = 0;
+        } else {
+            self.auto_scroll = false;
+        }
+    }
+
+    /// Return the selected packet in the filtered view.
+    #[must_use]
+    pub fn selected_packet(&self) -> Option<&PacketRecord> {
+        let filtered = self.filtered_packets();
+        let idx = self.selected_index(filtered.len())?;
+        filtered.get(idx).copied()
+    }
+
+    /// Return the selected filtered index if any.
+    #[must_use]
+    pub fn selected_index(&self, filtered_len: usize) -> Option<usize> {
+        if filtered_len == 0 {
+            None
+        } else {
+            Some(
+                self.table_state
+                    .selected()
+                    .unwrap_or(filtered_len - 1)
+                    .min(filtered_len - 1),
+            )
+        }
+    }
+
+    /// Estimate current and peak packet rates from capture timestamps.
+    #[must_use]
+    pub fn packet_rates(&self) -> (usize, usize) {
+        if self.packets.is_empty() {
+            return (0, 0);
+        }
+
+        let mut peak = 0usize;
+        let mut start = 0usize;
+        for end in 0..self.packets.len() {
+            let current_ts = self.packets[end].timestamp_ms;
+            while start <= end
+                && current_ts.saturating_sub(self.packets[start].timestamp_ms) >= 1_000
+            {
+                start += 1;
+            }
+            peak = peak.max(end - start + 1);
+        }
+
+        let latest_ts = self.packets.last().map_or(0, |pkt| pkt.timestamp_ms);
+        let current = self
+            .packets
+            .iter()
+            .rev()
+            .take_while(|pkt| latest_ts.saturating_sub(pkt.timestamp_ms) < 1_000)
+            .count();
+
+        (current, peak)
+    }
+
+    fn select_last_filtered(&mut self) {
+        let last = self.filtered_packets().len().saturating_sub(1);
+        self.table_state.select(Some(last));
+    }
+
+    fn clamp_selection(&mut self) {
+        let filtered_len = self.filtered_packets().len();
+        let idx = self.selected_index(filtered_len).unwrap_or(0);
+        self.table_state.select(Some(idx));
+    }
+}
+
+#[cfg(test)]
+mod packet_monitor_tests {
+    use super::{PacketMonitorState, PacketRecord};
+    use textquest_common::ipc::PacketDirection;
+
+    fn packet(ts: u64) -> PacketRecord {
+        PacketRecord {
+            client_id: 1,
+            opcode: 0x1234,
+            direction: PacketDirection::Inbound,
+            timestamp_ms: ts,
+            payload_size: 4,
+            payload: vec![0x34, 0x12, 0xAA, 0xBB],
+        }
+    }
+
+    #[test]
+    fn packet_rates_reflect_live_and_peak_windows() {
+        let mut state = PacketMonitorState::new();
+        for ts in [0, 100, 200, 1_100, 1_150] {
+            state.push(packet(ts));
+        }
+
+        assert_eq!(state.packet_rates(), (2, 3));
+    }
+
+    #[test]
+    fn selected_packet_tracks_latest_when_live() {
+        let mut state = PacketMonitorState::new();
+        state.push(packet(100));
+        state.push(packet(200));
+
+        assert_eq!(
+            state.selected_packet().map(|pkt| pkt.timestamp_ms),
+            Some(200)
+        );
     }
 }
 

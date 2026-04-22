@@ -106,3 +106,4 @@ tools/python-sdk/.coverage
 
 # Legacy tooling (obsolete)
 .symphony-opencode/
+dispatch.log

@@ -56,12 +56,13 @@ fn draw_packet_stream(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     let filtered = state.filtered_packets();
+    let filtered = filtered.as_slice();
     let captured_count = state.packets.len();
-    let peak_rate = 12482; // TODO: Calculate from timestamps
+    let (current_rate, peak_rate) = state.packet_rates();
 
     let title = format!(
-        " Packet Stream · {} captured · {}/s peak ",
-        captured_count, peak_rate
+        " Packet Stream · {} captured · {}/s live · {}/s peak ",
+        captured_count, current_rate, peak_rate
     );
     let blk = panel(title, border_style, t);
 
@@ -83,20 +84,25 @@ fn draw_packet_stream(frame: &mut Frame, area: Rect, app: &App) {
         // Calculate visible rows (area height minus borders, header, and filter line)
         let visible_rows = area.height.saturating_sub(6) as usize;
         let total = filtered.len();
+        let selected_idx = state.selected_index(total).unwrap_or(0);
         let skip = if state.auto_scroll {
             total.saturating_sub(visible_rows)
         } else {
-            total
-                .saturating_sub(visible_rows)
-                .saturating_sub(state.scroll_offset)
+            let selection_anchor = selected_idx.saturating_add(1).saturating_sub(visible_rows);
+            selection_anchor.min(
+                total
+                    .saturating_sub(visible_rows)
+                    .saturating_sub(state.scroll_offset),
+            )
         };
 
         let rows: Vec<Row> = filtered
             .iter()
+            .enumerate()
             .skip(skip)
             .take(visible_rows)
-            .map(|pkt| {
-                let is_selected = false; // TODO: Track selected index in state
+            .map(|(idx, pkt)| {
+                let is_selected = idx == selected_idx;
 
                 let cursor = if is_selected {
                     Span::styled(
@@ -129,7 +135,7 @@ fn draw_packet_stream(frame: &mut Frame, area: Rect, app: &App) {
                     get_opcode_color_style(pkt.opcode, t)
                 };
 
-                let hex_preview = format_hex_preview(pkt.opcode);
+                let hex_preview = format_payload_preview(&pkt.payload);
 
                 Row::new(vec![
                     cursor,
@@ -179,9 +185,7 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
     let title = " Packet · detail ";
     let blk = panel(title, border_style, t);
 
-    // Get the selected packet (or first if none selected)
-    let filtered = state.filtered_packets();
-    if filtered.is_empty() {
+    let Some(pkt) = state.selected_packet() else {
         frame.render_widget(
             Paragraph::new("No packet selected")
                 .style(Style::default().fg(t.text_muted))
@@ -189,10 +193,10 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
             area,
         );
         return;
-    }
+    };
 
-    // TODO: Get actual selected index from state
-    let pkt = &filtered[0];
+    let client_label = format_client_name(app, pkt.client_id);
+    let (hex_lines, text_lines) = format_payload_dump(&pkt.payload, area.width.saturating_sub(4));
 
     let mut lines = vec![
         Line::from(vec![
@@ -234,10 +238,7 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
         ]),
         Line::from(vec![
             Span::styled("client   ", Style::default().fg(t.text_secondary)),
-            Span::styled(
-                format_client_name(pkt.client_id),
-                Style::default().fg(t.text_accent),
-            ),
+            Span::styled(client_label, Style::default().fg(t.text_accent)),
             Span::raw(" "),
             Span::styled(
                 format!("(pid {})", pkt.client_id),
@@ -246,56 +247,39 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
         ]),
         Line::raw(""),
         Line::from(vec![Span::styled(
-            "decoded",
-            Style::default().fg(t.text_secondary),
-        )]),
-        Line::from(vec![
-            Span::raw("  "),
-            Span::styled("caster_id", Style::default().fg(t.text_accent)),
-            Span::raw("    = "),
-            Span::styled("4826", Style::default().fg(t.text_bright)),
-            Span::raw("  "),
-            Span::styled("// Sylunariel", Style::default().fg(t.text_muted)),
-        ]),
-        Line::from(vec![
-            Span::raw("  "),
-            Span::styled("target_id", Style::default().fg(t.text_accent)),
-            Span::raw("    = "),
-            Span::styled("4829", Style::default().fg(t.text_bright)),
-            Span::raw("  "),
-            Span::styled("// Thurgrek", Style::default().fg(t.text_muted)),
-        ]),
-        Line::from(vec![
-            Span::raw("  "),
-            Span::styled("spell_id", Style::default().fg(t.text_accent)),
-            Span::raw("     = "),
-            Span::styled("1000", Style::default().fg(t.text_bright)),
-            Span::raw("  "),
-            Span::styled("// Complete Healing", Style::default().fg(t.text_muted)),
-        ]),
-        Line::from(vec![
-            Span::raw("  "),
-            Span::styled("cast_time_ms", Style::default().fg(t.text_accent)),
-            Span::raw(" = "),
-            Span::styled("10000", Style::default().fg(t.text_bright)),
-        ]),
-        Line::from(vec![
-            Span::raw("  "),
-            Span::styled("gem_slot", Style::default().fg(t.text_accent)),
-            Span::raw("     = "),
-            Span::styled("7", Style::default().fg(t.text_bright)),
-        ]),
-        Line::raw(""),
-        Line::from(vec![Span::styled(
             "hex",
             Style::default().fg(t.text_secondary),
         )]),
-        Line::from(vec![
-            Span::styled("0000", Style::default().fg(t.text_muted)),
-            Span::raw("  "),
-            Span::raw(format_hex_preview(pkt.opcode)),
-        ]),
     ];
+
+    lines.extend(hex_lines.into_iter().map(|line| {
+        let mut parts = line.splitn(2, ": ");
+        let offset = parts.next().unwrap_or("0000");
+        let bytes = parts.next().unwrap_or("");
+        Line::from(vec![
+            Span::styled(offset.to_string(), Style::default().fg(t.text_muted)),
+            Span::raw("  "),
+            Span::raw(bytes.to_string()),
+        ])
+    }));
+    lines.push(Line::raw(""));
+    lines.push(Line::from(vec![Span::styled(
+        "text",
+        Style::default().fg(t.text_secondary),
+    )]));
+    if text_lines.is_empty() {
+        lines.push(Line::from(vec![Span::styled(
+            "  (empty payload)",
+            Style::default().fg(t.text_muted),
+        )]));
+    } else {
+        lines.extend(text_lines.into_iter().map(|line| {
+            Line::from(vec![Span::styled(
+                format!("  {line}"),
+                Style::default().fg(t.text_bright),
+            )])
+        }));
+    }
 
     frame.render_widget(
         Paragraph::new(lines).block(blk).wrap(Wrap { trim: false }),
@@ -323,34 +307,37 @@ fn format_opcode_name(opcode: u16) -> String {
     format!("0x{:04X}", opcode)
 }
 
-/// Format hex preview (first 16 bytes, currently placeholder).
-fn format_hex_preview(opcode: u16) -> String {
-    // TODO: Get actual payload bytes
-    format!(
-        "{:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X} {:02X}",
-        (opcode >> 8) & 0xFF,
-        opcode & 0xFF,
-        0x00,
-        0x01,
-        0x02,
-        0x03,
-        0x04,
-        0x05,
-        0x06,
-        0x07,
-        0x08,
-        0x09,
-        0x0A,
-        0x0B,
-        0x0C,
-        0x0D
-    )
+/// Format a one-line payload preview.
+fn format_payload_preview(payload: &[u8]) -> String {
+    if payload.is_empty() {
+        return String::from("(empty)");
+    }
+
+    payload
+        .iter()
+        .take(16)
+        .map(|byte| format!("{byte:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
-/// Format client name (currently uses PID, TODO: resolve to character names).
-fn format_client_name(client_id: u32) -> String {
-    // TODO: Resolve client_id to character name
-    format!("Client{}", client_id)
+/// Format client name using the best available character identity for the PID.
+fn format_client_name(app: &App, client_id: u32) -> String {
+    app.clients
+        .iter()
+        .find(|client| client.pid == client_id)
+        .map(|client| {
+            if !client.character_name.is_empty() {
+                client.character_name.clone()
+            } else {
+                client
+                    .local_player
+                    .as_ref()
+                    .map(|player| player.displayed_name.clone())
+                    .unwrap_or_else(|| format!("PID {client_id}"))
+            }
+        })
+        .unwrap_or_else(|| format!("PID {client_id}"))
 }
 
 /// Format the filter echo line.
@@ -379,6 +366,43 @@ fn format_filter_line<'a>(
     Line::from(spans)
 }
 
+fn format_payload_dump(payload: &[u8], width: u16) -> (Vec<String>, Vec<String>) {
+    let hex_bytes_per_line = usize::from((width.saturating_sub(10) / 3).max(4));
+    let text_bytes_per_line = usize::from(width.saturating_sub(4).max(8));
+
+    let hex_lines = if payload.is_empty() {
+        vec![String::from("0000: (empty)")]
+    } else {
+        payload
+            .chunks(hex_bytes_per_line)
+            .enumerate()
+            .map(|(idx, chunk)| {
+                let bytes = chunk
+                    .iter()
+                    .map(|byte| format!("{byte:02X}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                format!("{:04X}: {bytes}", idx * hex_bytes_per_line)
+            })
+            .collect()
+    };
+
+    let text_lines = payload
+        .chunks(text_bytes_per_line)
+        .map(|chunk| {
+            chunk
+                .iter()
+                .map(|byte| match byte {
+                    b' '..=b'~' => char::from(*byte),
+                    _ => '.',
+                })
+                .collect::<String>()
+        })
+        .collect();
+
+    (hex_lines, text_lines)
+}
+
 /// Format a millisecond timestamp as `HH:MM:SS`.
 fn format_timestamp(ms: u64) -> String {
     let secs = (ms / 1000) % 86400;
@@ -404,5 +428,20 @@ mod tests {
     fn format_timestamp_seconds() {
         assert_eq!(format_timestamp(59_000), "00:00:59");
         assert_eq!(format_timestamp(60_000), "00:01:00");
+    }
+
+    #[test]
+    fn format_payload_preview_uses_real_bytes() {
+        assert_eq!(
+            format_payload_preview(&[0x34, 0x12, 0xAA, 0xFF]),
+            "34 12 AA FF"
+        );
+    }
+
+    #[test]
+    fn format_payload_dump_includes_hex_and_ascii() {
+        let (hex, text) = format_payload_dump(b"AB\x01cd", 32);
+        assert_eq!(hex[0], "0000: 41 42 01 63 64");
+        assert_eq!(text[0], "AB.cd");
     }
 }
