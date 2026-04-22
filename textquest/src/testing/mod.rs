@@ -1,5 +1,6 @@
 //! Testing utilities and observability helpers for TextQuest.
 
+pub mod event_log;
 pub mod metrics;
 pub mod metrics_summary;
 pub mod mocks;

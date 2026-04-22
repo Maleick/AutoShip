@@ -11,7 +11,7 @@ use textquest::config::LogConfig;
 #[cfg(windows)]
 use tracing_appender::rolling;
 #[cfg(windows)]
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -34,6 +34,10 @@ struct Args {
     /// Inject into eqgame.exe processes
     #[arg(short, long)]
     inject: bool,
+
+    /// Log output format: "text" (human-readable, default) or "json" (structured JSONL)
+    #[arg(long, default_value = "text", value_parser = ["text", "json"])]
+    log_format: String,
 }
 
 #[derive(Subcommand, Debug)]
@@ -328,16 +332,7 @@ fn main() -> Result<()> {
     let log_config = cli::load_config().map(|c| c.log).unwrap_or_default();
 
     let log_dir = paths::resolve_log_dir();
-    let _tracing_guard = init_tracing(&log_dir, log_prefix, default_filter, &log_config);
-
-    // Prune old log files on startup (best-effort, errors are already logged
-    // inside prune_log_dir).
-    log_retention::prune_log_dir(
-        &log_dir,
-        log_prefix,
-        log_config.max_size_mb.saturating_mul(1024 * 1024),
-        log_config.max_age_days,
-    );
+    let _tracing_guard = init_tracing(&log_dir, log_prefix, default_filter, &args.log_format);
 
     tracing::info!(
         log_prefix,
@@ -508,7 +503,7 @@ fn init_tracing(
     log_dir: &Path,
     filename_prefix: &str,
     default_filter: &str,
-    log_config: &LogConfig,
+    log_format: &str,
 ) -> tracing_appender::non_blocking::WorkerGuard {
     if let Err(err) = std::fs::create_dir_all(log_dir) {
         eprintln!(
@@ -534,11 +529,21 @@ fn init_tracing(
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
 
-    fmt()
-        .with_env_filter(filter)
-        .with_writer(non_blocking)
-        .with_ansi(false)
-        .init();
+    if log_format == "json" {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(fmt::layer().json().with_writer(non_blocking))
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(
+                fmt::layer()
+                    .with_writer(non_blocking)
+                    .with_ansi(false),
+            )
+            .init();
+    }
 
     guard
 }
@@ -640,6 +645,30 @@ mod tests {
     #[test]
     fn overnight_test_invalid_duration_rejected() {
         let result = Args::try_parse_from(["textquest", "overnight-test", "--duration", "notanumber"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn log_format_defaults_to_text() {
+        let args = Args::parse_from(["textquest"]);
+        assert_eq!(args.log_format, "text");
+    }
+
+    #[test]
+    fn log_format_accepts_json() {
+        let args = Args::parse_from(["textquest", "--log-format", "json"]);
+        assert_eq!(args.log_format, "json");
+    }
+
+    #[test]
+    fn log_format_accepts_text() {
+        let args = Args::parse_from(["textquest", "--log-format", "text"]);
+        assert_eq!(args.log_format, "text");
+    }
+
+    #[test]
+    fn log_format_rejects_invalid_value() {
+        let result = Args::try_parse_from(["textquest", "--log-format", "yaml"]);
         assert!(result.is_err());
     }
 }
