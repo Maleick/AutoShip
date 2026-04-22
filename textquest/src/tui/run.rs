@@ -206,6 +206,7 @@ fn run_loop(
         // Camp loop tick (every 1 second)
         if last_camp_tick.elapsed() >= CAMP_TICK_INTERVAL {
             let dispatched = orchestrator.tick();
+            forward_combat_soul_events(app, orchestrator);
             if dispatched > 0 {
                 app.status_message = format!(
                     "Camp: {} cmds dispatched | {}",
@@ -314,7 +315,7 @@ fn run_loop(
 
         // Soul Engine tick (every 5 seconds)
         if last_soul_tick.elapsed() >= SOUL_TICK_INTERVAL {
-            tick_soul_engine(app);
+            tick_soul_engine(app, orchestrator);
             last_soul_tick = Instant::now();
         }
 
@@ -1566,19 +1567,14 @@ pub(super) fn zone_to_short_name(zone_name: &str) -> String {
 /// Tick the Soul Engine coordinator (if enabled).
 /// Generates soul commands (idle behaviors, chat, emotes) for all registered
 /// characters.
-fn tick_soul_engine(app: &mut App) {
+fn tick_soul_engine(app: &mut App, orchestrator: &Orchestrator) {
     let Some(coordinator) = app.soul_coordinator.as_mut() else {
         return;
     };
 
-    // Build game states from current app data
-    // In the full orchestrator, this comes from shared memory per client.
-    // For now, use an empty map (no clients registered yet = no commands
-    // generated).
-    let states: HashMap<textquest_common::types::ClientId, textquest_common::types::GameState> =
-        HashMap::new();
+    sync_soul_registrations(coordinator, app, orchestrator);
 
-    let (commands, alerts) = coordinator.tick(&states);
+    let (commands, alerts) = coordinator.tick(&orchestrator.game_states);
 
     if !commands.is_empty() {
         tracing::debug!(count = commands.len(), "Soul Engine generated commands");
@@ -1598,6 +1594,52 @@ fn tick_soul_engine(app: &mut App) {
     }
 
     app.soul_tick_counter += 1;
+}
+
+fn sync_soul_registrations(
+    coordinator: &mut textquest_soul::coordinator::SoulCoordinator,
+    app: &App,
+    orchestrator: &Orchestrator,
+) {
+    for (&client_id, state) in &orchestrator.game_states {
+        let observed_name = state
+            .local_player
+            .as_ref()
+            .map(|player| player.displayed_name.as_str())
+            .filter(|name| !name.is_empty())
+            .or_else(|| {
+                app.clients
+                    .iter()
+                    .find(|client| client.pid == client_id)
+                    .map(|client| client.character_name.as_str())
+                    .filter(|name| !name.is_empty())
+            });
+
+        if let Some(name) = observed_name {
+            coordinator.ensure_character_registered(client_id, name);
+        }
+    }
+}
+
+fn forward_combat_soul_events(app: &mut App, orchestrator: &mut Orchestrator) {
+    let Some(coordinator) = app.soul_coordinator.as_mut() else {
+        return;
+    };
+
+    sync_soul_registrations(coordinator, app, orchestrator);
+
+    for (client_id, event) in orchestrator.combat.drain_soul_events() {
+        if let Some(state) = orchestrator.game_states.get(&client_id)
+            && let Some(player) = &state.local_player
+            && !player.displayed_name.is_empty()
+        {
+            coordinator.ensure_character_registered(client_id, &player.displayed_name);
+        }
+
+        if let Err(error) = coordinator.emit_soul_event(client_id, event) {
+            tracing::warn!(client_id, %error, "Failed to forward combat event into soul coordinator");
+        }
+    }
 }
 
 /// Poll all log watchers for new events and merge into the aggregate loot
@@ -1666,10 +1708,19 @@ fn handle_chat_pattern_action(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_live_nav_client_status, discord_sender_is_authorized, spawn_refresh_due};
+    use super::{
+        build_live_nav_client_status, discord_sender_is_authorized, forward_combat_soul_events,
+        spawn_refresh_due,
+    };
+    use crate::orchestrator::Orchestrator;
     use crate::tui::app::App;
+    use std::path::Path;
     use std::time::{Duration, Instant};
+    use textquest_common::combat::CombatStatus;
     use textquest_common::nav::{NavStatus, PauseReason};
+    use textquest_common::types::{GameState, SpawnData};
+    use textquest_soul::config::{CharacterSoulConfig, SoulConfig};
+    use textquest_soul::coordinator::SoulCoordinator;
 
     #[test]
     fn selected_client_spawn_refresh_uses_fast_interval() {
@@ -1786,5 +1837,89 @@ mod tests {
                  greatdivide."
             )]
         );
+    }
+
+    fn make_soul_game_state(client_id: u32, name: &str, combat_status: CombatStatus) -> GameState {
+        GameState {
+            client_id,
+            local_player: Some(SpawnData {
+                spawn_id: client_id,
+                name: name.to_string(),
+                displayed_name: name.to_string(),
+                level: 60,
+                hp_current: 100,
+                hp_max: 100,
+                mana_current: 100,
+                mana_max: 100,
+                endurance_current: 100,
+                endurance_max: 100,
+                ..SpawnData::default()
+            }),
+            target: Some(SpawnData {
+                spawn_id: 42,
+                name: "a goblin".to_string(),
+                displayed_name: "a goblin".to_string(),
+                spawn_type: 1,
+                hp_current: 75,
+                hp_max: 100,
+                ..SpawnData::default()
+            }),
+            nearby_spawns: Vec::new(),
+            timestamp_ms: 0,
+            nav_status: NavStatus::Idle,
+            combat_status,
+            zone_short_name: "crushbone".to_string(),
+            zone_long_name: "Crushbone".to_string(),
+            active_buffs: Vec::new(),
+            pet: None,
+            actual_version: None,
+            is_zone_changing: false,
+        }
+    }
+
+    #[test]
+    fn forward_combat_soul_events_updates_registered_character_mood() {
+        let mut app = App::new();
+        let mut soul_config = SoulConfig::default();
+        soul_config.enabled = true;
+        soul_config.character.push(CharacterSoulConfig {
+            name: "BattleMage".to_string(),
+            traits: textquest_common::soul::PersonalityTraits {
+                battle_hunger: 0.95,
+                ..Default::default()
+            },
+            speech: Default::default(),
+            edginess: None,
+            backstory: String::new(),
+            quirks: Vec::new(),
+        });
+        app.soul_coordinator =
+            Some(SoulCoordinator::new(soul_config, Path::new(":memory:")).unwrap());
+
+        let mut orchestrator = Orchestrator::new();
+        orchestrator.combat.set_main_tank(1);
+        orchestrator.combat.start_camp();
+
+        let mut states = HashMap::new();
+        states.insert(
+            1,
+            make_soul_game_state(1, "BattleMage", CombatStatus::Engaging { target_id: 42 }),
+        );
+        orchestrator.game_states = states.clone();
+        orchestrator.combat.tick(&states);
+        orchestrator.combat.drain_soul_events();
+
+        let mut idle_states = HashMap::new();
+        idle_states.insert(1, make_soul_game_state(1, "BattleMage", CombatStatus::Idle));
+        orchestrator.game_states = idle_states.clone();
+        orchestrator.combat.tick(&idle_states);
+
+        forward_combat_soul_events(&mut app, &mut orchestrator);
+
+        let mood = app
+            .soul_coordinator
+            .as_ref()
+            .and_then(|coordinator| coordinator.mood(1));
+        assert_eq!(mood, Some(textquest_common::soul::MoodState::Excited));
     }
 }

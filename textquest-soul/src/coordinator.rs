@@ -296,6 +296,45 @@ impl SoulCoordinator {
         self.anomaly_detector.register_character(client_id);
     }
 
+    /// Ensure the given client has a registered soul profile.
+    ///
+    /// If the client is already registered, this is a no-op. Otherwise the
+    /// coordinator looks for a matching configured character by name and falls
+    /// back to a default profile seeded from the observed name.
+    pub fn ensure_character_registered(&mut self, client_id: ClientId, observed_name: &str) {
+        if self.souls.contains_key(&client_id) {
+            return;
+        }
+
+        let config = self
+            .config
+            .character
+            .iter()
+            .find(|character| character.name.eq_ignore_ascii_case(observed_name))
+            .cloned()
+            .unwrap_or_else(|| CharacterSoulConfig {
+                name: observed_name.to_string(),
+                traits: PersonalityTraits::default(),
+                speech: SpeechStyle::default(),
+                edginess: None,
+                backstory: String::new(),
+                quirks: Vec::new(),
+            });
+
+        tracing::debug!(
+            client_id,
+            observed_name,
+            configured = self
+                .config
+                .character
+                .iter()
+                .any(|character| character.name.eq_ignore_ascii_case(observed_name)),
+            "soul_coordinator: registering observed character"
+        );
+
+        self.register_character(client_id, &config);
+    }
+
     /// Check whether an LLM request is allowed for the given character right
     /// now.
     ///
@@ -492,6 +531,7 @@ impl SoulCoordinator {
                 .find(|(_, s)| s.name == request.character_name)
                 && let Ok(response) = soul.responder.generate(&request)
             {
+                let channel = select_response_channel(&request, &soul.traits);
                 // Check if chat should be suppressed based on current game state
                 if let Some(state) = states.get(&cid) {
                     let suppress_ctx = GameStateContext::from_game_state(state);
@@ -499,7 +539,7 @@ impl SoulCoordinator {
                         commands.push((
                             cid,
                             Command::Say {
-                                channel: textquest_common::soul::SayChannel::Say,
+                                channel,
                                 message: response.text,
                                 target: None,
                             },
@@ -512,7 +552,7 @@ impl SoulCoordinator {
                     commands.push((
                         cid,
                         Command::Say {
-                            channel: textquest_common::soul::SayChannel::Say,
+                            channel,
                             message: response.text,
                             target: None,
                         },
@@ -730,43 +770,63 @@ impl SoulCoordinator {
         // Notify the anomaly detector that a soul event was received.
         self.anomaly_detector.record_soul_event(client_id);
 
-        let Some(soul) = self.souls.get_mut(&client_id) else {
+        let Some((
+            character_name,
+            traits,
+            speech_style,
+            backstory,
+            mood_after,
+            mood_before,
+        )) = ({
+            let Some(soul) = self.souls.get_mut(&client_id) else {
+                return;
+            };
+
+            // Capture mood before event processing for accurate memory recording
+            let mood_before = soul.mood;
+
+            // Update mood
+            soul.mood = soul
+                .personality
+                .process_event(soul.mood, &event, &soul.traits);
+
+            // Audit: event processed
+            if let Some(audit) = &self.audit {
+                let _ = audit.log(
+                    client_id,
+                    AuditActionType::EventProcessed,
+                    format!("{} processed game event: {:?}", soul.name, event),
+                    Some(serde_json::json!({"mood": format!("{:?}", mood_before)})),
+                    Some(serde_json::json!({"mood": format!("{:?}", soul.mood)})),
+                );
+            }
+
+            if let Some(audit) = &self.audit
+                && mood_before != soul.mood
+            {
+                let _ = audit.log(
+                    client_id,
+                    AuditActionType::MoodChange,
+                    format!(
+                        "{} mood: {:?} -> {:?} (game event)",
+                        soul.name, mood_before, soul.mood
+                    ),
+                    Some(serde_json::json!({"mood": format!("{:?}", mood_before)})),
+                    Some(serde_json::json!({"mood": format!("{:?}", soul.mood)})),
+                );
+            }
+
+            Some((
+                soul.name.clone(),
+                soul.traits.clone(),
+                soul.speech_style.clone(),
+                soul.backstory.clone(),
+                soul.mood,
+                mood_before,
+            ))
+        }) else {
             return;
         };
-
-        // Capture mood before event processing for accurate memory recording
-        let mood_before = soul.mood;
-
-        // Update mood
-        soul.mood = soul
-            .personality
-            .process_event(soul.mood, &event, &soul.traits);
-
-        // Audit: event processed
-        if let Some(audit) = &self.audit {
-            let _ = audit.log(
-                client_id,
-                AuditActionType::EventProcessed,
-                format!("{} processed game event: {:?}", soul.name, event),
-                Some(serde_json::json!({"mood": format!("{:?}", mood_before)})),
-                Some(serde_json::json!({"mood": format!("{:?}", soul.mood)})),
-            );
-        }
-
-        if let Some(audit) = &self.audit
-            && mood_before != soul.mood
-        {
-            let _ = audit.log(
-                client_id,
-                AuditActionType::MoodChange,
-                format!(
-                    "{} mood: {:?} -> {:?} (game event)",
-                    soul.name, mood_before, soul.mood
-                ),
-                Some(serde_json::json!({"mood": format!("{:?}", mood_before)})),
-                Some(serde_json::json!({"mood": format!("{:?}", soul.mood)})),
-            );
-        }
 
         // Determine importance based on event type
         let importance = match &event {
@@ -791,11 +851,33 @@ impl SoulCoordinator {
                 AuditActionType::MemoryRecord,
                 format!(
                     "{} recorded game event memory (importance {importance})",
-                    soul.name
+                    character_name
                 ),
                 None,
                 None,
             );
+        }
+
+        if let Some((priority, description)) = combat_reaction_request(&event)
+            && self.can_request(client_id)
+        {
+            let request = LlmRequest {
+                character_name,
+                traits,
+                mood: mood_after,
+                speech_style,
+                situation: Situation::CombatReaction { description },
+                priority,
+                memory_context: self
+                    .memory
+                    .recall_recent(client_id, 5)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|row| row.event_json)
+                    .collect(),
+                backstory,
+            };
+            self.llm_queue.enqueue(request);
         }
     }
 
@@ -906,6 +988,46 @@ fn ipc_command_priority(cmd: &Command) -> IpcCommandPriority {
             _ => IpcCommandPriority::Low,
         },
         _ => IpcCommandPriority::Normal,
+    }
+}
+
+fn combat_reaction_request(event: &SoulEvent) -> Option<(LlmPriority, String)> {
+    match event {
+        SoulEvent::Death { zone, killer } => Some((
+            LlmPriority::High,
+            match killer {
+                Some(killer) => format!("was killed by {killer} in {zone}"),
+                None => format!("died in {zone}"),
+            },
+        )),
+        SoulEvent::GroupWipe { zone } => Some((LlmPriority::High, format!("the group wiped in {zone}"))),
+        SoulEvent::Kill { target, zone } => {
+            Some((LlmPriority::Medium, format!("killed {target} in {zone}")))
+        }
+        SoulEvent::Loot { item, zone } => {
+            Some((LlmPriority::Medium, format!("looted {item} in {zone}")))
+        }
+        _ => None,
+    }
+}
+
+fn select_response_channel(
+    request: &LlmRequest,
+    traits: &PersonalityTraits,
+) -> textquest_common::soul::SayChannel {
+    match &request.situation {
+        Situation::PlayerChat { .. } => textquest_common::soul::SayChannel::Say,
+        Situation::CombatReaction { .. } => {
+            if traits.loyalty > 0.6 || traits.extraversion <= 0.6 {
+                textquest_common::soul::SayChannel::Group
+            } else {
+                textquest_common::soul::SayChannel::Say
+            }
+        }
+        Situation::GameEvent { .. } | Situation::FleetCommentary { .. } => {
+            textquest_common::soul::SayChannel::Group
+        }
+        Situation::BotChat { .. } | Situation::IdleChatter => textquest_common::soul::SayChannel::Say,
     }
 }
 
@@ -1250,6 +1372,59 @@ mod tests {
             );
             assert!(result.is_ok(), "emit_soul_event failed for {mob}");
         }
+    }
+
+    #[test]
+    fn ensure_character_registered_uses_matching_config_by_name() {
+        let mut config = make_soul_config(true);
+        let mut char_config = make_char_config("BattleMage");
+        char_config.traits.battle_hunger = 0.95;
+        config.character.push(char_config);
+
+        let mut coord = SoulCoordinator::new(config, Path::new(":memory:")).unwrap();
+        coord.ensure_character_registered(7, "BattleMage");
+        coord.on_game_event(
+            7,
+            SoulEvent::Kill {
+                target: "a goblin".into(),
+                zone: "crushbone".into(),
+            },
+        );
+
+        assert_eq!(coord.mood(7), Some(MoodState::Excited));
+    }
+
+    #[test]
+    fn combat_event_enqueues_group_reaction_for_loyal_character() {
+        let mut coord = make_coordinator(true);
+        let mut char_config = make_char_config("Shieldmate");
+        char_config.traits.loyalty = 0.9;
+        char_config.traits.battle_hunger = 0.8;
+        coord.register_character(1, &char_config);
+
+        coord.on_game_event(
+            1,
+            SoulEvent::Kill {
+                target: "a gnoll".into(),
+                zone: "blackburrow".into(),
+            },
+        );
+
+        let mut states = HashMap::new();
+        states.insert(1, make_game_state(1));
+        let (commands, _alerts) = coord.tick(&states);
+
+        assert!(
+            commands.iter().any(|(_, command)| matches!(
+                command,
+                Command::Say {
+                    channel: textquest_common::soul::SayChannel::Group,
+                    message,
+                    target: None
+                } if !message.is_empty()
+            )),
+            "expected a non-empty group combat reaction, got {commands:?}"
+        );
     }
 
     #[test]
