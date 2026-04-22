@@ -1,0 +1,675 @@
+//! Slash command registry for TextQuest scripts and plugins.
+//!
+//! Supports commands of the form `/command subcommand arg1 arg2 ...` with
+//! longest-prefix routing, variadic arguments, per-command help text, and
+//! argument validation.
+//!
+//! # Example
+//!
+//! ```
+//! use textquest_dll::commands::{CommandRegistry, ArgType, CommandResult};
+//!
+//! let mut registry = CommandRegistry::new();
+//!
+//! registry.register(
+//!     "/nav",
+//!     "Navigation commands",
+//!     &[],
+//!     false,
+//!     |_args| {
+//!         println!("nav base command");
+//!         CommandResult::Ok
+//!     },
+//! );
+//!
+//! registry.register(
+//!     "/nav waypoint",
+//!     "Navigate to a named waypoint",
+//!     &[ArgType::String],
+//!     false,
+//!     |args| {
+//!         println!("navigating to: {}", args[0]);
+//!         CommandResult::Ok
+//!     },
+//! );
+//!
+//! let result = registry.dispatch("/nav waypoint home");
+//! assert!(matches!(result, CommandResult::Ok));
+//! ```
+
+use std::collections::HashMap;
+
+/// Type alias for a boxed command handler callback.
+pub type CommandCallback = Box<dyn Fn(&[&str]) -> CommandResult + Send + Sync>;
+
+/// Result returned by a command handler or dispatch.
+#[derive(Debug, PartialEq, Eq)]
+pub enum CommandResult {
+    /// Command executed successfully.
+    Ok,
+    /// Command executed but produced a user-visible message.
+    Message(String),
+    /// Command failed with an error message.
+    Error(String),
+    /// No command matched the input.
+    NotFound,
+    /// Argument validation failed.
+    ValidationError(String),
+}
+
+/// Argument type for validation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArgType {
+    /// Any non-empty string.
+    String,
+    /// A valid `i64` integer.
+    Int,
+    /// A valid `f64` floating-point number.
+    Float,
+    /// "true", "false", "1", or "0" (case-insensitive).
+    Bool,
+}
+
+impl ArgType {
+    /// Validate a string argument against this type.
+    fn validate(&self, value: &str) -> bool {
+        match self {
+            ArgType::String => !value.is_empty(),
+            ArgType::Int => value.parse::<i64>().is_ok(),
+            ArgType::Float => value.parse::<f64>().is_ok(),
+            ArgType::Bool => matches!(
+                value.to_lowercase().as_str(),
+                "true" | "false" | "1" | "0"
+            ),
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            ArgType::String => "string",
+            ArgType::Int => "int",
+            ArgType::Float => "float",
+            ArgType::Bool => "bool",
+        }
+    }
+}
+
+/// A registered command definition.
+pub struct CommandDef {
+    /// Canonical path (e.g. `/nav waypoint`).
+    pub path: String,
+    /// Short description shown in `/help` output.
+    pub help: String,
+    /// Required positional argument types. Enforced before the callback fires.
+    pub arg_types: Vec<ArgType>,
+    /// If `true`, arguments beyond `arg_types.len()` are accepted without error.
+    pub variadic: bool,
+    /// The handler callback.
+    pub callback: CommandCallback,
+}
+
+impl std::fmt::Debug for CommandDef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CommandDef")
+            .field("path", &self.path)
+            .field("help", &self.help)
+            .field("arg_types", &self.arg_types)
+            .field("variadic", &self.variadic)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Registry of slash commands with longest-prefix routing.
+///
+/// Commands are keyed by their canonical path (leading `/` + space-separated
+/// tokens). When dispatching, the registry finds the longest registered path
+/// that is a prefix of the input tokens and passes the remaining tokens as
+/// arguments.
+pub struct CommandRegistry {
+    /// Map from normalized path (lowercase, no leading `/`) to definition.
+    commands: HashMap<String, CommandDef>,
+}
+
+impl CommandRegistry {
+    /// Create an empty registry.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            commands: HashMap::new(),
+        }
+    }
+
+    /// Register a command at `path`.
+    ///
+    /// `path` must start with `/` and may contain subcommand segments separated
+    /// by spaces (e.g. `/nav waypoint`).
+    ///
+    /// Returns `false` (and logs a warning) if a command is already registered
+    /// at the exact same path; returns `true` on success.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `path` does not start with `/`.
+    pub fn register<F>(
+        &mut self,
+        path: &str,
+        help: &str,
+        arg_types: &[ArgType],
+        variadic: bool,
+        callback: F,
+    ) -> bool
+    where
+        F: Fn(&[&str]) -> CommandResult + Send + Sync + 'static,
+    {
+        assert!(
+            path.starts_with('/'),
+            "Command path must start with '/': {path}"
+        );
+
+        let key = normalize_path(path);
+
+        if self.commands.contains_key(&key) {
+            tracing::warn!(path, "Duplicate command registration ignored");
+            return false;
+        }
+
+        tracing::debug!(path, help, variadic, "Registering command");
+
+        self.commands.insert(
+            key,
+            CommandDef {
+                path: path.to_string(),
+                help: help.to_string(),
+                arg_types: arg_types.to_vec(),
+                variadic,
+                callback: Box::new(callback),
+            },
+        );
+
+        true
+    }
+
+    /// Dispatch a raw input string (e.g. `"/nav waypoint home"`).
+    ///
+    /// Tokenizes on ASCII whitespace, strips the leading `/`, finds the
+    /// longest-prefix match, validates arguments, then calls the handler.
+    ///
+    /// Returns [`CommandResult::NotFound`] when no command matches.
+    pub fn dispatch(&self, input: &str) -> CommandResult {
+        let input = input.trim();
+
+        if !input.starts_with('/') {
+            return CommandResult::Error("Input must start with '/'".to_string());
+        }
+
+        let tokens: Vec<&str> = input.split_ascii_whitespace().collect();
+        if tokens.is_empty() {
+            return CommandResult::NotFound;
+        }
+
+        // Find the longest registered prefix.
+        let (def, args) = match self.find_longest_prefix(&tokens) {
+            Some(pair) => pair,
+            None => {
+                tracing::debug!(input, "No matching command found");
+                return CommandResult::NotFound;
+            }
+        };
+
+        tracing::info!(
+            path = def.path,
+            args = ?args,
+            "Dispatching command"
+        );
+
+        // Validate argument types and count.
+        if let Some(err) = validate_args(def, args) {
+            tracing::warn!(path = def.path, error = %err, "Command argument validation failed");
+            return CommandResult::ValidationError(err);
+        }
+
+        let result = (def.callback)(args);
+
+        match &result {
+            CommandResult::Ok => tracing::debug!(path = def.path, "Command completed ok"),
+            CommandResult::Message(msg) => {
+                tracing::debug!(path = def.path, message = %msg, "Command completed with message");
+            }
+            CommandResult::Error(err) => {
+                tracing::warn!(path = def.path, error = %err, "Command returned error");
+            }
+            CommandResult::NotFound | CommandResult::ValidationError(_) => {}
+        }
+
+        result
+    }
+
+    /// Return a formatted help string for all registered commands, or for a
+    /// specific command path if `filter` is `Some`.
+    #[must_use]
+    pub fn help(&self, filter: Option<&str>) -> String {
+        let mut defs: Vec<&CommandDef> = self.commands.values().collect();
+        defs.sort_by(|a, b| a.path.cmp(&b.path));
+
+        if let Some(f) = filter {
+            let key = normalize_path(f);
+            return match self.commands.get(&key) {
+                Some(def) => format_help(def),
+                None => format!("No command registered at '{f}'"),
+            };
+        }
+
+        if defs.is_empty() {
+            return "No commands registered.".to_string();
+        }
+
+        defs.iter().map(|d| format_help(d)).collect::<Vec<_>>().join("\n")
+    }
+
+    /// Return all registered command paths, sorted.
+    #[must_use]
+    pub fn command_paths(&self) -> Vec<String> {
+        let mut paths: Vec<String> =
+            self.commands.values().map(|d| d.path.clone()).collect();
+        paths.sort();
+        paths
+    }
+
+    /// Find the longest registered prefix matching the input tokens.
+    ///
+    /// Tries progressively shorter token windows starting from the full token
+    /// list. The first token always includes the leading `/`.
+    fn find_longest_prefix<'a>(
+        &'a self,
+        tokens: &'a [&'a str],
+    ) -> Option<(&'a CommandDef, &'a [&'a str])> {
+        // tokens[0] is "/command" (may be "/command" or "/" if split weirdly).
+        // Build candidate keys by joining increasing prefix lengths.
+        // We try from longest to shortest.
+        for prefix_len in (1..=tokens.len()).rev() {
+            let key = normalize_path(&tokens[..prefix_len].join(" "));
+            if let Some(def) = self.commands.get(&key) {
+                return Some((def, &tokens[prefix_len..]));
+            }
+        }
+        None
+    }
+}
+
+impl Default for CommandRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/// Normalize a command path for use as a HashMap key.
+///
+/// Strips leading `/`, trims whitespace, and lowercases.
+fn normalize_path(path: &str) -> String {
+    path.trim_start_matches('/').trim().to_lowercase()
+}
+
+/// Validate arguments against a command's declared types.
+///
+/// Returns `Some(error_message)` on failure, `None` on success.
+fn validate_args(def: &CommandDef, args: &[&str]) -> Option<String> {
+    let required = def.arg_types.len();
+
+    if args.len() < required {
+        return Some(format!(
+            "Too few arguments for '{}': expected {}, got {}. Usage: {}",
+            def.path,
+            required,
+            args.len(),
+            format_usage(def),
+        ));
+    }
+
+    if !def.variadic && args.len() > required {
+        return Some(format!(
+            "Too many arguments for '{}': expected {}, got {}. Usage: {}",
+            def.path,
+            required,
+            args.len(),
+            format_usage(def),
+        ));
+    }
+
+    // Validate each typed argument.
+    for (i, arg_type) in def.arg_types.iter().enumerate() {
+        if !arg_type.validate(args[i]) {
+            return Some(format!(
+                "Argument {} to '{}' must be {}, got '{}'",
+                i + 1,
+                def.path,
+                arg_type.name(),
+                args[i],
+            ));
+        }
+    }
+
+    None
+}
+
+/// Format a usage line for a command definition.
+fn format_usage(def: &CommandDef) -> String {
+    let args: Vec<String> = def
+        .arg_types
+        .iter()
+        .enumerate()
+        .map(|(i, t)| format!("<arg{}: {}>", i + 1, t.name()))
+        .collect();
+    let variadic_suffix = if def.variadic { " [...]" } else { "" };
+    format!("{} {}{}", def.path, args.join(" "), variadic_suffix)
+}
+
+/// Format a full help entry for a command definition.
+fn format_help(def: &CommandDef) -> String {
+    let usage = format_usage(def);
+    let variadic_note = if def.variadic { " (variadic)" } else { "" };
+    format!("  {}\n    {}{}", usage, def.help, variadic_note)
+}
+
+// ─── Tests ───────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ok_handler(_args: &[&str]) -> CommandResult {
+        CommandResult::Ok
+    }
+
+    // ── Registration ────────────────────────────────────────────────────────
+
+    #[test]
+    fn register_and_dispatch_simple() {
+        let mut reg = CommandRegistry::new();
+        reg.register("/hello", "Say hello", &[], false, ok_handler);
+        assert_eq!(reg.dispatch("/hello"), CommandResult::Ok);
+    }
+
+    #[test]
+    fn register_returns_false_on_conflict() {
+        let mut reg = CommandRegistry::new();
+        assert!(reg.register("/dupe", "first", &[], false, ok_handler));
+        assert!(!reg.register("/dupe", "second", &[], false, ok_handler));
+        // Only one registration; still dispatches to the first.
+        assert_eq!(reg.dispatch("/dupe"), CommandResult::Ok);
+    }
+
+    #[test]
+    #[should_panic(expected = "must start with '/'")]
+    fn register_panics_without_leading_slash() {
+        let mut reg = CommandRegistry::new();
+        reg.register("noslash", "bad", &[], false, ok_handler);
+    }
+
+    // ── Parsing & routing ───────────────────────────────────────────────────
+
+    #[test]
+    fn dispatch_unknown_returns_not_found() {
+        let reg = CommandRegistry::new();
+        assert_eq!(reg.dispatch("/unknown"), CommandResult::NotFound);
+    }
+
+    #[test]
+    fn dispatch_non_slash_returns_error() {
+        let reg = CommandRegistry::new();
+        let result = reg.dispatch("hello");
+        assert!(matches!(result, CommandResult::Error(_)));
+    }
+
+    #[test]
+    fn route_to_subcommand_longest_prefix() {
+        let mut reg = CommandRegistry::new();
+        let base_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let sub_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        let base_flag = base_called.clone();
+        reg.register("/nav", "nav base", &[], false, move |_| {
+            base_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            CommandResult::Ok
+        });
+
+        let sub_flag = sub_called.clone();
+        reg.register(
+            "/nav waypoint",
+            "go to waypoint",
+            &[ArgType::String],
+            false,
+            move |_| {
+                sub_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                CommandResult::Ok
+            },
+        );
+
+        // "/nav waypoint home" should route to /nav waypoint, not /nav
+        assert_eq!(reg.dispatch("/nav waypoint home"), CommandResult::Ok);
+        assert!(!base_called.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(sub_called.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    #[test]
+    fn route_falls_back_to_base_when_no_sub_matches() {
+        let mut reg = CommandRegistry::new();
+        let base_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        let flag = base_called.clone();
+        reg.register("/nav", "nav base", &[], true, move |_| {
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            CommandResult::Ok
+        });
+
+        // No "/nav unknown" — should fall back to /nav (variadic accepts extra args)
+        assert_eq!(reg.dispatch("/nav unknown extra"), CommandResult::Ok);
+        assert!(base_called.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    #[test]
+    fn case_insensitive_dispatch() {
+        let mut reg = CommandRegistry::new();
+        reg.register("/Hello", "case test", &[], false, ok_handler);
+        // Input in different case should still match.
+        assert_eq!(reg.dispatch("/HELLO"), CommandResult::Ok);
+        assert_eq!(reg.dispatch("/hello"), CommandResult::Ok);
+    }
+
+    // ── Variadic args ───────────────────────────────────────────────────────
+
+    #[test]
+    fn variadic_accepts_extra_args() {
+        let mut reg = CommandRegistry::new();
+        let received = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let recv = received.clone();
+        reg.register("/say", "say text", &[ArgType::String], true, move |args| {
+            let mut v = recv.lock().unwrap();
+            *v = args.iter().map(|s| s.to_string()).collect();
+            CommandResult::Ok
+        });
+
+        assert_eq!(reg.dispatch("/say hello world foo bar"), CommandResult::Ok);
+        let got = received.lock().unwrap().clone();
+        assert_eq!(got, vec!["hello", "world", "foo", "bar"]);
+    }
+
+    #[test]
+    fn non_variadic_rejects_extra_args() {
+        let mut reg = CommandRegistry::new();
+        reg.register("/exact", "exact args", &[ArgType::String], false, ok_handler);
+        let result = reg.dispatch("/exact one two");
+        assert!(matches!(result, CommandResult::ValidationError(_)));
+    }
+
+    #[test]
+    fn variadic_zero_required_args_accepts_any() {
+        let mut reg = CommandRegistry::new();
+        reg.register("/broadcast", "broadcast", &[], true, ok_handler);
+        assert_eq!(reg.dispatch("/broadcast"), CommandResult::Ok);
+        assert_eq!(reg.dispatch("/broadcast a b c d e"), CommandResult::Ok);
+    }
+
+    // ── Argument validation ─────────────────────────────────────────────────
+
+    #[test]
+    fn validate_int_arg() {
+        let mut reg = CommandRegistry::new();
+        reg.register("/setlevel", "set level", &[ArgType::Int], false, ok_handler);
+        assert_eq!(reg.dispatch("/setlevel 60"), CommandResult::Ok);
+        assert!(matches!(
+            reg.dispatch("/setlevel notanumber"),
+            CommandResult::ValidationError(_)
+        ));
+    }
+
+    #[test]
+    fn validate_float_arg() {
+        let mut reg = CommandRegistry::new();
+        reg.register("/speed", "set speed", &[ArgType::Float], false, ok_handler);
+        assert_eq!(reg.dispatch("/speed 1.5"), CommandResult::Ok);
+        assert_eq!(reg.dispatch("/speed 2"), CommandResult::Ok);
+        assert!(matches!(
+            reg.dispatch("/speed fast"),
+            CommandResult::ValidationError(_)
+        ));
+    }
+
+    #[test]
+    fn validate_bool_arg() {
+        let mut reg = CommandRegistry::new();
+        reg.register("/autoattack", "toggle autoattack", &[ArgType::Bool], false, ok_handler);
+        for val in &["true", "false", "1", "0", "TRUE", "FALSE"] {
+            let cmd = format!("/autoattack {val}");
+            assert_eq!(reg.dispatch(&cmd), CommandResult::Ok, "expected ok for {val}");
+        }
+        assert!(matches!(
+            reg.dispatch("/autoattack yes"),
+            CommandResult::ValidationError(_)
+        ));
+    }
+
+    #[test]
+    fn too_few_args_returns_validation_error() {
+        let mut reg = CommandRegistry::new();
+        reg.register(
+            "/tp",
+            "teleport",
+            &[ArgType::Float, ArgType::Float],
+            false,
+            ok_handler,
+        );
+        let result = reg.dispatch("/tp 100.0");
+        assert!(matches!(result, CommandResult::ValidationError(_)));
+    }
+
+    // ── Help system ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn help_all_contains_registered_paths() {
+        let mut reg = CommandRegistry::new();
+        reg.register("/foo", "foo help", &[], false, ok_handler);
+        reg.register("/bar", "bar help", &[ArgType::String], false, ok_handler);
+        let help = reg.help(None);
+        assert!(help.contains("/foo"), "help missing /foo:\n{help}");
+        assert!(help.contains("/bar"), "help missing /bar:\n{help}");
+        assert!(help.contains("foo help"), "help missing description:\n{help}");
+    }
+
+    #[test]
+    fn help_filter_returns_specific_command() {
+        let mut reg = CommandRegistry::new();
+        reg.register("/foo", "foo help", &[], false, ok_handler);
+        reg.register("/bar", "bar help", &[], false, ok_handler);
+        let help = reg.help(Some("/foo"));
+        assert!(help.contains("/foo"));
+        assert!(!help.contains("/bar"));
+    }
+
+    #[test]
+    fn help_filter_unknown_returns_not_found_message() {
+        let reg = CommandRegistry::new();
+        let help = reg.help(Some("/nonexistent"));
+        assert!(help.contains("No command registered"));
+    }
+
+    #[test]
+    fn help_shows_variadic_marker() {
+        let mut reg = CommandRegistry::new();
+        reg.register("/v", "variadic cmd", &[], true, ok_handler);
+        let help = reg.help(None);
+        assert!(help.contains("variadic"), "expected variadic marker:\n{help}");
+    }
+
+    #[test]
+    fn help_empty_registry() {
+        let reg = CommandRegistry::new();
+        assert!(reg.help(None).contains("No commands"));
+    }
+
+    // ── Command paths ───────────────────────────────────────────────────────
+
+    #[test]
+    fn command_paths_sorted() {
+        let mut reg = CommandRegistry::new();
+        reg.register("/z", "z", &[], false, ok_handler);
+        reg.register("/a", "a", &[], false, ok_handler);
+        reg.register("/m", "m", &[], false, ok_handler);
+        let paths = reg.command_paths();
+        assert_eq!(paths, vec!["/a", "/m", "/z"]);
+    }
+
+    // ── Callback receives correct args ───────────────────────────────────────
+
+    #[test]
+    fn callback_receives_args_after_prefix() {
+        let mut reg = CommandRegistry::new();
+        let received = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let recv = received.clone();
+        reg.register(
+            "/nav waypoint",
+            "go to waypoint",
+            &[ArgType::String],
+            true,
+            move |args| {
+                *recv.lock().unwrap() = args.iter().map(|s| s.to_string()).collect();
+                CommandResult::Ok
+            },
+        );
+
+        assert_eq!(reg.dispatch("/nav waypoint home extra"), CommandResult::Ok);
+        let got = received.lock().unwrap().clone();
+        assert_eq!(got, vec!["home", "extra"]);
+    }
+
+    // ── normalize_path ───────────────────────────────────────────────────────
+
+    #[test]
+    fn normalize_strips_slash_and_lowercases() {
+        assert_eq!(normalize_path("/Hello"), "hello");
+        assert_eq!(normalize_path("/NAV WAYPOINT"), "nav waypoint");
+        assert_eq!(normalize_path("no-slash"), "no-slash");
+    }
+
+    // ── ArgType validation ───────────────────────────────────────────────────
+
+    #[test]
+    fn arg_type_string_rejects_empty() {
+        assert!(!ArgType::String.validate(""));
+        assert!(ArgType::String.validate("a"));
+    }
+
+    #[test]
+    fn arg_type_int_rejects_float() {
+        assert!(!ArgType::Int.validate("1.5"));
+        assert!(ArgType::Int.validate("-42"));
+    }
+
+    #[test]
+    fn arg_type_float_accepts_int_strings() {
+        assert!(ArgType::Float.validate("42"));
+        assert!(ArgType::Float.validate("3.14"));
+        assert!(!ArgType::Float.validate("pi"));
+    }
+}
