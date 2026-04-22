@@ -438,10 +438,10 @@ pub const TRUSTED_ORIGINS: &[&str] = &[
 
 pub(crate) fn is_trusted_origin(headers: &HeaderMap) -> bool {
     let Some(origin) = headers.get(axum::http::header::ORIGIN) else {
-        // Non-browser clients can omit Origin entirely; in production builds we
-        // treat that as untrusted.  In test builds we allow it so unit tests
-        // that construct bare HeaderMaps still pass without faking an Origin.
-        return cfg!(test);
+        // Requests without an Origin header are always untrusted — browser
+        // cross-origin requests always include Origin, and native clients that
+        // legitimately omit it should be handled by separate authentication.
+        return false;
     };
 
     let Ok(origin_str) = origin.to_str() else {
@@ -814,6 +814,36 @@ mod tests {
 
         let status = put_rules(State(state), headers, Json(payload)).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn put_rules_rejects_no_origin_header() {
+        let state = demo_state();
+        let payload = LootRulesPayload {
+            keep_items: vec!["Safe Item".into()],
+            sell_items: vec![],
+            destroy_items: vec![],
+            loot_all: false,
+            auto_split: false,
+        };
+        // Empty HeaderMap — no Origin header present — must be rejected even in test builds.
+        let status = put_rules(State(state), HeaderMap::new(), Json(payload)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    #[test]
+    fn is_trusted_origin_rejects_no_origin_header() {
+        assert!(!is_trusted_origin(&HeaderMap::new()));
+    }
+
+    #[test]
+    fn is_trusted_origin_accepts_trusted_origin() {
+        let mut h = HeaderMap::new();
+        h.insert(
+            axum::http::header::ORIGIN,
+            TRUSTED_ORIGINS[0].parse().unwrap(),
+        );
+        assert!(is_trusted_origin(&h));
     }
 
     #[tokio::test]
