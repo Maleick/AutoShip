@@ -631,4 +631,100 @@ mod tests {
         assert_eq!(absent.pid, None);
         assert_eq!(absent.ipc_latency.p50_ms, Some(25));
     }
+
+    // ── Memory inspection ─────────────────────────────────────────────────────
+
+    #[test]
+    fn memory_inspection_single_sample_visible_in_snapshot() {
+        let mut store = AdminMonitoringStore::with_retention(retention(4, 4, 4));
+        let now = Instant::now();
+
+        store.register_session(99, 9_900);
+        store.record_memory_sample_at(99, 1024 * 1024 * 200, now); // 200 MiB
+
+        let snapshot = store
+            .snapshot(99, now)
+            .expect("session snapshot should exist");
+        let mem = &snapshot.memory;
+        // Exactly one sample — min/max/avg should all equal that sample.
+        assert!(
+            mem.avg_bytes.is_some(),
+            "memory summary should report avg after one sample"
+        );
+        assert_eq!(mem.min_bytes, mem.max_bytes, "single sample: min == max");
+        assert_eq!(mem.avg_bytes, mem.min_bytes, "single sample: avg == min");
+    }
+
+    #[test]
+    fn memory_inspection_multiple_samples_gives_correct_range() {
+        let mut store = AdminMonitoringStore::with_retention(retention(4, 8, 4));
+        let now = Instant::now();
+        let client_id = 55u64;
+
+        store.register_session(client_id, 5_500);
+
+        let samples_mib: &[u64] = &[100, 150, 200, 250];
+        for (i, &mib) in samples_mib.iter().enumerate() {
+            store.record_memory_sample_at(
+                client_id,
+                mib * 1024 * 1024,
+                now + Duration::from_secs(i as u64),
+            );
+        }
+
+        let snapshot = store
+            .snapshot(client_id, now + Duration::from_secs(10))
+            .expect("session snapshot should exist");
+        let mem = &snapshot.memory;
+
+        assert_eq!(mem.min_bytes, Some(100 * 1024 * 1024), "min should be 100 MiB");
+        assert_eq!(mem.max_bytes, Some(250 * 1024 * 1024), "max should be 250 MiB");
+        // avg of [100, 150, 200, 250] = 175 MiB
+        assert_eq!(
+            mem.avg_bytes,
+            Some(175 * 1024 * 1024),
+            "avg should be 175 MiB"
+        );
+    }
+
+    #[test]
+    fn memory_inspection_retention_cap_evicts_oldest() {
+        let mut store = AdminMonitoringStore::with_retention(retention(4, 2, 4)); // cap at 2 memory samples
+        let now = Instant::now();
+
+        store.register_session(77, 7_700);
+        store.record_memory_sample_at(77, 100 * 1024 * 1024, now);
+        store.record_memory_sample_at(77, 200 * 1024 * 1024, now + Duration::from_secs(1));
+        store.record_memory_sample_at(77, 300 * 1024 * 1024, now + Duration::from_secs(2)); // oldest evicted
+
+        let snapshot = store
+            .snapshot(77, now + Duration::from_secs(10))
+            .expect("session snapshot should exist");
+        let mem = &snapshot.memory;
+
+        // Only the 2 newest samples (200 MiB, 300 MiB) should be retained.
+        assert_eq!(mem.min_bytes, Some(200 * 1024 * 1024), "oldest 100 MiB evicted");
+        assert_eq!(mem.max_bytes, Some(300 * 1024 * 1024), "newest sample retained");
+    }
+
+    // ── Tracing / inspection helpers ──────────────────────────────────────────
+
+    #[test]
+    fn sample_process_memory_bytes_returns_option() {
+        // On macOS (not windows, not linux) this always returns None — just
+        // verify it doesn't panic and the type contract holds.
+        let result = sample_process_memory_bytes(std::process::id());
+        // We don't assert a specific value because the platform determines the
+        // implementation; we just assert the call completes safely.
+        let _ = result; // Option<u64> — None on macOS stub, Some on Linux/Windows
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn sample_process_memory_bytes_current_process_linux() {
+        // On Linux the function reads /proc/<pid>/status VmRSS.
+        let bytes = sample_process_memory_bytes(std::process::id())
+            .expect("should be able to read own memory on Linux");
+        assert!(bytes > 0, "own process memory should be non-zero");
+    }
 }

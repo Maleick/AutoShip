@@ -3399,6 +3399,125 @@ mod tests {
         assert_eq!(cat, OffsetCategory::All);
     }
 
+    // ── EqInternalsState ──────────────────────────────────────────────
+
+    #[test]
+    fn eq_internals_state_new_populates_entries() {
+        let state = EqInternalsState::new();
+        // Must have at least one entry from the compiled offset database.
+        assert!(
+            !state.all_entries.is_empty(),
+            "EqInternalsState::new() should populate entries from compiled offsets"
+        );
+        // Filtered list starts equal to full list when no filter is applied.
+        assert_eq!(
+            state.all_entries.len(),
+            state.filtered_entries.len(),
+            "initial filtered_entries should match all_entries"
+        );
+        // Default category filter is All.
+        assert_eq!(state.category_filter, OffsetCategory::All);
+        // Search filter is empty and not in search mode.
+        assert!(state.search_filter.is_empty());
+        assert!(!state.search_mode);
+    }
+
+    #[test]
+    fn eq_internals_state_apply_filter_by_category() {
+        let mut state = EqInternalsState::new();
+        // Switch to Globals category — should produce a non-empty subset.
+        state.category_filter = OffsetCategory::Globals;
+        state.apply_filter();
+        assert!(
+            !state.filtered_entries.is_empty(),
+            "Globals filter should retain at least one entry"
+        );
+        for entry in &state.filtered_entries {
+            assert_eq!(
+                entry.category,
+                OffsetCategory::Globals,
+                "all filtered entries should belong to Globals"
+            );
+        }
+    }
+
+    #[test]
+    fn eq_internals_state_apply_filter_all_resets_to_full_list() {
+        let mut state = EqInternalsState::new();
+        let total = state.all_entries.len();
+
+        // Narrow down to a specific category.
+        state.category_filter = OffsetCategory::Functions;
+        state.apply_filter();
+        let narrowed = state.filtered_entries.len();
+        assert!(narrowed <= total);
+
+        // Reset to All.
+        state.category_filter = OffsetCategory::All;
+        state.apply_filter();
+        assert_eq!(
+            state.filtered_entries.len(),
+            total,
+            "resetting to All should restore full list"
+        );
+    }
+
+    #[test]
+    fn eq_internals_state_search_filter_case_insensitive() {
+        let mut state = EqInternalsState::new();
+        // Pick a substring that exists in the known offset names.
+        // "player" appears in PlayerBase / PlayerZone offset names.
+        state.search_filter = "PLAYER".to_string();
+        state.apply_filter();
+        for entry in &state.filtered_entries {
+            assert!(
+                entry.name.to_lowercase().contains("player"),
+                "search filter should be case-insensitive; '{}' should contain 'player'",
+                entry.name
+            );
+        }
+    }
+
+    #[test]
+    fn eq_internals_state_search_filter_empty_shows_all() {
+        let mut state = EqInternalsState::new();
+        let total = state.all_entries.len();
+        state.search_filter = "unlikely_xyz_not_present".to_string();
+        state.apply_filter();
+        // Unknown filter produces empty or very small result.
+        let filtered_count = state.filtered_entries.len();
+        assert!(filtered_count < total);
+
+        // Clearing the search restores the full list.
+        state.search_filter = String::new();
+        state.apply_filter();
+        assert_eq!(state.filtered_entries.len(), total);
+    }
+
+    #[test]
+    fn eq_internals_state_select_navigation_clamps_to_bounds() {
+        let mut state = EqInternalsState::new();
+        let max = state.filtered_entries.len().saturating_sub(1);
+
+        // select_prev at position 0 stays at 0.
+        state.table_state.select(Some(0));
+        state.select_prev();
+        assert_eq!(state.table_state.selected(), Some(0));
+
+        // select_next at max stays at max.
+        state.table_state.select(Some(max));
+        state.select_next();
+        assert_eq!(state.table_state.selected(), Some(max));
+    }
+
+    #[test]
+    fn eq_internals_state_selected_entry_returns_correct_entry() {
+        let mut state = EqInternalsState::new();
+        state.table_state.select(Some(0));
+        let entry = state.selected_entry().expect("should have a selected entry");
+        assert_eq!(entry.name, state.filtered_entries[0].name);
+    }
+
     // ── MapViewportMode ────────────────────────────────────────────────
 
     #[test]
