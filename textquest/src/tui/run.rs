@@ -234,9 +234,26 @@ fn run_loop(
             for pid in pids {
                 let events = orchestrator.poll_packets(pid);
                 for evt in events {
+                    // Resolve the client PID to a human-readable name at
+                    // capture time so the detail panel always shows a name
+                    // even after the client disconnects.
+                    let process_name = app
+                        .clients
+                        .iter()
+                        .find(|c| c.pid == evt.client_id)
+                        .map(|c| {
+                            if !c.character_name.is_empty() {
+                                c.character_name.clone()
+                            } else {
+                                format!("PID {}", c.pid)
+                            }
+                        })
+                        .unwrap_or_else(|| format!("PID {}", evt.client_id));
+
                     app.packet_monitor_state
                         .push(crate::tui::state::PacketRecord {
                             client_id: evt.client_id,
+                            process_name,
                             opcode: evt.opcode,
                             direction: evt.direction,
                             timestamp_ms: evt.timestamp_ms,

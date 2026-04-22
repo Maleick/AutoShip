@@ -195,7 +195,12 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
         return;
     };
 
-    let client_label = format_client_name(app, pkt.client_id);
+    // Use the name resolved at capture time (stored in the record itself).
+    let client_label = if pkt.process_name.is_empty() {
+        format!("PID {}", pkt.client_id)
+    } else {
+        pkt.process_name.clone()
+    };
     let (hex_lines, text_lines) = format_payload_dump(&pkt.payload, area.width.saturating_sub(4));
 
     let mut lines = vec![
@@ -321,45 +326,72 @@ fn format_payload_preview(payload: &[u8]) -> String {
         .join(" ")
 }
 
-/// Format client name using the best available character identity for the PID.
-fn format_client_name(app: &App, client_id: u32) -> String {
-    app.clients
-        .iter()
-        .find(|client| client.pid == client_id)
-        .map(|client| {
-            if !client.character_name.is_empty() {
-                client.character_name.clone()
-            } else {
-                client
-                    .local_player
-                    .as_ref()
-                    .map(|player| player.displayed_name.clone())
-                    .unwrap_or_else(|| format!("PID {client_id}"))
-            }
-        })
-        .unwrap_or_else(|| format!("PID {client_id}"))
-}
-
-/// Format the filter echo line.
+/// Format the filter echo line showing active filter state and capture stats.
 fn format_filter_line<'a>(
     state: &'a crate::tui::app::PacketMonitorState,
     filtered: &'a [&'a crate::tui::state::PacketRecord],
 ) -> Line<'a> {
+    let opcode_label = match state.filter_opcode {
+        Some(op) => format!("op=0x{op:04X}"),
+        None => String::from("op=*"),
+    };
+    let dir_label = match state.filter_direction {
+        Some(textquest_common::ipc::PacketDirection::Outbound) => String::from("dir=S→C"),
+        Some(textquest_common::ipc::PacketDirection::Inbound) => String::from("dir=C→S"),
+        None => String::from("dir=any"),
+    };
+    let client_label = match state.filter_client_id {
+        Some(pid) => format!("client={pid}"),
+        None => String::from("client=*"),
+    };
+    let scroll_label = if state.auto_scroll { "▶ live" } else { "⏸ paused" };
+    let scroll_color = if state.auto_scroll {
+        ratatui::style::Color::Green
+    } else {
+        ratatui::style::Color::Yellow
+    };
+
+    // Show "N packets since capture started" using the first-packet timestamp.
+    let since_label = if let Some(start_ms) = state.capture_start_ms {
+        // Use the latest packet's timestamp to compute elapsed duration.
+        let elapsed_ms = state
+            .packets
+            .last()
+            .map(|p| p.timestamp_ms.saturating_sub(start_ms))
+            .unwrap_or(0);
+        let elapsed_secs = elapsed_ms / 1_000;
+        if elapsed_secs >= 3600 {
+            format!(
+                "{} pkts in {:02}:{:02}:{:02}",
+                state.packets.len(),
+                elapsed_secs / 3600,
+                (elapsed_secs % 3600) / 60,
+                elapsed_secs % 60
+            )
+        } else {
+            format!(
+                "{} pkts in {:02}:{:02}",
+                state.packets.len(),
+                elapsed_secs / 60,
+                elapsed_secs % 60
+            )
+        }
+    } else {
+        format!("{} pkts", state.packets.len())
+    };
+
     let spans = vec![
         Span::styled("filter: ", Style::default().fg(ratatui::style::Color::Cyan)),
-        Span::raw("op=* · "),
-        Span::styled("dir=any", Style::default().fg(ratatui::style::Color::Cyan)),
+        Span::raw(opcode_label),
         Span::raw(" · "),
-        Span::styled("client=*", Style::default().fg(ratatui::style::Color::Cyan)),
+        Span::styled(dir_label, Style::default().fg(ratatui::style::Color::Cyan)),
         Span::raw(" · "),
-        Span::styled("▶ live", Style::default().fg(ratatui::style::Color::Green)),
+        Span::styled(client_label, Style::default().fg(ratatui::style::Color::Cyan)),
+        Span::raw(" · "),
+        Span::styled(scroll_label, Style::default().fg(scroll_color)),
         Span::raw("  "),
         Span::styled(
-            format!(
-                "({} rows · {} since 11:42)",
-                filtered.len(),
-                state.packets.len()
-            ),
+            format!("({} shown · {})", filtered.len(), since_label),
             Style::default().fg(ratatui::style::Color::DarkGray),
         ),
     ];

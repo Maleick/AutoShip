@@ -1889,6 +1889,9 @@ impl ExplorerScreenState {
 pub struct PacketRecord {
     /// PID of the client that captured the packet.
     pub client_id: u32,
+    /// Human-readable process name resolved from `client_id` at capture time.
+    /// Falls back to an empty string when resolution is unavailable.
+    pub process_name: String,
     /// EQ protocol opcode identifier.
     pub opcode: u16,
     /// Whether the packet was inbound or outbound.
@@ -1925,8 +1928,17 @@ pub struct PacketMonitorState {
     pub filter_opcode: Option<u16>,
     /// Optional direction filter.
     pub filter_direction: Option<textquest_common::ipc::PacketDirection>,
+    /// Optional client PID filter — when set, only show packets from this PID.
+    pub filter_client_id: Option<u32>,
     /// Whether the panel is paused (stops consuming new packets into view).
     pub paused: bool,
+    /// Millisecond timestamp (from packet records) when the first packet was
+    /// captured. Used to compute "N packets since capture started".
+    pub capture_start_ms: Option<u64>,
+    /// Tracked peak packets-per-second observed across the entire session.
+    /// Updated on every `push()` so the sidebar can display it without a full
+    /// linear scan over all historical packets.
+    pub peak_rate: usize,
 }
 
 impl PacketMonitorState {
@@ -1942,16 +1954,28 @@ impl PacketMonitorState {
             scroll_offset: 0,
             filter_opcode: None,
             filter_direction: None,
+            filter_client_id: None,
             paused: false,
+            capture_start_ms: None,
+            peak_rate: 0,
         }
     }
 
     /// Push a new packet record, evicting the oldest if at capacity.
     pub fn push(&mut self, record: PacketRecord) {
+        // Track the earliest captured timestamp for "session age" display.
+        if self.capture_start_ms.is_none() {
+            self.capture_start_ms = Some(record.timestamp_ms);
+        }
         if self.packets.len() >= self.capacity {
             self.packets.remove(0);
         }
         self.packets.push(record);
+
+        // Update peak rate from the current measurement.
+        let (_, new_peak) = self.packet_rates();
+        self.peak_rate = self.peak_rate.max(new_peak);
+
         if self.auto_scroll {
             self.select_last_filtered();
         } else {
@@ -1966,6 +1990,7 @@ impl PacketMonitorState {
             .filter(|p| {
                 self.filter_opcode.is_none_or(|op| p.opcode == op)
                     && self.filter_direction.is_none_or(|d| p.direction == d)
+                    && self.filter_client_id.is_none_or(|id| p.client_id == id)
             })
             .collect()
     }
@@ -1990,11 +2015,13 @@ impl PacketMonitorState {
         self.paused = !self.paused;
     }
 
-    /// Clear all captured packets.
+    /// Clear all captured packets and reset session counters.
     pub fn clear(&mut self) {
         self.packets.clear();
         self.scroll_offset = 0;
         self.auto_scroll = true;
+        self.capture_start_ms = None;
+        self.peak_rate = 0;
         self.table_state.select(Some(0));
     }
 
@@ -2043,24 +2070,17 @@ impl PacketMonitorState {
     }
 
     /// Estimate current and peak packet rates from capture timestamps.
+    ///
+    /// Current rate: packets in the trailing 1-second window.
+    /// Peak rate: maximum 1-second window count ever observed; tracked
+    /// incrementally via `self.peak_rate` and updated on every `push()`.
     #[must_use]
     pub fn packet_rates(&self) -> (usize, usize) {
         if self.packets.is_empty() {
             return (0, 0);
         }
 
-        let mut peak = 0usize;
-        let mut start = 0usize;
-        for end in 0..self.packets.len() {
-            let current_ts = self.packets[end].timestamp_ms;
-            while start <= end
-                && current_ts.saturating_sub(self.packets[start].timestamp_ms) >= 1_000
-            {
-                start += 1;
-            }
-            peak = peak.max(end - start + 1);
-        }
-
+        // Compute the current 1-second window count.
         let latest_ts = self.packets.last().map_or(0, |pkt| pkt.timestamp_ms);
         let current = self
             .packets
@@ -2069,7 +2089,22 @@ impl PacketMonitorState {
             .take_while(|pkt| latest_ts.saturating_sub(pkt.timestamp_ms) < 1_000)
             .count();
 
-        (current, peak)
+        // Compute the peak 1-second window over all history (used internally
+        // by push() to update self.peak_rate; returned here for testing and
+        // for the initial render before any push() calls have run).
+        let mut window_peak = 0usize;
+        let mut start = 0usize;
+        for end in 0..self.packets.len() {
+            let current_ts = self.packets[end].timestamp_ms;
+            while start <= end
+                && current_ts.saturating_sub(self.packets[start].timestamp_ms) >= 1_000
+            {
+                start += 1;
+            }
+            window_peak = window_peak.max(end - start + 1);
+        }
+
+        (current, self.peak_rate.max(window_peak))
     }
 
     fn select_last_filtered(&mut self) {
@@ -2092,6 +2127,7 @@ mod packet_monitor_tests {
     fn packet(ts: u64) -> PacketRecord {
         PacketRecord {
             client_id: 1,
+            process_name: String::from("eqgame.exe"),
             opcode: 0x1234,
             direction: PacketDirection::Inbound,
             timestamp_ms: ts,
@@ -2120,6 +2156,59 @@ mod packet_monitor_tests {
             state.selected_packet().map(|pkt| pkt.timestamp_ms),
             Some(200)
         );
+    }
+
+    #[test]
+    fn peak_rate_tracked_incrementally() {
+        let mut state = PacketMonitorState::new();
+        // Push 3 packets within 1 second, then 2 more in a later second.
+        for ts in [0u64, 100, 200, 1_100, 1_150] {
+            state.push(packet(ts));
+        }
+        // Peak should be 3 (the first 1-second window).
+        assert_eq!(state.peak_rate, 3);
+    }
+
+    #[test]
+    fn capture_start_ms_set_on_first_push() {
+        let mut state = PacketMonitorState::new();
+        assert!(state.capture_start_ms.is_none());
+        state.push(packet(42_000));
+        assert_eq!(state.capture_start_ms, Some(42_000));
+        state.push(packet(43_000));
+        // Must not change after the first push.
+        assert_eq!(state.capture_start_ms, Some(42_000));
+    }
+
+    #[test]
+    fn capture_start_ms_resets_on_clear() {
+        let mut state = PacketMonitorState::new();
+        state.push(packet(1_000));
+        state.clear();
+        assert!(state.capture_start_ms.is_none());
+        assert_eq!(state.peak_rate, 0);
+    }
+
+    #[test]
+    fn filter_client_id_limits_filtered_packets() {
+        let mut state = PacketMonitorState::new();
+        let mut p1 = packet(0);
+        p1.client_id = 100;
+        let mut p2 = packet(10);
+        p2.client_id = 200;
+        state.push(p1);
+        state.push(p2);
+
+        state.filter_client_id = Some(100);
+        let filtered = state.filtered_packets();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].client_id, 100);
+    }
+
+    #[test]
+    fn process_name_stored_in_packet_record() {
+        let state_pkt = packet(0);
+        assert_eq!(state_pkt.process_name, "eqgame.exe");
     }
 }
 
