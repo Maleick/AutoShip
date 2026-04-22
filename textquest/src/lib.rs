@@ -111,6 +111,11 @@ pub mod operator_utils;
 /// Plugin discovery and loading — MQ2-compatible DLL plugin infrastructure.
 pub mod plugins;
 
+/// Shared hotkey/command registries — used by Lua and plugin subsystems for
+/// script/plugin-registered bindings with priority ordering and lifecycle
+/// cleanup.
+pub mod registry;
+
 /// Timestamp config runtime — loads per-character timestamp settings from disk
 /// and dispatches IPC commands to DLL clients.
 pub mod timestamp_runtime;

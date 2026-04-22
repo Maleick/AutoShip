@@ -53,3 +53,6 @@ tempfile = "3"
 
 [features]
 windows-dangerous-tests = []
+## Enable spell-readiness API on MQ2Bridge::has_spell_ready().
+## Requires a fully implemented spell timer system in master.
+spell-system = []

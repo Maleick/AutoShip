@@ -7,12 +7,39 @@
 //!
 //! Load failures are logged but never panic — the orchestrator keeps running
 //! with whatever plugins loaded successfully.
+//!
+//! # Hotkey/command registration for plugins
+//!
+//! Plugins receive a [`PluginApi`] pointer during `PLUGIN_INIT` (via the
+//! optional `PLUGIN_INIT_V2` entry point) that exposes two C-callable functions:
+//!
+//! ```c
+//! // Register a hotkey. Returns a u64 hotkey ID (0 on failure).
+//! uint64_t tq_register_hotkey(const char* combo, void (*callback)(void));
+//!
+//! // Register a slash command. Returns a u64 command ID (0 on failure).
+//! uint64_t tq_register_command(const char* path, void (*callback)(const char*));
+//!
+//! // Unregister a hotkey by ID.
+//! int      tq_unregister_hotkey(uint64_t id);
+//!
+//! // Unregister a command by ID.
+//! int      tq_unregister_command(uint64_t id);
+//! ```
+//!
+//! On unload the registry automatically cleans up all entries registered by
+//! that plugin.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use tracing::{debug, error, info, warn};
+
+use crate::registry::{
+    CommandId, Priority, ScriptHotkeyId, SharedCommandRegistry, SharedHotkeyRegistry,
+};
 
 // ─── ABI function signatures ─────────────────────────────────────────────────
 
@@ -36,6 +63,52 @@ type PluginVersionPtr = *const std::os::raw::c_char;
 
 /// Minimum plugin API version accepted by this loader.
 pub const MIN_PLUGIN_VERSION: u32 = 1;
+
+// ─── Plugin registration API ─────────────────────────────────────────────────
+
+/// C-callable function signatures that plugins may call to register hotkeys /
+/// commands.  These are exposed to plugins via the `PLUGIN_INIT_V2` entry point.
+type RegisterHotkeyFn =
+    unsafe extern "C" fn(combo: *const std::os::raw::c_char, cb: unsafe extern "C" fn()) -> u64;
+type RegisterCommandFn = unsafe extern "C" fn(
+    path: *const std::os::raw::c_char,
+    cb: unsafe extern "C" fn(*const std::os::raw::c_char),
+) -> u64;
+type UnregisterHotkeyFn = unsafe extern "C" fn(id: u64) -> i32;
+type UnregisterCommandFn = unsafe extern "C" fn(id: u64) -> i32;
+
+/// `PLUGIN_INIT_V2` — optional entry point that receives the API table.
+///
+/// Plugins that export this symbol are handed a [`PluginApi`] pointer before
+/// `PLUGIN_INIT` is called, giving them access to the hotkey/command APIs.
+#[cfg(target_os = "windows")]
+type PluginInitV2Fn = unsafe extern "C" fn(api: *const PluginApi) -> i32;
+
+/// API table passed to plugins via `PLUGIN_INIT_V2`.
+///
+/// The layout is fixed (repr C) and versioned by `api_version`.  Plugins must
+/// check `api_version >= 1` before calling any function pointer.
+#[repr(C)]
+pub struct PluginApi {
+    /// Always `1` for this version of the API table.
+    pub api_version: u32,
+    /// Register a hotkey. `combo` is a null-terminated UTF-8 string
+    /// (e.g. `"ctrl+f5"`).  Returns a non-zero hotkey ID on success.
+    pub register_hotkey: RegisterHotkeyFn,
+    /// Register a slash command. `path` is a null-terminated UTF-8 string
+    /// (e.g. `"/mymod help"`).  Returns a non-zero command ID on success.
+    pub register_command: RegisterCommandFn,
+    /// Unregister a hotkey by ID returned from `register_hotkey`.
+    /// Returns 1 on success, 0 if not found.
+    pub unregister_hotkey: UnregisterHotkeyFn,
+    /// Unregister a command by ID returned from `register_command`.
+    /// Returns 1 on success, 0 if not found.
+    pub unregister_command: UnregisterCommandFn,
+}
+
+// Safety: PluginApi contains only fn pointers which are Send+Sync.
+unsafe impl Send for PluginApi {}
+unsafe impl Sync for PluginApi {}
 
 // ─── PluginMetadata ───────────────────────────────────────────────────────────
 
@@ -71,20 +144,161 @@ impl std::fmt::Debug for PluginHandle {
     }
 }
 
+// ─── PluginRegistrationTracker ────────────────────────────────────────────────
+
+/// Tracks hotkey and command IDs registered by a specific plugin so they can
+/// be bulk-removed when the plugin is unloaded.
+#[derive(Debug, Default)]
+pub struct PluginRegistrationTracker {
+    pub hotkey_ids: Vec<ScriptHotkeyId>,
+    pub command_ids: Vec<CommandId>,
+}
+
+impl PluginRegistrationTracker {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 // ─── PluginRegistry ──────────────────────────────────────────────────────────
 
 /// Tracks all successfully loaded plugins, keyed by plugin name.
-#[derive(Debug, Default)]
 pub struct PluginRegistry {
     plugins: HashMap<String, PluginHandle>,
     /// Directory that was scanned most recently.
     plugins_dir: Option<PathBuf>,
+    /// Per-plugin registration trackers for bulk cleanup on unload.
+    trackers: HashMap<String, PluginRegistrationTracker>,
+    /// Shared command registry — plugins register into this.
+    command_registry: SharedCommandRegistry,
+    /// Shared hotkey registry — plugins register into this.
+    hotkey_registry: SharedHotkeyRegistry,
+}
+
+impl std::fmt::Debug for PluginRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PluginRegistry")
+            .field("plugins", &self.plugins.keys().collect::<Vec<_>>())
+            .field("plugins_dir", &self.plugins_dir)
+            .finish_non_exhaustive()
+    }
 }
 
 impl PluginRegistry {
-    /// Create an empty registry.
+    /// Create an empty registry with freshly-created shared registries.
     pub fn new() -> Self {
-        Self::default()
+        let (cmd, hk) = crate::registry::new_shared();
+        Self::with_registries(cmd, hk)
+    }
+
+    /// Create a registry that shares existing hotkey/command registries (e.g.
+    /// with a [`crate::lua::bindings::LuaBindings`] instance).
+    pub fn with_registries(
+        command_registry: SharedCommandRegistry,
+        hotkey_registry: SharedHotkeyRegistry,
+    ) -> Self {
+        Self {
+            plugins: HashMap::new(),
+            plugins_dir: None,
+            trackers: HashMap::new(),
+            command_registry,
+            hotkey_registry,
+        }
+    }
+
+    /// Register a hotkey on behalf of a plugin.
+    ///
+    /// This is the Rust-side equivalent of `tq_register_hotkey` and is used
+    /// in unit tests.  On Windows the same logic is called via the C FFI from
+    /// the plugin DLL.
+    pub fn plugin_register_hotkey(
+        &mut self,
+        plugin_name: &str,
+        combo: impl Into<String>,
+        callback: Box<dyn Fn() + Send + Sync>,
+    ) -> ScriptHotkeyId {
+        let id = self.hotkey_registry.lock().unwrap().register(
+            combo,
+            Priority::Plugin,
+            plugin_name,
+            callback,
+        );
+        self.trackers
+            .entry(plugin_name.to_string())
+            .or_default()
+            .hotkey_ids
+            .push(id);
+        id
+    }
+
+    /// Register a slash command on behalf of a plugin.
+    pub fn plugin_register_command(
+        &mut self,
+        plugin_name: &str,
+        path: impl Into<String>,
+        handler: Box<dyn Fn(&str) + Send + Sync>,
+    ) -> CommandId {
+        let id = self.command_registry.lock().unwrap().register(
+            path,
+            Priority::Plugin,
+            plugin_name,
+            handler,
+        );
+        self.trackers
+            .entry(plugin_name.to_string())
+            .or_default()
+            .command_ids
+            .push(id);
+        id
+    }
+
+    /// Unregister a specific hotkey registered by a plugin.
+    pub fn plugin_unregister_hotkey(&mut self, plugin_name: &str, id: ScriptHotkeyId) -> bool {
+        if let Some(tracker) = self.trackers.get_mut(plugin_name) {
+            tracker.hotkey_ids.retain(|&hid| hid != id);
+        }
+        self.hotkey_registry.lock().unwrap().unregister(id)
+    }
+
+    /// Unregister a specific command registered by a plugin.
+    pub fn plugin_unregister_command(&mut self, plugin_name: &str, id: CommandId) -> bool {
+        if let Some(tracker) = self.trackers.get_mut(plugin_name) {
+            tracker.command_ids.retain(|&cid| cid != id);
+        }
+        self.command_registry.lock().unwrap().unregister(id)
+    }
+
+    /// Bulk-unregister all hotkeys and commands registered by `plugin_name`.
+    ///
+    /// Called automatically when a plugin is unloaded.
+    pub fn cleanup_plugin_registrations(&mut self, plugin_name: &str) -> (usize, usize) {
+        let tracker = match self.trackers.remove(plugin_name) {
+            Some(t) => t,
+            None => return (0, 0),
+        };
+        let mut hk_reg = self.hotkey_registry.lock().unwrap();
+        let mut cmd_reg = self.command_registry.lock().unwrap();
+        let hk_removed: usize =
+            tracker.hotkey_ids.iter().filter(|&&id| hk_reg.unregister(id)).count();
+        let cmd_removed: usize =
+            tracker.command_ids.iter().filter(|&&id| cmd_reg.unregister(id)).count();
+        info!(
+            plugin = %plugin_name,
+            hotkeys_removed = hk_removed,
+            commands_removed = cmd_removed,
+            "Plugin registrations cleaned up on unload"
+        );
+        (hk_removed, cmd_removed)
+    }
+
+    /// Expose shared registry handles for external coordination.
+    pub fn command_registry(&self) -> SharedCommandRegistry {
+        Arc::clone(&self.command_registry)
+    }
+
+    /// Expose shared registry handles for external coordination.
+    pub fn hotkey_registry(&self) -> SharedHotkeyRegistry {
+        Arc::clone(&self.hotkey_registry)
     }
 
     /// Scan `dir` for `*.dll` files, attempt to load each one, and register
@@ -381,5 +595,148 @@ mod tests {
         let count = registry.discover_and_load(dir.path()).unwrap();
         assert_eq!(count, 1);
         assert!(!registry.is_empty());
+    }
+
+    // ── Plugin registration API ───────────────────────────────────────────────
+
+    #[test]
+    fn plugin_register_hotkey_fires_callback() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use std::sync::Arc;
+
+        let mut registry = PluginRegistry::new();
+        let fired = Arc::new(AtomicU32::new(0));
+        let f = Arc::clone(&fired);
+
+        let id = registry.plugin_register_hotkey(
+            "test_plugin",
+            "ctrl+f5",
+            Box::new(move || {
+                f.fetch_add(1, Ordering::Relaxed);
+            }),
+        );
+
+        assert!(registry.hotkey_registry().lock().unwrap().fire("ctrl+f5"));
+        assert_eq!(fired.load(Ordering::Relaxed), 1);
+
+        // Explicit unregister by ID.
+        assert!(registry.plugin_unregister_hotkey("test_plugin", id));
+        assert!(!registry.hotkey_registry().lock().unwrap().fire("ctrl+f5"));
+    }
+
+    #[test]
+    fn plugin_register_command_routes_correctly() {
+        use std::sync::Arc;
+        use std::sync::Mutex;
+
+        let mut registry = PluginRegistry::new();
+        let received = Arc::new(Mutex::new(String::new()));
+        let r = Arc::clone(&received);
+
+        let id = registry.plugin_register_command(
+            "test_plugin",
+            "/plug cmd",
+            Box::new(move |args: &str| {
+                *r.lock().unwrap() = args.to_string();
+            }),
+        );
+
+        assert!(registry.command_registry().lock().unwrap().dispatch("/plug cmd foo bar"));
+        assert_eq!(*received.lock().unwrap(), "foo bar");
+
+        // Explicit unregister.
+        assert!(registry.plugin_unregister_command("test_plugin", id));
+        assert!(!registry.command_registry().lock().unwrap().dispatch("/plug cmd foo bar"));
+    }
+
+    #[test]
+    fn cleanup_plugin_registrations_removes_all_on_unload() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use std::sync::Arc;
+
+        let mut registry = PluginRegistry::new();
+
+        // Register two hotkeys and one command for "plugin_a".
+        let fired = Arc::new(AtomicU32::new(0));
+        let f1 = Arc::clone(&fired);
+        let f2 = Arc::clone(&fired);
+
+        registry.plugin_register_hotkey("plugin_a", "alt+f1", Box::new(move || { f1.fetch_add(1, Ordering::Relaxed); }));
+        registry.plugin_register_hotkey("plugin_a", "alt+f2", Box::new(move || { f2.fetch_add(1, Ordering::Relaxed); }));
+        registry.plugin_register_command("plugin_a", "/pa cmd", Box::new(|_| {}));
+
+        // Sanity: both hotkeys and command work.
+        assert!(registry.hotkey_registry().lock().unwrap().fire("alt+f1"));
+        assert!(registry.hotkey_registry().lock().unwrap().fire("alt+f2"));
+        assert!(registry.command_registry().lock().unwrap().dispatch("/pa cmd"));
+
+        // Simulate plugin unload.
+        let (hk, cmd) = registry.cleanup_plugin_registrations("plugin_a");
+        assert_eq!(hk, 2, "two hotkeys should have been removed");
+        assert_eq!(cmd, 1, "one command should have been removed");
+
+        // Nothing fires after cleanup.
+        assert!(!registry.hotkey_registry().lock().unwrap().fire("alt+f1"));
+        assert!(!registry.hotkey_registry().lock().unwrap().fire("alt+f2"));
+        assert!(!registry.command_registry().lock().unwrap().dispatch("/pa cmd"));
+    }
+
+    #[test]
+    fn plugin_priority_is_higher_than_script() {
+        use std::sync::{Arc, Mutex};
+
+        let (cmd_reg, hk_reg) = crate::registry::new_shared();
+        let mut plugin_registry = PluginRegistry::with_registries(
+            Arc::clone(&cmd_reg),
+            Arc::clone(&hk_reg),
+        );
+
+        let order = Arc::new(Mutex::new(Vec::<&'static str>::new()));
+        let o1 = Arc::clone(&order);
+        let o2 = Arc::clone(&order);
+
+        // Script-priority entry (lower precedence).
+        cmd_reg.lock().unwrap().register(
+            "/shared",
+            crate::registry::Priority::Script,
+            "a_script",
+            Box::new(move |_| o1.lock().unwrap().push("script")),
+        );
+
+        // Plugin-priority entry (higher precedence).
+        plugin_registry.plugin_register_command(
+            "my_plugin",
+            "/shared",
+            Box::new(move |_| o2.lock().unwrap().push("plugin")),
+        );
+
+        assert!(cmd_reg.lock().unwrap().dispatch("/shared"));
+        let result = order.lock().unwrap().clone();
+        assert_eq!(result, vec!["plugin"], "plugin must shadow script");
+    }
+
+    #[test]
+    fn with_registries_shares_state_with_lua_bindings() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use std::sync::Arc;
+
+        let (cmd_reg, hk_reg) = crate::registry::new_shared();
+        let mut plugin_registry = PluginRegistry::with_registries(
+            Arc::clone(&cmd_reg),
+            Arc::clone(&hk_reg),
+        );
+
+        // Plugin registers a hotkey via the Rust API.
+        let fired = Arc::new(AtomicU32::new(0));
+        let f = Arc::clone(&fired);
+        plugin_registry.plugin_register_hotkey(
+            "my_plugin",
+            "ctrl+g",
+            Box::new(move || { f.fetch_add(1, Ordering::Relaxed); }),
+        );
+
+        // Fire via the shared handle (same one the Lua bindings would hold).
+        assert!(hk_reg.lock().unwrap().fire("ctrl+g"));
+        assert_eq!(fired.load(Ordering::Relaxed), 1);
     }
 }

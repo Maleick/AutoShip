@@ -1,5 +1,8 @@
 //! MQ2 FFI bindings — raw C-layout equivalents of core MQ2/eqlib types.
 //!
+//! Also exposes the [`bridge`] submodule which provides the safe `MQ2Bridge`
+//! translation layer for plugin-style API calls.
+//!
 //! # Memory Safety Assumptions
 //!
 //! All raw pointer operations in this module assume:
@@ -51,6 +54,9 @@
     // Clippy does not understand that padding arrays cannot be removed.
     clippy::large_stack_arrays,
 )]
+
+pub mod bridge;
+pub use bridge::MQ2Bridge;
 
 use std::ptr::NonNull;
 
