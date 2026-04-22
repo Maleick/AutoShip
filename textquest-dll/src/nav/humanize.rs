@@ -46,7 +46,10 @@ impl MovementPersonality {
         let mut rng = Xorshift32::from_client_id(client_id);
         let seed = rng.next_u32();
         let speed_factor = 0.93 + (seed % 140) as f32 / 1000.0; // 0.93..1.07
-        let heading_wobble = 1.0 + (seed.wrapping_shr(8) % 30) as f32 / 10.0; // 1.0..4.0
+        // Generate 1.0..2.5 EQ-deg/frame; previously 1.0..4.0 but capped to MAX_HEADING_WOBBLE
+        // to stay within the estimated movement-agreement angular velocity tolerance.
+        let heading_wobble = (1.0 + (seed.wrapping_shr(8) % 30) as f32 / 10.0)
+            .min(MAX_HEADING_WOBBLE); // clamp: 1.0..2.5
         let detour_chance = (seed.wrapping_shr(16) % 80) as f32 / 1000.0; // 0.00..0.08
 
         Self {
@@ -116,8 +119,8 @@ mod tests {
         for id in 0..50 {
             let p = MovementPersonality::from_client_id(id);
             assert!(
-                p.heading_wobble >= 1.0 && p.heading_wobble <= 4.0,
-                "heading_wobble {} out of range for client_id {id}",
+                p.heading_wobble >= 1.0 && p.heading_wobble <= MAX_HEADING_WOBBLE,
+                "heading_wobble {} out of range [1.0, {MAX_HEADING_WOBBLE}] for client_id {id}",
                 p.heading_wobble
             );
         }

@@ -363,6 +363,23 @@ pub const OUTBOUND_MSG_COUNTER: u64 = 0x0001_40F6_0FC8;
 /// Global inbound message counter
 pub const INBOUND_MSG_COUNTER: u64 = 0x0001_40F6_0FC4;
 
+/// Message counter heartbeat sender — sends opcode `0xbb29` every ~500 ms.
+///
+/// Named `FUN_1401a4320` in Ghidra analysis (2026-04-03 SME session). Reads
+/// `OUTBOUND_MSG_COUNTER` and `INBOUND_MSG_COUNTER`, refills them if < 2
+/// (outbound += 0x37, inbound += 0x55), negates both, and forwards negated
+/// values to the server. Server compares against its own counts; mismatch is
+/// a detection event. **Do not hook** — any interception breaks heartbeat
+/// reporting and causes immediate counter drift.
+///
+/// Address confidence: `SME-reported` (not yet independently Ghidra-verified).
+/// Note: a separate address `0x1401A4650` appears in some analysis notes with
+/// the same `FUN_1401a4650` label; that address maps to `REAL_RENDER_WORLD`
+/// in this file — naming collision requires live resolution.
+///
+/// Reference: docs/research/C3-game-loop-touchpoints.md §3, §7
+pub const MSG_COUNTER_HEARTBEAT: u64 = 0x0001_401A_4320;
+
 /// File integrity check dispatcher (EXE self-hash + data files)
 pub const FILE_INTEGRITY_DISPATCHER: u64 = 0x0001_4056_4BC0;
 

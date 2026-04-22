@@ -263,6 +263,8 @@ Independent verification via GhidraMCP analysis of eqgame.exe on Frostreaver. Ev
 
 SME-reported detection systems (byte count, memshift, memcheck 1-4) remain `SME-reported, partially verified`. Ghidra-confirmed findings above are `Live-validated` via binary analysis. Main loop internals remain unverified due to decompiler timeout on the ~20KB function body. Movement-agreement research (2026-04-21) is `Research-backed` — see section above.
 
+**Main loop no-touch zone refinement (2026-04-21 — #2186):** The entry point of `__ProcessGameEvents` (`0x14028E0F0`) is confirmed safe for HWBP hooking — TextQuest already uses DR0 there with no code modification. The loop body interior remains a no-touch zone for code modification until the chunked decompile (#2186 §6) is completed on Frostreaver to locate the memshift check and enumerate all 40+ counter decrement sites. The "inline byte count checks" originally reported by the SME are the message counter heartbeat system (opcode `0xbb29`, 500 ms cadence), not static code-section byte comparisons; however, server-initiated memcheck (`0x4f27`) can still detect any `.text` modification, so the no-touch classification for standard detour hooking stands. See `docs/research/C3-game-loop-touchpoints.md` for the full per-region assessment.
+
 ## Near-Term `M5` Hardening Focus
 
 Current roadmap work should focus on:
