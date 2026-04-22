@@ -311,6 +311,14 @@ pub struct SoulConfig {
     /// remains harsher for hostile interactions.
     #[serde(default = "default_sentiment_trust_delta")]
     pub sentiment_trust_delta: f32,
+    /// Enable speech pattern learning (catchphrase adoption and slang
+    /// contagion). When false, `on_player_message` skips all evolution logic.
+    #[serde(default = "default_enable_speech_learning")]
+    pub enable_speech_learning: bool,
+    /// Base probability (0.0–1.0) for a character to adopt an observed
+    /// catchphrase from a trusted peer (faction >= 500).
+    #[serde(default = "default_catchphrase_adoption_chance")]
+    pub catchphrase_adoption_chance: f32,
 }
 
 const fn default_max_requests_per_character() -> u32 {
@@ -337,6 +345,14 @@ const fn default_sentiment_trust_delta() -> f32 {
     0.05
 }
 
+const fn default_enable_speech_learning() -> bool {
+    true
+}
+
+const fn default_catchphrase_adoption_chance() -> f32 {
+    0.1
+}
+
 impl Default for SoulConfig {
     fn default() -> Self {
         Self {
@@ -359,6 +375,8 @@ impl Default for SoulConfig {
             max_chat_memory_writes_per_hour: default_max_chat_memory_writes_per_hour(),
             sentiment_faction_delta: default_sentiment_faction_delta(),
             sentiment_trust_delta: default_sentiment_trust_delta(),
+            enable_speech_learning: default_enable_speech_learning(),
+            catchphrase_adoption_chance: default_catchphrase_adoption_chance(),
         }
     }
 }

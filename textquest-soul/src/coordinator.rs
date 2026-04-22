@@ -23,6 +23,7 @@ use super::{
     memory::MemoryStore,
     personality::{PersonalityEngine, SoulContext},
     social::SocialGraph,
+    speech_evolution::{PhraseFrequencyTracker, SpeechEvolution, SpeechEvolutionConfig},
     suppression::{GameStateContext, SuppressionRules},
 };
 
@@ -191,6 +192,8 @@ struct CharacterSoul {
     personality: PersonalityEngine,
     idle: IdleScheduler,
     responder: TraitDrivenResponder,
+    /// Per-character speech pattern evolution (catchphrases + slang).
+    speech_evolution: SpeechEvolution,
 }
 
 /// Tick-driven orchestrator for all Soul Engine subsystems.
@@ -220,6 +223,8 @@ pub struct SoulCoordinator {
     /// Sliding one-hour window of chat-derived memory write timestamps, keyed
     /// by client. Used to enforce `max_chat_memory_writes_per_hour`.
     chat_memory_write_timestamps: HashMap<ClientId, VecDeque<Instant>>,
+    /// Global phrase frequency tracker for catchphrase candidate detection.
+    phrase_tracker: PhraseFrequencyTracker,
 }
 
 const MAX_PLAYER_CHAT_MESSAGE_BYTES: usize = 512;
@@ -254,6 +259,7 @@ impl SoulCoordinator {
             anomaly_detector: AnomalyDetector::new(),
             audit: None,
             chat_memory_write_timestamps: HashMap::new(),
+            phrase_tracker: PhraseFrequencyTracker::new(),
         })
     }
 
@@ -269,6 +275,10 @@ impl SoulCoordinator {
     pub fn register_character(&mut self, client_id: ClientId, char_config: &CharacterSoulConfig) {
         let edginess = char_config.edginess.unwrap_or(self.config.edginess);
 
+        let speech_evo_config = SpeechEvolutionConfig {
+            adoption_chance: self.config.catchphrase_adoption_chance,
+            ..SpeechEvolutionConfig::default()
+        };
         let soul = CharacterSoul {
             name: char_config.name.clone(),
             traits: char_config.traits.clone(),
@@ -279,6 +289,7 @@ impl SoulCoordinator {
             personality: PersonalityEngine::new(client_id),
             idle: IdleScheduler::new(client_id, &self.config),
             responder: TraitDrivenResponder::new(client_id, edginess),
+            speech_evolution: SpeechEvolution::new(speech_evo_config),
         };
 
         self.souls.insert(client_id, soul);
@@ -715,6 +726,54 @@ impl SoulCoordinator {
         }
 
         self.llm_queue.enqueue(request);
+
+        // Speech evolution: observe phrases from the player message.
+        // Only runs when `enable_speech_learning` is true.
+        if self.config.enable_speech_learning {
+            // Update global phrase frequency tracker with every word/token from
+            // this message so catchphrase candidates accumulate across speakers.
+            for token in message.split_whitespace() {
+                self.phrase_tracker.record(player_name, token);
+            }
+
+            // Determine faction score for this speaker relative to the
+            // character observing the message.
+            let faction_score = self
+                .social
+                .get(&_soul_name, player_name)
+                .map(|r| r.faction_score)
+                .unwrap_or(0);
+
+            // Route whole message as a potential catchphrase if it has been
+            // used by multiple distinct speakers already.
+            let is_candidate = self.phrase_tracker.is_catchphrase_candidate(message);
+            if is_candidate
+                && let Some(soul) = self.souls.get_mut(&client_id)
+            {
+                let rng_roll = pseudo_rng_roll(client_id, self.tick_count);
+                soul.speech_evolution
+                    .observe_phrase(player_name, message, faction_score, rng_roll);
+            }
+
+            // Route each word as potential slang (shorter terms spread faster).
+            if let Some(soul) = self.souls.get_mut(&client_id) {
+                for token in message.split_whitespace() {
+                    // Only treat short tokens (≤6 chars) as slang candidates.
+                    if token.len() <= 6 {
+                        let rng_roll = pseudo_rng_roll(client_id, self.tick_count);
+                        soul.speech_evolution.observe_slang(
+                            player_name,
+                            token,
+                            faction_score,
+                            self.tick_count,
+                            rng_roll,
+                        );
+                    }
+                }
+                // Decay stale slang on every player message (lightweight).
+                soul.speech_evolution.decay_slang(self.tick_count);
+            }
+        }
     }
 
     /// Handle a game event (kill, death, loot, zone change, etc.).
@@ -902,6 +961,18 @@ fn ipc_command_priority(cmd: &Command) -> IpcCommandPriority {
         },
         _ => IpcCommandPriority::Normal,
     }
+}
+
+/// Deterministic pseudo-random roll in [0.0, 1.0) seeded by client_id and
+/// tick. Used for speech evolution decisions so tests stay reproducible by
+/// controlling tick values. Not cryptographically secure — fine for game AI.
+fn pseudo_rng_roll(client_id: ClientId, tick: u64) -> f32 {
+    // Xorshift64 mix
+    let mut x: u64 = client_id as u64 ^ tick.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    (x & 0x00ff_ffff) as f32 / 0x0100_0000 as f32
 }
 
 fn truncate_utf8(input: &str, max_bytes: usize) -> &str {
