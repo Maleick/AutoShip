@@ -1,0 +1,81 @@
+diff --git a/docs/autoship/monitor-prs-beacon-fix.patch b/docs/autoship/monitor-prs-beacon-fix.patch
+new file mode 100644
+index 00000000..b6d4cadc
+--- /dev/null
++++ b/docs/autoship/monitor-prs-beacon-fix.patch
+@@ -0,0 +1,75 @@
++--- /tmp/monitor-prs-original.sh	2026-04-22 01:30:33
+++++ /tmp/monitor-prs-fixed.sh	2026-04-22 01:31:06
++@@ -8,6 +8,8 @@
++ AUTOSHIP_DIR=".autoship"
++ STATE_FILE="$AUTOSHIP_DIR/state.json"
++ SEEN_FILE="$AUTOSHIP_DIR/.pr-monitor-seen.json"
+++# Tracks BEACON transition announcements to prevent re-emission on every poll.
+++BEACON_ANNOUNCED_FILE="$AUTOSHIP_DIR/beacon-announced"
++ 
++ # Temporary file for atomic seen-state updates — cleaned up on exit
++ _SEEN_TMP=$(mktemp)
++@@ -41,6 +43,9 @@
++   exit 1
++ fi
++ 
+++# Ensure beacon-announced file exists (plain-text set: one PR_ISSUE key per line)
+++touch "$BEACON_ANNOUNCED_FILE"
+++
++ emit_if_changed() {
++   local pr_number="$1"
++   local event="$2"
++@@ -61,6 +66,18 @@
++     "$SEEN_FILE" > "$_SEEN_TMP" && mv "$_SEEN_TMP" "$SEEN_FILE"
++ }
++ 
+++# Returns 0 (true) if this issue_id has NOT been announced yet; records it on first call.
+++beacon_announce_once() {
+++  local issue_id="$1"
+++  local pr_number="$2"
+++  local key="issue=${issue_id}:pr=${pr_number}"
+++  if grep -qxF "$key" "$BEACON_ANNOUNCED_FILE" 2>/dev/null; then
+++    return 1  # already announced
+++  fi
+++  echo "$key" >> "$BEACON_ANNOUNCED_FILE"
+++  return 0  # first announcement
+++}
+++
++ while true; do
++   # Check open AutoShip PRs for CI status and conflicts
++   gh pr list --label autoship --state open \
++@@ -98,10 +115,13 @@
++     --repo "$REPO_SLUG" 2>/dev/null | \
++     jq -r '.[] | "\(.number) \(.mergedAt)"' | \
++     while read -r num merged_at; do
++-      # Only emit for merges in the last 60 seconds
++-      merged_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$merged_at" "+%s" 2>/dev/null || \
+++      # Parse ISO-8601 UTC timestamp portably:
+++      #   macOS BSD date: date -u -j -f <fmt> <value> +%s
+++      #   GNU date:       date -d "$merged_at" +%s
+++      # The -u flag forces UTC interpretation so local timezone offset doesn't skew the age.
+++      merged_epoch=$(date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$merged_at" "+%s" 2>/dev/null || \
++                      date -d "$merged_at" "+%s" 2>/dev/null || echo 0)
++-      now_epoch=$(date +%s)
+++      now_epoch=$(date -u +%s)
++       age=$((now_epoch - merged_epoch))
++       if [[ $age -lt 60 ]]; then
++         emit_if_changed "$num" "[PR_MERGED]"
++@@ -113,10 +133,13 @@
++             '.issues | to_entries[] | select(.value.pr_number == $pr) | .key' \
++             "$STATE_FILE" 2>/dev/null | head -1)
++           if [[ -n "$ISSUE_ID" ]]; then
++-            COMPLETED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
++-            bash "$REPO_ROOT/hooks/update-state.sh" set-merged "$ISSUE_ID" \
++-              completed_at="$COMPLETED_AT" 2>/dev/null || true
++-            echo "[BEACON] Transitioned issue $ISSUE_ID to merged (PR #$num, completed_at=$COMPLETED_AT)"
+++            # Gate BEACON transition: only emit once per (issue, PR) pair.
+++            if beacon_announce_once "$ISSUE_ID" "$num"; then
+++              COMPLETED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+++              bash "$REPO_ROOT/hooks/update-state.sh" set-merged "$ISSUE_ID" \
+++                completed_at="$COMPLETED_AT" 2>/dev/null || true
+++              echo "[BEACON] Transitioned issue $ISSUE_ID to merged (PR #$num, completed_at=$COMPLETED_AT)"
+++            fi
++           fi
++         fi
++       fi
