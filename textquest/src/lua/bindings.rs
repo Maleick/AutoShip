@@ -11,10 +11,11 @@
 /// - hotkeys: textquest.hotkeys.*
 /// - commands: textquest.commands.*
 
-use mlua::{Lua, Result as LuaResult, Table};
+use mlua::{Lua, LuaOptions, Result as LuaResult, Table};
 use std::sync::Arc;
 
 use crate::lua::error::LuaApiError;
+use crate::lua::sandbox;
 use crate::lua::types::{LuaGroupMember, LuaPlayer, LuaSpawn, LuaTarget};
 use crate::registry::{Priority, SharedCommandRegistry, SharedHotkeyRegistry};
 
@@ -26,20 +27,33 @@ pub struct LuaBindings {
     hotkey_registry: SharedHotkeyRegistry,
 }
 
+/// Construct a sandboxed `Lua` VM (safe libs only, memory + CPU limits applied).
+fn make_sandboxed_lua() -> Result<Lua, LuaApiError> {
+    let lua = Lua::new_with(sandbox::sandbox_libs(), LuaOptions::default())
+        .map_err(|e| LuaApiError::BindingError(e.to_string()))?;
+    sandbox::apply(&lua).map_err(|e| LuaApiError::BindingError(e.to_string()))?;
+    Ok(lua)
+}
+
 impl LuaBindings {
     /// Create bindings with freshly-created private registries.
+    ///
+    /// The Lua VM is sandboxed: only safe standard libraries are loaded, dangerous
+    /// globals are removed, and memory / CPU limits are enforced.
     pub fn new() -> Result<Self, LuaApiError> {
-        let lua = Lua::new();
+        let lua = make_sandboxed_lua()?;
         let (command_registry, hotkey_registry) = crate::registry::new_shared();
         Ok(Self { lua, command_registry, hotkey_registry })
     }
 
     /// Create bindings that share existing registries (e.g. with the plugin loader).
+    ///
+    /// The Lua VM is sandboxed identically to [`LuaBindings::new`].
     pub fn with_registries(
         command_registry: SharedCommandRegistry,
         hotkey_registry: SharedHotkeyRegistry,
     ) -> Result<Self, LuaApiError> {
-        let lua = Lua::new();
+        let lua = make_sandboxed_lua()?;
         Ok(Self { lua, command_registry, hotkey_registry })
     }
 

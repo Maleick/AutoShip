@@ -6,6 +6,7 @@
 pub mod bindings;
 pub mod error;
 pub mod loader;
+pub mod sandbox;
 pub mod types;
 
 pub use bindings::LuaBindings;
