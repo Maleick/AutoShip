@@ -23,6 +23,7 @@ use super::{
     },
     memory::MemoryStore,
     personality::{PersonalityEngine, SoulContext},
+    personality_drift::DriftEngine,
     social::SocialGraph,
     speech_evolution::{PhraseFrequencyTracker, SpeechEvolution, SpeechEvolutionConfig},
     suppression::{GameStateContext, SuppressionRules},
@@ -195,6 +196,8 @@ struct CharacterSoul {
     responder: TraitDrivenResponder,
     /// Per-character speech pattern evolution (catchphrases + slang).
     speech_evolution: SpeechEvolution,
+    /// Trait drift engine — tracks per-session drift and applies per-event nudges.
+    drift: DriftEngine,
 }
 
 /// Tick-driven orchestrator for all Soul Engine subsystems.
@@ -294,6 +297,7 @@ impl SoulCoordinator {
             idle: IdleScheduler::new(client_id, &self.config),
             responder: TraitDrivenResponder::new(client_id, edginess),
             speech_evolution: SpeechEvolution::new(speech_evo_config),
+            drift: DriftEngine::new(self.config.trait_drift_multiplier),
         };
 
         self.souls.insert(client_id, soul);
@@ -855,6 +859,11 @@ impl SoulCoordinator {
         soul.mood = soul
             .personality
             .process_event(soul.mood, &event, &soul.traits);
+
+        // Apply trait drift (if enabled in config)
+        if self.config.enable_trait_drift {
+            soul.drift.apply(&mut soul.traits, &event);
+        }
 
         // Audit: event processed
         if let Some(audit) = &self.audit {

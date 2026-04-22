@@ -328,6 +328,16 @@ pub struct SoulConfig {
     /// Default: 0.20 (20% per tick when cooldown has elapsed).
     #[serde(default = "default_banter_chance_friend")]
     pub banter_chance_friend: f32,
+    /// Enable gradual personality trait drift driven by in-game events.
+    /// When false, `apply_trait_drift()` in the coordinator is a no-op.
+    /// Default: true.
+    #[serde(default = "default_enable_trait_drift")]
+    pub enable_trait_drift: bool,
+    /// Multiplier applied to every per-event drift delta (1.0 = default
+    /// magnitudes). Set to 0.0 to disable drift without touching `enable_trait_drift`.
+    /// Default: 1.0.
+    #[serde(default = "default_trait_drift_multiplier")]
+    pub trait_drift_multiplier: f32,
 }
 
 const fn default_max_requests_per_character() -> u32 {
@@ -370,6 +380,14 @@ const fn default_banter_chance_friend() -> f32 {
     0.20
 }
 
+const fn default_enable_trait_drift() -> bool {
+    true
+}
+
+const fn default_trait_drift_multiplier() -> f32 {
+    1.0
+}
+
 impl Default for SoulConfig {
     fn default() -> Self {
         Self {
@@ -396,6 +414,8 @@ impl Default for SoulConfig {
             catchphrase_adoption_chance: default_catchphrase_adoption_chance(),
             banter_cooldown_secs: default_banter_cooldown_secs(),
             banter_chance_friend: default_banter_chance_friend(),
+            enable_trait_drift: default_enable_trait_drift(),
+            trait_drift_multiplier: default_trait_drift_multiplier(),
         }
     }
 }

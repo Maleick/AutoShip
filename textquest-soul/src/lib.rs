@@ -33,6 +33,8 @@ pub mod mood_decay;
 pub mod operator;
 /// Personality system — trait-based character archetypes and mood modeling.
 pub mod personality;
+/// Personality drift — gradual trait changes driven by in-game experiences.
+pub mod personality_drift;
 /// LLM request rate limiting.
 pub mod rate_limiter;
 /// Error handling and recovery — retry, fallback, reload, and restart
