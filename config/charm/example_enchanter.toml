@@ -1,0 +1,48 @@
+# TextQuest — Enchanter Charm/Pet Configuration Example
+#
+# Rename this file to "enchanter.toml" to activate it.
+# Settings here are merged with global.toml: fields set below win over globals.
+#
+# Enchanter specifics:
+#   - Charm is a primary DPS / CC mechanic; balanced or aggressive mode works.
+#   - Re-charm at ~90 ticks (9 min) gives plenty of runway before expiry.
+#   - Only charm animals/humanoids; skip undead (they resist).
+#   - One charmed pet at a time by default; raise for group-charm.
+
+# ── Pet behaviour ──────────────────────────────────────────────────────────────
+
+pet_behavior_mode = "balanced"
+auto_recharm = true
+auto_send_pet = true
+max_charmed = 1
+
+# ── Re-charm thresholds ────────────────────────────────────────────────────────
+
+[recharge]
+recharge_below_ticks = 90      # re-charm ~9 minutes before expiry
+pet_hp_safety_pct = 50.0       # disengage pet above 50% HP before re-charm
+min_mana_pct = 25.0            # wait for at least 25% mana
+
+# ── Affinity — Enchanter prefers animals & humanoids ─────────────────────────
+
+[affinity]
+preferred_types = ["animal", "humanoid"]
+avoid_types     = ["undead", "summoned"]
+min_level       = 50
+max_level       = 65
+
+# ── Pet spell priorities ───────────────────────────────────────────────────────
+#
+# Charmed mobs often have their own spell bars; list spells you want them to
+# cast in priority order.  The DLL will send /pet cast <name> when conditions
+# are met.
+
+[[pet_spell_priorities]]
+name      = "Spirit of Wolf"
+priority  = 1
+condition = "pet_hp_above_80"
+
+[[pet_spell_priorities]]
+name      = "Rune IV"
+priority  = 2
+condition = "pet_hp_below_70"

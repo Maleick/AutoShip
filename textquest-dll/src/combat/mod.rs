@@ -1,6 +1,7 @@
 pub mod ability_cooldowns;
 pub mod aggro;
 pub mod buffs;
+pub mod charm_config;
 pub mod classes;
 pub mod debuff_tracker;
 pub mod debuffs;

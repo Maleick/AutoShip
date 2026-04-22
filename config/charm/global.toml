@@ -1,0 +1,68 @@
+# TextQuest — Global Charm/Pet Configuration
+#
+# These defaults apply to every class. Per-class files (e.g. enchanter.toml)
+# are merged on top: any field set in the class file overrides the global value.
+#
+# All fields are optional. Omitted fields use the built-in defaults documented
+# below.
+
+# ── Pet behaviour ──────────────────────────────────────────────────────────────
+
+# How the pet/charmed mob behaves in combat.
+# Options: "aggressive" | "balanced" | "defensive"
+#   aggressive — pet attacks without regard for CC; can break mezzes
+#   balanced   — pet assists on main-assist target; avoids mezzed mobs (default)
+#   defensive  — pet counter-attacks only; stays close to owner
+pet_behavior_mode = "balanced"
+
+# Send the pet to attack automatically after charm succeeds.
+auto_send_pet = true
+
+# Automatically re-apply charm when it breaks or is about to expire.
+auto_recharm = true
+
+# Maximum number of mobs charmed simultaneously.
+# Most classes keep this at 1; group-charm enchanters may raise it.
+max_charmed = 1
+
+# ── Re-charm thresholds ────────────────────────────────────────────────────────
+
+[recharge]
+# Re-cast charm when the remaining duration drops below this many ticks.
+# One EQ server tick ≈ 6 seconds; 60 ticks ≈ 6 minutes lead time.
+recharge_below_ticks = 60
+
+# If pet HP is below this percentage, disengage the pet before re-charming.
+pet_hp_safety_pct = 40.0
+
+# Do not attempt a re-charm cast unless mana is above this percentage.
+min_mana_pct = 20.0
+
+# ── Affinity — which mobs to charm ───────────────────────────────────────────
+
+[affinity]
+# Preferred mob types (charm these first when multiple candidates exist).
+preferred_types = []
+
+# Mob types to avoid charming entirely (even if they are in range).
+avoid_types = ["undead", "summoned"]
+
+# Level window for charm candidates (omit to allow any level).
+# min_level = 45
+# max_level = 65
+
+# ── Pet spell priorities ───────────────────────────────────────────────────────
+#
+# Ordered list of spells the pet should cast, from highest (1) to lowest
+# priority.  The `condition` field uses the same expression syntax as rotation
+# conditions (e.g. "pet_hp_below_80").
+#
+# Example (uncomment and adapt):
+# [[pet_spell_priorities]]
+# name = "Burnout IV"
+# priority = 1
+#
+# [[pet_spell_priorities]]
+# name = "Rune IV"
+# priority = 2
+# condition = "pet_hp_below_80"
