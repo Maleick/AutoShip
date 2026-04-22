@@ -394,4 +394,124 @@ mod tests {
             assert_eq!(entries.len(), 2);
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Concurrent write safety
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn concurrent_writes_produce_valid_jsonl_lines() {
+        use std::sync::Arc;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("concurrent_audit.log");
+        let logger = Arc::new(SoulAuditLogger::open(&path).unwrap());
+
+        let thread_count = 8usize;
+        let writes_per_thread = 16usize;
+
+        let handles: Vec<_> = (0..thread_count)
+            .map(|t| {
+                let logger = Arc::clone(&logger);
+                std::thread::spawn(move || {
+                    for i in 0..writes_per_thread {
+                        logger
+                            .log(
+                                t as u32,
+                                AuditActionType::EventProcessed,
+                                format!("thread {t} write {i}"),
+                                None,
+                                None,
+                            )
+                            .unwrap();
+                    }
+                })
+            })
+            .collect();
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        // Every line written must be valid JSON
+        let content = std::fs::read_to_string(logger.log_path()).unwrap();
+        let lines: Vec<&str> = content.lines().filter(|l| !l.trim().is_empty()).collect();
+        assert_eq!(
+            lines.len(),
+            thread_count * writes_per_thread,
+            "expected {} lines, got {}",
+            thread_count * writes_per_thread,
+            lines.len()
+        );
+        for line in &lines {
+            let v: serde_json::Value =
+                serde_json::from_str(line).expect("each line must be valid JSON");
+            assert!(v.is_object());
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Sequence numbers across all action types
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn all_action_types_can_be_logged_and_filtered() {
+        let (logger, _dir) = make_logger();
+
+        let action_types = [
+            AuditActionType::MoodChange,
+            AuditActionType::MemoryRecord,
+            AuditActionType::LlmRequest,
+            AuditActionType::EventProcessed,
+        ];
+
+        // Log one entry of each type under the same character
+        for (i, action_type) in action_types.iter().enumerate() {
+            logger
+                .log(
+                    1,
+                    action_type.clone(),
+                    format!("action {i}"),
+                    None,
+                    None,
+                )
+                .unwrap();
+        }
+
+        let entries = logger.entries_for(1).unwrap();
+        assert_eq!(entries.len(), action_types.len());
+
+        // Verify sequence numbers are monotonically increasing
+        for (idx, entry) in entries.iter().enumerate() {
+            assert_eq!(
+                entry.seq,
+                (idx + 1) as u64,
+                "seq should be 1-based and monotonic"
+            );
+        }
+
+        // Verify each action type appears exactly once
+        for action_type in &action_types {
+            assert_eq!(
+                entries
+                    .iter()
+                    .filter(|e| &e.action_type == action_type)
+                    .count(),
+                1,
+                "expected exactly one entry for {action_type:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn log_entry_description_is_captured_exactly() {
+        let (logger, _dir) = make_logger();
+        let desc = "mood shifted from Neutral to Excited after combat";
+        logger
+            .log(5, AuditActionType::MoodChange, desc, None, None)
+            .unwrap();
+        let entries = logger.entries_for(5).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].description, desc);
+    }
 }

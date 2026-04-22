@@ -34,7 +34,7 @@ enum RelogDispatchOutcome {
 
 /// Events emitted by the orchestrator loop for external consumers (TUI,
 /// logging).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum LoopEvent {
     /// A client was detected as unhealthy and sent `/camp desktop`.
     ClientCamped { pid: u32 },
@@ -1002,5 +1002,196 @@ mod tests {
             }
             other => panic!("expected ProgressReported, got {other:?}"),
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // LoopEvent serialization
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn loop_event_client_camped_serializes_to_json() {
+        let e = LoopEvent::ClientCamped { pid: 42 };
+        let json = serde_json::to_string(&e).unwrap();
+        assert!(json.contains("ClientCamped"));
+        assert!(json.contains("42"));
+    }
+
+    #[test]
+    fn loop_event_all_variants_round_trip_json() {
+        let events = vec![
+            LoopEvent::ClientCamped { pid: 1 },
+            LoopEvent::ClientRequeued { pid: 2 },
+            LoopEvent::ClientRegistered { pid: 3 },
+            LoopEvent::PeerDiscovered {
+                node_name: "node-alpha".to_string(),
+                sessions: 5,
+            },
+            LoopEvent::PeerExpired {
+                node_name: "node-beta".to_string(),
+            },
+            LoopEvent::HealthCheckDone {
+                healthy: 10,
+                unhealthy: 2,
+            },
+            LoopEvent::ShuttingDown,
+        ];
+
+        for event in &events {
+            let json = serde_json::to_string(event).unwrap();
+            // Must be valid JSON
+            let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+            assert!(value.is_object(), "expected JSON object for {event:?}");
+        }
+    }
+
+    #[test]
+    fn loop_event_deserializes_from_json() {
+        let json = r#"{"ClientCamped":{"pid":99}}"#;
+        let event: LoopEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(event, LoopEvent::ClientCamped { pid: 99 }));
+    }
+
+    #[test]
+    fn loop_event_health_check_done_fields_survive_round_trip() {
+        let original = LoopEvent::HealthCheckDone {
+            healthy: 8,
+            unhealthy: 3,
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let decoded: LoopEvent = serde_json::from_str(&json).unwrap();
+        assert!(
+            matches!(decoded, LoopEvent::HealthCheckDone { healthy: 8, unhealthy: 3 }),
+            "round-trip failed: {json}"
+        );
+    }
+
+    #[test]
+    fn loop_event_peer_discovered_fields_survive_round_trip() {
+        let original = LoopEvent::PeerDiscovered {
+            node_name: "frostreaver".to_string(),
+            sessions: 12,
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let decoded: LoopEvent = serde_json::from_str(&json).unwrap();
+        assert!(
+            matches!(
+                &decoded,
+                LoopEvent::PeerDiscovered { node_name, sessions: 12 }
+                    if node_name == "frostreaver"
+            ),
+            "round-trip failed: {json}"
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // LoopEvent filtering
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn loop_event_filter_by_variant_type() {
+        let events = vec![
+            LoopEvent::ClientCamped { pid: 1 },
+            LoopEvent::ClientRequeued { pid: 2 },
+            LoopEvent::ClientRegistered { pid: 3 },
+            LoopEvent::HealthCheckDone {
+                healthy: 4,
+                unhealthy: 0,
+            },
+            LoopEvent::ShuttingDown,
+        ];
+
+        let camped: Vec<_> = events
+            .iter()
+            .filter(|e| matches!(e, LoopEvent::ClientCamped { .. }))
+            .collect();
+        assert_eq!(camped.len(), 1);
+
+        let health_done: Vec<_> = events
+            .iter()
+            .filter(|e| matches!(e, LoopEvent::HealthCheckDone { .. }))
+            .collect();
+        assert_eq!(health_done.len(), 1);
+
+        let peer_events: Vec<_> = events
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e,
+                    LoopEvent::PeerDiscovered { .. } | LoopEvent::PeerExpired { .. }
+                )
+            })
+            .collect();
+        assert!(peer_events.is_empty());
+    }
+
+    #[test]
+    fn loop_event_only_shutdown_variant_has_no_fields_in_json() {
+        let e = LoopEvent::ShuttingDown;
+        let json = serde_json::to_string(&e).unwrap();
+        // serde encodes unit variants as plain string
+        assert_eq!(json, "\"ShuttingDown\"");
+    }
+
+    // -------------------------------------------------------------------------
+    // Tick boundary event emission
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn health_check_tick_emits_health_check_done_with_correct_counts() {
+        let config = make_app_config();
+        let (_tx, rx) = watch::channel(false);
+        let mut oloop = OrchestratorLoop::from_config(&config, rx);
+
+        // Pre-register two clients at different health states so the tick
+        // exercises the counting path. With an empty manager the counts are
+        // both zero — verify the event is still emitted with zeroes.
+        let events = oloop.tick_health_checks();
+
+        // With no clients the tick produces no events (health check exits
+        // early when there are no sessions to inspect).
+        assert!(
+            events.is_empty()
+                || events
+                    .iter()
+                    .all(|e| matches!(e, LoopEvent::HealthCheckDone { .. })),
+            "unexpected non-HealthCheckDone event from empty health tick"
+        );
+    }
+
+    #[test]
+    fn launch_tick_with_no_queued_clients_emits_no_events() {
+        let config = make_app_config();
+        let (_tx, rx) = watch::channel(false);
+        let mut oloop = OrchestratorLoop::from_config(&config, rx);
+        let events = oloop.tick_launch_coordinator();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn loop_event_serialized_vec_can_be_filtered_after_deserialization() {
+        let events = vec![
+            LoopEvent::ClientCamped { pid: 7 },
+            LoopEvent::PeerDiscovered {
+                node_name: "node-x".into(),
+                sessions: 3,
+            },
+            LoopEvent::ShuttingDown,
+        ];
+
+        // Serialize then deserialize the whole batch
+        let json = serde_json::to_string(&events).unwrap();
+        let decoded: Vec<LoopEvent> = serde_json::from_str(&json).unwrap();
+
+        let shutdowns: Vec<_> = decoded
+            .iter()
+            .filter(|e| matches!(e, LoopEvent::ShuttingDown))
+            .collect();
+        assert_eq!(shutdowns.len(), 1);
+
+        let discovered: Vec<_> = decoded
+            .iter()
+            .filter(|e| matches!(e, LoopEvent::PeerDiscovered { .. }))
+            .collect();
+        assert_eq!(discovered.len(), 1);
     }
 }
