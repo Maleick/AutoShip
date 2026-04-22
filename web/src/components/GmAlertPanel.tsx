@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { FloppyDisk, ShieldWarning, Warning } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
 import type { GmAlertConfig } from "../types";
 import { useGmAlerts } from "../hooks/useGmAlerts";
 
@@ -79,8 +78,16 @@ function TextField({
 }
 
 export default function GmAlertPanel() {
-  const { config, presence, automationPaused, loading, saving, error, savedAt, save } =
-    useGmAlerts();
+  const {
+    config,
+    presence,
+    automationPaused,
+    loading,
+    saving,
+    error,
+    savedAt,
+    save,
+  } = useGmAlerts();
   const [draft, setDraft] = useState<GmAlertConfig>(config);
 
   useEffect(() => {
@@ -138,7 +145,10 @@ export default function GmAlertPanel() {
 
       <div className="mt-6 space-y-4">
         {loading ? (
-          <StatusBanner tone="neutral" text="Loading GM alert configuration..." />
+          <StatusBanner
+            tone="neutral"
+            text="Loading GM alert configuration..."
+          />
         ) : error ? (
           <StatusBanner tone="error" text={error} />
         ) : savedAt ? (
@@ -254,8 +264,8 @@ export default function GmAlertPanel() {
               <code>/api/webhooks</code>.
             </li>
             <li>
-              Sound files should be placed in{" "}
-              <code>config/sounds/</code> directory.
+              Sound files should be placed in <code>config/sounds/</code>{" "}
+              directory.
             </li>
           </ul>
         </div>

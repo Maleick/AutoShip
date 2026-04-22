@@ -12,6 +12,7 @@
 //! executable when `.text` is encrypted.
 
 pub mod alloc;
+pub mod direct_stub;
 pub mod etw_blind;
 pub mod page_encrypt;
 pub mod page_guard;

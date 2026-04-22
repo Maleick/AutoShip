@@ -174,7 +174,7 @@ Based on research across C2/Red Team techniques and Matt's constraints:
 1. ~~Do memcheck 1-4 also cover functions called BY the main loop, or only the loop body itself?~~ — **RESOLVED:** Server-initiated memcheck uses opcode `0x4f27` → handler `FUN_1400b5720`. Server sends memory region specs, client copies 0x100-byte blocks and returns hashes. Server can request any address range.
 2. ~~Does the AC read debug registers (DR0-DR3) via GetThreadContext?~~ — **RESOLVED: NO.** `GetThreadContext` and `SetThreadContext` are NOT in the import table. HWBP hooks are safe from client-side detection.
 3. ~~What specific opcodes do the 6 memshift checks use?~~ — **RESOLVED:** The "inline byte count checks" are actually a **message counter heartbeat system**. Two counters (`DAT_140f60ed8` outbound, `DAT_140f60ed4` inbound) are decremented by every opcode handler in the main loop (40+ locations). Every 500ms, `FUN_1401a4320` sends negated counter values to the server via opcode `0xbb29`. Server compares against its own counts.
-4. What is the movement agreement packet opcode and full field layout? — **PARTIALLY RESOLVED:** `CMovementHistoryClientException` RTTI class confirms server-side validation exists. Awaiting Matt's input on opcode.
+4. What is the movement agreement packet opcode and full field layout? — **RESEARCH COMPLETE (partial):** `CMovementHistoryClientException` RTTI class confirms server-side validation exists. Per-frame position update opcode is `0x1643` via `UdpConnection::SendMessage` (confirmed in network architecture research); payload matches `PlayerPositionUpdateClient_Struct` (sequence u16, spawn_id u16, vehicle_id u16, delta_x/z/y f32, packed heading:12/animation:10 bitfield). Distinct movement-history summary opcode (1/sec aggregate) and Ghidra xref to serialization site remain unresolved — blocked on live Frostreaver Ghidra session. Tolerance envelope derived and cross-checked against `humanize.rs`; heading_wobble upper bound (4.0 EQ-deg) is MARGINAL vs. estimated ~2.7-deg/frame server cap. See `docs/research/C1-movement-agreement-packet.md`.
 5. Can Early Bird injection win the race against EQ's AC initialization? — **OPEN** (requires live testing)
 
 ### Ghidra-Verified Findings (2026-04-03)
@@ -251,9 +251,17 @@ Independent verification via GhidraMCP analysis of eqgame.exe on Frostreaver. Ev
 
 - Server-set flag at player struct offset 0x2C4 — persists in save data across sessions. Once flagged, character stays flagged forever.
 
+**Movement-agreement packet (2026-04-21 — Research, not live-validated):**
+
+- Per-frame position update: opcode `0x1643` via `UdpConnection::SendMessage` (confirmed network architecture research, Dec 2024 binary)
+- Payload struct: `PlayerPositionUpdateClient_Struct` — sequence (u16), spawn_id (u16), vehicle_id (u16), delta_x/z/y (f32 each), packed heading:12 + animation:10 bitfield
+- Movement-history summary (1/sec aggregate): opcode unresolved — `CMovementHistoryClientException` RTTI confirmed; serialization site xref blocked on Ghidra session
+- Tolerance envelope: speed_factor ±7% SAFE; heading_wobble 1.0–4.0 EQ-deg/frame MARGINAL (4.0 exceeds estimated ~2.7-deg/frame cap); see `docs/research/C1-movement-agreement-packet.md`
+- Evidence state: `Research-backed` for struct layout and opcode; `Needs Live Proof` for tolerance bounds and history-summary opcode
+
 ### Evidence Status
 
-SME-reported detection systems (byte count, memshift, memcheck 1-4) remain `SME-reported, partially verified`. Ghidra-confirmed findings above are `Live-validated` via binary analysis. Main loop internals remain unverified due to decompiler timeout on the ~20KB function body.
+SME-reported detection systems (byte count, memshift, memcheck 1-4) remain `SME-reported, partially verified`. Ghidra-confirmed findings above are `Live-validated` via binary analysis. Main loop internals remain unverified due to decompiler timeout on the ~20KB function body. Movement-agreement research (2026-04-21) is `Research-backed` — see section above.
 
 ## Near-Term `M5` Hardening Focus
 

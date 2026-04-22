@@ -1,7 +1,31 @@
 //! Movement humanization — per-character speed jitter, heading wobble,
 //! and occasional path deviations to avoid bot-like movement patterns.
+//!
+//! # Movement-Agreement Tolerance Envelope (issue #2184)
+//!
+//! The EQ server validates per-frame position updates (opcode `0x1643`,
+//! `PlayerPositionUpdateClient_Struct`) against its own reconstructed movement
+//! history via the `CMovementHistoryClientException` handler. The following
+//! bounds are **research-derived** (EQEmu source + SME) and not yet live-validated.
+//! See `docs/research/C1-movement-agreement-packet.md` for the full analysis.
+//!
+//! | Parameter       | This module's range | Est. server tolerance | Status   |
+//! |-----------------|--------------------|-----------------------|----------|
+//! | `speed_factor`  | 0.93–1.07          | up to ~2.0× (warp cap)| SAFE     |
+//! | `heading_wobble`| 1.0–2.5 EQ-deg/frm | ~2.7 EQ-deg/frm est.  | SAFE*    |
+//! | `detour_chance` | 0.00–0.08          | path-level, not frame | SAFE     |
+//!
+//! *`heading_wobble` was previously generated in the range 1.0–4.0. The upper
+//! bound has been tightened to 2.5 EQ-degrees/frame to stay within the estimated
+//! ~2.7-degree/frame per-frame angular velocity cap. Live validation required to
+//! confirm the exact server threshold.
 
 use textquest_common::nav::Xorshift32;
+
+/// Maximum heading wobble magnitude in EQ degrees per tick.
+/// Capped at 2.5 to stay within the estimated ~2.7 EQ-deg/frame server-side
+/// angular velocity tolerance (see `docs/research/C1-movement-agreement-packet.md`).
+const MAX_HEADING_WOBBLE: f32 = 2.5;
 
 /// Per-character movement personality. Values are seeded from the `client_id`
 /// so each character consistently moves differently.
