@@ -28,6 +28,8 @@ mod eq;
 #[allow(dead_code)]
 mod hooks;
 #[allow(dead_code)]
+mod injection;
+#[allow(dead_code)]
 mod ipc;
 #[allow(dead_code)]
 mod login;
