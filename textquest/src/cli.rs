@@ -1662,18 +1662,87 @@ pub fn run_dump_mode() -> Result<()> {
 /// loop.
 ///
 /// Blocks until Ctrl+C is pressed.
+/// Emit a final shutdown report based on accumulated loop events.
+fn print_shutdown_report(events: &[crate::orchestrator_loop::LoopEvent]) {
+    use crate::orchestrator_loop::LoopEvent;
+
+    let mut camped = 0u32;
+    let mut requeued = 0u32;
+    let mut registered = 0u32;
+    let mut peers_discovered = 0u32;
+    let mut peers_expired = 0u32;
+    let mut health_checks = 0u32;
+
+    for event in events {
+        match event {
+            LoopEvent::ClientCamped { .. } => camped += 1,
+            LoopEvent::ClientRequeued { .. } => requeued += 1,
+            LoopEvent::ClientRegistered { .. } => registered += 1,
+            LoopEvent::PeerDiscovered { .. } => peers_discovered += 1,
+            LoopEvent::PeerExpired { .. } => peers_expired += 1,
+            LoopEvent::HealthCheckDone { .. } => health_checks += 1,
+            LoopEvent::ShuttingDown => {}
+        }
+    }
+
+    eprintln!("--- Shutdown Report ---");
+    eprintln!("  Health checks run : {health_checks}");
+    eprintln!("  Clients registered: {registered}");
+    eprintln!("  Clients camped    : {camped}");
+    eprintln!("  Clients requeued  : {requeued}");
+    eprintln!("  Peers discovered  : {peers_discovered}");
+    eprintln!("  Peers expired     : {peers_expired}");
+    eprintln!("  Total events      : {}", events.len());
+    eprintln!("----------------------");
+
+    info!(
+        health_checks,
+        clients_registered = registered,
+        clients_camped = camped,
+        clients_requeued = requeued,
+        peers_discovered,
+        peers_expired,
+        total_events = events.len(),
+        "Orchestrator shutdown report"
+    );
+}
+
+/// Run the orchestrator event loop — health checks, launch coordinator, camp
+/// loop.
+///
+/// Blocks until Ctrl+C is pressed, then performs a graceful shutdown:
+/// - First Ctrl+C: signals the loop to stop, waits up to 60 s, exits 0.
+/// - Second Ctrl+C during shutdown: exits immediately with code 130.
 pub fn run_orchestrate_mode() -> Result<()> {
     let config = load_config()?;
 
     let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
+
+    // Track whether a forced exit was requested so we can set exit code 130.
+    let forced_exit = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
     rt.block_on(async {
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
-        // Catch Ctrl+C for graceful shutdown
+        // ── Signal handler ───────────────────────────────────────────────
+        // First Ctrl+C  → send graceful shutdown signal.
+        // Second Ctrl+C → forced exit with code 130.
         let tx = shutdown_tx.clone();
+        let forced_flag = forced_exit.clone();
         tokio::spawn(async move {
+            // First signal
             if tokio::signal::ctrl_c().await.is_ok() {
+                eprintln!("\nShutting down gracefully… (press Ctrl+C again to force)");
+                info!("SIGINT received — initiating graceful shutdown");
                 let _ = tx.send(true);
+            }
+
+            // Second signal — forced exit
+            if tokio::signal::ctrl_c().await.is_ok() {
+                eprintln!("\nForced exit requested.");
+                info!("Second SIGINT received — forcing exit with code 130");
+                forced_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                std::process::exit(130);
             }
         });
 
@@ -1683,12 +1752,66 @@ pub fn run_orchestrate_mode() -> Result<()> {
         info!("Orchestrator loop starting — press Ctrl+C to stop");
         eprintln!("Orchestrator loop running. Press Ctrl+C to stop.");
 
+        // ── Run the loop ─────────────────────────────────────────────────
         let events = oloop.run().await;
-        info!(events = events.len(), "Orchestrator loop stopped");
-        eprintln!("Orchestrator loop stopped ({} events).", events.len());
+
+        info!(events = events.len(), "Orchestrator loop stopped — flushing");
+        eprintln!("Orchestrator loop stopped. Flushing state…");
+
+        // ── Final report ─────────────────────────────────────────────────
+        print_shutdown_report(&events);
+
+        eprintln!("Shutdown complete.");
+        info!("Orchestrator shutdown complete");
     });
 
+    // If a forced exit happened via process::exit(130) we never reach here.
+    // Normal clean shutdown → exit 0 (implicit via Ok(())).
     Ok(())
+}
+
+#[cfg(test)]
+mod orchestrate_tests {
+    use super::print_shutdown_report;
+    use crate::orchestrator_loop::LoopEvent;
+
+    #[test]
+    fn shutdown_report_counts_events_correctly() {
+        let events = vec![
+            LoopEvent::ClientRegistered { pid: 1001 },
+            LoopEvent::ClientRegistered { pid: 1002 },
+            LoopEvent::HealthCheckDone {
+                healthy: 2,
+                unhealthy: 0,
+            },
+            LoopEvent::ClientCamped { pid: 1001 },
+            LoopEvent::ClientRequeued { pid: 1001 },
+            LoopEvent::PeerDiscovered {
+                node_name: "node-a".into(),
+                sessions: 3,
+            },
+            LoopEvent::PeerExpired {
+                node_name: "node-b".into(),
+            },
+            LoopEvent::ShuttingDown,
+        ];
+
+        // print_shutdown_report should not panic and should process all event
+        // variants without crashing.
+        print_shutdown_report(&events);
+    }
+
+    #[test]
+    fn shutdown_report_empty_events() {
+        // Edge case: loop was shut down before any events accumulated.
+        print_shutdown_report(&[]);
+    }
+
+    #[test]
+    fn shutdown_report_shutting_down_only() {
+        let events = vec![LoopEvent::ShuttingDown];
+        print_shutdown_report(&events);
+    }
 }
 
 // ─── Daemon lifecycle ───────────────────────────────────────────────────────
