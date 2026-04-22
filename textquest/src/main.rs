@@ -222,6 +222,17 @@ enum Commands {
         log_level: String,
     },
 
+    // ── Report generation ─────────────────────────────────────────────
+    /// Generate an HTML report from a session JSON export
+    Report {
+        /// Path to the session JSON export file (produced by overnight-test)
+        #[arg(long, short)]
+        input: std::path::PathBuf,
+        /// Output path for the HTML report (default: report.html)
+        #[arg(long, short, default_value = "report.html")]
+        output: std::path::PathBuf,
+    },
+
     // ── Configuration ─────────────────────────────────────────────────
     /// Configuration management
     Config {
@@ -435,6 +446,9 @@ fn main() -> Result<()> {
             &output_dir,
             &log_level,
         ),
+
+        // Report generation
+        Some(Commands::Report { input, output }) => cli::run_report_mode(&input, &output),
 
         // Configuration
         Some(Commands::Config { action }) => match action {

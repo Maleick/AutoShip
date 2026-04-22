@@ -2619,6 +2619,58 @@ pub fn run_overnight_test_mode(
     Ok(())
 }
 
+// ── HTML report generation ───────────────────────────────────────────────────
+
+/// Generate a self-contained HTML report from a session JSON export.
+///
+/// The `input` file is a JSON object exported by the overnight-test runner
+/// containing `events` (array of `TestEvent`) and optionally `metrics`
+/// (`MetricsSummary`).  The output is a fully self-contained HTML5 file.
+pub fn run_report_mode(input: &std::path::Path, output: &std::path::Path) -> Result<()> {
+    use crate::testing::report_generator::{MetricsSummary, ReportGenerator, TestEvent};
+
+    let raw = std::fs::read_to_string(input)
+        .with_context(|| format!("Failed to read session JSON from {}", input.display()))?;
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&raw).context("Session JSON is not valid JSON")?;
+
+    let events: Vec<TestEvent> = if let Some(arr) = parsed.get("events") {
+        serde_json::from_value(arr.clone()).context("Failed to parse 'events' array")?
+    } else {
+        Vec::new()
+    };
+
+    let metrics: Option<MetricsSummary> = if let Some(m) = parsed.get("metrics") {
+        serde_json::from_value(m.clone()).ok()
+    } else {
+        None
+    };
+
+    // Use the directory containing the input file as the session directory.
+    let session_dir = input.parent().unwrap_or(std::path::Path::new("."));
+
+    let html = ReportGenerator::generate(session_dir, &events, metrics.as_ref());
+
+    if let Some(parent) = output.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create output directory {}", parent.display()))?;
+        }
+    }
+
+    std::fs::write(output, &html)
+        .with_context(|| format!("Failed to write HTML report to {}", output.display()))?;
+
+    eprintln!(
+        "report: wrote {} bytes → {}",
+        html.len(),
+        output.display()
+    );
+
+    Ok(())
+}
+
 /// Helper: read and log a hex dump of `count` bytes starting at `base_addr +
 /// start_offset`.
 #[allow(dead_code)]
