@@ -351,6 +351,10 @@ pub struct AppConfig {
     /// Say detection and alerting configuration.
     #[serde(default)]
     pub say_detection: SayDetectionConfig,
+
+    /// Log file rotation and retention configuration.
+    #[serde(default)]
+    pub log: LogConfig,
 }
 
 /// Kill tracker auto-reporting configuration.
@@ -861,6 +865,45 @@ impl Default for PeerDiscoveryConfig {
     }
 }
 
+/// Log file rotation and retention configuration.
+///
+/// Controls how many log files are kept, their maximum combined size, and how
+/// long files are retained before automatic deletion.
+///
+/// # TOML example
+///
+/// ```toml
+/// [log]
+/// max_size_mb  = 200   # Delete oldest files until total log dir size < 200 MB
+/// max_files    = 14    # Keep at most 14 rolling files (daily rotation)
+/// max_age_days = 14    # Delete files older than 14 days
+/// ```
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct LogConfig {
+    /// Maximum total size in megabytes for all log files matching a given
+    /// prefix.  When exceeded, the oldest files are removed first.  `0`
+    /// disables size-based pruning.
+    pub max_size_mb: u64,
+    /// Maximum number of rolling log files to retain.  Passed directly to
+    /// `tracing-appender`'s `RollingFileAppender`.  `0` uses the appender's
+    /// default (unlimited).
+    pub max_files: usize,
+    /// Delete log files older than this many days.  `0` disables age-based
+    /// pruning.
+    pub max_age_days: u64,
+}
+
+impl Default for LogConfig {
+    fn default() -> Self {
+        Self {
+            max_size_mb: 100,
+            max_files: 7,
+            max_age_days: 30,
+        }
+    }
+}
+
 fn default_process_name() -> String {
     "eqgame.exe".to_string()
 }
@@ -911,6 +954,7 @@ impl AppConfig {
             timing_correction: false,
             kill_tracker: KillTrackerConfig::default(),
             say_detection: SayDetectionConfig::default(),
+            log: LogConfig::default(),
         }
     }
 }
@@ -1220,6 +1264,59 @@ timing_correction = true
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
         assert!(cfg.hook_rotation_enabled);
         assert_eq!(cfg.hook_rotation_interval_ms, 7500);
+    }
+
+    #[test]
+    fn log_config_defaults() {
+        let cfg = AppConfig::default_config();
+        assert_eq!(cfg.log.max_size_mb, 100);
+        assert_eq!(cfg.log.max_files, 7);
+        assert_eq!(cfg.log.max_age_days, 30);
+    }
+
+    #[test]
+    fn log_config_parses_from_toml() {
+        let cfg: AppConfig = toml::from_str(
+            r#"
+[log]
+max_size_mb  = 500
+max_files    = 14
+max_age_days = 60
+"#,
+        )
+        .unwrap();
+        assert_eq!(cfg.log.max_size_mb, 500);
+        assert_eq!(cfg.log.max_files, 14);
+        assert_eq!(cfg.log.max_age_days, 60);
+    }
+
+    #[test]
+    fn log_config_partial_override() {
+        let cfg: AppConfig = toml::from_str(
+            r#"
+[log]
+max_files = 3
+"#,
+        )
+        .unwrap();
+        // Only max_files overridden; others stay at defaults.
+        assert_eq!(cfg.log.max_files, 3);
+        assert_eq!(cfg.log.max_size_mb, 100);
+        assert_eq!(cfg.log.max_age_days, 30);
+    }
+
+    #[test]
+    fn log_config_zero_disables_pruning() {
+        let cfg: AppConfig = toml::from_str(
+            r#"
+[log]
+max_size_mb  = 0
+max_age_days = 0
+"#,
+        )
+        .unwrap();
+        assert_eq!(cfg.log.max_size_mb, 0);
+        assert_eq!(cfg.log.max_age_days, 0);
     }
 
     #[test]

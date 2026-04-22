@@ -38,6 +38,8 @@ pub mod command_dispatch;
 pub mod circuit_breaker;
 /// TOML configuration loading.
 pub mod config;
+/// Log file rotation and retention — size-based and age-based cleanup.
+pub mod log_retention;
 /// Crash reporting and session recovery — per-character context snapshots and
 /// recovery commands.
 #[cfg(windows)]

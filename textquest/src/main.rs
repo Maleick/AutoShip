@@ -1,11 +1,13 @@
 #[cfg(windows)]
-use textquest::{cli, paths};
+use textquest::{cli, log_retention, paths};
 
 #[cfg(windows)]
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 #[cfg(windows)]
 use std::path::Path;
+#[cfg(windows)]
+use textquest::config::LogConfig;
 #[cfg(windows)]
 use tracing_appender::rolling;
 #[cfg(windows)]
@@ -309,8 +311,22 @@ fn main() -> Result<()> {
     } else {
         ("textquest.log", "info")
     };
+
+    // Load log config for rotation/retention settings; fall back to defaults
+    // if the config file is not yet present (first run, fresh install, etc.).
+    let log_config = cli::load_config().map(|c| c.log).unwrap_or_default();
+
     let log_dir = paths::resolve_log_dir();
-    let _tracing_guard = init_tracing(&log_dir, log_prefix, default_filter);
+    let _tracing_guard = init_tracing(&log_dir, log_prefix, default_filter, &log_config);
+
+    // Prune old log files on startup (best-effort, errors are already logged
+    // inside prune_log_dir).
+    log_retention::prune_log_dir(
+        &log_dir,
+        log_prefix,
+        log_config.max_size_mb.saturating_mul(1024 * 1024),
+        log_config.max_age_days,
+    );
 
     tracing::info!(
         log_prefix,
@@ -478,6 +494,7 @@ fn init_tracing(
     log_dir: &Path,
     filename_prefix: &str,
     default_filter: &str,
+    log_config: &LogConfig,
 ) -> tracing_appender::non_blocking::WorkerGuard {
     if let Err(err) = std::fs::create_dir_all(log_dir) {
         eprintln!(
@@ -485,12 +502,19 @@ fn init_tracing(
             log_dir.display()
         );
     }
-    let file_appender = rolling::RollingFileAppender::builder()
+
+    let mut builder = rolling::RollingFileAppender::builder()
         .rotation(rolling::Rotation::DAILY)
-        .filename_prefix(filename_prefix)
-        .max_log_files(7)
+        .filename_prefix(filename_prefix);
+
+    if log_config.max_files > 0 {
+        builder = builder.max_log_files(log_config.max_files);
+    }
+
+    let file_appender = builder
         .build(log_dir)
         .unwrap_or_else(|_| rolling::daily(log_dir, filename_prefix));
+
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     let filter =
