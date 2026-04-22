@@ -740,6 +740,12 @@ pub struct OrchestratorConfig {
     pub orchestrator_tick_interval_ms: u64,
     /// Interval in milliseconds between game state polls from shared memory.
     pub state_poll_interval_ms: u64,
+    /// Interval in milliseconds between fleet progress report emissions.
+    ///
+    /// A `ProgressReported` [`crate::orchestrator_loop::LoopEvent`] is emitted
+    /// every `progress_report_interval_ms` milliseconds. Set to 0 to disable.
+    /// Defaults to 30 000 ms (30 seconds).
+    pub progress_report_interval_ms: u64,
 }
 
 impl Default for OrchestratorConfig {
@@ -749,6 +755,7 @@ impl Default for OrchestratorConfig {
             launch_tick_interval_ms: 1000,
             orchestrator_tick_interval_ms: 250,
             state_poll_interval_ms: 100,
+            progress_report_interval_ms: 30_000,
         }
     }
 }

@@ -14,7 +14,7 @@ use crate::{
     credentials::store::CredentialStore,
     discord::webhook::WebhookSender,
     launcher::coordinator::{CoordinatorEvent, LaunchCoordinator},
-    metrics::{SessionErrorKind, sample_process_memory_bytes},
+    metrics::{ProgressReport, ProgressTracker, SessionErrorKind, sample_process_memory_bytes},
     orchestrator::Orchestrator,
 };
 use std::{
@@ -48,6 +48,8 @@ pub enum LoopEvent {
     PeerExpired { node_name: String },
     /// Health check completed for all clients.
     HealthCheckDone { healthy: usize, unhealthy: usize },
+    /// A fleet progress snapshot was captured on the reporting interval.
+    ProgressReported(Box<ProgressReport>),
     /// The loop is shutting down.
     ShuttingDown,
 }
@@ -69,6 +71,8 @@ pub struct OrchestratorLoop {
     auto_group_runtime: crate::auto_group::AutoGroupRuntime,
     timestamp_runtime: crate::timestamp_runtime::TimestampRuntime,
     window_title_runtime: crate::window_title_runtime::WindowTitleRuntime,
+    /// In-process per-client session counters for real-time progress reporting.
+    progress_tracker: ProgressTracker,
 }
 
 impl OrchestratorLoop {
@@ -111,6 +115,7 @@ impl OrchestratorLoop {
             auto_group_runtime: crate::auto_group::AutoGroupRuntime::new(),
             timestamp_runtime: crate::timestamp_runtime::TimestampRuntime::new(),
             window_title_runtime: crate::window_title_runtime::WindowTitleRuntime::new(),
+            progress_tracker: ProgressTracker::new(),
         }
     }
 
@@ -204,10 +209,20 @@ impl OrchestratorLoop {
             self.config.orchestrator_tick_interval_ms,
         ));
 
+        // Progress reporting interval — fall back to 30s if unconfigured or zero.
+        let progress_interval_ms = if self.config.progress_report_interval_ms == 0 {
+            30_000
+        } else {
+            self.config.progress_report_interval_ms
+        };
+        let mut progress_interval =
+            tokio::time::interval(Duration::from_millis(progress_interval_ms));
+
         // Don't burst-fire missed ticks
         health_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         launch_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         orch_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        progress_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
         loop {
             tokio::select! {
@@ -243,6 +258,10 @@ impl OrchestratorLoop {
                     self.sync_timestamp_runtime();
                     self.sync_window_title_runtime();
                 }
+                _ = progress_interval.tick() => {
+                    let event = self.tick_progress();
+                    tracing::debug!(?event, "progress report emitted");
+                }
                 Ok(()) = self.shutdown_rx.changed() => {
                     if *self.shutdown_rx.borrow() {
                         tracing::info!("Shutdown signal received — stopping orchestrator loop");
@@ -251,6 +270,25 @@ impl OrchestratorLoop {
                 }
             }
         }
+    }
+
+    /// Build and emit a `ProgressReported` event from current tracker state.
+    ///
+    /// The returned event is informational; callers (TUI, Discord) subscribe
+    /// by holding the same `OrchestratorLoop` or receiving `LoopEvent` via a
+    /// broadcast channel wired at a higher layer.
+    pub fn tick_progress(&mut self) -> LoopEvent {
+        let report = self.progress_tracker.build_report();
+        tracing::info!(
+            total_clients = report.total_clients,
+            active_clients = report.active_clients,
+            fleet_xp_per_hour_avg = report.fleet_xp_per_hour_avg,
+            fleet_kills_per_hour = report.fleet_kills_per_hour,
+            fleet_deaths_total = report.fleet_deaths_total,
+            camp_uptime_ratio = report.camp_uptime_ratio(),
+            "Fleet progress snapshot"
+        );
+        LoopEvent::ProgressReported(Box::new(report))
     }
 
     fn tick_peer_discovery(&mut self) -> Vec<LoopEvent> {
@@ -906,12 +944,15 @@ mod tests {
                 healthy: 5,
                 unhealthy: 1,
             },
+            LoopEvent::ProgressReported(Box::new(
+                crate::metrics::ProgressReport::from_snapshots(vec![]),
+            )),
             LoopEvent::ShuttingDown,
         ];
         for e in &events {
             let _ = format!("{e:?}");
         }
-        assert_eq!(events.len(), 7);
+        assert_eq!(events.len(), 8);
     }
 
     #[test]
@@ -921,5 +962,45 @@ mod tests {
         assert_eq!(config.launch_tick_interval_ms, 1000);
         assert_eq!(config.orchestrator_tick_interval_ms, 250);
         assert_eq!(config.state_poll_interval_ms, 100);
+        assert_eq!(config.progress_report_interval_ms, 30_000);
+    }
+
+    #[test]
+    fn tick_progress_emits_progress_reported_event() {
+        let config = make_app_config();
+        let (_tx, rx) = watch::channel(false);
+        let mut oloop = OrchestratorLoop::from_config(&config, rx);
+
+        // Register a client in the progress tracker
+        oloop.progress_tracker.register_client(1, "Paladin");
+        oloop.progress_tracker.record_kill(1);
+        oloop.progress_tracker.record_death(1);
+
+        let event = oloop.tick_progress();
+        match event {
+            LoopEvent::ProgressReported(report) => {
+                assert_eq!(report.total_clients, 1);
+                assert_eq!(report.fleet_kills_total, 1);
+                assert_eq!(report.fleet_deaths_total, 1);
+            }
+            other => panic!("expected ProgressReported, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn tick_progress_empty_tracker_is_zero() {
+        let config = make_app_config();
+        let (_tx, rx) = watch::channel(false);
+        let mut oloop = OrchestratorLoop::from_config(&config, rx);
+
+        let event = oloop.tick_progress();
+        match event {
+            LoopEvent::ProgressReported(report) => {
+                assert_eq!(report.total_clients, 0);
+                assert_eq!(report.fleet_kills_total, 0);
+                assert_eq!(report.camp_uptime_ratio(), 0.0);
+            }
+            other => panic!("expected ProgressReported, got {other:?}"),
+        }
     }
 }
