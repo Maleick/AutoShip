@@ -1,0 +1,45 @@
+# config/clickies/example_enchanter.toml
+#
+# Example: Enchanter-specific clicky profile.
+# Rename to your character name to activate (e.g. "Kira.toml").
+#
+# This file is merged with global.toml: global items first, then
+# character-specific items, sorted by priority.
+
+# ── Epic proc — Flowing Black Silk Sash ─────────────────────────────────────
+
+[[clicky]]
+name        = "Epic Proc — FBSS"
+slot        = 0
+cooldown_ms = 72000
+priority    = 0
+enabled     = true
+ooc_only    = true
+note        = "Haste proc. Click out of combat when haste buff falls off."
+
+[[clicky.conditions]]
+missing_buffs = ["Swift Like the Wind"]
+
+# ── KEI / Clarity self-buff ──────────────────────────────────────────────────
+
+[[clicky]]
+name        = "Mana Regen Clicky"
+slot        = 3
+cooldown_ms = 300000
+priority    = 2
+enabled     = true
+ooc_only    = true
+note        = "KEI-equivalent clicky. Fire when mana < 50% out of combat."
+
+[[clicky.conditions]]
+mana_pct_max = 50.0
+
+# ── Illusion clicky (disabled by default) ────────────────────────────────────
+
+[[clicky]]
+name        = "Illusion — Dark Elf"
+slot        = 10
+cooldown_ms = 0
+priority    = 10
+enabled     = false
+note        = "Cosmetic. Enable for role-play sessions."

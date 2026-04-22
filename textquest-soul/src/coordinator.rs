@@ -671,7 +671,7 @@ impl SoulCoordinator {
                 AuditActionType::MemoryRecord,
                 format!(
                     "{} recorded player chat memory from {}",
-                    soul_name, player_name
+                    soul.name, player_name
                 ),
                 None,
                 None,

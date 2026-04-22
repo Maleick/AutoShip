@@ -1,0 +1,32 @@
+# config/clickies/example_warrior.toml
+#
+# Example: Warrior-specific clicky profile.
+# Rename to your character name to activate (e.g. "Warrior01.toml").
+
+# ── Endurance potion ─────────────────────────────────────────────────────────
+
+[[clicky]]
+name        = "Endurance Potion"
+slot        = 5
+cooldown_ms = 60000
+priority    = 0
+enabled     = true
+combat_only = true
+note        = "Use in combat when HP falls below 40%"
+
+[[clicky.conditions]]
+hp_pct_max = 40.0
+
+# ── Defensive damage shield proc ─────────────────────────────────────────────
+
+[[clicky]]
+name        = "Shield of the Magi"
+slot        = 22
+cooldown_ms = 120000
+priority    = 1
+enabled     = true
+ooc_only    = true
+note        = "Damage shield proc. Click out of combat when buff falls off."
+
+[[clicky.conditions]]
+missing_buffs = ["Shield of the Magi"]

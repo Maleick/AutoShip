@@ -1,0 +1,42 @@
+# config/clickies/global.toml
+#
+# Global clicky profile — applies to every character.
+# Character-specific files (e.g. Kira.toml) are merged on top of this.
+#
+# All fields except `name` and `slot` are optional.
+# Defaults: cooldown_ms = 0, priority = 0, enabled = true
+#
+# Conditions: ALL must be true simultaneously for the item to fire.
+# Empty conditions list = fire whenever cooldown has expired.
+#
+#   [[clicky.conditions]]
+#   hp_pct_max   = 50.0      # fire when HP <= 50%
+#   mana_pct_max = 30.0      # fire when mana <= 30%
+#   missing_buffs = ["Haste"] # fire when Haste buff is absent
+
+# ── Heal Potion ──────────────────────────────────────────────────────────────
+
+[[clicky]]
+name        = "Heal Potion"
+slot        = 5
+cooldown_ms = 30000
+priority    = 0
+enabled     = true
+note        = "Emergency heal — fires at 30% HP"
+
+[[clicky.conditions]]
+hp_pct_max = 30.0
+
+# ── Tether / Defensive Proc ──────────────────────────────────────────────────
+
+[[clicky]]
+name        = "Tether of Shadows"
+slot        = 22
+cooldown_ms = 60000
+priority    = 5
+enabled     = true
+combat_only = true
+note        = "Defensive proc clicky — use in combat at 60% HP or below"
+
+[[clicky.conditions]]
+hp_pct_max = 60.0
