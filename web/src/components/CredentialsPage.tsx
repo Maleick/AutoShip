@@ -97,7 +97,7 @@ function PasswordBadge({ hasPassword }: { hasPassword: boolean }) {
 
 // ─── Test Connection Button ───────────────────────────────────────────────────
 
-function TestConnectionButton({ name }: { name: string }) {
+function TestConnectionButton({ name: _name }: { name: string }) {
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<"idle" | "success" | "error">("idle");
 

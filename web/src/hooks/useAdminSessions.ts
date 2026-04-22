@@ -4,20 +4,6 @@ import type { AdminSessionRecord } from "../types";
 
 const POLL_INTERVAL_MS = 5000;
 
-export interface AdminSession {
-  session_id: number;
-  character_name: string | null;
-  class_name: string | null;
-  group_id: number;
-  routing_scope: {
-    kind: string;
-    label: string;
-    group_id: number | null;
-    toon_name: string | null;
-  };
-  lifecycle_state: string;
-}
-
 function readString(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;

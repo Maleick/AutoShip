@@ -1,7 +1,8 @@
 import { Gauge, Terminal, FolderSimple, Users, Warning, CheckCircle } from "@phosphor-icons/react";
-import { useAdminSessions, type AdminSession } from "../hooks/useAdminSessions";
+import { useAdminSessions } from "../hooks/useAdminSessions";
+import type { AdminSessionRecord } from "../types";
 
-function SessionOverview({ sessions }: { sessions: AdminSession[] }) {
+function SessionOverview({ sessions }: { sessions: AdminSessionRecord[] }) {
   if (sessions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-white/50">
@@ -16,34 +17,34 @@ function SessionOverview({ sessions }: { sessions: AdminSession[] }) {
     <div className="grid gap-3">
       {sessions.map((session) => (
         <div
-          key={session.session_id}
+          key={session.sessionId}
           className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-4"
         >
           <div className="flex items-center gap-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-magentadark/20">
               <span className="font-mono text-sm text-magentaglow">
-                {session.session_id}
+                {session.sessionId}
               </span>
             </div>
             <div>
               <p className="font-medium text-white">
-                {session.character_name || "Unknown"}
+                {session.characterName || "Unknown"}
               </p>
               <p className="text-sm text-white/50">
-                {session.class_name || "Unknown"} • Group {session.group_id}
+                {session.className || "Unknown"} • Group {session.groupId}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {session.lifecycle_state === "active" ? (
+            {session.lifecycle === "active" ? (
               <CheckCircle size={20} className="text-green-400" />
-            ) : session.lifecycle_state === "error" ? (
+            ) : session.lifecycle === "error" ? (
               <Warning size={20} className="text-red-400" />
             ) : (
               <div className="h-2.5 w-2.5 rounded-full bg-yellow-400" />
             )}
             <span className="text-sm capitalize text-white/70">
-              {session.lifecycle_state}
+              {session.lifecycle}
             </span>
           </div>
         </div>

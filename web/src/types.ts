@@ -858,6 +858,7 @@ export interface KillTrackerDashboard {
 export type ChatChannel =
   | "say"
   | "tell"
+  | "tell_out"
   | "group"
   | "raid"
   | "guild"
@@ -900,25 +901,11 @@ export type LogRotation =
 export interface ChatLogSettings {
   enabled: boolean;
   rotation: LogRotation;
-  level: "info" | "debug";
+  level: LogLevel;
   channels: ChatChannel[];
 }
 
-// ── Auto-accept types ────────────────────────────────────────────────────────
-
-export type AutoAcceptTrustMode = "anyone" | "trust_list";
-
-export interface AutoAcceptSettings {
-  enabled: boolean;
-  accept_group_invites: boolean;
-  accept_trades: boolean;
-  accept_task_adds: boolean;
-  accept_dz_adds: boolean;
-  accept_translocates: boolean;
-  accept_anchors: boolean;
-  trust_mode: AutoAcceptTrustMode;
-  trusted_players: string[];
-}
+// ── Auto-accept types (deduplicated — defined earlier in file) ───────────────
 
 export interface TradeskillTrophySettings {
   enabled: boolean;
@@ -962,17 +949,6 @@ export interface PlayerWatchConfig {
   filter_mode: PlayerFilterMode;
   sound_on_zone_in: boolean;
   friends: string[];
-}
-
-export type TimestampFormat =
-  | "date_time_24"
-  | "time_24"
-  | "date_time_12"
-  | "time_12";
-
-export interface TimestampConfig {
-  enabled: boolean;
-  format: TimestampFormat;
 }
 
 // ── GM alerts types ──────────────────────────────────────────────────────────
@@ -1153,44 +1129,11 @@ export interface XAssistConfigUpdate {
 
 // ── Inventory utility parity types ───────────────────────────────────────────
 
-export type PluginSupportLevel = "native" | "adapted" | "deferred";
-
-export interface PluginMapping {
-  plugin_name: string;
-  owner: string;
-  support_level: PluginSupportLevel;
-  native_surface: string;
-  notes: string;
-}
-
 export interface LegacyAdapterProvenance {
-  plugin_name: string;
-  support_level: PluginSupportLevel;
-  source: string;
-  imported_records: number;
+  plugin: string;
+  source_reference: string;
+  adapted_into: string;
   unsupported_fields: string[];
-}
-
-export type CursorOverflowAction = "keep" | "bank" | "sell" | "destroy" | "consume" | "route" | "claim";
-
-export interface CursorRule {
-  item_name: string;
-  max_quantity: number;
-  overflow_action: CursorOverflowAction;
-}
-
-export type RewardRoutingTarget = "keep" | "bank" | "sell" | "tribute" | "trophy";
-
-export interface RewardRoutingRule {
-  task_matcher: string;
-  reward_name: string;
-  target: RewardRoutingTarget;
-}
-
-export interface CollectionRoutingRule {
-  set_name: string;
-  item_name: string;
-  target: RewardRoutingTarget;
 }
 
 export interface FoodRule {
@@ -1199,15 +1142,8 @@ export interface FoodRule {
   hydrate: boolean;
 }
 
-export interface RelocationRule {
-  item_name: string;
-  destination: string;
-  keep_on_hand: number;
-}
-
 export interface AutoClaimRule {
   claim_name: string;
-  target: RewardRoutingTarget;
   enabled: boolean;
 }
 

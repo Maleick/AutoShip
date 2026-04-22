@@ -1,7 +1,6 @@
 import React from "react";
 import {
   Check,
-  Circle,
   X,
   Warning,
   Clock,
@@ -20,7 +19,7 @@ interface StatusIconProps {
 const statusConfig: Record<
   StatusType,
   {
-    icon: React.FC<{ size: number; weight: "bold" | "fill" }>;
+    icon: React.FC<{ size: number; weight: "bold" | "fill"; className?: string }>;
     color: string;
     bgColor: string;
     label: string;

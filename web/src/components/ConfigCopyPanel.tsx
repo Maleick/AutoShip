@@ -22,11 +22,8 @@ function parseCopyResponse(payload: unknown): ConfigCopyResponseEntry[] {
       entry && typeof entry === "object"
         ? {
             char: String((entry as { char?: unknown }).char ?? ""),
-            status:
-              ((entry as { status?: unknown }).status as CopyStatus) ?? "error",
-            diff_summary: String(
-              (entry as { diff_summary?: unknown }).diff_summary ?? "",
-            ),
+            status: ((entry as { status?: unknown }).status as CopyStatus) ?? "error",
+            diff_summary: String((entry as { diff_summary?: unknown }).diff_summary ?? ""),
           }
         : {
             char: "",
@@ -51,17 +48,12 @@ function copySubsetNeedsRotation(subset: CopySubset): boolean {
   return subset === "rotation" || subset === "both";
 }
 
-export default function ConfigCopyPanel({
-  characterConfigs,
-}: ConfigCopyPanelProps) {
+export default function ConfigCopyPanel({ characterConfigs }: ConfigCopyPanelProps) {
   const [fromChar, setFromChar] = useState("");
   const [toChars, setToChars] = useState<string[]>([]);
   const [subset, setSubset] = useState<CopySubset>("both");
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<{
-    message: string;
-    type: "ok" | "err";
-  } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "ok" | "err" } | null>(null);
   const [results, setResults] = useState<ConfigCopyResponseEntry[]>([]);
 
   const sourceCharacter = characterConfigs.find(
@@ -88,9 +80,7 @@ export default function ConfigCopyPanel({
   useEffect(() => {
     if (toChars.length === 0) return;
 
-    const validToChars = new Set(
-      targetOptions.map((character) => character.character_name),
-    );
+    const validToChars = new Set(targetOptions.map((character) => character.character_name));
     const next = toChars.filter((value) => validToChars.has(value));
 
     if (next.length !== toChars.length) {
@@ -119,10 +109,7 @@ export default function ConfigCopyPanel({
       });
 
       if (response.status === 404 || response.status === 501) {
-        setToast({
-          message: "Config copy backend unavailable (demo mode)",
-          type: "err",
-        });
+        setToast({ message: "Config copy backend unavailable (demo mode)", type: "err" });
         setLoading(false);
         return;
       }
@@ -134,9 +121,7 @@ export default function ConfigCopyPanel({
       if (!response.ok) {
         const message =
           copyResults.length > 0
-            ? copyResults
-                .map((result) => `${result.char}: ${result.diff_summary}`)
-                .join(" | ")
+            ? copyResults.map((result) => `${result.char}: ${result.diff_summary}`).join(" | ")
             : `Copy request failed with HTTP ${response.status}`;
         setToast({ message, type: "err" });
         return;
@@ -181,11 +166,7 @@ export default function ConfigCopyPanel({
             <input
               type="text"
               list="config-copy-source"
-              placeholder={
-                sourceCharacter
-                  ? sourceCharacter.character_name
-                  : "Search source character"
-              }
+              placeholder={sourceCharacter ? sourceCharacter.character_name : "Search source character"}
               value={fromChar}
               onChange={(event) => {
                 setFromChar(event.target.value);
@@ -217,13 +198,11 @@ export default function ConfigCopyPanel({
               <p className="text-[10px] text-white/50 font-rune">
                 {copySubsetNeedsRotation(subset) && fromChar
                   ? "No matching-class targets available for rotation copy."
-                  : "No valid targets."}
-              </p>
+                  : "No valid targets."
+              }</p>
             ) : (
               targetOptions.map((character) => {
-                const isChecked = selectedTargetSet.has(
-                  character.character_name,
-                );
+                const isChecked = selectedTargetSet.has(character.character_name);
                 return (
                   <label
                     key={character.character_name}
@@ -289,9 +268,7 @@ export default function ConfigCopyPanel({
         <button
           type="button"
           onClick={handleCopy}
-          disabled={
-            loading || !fromChar || !hasTargets || characterConfigs.length === 0
-          }
+          disabled={loading || !fromChar || !hasTargets || characterConfigs.length === 0}
           className="px-4 py-2 bg-magentadark/20 border border-magentaglow text-white text-xs font-tech uppercase tracking-[0.22em] hover:bg-magentadark/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? "Copying…" : "Copy"}

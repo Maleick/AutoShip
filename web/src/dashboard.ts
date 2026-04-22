@@ -4,7 +4,7 @@ export interface DashboardSnapshot {
   sessions: SessionSection;
   spawnFinder: SpawnFinderSection;
   groups: GroupSection;
-  automation: AutomationSection;
+  automation?: AutomationSection;
   navigation: NavigationSection;
   relocation: RelocationSection;
   economy: EconomySection;

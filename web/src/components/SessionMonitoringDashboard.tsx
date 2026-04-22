@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo } from "react";
 import {
   ArrowsClockwise,
   Broadcast,
-  Heart,
   Info,
   Pulse,
   WarningDiamond,

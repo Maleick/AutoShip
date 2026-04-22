@@ -23,7 +23,6 @@ import BoxChatPanel from "./BoxChatPanel";
 import ChatLogPanel from "./ChatLogPanel";
 import GmAlertPanel from "./GmAlertPanel";
 import KillTrackerPanel from "./KillTrackerPanel";
-import AutoGroupPanel from "./AutoGroupPanel";
 import SpawnFinderPanel from "./SpawnFinderPanel";
 import TradeskillTrophyPanel from "./TradeskillTrophyPanel";
 import type {
@@ -803,6 +802,12 @@ export default function OperatorDashboard() {
                 </div>
               }
             >
+              {!snapshot.automation ? (
+                <div className="rounded-3xl border border-dashed border-white/10 bg-[#0d0715] p-4 text-sm text-white/45">
+                  Automation data unavailable.
+                </div>
+              ) : (
+              <>
               <div className="grid gap-3 sm:grid-cols-3">
                 <StatChip
                   label="Connected"
@@ -876,6 +881,8 @@ export default function OperatorDashboard() {
                   ))
                 )}
               </div>
+              </>
+              )}
             </Panel>
 
             <Panel

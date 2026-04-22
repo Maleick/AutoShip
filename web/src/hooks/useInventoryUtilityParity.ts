@@ -5,8 +5,6 @@ import type {
   CollectionRoutingRule,
   CursorRule,
   FoodRule,
-  PluginMapping,
-  LegacyAdapterProvenance,
   RelocationRule,
   RewardRoutingRule,
 } from "../types";

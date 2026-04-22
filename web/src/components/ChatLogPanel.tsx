@@ -190,7 +190,7 @@ export default function ChatLogPanel() {
               } else if (value === "daily") {
                 updateRotation({ type: "daily" });
               } else {
-                updateRotation({ type: "by_size", size: 5 * 1024 * 1024 });
+                updateRotation({ type: "by_size", max_bytes: 5 * 1024 * 1024 });
               }
             }}
             options={[
