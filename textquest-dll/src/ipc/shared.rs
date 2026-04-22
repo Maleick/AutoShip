@@ -390,6 +390,7 @@ mod tests {
             pet: None,
             timestamp_ms: 1234,
             nav_status: textquest_common::nav::NavStatus::Idle,
+            is_zone_changing: false,
             combat_status: textquest_common::combat::CombatStatus::Idle,
             zone_short_name: "qeynos".into(),
             zone_long_name: "South Qeynos".into(),
