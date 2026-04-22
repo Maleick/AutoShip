@@ -9,10 +9,13 @@ pub mod admin_monitoring;
 pub mod baseline_scorecard;
 pub mod collector;
 pub mod events;
+pub mod exporter;
 pub mod kill_reporter;
 pub mod kill_session_store;
 pub mod kill_tracker;
+pub mod sampling;
 mod store;
+pub mod types;
 pub mod xp_tracker;
 
 pub use admin_monitoring::{
@@ -33,3 +36,8 @@ pub use kill_reporter::KillReporter;
 pub use kill_session_store::KillSessionStore;
 pub use kill_tracker::{ClientDpsStats, EfficiencyScore, KillRecord, KillTracker, MobStats};
 pub use store::MetricsStore;
+pub use types::{
+    CharacterMetrics as RtCharacterMetrics, CombatMetrics as RtCombatMetrics,
+    FleetMetrics as RtFleetMetrics, LootMetrics, MetricWindow, MovementMetrics as RtMovementMetrics,
+    SystemMetrics, TimeWindowedMetrics,
+};
