@@ -20,6 +20,382 @@ use crate::{
     nav::mesh::NavMeshOverlay,
 };
 
+// ─── Help panel state ────────────────────────────────────────────────────────
+
+/// A single entry in the help topic list.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct HelpTopic {
+    /// Canonical topic key used for matching and jump-targets.
+    pub key: String,
+    /// Human-readable display title shown in the panel.
+    pub title: String,
+    /// Help section this topic belongs to.
+    pub section: String,
+}
+
+/// State for the help panel overlay.
+///
+/// Tracks open/closed state, search, result navigation, and scroll position.
+/// Intentionally decoupled from rendering so `#1117` can land independently.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct HelpPanelState {
+    /// Whether the help panel is currently open.
+    pub open: bool,
+    /// Current search query string.
+    pub query: String,
+    /// Index of the currently highlighted search result.
+    pub selected_result: usize,
+    /// Scroll offset (in lines) within the selected help topic.
+    pub scroll: usize,
+    /// Full topic list — populated from command metadata at construction time.
+    pub topics: Vec<HelpTopic>,
+}
+
+impl Default for HelpPanelState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl HelpPanelState {
+    /// Maximum lines scrollable per call to [`scroll_down`] / [`scroll_up`].
+    pub const SCROLL_STEP: usize = 3;
+
+    /// Create a new, closed help panel with an empty topic list.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            open: false,
+            query: String::new(),
+            selected_result: 0,
+            scroll: 0,
+            topics: Vec::new(),
+        }
+    }
+
+    /// Create a help panel pre-populated with the given topic list.
+    #[must_use]
+    pub fn with_topics(topics: Vec<HelpTopic>) -> Self {
+        Self {
+            topics,
+            ..Self::new()
+        }
+    }
+
+    // ── Visibility ──────────────────────────────────────────────────────────
+
+    /// Open the help panel, resetting scroll but preserving the query.
+    pub fn open(&mut self) {
+        self.open = true;
+        self.scroll = 0;
+    }
+
+    /// Close the help panel.
+    pub fn close(&mut self) {
+        self.open = false;
+    }
+
+    /// Toggle open/closed state.
+    pub fn toggle(&mut self) {
+        if self.open {
+            self.close();
+        } else {
+            self.open();
+        }
+    }
+
+    // ── Search ──────────────────────────────────────────────────────────────
+
+    /// Replace the search query and reset result selection + scroll.
+    pub fn set_query(&mut self, query: impl Into<String>) {
+        self.query = query.into();
+        self.selected_result = 0;
+        self.scroll = 0;
+    }
+
+    /// Append a single character to the search query.
+    pub fn push_query_char(&mut self, ch: char) {
+        self.query.push(ch);
+        self.selected_result = 0;
+        self.scroll = 0;
+    }
+
+    /// Remove the last character from the search query.
+    pub fn pop_query_char(&mut self) {
+        self.query.pop();
+        self.selected_result = 0;
+        self.scroll = 0;
+    }
+
+    /// Return topics whose `key` or `title` contain the current query
+    /// (case-insensitive).  Returns all topics when the query is empty.
+    #[must_use]
+    pub fn filtered_topics(&self) -> Vec<&HelpTopic> {
+        if self.query.is_empty() {
+            return self.topics.iter().collect();
+        }
+        let lower = self.query.to_ascii_lowercase();
+        self.topics
+            .iter()
+            .filter(|t| {
+                t.key.to_ascii_lowercase().contains(&lower)
+                    || t.title.to_ascii_lowercase().contains(&lower)
+                    || t.section.to_ascii_lowercase().contains(&lower)
+            })
+            .collect()
+    }
+
+    /// Return the currently selected topic, if any.
+    #[must_use]
+    pub fn selected_topic(&self) -> Option<&HelpTopic> {
+        let results = self.filtered_topics();
+        results.get(self.selected_result).copied()
+    }
+
+    // ── Result navigation ───────────────────────────────────────────────────
+
+    /// Move selection to the next result; wraps around.
+    pub fn next_result(&mut self) {
+        let count = self.filtered_topics().len();
+        if count == 0 {
+            return;
+        }
+        self.selected_result = (self.selected_result + 1) % count;
+        self.scroll = 0;
+    }
+
+    /// Move selection to the previous result; wraps around.
+    pub fn prev_result(&mut self) {
+        let count = self.filtered_topics().len();
+        if count == 0 {
+            return;
+        }
+        self.selected_result = self.selected_result.saturating_add(count - 1) % count;
+        self.scroll = 0;
+    }
+
+    // ── Scroll ──────────────────────────────────────────────────────────────
+
+    /// Scroll down by [`SCROLL_STEP`] lines.
+    pub fn scroll_down(&mut self) {
+        self.scroll = self.scroll.saturating_add(Self::SCROLL_STEP);
+    }
+
+    /// Scroll up by [`SCROLL_STEP`] lines (floors at 0).
+    pub fn scroll_up(&mut self) {
+        self.scroll = self.scroll.saturating_sub(Self::SCROLL_STEP);
+    }
+
+    /// Reset scroll to the top.
+    pub fn scroll_to_top(&mut self) {
+        self.scroll = 0;
+    }
+}
+
+#[cfg(test)]
+mod help_panel_tests {
+    use super::{HelpPanelState, HelpTopic};
+
+    fn make_topics() -> Vec<HelpTopic> {
+        vec![
+            HelpTopic {
+                key: "camp".into(),
+                title: "Camp Loop".into(),
+                section: "Workflows".into(),
+            },
+            HelpTopic {
+                key: "nav".into(),
+                title: "Navigation".into(),
+                section: "Navigation".into(),
+            },
+            HelpTopic {
+                key: "help".into(),
+                title: "Help Overlay".into(),
+                section: "Workflows".into(),
+            },
+        ]
+    }
+
+    #[test]
+    fn new_panel_is_closed() {
+        let state = HelpPanelState::new();
+        assert!(!state.open);
+        assert_eq!(state.query, "");
+        assert_eq!(state.selected_result, 0);
+        assert_eq!(state.scroll, 0);
+        assert!(state.topics.is_empty());
+    }
+
+    #[test]
+    fn toggle_open_close() {
+        let mut state = HelpPanelState::new();
+        assert!(!state.open);
+        state.toggle();
+        assert!(state.open);
+        state.toggle();
+        assert!(!state.open);
+    }
+
+    #[test]
+    fn open_resets_scroll() {
+        let mut state = HelpPanelState::new();
+        state.scroll = 9;
+        state.open();
+        assert!(state.open);
+        assert_eq!(state.scroll, 0);
+    }
+
+    #[test]
+    fn close_sets_open_false() {
+        let mut state = HelpPanelState::with_topics(make_topics());
+        state.open();
+        state.close();
+        assert!(!state.open);
+    }
+
+    #[test]
+    fn set_query_resets_selection_and_scroll() {
+        let mut state = HelpPanelState::with_topics(make_topics());
+        state.selected_result = 2;
+        state.scroll = 5;
+        state.set_query("nav");
+        assert_eq!(state.query, "nav");
+        assert_eq!(state.selected_result, 0);
+        assert_eq!(state.scroll, 0);
+    }
+
+    #[test]
+    fn push_pop_query_char() {
+        let mut state = HelpPanelState::new();
+        state.push_query_char('n');
+        state.push_query_char('a');
+        state.push_query_char('v');
+        assert_eq!(state.query, "nav");
+        state.pop_query_char();
+        assert_eq!(state.query, "na");
+    }
+
+    #[test]
+    fn filtered_topics_empty_query_returns_all() {
+        let state = HelpPanelState::with_topics(make_topics());
+        assert_eq!(state.filtered_topics().len(), 3);
+    }
+
+    #[test]
+    fn filtered_topics_matches_key_and_title() {
+        let state = HelpPanelState::with_topics(make_topics());
+        let results = state.filtered_topics();
+        // all 3 topics returned when query is empty
+        assert_eq!(results.len(), 3);
+
+        let mut s = HelpPanelState::with_topics(make_topics());
+        s.set_query("nav");
+        let results = s.filtered_topics();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].key, "nav");
+    }
+
+    #[test]
+    fn filtered_topics_case_insensitive() {
+        let mut state = HelpPanelState::with_topics(make_topics());
+        state.set_query("CAMP");
+        let results = state.filtered_topics();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].key, "camp");
+    }
+
+    #[test]
+    fn next_result_wraps() {
+        let mut state = HelpPanelState::with_topics(make_topics());
+        state.next_result(); // → 1
+        state.next_result(); // → 2
+        state.next_result(); // → 0 (wrap)
+        assert_eq!(state.selected_result, 0);
+    }
+
+    #[test]
+    fn prev_result_wraps() {
+        let mut state = HelpPanelState::with_topics(make_topics());
+        state.prev_result(); // → 2 (wrap from 0)
+        assert_eq!(state.selected_result, 2);
+        state.prev_result(); // → 1
+        assert_eq!(state.selected_result, 1);
+    }
+
+    #[test]
+    fn next_prev_reset_scroll() {
+        let mut state = HelpPanelState::with_topics(make_topics());
+        state.scroll = 10;
+        state.next_result();
+        assert_eq!(state.scroll, 0);
+        state.scroll = 10;
+        state.prev_result();
+        assert_eq!(state.scroll, 0);
+    }
+
+    #[test]
+    fn scroll_up_down_and_top() {
+        let mut state = HelpPanelState::new();
+        state.scroll_down();
+        assert_eq!(state.scroll, HelpPanelState::SCROLL_STEP);
+        state.scroll_down();
+        assert_eq!(state.scroll, HelpPanelState::SCROLL_STEP * 2);
+        state.scroll_up();
+        assert_eq!(state.scroll, HelpPanelState::SCROLL_STEP);
+        state.scroll_to_top();
+        assert_eq!(state.scroll, 0);
+    }
+
+    #[test]
+    fn scroll_up_floors_at_zero() {
+        let mut state = HelpPanelState::new();
+        state.scroll_up();
+        assert_eq!(state.scroll, 0);
+    }
+
+    #[test]
+    fn selected_topic_none_on_empty() {
+        let state = HelpPanelState::new();
+        assert!(state.selected_topic().is_none());
+    }
+
+    #[test]
+    fn selected_topic_returns_correct_entry() {
+        let mut state = HelpPanelState::with_topics(make_topics());
+        state.next_result(); // → index 1 = "nav"
+        assert_eq!(state.selected_topic().map(|t| t.key.as_str()), Some("nav"));
+    }
+
+    #[test]
+    fn next_result_noop_on_empty_topics() {
+        let mut state = HelpPanelState::new();
+        state.next_result();
+        assert_eq!(state.selected_result, 0);
+    }
+
+    #[test]
+    fn prev_result_noop_on_empty_topics() {
+        let mut state = HelpPanelState::new();
+        state.prev_result();
+        assert_eq!(state.selected_result, 0);
+    }
+
+    #[test]
+    fn serde_roundtrip() {
+        let mut state = HelpPanelState::with_topics(make_topics());
+        state.open();
+        state.set_query("nav");
+        state.scroll_down();
+
+        let json = serde_json::to_string(&state).expect("serialize");
+        let restored: HelpPanelState = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.open, state.open);
+        assert_eq!(restored.query, state.query);
+        assert_eq!(restored.scroll, state.scroll);
+        assert_eq!(restored.topics.len(), state.topics.len());
+    }
+}
+
 // ─── Per-screen state sub-structs ────────────────────────────────────────────
 
 /// State for the Spawns screen — selection, filtering, and search.

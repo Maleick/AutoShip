@@ -50,9 +50,9 @@ use super::state::{
 pub use super::{
     client::ClientState,
     state::{
-        CommandBarState, HexDumpState, HookRotationState, HookSlotState, MapScreenState,
-        MapViewportMode, NavigationScreenState, OverviewScreenState, PacketMonitorState,
-        SpawnsScreenState, TacticalScreenState,
+        CommandBarState, HelpPanelState, HelpTopic, HexDumpState, HookRotationState,
+        HookSlotState, MapScreenState, MapViewportMode, NavigationScreenState, OverviewScreenState,
+        PacketMonitorState, SpawnsScreenState, TacticalScreenState,
     },
 };
 
@@ -532,6 +532,11 @@ pub struct App {
     pub help_scroll: usize,
     /// Optional jump target applied the next time help is drawn.
     pub help_focus: Option<HelpFocus>,
+    /// Structured help panel state — search, navigation, and scroll.
+    ///
+    /// Decoupled from `help_visible`/`help_scroll`/`help_focus` so rendering
+    /// (`#1117`) can land independently.
+    pub help_panel: HelpPanelState,
 
     /// Current operating mode (camp or hunt).
     pub operating_mode: crate::camp::hunt::OperatingMode,
@@ -877,6 +882,7 @@ impl App {
             help_visible: false,
             help_scroll: 0,
             help_focus: None,
+            help_panel: HelpPanelState::with_topics(Self::build_help_topics()),
 
             operating_mode: crate::camp::hunt::OperatingMode::Camp,
 
@@ -959,10 +965,47 @@ impl App {
         aliases
     }
 
+    /// Build the canonical help topic list from command metadata.
+    fn build_help_topics() -> Vec<HelpTopic> {
+        command::command_entries()
+            .iter()
+            .map(|entry| HelpTopic {
+                key: entry.phrase.to_string(),
+                title: entry.summary.to_string(),
+                section: format!("{:?}", entry.section),
+            })
+            .collect()
+    }
+
     /// Open the help overlay and optionally jump to a section or command.
     pub fn open_help(&mut self, focus: HelpFocus) {
         self.help_visible = true;
         self.help_focus = Some(focus);
+        self.help_panel.open();
+        // Seed query for command-targeted jumps so filtering is pre-applied.
+        if let HelpFocus::Command(cmd) = focus {
+            self.help_panel.set_query(cmd);
+        } else {
+            self.help_panel.set_query("");
+        }
+    }
+
+    /// Close the help overlay.
+    pub fn close_help(&mut self) {
+        self.help_visible = false;
+        self.help_focus = None;
+        self.help_panel.close();
+    }
+
+    /// Toggle the help overlay open/closed.
+    pub fn toggle_help(&mut self) {
+        if self.help_visible {
+            self.close_help();
+        } else {
+            self.open_help(HelpFocus::Section(
+                super::command::HelpSection::Workflows,
+            ));
+        }
     }
 
     /// Set a transient toast notification message.
