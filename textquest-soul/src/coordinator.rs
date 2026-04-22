@@ -217,6 +217,9 @@ pub struct SoulCoordinator {
     anomaly_detector: AnomalyDetector,
     /// Optional JSONL audit logger for key Soul Engine events.
     audit: Option<SoulAuditLogger>,
+    /// Sliding one-hour window of chat-derived memory write timestamps, keyed
+    /// by client. Used to enforce `max_chat_memory_writes_per_hour`.
+    chat_memory_write_timestamps: HashMap<ClientId, VecDeque<Instant>>,
 }
 
 const MAX_PLAYER_CHAT_MESSAGE_BYTES: usize = 512;
@@ -250,6 +253,7 @@ impl SoulCoordinator {
             ipc_available: true,
             anomaly_detector: AnomalyDetector::new(),
             audit: None,
+            chat_memory_write_counts: HashMap::new(),
         })
     }
 
@@ -550,6 +554,41 @@ impl SoulCoordinator {
         }
     }
 
+    /// Check and record a chat-derived memory write for rate limiting.
+    ///
+    /// Returns `true` if the write is allowed (within the hourly cap), `false`
+    /// if it should be dropped. Slides the window on each call.
+    fn allow_chat_memory_write(&mut self, client_id: ClientId, now: Instant) -> bool {
+        const WINDOW_SECS: u64 = 3600;
+        let cap = self.config.max_chat_memory_writes_per_hour as usize;
+        let window = self
+            .chat_memory_write_counts
+            .entry(client_id)
+            .or_default();
+
+        // Drain entries older than one hour.
+        while let Some(&front) = window.front() {
+            if now.duration_since(front).as_secs() >= WINDOW_SECS {
+                window.pop_front();
+            } else {
+                break;
+            }
+        }
+
+        if window.len() >= cap {
+            tracing::warn!(
+                client_id,
+                window_count = window.len(),
+                cap,
+                "chat memory write dropped: hourly cap reached"
+            );
+            return false;
+        }
+
+        window.push_back(now);
+        true
+    }
+
     /// Handle an incoming message from a real player.
     pub fn on_player_message(
         &mut self,
@@ -561,6 +600,10 @@ impl SoulCoordinator {
         if !self.config.player_chat_enabled {
             return;
         }
+
+        // Check the hourly cap before borrowing soul — allow_chat_memory_write
+        // takes &mut self so it must not be called while soul is live.
+        let chat_write_allowed = self.allow_chat_memory_write(client_id, Instant::now());
 
         let Some(soul) = self.souls.get_mut(&client_id) else {
             return;
@@ -607,21 +650,31 @@ impl SoulCoordinator {
             );
         }
 
-        // Record memory with the mood as it was before the event changed it
-        let _ = self.memory.record(client_id, &event, mood_before, 2.0);
+        // Record memory with the mood as it was before the event changed it.
+        // Guard against chat-driven DoS: drop the write if the hourly cap is
+        // reached for this character. Conversation table is still updated
+        // above; only the memories table write is gated.
+        let memory_written = if chat_write_allowed {
+            let _ = self.memory.record(client_id, &event, mood_before, 2.0);
+            true
+        } else {
+            false
+        };
 
         // Audit: memory record
-        if let Some(audit) = &self.audit {
-            let _ = audit.log(
-                client_id,
-                AuditActionType::MemoryRecord,
-                format!(
-                    "{} recorded player chat memory from {}",
-                    soul.name, player_name
-                ),
-                None,
-                None,
-            );
+        if memory_written {
+            if let Some(audit) = &self.audit {
+                let _ = audit.log(
+                    client_id,
+                    AuditActionType::MemoryRecord,
+                    format!(
+                        "{} recorded player chat memory from {}",
+                        soul.name, player_name
+                    ),
+                    None,
+                    None,
+                );
+            }
         }
 
         // Queue an LLM response (high priority for real players)
@@ -1223,5 +1276,101 @@ mod tests {
             "stale queued commands should be discarded on dequeue"
         );
         assert_eq!(queue.dropped_stale_count(), 1);
+    }
+
+    // --- Chat memory write rate limit tests ---
+
+    fn make_coordinator_with_chat_cap(cap: u32) -> SoulCoordinator {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("test_memory.db");
+        let config = SoulConfig {
+            enabled: true,
+            max_chat_memory_writes_per_hour: cap,
+            ..SoulConfig::default()
+        };
+        let dir = Box::leak(Box::new(dir));
+        let _ = dir;
+        SoulCoordinator::new(config, &db_path).unwrap()
+    }
+
+    #[test]
+    fn chat_memory_writes_under_cap_are_allowed() {
+        let mut coord = make_coordinator_with_chat_cap(3);
+        let t0 = Instant::now();
+        assert!(coord.allow_chat_memory_write(1, t0));
+        assert!(coord.allow_chat_memory_write(1, t0));
+        assert!(coord.allow_chat_memory_write(1, t0));
+    }
+
+    #[test]
+    fn chat_memory_writes_over_cap_are_rejected() {
+        let mut coord = make_coordinator_with_chat_cap(3);
+        let t0 = Instant::now();
+        coord.allow_chat_memory_write(1, t0);
+        coord.allow_chat_memory_write(1, t0);
+        coord.allow_chat_memory_write(1, t0);
+        // 4th write exceeds the cap of 3
+        assert!(!coord.allow_chat_memory_write(1, t0));
+    }
+
+    #[test]
+    fn chat_memory_write_window_rolls_after_one_hour() {
+        let mut coord = make_coordinator_with_chat_cap(2);
+        let t0 = Instant::now();
+        // Fill the cap
+        coord.allow_chat_memory_write(1, t0);
+        coord.allow_chat_memory_write(1, t0);
+        assert!(!coord.allow_chat_memory_write(1, t0));
+
+        // After 3600 seconds the window expires; writes should be allowed again
+        let t1 = t0 + Duration::from_secs(3600);
+        assert!(coord.allow_chat_memory_write(1, t1));
+    }
+
+    #[test]
+    fn chat_memory_write_cap_is_per_character() {
+        let mut coord = make_coordinator_with_chat_cap(1);
+        let t0 = Instant::now();
+        // Character 1 fills its cap
+        assert!(coord.allow_chat_memory_write(1, t0));
+        assert!(!coord.allow_chat_memory_write(1, t0));
+        // Character 2 is independent
+        assert!(coord.allow_chat_memory_write(2, t0));
+    }
+
+    #[test]
+    fn on_player_message_stops_recording_after_hourly_cap() {
+        let mut coord = make_coordinator_with_chat_cap(2);
+        coord.config.player_chat_enabled = true;
+        coord.register_character(1, &make_char_config("Mage01"));
+
+        let mut states = HashMap::new();
+        states.insert(1, make_game_state(1));
+        coord.tick(&states);
+
+        // Two messages allowed under cap
+        coord.on_player_message(1, "Spammer", "hello 1", "say");
+        coord.on_player_message(1, "Spammer", "hello 2", "say");
+
+        // Fetch memories recorded so far
+        let after_two = coord
+            .memory_store()
+            .recall_about(1, "Spammer", 100)
+            .unwrap_or_default()
+            .len();
+
+        // Third message hits the cap — memory.record() should be skipped
+        coord.on_player_message(1, "Spammer", "hello 3 over cap", "say");
+
+        let after_three = coord
+            .memory_store()
+            .recall_about(1, "Spammer", 100)
+            .unwrap_or_default()
+            .len();
+
+        assert_eq!(
+            after_two, after_three,
+            "memory row count should not grow after hourly cap is reached"
+        );
     }
 }

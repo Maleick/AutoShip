@@ -293,6 +293,14 @@ pub struct SoulConfig {
     /// Mood decay rate used by the personality engine.
     #[serde(default = "default_mood_decay_rate")]
     pub mood_decay_rate: f32,
+    /// Maximum chat-derived memory writes per character per hour.
+    ///
+    /// Caps how many `PlayerChat` memory rows a single character can
+    /// accumulate in a rolling one-hour window. Excess writes are silently
+    /// dropped and logged. Default 60 (≈ 1/min sustained) is intentionally
+    /// conservative.
+    #[serde(default = "default_max_chat_memory_writes_per_hour")]
+    pub max_chat_memory_writes_per_hour: u32,
 }
 
 const fn default_max_requests_per_character() -> u32 {
@@ -305,6 +313,10 @@ const fn default_max_global_requests() -> u32 {
 
 const fn default_mood_decay_rate() -> f32 {
     0.05
+}
+
+const fn default_max_chat_memory_writes_per_hour() -> u32 {
+    60
 }
 
 impl Default for SoulConfig {
@@ -326,6 +338,7 @@ impl Default for SoulConfig {
             max_global_requests: default_max_global_requests(),
             memory_decay_days: default_memory_decay_days(),
             mood_decay_rate: default_mood_decay_rate(),
+            max_chat_memory_writes_per_hour: default_max_chat_memory_writes_per_hour(),
         }
     }
 }
