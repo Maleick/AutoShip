@@ -400,6 +400,29 @@ pub const CHEATER_LD_FLAG_STRING: u64 = 0x0001_40AF_EBC8;
 /// `CheaterLdFlag` global flag variable storing the current anti-cheat state.
 pub const CHEATER_LD_FLAG_VAR: u64 = 0x0001_40AF_ED90;
 
+/// Message counter heartbeat function — every 500 ms: refills OUTBOUND_MSG_COUNTER
+/// (+0x37) and INBOUND_MSG_COUNTER (+0x55), negates both, sends via opcode `0xbb29`.
+/// Server compares against its own send/receive counts; mismatch = detection event.
+/// Source: Ghidra analysis of eqgame.exe, 2026-04-03. Issue: #2187 (C4), #2176 (A2).
+pub const COUNTER_HEARTBEAT: u64 = 0x0001_401A_4650;
+
+/// Counter heartbeat send stub — inner function that constructs and sends the
+/// `0xbb29` opcode with negated counter values. Called by `COUNTER_HEARTBEAT`.
+/// Source: Ghidra analysis of eqgame.exe, 2026-04-03. Issue: #2187 (C4).
+pub const COUNTER_HEARTBEAT_SEND: u64 = 0x0001_401A_4320;
+
+/// Lagged Fibonacci PRNG used by `FILE_INTEGRITY_DISPATCHER` to sample 256
+/// random DWORDs from each checked file. Additive LFG with p=55, q=24.
+/// Deterministic — server replicates the sequence. State at `LFG_PRNG_STATE`.
+/// Source: Ghidra analysis of eqgame.exe, 2026-04-03. Issue: #2187 (C4), #2177 (A3).
+pub const LFG_PRNG: u64 = 0x0001_4025_ABD0;
+
+/// Lagged Fibonacci PRNG state array (55 × u32). Read and updated by `LFG_PRNG`
+/// during each file integrity check. Server knows the initial seed and can
+/// reproduce all 256 sample positions.
+/// Source: Ghidra analysis of eqgame.exe, 2026-04-03. Issue: #2187 (C4), #2177 (A3).
+pub const LFG_PRNG_STATE: u64 = 0x0001_40E8_D148;
+
 // ─── CInvSlotMgr function addresses ───
 // Source: eqgame.h, client date 20260310
 
@@ -1880,6 +1903,10 @@ mod tests {
             NET_SEND,
             OUTBOUND_MSG_COUNTER,
             INBOUND_MSG_COUNTER,
+            COUNTER_HEARTBEAT,
+            COUNTER_HEARTBEAT_SEND,
+            LFG_PRNG,
+            LFG_PRNG_STATE,
             CCHAT_MGR_GET_RGBA,
             CCHAT_MGR_INIT_CONTEXT_MENU,
             CCHAT_MGR_FREE_CHAT_WINDOW,
