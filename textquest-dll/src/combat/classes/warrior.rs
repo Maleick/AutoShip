@@ -57,9 +57,28 @@ fn warrior_config_path() -> Option<PathBuf> {
         .map(|dir| dir.join("config/classes/warrior.toml"))
 }
 
-fn parse_runtime_config(contents: &str, source: &str) -> WarriorRuntimeConfig {
-    toml::from_str(contents).unwrap_or_else(|error| {
-        panic!("Failed to parse Warrior runtime config from {source}: {error}")
+fn parse_runtime_config(contents: &str) -> Result<WarriorRuntimeConfig, toml::de::Error> {
+    toml::from_str(contents)
+}
+
+fn embedded_runtime_config() -> WarriorRuntimeConfig {
+    parse_runtime_config(EMBEDDED_WARRIOR_CONFIG).unwrap_or_else(|error| {
+        tracing::warn!(
+            error = %error,
+            "Failed to parse embedded warrior runtime config; using empty defaults"
+        );
+        WarriorRuntimeConfig::default()
+    })
+}
+
+fn load_runtime_config_from_contents(contents: &str, source: &str) -> WarriorRuntimeConfig {
+    parse_runtime_config(contents).unwrap_or_else(|error| {
+        tracing::warn!(
+            source,
+            error = %error,
+            "Failed to parse warrior runtime config; using embedded defaults"
+        );
+        embedded_runtime_config()
     })
 }
 
@@ -67,10 +86,11 @@ fn load_warrior_runtime_config() -> WarriorRuntimeConfig {
     if let Some(path) = warrior_config_path()
         && let Ok(contents) = std::fs::read_to_string(&path)
     {
-        return parse_runtime_config(&contents, &path.display().to_string());
+        let source = path.display().to_string();
+        return load_runtime_config_from_contents(&contents, &source);
     }
 
-    parse_runtime_config(EMBEDDED_WARRIOR_CONFIG, "embedded warrior class config")
+    embedded_runtime_config()
 }
 
 fn runtime_config() -> &'static WarriorRuntimeConfig {
@@ -435,6 +455,43 @@ mod tests {
             Some("warrior-offensive-disc")
         );
         assert_eq!(burn.shared_cooldown_ticks, Some(36000));
+    }
+
+    #[test]
+    fn warrior_falls_back_to_embedded_defaults_on_malformed_toml() {
+        let config = load_runtime_config_from_contents("ability_sets = [", "test warrior config");
+
+        let set_names: Vec<_> = config
+            .ability_sets
+            .iter()
+            .map(|set| set.name.as_str())
+            .collect();
+        assert_eq!(
+            set_names,
+            vec![
+                "EmergencyGuard",
+                "DefensiveLine",
+                "BurnPrimary",
+                "PrecisionLine"
+            ]
+        );
+
+        let rotation_names: Vec<_> = config
+            .rotation_groups
+            .iter()
+            .map(|group| group.name.as_str())
+            .collect();
+        assert_eq!(
+            rotation_names,
+            vec![
+                "Downtime",
+                "HateTools",
+                "Emergency",
+                "Defenses",
+                "Burn",
+                "Combat"
+            ]
+        );
     }
 
     #[test]
