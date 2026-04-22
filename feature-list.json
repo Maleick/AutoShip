@@ -41,6 +41,16 @@
         "python3 scripts/dev-preflight.py"
       ],
       "notes": "Blocked on missing prerequisite work from issues #1729 and #1730. This branch has no `textquest-admin` binary, no `textquest/src/admin/` module, and no admin backup API/client/models to wire. Issue #1733 is marked `agent:ready`, but the required scaffolding is not present in `origin/master` or this worktree."
+    },
+    {
+      "id": "issue-2172-stack-spoof-invalid-module-name",
+      "name": "stack spoof invalid module name handling",
+      "status": "complete",
+      "acceptance_tests": [
+        "cargo test -p textquest-dll stack_spoof -- --nocapture",
+        "python3 scripts/dev-preflight.py"
+      ],
+      "notes": "Rejected interior-NUL module names in `stack_spoof::find_gadgets` so `GetModuleHandleA` cannot silently resolve the calling module, added regression coverage, and documented that frame rewriting still operates on the live RBP chain heuristically rather than validating each original return address against a target module."
     }
   ]
 }

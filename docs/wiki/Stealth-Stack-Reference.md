@@ -176,6 +176,7 @@ Frame N+1 begins:
 - **Gadget cache:** scanned once per module (ntdll, kernel32) for `ret` (0xC3) instructions
   - Heuristic: preceded by 4 non-zero bytes (avoid padding)
   - Typically hundreds of gadgets per module
+  - Invalid module names are rejected up front; the scanner no longer falls back to an empty C string that would make `GetModuleHandleA` resolve the calling module instead of the requested target
 - **Spoof depth:** 4 frames (RBP chain walk from current frame)
 - **RAII restoration:** Drop impl automatically restores original rets (panic-safe)
 - **API:** `with_spoofed_stack<F>` closure-based wrapper
@@ -190,6 +191,7 @@ Frame N+1 begins:
 **Known Limits:**
 - Gadget heuristic is not fool-proof (may pick padding or misaligned rets)
 - Works only on caller frame boundaries (mid-function rets not masked)
+- The frame walker rewrites the current RBP chain heuristically; it does not verify that each original return address belongs to a specific trusted module before swapping in a gadget
 - Stub for layer 3 of sleep cycle: `prepare_spoofed_frame()` / `restore_real_frame()` not yet active
 
 ---
@@ -582,3 +584,6 @@ At DLL load, the following sequence executes (from `lib.rs` entrypoint):
 
 ---
 
+## Fix #2172
+
+Stack-spoof gadget scanner now correctly searches the target module (not the caller module) via fixed CString handling.

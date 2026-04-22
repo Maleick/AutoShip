@@ -34,7 +34,16 @@ mod inner {
     /// a sequence of non-zero bytes (heuristic for "end of a real
     /// function").
     pub fn find_gadgets(module_name: &str) -> Vec<usize> {
-        let c_name = std::ffi::CString::new(module_name).unwrap_or_default();
+        let c_name = match std::ffi::CString::new(module_name) {
+            Ok(name) => name,
+            Err(_) => {
+                warn!(
+                    "find_gadgets rejected module name containing interior NUL: {:?}",
+                    module_name
+                );
+                return Vec::new();
+            }
+        };
 
         let (base, size) = unsafe {
             let handle: HMODULE = match GetModuleHandleA(PCSTR::from_raw(c_name.as_ptr().cast())) {
@@ -282,6 +291,12 @@ mod tests {
     #[test]
     fn find_gadgets_nonexistent_module_returns_empty() {
         let gadgets = find_gadgets("nonexistent_module_12345.dll");
+        assert!(gadgets.is_empty());
+    }
+
+    #[test]
+    fn find_gadgets_module_name_with_nul_returns_empty() {
+        let gadgets = find_gadgets("kernel32.dll\0ntdll.dll");
         assert!(gadgets.is_empty());
     }
 
