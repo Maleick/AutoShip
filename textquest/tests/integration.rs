@@ -101,7 +101,10 @@ fn test_configs() -> (LaunchConfig, RetryConfig, ServerConfig) {
     };
     let retry = RetryConfig {
         max_retries: 3,
-        base_backoff_secs: 30,
+        base_backoff_secs: 1,
+        max_backoff_secs: 60,
+        backoff_multiplier: 2.0,
+        backoff_jitter: 0.0,
         mass_failure_threshold: 5,
         mass_failure_window_secs: 60,
     };

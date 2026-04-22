@@ -1,5 +1,7 @@
 //! Login automation — per-client FSM, staggered launch, process spawner.
 
+/// Exponential backoff policy and per-account failure tracker.
+pub mod backoff;
 /// Launch coordinator — staggered multi-client launching with mass failure
 /// detection.
 pub mod coordinator;

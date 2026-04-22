@@ -2,6 +2,7 @@ use crate::{
     circuit_breaker::CircuitBreaker,
     config::{LaunchConfig, RetryConfig, ServerConfig},
     launcher::{
+        backoff::{AccountBackoffTracker, LoginBackoff},
         login_sm::{LoginAction, LoginEvent, LoginStateMachine},
         spawner,
     },
@@ -25,6 +26,10 @@ pub struct LaunchCoordinator {
     active_logins: Vec<LoginStateMachine>,
     /// 3-state circuit breaker — trips when mass failures exceed the threshold.
     circuit_breaker: CircuitBreaker,
+    /// Exponential backoff policy derived from `RetryConfig`.
+    backoff_policy: LoginBackoff,
+    /// Per-account backoff failure trackers (keyed by account name).
+    account_trackers: HashMap<String, AccountBackoffTracker>,
     /// Per-client earliest retry time, honoring backoff from
     /// `LoginAction::Retry`.
     retry_not_before: HashMap<ClientId, Instant>,
@@ -78,6 +83,12 @@ impl LaunchCoordinator {
             // One success probe is enough to close after a pause
             1,
         );
+        let backoff_policy = LoginBackoff::new(
+            Duration::from_secs(retry.base_backoff_secs),
+            Duration::from_secs(retry.max_backoff_secs),
+            retry.backoff_multiplier,
+            retry.backoff_jitter,
+        );
         Self {
             config,
             retry_config: retry,
@@ -85,6 +96,8 @@ impl LaunchCoordinator {
             launch_queue: VecDeque::new(),
             active_logins: Vec::new(),
             circuit_breaker,
+            backoff_policy,
+            account_trackers: HashMap::new(),
             retry_not_before: HashMap::new(),
             paused: false,
             last_launch: None,
@@ -156,15 +169,40 @@ impl LaunchCoordinator {
             if let Some(action) = self.active_logins[i].tick() {
                 let client_id = self.active_logins[i].client_id;
                 match action {
-                    LoginAction::Retry { after } => {
+                    LoginAction::Retry { .. } => {
                         let sm = self.active_logins.remove(i);
+                        // Use exponential backoff instead of the SM's fixed delay
+                        let tracker = self
+                            .account_trackers
+                            .entry(sm.account_info.account_name.clone())
+                            .or_insert_with(|| {
+                                AccountBackoffTracker::new(&sm.account_info.account_name)
+                            });
+                        let backoff_delay = tracker.record_failure(&self.backoff_policy);
+                        tracing::info!(
+                            client_id = sm.client_id,
+                            account = %sm.account_info.account_name,
+                            attempt = tracker.failures(),
+                            delay_ms = backoff_delay.as_millis(),
+                            "Login retry scheduled with exponential backoff"
+                        );
                         self.retry_not_before
-                            .insert(sm.client_id, Instant::now() + after);
+                            .insert(sm.client_id, Instant::now() + backoff_delay);
                         retry_queue.push((sm.client_id, sm.account_info));
                         // Don't increment i since we removed the element
                         continue;
                     }
                     LoginAction::Abort { reason } => {
+                        // Record failure in per-account tracker
+                        let account_name = self.active_logins[i]
+                            .account_info
+                            .account_name
+                            .clone();
+                        let tracker = self
+                            .account_trackers
+                            .entry(account_name.clone())
+                            .or_insert_with(|| AccountBackoffTracker::new(&account_name));
+                        tracker.record_failure(&self.backoff_policy);
                         self.circuit_breaker.record_failure();
                         if self.circuit_breaker.is_open() {
                             self.paused = true;
@@ -194,7 +232,11 @@ impl LaunchCoordinator {
             ) && !self.active_logins[i].ready_event_emitted
             {
                 self.active_logins[i].ready_event_emitted = true;
-                // Successful login: allow the circuit breaker to probe recovery.
+                // Successful login: reset per-account backoff counter and probe circuit breaker.
+                let account_name = self.active_logins[i].account_info.account_name.clone();
+                if let Some(tracker) = self.account_trackers.get_mut(&account_name) {
+                    tracker.record_success();
+                }
                 self.circuit_breaker.record_success();
                 events.push(CoordinatorEvent::ClientReady { client_id });
             }
@@ -238,8 +280,8 @@ impl LaunchCoordinator {
         {
             let action = sm.advance(event);
             match action {
-                LoginAction::Retry { after } => {
-                    // Find and remove this SM, re-enqueue with reset attempts
+                LoginAction::Retry { .. } => {
+                    // Find and remove this SM, re-enqueue with exponential backoff
                     if let Some(idx) = self
                         .active_logins
                         .iter()
@@ -247,13 +289,40 @@ impl LaunchCoordinator {
                     {
                         let mut sm = self.active_logins.remove(idx);
                         sm.attempts = 0;
+                        let tracker = self
+                            .account_trackers
+                            .entry(sm.account_info.account_name.clone())
+                            .or_insert_with(|| {
+                                AccountBackoffTracker::new(&sm.account_info.account_name)
+                            });
+                        let backoff_delay = tracker.record_failure(&self.backoff_policy);
+                        tracing::info!(
+                            client_id,
+                            account = %sm.account_info.account_name,
+                            attempt = tracker.failures(),
+                            delay_ms = backoff_delay.as_millis(),
+                            "Login retry (report_login_event) scheduled with exponential backoff"
+                        );
                         self.retry_not_before
-                            .insert(sm.client_id, Instant::now() + after);
+                            .insert(sm.client_id, Instant::now() + backoff_delay);
                         self.launch_queue
                             .push_front((sm.client_id, sm.account_info));
                     }
                 }
                 LoginAction::Abort { reason } => {
+                    // Record failure in per-account tracker
+                    if let Some(sm) = self
+                        .active_logins
+                        .iter()
+                        .find(|s| s.client_id == client_id)
+                    {
+                        let account_name = sm.account_info.account_name.clone();
+                        let tracker = self
+                            .account_trackers
+                            .entry(account_name.clone())
+                            .or_insert_with(|| AccountBackoffTracker::new(&account_name));
+                        tracker.record_failure(&self.backoff_policy);
+                    }
                     self.circuit_breaker.record_failure();
                     if self.circuit_breaker.is_open() {
                         self.paused = true;
@@ -377,7 +446,10 @@ mod tests {
         };
         let retry = RetryConfig {
             max_retries: 3,
-            base_backoff_secs: 30,
+            base_backoff_secs: 1,
+            max_backoff_secs: 60,
+            backoff_multiplier: 2.0,
+            backoff_jitter: 0.0,
             mass_failure_threshold: 5,
             mass_failure_window_secs: 60,
         };

@@ -698,8 +698,16 @@ impl Default for ServerConfig {
 pub struct RetryConfig {
     /// Maximum number of retry attempts before giving up.
     pub max_retries: u32,
-    /// Base backoff delay in seconds (multiplied on each retry).
+    /// Base backoff delay in seconds for the first retry.
     pub base_backoff_secs: u64,
+    /// Maximum backoff delay in seconds (caps exponential growth).
+    pub max_backoff_secs: u64,
+    /// Exponential multiplier applied to the base delay on each retry
+    /// (e.g., 2.0 → doubles each attempt).
+    pub backoff_multiplier: f64,
+    /// Jitter fraction added to the computed delay (0.0 = none, 0.25 = up to
+    /// 25% extra). Prevents thundering-herd during mass reconnect events.
+    pub backoff_jitter: f64,
     /// Number of failures within the window to trigger mass-failure mode.
     pub mass_failure_threshold: u32,
     /// Time window in seconds for mass-failure detection.
@@ -710,7 +718,10 @@ impl Default for RetryConfig {
     fn default() -> Self {
         Self {
             max_retries: 3,
-            base_backoff_secs: 30,
+            base_backoff_secs: 1,
+            max_backoff_secs: 60,
+            backoff_multiplier: 2.0,
+            backoff_jitter: 0.1,
             mass_failure_threshold: 5,
             mass_failure_window_secs: 60,
         }
@@ -1169,7 +1180,10 @@ timing_correction = true
     fn retry_config_defaults() {
         let cfg = RetryConfig::default();
         assert_eq!(cfg.max_retries, 3);
-        assert_eq!(cfg.base_backoff_secs, 30);
+        assert_eq!(cfg.base_backoff_secs, 1);
+        assert_eq!(cfg.max_backoff_secs, 60);
+        assert!((cfg.backoff_multiplier - 2.0).abs() < f64::EPSILON);
+        assert!((cfg.backoff_jitter - 0.1).abs() < f64::EPSILON);
         assert_eq!(cfg.mass_failure_threshold, 5);
         assert_eq!(cfg.mass_failure_window_secs, 60);
     }
