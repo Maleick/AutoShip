@@ -196,6 +196,30 @@ enum Commands {
         dry_run: bool,
     },
 
+    // ── Testing ───────────────────────────────────────────────────────
+    /// Run the orchestrator in test mode for N hours with progress reporting
+    #[command(name = "overnight-test")]
+    OvernightTest {
+        /// Duration to run in hours (default: 8)
+        #[arg(long, default_value = "8")]
+        duration: f64,
+        /// Account profile name to test (omit for all accounts)
+        #[arg(long)]
+        accounts: Option<String>,
+        /// Test all accounts regardless of profile
+        #[arg(long)]
+        all_accounts: bool,
+        /// Comma-separated list of scenarios to run
+        #[arg(long, value_delimiter = ',')]
+        scenarios: Vec<String>,
+        /// Directory to write progress and final JSON report
+        #[arg(long, default_value = "./overnight-test-runs")]
+        output_dir: std::path::PathBuf,
+        /// Log level (default: info)
+        #[arg(long, default_value = "info")]
+        log_level: String,
+    },
+
     // ── Configuration ─────────────────────────────────────────────────
     /// Configuration management
     Config {
@@ -379,6 +403,23 @@ fn main() -> Result<()> {
         // Orchestration
         Some(Commands::Orchestrate { dry_run }) => cli::run_orchestrate_mode(dry_run),
 
+        // Testing
+        Some(Commands::OvernightTest {
+            duration,
+            accounts,
+            all_accounts,
+            scenarios,
+            output_dir,
+            log_level,
+        }) => cli::run_overnight_test_mode(
+            duration,
+            accounts.as_deref(),
+            all_accounts,
+            &scenarios,
+            &output_dir,
+            &log_level,
+        ),
+
         // Configuration
         Some(Commands::Config { action }) => match action {
             ConfigAction::Check { path } => cli::run_config_check_mode(path.as_deref()),
@@ -468,6 +509,7 @@ fn init_tracing(
 mod tests {
     use super::{Args, Commands, NavMeshAction};
     use clap::Parser;
+    use std::path::PathBuf;
 
     #[test]
     fn parses_navmesh_reload_with_zone() {
@@ -495,5 +537,71 @@ mod tests {
             }
             other => panic!("unexpected command: {other:?}"),
         }
+    }
+
+    #[test]
+    fn parses_overnight_test_defaults() {
+        let args = Args::parse_from(["textquest", "overnight-test"]);
+        match args.command {
+            Some(Commands::OvernightTest {
+                duration,
+                accounts,
+                all_accounts,
+                scenarios,
+                output_dir,
+                log_level,
+            }) => {
+                assert!((duration - 8.0_f64).abs() < f64::EPSILON);
+                assert!(accounts.is_none());
+                assert!(!all_accounts);
+                assert!(scenarios.is_empty());
+                assert_eq!(output_dir, PathBuf::from("./overnight-test-runs"));
+                assert_eq!(log_level, "info");
+            }
+            other => panic!("unexpected command: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_overnight_test_custom_flags() {
+        let args = Args::parse_from([
+            "textquest",
+            "overnight-test",
+            "--duration",
+            "4",
+            "--accounts",
+            "frostreaver",
+            "--all-accounts",
+            "--scenarios",
+            "combat,nav",
+            "--output-dir",
+            "/tmp/runs",
+            "--log-level",
+            "debug",
+        ]);
+        match args.command {
+            Some(Commands::OvernightTest {
+                duration,
+                accounts,
+                all_accounts,
+                scenarios,
+                output_dir,
+                log_level,
+            }) => {
+                assert!((duration - 4.0_f64).abs() < f64::EPSILON);
+                assert_eq!(accounts.as_deref(), Some("frostreaver"));
+                assert!(all_accounts);
+                assert_eq!(scenarios, vec!["combat", "nav"]);
+                assert_eq!(output_dir, PathBuf::from("/tmp/runs"));
+                assert_eq!(log_level, "debug");
+            }
+            other => panic!("unexpected command: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn overnight_test_invalid_duration_rejected() {
+        let result = Args::try_parse_from(["textquest", "overnight-test", "--duration", "notanumber"]);
+        assert!(result.is_err());
     }
 }

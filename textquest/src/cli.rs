@@ -2527,6 +2527,98 @@ fn dump_spawn_list_diagnostic(proc: &process::memory::ProcessHandle, eq_base: u6
     info!("===================================================");
 }
 
+// ─── Overnight test ─────────────────────────────────────────────────────────
+
+/// Run the orchestrator in test mode for a fixed duration, then emit a JSON
+/// progress report and exit.
+///
+/// This is the implementation for `textquest overnight-test`.
+pub fn run_overnight_test_mode(
+    duration_hours: f64,
+    accounts: Option<&str>,
+    all_accounts: bool,
+    scenarios: &[String],
+    output_dir: &std::path::Path,
+    log_level: &str,
+) -> Result<()> {
+    use std::time::{Duration, Instant};
+
+    let duration = Duration::from_secs_f64(duration_hours * 3600.0);
+
+    eprintln!(
+        "overnight-test: running for {duration_hours:.1}h ({}s), output → {}",
+        duration.as_secs(),
+        output_dir.display()
+    );
+    info!(
+        duration_hours,
+        ?accounts,
+        all_accounts,
+        ?scenarios,
+        output_dir = %output_dir.display(),
+        log_level,
+        "overnight-test starting"
+    );
+
+    std::fs::create_dir_all(output_dir)
+        .with_context(|| format!("Failed to create output dir: {}", output_dir.display()))?;
+
+    let start = Instant::now();
+    let deadline = start + duration;
+
+    // Heartbeat loop — real orchestrator work would be wired here in future
+    // sub-issues (#864.2-#864.8).
+    let heartbeat = Duration::from_secs(60);
+    let mut ticks: u64 = 0;
+    let mut last_tick = Instant::now();
+
+    while Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(500));
+
+        if last_tick.elapsed() >= heartbeat {
+            ticks += 1;
+            let elapsed_secs = start.elapsed().as_secs();
+            let remaining_secs = deadline
+                .checked_duration_since(Instant::now())
+                .unwrap_or_default()
+                .as_secs();
+            eprintln!(
+                "overnight-test: tick {ticks} — elapsed {elapsed_secs}s, remaining {remaining_secs}s"
+            );
+            info!(ticks, elapsed_secs, remaining_secs, "overnight-test heartbeat");
+            last_tick = Instant::now();
+        }
+    }
+
+    let elapsed_secs = start.elapsed().as_secs();
+    let report = serde_json::json!({
+        "version": 1,
+        "duration_hours": duration_hours,
+        "elapsed_seconds": elapsed_secs,
+        "accounts": accounts,
+        "all_accounts": all_accounts,
+        "scenarios": scenarios,
+        "ticks": ticks,
+        "status": "completed",
+    });
+
+    let report_path = output_dir.join("overnight-test-report.json");
+    let report_str =
+        serde_json::to_string_pretty(&report).context("Failed to serialize report")?;
+    std::fs::write(&report_path, &report_str)
+        .with_context(|| format!("Failed to write report to {}", report_path.display()))?;
+
+    eprintln!("overnight-test: complete. Report written to {}", report_path.display());
+    info!(
+        elapsed_secs,
+        ticks,
+        report_path = %report_path.display(),
+        "overnight-test completed"
+    );
+
+    Ok(())
+}
+
 /// Helper: read and log a hex dump of `count` bytes starting at `base_addr +
 /// start_offset`.
 #[allow(dead_code)]
