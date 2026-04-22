@@ -1707,14 +1707,76 @@ fn print_shutdown_report(events: &[crate::orchestrator_loop::LoopEvent]) {
     );
 }
 
+/// Print the orchestrator dry-run plan and return without executing anything.
+///
+/// No IPC writes, DLL injections, or process launches are performed.
+fn run_orchestrate_dry_run(config: &crate::config::AppConfig) -> Result<()> {
+    println!("Orchestrator Dry-Run Plan");
+    println!("=========================");
+    println!("(No DLL injection, IPC commands, or process launches will occur.)");
+    println!();
+    println!("Process name : {}", config.process_name);
+    println!("Max spawns   : {}", config.max_spawns);
+    println!();
+
+    println!("Orchestrator tick rates:");
+    println!(
+        "  Health check interval     : {} ms",
+        config.orchestrator.health_check_interval_ms
+    );
+    println!(
+        "  Launch tick interval      : {} ms",
+        config.orchestrator.launch_tick_interval_ms
+    );
+    println!(
+        "  Orchestrator tick interval: {} ms",
+        config.orchestrator.orchestrator_tick_interval_ms
+    );
+    println!(
+        "  State poll interval       : {} ms",
+        config.orchestrator.state_poll_interval_ms
+    );
+    println!();
+
+    let group_count = config.group.len();
+    let toon_count: usize = config.group.iter().map(|g| g.toon.len()).sum();
+    println!("Groups : {group_count}");
+    println!("Toons  : {toon_count}");
+    if !config.group.is_empty() {
+        for g in &config.group {
+            println!("  Group {} — \"{}\" ({} toons)", g.id, g.name, g.toon.len());
+            for t in &g.toon {
+                println!("    {} ({}, {})", t.name, t.class, t.role);
+            }
+        }
+    }
+    println!();
+
+    println!("Peer discovery: {}", if config.discovery.multicast_enabled { "enabled" } else { "disabled" });
+    println!("Discord webhook: {}", if !config.discord.webhook_url.is_empty() { "configured" } else { "not configured" });
+    println!();
+
+    println!("Ready to run? Remove --dry-run and rerun.");
+    info!("Dry-run complete — no actions taken");
+    Ok(())
+}
+
 /// Run the orchestrator event loop — health checks, launch coordinator, camp
 /// loop.
 ///
 /// Blocks until Ctrl+C is pressed, then performs a graceful shutdown:
 /// - First Ctrl+C: signals the loop to stop, waits up to 60 s, exits 0.
 /// - Second Ctrl+C during shutdown: exits immediately with code 130.
-pub fn run_orchestrate_mode() -> Result<()> {
+///
+/// When `dry_run` is `true`, parses config, prints what *would* happen, and
+/// returns without starting the loop, sending any IPC commands, or injecting
+/// any DLLs.
+pub fn run_orchestrate_mode(dry_run: bool) -> Result<()> {
     let config = load_config()?;
+
+    if dry_run {
+        return run_orchestrate_dry_run(&config);
+    }
 
     let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
 
@@ -1811,6 +1873,33 @@ mod orchestrate_tests {
     fn shutdown_report_shutting_down_only() {
         let events = vec![LoopEvent::ShuttingDown];
         print_shutdown_report(&events);
+    }
+
+    #[test]
+    fn dry_run_succeeds_with_default_config() {
+        // Verify dry-run returns Ok(()) and does not attempt any IPC or DLL ops.
+        let config = crate::config::AppConfig::default_config();
+        let result = super::run_orchestrate_dry_run(&config);
+        assert!(result.is_ok(), "dry-run should succeed with default config");
+    }
+
+    #[test]
+    fn dry_run_reflects_process_name() {
+        let mut config = crate::config::AppConfig::default_config();
+        config.process_name = "custom_eq.exe".to_string();
+        // Should complete without error regardless of process name.
+        assert!(super::run_orchestrate_dry_run(&config).is_ok());
+    }
+
+    #[test]
+    fn dry_run_reflects_group_count() {
+        let mut config = crate::config::AppConfig::default_config();
+        config.group.push(crate::config::GroupConfig {
+            id: 1,
+            name: "MainRaid".into(),
+            toon: vec![],
+        });
+        assert!(super::run_orchestrate_dry_run(&config).is_ok());
     }
 }
 

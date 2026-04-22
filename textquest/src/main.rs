@@ -189,7 +189,12 @@ enum Commands {
     // ── Orchestration ─────────────────────────────────────────────────
     /// Run the orchestrator event loop (health checks, launch coordinator, camp
     /// loop)
-    Orchestrate,
+    Orchestrate {
+        /// Parse config and print what the orchestrator would do without
+        /// executing any IPC writes, DLL injections, or process launches.
+        #[arg(long)]
+        dry_run: bool,
+    },
 
     // ── Configuration ─────────────────────────────────────────────────
     /// Configuration management
@@ -372,7 +377,7 @@ fn main() -> Result<()> {
         Some(Commands::Calibrate) => cli::run_calibrate_mode(),
 
         // Orchestration
-        Some(Commands::Orchestrate) => cli::run_orchestrate_mode(),
+        Some(Commands::Orchestrate { dry_run }) => cli::run_orchestrate_mode(dry_run),
 
         // Configuration
         Some(Commands::Config { action }) => match action {
