@@ -1,5 +1,6 @@
 //! Mock implementations for EQ process reading.
 
+#[cfg(windows)]
 use crate::process::memory::ProcessHandle;
 use std::collections::HashMap;
 

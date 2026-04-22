@@ -3,8 +3,7 @@
 //! A `TestScenario` encapsulates a named, async, time-bounded test that collects
 //! structured metrics and error strings as evidence of pass/fail.
 
-use std::collections::HashMap;
-use std::time::Duration;
+use std::{collections::HashMap, future::Future, pin::Pin, time::Duration};
 
 // ── Metric value ────────────────────────────────────────────────────────────
 
@@ -70,15 +69,24 @@ impl ScenarioResult {
 /// calls [`run`](TestScenario::run) with a wall-clock budget; the scenario
 /// should honour that budget and return a [`ScenarioResult`] regardless of
 /// whether it succeeded.
+/// A boxed, pinned `Send` future — the return type of [`TestScenario::run`].
+pub type BoxScenarioFuture<'a> = Pin<Box<dyn Future<Output = ScenarioResult> + Send + 'a>>;
+
+/// A named, async scenario that runs for a bounded duration and returns structured results.
+///
+/// Implementors describe a self-contained behaviour test.  The orchestrator
+/// calls [`run`](TestScenario::run) with a wall-clock budget; the scenario
+/// should honour that budget and return a [`ScenarioResult`] regardless of
+/// whether it succeeded.
+///
+/// The trait is object-safe (`dyn TestScenario`) — `run` returns a
+/// `Pin<Box<dyn Future>>` rather than using RPITIT.
 pub trait TestScenario: Send {
     /// A short, human-readable identifier for this scenario (e.g. `"spawn_read_roundtrip"`).
     fn name(&self) -> &str;
 
     /// Execute the scenario for at most `duration`, returning structured results.
-    fn run(
-        &mut self,
-        duration: Duration,
-    ) -> impl std::future::Future<Output = ScenarioResult> + Send;
+    fn run(&mut self, duration: Duration) -> BoxScenarioFuture<'_>;
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -100,9 +108,9 @@ mod tests {
             "always_pass"
         }
 
-        async fn run(&mut self, _duration: Duration) -> ScenarioResult {
+        fn run(&mut self, _duration: Duration) -> BoxScenarioFuture<'_> {
             self.counter += 1;
-            ScenarioResult::success(Duration::from_millis(0))
+            Box::pin(async { ScenarioResult::success(Duration::from_millis(0)) })
         }
     }
 
@@ -114,11 +122,13 @@ mod tests {
             "always_fail"
         }
 
-        async fn run(&mut self, _duration: Duration) -> ScenarioResult {
-            ScenarioResult::failure(
-                Duration::from_millis(1),
-                vec!["intentional failure".to_string()],
-            )
+        fn run(&mut self, _duration: Duration) -> BoxScenarioFuture<'_> {
+            Box::pin(async {
+                ScenarioResult::failure(
+                    Duration::from_millis(1),
+                    vec!["intentional failure".to_string()],
+                )
+            })
         }
     }
 
@@ -130,14 +140,16 @@ mod tests {
             "metric_emitter"
         }
 
-        async fn run(&mut self, _duration: Duration) -> ScenarioResult {
-            ScenarioResult::success(Duration::from_millis(5))
-                .with_metric("frames", MetricValue::Counter(100))
-                .with_metric("memory_mb", MetricValue::Gauge(42.5))
-                .with_metric(
-                    "latency_ms",
-                    MetricValue::Histogram(vec![1.0, 2.5, 3.0, 1.5]),
-                )
+        fn run(&mut self, _duration: Duration) -> BoxScenarioFuture<'_> {
+            Box::pin(async {
+                ScenarioResult::success(Duration::from_millis(5))
+                    .with_metric("frames", MetricValue::Counter(100))
+                    .with_metric("memory_mb", MetricValue::Gauge(42.5))
+                    .with_metric(
+                        "latency_ms",
+                        MetricValue::Histogram(vec![1.0, 2.5, 3.0, 1.5]),
+                    )
+            })
         }
     }
 

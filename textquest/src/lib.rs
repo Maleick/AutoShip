@@ -93,7 +93,6 @@ pub mod tui;
 #[cfg(windows)]
 pub mod cli;
 /// Testing utilities — scenario harness, metric types, and result types.
-#[cfg(windows)]
 #[allow(dead_code)]
 pub mod testing;
 
