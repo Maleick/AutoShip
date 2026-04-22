@@ -33,6 +33,12 @@ pub struct GameState {
     /// Detected EQ patch date from `__ActualVersionDate` if available.
     #[serde(default)]
     pub actual_version: Option<String>,
+    /// True while the client is in the middle of a zone transition (e.g.
+    /// between clicking a zone line and fully loading into the new zone).
+    /// Set by the DLL when it detects an active zone transition; defaults to
+    /// `false` for older DLL payloads that do not include this field.
+    #[serde(default)]
+    pub is_zone_changing: bool,
 }
 
 impl GameState {
@@ -53,6 +59,7 @@ impl GameState {
             pet: self.pet.clone(),
             spawn_epoch,
             actual_version: self.actual_version.clone(),
+            is_zone_changing: self.is_zone_changing,
         }
     }
 }
@@ -95,6 +102,9 @@ pub struct SharedStateFrame {
     /// Detected EQ patch date from `__ActualVersionDate` if available.
     #[serde(default)]
     pub actual_version: Option<String>,
+    /// True while the client is in the middle of a zone transition.
+    #[serde(default)]
+    pub is_zone_changing: bool,
 }
 
 impl SharedStateFrame {
@@ -115,6 +125,7 @@ impl SharedStateFrame {
             active_buffs: self.active_buffs,
             pet: self.pet,
             actual_version: self.actual_version,
+            is_zone_changing: self.is_zone_changing,
         }
     }
 }
@@ -567,6 +578,7 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
         let json = serde_json::to_string(&gs).expect("serialize");
         let restored: GameState = serde_json::from_str(&json).expect("deserialize");
@@ -588,6 +600,7 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let frame = gs.to_shared_frame(3, true);
@@ -611,6 +624,7 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let frame = gs.to_shared_frame(4, false);
@@ -636,6 +650,7 @@ mod tests {
             pet: None,
             spawn_epoch: 9,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let state = frame.into_game_state(cached_spawns.clone());
@@ -795,6 +810,7 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
         assert_eq!(gs.nearby_spawns.len(), 2);
         assert_eq!(gs.nearby_spawns[0].hp_current, 100);

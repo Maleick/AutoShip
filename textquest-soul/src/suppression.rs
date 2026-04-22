@@ -60,8 +60,13 @@ impl GameStateContext {
         let is_engaging = matches!(state.combat_status, CombatStatus::Engaging { .. });
         let is_casting = matches!(state.combat_status, CombatStatus::Casting { .. });
         let is_navigating = !matches!(state.nav_status, NavStatus::Idle | NavStatus::Arrived);
-        let is_looting = false; // TODO: Add looting state to GameState when loot tracking is implemented
-        let is_zone_changing = false; // TODO: Add zone change detection when zone tracking is improved
+        // stand_state 2 = looting (see SpawnData::stand_state field docs).
+        let is_looting = state
+            .local_player
+            .as_ref()
+            .map(|p| p.stand_state == 2)
+            .unwrap_or(false);
+        let is_zone_changing = state.is_zone_changing;
 
         Self {
             in_combat,
@@ -144,6 +149,7 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         }
     }
 
@@ -437,5 +443,132 @@ mod tests {
         let ctx = GameStateContext::from_game_state(&state);
         // Should suppress idle due to BOTH combat AND navigation
         assert!(rules.should_suppress_idle(ctx));
+    }
+
+    // --- Tests for wired is_looting (stand_state == 2) ---
+
+    #[test]
+    fn is_looting_true_when_stand_state_is_two() {
+        let mut state = make_game_state(1);
+        // stand_state 2 = looting (per SpawnData field docs)
+        state.local_player = Some(SpawnData {
+            stand_state: 2,
+            ..SpawnData::default()
+        });
+
+        let ctx = GameStateContext::from_game_state(&state);
+        assert!(ctx.is_looting);
+    }
+
+    #[test]
+    fn is_looting_false_when_standing() {
+        let mut state = make_game_state(1);
+        state.local_player = Some(SpawnData {
+            stand_state: 0,
+            ..SpawnData::default()
+        });
+
+        let ctx = GameStateContext::from_game_state(&state);
+        assert!(!ctx.is_looting);
+    }
+
+    #[test]
+    fn is_looting_false_when_sitting() {
+        let mut state = make_game_state(1);
+        state.local_player = Some(SpawnData {
+            stand_state: 3,
+            ..SpawnData::default()
+        });
+
+        let ctx = GameStateContext::from_game_state(&state);
+        assert!(!ctx.is_looting);
+    }
+
+    #[test]
+    fn is_looting_false_when_no_local_player() {
+        let mut state = make_game_state(1);
+        state.local_player = None;
+
+        let ctx = GameStateContext::from_game_state(&state);
+        assert!(!ctx.is_looting);
+    }
+
+    #[test]
+    fn suppress_idle_during_looting_via_game_state() {
+        let rules = SuppressionRules::default();
+        let mut state = make_game_state(1);
+        state.local_player = Some(SpawnData {
+            stand_state: 2,
+            ..SpawnData::default()
+        });
+
+        let ctx = GameStateContext::from_game_state(&state);
+        assert!(ctx.is_looting);
+        assert!(rules.should_suppress_idle(ctx));
+    }
+
+    #[test]
+    fn suppress_idle_looting_respects_config_flag() {
+        let rules = SuppressionRules {
+            suppress_idle_during_looting: false,
+            ..SuppressionRules::default()
+        };
+        let mut state = make_game_state(1);
+        state.local_player = Some(SpawnData {
+            stand_state: 2,
+            ..SpawnData::default()
+        });
+
+        let ctx = GameStateContext::from_game_state(&state);
+        assert!(ctx.is_looting);
+        // suppression disabled for looting; no other triggers active
+        assert!(!rules.should_suppress_idle(ctx));
+    }
+
+    // --- Tests for wired is_zone_changing (GameState::is_zone_changing) ---
+
+    #[test]
+    fn is_zone_changing_true_when_flag_set() {
+        let mut state = make_game_state(1);
+        state.is_zone_changing = true;
+
+        let ctx = GameStateContext::from_game_state(&state);
+        assert!(ctx.is_zone_changing);
+    }
+
+    #[test]
+    fn is_zone_changing_false_by_default() {
+        let state = make_game_state(1);
+
+        let ctx = GameStateContext::from_game_state(&state);
+        assert!(!ctx.is_zone_changing);
+    }
+
+    #[test]
+    fn suppress_idle_during_zone_change_via_game_state() {
+        let rules = SuppressionRules::default();
+        let mut state = make_game_state(1);
+        state.is_zone_changing = true;
+
+        let ctx = GameStateContext::from_game_state(&state);
+        assert!(ctx.is_zone_changing);
+        assert!(rules.should_suppress_idle(ctx));
+        assert!(rules.should_suppress_chat(ctx));
+    }
+
+    #[test]
+    fn suppress_zone_change_respects_config_flags() {
+        let rules = SuppressionRules {
+            suppress_chat_during_zone_change: false,
+            suppress_idle_during_zone_change: false,
+            ..SuppressionRules::default()
+        };
+        let mut state = make_game_state(1);
+        state.is_zone_changing = true;
+
+        let ctx = GameStateContext::from_game_state(&state);
+        assert!(ctx.is_zone_changing);
+        assert!(!rules.should_suppress_chat(ctx));
+        assert!(!rules.should_suppress_idle(ctx));
     }
 }

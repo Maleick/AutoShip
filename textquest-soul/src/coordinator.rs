@@ -957,6 +957,7 @@ mod tests {
             active_buffs: vec![],
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         }
     }
 

@@ -282,6 +282,7 @@ mod tests {
                 }],
             }),
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let shared =
@@ -339,6 +340,7 @@ mod tests {
                 }],
             }),
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let shared =
@@ -367,6 +369,7 @@ mod tests {
             active_buffs: Vec::new(),
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         assert!(SharedClientState::from_game_state(None, &state, false).is_none());
@@ -390,6 +393,7 @@ mod tests {
             active_buffs: Vec::new(),
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let shared = SharedClientState::from_game_state(None, &state, false).expect("state");
@@ -414,6 +418,7 @@ mod tests {
             active_buffs: Vec::new(),
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let shared =
@@ -439,6 +444,7 @@ mod tests {
             active_buffs: Vec::new(),
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let shared = SharedClientState::from_game_state(None, &state, false).expect("state");
@@ -462,6 +468,7 @@ mod tests {
             active_buffs: Vec::new(),
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let shared = SharedClientState::from_game_state(None, &state, false).expect("state");
@@ -483,6 +490,7 @@ mod tests {
             active_buffs: Vec::new(),
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let shared = SharedClientState::from_game_state(None, &state, false).expect("state");

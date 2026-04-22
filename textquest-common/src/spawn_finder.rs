@@ -98,6 +98,7 @@ mod tests {
             active_buffs: Vec::new(),
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let observer =
@@ -123,6 +124,7 @@ mod tests {
             active_buffs: Vec::new(),
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         assert!(LiveSpawnObserver::from_game_state(Some("Fallback"), &state).is_none());
@@ -145,6 +147,7 @@ mod tests {
             active_buffs: Vec::new(),
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let observer =
@@ -169,6 +172,7 @@ mod tests {
             active_buffs: Vec::new(),
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let observer =
@@ -193,6 +197,7 @@ mod tests {
             active_buffs: Vec::new(),
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let observer = LiveSpawnObserver::from_game_state(None, &state).expect("observer");
@@ -214,6 +219,7 @@ mod tests {
             active_buffs: Vec::new(),
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let observer = LiveSpawnObserver::from_game_state(None, &state).expect("observer");
@@ -236,6 +242,7 @@ mod tests {
             active_buffs: Vec::new(),
             pet: None,
             actual_version: None,
+            is_zone_changing: false,
         };
 
         let observer = LiveSpawnObserver::from_game_state(None, &state).expect("observer");

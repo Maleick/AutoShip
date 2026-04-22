@@ -1843,6 +1843,27 @@ fn read_and_publish_state(tick: u64) {
             cached_nearby.clone_from(&spawns);
         }
 
+        // Detect zone transitions by tracking the last-seen non-empty zone name.
+        // EQ clears the zone short name to an empty string during the loading
+        // screen, so an empty zone_short signals an active transition.
+        // Additionally, a change from the previously-known name to a new non-empty
+        // name means we just finished loading — we mark that tick as changing too,
+        // so suppression covers the very first frame in a new zone.
+        static LAST_ZONE_SHORT: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+        let is_zone_changing = {
+            let mut last = LAST_ZONE_SHORT.lock().unwrap_or_else(|e| e.into_inner());
+            if zone_short.is_empty() {
+                // Loading screen in progress
+                true
+            } else if *last != zone_short {
+                // Zone name just changed — first tick in the new zone
+                *last = zone_short.clone();
+                true
+            } else {
+                false
+            }
+        };
+
         *cached = Some(textquest_common::types::GameState {
             client_id: std::process::id(),
             local_player,
@@ -1856,6 +1877,7 @@ fn read_and_publish_state(tick: u64) {
             active_buffs,
             pet,
             actual_version: crate::eq_actual_version(),
+            is_zone_changing,
         });
     } else if let Some(ref mut state) = *cached {
         state.local_player = local_player;
@@ -1865,6 +1887,10 @@ fn read_and_publish_state(tick: u64) {
         state.combat_status = crate::combat::status();
         state.active_buffs = active_buffs;
         state.pet = pet;
+        // On non-refresh ticks zone names are not re-read, so preserve the
+        // transition state from the cached zone_short_name until the next
+        // refresh tick updates the zone fields.
+        state.is_zone_changing = state.zone_short_name.is_empty();
     } else {
         return;
     }
