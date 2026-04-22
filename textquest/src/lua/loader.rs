@@ -485,4 +485,96 @@ mod tests {
         assert!(loader.resume_script("ghost").is_err());
         assert!(loader.reload_script("ghost").is_err());
     }
+
+    // ── Sandbox security tests ────────────────────────────────────────────────
+
+    /// `os` global must not be available — calling `os.execute` should error.
+    #[test]
+    fn test_sandbox_blocks_os_execute() {
+        let (loader, _dir) = make_loader();
+        let result = loader.execute_string(r#"os.execute("echo pwned")"#);
+        assert!(
+            result.is_err(),
+            "os.execute must not succeed in sandboxed Lua"
+        );
+        let err = result.unwrap_err().to_string();
+        // Error should mention 'os' being nil/unavailable, not that the command ran.
+        assert!(
+            err.contains("os") || err.contains("nil") || err.contains("attempt"),
+            "unexpected error text: {err}"
+        );
+    }
+
+    /// `io.open` must be blocked.
+    #[test]
+    fn test_sandbox_blocks_io_open() {
+        let (loader, _dir) = make_loader();
+        let result = loader.execute_string(r#"io.open("/etc/passwd", "r")"#);
+        assert!(result.is_err(), "io.open must not succeed in sandboxed Lua");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("io") || err.contains("nil") || err.contains("attempt"),
+            "unexpected error text: {err}"
+        );
+    }
+
+    /// `debug.getfenv` must be blocked.
+    #[test]
+    fn test_sandbox_blocks_debug() {
+        let (loader, _dir) = make_loader();
+        let result = loader.execute_string("debug.getfenv(print)");
+        assert!(
+            result.is_err(),
+            "debug.getfenv must not succeed in sandboxed Lua"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("debug") || err.contains("nil") || err.contains("attempt"),
+            "unexpected error text: {err}"
+        );
+    }
+
+    /// `require` with an unknown module must be blocked.
+    #[test]
+    fn test_sandbox_blocks_require() {
+        let (loader, _dir) = make_loader();
+        let result = loader.execute_string(r#"require("socket")"#);
+        assert!(result.is_err(), "require must be blocked in sandboxed Lua");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("sandbox") || err.contains("not allowed"),
+            "unexpected error text: {err}"
+        );
+    }
+
+    /// An infinite loop must be terminated by the instruction-count hook.
+    #[test]
+    fn test_sandbox_kills_infinite_loop() {
+        let (loader, _dir) = make_loader();
+        let result = loader.execute_string("while true do end");
+        assert!(
+            result.is_err(),
+            "infinite loop must be terminated by sandbox hook"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("sandbox") || err.contains("instruction") || err.contains("limit"),
+            "unexpected error text: {err}"
+        );
+    }
+
+    /// Safe globals (math, string, table) must still be accessible.
+    #[test]
+    fn test_sandbox_allows_safe_globals() {
+        let (loader, _dir) = make_loader();
+        loader
+            .execute_string("return math.floor(3.7)")
+            .expect("math.floor must work");
+        loader
+            .execute_string(r#"return string.upper("hello")"#)
+            .expect("string.upper must work");
+        loader
+            .execute_string("return table.concat({1,2,3}, ',')")
+            .expect("table.concat must work");
+    }
 }
