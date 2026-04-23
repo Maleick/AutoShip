@@ -143,6 +143,50 @@ pub struct CharmConfig {
     pub max_charmed: u8,
 }
 
+/// Partial overlay parsed from TOML for layered merge.
+///
+/// Unlike `CharmConfig`, this struct intentionally does not apply defaults so
+/// we can detect whether a key was explicitly provided by the file.
+#[derive(Debug, Clone, Default, Deserialize)]
+struct CharmConfigOverlay {
+    #[serde(default)]
+    pet_behavior_mode: Option<PetBehaviorMode>,
+    #[serde(default)]
+    recharge: Option<ReCharmThresholdsOverlay>,
+    #[serde(default)]
+    affinity: Option<PetAffinityPrefsOverlay>,
+    #[serde(default)]
+    pet_spell_priorities: Option<Vec<PetSpellPriority>>,
+    #[serde(default)]
+    auto_recharm: Option<bool>,
+    #[serde(default)]
+    auto_send_pet: Option<bool>,
+    #[serde(default)]
+    max_charmed: Option<u8>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct ReCharmThresholdsOverlay {
+    #[serde(default)]
+    recharge_below_ticks: Option<u32>,
+    #[serde(default)]
+    pet_hp_safety_pct: Option<f32>,
+    #[serde(default)]
+    min_mana_pct: Option<f32>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct PetAffinityPrefsOverlay {
+    #[serde(default)]
+    preferred_types: Option<Vec<String>>,
+    #[serde(default)]
+    avoid_types: Option<Vec<String>>,
+    #[serde(default)]
+    min_level: Option<u8>,
+    #[serde(default)]
+    max_level: Option<u8>,
+}
+
 fn default_true() -> bool {
     true
 }
@@ -171,8 +215,11 @@ impl Default for CharmConfig {
 /// Reads `global.toml` first, then merges `<class_name>.toml` on top.
 /// Returns the merged config.
 pub fn load_from_dir(dir: &Path, class_name: &str) -> Result<CharmConfig> {
+    let mut merged = CharmConfig::default();
     let global_path = dir.join("global.toml");
-    let mut merged = load_single_optional(&global_path)?.unwrap_or_default();
+    if let Some(global_cfg) = load_single_optional(&global_path)? {
+        merge_into(&mut merged, global_cfg);
+    }
 
     let class_lower = class_name.trim().to_ascii_lowercase();
     if !class_lower.is_empty() {
@@ -191,59 +238,64 @@ pub fn load_for_class(class_name: &str) -> Result<CharmConfig> {
     load_from_dir(&dir, class_name)
 }
 
-fn load_single_optional(path: &Path) -> Result<Option<CharmConfig>> {
+fn load_single_optional(path: &Path) -> Result<Option<CharmConfigOverlay>> {
     if !path.is_file() {
         return Ok(None);
     }
     let contents = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read charm config: {}", path.display()))?;
-    let config = toml::from_str::<CharmConfig>(&contents)
+    let config = toml::from_str::<CharmConfigOverlay>(&contents)
         .with_context(|| format!("Failed to parse charm config: {}", path.display()))?;
     Ok(Some(config))
 }
 
-/// Merge `overlay` fields into `base` — non-default values in `overlay` win.
-///
-/// Strategy: overlay replaces any field that differs from CharmConfig::default().
-/// We do a field-by-field merge so partial TOML files work correctly.
-fn merge_into(base: &mut CharmConfig, overlay: CharmConfig) {
-    let defaults = CharmConfig::default();
-
-    if overlay.pet_behavior_mode != defaults.pet_behavior_mode {
-        base.pet_behavior_mode = overlay.pet_behavior_mode;
+/// Merge explicitly-present `overlay` fields into `base`.
+fn merge_into(base: &mut CharmConfig, overlay: CharmConfigOverlay) {
+    if let Some(mode) = overlay.pet_behavior_mode {
+        base.pet_behavior_mode = mode;
     }
-    if overlay.recharge.recharge_below_ticks != defaults.recharge.recharge_below_ticks {
-        base.recharge.recharge_below_ticks = overlay.recharge.recharge_below_ticks;
+    if let Some(recharge) = overlay.recharge {
+        if let Some(v) = recharge.recharge_below_ticks {
+            base.recharge.recharge_below_ticks = v;
+        }
+        if let Some(v) = recharge.pet_hp_safety_pct {
+            base.recharge.pet_hp_safety_pct = v;
+        }
+        if let Some(v) = recharge.min_mana_pct {
+            base.recharge.min_mana_pct = v;
+        }
     }
-    if overlay.recharge.pet_hp_safety_pct != defaults.recharge.pet_hp_safety_pct {
-        base.recharge.pet_hp_safety_pct = overlay.recharge.pet_hp_safety_pct;
+    if let Some(affinity) = overlay.affinity {
+        if let Some(preferred) = affinity.preferred_types
+            && !preferred.is_empty()
+        {
+            base.affinity.preferred_types = preferred;
+        }
+        if let Some(avoid) = affinity.avoid_types
+            && !avoid.is_empty()
+        {
+            base.affinity.avoid_types = avoid;
+        }
+        if affinity.min_level.is_some() {
+            base.affinity.min_level = affinity.min_level;
+        }
+        if affinity.max_level.is_some() {
+            base.affinity.max_level = affinity.max_level;
+        }
     }
-    if overlay.recharge.min_mana_pct != defaults.recharge.min_mana_pct {
-        base.recharge.min_mana_pct = overlay.recharge.min_mana_pct;
+    if let Some(priorities) = overlay.pet_spell_priorities
+        && !priorities.is_empty()
+    {
+        base.pet_spell_priorities = priorities;
     }
-    if !overlay.affinity.preferred_types.is_empty() {
-        base.affinity.preferred_types = overlay.affinity.preferred_types;
+    if let Some(auto_recharm) = overlay.auto_recharm {
+        base.auto_recharm = auto_recharm;
     }
-    if !overlay.affinity.avoid_types.is_empty() {
-        base.affinity.avoid_types = overlay.affinity.avoid_types;
+    if let Some(auto_send_pet) = overlay.auto_send_pet {
+        base.auto_send_pet = auto_send_pet;
     }
-    if overlay.affinity.min_level.is_some() {
-        base.affinity.min_level = overlay.affinity.min_level;
-    }
-    if overlay.affinity.max_level.is_some() {
-        base.affinity.max_level = overlay.affinity.max_level;
-    }
-    if !overlay.pet_spell_priorities.is_empty() {
-        base.pet_spell_priorities = overlay.pet_spell_priorities;
-    }
-    if !overlay.auto_recharm {
-        base.auto_recharm = false;
-    }
-    if !overlay.auto_send_pet {
-        base.auto_send_pet = false;
-    }
-    if overlay.max_charmed != default_max_charmed() {
-        base.max_charmed = overlay.max_charmed;
+    if let Some(max_charmed) = overlay.max_charmed {
+        base.max_charmed = max_charmed;
     }
 }
 
@@ -530,7 +582,7 @@ mod tests {
             max_charmed: 4,
             ..Default::default()
         };
-        let overlay = CharmConfig::default(); // all defaults
+        let overlay = CharmConfigOverlay::default(); // no fields provided
         merge_into(&mut base, overlay);
         assert_eq!(base.pet_behavior_mode, PetBehaviorMode::Aggressive);
         assert_eq!(base.max_charmed, 4);
@@ -541,11 +593,36 @@ mod tests {
         let mut base = CharmConfig::default();
         base.affinity.preferred_types = vec!["animal".into()];
 
-        let mut overlay = CharmConfig::default();
-        overlay.affinity.preferred_types = vec!["humanoid".into(), "giant".into()];
+        let overlay = CharmConfigOverlay {
+            affinity: Some(PetAffinityPrefsOverlay {
+                preferred_types: Some(vec!["humanoid".into(), "giant".into()]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
         merge_into(&mut base, overlay);
 
         assert_eq!(base.affinity.preferred_types, vec!["humanoid", "giant"]);
+    }
+
+    #[test]
+    fn load_from_dir_class_can_override_global_back_to_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        write_toml(
+            dir.path(),
+            "global.toml",
+            "pet_behavior_mode = \"aggressive\"\nauto_send_pet = false\nmax_charmed = 2",
+        );
+        write_toml(
+            dir.path(),
+            "enchanter.toml",
+            "pet_behavior_mode = \"balanced\"\nauto_send_pet = true\nmax_charmed = 1",
+        );
+
+        let cfg = load_from_dir(dir.path(), "enchanter").unwrap();
+        assert_eq!(cfg.pet_behavior_mode, PetBehaviorMode::Balanced);
+        assert!(cfg.auto_send_pet);
+        assert_eq!(cfg.max_charmed, 1);
     }
 
     // ── Hot-reload ────────────────────────────────────────────────────────────
