@@ -9,7 +9,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use textquest_common::{
     nav::NavStatus,
-    types::{ClientId, GameState, SharedStateFrame, SpawnData},
+    types::{ClientId, GameState, PetData, SharedStateFrame, SpawnData},
 };
 
 static PERF_TRACE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
@@ -22,6 +22,47 @@ static PERF_TRACE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
         })
         .unwrap_or(false)
 });
+
+#[derive(Debug, serde::Deserialize)]
+struct LegacySharedStateFrame {
+    client_id: ClientId,
+    local_player: Option<SpawnData>,
+    target: Option<SpawnData>,
+    nearby_spawns: Option<Vec<SpawnData>>,
+    timestamp_ms: u64,
+    nav_status: textquest_common::nav::NavStatus,
+    combat_status: textquest_common::combat::CombatStatus,
+    zone_short_name: String,
+    zone_long_name: String,
+    #[serde(default)]
+    active_buffs: Vec<textquest_common::combat::BuffInfo>,
+    #[serde(default)]
+    pet: Option<PetData>,
+    spawn_epoch: u64,
+    #[serde(default)]
+    actual_version: Option<String>,
+}
+
+impl LegacySharedStateFrame {
+    fn into_current(self) -> SharedStateFrame {
+        SharedStateFrame {
+            client_id: self.client_id,
+            local_player: self.local_player,
+            target: self.target,
+            nearby_spawns: self.nearby_spawns,
+            timestamp_ms: self.timestamp_ms,
+            nav_status: self.nav_status,
+            combat_status: self.combat_status,
+            zone_short_name: self.zone_short_name,
+            zone_long_name: self.zone_long_name,
+            active_buffs: self.active_buffs,
+            pet: self.pet,
+            spawn_epoch: self.spawn_epoch,
+            actual_version: self.actual_version,
+            is_zone_changing: false,
+        }
+    }
+}
 
 /// Reads game state from shared memory for a specific client.
 pub struct SharedStateReader {
@@ -182,9 +223,7 @@ impl SharedStateReader {
             }
 
             // 6. Decode only if both sequence reads match and are even
-            let (frame, _): (SharedStateFrame, _) =
-                bincode::serde::decode_from_slice(&payload_copy, bincode::config::standard())
-                    .ok()?;
+            let frame = decode_shared_state_frame(&payload_copy)?;
 
             if let Some(start) = perf_start {
                 tracing::info!(
@@ -206,6 +245,16 @@ impl SharedStateReader {
             None
         }
     }
+}
+
+fn decode_shared_state_frame(payload: &[u8]) -> Option<SharedStateFrame> {
+    bincode::serde::decode_from_slice(payload, bincode::config::standard())
+        .map(|(frame, _): (SharedStateFrame, _)| frame)
+        .or_else(|_| {
+            bincode::serde::decode_from_slice(payload, bincode::config::standard())
+                .map(|(legacy, _): (LegacySharedStateFrame, _)| legacy.into_current())
+        })
+        .ok()
 }
 
 fn nav_snapshot_from_frame(frame: SharedStateFrame) -> SharedNavSnapshot {
@@ -248,6 +297,23 @@ impl Drop for SharedStateReader {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Debug, Clone, serde::Serialize)]
+    struct LegacyFrameForTest {
+        client_id: ClientId,
+        local_player: Option<SpawnData>,
+        target: Option<SpawnData>,
+        nearby_spawns: Option<Vec<SpawnData>>,
+        timestamp_ms: u64,
+        nav_status: textquest_common::nav::NavStatus,
+        combat_status: textquest_common::combat::CombatStatus,
+        zone_short_name: String,
+        zone_long_name: String,
+        active_buffs: Vec<textquest_common::combat::BuffInfo>,
+        pet: Option<PetData>,
+        spawn_epoch: u64,
+        actual_version: Option<String>,
+    }
 
     fn make_spawn(id: u32) -> SpawnData {
         SpawnData {
@@ -340,5 +406,31 @@ mod tests {
         assert_eq!(snapshot.zone_short_name, "qeynos");
         assert_eq!(snapshot.zone_long_name, "South Qeynos");
         assert_eq!(snapshot.nav_status, textquest_common::nav::NavStatus::Idle);
+    }
+
+    #[test]
+    fn decode_shared_state_frame_accepts_legacy_payload_without_zone_change_flag() {
+        let legacy = LegacyFrameForTest {
+            client_id: 42,
+            local_player: Some(make_spawn(1)),
+            target: Some(make_spawn(2)),
+            nearby_spawns: Some(vec![make_spawn(10)]),
+            timestamp_ms: 1234,
+            nav_status: textquest_common::nav::NavStatus::Idle,
+            combat_status: textquest_common::combat::CombatStatus::Idle,
+            zone_short_name: "qeynos".into(),
+            zone_long_name: "South Qeynos".into(),
+            active_buffs: vec![],
+            pet: None,
+            spawn_epoch: 1,
+            actual_version: None,
+        };
+        let mut payload = Vec::new();
+        bincode::serde::encode_into_std_write(&legacy, &mut payload, bincode::config::standard())
+            .expect("legacy frame should serialize");
+
+        let frame = decode_shared_state_frame(&payload).expect("legacy payload should decode");
+        assert!(!frame.is_zone_changing);
+        assert_eq!(frame.zone_short_name, "qeynos");
     }
 }

@@ -601,10 +601,7 @@ mod tests {
             tracker.record(&speaker, "crowded");
         }
 
-        assert_eq!(
-            tracker.speaker_count("crowded"),
-            MAX_SPEAKERS_PER_PHRASE
-        );
+        assert_eq!(tracker.speaker_count("crowded"), MAX_SPEAKERS_PER_PHRASE);
     }
 
     // --- Multi-character contagion integration ---

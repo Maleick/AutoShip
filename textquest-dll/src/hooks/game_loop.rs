@@ -97,8 +97,7 @@ static PREV_NEARBY_SPAWNS: std::sync::OnceLock<
 /// Initialized to 0 (flag clear). Compared each frame against the live value.
 /// When the live value transitions from 0 to non-zero a
 /// `ChecksumMismatchAlertBatch` response is emitted.
-static PREV_CHEATER_LD_FLAG: std::sync::atomic::AtomicI32 =
-    std::sync::atomic::AtomicI32::new(0);
+static PREV_CHEATER_LD_FLAG: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
 /// Read the `CheaterLdFlag` from EQ memory and emit an operator alert if it
 /// has flipped to a non-zero value since the last check.
