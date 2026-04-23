@@ -270,12 +270,7 @@ impl ClickyManager {
     /// Returns the milliseconds remaining on `item`'s cooldown for
     /// `character_id`, or `0` if the item is already ready.
     #[must_use]
-    pub fn cooldown_remaining_ms(
-        &self,
-        character_id: u32,
-        item: &ClickyItem,
-        now: Instant,
-    ) -> u64 {
+    pub fn cooldown_remaining_ms(&self, character_id: u32, item: &ClickyItem, now: Instant) -> u64 {
         match self.cooldowns.get(&(character_id, item.name.clone())) {
             None => 0,
             Some(&last) => {
@@ -300,9 +295,7 @@ impl ClickyManager {
     ) -> Vec<&ClickyItem> {
         self.items
             .iter()
-            .filter(|item| {
-                self.is_ready(character_id, item, now) && item.conditions_met(snapshot)
-            })
+            .filter(|item| self.is_ready(character_id, item, now) && item.conditions_met(snapshot))
             .collect()
     }
 
@@ -331,8 +324,7 @@ impl ClickyManager {
                 .iter()
                 .enumerate()
                 .filter(|(_, item)| {
-                    self.is_ready(character_id, item, now)
-                        && item.conditions_met(snapshot)
+                    self.is_ready(character_id, item, now) && item.conditions_met(snapshot)
                 })
                 .map(|(idx, _)| idx)
                 .collect();
@@ -658,8 +650,7 @@ mod tests {
 
     #[test]
     fn history_capped_at_configured_size() {
-        let mut mgr = ClickyManager::new(vec![simple_item("Boots", 0, 0)])
-            .with_history_cap(3);
+        let mut mgr = ClickyManager::new(vec![simple_item("Boots", 0, 0)]).with_history_cap(3);
         let stub = StubExecutor::default();
 
         // Fire 5 times using advancing time to reset cooldown.
@@ -677,14 +668,16 @@ mod tests {
 
     #[test]
     fn total_clicks_increments_correctly() {
-        let mut mgr = ClickyManager::new(vec![
-            simple_item("ItemA", 0, 0),
-            simple_item("ItemB", 1, 0),
-        ]);
+        let mut mgr =
+            ClickyManager::new(vec![simple_item("ItemA", 0, 0), simple_item("ItemB", 1, 0)]);
         let t0 = Instant::now();
         let stub = StubExecutor::default();
 
-        mgr.tick(t0, &[(1, healthy_snapshot()), (2, healthy_snapshot())], &stub);
+        mgr.tick(
+            t0,
+            &[(1, healthy_snapshot()), (2, healthy_snapshot())],
+            &stub,
+        );
 
         // 2 items × 2 characters = 4 clicks
         assert_eq!(mgr.total_clicks, 4);
@@ -723,7 +716,10 @@ mod tests {
 
         // Should now be blocked.
         mgr.tick(t0, &[(1, healthy_snapshot())], &stub);
-        assert!(stub.calls.borrow().is_empty(), "external use should enforce cooldown");
+        assert!(
+            stub.calls.borrow().is_empty(),
+            "external use should enforce cooldown"
+        );
     }
 
     // ── Log output ────────────────────────────────────────────────────────────

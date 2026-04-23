@@ -104,8 +104,11 @@ fn write_export_json(
         "schema_version": 1,
     });
 
-    fs::write(&path, serde_json::to_string_pretty(&export).expect("export must serialize"))
-        .expect("failed to write export.json");
+    fs::write(
+        &path,
+        serde_json::to_string_pretty(&export).expect("export must serialize"),
+    )
+    .expect("failed to write export.json");
     path
 }
 
@@ -144,7 +147,12 @@ fn test_full_output_pipeline() {
     assert!(events_path.exists(), "events.jsonl must exist");
     let raw = fs::read_to_string(&events_path).expect("read events.jsonl");
     let lines: Vec<&str> = raw.lines().filter(|l| !l.is_empty()).collect();
-    assert_eq!(lines.len(), 4, "expected 4 event lines, got {}", lines.len());
+    assert_eq!(
+        lines.len(),
+        4,
+        "expected 4 event lines, got {}",
+        lines.len()
+    );
 
     // Each line must be valid JSON.
     for (i, line) in lines.iter().enumerate() {
@@ -166,7 +174,10 @@ fn test_full_output_pipeline() {
     let metrics_val: serde_json::Value =
         serde_json::from_str(&metrics_raw).expect("metrics.json must be valid JSON");
 
-    assert!(metrics_val.is_object(), "metrics.json root must be a JSON object");
+    assert!(
+        metrics_val.is_object(),
+        "metrics.json root must be a JSON object"
+    );
     assert!(
         metrics_val.get("kills_total").is_some(),
         "metrics.json must contain 'kills_total'"
@@ -213,7 +224,10 @@ fn test_full_output_pipeline() {
     let export_val: serde_json::Value =
         serde_json::from_str(&export_raw).expect("export.json must be valid JSON");
 
-    assert!(export_val.is_object(), "export.json root must be a JSON object");
+    assert!(
+        export_val.is_object(),
+        "export.json root must be a JSON object"
+    );
     assert!(
         export_val.get("session_id").is_some(),
         "export must contain 'session_id'"
@@ -239,12 +253,8 @@ fn test_full_output_pipeline() {
 fn test_report_accuracy() {
     let tmp = temp_dir();
 
-    let sm = SessionManager::new(
-        tmp.path(),
-        vec!["Necro01".into()],
-        vec!["combat".into()],
-    )
-    .expect("SessionManager::new failed");
+    let sm = SessionManager::new(tmp.path(), vec!["Necro01".into()], vec!["combat".into()])
+        .expect("SessionManager::new failed");
 
     // Simulate 2 iterations: collect DPS samples and kill counts.
     let mut agg = MetricsAggregator::new();
@@ -263,7 +273,11 @@ fn test_report_accuracy() {
 
     // kills: 3 + 5 = 8 total, count = 2, average = 4.0
     let kills = &val["kills"];
-    assert_eq!(kills["count"].as_u64().unwrap_or(0), 2, "kill count must be 2");
+    assert_eq!(
+        kills["count"].as_u64().unwrap_or(0),
+        2,
+        "kill count must be 2"
+    );
     let kills_sum = kills["sum"].as_f64().expect("kills.sum");
     assert!(
         (kills_sum - 8.0).abs() < f64::EPSILON,
@@ -311,12 +325,17 @@ fn test_json_export_validity() {
     let metrics_raw = agg.to_json();
     let event_count: usize = 12;
 
-    let export_path =
-        write_export_json(&sm.session_dir, &sm.metadata.session_id, event_count, &metrics_raw);
+    let export_path = write_export_json(
+        &sm.session_dir,
+        &sm.metadata.session_id,
+        event_count,
+        &metrics_raw,
+    );
     assert!(export_path.exists(), "export.json must be created");
 
     let raw = fs::read_to_string(&export_path).expect("read export.json");
-    let val: serde_json::Value = serde_json::from_str(&raw).expect("export.json must be valid JSON");
+    let val: serde_json::Value =
+        serde_json::from_str(&raw).expect("export.json must be valid JSON");
 
     // Top-level shape
     assert!(val.is_object(), "export must be a JSON object");
@@ -352,7 +371,10 @@ fn test_json_export_validity() {
 
     // metrics sub-object must contain our keys
     let metrics = &val["metrics"];
-    assert!(metrics.is_object(), "metrics in export must be a JSON object");
+    assert!(
+        metrics.is_object(),
+        "metrics in export must be a JSON object"
+    );
     assert!(
         metrics.get("kills").is_some(),
         "metrics.kills must be present in export"
@@ -363,7 +385,9 @@ fn test_json_export_validity() {
     );
 
     // kills sum = 12
-    let kills_sum = metrics["kills"]["sum"].as_f64().expect("kills.sum in export");
+    let kills_sum = metrics["kills"]["sum"]
+        .as_f64()
+        .expect("kills.sum in export");
     assert!(
         (kills_sum - 12.0).abs() < f64::EPSILON,
         "kills sum in export expected 12.0, got {kills_sum}"

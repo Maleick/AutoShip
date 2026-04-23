@@ -7,8 +7,6 @@
 #![allow(clippy::new_without_default)]
 #![allow(clippy::items_after_test_module)]
 
-/// Canonical exit codes and pre-exit error reporting for TextQuest binaries.
-pub mod exit_code;
 /// Operational alerting — persistence, routing, Discord/email delivery.
 pub mod alerts;
 /// Auto-group config persistence and runtime invite/role orchestration.
@@ -21,6 +19,9 @@ pub mod box_chat;
 pub mod camp;
 /// MQ2Log-style per-character chat output logging.
 pub mod chat_log;
+/// Circuit breaker for mass failure protection — 3-state (Closed/Open/HalfOpen)
+/// with sliding-window failure counting and auto-reset timeout.
+pub mod circuit_breaker;
 /// Multi-client session management and self-healing monitor.
 #[cfg(windows)]
 #[allow(dead_code)]
@@ -33,13 +34,8 @@ pub mod combat;
 /// entrypoints.
 #[cfg(windows)]
 pub mod command_dispatch;
-/// Circuit breaker for mass failure protection — 3-state (Closed/Open/HalfOpen)
-/// with sliding-window failure counting and auto-reset timeout.
-pub mod circuit_breaker;
 /// TOML configuration loading.
 pub mod config;
-/// Log file rotation and retention — size-based and age-based cleanup.
-pub mod log_retention;
 /// Crash reporting and session recovery — per-character context snapshots and
 /// recovery commands.
 #[cfg(windows)]
@@ -48,10 +44,14 @@ pub mod crash_reporter;
 #[cfg(windows)]
 #[allow(dead_code)]
 pub mod credentials;
+/// Canonical exit codes and pre-exit error reporting for TextQuest binaries.
+pub mod exit_code;
 /// Login automation — per-client FSM, staggered launch, process spawner.
 #[cfg(windows)]
 #[allow(dead_code)]
 pub mod launcher;
+/// Log file rotation and retention — size-based and age-based cleanup.
+pub mod log_retention;
 
 /// Discord webhook and bridge integration.
 #[cfg_attr(not(windows), allow(dead_code))]

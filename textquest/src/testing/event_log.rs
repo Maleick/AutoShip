@@ -186,7 +186,12 @@ mod tests {
             .unwrap();
 
         let lines: Vec<&str> = content.lines().collect();
-        assert_eq!(lines.len(), 3, "expected 3 JSONL lines, got {}", lines.len());
+        assert_eq!(
+            lines.len(),
+            3,
+            "expected 3 JSONL lines, got {}",
+            lines.len()
+        );
         for line in &lines {
             serde_json::from_str::<TestEvent>(line).expect("each line must be valid JSON");
         }
@@ -216,7 +221,11 @@ mod tests {
             .unwrap()
             .read_to_string(&mut content)
             .unwrap();
-        assert_eq!(content.lines().count(), 2, "should have 2 lines after two opens");
+        assert_eq!(
+            content.lines().count(),
+            2,
+            "should have 2 lines after two opens"
+        );
     }
 
     #[test]

@@ -194,10 +194,7 @@ impl LaunchCoordinator {
                     }
                     LoginAction::Abort { reason } => {
                         // Record failure in per-account tracker
-                        let account_name = self.active_logins[i]
-                            .account_info
-                            .account_name
-                            .clone();
+                        let account_name = self.active_logins[i].account_info.account_name.clone();
                         let tracker = self
                             .account_trackers
                             .entry(account_name.clone())
@@ -311,11 +308,7 @@ impl LaunchCoordinator {
                 }
                 LoginAction::Abort { reason } => {
                     // Record failure in per-account tracker
-                    if let Some(sm) = self
-                        .active_logins
-                        .iter()
-                        .find(|s| s.client_id == client_id)
-                    {
+                    if let Some(sm) = self.active_logins.iter().find(|s| s.client_id == client_id) {
                         let account_name = sm.account_info.account_name.clone();
                         let tracker = self
                             .account_trackers

@@ -295,13 +295,22 @@ mod constant_time_tests {
     #[test]
     fn all_length_variants_evaluated() {
         let expected = "abcdefghij"; // 10 bytes
-        let shorter = "abcde";       // 5 bytes  — must not match
-        let equal   = "abcdefghij"; // 10 bytes — must match
-        let longer  = "abcdefghijklmno"; // 15 bytes — must not match
+        let shorter = "abcde"; // 5 bytes  — must not match
+        let equal = "abcdefghij"; // 10 bytes — must match
+        let longer = "abcdefghijklmno"; // 15 bytes — must not match
 
-        assert!(!constant_time_eq_str(shorter, expected), "shorter must not match");
-        assert!( constant_time_eq_str(equal,   expected), "equal content must match");
-        assert!(!constant_time_eq_str(longer,  expected), "longer must not match");
+        assert!(
+            !constant_time_eq_str(shorter, expected),
+            "shorter must not match"
+        );
+        assert!(
+            constant_time_eq_str(equal, expected),
+            "equal content must match"
+        );
+        assert!(
+            !constant_time_eq_str(longer, expected),
+            "longer must not match"
+        );
     }
 }
 

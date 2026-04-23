@@ -944,9 +944,9 @@ mod tests {
                 healthy: 5,
                 unhealthy: 1,
             },
-            LoopEvent::ProgressReported(Box::new(
-                crate::metrics::ProgressReport::from_snapshots(vec![]),
-            )),
+            LoopEvent::ProgressReported(Box::new(crate::metrics::ProgressReport::from_snapshots(
+                vec![],
+            ))),
             LoopEvent::ShuttingDown,
         ];
         for e in &events {
@@ -1060,7 +1060,13 @@ mod tests {
         let json = serde_json::to_string(&original).unwrap();
         let decoded: LoopEvent = serde_json::from_str(&json).unwrap();
         assert!(
-            matches!(decoded, LoopEvent::HealthCheckDone { healthy: 8, unhealthy: 3 }),
+            matches!(
+                decoded,
+                LoopEvent::HealthCheckDone {
+                    healthy: 8,
+                    unhealthy: 3
+                }
+            ),
             "round-trip failed: {json}"
         );
     }

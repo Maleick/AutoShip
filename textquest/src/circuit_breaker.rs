@@ -350,9 +350,15 @@ mod tests {
         let _ = cb.is_open(); // → HalfOpen
 
         cb.record_success();
-        assert!(matches!(cb.state(), CircuitState::HalfOpen { successes: 1 }));
+        assert!(matches!(
+            cb.state(),
+            CircuitState::HalfOpen { successes: 1 }
+        ));
         cb.record_success();
-        assert!(matches!(cb.state(), CircuitState::HalfOpen { successes: 2 }));
+        assert!(matches!(
+            cb.state(),
+            CircuitState::HalfOpen { successes: 2 }
+        ));
         cb.record_success();
         assert_eq!(cb.state(), CircuitState::Closed);
     }

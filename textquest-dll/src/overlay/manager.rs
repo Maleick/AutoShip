@@ -369,7 +369,10 @@ mod tests {
         let click_y = hdr.y + 4.0;
 
         mgr.mouse_down(click_x, click_y);
-        let ds = mgr.drag.as_ref().expect("drag state must be set after header click");
+        let ds = mgr
+            .drag
+            .as_ref()
+            .expect("drag state must be set after header click");
         assert_eq!(ds.window_idx, 0);
         assert!((ds.offset_x - (click_x - wx)).abs() < f32::EPSILON);
         assert!((ds.offset_y - (click_y - wy)).abs() < f32::EPSILON);
@@ -428,8 +431,14 @@ mod tests {
         // Move again — window must stay put.
         mgr.mouse_move(mx + 100.0, my + 100.0);
         let w = mgr.get_window("end").unwrap();
-        assert!((w.x - x_after_move).abs() < f32::EPSILON, "x must not change after drag ended");
-        assert!((w.y - y_after_move).abs() < f32::EPSILON, "y must not change after drag ended");
+        assert!(
+            (w.x - x_after_move).abs() < f32::EPSILON,
+            "x must not change after drag ended"
+        );
+        assert!(
+            (w.y - y_after_move).abs() < f32::EPSILON,
+            "y must not change after drag ended"
+        );
     }
 
     /// Clamping: dragging past the top-left edge clamps window to (0, 0).
@@ -496,7 +505,10 @@ mod tests {
         mgr.mouse_down(click_x, click_y);
         let ds = mgr.drag.as_ref().expect("drag must start");
         // Top window was added last, so its index is 1.
-        assert_eq!(ds.window_idx, 1, "topmost (last-added) window must win drag");
+        assert_eq!(
+            ds.window_idx, 1,
+            "topmost (last-added) window must win drag"
+        );
     }
 
     /// Drag does not affect a second window that is not being dragged.
@@ -540,6 +552,9 @@ mod tests {
         // Save/restore resets transient state.
         let json = mgr.save_state().unwrap();
         mgr.load_state(&json).unwrap();
-        assert!(mgr.drag.is_none(), "load_state must cancel in-progress drag");
+        assert!(
+            mgr.drag.is_none(),
+            "load_state must cancel in-progress drag"
+        );
     }
 }

@@ -2959,7 +2959,8 @@ friends = ["OldFriend"]
         // After unwind, the override must be gone.
         let after_panic = crate::api::textquest_config_path();
         assert_ne!(
-            after_panic, sentinel,
+            after_panic,
+            sentinel,
             "override must be cleared after panic unwind — found: {}",
             after_panic.display()
         );

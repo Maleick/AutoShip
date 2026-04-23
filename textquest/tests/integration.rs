@@ -862,7 +862,10 @@ fn group_travel_all_clients_receive_plans() {
     let plans = plan_group_travel(&client_ids, &class_map, "qeynos", "highkeep");
     assert_eq!(plans.len(), 6, "every client must get a travel plan");
     for plan in &plans {
-        assert!(plan.current().is_some(), "each plan must have at least one step");
+        assert!(
+            plan.current().is_some(),
+            "each plan must have at least one step"
+        );
     }
 }
 
@@ -886,7 +889,10 @@ fn stagger_delays_spread_across_clients() {
     let staggers = generate_zone_staggers(&client_ids, 5, 60, 7);
     let mut unique_delays: std::collections::HashSet<u32> = std::collections::HashSet::new();
     for &delay in staggers.values() {
-        assert!((5..=60).contains(&delay), "delay {delay} out of [5, 60] range");
+        assert!(
+            (5..=60).contains(&delay),
+            "delay {delay} out of [5, 60] range"
+        );
         unique_delays.insert(delay);
     }
     // At least 2 different delays expected across 10 clients.
@@ -912,15 +918,24 @@ fn straggler_single_client_receives_solo_plan() {
 fn travel_plan_sequential_step_advancement() {
     // A multi-step plan: stagger → walk → zone → stagger → walk → zone.
     let steps = vec![
-        TravelStep::StaggerWait { min_secs: 10, max_secs: 10 },
+        TravelStep::StaggerWait {
+            min_secs: 10,
+            max_secs: 10,
+        },
         TravelStep::WalkTo {
-            waypoints: vec![Waypoint::new(50.0, 0.0, 0.0), Waypoint::new(100.0, 0.0, 0.0)],
+            waypoints: vec![
+                Waypoint::new(50.0, 0.0, 0.0),
+                Waypoint::new(100.0, 0.0, 0.0),
+            ],
         },
         TravelStep::ZoneTo {
             zone_name: "ecommons".to_string(),
             zone_line_pos: Waypoint::new(100.0, 0.0, 0.0),
         },
-        TravelStep::StaggerWait { min_secs: 5, max_secs: 15 },
+        TravelStep::StaggerWait {
+            min_secs: 5,
+            max_secs: 15,
+        },
         TravelStep::ZoneTo {
             zone_name: "nro".to_string(),
             zone_line_pos: Waypoint::new(200.0, 0.0, 0.0),
@@ -957,15 +972,22 @@ fn group_router_with_porters_produces_plans_for_all() {
         .collect();
 
     let plans = router.plan_travel(&client_ids, &class_map, "gfay", "wakening");
-    assert_eq!(plans.len(), 5, "each client must get a plan even with porters registered");
+    assert_eq!(
+        plans.len(),
+        5,
+        "each client must get a plan even with porters registered"
+    );
     for plan in &plans {
-        assert!(plan.current().is_some(), "porter-aware plan must have at least one step");
+        assert!(
+            plan.current().is_some(),
+            "porter-aware plan must have at least one step"
+        );
     }
 }
 
 #[test]
 fn zone_failure_stagger_retry_recovery_action() {
-    use textquest::zoning::{ZoneFailureCode, ZoneFailureState, RecoveryAction};
+    use textquest::zoning::{RecoveryAction, ZoneFailureCode, ZoneFailureState};
 
     // GeneralFailure → RetryZone.
     let state = ZoneFailureState::new(ZoneFailureCode::GeneralFailure, 3);
@@ -980,7 +1002,7 @@ fn zone_failure_stagger_retry_recovery_action() {
 
 #[test]
 fn zone_failure_abandon_codes_map_correctly() {
-    use textquest::zoning::{ZoneFailureCode, ZoneFailureState, RecoveryAction};
+    use textquest::zoning::{RecoveryAction, ZoneFailureCode, ZoneFailureState};
 
     for abandon_code in [
         ZoneFailureCode::LevelTooLow,
@@ -1000,7 +1022,7 @@ fn zone_failure_abandon_codes_map_correctly() {
 
 #[test]
 fn zone_failure_retryable_codes_map_correctly() {
-    use textquest::zoning::{ZoneFailureCode, ZoneFailureState, RecoveryAction};
+    use textquest::zoning::{RecoveryAction, ZoneFailureCode, ZoneFailureState};
 
     for retry_code in [
         ZoneFailureCode::SpellResisted,
@@ -1019,7 +1041,7 @@ fn zone_failure_retryable_codes_map_correctly() {
 
 #[test]
 fn zone_failure_combat_maps_to_wait_out_of_combat() {
-    use textquest::zoning::{ZoneFailureCode, ZoneFailureState, RecoveryAction};
+    use textquest::zoning::{RecoveryAction, ZoneFailureCode, ZoneFailureState};
 
     let state = ZoneFailureState::new(ZoneFailureCode::PlayerInCombat, 3);
     assert_eq!(state.recovery_action, RecoveryAction::WaitOutOfCombat);
@@ -1027,7 +1049,7 @@ fn zone_failure_combat_maps_to_wait_out_of_combat() {
 
 #[test]
 fn zone_failure_mana_maps_to_wait_mana_regen() {
-    use textquest::zoning::{ZoneFailureCode, ZoneFailureState, RecoveryAction};
+    use textquest::zoning::{RecoveryAction, ZoneFailureCode, ZoneFailureState};
 
     let state = ZoneFailureState::new(ZoneFailureCode::InsufficientMana, 3);
     assert_eq!(state.recovery_action, RecoveryAction::WaitManaRegen);
@@ -1044,7 +1066,7 @@ fn zone_nav_fsm_starts_idle() {
 
 #[test]
 fn zone_nav_fsm_walk_to_transition() {
-    use textquest::nav::zone_transition::{ZoneTransitionFsm, TransitionKind};
+    use textquest::nav::zone_transition::{TransitionKind, ZoneTransitionFsm};
 
     let mut fsm = ZoneTransitionFsm::new(2);
     fsm.start(TransitionKind::WalkTo {
@@ -1055,7 +1077,7 @@ fn zone_nav_fsm_walk_to_transition() {
 
 #[test]
 fn zone_nav_fsm_zone_to_transition() {
-    use textquest::nav::zone_transition::{ZoneTransitionFsm, TransitionKind};
+    use textquest::nav::zone_transition::{TransitionKind, ZoneTransitionFsm};
 
     let mut fsm = ZoneTransitionFsm::new(3);
     fsm.start(TransitionKind::ZoneTo {
@@ -1067,7 +1089,7 @@ fn zone_nav_fsm_zone_to_transition() {
 
 #[test]
 fn zone_nav_fsm_port_to_transition() {
-    use textquest::nav::zone_transition::{ZoneTransitionFsm, TransitionKind};
+    use textquest::nav::zone_transition::{TransitionKind, ZoneTransitionFsm};
 
     let mut fsm = ZoneTransitionFsm::new(4);
     fsm.start(TransitionKind::PortTo {
@@ -1079,7 +1101,7 @@ fn zone_nav_fsm_port_to_transition() {
 
 #[test]
 fn zone_nav_fsm_restarting_replaces_transition() {
-    use textquest::nav::zone_transition::{ZoneTransitionFsm, TransitionKind};
+    use textquest::nav::zone_transition::{TransitionKind, ZoneTransitionFsm};
 
     let mut fsm = ZoneTransitionFsm::new(5);
     fsm.start(TransitionKind::WalkTo {

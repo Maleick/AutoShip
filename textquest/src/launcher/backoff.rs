@@ -215,12 +215,7 @@ mod tests {
 
     #[test]
     fn delay_caps_at_max() {
-        let policy = LoginBackoff::new(
-            Duration::from_secs(1),
-            Duration::from_secs(10),
-            2.0,
-            0.0,
-        );
+        let policy = LoginBackoff::new(Duration::from_secs(1), Duration::from_secs(10), 2.0, 0.0);
         // After enough attempts, delay should be capped
         let large = policy.delay_for(20);
         assert_eq!(large, Duration::from_secs(10), "delay must cap at max");
@@ -248,18 +243,10 @@ mod tests {
 
     #[test]
     fn jitter_adds_to_base_delay() {
-        let no_jitter = LoginBackoff::new(
-            Duration::from_secs(2),
-            Duration::from_secs(60),
-            2.0,
-            0.0,
-        );
-        let with_jitter = LoginBackoff::new(
-            Duration::from_secs(2),
-            Duration::from_secs(60),
-            2.0,
-            0.5,
-        );
+        let no_jitter =
+            LoginBackoff::new(Duration::from_secs(2), Duration::from_secs(60), 2.0, 0.0);
+        let with_jitter =
+            LoginBackoff::new(Duration::from_secs(2), Duration::from_secs(60), 2.0, 0.5);
         // delay_for uses deterministic jitter (fixed fraction), so with_jitter >= no_jitter
         let base = no_jitter.delay_for(1);
         let jittered = with_jitter.delay_for(1);
@@ -389,12 +376,7 @@ mod tests {
 
     #[test]
     fn jitter_delay_for_with_jitter_produces_at_least_base_delay() {
-        let policy = LoginBackoff::new(
-            Duration::from_secs(1),
-            Duration::from_secs(60),
-            2.0,
-            0.5,
-        );
+        let policy = LoginBackoff::new(Duration::from_secs(1), Duration::from_secs(60), 2.0, 0.5);
         for seed in [0u64, 1, 12345, u64::MAX] {
             for attempt in 1..=5 {
                 let jittered = policy.delay_for_with_jitter(attempt, seed);

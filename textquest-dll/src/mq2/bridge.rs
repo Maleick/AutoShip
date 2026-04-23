@@ -170,7 +170,7 @@ impl<'tick> MQ2Bridge<'tick> {
     ///
     /// This check is best-effort: it reflects the locally cached timer state
     /// and may lag a fraction of a server tick.
-    #[cfg(feature = "spell-system")]
+    #[cfg(all(windows, feature = "spell-system"))]
     pub fn has_spell_ready(&self, name: &str) -> bool {
         tracing::debug!(spell = name, "MQ2Bridge::has_spell_ready");
         let ready = spell_is_ready(name);
@@ -182,11 +182,11 @@ impl<'tick> MQ2Bridge<'tick> {
     ///
     /// Always returns `false`.  Gate your code on `cfg(feature = "spell-system")`
     /// or rely on the IPC-layer spell data instead.
-    #[cfg(not(feature = "spell-system"))]
+    #[cfg(not(all(windows, feature = "spell-system")))]
     pub fn has_spell_ready(&self, name: &str) -> bool {
         tracing::debug!(
             spell = name,
-            "MQ2Bridge::has_spell_ready: spell-system feature not enabled, returning false"
+            "MQ2Bridge::has_spell_ready: spell-system unavailable on this build, returning false"
         );
         false
     }
@@ -300,8 +300,9 @@ fn find_spawn_by_id(spawn_id: u32) -> Option<SpawnSnapshot> {
             }
 
             // SAFETY: validated above.
-            let sid =
-                unsafe { *((current + textquest_common::offsets::player_base::SPAWN_ID) as *const u32) };
+            let sid = unsafe {
+                *((current + textquest_common::offsets::player_base::SPAWN_ID) as *const u32)
+            };
 
             if sid == spawn_id {
                 // Found — snapshot via offset-based read.
@@ -377,8 +378,11 @@ fn read_item_snapshot(slot: i32) -> Option<ItemSnapshot> {
 
         // Use the existing inventory query helper which handles the PC item
         // manager pointer chain and slot validation.
-        let info =
-            crate::eq::inventory::query_top_level_slot_item(eq_base, 0 /* ItemLocation::Personal */, slot as i16)?;
+        let info = crate::eq::inventory::query_top_level_slot_item(
+            eq_base,
+            0, /* ItemLocation::Personal */
+            slot as i16,
+        )?;
 
         Some(ItemSnapshot {
             id: info.id as u32,
@@ -466,15 +470,13 @@ fn read_group_members() -> Vec<SpawnSnapshot> {
 
             // Read whether the member is offline — skip offline members since
             // they have no live spawn.
-            let is_offline = if crate::hooks::game_loop::is_readable(
-                member_ptr + group::MEMBER_IS_OFFLINE,
-                1,
-            ) {
-                // SAFETY: validated above.
-                unsafe { *((member_ptr + group::MEMBER_IS_OFFLINE) as *const bool) }
-            } else {
-                false
-            };
+            let is_offline =
+                if crate::hooks::game_loop::is_readable(member_ptr + group::MEMBER_IS_OFFLINE, 1) {
+                    // SAFETY: validated above.
+                    unsafe { *((member_ptr + group::MEMBER_IS_OFFLINE) as *const bool) }
+                } else {
+                    false
+                };
 
             if is_offline {
                 tracing::debug!(name = %member_name, "read_group_members: skipping offline member");
@@ -691,7 +693,7 @@ mod tests {
     #[test]
     fn has_spell_ready_stub_returns_false() {
         let bridge = MQ2Bridge::new();
-        // Without the spell-system feature gate the stub always returns false.
+        // Non-Windows and non-spell-system builds always use the stub.
         assert!(!bridge.has_spell_ready("Complete Heal"));
         assert!(!bridge.has_spell_ready(""));
     }

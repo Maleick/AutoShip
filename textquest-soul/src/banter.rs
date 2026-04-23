@@ -159,7 +159,10 @@ impl BanterEngine {
 
                 // Cooldown gate (shared for A→B and B→A)
                 let pair_key = (id_a.min(id_b), id_a.max(id_b));
-                let state = self.cooldowns.entry(pair_key).or_insert_with(BanterState::new);
+                let state = self
+                    .cooldowns
+                    .entry(pair_key)
+                    .or_insert_with(BanterState::new);
                 if !state.cooldown_elapsed(cooldown) {
                     continue;
                 }
@@ -184,18 +187,9 @@ impl BanterEngine {
                 // All gates passed — emit an LLM request for id_a (initiator)
                 state.mark_fired();
 
-                let traits = soul_traits
-                    .get(&id_a)
-                    .cloned()
-                    .unwrap_or_default();
-                let mood = soul_moods
-                    .get(&id_a)
-                    .copied()
-                    .unwrap_or_default();
-                let backstory = soul_backstories
-                    .get(&id_a)
-                    .cloned()
-                    .unwrap_or_default();
+                let traits = soul_traits.get(&id_a).cloned().unwrap_or_default();
+                let mood = soul_moods.get(&id_a).copied().unwrap_or_default();
+                let backstory = soul_backstories.get(&id_a).cloned().unwrap_or_default();
 
                 let request = LlmRequest {
                     character_name: name_a.to_string(),
@@ -244,7 +238,10 @@ fn banter_threshold(
         .map(|r| r.tags.as_slice())
         .unwrap_or(&[]);
 
-    if tags.contains(&SocialTag::Friend) || tags.contains(&SocialTag::Sibling) || tags.contains(&SocialTag::Crush) {
+    if tags.contains(&SocialTag::Friend)
+        || tags.contains(&SocialTag::Sibling)
+        || tags.contains(&SocialTag::Crush)
+    {
         chances.friend
     } else if tags.contains(&SocialTag::Nemesis) {
         chances.nemesis
@@ -317,7 +314,10 @@ mod tests {
             &mut always_trigger(),
         );
 
-        assert!(results.is_empty(), "different zones should produce no banter");
+        assert!(
+            results.is_empty(),
+            "different zones should produce no banter"
+        );
     }
 
     #[test]
@@ -342,7 +342,11 @@ mod tests {
             &mut always_trigger(),
         );
 
-        assert_eq!(results.len(), 1, "same zone with trigger should produce 1 banter");
+        assert_eq!(
+            results.len(),
+            1,
+            "same zone with trigger should produce 1 banter"
+        );
         assert_eq!(results[0].0, 1); // initiator is id_a (lower ID)
         assert_eq!(results[0].1.character_name, "Alice");
         if let Situation::BotChat { character_name, .. } = &results[0].1.situation {
@@ -384,7 +388,10 @@ mod tests {
     #[test]
     fn friend_tag_uses_friend_threshold() {
         let mut social = SocialGraph::new();
-        social.get_or_create("Alice", "Bob").tags.push(SocialTag::Friend);
+        social
+            .get_or_create("Alice", "Bob")
+            .tags
+            .push(SocialTag::Friend);
 
         let chances = BanterChances {
             friend: 0.9,
@@ -394,13 +401,19 @@ mod tests {
         };
 
         let threshold = banter_threshold("Alice", "Bob", &social, &chances);
-        assert!((threshold - 0.9).abs() < f32::EPSILON, "friend should use friend threshold");
+        assert!(
+            (threshold - 0.9).abs() < f32::EPSILON,
+            "friend should use friend threshold"
+        );
     }
 
     #[test]
     fn rival_tag_uses_rival_threshold() {
         let mut social = SocialGraph::new();
-        social.get_or_create("Alice", "Bob").tags.push(SocialTag::Rival);
+        social
+            .get_or_create("Alice", "Bob")
+            .tags
+            .push(SocialTag::Rival);
 
         let chances = BanterChances {
             friend: 0.9,
@@ -410,13 +423,19 @@ mod tests {
         };
 
         let threshold = banter_threshold("Alice", "Bob", &social, &chances);
-        assert!((threshold - 0.5).abs() < f32::EPSILON, "rival should use rival threshold");
+        assert!(
+            (threshold - 0.5).abs() < f32::EPSILON,
+            "rival should use rival threshold"
+        );
     }
 
     #[test]
     fn nemesis_tag_uses_nemesis_threshold() {
         let mut social = SocialGraph::new();
-        social.get_or_create("Alice", "Bob").tags.push(SocialTag::Nemesis);
+        social
+            .get_or_create("Alice", "Bob")
+            .tags
+            .push(SocialTag::Nemesis);
 
         let chances = BanterChances {
             friend: 0.9,
@@ -426,7 +445,10 @@ mod tests {
         };
 
         let threshold = banter_threshold("Alice", "Bob", &social, &chances);
-        assert!((threshold - 0.001).abs() < f32::EPSILON, "nemesis should use nemesis threshold");
+        assert!(
+            (threshold - 0.001).abs() < f32::EPSILON,
+            "nemesis should use nemesis threshold"
+        );
     }
 
     #[test]
@@ -440,7 +462,10 @@ mod tests {
         };
 
         let threshold = banter_threshold("Alice", "Bob", &social, &chances);
-        assert!((threshold - 0.05).abs() < f32::EPSILON, "no tags should use neutral threshold");
+        assert!(
+            (threshold - 0.05).abs() < f32::EPSILON,
+            "no tags should use neutral threshold"
+        );
     }
 
     // ------------------------------------------------------------------
@@ -460,15 +485,27 @@ mod tests {
 
         // First tick fires
         let first = engine.tick(
-            &client_names, &client_zones, &social,
-            &traits, &moods, &backstories, &config, &mut always_trigger(),
+            &client_names,
+            &client_zones,
+            &social,
+            &traits,
+            &moods,
+            &backstories,
+            &config,
+            &mut always_trigger(),
         );
         assert_eq!(first.len(), 1, "first tick should fire");
 
         // Second tick immediately after should be blocked by cooldown
         let second = engine.tick(
-            &client_names, &client_zones, &social,
-            &traits, &moods, &backstories, &config, &mut always_trigger(),
+            &client_names,
+            &client_zones,
+            &social,
+            &traits,
+            &moods,
+            &backstories,
+            &config,
+            &mut always_trigger(),
         );
         assert!(second.is_empty(), "cooldown should block second tick");
         assert_eq!(engine.active_cooldown_count(), 1);
@@ -492,17 +529,33 @@ mod tests {
         let backstories: HashMap<ClientId, String> = HashMap::new();
 
         let first = engine.tick(
-            &client_names, &client_zones, &social,
-            &traits, &moods, &backstories, &config, &mut always_trigger(),
+            &client_names,
+            &client_zones,
+            &social,
+            &traits,
+            &moods,
+            &backstories,
+            &config,
+            &mut always_trigger(),
         );
         assert_eq!(first.len(), 1, "first tick should fire");
 
         // With 0-second cooldown, next tick should also fire
         let second = engine.tick(
-            &client_names, &client_zones, &social,
-            &traits, &moods, &backstories, &config, &mut always_trigger(),
+            &client_names,
+            &client_zones,
+            &social,
+            &traits,
+            &moods,
+            &backstories,
+            &config,
+            &mut always_trigger(),
         );
-        assert_eq!(second.len(), 1, "zero cooldown should allow immediate repeat");
+        assert_eq!(
+            second.len(),
+            1,
+            "zero cooldown should allow immediate repeat"
+        );
     }
 
     // ------------------------------------------------------------------
@@ -521,8 +574,14 @@ mod tests {
         let backstories: HashMap<ClientId, String> = HashMap::new();
 
         let results = engine.tick(
-            &client_names, &client_zones, &social,
-            &traits, &moods, &backstories, &config, &mut always_trigger(),
+            &client_names,
+            &client_zones,
+            &social,
+            &traits,
+            &moods,
+            &backstories,
+            &config,
+            &mut always_trigger(),
         );
 
         assert_eq!(results.len(), 1);
@@ -556,9 +615,18 @@ mod tests {
         let backstories: HashMap<ClientId, String> = HashMap::new();
 
         let results = engine.tick(
-            &client_names, &client_zones, &social,
-            &traits, &moods, &backstories, &config, &mut always_trigger(),
+            &client_names,
+            &client_zones,
+            &social,
+            &traits,
+            &moods,
+            &backstories,
+            &config,
+            &mut always_trigger(),
         );
-        assert!(results.is_empty(), "disabled inter_character_chat should suppress all banter");
+        assert!(
+            results.is_empty(),
+            "disabled inter_character_chat should suppress all banter"
+        );
     }
 }

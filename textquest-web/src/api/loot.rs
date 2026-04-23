@@ -744,7 +744,8 @@ mod tests {
         let payload = MasterLooterPayload {
             character: Some("Frostreaver".into()),
         };
-        let status = put_master_looter(State(state.clone()), trusted_headers(), Json(payload)).await;
+        let status =
+            put_master_looter(State(state.clone()), trusted_headers(), Json(payload)).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
         let Json(ml) = get_master_looter(State(state)).await;
         assert_eq!(ml.character, Some("Frostreaver".into()));

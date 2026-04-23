@@ -184,8 +184,7 @@ impl TextInput {
             return;
         }
         // Find the previous char boundary.
-        let prev = self
-            .value[..self.cursor]
+        let prev = self.value[..self.cursor]
             .char_indices()
             .next_back()
             .map(|(i, _)| i)
@@ -630,11 +629,7 @@ impl InputDispatcher {
 
 /// Hit-test a click against the widgets of a specific window and return the
 /// index of the widget that was clicked (if any).
-pub fn hit_test_widget(
-    window: &super::window::Window,
-    mx: f32,
-    my: f32,
-) -> Option<usize> {
+pub fn hit_test_widget(window: &super::window::Window, mx: f32, my: f32) -> Option<usize> {
     let rects = window.widget_rects();
     rects
         .iter()
@@ -757,7 +752,10 @@ mod tests {
         let mut mgr = make_mgr_with_win("d");
         let mut fm = FocusManager::new();
         let mut disp = InputDispatcher::new();
-        let ev = InputEvent::MouseDown { x: 9999.0, y: 9999.0 };
+        let ev = InputEvent::MouseDown {
+            x: 9999.0,
+            y: 9999.0,
+        };
         let result = disp.dispatch(&ev, &mut mgr, &mut fm);
         assert_eq!(result, DispatchResult::PassThrough);
         assert!(!fm.overlay_has_focus());
@@ -769,7 +767,10 @@ mod tests {
         let mut fm = FocusManager::new();
         let mut disp = InputDispatcher::new();
         let ev = InputEvent::CharInput('a');
-        assert_eq!(disp.dispatch(&ev, &mut mgr, &mut fm), DispatchResult::PassThrough);
+        assert_eq!(
+            disp.dispatch(&ev, &mut mgr, &mut fm),
+            DispatchResult::PassThrough
+        );
     }
 
     #[test]
@@ -779,7 +780,10 @@ mod tests {
         fm.focus("k");
         let mut disp = InputDispatcher::new();
         let ev = InputEvent::CharInput('a');
-        assert_eq!(disp.dispatch(&ev, &mut mgr, &mut fm), DispatchResult::Consumed);
+        assert_eq!(
+            disp.dispatch(&ev, &mut mgr, &mut fm),
+            DispatchResult::Consumed
+        );
     }
 
     #[test]
@@ -789,7 +793,10 @@ mod tests {
         fm.focus("e");
         let mut disp = InputDispatcher::new();
         let ev = InputEvent::KeyDown(Key::Escape);
-        assert_eq!(disp.dispatch(&ev, &mut mgr, &mut fm), DispatchResult::Consumed);
+        assert_eq!(
+            disp.dispatch(&ev, &mut mgr, &mut fm),
+            DispatchResult::Consumed
+        );
         assert!(!fm.overlay_has_focus());
     }
 

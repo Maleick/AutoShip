@@ -434,7 +434,10 @@ mod tests {
             uptime_secs: 7200,
         };
         assert!(m.dll_cpu_percent < 5.0, "DLL should have low CPU overhead");
-        assert!(m.frame_latency_ms < 34.0, "frame latency should be <2 frames at 60 Hz");
+        assert!(
+            m.frame_latency_ms < 34.0,
+            "frame latency should be <2 frames at 60 Hz"
+        );
     }
 
     // ── CharacterMetrics ──────────────────────────────────────────────────────

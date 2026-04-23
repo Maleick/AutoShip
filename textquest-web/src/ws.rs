@@ -42,20 +42,22 @@ pub async fn ws_handler(
 ) -> Response {
     // Explicit dev opt-out.
     if state.auth_disabled {
-        tracing::warn!("Auth disabled (TEXTQUEST_DISABLE_AUTH=1) — WebSocket allowed without token");
-        return ws.on_upgrade(move |socket| handle_socket(socket, state)).into_response();
+        tracing::warn!(
+            "Auth disabled (TEXTQUEST_DISABLE_AUTH=1) — WebSocket allowed without token"
+        );
+        return ws
+            .on_upgrade(move |socket| handle_socket(socket, state))
+            .into_response();
     }
 
     match state.api_token {
-        Some(ref expected_token) => {
-            match &query.token {
-                Some(provided_token) if constant_time_eq_str(provided_token, expected_token) => {}
-                _ => {
-                    tracing::warn!("WebSocket connection rejected: missing or invalid token");
-                    return StatusCode::UNAUTHORIZED.into_response();
-                }
+        Some(ref expected_token) => match &query.token {
+            Some(provided_token) if constant_time_eq_str(provided_token, expected_token) => {}
+            _ => {
+                tracing::warn!("WebSocket connection rejected: missing or invalid token");
+                return StatusCode::UNAUTHORIZED.into_response();
             }
-        }
+        },
         None => {
             // No token configured and auth not explicitly disabled — reject.
             tracing::error!(

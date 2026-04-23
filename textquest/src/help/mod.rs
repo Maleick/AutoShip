@@ -419,7 +419,8 @@ answer = "It pulls the NPC."
 
         // Bad file
         let mut bad = fs::File::create(dir.path().join("bad.toml")).unwrap();
-        bad.write_all(b"[[commands\nthis is not valid toml {{{{").unwrap();
+        bad.write_all(b"[[commands\nthis is not valid toml {{{{")
+            .unwrap();
 
         // Good file alongside it
         let good_toml = r#"
@@ -461,7 +462,10 @@ tags = ["Combat", "CONTROL"]
         let (dir, _path) = write_temp("kw.toml", toml);
         let topics = HelpLoader::load_all(dir.path());
         let kw = &topics[0].keywords;
-        assert!(kw.iter().all(|k| k == k.to_lowercase().as_str()), "all lowercase: {kw:?}");
+        assert!(
+            kw.iter().all(|k| k == k.to_lowercase().as_str()),
+            "all lowercase: {kw:?}"
+        );
     }
 
     // ── Category labels ───────────────────────────────────────────────────────

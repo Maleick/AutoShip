@@ -284,7 +284,14 @@ impl HotkeyRegistry {
         tracing::debug!(combo = %combo, ?id, "hotkey registered");
 
         self.by_combo.insert(combo, id);
-        self.by_id.insert(id, HotkeyEntry { id, combo, callback });
+        self.by_id.insert(
+            id,
+            HotkeyEntry {
+                id,
+                combo,
+                callback,
+            },
+        );
 
         Ok(id)
     }
@@ -499,7 +506,11 @@ mod tests {
 
         reg.register(combo, cb).unwrap();
         assert!(reg.process_key_event(combo));
-        assert_eq!(counter.load(Ordering::Relaxed), 1, "callback must fire once");
+        assert_eq!(
+            counter.load(Ordering::Relaxed),
+            1,
+            "callback must fire once"
+        );
     }
 
     #[test]
@@ -532,7 +543,11 @@ mod tests {
         assert!(reg.process_key_event(combo));
         reg.unregister(id);
         assert!(!reg.process_key_event(combo));
-        assert_eq!(counter.load(Ordering::Relaxed), 1, "no extra fires after unregister");
+        assert_eq!(
+            counter.load(Ordering::Relaxed),
+            1,
+            "no extra fires after unregister"
+        );
     }
 
     // ── Triple-modifier combo ─────────────────────────────────────────────────

@@ -1752,8 +1752,22 @@ fn run_orchestrate_dry_run(config: &crate::config::AppConfig) -> Result<()> {
     }
     println!();
 
-    println!("Peer discovery: {}", if config.discovery.multicast_enabled { "enabled" } else { "disabled" });
-    println!("Discord webhook: {}", if !config.discord.webhook_url.is_empty() { "configured" } else { "not configured" });
+    println!(
+        "Peer discovery: {}",
+        if config.discovery.multicast_enabled {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    );
+    println!(
+        "Discord webhook: {}",
+        if !config.discord.webhook_url.is_empty() {
+            "configured"
+        } else {
+            "not configured"
+        }
+    );
     println!();
 
     println!("Ready to run? Remove --dry-run and rerun.");
@@ -1817,7 +1831,10 @@ pub fn run_orchestrate_mode(dry_run: bool) -> Result<()> {
         // ── Run the loop ─────────────────────────────────────────────────
         let events = oloop.run().await;
 
-        info!(events = events.len(), "Orchestrator loop stopped — flushing");
+        info!(
+            events = events.len(),
+            "Orchestrator loop stopped — flushing"
+        );
         eprintln!("Orchestrator loop stopped. Flushing state…");
 
         // ── Final report ─────────────────────────────────────────────────
@@ -2585,7 +2602,10 @@ pub fn run_overnight_test_mode(
             eprintln!(
                 "overnight-test: tick {ticks} — elapsed {elapsed_secs}s, remaining {remaining_secs}s"
             );
-            info!(ticks, elapsed_secs, remaining_secs, "overnight-test heartbeat");
+            info!(
+                ticks,
+                elapsed_secs, remaining_secs, "overnight-test heartbeat"
+            );
             last_tick = Instant::now();
         }
     }
@@ -2603,12 +2623,14 @@ pub fn run_overnight_test_mode(
     });
 
     let report_path = output_dir.join("overnight-test-report.json");
-    let report_str =
-        serde_json::to_string_pretty(&report).context("Failed to serialize report")?;
+    let report_str = serde_json::to_string_pretty(&report).context("Failed to serialize report")?;
     std::fs::write(&report_path, &report_str)
         .with_context(|| format!("Failed to write report to {}", report_path.display()))?;
 
-    eprintln!("overnight-test: complete. Report written to {}", report_path.display());
+    eprintln!(
+        "overnight-test: complete. Report written to {}",
+        report_path.display()
+    );
     info!(
         elapsed_secs,
         ticks,
@@ -2654,19 +2676,16 @@ pub fn run_report_mode(input: &std::path::Path, output: &std::path::Path) -> Res
 
     if let Some(parent) = output.parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create output directory {}", parent.display()))?;
+            std::fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create output directory {}", parent.display())
+            })?;
         }
     }
 
     std::fs::write(output, &html)
         .with_context(|| format!("Failed to write HTML report to {}", output.display()))?;
 
-    eprintln!(
-        "report: wrote {} bytes → {}",
-        html.len(),
-        output.display()
-    );
+    eprintln!("report: wrote {} bytes → {}", html.len(), output.display());
 
     Ok(())
 }

@@ -960,9 +960,18 @@ mod tests {
             hide_looted_corpses: false,
         };
         let corpses = vec![
-            CorpseEntry { spawn_id: 10, mob_name: "wolf".into() },
-            CorpseEntry { spawn_id: 11, mob_name: "bear".into() },
-            CorpseEntry { spawn_id: 12, mob_name: "snake".into() },
+            CorpseEntry {
+                spawn_id: 10,
+                mob_name: "wolf".into(),
+            },
+            CorpseEntry {
+                spawn_id: 11,
+                mob_name: "bear".into(),
+            },
+            CorpseEntry {
+                spawn_id: 12,
+                mob_name: "snake".into(),
+            },
         ];
         let corpse_count = corpses.len();
         let mut cycle = LootCycle::new(config, corpses);
@@ -992,7 +1001,7 @@ mod tests {
         };
         let json = serde_json::to_string(&rules).expect("serialize");
         let restored: LootRules = serde_json::from_str(&json).expect("deserialize");
-        assert_eq!(restored.loot_all, false);
+        assert!(!restored.loot_all);
         assert!(restored.keep_items.contains("Epic Drop"));
         assert!(restored.sell_items.contains("Common Junk"));
         assert!(restored.destroy_items.contains("Rat Pelt"));
@@ -1001,8 +1010,7 @@ mod tests {
     #[test]
     fn test_loot_rules_defaults_from_empty_json() {
         // An empty JSON object should deserialize to safe defaults.
-        let restored: LootRules =
-            serde_json::from_str("{}").expect("deserialize empty");
+        let restored: LootRules = serde_json::from_str("{}").expect("deserialize empty");
         assert!(restored.loot_all, "loot_all defaults to true");
         assert!(restored.auto_split, "auto_split defaults to true");
         assert!(restored.keep_items.is_empty());

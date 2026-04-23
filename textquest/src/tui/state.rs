@@ -3514,7 +3514,9 @@ mod tests {
     fn eq_internals_state_selected_entry_returns_correct_entry() {
         let mut state = EqInternalsState::new();
         state.table_state.select(Some(0));
-        let entry = state.selected_entry().expect("should have a selected entry");
+        let entry = state
+            .selected_entry()
+            .expect("should have a selected entry");
         assert_eq!(entry.name, state.filtered_entries[0].name);
     }
 
@@ -3782,7 +3784,12 @@ impl HelpTab {
 
     /// All tabs in display order.
     pub fn all() -> &'static [HelpTab] {
-        &[HelpTab::Commands, HelpTab::Faq, HelpTab::Tips, HelpTab::Results]
+        &[
+            HelpTab::Commands,
+            HelpTab::Faq,
+            HelpTab::Tips,
+            HelpTab::Results,
+        ]
     }
 }
 

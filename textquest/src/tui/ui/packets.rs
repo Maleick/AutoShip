@@ -344,7 +344,11 @@ fn format_filter_line<'a>(
         Some(pid) => format!("client={pid}"),
         None => String::from("client=*"),
     };
-    let scroll_label = if state.auto_scroll { "▶ live" } else { "⏸ paused" };
+    let scroll_label = if state.auto_scroll {
+        "▶ live"
+    } else {
+        "⏸ paused"
+    };
     let scroll_color = if state.auto_scroll {
         ratatui::style::Color::Green
     } else {
@@ -386,7 +390,10 @@ fn format_filter_line<'a>(
         Span::raw(" · "),
         Span::styled(dir_label, Style::default().fg(ratatui::style::Color::Cyan)),
         Span::raw(" · "),
-        Span::styled(client_label, Style::default().fg(ratatui::style::Color::Cyan)),
+        Span::styled(
+            client_label,
+            Style::default().fg(ratatui::style::Color::Cyan),
+        ),
         Span::raw(" · "),
         Span::styled(scroll_label, Style::default().fg(scroll_color)),
         Span::raw("  "),

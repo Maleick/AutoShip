@@ -102,7 +102,13 @@ fn state_persists_window_geometry_and_theme() {
     };
     s.windows.insert(
         "hud".into(),
-        PersistedWindow { x: 10.0, y: 20.0, width: 300.0, height: 200.0, minimized: false },
+        PersistedWindow {
+            x: 10.0,
+            y: 20.0,
+            width: 300.0,
+            height: 200.0,
+            minimized: false,
+        },
     );
     state::save(&s, &path).unwrap();
 
@@ -133,7 +139,13 @@ fn state_minimized_flag_persists() {
     let mut s = OverlayState::default();
     s.windows.insert(
         "mini".into(),
-        PersistedWindow { x: 0.0, y: 0.0, width: 200.0, height: 150.0, minimized: true },
+        PersistedWindow {
+            x: 0.0,
+            y: 0.0,
+            width: 200.0,
+            height: 150.0,
+            minimized: true,
+        },
     );
     state::save(&s, &path).unwrap();
     let loaded = state::load(&path).unwrap();
@@ -209,12 +221,19 @@ fn keyboard_consumed_after_mouse_focuses() {
     let (mut mgr, mut fm, mut disp) = make_mgr_two_windows();
 
     // Mouse click grants focus.
-    disp.dispatch(&InputEvent::MouseDown { x: 150.0, y: 130.0 }, &mut mgr, &mut fm);
+    disp.dispatch(
+        &InputEvent::MouseDown { x: 150.0, y: 130.0 },
+        &mut mgr,
+        &mut fm,
+    );
     assert!(fm.overlay_has_focus());
 
     // Keyboard input is now consumed by overlay.
     let key = InputEvent::CharInput('q');
-    assert_eq!(disp.dispatch(&key, &mut mgr, &mut fm), DispatchResult::Consumed);
+    assert_eq!(
+        disp.dispatch(&key, &mut mgr, &mut fm),
+        DispatchResult::Consumed
+    );
 }
 
 #[test]
@@ -222,7 +241,10 @@ fn keyboard_passes_through_before_focus() {
     let (mut mgr, mut fm, mut disp) = make_mgr_two_windows();
     // No focus yet — keyboard should pass through.
     let key = InputEvent::CharInput('a');
-    assert_eq!(disp.dispatch(&key, &mut mgr, &mut fm), DispatchResult::PassThrough);
+    assert_eq!(
+        disp.dispatch(&key, &mut mgr, &mut fm),
+        DispatchResult::PassThrough
+    );
 }
 
 #[test]
@@ -231,22 +253,39 @@ fn mouse_move_always_passes_through() {
     // Even when overlay has focus, mouse-move is pass-through (EQ needs cursor).
     fm.focus("w1");
     let ev = InputEvent::MouseMove { x: 150.0, y: 130.0 };
-    assert_eq!(disp.dispatch(&ev, &mut mgr, &mut fm), DispatchResult::PassThrough);
+    assert_eq!(
+        disp.dispatch(&ev, &mut mgr, &mut fm),
+        DispatchResult::PassThrough
+    );
 }
 
 #[test]
 fn mouse_wheel_consumed_over_window() {
     let (mut mgr, mut fm, mut disp) = make_mgr_two_windows();
     // Wheel over w1.
-    let ev = InputEvent::MouseWheel { x: 150.0, y: 130.0, delta: 1.0 };
-    assert_eq!(disp.dispatch(&ev, &mut mgr, &mut fm), DispatchResult::Consumed);
+    let ev = InputEvent::MouseWheel {
+        x: 150.0,
+        y: 130.0,
+        delta: 1.0,
+    };
+    assert_eq!(
+        disp.dispatch(&ev, &mut mgr, &mut fm),
+        DispatchResult::Consumed
+    );
 }
 
 #[test]
 fn mouse_wheel_passes_through_outside() {
     let (mut mgr, mut fm, mut disp) = make_mgr_two_windows();
-    let ev = InputEvent::MouseWheel { x: 1.0, y: 1.0, delta: -1.0 };
-    assert_eq!(disp.dispatch(&ev, &mut mgr, &mut fm), DispatchResult::PassThrough);
+    let ev = InputEvent::MouseWheel {
+        x: 1.0,
+        y: 1.0,
+        delta: -1.0,
+    };
+    assert_eq!(
+        disp.dispatch(&ev, &mut mgr, &mut fm),
+        DispatchResult::PassThrough
+    );
 }
 
 #[test]
@@ -254,7 +293,10 @@ fn tab_key_consumed_when_focused() {
     let (mut mgr, mut fm, mut disp) = make_mgr_two_windows();
     fm.focus("w1");
     let ev = InputEvent::KeyDown(Key::Tab);
-    assert_eq!(disp.dispatch(&ev, &mut mgr, &mut fm), DispatchResult::Consumed);
+    assert_eq!(
+        disp.dispatch(&ev, &mut mgr, &mut fm),
+        DispatchResult::Consumed
+    );
 }
 
 #[test]
@@ -262,7 +304,10 @@ fn function_key_passes_through_when_not_focused() {
     let (mut mgr, mut fm, mut disp) = make_mgr_two_windows();
     // F1 without focus → EQ gets it (EQ uses F-keys for targeting etc.)
     let ev = InputEvent::KeyDown(Key::F(1));
-    assert_eq!(disp.dispatch(&ev, &mut mgr, &mut fm), DispatchResult::PassThrough);
+    assert_eq!(
+        disp.dispatch(&ev, &mut mgr, &mut fm),
+        DispatchResult::PassThrough
+    );
 }
 
 // ── Theme switching ───────────────────────────────────────────────────────────
@@ -271,7 +316,10 @@ fn function_key_passes_through_when_not_focused() {
 fn theme_dark_and_light_differ() {
     let dark = Theme::Dark.colors();
     let light = Theme::Light.colors();
-    assert_ne!(dark.background, light.background, "dark/light backgrounds should differ");
+    assert_ne!(
+        dark.background, light.background,
+        "dark/light backgrounds should differ"
+    );
     assert_ne!(dark.header, light.header);
 }
 

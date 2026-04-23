@@ -570,7 +570,10 @@ mod tests {
         // Trusted friend (faction 600) uses the phrase
         let adopted = evo.observe_phrase("GuildLeader", "Strength and Honor!", 600, 0.05);
         assert!(adopted);
-        assert!(evo.active_catchphrases().contains(&"Strength and Honor!".to_string()));
+        assert!(
+            evo.active_catchphrases()
+                .contains(&"Strength and Honor!".to_string())
+        );
     }
 
     #[test]

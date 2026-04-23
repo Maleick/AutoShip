@@ -255,9 +255,7 @@ impl SocialGraph {
 
         // Snapshot gossiper's opinion of subject BEFORE modifying any edges,
         // so the propagation reflects the opinion at the moment of gossip.
-        let gossiper_opinion = self
-            .get(gossiper, subject)
-            .map_or(0, |r| r.faction_score);
+        let gossiper_opinion = self.get(gossiper, subject).map_or(0, |r| r.faction_score);
 
         // gossiper → listener: +20 faction (conversation bond)
         {

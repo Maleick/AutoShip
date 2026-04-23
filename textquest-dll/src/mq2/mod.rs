@@ -423,11 +423,7 @@ pub unsafe fn read_spawn_snapshot(ptr: *const u8) -> Option<SpawnSnapshot> {
     let mut name_buf = [0u8; 64];
     // SAFETY: is_readable_block validated the range covering 0x0158..0x0198.
     unsafe {
-        std::ptr::copy_nonoverlapping(
-            ptr.add(PC_NAME_OFFSET),
-            name_buf.as_mut_ptr(),
-            64,
-        );
+        std::ptr::copy_nonoverlapping(ptr.add(PC_NAME_OFFSET), name_buf.as_mut_ptr(), 64);
     }
 
     Some(SpawnSnapshot {
@@ -510,8 +506,13 @@ fn is_readable_block(address: usize, len: usize) -> bool {
     let mut mbi = MEMORY_BASIC_INFORMATION::default();
     // SAFETY: VirtualQuery is safe to call with any address; it fills mbi on
     // success and returns 0 on failure.
-    let result =
-        unsafe { VirtualQuery(Some(address as *const _), &mut mbi, std::mem::size_of_val(&mbi)) };
+    let result = unsafe {
+        VirtualQuery(
+            Some(address as *const _),
+            &mut mbi,
+            std::mem::size_of_val(&mbi),
+        )
+    };
     if result == 0 {
         return false;
     }
@@ -639,7 +640,7 @@ mod tests {
             speed_run: 0.0,
             stand_state: 0,
             level: 65,
-            class: 2, // CLR
+            class: 2,      // CLR
             spawn_type: 0, // player
         }
     }
@@ -694,9 +695,9 @@ mod tests {
             speed_run: 0.0,
             stand_state: 0,
             level: 20,
-            class: 1, // WAR
+            class: 1,      // WAR
             spawn_type: 1, // NPC
-            race: 9, // Troll
+            race: 9,       // Troll
             hp_current: 500,
             hp_max: 1000,
         }
@@ -803,9 +804,7 @@ mod tests {
     #[test]
     fn player_client_ref_snapshot_from_box() {
         // Build a zeroed raw struct, fill in the fields we care about.
-        let mut raw: Box<RawPlayerClient> = unsafe {
-            Box::new(std::mem::zeroed())
-        };
+        let mut raw: Box<RawPlayerClient> = unsafe { Box::new(std::mem::zeroed()) };
         raw.spawn_id = 99;
         raw.y = 1.0;
         raw.x = 2.0;

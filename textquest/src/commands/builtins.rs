@@ -345,7 +345,7 @@ fn print_help(topic: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry::{new_shared, Priority};
+    use crate::registry::{Priority, new_shared};
     use std::sync::{Arc, Mutex};
 
     // ── Stub ScriptManager ────────────────────────────────────────────────
@@ -432,19 +432,34 @@ mod tests {
         let reg = setup();
         assert!(reg.lock().unwrap().dispatch("/textquest help"));
         assert!(reg.lock().unwrap().dispatch("/textquest help scripts"));
-        assert!(reg.lock().unwrap().dispatch("/textquest help unknown_topic"));
+        assert!(
+            reg.lock()
+                .unwrap()
+                .dispatch("/textquest help unknown_topic")
+        );
     }
 
     #[test]
     fn help_all_topics_dispatch() {
         let topics = [
-            "scripts", "list_scripts", "plugins", "list_plugins",
-            "reload", "enable", "disable", "debug", "status",
+            "scripts",
+            "list_scripts",
+            "plugins",
+            "list_plugins",
+            "reload",
+            "enable",
+            "disable",
+            "debug",
+            "status",
         ];
         let reg = setup();
         for topic in &topics {
             let cmd = format!("/textquest help {}", topic);
-            assert!(reg.lock().unwrap().dispatch(&cmd), "help {} must dispatch", topic);
+            assert!(
+                reg.lock().unwrap().dispatch(&cmd),
+                "help {} must dispatch",
+                topic
+            );
         }
     }
 
@@ -479,7 +494,11 @@ mod tests {
     fn reload_unknown_dispatches_without_panic() {
         // Stub always succeeds; this just verifies no panic.
         let reg = setup();
-        assert!(reg.lock().unwrap().dispatch("/textquest reload nonexistent"));
+        assert!(
+            reg.lock()
+                .unwrap()
+                .dispatch("/textquest reload nonexistent")
+        );
     }
 
     #[test]
@@ -568,14 +587,26 @@ mod tests {
     #[test]
     fn status_counts_scripts_correctly() {
         let stub = StubScripts::with_scripts(vec![
-            ScriptSnapshot { id: "a".into(), name: "a".into(), state: ScriptLifecycle::Running },
-            ScriptSnapshot { id: "b".into(), name: "b".into(), state: ScriptLifecycle::Running },
+            ScriptSnapshot {
+                id: "a".into(),
+                name: "a".into(),
+                state: ScriptLifecycle::Running,
+            },
+            ScriptSnapshot {
+                id: "b".into(),
+                name: "b".into(),
+                state: ScriptLifecycle::Running,
+            },
             ScriptSnapshot {
                 id: "c".into(),
                 name: "c".into(),
                 state: ScriptLifecycle::Error("oops".into()),
             },
-            ScriptSnapshot { id: "d".into(), name: "d".into(), state: ScriptLifecycle::Paused },
+            ScriptSnapshot {
+                id: "d".into(),
+                name: "d".into(),
+                state: ScriptLifecycle::Paused,
+            },
         ]);
         let reg = setup_with(Arc::clone(&stub) as Arc<dyn ScriptManager>);
         assert!(reg.lock().unwrap().dispatch("/textquest status"));

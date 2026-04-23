@@ -677,8 +677,16 @@ mod tests {
             .expect("session snapshot should exist");
         let mem = &snapshot.memory;
 
-        assert_eq!(mem.min_bytes, Some(100 * 1024 * 1024), "min should be 100 MiB");
-        assert_eq!(mem.max_bytes, Some(250 * 1024 * 1024), "max should be 250 MiB");
+        assert_eq!(
+            mem.min_bytes,
+            Some(100 * 1024 * 1024),
+            "min should be 100 MiB"
+        );
+        assert_eq!(
+            mem.max_bytes,
+            Some(250 * 1024 * 1024),
+            "max should be 250 MiB"
+        );
         // avg of [100, 150, 200, 250] = 175 MiB
         assert_eq!(
             mem.avg_bytes,
@@ -703,8 +711,16 @@ mod tests {
         let mem = &snapshot.memory;
 
         // Only the 2 newest samples (200 MiB, 300 MiB) should be retained.
-        assert_eq!(mem.min_bytes, Some(200 * 1024 * 1024), "oldest 100 MiB evicted");
-        assert_eq!(mem.max_bytes, Some(300 * 1024 * 1024), "newest sample retained");
+        assert_eq!(
+            mem.min_bytes,
+            Some(200 * 1024 * 1024),
+            "oldest 100 MiB evicted"
+        );
+        assert_eq!(
+            mem.max_bytes,
+            Some(300 * 1024 * 1024),
+            "newest sample retained"
+        );
     }
 
     // ── Tracing / inspection helpers ──────────────────────────────────────────

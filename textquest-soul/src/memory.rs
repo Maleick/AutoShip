@@ -1897,7 +1897,10 @@ mod tests {
 
         let summary = store.summarize_player_chat_sentiment(1, "Alice").unwrap();
 
-        assert_eq!(summary.as_deref(), Some("had 2 positive chats, 1 negative chat"));
+        assert_eq!(
+            summary.as_deref(),
+            Some("had 2 positive chats, 1 negative chat")
+        );
     }
 
     #[test]

@@ -44,7 +44,12 @@ impl HelpTab {
     }
 
     fn all() -> &'static [HelpTab] {
-        &[HelpTab::Commands, HelpTab::Faq, HelpTab::Tips, HelpTab::Results]
+        &[
+            HelpTab::Commands,
+            HelpTab::Faq,
+            HelpTab::Tips,
+            HelpTab::Results,
+        ]
     }
 }
 
@@ -282,7 +287,12 @@ pub fn draw_help_search_panel(frame: &mut Frame, area: Rect, app: &App) {
     let outer_block = Block::default()
         .borders(Borders::ALL)
         .border_type(t.border_type)
-        .title(Span::styled(" Help ", Style::default().fg(t.text_bright).add_modifier(Modifier::BOLD)))
+        .title(Span::styled(
+            " Help ",
+            Style::default()
+                .fg(t.text_bright)
+                .add_modifier(Modifier::BOLD),
+        ))
         .border_style(Style::default().fg(t.text_accent))
         .style(Style::default().bg(t.help_bg));
 
@@ -311,7 +321,11 @@ fn draw_search_bar(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
     let state = &app.help_search_state;
 
-    let cursor_char = if (app.tick_count / 15) % 2 == 0 { "█" } else { " " };
+    let cursor_char = if (app.tick_count / 15) % 2 == 0 {
+        "█"
+    } else {
+        " "
+    };
     let display = format!("{}{}", state.query, cursor_char);
     let display = truncate_inline(&display, area.width.saturating_sub(4) as usize);
 
@@ -391,10 +405,7 @@ fn draw_result_list(frame: &mut Frame, area: Rect, app: &App) {
             let color = section_color(entry.section, app);
             let is_selected = idx == selected;
             let marker = if is_selected { "▶ " } else { "  " };
-            let label = truncate_inline(
-                entry.title,
-                area.width.saturating_sub(20) as usize,
-            );
+            let label = truncate_inline(entry.title, area.width.saturating_sub(20) as usize);
             let summary = truncate_inline(
                 entry.summary,
                 area.width.saturating_sub(label.len() as u16 + 6) as usize,
@@ -434,7 +445,10 @@ fn draw_detail_pane(frame: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(t.border_type)
-        .title(Span::styled(" Detail ", Style::default().fg(t.text_secondary)))
+        .title(Span::styled(
+            " Detail ",
+            Style::default().fg(t.text_secondary),
+        ))
         .border_style(Style::default().fg(t.border_dim.fg.unwrap_or(t.text_muted)));
 
     if entries.is_empty() {
@@ -449,9 +463,10 @@ fn draw_detail_pane(frame: &mut Frame, area: Rect, app: &App) {
     let color = section_color(entry.section, app);
 
     let lines = vec![
-        Line::from(vec![
-            Span::styled(entry.title, Style::default().fg(color).add_modifier(Modifier::BOLD)),
-        ]),
+        Line::from(vec![Span::styled(
+            entry.title,
+            Style::default().fg(color).add_modifier(Modifier::BOLD),
+        )]),
         Line::from(""),
         Line::from(vec![
             Span::styled("Usage:   ", Style::default().fg(t.text_muted)),
@@ -462,9 +477,10 @@ fn draw_detail_pane(frame: &mut Frame, area: Rect, app: &App) {
             Span::styled(entry.example, Style::default().fg(t.text_accent)),
         ]),
         Line::from(""),
-        Line::from(vec![
-            Span::styled(entry.summary, Style::default().fg(t.text_normal)),
-        ]),
+        Line::from(vec![Span::styled(
+            entry.summary,
+            Style::default().fg(t.text_normal),
+        )]),
     ];
 
     let detail = Paragraph::new(lines)
@@ -480,15 +496,40 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
 
     let hints = vec![
-        Span::styled(" / ", Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " / ",
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled("search  ", Style::default().fg(t.text_muted)),
-        Span::styled("Esc ", Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Esc ",
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled("close  ", Style::default().fg(t.text_muted)),
-        Span::styled("↑↓ ", Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "↑↓ ",
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled("navigate  ", Style::default().fg(t.text_muted)),
-        Span::styled("Enter ", Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Enter ",
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled("show detail  ", Style::default().fg(t.text_muted)),
-        Span::styled("Tab ", Style::default().fg(t.text_accent).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "Tab ",
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::styled("switch tab", Style::default().fg(t.text_muted)),
     ];
 
@@ -517,7 +558,11 @@ mod tests {
             .expect("draw");
         let buf = terminal.backend().buffer().clone();
         (0..height)
-            .map(|y| (0..width).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>())
+            .map(|y| {
+                (0..width)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect::<String>()
+            })
             .collect::<Vec<_>>()
             .join("\n")
     }
@@ -542,7 +587,10 @@ mod tests {
     fn help_search_panel_renders_footer_hints() {
         let app = App::new();
         let rendered = render_help(app, 100, 34);
-        assert!(rendered.contains("search") || rendered.contains("close"), "missing footer hints");
+        assert!(
+            rendered.contains("search") || rendered.contains("close"),
+            "missing footer hints"
+        );
     }
 
     #[test]
@@ -572,7 +620,11 @@ mod tests {
         state.tab = HelpTab::Commands;
         let entries = filtered_entries(&state);
         assert!(!entries.is_empty(), "expected at least one nav result");
-        assert!(entries.iter().any(|e| e.title.contains("nav") || e.summary.to_lowercase().contains("nav")));
+        assert!(
+            entries
+                .iter()
+                .any(|e| e.title.contains("nav") || e.summary.to_lowercase().contains("nav"))
+        );
     }
 
     #[test]
@@ -608,6 +660,9 @@ mod tests {
         state.tab = HelpTab::Faq;
         state.query = "Esc".to_string();
         let entries = filtered_entries(&state);
-        assert!(!entries.is_empty(), "expected at least one FAQ result for Esc");
+        assert!(
+            !entries.is_empty(),
+            "expected at least one FAQ result for Esc"
+        );
     }
 }

@@ -176,7 +176,10 @@ mod tests {
     fn display_includes_code_and_reason() {
         let s = ExitCode::RuntimeFailure.to_string();
         assert!(s.contains('1'), "expected code 1 in display: {s}");
-        assert!(s.contains("runtime failure"), "expected reason in display: {s}");
+        assert!(
+            s.contains("runtime failure"),
+            "expected reason in display: {s}"
+        );
     }
 
     #[test]

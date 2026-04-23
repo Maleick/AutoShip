@@ -87,10 +87,7 @@ impl ArgType {
             ArgType::String => !value.is_empty(),
             ArgType::Int => value.parse::<i64>().is_ok(),
             ArgType::Float => value.parse::<f64>().is_ok(),
-            ArgType::Bool => matches!(
-                value.to_lowercase().as_str(),
-                "true" | "false" | "1" | "0"
-            ),
+            ArgType::Bool => matches!(value.to_lowercase().as_str(), "true" | "false" | "1" | "0"),
         }
     }
 
@@ -290,14 +287,16 @@ impl CommandRegistry {
             return "No commands registered.".to_string();
         }
 
-        defs.iter().map(|d| format_help(d)).collect::<Vec<_>>().join("\n")
+        defs.iter()
+            .map(|d| format_help(d))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     /// Return all registered command paths, sorted.
     #[must_use]
     pub fn command_paths(&self) -> Vec<String> {
-        let mut paths: Vec<String> =
-            self.commands.values().map(|d| d.path.clone()).collect();
+        let mut paths: Vec<String> = self.commands.values().map(|d| d.path.clone()).collect();
         paths.sort();
         paths
     }
@@ -525,7 +524,13 @@ mod tests {
     #[test]
     fn non_variadic_rejects_extra_args() {
         let mut reg = CommandRegistry::new();
-        reg.register("/exact", "exact args", &[ArgType::String], false, ok_handler);
+        reg.register(
+            "/exact",
+            "exact args",
+            &[ArgType::String],
+            false,
+            ok_handler,
+        );
         let result = reg.dispatch("/exact one two");
         assert!(matches!(result, CommandResult::ValidationError(_)));
     }
@@ -566,10 +571,20 @@ mod tests {
     #[test]
     fn validate_bool_arg() {
         let mut reg = CommandRegistry::new();
-        reg.register("/autoattack", "toggle autoattack", &[ArgType::Bool], false, ok_handler);
+        reg.register(
+            "/autoattack",
+            "toggle autoattack",
+            &[ArgType::Bool],
+            false,
+            ok_handler,
+        );
         for val in &["true", "false", "1", "0", "TRUE", "FALSE"] {
             let cmd = format!("/autoattack {val}");
-            assert_eq!(reg.dispatch(&cmd), CommandResult::Ok, "expected ok for {val}");
+            assert_eq!(
+                reg.dispatch(&cmd),
+                CommandResult::Ok,
+                "expected ok for {val}"
+            );
         }
         assert!(matches!(
             reg.dispatch("/autoattack yes"),
@@ -601,7 +616,10 @@ mod tests {
         let help = reg.help(None);
         assert!(help.contains("/foo"), "help missing /foo:\n{help}");
         assert!(help.contains("/bar"), "help missing /bar:\n{help}");
-        assert!(help.contains("foo help"), "help missing description:\n{help}");
+        assert!(
+            help.contains("foo help"),
+            "help missing description:\n{help}"
+        );
     }
 
     #[test]
@@ -626,7 +644,10 @@ mod tests {
         let mut reg = CommandRegistry::new();
         reg.register("/v", "variadic cmd", &[], true, ok_handler);
         let help = reg.help(None);
-        assert!(help.contains("variadic"), "expected variadic marker:\n{help}");
+        assert!(
+            help.contains("variadic"),
+            "expected variadic marker:\n{help}"
+        );
     }
 
     #[test]

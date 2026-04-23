@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use tempfile::TempDir;
 use textquest::testing::{
-    runner::{spawn_runners, TestLoopResult},
+    runner::{TestLoopResult, spawn_runners},
     scenario::{BoxScenarioFuture, ScenarioResult, TestScenario},
 };
 use textquest_common::login::AccountInfo;
@@ -88,7 +88,9 @@ async fn test_single_iteration_loop() {
     let handles = spawn_runners(
         accounts,
         |_, _| {
-            vec![Box::new(MockPass { label: "login_mock" }) as Box<dyn TestScenario>]
+            vec![Box::new(MockPass {
+                label: "login_mock",
+            }) as Box<dyn TestScenario>]
         },
         Duration::from_secs(5),
         dir.path(),
@@ -126,9 +128,15 @@ async fn test_multi_iteration_loop() {
         accounts,
         |_, _| {
             vec![
-                Box::new(MockPass { label: "scenario_1" }) as Box<dyn TestScenario>,
-                Box::new(MockPass { label: "scenario_2" }) as Box<dyn TestScenario>,
-                Box::new(MockPass { label: "scenario_3" }) as Box<dyn TestScenario>,
+                Box::new(MockPass {
+                    label: "scenario_1",
+                }) as Box<dyn TestScenario>,
+                Box::new(MockPass {
+                    label: "scenario_2",
+                }) as Box<dyn TestScenario>,
+                Box::new(MockPass {
+                    label: "scenario_3",
+                }) as Box<dyn TestScenario>,
             ]
         },
         Duration::from_secs(10),
@@ -182,7 +190,9 @@ async fn test_early_termination() {
         |_, _| {
             // Provide a long-running scenario that should NOT complete because
             // the shutdown signal fires first.
-            vec![Box::new(MockPass { label: "should_not_run" }) as Box<dyn TestScenario>]
+            vec![Box::new(MockPass {
+                label: "should_not_run",
+            }) as Box<dyn TestScenario>]
         },
         Duration::from_secs(60),
         dir.path(),
@@ -216,8 +226,12 @@ async fn test_scenario_error_handling() {
         accounts,
         |_, _| {
             vec![
-                Box::new(MockPass { label: "ok_scenario" }) as Box<dyn TestScenario>,
-                Box::new(MockFail { label: "fail_scenario" }) as Box<dyn TestScenario>,
+                Box::new(MockPass {
+                    label: "ok_scenario",
+                }) as Box<dyn TestScenario>,
+                Box::new(MockFail {
+                    label: "fail_scenario",
+                }) as Box<dyn TestScenario>,
             ]
         },
         Duration::from_secs(5),

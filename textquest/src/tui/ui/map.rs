@@ -611,7 +611,11 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         } else {
             "-"
         },
-        if app.map_state.show_extended { "E" } else { "-" },
+        if app.map_state.show_extended {
+            "E"
+        } else {
+            "-"
+        },
     );
 
     let border_style = if app.is_panel_focused(ActivePanel::TacticalMap) {
@@ -2177,13 +2181,13 @@ fn draw_layer_visibility_panel(frame: &mut Frame, area: ratatui::layout::Rect, a
     let off_style = Style::default().fg(t.text_muted);
 
     let layers: &[(&str, bool, &str)] = &[
-        ("Base (G)",        app.map_state.show_geometry,    "g"),
-        ("Spawns (S)",      app.map_state.show_spawns,      "s"),
-        ("Nav paths (W)",   app.map_state.show_nav_paths,   "w"),
-        ("Navmesh (X)",     app.map_state.show_navmesh,     "x"),
-        ("Labels (L)",      app.map_state.show_labels,      "l"),
+        ("Base (G)", app.map_state.show_geometry, "g"),
+        ("Spawns (S)", app.map_state.show_spawns, "s"),
+        ("Nav paths (W)", app.map_state.show_nav_paths, "w"),
+        ("Navmesh (X)", app.map_state.show_navmesh, "x"),
+        ("Labels (L)", app.map_state.show_labels, "l"),
         ("Annotations (A)", app.map_state.show_annotations, "a"),
-        ("Extended (E)",    app.map_state.show_extended,    "e"),
+        ("Extended (E)", app.map_state.show_extended, "e"),
     ];
 
     let lines: Vec<Line> = layers

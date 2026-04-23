@@ -105,7 +105,12 @@ impl MetricsSummary {
         let mut errors_full: Vec<(String, DateTime<Utc>)> = Vec::new();
 
         for ev in events {
-            let hour = ev.timestamp.format("%H").to_string().parse::<u32>().unwrap_or(0);
+            let hour = ev
+                .timestamp
+                .format("%H")
+                .to_string()
+                .parse::<u32>()
+                .unwrap_or(0);
             let bucket = hourly.entry(hour).or_insert((0, 0));
 
             match ev.kind {
@@ -617,7 +622,10 @@ mod tests {
         assert!(html.contains("<!DOCTYPE html>"), "must start with doctype");
         assert!(html.contains("</html>"), "must end with </html>");
         assert!(html.contains("<title>"), "must have title element");
-        assert!(html.contains("TextQuest Session Report"), "must have report heading");
+        assert!(
+            html.contains("TextQuest Session Report"),
+            "must have report heading"
+        );
     }
 
     #[test]
@@ -627,8 +635,14 @@ mod tests {
         let html = ReportGenerator::generate(&dir, &events, None);
 
         // 1 kill, 1 pull, 1 success, 1 failure, 1 error
-        assert!(html.contains("Total Kills") || html.contains("Kills"), "kills card present");
-        assert!(html.contains("Total Pulls") || html.contains("Pulls"), "pulls card present");
+        assert!(
+            html.contains("Total Kills") || html.contains("Kills"),
+            "kills card present"
+        );
+        assert!(
+            html.contains("Total Pulls") || html.contains("Pulls"),
+            "pulls card present"
+        );
     }
 
     #[test]
@@ -636,7 +650,10 @@ mod tests {
         let dir = PathBuf::from("/tmp/empty-session");
         let html = ReportGenerator::generate(&dir, &[], None);
 
-        assert!(html.contains("<!DOCTYPE html>"), "empty events: doctype present");
+        assert!(
+            html.contains("<!DOCTYPE html>"),
+            "empty events: doctype present"
+        );
         assert!(html.contains("</html>"), "empty events: close tag present");
         assert!(html.contains("0"), "empty events: zeros shown");
     }
@@ -698,7 +715,10 @@ mod tests {
             !html.contains("<script>alert(1)</script>"),
             "raw script tags must not appear in output"
         );
-        assert!(html.contains("&lt;script&gt;"), "angle brackets must be escaped");
+        assert!(
+            html.contains("&lt;script&gt;"),
+            "angle brackets must be escaped"
+        );
     }
 
     #[test]
@@ -728,10 +748,12 @@ mod tests {
     #[test]
     fn test_pre_computed_metrics_used() {
         let dir = PathBuf::from("/tmp/precomputed-session");
-        let mut m = MetricsSummary::default();
-        m.total_iterations = 99;
-        m.success_count = 99;
-        m.total_kills = 500;
+        let m = MetricsSummary {
+            total_iterations: 99,
+            success_count: 99,
+            total_kills: 500,
+            ..MetricsSummary::default()
+        };
         let html = ReportGenerator::generate(&dir, &[], Some(&m));
 
         assert!(html.contains("99"), "pre-computed iterations shown");
@@ -742,7 +764,10 @@ mod tests {
     fn test_html5_doctype() {
         let dir = PathBuf::from("/tmp/doctype-session");
         let html = ReportGenerator::generate(&dir, &[], None);
-        assert!(html.trim_start().starts_with("<!DOCTYPE html>"), "HTML5 doctype required");
+        assert!(
+            html.trim_start().starts_with("<!DOCTYPE html>"),
+            "HTML5 doctype required"
+        );
     }
 
     #[test]
@@ -753,7 +778,10 @@ mod tests {
         // Must not reference external URLs in src/href attributes.
         assert!(!html.contains("src=\"http"), "no external src URLs");
         assert!(!html.contains("href=\"http"), "no external href URLs");
-        assert!(!html.contains("<link"), "no external stylesheets via <link>");
+        assert!(
+            !html.contains("<link"),
+            "no external stylesheets via <link>"
+        );
         assert!(!html.contains("<script src"), "no external script tags");
     }
 }

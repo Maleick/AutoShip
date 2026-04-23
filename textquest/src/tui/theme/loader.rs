@@ -432,9 +432,7 @@ fn theme_from_file(file: ThemeFile) -> Result<Theme, ThemeLoadError> {
         spawn_corpse: parse_field("colors.spawn_corpse", &c.spawn_corpse)?,
         spawn_unknown: parse_field("colors.spawn_unknown", &c.spawn_unknown)?,
 
-        table_header: Style::default()
-            .fg(table_hdr)
-            .add_modifier(Modifier::BOLD),
+        table_header: Style::default().fg(table_hdr).add_modifier(Modifier::BOLD),
         row_selected_bg: parse_field("colors.row_selected_bg", &c.row_selected_bg)?,
 
         state_dead: parse_field("colors.state_dead", &c.state_dead)?,
@@ -507,10 +505,7 @@ mod tests {
     #[test]
     fn parse_hex_rgb_shorthand() {
         // #f0f → #ff00ff
-        assert_eq!(
-            parse_hex_color("#f0f"),
-            Some(Color::Rgb(0xff, 0x00, 0xff))
-        );
+        assert_eq!(parse_hex_color("#f0f"), Some(Color::Rgb(0xff, 0x00, 0xff)));
     }
 
     #[test]
@@ -550,7 +545,7 @@ mod tests {
     // ── load_theme round-trip ─────────────────────────────────────────────────
 
     fn minimal_toml() -> &'static str {
-        r#"
+        r##"
 [meta]
 name = "Test"
 version = "1.0"
@@ -608,7 +603,7 @@ con_white      = "#ffffff"
 con_light_blue = "#aaddff"
 con_blue       = "#0000ff"
 con_green      = "#00ff00"
-"#
+"##
     }
 
     #[test]
@@ -631,10 +626,8 @@ con_green      = "#00ff00"
 
     #[test]
     fn load_theme_invalid_color_returns_error() {
-        let bad = minimal_toml().replace(
-            r#"hp_high   = "#00ff00""#,
-            r#"hp_high   = "notacolor""#,
-        );
+        let bad =
+            minimal_toml().replace(r##"hp_high   = "#00ff00""##, r##"hp_high   = "notacolor""##);
         let file: ThemeFile = toml::from_str(&bad).expect("toml parses ok");
         let err = theme_from_file(file).expect_err("should fail on bad color");
         assert!(matches!(err, ThemeLoadError::InvalidColor { .. }));
@@ -643,7 +636,7 @@ con_green      = "#00ff00"
     #[test]
     fn load_theme_missing_field_returns_parse_error() {
         // Remove a required field
-        let bad = minimal_toml().replace(r#"hp_high   = "#00ff00""#, "");
+        let bad = minimal_toml().replace(r##"hp_high   = "#00ff00""##, "");
         let result: Result<ThemeFile, _> = toml::from_str(&bad);
         assert!(result.is_err(), "missing required field should fail");
     }

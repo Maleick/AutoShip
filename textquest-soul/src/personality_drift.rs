@@ -141,11 +141,9 @@ impl DriftEngine {
     fn nudge(&mut self, traits: &mut PersonalityTraits, field: TraitField, raw_delta: f32) {
         let delta = raw_delta * self.multiplier;
         match field {
-            TraitField::Openness => apply_with_cap(
-                &mut traits.openness,
-                &mut self.session.openness,
-                delta,
-            ),
+            TraitField::Openness => {
+                apply_with_cap(&mut traits.openness, &mut self.session.openness, delta)
+            }
             TraitField::Conscientiousness => apply_with_cap(
                 &mut traits.conscientiousness,
                 &mut self.session.conscientiousness,
@@ -171,26 +169,16 @@ impl DriftEngine {
                 &mut self.session.battle_hunger,
                 delta,
             ),
-            TraitField::Greed => apply_with_cap(
-                &mut traits.greed,
-                &mut self.session.greed,
-                delta,
-            ),
-            TraitField::Wanderlust => apply_with_cap(
-                &mut traits.wanderlust,
-                &mut self.session.wanderlust,
-                delta,
-            ),
-            TraitField::Loyalty => apply_with_cap(
-                &mut traits.loyalty,
-                &mut self.session.loyalty,
-                delta,
-            ),
-            TraitField::Mischief => apply_with_cap(
-                &mut traits.mischief,
-                &mut self.session.mischief,
-                delta,
-            ),
+            TraitField::Greed => apply_with_cap(&mut traits.greed, &mut self.session.greed, delta),
+            TraitField::Wanderlust => {
+                apply_with_cap(&mut traits.wanderlust, &mut self.session.wanderlust, delta)
+            }
+            TraitField::Loyalty => {
+                apply_with_cap(&mut traits.loyalty, &mut self.session.loyalty, delta)
+            }
+            TraitField::Mischief => {
+                apply_with_cap(&mut traits.mischief, &mut self.session.mischief, delta)
+            }
         }
     }
 }
@@ -449,7 +437,10 @@ mod tests {
             ..Default::default()
         };
         engine.decay_toward_baseline(&mut traits, 0.01);
-        assert!(traits.neuroticism < 0.9, "high trait should decay toward 0.5");
+        assert!(
+            traits.neuroticism < 0.9,
+            "high trait should decay toward 0.5"
+        );
         assert!(traits.neuroticism > 0.5);
     }
 

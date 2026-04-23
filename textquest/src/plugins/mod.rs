@@ -160,7 +160,10 @@ impl PluginHealth {
     pub fn error_count_in_window(&self) -> usize {
         let now = Instant::now();
         let window = Duration::from_secs(ERROR_BUDGET_WINDOW_SECS);
-        self.recent_errors.iter().filter(|&&t| now.duration_since(t) <= window).count()
+        self.recent_errors
+            .iter()
+            .filter(|&&t| now.duration_since(t) <= window)
+            .count()
     }
 }
 
@@ -341,7 +344,10 @@ impl PluginRegistry {
     /// Returns `true` if the named plugin is disabled due to error-budget
     /// exhaustion.  Unknown plugin names always return `false`.
     pub fn is_plugin_disabled(&self, name: &str) -> bool {
-        self.health.get(name).map(|h| h.is_disabled()).unwrap_or(false)
+        self.health
+            .get(name)
+            .map(|h| h.is_disabled())
+            .unwrap_or(false)
     }
 
     /// Return a reference to the [`PluginHealth`] record for a plugin, if any.
@@ -353,12 +359,18 @@ impl PluginRegistry {
     ///
     /// Returns `true` if the plugin was just disabled by this call.
     pub fn record_plugin_error(&mut self, name: &str, detail: &str) -> bool {
-        self.health.entry(name.to_string()).or_insert_with(PluginHealth::new).record_error(name, detail)
+        self.health
+            .entry(name.to_string())
+            .or_insert_with(PluginHealth::new)
+            .record_error(name, detail)
     }
 
     /// Record a successful call for a plugin (heartbeat update).
     pub fn record_plugin_success(&mut self, name: &str) {
-        self.health.entry(name.to_string()).or_insert_with(PluginHealth::new).record_success();
+        self.health
+            .entry(name.to_string())
+            .or_insert_with(PluginHealth::new)
+            .record_success();
     }
 
     /// Register a hotkey on behalf of a plugin.
@@ -433,10 +445,16 @@ impl PluginRegistry {
         };
         let mut hk_reg = self.hotkey_registry.lock().unwrap();
         let mut cmd_reg = self.command_registry.lock().unwrap();
-        let hk_removed: usize =
-            tracker.hotkey_ids.iter().filter(|&&id| hk_reg.unregister(id)).count();
-        let cmd_removed: usize =
-            tracker.command_ids.iter().filter(|&&id| cmd_reg.unregister(id)).count();
+        let hk_removed: usize = tracker
+            .hotkey_ids
+            .iter()
+            .filter(|&&id| hk_reg.unregister(id))
+            .count();
+        let cmd_removed: usize = tracker
+            .command_ids
+            .iter()
+            .filter(|&&id| cmd_reg.unregister(id))
+            .count();
         info!(
             plugin = %plugin_name,
             hotkeys_removed = hk_removed,
@@ -648,9 +666,8 @@ impl PluginRegistry {
 
         // Call PLUGIN_INIT wrapped in catch_unwind for panic isolation.
         // SAFETY: symbol lifetime is bounded by `lib` which we still hold.
-        let init_fn: libloading::Symbol<PluginInitFn> = unsafe {
-            lib.get(b"PLUGIN_INIT\0").expect("already validated above")
-        };
+        let init_fn: libloading::Symbol<PluginInitFn> =
+            unsafe { lib.get(b"PLUGIN_INIT\0").expect("already validated above") };
 
         // SAFETY: the function pointer is valid for the lifetime of `lib`.
         // We copy it as a raw fn pointer so catch_unwind can take ownership.
@@ -695,7 +712,10 @@ impl PluginRegistry {
             version,
         };
 
-        Ok(PluginHandle { metadata, library: lib })
+        Ok(PluginHandle {
+            metadata,
+            library: lib,
+        })
     }
 
     /// Read the `PLUGIN_VERSION` export as a UTF-8 string if present.
@@ -860,8 +880,8 @@ mod tests {
 
     #[test]
     fn plugin_register_hotkey_fires_callback() {
-        use std::sync::atomic::{AtomicU32, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicU32, Ordering};
 
         let mut registry = PluginRegistry::new();
         let fired = Arc::new(AtomicU32::new(0));
@@ -900,18 +920,30 @@ mod tests {
             }),
         );
 
-        assert!(registry.command_registry().lock().unwrap().dispatch("/plug cmd foo bar"));
+        assert!(
+            registry
+                .command_registry()
+                .lock()
+                .unwrap()
+                .dispatch("/plug cmd foo bar")
+        );
         assert_eq!(*received.lock().unwrap(), "foo bar");
 
         // Explicit unregister.
         assert!(registry.plugin_unregister_command("test_plugin", id));
-        assert!(!registry.command_registry().lock().unwrap().dispatch("/plug cmd foo bar"));
+        assert!(
+            !registry
+                .command_registry()
+                .lock()
+                .unwrap()
+                .dispatch("/plug cmd foo bar")
+        );
     }
 
     #[test]
     fn cleanup_plugin_registrations_removes_all_on_unload() {
-        use std::sync::atomic::{AtomicU32, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicU32, Ordering};
 
         let mut registry = PluginRegistry::new();
 
@@ -920,14 +952,32 @@ mod tests {
         let f1 = Arc::clone(&fired);
         let f2 = Arc::clone(&fired);
 
-        registry.plugin_register_hotkey("plugin_a", "alt+f1", Box::new(move || { f1.fetch_add(1, Ordering::Relaxed); }));
-        registry.plugin_register_hotkey("plugin_a", "alt+f2", Box::new(move || { f2.fetch_add(1, Ordering::Relaxed); }));
+        registry.plugin_register_hotkey(
+            "plugin_a",
+            "alt+f1",
+            Box::new(move || {
+                f1.fetch_add(1, Ordering::Relaxed);
+            }),
+        );
+        registry.plugin_register_hotkey(
+            "plugin_a",
+            "alt+f2",
+            Box::new(move || {
+                f2.fetch_add(1, Ordering::Relaxed);
+            }),
+        );
         registry.plugin_register_command("plugin_a", "/pa cmd", Box::new(|_| {}));
 
         // Sanity: both hotkeys and command work.
         assert!(registry.hotkey_registry().lock().unwrap().fire("alt+f1"));
         assert!(registry.hotkey_registry().lock().unwrap().fire("alt+f2"));
-        assert!(registry.command_registry().lock().unwrap().dispatch("/pa cmd"));
+        assert!(
+            registry
+                .command_registry()
+                .lock()
+                .unwrap()
+                .dispatch("/pa cmd")
+        );
 
         // Simulate plugin unload.
         let (hk, cmd) = registry.cleanup_plugin_registrations("plugin_a");
@@ -937,7 +987,13 @@ mod tests {
         // Nothing fires after cleanup.
         assert!(!registry.hotkey_registry().lock().unwrap().fire("alt+f1"));
         assert!(!registry.hotkey_registry().lock().unwrap().fire("alt+f2"));
-        assert!(!registry.command_registry().lock().unwrap().dispatch("/pa cmd"));
+        assert!(
+            !registry
+                .command_registry()
+                .lock()
+                .unwrap()
+                .dispatch("/pa cmd")
+        );
     }
 
     #[test]
@@ -945,10 +1001,8 @@ mod tests {
         use std::sync::{Arc, Mutex};
 
         let (cmd_reg, hk_reg) = crate::registry::new_shared();
-        let mut plugin_registry = PluginRegistry::with_registries(
-            Arc::clone(&cmd_reg),
-            Arc::clone(&hk_reg),
-        );
+        let mut plugin_registry =
+            PluginRegistry::with_registries(Arc::clone(&cmd_reg), Arc::clone(&hk_reg));
 
         let order = Arc::new(Mutex::new(Vec::<&'static str>::new()));
         let o1 = Arc::clone(&order);
@@ -976,14 +1030,12 @@ mod tests {
 
     #[test]
     fn with_registries_shares_state_with_lua_bindings() {
-        use std::sync::atomic::{AtomicU32, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicU32, Ordering};
 
         let (cmd_reg, hk_reg) = crate::registry::new_shared();
-        let mut plugin_registry = PluginRegistry::with_registries(
-            Arc::clone(&cmd_reg),
-            Arc::clone(&hk_reg),
-        );
+        let mut plugin_registry =
+            PluginRegistry::with_registries(Arc::clone(&cmd_reg), Arc::clone(&hk_reg));
 
         // Plugin registers a hotkey via the Rust API.
         let fired = Arc::new(AtomicU32::new(0));
@@ -991,7 +1043,9 @@ mod tests {
         plugin_registry.plugin_register_hotkey(
             "my_plugin",
             "ctrl+g",
-            Box::new(move || { f.fetch_add(1, Ordering::Relaxed); }),
+            Box::new(move || {
+                f.fetch_add(1, Ordering::Relaxed);
+            }),
         );
 
         // Fire via the shared handle (same one the Lua bindings would hold).
@@ -1032,9 +1086,12 @@ mod tests {
 
         assert!(
             registry.is_plugin_disabled(name),
-            "plugin must be disabled after {} errors", ERROR_BUDGET_MAX + 1
+            "plugin must be disabled after {} errors",
+            ERROR_BUDGET_MAX + 1
         );
-        let reason = registry.plugin_health(name).and_then(|h| h.disable_reason());
+        let reason = registry
+            .plugin_health(name)
+            .and_then(|h| h.disable_reason());
         assert!(reason.is_some(), "disable reason should be recorded");
     }
 
@@ -1065,14 +1122,22 @@ mod tests {
         let mut registry = PluginRegistry::new();
         let name = "healthy_plugin";
 
-        assert!(registry.plugin_health(name).is_none(), "no health record before first call");
+        assert!(
+            registry.plugin_health(name).is_none(),
+            "no health record before first call"
+        );
 
         registry
             .call_plugin_fn(name, "ok_call", || 99_i32)
             .expect("successful call must not error");
 
-        let h = registry.plugin_health(name).expect("health record created after call");
-        assert!(h.last_heartbeat.is_some(), "heartbeat should be set after success");
+        let h = registry
+            .plugin_health(name)
+            .expect("health record created after call");
+        assert!(
+            h.last_heartbeat.is_some(),
+            "heartbeat should be set after success"
+        );
         assert!(!h.is_disabled(), "should not be disabled");
     }
 
@@ -1094,7 +1159,10 @@ mod tests {
         // total in-window count is only 1 — well below the budget max.
         let name = "window_test";
         let just_disabled = health.record_error(name, "new error");
-        assert!(!just_disabled, "plugin must not be disabled — stale errors should be evicted");
+        assert!(
+            !just_disabled,
+            "plugin must not be disabled — stale errors should be evicted"
+        );
         assert_eq!(health.error_count_in_window(), 1);
         assert!(!health.is_disabled());
     }
@@ -1114,7 +1182,10 @@ mod tests {
         assert!(registry.is_empty());
         // Error budget should have recorded the failure.
         assert_eq!(
-            registry.plugin_health("broken_plugin").map(|h| h.error_count_in_window()).unwrap_or(0),
+            registry
+                .plugin_health("broken_plugin")
+                .map(|h| h.error_count_in_window())
+                .unwrap_or(0),
             1,
             "one error should be recorded for the failed load"
         );

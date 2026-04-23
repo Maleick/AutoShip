@@ -271,10 +271,7 @@ impl PortalDatabase {
         let dest = destination_zone.trim().to_ascii_lowercase();
         self.portals
             .iter()
-            .filter(|p| {
-                p.min_level <= level
-                    && p.destination_zone.to_ascii_lowercase() == dest
-            })
+            .filter(|p| p.min_level <= level && p.destination_zone.to_ascii_lowercase() == dest)
             .collect()
     }
 
@@ -308,7 +305,8 @@ impl PortalDatabase {
             portals: self.portals.clone(),
             safe_camps: self.safe_camps.clone(),
         };
-        let toml_str = toml::to_string_pretty(&file).context("Failed to serialize portal database")?;
+        let toml_str =
+            toml::to_string_pretty(&file).context("Failed to serialize portal database")?;
         std::fs::write(&self.path, toml_str)
             .with_context(|| format!("Failed to write portal database: {}", self.path.display()))?;
         Ok(())
@@ -536,7 +534,6 @@ pub fn builtin_defaults() -> PortalDatabaseFile {
                 spell_name: Some("Translocate: Nexus".into()),
                 spell_id: Some(3229),
             },
-
             // ── Druid Ports ──────────────────────────────────────────────
             Portal {
                 id: "dru_port_northkarana".into(),
@@ -734,7 +731,6 @@ pub fn builtin_defaults() -> PortalDatabaseFile {
                 spell_name: Some("Succor: Velious".into()),
                 spell_id: Some(2436),
             },
-
             // ── Mage Ports (send target, not caster) ────────────────────
             Portal {
                 id: "mag_port_elemental".into(),
@@ -762,7 +758,6 @@ pub fn builtin_defaults() -> PortalDatabaseFile {
                 spell_name: Some("Translocate".into()),
                 spell_id: Some(3244),
             },
-
             // ── Necro Gate ───────────────────────────────────────────────
             Portal {
                 id: "nec_gate".into(),
@@ -777,7 +772,6 @@ pub fn builtin_defaults() -> PortalDatabaseFile {
                 spell_name: Some("Gate".into()),
                 spell_id: Some(234),
             },
-
             // ── Shadow Knight Gate ───────────────────────────────────────
             Portal {
                 id: "sk_gate".into(),
@@ -853,7 +847,11 @@ mod tests {
     fn all_builtin_portals_have_non_empty_ids_and_zones() {
         for p in builtin_defaults().portals {
             assert!(!p.id.is_empty(), "portal id is empty");
-            assert!(!p.destination_zone.is_empty(), "portal '{}'  has empty destination_zone", p.id);
+            assert!(
+                !p.destination_zone.is_empty(),
+                "portal '{}'  has empty destination_zone",
+                p.id
+            );
         }
     }
 
@@ -871,7 +869,10 @@ mod tests {
     fn druid_has_pine_twilight_iceclad_at_52() {
         let d = db();
         let p = d.best_portal_to(CLASS_DRUID, 52, "iceclad");
-        assert!(p.is_some(), "expected Druid iceclad portal (Pine Twilight) at level 52");
+        assert!(
+            p.is_some(),
+            "expected Druid iceclad portal (Pine Twilight) at level 52"
+        );
         let p = p.unwrap();
         assert_eq!(p.id, "dru_port_iceclad");
     }
@@ -880,7 +881,10 @@ mod tests {
     fn druid_has_wandering_mind_wakening_at_54() {
         let d = db();
         let p = d.best_portal_to(CLASS_DRUID, 54, "wakening");
-        assert!(p.is_some(), "expected Druid wakening portal (Wandering Mind)");
+        assert!(
+            p.is_some(),
+            "expected Druid wakening portal (Wandering Mind)"
+        );
         let p = p.unwrap();
         assert_eq!(p.id, "dru_port_wakening");
     }

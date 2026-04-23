@@ -81,7 +81,10 @@ pub struct CommandRegistry {
 impl CommandRegistry {
     /// Create a new, empty registry.
     pub fn new() -> Self {
-        Self { entries: Vec::new(), next_id: 1 }
+        Self {
+            entries: Vec::new(),
+            next_id: 1,
+        }
     }
 
     /// Register a command handler.
@@ -107,7 +110,13 @@ impl CommandRegistry {
             %path, %priority, %source_id, ?id,
             "command registered"
         );
-        self.entries.push(CommandEntry { id, path, priority, source_id, handler });
+        self.entries.push(CommandEntry {
+            id,
+            path,
+            priority,
+            source_id,
+            handler,
+        });
         id
     }
 
@@ -152,10 +161,7 @@ impl CommandRegistry {
         let matching: Vec<&CommandEntry> = self
             .entries
             .iter()
-            .filter(|e| {
-                command_line == e.path
-                    || command_line.starts_with(&format!("{} ", e.path))
-            })
+            .filter(|e| command_line == e.path || command_line.starts_with(&format!("{} ", e.path)))
             .collect();
 
         if matching.is_empty() {
@@ -226,7 +232,10 @@ pub struct ScriptHotkeyRegistry {
 impl ScriptHotkeyRegistry {
     /// Create a new, empty registry.
     pub fn new() -> Self {
-        Self { entries: Vec::new(), next_id: 1 }
+        Self {
+            entries: Vec::new(),
+            next_id: 1,
+        }
     }
 
     /// Register a hotkey.
@@ -251,7 +260,13 @@ impl ScriptHotkeyRegistry {
             %combo, %priority, %source_id, ?id,
             "hotkey registered (script/plugin)"
         );
-        self.entries.push(HotkeyEntry { id, combo, priority, source_id, callback });
+        self.entries.push(HotkeyEntry {
+            id,
+            combo,
+            priority,
+            source_id,
+            callback,
+        });
         id
     }
 
@@ -464,7 +479,14 @@ mod tests {
         let mut reg = ScriptHotkeyRegistry::new();
         let fired = Arc::new(AtomicU32::new(0));
         let f = fired.clone();
-        reg.register("ctrl+f5", Priority::Script, "s", Box::new(move || { f.fetch_add(1, Ordering::Relaxed); }));
+        reg.register(
+            "ctrl+f5",
+            Priority::Script,
+            "s",
+            Box::new(move || {
+                f.fetch_add(1, Ordering::Relaxed);
+            }),
+        );
 
         assert!(reg.fire("ctrl+f5"));
         assert_eq!(fired.load(Ordering::Relaxed), 1);
@@ -475,7 +497,14 @@ mod tests {
         let mut reg = ScriptHotkeyRegistry::new();
         let fired = Arc::new(AtomicU32::new(0));
         let f = fired.clone();
-        reg.register("Ctrl+F5", Priority::Script, "s", Box::new(move || { f.fetch_add(1, Ordering::Relaxed); }));
+        reg.register(
+            "Ctrl+F5",
+            Priority::Script,
+            "s",
+            Box::new(move || {
+                f.fetch_add(1, Ordering::Relaxed);
+            }),
+        );
 
         assert!(reg.fire("ctrl+f5"));
         assert!(reg.fire("CTRL+F5"));
@@ -494,10 +523,20 @@ mod tests {
         let order = Arc::new(Mutex::new(Vec::<&'static str>::new()));
 
         let o1 = order.clone();
-        reg.register("alt+z", Priority::Script, "s", Box::new(move || o1.lock().unwrap().push("script")));
+        reg.register(
+            "alt+z",
+            Priority::Script,
+            "s",
+            Box::new(move || o1.lock().unwrap().push("script")),
+        );
 
         let o2 = order.clone();
-        reg.register("alt+z", Priority::Plugin, "p", Box::new(move || o2.lock().unwrap().push("plugin")));
+        reg.register(
+            "alt+z",
+            Priority::Plugin,
+            "p",
+            Box::new(move || o2.lock().unwrap().push("plugin")),
+        );
 
         assert!(reg.fire("alt+z"));
         let result = order.lock().unwrap().clone();

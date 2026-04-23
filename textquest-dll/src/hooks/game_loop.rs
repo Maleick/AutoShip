@@ -97,8 +97,7 @@ static PREV_NEARBY_SPAWNS: std::sync::OnceLock<
 /// Initialized to 0 (flag clear). Compared each frame against the live value.
 /// When the live value transitions from 0 to non-zero a `ChecksumMismatchAlert`
 /// is emitted.
-static PREV_CHEATER_LD_FLAG: std::sync::atomic::AtomicI32 =
-    std::sync::atomic::AtomicI32::new(0);
+static PREV_CHEATER_LD_FLAG: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
 /// Read the `CheaterLdFlag` from EQ memory and emit an operator alert if it
 /// has flipped to a non-zero value since the last check.
@@ -152,16 +151,14 @@ fn check_cheater_ld_flag() {
                  character is persistently flagged across sessions"
             );
 
-            crate::ipc::send_response(
-                textquest_common::ipc::Response::ChecksumMismatchAlert {
-                    client_id: std::process::id(),
-                    character_name: String::new(),
-                    kind: "cheater_ld_flag".to_string(),
-                    opcode: 0,
-                    cheater_ld_flag_value: current,
-                    timestamp_ms,
-                },
-            );
+            crate::ipc::send_response(textquest_common::ipc::Response::ChecksumMismatchAlert {
+                client_id: std::process::id(),
+                character_name: String::new(),
+                kind: "cheater_ld_flag".to_string(),
+                opcode: 0,
+                cheater_ld_flag_value: current,
+                timestamp_ms,
+            });
         }
     }
 
@@ -4698,7 +4695,10 @@ mod tests {
         let current: i32 = 1;
         // Alert fires only on the 0→non-zero transition.
         let should_alert = prev == 0 && current != 0;
-        assert!(should_alert, "alert should fire when flag transitions from 0 to non-zero");
+        assert!(
+            should_alert,
+            "alert should fire when flag transitions from 0 to non-zero"
+        );
     }
 
     /// No alert when flag was already non-zero (avoid flooding).
@@ -4707,7 +4707,10 @@ mod tests {
         let prev: i32 = 1;
         let current: i32 = 1;
         let should_alert = prev == 0 && current != 0;
-        assert!(!should_alert, "alert should not re-fire when flag is already non-zero");
+        assert!(
+            !should_alert,
+            "alert should not re-fire when flag is already non-zero"
+        );
     }
 
     /// No alert when flag is zero (normal state).

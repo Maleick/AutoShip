@@ -761,7 +761,11 @@ priority = "low"
         let alerts = tracker.update(&spawns, 1);
         // Each new named emits a SpawnUp.
         assert_eq!(alerts.len(), 3);
-        assert!(alerts.iter().all(|a| matches!(a, NamedAlert::SpawnUp { .. })));
+        assert!(
+            alerts
+                .iter()
+                .all(|a| matches!(a, NamedAlert::SpawnUp { .. }))
+        );
 
         // priority_target must be the high-priority mob.
         let target = tracker.priority_target().unwrap();
@@ -803,7 +807,12 @@ priority = "high"
         // Die at tick 1000.
         let alerts = tracker.update(&[], 1000);
         assert_eq!(alerts.len(), 1);
-        let NamedAlert::SpawnDown { name, zone, respawn_estimate } = &alerts[0] else {
+        let NamedAlert::SpawnDown {
+            name,
+            zone,
+            respawn_estimate,
+        } = &alerts[0]
+        else {
             panic!("Expected SpawnDown");
         };
         assert_eq!(name, "Garanel Rucksif");
@@ -848,9 +857,14 @@ priority = "high"
                     NamedAlert::SpawnUp { name, zone } => {
                         self.entries.push(format!("UP: {name} in {zone}"));
                     }
-                    NamedAlert::SpawnDown { name, zone, respawn_estimate } => {
-                        self.entries
-                            .push(format!("DOWN: {name} in {zone} (est tick {respawn_estimate})"));
+                    NamedAlert::SpawnDown {
+                        name,
+                        zone,
+                        respawn_estimate,
+                    } => {
+                        self.entries.push(format!(
+                            "DOWN: {name} in {zone} (est tick {respawn_estimate})"
+                        ));
                     }
                 }
             }

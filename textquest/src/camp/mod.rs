@@ -9,14 +9,14 @@ pub mod banking;
 /// Buff tracking and rebuffing logic.
 #[cfg(windows)]
 pub mod buffs;
-/// Clicky item automation — cooldown tracking, condition evaluation, and
-/// per-character item-use dispatch.
-pub mod clickies;
 /// Crowd control assignment and tracking.
 #[cfg(windows)]
 pub mod cc;
 /// Per-class ability configuration for the camp loop.
 pub mod class_config;
+/// Clicky item automation — cooldown tracking, condition evaluation, and
+/// per-character item-use dispatch.
+pub mod clickies;
 /// Collectible and tribute management — collection quest progress, tribute
 /// automation.
 #[cfg(windows)]

@@ -389,15 +389,13 @@ mod tests {
 
     #[test]
     fn pet_behavior_mode_parses_all_variants() {
-        let aggressive: CharmConfig =
-            toml::from_str("pet_behavior_mode = \"aggressive\"").unwrap();
+        let aggressive: CharmConfig = toml::from_str("pet_behavior_mode = \"aggressive\"").unwrap();
         assert_eq!(aggressive.pet_behavior_mode, PetBehaviorMode::Aggressive);
 
         let balanced: CharmConfig = toml::from_str("pet_behavior_mode = \"balanced\"").unwrap();
         assert_eq!(balanced.pet_behavior_mode, PetBehaviorMode::Balanced);
 
-        let defensive: CharmConfig =
-            toml::from_str("pet_behavior_mode = \"defensive\"").unwrap();
+        let defensive: CharmConfig = toml::from_str("pet_behavior_mode = \"defensive\"").unwrap();
         assert_eq!(defensive.pet_behavior_mode, PetBehaviorMode::Defensive);
     }
 

@@ -255,7 +255,8 @@ mod tests {
     #[test]
     fn test_metric_stats_filters_nan_and_inf() {
         // NaN and Inf are discarded; only 2.0 and 4.0 remain.
-        let stats = MetricStats::from_samples(&[f64::NAN, 2.0, f64::INFINITY, 4.0, f64::NEG_INFINITY]);
+        let stats =
+            MetricStats::from_samples(&[f64::NAN, 2.0, f64::INFINITY, 4.0, f64::NEG_INFINITY]);
         assert_eq!(stats.min, 2.0);
         assert_eq!(stats.max, 4.0);
         assert_eq!(stats.sum, 6.0);
@@ -321,8 +322,7 @@ mod tests {
     #[test]
     fn test_summary_duration_percentiles() {
         // Durations: 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 ms
-        let results: Vec<ScenarioResult> =
-            (1..=10u64).map(|i| success(i * 10)).collect();
+        let results: Vec<ScenarioResult> = (1..=10u64).map(|i| success(i * 10)).collect();
         let summary = MetricsSummary::from_results("perc", &results);
         let dur = &summary.metrics["duration_ms"];
         assert_eq!(dur.min, 10.0);
@@ -354,10 +354,8 @@ mod tests {
 
     #[test]
     fn test_summary_named_metric_histogram() {
-        let result = ScenarioResult::success(Duration::from_millis(10)).with_metric(
-            "latency",
-            MetricValue::Histogram(vec![1.0, 2.0, 3.0]),
-        );
+        let result = ScenarioResult::success(Duration::from_millis(10))
+            .with_metric("latency", MetricValue::Histogram(vec![1.0, 2.0, 3.0]));
         let summary = MetricsSummary::from_results("hist_test", &[result]);
         let stats = &summary.metrics["latency"];
         assert_eq!(stats.sum, 6.0);

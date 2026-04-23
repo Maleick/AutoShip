@@ -495,7 +495,10 @@ mod tests {
                 .method("PUT")
                 .uri("/")
                 .header("content-type", "application/json")
-                .header(axum::http::header::ORIGIN, crate::api::loot::TRUSTED_ORIGINS[0])
+                .header(
+                    axum::http::header::ORIGIN,
+                    crate::api::loot::TRUSTED_ORIGINS[0],
+                )
                 .body(Body::from(payload.to_string()))
                 .unwrap(),
         )
@@ -526,7 +529,10 @@ mod tests {
             Request::builder()
                 .method("POST")
                 .uri("/start")
-                .header(axum::http::header::ORIGIN, crate::api::loot::TRUSTED_ORIGINS[0])
+                .header(
+                    axum::http::header::ORIGIN,
+                    crate::api::loot::TRUSTED_ORIGINS[0],
+                )
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -550,7 +556,10 @@ mod tests {
             Request::builder()
                 .method("POST")
                 .uri("/start")
-                .header(axum::http::header::ORIGIN, crate::api::loot::TRUSTED_ORIGINS[0])
+                .header(
+                    axum::http::header::ORIGIN,
+                    crate::api::loot::TRUSTED_ORIGINS[0],
+                )
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -574,7 +583,10 @@ mod tests {
             Request::builder()
                 .method("POST")
                 .uri("/start")
-                .header(axum::http::header::ORIGIN, crate::api::loot::TRUSTED_ORIGINS[0])
+                .header(
+                    axum::http::header::ORIGIN,
+                    crate::api::loot::TRUSTED_ORIGINS[0],
+                )
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -598,7 +610,10 @@ mod tests {
             Request::builder()
                 .method("POST")
                 .uri("/reset")
-                .header(axum::http::header::ORIGIN, crate::api::loot::TRUSTED_ORIGINS[0])
+                .header(
+                    axum::http::header::ORIGIN,
+                    crate::api::loot::TRUSTED_ORIGINS[0],
+                )
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -623,7 +638,10 @@ mod tests {
                 .method("PUT")
                 .uri("/")
                 .header("content-type", "application/json")
-                .header(axum::http::header::ORIGIN, crate::api::loot::TRUSTED_ORIGINS[0])
+                .header(
+                    axum::http::header::ORIGIN,
+                    crate::api::loot::TRUSTED_ORIGINS[0],
+                )
                 .body(Body::from(json!({ "enabled": false }).to_string()))
                 .unwrap(),
         )

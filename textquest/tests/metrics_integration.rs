@@ -11,14 +11,14 @@
 
 use std::time::{Duration, Instant};
 
+use textquest::metrics::types::{
+    CombatMetrics as RtCombatMetrics, FleetMetrics as RtFleetMetrics, LootMetrics, MetricWindow,
+    MovementMetrics as RtMovementMetrics, SystemMetrics, TimeWindowedMetrics,
+};
 use textquest::metrics::{
     AdminMonitoringRetention, AdminMonitoringStore, MetricsCollector, MonitoredSessionState,
     SessionErrorKind,
     baseline_scorecard::{CombatMetrics, MovementMetrics},
-};
-use textquest::metrics::types::{
-    CombatMetrics as RtCombatMetrics, FleetMetrics as RtFleetMetrics, LootMetrics, MetricWindow,
-    MovementMetrics as RtMovementMetrics, SystemMetrics, TimeWindowedMetrics,
 };
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -256,15 +256,16 @@ fn admin_store_memory_trend_grows_correctly() {
     store.record_memory_sample_at(30, 110_000_000, now + Duration::from_secs(60));
     store.record_memory_sample_at(30, 120_000_000, now + Duration::from_secs(120));
 
-    let snap = store
-        .snapshot(30, now + Duration::from_secs(120))
-        .unwrap();
+    let snap = store.snapshot(30, now + Duration::from_secs(120)).unwrap();
     assert_eq!(snap.memory.sample_count, 3);
     assert_eq!(snap.memory.current_bytes, Some(120_000_000));
     assert_eq!(snap.memory.delta_bytes, Some(20_000_000));
 
     // Growth rate: 20 MB over 120s → 10 MB/min (10_000_000)
-    let rate = snap.memory.growth_bytes_per_minute.expect("growth rate set");
+    let rate = snap
+        .memory
+        .growth_bytes_per_minute
+        .expect("growth rate set");
     assert!((rate - 10_000_000.0).abs() < 1.0, "unexpected rate: {rate}");
 }
 
@@ -277,11 +278,12 @@ fn admin_store_memory_trend_shrinks_correctly() {
     store.record_memory_sample_at(31, 500_000_000, now);
     store.record_memory_sample_at(31, 400_000_000, now + Duration::from_secs(60));
 
-    let snap = store
-        .snapshot(31, now + Duration::from_secs(60))
-        .unwrap();
+    let snap = store.snapshot(31, now + Duration::from_secs(60)).unwrap();
     assert_eq!(snap.memory.delta_bytes, Some(-100_000_000));
-    let rate = snap.memory.growth_bytes_per_minute.expect("growth rate set");
+    let rate = snap
+        .memory
+        .growth_bytes_per_minute
+        .expect("growth rate set");
     assert!(rate < 0.0, "shrinking memory should be negative rate");
 }
 
@@ -309,9 +311,7 @@ fn admin_store_memory_retention_bound_enforced() {
         store.record_memory_sample_at(33, i * 1_000_000, now + Duration::from_secs(i * 10));
     }
 
-    let snap = store
-        .snapshot(33, now + Duration::from_secs(100))
-        .unwrap();
+    let snap = store.snapshot(33, now + Duration::from_secs(100)).unwrap();
     assert_eq!(snap.memory.sample_count, 5);
     // Oldest 3 discarded; current_bytes = 7MB (index 7 in the loop)
     assert_eq!(snap.memory.current_bytes, Some(7_000_000));
@@ -326,15 +326,26 @@ fn admin_store_error_rate_counts_last_60s_only() {
     store.register_session(40, 4000);
 
     // old error (>60s ago) — should NOT count toward errors_per_minute
-    store.record_error_at(40, SessionErrorKind::PipeConnect, now - Duration::from_secs(90));
+    store.record_error_at(
+        40,
+        SessionErrorKind::PipeConnect,
+        now - Duration::from_secs(90),
+    );
     // two recent errors
-    store.record_error_at(40, SessionErrorKind::IpcDispatch, now - Duration::from_secs(30));
+    store.record_error_at(
+        40,
+        SessionErrorKind::IpcDispatch,
+        now - Duration::from_secs(30),
+    );
     store.record_error_at(40, SessionErrorKind::HealthCheck, now);
 
     let snap = store.snapshot(40, now).unwrap();
     assert_eq!(snap.errors.total_errors, 3);
     assert_eq!(snap.errors.errors_per_minute, 2);
-    assert_eq!(snap.errors.last_error_kind, Some(SessionErrorKind::HealthCheck));
+    assert_eq!(
+        snap.errors.last_error_kind,
+        Some(SessionErrorKind::HealthCheck)
+    );
 }
 
 #[test]
@@ -342,7 +353,11 @@ fn admin_store_error_rate_zero_when_all_errors_expired() {
     let mut store = AdminMonitoringStore::with_retention(small_retention());
     let now = Instant::now();
     store.register_session(41, 4100);
-    store.record_error_at(40, SessionErrorKind::PipeAuth, now - Duration::from_secs(120));
+    store.record_error_at(
+        40,
+        SessionErrorKind::PipeAuth,
+        now - Duration::from_secs(120),
+    );
 
     let snap = store.snapshot(41, now).unwrap();
     assert_eq!(snap.errors.errors_per_minute, 0);
@@ -463,7 +478,10 @@ fn rt_system_metrics_overhead_within_budget() {
         uptime_secs: 3600,
     };
     assert!(m.dll_cpu_percent < 2.0, "CPU overhead exceeded 2% budget");
-    assert!(m.frame_latency_ms < 34.0, "frame latency exceeded 2-frame budget at 60 Hz");
+    assert!(
+        m.frame_latency_ms < 34.0,
+        "frame latency exceeded 2-frame budget at 60 Hz"
+    );
 }
 
 // ─── MetricWindow ────────────────────────────────────────────────────────────
@@ -575,9 +593,14 @@ fn alert_threshold_ipc_spike_via_admin_store() {
     }
     store.record_ipc_latency_at(50, 600, now + Duration::from_millis(2000)); // spike
 
-    let snap = store.snapshot(50, now + Duration::from_millis(2100)).unwrap();
+    let snap = store
+        .snapshot(50, now + Duration::from_millis(2100))
+        .unwrap();
     let p95 = snap.ipc_latency.p95_ms.expect("p95 should be set");
-    assert!(p95 > 500, "p95 IPC latency {p95}ms should exceed 500ms alert threshold");
+    assert!(
+        p95 > 500,
+        "p95 IPC latency {p95}ms should exceed 500ms alert threshold"
+    );
 }
 
 // ─── Serde round-trips ────────────────────────────────────────────────────────

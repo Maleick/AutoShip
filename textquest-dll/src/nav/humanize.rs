@@ -48,8 +48,8 @@ impl MovementPersonality {
         let speed_factor = 0.93 + (seed % 140) as f32 / 1000.0; // 0.93..1.07
         // Generate 1.0..2.5 EQ-deg/frame; previously 1.0..4.0 but capped to MAX_HEADING_WOBBLE
         // to stay within the estimated movement-agreement angular velocity tolerance.
-        let heading_wobble = (1.0 + (seed.wrapping_shr(8) % 30) as f32 / 10.0)
-            .min(MAX_HEADING_WOBBLE); // clamp: 1.0..2.5
+        let heading_wobble =
+            (1.0 + (seed.wrapping_shr(8) % 30) as f32 / 10.0).min(MAX_HEADING_WOBBLE); // clamp: 1.0..2.5
         let detour_chance = (seed.wrapping_shr(16) % 80) as f32 / 1000.0; // 0.00..0.08
 
         Self {

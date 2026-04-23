@@ -468,13 +468,7 @@ mod tests {
         // Log one entry of each type under the same character
         for (i, action_type) in action_types.iter().enumerate() {
             logger
-                .log(
-                    1,
-                    action_type.clone(),
-                    format!("action {i}"),
-                    None,
-                    None,
-                )
+                .log(1, action_type.clone(), format!("action {i}"), None, None)
                 .unwrap();
         }
 

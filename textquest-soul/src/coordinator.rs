@@ -490,11 +490,8 @@ impl SoulCoordinator {
                 .iter()
                 .map(|(&id, s)| (id, s.traits.clone()))
                 .collect();
-            let soul_moods: HashMap<ClientId, textquest_common::soul::MoodState> = self
-                .souls
-                .iter()
-                .map(|(&id, s)| (id, s.mood))
-                .collect();
+            let soul_moods: HashMap<ClientId, textquest_common::soul::MoodState> =
+                self.souls.iter().map(|(&id, s)| (id, s.mood)).collect();
             let soul_backstories: HashMap<ClientId, String> = self
                 .souls
                 .iter()
@@ -502,7 +499,9 @@ impl SoulCoordinator {
                 .collect();
 
             // Mix tick count into a non-zero seed (0 is a fixed point in xorshift).
-            let seed = (self.tick_count as u32).wrapping_mul(0x9E37_79B9).wrapping_add(1);
+            let seed = (self.tick_count as u32)
+                .wrapping_mul(0x9E37_79B9)
+                .wrapping_add(1);
             let mut rng = textquest_common::nav::Xorshift32::new(seed);
 
             let banter_requests = self.banter.tick(
@@ -519,8 +518,10 @@ impl SoulCoordinator {
             for (_client_id, request) in banter_requests {
                 // Record IdleTogether social event for the banter pair so the
                 // relationship graph is updated.
-                if let crate::llm::Situation::BotChat { character_name: ref responder_name, .. } =
-                    request.situation
+                if let crate::llm::Situation::BotChat {
+                    character_name: ref responder_name,
+                    ..
+                } = request.situation
                 {
                     self.social.apply_event(
                         &request.character_name,
@@ -741,9 +742,7 @@ impl SoulCoordinator {
         };
 
         // Audit: memory record
-        if memory_written
-            && let Some(audit) = &self.audit
-        {
+        if memory_written && let Some(audit) = &self.audit {
             let _ = audit.log(
                 client_id,
                 AuditActionType::MemoryRecord,
@@ -814,9 +813,7 @@ impl SoulCoordinator {
             // Route whole message as a potential catchphrase if it has been
             // used by multiple distinct speakers already.
             let is_candidate = self.phrase_tracker.is_catchphrase_candidate(message);
-            if is_candidate
-                && let Some(soul) = self.souls.get_mut(&client_id)
-            {
+            if is_candidate && let Some(soul) = self.souls.get_mut(&client_id) {
                 let rng_roll = pseudo_rng_roll(client_id, self.tick_count);
                 soul.speech_evolution
                     .observe_phrase(player_name, message, faction_score, rng_roll);
@@ -872,12 +869,11 @@ impl SoulCoordinator {
 
                     // Record a Witnessed memory for the listener.
                     let gossip_event = SoulEvent::Witnessed {
-                        description: format!(
-                            "heard from {} that {} ...",
-                            player_name, subject
-                        ),
+                        description: format!("heard from {} that {} ...", player_name, subject),
                     };
-                    let _ = self.memory.record(client_id, &gossip_event, mood_before, 1.0);
+                    let _ = self
+                        .memory
+                        .record(client_id, &gossip_event, mood_before, 1.0);
 
                     // Only process the first name match per message to avoid
                     // multi-target noise.

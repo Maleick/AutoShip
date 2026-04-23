@@ -24,19 +24,21 @@ mod combat;
 #[allow(dead_code)]
 pub mod commands;
 #[allow(dead_code)]
-pub mod hotkeys;
-#[allow(dead_code)]
 mod dialog;
 #[allow(dead_code)]
 mod eq;
 #[allow(dead_code)]
 mod hooks;
 #[allow(dead_code)]
+pub mod hotkeys;
+#[allow(dead_code)]
 mod injection;
 #[allow(dead_code)]
 mod ipc;
 #[allow(dead_code)]
 mod login;
+#[allow(dead_code)]
+pub mod mq2;
 #[allow(dead_code)]
 mod nav;
 #[allow(dead_code)]
@@ -51,8 +53,6 @@ mod syscall;
 pub mod timestamp;
 #[allow(dead_code)]
 mod tradeskill_trophy;
-#[allow(dead_code)]
-pub mod mq2;
 
 use std::{
     path::PathBuf,

@@ -537,11 +537,7 @@ fn init_tracing(
     } else {
         tracing_subscriber::registry()
             .with(filter)
-            .with(
-                fmt::layer()
-                    .with_writer(non_blocking)
-                    .with_ansi(false),
-            )
+            .with(fmt::layer().with_writer(non_blocking).with_ansi(false))
             .init();
     }
 
@@ -644,7 +640,8 @@ mod tests {
 
     #[test]
     fn overnight_test_invalid_duration_rejected() {
-        let result = Args::try_parse_from(["textquest", "overnight-test", "--duration", "notanumber"]);
+        let result =
+            Args::try_parse_from(["textquest", "overnight-test", "--duration", "notanumber"]);
         assert!(result.is_err());
     }
 

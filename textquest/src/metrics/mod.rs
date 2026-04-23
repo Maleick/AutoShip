@@ -40,6 +40,6 @@ pub use progress::{ClientProgressSnapshot, ProgressReport, ProgressTracker};
 pub use store::MetricsStore;
 pub use types::{
     CharacterMetrics as RtCharacterMetrics, CombatMetrics as RtCombatMetrics,
-    FleetMetrics as RtFleetMetrics, LootMetrics, MetricWindow, MovementMetrics as RtMovementMetrics,
-    SystemMetrics, TimeWindowedMetrics,
+    FleetMetrics as RtFleetMetrics, LootMetrics, MetricWindow,
+    MovementMetrics as RtMovementMetrics, SystemMetrics, TimeWindowedMetrics,
 };

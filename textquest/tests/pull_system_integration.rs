@@ -14,13 +14,11 @@
 //! - Return-to-camp after loot phase
 //! - Pull timeout recovery
 
-use textquest::{
-    camp::{
-        cc::CcTracker,
-        config::CampConfig,
-        puller::{NearbySpawn, SpawnType, select_pull_target},
-        state::{CampAction, CampLoop, CampMember, CampSnapshot, CampState, PULL_DURATION, Role},
-    },
+use textquest::camp::{
+    cc::CcTracker,
+    config::CampConfig,
+    puller::{NearbySpawn, SpawnType, select_pull_target},
+    state::{CampAction, CampLoop, CampMember, CampSnapshot, CampState, PULL_DURATION, Role},
 };
 
 // ============================================================================
@@ -270,7 +268,9 @@ fn pull_dedicated_puller_gets_target_and_attack() {
     // pid 103 is Bard01 with Role::Puller
     let puller_cmds: Vec<_> = cmds.iter().filter(|(pid, _)| *pid == 103).collect();
     assert!(
-        puller_cmds.iter().any(|(_, a)| a.to_string().contains("/target")),
+        puller_cmds
+            .iter()
+            .any(|(_, a)| a.to_string().contains("/target")),
         "Puller must receive /target command"
     );
     assert!(
@@ -293,7 +293,9 @@ fn pull_falls_back_to_tank_when_no_puller() {
     // Tank (pid 100) must pull when no Puller role present
     let tank_cmds: Vec<_> = cmds.iter().filter(|(pid, _)| *pid == 100).collect();
     assert!(
-        tank_cmds.iter().any(|(_, a)| a.to_string().contains("/target")),
+        tank_cmds
+            .iter()
+            .any(|(_, a)| a.to_string().contains("/target")),
         "Tank must receive /target when no Puller exists"
     );
     assert!(
@@ -400,7 +402,7 @@ fn pull_target_prefers_hvt_over_generic_mob() {
 fn pull_target_excludes_cc_tracked_mobs() {
     let config = base_camp_config();
     let spawns = vec![
-        make_spawn(1, "an orc pawn", 55.0, 55.0),    // CC-tracked
+        make_spawn(1, "an orc pawn", 55.0, 55.0),      // CC-tracked
         make_spawn(2, "an orc centurion", 60.0, 60.0), // Available
     ];
     let mut cc = CcTracker::new();
@@ -427,7 +429,10 @@ fn pull_target_ignores_player_spawns() {
     }];
     let cc = CcTracker::new();
     let result = select_pull_target(&spawns, &config, &cc, &[]);
-    assert_eq!(result, None, "Player spawns must never be targeted for pull");
+    assert_eq!(
+        result, None,
+        "Player spawns must never be targeted for pull"
+    );
 }
 
 /// Verifies corpses are never re-pulled.

@@ -10,10 +10,7 @@ use std::{
     time::Duration,
 };
 
-use tokio::{
-    sync::watch,
-    task::JoinHandle,
-};
+use tokio::{sync::watch, task::JoinHandle};
 
 use super::scenario::{ScenarioResult, TestScenario};
 use textquest_common::login::AccountInfo;
@@ -185,14 +182,7 @@ where
         let dir = Arc::clone(&output_dir);
         let rx = shutdown_rx.clone();
 
-        let runner = TestLoopRunner::new(
-            account,
-            task_id,
-            scenarios,
-            duration,
-            dir.as_ref(),
-            rx,
-        );
+        let runner = TestLoopRunner::new(account, task_id, scenarios, duration, dir.as_ref(), rx);
 
         let handle = tokio::spawn(runner.run());
         handles.push(handle);

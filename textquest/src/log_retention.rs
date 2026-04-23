@@ -34,7 +34,10 @@ pub fn prune_by_age(log_dir: &Path, prefix: &str, max_age_days: u64) -> usize {
     let entries = match std::fs::read_dir(log_dir) {
         Ok(e) => e,
         Err(err) => {
-            tracing::warn!("log_retention: cannot read log dir {}: {err}", log_dir.display());
+            tracing::warn!(
+                "log_retention: cannot read log dir {}: {err}",
+                log_dir.display()
+            );
             return 0;
         }
     };
@@ -86,7 +89,10 @@ pub fn prune_by_size(log_dir: &Path, prefix: &str, max_size_bytes: u64) -> usize
     let entries = match std::fs::read_dir(log_dir) {
         Ok(e) => e,
         Err(err) => {
-            tracing::warn!("log_retention: cannot read log dir {}: {err}", log_dir.display());
+            tracing::warn!(
+                "log_retention: cannot read log dir {}: {err}",
+                log_dir.display()
+            );
             return 0;
         }
     };

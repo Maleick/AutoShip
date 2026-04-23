@@ -77,8 +77,7 @@ mod inner {
     static OWNER: Mutex<SleepOwner> = Mutex::new(SleepOwner::None);
 
     /// Raw handle to the timer-queue timer (stored as usize for Send safety).
-    static TIMER_HANDLE: std::sync::atomic::AtomicUsize =
-        std::sync::atomic::AtomicUsize::new(0);
+    static TIMER_HANDLE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
     /// Acquire the OWNER mutex, returning `None` if already held.
     fn try_acquire(new_owner: SleepOwner) -> Option<MutexGuard<'static, SleepOwner>> {
@@ -163,11 +162,11 @@ mod inner {
         let result = unsafe {
             CreateTimerQueueTimer(
                 &mut timer_handle,
-                None,                       // NULL = default process queue
+                None, // NULL = default process queue
                 Some(timer_callback),
-                None,                       // context = NULL
-                interval_ms,                // due time (first fire)
-                interval_ms,                // period (subsequent fires)
+                None,        // context = NULL
+                interval_ms, // due time (first fire)
+                interval_ms, // period (subsequent fires)
                 WT_EXECUTEDEFAULT | WT_EXECUTEINTIMERTHREAD,
             )
         };

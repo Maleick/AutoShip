@@ -305,7 +305,11 @@ mod tests {
         };
         // 60 kills / 1 hour = 60.0
         let diff = (snap.kills_per_hour() - 60.0).abs();
-        assert!(diff < 0.001, "expected ~60.0, got {}", snap.kills_per_hour());
+        assert!(
+            diff < 0.001,
+            "expected ~60.0, got {}",
+            snap.kills_per_hour()
+        );
     }
 
     #[test]
@@ -324,12 +328,22 @@ mod tests {
         };
         // 2 deaths / 0.5 hours = 4 deaths/hour
         let diff = (snap.deaths_per_hour() - 4.0).abs();
-        assert!(diff < 0.001, "expected ~4.0, got {}", snap.deaths_per_hour());
+        assert!(
+            diff < 0.001,
+            "expected ~4.0, got {}",
+            snap.deaths_per_hour()
+        );
     }
 
     // ── ProgressReport ────────────────────────────────────────────────────────
 
-    fn make_snap(pid: u32, kills: usize, deaths: usize, xp_hr: f32, in_combat: bool) -> ClientProgressSnapshot {
+    fn make_snap(
+        pid: u32,
+        kills: usize,
+        deaths: usize,
+        xp_hr: f32,
+        in_combat: bool,
+    ) -> ClientProgressSnapshot {
         ClientProgressSnapshot {
             pid,
             character_name: format!("Char{pid}"),
@@ -366,11 +380,19 @@ mod tests {
 
         // XP avg = (10 + 20) / 2 = 15.0
         let diff = (report.fleet_xp_per_hour_avg - 15.0).abs();
-        assert!(diff < 0.01, "expected ~15.0 avg xp/hr, got {}", report.fleet_xp_per_hour_avg);
+        assert!(
+            diff < 0.01,
+            "expected ~15.0 avg xp/hr, got {}",
+            report.fleet_xp_per_hour_avg
+        );
 
         // kills/hr: (60 + 30) / 1 hr each = 90.0
         let diff2 = (report.fleet_kills_per_hour - 90.0).abs();
-        assert!(diff2 < 0.01, "expected ~90.0 kills/hr, got {}", report.fleet_kills_per_hour);
+        assert!(
+            diff2 < 0.01,
+            "expected ~90.0 kills/hr, got {}",
+            report.fleet_kills_per_hour
+        );
 
         assert_eq!(report.fleet_deaths_total, 2);
         assert_eq!(report.fleet_kills_total, 90);
@@ -399,7 +421,11 @@ mod tests {
         let report = ProgressReport::from_snapshots(snaps);
         // Only one non-zero rate (30.0)
         let diff = (report.fleet_xp_per_hour_avg - 30.0).abs();
-        assert!(diff < 0.01, "expected ~30.0 avg xp/hr, got {}", report.fleet_xp_per_hour_avg);
+        assert!(
+            diff < 0.01,
+            "expected ~30.0 avg xp/hr, got {}",
+            report.fleet_xp_per_hour_avg
+        );
     }
 
     // ── ProgressTracker ───────────────────────────────────────────────────────
@@ -444,9 +470,17 @@ mod tests {
         tracker.update_xp_rates(5, 12.5, 3.0);
         let snaps = tracker.build_snapshots();
         let diff = (snaps[0].xp_per_hour - 12.5).abs();
-        assert!(diff < 0.001, "expected 12.5 xp/hr, got {}", snaps[0].xp_per_hour);
+        assert!(
+            diff < 0.001,
+            "expected 12.5 xp/hr, got {}",
+            snaps[0].xp_per_hour
+        );
         let diff2 = (snaps[0].aa_xp_per_hour - 3.0).abs();
-        assert!(diff2 < 0.001, "expected 3.0 aa xp/hr, got {}", snaps[0].aa_xp_per_hour);
+        assert!(
+            diff2 < 0.001,
+            "expected 3.0 aa xp/hr, got {}",
+            snaps[0].aa_xp_per_hour
+        );
     }
 
     #[test]

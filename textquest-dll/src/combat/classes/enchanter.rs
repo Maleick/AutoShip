@@ -980,14 +980,26 @@ mod tests {
         let charm = sets.iter().find(|s| s.name == "Charm");
         assert!(charm.is_some(), "Charm ability set must be defined");
         let charm = charm.unwrap();
-        assert!(!charm.candidates.is_empty(), "Charm set must have candidates");
+        assert!(
+            !charm.candidates.is_empty(),
+            "Charm set must have candidates"
+        );
         // Base spell available from level 12
         let base = charm.candidates.iter().find(|c| c.name == "Charm");
-        assert!(base.is_some(), "base 'Charm' candidate (level 12) must be present");
+        assert!(
+            base.is_some(),
+            "base 'Charm' candidate (level 12) must be present"
+        );
         assert_eq!(base.unwrap().min_level, 12);
         // Top-tier spell at 65
-        let top = charm.candidates.iter().find(|c| c.name == "Command of Druzzil");
-        assert!(top.is_some(), "'Command of Druzzil' (level 65) must be present");
+        let top = charm
+            .candidates
+            .iter()
+            .find(|c| c.name == "Command of Druzzil");
+        assert!(
+            top.is_some(),
+            "'Command of Druzzil' (level 65) must be present"
+        );
         assert_eq!(top.unwrap().min_level, 65);
     }
 
@@ -999,13 +1011,19 @@ mod tests {
 
         let at_60 = textquest_common::combat::resolve_abilities(&sets, &known, 60);
         assert_eq!(
-            at_60.get("Charm").expect("Charm resolves at 60").ability_name,
+            at_60
+                .get("Charm")
+                .expect("Charm resolves at 60")
+                .ability_name,
             "Boltran's Agacerie",
         );
 
         let at_65 = textquest_common::combat::resolve_abilities(&sets, &known, 65);
         assert_eq!(
-            at_65.get("Charm").expect("Charm resolves at 65").ability_name,
+            at_65
+                .get("Charm")
+                .expect("Charm resolves at 65")
+                .ability_name,
             "Command of Druzzil",
         );
     }
@@ -1040,7 +1058,10 @@ mod tests {
             extended_targets: Some(&xtargets),
         };
         let status = ctx.pet_status();
-        assert!(status.has_pet(), "charmed mob in MyPet slot must register as active pet");
+        assert!(
+            status.has_pet(),
+            "charmed mob in MyPet slot must register as active pet"
+        );
         assert_eq!(status.spawn_id, Some(500));
     }
 
@@ -1103,7 +1124,10 @@ mod tests {
     fn pet_attack_action_requests_attack_when_pet_is_idle() {
         use crate::combat::strategy::{PetAction, pet_attack_action};
         let player = SpawnData::default();
-        let target = SpawnData { spawn_id: 99, ..SpawnData::default() };
+        let target = SpawnData {
+            spawn_id: 99,
+            ..SpawnData::default()
+        };
         let enemies = vec![target.clone()];
         let config = CombatConfig::default();
         let xtargets = ExtendedTargetList {
@@ -1142,7 +1166,10 @@ mod tests {
     fn pet_attack_action_skips_when_pet_already_on_target() {
         use crate::combat::strategy::pet_attack_action;
         let player = SpawnData::default();
-        let target = SpawnData { spawn_id: 99, ..SpawnData::default() };
+        let target = SpawnData {
+            spawn_id: 99,
+            ..SpawnData::default()
+        };
         let enemies = vec![target.clone()];
         let config = CombatConfig::default();
         // Pet slot + PetTarget slot pointing at same target → already attacking

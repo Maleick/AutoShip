@@ -50,8 +50,8 @@ use super::state::{
 pub use super::{
     client::ClientState,
     state::{
-        CommandBarState, HelpPanelState, HelpTopic, HexDumpState, HookRotationState,
-        HookSlotState, MapScreenState, MapViewportMode, NavigationScreenState, OverviewScreenState,
+        CommandBarState, HelpPanelState, HelpTopic, HexDumpState, HookRotationState, HookSlotState,
+        MapScreenState, MapViewportMode, NavigationScreenState, OverviewScreenState,
         PacketMonitorState, SpawnsScreenState, TacticalScreenState,
     },
 };
@@ -1018,9 +1018,7 @@ impl App {
         if self.help_visible {
             self.close_help();
         } else {
-            self.open_help(HelpFocus::Section(
-                super::command::HelpSection::Workflows,
-            ));
+            self.open_help(HelpFocus::Section(super::command::HelpSection::Workflows));
         }
     }
 
@@ -4713,11 +4711,7 @@ impl App {
                 let action = args.get(2).copied();
                 if let (Some(gem), Some("ready")) = (gem, action) {
                     self.spell_loadout_state.set_recast_ms(gem, 0);
-                    self.set_feedback(
-                        ToastLevel::Info,
-                        format!("Gem {gem} marked ready"),
-                        false,
-                    );
+                    self.set_feedback(ToastLevel::Info, format!("Gem {gem} marked ready"), false);
                 } else {
                     self.set_feedback(
                         ToastLevel::Warning,
@@ -4746,7 +4740,11 @@ impl App {
         match args.first().copied() {
             Some("toggle") => {
                 self.rotation_window_state.toggle_selected();
-                self.set_feedback(ToastLevel::Info, String::from("Rotation entry toggled"), false);
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from("Rotation entry toggled"),
+                    false,
+                );
             }
             Some("up") => {
                 self.rotation_window_state.select_prev();
@@ -4758,11 +4756,7 @@ impl App {
                 if args.len() > 1 {
                     let name = args[1..].join(" ");
                     self.rotation_window_state.record_cast(&name);
-                    self.set_feedback(
-                        ToastLevel::Info,
-                        format!("Recorded cast: {name}"),
-                        false,
-                    );
+                    self.set_feedback(ToastLevel::Info, format!("Recorded cast: {name}"), false);
                 } else {
                     self.set_feedback(
                         ToastLevel::Warning,
@@ -4875,7 +4869,11 @@ impl App {
             }
             Some("clear") => {
                 self.force_target_state.remove_selected();
-                self.set_feedback(ToastLevel::Info, String::from("Force target removed"), false);
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from("Force target removed"),
+                    false,
+                );
             }
             Some("up") => {
                 self.force_target_state.select_prev();

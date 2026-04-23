@@ -458,7 +458,6 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
         if card_area.height > 0 && card_area.width > 0 {
             frame.render_widget(Paragraph::new(lines).block(blk), card_area);
         }
-
     }
 }
 

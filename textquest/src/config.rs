@@ -211,11 +211,9 @@ impl AccountsConfig {
         profile_name: &str,
     ) -> Result<Vec<textquest_common::login::AccountInfo>> {
         let cfg = Self::load(accounts_path)?;
-        let entries = cfg
-            .accounts_for_profile_name(profile_name)
-            .ok_or_else(|| {
-                anyhow::anyhow!("No profile group named '{profile_name}' found in accounts config")
-            })?;
+        let entries = cfg.accounts_for_profile_name(profile_name).ok_or_else(|| {
+            anyhow::anyhow!("No profile group named '{profile_name}' found in accounts config")
+        })?;
         Ok(entries.into_iter().map(Self::to_account_info).collect())
     }
 
@@ -1844,8 +1842,8 @@ pitch = 60.0
 
     #[cfg(windows)]
     fn open_test_store() -> crate::credentials::store::CredentialStore {
-        use std::path::PathBuf;
         use crate::credentials::crypto;
+        use std::path::PathBuf;
         let salt = crypto::generate_salt();
         let key = crypto::derive_key("test_pw", &salt).unwrap();
         crate::credentials::store::CredentialStore::open(&PathBuf::from(":memory:"), key).unwrap()

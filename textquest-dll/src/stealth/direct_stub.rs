@@ -186,14 +186,7 @@ pub unsafe fn call_direct(
     };
     // Cast the stub to a raw function pointer and call it.
     // The stub uses the Windows x64 syscall ABI directly.
-    type DirectStubFn = unsafe extern "system" fn(
-        usize,
-        usize,
-        usize,
-        usize,
-        usize,
-        usize,
-    ) -> i32;
+    type DirectStubFn = unsafe extern "system" fn(usize, usize, usize, usize, usize, usize) -> i32;
 
     let f: DirectStubFn = unsafe { std::mem::transmute(fn_ptr) };
     let result = unsafe { f(arg1, arg2, arg3, arg4, arg5, arg6) };
@@ -266,14 +259,7 @@ fn build_stub_page(entries: &[(u32, u16)]) -> Result<DirectStubPage, DirectStubE
 
     // Lock page to PAGE_EXECUTE_READ — no more writes.
     let mut old_protect = windows::Win32::System::Memory::PAGE_PROTECTION_FLAGS(0);
-    let result = unsafe {
-        VirtualProtect(
-            base,
-            alloc_size,
-            PAGE_EXECUTE_READ,
-            &mut old_protect,
-        )
-    };
+    let result = unsafe { VirtualProtect(base, alloc_size, PAGE_EXECUTE_READ, &mut old_protect) };
 
     if result.is_err() {
         // Failed to lock — free and error.
@@ -309,7 +295,11 @@ fn build_stub_page(entries: &[(u32, u16)]) -> Result<DirectStubPage, DirectStubE
     Ok(DirectStubPage {
         base: std::ptr::null_mut(),
         count: entries.len(),
-        index: entries.iter().enumerate().map(|(i, &(h, _))| (h, i)).collect(),
+        index: entries
+            .iter()
+            .enumerate()
+            .map(|(i, &(h, _))| (h, i))
+            .collect(),
     })
 }
 
@@ -380,7 +370,11 @@ mod tests {
         // (They won't be in entries in practice, but test the guard.)
         let blocked_entries = vec![(hash::NT_PROTECT_VIRTUAL_MEMORY, 0x004D_u16)];
         let blocked_page = build_stub_page(&blocked_entries).unwrap();
-        assert!(blocked_page.stub_ptr(hash::NT_PROTECT_VIRTUAL_MEMORY).is_none());
+        assert!(
+            blocked_page
+                .stub_ptr(hash::NT_PROTECT_VIRTUAL_MEMORY)
+                .is_none()
+        );
     }
 
     #[cfg(not(windows))]
@@ -400,9 +394,7 @@ mod tests {
     #[test]
     fn call_direct_macos_stub_returns_success() {
         // macOS stub always returns Ok(0).
-        let result = unsafe {
-            call_direct(hash::NT_SET_CONTEXT_THREAD, 0x00BE, 0, 0, 0, 0, 0, 0)
-        };
+        let result = unsafe { call_direct(hash::NT_SET_CONTEXT_THREAD, 0x00BE, 0, 0, 0, 0, 0, 0) };
         assert_eq!(result.unwrap(), 0);
     }
 
@@ -444,7 +436,11 @@ mod tests {
         };
 
         // macOS stub returns Ok(0); on Windows would be a real syscall result.
-        assert_eq!(result.unwrap(), 0, "Fallback path should return STATUS_SUCCESS stub");
+        assert_eq!(
+            result.unwrap(),
+            0,
+            "Fallback path should return STATUS_SUCCESS stub"
+        );
     }
 
     /// Verify blocked SSNs fail-closed even if the gadget is also missing.

@@ -870,9 +870,7 @@ mod inner {
         // The server sends 0xd799 when any integrity check fails. Emit a
         // high-priority alert immediately so the operator is notified within
         // one frame, before the disconnect is processed by EQ's network layer.
-        if direction == PacketDirection::Inbound
-            && opcode == OPCODE_CHECKSUM_MISMATCH_DISCONNECT
-        {
+        if direction == PacketDirection::Inbound && opcode == OPCODE_CHECKSUM_MISMATCH_DISCONNECT {
             tracing::error!(
                 client_id,
                 opcode = format!("{:#06x}", opcode),
@@ -1256,7 +1254,10 @@ mod tests {
     fn non_checksum_mismatch_opcode_does_not_alert() {
         let packet = [0x00u8, 0x00, 0x29, 0xbb, 0x00, 0x00, 0x00, 0x00]; // 0xbb29 heartbeat
         let opcode = u16::from_le_bytes([packet[2], packet[3]]);
-        assert_ne!(opcode, 0xd799, "heartbeat opcode 0xbb29 must not match 0xd799");
+        assert_ne!(
+            opcode, 0xd799,
+            "heartbeat opcode 0xbb29 must not match 0xd799"
+        );
     }
 
     // ── trace-packets feature ────────────────────────────────────────────────
@@ -1273,7 +1274,10 @@ mod tests {
         // The heartbeat opcode 0xbb29 should format as "0xbb29" (6 hex chars, 0x prefix).
         let opcode: u16 = 0xbb29;
         let formatted = format!("{:#06x}", opcode);
-        assert_eq!(formatted, "0xbb29", "packet_op field must use 0x-prefixed lowercase hex");
+        assert_eq!(
+            formatted, "0xbb29",
+            "packet_op field must use 0x-prefixed lowercase hex"
+        );
 
         // The checksum-mismatch opcode 0xd799 should format as "0xd799".
         let alert_opcode: u16 = 0xd799;
@@ -1293,9 +1297,18 @@ mod tests {
         let outbound = format!("{:?}", PacketDirection::Outbound);
         let inbound = format!("{:?}", PacketDirection::Inbound);
 
-        assert!(!outbound.is_empty(), "Outbound direction debug must be non-empty");
-        assert!(!inbound.is_empty(), "Inbound direction debug must be non-empty");
-        assert_ne!(outbound, inbound, "Direction variants must produce distinct debug output");
+        assert!(
+            !outbound.is_empty(),
+            "Outbound direction debug must be non-empty"
+        );
+        assert!(
+            !inbound.is_empty(),
+            "Inbound direction debug must be non-empty"
+        );
+        assert_ne!(
+            outbound, inbound,
+            "Direction variants must produce distinct debug output"
+        );
     }
 
     fn checksum_mismatch_opcode_for_test() -> u16 {
