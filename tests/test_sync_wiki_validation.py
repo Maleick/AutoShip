@@ -65,6 +65,32 @@ class WikiValidationTests(unittest.TestCase):
             finally:
                 self.module.SOURCE_DIR = original_source_dir
 
+    def test_discover_source_files_rejects_symlinked_markdown(self) -> None:
+        if os.name == "nt":
+            self.skipTest("symlink creation is not reliable in this Windows test environment")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_root = Path(tmpdir)
+            wiki_root = tmp_root / "wiki"
+            wiki_root.mkdir()
+            outside_file = tmp_root / "secret.txt"
+            outside_file.write_text("top secret\n", encoding="utf-8")
+
+            for required in self.module.REQUIRED_FILES:
+                target = wiki_root / required
+                if required == "Home.md":
+                    target.symlink_to(outside_file)
+                else:
+                    target.write_text(f"# {required}\n", encoding="utf-8")
+
+            original_source_dir = self.module.SOURCE_DIR
+            self.module.SOURCE_DIR = wiki_root
+            try:
+                with self.assertRaisesRegex(self.module.WikiSyncError, "Refusing to follow symlinked wiki page"):
+                    self.module.discover_source_files()
+            finally:
+                self.module.SOURCE_DIR = original_source_dir
+
     def test_run_includes_stdout_and_stderr_on_failure(self) -> None:
         # Mock subprocess.run so this test is not sensitive to whether the
         # current Python interpreter can be launched as a child process (e.g.

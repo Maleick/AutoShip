@@ -115,7 +115,14 @@ def discover_source_files() -> dict[str, Path]:
         joined = ", ".join(str(path) for path in sorted(nested_markdown))
         fail(f"docs/wiki must stay flat; nested markdown files found: {joined}")
 
-    files = {path.name: path for path in SOURCE_DIR.glob("*.md")}
+    files: dict[str, Path] = {}
+    for path in SOURCE_DIR.glob("*.md"):
+        if path.is_symlink():
+            fail(f"Refusing to follow symlinked wiki page: {path.name}")
+        if not path.is_file():
+            fail(f"Wiki page must be a regular file: {path.name}")
+        files[path.name] = path
+
     missing = [name for name in REQUIRED_FILES if name not in files]
     if missing:
         fail(f"Missing required wiki pages: {', '.join(missing)}")
