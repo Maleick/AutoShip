@@ -30,7 +30,7 @@
 //! non-Windows hosts the bridge compiles clean and all methods return
 //! `None`/empty.  This lets `cargo check` and unit tests run on macOS/Linux.
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, rc::Rc};
 
 use super::{ItemSnapshot, PlayerSnapshot, SpawnSnapshot};
 
@@ -46,6 +46,8 @@ use super::{ItemSnapshot, PlayerSnapshot, SpawnSnapshot};
 pub struct MQ2Bridge<'tick> {
     /// Phantom lifetime to prevent the bridge from escaping a game tick.
     _tick: PhantomData<&'tick ()>,
+    /// Marker to enforce the documented `!Send + !Sync` contract.
+    _not_send_sync: PhantomData<Rc<()>>,
 }
 
 impl<'tick> Default for MQ2Bridge<'tick> {
@@ -62,7 +64,10 @@ impl<'tick> MQ2Bridge<'tick> {
     /// Caller must be on the EQ game thread and must not use the returned
     /// bridge after the current game-loop callback returns.
     pub fn new() -> Self {
-        Self { _tick: PhantomData }
+        Self {
+            _tick: PhantomData,
+            _not_send_sync: PhantomData,
+        }
     }
 
     // ── Player ────────────────────────────────────────────────────────────────
