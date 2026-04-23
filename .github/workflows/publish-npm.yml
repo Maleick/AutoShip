@@ -23,27 +23,27 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd textquest-client/tstextquest
+          cd textquest-client/typescript
           npm ci
 
       - name: Lint
         run: |
-          cd textquest-client/tstextquest
+          cd textquest-client/typescript
           npm run lint || true
 
       - name: Typecheck
         run: |
-          cd textquest-client/tstextquest
+          cd textquest-client/typescript
           npm run typecheck || true
 
       - name: Build package
         run: |
-          cd textquest-client/tstextquest
+          cd textquest-client/typescript
           npm run build
 
       - name: Publish to npm
         run: |
-          cd textquest-client/tstextquest
+          cd textquest-client/typescript
           npm publish --access public --dry-run
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -51,7 +51,7 @@ jobs:
 
       - name: Publish to npm (live)
         run: |
-          cd textquest-client/tstextquest
+          cd textquest-client/typescript
           npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

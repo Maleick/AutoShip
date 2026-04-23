@@ -26,7 +26,7 @@ class AutomationWorkflowTests(unittest.TestCase):
         self.assertRegex(
             text,
             re.compile(
-                r"pull_request_target:\s*\n\s*types:\s*\[\s*labeled,\s*reopened,\s*synchronize,\s*ready_for_review,\s*closed\s*\]"
+                r"pull_request_target:\s*\n\s*types:\s*\[\s*labeled,\s*unlabeled,\s*reopened,\s*synchronize,\s*ready_for_review,\s*converted_to_draft,\s*closed\s*\]"
             ),
         )
 
@@ -57,6 +57,43 @@ class AutomationWorkflowTests(unittest.TestCase):
                 r"if \(!isClosed && !shouldSkip && !shouldWithholdReady && !hasReady\) \{"
             ),
         )
+
+    def test_ready_label_requires_structured_issue_body(self) -> None:
+        text = WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn("const requiredReadySectionGroups = [", text)
+        for section in (
+            "Task Description",
+            "Scope",
+            "Implementation Notes",
+            "Testing",
+            "Acceptance Criteria",
+            "Done when (Acceptance Criteria)",
+            "Acceptance",
+        ):
+            with self.subTest(section=section):
+                self.assertIn(section, text)
+        self.assertIn("#{2,3}", text)
+        self.assertIn("hasRequiredReadySections(issue.body || \"\")", text)
+        self.assertIn("missingRequiredSections", text)
+
+    def test_automation_has_no_dead_schedule_conditions(self) -> None:
+        text = WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertNotIn("github.event_name == 'schedule'", text)
+
+    def test_auto_merge_uses_squash_and_blocking_labels(self) -> None:
+        text = WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn("mergeMethod: SQUASH", text)
+        self.assertIn("extractLinkedIssueNumbers", text)
+        self.assertIn("linkedIssueHasBlockingLabels", text)
+        self.assertIn("disablePullRequestAutoMerge", text)
+        self.assertIn("autoMergeBlockReason", text)
+        for label in ("merge:block", "agent:blocked", "human:required", "risk:high"):
+            with self.subTest(label=label):
+                self.assertIn(label, text)
+        self.assertIn("pr.data.draft", text)
 
 
 if __name__ == "__main__":

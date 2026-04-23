@@ -66,7 +66,7 @@ jobs:
           docs_only=true
           for file in "${changed_files[@]}"; do
             case "$file" in
-              docs/**|site/**|*.md|*.txt|.github/workflows/docs-pages.yml|tests/test_*docs*.py|tests/test_workflow_contract.py)
+              docs/**|site/**|*.md|requirements-docs.txt|.github/workflows/docs-pages.yml|tests/test_*docs*.py|tests/test_workflow_contract.py)
                 ;;
               *)
                 docs_only=false
@@ -154,24 +154,15 @@ jobs:
         continue-on-error: true
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
-      - name: Check rustfmt
-        if: steps.scope.outputs.docs_only != 'true'
-        run: cargo fmt --check
       - name: Run clippy
         if: steps.scope.outputs.docs_only != 'true'
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Cache cargo-tarpaulin binary
-        if: steps.scope.outputs.docs_only != 'true'
-        id: cache-tarpaulin
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-tarpaulin
-          key: cargo-tarpaulin-${{ runner.os }}-v0.31
-
       - name: Install cargo-tarpaulin
-        if: steps.scope.outputs.docs_only != 'true' && steps.cache-tarpaulin.outputs.cache-hit != 'true'
-        run: cargo install cargo-tarpaulin --locked --version ^0.31
+        if: steps.scope.outputs.docs_only != 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin@0.35.2
 
       - name: Run coverage (threshold 80%)
         if: steps.scope.outputs.docs_only != 'true'

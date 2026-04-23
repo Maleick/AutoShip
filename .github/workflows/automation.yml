@@ -4,7 +4,7 @@ on:
   issues:
     types: [opened, edited, reopened, closed, labeled, unlabeled]
   pull_request_target:
-    types: [labeled, reopened, synchronize, ready_for_review, closed]
+    types: [labeled, unlabeled, reopened, synchronize, ready_for_review, converted_to_draft, closed]
   workflow_dispatch:
 
 concurrency:
@@ -17,7 +17,7 @@ permissions:
 jobs:
   agent-ready:
     name: Auto-label agent:ready
-    if: github.event_name == 'issues' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'issues' || github.event_name == 'workflow_dispatch'
     timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
@@ -32,10 +32,30 @@ jobs:
             const repo = context.repo.repo;
             const readyLabel = "agent:ready";
             const skipLabel = "agent:skip-ready";
+            const requiredReadySectionGroups = [
+              ["Task Description"],
+              ["Scope"],
+              ["Implementation Notes"],
+              ["Testing"],
+              ["Acceptance Criteria", "Done when (Acceptance Criteria)", "Acceptance"],
+            ];
             const requiredLabels = [
               { name: readyLabel, color: "0E8A16", description: "Issue is eligible for autonomous pickup." },
               { name: skipLabel, color: "D93F0B", description: "Roadmap container issues are intentionally excluded." },
             ];
+
+            function escapeRegExp(value) {
+              return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            }
+
+            function hasRequiredReadySections(body) {
+              return requiredReadySectionGroups.every(group =>
+                group.some(section => {
+                  const pattern = new RegExp(`(^|\\n)#{2,3}\\s+${escapeRegExp(section)}\\s*(\\n|$)`, "i");
+                  return pattern.test(body || "");
+                })
+              );
+            }
 
             async function hasOpenLinkedPr(issueNumber) {
               let page = 1;
@@ -85,7 +105,14 @@ jobs:
               const hasReady = normalized.has(readyLabel);
               const shouldSkip = normalized.has(skipLabel) || /^M(\d+|x)\b/i.test((title || "").trim());
               const isClosed = state !== "open";
-              const shouldWithholdReady = normalized.has("agent:working") || normalized.has("agent:blocked") || (await hasOpenLinkedPr(number));
+              const missingRequiredSections = !hasRequiredReadySections(issue.body || "");
+              const shouldWithholdReady =
+                normalized.has("agent:working") ||
+                normalized.has("agent:blocked") ||
+                normalized.has("human:required") ||
+                normalized.has("risk:high") ||
+                missingRequiredSections ||
+                (await hasOpenLinkedPr(number));
 
               if ((isClosed || shouldSkip || shouldWithholdReady) && hasReady) {
                 await github.rest.issues.removeLabel({ owner, repo, issue_number: number, name: readyLabel });
@@ -105,7 +132,7 @@ jobs:
 
   agent-close:
     name: Auto-close agent PRs
-    if: github.event_name == 'pull_request_target' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch'
     timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
@@ -143,11 +170,12 @@ jobs:
   auto-merge:
     name: Enable auto-merge
     if: >
-      (github.event_name == 'pull_request_target' && github.event.pull_request.state == 'open' && contains(github.event.pull_request.labels.*.name, 'merge:auto') && !contains(github.event.pull_request.labels.*.name, 'merge:block')) ||
+      (github.event_name == 'pull_request_target' && github.event.pull_request.state == 'open' && (contains(github.event.pull_request.labels.*.name, 'merge:auto') || contains(github.event.pull_request.labels.*.name, 'merge:block') || contains(github.event.pull_request.labels.*.name, 'agent:blocked') || contains(github.event.pull_request.labels.*.name, 'human:required') || contains(github.event.pull_request.labels.*.name, 'risk:high'))) ||
       github.event_name == 'workflow_dispatch'
     timeout-minutes: 5
     runs-on: [self-hosted, Linux, X64, textquest]
     permissions:
+      issues: read
       pull-requests: write
     steps:
       - name: Enable auto-merge on labeled PRs
@@ -157,11 +185,61 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const mergeLabel = "merge:auto";
+            const blockingLabels = new Set(["merge:block", "agent:blocked", "human:required", "risk:high"]);
+
+            function labelSet(labels) {
+              return new Set((labels || []).map(label => (label.name || "").toLowerCase()));
+            }
+
+            function extractLinkedIssueNumbers(body) {
+              return [...(body || "").matchAll(/(?:fix(?:es)?|close(?:s)?|resolve(?:s)?)\s+#(\d+)/gi)].map(match => parseInt(match[1], 10));
+            }
+
+            async function linkedIssueHasBlockingLabels(issueNumber) {
+              const issue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
+              const labels = labelSet(issue.data.labels);
+              return [...blockingLabels].some(label => labels.has(label));
+            }
+
+            async function autoMergeBlockReason(pr) {
+              const labels = labelSet(pr.data.labels);
+              if (pr.data.draft) return "PR is draft";
+              const blockingPrLabel = [...blockingLabels].find(label => labels.has(label));
+              if (blockingPrLabel) return `PR has blocking label ${blockingPrLabel}`;
+              for (const issueNumber of extractLinkedIssueNumbers(pr.data.body || "")) {
+                if (await linkedIssueHasBlockingLabels(issueNumber)) return `linked issue #${issueNumber} has a blocking label`;
+              }
+              return null;
+            }
+
+            async function shouldSkipAutoMerge(pr) {
+              return (await autoMergeBlockReason(pr)) !== null;
+            }
+
+            async function disableAutoMerge(prNumber, prId, reason) {
+              if (!reason) return;
+              if (!prId) {
+                core.info(`Skipped disabling auto-merge on PR #${prNumber}: missing pull request node ID.`);
+                return;
+              }
+              try {
+                await github.graphql(`mutation($prId: ID!) { disablePullRequestAutoMerge(input: { pullRequestId: $prId }) { clientMutationId } }`, { prId });
+                core.info(`Disabled auto-merge on PR #${prNumber}: ${reason}.`);
+              } catch (e) {
+                core.info(`Auto-merge was not active or could not be disabled on PR #${prNumber}: ${e.message}`);
+              }
+            }
 
             async function enableAutoMerge(prNumber) {
               try {
                 const pr = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
-                await github.graphql(`mutation($prId: ID!) { enablePullRequestAutoMerge(input: { pullRequestId: $prId, mergeMethod: MERGE }) { clientMutationId } }`, { prId: pr.data.node_id });
+                const blockReason = await autoMergeBlockReason(pr);
+                if (blockReason) {
+                  await disableAutoMerge(prNumber, pr.data.node_id, blockReason);
+                  core.info(`Skipped auto-merge on PR #${prNumber}: ${blockReason}.`);
+                  return;
+                }
+                await github.graphql(`mutation($prId: ID!) { enablePullRequestAutoMerge(input: { pullRequestId: $prId, mergeMethod: SQUASH }) { clientMutationId } }`, { prId: pr.data.node_id });
                 core.info(`Enabled auto-merge on PR #${prNumber}`);
               } catch (e) { core.warning(`Failed for PR #${prNumber}: ${e.message}`); }
             }

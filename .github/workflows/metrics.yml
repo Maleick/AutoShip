@@ -6,8 +6,6 @@ on:
     paths:
       - "**/*.rs"
       - "scripts/update_readme_metrics.py"
-    paths-ignore:
-      - ".autoship/**"
   schedule:
     # Weekly self-healing fallback — ensures metrics refresh even if
     # push triggers are lost (runner outages, flood cancellations).

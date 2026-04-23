@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 import unittest
 
+import yaml
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
@@ -40,6 +42,10 @@ FORBIDDEN_CI_STRINGS = (
 
 
 class WorkflowContractTests(unittest.TestCase):
+    @staticmethod
+    def _load_workflow(name: str) -> dict:
+        return yaml.load((WORKFLOWS / name).read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+
     @staticmethod
     def _job_block(text: str, job_name: str) -> list[str]:
         lines = text.splitlines()
@@ -91,13 +97,82 @@ class WorkflowContractTests(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, text)
 
-    def test_ci_docs_only_allowlist_includes_docs_contract_tests(self) -> None:
+    def test_workflow_events_do_not_mix_paths_and_paths_ignore(self) -> None:
+        for workflow_path in WORKFLOWS.glob("*.yml"):
+            workflow = yaml.load(workflow_path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+            events = workflow.get("on", {})
+            if not isinstance(events, dict):
+                continue
+            for event_name, event_config in events.items():
+                with self.subTest(workflow=workflow_path.name, event=event_name):
+                    if isinstance(event_config, dict):
+                        self.assertFalse(
+                            {"paths", "paths-ignore"}.issubset(event_config),
+                            f"{workflow_path.name}:{event_name} cannot define both paths and paths-ignore",
+                        )
+
+    def test_workflows_do_not_reference_schedule_without_trigger(self) -> None:
+        for workflow_path in WORKFLOWS.glob("*.yml"):
+            text = workflow_path.read_text(encoding="utf-8")
+            workflow = yaml.load(text, Loader=yaml.BaseLoader)
+            events = workflow.get("on", {})
+            has_schedule = isinstance(events, dict) and "schedule" in events
+            with self.subTest(workflow=workflow_path.name):
+                if "github.event_name == 'schedule'" in text:
+                    self.assertTrue(
+                        has_schedule,
+                        f"{workflow_path.name} references schedule but has no schedule trigger",
+                    )
+
+    def test_ci_docs_only_allowlist_excludes_map_text_files(self) -> None:
         text = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
 
         self.assertIn(
-            "docs/**|site/**|*.md|*.txt|.github/workflows/docs-pages.yml|tests/test_*docs*.py|tests/test_workflow_contract.py",
+            "docs/**|site/**|*.md|requirements-docs.txt|.github/workflows/docs-pages.yml|tests/test_*docs*.py|tests/test_workflow_contract.py",
             text,
         )
+        self.assertIn("requirements-docs.txt", text)
+        self.assertNotIn("|*.txt|", text)
+        self.assertNotRegex(text, r"case \"\\$file\" in[\\s\\S]*\\*\\.txt")
+
+    def test_ci_merge_gate_runs_one_rustfmt_check(self) -> None:
+        text = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+        merge_gate = "\n".join(self._job_block(text, "merge_gate"))
+        fmt_commands = [line for line in merge_gate.splitlines() if "cargo fmt" in line]
+
+        self.assertEqual(fmt_commands, ["        run: cargo fmt --all -- --check"])
+
+    def test_ci_uses_deterministic_tarpaulin_install(self) -> None:
+        text = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+
+        self.assertNotIn("cargo install cargo-tarpaulin", text)
+        self.assertNotIn("--version ^", text)
+        self.assertIn("uses: taiki-e/install-action@v2", text)
+        self.assertRegex(text, r"tool: cargo-tarpaulin@\d+\.\d+\.\d+")
+
+    def test_pages_workflow_builds_mkdocs_source(self) -> None:
+        text = (WORKFLOWS / "docs-pages.yml").read_text(encoding="utf-8")
+
+        self.assertIn('- "docs/wiki/**"', text)
+        self.assertIn('- "mkdocs.yml"', text)
+        self.assertIn('- "requirements-docs.txt"', text)
+        self.assertIn("python3 -m pip install -r requirements-docs.txt", text)
+        self.assertNotIn("python3 -m pip install mkdocs-material mkdocs-exclude", text)
+        self.assertIn("mkdocs build --strict --site-dir site", text)
+        self.assertIn("path: ./site", text)
+
+    def test_publish_workflows_use_existing_package_dirs(self) -> None:
+        npm_text = (WORKFLOWS / "publish-npm.yml").read_text(encoding="utf-8")
+        python_text = (WORKFLOWS / "publish-python.yml").read_text(encoding="utf-8")
+
+        self.assertIn("cd textquest-client/typescript", npm_text)
+        self.assertNotIn("textquest-client/tstextquest", npm_text)
+        self.assertTrue((REPO_ROOT / "textquest-client" / "typescript" / "package.json").exists())
+
+        self.assertIn("cd textquest-client/python", python_text)
+        self.assertIn("packages-dir: textquest-client/python/dist/", python_text)
+        self.assertNotIn("textquest-client/pytextquest", python_text)
+        self.assertTrue((REPO_ROOT / "textquest-client" / "python" / "pyproject.toml").exists())
 
     def test_nightly_release_still_has_dispatch_and_schedule(self) -> None:
         text = (WORKFLOWS / "nightly-release.yml").read_text(encoding="utf-8")
