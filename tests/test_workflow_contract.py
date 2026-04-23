@@ -74,6 +74,8 @@ class WorkflowContractTests(unittest.TestCase):
             "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
             merge_gate,
         )
+        self.assertIn("        uses: dtolnay/rust-toolchain@stable", merge_gate)
+        self.assertNotIn("        uses: dtolnay/rust-toolchain@nightly", merge_gate)
         self.assertNotIn("        run: cargo fmt --all --check", merge_gate)
         self.assertIn("    name: Secret scan", secrets_scan)
         self.assertIn(
@@ -149,6 +151,31 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn("--version ^", text)
         self.assertIn("uses: taiki-e/install-action@v2", text)
         self.assertRegex(text, r"tool: cargo-tarpaulin@\d+\.\d+\.\d+")
+        self.assertIn("Run coverage (threshold 68%)", text)
+        self.assertIn("python3 scripts/coverage-report.py --threshold 68", text)
+
+    def test_ci_serializes_linux_native_dependency_installs(self) -> None:
+        text = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+
+        self.assertEqual(text.count("flock /tmp/textquest-apt.lock"), 2)
+        self.assertEqual(text.count("DPkg::Lock::Timeout=300 update"), 2)
+        self.assertEqual(text.count("DPkg::Lock::Timeout=300 install -y"), 2)
+
+    def test_metrics_workflow_refreshes_static_badges_without_looping(self) -> None:
+        text = (WORKFLOWS / "metrics.yml").read_text(encoding="utf-8")
+        workflow = self._load_workflow("metrics.yml")
+        push = workflow["on"]["push"]
+
+        self.assertEqual(push.get("branches"), ["master"])
+        self.assertNotIn("paths:", text)
+        self.assertNotIn("paths-ignore:", text)
+        self.assertIn(
+            "if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip metrics]')",
+            text,
+        )
+        self.assertIn("[skip metrics]", text)
+        self.assertIn("fetch-depth: 0", text)
+        self.assertIn("fetch-tags: true", text)
 
     def test_pages_workflow_deploys_checked_in_site(self) -> None:
         text = (WORKFLOWS / "docs-pages.yml").read_text(encoding="utf-8")

@@ -8,20 +8,19 @@
 
 <p align="center">
   <a href="https://github.com/Maleick/TextQuest/actions/workflows/ci.yml"><img src="https://github.com/Maleick/TextQuest/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Maleick/TextQuest/actions/workflows/release.yml"><img src="https://github.com/Maleick/TextQuest/actions/workflows/release.yml/badge.svg" alt="Release"></a>
+  <a href="https://github.com/Maleick/TextQuest/releases/tag/v0.7.0-alpha"><img src="https://img.shields.io/static/v1?label=release&message=v0.7.0-alpha&color=success&style=flat" alt="Release"></a>
   <a href="https://textquest.teamoperator.red"><img src="https://img.shields.io/badge/docs-textquest.teamoperator.red-blue?style=flat" alt="Docs"></a>
-  <a href="https://github.com/Maleick/TextQuest/commits/master"><img src="https://img.shields.io/github/last-commit/Maleick/TextQuest?style=flat" alt="Last Commit"></a>
+  <a href="https://github.com/Maleick/TextQuest/commit/56e51b377a72a09d1b9d510045dd78ec1aef10d4"><img src="https://img.shields.io/static/v1?label=last+commit&message=2026-04-23+56e51b37&color=informational&style=flat" alt="Last Commit"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust-edition%202024-orange?style=flat" alt="Rust"></a>
   <a href="https://github.com/sponsors/Maleick"><img src="https://img.shields.io/github/sponsors/Maleick?label=Sponsor&logo=GitHub&color=EA4AAA&style=flat" alt="Sponsor"></a>
 </p>
 
 <p align="center">
 
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-265%2C748-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-3%2C825%20exact-brightgreen?style=flat-square)](#testing)
-![Crates](https://img.shields.io/badge/Crates-6-purple?style=flat-square)
-![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey?style=flat-square)
-![Accounts](https://img.shields.io/badge/Accounts-26%2F36-cyan?style=flat-square)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-285%2C998-blue?style=flat-square)](#testing)
+[![Tests](https://img.shields.io/badge/Tests-4%2C163%20exact-brightgreen?style=flat-square)](#testing)
+[![Workspace Crates](https://img.shields.io/badge/Workspace%20Crates-8-purple?style=flat-square)](#testing)
+![Platform](https://img.shields.io/static/v1?label=Platform&message=Windows+%7C+macOS+%7C+Linux&color=lightgrey&style=flat-square)
 
 </p>
 
@@ -212,7 +211,7 @@ Full guide: [`docs/wiki/Configuration.md`](docs/wiki/Configuration.md)
 
 ## Testing
 
-Current workspace totals: 265,748 Rust lines and 3,825 exact tests. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`.
+Current workspace totals: 285,998 Rust lines, 4,163 exact tests, and 8 workspace crates. Latest release: v0.7.0-alpha. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`.
 
 ```bash
 cargo test                                    # full workspace

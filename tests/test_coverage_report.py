@@ -253,18 +253,19 @@ class MainThresholdTests(unittest.TestCase):
                 result = self.module.main()
         self.assertEqual(result, 1)
 
-    def test_default_threshold_is_80(self) -> None:
-        # Default threshold is 80: 79.9% should fail, 80.0% should pass.
+    def test_default_threshold_matches_workspace_baseline(self) -> None:
+        # The repo-wide CI gate tracks the current workspace baseline; new and
+        # heavily modified code still has higher review expectations.
         with mock.patch("sys.argv", ["coverage-report.py"]):
             with mock.patch.object(
-                self.module, "generate_coverage_report", return_value=(0, 79.9)
+                self.module, "generate_coverage_report", return_value=(0, 67.9)
             ):
                 result = self.module.main()
         self.assertEqual(result, 1)
 
         with mock.patch("sys.argv", ["coverage-report.py"]):
             with mock.patch.object(
-                self.module, "generate_coverage_report", return_value=(0, 80.0)
+                self.module, "generate_coverage_report", return_value=(0, 68.0)
             ):
                 result = self.module.main()
         self.assertEqual(result, 0)

@@ -3,9 +3,6 @@ name: Refresh README Metrics
 on:
   push:
     branches: [master]
-    paths:
-      - "**/*.rs"
-      - "scripts/update_readme_metrics.py"
   schedule:
     # Weekly self-healing fallback — ensures metrics refresh even if
     # push triggers are lost (runner outages, flood cancellations).
@@ -21,11 +18,14 @@ permissions:
 
 jobs:
   update-metrics:
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip metrics]')
     runs-on: [self-hosted, Linux, X64, textquest]
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -50,6 +50,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "No metrics change"
           else
-            git commit -m "chore(docs): auto-refresh metrics [skip ci]"
+            git commit -m "chore(docs): auto-refresh metrics [skip ci] [skip metrics]"
             git push
           fi

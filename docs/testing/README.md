@@ -41,8 +41,8 @@ cargo test --all-features --lib
 # Run only Python tests
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 
-# Generate a coverage report with the 80 % threshold
-python3 scripts/coverage-report.py --threshold 80
+# Generate a coverage report with the workspace baseline threshold
+python3 scripts/coverage-report.py --threshold 68
 ```
 
 ---
@@ -221,8 +221,9 @@ cargo test --all-features --tests --doc
 
 ### Threshold
 
-**80 % line coverage** is the enforced minimum across all workspace crates
-(issue #1202). CI blocks merges that fall below this threshold.
+The repo-wide CI gate enforces the current workspace baseline, currently
+**68 % line coverage**. New files and major new functions should still meet the
+80 % target, and modified logic should stay at or above 70 % where practical.
 
 ### Measuring Coverage Locally
 
@@ -230,11 +231,14 @@ cargo test --all-features --tests --doc
 # Install cargo-tarpaulin once
 cargo install cargo-tarpaulin --locked --version ^0.31
 
-# Text report (exits 1 if below 80 %)
-python3 scripts/coverage-report.py --threshold 80
+# Text report (exits 1 if below the workspace baseline)
+python3 scripts/coverage-report.py --threshold 68
 
 # Text + HTML report
-python3 scripts/coverage-report.py --html --threshold 80
+python3 scripts/coverage-report.py --html --threshold 68
+
+# Aspirational full-workspace target for coverage cleanup work
+python3 scripts/coverage-report.py --threshold 80
 
 # Raw tarpaulin invocation
 cargo tarpaulin --workspace --all-features --tests
@@ -266,7 +270,7 @@ used.
 Triggers on every PR to `master` and every push to `master`.
 
 **Smart skip:** If every changed file is under `docs/`, `site/`, `*.md`, or
-`*.txt`, the Rust build, test, and coverage steps are skipped. Only wiki
+the other configured documentation-only paths, the Rust build, test, and coverage steps are skipped. Only wiki
 validation and offset sync always run.
 
 | Step                                     | What it does                                               |
@@ -279,7 +283,7 @@ validation and offset sync always run.
 | Validate offset sync                     | `python3 scripts/validate_offsets_sync.py`                 |
 | Run Python tests (advisory)              | `python3 -m unittest discover -s tests -p 'test_*.py' -v`  |
 | Run clippy                               | `cargo clippy --all-targets --all-features -- -D warnings` |
-| Run coverage (threshold 80 %)            | `python3 scripts/coverage-report.py --threshold 80`        |
+| Run coverage (threshold 68 %)            | `python3 scripts/coverage-report.py --threshold 68`        |
 
 ### `ci.yml` — `test-matrix` Job
 

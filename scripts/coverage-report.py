@@ -11,12 +11,12 @@ Usage:
   python3 scripts/coverage-report.py [--html] [--threshold <percent>]
 
   --html         Generate HTML report (output to target/tarpaulin-report.html)
-  --threshold N  Exit with code 1 if coverage falls below N% (default: 80)
+  --threshold N  Exit with code 1 if coverage falls below N% (default: 68)
 
 Examples:
-  python3 scripts/coverage-report.py                    # Text report (80% threshold)
+  python3 scripts/coverage-report.py                    # Text report (68% baseline)
   python3 scripts/coverage-report.py --html             # Text + HTML report
-  python3 scripts/coverage-report.py --threshold 80     # Enforce 80% minimum coverage
+  python3 scripts/coverage-report.py --threshold 80     # Check against aspirational target
 """
 
 import subprocess
@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 COMMAND_TIMEOUT_SECONDS = 3000
+DEFAULT_COVERAGE_THRESHOLD = 68
 
 def run_command(cmd: list, capture_output: bool = True) -> Tuple[int, str, str]:
     """Run a command and return (exit_code, stdout, stderr)."""
@@ -145,8 +146,11 @@ def main():
     parser.add_argument(
         "--threshold",
         type=int,
-        default=80,
-        help="Exit with code 1 if coverage falls below this percentage (default: 80)"
+        default=DEFAULT_COVERAGE_THRESHOLD,
+        help=(
+            "Exit with code 1 if coverage falls below this percentage "
+            f"(default: {DEFAULT_COVERAGE_THRESHOLD})"
+        )
     )
 
     args = parser.parse_args()

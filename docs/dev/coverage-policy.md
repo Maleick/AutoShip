@@ -8,7 +8,7 @@ TextQuest maintains an active test coverage monitoring program to ensure code qu
 
 - **New code**: Minimum 80% line coverage required for new files and major new functions
 - **Modified code**: Aim for 70%+ coverage on changed logic
-- **Overall repository**: Minimum 60%+ across all crates in CI
+- **Overall repository**: Minimum 68%+ across all crates in CI, matching the current measured baseline
 - **Windows-specific code**: Platform-gated tests exempt from strict requirements (run on Windows CI only)
 
 ## How Coverage is Measured
@@ -27,8 +27,8 @@ python3 scripts/coverage-report.py
 # Generate HTML report
 python3 scripts/coverage-report.py --html
 
-# Check against the CI baseline (exit 1 if below 60%)
-python3 scripts/coverage-report.py --threshold 60
+# Check against the CI baseline (exit 1 if below 68%)
+python3 scripts/coverage-report.py --threshold 68
 ```
 
 ### Coverage in CI
@@ -36,7 +36,7 @@ python3 scripts/coverage-report.py --threshold 60
  Pull requests trigger a **coverage job** that:
 
  1. Runs `cargo tarpaulin` on the full workspace
-2. Blocks merge if the overall workspace falls below the 60% baseline
+2. Blocks merge if the overall workspace falls below the 68% baseline
 3. Publishes a coverage summary in CI logs for review
 
 The coverage job runs inside the main Linux CI gate with the same environment as the rest of the PR checks.

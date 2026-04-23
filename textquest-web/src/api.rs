@@ -2803,22 +2803,18 @@ friends = ["OldFriend"]
         std::fs::remove_file(&config_path).ok();
     }
 
-    #[cfg(unix)]
     #[tokio::test]
     async fn put_player_watch_config_does_not_update_state_when_disk_write_fails() {
-        use std::os::unix::fs::PermissionsExt;
-
         let _lock = config_env_lock().lock().await;
         let temp_root = std::env::temp_dir().join(format!(
-            "textquest-web-api-player-watch-readonly-{}",
+            "textquest-web-api-player-watch-write-failure-{}",
             uuid::Uuid::new_v4()
         ));
-        let read_only_dir = temp_root.join("readonly");
-        std::fs::create_dir_all(&read_only_dir).expect("create readonly dir");
-        std::fs::set_permissions(&read_only_dir, std::fs::Permissions::from_mode(0o555))
-            .expect("mark readonly");
+        std::fs::create_dir_all(&temp_root).expect("create temp root");
+        let file_parent = temp_root.join("not-a-directory");
+        std::fs::write(&file_parent, "not a directory").expect("create file parent");
 
-        let config_path = read_only_dir.join("textquest.toml");
+        let config_path = file_parent.join("textquest.toml");
         let _guard = ConfigPathGuard::set(&config_path);
         let state =
             crate::test_support::demo_app_state_with_snapshot("api-player-watch-failure.json");
@@ -2838,7 +2834,7 @@ friends = ["OldFriend"]
             }),
         )
         .await
-        .expect_err("readonly target should fail")
+        .expect_err("file parent should fail")
         .into_response();
         let (status, _) = error_response_json(response).await;
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
@@ -2846,8 +2842,6 @@ friends = ["OldFriend"]
         let saved = state.player_watch_config.read().await.clone();
         assert_eq!(saved, original);
 
-        std::fs::set_permissions(&read_only_dir, std::fs::Permissions::from_mode(0o755))
-            .expect("restore dir perms");
         std::fs::remove_dir_all(&temp_root).ok();
     }
 
@@ -2877,22 +2871,18 @@ friends = ["OldFriend"]
         std::fs::remove_file(&expected_timestamp_path).ok();
     }
 
-    #[cfg(unix)]
     #[tokio::test]
     async fn put_timestamp_config_does_not_update_state_when_disk_write_fails() {
-        use std::os::unix::fs::PermissionsExt;
-
         let _lock = config_env_lock().lock().await;
         let temp_root = std::env::temp_dir().join(format!(
-            "textquest-web-api-timestamp-readonly-{}",
+            "textquest-web-api-timestamp-write-failure-{}",
             uuid::Uuid::new_v4()
         ));
-        let read_only_dir = temp_root.join("readonly");
-        std::fs::create_dir_all(&read_only_dir).expect("create readonly dir");
-        std::fs::set_permissions(&read_only_dir, std::fs::Permissions::from_mode(0o555))
-            .expect("mark readonly");
+        std::fs::create_dir_all(&temp_root).expect("create temp root");
+        let file_parent = temp_root.join("not-a-directory");
+        std::fs::write(&file_parent, "not a directory").expect("create file parent");
 
-        let config_path = read_only_dir.join("textquest.toml");
+        let config_path = file_parent.join("textquest.toml");
         let _guard = ConfigPathGuard::set(&config_path);
         let state = crate::test_support::demo_app_state_with_snapshot("api-timestamp-failure.json");
         let original = TimestampConfig {
@@ -2914,7 +2904,7 @@ friends = ["OldFriend"]
             }),
         )
         .await
-        .expect_err("readonly target should fail")
+        .expect_err("file parent should fail")
         .into_response();
         let (status, _) = error_response_json(response).await;
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
@@ -2928,8 +2918,6 @@ friends = ["OldFriend"]
             .expect("original config still present");
         assert_eq!(saved, original);
 
-        std::fs::set_permissions(&read_only_dir, std::fs::Permissions::from_mode(0o755))
-            .expect("restore dir perms");
         std::fs::remove_dir_all(&temp_root).ok();
     }
 

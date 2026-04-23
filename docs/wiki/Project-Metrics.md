@@ -1,11 +1,13 @@
 # Project Metrics
 
-Current workspace totals: 265,748 Rust lines and 3,825 exact tests. This page and the README badges are auto-refreshed by `scripts/update_readme_metrics.py`.
+Current workspace totals: 285,998 Rust lines, 4,163 exact tests, and 8 workspace crates. Latest release: v0.7.0-alpha. This page and the README badges are auto-refreshed by `scripts/update_readme_metrics.py`.
 
 ## What This Tracks
 
 - tracked Rust source lines across the workspace
 - exact test count from `cargo test --workspace -- --list` when Cargo is available
+- workspace crate count from the root `Cargo.toml`
+- newest semver-style release tag and source commit badge values
 - source scan fallback for the test count when the cargo runner is unavailable
 
 ## Refresh Flow
