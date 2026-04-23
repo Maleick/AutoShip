@@ -14,6 +14,11 @@ use std::{
 };
 
 const MAX_OBSERVATION_HISTORY: usize = 1_000;
+/// Hard cap for globally tracked phrases to prevent unbounded growth from
+/// attacker-controlled chat tokens.
+const MAX_TRACKED_PHRASES: usize = 4_096;
+/// Hard cap for distinct speakers retained per phrase.
+const MAX_SPEAKERS_PER_PHRASE: usize = 64;
 
 /// Faction score threshold for catchphrase adoption (trusted friend).
 const CATCHPHRASE_FACTION_THRESHOLD: i32 = 500;
@@ -75,6 +80,8 @@ pub struct SlangEntry {
 pub struct PhraseFrequencyTracker {
     /// phrase → set of distinct speaker names
     speakers: HashMap<String, Vec<String>>,
+    /// Insertion order used to evict oldest phrases when at capacity.
+    order: VecDeque<String>,
 }
 
 impl PhraseFrequencyTracker {
@@ -85,8 +92,17 @@ impl PhraseFrequencyTracker {
     /// Record that `speaker` used `phrase`. Returns the updated distinct
     /// speaker count for this phrase.
     pub fn record(&mut self, speaker: &str, phrase: &str) -> usize {
+        if !self.speakers.contains_key(phrase) {
+            if self.speakers.len() >= MAX_TRACKED_PHRASES
+                && let Some(oldest) = self.order.pop_front()
+            {
+                self.speakers.remove(&oldest);
+            }
+            self.order.push_back(phrase.to_string());
+        }
+
         let entry = self.speakers.entry(phrase.to_string()).or_default();
-        if !entry.iter().any(|s| s == speaker) {
+        if !entry.iter().any(|s| s == speaker) && entry.len() < MAX_SPEAKERS_PER_PHRASE {
             entry.push(speaker.to_string());
         }
         entry.len()
@@ -106,6 +122,7 @@ impl PhraseFrequencyTracker {
     /// Clears all tracked phrases (e.g. on zone change).
     pub fn reset(&mut self) {
         self.speakers.clear();
+        self.order.clear();
     }
 }
 
@@ -558,6 +575,36 @@ mod tests {
         tracker.reset();
         assert_eq!(tracker.speaker_count("kk"), 0);
         assert!(!tracker.is_catchphrase_candidate("kk"));
+    }
+
+    #[test]
+    fn test_phrase_tracker_evicts_oldest_phrases_at_capacity() {
+        let mut tracker = PhraseFrequencyTracker::new();
+
+        for i in 0..MAX_TRACKED_PHRASES {
+            let phrase = format!("p{i}");
+            tracker.record("Alice", &phrase);
+        }
+        assert_eq!(tracker.speaker_count("p0"), 1);
+
+        tracker.record("Alice", "overflow");
+
+        assert_eq!(tracker.speaker_count("p0"), 0);
+        assert_eq!(tracker.speaker_count("overflow"), 1);
+    }
+
+    #[test]
+    fn test_phrase_tracker_caps_distinct_speakers_per_phrase() {
+        let mut tracker = PhraseFrequencyTracker::new();
+        for i in 0..(MAX_SPEAKERS_PER_PHRASE + 10) {
+            let speaker = format!("S{i}");
+            tracker.record(&speaker, "crowded");
+        }
+
+        assert_eq!(
+            tracker.speaker_count("crowded"),
+            MAX_SPEAKERS_PER_PHRASE
+        );
     }
 
     // --- Multi-character contagion integration ---
