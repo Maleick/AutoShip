@@ -69,6 +69,7 @@ The main coordinator:
 Important current note from code:
 
 - player chat now uses the local keyword sentiment scorer to persist per-message sentiment, update player relationship faction/trust on strong positive or negative messages, and summarize notable prior chats into LLM context.
+- inter-character banter now preserves empty `zone_short_name` values when checking same-zone proximity, so clients with unresolved zones do not get grouped together under a shared `unknown` fallback.
 
 ## Current Behavior vs Roadmap
 

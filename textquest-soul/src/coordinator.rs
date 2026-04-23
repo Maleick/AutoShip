@@ -483,7 +483,7 @@ impl SoulCoordinator {
                 .collect();
             let client_zones: HashMap<ClientId, String> = states
                 .iter()
-                .map(|(&id, gs)| (id, zone_from_state(gs).to_string()))
+                .map(|(&id, gs)| (id, gs.zone_short_name.clone()))
                 .collect();
             let soul_traits: HashMap<ClientId, textquest_common::soul::PersonalityTraits> = self
                 .souls
