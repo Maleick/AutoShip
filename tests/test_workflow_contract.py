@@ -150,15 +150,13 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("uses: taiki-e/install-action@v2", text)
         self.assertRegex(text, r"tool: cargo-tarpaulin@\d+\.\d+\.\d+")
 
-    def test_pages_workflow_builds_mkdocs_source(self) -> None:
+    def test_pages_workflow_deploys_checked_in_site(self) -> None:
         text = (WORKFLOWS / "docs-pages.yml").read_text(encoding="utf-8")
 
-        self.assertIn('- "docs/wiki/**"', text)
-        self.assertIn('- "mkdocs.yml"', text)
-        self.assertIn('- "requirements-docs.txt"', text)
-        self.assertIn("python3 -m pip install -r requirements-docs.txt", text)
-        self.assertNotIn("python3 -m pip install mkdocs-material mkdocs-exclude", text)
-        self.assertIn("mkdocs build --strict --site-dir site", text)
+        self.assertIn('- "site/**"', text)
+        self.assertNotIn('- "docs/wiki/**"', text)
+        self.assertNotIn("mkdocs build", text)
+        self.assertNotIn("python3 -m pip install", text)
         self.assertIn("path: ./site", text)
 
     def test_publish_workflows_use_existing_package_dirs(self) -> None:
