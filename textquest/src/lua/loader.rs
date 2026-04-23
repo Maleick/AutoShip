@@ -149,6 +149,7 @@ impl ScriptLoader {
         })?;
 
         let exec_result = {
+            self.bindings.reset_sandbox_instruction_counter();
             let lua = self.bindings.get_lua();
             lua.load(&source).exec()
         };
@@ -297,6 +298,7 @@ impl ScriptLoader {
     }
 
     pub fn execute_string(&self, code: &str) -> Result<Value, LuaLoaderError> {
+        self.bindings.reset_sandbox_instruction_counter();
         let lua = self.bindings.get_lua();
         let result = lua
             .load(code)
@@ -312,6 +314,7 @@ impl ScriptLoader {
         function: &str,
         args: Vec<Value>,
     ) -> Result<Value, LuaLoaderError> {
+        self.bindings.reset_sandbox_instruction_counter();
         let lua = self.bindings.get_lua();
 
         let globals = lua.globals();
@@ -561,6 +564,21 @@ mod tests {
             err.contains("sandbox") || err.contains("instruction") || err.contains("limit"),
             "unexpected error text: {err}"
         );
+    }
+
+    /// CPU budget should reset between top-level calls.
+    #[test]
+    fn test_sandbox_cpu_budget_resets_between_invocations() {
+        let (loader, _dir) = make_loader();
+        let first = loader.execute_string("while true do end");
+        assert!(first.is_err(), "first script should trip the CPU limiter");
+
+        let second: i64 = loader
+            .execute_string("return 7")
+            .expect("second script should run with a fresh CPU budget")
+            .cast()
+            .expect("cast to i64");
+        assert_eq!(second, 7);
     }
 
     /// Syntax error on load → ScriptState::Error (not Running).

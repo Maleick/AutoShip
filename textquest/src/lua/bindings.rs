@@ -12,6 +12,7 @@
 /// - commands: textquest.commands.*
 
 use mlua::{Lua, LuaOptions, Result as LuaResult, Table};
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use crate::lua::error::LuaApiError;
@@ -21,6 +22,7 @@ use crate::registry::{Priority, SharedCommandRegistry, SharedHotkeyRegistry};
 
 pub struct LuaBindings {
     lua: Lua,
+    sandbox_instruction_counter: Arc<AtomicU64>,
     /// Shared command registry — injected so plugins and Lua share the same table.
     command_registry: SharedCommandRegistry,
     /// Shared hotkey registry — injected so plugins and Lua share the same table.
@@ -28,11 +30,12 @@ pub struct LuaBindings {
 }
 
 /// Construct a sandboxed `Lua` VM (safe libs only, memory + CPU limits applied).
-fn make_sandboxed_lua() -> Result<Lua, LuaApiError> {
+fn make_sandboxed_lua() -> Result<(Lua, Arc<AtomicU64>), LuaApiError> {
     let lua = Lua::new_with(sandbox::sandbox_libs(), LuaOptions::default())
         .map_err(|e| LuaApiError::BindingError(e.to_string()))?;
-    sandbox::apply(&lua).map_err(|e| LuaApiError::BindingError(e.to_string()))?;
-    Ok(lua)
+    let instruction_counter =
+        sandbox::apply(&lua).map_err(|e| LuaApiError::BindingError(e.to_string()))?;
+    Ok((lua, instruction_counter))
 }
 
 impl LuaBindings {
@@ -41,9 +44,14 @@ impl LuaBindings {
     /// The Lua VM is sandboxed: only safe standard libraries are loaded, dangerous
     /// globals are removed, and memory / CPU limits are enforced.
     pub fn new() -> Result<Self, LuaApiError> {
-        let lua = make_sandboxed_lua()?;
+        let (lua, sandbox_instruction_counter) = make_sandboxed_lua()?;
         let (command_registry, hotkey_registry) = crate::registry::new_shared();
-        Ok(Self { lua, command_registry, hotkey_registry })
+        Ok(Self {
+            lua,
+            sandbox_instruction_counter,
+            command_registry,
+            hotkey_registry,
+        })
     }
 
     /// Create bindings that share existing registries (e.g. with the plugin loader).
@@ -53,8 +61,13 @@ impl LuaBindings {
         command_registry: SharedCommandRegistry,
         hotkey_registry: SharedHotkeyRegistry,
     ) -> Result<Self, LuaApiError> {
-        let lua = make_sandboxed_lua()?;
-        Ok(Self { lua, command_registry, hotkey_registry })
+        let (lua, sandbox_instruction_counter) = make_sandboxed_lua()?;
+        Ok(Self {
+            lua,
+            sandbox_instruction_counter,
+            command_registry,
+            hotkey_registry,
+        })
     }
 
     /// Return a clone of the shared command registry handle.
@@ -516,6 +529,11 @@ impl LuaBindings {
 
     pub fn get_lua(&self) -> &Lua {
         &self.lua
+    }
+
+    /// Reset sandbox CPU budget before a top-level script invocation.
+    pub fn reset_sandbox_instruction_counter(&self) {
+        sandbox::reset_instruction_counter(&self.sandbox_instruction_counter);
     }
 }
 
