@@ -181,7 +181,7 @@ impl LaunchCoordinator {
                         let backoff_delay = tracker.record_failure(&self.backoff_policy);
                         tracing::info!(
                             client_id = sm.client_id,
-                            account = %sm.account_info.account_name,
+                            account = "[redacted]",
                             attempt = tracker.failures(),
                             delay_ms = backoff_delay.as_millis(),
                             "Login retry scheduled with exponential backoff"
@@ -295,7 +295,7 @@ impl LaunchCoordinator {
                         let backoff_delay = tracker.record_failure(&self.backoff_policy);
                         tracing::info!(
                             client_id,
-                            account = %sm.account_info.account_name,
+                            account = "[redacted]",
                             attempt = tracker.failures(),
                             delay_ms = backoff_delay.as_millis(),
                             "Login retry (report_login_event) scheduled with exponential backoff"

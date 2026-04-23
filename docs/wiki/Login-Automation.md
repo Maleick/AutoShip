@@ -239,6 +239,7 @@ pre-game-loop UI interactions.
 
 - Login automation is no longer just a design note; the code has real phase models and in-client login logic.
 - The launch coordinator already tracks stagger timing, retries, and pause conditions for mass failures.
+- Login retry scheduling logs now redact account names and rely on `client_id`, retry attempt, and backoff delay for troubleshooting.
 - Profile groups add named, hotkey-accessible multi-character launch profiles (MQ2 parity).
 
 ### Validation notes
