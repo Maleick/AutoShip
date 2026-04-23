@@ -343,7 +343,13 @@ fn main() -> Result<()> {
     let log_config = cli::load_config().map(|c| c.log).unwrap_or_default();
 
     let log_dir = paths::resolve_log_dir();
-    let _tracing_guard = init_tracing(&log_dir, log_prefix, default_filter, &args.log_format);
+    let _tracing_guard = init_tracing(
+        &log_dir,
+        log_prefix,
+        default_filter,
+        &args.log_format,
+        &log_config,
+    );
 
     tracing::info!(
         log_prefix,
@@ -515,6 +521,7 @@ fn init_tracing(
     filename_prefix: &str,
     default_filter: &str,
     log_format: &str,
+    log_config: &LogConfig,
 ) -> tracing_appender::non_blocking::WorkerGuard {
     if let Err(err) = std::fs::create_dir_all(log_dir) {
         eprintln!(

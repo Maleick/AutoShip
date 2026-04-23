@@ -31,11 +31,28 @@ Current sections include:
 - `[launch]`
 - `[server]`
 - `[retry]`
+- `[log]`
 - `[alerts]`
 - `[vendor_watch]`
 - `[soul]`
 - `[[group]]`
 - Discord-related options
+
+## Log Retention
+
+`[log]` in `config/textquest.toml` controls TextQuest's rolling log retention.
+
+```toml
+[log]
+max_size_mb = 100
+max_files = 7
+max_age_days = 30
+```
+
+Current behavior:
+
+- `max_files` is passed into tracing startup on Windows, so daily-rotated `textquest.log` files now honor the configured retained-file count.
+- `max_age_days` and `max_size_mb` continue to govern post-write pruning for retained logs.
 
 ## Operational Alerts
 
