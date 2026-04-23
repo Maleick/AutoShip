@@ -419,6 +419,319 @@ pub struct Toast {
 }
 
 /// Application state for the TUI command center.
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CampPhase {
+    #[default]
+    Idle,
+    Pulling,
+    Fighting,
+    Looting,
+    Medding,
+    Buffing,
+    Recovery,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CampMemberStatus {
+    pub name: String,
+    pub hp_points: f32,
+    pub mana_pct: Option<f32>,
+    pub in_combat: bool,
+    pub is_dead: bool,
+}
+
+impl CampMemberStatus {
+    #[must_use]
+    pub fn new(name: String, hp_points: f32, mana_pct: Option<f32>) -> Self {
+        Self {
+            name,
+            hp_points,
+            mana_pct,
+            in_combat: false,
+            is_dead: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CampStatusState {
+    pub members: Vec<CampMemberStatus>,
+    pub phase: CampPhase,
+    pub current_pull_target: String,
+}
+
+impl CampStatusState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn update_members(&mut self, members: Vec<CampMemberStatus>) {
+        self.members = members;
+    }
+
+    pub fn set_phase(&mut self, phase: CampPhase) {
+        self.phase = phase;
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SpellLoadoutSlot {
+    pub enabled: bool,
+    pub recast_ms: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SpellLoadoutState {
+    pub selected: usize,
+    pub slots: Vec<SpellLoadoutSlot>,
+}
+
+impl SpellLoadoutState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            selected: 0,
+            slots: vec![SpellLoadoutSlot::default(); 12],
+        }
+    }
+
+    pub fn toggle_selected(&mut self) {
+        if let Some(slot) = self.slots.get_mut(self.selected) {
+            slot.enabled = !slot.enabled;
+        }
+    }
+
+    pub fn select_prev(&mut self) {
+        if self.slots.is_empty() {
+            self.selected = 0;
+        } else {
+            self.selected = self.selected.saturating_sub(1);
+        }
+    }
+
+    pub fn select_next(&mut self) {
+        if self.slots.is_empty() {
+            self.selected = 0;
+        } else {
+            self.selected = (self.selected + 1).min(self.slots.len().saturating_sub(1));
+        }
+    }
+
+    pub fn set_recast_ms(&mut self, gem: u8, recast_ms: u64) {
+        let index = usize::from(gem.saturating_sub(1));
+        if let Some(slot) = self.slots.get_mut(index) {
+            slot.recast_ms = recast_ms;
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RotationEntry {
+    pub name: String,
+    pub enabled: bool,
+    pub casts: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RotationWindowState {
+    pub selected: usize,
+    pub entries: Vec<RotationEntry>,
+}
+
+impl RotationWindowState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn toggle_selected(&mut self) {
+        if let Some(entry) = self.entries.get_mut(self.selected) {
+            entry.enabled = !entry.enabled;
+        }
+    }
+
+    pub fn select_prev(&mut self) {
+        if self.entries.is_empty() {
+            self.selected = 0;
+        } else {
+            self.selected = self.selected.saturating_sub(1);
+        }
+    }
+
+    pub fn select_next(&mut self) {
+        if self.entries.is_empty() {
+            self.selected = 0;
+        } else {
+            self.selected = (self.selected + 1).min(self.entries.len().saturating_sub(1));
+        }
+    }
+
+    pub fn record_cast(&mut self, name: &str) {
+        if let Some(entry) = self
+            .entries
+            .iter_mut()
+            .find(|entry| entry.name.eq_ignore_ascii_case(name))
+        {
+            entry.casts = entry.casts.saturating_add(1);
+            return;
+        }
+
+        self.entries.push(RotationEntry {
+            name: name.to_owned(),
+            enabled: true,
+            casts: 1,
+        });
+        self.selected = self.entries.len().saturating_sub(1);
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PullTarget {
+    pub name: String,
+    pub done: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PullWindowState {
+    pub selected: usize,
+    pub targets: Vec<PullTarget>,
+    pub auto_pull_enabled: bool,
+    pub last_pull_name: String,
+}
+
+impl PullWindowState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn skip_selected(&mut self) {
+        if let Some(target) = self.targets.get_mut(self.selected) {
+            target.done = true;
+        }
+    }
+
+    pub fn select_prev(&mut self) {
+        if self.targets.is_empty() {
+            self.selected = 0;
+        } else {
+            self.selected = self.selected.saturating_sub(1);
+        }
+    }
+
+    pub fn select_next(&mut self) {
+        if self.targets.is_empty() {
+            self.selected = 0;
+        } else {
+            self.selected = (self.selected + 1).min(self.targets.len().saturating_sub(1));
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ForceTargetEntry {
+    pub spawn_id: u32,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ForceTargetState {
+    pub selected: usize,
+    pub entries: Vec<ForceTargetEntry>,
+}
+
+impl ForceTargetState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn add(&mut self, spawn_id: u32, name: &str) {
+        if self.entries.iter().any(|entry| entry.spawn_id == spawn_id) {
+            return;
+        }
+
+        self.entries.push(ForceTargetEntry {
+            spawn_id,
+            name: name.to_owned(),
+        });
+        self.selected = self.entries.len().saturating_sub(1);
+    }
+
+    pub fn remove(&mut self, spawn_id: u32) {
+        self.entries.retain(|entry| entry.spawn_id != spawn_id);
+        self.selected = self.selected.min(self.entries.len().saturating_sub(1));
+    }
+
+    pub fn remove_selected(&mut self) {
+        if self.selected < self.entries.len() {
+            self.entries.remove(self.selected);
+            self.selected = self.selected.min(self.entries.len().saturating_sub(1));
+        }
+    }
+
+    pub fn select_prev(&mut self) {
+        if self.entries.is_empty() {
+            self.selected = 0;
+        } else {
+            self.selected = self.selected.saturating_sub(1);
+        }
+    }
+
+    pub fn select_next(&mut self) {
+        if self.entries.is_empty() {
+            self.selected = 0;
+        } else {
+            self.selected = (self.selected + 1).min(self.entries.len().saturating_sub(1));
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ClickyItemState {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ClickyWindowState {
+    pub selected: usize,
+    pub items: Vec<ClickyItemState>,
+}
+
+impl ClickyWindowState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            selected: 0,
+            items: vec![ClickyItemState::default()],
+        }
+    }
+
+    pub fn toggle_selected(&mut self) {
+        if let Some(item) = self.items.get_mut(self.selected) {
+            item.enabled = !item.enabled;
+        }
+    }
+
+    pub fn select_prev(&mut self) {
+        if self.items.is_empty() {
+            self.selected = 0;
+        } else {
+            self.selected = self.selected.saturating_sub(1);
+        }
+    }
+
+    pub fn select_next(&mut self) {
+        if self.items.is_empty() {
+            self.selected = 0;
+        } else {
+            self.selected = (self.selected + 1).min(self.items.len().saturating_sub(1));
+        }
+    }
+}
+
 pub struct App {
     /// Whether the application is still running (false triggers shutdown).
     pub running: bool,
@@ -648,6 +961,19 @@ pub struct App {
     pub kill_tracker: crate::metrics::KillTracker,
     /// Multi-session store for per-character kill history.
     pub kill_session_store: crate::metrics::KillSessionStore,
+
+    /// Spell loadout window backend state.
+    pub spell_loadout_state: SpellLoadoutState,
+    /// Rotation window backend state.
+    pub rotation_window_state: RotationWindowState,
+    /// Pull window backend state.
+    pub pull_window_state: PullWindowState,
+    /// Force-target window backend state.
+    pub force_target_state: ForceTargetState,
+    /// Clicky window backend state.
+    pub clicky_window_state: ClickyWindowState,
+    /// Camp status backend state.
+    pub camp_status_state: CampStatusState,
 
     /// Chat pattern rule engine for user-defined event triggers.
     pub chat_pattern_engine: textquest_common::chat_pattern_rules::ChatPatternRuleEngine,
@@ -945,6 +1271,12 @@ impl App {
             kill_reporter: crate::metrics::KillReporter::default(),
             kill_tracker: crate::metrics::KillTracker::new(chrono::Utc::now().timestamp()),
             kill_session_store: crate::metrics::KillSessionStore::new(),
+            spell_loadout_state: SpellLoadoutState::new(),
+            rotation_window_state: RotationWindowState::new(),
+            pull_window_state: PullWindowState::new(),
+            force_target_state: ForceTargetState::new(),
+            clicky_window_state: ClickyWindowState::new(),
+            camp_status_state: CampStatusState::new(),
 
             chat_pattern_engine: {
                 use textquest_common::chat_pattern_rules::ChatPatternRulesConfig;
