@@ -27,10 +27,18 @@ pub mod timer_queue_sleep;
 pub mod trampoline;
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, MutexGuard};
 
 static SLEEP_ENABLED: AtomicBool = AtomicBool::new(false);
 static SLEEP_INITIALIZED: AtomicBool = AtomicBool::new(false);
 static CODE_ENCRYPTED: AtomicBool = AtomicBool::new(false);
+static SLEEP_CYCLE_LOCK: Mutex<()> = Mutex::new(());
+
+fn lock_sleep_cycle() -> MutexGuard<'static, ()> {
+    SLEEP_CYCLE_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum StealthError {
@@ -79,6 +87,7 @@ pub fn disable() {
 /// Wake: decrypt .text + set RX. Called at frame start.
 #[cfg_attr(windows, unsafe(link_section = ".tq"))]
 pub fn wake() {
+    let _cycle_guard = lock_sleep_cycle();
     if !SLEEP_ENABLED.load(Ordering::Acquire) {
         return;
     }
@@ -94,6 +103,7 @@ pub fn wake() {
 /// Sleep: set RW + encrypt .text. Called at frame end.
 #[cfg_attr(windows, unsafe(link_section = ".tq"))]
 pub fn sleep() {
+    let _cycle_guard = lock_sleep_cycle();
     if !SLEEP_ENABLED.load(Ordering::Acquire) {
         return;
     }
