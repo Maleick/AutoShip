@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use std::{
     path::{Path, PathBuf},
     time::{Duration, Instant},
@@ -2561,6 +2561,9 @@ pub fn run_overnight_test_mode(
 ) -> Result<()> {
     use std::time::{Duration, Instant};
 
+    if !duration_hours.is_finite() || duration_hours < 0.0 {
+        bail!("overnight-test duration must be a finite number >= 0 hours");
+    }
     let duration = Duration::from_secs_f64(duration_hours * 3600.0);
 
     eprintln!(

@@ -40,6 +40,17 @@ struct Args {
     log_format: String,
 }
 
+fn parse_duration_hours(arg: &str) -> Result<f64, String> {
+    let duration = arg.parse::<f64>().map_err(|e| e.to_string())?;
+    if !duration.is_finite() {
+        return Err("duration must be a finite number".to_string());
+    }
+    if duration < 0.0 {
+        return Err("duration must be >= 0".to_string());
+    }
+    Ok(duration)
+}
+
 #[derive(Subcommand, Debug)]
 enum Commands {
     // ── Daemon lifecycle ──────────────────────────────────────────────
@@ -207,7 +218,7 @@ enum Commands {
     #[command(name = "overnight-test")]
     OvernightTest {
         /// Duration to run in hours (default: 8)
-        #[arg(long, default_value = "8")]
+        #[arg(long, default_value = "8", value_parser = parse_duration_hours)]
         duration: f64,
         /// Account profile name to test (omit for all accounts)
         #[arg(long)]
@@ -642,6 +653,24 @@ mod tests {
     fn overnight_test_invalid_duration_rejected() {
         let result =
             Args::try_parse_from(["textquest", "overnight-test", "--duration", "notanumber"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn overnight_test_negative_duration_rejected() {
+        let result = Args::try_parse_from(["textquest", "overnight-test", "--duration", "-1"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn overnight_test_nan_duration_rejected() {
+        let result = Args::try_parse_from(["textquest", "overnight-test", "--duration", "NaN"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn overnight_test_infinite_duration_rejected() {
+        let result = Args::try_parse_from(["textquest", "overnight-test", "--duration", "inf"]);
         assert!(result.is_err());
     }
 
