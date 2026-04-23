@@ -95,9 +95,10 @@ static PREV_NEARBY_SPAWNS: std::sync::OnceLock<
 /// Last observed value of `CheaterLdFlag` in EQ memory.
 ///
 /// Initialized to 0 (flag clear). Compared each frame against the live value.
-/// When the live value transitions from 0 to non-zero a `ChecksumMismatchAlert`
-/// is emitted.
-static PREV_CHEATER_LD_FLAG: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+/// When the live value transitions from 0 to non-zero a
+/// `ChecksumMismatchAlertBatch` response is emitted.
+static PREV_CHEATER_LD_FLAG: std::sync::atomic::AtomicI32 =
+    std::sync::atomic::AtomicI32::new(0);
 
 /// Read the `CheaterLdFlag` from EQ memory and emit an operator alert if it
 /// has flipped to a non-zero value since the last check.
@@ -151,14 +152,18 @@ fn check_cheater_ld_flag() {
                  character is persistently flagged across sessions"
             );
 
-            crate::ipc::send_response(textquest_common::ipc::Response::ChecksumMismatchAlert {
-                client_id: std::process::id(),
-                character_name: String::new(),
-                kind: "cheater_ld_flag".to_string(),
-                opcode: 0,
-                cheater_ld_flag_value: current,
-                timestamp_ms,
-            });
+            crate::ipc::send_response(
+                textquest_common::ipc::Response::ChecksumMismatchAlertBatch {
+                    alerts: vec![textquest_common::ipc::ChecksumMismatchAlert {
+                        client_id: std::process::id(),
+                        character_name: String::new(),
+                        kind: "cheater_ld_flag".to_string(),
+                        opcode: 0,
+                        cheater_ld_flag_value: current,
+                        timestamp_ms,
+                    }],
+                },
+            );
         }
     }
 

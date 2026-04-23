@@ -818,7 +818,7 @@ mod inner {
     /// # Checksum-mismatch disconnect detection
     ///
     /// When the inbound opcode is `OPCODE_CHECKSUM_MISMATCH_DISCONNECT`
-    /// (`0xd799`), a `Response::ChecksumMismatchAlert` is enqueued immediately
+    /// (`0xd799`), a `Response::ChecksumMismatchAlertBatch` is enqueued immediately
     /// **in addition to** the normal `PacketEvent`. This fires within the same
     /// call so the operator receives the alert within one frame of the packet
     /// arriving.
@@ -877,13 +877,15 @@ mod inner {
                 "ANTI-CHEAT ALERT: server sent checksum-mismatch disconnect (0xd799) — \
                  integrity check failed; character may be persistently flagged"
             );
-            crate::ipc::send_response(Response::ChecksumMismatchAlert {
-                client_id,
-                character_name: String::new(), // resolved by orchestrator from shared state
-                kind: "checksum_mismatch_packet".to_string(),
-                opcode,
-                cheater_ld_flag_value: 0,
-                timestamp_ms,
+            crate::ipc::send_response(Response::ChecksumMismatchAlertBatch {
+                alerts: vec![textquest_common::ipc::ChecksumMismatchAlert {
+                    client_id,
+                    character_name: String::new(), // resolved by orchestrator from shared state
+                    kind: "checksum_mismatch_packet".to_string(),
+                    opcode,
+                    cheater_ld_flag_value: 0,
+                    timestamp_ms,
+                }],
             });
         }
 
