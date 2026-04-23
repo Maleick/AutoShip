@@ -262,7 +262,7 @@ Full milestone spec + evidence rules: [`docs/implementation-roadmap.md`](docs/im
 
 ## AI Agent Pipeline
 
-TextQuest uses [AutoShip](https://github.com/Maleick/AutoShip) for autonomous issue routing — GitHub issues are dispatched to Codex, Gemini, or Claude, verified, and merged automatically.
+TextQuest uses [AutoShip](https://github.com/Maleick/AutoShip) for autonomous issue routing — GitHub issues are dispatched to OpenCode, OpenAI, Codex, or Claude, verified, and merged automatically.
 
 [![AutoShip](https://img.shields.io/badge/powered%20by-AutoShip-cyan?style=flat)](https://github.com/Maleick/AutoShip)
 [![Sponsor](https://img.shields.io/github/sponsors/Maleick?label=Keep%20the%20agents%20running&logo=GitHub&color=EA4AAA&style=flat)](https://github.com/sponsors/Maleick)

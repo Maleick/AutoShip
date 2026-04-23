@@ -1,0 +1,65 @@
+{
+  "scope": "graph index trend (commits)",
+  "commits": [
+    {
+      "commit": "163aa704",
+      "date": "2026-04-22",
+      "message": "feat(lua): script lifecycle unload/pause/resume + state enum (#1006) (#2332)",
+      "nodes": 17360,
+      "edges": 120408,
+      "files": 734,
+      "community_tui_state": 6532,
+      "community_combat_target": 3649,
+      "delta_from_prev": null,
+      "delta_to_next": {
+        "nodes": 106,
+        "edges": 767,
+        "files": 2,
+        "tui_state": 68,
+        "combat_target": 36
+      }
+    },
+    {
+      "commit": "23d23874",
+      "date": "2026-04-22",
+      "message": "feat(mq2): API bridge translation layer (#1015) (#2333)",
+      "nodes": 17466,
+      "edges": 121175,
+      "files": 736,
+      "community_tui_state": 6600,
+      "community_combat_target": 3685,
+      "delta_from_prev": {
+        "nodes": 106,
+        "edges": 767,
+        "files": 2,
+        "tui_state": 68,
+        "combat_target": 36
+      },
+      "delta_to_next": {
+        "nodes": 0,
+        "edges": 0,
+        "files": 0,
+        "tui_state": 0,
+        "combat_target": 0
+      }
+    },
+    {
+      "commit": "43afdaea",
+      "date": "2026-04-22",
+      "message": "chore: relocate clicky design docs, refresh metrics (#2334)",
+      "nodes": 17466,
+      "edges": 121175,
+      "files": 736,
+      "community_tui_state": 6600,
+      "community_combat_target": 3685,
+      "delta_from_prev": {
+        "nodes": 0,
+        "edges": 0,
+        "files": 0,
+        "tui_state": 0,
+        "combat_target": 0
+      }
+    }
+  ],
+  "insight": "A small but notable structural jump occurred between 163aa704 and 23d23874, while the latest commit did not move graph size metrics."
+}

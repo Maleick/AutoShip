@@ -1,0 +1,34 @@
+section,metric,commit_163aa704,commit_23d23874,commit_43afdaea,scope,value_1hop,value_2hop,context
+operator_kpi,changed_files,,,,,2,2,
+operator_kpi,direct_nodes,,,,,24,24,
+operator_kpi,impacted_nodes_within_1_hop,,,,,70,
+operator_kpi,additional_files_affected_1hop,,,,,33,
+operator_kpi,app_callers,,,,,5,5,"web/src/App.tsx::App"
+operator_kpi,app_callees,,,,,22,22,"web/src/App.tsx::App"
+operator_kpi,operator_dashboard_callers,,,,,4,4,"web/src/components/OperatorDashboard.tsx::OperatorDashboard"
+operator_kpi,operator_dashboard_callees,,,,,83,83,"web/src/components/OperatorDashboard.tsx::OperatorDashboard"
+operator_kpi,test_gaps,,,,,20,20,
+operator_kpi,risk,,,,,high,high,
+operator_kpi,impact_nodes_2hop,,,,,500,500,"2-hop radius from web/App + OperatorDashboard"
+operator_kpi,additional_files_2hop,,,,,144,144,"2-hop radius from web/App + OperatorDashboard"
+operator_kpi,flow_count_operator_scope,,,,,0,0,"No affected runtime flows in App/Operator 1-hop or 2-hop scope"
+operator_kpi,flow_count_design_scope,,,,,0,4,"Design mock/UI flows (renderNavigation/navCard families) are separate"
+trend,nodes,17360,17466,17466,from graph stats,,,"delta vs prev: 106@23d23874"
+trend,edges,120408,121175,121175,from graph stats,,,"delta vs prev: 767@23d23874"
+trend,files,734,736,736,from graph stats,,,"delta vs prev: 2@23d23874"
+trend,community_tui_state,6532,6600,6600,from graph stats,,,"delta vs prev: 68@23d23874"
+trend,community_combat_target,3649,3685,3685,from graph stats,,,"delta vs prev: 36@23d23874"
+trend,delta_nodes_vs_prev,0,106,0,relative to previous commit,,,
+trend,delta_edges_vs_prev,0,767,0,relative to previous commit,,,
+trend,delta_files_vs_prev,0,2,0,relative to previous commit,,,
+trend,delta_tui_state_vs_prev,0,68,0,relative to previous commit,,,
+trend,delta_combat_target_vs_prev,0,36,0,relative to previous commit,,,
+cross_module,components_to_combat_flow_count,0,0,0,from operator/combat matrix,,,"No direct component/operator paths into combat in scope"
+cross_module,combat_to_components_flow_count,0,0,0,from operator/combat matrix,,,"No direct combat paths targeting operator entry points"
+cross_module,design_to_combat_flow_count,76,76,76,from operator/combat matrix,,,"Design-only mock flows disconnected from runtime"
+combat_flows_top_5,clear_flee_requested_restores_idle_criticality,,,,flow criticality,0.5267,0.5267,"primary_file: textquest-dll/src/combat/state.rs"
+combat_flows_top_5,clear_flee_requested_restores_idle_nodes,,,,flow node_count,3,3,
+combat_flows_top_5,downtime_rotation_groups_execute_while_idle_criticality,,,,flow criticality,0.4068,0.4068,
+combat_flows_top_5,downtime_rotation_groups_execute_while_idle_nodes,,,,flow node_count,28,28,
+combat_flows_top_5,zone_disconnect_auto_disengages_criticality,,,,flow criticality,0.4068,0.4068,
+combat_flows_top_5,zone_disconnect_auto_disengages_nodes,,,,flow node_count,28,28,

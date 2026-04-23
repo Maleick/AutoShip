@@ -1,0 +1,97 @@
+{
+  "bundle_name": "operator_chart_bundle",
+  "generated_at": "2026-04-23T01:41:50Z",
+  "scope": "operator-facing + crossover",
+  "files": [
+    {
+      "name": "operator_chart_summary_1hop.json",
+      "kind": "json",
+      "description": "1-hop operator-facing summary with runtime call surface"
+    },
+    {
+      "name": "operator_1hop_summary.csv",
+      "kind": "csv",
+      "description": "1-hop summary metrics for quick charting"
+    },
+    {
+      "name": "operator_flow_1hop.csv",
+      "kind": "csv",
+      "description": "1-hop flow table for scope (no affected runtime flows detected)"
+    },
+    {
+      "name": "operator_2hop_summary.json",
+      "kind": "json",
+      "description": "1-hop and 2-hop operator impact summary with risk/coverage"
+    },
+    {
+      "name": "operator_2hop_summary.csv",
+      "kind": "csv",
+      "description": "2-hop summary metrics for charting"
+    },
+    {
+      "name": "operator_flow_2hop.csv",
+      "kind": "csv",
+      "description": "2-hop flow table for scope (no affected runtime flows detected)"
+    },
+    {
+      "name": "components_vs_combat_handle_crossover.json",
+      "kind": "json",
+      "description": "Front-end/components-handle vs combat-target crossover metrics"
+    },
+  {
+      "name": "components_vs_combat_handle_crossover.csv",
+      "kind": "csv",
+      "description": "Crossover summary metrics for chart/table views"
+    },
+    {
+      "name": "operator_2hop_combat_flow_list.csv",
+      "kind": "csv",
+      "description": "Top 2-hop combat flow list (non-design/runtime paths), with criticality and size"
+    },
+    {
+      "name": "operator_2hop_combat_flow_list.json",
+      "kind": "json",
+      "description": "2-hop combat flow summary with source references and cross-module notes"
+    },
+    {
+      "name": "graph_metrics_commit_trend.csv",
+      "kind": "csv",
+      "description": "Commit-level graph metric trend snapshots for quick timeline charts"
+    },
+    {
+      "name": "graph_metrics_commit_trend.json",
+      "kind": "json",
+      "description": "Commit-level graph metric trend with explicit deltas and notes"
+    },
+    {
+      "name": "operator_chart_bundle_manifest.json",
+      "kind": "json",
+      "description": "Machine-readable bundle index"
+    },
+    {
+      "name": "operator_chart_readme.md",
+      "kind": "markdown",
+      "description": "Human-readable import guide and usage notes"
+    },
+    {
+      "name": "operator_combat_crossover_flow_matrix.csv",
+      "kind": "csv",
+      "description": "Cross-module flow matrix summarizing operator/combat coupling signals"
+    },
+    {
+      "name": "operator_chart_summary_matrix.csv",
+      "kind": "csv",
+      "description": "Wide-format consolidated operator + 2-hop + commit trend + top flow summary for chart ingestion"
+    },
+    {
+      "name": "operator_chart_template_spec.json",
+      "kind": "json",
+      "description": "Template describing which files and series to render for terminal/chart tooling"
+    },
+    {
+      "name": "operator_top5_combat_flows_vega_spec.json",
+      "kind": "json",
+      "description": "Top-five combat flow Vega-Lite chart spec for criticality and node-count view"
+    }
+  ]
+}

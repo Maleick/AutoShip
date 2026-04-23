@@ -1,0 +1,37 @@
+{
+  "generated_for": "operator-facing chart (1-hop + 2-hop depth)",
+  "generated_from": "code-review-graph tools",
+  "generated_at": "2026-04-23T01:41:50Z",
+  "graph_scope": {
+    "changed_files": [
+      "web/src/App.tsx",
+      "web/src/components/OperatorDashboard.tsx"
+    ],
+    "depths": {
+      "depth_1": {
+        "direct_nodes": 24,
+        "impacted_nodes": 70,
+        "additional_files_affected": 33,
+        "risk": "high"
+      },
+      "depth_2": {
+        "direct_nodes": 24,
+        "impacted_nodes": 500,
+        "additional_files_affected": 144,
+        "risk": "high",
+        "truncated": true
+      }
+    }
+  },
+  "change_review": {
+    "changed_function_class_count": 0,
+    "affected_flows_count": 0,
+    "test_gaps": 20,
+    "overall_risk": "high"
+  },
+  "runtime_key_entities": [
+    "web/src/App.tsx::App",
+    "web/src/components/OperatorDashboard.tsx::OperatorDashboard",
+    "/Users/maleick/Projects/TextQuest/web/src/App.test.tsx"
+  ]
+}

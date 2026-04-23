@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "created_at": "2026-04-23",
+  "notes": "Template for turning Graph Analysis exports into reusable charts.",
+  "charts": [
+    {
+      "id": "trend_overview",
+      "type": "line",
+      "title": "Graph size trend by commit",
+      "source": "artifacts/graph_metrics_commit_trend.csv",
+      "x": "commit",
+      "series": [
+        { "field": "nodes", "label": "Nodes" },
+        { "field": "edges", "label": "Edges" },
+        { "field": "files", "label": "Files" },
+        { "field": "tui_state_size", "label": "TUI State community" },
+        { "field": "combat_target_size", "label": "Combat Target community" }
+      ]
+    },
+    {
+      "id": "operator_kpi_gap",
+      "type": "bar",
+      "title": "Operator scope: 1-hop vs 2-hop impact",
+      "source": "artifacts/operator_chart_summary_matrix.csv",
+      "filter": {
+        "section": "operator_kpi"
+      },
+      "x": "metric",
+      "series": [
+        { "field": "value_1hop", "label": "1-hop" },
+        { "field": "value_2hop", "label": "2-hop" }
+      ]
+    },
+    {
+      "id": "cross_module_matrix",
+      "type": "matrix",
+      "title": "Cross-module coupling matrix",
+      "source": "artifacts/operator_chart_summary_matrix.csv",
+      "filter": {
+        "section": "cross_module"
+      },
+      "rows": "metric",
+      "columns": ["commit_163aa704", "commit_23d23874", "commit_43afdaea"],
+      "value": "commit_23d23874"
+    },
+    {
+      "id": "top_combat_flows",
+      "type": "bar",
+      "title": "Top combat flows by criticality",
+      "source": "artifacts/operator_2hop_combat_flow_list.csv",
+      "sort": {
+        "field": "criticality",
+        "order": "desc",
+        "limit": 5
+      },
+      "x": "flow_name",
+      "series": [
+        { "field": "criticality", "label": "Criticality" },
+        { "field": "node_count", "label": "Node count" }
+      ]
+    }
+  ]
+}

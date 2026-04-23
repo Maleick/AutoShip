@@ -1,0 +1,14 @@
+metric,value
+changed_files,2
+depth,1
+direct_nodes,24
+impacted_nodes_within_1_hop,70
+additional_files_affected,33
+risk,high
+changed_functions_or_classes,0
+affected_flows_count,0
+test_gaps,20
+App_callers,5
+App_callees,22
+OperatorDashboard_callers,4
+OperatorDashboard_callees,83

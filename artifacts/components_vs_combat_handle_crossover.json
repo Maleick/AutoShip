@@ -1,0 +1,45 @@
+{
+  "generated_for": "community crossover: components-handle vs combat-target",
+  "generated_from": "code-review-graph tools",
+  "community_a": {
+    "name": "components-handle",
+    "size": 754,
+    "file_count": 114,
+    "cohesion": 0.1735,
+    "dominant_language": "tsx"
+  },
+  "community_b": {
+    "name": "combat-target",
+    "size": 3685,
+    "file_count": 121,
+    "cohesion": 0.1943,
+    "dominant_language": "rust"
+  },
+  "sample_signal_nodes": {
+    "components": {
+      "App": {
+        "callers": 5,
+        "callees": 22
+      },
+      "OperatorDashboard": {
+        "callers": 4,
+        "callees": 83
+      }
+    },
+    "combat": {
+      "AbilityCooldownTracker.can_use": {
+        "callers": 14,
+        "callees": 4
+      }
+    }
+  },
+  "observed_crossover_edges": {
+    "components_to_combat": 0,
+    "combat_to_components": 0,
+    "notes": [
+      "OperatorDashboard is called from App and component tests only.",
+      "AbilityCooldownTracker.can_use is called from combat/state.rs only.",
+      "No direct sample edges observed between the two community roots."
+    ]
+  }
+}

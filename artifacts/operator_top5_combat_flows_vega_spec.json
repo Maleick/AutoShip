@@ -1,0 +1,70 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "description": "Top 5 combat flows by criticality and node count (2-hop scope)",
+  "title": "Top 5 Combat Flows",
+  "data": {
+    "url": "artifacts/operator_2hop_combat_flow_list.csv"
+  },
+  "transform": [
+    {"calculate": "toNumber(datum.criticality)", "as": "criticality_value"},
+    {"calculate": "toNumber(datum.node_count)", "as": "node_count_value"},
+    {"window": [{"op": "rank", "as": "flow_rank"}], "sort": [{"field": "criticality_value", "order": "desc"}]},
+    {"filter": "datum.flow_rank <= 5"}
+  ],
+  "vconcat": [
+    {
+      "width": 560,
+      "height": 220,
+      "mark": "bar",
+      "encoding": {
+        "x": {
+          "field": "flow_name",
+          "type": "nominal",
+          "sort": "-y",
+          "axis": {
+            "title": "Flow",
+            "labelAngle": -45,
+            "labelFontSize": 10
+          }
+        },
+        "y": {
+          "field": "criticality_value",
+          "type": "quantitative",
+          "title": "Criticality"
+        },
+        "tooltip": [
+          {"field": "flow_name", "type": "nominal", "title": "Flow"},
+          {"field": "criticality_value", "type": "quantitative", "title": "Criticality", "format": ".4f"},
+          {"field": "node_count_value", "type": "quantitative", "title": "Nodes"}
+        ]
+      }
+    },
+    {
+      "width": 560,
+      "height": 220,
+      "mark": "bar",
+      "encoding": {
+        "x": {
+          "field": "flow_name",
+          "type": "nominal",
+          "sort": "-y",
+          "axis": {
+            "title": "Flow",
+            "labelAngle": -45,
+            "labelFontSize": 10
+          }
+        },
+        "y": {
+          "field": "node_count_value",
+          "type": "quantitative",
+          "title": "Node count"
+        },
+        "tooltip": [
+          {"field": "flow_name", "type": "nominal", "title": "Flow"},
+          {"field": "node_count_value", "type": "quantitative", "title": "Node count"},
+          {"field": "file_count", "type": "quantitative", "title": "Files"}
+        ]
+      }
+    }
+  ]
+}

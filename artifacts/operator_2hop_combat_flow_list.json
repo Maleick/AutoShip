@@ -1,0 +1,59 @@
+{
+  "scope": {
+    "files": [
+      "textquest-dll/src/combat/ability_cooldowns.rs",
+      "textquest-dll/src/combat/state.rs"
+    ],
+    "depth": 2
+  },
+  "summary": {
+    "flow_count": 76,
+    "non_design_flow_count": 74,
+    "top_flow_count": 25,
+    "top5": [
+      {
+        "name": "clear_flee_requested_restores_idle",
+        "criticality": 0.5267,
+        "node_count": 3,
+        "file_count": 1
+      },
+      {
+        "name": "downtime_rotation_groups_execute_while_idle",
+        "criticality": 0.4068,
+        "node_count": 28,
+        "file_count": 1
+      },
+      {
+        "name": "zone_disconnect_auto_disengages",
+        "criticality": 0.4068,
+        "node_count": 28,
+        "file_count": 1
+      },
+      {
+        "name": "zone_disconnect_during_casting_auto_disengages",
+        "criticality": 0.4068,
+        "node_count": 28,
+        "file_count": 1
+      },
+      {
+        "name": "zone_guard_clears_flee_requested",
+        "criticality": 0.4068,
+        "node_count": 28,
+        "file_count": 1
+      }
+    ]
+  },
+  "cross_module_note": "No high-coupling flow path was found between UI App/operator components and combat cooldown/state paths in 2-hop operator-focused scope.",
+  "source_examples": {
+    "clear_flee_requested_restores_idle": {
+      "id": 433,
+      "file": "textquest-dll/src/combat/state.rs",
+      "lines": "3398-3404"
+    },
+    "design_navCard_reference": {
+      "id": 11,
+      "file": "design_handoff_tui_refresh/mock/src/screen_navigation.js",
+      "lines": "9-39"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+metric,value
+community_a_components_handle_size,754
+community_a_file_count,114
+community_a_cohesion,0.1735
+community_a_language,tsx
+community_b_combat_target_size,3685
+community_b_file_count,121
+community_b_cohesion,0.1943
+community_b_language,rust
+components_App_callers,5
+components_App_callees,22
+components_OperatorDashboard_callers,4
+components_OperatorDashboard_callees,83
+combat_can_use_callers,14
+combat_can_use_callees,4
+crossover_components_to_combat,0
+crossover_combat_to_components,0

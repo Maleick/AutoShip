@@ -1,0 +1,4 @@
+commit,date,message,nodes,edges,files,tui_state_size,combat_target_size,delta_nodes_vs_prev,delta_edges_vs_prev,delta_files_vs_prev,delta_tui_state_vs_prev,delta_combat_target_vs_prev
+163aa704,2026-04-22,"feat(lua): script lifecycle unload/pause/resume + state enum (#1006) (#2332)",17360,120408,734,6532,3649,0,0,0,0,0
+23d23874,2026-04-22,"feat(mq2): API bridge translation layer (#1015) (#2333)",17466,121175,736,6600,3685,106,767,2,68,36
+43afdaea,2026-04-22,"chore: relocate clicky design docs, refresh metrics (#2334)",17466,121175,736,6600,3685,0,0,0,0,0

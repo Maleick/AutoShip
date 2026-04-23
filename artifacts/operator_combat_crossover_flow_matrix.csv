@@ -1,0 +1,4 @@
+source_surface,target_surface,flow_count,shared_nodes,status,note
+components-handle,combat-target,0,0,isolated,"No direct Operator/App/OperatorDashboard flows in 2-hop operator scope touch combat cooldown/state nodes"
+combat-target,components-handle,0,0,isolated,"No direct combat cooldown/state flows target Operator/App entry components"
+design-mock,combat-target,76,0,disconnected,"Design render/navigation flows remain in docs/design + mock paths"

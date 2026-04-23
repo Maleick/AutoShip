@@ -259,4 +259,4 @@ For bugs, feature requests, and architecture questions:
 - **GitHub Issues** — File issues at https://github.com/Maleick/TextQuest/issues
 - **Documentation** — Full guides in [`docs/wiki/`](.)
 - **Code examples** — See [`docs/dev/`](../dev) for developer patterns and testing
-- **AutoShip automation** — TextQuest uses autonomous agents (Claude, Codex, Gemini) for issue dispatch and PR validation
+- **AutoShip automation** — TextQuest uses autonomous agents (OpenCode Go, OpenCode Zen free, OpenAI, Claude, Codex) for issue dispatch and PR validation
