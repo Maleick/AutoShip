@@ -2625,6 +2625,21 @@ fn set_window_title_for_pid(pid: u32, title: &str) {
     }
 }
 
+fn send_command_result(success: bool, message: impl Into<String>) {
+    crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+        success,
+        message: message.into(),
+    });
+}
+
+fn send_unsupported_command(command_name: &'static str) {
+    tracing::warn!(command = command_name, "Unsupported command received");
+    send_command_result(
+        false,
+        format!("Command {command_name} is not supported by this DLL build"),
+    );
+}
+
 /// Dispatch a single IPC command received from the orchestrator.
 fn dispatch_command(cmd: textquest_common::ipc::Command) {
     use std::borrow::Cow;
@@ -2815,6 +2830,72 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 }
             }
             execute_slash_command(slash_command);
+        }
+        Command::MoveTo { x, y, z } => {
+            tracing::info!(x, y, z, "MoveTo received");
+            crate::nav::handle_command(crate::nav::NavCommand::Navigate(vec![
+                textquest_common::nav::Waypoint::new(x, y, z),
+            ]));
+        }
+        Command::StopMovement => {
+            tracing::info!("StopMovement received");
+            crate::nav::handle_command(crate::nav::NavCommand::Stop);
+            execute_slash_command("/stop");
+        }
+        Command::SetTarget { spawn_id } => {
+            tracing::info!(spawn_id, "SetTarget received");
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            if eq_base == 0 {
+                send_command_result(false, "Cannot set target before EQ base is initialized");
+                return;
+            }
+            let controller = super::targeting::TargetingController::new(eq_base);
+            match controller.set_target(spawn_id) {
+                Ok(()) => send_command_result(true, format!("Target set to spawn {spawn_id}")),
+                Err(error) => send_command_result(false, error.to_string()),
+            }
+        }
+        Command::ClearTarget => {
+            tracing::info!("ClearTarget received");
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            if eq_base == 0 {
+                send_command_result(false, "Cannot clear target before EQ base is initialized");
+                return;
+            }
+            let controller = super::targeting::TargetingController::new(eq_base);
+            match controller.clear_target() {
+                Ok(()) => send_command_result(true, "Target cleared"),
+                Err(error) => send_command_result(false, error.to_string()),
+            }
+        }
+        Command::Attack { target_id } => {
+            tracing::info!(target_id, "Attack received");
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+            if eq_base == 0 {
+                send_command_result(false, "Cannot attack before EQ base is initialized");
+                return;
+            }
+            let controller = super::targeting::TargetingController::new(eq_base);
+            match controller.set_target(target_id) {
+                Ok(()) => {
+                    crate::eq::toggle_auto_attack(true);
+                    send_command_result(true, format!("Auto-attack enabled on spawn {target_id}"));
+                }
+                Err(error) => send_command_result(false, error.to_string()),
+            }
+        }
+        Command::StopAttack => {
+            tracing::info!("StopAttack received");
+            crate::eq::toggle_auto_attack(false);
+            send_command_result(true, "Auto-attack disabled");
+        }
+        Command::Sit => {
+            tracing::info!("Sit received");
+            execute_slash_command("/sit");
+        }
+        Command::Stand => {
+            tracing::info!("Stand received");
+            execute_slash_command("/stand");
         }
         Command::NavigateTo { waypoints } => {
             crate::nav::handle_command(crate::nav::NavCommand::Navigate(waypoints));
@@ -3046,11 +3127,38 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 diagnostics,
             });
         }
+        Command::PollPackets => {
+            tracing::debug!("PollPackets reached game-loop dispatch after immediate IPC path");
+            let events = crate::ipc::drain_packet_responses();
+            crate::ipc::send_response(textquest_common::ipc::Response::PacketBatch { events });
+        }
+        Command::PollSpawnEvents => {
+            tracing::debug!("PollSpawnEvents reached game-loop dispatch after immediate IPC path");
+            let events = crate::ipc::drain_spawn_responses();
+            crate::ipc::send_response(textquest_common::ipc::Response::SpawnEventBatch { events });
+        }
+        Command::PollChat => {
+            tracing::debug!("PollChat reached game-loop dispatch after immediate IPC path");
+            let messages = crate::ipc::drain_chat_messages();
+            crate::ipc::send_response(textquest_common::ipc::Response::ChatBatch { messages });
+        }
         Command::QueryContainerSlots { filter } => {
             tracing::info!(?filter, "QueryContainerSlots received");
             let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
             let slots = crate::eq::inventory::query_open_container_slots(eq_base, &filter);
             crate::ipc::send_response(textquest_common::ipc::Response::ContainerSlots { slots });
+        }
+        Command::QueryBazaarResults { filter } => {
+            tracing::info!(?filter, "QueryBazaarResults received");
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
+            let windows = crate::eq::bazaar::query_bazaar_results(eq_base, &filter);
+            crate::ipc::send_response(textquest_common::ipc::Response::BazaarResults { windows });
+        }
+        Command::QueryMerchantItems { filter } => {
+            tracing::info!(?filter, "QueryMerchantItems received");
+            let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Relaxed);
+            let windows = crate::eq::merchant::query_merchant_items(eq_base, &filter);
+            crate::ipc::send_response(textquest_common::ipc::Response::MerchantItems { windows });
         }
         Command::QueryContextMenu => {
             tracing::info!("QueryContextMenu received");
@@ -3091,6 +3199,15 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         }
         Command::Ping => {
             tracing::info!("Ping received");
+        }
+        Command::JoinGroup { .. } => {
+            send_unsupported_command("JoinGroup");
+        }
+        Command::ApplyBuffs => {
+            send_unsupported_command("ApplyBuffs");
+        }
+        Command::ReportReady => {
+            send_unsupported_command("ReportReady");
         }
         Command::StartLogin {
             account_name,
@@ -3136,6 +3253,20 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             crate::combat::handle_command(crate::combat::CombatCommand::SetAssistTarget {
                 spawn_id,
             });
+        }
+        Command::CombatForceAbility { ability_id } => {
+            tracing::info!(ability_id, "CombatForceAbility received");
+            crate::eq::do_combat_ability(ability_id as i32, true);
+            send_command_result(true, format!("Combat ability {ability_id} requested"));
+        }
+        Command::CombatEmergencyHeal { .. } => {
+            send_unsupported_command("CombatEmergencyHeal");
+        }
+        Command::HealClaimTarget { .. } => {
+            send_unsupported_command("HealClaimTarget");
+        }
+        Command::HealReleaseClaim { .. } => {
+            send_unsupported_command("HealReleaseClaim");
         }
         Command::UpdateSharedClientStates { states } => {
             tracing::debug!(count = states.len(), "UpdateSharedClientStates received");
@@ -3183,6 +3314,33 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             tracing::info!(%mode, "SetRenderMode received");
             crate::hooks::render::set_mode(mode);
             crate::ipc::send_response(textquest_common::ipc::Response::RenderModeChanged { mode });
+        }
+        Command::SetHookState { .. } => {
+            send_unsupported_command("SetHookState");
+        }
+        Command::SetCamera { .. } => {
+            send_unsupported_command("SetCamera");
+        }
+        Command::Say { .. } => {
+            send_unsupported_command("Say");
+        }
+        Command::Emote { .. } => {
+            send_unsupported_command("Emote");
+        }
+        Command::SoulAction { .. } => {
+            send_unsupported_command("SoulAction");
+        }
+        Command::SoulControl { .. } => {
+            send_unsupported_command("SoulControl");
+        }
+        Command::RequestZone { .. } => {
+            send_unsupported_command("RequestZone");
+        }
+        Command::FlushMovementQueue => {
+            send_unsupported_command("FlushMovementQueue");
+        }
+        Command::RequestSafeCoords(_) => {
+            send_unsupported_command("RequestSafeCoords");
         }
         Command::CaptureScreenshot => {
             tracing::info!("CaptureScreenshot received");
@@ -3402,9 +3560,6 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             );
             configure_window_title(format, server_name);
             update_window_title();
-        }
-        other => {
-            tracing::debug!(?other, "Unhandled command");
         }
     }
 }
@@ -4098,6 +4253,40 @@ mod tests {
             events.is_empty(),
             "initial snapshots should be used as baseline without emission"
         );
+    }
+
+    #[test]
+    fn set_target_reports_failure_when_eq_base_is_not_initialized() {
+        crate::EQ_BASE.store(0, std::sync::atomic::Ordering::SeqCst);
+
+        let responses = crate::ipc::with_ipc_running_for_test(|| {
+            dispatch_command(textquest_common::ipc::Command::SetTarget { spawn_id: 123 });
+            crate::ipc::drain_responses()
+        });
+
+        assert!(matches!(
+            responses.as_slice(),
+            [textquest_common::ipc::Response::CommandResult {
+                success: false,
+                message
+            }] if message.contains("Cannot set target")
+        ));
+    }
+
+    #[test]
+    fn unsupported_issue_backed_commands_return_explicit_failure() {
+        let responses = crate::ipc::with_ipc_running_for_test(|| {
+            dispatch_command(textquest_common::ipc::Command::JoinGroup { group_id: 3 });
+            crate::ipc::drain_responses()
+        });
+
+        assert!(matches!(
+            responses.as_slice(),
+            [textquest_common::ipc::Response::CommandResult {
+                success: false,
+                message
+            }] if message.contains("JoinGroup") && message.contains("not supported")
+        ));
     }
 
     #[test]

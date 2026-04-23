@@ -81,13 +81,13 @@ fn main() -> ExitCode {
         Commands::Diagnose { session_id } => match client.get_diagnostics(session_id) {
             Ok(diag) => {
                 println!("=== Diagnostics for Session {} ===", session_id);
-                println!("Memory: {} MB", diag.memory_mb);
-                println!("CPU %: {}", diag.cpu_percent);
-                println!("IPC Latency (ms):");
-                println!("  p50: {}", diag.ipc_latency_p50);
-                println!("  p95: {}", diag.ipc_latency_p95);
-                println!("  p99: {}", diag.ipc_latency_p99);
-                println!("Status: {}", diag.status);
+                println!("Character: {}", diag.character_name);
+                println!("Zone: {}", diag.zone);
+                println!("Uptime: {} seconds", diag.uptime_seconds);
+                println!("HP: {:.1}%", diag.hp);
+                println!("Mana: {:.1}%", diag.mana);
+                println!("Actions: {}", diag.action_count);
+                println!("Errors: {}", diag.error_count);
                 ExitCode::SUCCESS
             }
             Err(e) => {
@@ -152,12 +152,15 @@ fn main() -> ExitCode {
                             println!(
                                 "Session {}: {} ({}) - {} [{}]",
                                 session.session_id,
-                                session
-                                    .character_name
-                                    .unwrap_or_else(|| "Unknown".to_string()),
+                                session.character_name,
                                 session.class_name.unwrap_or_else(|| "Unknown".to_string()),
-                                session.routing_scope.label,
-                                format!("{:?}", session.lifecycle_state).to_lowercase()
+                                session
+                                    .routing_scope
+                                    .unwrap_or_else(|| "unassigned".to_string()),
+                                session
+                                    .lifecycle
+                                    .or(session.status)
+                                    .unwrap_or_else(|| "unknown".to_string())
                             );
                         }
                     }

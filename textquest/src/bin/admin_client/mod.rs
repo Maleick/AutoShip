@@ -7,34 +7,33 @@ use std::io::Read;
 
 pub struct AdminClient {
     base_url: String,
+    origin: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SessionInfo {
-    pub session_id: u32,
-    pub character_name: Option<String>,
+    pub session_id: String,
+    pub character_name: String,
     pub class_name: Option<String>,
-    pub group_id: u8,
-    pub routing_scope: RoutingScope,
-    pub lifecycle_state: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct RoutingScope {
-    pub kind: String,
-    pub label: String,
     pub group_id: Option<u8>,
-    pub toon_name: Option<String>,
+    pub routing_scope: Option<String>,
+    pub lifecycle: Option<String>,
+    pub status: Option<String>,
+    pub zone: Option<String>,
+    pub level: Option<u32>,
+    pub last_heartbeat: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Diagnostics {
-    pub memory_mb: u64,
-    pub cpu_percent: f32,
-    pub ipc_latency_p50: f64,
-    pub ipc_latency_p95: f64,
-    pub ipc_latency_p99: f64,
-    pub status: String,
+    pub session_id: u32,
+    pub uptime_seconds: u64,
+    pub character_name: String,
+    pub zone: String,
+    pub hp: f32,
+    pub mana: f32,
+    pub action_count: u64,
+    pub error_count: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,9 +83,9 @@ pub struct ErrorResponse {
 
 impl AdminClient {
     pub fn new(base_url: &str) -> Self {
-        Self {
-            base_url: base_url.to_string(),
-        }
+        let base_url = base_url.trim_end_matches('/').to_string();
+        let origin = origin_from_base_url(&base_url);
+        Self { base_url, origin }
     }
 
     fn get<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T, String> {
@@ -115,6 +114,7 @@ impl AdminClient {
     fn post<T: for<'de> Deserialize<'de>>(&self, path: &str) -> Result<T, String> {
         let url = format!("{}{}", self.base_url, path);
         let response = ureq::post(&url)
+            .set("Origin", &self.origin)
             .call()
             .map_err(|e| format!("Request failed: {}", e))?;
 
@@ -183,6 +183,19 @@ impl AdminClient {
     }
 }
 
+fn origin_from_base_url(base_url: &str) -> String {
+    let trimmed = base_url.trim_end_matches('/');
+    let Some((scheme, rest)) = trimmed.split_once("://") else {
+        return trimmed.to_string();
+    };
+    let authority = rest.split('/').next().unwrap_or(rest);
+    if authority.is_empty() {
+        trimmed.to_string()
+    } else {
+        format!("{scheme}://{authority}")
+    }
+}
+
 fn main() {}
 
 #[cfg(test)]
@@ -222,5 +235,76 @@ mod tests {
         assert_eq!(resp.session_id, 42);
         assert_eq!(resp.backup_id, "backup-2024-04-18-123456");
         assert!(resp.message.contains("Restore"));
+    }
+
+    #[test]
+    fn session_info_deserializes_backend_admin_record() {
+        let json = r#"{
+            "session_id": "session-42",
+            "character_name": "Cleric",
+            "profile": null,
+            "group_id": 2,
+            "routing_scope": "group:2:main",
+            "lifecycle": "active",
+            "status": "active",
+            "zone": "Plane of Knowledge",
+            "level": 65,
+            "class_name": "CLR",
+            "last_heartbeat": null
+        }"#;
+
+        let session: SessionInfo = serde_json::from_str(json).expect("parse admin session");
+
+        assert_eq!(session.session_id, "session-42");
+        assert_eq!(session.character_name, "Cleric");
+        assert_eq!(session.class_name.as_deref(), Some("CLR"));
+        assert_eq!(session.group_id, Some(2));
+        assert_eq!(session.routing_scope.as_deref(), Some("group:2:main"));
+        assert_eq!(session.lifecycle.as_deref(), Some("active"));
+    }
+
+    #[test]
+    fn diagnostics_deserializes_backend_payload() {
+        let json = r#"{
+            "session_id": 42,
+            "uptime_seconds": 3600,
+            "character_name": "Cleric",
+            "zone": "Plane of Knowledge",
+            "hp": 88.5,
+            "mana": 76.0,
+            "action_count": 12,
+            "error_count": 1
+        }"#;
+
+        let diagnostics: Diagnostics = serde_json::from_str(json).expect("parse diagnostics");
+
+        assert_eq!(diagnostics.session_id, 42);
+        assert_eq!(diagnostics.uptime_seconds, 3600);
+        assert_eq!(diagnostics.character_name, "Cleric");
+        assert_eq!(diagnostics.zone, "Plane of Knowledge");
+        assert_eq!(diagnostics.hp, 88.5);
+        assert_eq!(diagnostics.mana, 76.0);
+        assert_eq!(diagnostics.action_count, 12);
+        assert_eq!(diagnostics.error_count, 1);
+    }
+
+    #[test]
+    fn admin_client_normalizes_base_url_and_origin() {
+        let client = AdminClient::new("http://127.0.0.1:3001/api/");
+
+        assert_eq!(client.base_url, "http://127.0.0.1:3001/api");
+        assert_eq!(client.origin, "http://127.0.0.1:3001");
+    }
+
+    #[test]
+    fn origin_from_base_url_handles_plain_host_urls() {
+        assert_eq!(
+            origin_from_base_url("http://localhost:3001/"),
+            "http://localhost:3001"
+        );
+        assert_eq!(
+            origin_from_base_url("https://example.invalid/admin/api"),
+            "https://example.invalid"
+        );
     }
 }

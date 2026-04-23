@@ -178,7 +178,7 @@ impl<'tick> MQ2Bridge<'tick> {
     #[cfg(all(windows, feature = "spell-system"))]
     pub fn has_spell_ready(&self, name: &str) -> bool {
         tracing::debug!(spell = name, "MQ2Bridge::has_spell_ready");
-        let ready = spell_is_ready(name);
+        let ready = Self::spell_is_ready(name);
         tracing::debug!(spell = name, ready, "MQ2Bridge::has_spell_ready result");
         ready
     }
@@ -192,6 +192,19 @@ impl<'tick> MQ2Bridge<'tick> {
         tracing::debug!(
             spell = name,
             "MQ2Bridge::has_spell_ready: spell-system unavailable on this build, returning false"
+        );
+        false
+    }
+
+    #[cfg(all(windows, feature = "spell-system"))]
+    fn spell_is_ready(name: &str) -> bool {
+        if name.trim().is_empty() {
+            return false;
+        }
+
+        tracing::debug!(
+            spell = name,
+            "spell-system readiness lookup is not wired to live gem timers yet"
         );
         false
     }

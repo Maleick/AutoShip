@@ -259,8 +259,7 @@ fn cmd_status(scripts: &dyn ScriptManager, plugins: &Mutex<PluginRegistry>) {
 
 /// Split `s` into the first whitespace-delimited word and the remainder.
 ///
-/// ```
-/// # use textquest::commands::builtins::*; // not pub, just for clarity
+/// ```ignore
 /// assert_eq!(split_first_word("reload mymod"), ("reload", " mymod"));
 /// assert_eq!(split_first_word(""), ("", ""));
 /// assert_eq!(split_first_word("status"), ("status", ""));
@@ -417,6 +416,13 @@ mod tests {
 
     fn setup() -> SharedCommandRegistry {
         setup_with(StubScripts::new())
+    }
+
+    #[test]
+    fn split_first_word_handles_empty_single_and_remainder() {
+        assert_eq!(split_first_word("reload mymod"), ("reload", " mymod"));
+        assert_eq!(split_first_word(""), ("", ""));
+        assert_eq!(split_first_word("status"), ("status", ""));
     }
 
     // ── Dispatch: each subcommand dispatches through /textquest ───────────

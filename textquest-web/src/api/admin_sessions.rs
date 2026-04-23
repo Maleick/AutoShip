@@ -45,6 +45,16 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupId {
+    pub backup_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupList {
+    pub backups: Vec<BackupId>,
+}
+
 fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
     (
         status,
@@ -56,15 +66,12 @@ fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Js
 
 // ─── Session Lifecycle Handlers ────────────────────────────────────────────────
 
-/// Restart a session by ID.
-///
-/// Emits a "session:restart:{id}" event on the broadcast channel that the
-/// orchestrator subscribes to. Returns 404 if the session ID does not exist.
-pub async fn restart_session(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<u32>,
+async fn queue_lifecycle_operation(
+    state: Arc<AppState>,
+    id: u32,
     headers: HeaderMap,
-) -> impl IntoResponse {
+    operation: &'static str,
+) -> axum::response::Response {
     if !crate::api::loot::is_trusted_origin(&headers) {
         return json_error(
             StatusCode::FORBIDDEN,
@@ -77,16 +84,105 @@ pub async fn restart_session(
         return e.into_response();
     }
 
-    let event = format!("session:restart:{}", id);
+    let event = format!("session:{operation}:{id}");
     let _ = state.event_tx.send(event);
 
     let response = SessionLifecycleResponse {
         session_id: id,
-        operation: "restart".to_string(),
-        message: format!("Restart request queued for session {}", id),
+        operation: operation.to_string(),
+        message: format!("{operation} request queued for session {id}"),
     };
 
     (StatusCode::ACCEPTED, Json(response)).into_response()
+}
+
+/// Start a session by ID.
+pub async fn start_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<u32>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    queue_lifecycle_operation(state, id, headers, "start").await
+}
+
+/// Stop a session by ID.
+pub async fn stop_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<u32>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    queue_lifecycle_operation(state, id, headers, "stop").await
+}
+
+/// Restart a session by ID.
+///
+/// Emits a "session:restart:{id}" event on the broadcast channel that the
+/// orchestrator subscribes to. Returns 404 if the session ID does not exist.
+pub async fn restart_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<u32>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    queue_lifecycle_operation(state, id, headers, "restart").await
+}
+
+pub async fn list_backups(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<u32>,
+) -> impl IntoResponse {
+    if let Err(e) = validate_session_exists(&state, id).await {
+        return e.into_response();
+    }
+
+    (StatusCode::OK, Json(BackupList { backups: vec![] })).into_response()
+}
+
+pub async fn create_backup(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<u32>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if !crate::api::loot::is_trusted_origin(&headers) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "Forbidden: untrusted origin for session backup mutation",
+        )
+        .into_response();
+    }
+
+    if let Err(e) = validate_session_exists(&state, id).await {
+        return e.into_response();
+    }
+
+    json_error(
+        StatusCode::NOT_IMPLEMENTED,
+        "Session backup creation is not implemented in this build",
+    )
+    .into_response()
+}
+
+pub async fn restore_backup(
+    State(state): State<Arc<AppState>>,
+    Path((id, _backup_id)): Path<(u32, String)>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if !crate::api::loot::is_trusted_origin(&headers) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "Forbidden: untrusted origin for session backup mutation",
+        )
+        .into_response();
+    }
+
+    if let Err(e) = validate_session_exists(&state, id).await {
+        return e.into_response();
+    }
+
+    json_error(
+        StatusCode::NOT_IMPLEMENTED,
+        "Session backup restore is not implemented in this build",
+    )
+    .into_response()
 }
 
 // ─── Helper Functions ──────────────────────────────────────────────────────────
@@ -150,8 +246,12 @@ fn read_live_sessions(
 /// Build the admin sessions sub-router.
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/{id}/start", post(start_session))
+        .route("/{id}/stop", post(stop_session))
         .route("/{id}/restart", post(restart_session))
         .route("/{id}/config-audit", get(audit_config))
+        .route("/{id}/backups", get(list_backups).post(create_backup))
+        .route("/{id}/backups/{backup_id}/restore", post(restore_backup))
 }
 
 // ─── Config Audit Endpoint ────────────────────────────────────────────────────
@@ -232,5 +332,77 @@ mod tests {
             .expect("response");
 
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn lifecycle_routes_accept_trusted_local_origin() {
+        for operation in ["start", "stop", "restart"] {
+            let state = crate::test_support::demo_app_state();
+            let app = router().with_state(state);
+
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(format!("/1/{operation}"))
+                        .header(header::ORIGIN, "http://127.0.0.1:3001")
+                        .body(Body::empty())
+                        .expect("request"),
+                )
+                .await
+                .expect("response");
+
+            assert_eq!(
+                response.status(),
+                StatusCode::ACCEPTED,
+                "{operation} should be mounted and accepted"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn backup_routes_are_explicitly_mounted() {
+        let state = crate::test_support::demo_app_state();
+        let app = router().with_state(state);
+
+        let list_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/1/backups")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(list_response.status(), StatusCode::OK);
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/1/backups")
+                    .header(header::ORIGIN, "http://127.0.0.1:3001")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(create_response.status(), StatusCode::NOT_IMPLEMENTED);
+
+        let restore_response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/1/backups/example/restore")
+                    .header(header::ORIGIN, "http://127.0.0.1:3001")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(restore_response.status(), StatusCode::NOT_IMPLEMENTED);
     }
 }

@@ -217,6 +217,29 @@ pub fn drain_responses() -> Vec<Response> {
     std::mem::take(&mut *queue)
 }
 
+#[cfg(test)]
+pub(crate) fn with_ipc_running_for_test<T>(f: impl FnOnce() -> T) -> T {
+    static TEST_IPC_STATE_LOCK: Mutex<()> = Mutex::new(());
+
+    struct RestoreRunning(bool);
+
+    impl Drop for RestoreRunning {
+        fn drop(&mut self) {
+            IPC_RUNNING.store(self.0, Ordering::SeqCst);
+            let _ = drain_responses();
+        }
+    }
+
+    let _lock = TEST_IPC_STATE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let old_running = IPC_RUNNING.swap(true, Ordering::SeqCst);
+    let _ = drain_responses();
+    let _restore = RestoreRunning(old_running);
+
+    f()
+}
+
 /// Drain only `SpawnEventBatch`-relevant responses from `PENDING_RESPONSES`,
 /// leaving all other variants in the queue.
 ///
@@ -391,6 +414,45 @@ fn handle_immediate_command(cmd: &Command) -> bool {
     }
 }
 
+fn immediate_response_for_command(
+    cmd: &Command,
+    client_id: ClientId,
+    correlation_id: Option<u64>,
+) -> Option<IpcResponse> {
+    let response = match cmd {
+        Command::Ping => Response::Pong {
+            client_id,
+            timestamp_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_millis() as u64),
+        },
+        Command::PollPackets => Response::PacketBatch {
+            events: drain_packet_responses(),
+        },
+        Command::PollSpawnEvents => Response::SpawnEventBatch {
+            events: drain_spawn_responses(),
+        },
+        Command::PollChat => Response::ChatBatch {
+            messages: drain_chat_messages(),
+        },
+        Command::QueryBazaarResults { filter } => {
+            let eq_base = crate::EQ_BASE.load(Ordering::Relaxed);
+            Response::BazaarResults {
+                windows: crate::eq::bazaar::query_bazaar_results(eq_base, filter),
+            }
+        }
+        Command::QueryMerchantItems { filter } => {
+            let eq_base = crate::EQ_BASE.load(Ordering::Relaxed);
+            Response::MerchantItems {
+                windows: crate::eq::merchant::query_merchant_items(eq_base, filter),
+            }
+        }
+        _ => return None,
+    };
+
+    Some(IpcResponse::echo(response, correlation_id))
+}
+
 /// Background thread: creates a `CommandListener` and loops receiving commands
 /// until `IPC_RUNNING` is cleared or the DLL is shutting down.
 fn listener_loop(client_id: ClientId, token: SessionToken) {
@@ -429,62 +491,10 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                     continue;
                 }
 
-                // Respond to Ping inline — no need to queue.
-                if matches!(&cmd, Command::Ping) {
-                    let _ = listener.respond(&IpcResponse::echo(
-                        Response::Pong {
-                            client_id,
-                            timestamp_ms: std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .map_or(0, |d| d.as_millis() as u64),
-                        },
-                        correlation_id,
-                    ));
-                    listener.disconnect();
-                    continue;
-                }
-
-                // Respond to PollPackets inline — drain only packet events.
-                // Uses drain_packet_responses() so other queued responses are preserved.
-                if matches!(&cmd, Command::PollPackets) {
-                    let events = drain_packet_responses();
-                    let _ = listener.respond(&IpcResponse::echo(
-                        Response::PacketBatch { events },
-                        correlation_id,
-                    ));
-                    listener.disconnect();
-                    continue;
-                }
-
-                // Respond to PollSpawnEvents inline — drain only spawn event responses.
-                if matches!(&cmd, Command::PollSpawnEvents) {
-                    let events = drain_spawn_responses();
-                    let _ = listener.respond(&IpcResponse::echo(
-                        Response::SpawnEventBatch { events },
-                        correlation_id,
-                    ));
-                    listener.disconnect();
-                    continue;
-                }
-
-                // Respond to PollChat inline — drain accumulated chat messages.
-                if matches!(&cmd, Command::PollChat) {
-                    let messages = drain_chat_messages();
-                    let _ = listener.respond(&IpcResponse::echo(
-                        Response::ChatBatch { messages },
-                        correlation_id,
-                    ));
-                    listener.disconnect();
-                    continue;
-                }
-
-                if let Command::QueryMerchantItems { filter } = &cmd {
-                    let eq_base = crate::EQ_BASE.load(Ordering::Relaxed);
-                    let windows = crate::eq::merchant::query_merchant_items(eq_base, filter);
-                    let _ = listener.respond(&IpcResponse::echo(
-                        Response::MerchantItems { windows },
-                        correlation_id,
-                    ));
+                if let Some(response) =
+                    immediate_response_for_command(&cmd, client_id, correlation_id)
+                {
+                    let _ = listener.respond(&response);
                     listener.disconnect();
                     continue;
                 }
@@ -622,6 +632,35 @@ mod tests {
             };
             publish_state(&frame); // must not panic
         }
+    }
+
+    #[test]
+    fn immediate_bazaar_query_returns_correlated_response() {
+        let response = immediate_response_for_command(
+            &Command::QueryBazaarResults {
+                filter: textquest_common::ipc::BazaarQuery {
+                    text_contains: Some("fungi".to_string()),
+                    max_rows: Some(5),
+                },
+            },
+            42,
+            Some(99),
+        )
+        .expect("bazaar query should be handled inline");
+
+        assert_eq!(response.correlation_id, Some(99));
+        assert!(matches!(
+            response.response,
+            Response::BazaarResults { windows } if windows.is_empty()
+        ));
+    }
+
+    #[test]
+    fn non_immediate_commands_are_left_for_game_loop_dispatch() {
+        let response =
+            immediate_response_for_command(&Command::SetTarget { spawn_id: 7 }, 42, None);
+
+        assert!(response.is_none());
     }
 
     // ─── stop() is idempotent ─────────────────────────────────────────────────
