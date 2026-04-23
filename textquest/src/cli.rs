@@ -1681,6 +1681,7 @@ fn print_shutdown_report(events: &[crate::orchestrator_loop::LoopEvent]) {
             LoopEvent::PeerDiscovered { .. } => peers_discovered += 1,
             LoopEvent::PeerExpired { .. } => peers_expired += 1,
             LoopEvent::HealthCheckDone { .. } => health_checks += 1,
+            LoopEvent::ProgressReported(_) => {}
             LoopEvent::ShuttingDown => {}
         }
     }
