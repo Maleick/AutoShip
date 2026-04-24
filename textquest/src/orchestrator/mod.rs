@@ -31,7 +31,7 @@ use crate::{
 };
 use std::{
     collections::HashMap,
-    fs, io,
+    env, fs, io,
     path::{Path, PathBuf},
     time::{Duration, Instant, SystemTime},
 };
@@ -63,12 +63,26 @@ const CC_EXPIRY_BUFFER: u64 = 3;
 /// How often to check the persisted character config file for reward updates.
 const REWARD_CONFIG_SYNC_INTERVAL: u64 = 50;
 
+/// Returns the runtime data root: `TEXTQUEST_DATA_DIR`, exe parent, then cwd fallback.
+fn data_dir() -> PathBuf {
+    if let Ok(dir) = env::var("TEXTQUEST_DATA_DIR")
+        && !dir.trim().is_empty()
+    {
+        return PathBuf::from(dir);
+    }
+
+    env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(PathBuf::from))
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
 fn character_config_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../config/character-configs.json")
+    data_dir().join("config/character-configs.json")
 }
 
 fn live_session_snapshot_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../data/runtime/live_sessions.json")
+    data_dir().join("data/runtime/live_sessions.json")
 }
 
 fn admin_session_snapshot_path() -> PathBuf {
