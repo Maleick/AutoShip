@@ -175,14 +175,55 @@ pub enum AutoAcceptRequestKind {
     GroupInvite,
     /// Trade confirmation window.
     Trade,
+    /// NPC quest update prompt.
+    QuestUpdate,
+    /// NPC quest completion or reward prompt.
+    QuestCompletion,
+    /// Resurrection confirmation prompt.
+    Resurrection,
     /// Task offer or task add prompt.
     TaskAdd,
+    /// Shared task invitation prompt.
+    TaskInvite,
+    /// Mission offer or invitation prompt.
+    MissionInvite,
     /// Dynamic zone / expedition offer prompt.
     DzAdd,
+    /// Raid invitation prompt.
+    RaidInvite,
+    /// Fellowship invitation prompt.
+    FellowshipInvite,
     /// Wizard or druid translocate prompt.
     Translocate,
     /// Primary/secondary anchor teleport prompt.
     Anchor,
+}
+
+/// Action to take when an auto-accept policy rule matches a dialog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoAcceptAction {
+    /// Click the dialog's affirmative button.
+    Accept,
+    /// Click the dialog's negative button when one is known.
+    Decline,
+    /// Leave the dialog untouched.
+    Ignore,
+}
+
+/// Optional source/text-specific override for incoming dialog automation.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AutoAcceptRule {
+    /// Dialog kind the rule applies to.
+    pub kind: AutoAcceptRequestKind,
+    /// Action to apply when the rule matches.
+    pub action: AutoAcceptAction,
+    /// Case-insensitive source substring required for a match.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_contains: Option<String>,
+    /// Case-insensitive dialog text substring required for a match.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_contains: Option<String>,
 }
 
 /// Trust policy for incoming auto-accept requests.
@@ -217,6 +258,21 @@ pub struct AutoAcceptSettings {
     pub trust_mode: AutoAcceptTrustMode,
     /// Case-insensitive character allowlist used when `trust_mode = TrustList`.
     pub trusted_players: Vec<String>,
+    /// Case-insensitive source allowlist applied before default accepts.
+    #[serde(default)]
+    pub source_allowlist: Vec<String>,
+    /// Case-insensitive source denylist applied before accepts.
+    #[serde(default)]
+    pub source_blocklist: Vec<String>,
+    /// Case-insensitive dialog text denylist applied before accepts.
+    #[serde(default)]
+    pub text_blocklist: Vec<String>,
+    /// Explicit source/text block matches should click decline when possible.
+    #[serde(default)]
+    pub decline_blocked: bool,
+    /// Ordered source/text-specific rules that can accept, decline, or ignore.
+    #[serde(default)]
+    pub rules: Vec<AutoAcceptRule>,
 }
 
 impl AutoAcceptSettings {
@@ -235,8 +291,17 @@ impl AutoAcceptSettings {
         match kind {
             AutoAcceptRequestKind::GroupInvite => self.accept_group_invites,
             AutoAcceptRequestKind::Trade => self.accept_trades,
+            AutoAcceptRequestKind::QuestUpdate
+            | AutoAcceptRequestKind::QuestCompletion
+            | AutoAcceptRequestKind::Resurrection => false,
             AutoAcceptRequestKind::TaskAdd => self.accept_task_adds,
+            AutoAcceptRequestKind::TaskInvite | AutoAcceptRequestKind::MissionInvite => {
+                self.accept_task_adds
+            }
             AutoAcceptRequestKind::DzAdd => self.accept_dz_adds,
+            AutoAcceptRequestKind::RaidInvite | AutoAcceptRequestKind::FellowshipInvite => {
+                self.accept_group_invites
+            }
             AutoAcceptRequestKind::Translocate => self.accept_translocates,
             AutoAcceptRequestKind::Anchor => self.accept_anchors,
         }
@@ -255,6 +320,11 @@ impl Default for AutoAcceptSettings {
             accept_anchors: true,
             trust_mode: AutoAcceptTrustMode::Anyone,
             trusted_players: Vec::new(),
+            source_allowlist: Vec::new(),
+            source_blocklist: Vec::new(),
+            text_blocklist: Vec::new(),
+            decline_blocked: false,
+            rules: Vec::new(),
         }
     }
 }

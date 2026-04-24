@@ -17,7 +17,8 @@ use std::{
 };
 
 use textquest_common::ipc::{
-    AutoAcceptRequestKind, AutoAcceptSettings, AutoAcceptTrustMode, AutoRezConfig,
+    AutoAcceptAction, AutoAcceptRequestKind, AutoAcceptRule, AutoAcceptSettings,
+    AutoAcceptTrustMode, AutoRezConfig,
 };
 
 /// Whether auto-accept is enabled. Disabled by default; toggled via IPC
@@ -36,10 +37,44 @@ const REZ_CONFIRM_DIALOG: &str = "ConfirmationDialogBox";
 const REZ_CONFIRM_TEXT_CHILD: &str = "cd_textoutput";
 const REZ_YES_BUTTONS: &[&str] = &["Yes_Button", "CD_Yes_Button"];
 const REZ_NO_BUTTONS: &[&str] = &["No_Button", "CD_No_Button"];
-const GENERIC_DIALOG_ACCEPT_PAIRS: &[(&str, &str)] = &[
-    ("TradeWnd", "TRDW_Trade_Button"),
-    ("TaskSelectWnd", "TaskSelectAcceptButton"),
+const TRADE_ACCEPT_BUTTONS: &[&str] = &["TRDW_Trade_Button"];
+const TASK_ACCEPT_BUTTONS: &[&str] = &["TASKSEL_AcceptButton", "TaskSelectAcceptButton"];
+const CONFIRM_ACCEPT_BUTTONS: &[&str] = &["Yes_Button", "CD_Yes_Button"];
+const CONFIRM_DECLINE_BUTTONS: &[&str] = &["No_Button", "CD_No_Button"];
+const GENERIC_DIALOG_SPECS: &[DialogSpec] = &[
+    DialogSpec {
+        parent_sidl: "TRDW_TradeRequestWnd",
+        default_kind: Some(AutoAcceptRequestKind::Trade),
+        accept_buttons: TRADE_ACCEPT_BUTTONS,
+        decline_buttons: &[],
+    },
+    DialogSpec {
+        parent_sidl: "TradeWnd",
+        default_kind: Some(AutoAcceptRequestKind::Trade),
+        accept_buttons: TRADE_ACCEPT_BUTTONS,
+        decline_buttons: &[],
+    },
+    DialogSpec {
+        parent_sidl: "TaskSelectWnd",
+        default_kind: Some(AutoAcceptRequestKind::TaskAdd),
+        accept_buttons: TASK_ACCEPT_BUTTONS,
+        decline_buttons: &[],
+    },
+    DialogSpec {
+        parent_sidl: REZ_CONFIRM_DIALOG,
+        default_kind: None,
+        accept_buttons: CONFIRM_ACCEPT_BUTTONS,
+        decline_buttons: CONFIRM_DECLINE_BUTTONS,
+    },
 ];
+
+#[derive(Debug, Clone, Copy)]
+struct DialogSpec {
+    parent_sidl: &'static str,
+    default_kind: Option<AutoAcceptRequestKind>,
+    accept_buttons: &'static [&'static str],
+    decline_buttons: &'static [&'static str],
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RezOffer {
@@ -137,16 +172,210 @@ fn current_auto_accept_settings() -> AutoAcceptSettings {
         .clone()
 }
 
-fn allows_unverified_generic_auto_accept(settings: &AutoAcceptSettings) -> bool {
-    settings.enabled && matches!(settings.trust_mode, AutoAcceptTrustMode::Anyone)
+fn generic_dialog_kind(
+    parent_sidl: &str,
+    dialog_text: Option<&str>,
+) -> Option<AutoAcceptRequestKind> {
+    match parent_sidl {
+        "TRDW_TradeRequestWnd" | "TradeWnd" => Some(AutoAcceptRequestKind::Trade),
+        "TaskSelectWnd" => Some(AutoAcceptRequestKind::TaskAdd),
+        REZ_CONFIRM_DIALOG => dialog_text.and_then(classify_confirmation_dialog_text),
+        _ => dialog_text.and_then(classify_confirmation_dialog_text),
+    }
 }
 
-fn generic_dialog_kind(parent_sidl: &str) -> Option<AutoAcceptRequestKind> {
-    match parent_sidl {
-        "TradeWnd" => Some(AutoAcceptRequestKind::Trade),
-        "TaskSelectWnd" => Some(AutoAcceptRequestKind::TaskAdd),
-        _ => None,
+fn classify_confirmation_dialog_text(text: &str) -> Option<AutoAcceptRequestKind> {
+    let lower = textquest_common::chat::strip_stml(text).to_ascii_lowercase();
+
+    if is_rez_offer_text(&lower) {
+        return Some(AutoAcceptRequestKind::Resurrection);
     }
+    if lower.contains("translocate") || lower.contains("evacuate") {
+        return Some(AutoAcceptRequestKind::Translocate);
+    }
+    if lower.contains("anchor") {
+        return Some(AutoAcceptRequestKind::Anchor);
+    }
+    if lower.contains("fellowship") {
+        return Some(AutoAcceptRequestKind::FellowshipInvite);
+    }
+    if lower.contains("raid") && lower.contains("invite") {
+        return Some(AutoAcceptRequestKind::RaidInvite);
+    }
+    if lower.contains("group") && lower.contains("invite") {
+        return Some(AutoAcceptRequestKind::GroupInvite);
+    }
+    if lower.contains("dynamic zone") || lower.contains("expedition") {
+        return Some(AutoAcceptRequestKind::DzAdd);
+    }
+    if lower.contains("mission") {
+        return Some(AutoAcceptRequestKind::MissionInvite);
+    }
+    if lower.contains("shared task") || lower.contains("task invite") {
+        return Some(AutoAcceptRequestKind::TaskInvite);
+    }
+    if lower.contains("task") {
+        return Some(AutoAcceptRequestKind::TaskAdd);
+    }
+    if lower.contains("quest") && (lower.contains("complete") || lower.contains("reward")) {
+        return Some(AutoAcceptRequestKind::QuestCompletion);
+    }
+    if lower.contains("quest") {
+        return Some(AutoAcceptRequestKind::QuestUpdate);
+    }
+    if lower.contains("trade") {
+        return Some(AutoAcceptRequestKind::Trade);
+    }
+
+    None
+}
+
+fn sanitize_source_candidate(candidate: &str) -> Option<String> {
+    let source = candidate
+        .trim()
+        .trim_matches(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_' && ch != '-' && ch != ' ')
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    if source.is_empty() {
+        return None;
+    }
+
+    let lower = source.to_ascii_lowercase();
+    if matches!(
+        lower.as_str(),
+        "you" | "your" | "do" | "would" | "accept" | "the" | "a" | "an"
+    ) {
+        return None;
+    }
+
+    Some(source)
+}
+
+fn infer_dialog_source(kind: AutoAcceptRequestKind, text: &str) -> Option<String> {
+    if kind == AutoAcceptRequestKind::Resurrection {
+        return parse_rez_offer_text(text).map(|offer| offer.caster_name);
+    }
+
+    let stripped = textquest_common::chat::strip_stml(text);
+    let normalized = stripped.trim();
+    if normalized.is_empty() {
+        return None;
+    }
+
+    let lower = normalized.to_ascii_lowercase();
+    for marker in [
+        " invites you",
+        " has invited you",
+        " wants to trade",
+        " wishes to",
+        " would like",
+        " offers ",
+        " asks ",
+        " is inviting",
+    ] {
+        if let Some(idx) = lower.find(marker) {
+            return sanitize_source_candidate(&normalized[..idx]);
+        }
+    }
+
+    normalized
+        .split_whitespace()
+        .next()
+        .and_then(sanitize_source_candidate)
+}
+
+fn normalize_filter(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn contains_filter(haystack: Option<&str>, needle: &str) -> bool {
+    let needle = normalize_filter(needle);
+    if needle.is_empty() {
+        return false;
+    }
+
+    haystack
+        .map(|value| value.to_ascii_lowercase().contains(&needle))
+        .unwrap_or(false)
+}
+
+fn source_matches_any(source: Option<&str>, filters: &[String]) -> bool {
+    filters
+        .iter()
+        .any(|filter| contains_filter(source, filter.as_str()))
+}
+
+fn text_matches_any(text: Option<&str>, filters: &[String]) -> bool {
+    filters
+        .iter()
+        .any(|filter| contains_filter(text, filter.as_str()))
+}
+
+fn rule_matches(
+    rule: &AutoAcceptRule,
+    kind: AutoAcceptRequestKind,
+    source: Option<&str>,
+    text: Option<&str>,
+) -> bool {
+    rule.kind == kind
+        && rule
+            .source_contains
+            .as_deref()
+            .map(|filter| contains_filter(source, filter))
+            .unwrap_or(true)
+        && rule
+            .text_contains
+            .as_deref()
+            .map(|filter| contains_filter(text, filter))
+            .unwrap_or(true)
+}
+
+fn source_allowed_by_trust_mode(settings: &AutoAcceptSettings, source: Option<&str>) -> bool {
+    match settings.trust_mode {
+        AutoAcceptTrustMode::Anyone => true,
+        AutoAcceptTrustMode::TrustList => source_matches_any(source, &settings.trusted_players),
+    }
+}
+
+fn decide_generic_dialog_action(
+    settings: &AutoAcceptSettings,
+    kind: AutoAcceptRequestKind,
+    source: Option<&str>,
+    text: Option<&str>,
+) -> AutoAcceptAction {
+    if !settings.enabled {
+        return AutoAcceptAction::Ignore;
+    }
+
+    if source_matches_any(source, &settings.source_blocklist)
+        || text_matches_any(text, &settings.text_blocklist)
+    {
+        return if settings.decline_blocked {
+            AutoAcceptAction::Decline
+        } else {
+            AutoAcceptAction::Ignore
+        };
+    }
+
+    for rule in &settings.rules {
+        if rule_matches(rule, kind, source, text) {
+            return rule.action;
+        }
+    }
+
+    if !settings.source_allowlist.is_empty()
+        && !source_matches_any(source, &settings.source_allowlist)
+    {
+        return AutoAcceptAction::Ignore;
+    }
+
+    if !settings.is_kind_enabled(kind) || !source_allowed_by_trust_mode(settings, source) {
+        return AutoAcceptAction::Ignore;
+    }
+
+    AutoAcceptAction::Accept
 }
 
 fn mark_recent_rez_context(at: Instant) {
@@ -291,37 +520,11 @@ pub unsafe fn check_dialogs() {
     }
 
     let settings = current_auto_accept_settings();
-    if !allows_unverified_generic_auto_accept(&settings) {
-        tracing::debug!(
-            trust_mode = ?settings.trust_mode,
-            trusted_players = settings.trusted_players.len(),
-            "Skipping generic dialog auto-accept because trusted sender cannot be validated"
-        );
-        return;
-    }
-
-    const GENERIC_DIALOG_ACCEPT_SPECS: &[(AutoAcceptRequestKind, &str, &str)] = &[
-        (
-            AutoAcceptRequestKind::Trade,
-            "TRDW_TradeRequestWnd",
-            "TRDW_Trade_Button",
-        ),
-        (
-            AutoAcceptRequestKind::TaskAdd,
-            "TaskSelectWnd",
-            "TASKSEL_AcceptButton",
-        ),
-    ];
-
-    for &(kind, parent_sidl, button_sidl) in GENERIC_DIALOG_ACCEPT_SPECS {
-        if !settings.is_kind_enabled(kind) {
-            continue;
-        }
-
+    for spec in GENERIC_DIALOG_SPECS {
         // Find the parent dialog window by SIDL name (must be visible)
         let parent = crate::eq::widgets::find_visible_window_by_sidl_name(
             mgr,
-            parent_sidl,
+            spec.parent_sidl,
             eqg::CSIDL_SCREEN_WND_SIDL_TEXT,
             eqg::CXWNDMGR_WINDOWS_ARRAY,
             eqg::CXWNDMGR_WINDOWS_COUNT,
@@ -331,24 +534,47 @@ pub unsafe fn check_dialogs() {
             continue;
         };
 
-        let button = crate::eq::widgets::find_child_by_sidl_text(parent_wnd, button_sidl);
-        let Some(button_wnd) = button else {
+        let dialog_text = read_generic_dialog_text(parent_wnd);
+        let Some(kind) = spec
+            .default_kind
+            .or_else(|| generic_dialog_kind(spec.parent_sidl, dialog_text.as_deref()))
+        else {
             continue;
         };
-
-        if !crate::eq::widgets::is_visible(button_wnd) {
+        let source = dialog_text
+            .as_deref()
+            .and_then(|text| infer_dialog_source(kind, text));
+        let action = decide_generic_dialog_action(
+            &settings,
+            kind,
+            source.as_deref(),
+            dialog_text.as_deref(),
+        );
+        if action == AutoAcceptAction::Ignore {
             continue;
         }
 
+        let button_sidls = match action {
+            AutoAcceptAction::Accept => spec.accept_buttons,
+            AutoAcceptAction::Decline => spec.decline_buttons,
+            AutoAcceptAction::Ignore => unreachable!(),
+        };
+        let Some((button_sidl, button_wnd)) =
+            click_first_visible_child_by_sidl(parent_wnd, button_sidls)
+        else {
+            continue;
+        };
+
         tracing::info!(
-            parent = parent_sidl,
+            parent = spec.parent_sidl,
             button = button_sidl,
+            ?kind,
+            ?action,
+            source = source.as_deref().unwrap_or("unknown"),
             parent_ptr = format!("{:#x}", parent_wnd),
             button_ptr = format!("{:#x}", button_wnd),
-            "Auto-accepting dialog"
+            "Handling auto-accept dialog"
         );
-
-        crate::eq::widgets::click_button_via_vtable(button_wnd);
         return;
     }
 }
@@ -372,10 +598,10 @@ unsafe fn handle_rez_confirmation_dialog(mgr: usize, config: &AutoRezConfig) -> 
     };
 
     let Some(dialog_text) = read_rez_confirmation_text(dialog_wnd) else {
-        return true;
+        return false;
     };
     let Some(offer) = parse_rez_offer_text(&dialog_text) else {
-        return true;
+        return false;
     };
 
     let now = Instant::now();
@@ -433,6 +659,53 @@ unsafe fn handle_rez_confirmation_dialog(mgr: usize, config: &AutoRezConfig) -> 
             true
         }
     }
+}
+
+#[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
+unsafe fn read_generic_dialog_text(dialog_wnd: usize) -> Option<String> {
+    use textquest_common::offsets::eqmain as off;
+
+    if let Some(text) = crate::eq::widgets::read_cxstr(dialog_wnd + off::CXWND_WINDOW_TEXT) {
+        let stripped = textquest_common::chat::strip_stml(&text);
+        if !stripped.trim().is_empty() {
+            return Some(stripped);
+        }
+    }
+
+    let mut best_text: Option<String> = None;
+    let mut child = *((dialog_wnd + off::CXWND_FIRST_NODE) as *const usize);
+    let mut count = 0u32;
+    while child != 0 && count < 200 {
+        count += 1;
+        if let Some(text) = crate::eq::widgets::read_cxstr(child + off::CXWND_WINDOW_TEXT) {
+            let stripped = textquest_common::chat::strip_stml(&text);
+            if stripped.len() > best_text.as_ref().map_or(0, String::len) {
+                best_text = Some(stripped);
+            }
+        }
+        child = *((child + off::CXWND_NEXT) as *const usize);
+    }
+
+    best_text.filter(|text| !text.trim().is_empty())
+}
+
+#[cfg(windows)]
+#[allow(unsafe_op_in_unsafe_fn)]
+unsafe fn click_first_visible_child_by_sidl(
+    parent_wnd: usize,
+    sidl_names: &'static [&'static str],
+) -> Option<(&'static str, usize)> {
+    for sidl_name in sidl_names {
+        if let Some(button_wnd) = crate::eq::widgets::find_child_by_sidl_text(parent_wnd, sidl_name)
+            && crate::eq::widgets::is_visible(button_wnd)
+        {
+            crate::eq::widgets::click_button_via_vtable(button_wnd);
+            return Some((sidl_name, button_wnd));
+        }
+    }
+
+    None
 }
 
 #[cfg(windows)]
@@ -570,34 +843,40 @@ mod tests {
     }
 
     #[test]
-    fn dialog_pairs_have_two_elements_each() {
-        for (parent, button) in GENERIC_DIALOG_ACCEPT_PAIRS {
-            assert!(!parent.is_empty(), "parent SIDL name must not be empty");
-            assert!(!button.is_empty(), "button SIDL name must not be empty");
+    fn dialog_specs_have_accept_buttons() {
+        for spec in GENERIC_DIALOG_SPECS {
+            assert!(
+                !spec.parent_sidl.is_empty(),
+                "parent SIDL name must not be empty"
+            );
+            assert!(
+                !spec.accept_buttons.is_empty(),
+                "accept buttons must not be empty"
+            );
         }
     }
 
     #[test]
-    fn dialog_pairs_contain_trade_window() {
-        let has_trade = GENERIC_DIALOG_ACCEPT_PAIRS
+    fn dialog_specs_contain_trade_window() {
+        let has_trade = GENERIC_DIALOG_SPECS
             .iter()
-            .any(|(parent, _)| *parent == "TradeWnd");
+            .any(|spec| spec.parent_sidl == "TradeWnd");
         assert!(has_trade, "Must have TradeWnd pair");
     }
 
     #[test]
-    fn generic_dialog_pairs_contain_task_window() {
-        let has_task = GENERIC_DIALOG_ACCEPT_PAIRS
+    fn generic_dialog_specs_contain_task_window() {
+        let has_task = GENERIC_DIALOG_SPECS
             .iter()
-            .any(|(parent, _)| *parent == "TaskSelectWnd");
+            .any(|spec| spec.parent_sidl == "TaskSelectWnd");
         assert!(has_task, "Must have TaskSelectWnd pair");
     }
 
     #[test]
     fn respawn_window_handled_via_recent_rez_context() {
-        let has_respawn = GENERIC_DIALOG_ACCEPT_PAIRS
+        let has_respawn = GENERIC_DIALOG_SPECS
             .iter()
-            .any(|(parent, _)| *parent == "RespawnWnd");
+            .any(|spec| spec.parent_sidl == "RespawnWnd");
         assert!(
             !has_respawn,
             "RespawnWnd must stay on the dedicated recent-rez handling path"
@@ -750,26 +1029,109 @@ mod tests {
     #[test]
     fn generic_dialog_kind_maps_known_dialogs() {
         assert_eq!(
-            generic_dialog_kind("TradeWnd"),
+            generic_dialog_kind("TradeWnd", None),
             Some(AutoAcceptRequestKind::Trade)
         );
         assert_eq!(
-            generic_dialog_kind("TaskSelectWnd"),
+            generic_dialog_kind("TaskSelectWnd", None),
             Some(AutoAcceptRequestKind::TaskAdd)
         );
-        assert_eq!(generic_dialog_kind("UnknownWnd"), None);
+        assert_eq!(
+            generic_dialog_kind(
+                REZ_CONFIRM_DIALOG,
+                Some("Leader invites you to join a group.")
+            ),
+            Some(AutoAcceptRequestKind::GroupInvite)
+        );
+        assert_eq!(generic_dialog_kind("UnknownWnd", None), None);
     }
 
     #[test]
-    fn allows_unverified_generic_auto_accept_requires_anyone_trust_mode() {
+    fn source_filter_policy_blocks_then_declines() {
         let mut settings = AutoAcceptSettings {
             enabled: true,
+            source_blocklist: vec!["Badactor".into()],
+            decline_blocked: true,
             ..AutoAcceptSettings::default()
         };
-        assert!(allows_unverified_generic_auto_accept(&settings));
 
-        settings.trust_mode = AutoAcceptTrustMode::TrustList;
-        settings.trusted_players = vec!["Leader".into()];
-        assert!(!allows_unverified_generic_auto_accept(&settings));
+        let action = decide_generic_dialog_action(
+            &settings,
+            AutoAcceptRequestKind::GroupInvite,
+            Some("BadActor"),
+            Some("BadActor invites you to join a group."),
+        );
+        assert_eq!(action, AutoAcceptAction::Decline);
+
+        settings.decline_blocked = false;
+        let action = decide_generic_dialog_action(
+            &settings,
+            AutoAcceptRequestKind::GroupInvite,
+            Some("BadActor"),
+            Some("BadActor invites you to join a group."),
+        );
+        assert_eq!(action, AutoAcceptAction::Ignore);
+    }
+
+    #[test]
+    fn trust_list_requires_inferred_source() {
+        let settings = AutoAcceptSettings {
+            enabled: true,
+            trust_mode: AutoAcceptTrustMode::TrustList,
+            trusted_players: vec!["Leader".into()],
+            ..AutoAcceptSettings::default()
+        };
+
+        assert_eq!(
+            decide_generic_dialog_action(
+                &settings,
+                AutoAcceptRequestKind::GroupInvite,
+                Some("Leader"),
+                Some("Leader invites you to join a group."),
+            ),
+            AutoAcceptAction::Accept
+        );
+        assert_eq!(
+            decide_generic_dialog_action(
+                &settings,
+                AutoAcceptRequestKind::GroupInvite,
+                Some("Stranger"),
+                Some("Stranger invites you to join a group."),
+            ),
+            AutoAcceptAction::Ignore
+        );
+    }
+
+    #[test]
+    fn explicit_rule_can_accept_quest_completion() {
+        let settings = AutoAcceptSettings {
+            enabled: true,
+            rules: vec![AutoAcceptRule {
+                kind: AutoAcceptRequestKind::QuestCompletion,
+                action: AutoAcceptAction::Accept,
+                source_contains: Some("Priest".into()),
+                text_contains: Some("reward".into()),
+            }],
+            ..AutoAcceptSettings::default()
+        };
+
+        let action = decide_generic_dialog_action(
+            &settings,
+            AutoAcceptRequestKind::QuestCompletion,
+            Some("A Priest of Discord"),
+            Some("A Priest of Discord offers a quest reward."),
+        );
+        assert_eq!(action, AutoAcceptAction::Accept);
+    }
+
+    #[test]
+    fn infer_dialog_source_reads_sender_prefix() {
+        assert_eq!(
+            infer_dialog_source(
+                AutoAcceptRequestKind::RaidInvite,
+                "RaidLeader invites you to join a raid."
+            ),
+            Some("RaidLeader".into())
+        );
     }
 }
