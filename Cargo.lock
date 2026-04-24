@@ -4251,6 +4251,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "bitflags 2.11.1",
+ "criterion",
  "getrandom 0.2.17",
  "once_cell",
  "retour",

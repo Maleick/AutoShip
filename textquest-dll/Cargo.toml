@@ -51,7 +51,12 @@ windows = { version = "0.54", features = [
 retour = { version = "0.3", features = ["static-detour"] }
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3"
+
+[[bench]]
+name = "ability_cooldowns"
+harness = false
 
 [features]
 windows-dangerous-tests = []

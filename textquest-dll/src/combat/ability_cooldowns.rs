@@ -51,6 +51,36 @@ impl AbilityAvailability {
     }
 }
 
+/// Precomputed key for a named shared cooldown bucket.
+///
+/// Rotation entries that evaluate every tick should build this once when the
+/// rotation/config entry is loaded, then use the `*_with_shared_key` APIs to
+/// avoid hashing the shared timer name on every availability check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SharedCooldownKey(i32);
+
+impl SharedCooldownKey {
+    /// Build a cooldown key from a configured shared timer name.
+    #[inline]
+    #[must_use]
+    pub fn from_name(shared_timer_key: &str) -> Self {
+        Self(AbilityCooldownTracker::shared_timer_id(shared_timer_key))
+    }
+
+    /// Build a cooldown key from a known metadata shared timer bucket.
+    #[inline]
+    #[must_use]
+    pub const fn from_timer_id(timer_id: u8) -> Self {
+        Self(SHARED_TIMER_KEY_BASE - timer_id as i32)
+    }
+
+    #[inline]
+    #[must_use]
+    const fn raw_id(self) -> i32 {
+        self.0
+    }
+}
+
 /// Tracks cooldown state for abilities with optional metadata.
 ///
 /// A small inline capacity keeps the common case allocation-light, while the
@@ -165,21 +195,38 @@ impl AbilityCooldownTracker {
     /// without knowing the raw bucket ID.
     #[inline]
     pub fn can_use_shared_key(&self, key: &str, now: u32) -> bool {
-        self.availability(Self::shared_timer_id(key), now)
-            .is_ready_at(now)
+        self.can_use_shared_cooldown(SharedCooldownKey::from_name(key), now)
+    }
+
+    /// Whether a precomputed shared-timer bucket is ready.
+    #[inline]
+    pub fn can_use_shared_cooldown(&self, key: SharedCooldownKey, now: u32) -> bool {
+        self.availability(key.raw_id(), now).is_ready_at(now)
     }
 
     /// Whether an ability can be attempted at the given tick.
     #[inline]
     pub fn can_use(&self, ability_id: i32, shared_timer_key: Option<&str>, now: u32) -> bool {
+        self.can_use_with_shared_key(
+            ability_id,
+            shared_timer_key.map(SharedCooldownKey::from_name),
+            now,
+        )
+    }
+
+    /// Whether an ability can be attempted using a precomputed shared key.
+    #[inline]
+    pub fn can_use_with_shared_key(
+        &self,
+        ability_id: i32,
+        shared_timer_key: Option<SharedCooldownKey>,
+        now: u32,
+    ) -> bool {
         if !self.availability(ability_id, now).is_ready_at(now) {
             return false;
         }
 
-        shared_timer_key.is_none_or(|key| {
-            self.availability(Self::shared_timer_id(key), now)
-                .is_ready_at(now)
-        })
+        shared_timer_key.is_none_or(|key| self.availability(key.raw_id(), now).is_ready_at(now))
     }
 
     /// Whether an ability is ready, accounting for both its direct cooldown
@@ -196,8 +243,7 @@ impl AbilityCooldownTracker {
         }
 
         shared_timer_id.is_none_or(|timer_id| {
-            self.availability(shared_timer_key(timer_id), now)
-                .is_ready_at(now)
+            self.can_use_shared_cooldown(SharedCooldownKey::from_timer_id(timer_id), now)
         })
     }
 
@@ -211,6 +257,24 @@ impl AbilityCooldownTracker {
         shared_cooldown_ticks: Option<u32>,
         now: u32,
     ) {
+        self.consume_with_shared_key(
+            ability_id,
+            cooldown_ticks,
+            shared_timer_key.map(SharedCooldownKey::from_name),
+            shared_cooldown_ticks,
+            now,
+        );
+    }
+
+    /// Mark an ability as consumed using a precomputed shared key.
+    pub fn consume_with_shared_key(
+        &mut self,
+        ability_id: i32,
+        cooldown_ticks: Option<u32>,
+        shared_timer_key: Option<SharedCooldownKey>,
+        shared_cooldown_ticks: Option<u32>,
+        now: u32,
+    ) {
         let state = Self::availability_state(cooldown_ticks, self.fallback_retry_ticks, now);
         self.upsert(ability_id, state);
 
@@ -220,7 +284,7 @@ impl AbilityCooldownTracker {
                 self.fallback_retry_ticks,
                 now,
             );
-            self.upsert(Self::shared_timer_id(shared_timer_key), shared_state);
+            self.upsert(shared_timer_key.raw_id(), shared_state);
         }
     }
 
@@ -279,16 +343,14 @@ impl AbilityCooldownTracker {
         self.upsert(ability_id, state);
 
         if let Some(timer_id) = shared_timer_id {
-            let shared_state =
-                Self::availability_state(cooldown_ticks, self.fallback_retry_ticks, now);
-            self.upsert(shared_timer_key(timer_id), shared_state);
+            self.upsert(SharedCooldownKey::from_timer_id(timer_id).raw_id(), state);
         }
     }
 }
 
 #[inline]
-fn shared_timer_key(timer_id: u8) -> i32 {
-    SHARED_TIMER_KEY_BASE - i32::from(timer_id)
+const fn shared_timer_key(timer_id: u8) -> i32 {
+    SHARED_TIMER_KEY_BASE - timer_id as i32
 }
 
 /// Lookup cooldown metadata for known live-safe activated ability lines.
@@ -491,5 +553,24 @@ mod tests {
 
         tracker.tick(106);
         assert!(tracker.can_use(102, Some("warrior-offense"), 106));
+    }
+
+    #[test]
+    fn precomputed_shared_timer_key_avoids_name_lookup_path() {
+        let shared_key = SharedCooldownKey::from_name("warrior-offense");
+        let mut tracker = AbilityCooldownTracker::with_retry_ticks(5);
+        tracker.consume_with_shared_key(101, Some(4), Some(shared_key), Some(6), 100);
+
+        assert!(!tracker.can_use_with_shared_key(102, Some(shared_key), 100));
+
+        for now in 101..106 {
+            tracker.tick(now);
+        }
+
+        assert!(tracker.can_use_with_shared_key(101, None, 105));
+        assert!(!tracker.can_use_with_shared_key(102, Some(shared_key), 105));
+
+        tracker.tick(106);
+        assert!(tracker.can_use_with_shared_key(102, Some(shared_key), 106));
     }
 }
