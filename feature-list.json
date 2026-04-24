@@ -84,6 +84,15 @@
       "notes": "Add TOML-backed zone metadata, neutral fallback for unknown zones, coordinator-time zone loading, and zone-aware idle weighting for behavior and mood interactions."
     },
     {
+      "id": "issue-792-macroquest-plugin-loader-compat-layer",
+      "name": "Issue #792 MacroQuest plugin loader and compatibility layer",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check -p textquest-dll --tests"
+      ],
+      "notes": "Initial scaffold adds MQ2 plugin discovery, per-plugin config defaults, a C-compatible TextQuest MQ2 host API table, an MQ2Bridge command trait implementation, and Windows-only DLL lifecycle loading hooks. Full binary API coverage, true native crash isolation, packet/datatype exports, and popular plugin validation remain follow-up work."
+    },
+    {
       "id": "issue-794-clickies-module-consumable-item-automation",
       "name": "Clickies module consumable/item automation",
       "status": "in_progress",
