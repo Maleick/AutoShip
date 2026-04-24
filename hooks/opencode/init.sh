@@ -150,7 +150,7 @@ load_routing_config() {
     fi
     rm -f "$model_routing_file"
     if command -v opencode >/dev/null 2>&1 && [[ -x "$SCRIPT_DIR/setup.sh" ]]; then
-      AUTOSHIP_MAX_AGENTS="${AUTOSHIP_MAX_AGENTS:-10}" bash "$SCRIPT_DIR/setup.sh" >/dev/null 2>&1 || true
+      AUTOSHIP_MAX_AGENTS="${AUTOSHIP_MAX_AGENTS:-15}" bash "$SCRIPT_DIR/setup.sh" >/dev/null 2>&1 || true
     fi
     if [[ ! -f "$model_routing_file" ]]; then
       jq -n '{defaultFallback: null, models: []}' > "$model_routing_file"

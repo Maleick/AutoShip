@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-labelledby="title desc">
-  <title id="title">AutoShip OpenCode automation</title>
-  <desc id="desc">A postman throws a package while AutoShip plans with GPT-5.5 and dispatches OpenCode workers.</desc>
+  <title id="title">AutoShip turns backlog into reviewed PRs</title>
+  <desc id="desc">AutoShip is an OpenCode plugin that plans GitHub issues, dispatches workers, verifies results, and packages reviewed pull requests.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#0b1020"/>
@@ -26,8 +26,8 @@
 
   <!-- Big readable product copy -->
   <text x="70" y="112" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="70" font-weight="900" fill="#f8fafc" letter-spacing="-2">AutoShip</text>
-  <text x="74" y="166" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="30" font-weight="700" fill="#cbd5e1">OpenCode-only GitHub issue → PR automation</text>
-  <text x="76" y="220" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="25" fill="#fbbf24">GPT-5.5 plans • 15 workers ship • reviewer verifies</text>
+  <text x="74" y="166" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="32" font-weight="800" fill="#cbd5e1">Turn backlog into reviewed PRs.</text>
+  <text x="76" y="220" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="24" fill="#fbbf24">OpenCode plans • 15 workers ship • GPT-5.5 verifies</text>
 
   <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700">
     <rect x="76" y="262" width="188" height="46" rx="14" fill="#111827" stroke="#334155"/>

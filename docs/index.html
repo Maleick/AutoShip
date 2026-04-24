@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AutoShip — ship GitHub issues on autopilot</title>
-  <meta name="description" content="AutoShip is an OpenCode plugin that autonomously routes GitHub issues to AI agents, verifies results, opens PRs, and merges them." />
-  <meta property="og:title" content="AutoShip — ship GitHub issues on autopilot" />
-  <meta property="og:description" content="Autonomous OpenCode orchestration. Routes GitHub issues to live OpenCode models, verifies results, opens PRs, merges." />
+  <title>AutoShip — turn backlog into reviewed PRs</title>
+  <meta name="description" content="AutoShip is an OpenCode plugin for solo maintainers that plans GitHub issues, routes OpenCode workers, verifies results, and packages reviewed pull requests." />
+  <meta property="og:title" content="AutoShip — turn backlog into reviewed PRs" />
+  <meta property="og:description" content="Turn backlog into reviewed PRs with OpenCode issue planning, worker routing, and verification." />
   <meta property="og:image" content="https://raw.githubusercontent.com/Maleick/AutoShip/main/assets/autoship-banner.svg" />
   <meta name="twitter:card" content="summary_large_image" />
   <style>
@@ -215,7 +215,7 @@
 <!-- Hero -->
 <div class="hero">
    <img src="assets/autoship-banner.svg"
-        alt="AutoShip — ship GitHub issues on autopilot" />
+         alt="AutoShip — turn backlog into reviewed PRs" />
 
   <div class="hero-badges">
     <img src="https://img.shields.io/github/stars/Maleick/AutoShip?style=flat&color=f59e0b" alt="Stars" />
@@ -225,8 +225,9 @@
   </div>
 
   <p class="hero-desc">
-    An <strong>OpenCode-only plugin</strong> that autonomously routes GitHub issues to live OpenCode models,
-    verifies their work, opens pull requests, and merges them.
+    <strong>Turn backlog into reviewed PRs.</strong> AutoShip is the OpenCode plugin for solo maintainers
+    who want their GitHub issue queue planned, routed, verified, and packaged into pull requests without
+    babysitting every worker.
   </p>
 
   <div class="hero-actions">
@@ -250,7 +251,7 @@
     <div class="stat-label">avg issue → merged PR</div>
   </div>
   <div class="stat">
-    <span class="stat-num">10</span>
+    <span class="stat-num">15</span>
     <div class="stat-label">default active workers</div>
   </div>
   <div class="stat">
@@ -290,14 +291,13 @@
     </div>
     <div class="ba-card after">
       <h3>🚀 With AutoShip</h3>
-      <pre class="hero-code">/autoship:start</pre>
+      <pre class="hero-code">/autoship</pre>
       <p style="font-size:.88rem;color:var(--muted);line-height:1.6;">
         AutoShip reads your issues, classifies each one, picks a configured OpenCode model,
         creates an isolated worktree, dispatches with a focused prompt,
-        verifies the result, opens a PR, waits for CI, merges, closes the issue,
-        and immediately starts the next one.
+        verifies the result, and opens a reviewed PR for the work that passed.
       </p>
-      <p style="margin-top:12px;font-size:.88rem;color:var(--muted);">You come back to merged PRs.</p>
+      <p style="margin-top:12px;font-size:.88rem;color:var(--muted);">You come back to reviewed PRs ready for final decision.</p>
       <p class="ba-time good">Time: you typed one command.</p>
     </div>
   </div>
@@ -447,8 +447,8 @@
 
 <!-- CTA -->
 <section style="text-align:center; padding: 72px 24px;">
-  <h2 style="font-size:2rem;">Ready to <span style="color:var(--amber);">stop babysitting issues?</span></h2>
-  <p style="color:var(--muted);max-width:480px;margin:16px auto 36px;font-size:1.05rem;">One install. One command. Your backlog ships itself.</p>
+  <h2 style="font-size:2rem;">Ready to <span style="color:var(--amber);">turn backlog into reviewed PRs?</span></h2>
+  <p style="color:var(--muted);max-width:520px;margin:16px auto 36px;font-size:1.05rem;">One install. One command. AutoShip plans, routes, verifies, and packages the PRs.</p>
   <a class="btn-primary" href="https://github.com/Maleick/AutoShip/blob/main/docs/OPENCODE_INSTALL.md" style="font-size:1.1rem;padding:15px 36px;">
     Install AutoShip →
   </a>

@@ -1,8 +1,9 @@
 # AutoShip Wiki
 
-![AutoShip — OpenCode-only GitHub issue to PR automation](../assets/autoship-banner.svg)
+![AutoShip — Turn backlog into reviewed PRs](../assets/autoship-banner.svg)
 
-AutoShip is an OpenCode-only orchestration plugin that turns GitHub issues into pull requests.
+**Turn backlog into reviewed PRs.**
+AutoShip is the OpenCode plugin for solo maintainers who want their GitHub issue queue planned, routed, verified, and packaged into pull requests without babysitting every worker.
 
 ## Core Behavior
 

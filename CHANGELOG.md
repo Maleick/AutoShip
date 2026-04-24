@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.6.1
+
+- Sync full OpenCode plugin assets from the latest GitHub release, not just `autoship.ts`.
+- Keep installed hooks, commands, skills, AGENTS guidance, and version aligned under `~/.config/opencode/.autoship/`.
+- Preserve the 15-worker default when model routing is auto-generated.
+
 ## v1.6.0
 
 - OpenCode-only runtime.
