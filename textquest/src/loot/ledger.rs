@@ -16,7 +16,7 @@
     clippy::redundant_field_names
 )]
 
-use std::{collections::HashMap, sync::Mutex};
+use std::{collections::HashMap, sync::{Mutex, PoisonError}};
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
@@ -233,7 +233,7 @@ impl EconomyLedger {
         plat_delta: i64,
         note: Option<&str>,
     ) -> Result<i64> {
-        let conn = self.conn.lock().expect("ledger mutex poisoned");
+        let conn = self.conn.lock().unwrap_or_else(PoisonError::into_inner);
         conn.execute(
             "INSERT INTO economy_ledger
                 (item_id, item_name, quantity, source, character_id, plat_delta, note)
@@ -254,7 +254,7 @@ impl EconomyLedger {
 
     /// Retrieve all entries, optionally filtered to a single character.
     pub fn entries(&self, character_filter: Option<&str>) -> Result<Vec<LedgerEntry>> {
-        let conn = self.conn.lock().expect("ledger mutex poisoned");
+        let conn = self.conn.lock().unwrap_or_else(PoisonError::into_inner);
         let (sql, param) = if let Some(c) = character_filter {
             (
                 "SELECT id, timestamp, item_id, item_name, quantity, source, character_id, \

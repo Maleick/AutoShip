@@ -8,7 +8,7 @@ use std::{
     fs::{File, OpenOptions},
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Mutex, PoisonError},
 };
 
 use anyhow::Result;
@@ -101,7 +101,7 @@ impl SoulAuditLogger {
         before_state: Option<serde_json::Value>,
         after_state: Option<serde_json::Value>,
     ) -> Result<()> {
-        let mut inner = self.inner.lock().expect("audit logger mutex poisoned");
+        let mut inner = self.inner.lock().unwrap_or_else(PoisonError::into_inner);
         inner.seq += 1;
 
         let entry = AuditEntry {

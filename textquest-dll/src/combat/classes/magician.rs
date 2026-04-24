@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    sync::Mutex,
+    sync::{Mutex, PoisonError},
 };
 
 use textquest_common::combat::{
@@ -201,7 +201,7 @@ impl MagicianStrategy {
     }
 
     fn update_resolved_abilities(&self, resolved: HashMap<String, ResolvedAbility>) {
-        let mut runtime = self.runtime.lock().expect("magician runtime lock");
+        let mut runtime = self.runtime.lock().unwrap_or_else(PoisonError::into_inner);
         runtime.resolved_abilities = resolved;
         runtime.debuffed_targets.clear();
         runtime.buffed_pet_id = None;
@@ -209,7 +209,7 @@ impl MagicianStrategy {
     }
 
     fn handle_cast_outcome(&self, result: CastResult) {
-        let mut runtime = self.runtime.lock().expect("magician runtime lock");
+        let mut runtime = self.runtime.lock().unwrap_or_else(PoisonError::into_inner);
         let pending_cast = runtime.pending_cast.take();
 
         if !matches!(result, CastResult::Success) {
@@ -257,7 +257,7 @@ impl ClassStrategy for MagicianStrategy {
         };
         let mana_pct = ctx.player.mana_pct();
 
-        let mut runtime = self.runtime.lock().expect("magician runtime lock");
+        let mut runtime = self.runtime.lock().unwrap_or_else(PoisonError::into_inner);
         if runtime.resolved_abilities.is_empty() {
             drop(runtime);
             return self.fallback_select_spell(ctx);
@@ -327,7 +327,7 @@ impl ClassStrategy for MagicianStrategy {
             return None;
         }
 
-        let mut runtime = self.runtime.lock().expect("magician runtime lock");
+        let mut runtime = self.runtime.lock().unwrap_or_else(PoisonError::into_inner);
         if runtime.buffed_pet_id != Some(pet_id) {
             runtime.buffed_pet_id = None;
         }
@@ -350,7 +350,7 @@ impl ClassStrategy for MagicianStrategy {
 
     fn on_action_complete(&mut self, ctx: &CombatContext) {
         if !ctx.in_combat {
-            let mut runtime = self.runtime.lock().expect("magician runtime lock");
+            let mut runtime = self.runtime.lock().unwrap_or_else(PoisonError::into_inner);
             runtime.debuffed_targets.clear();
             runtime.pending_cast = None;
         }
