@@ -1,0 +1,6 @@
+[travel.poknowledge]
+portal_location = { x = 100.0, y = 200.0, z = 3.0 }
+safe_camp = { x = 150.0, y = 250.0, z = 3.0 }
+requires_spells = ["Translocate", "Evacuate"]
+group_wait_secs = 120
+portal_window_secs = 30
