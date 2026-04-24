@@ -24,6 +24,8 @@ pub mod chat;
 pub mod chat_pattern_rules;
 /// Combat-related shared types (class roles, spell metadata, assist targets).
 pub mod combat;
+/// Shared cryptographic primitives and secret-handling helpers.
+pub mod crypto;
 /// Economy ledger schema, transaction logging, and trend metrics.
 pub mod economy;
 /// Unified error handling framework with structured error types and recovery

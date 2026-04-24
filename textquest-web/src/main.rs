@@ -191,7 +191,11 @@ async fn api_token_auth(
                 .and_then(|v| v.to_str().ok());
 
             match provided {
-                Some(token) if constant_time_eq_str(token, expected_token) => {}
+                Some(token)
+                    if textquest_common::crypto::cmp::constant_time_eq(
+                        token.as_bytes(),
+                        expected_token.as_bytes(),
+                    ) => {}
                 _ => {
                     tracing::warn!(
                         path = req.uri().path(),
@@ -214,108 +218,6 @@ async fn api_token_auth(
     }
 
     Ok(next.run(req).await)
-}
-
-/// Constant-time string comparison to prevent timing oracle attacks on the API
-/// token.
-///
-/// Comparison time is proportional to `expected` (the server-side token) length,
-/// independent of the length of the attacker-controlled `provided` input.
-/// This eliminates both content-timing and length-oracle attacks.
-///
-/// Compares exactly `expected.len()` byte positions, treating missing bytes in
-/// `provided` as zero and folding any length mismatch into the final result so
-/// shorter or longer inputs never accidentally compare equal.
-pub(crate) fn constant_time_eq_str(provided: &str, expected: &str) -> bool {
-    use subtle::Choice;
-
-    let pb = provided.as_bytes();
-    let eb = expected.as_bytes();
-    let expected_len = eb.len();
-
-    // Compare exactly `expected_len` positions so the amount of work does not
-    // scale with attacker-controlled input length. Missing bytes from `provided`
-    // are treated as zero.
-    let mut diff = 0u8;
-    for (expected_byte, provided_byte) in eb.iter().zip(
-        pb.iter()
-            .copied()
-            .chain(std::iter::repeat(0u8))
-            .take(expected_len),
-    ) {
-        diff |= provided_byte ^ expected_byte;
-    }
-
-    let content_eq: Choice = Choice::from((diff == 0) as u8);
-
-    // Length must also match so both short and long inputs are rejected even if
-    // the compared prefix matches.
-    let length_eq: Choice = Choice::from((pb.len() == expected_len) as u8);
-
-    // Both content AND length must agree for the tokens to be equal.
-    (content_eq & length_eq).into()
-}
-
-#[cfg(test)]
-mod constant_time_tests {
-    use super::constant_time_eq_str;
-
-    #[test]
-    fn equal_tokens_match() {
-        assert!(constant_time_eq_str("secret-token", "secret-token"));
-    }
-
-    #[test]
-    fn different_content_does_not_match() {
-        assert!(!constant_time_eq_str("wrong-token!", "secret-token"));
-    }
-
-    #[test]
-    fn shorter_input_does_not_match() {
-        assert!(!constant_time_eq_str("short", "secret-token"));
-    }
-
-    #[test]
-    fn longer_input_does_not_match() {
-        assert!(!constant_time_eq_str("secret-token-extra", "secret-token"));
-    }
-
-    #[test]
-    fn empty_input_does_not_match_nonempty_expected() {
-        assert!(!constant_time_eq_str("", "secret-token"));
-    }
-
-    #[test]
-    fn both_empty_match() {
-        // Edge case: if the server token is somehow empty, same empty input matches.
-        assert!(constant_time_eq_str("", ""));
-    }
-
-    /// Verify that all three length variants (equal, shorter, longer) go through
-    /// the same code path — we cannot measure wall-clock time in a unit test, but
-    /// we can assert that none of them short-circuit by confirming all return
-    /// false when they should, and that the function is purely structural
-    /// (no early returns based on length).
-    #[test]
-    fn all_length_variants_evaluated() {
-        let expected = "abcdefghij"; // 10 bytes
-        let shorter = "abcde"; // 5 bytes  — must not match
-        let equal = "abcdefghij"; // 10 bytes — must match
-        let longer = "abcdefghijklmno"; // 15 bytes — must not match
-
-        assert!(
-            !constant_time_eq_str(shorter, expected),
-            "shorter must not match"
-        );
-        assert!(
-            constant_time_eq_str(equal, expected),
-            "equal content must match"
-        );
-        assert!(
-            !constant_time_eq_str(longer, expected),
-            "longer must not match"
-        );
-    }
 }
 
 /// Returns the runtime data root: `TEXTQUEST_DATA_DIR` env var → exe parent → `"."`.

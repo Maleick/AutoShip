@@ -152,7 +152,10 @@ impl CommandListener {
 
                 if token_result.is_err()
                     || token_bytes_read != 32
-                    || !constant_time_eq(&token_buf, &self.expected_token)
+                    || !textquest_common::crypto::cmp::constant_time_eq(
+                        &token_buf,
+                        &self.expected_token,
+                    )
                 {
                     tracing::error!(
                         client_id = self.client_id,
@@ -323,16 +326,6 @@ pub fn validate_command(cmd: &Command) -> bool {
         }
         _ => true,
     }
-}
-
-/// Constant-time comparison to prevent timing side-channels on token
-/// validation.
-fn constant_time_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
-    let mut diff: u8 = 0;
-    for i in 0..32 {
-        diff |= a[i] ^ b[i];
-    }
-    diff == 0
 }
 
 /// Owns the `SECURITY_ATTRIBUTES` and its backing buffers (absolute security

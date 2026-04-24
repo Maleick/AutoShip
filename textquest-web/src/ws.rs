@@ -25,7 +25,7 @@ pub struct WsQuery {
 
 // Re-use the canonical constant-time comparison from the crate root so there
 // is exactly one implementation to audit and maintain.
-use super::constant_time_eq_str;
+use textquest_common::crypto::cmp::constant_time_eq;
 
 /// Upgrade HTTP connection to WebSocket for live session events.
 ///
@@ -52,7 +52,8 @@ pub async fn ws_handler(
 
     match state.api_token {
         Some(ref expected_token) => match &query.token {
-            Some(provided_token) if constant_time_eq_str(provided_token, expected_token) => {}
+            Some(provided_token)
+                if constant_time_eq(provided_token.as_bytes(), expected_token.as_bytes()) => {}
             _ => {
                 tracing::warn!("WebSocket connection rejected: missing or invalid token");
                 return StatusCode::UNAUTHORIZED.into_response();

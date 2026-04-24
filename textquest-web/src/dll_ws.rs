@@ -15,7 +15,8 @@ use serde::{Deserialize, Serialize};
 use textquest_common::ipc::{IpcCommand, IpcResponse};
 use tokio::sync::{OnceCell, RwLock};
 
-use crate::{AppState, constant_time_eq_str};
+use crate::AppState;
+use textquest_common::crypto::cmp::constant_time_eq;
 
 type SessionRegistry = Arc<RwLock<HashMap<String, DllSession>>>;
 
@@ -126,7 +127,7 @@ fn is_authorized(state: &AppState, headers: &HeaderMap, path: &'static str) -> b
     };
 
     match provided_token(headers) {
-        Some(token) if constant_time_eq_str(token, expected_token) => true,
+        Some(token) if constant_time_eq(token.as_bytes(), expected_token.as_bytes()) => true,
         _ => {
             tracing::warn!(
                 path,
