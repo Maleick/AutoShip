@@ -39,6 +39,7 @@ use textquest::{alerts::AlertStore, config::AlertingConfig};
 
 mod accounts;
 mod api;
+mod dll_ws;
 mod live_ipc;
 #[cfg(test)]
 mod test_support;
@@ -925,6 +926,7 @@ fn build_app(state: Arc<AppState>) -> Router {
             )),
         )
         .route("/ws", get(ws::ws_handler))
+        .route("/ws/dll", get(dll_ws::dll_ws_handler))
         .fallback_service(serve_spa)
         .layer(cors)
         .layer(DefaultBodyLimit::max(1024 * 1024)) // 1 MB global body-size cap

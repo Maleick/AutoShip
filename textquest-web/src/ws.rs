@@ -369,4 +369,31 @@ mod tests {
         server.abort();
         let _ = server.await;
     }
+
+    #[tokio::test]
+    async fn dll_websocket_requires_header_token_when_api_token_is_set() {
+        let mut state = crate::test_app_state();
+        state.api_token = Some("secret-token".to_string());
+        state.auth_disabled = false;
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("listener should bind");
+        let addr = listener.local_addr().expect("listener address");
+        let app = build_app(Arc::new(state));
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.expect("server should run");
+        });
+
+        let result = connect_async(format!("ws://{addr}/ws/dll?instance_id=test-dll")).await;
+
+        match result {
+            Err(tokio_tungstenite::tungstenite::Error::Http(response)) => {
+                assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            }
+            other => panic!("expected 401 websocket rejection, got {other:?}"),
+        }
+
+        server.abort();
+        let _ = server.await;
+    }
 }
