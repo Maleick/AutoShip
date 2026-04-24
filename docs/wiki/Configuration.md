@@ -18,6 +18,17 @@
 | `data/ghidra.db`                | Local SQLite cache for runtime/debug Ghidra lookups            |
 | `data/ghidra-export/`           | Local JSON export cache used by import/debug tooling           |
 
+## Runtime Offset Resolution
+
+The injected DLL now loads runtime offset data by default during startup. The loaded database is installed into both typed function bindings and generic `offsets::rebase(...)` consumers, so scan-updated function/global addresses take priority over compiled constants while preserving compiled fallbacks.
+
+Current behavior:
+
+- `TEXTQUEST_SKIP_SCAN=1` disables runtime offset loading and uses compiled constants only.
+- Cached offset data is stored under the system temp `textquest` directory with a module-hash-qualified filename.
+- A cache is accepted only when its module hash matches the loaded EQ image; stale caches are ignored.
+- If runtime data is unavailable or a named offset is missing, consumers fall back to the compiled constant and continue logging through the normal DLL startup path.
+
 ## Main App Config
 
 The main operator config path is `config/textquest.toml`.

@@ -55,13 +55,14 @@ pub mod timestamp;
 mod tradeskill_trophy;
 
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         OnceLock,
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 
+use serde::{Deserialize, Serialize};
 use textquest_common::offset_db::OffsetDatabase;
 
 /// Base address of eqgame.exe in memory. Set during initialization.
@@ -232,10 +233,9 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
     }
     let _ = EQ_ACTUAL_VERSION.set(actual_version);
 
-    // 2.1. Auto-detect offsets via pattern scanning (opt-in shadow mode).
-    // Set TEXTQUEST_SCAN_OFFSETS=1 to enable. Results are logged and validated
-    // against compiled constants but NOT used for control flow yet. See #746.
-    if std::env::var("TEXTQUEST_SCAN_OFFSETS").as_deref() == Ok("1") {
+    // 2.1. Auto-detect offsets via pattern scanning. Scanning is now default-on;
+    // TEXTQUEST_SKIP_SCAN=1 keeps the compiled-offset fallback path available.
+    if is_scan_active() {
         scan_offsets();
     }
 
@@ -545,8 +545,7 @@ pub(crate) fn eq_actual_version() -> Option<String> {
 }
 
 fn is_scan_active() -> bool {
-    std::env::var("TEXTQUEST_SCAN_OFFSETS").is_ok_and(|v: String| v == "1")
-        && std::env::var("TEXTQUEST_SCAN_ACTIVE").is_ok_and(|v: String| v == "1")
+    std::env::var("TEXTQUEST_SKIP_SCAN").map_or(true, |v: String| v != "1")
 }
 
 #[allow(dead_code)]
@@ -557,8 +556,14 @@ fn has_scanned_offsets() -> bool {
 }
 
 fn scan_offsets() {
-    if !is_scan_active() {
-        return;
+    let module_hash = module_hash(resolve_eq_base(), get_module_size(resolve_eq_base()));
+    let cache_path = offset_cache_path(module_hash.as_deref());
+
+    if let (Some(hash), Some(path)) = (module_hash.as_deref(), cache_path.as_deref()) {
+        if let Some(db) = load_offset_cache(path, hash) {
+            install_offset_db(db, Some(path), "Loaded cached scan offsets into OFFSET_DB");
+            return;
+        }
     }
 
     let mut paths = Vec::new();
@@ -590,22 +595,101 @@ fn scan_offsets() {
         return;
     };
 
+    if let (Some(hash), Some(path)) = (module_hash.as_deref(), cache_path.as_deref()) {
+        if let Err(err) = save_offset_cache(path, hash, &db) {
+            tracing::debug!(
+                path = path.display().to_string(),
+                error = %err,
+                "Failed to write scan offset cache"
+            );
+        }
+    }
+
+    install_offset_db(
+        db,
+        Some(&resolved_path),
+        "Loaded scan offsets into OFFSET_DB",
+    );
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OffsetCacheFile {
+    module_hash: String,
+    db: OffsetDatabase,
+}
+
+fn install_offset_db(db: OffsetDatabase, path: Option<&Path>, message: &'static str) {
     let count = db.functions.len() + db.globals.len();
+    textquest_common::bindings::install_fallback_database(db.clone());
+    textquest_common::offsets::install_runtime_database(db.clone());
     match OFFSET_DB.set(db) {
         Ok(()) => {
             tracing::info!(
-                path = resolved_path.display().to_string(),
+                path = path.map(|p| p.display().to_string()).unwrap_or_default(),
                 count,
-                "Loaded scan offsets into OFFSET_DB"
+                message
             );
         }
         Err(_) => {
             tracing::warn!(
-                path = resolved_path.display().to_string(),
+                path = path.map(|p| p.display().to_string()).unwrap_or_default(),
                 count,
                 "OFFSET_DB was already initialized; skipping newly loaded scan offsets"
             );
         }
+    }
+}
+
+fn offset_cache_path(module_hash: Option<&str>) -> Option<PathBuf> {
+    let hash = module_hash?;
+    Some(
+        std::env::temp_dir()
+            .join("textquest")
+            .join(format!("offset-cache-{hash}.json")),
+    )
+}
+
+fn load_offset_cache(path: &Path, expected_module_hash: &str) -> Option<OffsetDatabase> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let cache: OffsetCacheFile = serde_json::from_str(&content).ok()?;
+    (cache.module_hash == expected_module_hash).then_some(cache.db)
+}
+
+fn save_offset_cache(path: &Path, module_hash: &str, db: &OffsetDatabase) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let cache = OffsetCacheFile {
+        module_hash: module_hash.to_string(),
+        db: db.clone(),
+    };
+    std::fs::write(path, serde_json::to_string_pretty(&cache)?)?;
+    Ok(())
+}
+
+fn module_hash(base_addr: u64, module_size: usize) -> Option<String> {
+    if base_addr == 0 || module_size == 0 {
+        return None;
+    }
+
+    #[cfg(windows)]
+    {
+        // FNV-1a keeps this dependency-free and is enough to invalidate stale
+        // offset caches when the loaded module image changes.
+        const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+        const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+
+        let data = unsafe { std::slice::from_raw_parts(base_addr as *const u8, module_size) };
+        let hash = data.iter().fold(FNV_OFFSET, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(FNV_PRIME)
+        });
+        Some(format!("{hash:016x}"))
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = (base_addr, module_size);
+        None
     }
 }
 
@@ -622,8 +706,8 @@ fn resolve_offset_with_db(
     db: Option<&OffsetDatabase>,
 ) -> Option<u64> {
     if let Some(db) = db {
-        if let Some(addr) = db.get_function(name).or_else(|| db.get_global(name)) {
-            return db.rebase(addr, base).map(|addr| addr as u64);
+        if let Some(addr) = db.rebase_by_name(name, base) {
+            return Some(addr as u64);
         }
     }
 
@@ -744,8 +828,30 @@ pub fn activate_packet_validation(client_id: u32) -> Result<(), Box<dyn std::err
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::{
+        path::Path,
+        sync::{Mutex, OnceLock},
+    };
+
+    use textquest_common::offset_db::OffsetDatabase;
     use toml::Value;
+
+    static ENV_TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn env_test_lock() -> std::sync::MutexGuard<'static, ()> {
+        ENV_TEST_MUTEX
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("environment test mutex poisoned")
+    }
+
+    fn set_env(key: &str, value: &str) {
+        unsafe { std::env::set_var(key, value) };
+    }
+
+    fn clear_env(key: &str) {
+        unsafe { std::env::remove_var(key) };
+    }
 
     #[test]
     fn manifest_declares_cdylib() {
@@ -844,5 +950,38 @@ mod tests {
             "unexpected pub extern function in Rust source: {:?}",
             public_extern_fns
         );
+    }
+
+    #[test]
+    fn is_scan_active_defaults_to_enabled() {
+        let _guard = env_test_lock();
+        clear_env("TEXTQUEST_SCAN_OFFSETS");
+        clear_env("TEXTQUEST_SCAN_ACTIVE");
+        clear_env("TEXTQUEST_SKIP_SCAN");
+
+        assert!(super::is_scan_active());
+    }
+
+    #[test]
+    fn is_scan_active_respects_skip_scan_escape_hatch() {
+        let _guard = env_test_lock();
+        clear_env("TEXTQUEST_SCAN_OFFSETS");
+        clear_env("TEXTQUEST_SCAN_ACTIVE");
+        set_env("TEXTQUEST_SKIP_SCAN", "1");
+
+        assert!(!super::is_scan_active());
+
+        clear_env("TEXTQUEST_SKIP_SCAN");
+    }
+
+    #[test]
+    fn offset_cache_load_requires_matching_module_hash() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("offset-cache.json");
+        let db = OffsetDatabase::from_compiled_offsets();
+        super::save_offset_cache(&path, "abc123", &db).expect("save cache");
+
+        assert!(super::load_offset_cache(&path, "abc123").is_some());
+        assert!(super::load_offset_cache(&path, "different").is_none());
     }
 }

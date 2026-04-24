@@ -1,3 +1,7 @@
+use std::sync::{OnceLock, RwLock};
+
+use crate::offset_db::OffsetDatabase;
+
 // EQ global pointer addresses from eqlib/offsets/eqgame.h
 // These are PREFERRED 64-bit addresses (base 0x0001_4000_0000).
 // At runtime, subtract the preferred base and add the actual base
@@ -529,14 +533,48 @@ pub const PINST_CONTEXT_MENU_MANAGER: u64 = 0x0001_40F2_1BD0;
 /// Source: eqgame.h `CContextMenuManager__HandleMenu_x`
 pub const CONTEXT_MENU_MGR_HANDLE_MENU: u64 = 0x0001_4046_E770;
 
+static RUNTIME_OFFSET_DB: OnceLock<RwLock<Option<OffsetDatabase>>> = OnceLock::new();
+
+/// Install scan-updated offsets for generic `offsets::rebase` consumers.
+pub fn install_runtime_database(db: OffsetDatabase) {
+    let lock = RUNTIME_OFFSET_DB.get_or_init(|| RwLock::new(None));
+    let mut guard = lock.write().expect("runtime offset database lock poisoned");
+    *guard = Some(db);
+}
+
+/// Clear scan-updated offsets, restoring compile-time-only rebasing.
+pub fn clear_runtime_database() {
+    let lock = RUNTIME_OFFSET_DB.get_or_init(|| RwLock::new(None));
+    let mut guard = lock.write().expect("runtime offset database lock poisoned");
+    *guard = None;
+}
+
 /// Convert a preferred-base offset to an actual address given the runtime base.
 ///
 /// Returns `None` if `preferred_addr` is below `EQ_PREFERRED_BASE` (would
 /// underflow).
 #[must_use]
 pub fn rebase(preferred_addr: u64, actual_base: u64) -> Option<usize> {
+    if let Some(addr) = rebase_from_runtime_database(preferred_addr, actual_base) {
+        return Some(addr);
+    }
+
     let offset = preferred_addr.checked_sub(EQ_PREFERRED_BASE)?;
     Some((actual_base + offset) as usize)
+}
+
+fn rebase_from_runtime_database(preferred_addr: u64, actual_base: u64) -> Option<usize> {
+    let db_guard = RUNTIME_OFFSET_DB.get()?.read().ok()?;
+    let db = db_guard.as_ref()?;
+    let compiled = OffsetDatabase::from_compiled_offsets();
+
+    compiled
+        .functions
+        .iter()
+        .chain(compiled.globals.iter())
+        .find_map(|(name, compiled_addr)| {
+            (*compiled_addr == preferred_addr).then(|| db.rebase_by_name(name, actual_base))?
+        })
 }
 
 // ─── eqmain.dll offsets ───
@@ -1398,6 +1436,16 @@ pub mod context_menu_mgr {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock as StdOnceLock};
+
+    static RUNTIME_DB_TEST_MUTEX: StdOnceLock<Mutex<()>> = StdOnceLock::new();
+
+    fn lock_runtime_db_test() -> std::sync::MutexGuard<'static, ()> {
+        RUNTIME_DB_TEST_MUTEX
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("runtime offset db test mutex poisoned")
+    }
 
     #[test]
     fn rebase_normal_case() {
@@ -1405,6 +1453,21 @@ mod tests {
         let result = rebase(PINST_LOCAL_PLAYER, actual_base);
         let expected_offset = PINST_LOCAL_PLAYER - EQ_PREFERRED_BASE;
         assert_eq!(result, Some((actual_base + expected_offset) as usize));
+    }
+
+    #[test]
+    fn rebase_uses_runtime_database_when_installed() {
+        let _guard = lock_runtime_db_test();
+        clear_runtime_database();
+
+        let mut db = OffsetDatabase::from_compiled_offsets();
+        db.functions
+            .insert("castSpell".to_string(), EQ_PREFERRED_BASE + 0x2222);
+        install_runtime_database(db);
+
+        assert_eq!(rebase(CAST_SPELL, 0x7FF6_0000_0000), Some(0x7FF6_0000_2222));
+
+        clear_runtime_database();
     }
 
     #[test]

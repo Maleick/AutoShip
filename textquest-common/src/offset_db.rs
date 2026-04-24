@@ -96,6 +96,18 @@ impl OffsetDatabase {
         Some((actual_base + offset) as usize)
     }
 
+    /// Look up a named function/global and convert it to a runtime address.
+    ///
+    /// Functions are checked before globals because function hooks are the
+    /// highest-risk consumers during DLL startup; names are expected to match the
+    /// keys from [`Self::from_compiled_offsets`].
+    #[must_use]
+    pub fn rebase_by_name(&self, name: &str, actual_base: u64) -> Option<usize> {
+        self.get_function(name)
+            .or_else(|| self.get_global(name))
+            .and_then(|preferred_addr| self.rebase(preferred_addr, actual_base))
+    }
+
     /// Merge scan results into this database.
     ///
     /// Overwrites matching keys in the `globals` and `functions` maps with
@@ -350,6 +362,25 @@ mod tests {
         let result = db.rebase(addr, actual_base);
         let expected_offset = addr - db.eq_preferred_base;
         assert_eq!(result, Some((actual_base + expected_offset) as usize));
+    }
+
+    #[test]
+    fn rebase_by_name_prefers_function_and_global_entries() {
+        let mut db = OffsetDatabase::from_compiled_offsets();
+        db.functions
+            .insert("customFunc".to_string(), db.eq_preferred_base + 0x1234);
+        db.globals
+            .insert("customGlobal".to_string(), db.eq_preferred_base + 0x5678);
+
+        assert_eq!(
+            db.rebase_by_name("customFunc", 0x7FF6_0000_0000),
+            Some(0x7FF6_0000_1234)
+        );
+        assert_eq!(
+            db.rebase_by_name("customGlobal", 0x7FF6_0000_0000),
+            Some(0x7FF6_0000_5678)
+        );
+        assert_eq!(db.rebase_by_name("missing", 0x7FF6_0000_0000), None);
     }
 
     #[test]
