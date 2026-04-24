@@ -27,9 +27,10 @@ pub const ALERT_DB_PATH: &str = "data/alerts.db";
 ///
 /// Resolution order:
 ///   1. `TEXTQUEST_ALERT_DB_PATH` environment variable (absolute path).
-///   2. The first ancestor of `CARGO_MANIFEST_DIR` that contains `Cargo.lock`
-///      (the repo root), joined with [`ALERT_DB_PATH`].
-///   3. `ALERT_DB_PATH` itself, which falls back to CWD-relative.
+///   2. A deployed runtime data layout discovered by walking ancestors from
+///      the current executable's parent.
+///   3. `TEXTQUEST_DATA_DIR` joined with [`ALERT_DB_PATH`].
+///   4. `ALERT_DB_PATH` itself, which falls back to CWD-relative.
 ///
 /// Both the TUI (`App::open_alert_store`) and the web binary
 /// (`textquest-web::open_alert_store`) call this helper so a mis-aligned
@@ -41,14 +42,37 @@ pub fn resolve_alert_db_path() -> PathBuf {
         return PathBuf::from(override_path);
     }
 
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    for ancestor in manifest_dir.ancestors() {
-        if ancestor.join("Cargo.lock").exists() {
-            return ancestor.join(ALERT_DB_PATH);
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(exe_dir) = exe_path.parent()
+    {
+        for ancestor in exe_dir.ancestors() {
+            if let Some(path) = alert_db_path_from_runtime_layout(ancestor) {
+                return path;
+            }
         }
     }
 
+    if let Ok(data_dir) = std::env::var("TEXTQUEST_DATA_DIR")
+        && !data_dir.trim().is_empty()
+    {
+        return PathBuf::from(data_dir).join(ALERT_DB_PATH);
+    }
+
     PathBuf::from(ALERT_DB_PATH)
+}
+
+fn alert_db_path_from_runtime_layout(root: &Path) -> Option<PathBuf> {
+    let data_alerts = root.join(ALERT_DB_PATH);
+    if data_alerts.exists() || root.join("data").is_dir() {
+        return Some(data_alerts);
+    }
+
+    let sibling_alerts = root.join("alerts.db");
+    if sibling_alerts.exists() {
+        return Some(sibling_alerts);
+    }
+
+    None
 }
 
 const ALERT_SCHEMA: &str = "
