@@ -133,6 +133,7 @@ use axum::response::IntoResponse;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::to_bytes;
     use textquest_common::integrations::DiscordMessageMode;
 
     fn demo_state() -> Arc<AppState> {
@@ -168,16 +169,13 @@ mod tests {
     async fn put_settings_updates_state_and_trims_urls() {
         let state = demo_state();
         let settings = DiscordSettings {
-            webhook_url: " https://discord.example.com/default ".into(),
-            channels: HashMap::from([(
-                "kills".into(),
-                " https://discord.example.com/kills ".into(),
-            )]),
+            webhook_url: " https://discord.com/api/webhooks/default ".into(),
+            channels: HashMap::from([("kills".into(), " https://discordapp.com/api/webhooks/kills ".into())]),
             notification_routes: HashMap::from([(
                 "death".into(),
                 DiscordRouteConfig {
                     enabled: true,
-                    webhook_url: " https://discord.example.com/death ".into(),
+                    webhook_url: " https://discord.com/api/webhooks/death ".into(),
                     level: Severity::Critical,
                     message_mode: DiscordMessageMode::PlainText,
                     mention_policy: DiscordMentionPolicy::Everyone,
@@ -196,10 +194,10 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
 
         let stored = state.discord_state.settings.read().await.clone();
-        assert_eq!(stored.webhook_url, "https://discord.example.com/default");
+        assert_eq!(stored.webhook_url, "https://discord.com/api/webhooks/default");
         assert_eq!(
             stored.channels.get("kills").map(String::as_str),
-            Some("https://discord.example.com/kills")
+            Some("https://discordapp.com/api/webhooks/kills")
         );
         assert_eq!(
             stored
@@ -207,7 +205,79 @@ mod tests {
                 .get("death")
                 .expect("death route")
                 .webhook_url,
-            "https://discord.example.com/death"
+            "https://discord.com/api/webhooks/death"
+        );
+    }
+
+    #[tokio::test]
+    async fn put_settings_rejects_non_https_webhook_url() {
+        let state = demo_state();
+        let mut settings = DiscordSettings::default();
+        settings.webhook_url = "http://discord.com/api/webhooks/default".into();
+
+        let response = put_settings(State(state), trusted_headers(), Json(settings))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let message = String::from_utf8(body.to_vec()).unwrap();
+        assert!(message.contains("webhook_url"));
+        assert!(message.contains("https://discord.com/api/webhooks/"));
+    }
+
+    #[tokio::test]
+    async fn put_settings_rejects_non_discord_https_webhook_url() {
+        let state = demo_state();
+        let mut settings = DiscordSettings::default();
+        settings
+            .channels
+            .insert("kills".into(), "https://example.com/api/webhooks/kills".into());
+
+        let response = put_settings(State(state), trusted_headers(), Json(settings))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let message = String::from_utf8(body.to_vec()).unwrap();
+        assert!(message.contains("channels.kills"));
+        assert!(message.contains("discord.com"));
+    }
+
+    #[tokio::test]
+    async fn put_settings_accepts_empty_webhook_url_to_clear() {
+        let state = demo_state();
+        let mut settings = DiscordSettings::default();
+        settings.webhook_url = "   ".into();
+        settings.channels.insert("kills".into(), " ".into());
+        settings.notification_routes.insert(
+            "death".into(),
+            DiscordRouteConfig {
+                enabled: true,
+                webhook_url: "\t".into(),
+                level: Severity::Critical,
+                message_mode: DiscordMessageMode::PlainText,
+                mention_policy: DiscordMentionPolicy::Everyone,
+            },
+        );
+
+        let status = put_settings(State(state.clone()), trusted_headers(), Json(settings))
+            .await
+            .into_response()
+            .status();
+        assert_eq!(status, StatusCode::OK);
+
+        let stored = state.discord_state.settings.read().await.clone();
+        assert_eq!(stored.webhook_url, "");
+        assert_eq!(stored.channels.get("kills").map(String::as_str), Some(""));
+        assert_eq!(
+            stored
+                .notification_routes
+                .get("death")
+                .expect("death route")
+                .webhook_url,
+            ""
         );
     }
 
