@@ -108,6 +108,20 @@ Use `tracing` + `tracing-appender` for structured file logging. Do not use the `
 
 Return `Result` from fallible functions. Avoid `.unwrap()` in non-test code — use `?` or explicit error handling with context.
 
+### Mutex Poison Recovery
+
+Static `Mutex` locks in DLL-facing code must recover from poison instead of panicking. In an injected DLL, a panic while holding a global lock poisons that lock; later hook, IPC, or tick paths that call `.unwrap()` / `.expect()` on the same lock can turn one failure into repeated panics inside the host process.
+
+Use the poison-recovery pattern for static mutexes:
+
+```rust
+let mut guard = STATIC_STATE
+    .lock()
+    .unwrap_or_else(std::sync::PoisonError::into_inner);
+```
+
+Bare `.unwrap()` on mutex locks is acceptable only in test code, and the line must include a `// test-only` comment explaining the scope. Use `textquest-dll/src/combat/mod.rs` as the canonical reference implementation.
+
 ### Memory Offsets
 
 All EQ addresses in `textquest-common/src/offsets.rs` are preferred-base (`0x140000000`) values. Always call `offsets::rebase(addr, actual_base)` before using them as runtime pointers. Never treat offset constants as ready-to-dereference pointers.
@@ -154,6 +168,7 @@ cargo test -p textquest test_name     # Single test by name (substring match)
 - [ ] New logic has unit tests
 - [ ] Platform-specific code is behind `#[cfg(windows)]`
 - [ ] No `.unwrap()` in non-test paths without justification
+- [ ] Static `Mutex` locks use `.lock().unwrap_or_else(std::sync::PoisonError::into_inner)` instead of `.unwrap()` / `.expect()`
 - [ ] Offsets are rebased before use — not used as raw addresses
 - [ ] No credential files, `.env`, or secrets staged
 
