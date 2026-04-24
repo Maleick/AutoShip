@@ -13,6 +13,7 @@ pub mod exporter;
 pub mod kill_reporter;
 pub mod kill_session_store;
 pub mod kill_tracker;
+pub mod performance;
 pub mod progress;
 pub mod sampling;
 mod store;
@@ -36,6 +37,7 @@ pub use events::{FleetEvent, FleetEventLog};
 pub use kill_reporter::KillReporter;
 pub use kill_session_store::KillSessionStore;
 pub use kill_tracker::{ClientDpsStats, EfficiencyScore, KillRecord, KillTracker, MobStats};
+pub use performance::{FarmEfficiencySnapshot, PerformanceMetricsApi, PerformanceMonitor};
 pub use progress::{ClientProgressSnapshot, ProgressReport, ProgressTracker};
 pub use store::MetricsStore;
 pub use types::{
