@@ -38,6 +38,47 @@
 //! ```
 
 use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+
+/// Global slash-command registry used by DLL command hooks, Lua scripts, and
+/// plugin bridges.
+static GLOBAL_REGISTRY: OnceLock<Mutex<CommandRegistry>> = OnceLock::new();
+
+/// Returns the process-wide command registry.
+pub fn global() -> &'static Mutex<CommandRegistry> {
+    GLOBAL_REGISTRY.get_or_init(|| Mutex::new(CommandRegistry::new()))
+}
+
+/// Register a script/plugin command with variadic string arguments.
+///
+/// This is the Rust-side entrypoint backing future Lua calls such as
+/// `textquest.register_command('/mycommand', function(args) ... end)`.
+pub fn register_script_command<F>(path: &str, callback: F) -> bool
+where
+    F: Fn(&[&str]) -> CommandResult + Send + Sync + 'static,
+{
+    let help = format!("Script/plugin command registered at {path}");
+    match global().lock() {
+        Ok(mut registry) => registry.register(path, &help, &[], true, callback),
+        Err(err) => {
+            tracing::error!(path, error = %err, "global command registry lock poisoned");
+            false
+        }
+    }
+}
+
+/// Dispatch a raw slash command through the global registry.
+///
+/// DLL command hooks should call this after EQ has accepted a command line.
+pub fn dispatch_global_command(input: &str) -> CommandResult {
+    match global().lock() {
+        Ok(registry) => registry.dispatch(input),
+        Err(err) => {
+            tracing::error!(input, error = %err, "global command registry lock poisoned");
+            CommandResult::Error("TextQuest command registry unavailable".to_string())
+        }
+    }
+}
 
 // ─── Trace feature ────────────────────────────────────────────────────────────
 //
@@ -218,6 +259,9 @@ impl CommandRegistry {
         let (def, args) = match self.find_longest_prefix(&tokens) {
             Some(pair) => pair,
             None => {
+                if let Some(result) = self.dispatch_builtin_meta_command(&tokens) {
+                    return result;
+                }
                 tracing::debug!(input, "No matching command found");
                 return CommandResult::NotFound;
             }
@@ -299,6 +343,50 @@ impl CommandRegistry {
         let mut paths: Vec<String> = self.commands.values().map(|d| d.path.clone()).collect();
         paths.sort();
         paths
+    }
+
+    /// Dispatch built-in `/textquest` and `/mercs` metadata commands.
+    ///
+    /// These commands intentionally live outside the registry so the help/list
+    /// surface is available before Lua or plugin startup has registered any
+    /// commands.
+    fn dispatch_builtin_meta_command(&self, tokens: &[&str]) -> Option<CommandResult> {
+        let root = tokens.first()?.trim_start_matches('/').to_lowercase();
+        if root != "textquest" && root != "mercs" {
+            return None;
+        }
+
+        let subcommand = tokens.get(1).map(|s| s.to_lowercase());
+        let message = match subcommand.as_deref() {
+            None | Some("help") => {
+                if tokens.len() > 2 {
+                    let filter = format!("/{}", tokens[2..].join(" "));
+                    self.help(Some(&filter))
+                } else {
+                    self.help(None)
+                }
+            }
+            Some("commands") | Some("list_commands") => {
+                let paths = self.command_paths();
+                if paths.is_empty() {
+                    "No commands registered.".to_string()
+                } else {
+                    paths.join("\n")
+                }
+            }
+            Some("list_scripts") => {
+                "Script listing is pending Lua runtime integration.".to_string()
+            }
+            Some("reload") => "Script reload is pending Lua runtime integration.".to_string(),
+            Some("set") => "Runtime settings are pending config integration.".to_string(),
+            _ => format!(
+                "Unknown TextQuest command '{}'. Try /textquest help.",
+                tokens.join(" ")
+            ),
+        };
+
+        tracing::debug!(root, ?subcommand, "dispatching built-in metadata command");
+        Some(CommandResult::Message(message))
     }
 
     /// Find the longest registered prefix matching the input tokens.
@@ -654,6 +742,33 @@ mod tests {
     fn help_empty_registry() {
         let reg = CommandRegistry::new();
         assert!(reg.help(None).contains("No commands"));
+    }
+
+    #[test]
+    fn builtin_textquest_lists_registered_commands() {
+        let mut reg = CommandRegistry::new();
+        reg.register(
+            "/mercs pull",
+            "pull target",
+            &[ArgType::String],
+            false,
+            ok_handler,
+        );
+
+        let result = reg.dispatch("/textquest commands");
+        match result {
+            CommandResult::Message(message) => assert!(message.contains("/mercs pull")),
+            other => panic!("expected command listing message, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn register_script_command_uses_global_registry() {
+        let path = "/issue793_script_probe";
+        let _ = register_script_command(path, |_| CommandResult::Message("script ok".to_string()));
+
+        let result = dispatch_global_command(path);
+        assert_eq!(result, CommandResult::Message("script ok".to_string()));
     }
 
     // ── Command paths ───────────────────────────────────────────────────────

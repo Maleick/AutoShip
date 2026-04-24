@@ -26,7 +26,10 @@
 //! registry.unregister(id);
 //! ```
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::Path;
+use std::str::FromStr;
 use std::sync::{Mutex, OnceLock};
 
 /// Global hotkey registry instance. Initialized on first access.
@@ -128,6 +131,157 @@ pub enum VirtualKey {
     Equals = 0xBB,
 }
 
+impl std::fmt::Display for VirtualKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            VirtualKey::F1 => "F1",
+            VirtualKey::F2 => "F2",
+            VirtualKey::F3 => "F3",
+            VirtualKey::F4 => "F4",
+            VirtualKey::F5 => "F5",
+            VirtualKey::F6 => "F6",
+            VirtualKey::F7 => "F7",
+            VirtualKey::F8 => "F8",
+            VirtualKey::F9 => "F9",
+            VirtualKey::F10 => "F10",
+            VirtualKey::F11 => "F11",
+            VirtualKey::F12 => "F12",
+            VirtualKey::A => "A",
+            VirtualKey::B => "B",
+            VirtualKey::C => "C",
+            VirtualKey::D => "D",
+            VirtualKey::E => "E",
+            VirtualKey::F => "F",
+            VirtualKey::G => "G",
+            VirtualKey::H => "H",
+            VirtualKey::I => "I",
+            VirtualKey::J => "J",
+            VirtualKey::K => "K",
+            VirtualKey::L => "L",
+            VirtualKey::M => "M",
+            VirtualKey::N => "N",
+            VirtualKey::O => "O",
+            VirtualKey::P => "P",
+            VirtualKey::Q => "Q",
+            VirtualKey::R => "R",
+            VirtualKey::S => "S",
+            VirtualKey::T => "T",
+            VirtualKey::U => "U",
+            VirtualKey::V => "V",
+            VirtualKey::W => "W",
+            VirtualKey::X => "X",
+            VirtualKey::Y => "Y",
+            VirtualKey::Z => "Z",
+            VirtualKey::Num0 => "0",
+            VirtualKey::Num1 => "1",
+            VirtualKey::Num2 => "2",
+            VirtualKey::Num3 => "3",
+            VirtualKey::Num4 => "4",
+            VirtualKey::Num5 => "5",
+            VirtualKey::Num6 => "6",
+            VirtualKey::Num7 => "7",
+            VirtualKey::Num8 => "8",
+            VirtualKey::Num9 => "9",
+            VirtualKey::Insert => "Insert",
+            VirtualKey::Delete => "Delete",
+            VirtualKey::Home => "Home",
+            VirtualKey::End => "End",
+            VirtualKey::PageUp => "PageUp",
+            VirtualKey::PageDown => "PageDown",
+            VirtualKey::Left => "Left",
+            VirtualKey::Up => "Up",
+            VirtualKey::Right => "Right",
+            VirtualKey::Down => "Down",
+            VirtualKey::Escape => "Escape",
+            VirtualKey::Return => "Enter",
+            VirtualKey::Space => "Space",
+            VirtualKey::Tab => "Tab",
+            VirtualKey::Back => "Backspace",
+            VirtualKey::Tilde => "~",
+            VirtualKey::Minus => "-",
+            VirtualKey::Equals => "=",
+        };
+        f.write_str(value)
+    }
+}
+
+impl FromStr for VirtualKey {
+    type Err = ParseKeyComboError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let normalized = value.trim().to_ascii_lowercase();
+        match normalized.as_str() {
+            "f1" => Ok(VirtualKey::F1),
+            "f2" => Ok(VirtualKey::F2),
+            "f3" => Ok(VirtualKey::F3),
+            "f4" => Ok(VirtualKey::F4),
+            "f5" => Ok(VirtualKey::F5),
+            "f6" => Ok(VirtualKey::F6),
+            "f7" => Ok(VirtualKey::F7),
+            "f8" => Ok(VirtualKey::F8),
+            "f9" => Ok(VirtualKey::F9),
+            "f10" => Ok(VirtualKey::F10),
+            "f11" => Ok(VirtualKey::F11),
+            "f12" => Ok(VirtualKey::F12),
+            "a" => Ok(VirtualKey::A),
+            "b" => Ok(VirtualKey::B),
+            "c" => Ok(VirtualKey::C),
+            "d" => Ok(VirtualKey::D),
+            "e" => Ok(VirtualKey::E),
+            "f" => Ok(VirtualKey::F),
+            "g" => Ok(VirtualKey::G),
+            "h" => Ok(VirtualKey::H),
+            "i" => Ok(VirtualKey::I),
+            "j" => Ok(VirtualKey::J),
+            "k" => Ok(VirtualKey::K),
+            "l" => Ok(VirtualKey::L),
+            "m" => Ok(VirtualKey::M),
+            "n" => Ok(VirtualKey::N),
+            "o" => Ok(VirtualKey::O),
+            "p" => Ok(VirtualKey::P),
+            "q" => Ok(VirtualKey::Q),
+            "r" => Ok(VirtualKey::R),
+            "s" => Ok(VirtualKey::S),
+            "t" => Ok(VirtualKey::T),
+            "u" => Ok(VirtualKey::U),
+            "v" => Ok(VirtualKey::V),
+            "w" => Ok(VirtualKey::W),
+            "x" => Ok(VirtualKey::X),
+            "y" => Ok(VirtualKey::Y),
+            "z" => Ok(VirtualKey::Z),
+            "0" | "num0" => Ok(VirtualKey::Num0),
+            "1" | "num1" => Ok(VirtualKey::Num1),
+            "2" | "num2" => Ok(VirtualKey::Num2),
+            "3" | "num3" => Ok(VirtualKey::Num3),
+            "4" | "num4" => Ok(VirtualKey::Num4),
+            "5" | "num5" => Ok(VirtualKey::Num5),
+            "6" | "num6" => Ok(VirtualKey::Num6),
+            "7" | "num7" => Ok(VirtualKey::Num7),
+            "8" | "num8" => Ok(VirtualKey::Num8),
+            "9" | "num9" => Ok(VirtualKey::Num9),
+            "insert" | "ins" => Ok(VirtualKey::Insert),
+            "delete" | "del" => Ok(VirtualKey::Delete),
+            "home" => Ok(VirtualKey::Home),
+            "end" => Ok(VirtualKey::End),
+            "pageup" | "pgup" => Ok(VirtualKey::PageUp),
+            "pagedown" | "pgdn" => Ok(VirtualKey::PageDown),
+            "left" => Ok(VirtualKey::Left),
+            "up" => Ok(VirtualKey::Up),
+            "right" => Ok(VirtualKey::Right),
+            "down" => Ok(VirtualKey::Down),
+            "escape" | "esc" => Ok(VirtualKey::Escape),
+            "return" | "enter" => Ok(VirtualKey::Return),
+            "space" => Ok(VirtualKey::Space),
+            "tab" => Ok(VirtualKey::Tab),
+            "back" | "backspace" => Ok(VirtualKey::Back),
+            "tilde" | "`" | "~" => Ok(VirtualKey::Tilde),
+            "minus" | "-" => Ok(VirtualKey::Minus),
+            "equals" | "=" => Ok(VirtualKey::Equals),
+            _ => Err(ParseKeyComboError::UnknownToken(value.trim().to_string())),
+        }
+    }
+}
+
 bitflags::bitflags! {
     /// Keyboard modifier flags.
     ///
@@ -195,8 +349,123 @@ impl std::fmt::Display for KeyCombo {
         if self.modifiers.contains(Modifiers::ALT) {
             f.write_str("Alt+")?;
         }
-        write!(f, "{:?}", self.key)
+        write!(f, "{}", self.key)
     }
+}
+
+impl FromStr for KeyCombo {
+    type Err = ParseKeyComboError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let value = value.trim();
+        if value.is_empty() {
+            return Err(ParseKeyComboError::Empty);
+        }
+
+        let mut modifiers = Modifiers::empty();
+        let mut key = None;
+
+        for raw_part in value.split('+') {
+            let part = raw_part.trim();
+            if part.is_empty() {
+                return Err(ParseKeyComboError::UnknownToken(raw_part.to_string()));
+            }
+
+            match part.to_ascii_lowercase().as_str() {
+                "shift" => modifiers |= Modifiers::SHIFT,
+                "ctrl" | "control" => modifiers |= Modifiers::CTRL,
+                "alt" => modifiers |= Modifiers::ALT,
+                _ => {
+                    let parsed_key = VirtualKey::from_str(part)?;
+                    if key.replace(parsed_key).is_some() {
+                        return Err(ParseKeyComboError::DuplicateKey);
+                    }
+                }
+            }
+        }
+
+        let key = key.ok_or(ParseKeyComboError::MissingKey)?;
+        Ok(KeyCombo::new(key, modifiers))
+    }
+}
+
+/// Error returned when parsing an EQ-style hotkey string.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ParseKeyComboError {
+    #[error("hotkey combo cannot be empty")]
+    Empty,
+    #[error("hotkey combo must include one non-modifier key")]
+    MissingKey,
+    #[error("hotkey combo includes more than one non-modifier key")]
+    DuplicateKey,
+    #[error("unknown hotkey token '{0}'")]
+    UnknownToken(String),
+}
+
+/// Persisted hotkey binding from config.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HotkeyBinding {
+    /// EQ-style combo, for example `Alt+Z` or `Shift+Ctrl+F1`.
+    pub combo: String,
+    /// Slash command fired when the combo is pressed.
+    pub command: String,
+}
+
+impl HotkeyBinding {
+    pub fn new(combo: impl Into<String>, command: impl Into<String>) -> Self {
+        Self {
+            combo: combo.into(),
+            command: command.into(),
+        }
+    }
+
+    pub fn key_combo(&self) -> Result<KeyCombo, ParseKeyComboError> {
+        self.combo.parse()
+    }
+}
+
+/// Hotkey config section persisted as TOML.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HotkeyConfig {
+    #[serde(default)]
+    pub bindings: Vec<HotkeyBinding>,
+}
+
+/// Error returned when loading or saving hotkey bindings.
+#[derive(Debug, thiserror::Error)]
+pub enum HotkeyConfigError {
+    #[error("failed to read or write hotkey config: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("failed to parse hotkey config: {0}")]
+    Deserialize(#[from] toml::de::Error),
+    #[error("failed to serialize hotkey config: {0}")]
+    Serialize(#[from] toml::ser::Error),
+}
+
+pub fn load_bindings_from_config(
+    path: impl AsRef<Path>,
+) -> Result<HotkeyConfig, HotkeyConfigError> {
+    let path = path.as_ref();
+    if !path.exists() {
+        return Ok(HotkeyConfig::default());
+    }
+
+    let contents = std::fs::read_to_string(path)?;
+    Ok(toml::from_str(&contents)?)
+}
+
+pub fn save_bindings_to_config(
+    path: impl AsRef<Path>,
+    config: &HotkeyConfig,
+) -> Result<(), HotkeyConfigError> {
+    let path = path.as_ref();
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let contents = toml::to_string_pretty(config)?;
+    std::fs::write(path, contents)?;
+    Ok(())
 }
 
 // ── Registry ─────────────────────────────────────────────────────────────────
@@ -215,6 +484,15 @@ pub enum RegistryError {
         combo: KeyCombo,
         existing_id: HotkeyId,
     },
+}
+
+/// Error returned when registering a persisted hotkey command binding.
+#[derive(Debug, thiserror::Error)]
+pub enum CommandHotkeyError {
+    #[error(transparent)]
+    Parse(#[from] ParseKeyComboError),
+    #[error(transparent)]
+    Registry(#[from] RegistryError),
 }
 
 /// A registered hotkey entry kept inside the registry.
@@ -296,6 +574,36 @@ impl HotkeyRegistry {
         Ok(id)
     }
 
+    /// Register an EQ-style hotkey that dispatches a slash command.
+    pub fn register_command_binding(
+        &mut self,
+        combo_text: &str,
+        command: impl Into<String>,
+    ) -> Result<HotkeyId, CommandHotkeyError> {
+        let combo = combo_text.parse::<KeyCombo>()?;
+        let command = command.into();
+        let id = self.register(
+            combo,
+            Box::new(move || {
+                let result = crate::commands::dispatch_global_command(&command);
+                tracing::debug!(command = %command, ?result, "hotkey command dispatched");
+            }),
+        )?;
+        Ok(id)
+    }
+
+    /// Apply persisted command bindings to this registry.
+    pub fn apply_bindings(
+        &mut self,
+        config: &HotkeyConfig,
+    ) -> Result<Vec<HotkeyId>, CommandHotkeyError> {
+        let mut ids = Vec::with_capacity(config.bindings.len());
+        for binding in &config.bindings {
+            ids.push(self.register_command_binding(&binding.combo, binding.command.clone())?);
+        }
+        Ok(ids)
+    }
+
     /// Unregister a hotkey by its [`HotkeyId`].
     ///
     /// Returns `true` if the id was present and removed, `false` otherwise.
@@ -355,6 +663,15 @@ impl HotkeyRegistry {
     pub fn combos(&self) -> impl Iterator<Item = KeyCombo> + '_ {
         self.by_combo.keys().copied()
     }
+}
+
+/// Register a command hotkey in the global hotkey registry.
+pub fn register_command_hotkey(
+    combo_text: &str,
+    command: impl Into<String>,
+) -> Result<HotkeyId, CommandHotkeyError> {
+    let mut registry = global().lock().expect("global hotkey registry poisoned");
+    registry.register_command_binding(combo_text, command)
 }
 
 impl Default for HotkeyRegistry {
@@ -614,6 +931,48 @@ mod tests {
             Modifiers::SHIFT | Modifiers::ALT | Modifiers::CTRL,
         );
         assert_eq!(all.to_string(), "Ctrl+Shift+Alt+F10");
+    }
+
+    #[test]
+    fn parses_eq_style_hotkey_combo() {
+        let combo: KeyCombo = "Shift+Alt+Ctrl+Z".parse().unwrap();
+        assert_eq!(
+            combo,
+            KeyCombo::new(
+                VirtualKey::Z,
+                Modifiers::SHIFT | Modifiers::ALT | Modifiers::CTRL,
+            )
+        );
+    }
+
+    #[test]
+    fn hotkey_config_round_trips_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hotkeys.toml");
+        let config = HotkeyConfig {
+            bindings: vec![HotkeyBinding::new("Alt+Z", "/mercs pull npc_name")],
+        };
+
+        save_bindings_to_config(&path, &config).unwrap();
+        assert_eq!(load_bindings_from_config(&path).unwrap(), config);
+    }
+
+    #[test]
+    fn command_binding_dispatches_registered_command() {
+        let fired = Arc::new(AtomicU32::new(0));
+        let fired_for_command = fired.clone();
+        let path = "/issue793_hotkey_probe";
+        let _ = crate::commands::register_script_command(path, move |_| {
+            fired_for_command.fetch_add(1, Ordering::Relaxed);
+            crate::commands::CommandResult::Ok
+        });
+
+        let combo: KeyCombo = "Alt+Z".parse().unwrap();
+        let mut reg = HotkeyRegistry::new();
+        reg.register_command_binding("Alt+Z", path).unwrap();
+
+        assert!(reg.process_key_event(combo));
+        assert_eq!(fired.load(Ordering::Relaxed), 1);
     }
 
     #[test]

@@ -82,6 +82,15 @@
         "python3 scripts/dev-preflight.py"
       ],
       "notes": "Add TOML-backed zone metadata, neutral fallback for unknown zones, coordinator-time zone loading, and zone-aware idle weighting for behavior and mood interactions."
+    },
+    {
+      "id": "issue-793-hotkey-command-system",
+      "name": "In-game hotkey system for scripts/plugins",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check -p textquest-dll --all-targets"
+      ],
+      "notes": "Partial DLL-side scaffold: global script/plugin slash-command registration and dispatch, built-in /textquest command listing, EQ-style hotkey parsing, command hotkey binding, and TOML persistence helpers. Lua/MQ2/runtime EQ UI hook integration remains follow-up work."
     }
   ]
 }
