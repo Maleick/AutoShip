@@ -8,6 +8,7 @@
 //! No trampolines -- original function bytes are untouched.
 //! Only 4 debug registers available -- prioritize the most critical hooks.
 
+use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 #[cfg(test)]
 use std::sync::{Mutex, MutexGuard, OnceLock};
@@ -37,6 +38,31 @@ impl HwbpSlot {
 
 pub type HwbpCallback = fn(*mut ()) -> bool;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HwbpInstallOutcome {
+    Installed(HwbpSlot),
+    FallbackToDetour,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HwbpSlotConflict {
+    slot: HwbpSlot,
+}
+
+impl HwbpSlotConflict {
+    pub const fn slot(&self) -> HwbpSlot {
+        self.slot
+    }
+}
+
+impl fmt::Display for HwbpSlotConflict {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?} is already claimed by another HWBP hook", self.slot)
+    }
+}
+
+impl std::error::Error for HwbpSlotConflict {}
+
 pub(crate) struct SlotEntry {
     pub(crate) address: AtomicUsize,
     pub(crate) active: AtomicBool,
@@ -63,6 +89,13 @@ pub(crate) static CALLBACKS: [AtomicUsize; MAX_SLOTS] = [
     AtomicUsize::new(0),
     AtomicUsize::new(0),
     AtomicUsize::new(0),
+];
+
+static SLOT_CLAIMS: [AtomicBool; MAX_SLOTS] = [
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
+    AtomicBool::new(false),
 ];
 
 static VEH_INSTALLED: AtomicBool = AtomicBool::new(false);
@@ -330,6 +363,53 @@ pub fn register(
     address: usize,
     callback: HwbpCallback,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if !try_claim_slot(slot) {
+        return Err(Box::new(HwbpSlotConflict { slot }));
+    }
+
+    if let Err(error) = register_claimed(slot, address, callback) {
+        clear_slot_state(slot);
+        if active_count() == 0 {
+            platform::remove_veh();
+        }
+        return Err(error);
+    }
+
+    Ok(())
+}
+
+pub fn register_available(
+    address: usize,
+    callback: HwbpCallback,
+) -> Result<HwbpInstallOutcome, Box<dyn std::error::Error>> {
+    for idx in 0..MAX_SLOTS {
+        let Some(slot) = HwbpSlot::from_index(idx) else {
+            continue;
+        };
+
+        if !try_claim_slot(slot) {
+            continue;
+        }
+
+        if let Err(error) = register_claimed(slot, address, callback) {
+            clear_slot_state(slot);
+            if active_count() == 0 {
+                platform::remove_veh();
+            }
+            return Err(error);
+        }
+
+        return Ok(HwbpInstallOutcome::Installed(slot));
+    }
+
+    Ok(HwbpInstallOutcome::FallbackToDetour)
+}
+
+fn register_claimed(
+    slot: HwbpSlot,
+    address: usize,
+    callback: HwbpCallback,
+) -> Result<(), Box<dyn std::error::Error>> {
     let idx = slot as usize;
     platform::install_veh().map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
     CALLBACKS[idx].store(callback as usize, Ordering::Release);
@@ -354,6 +434,12 @@ pub fn register(
         "HWBP registered on main thread"
     );
     Ok(())
+}
+
+fn try_claim_slot(slot: HwbpSlot) -> bool {
+    SLOT_CLAIMS[slot as usize]
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
 }
 
 pub fn unregister(slot: HwbpSlot) -> Result<(), Box<dyn std::error::Error>> {
@@ -413,6 +499,7 @@ fn clear_slot_state(slot: HwbpSlot) {
     SLOTS[idx].active.store(false, Ordering::Release);
     SLOTS[idx].address.store(0, Ordering::Release);
     CALLBACKS[idx].store(0, Ordering::Release);
+    SLOT_CLAIMS[idx].store(false, Ordering::Release);
 }
 
 #[cfg(test)]
@@ -464,6 +551,102 @@ mod tests {
             assert!(!is_active(HwbpSlot::Dr0));
             assert_eq!(get_address(HwbpSlot::Dr0), 0);
         }
+        remove_all();
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn register_rejects_claimed_slot_without_overwriting_owner() {
+        let _guard = test_guard();
+        remove_all();
+        fn dummy_callback(_: *mut ()) -> bool {
+            true
+        }
+
+        register(HwbpSlot::Dr0, 0x11111, dummy_callback).expect("first claim should install");
+        let err = register(HwbpSlot::Dr0, 0x22222, dummy_callback)
+            .expect_err("second claim for same slot should fail");
+        let conflict = err
+            .downcast_ref::<HwbpSlotConflict>()
+            .expect("same-slot register should report a slot conflict");
+        assert_eq!(conflict.slot(), HwbpSlot::Dr0);
+        assert_eq!(get_address(HwbpSlot::Dr0), 0x11111);
+
+        remove_all();
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn concurrent_available_registration_uses_four_slots_then_falls_back() {
+        let _guard = test_guard();
+        remove_all();
+        fn dummy_callback(_: *mut ()) -> bool {
+            true
+        }
+
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(MAX_SLOTS + 1));
+        let mut handles = Vec::with_capacity(MAX_SLOTS + 1);
+        for idx in 0..=MAX_SLOTS {
+            let barrier = std::sync::Arc::clone(&barrier);
+            handles.push(std::thread::spawn(move || {
+                barrier.wait();
+                register_available(0x10_000 + idx, dummy_callback)
+                    .expect("stubbed HWBP install should not fail")
+            }));
+        }
+
+        let outcomes = handles
+            .into_iter()
+            .map(|handle| handle.join().expect("registration thread panicked"))
+            .collect::<Vec<_>>();
+
+        let installed = outcomes
+            .iter()
+            .filter_map(|outcome| match outcome {
+                HwbpInstallOutcome::Installed(slot) => Some(*slot as usize),
+                HwbpInstallOutcome::FallbackToDetour => None,
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        let fallbacks = outcomes
+            .iter()
+            .filter(|outcome| **outcome == HwbpInstallOutcome::FallbackToDetour)
+            .count();
+
+        assert_eq!(installed.len(), MAX_SLOTS);
+        assert_eq!(fallbacks, 1);
+
+        remove_all();
+    }
+
+    #[test]
+    #[cfg(not(windows))]
+    fn unregister_releases_available_slot_for_reuse() {
+        let _guard = test_guard();
+        remove_all();
+        fn dummy_callback(_: *mut ()) -> bool {
+            true
+        }
+
+        for idx in 0..MAX_SLOTS {
+            assert_eq!(
+                register_available(0x20_000 + idx, dummy_callback)
+                    .expect("stubbed HWBP install should not fail"),
+                HwbpInstallOutcome::Installed(HwbpSlot::from_index(idx).unwrap())
+            );
+        }
+        assert_eq!(
+            register_available(0x30_000, dummy_callback)
+                .expect("full slot set should fall back cleanly"),
+            HwbpInstallOutcome::FallbackToDetour
+        );
+
+        unregister(HwbpSlot::Dr1).expect("unregister should release DR1");
+        assert_eq!(
+            register_available(0x40_000, dummy_callback).expect("released slot should be reusable"),
+            HwbpInstallOutcome::Installed(HwbpSlot::Dr1)
+        );
+        assert_eq!(get_address(HwbpSlot::Dr1), 0x40_000);
+
         remove_all();
     }
 
