@@ -395,11 +395,17 @@ These notes are retained only so the historical MQ audit is not lost when `/User
      - expected current April 8 Test snapshot: `23120 / 0 / 427 / 21980 / 0`
    - Current source for that debugger DB:
      - `../TextQuest-Ghidra/test/eqgame/ghidra-export`
-5. Review the current patch checklist surfaces.
-  - Use `eqlib` history as a triage checklist only.
-  - Promote offsets only when local Ghidra or GhidraMCP proves them.
+5. Export byte-pattern candidates for scan-engine review.
+   - Use `scripts/export_ghidra_patterns.py` after the Ghidra harvest has produced symbol records with byte windows.
+   - Input records must include `name`, `bytes`, `category`, and `resolve`. `address` is recommended but not required; if it is missing, the exporter will still emit an entry with `expected_preferred: null`. Bare hex addresses such as `14028E0F0` (no `0x` prefix) are accepted. `--module` must be one of `EqGame`, `EqMain`, or `EqGraphics`, and `category` is normalized case-insensitively to `Function` or `Global`. RIP-relative entries should include `wildcards`, for example `[[3, 4]]`, so displacement bytes become `??` in the IDA pattern.
+   - Example:
+     - `python3 scripts/export_ghidra_patterns.py ../TextQuest-Ghidra/test/eqgame/ghidra-export/pattern-symbols.json --module EqGame --output /tmp/textquest-scan-entries.json`
+   - Review the output before promotion. A generated pattern is evidence for scan-engine testing, not an automatic offset promotion.
+6. Review the current patch checklist surfaces.
+   - Use `eqlib` history as a triage checklist only.
+   - Promote offsets only when local Ghidra or GhidraMCP proves them.
    - If `ZoneGuideManagerClient` is involved, verify the singleton/instance symbol explicitly. A nearby function symbol was close enough to cause a false promotion on 2026-04-09.
-6. Sync the current TextQuest source to `frostreaver`.
+7. Sync the current TextQuest source to `frostreaver`.
    - Do not assume the remote coding workspace is current.
    - Use a fresh full tracked-tree sync, not a hand-picked file overlay.
    - `scripts/sync-to-frostreaver.sh` does not satisfy this requirement today; it only syncs config/data/Ghidra surfaces and does not ship the tracked TextQuest source tree.
@@ -410,7 +416,7 @@ These notes are retained only so the historical MQ audit is not lost when `/User
      - extract the tracked tree into a fresh remote workspace
      - extract the ignored assets archive into that same workspace
    - Verify the remote source contains the latest `app.rs`, `event.rs`, `spawns.rs`, packet-hook files, and DLL startup changes before building.
-7. Rebuild the Windows artifacts on `frostreaver`.
+8. Rebuild the Windows artifacts on `frostreaver`.
    - Preferred:
      - `powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1 -CopyToDesktop`
    - Manual fallback:
@@ -418,7 +424,7 @@ These notes are retained only so the historical MQ audit is not lost when `/User
      - refresh Rust source mtimes under `textquest-common/src`, `textquest/src`, and `textquest-dll/src`
      - set `CMAKE_GENERATOR=Visual Studio 17 2022`
      - run `cargo +nightly build --release -p textquest -p textquest-dll`
-8. Refresh the desktop test folder.
+9. Refresh the desktop test folder.
    - The build helper now owns `C:\Users\xmale\Desktop\TextQuest-Test`.
    - It copies:
      - `target/release/textquest.exe`
@@ -437,38 +443,43 @@ These notes are retained only so the historical MQ audit is not lost when `/User
    - `README.md` still shows raw `target\release` examples; treat those as build-only guidance, not authoritative Test retest instructions.
    - Direct workspace-root launches or raw `target\release` retests are stale/unsafe for Test validation because they bypass the staged desktop drop.
    - Legacy helper debt remains: `scripts/test-windows.ps1`, `scripts/test_autologin.bat`, `scripts/test_single_login.bat`, and `scripts/launch_and_login.bat` still bypass the authoritative staged desktop drop and are unsafe for patch-day Test retests until updated.
-9. Run the Test validation pass.
-   - Launch EverQuest and get fully in game.
-   - Run:
-     - `C:\Users\xmale\Desktop\TextQuest-Test\02-inject.cmd`
-     - `C:\Users\xmale\Desktop\TextQuest-Test\01-dump.cmd`
-     - `C:\Users\xmale\Desktop\TextQuest-Test\03-ui.cmd`
-   - Optional:
-     - `C:\Users\xmale\Desktop\TextQuest-Test\verify_injection.bat`
-   - In `4` Debug, verify the three-pane layout: EQ Internals, Hex, and Ghidra Explorer.
-   - Press `Enter` on an internals row and on a Ghidra row; both should load bytes into Hex.
-   - If Debug says `No ghidra.db loaded`, stop and fix the desktop drop or working directory before trusting the debugger.
-   - To inspect raw spawn memory, use `2` Map, highlight a spawn, then press `h` or `x`; Debug no longer owns the spawn list.
-   - In `5` Packets, verify at least one inbound or outbound row appears after inject. Use `Space` to pause/resume, `j/k` or arrows to change selection, `PgUp/PgDn` to scroll, and confirm the sidebar shows a payload preview.
-   - Do not describe PacketMonitor as filtered/debug-decoded unless an operator-facing filter UI is added; today it is a live capture table plus selected-packet preview.
-   - Review:
-     - `logs/textquest-dump.log.*`
-     - `logs/textquest.log.*`
-     - `%TEMP%\\textquest\\textquest-dll.log*`
-     - `%TEMP%\\textquest\\textquest-dll-init-*.log`
-   - Manual TUI attach now adopts the existing `login_token_{pid}.bin` during live-process scans, and pipe-open now retries the on-disk token path if the in-memory map is empty, so packet polling should no longer warn forever about `No session token for client` after a clean manual inject.
-   - Do not launch `C:\Users\xmale\Projects\TextQuest-...\\textquest.exe` or `textquest_dll.dll` directly from the workspace root; stale root-level copies caused false Test results on 2026-04-09.
-10. Run the Live validation pass when Live binaries and a fresh interactive session exist.
-   - Repeat the same symbol harvest, evidence pack refresh, and desktop-drop validation against Live only after `live/eqgame`, `live/eqmain`, and `live/eqgraphics` are all available.
-   - If Live is still missing `eqmain` or `eqgraphics`, document that as the blocker instead of treating the Live workflow as complete.
-11. Record what changed.
-   - offsets promoted
-   - Test and Live evidence coverage
-   - missing module names or empty harvest slots
-   - manifest timestamp source
-   - unresolved globals/functions
-   - runtime failures
-   - build fixes needed on Windows
+10. Run the Test validation pass.
+
+- Launch EverQuest and get fully in game.
+- Run:
+  - `C:\Users\xmale\Desktop\TextQuest-Test\02-inject.cmd`
+  - `C:\Users\xmale\Desktop\TextQuest-Test\01-dump.cmd`
+  - `C:\Users\xmale\Desktop\TextQuest-Test\03-ui.cmd`
+- Optional:
+  - `C:\Users\xmale\Desktop\TextQuest-Test\verify_injection.bat`
+- In `4` Debug, verify the three-pane layout: EQ Internals, Hex, and Ghidra Explorer.
+- Press `Enter` on an internals row and on a Ghidra row; both should load bytes into Hex.
+- If Debug says `No ghidra.db loaded`, stop and fix the desktop drop or working directory before trusting the debugger.
+- To inspect raw spawn memory, use `2` Map, highlight a spawn, then press `h` or `x`; Debug no longer owns the spawn list.
+- In `5` Packets, verify at least one inbound or outbound row appears after inject. Use `Space` to pause/resume, `j/k` or arrows to change selection, `PgUp/PgDn` to scroll, and confirm the sidebar shows a payload preview.
+- Do not describe PacketMonitor as filtered/debug-decoded unless an operator-facing filter UI is added; today it is a live capture table plus selected-packet preview.
+- Review:
+  - `logs/textquest-dump.log.*`
+  - `logs/textquest.log.*`
+  - `%TEMP%\\textquest\\textquest-dll.log*`
+  - `%TEMP%\\textquest\\textquest-dll-init-*.log`
+- Manual TUI attach now adopts the existing `login_token_{pid}.bin` during live-process scans, and pipe-open now retries the on-disk token path if the in-memory map is empty, so packet polling should no longer warn forever about `No session token for client` after a clean manual inject.
+- Do not launch `C:\Users\xmale\Projects\TextQuest-...\\textquest.exe` or `textquest_dll.dll` directly from the workspace root; stale root-level copies caused false Test results on 2026-04-09.
+
+11. Run the Live validation pass when Live binaries and a fresh interactive session exist.
+
+- Repeat the same symbol harvest, evidence pack refresh, and desktop-drop validation against Live only after `live/eqgame`, `live/eqmain`, and `live/eqgraphics` are all available.
+- If Live is still missing `eqmain` or `eqgraphics`, document that as the blocker instead of treating the Live workflow as complete.
+
+12. Record what changed.
+
+- offsets promoted
+- Test and Live evidence coverage
+- missing module names or empty harvest slots
+- manifest timestamp source
+- unresolved globals/functions
+- runtime failures
+- build fixes needed on Windows
 
 ## Patch-Day Runtime Read Completeness Verification (Zone/Target/Class/State/Stand/Map/Named)
 
@@ -481,7 +492,9 @@ Run this block after any Test patch refresh touching runtime offsets or spawn re
    - `cargo test -p textquest --bin textquest -- --nocapture`
    - `cargo build -p textquest -p textquest-dll`
    - `verify`
-  - For the Tactical map/demo slice, use the `Historical / Reference-Only Tactical Map Verification (2026-04-10)` section in this runbook as the canonical operator checklist.
+
+- For the Tactical map/demo slice, use the `Historical / Reference-Only Tactical Map Verification (2026-04-10)` section in this runbook as the canonical operator checklist.
+
 2. Fresh in-world runtime capture:
    - Restart EQ client fully (do not reuse a previously injected process).
    - Inject once, then run `textquest.exe --dump`.
