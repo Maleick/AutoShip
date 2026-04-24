@@ -131,7 +131,10 @@ impl InMemoryCollector {
     ///
     /// Returns a map from metric name to a tuple of (kind, count).
     pub fn summary(&self) -> HashMap<String, (MetricKind, usize)> {
-        let metrics = self.metrics.lock().unwrap();
+        let metrics = self
+            .metrics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut summary = HashMap::new();
 
         for metric in metrics.iter() {
@@ -148,7 +151,7 @@ impl InMemoryCollector {
     pub fn metrics_by_kind(&self, kind: MetricKind) -> Vec<Metric> {
         self.metrics
             .lock()
-            .unwrap()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
             .filter(|m| m.kind == kind)
             .cloned()
@@ -159,7 +162,7 @@ impl InMemoryCollector {
     pub fn metrics_by_name(&self, name: &str) -> Vec<Metric> {
         self.metrics
             .lock()
-            .unwrap()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
             .filter(|m| m.name == name)
             .cloned()
@@ -192,19 +195,31 @@ impl Default for InMemoryCollector {
 
 impl MetricsCollector for InMemoryCollector {
     fn record(&self, metric: Metric) {
-        self.metrics.lock().unwrap().push(metric);
+        self.metrics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(metric);
     }
 
     fn all_metrics(&self) -> Vec<Metric> {
-        self.metrics.lock().unwrap().clone()
+        self.metrics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     fn clear(&self) {
-        self.metrics.lock().unwrap().clear();
+        self.metrics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
     }
 
     fn metric_count(&self) -> usize {
-        self.metrics.lock().unwrap().len()
+        self.metrics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len()
     }
 }
 
@@ -456,5 +471,48 @@ mod tests {
         });
 
         assert_eq!(collector.metric_count(), 1);
+    }
+
+    #[test]
+    fn test_poisoned_metrics_lock_recovers_for_collection() {
+        let collector = InMemoryCollector::new();
+
+        let poison_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut metrics = collector
+                .metrics
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            metrics.push(Metric {
+                name: "before_poison".to_string(),
+                kind: MetricKind::Counter,
+                value: 1.0,
+                labels: vec![],
+                timestamp: SystemTime::now(),
+            });
+            panic!("poison metrics lock");
+        }));
+        assert!(poison_result.is_err());
+
+        collector.record(Metric {
+            name: "after_poison".to_string(),
+            kind: MetricKind::Counter,
+            value: 2.0,
+            labels: vec![],
+            timestamp: SystemTime::now(),
+        });
+
+        assert_eq!(collector.metric_count(), 2);
+        assert_eq!(collector.all_metrics().len(), 2);
+        assert_eq!(collector.metrics_by_kind(MetricKind::Counter).len(), 2);
+        assert_eq!(collector.metrics_by_name("after_poison").len(), 1);
+        assert_eq!(collector.sum_by_name("after_poison"), 2.0);
+        assert_eq!(collector.average_by_name("after_poison"), Some(2.0));
+
+        let summary = collector.summary();
+        assert_eq!(summary["before_poison"], (MetricKind::Counter, 1));
+        assert_eq!(summary["after_poison"], (MetricKind::Counter, 1));
+
+        collector.clear();
+        assert_eq!(collector.metric_count(), 0);
     }
 }
