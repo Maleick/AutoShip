@@ -145,6 +145,55 @@ artifact_count=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json'
 assert_eq "1" "$artifact_count" "runner captures a stuck worker failure artifact"
 artifact_file=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' | head -1)
 jq -e '.issue == "issue-996" and .model == "opencode/test-free" and .role == "implementer" and .workspace != "" and .hook == "hooks/opencode/runner.sh" and .failure_category == "stuck" and (.logs | contains("ok")) and .attempt == 2' "$artifact_file" >/dev/null || fail "failure artifact includes issue, model, workspace, hook, logs, category, role, and attempt"
+test -s "$RUNNER_REPO/.autoship/workspaces/issue-996/worker.pid" || fail "runner records worker pid for lifecycle monitoring"
+
+MONITOR_REPO="$TMP_DIR/monitor-repo"
+mkdir -p "$MONITOR_REPO/.autoship/workspaces/issue-997" "$MONITOR_REPO/hooks/opencode" "$MONITOR_REPO/hooks"
+git init -q "$MONITOR_REPO"
+cp "$SCRIPT_DIR/monitor-agents.sh" "$MONITOR_REPO/hooks/opencode/monitor-agents.sh"
+cp "$SCRIPT_DIR/reconcile-state.sh" "$MONITOR_REPO/hooks/opencode/reconcile-state.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$MONITOR_REPO/hooks/update-state.sh"
+chmod +x "$MONITOR_REPO/hooks/opencode/monitor-agents.sh" "$MONITOR_REPO/hooks/opencode/reconcile-state.sh" "$MONITOR_REPO/hooks/update-state.sh"
+cat > "$MONITOR_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-997":{"state":"running"}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+printf '[]\n' > "$MONITOR_REPO/.autoship/event-queue.json"
+printf 'RUNNING\n' > "$MONITOR_REPO/.autoship/workspaces/issue-997/status"
+printf '999999\n' > "$MONITOR_REPO/.autoship/workspaces/issue-997/worker.pid"
+(
+  cd "$MONITOR_REPO"
+  bash hooks/opencode/monitor-agents.sh >/dev/null
+)
+assert_eq "STUCK" "$(tr -d '[:space:]' < "$MONITOR_REPO/.autoship/workspaces/issue-997/status")" "monitor marks RUNNING workspace stuck when worker pid is no longer live"
+assert_eq "stuck" "$(jq -r '.issues["issue-997"].state' "$MONITOR_REPO/.autoship/state.json")" "monitor reconciles stale RUNNING workspace state"
+
+MONITOR_COMPLETE_REPO="$TMP_DIR/monitor-complete-repo"
+mkdir -p "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998" "$MONITOR_COMPLETE_REPO/hooks/opencode" "$MONITOR_COMPLETE_REPO/hooks"
+git init -q "$MONITOR_COMPLETE_REPO"
+git -C "$MONITOR_COMPLETE_REPO" config user.email autoship@example.invalid
+git -C "$MONITOR_COMPLETE_REPO" config user.name AutoShip
+printf 'base\n' > "$MONITOR_COMPLETE_REPO/README.md"
+git -C "$MONITOR_COMPLETE_REPO" add README.md
+git -C "$MONITOR_COMPLETE_REPO" commit -q -m initial
+cp "$SCRIPT_DIR/monitor-agents.sh" "$MONITOR_COMPLETE_REPO/hooks/opencode/monitor-agents.sh"
+cp "$SCRIPT_DIR/reconcile-state.sh" "$MONITOR_COMPLETE_REPO/hooks/opencode/reconcile-state.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$MONITOR_COMPLETE_REPO/hooks/update-state.sh"
+chmod +x "$MONITOR_COMPLETE_REPO/hooks/opencode/monitor-agents.sh" "$MONITOR_COMPLETE_REPO/hooks/opencode/reconcile-state.sh" "$MONITOR_COMPLETE_REPO/hooks/update-state.sh"
+cat > "$MONITOR_COMPLETE_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-998":{"state":"running"}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+printf '[]\n' > "$MONITOR_COMPLETE_REPO/.autoship/event-queue.json"
+printf 'RUNNING\n' > "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/status"
+printf '999999\n' > "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/worker.pid"
+printf '2026-04-24T00:00:00Z\n' > "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/started_at"
+printf 'result\n' > "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/AUTOSHIP_RESULT.md"
+touch -t 202604240001 "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/AUTOSHIP_RESULT.md"
+touch -t 202604240000 "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/started_at"
+(
+  cd "$MONITOR_COMPLETE_REPO"
+  bash hooks/opencode/monitor-agents.sh >/dev/null
+)
+assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998/status")" "monitor marks dead worker complete when fresh result artifact exists"
 
 grep -F 'AUTOSHIP_VERSION="1.5.0-opencode"' "$SCRIPT_DIR/init.sh" >/dev/null 2>&1 && fail "init must not hardcode stale 1.5.0-opencode version"
 

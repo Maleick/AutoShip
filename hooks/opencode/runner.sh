@@ -103,6 +103,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
         fi
       fi
     ) &
+    printf '%s\n' "$!" > "$dir/worker.pid"
     echo "Started $(basename "$dir") with $model"
   fi
   started=$((started + 1))
