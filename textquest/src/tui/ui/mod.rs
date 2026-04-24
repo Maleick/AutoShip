@@ -151,10 +151,14 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Wizard overlay
     if app.wizard_state.active {
         use crate::tui::wizard::WizardWidget;
-        frame.render_widget(Clear, frame.area());
+        let popup_area = centered_popup(area, 92, 72, 96, 40, 96, 40, 1); // Fixed 96x40
+        frame
+            .buffer_mut()
+            .set_style(area, Style::default().add_modifier(Modifier::DIM));
+        frame.render_widget(Clear, popup_area);
         frame.render_widget(
             WizardWidget::new(&app.wizard_state).accent_color(app.theme.text_accent),
-            frame.area(),
+            popup_area,
         );
     }
 

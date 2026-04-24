@@ -1,18 +1,16 @@
-# Result: #950 — Verify/update packet scrambler offset for client 20260310
+# Result: #2492 — tui(wizard): full-screen Clear wipes frame — use centered_popup + dim pass
 
 Status: DONE
 
 Changes Made:
-- Updated `OFFSET_PACKET_SCRAMBLER`, `OFFSET_HTON`, and `OFFSET_NETWORK_SEND` in `textquest-common/src/offsets.rs` for the 20260310 live client.
-- Updated the active-hack offset comment with the verification date and canonical TextQuest-Ghidra snapshot.
-- Added active-hack IDA scan entries in `textquest-common/src/pattern_db.rs` for the packet scrambler global, opcode hton helper, and network send function.
+- Updated the wizard overlay in `textquest/src/tui/ui/mod.rs` to use a centered 96x40 popup area.
+- Added a dim pass over the underlying TUI buffer before clearing only the wizard popup rectangle.
+- Rendered `WizardWidget` into the popup area instead of the full terminal frame.
 
 Tests:
-- `cargo check -p textquest-common` passed.
+- `cargo check` passed.
 
 Notes:
-- Verification used the TextQuest-Ghidra `2026-04-11-live-working` snapshot and `staging/live/2026-04-11/eqgame.exe`, which reports `Mar 10 2026`.
-- GhidraMCP was not running locally, so verification used exported Ghidra metadata plus direct PE pattern scans/disassembly.
-- `cargo fmt --check` was attempted and failed on pre-existing unrelated formatting drift outside this issue (`textquest/src/tui/*`, `textquest-web/src/api/*`); touched files were formatted directly and pass `git diff --check`.
+- Full `cargo test` and preflight were intentionally not run per issue instructions.
 
 COMPLETE
