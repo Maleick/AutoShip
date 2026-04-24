@@ -827,39 +827,51 @@ pub enum NpcCategory {
 }
 
 impl NpcCategory {
+    /// Determine the NPC category from a spawn snapshot.
+    #[must_use]
+    pub fn from_spawn(spawn: &SpawnInfo) -> Option<Self> {
+        if spawn.spawn_type == SpawnType::Npc {
+            Self::from_spawn_name(&spawn.displayed_name)
+        } else {
+            None
+        }
+    }
+
     /// Determine the NPC category from a spawn name.
-    /// Returns `Some(category)` for any NPC spawn; returns `None` for non-NPC types.
+    /// Returns `Some(category)` for any supplied NPC-style name.
     #[must_use]
     pub fn from_spawn_name(name: &str) -> Option<Self> {
-        let lower = name.to_lowercase();
+        let lower = name.to_ascii_lowercase();
 
-        // Check for merchant patterns
-        if lower.contains("merchant")
-            || lower.contains("vendor")
-            || lower.contains("trainer")
-            || lower.contains("master")
-            || lower.contains("captain")
-            || lower.contains("quartermaster")
-        {
-            return Some(Self::Merchant);
-        }
-
-        // Check for banker patterns
         if lower.contains("banker") || lower.contains("exchange") {
             return Some(Self::Banker);
         }
 
-        // Check for training dummy patterns
         if lower.contains("training dummy") || lower.contains("practice dummy") {
             return Some(Self::TrainingDummy);
         }
 
-        // Check for quest NPC patterns
         if lower.contains("quest") || lower.contains("task") {
             return Some(Self::QuestNpc);
         }
 
-        // Default to Other for any unclassified NPC
+        if lower.contains("merchant")
+            || lower.contains("vendor")
+            || lower.contains("quartermaster")
+            || lower.contains("shopkeeper")
+            || lower.contains("provisioner")
+            || lower.contains("supplies")
+            || lower.contains("goods")
+            || lower.contains("armorer")
+            || lower.contains("weaponsmith")
+            || lower.contains("blacksmith")
+            || lower.contains("jeweler")
+            || lower.contains("scribe")
+            || lower.contains("tailor")
+        {
+            return Some(Self::Merchant);
+        }
+
         Some(Self::Other)
     }
 
@@ -900,11 +912,11 @@ impl MapFilterKind {
             "pet" | "pets" => Some(Self::Pet),
             "named" | "nameds" => Some(Self::Named),
             "untargetable" | "untargetables" | "untarget" => Some(Self::Untargetable),
-            "merchant" => Some(Self::NpcMerchant),
-            "banker" => Some(Self::NpcBanker),
-            "training" | "dummy" => Some(Self::NpcTrainingDummy),
-            "quest" => Some(Self::NpcQuestNpc),
-            "other" => Some(Self::NpcOther),
+            "merchant" | "merchants" | "vendor" | "vendors" => Some(Self::NpcMerchant),
+            "banker" | "bankers" | "bank" => Some(Self::NpcBanker),
+            "training" | "dummy" | "dummies" | "training-dummy" => Some(Self::NpcTrainingDummy),
+            "quest" | "quests" | "questnpc" | "quest-npc" => Some(Self::NpcQuestNpc),
+            "other" | "othernpc" | "other-npc" => Some(Self::NpcOther),
             _ => None,
         }
     }
@@ -1069,19 +1081,19 @@ impl MapFilters {
             return false;
         }
 
-        // Apply NPC subcategory filters if this is an NPC (and not a pet/named which take priority)
-        if is_npc && !is_pet && !is_named {
-            if let Some(category) = NpcCategory::from_spawn_name(&spawn.displayed_name) {
-                let allowed = match category {
-                    NpcCategory::Merchant => self.show_merchant,
-                    NpcCategory::Banker => self.show_banker,
-                    NpcCategory::TrainingDummy => self.show_training_dummy,
-                    NpcCategory::QuestNpc => self.show_quest_npc,
-                    NpcCategory::Other => self.show_other_npc,
-                };
-                if !allowed {
-                    return false;
-                }
+        if is_npc
+            && !is_pet
+            && let Some(category) = NpcCategory::from_spawn(spawn)
+        {
+            let allowed = match category {
+                NpcCategory::Merchant => self.show_merchant,
+                NpcCategory::Banker => self.show_banker,
+                NpcCategory::TrainingDummy => self.show_training_dummy,
+                NpcCategory::QuestNpc => self.show_quest_npc,
+                NpcCategory::Other => self.show_other_npc,
+            };
+            if !allowed {
+                return false;
             }
         }
 
@@ -1112,6 +1124,21 @@ impl MapFilters {
         if !self.show_untargetable {
             off.push("Untargetable");
         }
+        if !self.show_merchant {
+            off.push("Merchant");
+        }
+        if !self.show_banker {
+            off.push("Banker");
+        }
+        if !self.show_training_dummy {
+            off.push("Training Dummy");
+        }
+        if !self.show_quest_npc {
+            off.push("Quest NPC");
+        }
+        if !self.show_other_npc {
+            off.push("Other NPC");
+        }
 
         if off.is_empty() {
             String::from("Map filters: all ON")
@@ -1136,6 +1163,16 @@ impl MapFilters {
         out.push_str(if self.show_named { "Nm" } else { "-" });
         out.push('/');
         out.push_str(if self.show_untargetable { "Unt" } else { "-" });
+        out.push('/');
+        out.push_str(if self.show_merchant { "Mer" } else { "-" });
+        out.push('/');
+        out.push_str(if self.show_banker { "Bnk" } else { "-" });
+        out.push('/');
+        out.push_str(if self.show_training_dummy { "Dmy" } else { "-" });
+        out.push('/');
+        out.push_str(if self.show_quest_npc { "Qst" } else { "-" });
+        out.push('/');
+        out.push_str(if self.show_other_npc { "Oth" } else { "-" });
         out.push(']');
         out
     }

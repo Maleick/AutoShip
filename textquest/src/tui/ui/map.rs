@@ -25,7 +25,7 @@ use crate::{
     eq::structs::{SpawnInfo, SpawnType},
     tui::{
         app::{ActivePanel, App, MapViewportMode},
-        state::{MapSpawnPresentationCell, MapSpawnPresentationKey},
+        state::{MapSpawnPresentationCell, MapSpawnPresentationKey, NpcCategory},
         theme::Theme,
     },
 };
@@ -317,6 +317,10 @@ where
 /// This function implements the SpawnType→glyph mapping for the map display:
 /// - **Player**: First letter of class abbreviation (C, W, M, N, E, etc.) with class-specific color
 ///   - CLR: Cyan, WAR: Amber, MAG: Magenta, MNK: Red, ENC/NEC: Bright
+/// - **Merchant**: Circled plus (⊕), category-colored
+/// - **Banker**: Circled times (⊗), category-colored
+/// - **Training dummy**: Double-ended marker (⧲), category-colored
+/// - **Quest NPC**: Spark marker (✦), category-colored
 /// - **Named NPC**: Diamond (◆) in spawn_named color
 /// - **Regular NPC**: Circle (○) in spawn_npc color
 /// - **Corpse**: Cross dagger (†) in spawn_corpse color
@@ -341,7 +345,7 @@ where
 fn spawn_marker_glyph(
     app: &App,
     spawn: &crate::eq::structs::SpawnInfo,
-    group_names: &HashSet<&str>,
+    _group_names: &HashSet<&str>,
     selected_spawn_id: Option<u32>,
 ) -> (char, Color) {
     if Some(spawn.spawn_id) == selected_spawn_id {
@@ -363,6 +367,16 @@ fn spawn_marker_glyph(
                 (class_abbr, color)
             }
             SpawnType::Npc => {
+                if let Some(
+                    category @ (NpcCategory::Merchant
+                    | NpcCategory::Banker
+                    | NpcCategory::TrainingDummy
+                    | NpcCategory::QuestNpc),
+                ) = NpcCategory::from_spawn(spawn)
+                {
+                    return npc_category_marker(&app.theme, category);
+                }
+
                 let is_named = !spawn.displayed_name.starts_with("a ")
                     && !spawn.displayed_name.starts_with("an ");
                 if is_named {
@@ -378,6 +392,88 @@ fn spawn_marker_glyph(
                 ('†', app.theme.spawn_corpse)
             }
             SpawnType::Unknown(_) => ('?', app.theme.spawn_unknown),
+        }
+    }
+}
+
+fn npc_category_marker(theme: &Theme, category: NpcCategory) -> (char, Color) {
+    match category {
+        NpcCategory::Merchant => ('⊕', Color::Green),
+        NpcCategory::Banker => ('⊗', Color::Cyan),
+        NpcCategory::TrainingDummy => ('⧲', Color::Yellow),
+        NpcCategory::QuestNpc => ('✦', Color::Magenta),
+        NpcCategory::Other => ('○', theme.spawn_npc),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_npc_location_labels<F>(
+    app: &App,
+    to_grid: &F,
+    player_z: Option<f32>,
+    z_range: f32,
+    w: usize,
+    h: usize,
+    grid: &mut [Vec<(char, Color)>],
+    show_labels: bool,
+) where
+    F: Fn(f32, f32) -> (i32, i32),
+{
+    if !show_labels || !app.map_state.show_spawns {
+        return;
+    }
+
+    for spawn in &app.spawns {
+        if !app.map_state.filters.allows_spawn(spawn) {
+            continue;
+        }
+        if let Some(pz) = player_z
+            && (spawn.z - pz).abs() > z_range
+        {
+            continue;
+        }
+
+        let Some(
+            category @ (NpcCategory::Merchant
+            | NpcCategory::Banker
+            | NpcCategory::TrainingDummy
+            | NpcCategory::QuestNpc),
+        ) = NpcCategory::from_spawn(spawn)
+        else {
+            continue;
+        };
+
+        let (col, row) = to_grid(-spawn.y, -spawn.x);
+        if !grid_in_bounds(col, row, w, h) {
+            continue;
+        }
+
+        let label = app.redact_name(&spawn.displayed_name);
+        let label = if label.trim().is_empty() {
+            category.label().to_string()
+        } else {
+            label
+        };
+        let (_, color) = npc_category_marker(&app.theme, category);
+        let label_budget = if app.map_state.zoom > 1.8 {
+            22
+        } else if app.map_state.zoom > 1.1 {
+            16
+        } else if w > 120 {
+            12
+        } else {
+            9
+        };
+        let max_label_len = w.saturating_sub(col as usize + 1);
+        for (i, ch) in label
+            .chars()
+            .take(max_label_len.min(label_budget))
+            .enumerate()
+        {
+            let lc = col as usize + 1 + i;
+            if lc < w && grid[row as usize][lc].0 == ' ' {
+                grid[row as usize][lc] = (ch, color);
+            }
         }
     }
 }
@@ -876,6 +972,16 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             grid[row][col] = (cell.ch, cell.color);
         }
     }
+    draw_npc_location_labels(
+        app,
+        &to_grid,
+        player_z,
+        z_range,
+        w,
+        h,
+        &mut grid,
+        transform.using_local_view || app.map_state.zoom >= 0.75,
+    );
 
     for status in app.named_tracker.tracked_spawns() {
         if !status.is_alive {
@@ -1145,6 +1251,28 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             Span::raw(" NPC  ·  "),
             Span::styled("○", Style::default().fg(t.spawn_npc)),
             Span::raw(" NPC  ·  "),
+            Span::styled(
+                npc_category_marker(t, NpcCategory::Merchant).0.to_string(),
+                Style::default().fg(npc_category_marker(t, NpcCategory::Merchant).1),
+            ),
+            Span::raw(" Merchant  ·  "),
+            Span::styled(
+                npc_category_marker(t, NpcCategory::Banker).0.to_string(),
+                Style::default().fg(npc_category_marker(t, NpcCategory::Banker).1),
+            ),
+            Span::raw(" Banker  ·  "),
+            Span::styled(
+                npc_category_marker(t, NpcCategory::TrainingDummy)
+                    .0
+                    .to_string(),
+                Style::default().fg(npc_category_marker(t, NpcCategory::TrainingDummy).1),
+            ),
+            Span::raw(" Dummy  ·  "),
+            Span::styled(
+                npc_category_marker(t, NpcCategory::QuestNpc).0.to_string(),
+                Style::default().fg(npc_category_marker(t, NpcCategory::QuestNpc).1),
+            ),
+            Span::raw(" Quest  ·  "),
             Span::styled("†", Style::default().fg(t.spawn_corpse)),
             Span::raw(" Corpse  ·  "),
             Span::styled("◇", Style::default().fg(t.text_accent)),
