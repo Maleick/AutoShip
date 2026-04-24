@@ -310,12 +310,31 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   test -d "$CONFIG_DIR/.autoship/skills" || fail "package installer copies skills"
   test -f "$CONFIG_DIR/.autoship/AGENTS.md" || fail "package installer copies AGENTS.md"
   test -f "$CONFIG_DIR/.autoship/VERSION" || fail "package installer copies VERSION"
+  DOCTOR_BIN="$TMP_DIR/doctor-bin"
+  mkdir -p "$DOCTOR_BIN"
+  cat > "$DOCTOR_BIN/opencode" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1" == "models" ]]; then
+  printf '%s\n' opencode/minimax-m2.5-free openai/gpt-5.5
+  exit 0
+fi
+exit 0
+SH
+  cat > "$DOCTOR_BIN/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "auth status" ]]; then
+  printf '%s\n' "Token scopes: 'repo', 'workflow'"
+  exit 0
+fi
+exit 0
+SH
+  chmod +x "$DOCTOR_BIN/opencode" "$DOCTOR_BIN/gh"
   DOCTOR_CONFIG="$TMP_DIR/doctor-config"
   mkdir -p "$DOCTOR_CONFIG"
-  if OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-fail-1.txt" 2>&1; then
+  if PATH="$DOCTOR_BIN:$PATH" OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-fail-1.txt" 2>&1; then
     fail "doctor exits non-zero when required checks fail"
   fi
-  OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-fail-2.txt" 2>&1 || true
+  PATH="$DOCTOR_BIN:$PATH" OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-fail-2.txt" 2>&1 || true
   cmp "$TMP_DIR/doctor-fail-1.txt" "$TMP_DIR/doctor-fail-2.txt" >/dev/null || fail "doctor failure output is deterministic"
   grep -F '[FAIL]' "$TMP_DIR/doctor-fail-1.txt" >/dev/null || fail "doctor prints FAIL checks"
   grep -F '[WARN]' "$TMP_DIR/doctor-fail-1.txt" >/dev/null || fail "doctor prints WARN checks"
@@ -323,15 +342,30 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   printf '%s\n' '{"plugin":["opencode-autoship"]}' > "$DOCTOR_CONFIG/opencode.json"
   mkdir -p "$DOCTOR_CONFIG/.autoship/hooks" "$DOCTOR_CONFIG/.autoship/commands" "$DOCTOR_CONFIG/.autoship/skills"
   printf '{}\n' > "$DOCTOR_CONFIG/.autoship/config.json"
-  printf '{}\n' > "$DOCTOR_CONFIG/.autoship/model-routing.json"
+  printf '%s\n' '{"models":[{"id":"opencode/minimax-m2.5-free"}]}' > "$DOCTOR_CONFIG/.autoship/model-routing.json"
   cp AGENTS.md "$DOCTOR_CONFIG/.autoship/AGENTS.md"
   cp VERSION "$DOCTOR_CONFIG/.autoship/VERSION"
   date -u +%Y-%m-%dT%H:%M:%SZ > "$DOCTOR_CONFIG/.autoship/.onboarded"
-  OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-pass.txt"
+  PATH="$DOCTOR_BIN:$PATH" OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-pass.txt"
   grep -F '[PASS]' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor prints PASS checks"
   grep -F '0 failed' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor summary reports zero failures"
+  grep -F 'model-inventory' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor validates OpenCode model inventory"
+  grep -F 'gh-auth' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor validates GitHub auth"
+  cat > "$DOCTOR_BIN/opencode" <<'SH'
+#!/usr/bin/env bash
+exit 1
+SH
+  cat > "$DOCTOR_BIN/gh" <<'SH'
+#!/usr/bin/env bash
+exit 1
+SH
+  chmod +x "$DOCTOR_BIN/opencode" "$DOCTOR_BIN/gh"
+  PATH="$DOCTOR_BIN:$PATH" OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-optional-warn.txt"
+  grep -F '[WARN] model-inventory' "$TMP_DIR/doctor-optional-warn.txt" >/dev/null || fail "doctor warns for unavailable model inventory"
+  grep -F '[WARN] gh-auth' "$TMP_DIR/doctor-optional-warn.txt" >/dev/null || fail "doctor warns for missing GitHub auth"
+  grep -F '0 failed' "$TMP_DIR/doctor-optional-warn.txt" >/dev/null || fail "doctor treats optional readiness checks as warnings"
   printf 'v0.0.0\n' > "$DOCTOR_CONFIG/.autoship/VERSION"
-  if OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-version-fail.txt" 2>&1; then
+  if PATH="$DOCTOR_BIN:$PATH" OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-version-fail.txt" 2>&1; then
     fail "doctor fails when installed asset version does not match package"
   fi
   grep -F 'asset version' "$TMP_DIR/doctor-version-fail.txt" >/dev/null || fail "doctor reports mismatched asset version"
