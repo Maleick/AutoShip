@@ -318,7 +318,7 @@ mod constant_time_tests {
 }
 
 /// Returns the runtime data root: `TEXTQUEST_DATA_DIR` env var → exe parent → `"."`.
-fn data_dir() -> PathBuf {
+pub(crate) fn data_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("TEXTQUEST_DATA_DIR")
         && !dir.trim().is_empty()
     {
