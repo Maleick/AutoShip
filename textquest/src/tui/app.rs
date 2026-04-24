@@ -2,6 +2,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet, VecDeque, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
+    sync::LazyLock,
     time::Duration,
 };
 
@@ -40,6 +41,13 @@ use crate::{
 use anyhow::Context;
 use ratatui::style::Color;
 use textquest_soul::coordinator::SoulCoordinator;
+
+static GM_SYNC_CLIENT: LazyLock<reqwest::blocking::Client> = LazyLock::new(|| {
+    reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .expect("GM sync HTTP client init failed")
+});
 
 // Re-export extracted types so existing `use tui::app::*` paths still work.
 use super::state::{
@@ -3882,18 +3890,7 @@ impl App {
         let _ = std::thread::Builder::new()
             .name("gm-state-sync".to_string())
             .spawn(move || {
-                let client = match reqwest::blocking::Client::builder()
-                    .timeout(std::time::Duration::from_secs(2))
-                    .build()
-                {
-                    Ok(c) => c,
-                    Err(e) => {
-                        tracing::debug!(%e, "Failed to create HTTP client for GM sync");
-                        return;
-                    }
-                };
-
-                match client.post(&url).json(&payload).send() {
+                match GM_SYNC_CLIENT.post(&url).json(&payload).send() {
                     Ok(resp) if resp.status().is_success() => {
                         tracing::debug!("GM state synced to web dashboard");
                     }
