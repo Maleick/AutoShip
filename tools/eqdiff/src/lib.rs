@@ -7,11 +7,16 @@
 use anyhow::{Context, Result};
 use goblin::pe::PE;
 
+pub mod callgraph;
 pub mod matcher;
 pub mod offset_export;
 pub mod rtti;
 pub mod similarity;
 pub mod xref;
+pub use callgraph::{
+    BinaryFunction, CallEdge, CallGraph, FunctionMatch as CallGraphFunctionMatch, MatchConfidence,
+    MatchReport, build_call_graph, propagate_function_matches,
+};
 pub use matcher::{
     FunctionMatch, StringFunctionRef, apply_matches_to_offsets_json,
     match_functions_by_string_references, string_function_refs_from_xrefs,
