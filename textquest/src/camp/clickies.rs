@@ -36,6 +36,10 @@ use textquest_common::ipc::{Command, IpcCommand};
 /// Default ring-buffer capacity for per-manager usage history.
 const DEFAULT_HISTORY_CAP: usize = 64;
 
+fn default_enabled() -> bool {
+    true
+}
+
 // ── ClickCondition ────────────────────────────────────────────────────────────
 
 /// Condition that must be satisfied before a clicky item fires.
@@ -93,6 +97,8 @@ pub struct CharSnapshot {
     pub hp_pct: f32,
     /// Current mana as a percentage (0.0–100.0).
     pub mana_pct: f32,
+    /// Whether the character is currently in combat.
+    pub in_combat: bool,
     /// Names of buffs currently active on the character.
     pub active_buffs: Vec<String>,
 }
@@ -102,7 +108,34 @@ impl Default for CharSnapshot {
         Self {
             hp_pct: 100.0,
             mana_pct: 100.0,
+            in_combat: false,
             active_buffs: Vec::new(),
+        }
+    }
+}
+
+// ── ClickyScenario ───────────────────────────────────────────────────────────
+
+/// Combat state in which a clicky item is allowed to fire.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClickyScenario {
+    /// Fire regardless of combat state.
+    #[default]
+    Any,
+    /// Fire only while in combat.
+    Combat,
+    /// Fire only while out of combat.
+    Downtime,
+}
+
+impl ClickyScenario {
+    #[must_use]
+    fn matches(self, snapshot: &CharSnapshot) -> bool {
+        match self {
+            Self::Any => true,
+            Self::Combat => snapshot.in_combat,
+            Self::Downtime => !snapshot.in_combat,
         }
     }
 }
@@ -117,6 +150,15 @@ pub struct ClickyItem {
     /// EQ inventory slot number (0-based, matches `/useitem <slot>`).
     /// Common slots: 0 = primary, 1 = secondary, 13 = ammo, 22 = charm.
     pub slot: u8,
+    /// Optional character owner. `None` means all characters may use it.
+    #[serde(default)]
+    pub character_id: Option<u32>,
+    /// Whether this clicky is enabled in configuration or UI toggles.
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+    /// Combat state where this item should be considered.
+    #[serde(default)]
+    pub scenario: ClickyScenario,
     /// Milliseconds between uses (the item's recast / cooldown time).
     pub cooldown_ms: u64,
     /// Conditions that must all be satisfied before the item fires.
@@ -130,6 +172,20 @@ pub struct ClickyItem {
 }
 
 impl ClickyItem {
+    /// Returns true when this item is enabled and in scope for the character
+    /// and current combat state.
+    #[must_use]
+    pub fn is_available_for(&self, character_id: u32, snapshot: &CharSnapshot) -> bool {
+        if !self.enabled || !self.scenario.matches(snapshot) {
+            return false;
+        }
+
+        match self.character_id {
+            Some(owner) => owner == character_id,
+            None => true,
+        }
+    }
+
     /// Returns true when all conditions are met for a given snapshot.
     #[must_use]
     pub fn conditions_met(&self, snapshot: &CharSnapshot) -> bool {
@@ -295,7 +351,11 @@ impl ClickyManager {
     ) -> Vec<&ClickyItem> {
         self.items
             .iter()
-            .filter(|item| self.is_ready(character_id, item, now) && item.conditions_met(snapshot))
+            .filter(|item| {
+                item.is_available_for(character_id, snapshot)
+                    && self.is_ready(character_id, item, now)
+                    && item.conditions_met(snapshot)
+            })
             .collect()
     }
 
@@ -324,7 +384,9 @@ impl ClickyManager {
                 .iter()
                 .enumerate()
                 .filter(|(_, item)| {
-                    self.is_ready(character_id, item, now) && item.conditions_met(snapshot)
+                    item.is_available_for(character_id, snapshot)
+                        && self.is_ready(character_id, item, now)
+                        && item.conditions_met(snapshot)
                 })
                 .map(|(idx, _)| idx)
                 .collect();
@@ -380,6 +442,23 @@ impl ClickyManager {
         self.cooldowns
             .insert((character_id, item_name.to_string()), at);
     }
+
+    /// Enable or disable every configured clicky matching `item_name`.
+    ///
+    /// Returns `true` when at least one item was updated. This is the small
+    /// production hook used by UI controls for per-clicky quick toggles.
+    pub fn set_item_enabled(&mut self, item_name: &str, enabled: bool) -> bool {
+        let mut updated = false;
+
+        for item in &mut self.items {
+            if item.name.eq_ignore_ascii_case(item_name) {
+                item.enabled = enabled;
+                updated = true;
+            }
+        }
+
+        updated
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -395,6 +474,9 @@ mod tests {
         ClickyItem {
             name: name.to_string(),
             slot,
+            character_id: None,
+            enabled: true,
+            scenario: ClickyScenario::Any,
             cooldown_ms,
             conditions: vec![],
             priority: 0,
@@ -405,6 +487,7 @@ mod tests {
         CharSnapshot {
             hp_pct: 100.0,
             mana_pct: 100.0,
+            in_combat: false,
             active_buffs: vec![],
         }
     }
@@ -633,6 +716,65 @@ mod tests {
         assert_eq!(stub.calls.borrow().len(), 1);
     }
 
+    #[test]
+    fn disabled_item_is_not_clicked() {
+        let item = ClickyItem {
+            enabled: false,
+            ..simple_item("HealClicky", 5, 0)
+        };
+        let mut mgr = ClickyManager::new(vec![item]);
+        let stub = StubExecutor::default();
+
+        let logs = mgr.tick(Instant::now(), &[(1, healthy_snapshot())], &stub);
+
+        assert!(logs.is_empty());
+        assert!(stub.calls.borrow().is_empty());
+    }
+
+    #[test]
+    fn scenario_filters_combat_and_downtime_items() {
+        let combat = ClickyItem {
+            scenario: ClickyScenario::Combat,
+            ..simple_item("Potion", 1, 0)
+        };
+        let downtime = ClickyItem {
+            scenario: ClickyScenario::Downtime,
+            ..simple_item("Drink", 2, 0)
+        };
+        let mut mgr = ClickyManager::new(vec![combat, downtime]);
+        let stub = StubExecutor::default();
+        let combat_snapshot = CharSnapshot {
+            in_combat: true,
+            ..healthy_snapshot()
+        };
+
+        mgr.tick(Instant::now(), &[(1, combat_snapshot)], &stub);
+
+        let calls = stub.calls.borrow();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].1, "Potion");
+    }
+
+    #[test]
+    fn character_scoped_item_only_fires_for_owner() {
+        let item = ClickyItem {
+            character_id: Some(2),
+            ..simple_item("OwnerOnly", 3, 0)
+        };
+        let mut mgr = ClickyManager::new(vec![item]);
+        let stub = StubExecutor::default();
+
+        mgr.tick(
+            Instant::now(),
+            &[(1, healthy_snapshot()), (2, healthy_snapshot())],
+            &stub,
+        );
+
+        let calls = stub.calls.borrow();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, 2);
+    }
+
     // ── History capture ───────────────────────────────────────────────────────
 
     #[test]
@@ -756,5 +898,14 @@ mod tests {
 
         let logs = mgr.tick(t0, &[(1, snap)], &stub);
         assert!(logs.is_empty());
+    }
+
+    #[test]
+    fn set_item_enabled_toggles_matching_clickies() {
+        let mut mgr = ClickyManager::new(vec![simple_item("Boots", 0, 0)]);
+
+        assert!(mgr.set_item_enabled("boots", false));
+        assert!(!mgr.items[0].enabled);
+        assert!(!mgr.set_item_enabled("missing", true));
     }
 }

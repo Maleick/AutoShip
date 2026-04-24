@@ -84,6 +84,15 @@
       "notes": "Add TOML-backed zone metadata, neutral fallback for unknown zones, coordinator-time zone loading, and zone-aware idle weighting for behavior and mood interactions."
     },
     {
+      "id": "issue-794-clickies-module-consumable-item-automation",
+      "name": "Clickies module consumable/item automation",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check"
+      ],
+      "notes": "PARTIAL: Added per-character ownership, enable/disable toggles, and combat/downtime scenario gating to the existing clickies manager. Remaining work includes live inventory detection and the in-game window surface."
+    },
+    {
       "id": "issue-793-hotkey-command-system",
       "name": "In-game hotkey system for scripts/plugins",
       "status": "in_progress",
