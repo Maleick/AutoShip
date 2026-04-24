@@ -496,6 +496,15 @@ fn install_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn install_remaining_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
+    // Install WMI COM hooks before EQ can use WbemLocator for hardware or
+    // process inventory that bypasses direct Win32 interception.
+    if let Err(e) = hooks::wmi::install() {
+        tracing::warn!(
+            "WMI evasion hook failed (continuing without WMI filtering): {}",
+            e
+        );
+    }
+
     // Install render strobe hook -- background clients skip 3D rendering.
     if let Err(e) = hooks::render::install(eq_base) {
         tracing::warn!(
