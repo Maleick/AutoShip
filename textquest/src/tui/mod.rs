@@ -37,6 +37,8 @@ pub mod hotkeys;
 pub(crate) mod live_cast_capture;
 /// Dropdown menu bar system for accessible command navigation.
 pub mod menu;
+/// In-game overlay window models shared by DLL renderers and the TUI state.
+pub mod overlay;
 /// Priority queue types for heal/buff/debuff visibility.
 pub mod priorities;
 /// TUI run loop — terminal setup, tick/render cycle, graceful shutdown.

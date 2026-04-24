@@ -13,6 +13,7 @@ use super::{
     config_panel::ConfigPanelState,
     demo_data::{DemoRole, demo_client_cast_info, demo_client_profile},
     menu::MenuState,
+    overlay::{OverlayFrame, OverlayWindowManager},
     sound::SoundAlertManager,
     theme::{Theme, ThemeKind},
     ui::ch_chain::{CastState as ChPanelCastState, ChChainPanelState, ChainCleric, ChainStats},
@@ -1024,6 +1025,8 @@ pub struct App {
     pub clicky_window_state: ClickyWindowState,
     /// Camp status backend state.
     pub camp_status_state: CampStatusState,
+    /// In-game overlay window layout and input capture policy.
+    pub overlay_manager: OverlayWindowManager,
 
     /// Chat pattern rule engine for user-defined event triggers.
     pub chat_pattern_engine: textquest_common::chat_pattern_rules::ChatPatternRuleEngine,
@@ -1330,6 +1333,7 @@ impl App {
             force_target_state: ForceTargetState::new(),
             clicky_window_state: ClickyWindowState::new(),
             camp_status_state: CampStatusState::new(),
+            overlay_manager: OverlayWindowManager::new(),
 
             chat_pattern_engine: {
                 use textquest_common::chat_pattern_rules::ChatPatternRulesConfig;
@@ -1345,6 +1349,12 @@ impl App {
         app.cmd_state.load_history_from_disk();
         app.refresh_alert_history();
         app
+    }
+
+    /// Build the in-game overlay frame from the same state that powers the TUI.
+    #[must_use]
+    pub fn overlay_frame(&self) -> OverlayFrame {
+        self.overlay_manager.frame_from_app(self)
     }
 
     /// Build default command aliases.
