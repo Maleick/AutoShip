@@ -1106,6 +1106,40 @@ pub enum Command {
         /// Reward selection rules keyed by task title matching.
         config: RewardAutomationConfig,
     },
+    /// Read all registered fields for a live EQ struct instance.
+    ///
+    /// `base_address_or_global_name` accepts either an absolute address
+    /// (`0x...` or decimal) or a known global pointer name such as
+    /// `PINST_LOCAL_PLAYER`, `PINST_TARGET`, `PINST_SPAWN_MANAGER`, or
+    /// `PINST_LOCAL_PC`.
+    StructRead {
+        /// Struct registry name, e.g. `PlayerBase`, `PlayerZone`, `PcClient`.
+        struct_type: String,
+        /// Absolute base address or supported EQ global pointer name.
+        base_address_or_global_name: String,
+    },
+    /// Read one registered field from a live EQ struct instance.
+    StructFieldRead {
+        /// Struct registry name.
+        struct_type: String,
+        /// Field name from the struct registry.
+        field_name: String,
+        /// Absolute struct base address.
+        base_address: usize,
+    },
+    /// Request continuous polling for a live EQ struct.
+    ///
+    /// The protocol variant is reserved for debugger clients; this DLL build
+    /// currently returns an explicit unsupported result and expects callers to
+    /// poll with `StructRead`.
+    StructWatch {
+        /// Struct registry name.
+        struct_type: String,
+        /// Absolute base address or supported EQ global pointer name.
+        base_address_or_global_name: String,
+        /// Requested polling interval in milliseconds.
+        poll_interval_ms: u64,
+    },
     /// Add or replace a memory watchpoint.
     WatchAdd {
         /// Absolute virtual address to monitor.
@@ -1304,6 +1338,101 @@ pub struct ChatMessageInfo {
     /// EQ chat color code (e.g., 273 = default, 269 = system).
     pub color: i32,
     /// Timestamp in milliseconds when the message was captured.
+    pub timestamp_ms: u64,
+}
+
+/// Primitive field kinds supported by the EQ struct browser.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum StructFieldType {
+    /// Unsigned 8-bit integer.
+    U8,
+    /// Unsigned 16-bit integer.
+    U16,
+    /// Unsigned 32-bit integer.
+    U32,
+    /// Unsigned 64-bit integer.
+    U64,
+    /// Signed 8-bit integer.
+    I8,
+    /// Signed 16-bit integer.
+    I16,
+    /// Signed 32-bit integer.
+    I32,
+    /// Signed 64-bit integer.
+    I64,
+    /// 32-bit float.
+    F32,
+    /// 64-bit float.
+    F64,
+    /// Fixed-size nul-terminated string buffer.
+    String {
+        /// Maximum bytes to read from the string buffer.
+        len: usize,
+    },
+    /// Process pointer-sized address.
+    Pointer,
+}
+
+/// Typed value for one EQ struct field.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum StructFieldValue {
+    /// Unsigned 8-bit integer.
+    U8(u8),
+    /// Unsigned 16-bit integer.
+    U16(u16),
+    /// Unsigned 32-bit integer.
+    U32(u32),
+    /// Unsigned 64-bit integer.
+    U64(u64),
+    /// Signed 8-bit integer.
+    I8(i8),
+    /// Signed 16-bit integer.
+    I16(i16),
+    /// Signed 32-bit integer.
+    I32(i32),
+    /// Signed 64-bit integer.
+    I64(i64),
+    /// 32-bit float.
+    F32(f32),
+    /// 64-bit float.
+    F64(f64),
+    /// Decoded string buffer.
+    String(String),
+    /// Process pointer-sized address.
+    Pointer(usize),
+    /// The field could not be read safely.
+    Unreadable(String),
+}
+
+/// One typed field read from a live EQ struct instance.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct StructFieldSnapshot {
+    /// Field name from the struct registry.
+    pub name: String,
+    /// Byte offset from the struct base address.
+    pub offset: usize,
+    /// Absolute address that was read.
+    pub address: usize,
+    /// Primitive field type.
+    pub field_type: StructFieldType,
+    /// Typed field value.
+    pub value: StructFieldValue,
+    /// Human-friendly display string for TUI/web callers.
+    pub display_value: String,
+    /// Struct type to use when following this field as a pointer, if known.
+    pub nested_struct_type: Option<String>,
+}
+
+/// Typed snapshot of a live EQ struct instance.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct StructSnapshot {
+    /// Struct registry name, e.g. `PlayerBase`.
+    pub struct_type: String,
+    /// Absolute base address used for the field reads.
+    pub base_address: usize,
+    /// Field values read from memory.
+    pub fields: Vec<StructFieldSnapshot>,
+    /// Epoch milliseconds when the snapshot was produced.
     pub timestamp_ms: u64,
 }
 
@@ -1669,6 +1798,20 @@ pub enum Response {
     ChecksumMismatchAlertBatch {
         /// Alerts raised since the previous alert poll/drain.
         alerts: Vec<ChecksumMismatchAlert>,
+    },
+    /// Typed live EQ struct snapshot returned by `Command::StructRead`.
+    StructSnapshot {
+        /// Full struct snapshot.
+        snapshot: StructSnapshot,
+    },
+    /// Single typed EQ struct field returned by `Command::StructFieldRead`.
+    StructFieldData {
+        /// Struct registry name.
+        struct_type: String,
+        /// Absolute base address used for the read.
+        base_address: usize,
+        /// Field value snapshot.
+        field: StructFieldSnapshot,
     },
     /// Active memory watchpoints.
     WatchList {

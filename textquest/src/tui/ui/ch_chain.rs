@@ -377,17 +377,9 @@ impl ChChainWidget<'_> {
                 }
                 CastState::Casting(pct) => {
                     if pct > 0.75 {
-                        if compact {
-                            "*"
-                        } else {
-                            "◕"
-                        }
+                        if compact { "*" } else { "◕" }
                     } else if pct > 0.25 {
-                        if compact {
-                            ">"
-                        } else {
-                            "◑"
-                        }
+                        if compact { ">" } else { "◑" }
                     } else if compact {
                         "-"
                     } else {

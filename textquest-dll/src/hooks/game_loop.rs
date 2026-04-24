@@ -3621,6 +3621,66 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                 );
             }
         }
+        Command::StructRead {
+            struct_type,
+            base_address_or_global_name,
+        } => {
+            tracing::debug!(
+                struct_type = %struct_type,
+                base = %base_address_or_global_name,
+                "StructRead received"
+            );
+            let response = match crate::debug::struct_browser::read_struct(
+                &struct_type,
+                &base_address_or_global_name,
+            ) {
+                Ok(snapshot) => textquest_common::ipc::Response::StructSnapshot { snapshot },
+                Err(message) => textquest_common::ipc::Response::Error { message },
+            };
+            crate::ipc::send_response(response);
+        }
+        Command::StructFieldRead {
+            struct_type,
+            field_name,
+            base_address,
+        } => {
+            tracing::debug!(
+                struct_type = %struct_type,
+                field_name = %field_name,
+                base_address = format!("{base_address:#x}"),
+                "StructFieldRead received"
+            );
+            let response = match crate::debug::struct_browser::read_struct_field(
+                &struct_type,
+                &field_name,
+                base_address,
+            ) {
+                Ok((struct_type, field)) => textquest_common::ipc::Response::StructFieldData {
+                    struct_type,
+                    base_address,
+                    field,
+                },
+                Err(message) => textquest_common::ipc::Response::Error { message },
+            };
+            crate::ipc::send_response(response);
+        }
+        Command::StructWatch {
+            struct_type,
+            base_address_or_global_name,
+            poll_interval_ms,
+        } => {
+            tracing::info!(
+                struct_type = %struct_type,
+                base = %base_address_or_global_name,
+                poll_interval_ms,
+                "StructWatch received"
+            );
+            crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                success: false,
+                message: "StructWatch is not implemented in this DLL build; poll with StructRead"
+                    .to_string(),
+            });
+        }
         Command::WatchAdd {
             address,
             size,
