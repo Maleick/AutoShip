@@ -11,19 +11,30 @@
 /// - log: textquest.log.*
 /// - hotkeys: textquest.hotkeys.*
 /// - commands: textquest.commands.*
-use mlua::{Error as LuaError, Lua, LuaOptions, Result as LuaResult, Table, Value, Variadic};
-use std::sync::Arc;
+use mlua::{
+    Error as LuaError, Function, Lua, LuaOptions, RegistryKey, Result as LuaResult, Table, Value,
+    Variadic,
+};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, RwLock};
 use std::sync::atomic::{AtomicBool, AtomicU64};
 
 use crate::lua::error::LuaApiError;
 use crate::lua::sandbox;
+use crate::lua::types::{
+    LuaCommandRequest, LuaNavigationRequest, LuaPlayerSnapshot, LuaRuntimeState,
+};
 use crate::registry::{Priority, SharedCommandRegistry, SharedHotkeyRegistry};
 
 static LUA_COMMAND_TRACING_ENABLED: AtomicBool = AtomicBool::new(false);
 
+type EventHandlers = Arc<Mutex<HashMap<String, Vec<RegistryKey>>>>;
+
 pub struct LuaBindings {
     lua: Lua,
     sandbox_instruction_counter: Arc<AtomicU64>,
+    runtime_state: Arc<RwLock<LuaRuntimeState>>,
+    event_handlers: EventHandlers,
     /// Shared command registry — injected so plugins and Lua share the same table.
     command_registry: SharedCommandRegistry,
     /// Shared hotkey registry — injected so plugins and Lua share the same table.
@@ -50,6 +61,8 @@ impl LuaBindings {
         Ok(Self {
             lua,
             sandbox_instruction_counter,
+            runtime_state: Arc::new(RwLock::new(LuaRuntimeState::default())),
+            event_handlers: Arc::new(Mutex::new(HashMap::new())),
             command_registry,
             hotkey_registry,
         })
@@ -66,6 +79,8 @@ impl LuaBindings {
         Ok(Self {
             lua,
             sandbox_instruction_counter,
+            runtime_state: Arc::new(RwLock::new(LuaRuntimeState::default())),
+            event_handlers: Arc::new(Mutex::new(HashMap::new())),
             command_registry,
             hotkey_registry,
         })
@@ -79,6 +94,52 @@ impl LuaBindings {
     /// Return a clone of the shared hotkey registry handle.
     pub fn hotkey_registry(&self) -> SharedHotkeyRegistry {
         Arc::clone(&self.hotkey_registry)
+    }
+
+    /// Replace the player snapshot used by `textquest.player.*` calls.
+    pub fn set_player_snapshot(&self, player: LuaPlayerSnapshot) {
+        self.runtime_state
+            .write()
+            .expect("lua runtime_state lock poisoned")
+            .player = Some(player);
+    }
+
+    /// Clear the player snapshot; Lua player getters fall back to zero values.
+    pub fn clear_player_snapshot(&self) {
+        self.runtime_state
+            .write()
+            .expect("lua runtime_state lock poisoned")
+            .player = None;
+    }
+
+    pub fn player_snapshot(&self) -> Option<LuaPlayerSnapshot> {
+        self.runtime_state
+            .read()
+            .expect("lua runtime_state lock poisoned")
+            .player
+            .clone()
+    }
+
+    /// Drain queued navigation requests produced by Lua scripts.
+    pub fn drain_navigation_requests(&self) -> Vec<LuaNavigationRequest> {
+        std::mem::take(
+            &mut self
+                .runtime_state
+                .write()
+                .expect("lua runtime_state lock poisoned")
+                .navigation_requests,
+        )
+    }
+
+    /// Drain queued slash-command requests produced by Lua scripts.
+    pub fn drain_command_requests(&self) -> Vec<LuaCommandRequest> {
+        std::mem::take(
+            &mut self
+                .runtime_state
+                .write()
+                .expect("lua runtime_state lock poisoned")
+                .command_requests,
+        )
     }
 
     pub fn register_apis(&self) -> LuaResult<()> {
@@ -128,19 +189,11 @@ impl LuaBindings {
             "get_spawns",
             self.lua.create_function(|lua, ()| lua.create_table())?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         parent.set(
             "get_player",
-            self.lua.create_function(|lua, ()| {
-                let player = lua.create_table()?;
-                player.set("name", "")?;
-                player.set("level", 0u8)?;
-                player.set("class", "")?;
-                player.set("hp_percent", 0.0f32)?;
-                player.set("mana_percent", 0.0f32)?;
-                player.set("x", 0.0f32)?;
-                player.set("y", 0.0f32)?;
-                player.set("z", 0.0f32)?;
-                Ok(player)
+            self.lua.create_function(move |lua, ()| {
+                player_snapshot_table(lua, read_player_snapshot(&runtime_state))
             })?,
         )?;
         parent.set(
@@ -150,16 +203,20 @@ impl LuaBindings {
                 Ok(true)
             })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         parent.set(
             "move_to",
-            self.lua.create_function(|_, (x, y, z): (f32, f32, f32)| {
+            self.lua.create_function(move |_, (x, y, z): (f32, f32, f32)| {
+                queue_navigation_request(&runtime_state, LuaNavigationRequest::Goto { x, y, z });
                 tracing::debug!(x, y, z, "lua move_to requested");
                 Ok(true)
             })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         parent.set(
             "execute_command",
-            self.lua.create_function(|_, command: String| {
+            self.lua.create_function(move |_, command: String| {
+                queue_command_request(&runtime_state, command.clone());
                 tracing::debug!(command = %command, "lua execute_command requested");
                 Ok(true)
             })?,
@@ -220,41 +277,186 @@ impl LuaBindings {
     fn register_player_api(&self, parent: &Table) -> LuaResult<()> {
         let player = self.lua.create_table()?;
 
-        player.set("get_hp", self.lua.create_function(|_, ()| Ok(0i64))?)?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "get_hp",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.hp)
+                    .unwrap_or_default())
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         player.set(
             "get_hp_percent",
-            self.lua.create_function(|_, ()| Ok(0f32))?,
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.hp_percent())
+                    .unwrap_or_default())
+            })?,
         )?;
-        player.set("get_mana", self.lua.create_function(|_, ()| Ok(0i32))?)?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "get_mana",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.mana)
+                    .unwrap_or_default())
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         player.set(
             "get_mana_percent",
-            self.lua.create_function(|_, ()| Ok(0f32))?,
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.mana_percent())
+                    .unwrap_or_default())
+            })?,
         )?;
-        player.set("get_endurance", self.lua.create_function(|_, ()| Ok(0i32))?)?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "get_endurance",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.endurance)
+                    .unwrap_or_default())
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         player.set(
             "get_endurance_percent",
-            self.lua.create_function(|_, ()| Ok(0f32))?,
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.endurance_percent())
+                    .unwrap_or_default())
+            })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         player.set(
             "get_name",
-            self.lua.create_function(|_, ()| Ok("".to_string()))?,
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.name)
+                    .unwrap_or_default())
+            })?,
         )?;
-        player.set("get_level", self.lua.create_function(|_, ()| Ok(0u8))?)?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "get_level",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.level)
+                    .unwrap_or_default())
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         player.set(
             "get_class",
-            self.lua.create_function(|_, ()| Ok("".to_string()))?,
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.class_name)
+                    .unwrap_or_default())
+            })?,
         )?;
-        player.set("get_class_id", self.lua.create_function(|_, ()| Ok(0u8))?)?;
-        player.set("get_race_id", self.lua.create_function(|_, ()| Ok(0u32))?)?;
-        player.set("get_x", self.lua.create_function(|_, ()| Ok(0f32))?)?;
-        player.set("get_y", self.lua.create_function(|_, ()| Ok(0f32))?)?;
-        player.set("get_z", self.lua.create_function(|_, ()| Ok(0f32))?)?;
-        player.set("get_heading", self.lua.create_function(|_, ()| Ok(0f32))?)?;
-        player.set("get_speed", self.lua.create_function(|_, ()| Ok(0f32))?)?;
-        player.set("is_moving", self.lua.create_function(|_, ()| Ok(false))?)?;
-        player.set("is_feigned", self.lua.create_function(|_, ()| Ok(false))?)?;
-        player.set("is_dead", self.lua.create_function(|_, ()| Ok(false))?)?;
-        player.set("is_gm", self.lua.create_function(|_, ()| Ok(false))?)?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "get_class_id",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.class_id)
+                    .unwrap_or_default())
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "get_race_id",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.race_id)
+                    .unwrap_or_default())
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "get_x",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.x)
+                    .unwrap_or_default())
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "get_y",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.y)
+                    .unwrap_or_default())
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "get_z",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.z)
+                    .unwrap_or_default())
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "get_heading",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.heading)
+                    .unwrap_or_default())
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "get_speed",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.speed)
+                    .unwrap_or_default())
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "is_moving",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.is_moving())
+                    .unwrap_or(false))
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "is_feigned",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.is_feigned)
+                    .unwrap_or(false))
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "is_dead",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.is_dead)
+                    .unwrap_or(false))
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        player.set(
+            "is_gm",
+            self.lua.create_function(move |_, ()| {
+                Ok(read_player_snapshot(&runtime_state)
+                    .map(|player| player.is_gm)
+                    .unwrap_or(false))
+            })?,
+        )?;
 
         parent.set("player", player)?;
 
@@ -298,45 +500,76 @@ impl LuaBindings {
     fn register_nav_api(&self, parent: &Table) -> LuaResult<()> {
         let nav = self.lua.create_table()?;
 
+        let runtime_state = Arc::clone(&self.runtime_state);
         nav.set(
             "goto",
-            self.lua.create_function(|_, (x, y, z): (f32, f32, f32)| {
+            self.lua.create_function(move |_, (x, y, z): (f32, f32, f32)| {
+                queue_navigation_request(&runtime_state, LuaNavigationRequest::Goto { x, y, z });
                 tracing::debug!("nav.goto({}, {}, {})", x, y, z);
                 Ok(true)
             })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         nav.set(
             "stick",
-            self.lua.create_function(|_, target: String| {
+            self.lua.create_function(move |_, target: String| {
+                queue_navigation_request(
+                    &runtime_state,
+                    LuaNavigationRequest::Stick {
+                        target: target.clone(),
+                    },
+                );
                 tracing::debug!("nav.stick(\"{}\")", target);
                 Ok(true)
             })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         nav.set(
             "stop",
-            self.lua.create_function(|_, ()| {
+            self.lua.create_function(move |_, ()| {
+                queue_navigation_request(&runtime_state, LuaNavigationRequest::Stop);
                 tracing::debug!("nav.stop()");
                 Ok(true)
             })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         nav.set(
             "follow",
-            self.lua.create_function(|_, target: String| {
+            self.lua.create_function(move |_, target: String| {
+                queue_navigation_request(
+                    &runtime_state,
+                    LuaNavigationRequest::Follow {
+                        target: target.clone(),
+                    },
+                );
                 tracing::debug!("nav.follow(\"{}\")", target);
                 Ok(true)
             })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         nav.set(
             "add_waypoint",
-            self.lua
-                .create_function(|_, (x, y, z, name): (f32, f32, f32, String)| {
+            self.lua.create_function(
+                move |_, (x, y, z, name): (f32, f32, f32, String)| {
+                    queue_navigation_request(
+                        &runtime_state,
+                        LuaNavigationRequest::AddWaypoint {
+                            x,
+                            y,
+                            z,
+                            name: name.clone(),
+                        },
+                    );
                     tracing::debug!("nav.add_waypoint({}, {}, {}, \"{}\")", x, y, z, name);
                     Ok(true)
-                })?,
+                },
+            )?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         nav.set(
             "clear_waypoints",
-            self.lua.create_function(|_, ()| {
+            self.lua.create_function(move |_, ()| {
+                queue_navigation_request(&runtime_state, LuaNavigationRequest::ClearWaypoints);
                 tracing::debug!("nav.clear_waypoints()");
                 Ok(true)
             })?,
@@ -510,28 +743,49 @@ impl LuaBindings {
     fn register_events_api(&self, parent: &Table) -> LuaResult<()> {
         let events = self.lua.create_table()?;
 
+        let handlers = Arc::clone(&self.event_handlers);
         events.set(
             "on",
             self.lua
-                .create_function(|_, (event, _callback): (String, mlua::Function)| {
-                    tracing::debug!("events.on(\"{}\")", event);
-                    Ok(())
+                .create_function(move |lua, (event, callback): (String, Function)| {
+                    let callback = lua.create_registry_value(callback)?;
+                    let mut handlers = handlers.lock().expect("lua event_handlers lock poisoned");
+                    let callbacks = handlers.entry(event.clone()).or_default();
+                    callbacks.push(callback);
+                    tracing::debug!(
+                        event = %event,
+                        callbacks = callbacks.len(),
+                        "events.on registered Lua callback"
+                    );
+                    Ok(callbacks.len())
                 })?,
         )?;
+        let handlers = Arc::clone(&self.event_handlers);
         events.set(
             "off",
-            self.lua.create_function(|_, event: String| {
-                tracing::debug!("events.off(\"{}\")", event);
-                Ok(())
+            self.lua.create_function(move |_, event: String| {
+                let removed = handlers
+                    .lock()
+                    .expect("lua event_handlers lock poisoned")
+                    .remove(&event)
+                    .map(|callbacks| callbacks.len())
+                    .unwrap_or_default();
+                tracing::debug!(event = %event, removed, "events.off removed Lua callbacks");
+                Ok(removed)
             })?,
         )?;
+        let handlers = Arc::clone(&self.event_handlers);
         events.set(
             "emit",
-            self.lua
-                .create_function(|_, (event, data): (String, mlua::Value)| {
-                    tracing::debug!("events.emit(\"{}\", {:?})", event, data);
-                    Ok(())
-                })?,
+            self.lua.create_function(move |lua, (event, data): (String, Value)| {
+                let callback_count = emit_lua_event(lua, &handlers, &event, data)?;
+                tracing::debug!(
+                    event = %event,
+                    callbacks = callback_count,
+                    "events.emit dispatched Lua callbacks"
+                );
+                Ok(callback_count)
+            })?,
         )?;
 
         parent.set("events", events)?;
@@ -722,6 +976,17 @@ impl LuaBindings {
                 })?,
         )?;
 
+        // textquest.commands.execute(command_line) → boolean. The orchestrator can
+        // drain these requests and deliver them to the live client IPC surface.
+        let runtime_state = Arc::clone(&self.runtime_state);
+        commands.set(
+            "execute",
+            self.lua.create_function(move |_lua, command_line: String| {
+                queue_command_request(&runtime_state, command_line);
+                Ok(true)
+            })?,
+        )?;
+
         parent.set("commands", commands)?;
         Ok(())
     }
@@ -733,6 +998,12 @@ impl LuaBindings {
     /// Reset sandbox CPU budget before a top-level script invocation.
     pub fn reset_sandbox_instruction_counter(&self) {
         sandbox::reset_instruction_counter(&self.sandbox_instruction_counter);
+    }
+
+    /// Emit a TextQuest event into registered Lua callbacks.
+    pub fn emit_event(&self, event: &str, data: Value) -> LuaResult<usize> {
+        self.reset_sandbox_instruction_counter();
+        emit_lua_event(&self.lua, &self.event_handlers, event, data)
     }
 }
 
@@ -806,6 +1077,85 @@ fn trace_lua_log(level: &str, message: &str) {
         "error" => tracing::error!("[Lua] {}", message),
         _ => tracing::info!("[Lua] {}", message),
     }
+}
+
+fn read_player_snapshot(state: &Arc<RwLock<LuaRuntimeState>>) -> Option<LuaPlayerSnapshot> {
+    state
+        .read()
+        .expect("lua runtime_state lock poisoned")
+        .player
+        .clone()
+}
+
+fn player_snapshot_table(lua: &Lua, player: Option<LuaPlayerSnapshot>) -> LuaResult<Table> {
+    let player = player.unwrap_or_default();
+    let table = lua.create_table()?;
+    table.set("name", player.name)?;
+    table.set("level", player.level)?;
+    table.set("class", player.class_name)?;
+    table.set("class_id", player.class_id)?;
+    table.set("race_id", player.race_id)?;
+    table.set("hp", player.hp)?;
+    table.set("hp_percent", player.hp_percent())?;
+    table.set("mana", player.mana)?;
+    table.set("mana_percent", player.mana_percent())?;
+    table.set("endurance", player.endurance)?;
+    table.set("endurance_percent", player.endurance_percent())?;
+    table.set("x", player.x)?;
+    table.set("y", player.y)?;
+    table.set("z", player.z)?;
+    table.set("heading", player.heading)?;
+    table.set("speed", player.speed)?;
+    table.set("is_moving", player.is_moving())?;
+    table.set("is_feigned", player.is_feigned)?;
+    table.set("is_dead", player.is_dead)?;
+    table.set("is_gm", player.is_gm)?;
+    Ok(table)
+}
+
+fn queue_navigation_request(
+    state: &Arc<RwLock<LuaRuntimeState>>,
+    request: LuaNavigationRequest,
+) {
+    state
+        .write()
+        .expect("lua runtime_state lock poisoned")
+        .navigation_requests
+        .push(request);
+}
+
+fn queue_command_request(state: &Arc<RwLock<LuaRuntimeState>>, command: String) {
+    state
+        .write()
+        .expect("lua runtime_state lock poisoned")
+        .command_requests
+        .push(LuaCommandRequest { command });
+}
+
+fn emit_lua_event(
+    lua: &Lua,
+    handlers: &EventHandlers,
+    event: &str,
+    data: Value,
+) -> LuaResult<usize> {
+    let callbacks = {
+        let handlers = handlers.lock().expect("lua event_handlers lock poisoned");
+        let Some(keys) = handlers.get(event) else {
+            return Ok(0);
+        };
+
+        let mut callbacks = Vec::with_capacity(keys.len());
+        for key in keys {
+            callbacks.push(lua.registry_value::<Function>(key)?);
+        }
+        callbacks
+    };
+
+    for callback in &callbacks {
+        callback.call::<()>(data.clone())?;
+    }
+
+    Ok(callbacks.len())
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -971,6 +1321,50 @@ return removed and not fired
     }
 
     #[test]
+    fn player_api_reads_injected_snapshot() {
+        let b = make_bindings();
+        b.set_player_snapshot(LuaPlayerSnapshot {
+            name: "Frostreaver".to_string(),
+            level: 60,
+            class_name: "Warrior".to_string(),
+            class_id: 1,
+            race_id: 1,
+            hp: 750,
+            hp_max: 1000,
+            mana: 25,
+            mana_max: 100,
+            endurance: 50,
+            endurance_max: 100,
+            x: 1.5,
+            y: 2.5,
+            z: 3.5,
+            heading: 90.0,
+            speed: 4.0,
+            is_feigned: false,
+            is_dead: false,
+            is_gm: false,
+        });
+
+        let (name, hp_pct, x, moving): (String, f32, f32, bool) = b
+            .get_lua()
+            .load(
+                r#"
+return textquest.player.get_name(),
+       textquest.player.get_hp_percent(),
+       textquest.player.get_x(),
+       textquest.player.is_moving()
+"#,
+            )
+            .eval()
+            .expect("read injected player snapshot");
+
+        assert_eq!(name, "Frostreaver");
+        assert_eq!(hp_pct, 75.0);
+        assert_eq!(x, 1.5);
+        assert!(moving);
+    }
+
+    #[test]
     fn group_api_all_fns_callable() {
         let b = make_bindings();
         let lua = b.get_lua();
@@ -1003,6 +1397,46 @@ return removed and not fired
         "#;
         let ok: bool = lua.load(script).eval().expect("nav API callable");
         assert!(ok, "all nav API functions must return true");
+    }
+
+    #[test]
+    fn nav_and_command_apis_queue_runtime_requests() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+
+        lua.load(
+            r#"
+textquest.nav['goto'](11.0, 22.0, 33.0)
+textquest.nav.stop()
+textquest.commands.execute("/sit")
+textquest.execute_command("/stand")
+"#,
+        )
+        .exec()
+        .expect("queue Lua requests");
+
+        assert_eq!(
+            b.drain_navigation_requests(),
+            vec![
+                LuaNavigationRequest::Goto {
+                    x: 11.0,
+                    y: 22.0,
+                    z: 33.0
+                },
+                LuaNavigationRequest::Stop
+            ]
+        );
+        assert_eq!(
+            b.drain_command_requests(),
+            vec![
+                LuaCommandRequest {
+                    command: "/sit".to_string()
+                },
+                LuaCommandRequest {
+                    command: "/stand".to_string()
+                }
+            ]
+        );
     }
 
     #[test]
@@ -1131,6 +1565,27 @@ return removed and not fired
         "#;
         let ok: bool = lua.load(script).eval().expect("events API callable");
         assert!(ok);
+    }
+
+    #[test]
+    fn events_api_invokes_registered_callbacks() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        let count: i64 = lua
+            .load(
+                r#"
+local count = 0
+textquest.events.on("hp_change", function(data)
+    count = count + data.delta
+end)
+local fired = textquest.events.emit("hp_change", { delta = 2 })
+return count + fired
+"#,
+            )
+            .eval()
+            .expect("event callback should run");
+
+        assert_eq!(count, 3);
     }
 
     // ── Error conditions ───────────────────────────────────────────────────────

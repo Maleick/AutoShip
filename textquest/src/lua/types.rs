@@ -1,5 +1,151 @@
 use textquest_common::types::SpawnData;
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct LuaPlayerSnapshot {
+    pub name: String,
+    pub level: u8,
+    pub class_name: String,
+    pub class_id: u8,
+    pub race_id: u32,
+    pub hp: i64,
+    pub hp_max: i64,
+    pub mana: i32,
+    pub mana_max: i32,
+    pub endurance: i32,
+    pub endurance_max: i32,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub heading: f32,
+    pub speed: f32,
+    pub is_feigned: bool,
+    pub is_dead: bool,
+    pub is_gm: bool,
+}
+
+impl Default for LuaPlayerSnapshot {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            level: 0,
+            class_name: String::new(),
+            class_id: 0,
+            race_id: 0,
+            hp: 0,
+            hp_max: 0,
+            mana: 0,
+            mana_max: 0,
+            endurance: 0,
+            endurance_max: 0,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            heading: 0.0,
+            speed: 0.0,
+            is_feigned: false,
+            is_dead: false,
+            is_gm: false,
+        }
+    }
+}
+
+impl LuaPlayerSnapshot {
+    pub fn hp_percent(&self) -> f32 {
+        if self.hp_max > 0 {
+            (self.hp as f32 / self.hp_max as f32) * 100.0
+        } else {
+            0.0
+        }
+    }
+
+    pub fn mana_percent(&self) -> f32 {
+        if self.mana_max > 0 {
+            (self.mana as f32 / self.mana_max as f32) * 100.0
+        } else {
+            0.0
+        }
+    }
+
+    pub fn endurance_percent(&self) -> f32 {
+        if self.endurance_max > 0 {
+            (self.endurance as f32 / self.endurance_max as f32) * 100.0
+        } else {
+            0.0
+        }
+    }
+
+    pub fn is_moving(&self) -> bool {
+        self.speed > 0.0
+    }
+}
+
+impl From<&SpawnData> for LuaPlayerSnapshot {
+    fn from(spawn_data: &SpawnData) -> Self {
+        Self {
+            name: spawn_data.name.clone(),
+            level: spawn_data.level,
+            class_name: spawn_data.class_str(),
+            class_id: spawn_data.class_id,
+            race_id: spawn_data.race_id,
+            hp: spawn_data.hp_current,
+            hp_max: spawn_data.hp_max,
+            mana: spawn_data.mana_current,
+            mana_max: spawn_data.mana_max,
+            endurance: spawn_data.endurance_current,
+            endurance_max: spawn_data.endurance_max as i32,
+            x: spawn_data.x,
+            y: spawn_data.y,
+            z: spawn_data.z,
+            heading: spawn_data.heading,
+            speed: spawn_data.speed_run,
+            is_feigned: spawn_data.stand_state == 110,
+            is_dead: spawn_data.stand_state == 111,
+            is_gm: spawn_data.is_gm,
+        }
+    }
+}
+
+impl From<&LuaPlayer> for LuaPlayerSnapshot {
+    fn from(player: &LuaPlayer) -> Self {
+        Self::from(&player.spawn_data)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LuaNavigationRequest {
+    Goto {
+        x: f32,
+        y: f32,
+        z: f32,
+    },
+    Stick {
+        target: String,
+    },
+    Stop,
+    Follow {
+        target: String,
+    },
+    AddWaypoint {
+        x: f32,
+        y: f32,
+        z: f32,
+        name: String,
+    },
+    ClearWaypoints,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LuaCommandRequest {
+    pub command: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LuaRuntimeState {
+    pub player: Option<LuaPlayerSnapshot>,
+    pub navigation_requests: Vec<LuaNavigationRequest>,
+    pub command_requests: Vec<LuaCommandRequest>,
+}
+
 pub struct LuaPlayer {
     pub spawn_data: SpawnData,
 }

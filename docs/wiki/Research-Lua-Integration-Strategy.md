@@ -35,15 +35,18 @@ TextQuest uses **mlua** (crate: `mlua` v0.11) as the Lua VM.
 
 ### Lua Version
 
-Configured with **Lua 5.1** (`features = ["lua55"]`).
+Configured with **Lua 5.4** via `mlua` (`features = ["lua54", "vendored", "send"]`).
 
-Rationale: MQ2 plugins use Lua 5.1. Compatibility with existing MQ2 script ecosystems.
+Rationale: TextQuest embeds the interpreter so operators do not need a
+preinstalled Lua runtime. OpenVanilla/MacroQuest parity remains the target, but
+this repo currently uses Lua 5.4 rather than LuaJIT.
 
 ---
 
 ## 2. Current Integration Status
 
-Lua integration is **implemented** with bindings and script loader in place:
+Lua integration is **partially implemented** with bindings and script loader in
+place:
 
 - `textquest/src/lua/` module exists with:
   - `mod.rs` - Module root
@@ -54,7 +57,12 @@ Lua integration is **implemented** with bindings and script loader in place:
 
 - `LuaBindings` struct initializes the Lua context and registers all APIs
 - `ScriptLoader` handles script loading, execution, and management
-- APIs currently return stub values (not connected to live game state)
+- Player APIs read from an injected Rust-side snapshot when one is available and
+  return zero values otherwise
+- Navigation and command APIs queue typed requests for future orchestrator/IPC
+  delivery
+- Events store Lua callbacks and can be emitted from Lua or Rust through
+  `LuaBindings::emit_event`
 
 ### Implemented Components
 
@@ -63,6 +71,8 @@ Lua integration is **implemented** with bindings and script loader in place:
 3. **Domain registration** - Each domain (player, group, nav, etc.) registered as sub-table
 4. **Script loader** - Loads and executes Lua scripts from filesystem
 5. **REPL support** - `execute_string()` for runtime code execution
+6. **Runtime request bridge scaffold** - queued navigation and slash-command
+   requests are drainable from Rust
 
 ---
 
@@ -71,17 +81,16 @@ Lua integration is **implemented** with bindings and script loader in place:
 In `textquest/Cargo.toml`:
 
 ```toml
-mlua = { version = "0.11", default-features = false, features = ["lua55"] }
+mlua = { version = "0.11", default-features = false, features = ["lua54", "vendored", "send"] }
 ```
 
 ### Features
 
 | Feature | Status |
 |---------|--------|
-| lua55 (Lua 5.1) | Enabled |
+| lua54 | Enabled |
 | lua52 | Not enabled |
 | lua53 | Not enabled |
-| lua54 | Not enabled |
 
 ---
 
@@ -197,8 +206,27 @@ Event system for Lua script callbacks.
 
 ```lua
 textquest.events.on(event, callback)  -- Register event handler
-textquest.events.off(event)          -- Unregister event handler
-textquest.events.emit(event, data)    -- Emit event (from TQ to Lua)
+textquest.events.off(event)           -- Unregister all handlers for an event
+textquest.events.emit(event, data)    -- Emit event and return callback count
+```
+
+Rust hosts can emit registered callbacks with:
+
+```rust
+bindings.emit_event("hp_change", data)?;
+```
+
+### textquest.commands.*
+
+Lua scripts can register local slash-command callbacks and queue commands for
+the orchestrator:
+
+```lua
+textquest.commands.register("/myscript", function(args)
+  textquest.log.info(args)
+end)
+
+textquest.commands.execute("/sit")
 ```
 
 ### Supported Events (planned)
@@ -233,27 +261,31 @@ scripts/
 ### Example Script
 
 ```lua
--- Auto-heal script example
-function on_hp_change(old_hp, new_hp)
-    local hp_percent = (new_hp / textquest.player.get_hp()) * 100
-    if hp_percent < 30 then
-        textquest.combat.cast("Greater Healing", textquest.player.get_name())
+-- Current API smoke example
+local tq = require("textquest")
+
+tq.events.on("hp_change", function(data)
+    if data.hp_percent < 30 then
+        tq.commands.execute('/casting "Greater Healing"')
     end
 end
-
--- Register handler
-textquest.events.on("on_hp_change", on_hp_change)
 ```
+
+See `scripts/lua/examples/06_textquest_api_smoke.lua` for a runnable example
+using the lower-case `textquest` module.
 
 ---
 
 ## Next Steps
 
-1. **Connect APIs to live state** - Replace stub functions with actual game state reads
+1. **Connect APIs to live state** - Feed snapshots from the live process reader
+   and drain queued requests into orchestrator/DLL IPC
 2. ~~**Script loader**~~ - Implemented in `loader.rs`
-3. **Event system** - Wire up event emit calls from combat/state modules
-4. **Error handling** - Add script error catching and logging
-5. **Script sandboxing** - Consider security limits for user scripts
+3. ~~**Event callback registry**~~ - Implemented in `bindings.rs`
+4. **Event producers** - Wire up event emit calls from combat/state modules
+5. **Error handling** - Expand script error catching and logging in live flows
+6. **Script sandboxing** - Continue validating limits against real operator
+   scripts
 
 ## Script Loader API
 

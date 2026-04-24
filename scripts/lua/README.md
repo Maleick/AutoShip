@@ -182,9 +182,20 @@ discord.report_error("Something went wrong!", "Critical Alert")
 discord.send_test()
 ```
 
+### 6. Current API Smoke (`06_textquest_api_smoke.lua`)
+
+Small script using the current lower-case `textquest` module.
+
+**Demonstrates:**
+- `require("textquest")`
+- Player snapshot reads through `textquest.get_player()`
+- Event callbacks through `textquest.events.on(...)`
+- Queued navigation and slash-command requests
+
 ## TextQuest Lua API Reference
 
-Scripts access game state and execute actions through the global `TextQuest` table.
+Scripts access current orchestrator bindings through the lower-case global
+`textquest` table. `require("textquest")` returns that table inside the sandbox.
 
 ### Event Handlers
 

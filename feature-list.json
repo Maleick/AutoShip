@@ -63,6 +63,16 @@
       "notes": "Wired the existing Lua runtime into the textquest crate, exposed the issue #791 top-level API shape, and kept this partial because live game-state/DLL-backed APIs remain stubbed."
     },
     {
+      "id": "issue-820-lua-openvanilla-parity",
+      "name": "Issue #820 Lua scripting support OpenVanilla parity",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check -p textquest",
+        "cargo check -p textquest --tests"
+      ],
+      "notes": "PARTIAL: Extended the existing mlua scaffold with injected player snapshots, drainable navigation and slash-command request queues, real Lua event callback registration/emission, and current API docs/example. Live process-state producers, orchestrator/DLL IPC draining, LuaJIT compatibility, and full OpenVanilla API parity remain follow-up work."
+    },
+    {
       "id": "issue-2172-stack-spoof-invalid-module-name",
       "name": "stack spoof invalid module name handling",
       "status": "complete",
