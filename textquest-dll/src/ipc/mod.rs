@@ -9,6 +9,7 @@
 //! The listener runs on a background thread. Received commands are buffered in
 //! a channel and drained each game tick via `poll_commands()`.
 
+pub mod backend_ws;
 pub mod pipe;
 pub mod shared;
 
@@ -75,6 +76,7 @@ pub fn start(client_id: ClientId, token: SessionToken) -> Result<(), Box<dyn std
     let _ = PENDING_COMMANDS.set(Mutex::new(Vec::new()));
 
     IPC_RUNNING.store(true, Ordering::SeqCst);
+    backend_ws::start_sender(client_id, session_id);
 
     // --- Command listener thread ---
     thread::Builder::new()
@@ -99,6 +101,7 @@ pub fn stop() {
     }
 
     // The listener thread checks IPC_RUNNING and will exit on its own.
+    backend_ws::stop_sender();
     // SharedStateWriter and CommandListener clean up via Drop.
     tracing::info!("IPC stopped");
 }
@@ -160,6 +163,7 @@ pub fn send_response(response: Response) {
     if !is_running() {
         return;
     }
+    backend_ws::enqueue_response(IpcResponse::new(response.clone()));
     let pending = PENDING_RESPONSES.get_or_init(|| Mutex::new(Vec::new()));
     if let Ok(mut queue) = pending.lock() {
         if queue.len() >= MAX_PENDING_RESPONSES {
@@ -453,6 +457,11 @@ fn immediate_response_for_command(
     Some(IpcResponse::echo(response, correlation_id))
 }
 
+fn send_listener_response(listener: &mut CommandListener, response: &IpcResponse) {
+    backend_ws::enqueue_response(response.clone());
+    let _ = listener.respond(response);
+}
+
 /// Background thread: creates a `CommandListener` and loops receiving commands
 /// until `IPC_RUNNING` is cleared or the DLL is shutting down.
 fn listener_loop(client_id: ClientId, token: SessionToken) {
@@ -480,13 +489,14 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
 
                 if handle_immediate_command(&cmd) {
                     // Immediate commands get an Ack response.
-                    let _ = listener.respond(&IpcResponse::echo(
+                    let response = IpcResponse::echo(
                         Response::CommandResult {
                             success: true,
                             message: "handled".into(),
                         },
                         correlation_id,
-                    ));
+                    );
+                    send_listener_response(&mut listener, &response);
                     listener.disconnect();
                     continue;
                 }
@@ -494,7 +504,7 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                 if let Some(response) =
                     immediate_response_for_command(&cmd, client_id, correlation_id)
                 {
-                    let _ = listener.respond(&response);
+                    send_listener_response(&mut listener, &response);
                     listener.disconnect();
                     continue;
                 }
@@ -523,13 +533,14 @@ fn listener_loop(client_id: ClientId, token: SessionToken) {
                 };
 
                 // Send Ack so the orchestrator isn't left waiting.
-                let _ = listener.respond(&IpcResponse::echo(
+                let response = IpcResponse::echo(
                     Response::CommandResult {
                         success: queued,
                         message: if queued { "queued" } else { "queue full" }.into(),
                     },
                     correlation_id,
-                ));
+                );
+                send_listener_response(&mut listener, &response);
 
                 // Reset pipe for next connection. The orchestrator uses
                 // fire-and-forget (connect → token → command → close), so the

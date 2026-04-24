@@ -39,6 +39,11 @@ Current sections include:
 
 - `process_name`
 - `max_spawns`
+- `backend_url` for the injected DLL outbound WebSocket connection to
+  textquest-web. `ws://localhost:3001` is the local development default and is
+  normalized to `/ws`; production deployments should use the accepted
+  `wss://...` backend URL, including `?token=...` when WebSocket auth is
+  enabled. `TEXTQUEST_DLL_BACKEND_URL` overrides the TOML value.
 - `[launch]`
 - `[server]`
 - `[retry]`

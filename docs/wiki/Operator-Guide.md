@@ -164,6 +164,9 @@ This is the primary operator configuration file. Key sections:
 process_name = "eqgame"
 max_spawns = 10000
 
+# DLL outbound backend transport
+backend_url = "ws://localhost:3001"
+
 # Server and session settings
 [server]
 name = "Firiona Vie"         # or your TLP server
@@ -190,6 +193,11 @@ name = "Group 2"
 - Change `server` name to match your TLP
 - Adjust `max_clients` if you run fewer or more clients
 - Add group definitions for your multibox composition
+- Set `backend_url` to the textquest-web WebSocket backend. Local dev can use
+  `ws://localhost:3001`; production should use the accepted deployment URL
+  such as `wss://backend.example.com`. A host-only value is normalized to
+  `/ws`; include `?token=...` in the URL when the backend requires WebSocket
+  token auth.
 
 ### Alerting and Notifications
 

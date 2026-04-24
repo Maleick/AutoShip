@@ -8,6 +8,11 @@ process_name = "eqgame.exe"
 # Maximum spawns to read from the linked list (safety limit)
 max_spawns = 2048
 
+# Outbound WebSocket endpoint used by the injected DLL to publish responses and
+# event notifications to textquest-web. A bare backend host is normalized to
+# `/ws`, so ws://localhost:3001 connects to ws://localhost:3001/ws.
+backend_url = "ws://localhost:3001"
+
 # ─── Launch Configuration ───
 # Controls how EQ clients are started and staggered.
 [launch]
