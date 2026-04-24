@@ -19,6 +19,12 @@ pub struct OffsetDatabase {
     pub player_zone: HashMap<String, usize>,
     /// SpawnManager struct offsets keyed by name.
     pub spawn_manager: HashMap<String, usize>,
+    /// Struct field offsets keyed first by struct name, then field name.
+    #[serde(default)]
+    pub structs: HashMap<String, HashMap<String, usize>>,
+    /// Known struct sizes keyed by struct name.
+    #[serde(default)]
+    pub struct_sizes: HashMap<String, usize>,
     /// `CContextMenuManager` struct field offsets keyed by name.
     #[serde(default)]
     pub context_menu_manager: HashMap<String, usize>,
@@ -40,6 +46,13 @@ pub struct OffsetDatabase {
     /// eqgraphicsdx9.dll function addresses keyed by name.
     #[serde(default)]
     pub eqgraphics_functions: HashMap<String, u64>,
+}
+
+fn offset_map(entries: &[(&str, usize)]) -> HashMap<String, usize> {
+    entries
+        .iter()
+        .map(|(name, offset)| ((*name).to_string(), *offset))
+        .collect()
 }
 
 impl OffsetDatabase {
@@ -80,6 +93,24 @@ impl OffsetDatabase {
     #[must_use]
     pub fn get_player_zone_offset(&self, name: &str) -> Option<usize> {
         self.player_zone.get(name).copied()
+    }
+
+    /// Look up a field offset by struct and field name.
+    #[must_use]
+    pub fn get_struct_offset(&self, struct_name: &str, field_name: &str) -> Option<usize> {
+        self.structs.get(struct_name)?.get(field_name).copied()
+    }
+
+    /// Look up all known field offsets for a struct.
+    #[must_use]
+    pub fn get_struct_offsets(&self, struct_name: &str) -> Option<&HashMap<String, usize>> {
+        self.structs.get(struct_name)
+    }
+
+    /// Look up a known struct size.
+    #[must_use]
+    pub fn get_struct_size(&self, struct_name: &str) -> Option<usize> {
+        self.struct_sizes.get(struct_name).copied()
     }
 
     /// Look up a function address by name.
@@ -176,8 +207,11 @@ impl OffsetDatabase {
             PINST_SGRAPHICSENGINE, PINST_SPAWN_MANAGER, PINST_SPELL_MANAGER, PINST_TARGET,
             PROCESS_GAME_EVENTS, REAL_RENDER_WORLD, RIGHT_CLICKED_ON_PLAYER,
             SERVER_MEMCHECK_HANDLER, SPELL_BOOK_WND_MEMORIZE_SET, SYSTEM_FINGERPRINT, USE_SKILL,
-            WORLD_AUTHENTICATE, ZONE_GUIDE_MANAGER, context_menu_mgr, eqmain, player_base,
-            player_zone, spawn_manager, zone_info,
+            WORLD_AUTHENTICATE, ZONE_GUIDE_MANAGER, buff_slots, client_spell_manager,
+            context_menu_mgr, eq_spell, eqmain, everquest_info, extended_target_list,
+            extended_target_slot, group, item_base, item_definition, item_global_index, pc_client,
+            player_base, player_zone, profile, raid, spawn_manager, spell_hash_map, zone_guide,
+            zone_info,
         };
         let mut globals = HashMap::new();
         globals.insert("pinstLocalPlayer".to_string(), PINST_LOCAL_PLAYER);
@@ -204,37 +238,7 @@ impl OffsetDatabase {
         globals.insert("outboundMsgCounter".to_string(), OUTBOUND_MSG_COUNTER);
         globals.insert("inboundMsgCounter".to_string(), INBOUND_MSG_COUNTER);
 
-        let mut pb = HashMap::new();
-        pb.insert("next".to_string(), player_base::NEXT);
-        pb.insert("prev".to_string(), player_base::PREV);
-        pb.insert("y".to_string(), player_base::Y);
-        pb.insert("x".to_string(), player_base::X);
-        pb.insert("z".to_string(), player_base::Z);
-        pb.insert("heading".to_string(), player_base::HEADING);
-        pb.insert("speedCurrent".to_string(), player_base::SPEED_CURRENT);
-        pb.insert("speedRun".to_string(), player_base::SPEED_RUN);
-        pb.insert("speedHeading".to_string(), player_base::SPEED_HEADING);
-        pb.insert("name".to_string(), player_base::NAME);
-        pb.insert("displayedName".to_string(), player_base::DISPLAYED_NAME);
-        pb.insert("type".to_string(), player_base::TYPE);
-        pb.insert("spawnId".to_string(), player_base::SPAWN_ID);
-        pb.insert("lastName".to_string(), player_base::LASTNAME);
-
-        let mut pz = HashMap::new();
-        pz.insert("hpMax".to_string(), player_zone::HP_MAX);
-        pz.insert("hpCurrent".to_string(), player_zone::HP_CURRENT);
-        pz.insert("manaMax".to_string(), player_zone::MANA_MAX);
-        pz.insert("manaCurrent".to_string(), player_zone::MANA_CURRENT);
-        pz.insert("level".to_string(), player_zone::LEVEL);
-        pz.insert("charClass".to_string(), player_zone::CHAR_CLASS);
-        pz.insert(
-            "enduranceCurrent".to_string(),
-            player_zone::ENDURANCE_CURRENT,
-        );
-        pz.insert("enduranceMax".to_string(), player_zone::ENDURANCE_MAX);
-        pz.insert("standState".to_string(), player_zone::STANDSTATE);
-
-        let player_base = [
+        let player_base = offset_map(&[
             ("next", player_base::NEXT),
             ("prev", player_base::PREV),
             ("y", player_base::Y),
@@ -249,12 +253,11 @@ impl OffsetDatabase {
             ("type", player_base::TYPE),
             ("spawnId", player_base::SPAWN_ID),
             ("lastName", player_base::LASTNAME),
-        ]
-        .into_iter()
-        .map(|(k, v)| (k.to_string(), v))
-        .collect();
+            ("managedTarget", player_base::MANAGED_TARGET),
+        ]);
 
-        let player_zone = [
+        let player_zone = offset_map(&[
+            ("castingData", player_zone::CASTING_DATA),
             ("hpMax", player_zone::HP_MAX),
             ("hpCurrent", player_zone::HP_CURRENT),
             ("manaMax", player_zone::MANA_MAX),
@@ -264,15 +267,205 @@ impl OffsetDatabase {
             ("enduranceCurrent", player_zone::ENDURANCE_CURRENT),
             ("enduranceMax", player_zone::ENDURANCE_MAX),
             ("standState", player_zone::STANDSTATE),
+            ("gm", player_zone::GM),
+            ("gmRank", player_zone::GM_RANK),
+            ("spellGemEta", player_zone::SPELL_GEM_ETA),
+            ("meleeRadius", player_zone::MELEE_RADIUS),
+        ]);
+
+        let spawn_manager = offset_map(&[
+            ("playerList", spawn_manager::PLAYER_LIST),
+            (
+                "playerManagerCreatePlayer",
+                spawn_manager::PLAYER_MANAGER_CREATE_PLAYER,
+            ),
+            (
+                "playerManagerPrepDestroyPlayer",
+                spawn_manager::PLAYER_MANAGER_PREP_DESTROY_PLAYER,
+            ),
+        ]);
+
+        let pc_client = offset_map(&[
+            ("me", pc_client::ME),
+            ("profileManager", pc_client::PROFILE_MANAGER),
+            ("buffIds", pc_client::BUFF_IDS),
+            ("extendedTargetList", pc_client::EXTENDED_TARGET_LIST),
+            ("inCombat", pc_client::IN_COMBAT),
+            ("groupPtr", pc_client::GROUP_PTR),
+        ]);
+
+        let item_global_index = offset_map(&[
+            ("slot1", item_global_index::SLOT1),
+            ("slot2", item_global_index::SLOT2),
+            ("slot3", item_global_index::SLOT3),
+        ]);
+
+        let item_base = offset_map(&[
+            ("itemDef", item_base::ITEM_DEF),
+            ("charges", item_base::CHARGES),
+            ("id", item_base::ID),
+            ("stackCount", item_base::STACK_COUNT),
+            ("open", item_base::OPEN),
+            ("globalIndex", item_base::GLOBAL_INDEX),
+        ]);
+
+        let item_definition = offset_map(&[
+            ("name", item_definition::NAME),
+            ("itemNumber", item_definition::ITEM_NUMBER),
+            ("iconNumber", item_definition::ICON_NUMBER),
+            ("size", item_definition::SIZE),
+            ("type", item_definition::TYPE),
+            ("itemClass", item_definition::ITEM_CLASS),
+            ("containerSlots", item_definition::CONTAINER_SLOTS),
+            ("sizeCapacity", item_definition::SIZE_CAPACITY),
+            ("stackSize", item_definition::STACK_SIZE),
+        ]);
+
+        let profile = offset_map(&[
+            ("profileManager", profile::PROFILE_MANAGER),
+            ("profileListPtr", profile::PROFILE_LIST_PTR),
+            ("profileFirst", profile::PROFILE_FIRST),
+            ("buffsArray", profile::BUFFS_ARRAY),
+            ("spellBook", profile::SPELL_BOOK),
+            ("memorizedSpells", profile::MEMORIZED_SPELLS),
+            ("arrayDataPtr", profile::ARRAY_DATA_PTR),
+            ("arraySize", profile::ARRAY_SIZE),
+            ("buffIds", profile::BUFF_IDS),
+        ]);
+
+        let buff_slots = offset_map(&[
+            ("spellId", buff_slots::SPELL_ID),
+            ("duration", buff_slots::DURATION),
+            ("initialDuration", buff_slots::INITIAL_DURATION),
+            ("hitCount", buff_slots::HIT_COUNT),
+            ("modifier", buff_slots::MODIFIER),
+            ("buffType", buff_slots::BUFF_TYPE),
+            ("casterLevel", buff_slots::CASTER_LEVEL),
+        ]);
+
+        let client_spell_manager = offset_map(&[
+            ("maxSpellId", client_spell_manager::MAX_SPELL_ID),
+            ("spells", client_spell_manager::SPELLS),
+        ]);
+
+        let eq_spell = offset_map(&[
+            ("castTime", eq_spell::CAST_TIME),
+            ("id", eq_spell::ID),
+            ("name", eq_spell::NAME),
+        ]);
+
+        let spell_hash_map = offset_map(&[
+            ("count", spell_hash_map::COUNT),
+            ("head", spell_hash_map::HEAD),
+            ("buckets", spell_hash_map::BUCKETS),
+            ("dynamicSize", spell_hash_map::DYNAMIC_SIZE),
+            ("key", spell_hash_map::KEY),
+            ("value", spell_hash_map::VALUE),
+            ("hashNext", spell_hash_map::HASH_NEXT),
+            ("next", spell_hash_map::NEXT),
+            ("prev", spell_hash_map::PREV),
+        ]);
+
+        let extended_target_list = offset_map(&[
+            ("targetSlots", extended_target_list::TARGET_SLOTS),
+            ("autoAddHaters", extended_target_list::AUTO_ADD_HATERS),
+        ]);
+
+        let extended_target_slot = offset_map(&[
+            ("targetType", extended_target_slot::TARGET_TYPE),
+            ("status", extended_target_slot::STATUS),
+            ("spawnId", extended_target_slot::SPAWN_ID),
+            ("name", extended_target_slot::NAME),
+        ]);
+
+        let group = offset_map(&[
+            ("pcClientGroupPtr", group::PC_CLIENT_GROUP_PTR),
+            ("groupMembers", group::GROUP_MEMBERS),
+            ("groupLeader", group::GROUP_LEADER),
+            ("groupId", group::GROUP_ID),
+            ("memberNameCxstr", group::MEMBER_NAME_CXSTR),
+            ("memberType", group::MEMBER_TYPE),
+            ("memberOwnerCxstr", group::MEMBER_OWNER_CXSTR),
+            ("memberLevel", group::MEMBER_LEVEL),
+            ("memberIsOffline", group::MEMBER_IS_OFFLINE),
+            ("cxstrRepUtf8", group::CXSTR_REP_UTF8),
+        ]);
+
+        let zone_info = offset_map(&[
+            ("shortName", zone_info::SHORT_NAME),
+            ("longName", zone_info::LONG_NAME),
+        ]);
+
+        let zone_guide = offset_map(&[
+            ("zonesOffset", zone_guide::ZONES_OFFSET),
+            ("zoneId", zone_guide::ZONE_ID),
+            ("zoneName", zone_guide::ZONE_NAME),
+            ("zoneContinent", zone_guide::ZONE_CONTINENT),
+            ("zoneMinLevel", zone_guide::ZONE_MIN_LEVEL),
+            ("zoneMaxLevel", zone_guide::ZONE_MAX_LEVEL),
+            ("zoneConnectionsCount", zone_guide::ZONE_CONNECTIONS_COUNT),
+            ("zoneConnectionsArray", zone_guide::ZONE_CONNECTIONS_ARRAY),
+            ("connDestZoneId", zone_guide::CONN_DEST_ZONE_ID),
+            ("connTransferType", zone_guide::CONN_TRANSFER_TYPE),
+            ("connDisabled", zone_guide::CONN_DISABLED),
+            ("currentZone", zone_guide::CURRENT_ZONE),
+            ("dataSet", zone_guide::DATA_SET),
+        ]);
+
+        let mut structs = HashMap::new();
+        structs.insert("PlayerBase".to_string(), player_base.clone());
+        structs.insert("PlayerZoneClient".to_string(), player_zone.clone());
+        structs.insert("SpawnManager".to_string(), spawn_manager.clone());
+        structs.insert("PcClient".to_string(), pc_client);
+        structs.insert("ItemGlobalIndex".to_string(), item_global_index);
+        structs.insert("ItemBase".to_string(), item_base);
+        structs.insert("ItemDefinition".to_string(), item_definition);
+        structs.insert("PcProfile".to_string(), profile);
+        structs.insert("EQ_Affect".to_string(), buff_slots);
+        structs.insert("ClientSpellManager".to_string(), client_spell_manager);
+        structs.insert("EQ_Spell".to_string(), eq_spell);
+        structs.insert("SpellHashMap".to_string(), spell_hash_map);
+        structs.insert("ExtendedTargetList".to_string(), extended_target_list);
+        structs.insert("ExtendedTargetSlot".to_string(), extended_target_slot);
+        structs.insert("CGroup".to_string(), group);
+        structs.insert("zoneHeader".to_string(), zone_info);
+        structs.insert("ZoneGuideManagerClient".to_string(), zone_guide);
+
+        for struct_name in [
+            "CRaid",
+            "EverQuestinfo",
+            "FellowshipMember",
+            "CFellowship",
+            "DynamicZoneData",
+            "TaskMember",
+            "CTaskManager",
+            "AchievementManager",
+        ] {
+            structs
+                .entry(struct_name.to_string())
+                .or_insert_with(HashMap::new);
+        }
+
+        let struct_sizes = [
+            ("PlayerClient", crate::offsets::PLAYER_CLIENT_SIZE),
+            ("EQ_Spell", crate::offsets::EQ_SPELL_SIZE),
+            ("ItemGlobalIndex", crate::offsets::item_global_index::SIZE),
+            ("ExtendedTargetSlot", extended_target_slot::SIZE),
+            ("CRaid", raid::SIZE),
+            ("EverQuestinfo", everquest_info::SIZE),
+            ("zoneHeader", zone_info::SIZE),
+            (
+                "ZoneGuideZone",
+                crate::offsets::SPAWN_MANAGER_ZONE_ZONE_SIZE,
+            ),
+            (
+                "ZoneGuideConnection",
+                crate::offsets::zone_guide::CONNECTION_SIZE,
+            ),
         ]
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
         .collect();
-
-        let spawn_manager = [("playerList", spawn_manager::PLAYER_LIST)]
-            .into_iter()
-            .map(|(k, v)| (k.to_string(), v))
-            .collect();
 
         let context_menu_manager = [
             ("menusArray", context_menu_mgr::MENUS_DATA),
@@ -410,6 +603,8 @@ impl OffsetDatabase {
             player_base,
             player_zone,
             spawn_manager,
+            structs,
+            struct_sizes,
             context_menu_manager,
             context_menu,
             functions,
@@ -500,6 +695,14 @@ mod tests {
             restored.get_function("castSpell"),
             db.get_function("castSpell")
         );
+        assert_eq!(
+            restored.get_struct_offset("PcClient", "extendedTargetList"),
+            db.get_struct_offset("PcClient", "extendedTargetList")
+        );
+        assert_eq!(
+            restored.get_struct_size("EQ_Spell"),
+            db.get_struct_size("EQ_Spell")
+        );
     }
 
     #[test]
@@ -513,7 +716,16 @@ mod tests {
             db.get_player_zone_offset("level"),
             Some(crate::offsets::player_zone::LEVEL)
         );
+        assert_eq!(
+            db.get_struct_offset("ItemDefinition", "stackSize"),
+            Some(crate::offsets::item_definition::STACK_SIZE)
+        );
+        assert_eq!(
+            db.get_struct_size("zoneHeader"),
+            Some(crate::offsets::zone_info::SIZE)
+        );
         assert!(db.get_player_base_offset("nonexistent").is_none());
+        assert!(db.get_struct_offset("PcClient", "nonexistent").is_none());
     }
 
     #[test]
@@ -587,6 +799,8 @@ mod tests {
 
         assert!(loaded.context_menu_manager.is_empty());
         assert!(loaded.context_menu.is_empty());
+        assert!(loaded.structs.is_empty());
+        assert!(loaded.struct_sizes.is_empty());
         assert!(loaded.functions.is_empty());
         assert_eq!(loaded.get_global("pinstLocalPlayer"), Some(1234));
         assert_eq!(loaded.get_player_base_offset("x"), Some(120));
@@ -720,6 +934,7 @@ mod tests {
             "type",
             "spawnId",
             "lastName",
+            "managedTarget",
         ];
         for key in &expected {
             assert!(
@@ -735,6 +950,7 @@ mod tests {
     fn from_compiled_offsets_has_all_player_zone_keys() {
         let db = OffsetDatabase::from_compiled_offsets();
         let expected = [
+            "castingData",
             "hpMax",
             "hpCurrent",
             "manaMax",
@@ -744,6 +960,10 @@ mod tests {
             "enduranceCurrent",
             "enduranceMax",
             "standState",
+            "gm",
+            "gmRank",
+            "spellGemEta",
+            "meleeRadius",
         ];
         for key in &expected {
             assert!(
@@ -753,6 +973,34 @@ mod tests {
             );
         }
         assert_eq!(db.player_zone.len(), expected.len());
+    }
+
+    #[test]
+    fn from_compiled_offsets_exposes_priority_struct_maps() {
+        let db = OffsetDatabase::from_compiled_offsets();
+
+        assert_eq!(
+            db.get_struct_offset("PcClient", "extendedTargetList"),
+            Some(crate::offsets::pc_client::EXTENDED_TARGET_LIST)
+        );
+        assert_eq!(
+            db.get_struct_offset("EQ_Spell", "castTime"),
+            Some(crate::offsets::eq_spell::CAST_TIME)
+        );
+        assert_eq!(
+            db.get_struct_offset("ExtendedTargetSlot", "spawnId"),
+            Some(crate::offsets::extended_target_slot::SPAWN_ID)
+        );
+        assert_eq!(
+            db.get_struct_offset("zoneHeader", "shortName"),
+            Some(crate::offsets::zone_info::SHORT_NAME)
+        );
+        assert_eq!(
+            db.get_struct_size("CRaid"),
+            Some(crate::offsets::raid::SIZE)
+        );
+        assert!(db.get_struct_offsets("AchievementManager").is_some());
+        assert!(db.get_struct_offset("CRaid", "leaderName").is_none());
     }
 
     #[test]
@@ -961,6 +1209,8 @@ mod tests {
         assert!(loaded.eqmain_functions.is_empty());
         assert!(loaded.eqgraphics_globals.is_empty());
         assert!(loaded.eqgraphics_functions.is_empty());
+        assert!(loaded.structs.is_empty());
+        assert!(loaded.struct_sizes.is_empty());
     }
 
     // ─── load/save edge cases ───────────────────────────────────────────

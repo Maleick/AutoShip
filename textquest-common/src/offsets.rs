@@ -212,6 +212,57 @@ pub const XTARGET_SLOT_SPAWN_ID: u64 = 0x08;
 /// Offset of Name (char[64]) within ExtendedTargetSlot.
 pub const XTARGET_SLOT_NAME: u64 = 0x0c;
 
+/// Offsets within `PcClient` / `PcBase`.
+///
+/// Source: mq2-eqlib/include/eqlib/game/PcClient.h.  Keep these as the
+/// canonical `usize` field-offset constants for new consumers; the legacy
+/// top-level `PCCLIENT_*` constants remain for existing call sites.
+pub mod pc_client {
+    /// `CharacterZoneClient::me` (`PlayerClient*`) inside the embedded
+    /// `CharacterZoneClient`.
+    pub const ME: usize = super::character_zone::ME;
+    /// `ProfileManager`.
+    pub const PROFILE_MANAGER: usize = super::profile::PROFILE_MANAGER;
+    /// Flat `i32[62]` long-buff spell ID cache.
+    pub const BUFF_IDS: usize = super::profile::BUFF_IDS;
+    /// `ExtendedTargetList*`.
+    pub const EXTENDED_TARGET_LIST: usize = super::PCCLIENT_EXTENDED_TARGET_LIST as usize;
+    /// `bool InCombat`.
+    pub const IN_COMBAT: usize = super::PCCLIENT_IN_COMBAT as usize;
+    /// `CGroup*`.
+    pub const GROUP_PTR: usize = super::group::PC_CLIENT_GROUP_PTR;
+}
+
+/// Offsets within `ExtendedTargetList`.
+///
+/// Source: mq2-eqlib/include/eqlib/game/PcClient.h.
+pub mod extended_target_list {
+    /// Live client exposes up to 20 extended-target slots.
+    pub const MAX_TARGETS: usize = 20;
+    /// `ArrayClass<ExtendedTargetSlot> m_targetSlots`.
+    pub const TARGET_SLOTS: usize = super::XTARGET_LIST_SLOTS_OFFSET as usize;
+    /// `bool m_autoAddHaters`.
+    pub const AUTO_ADD_HATERS: usize = super::XTARGET_LIST_AUTO_ADD_HATERS as usize;
+}
+
+/// Offsets within `ExtendedTargetSlot`.
+///
+/// Source: mq2-eqlib/include/eqlib/game/PcClient.h.
+pub mod extended_target_slot {
+    /// `sizeof(ExtendedTargetSlot)`.
+    pub const SIZE: usize = super::XTARGET_SLOT_SIZE as usize;
+    /// `DWORD xTargetType`.
+    pub const TARGET_TYPE: usize = super::XTARGET_SLOT_TYPE as usize;
+    /// `DWORD XTargetSlotStatus`.
+    pub const STATUS: usize = super::XTARGET_SLOT_STATUS as usize;
+    /// `uint32_t SpawnID`.
+    pub const SPAWN_ID: usize = super::XTARGET_SLOT_SPAWN_ID as usize;
+    /// `char Name[64]`.
+    pub const NAME: usize = super::XTARGET_SLOT_NAME as usize;
+    /// Byte length of `Name`.
+    pub const NAME_SIZE: usize = 64;
+}
+
 /// pinstCXWndManager — eqgame.exe's UI window manager (not eqmain.dll's)
 pub const PINST_CXWND_MANAGER: u64 = 0x0001_40F3_7B28;
 
@@ -945,6 +996,25 @@ pub const EQ_SPELL_SIZE: usize = 0x218;
 /// Size of `ZoneGuideZone` on the 2026-03-10 live client.
 pub const SPAWN_MANAGER_ZONE_ZONE_SIZE: usize = 0x48;
 
+/// Offsets and size known for `CRaid`.
+///
+/// Field offsets still need import/verification before direct memory reads use
+/// them; keeping the size here lets the database advertise the struct as a
+/// tracked layout without inventing fields.
+pub mod raid {
+    /// `sizeof(CRaid)`.
+    pub const SIZE: usize = 0x3670;
+}
+
+/// Offsets and size known for `EverQuestinfo`.
+///
+/// This massive game-state struct is intentionally tracked before full field
+/// import so JSON/scan updates can start carrying field offsets incrementally.
+pub mod everquest_info {
+    /// `sizeof(EverQuestinfo)`.
+    pub const SIZE: usize = 0x75278;
+}
+
 // ─── PlayerClient (SPAWNINFO) field offsets ───
 // These are byte offsets within the PlayerClient struct.
 // Source: eqlib PlayerClient.h
@@ -1332,6 +1402,9 @@ pub mod zone_info {
     /// Address of the zoneHeader struct (instEQZoneInfo).
     /// This is NOT a pointer — it's the struct itself at this address.
     pub const INST_EQ_ZONE_INFO: u64 = 0x0001_40E9_5CD4;
+
+    /// `sizeof(zoneHeader)`.
+    pub const SIZE: usize = 0x2a4;
 
     /// char\[128\] — zone short name (e.g., "qey2hh1")
     pub const SHORT_NAME: usize = 0x000;
