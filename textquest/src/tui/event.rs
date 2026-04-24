@@ -1097,6 +1097,10 @@ pub fn handle_events(
                 _ => {}
             },
             ActivePanel::TacticalSpawns | ActivePanel::DebugSpawns => match key.code {
+                KeyCode::Char('p' | 'P') if app.active_screen == ActiveScreen::Debug => {
+                    app.toggle_gemma_observer_pause();
+                    return Ok(true);
+                }
                 KeyCode::Down | KeyCode::Char('j') => app.spawn_list_down(),
                 KeyCode::Up | KeyCode::Char('k') => app.spawn_list_up(),
                 KeyCode::PageDown => app.spawn_list_page_down(),
@@ -1115,9 +1119,20 @@ pub fn handle_events(
                 _ => {}
             },
             ActivePanel::DebugHexDump => match key.code {
+                KeyCode::Char('p' | 'P') => {
+                    app.toggle_gemma_observer_pause();
+                    return Ok(true);
+                }
                 KeyCode::Down => app.hex_scroll_down(),
                 KeyCode::Up => app.hex_scroll_up(),
                 KeyCode::Char('a') => app.toggle_hex_annotations(),
+                _ => {}
+            },
+            ActivePanel::DebugExplorer => match key.code {
+                KeyCode::Char('p' | 'P') => {
+                    app.toggle_gemma_observer_pause();
+                    return Ok(true);
+                }
                 _ => {}
             },
             ActivePanel::PacketMonitorLog => match key.code {
@@ -1181,6 +1196,10 @@ pub fn handle_events(
                         }
                         KeyCode::Char('/') => {
                             app.eq_internals_state.search_mode = true;
+                        }
+                        KeyCode::Char('p' | 'P') => {
+                            app.toggle_gemma_observer_pause();
+                            return Ok(true);
                         }
                         _ => {}
                     }

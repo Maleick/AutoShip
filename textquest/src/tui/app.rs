@@ -52,6 +52,7 @@ static GM_SYNC_CLIENT: LazyLock<reqwest::blocking::Client> = LazyLock::new(|| {
 });
 
 const GM_SYNC_QUEUE_CAPACITY: usize = 16;
+pub const GEMMA_OBSERVATION_LIMIT: usize = 50;
 
 #[derive(Debug)]
 struct GmSyncPayload {
@@ -190,6 +191,35 @@ pub enum ActivePanel {
     OrchestratorDashboard,
     /// Spawn event feed panel (zone in/out notifications).
     SpawnEvents,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GemmaObservationLevel {
+    Info,
+    Warning,
+    Critical,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GemmaObservation {
+    pub timestamp: String,
+    pub level: GemmaObservationLevel,
+    pub message: String,
+}
+
+impl GemmaObservation {
+    #[must_use]
+    pub fn new(
+        timestamp: impl Into<String>,
+        level: GemmaObservationLevel,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            timestamp: timestamp.into(),
+            level,
+            message: message.into(),
+        }
+    }
 }
 
 /// Layout preset for panel arrangement within a screen.
@@ -830,6 +860,12 @@ pub struct App {
     pub status_message: String,
     /// Monotonic tick counter incremented each refresh cycle.
     pub tick_count: u64,
+    /// Visible Gemma observer commentary feed, oldest to newest.
+    gemma_observations: VecDeque<GemmaObservation>,
+    /// Observations captured while the observer panel is paused.
+    pending_gemma_observations: VecDeque<GemmaObservation>,
+    /// Whether the Gemma observer panel is paused.
+    gemma_observer_paused: bool,
 
     /// Overview screen UI state (collapse flags, selection).
     pub overview_state: OverviewScreenState,
@@ -1226,6 +1262,9 @@ impl App {
             client_name_index_cache: RefCell::new(None),
             status_message: String::from("Waiting for EQ process..."),
             tick_count: 0,
+            gemma_observations: VecDeque::with_capacity(GEMMA_OBSERVATION_LIMIT),
+            pending_gemma_observations: VecDeque::with_capacity(GEMMA_OBSERVATION_LIMIT),
+            gemma_observer_paused: false,
 
             overview_state: OverviewScreenState::new(),
             spawns_state: SpawnsScreenState::new(),
@@ -1355,6 +1394,73 @@ impl App {
     #[must_use]
     pub fn overlay_frame(&self) -> OverlayFrame {
         self.overlay_manager.frame_from_app(self)
+    }
+
+    fn push_limited_gemma_observation(
+        feed: &mut VecDeque<GemmaObservation>,
+        observation: GemmaObservation,
+    ) {
+        while feed.len() >= GEMMA_OBSERVATION_LIMIT {
+            feed.pop_front();
+        }
+        feed.push_back(observation);
+    }
+
+    /// Append a Gemma observer note with an explicit timestamp.
+    pub fn push_gemma_observation(
+        &mut self,
+        timestamp: impl Into<String>,
+        level: GemmaObservationLevel,
+        message: impl Into<String>,
+    ) {
+        let observation = GemmaObservation::new(timestamp, level, message);
+        if self.gemma_observer_paused {
+            Self::push_limited_gemma_observation(&mut self.pending_gemma_observations, observation);
+        } else {
+            Self::push_limited_gemma_observation(&mut self.gemma_observations, observation);
+        }
+    }
+
+    /// Append a Gemma observer note using the current local wall-clock time.
+    pub fn push_gemma_observation_now(
+        &mut self,
+        level: GemmaObservationLevel,
+        message: impl Into<String>,
+    ) {
+        let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
+        self.push_gemma_observation(timestamp, level, message);
+    }
+
+    pub fn toggle_gemma_observer_pause(&mut self) {
+        self.gemma_observer_paused = !self.gemma_observer_paused;
+        if self.gemma_observer_paused {
+            self.status_message = String::from("Gemma Observer: paused");
+            return;
+        }
+
+        let resumed_count = self.pending_gemma_observations.len();
+        while let Some(observation) = self.pending_gemma_observations.pop_front() {
+            Self::push_limited_gemma_observation(&mut self.gemma_observations, observation);
+        }
+        self.status_message = if resumed_count == 0 {
+            String::from("Gemma Observer: resumed")
+        } else {
+            format!("Gemma Observer: resumed, applied {resumed_count} queued observation(s)")
+        };
+    }
+
+    #[must_use]
+    pub fn gemma_observer_paused(&self) -> bool {
+        self.gemma_observer_paused
+    }
+
+    #[must_use]
+    pub fn pending_gemma_observation_count(&self) -> usize {
+        self.pending_gemma_observations.len()
+    }
+
+    pub fn gemma_observations(&self) -> impl Iterator<Item = &GemmaObservation> {
+        self.gemma_observations.iter()
     }
 
     /// Build default command aliases.

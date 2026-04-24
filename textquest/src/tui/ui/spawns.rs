@@ -14,7 +14,7 @@ use super::widgets::{
 };
 use crate::{
     eq::structs::{SpawnInfo, StandState},
-    tui::app::{ActivePanel, App},
+    tui::app::{ActivePanel, App, GemmaObservationLevel},
 };
 
 fn current_spellset_lines(spells: &[crate::eq::structs::SpellSlot]) -> Vec<String> {
@@ -774,10 +774,17 @@ pub fn draw_debug_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &m
 /// If area.width > 110: Uses new 2-pane layout (spawns + hex sidebar).
 /// Otherwise: Falls back to vertical stacking.
 fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(10), Constraint::Length(8)])
+        .split(area);
+    let body = rows[0];
+    let observer = rows[1];
+
     // If enough width, use new Debug screen layout with spawns + hex sidebar
-    if area.width > 110 {
+    if body.width > 110 {
         let sidebar_width = 45; // 44 wide + 1 separator
-        let main_width = area.width.saturating_sub(sidebar_width);
+        let main_width = body.width.saturating_sub(sidebar_width);
 
         let cols = Layout::default()
             .direction(Direction::Horizontal)
@@ -785,15 +792,16 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
                 Constraint::Length(main_width),
                 Constraint::Length(sidebar_width),
             ])
-            .split(area);
+            .split(body);
 
         draw_debug_spawn_list(frame, cols[0], app);
         draw_hex_panel(frame, cols[1], app);
+        draw_gemma_observer_panel(frame, observer, app);
         return;
     }
 
     // Fallback for narrow terminals: vertical stacking
-    if area.width < 110 {
+    if body.width < 110 {
         let rows = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -802,7 +810,7 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
                 Constraint::Length(8),
                 Constraint::Min(10),
             ])
-            .split(area);
+            .split(body);
 
         let top = Layout::default()
             .direction(Direction::Horizontal)
@@ -814,13 +822,14 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
         draw_hex_panel_legacy(frame, rows[1], app);
         draw_hook_rotation_panel(frame, rows[2], app);
         draw_spawn_list(frame, rows[3], app);
+        draw_gemma_observer_panel(frame, observer, app);
         return;
     }
 
     let cols = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
-        .split(area);
+        .split(body);
 
     let left = Layout::default()
         .direction(Direction::Vertical)
@@ -837,11 +846,17 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
     draw_hook_rotation_panel(frame, left[2], app);
     draw_hex_panel_legacy(frame, left[3], app);
     draw_spawn_list(frame, cols[1], app);
+    draw_gemma_observer_panel(frame, observer, app);
 }
 
 /// 3-column layout: detail/hex | spawns | EQ Internals + explorer stacked.
 fn draw_debug_with_explorer(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     use super::{eq_internals::draw_eq_internals_panel, explorer::draw_explorer_panel};
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(10), Constraint::Length(8)])
+        .split(area);
 
     let cols = Layout::default()
         .direction(Direction::Horizontal)
@@ -850,7 +865,7 @@ fn draw_debug_with_explorer(frame: &mut Frame, area: ratatui::layout::Rect, app:
             Constraint::Percentage(35),
             Constraint::Percentage(40),
         ])
-        .split(area);
+        .split(rows[0]);
 
     let left = Layout::default()
         .direction(Direction::Vertical)
@@ -879,6 +894,7 @@ fn draw_debug_with_explorer(frame: &mut Frame, area: ratatui::layout::Rect, app:
     draw_eq_internals_panel(frame, right[0], app);
     draw_hook_rotation_panel(frame, right[1], app);
     draw_explorer_panel(frame, right[2], app);
+    draw_gemma_observer_panel(frame, rows[1], app);
 }
 
 /// EQ Internals-focused layout: internals + hex, minimal spawns.
@@ -887,7 +903,11 @@ fn draw_debug_explorer_focused(frame: &mut Frame, area: ratatui::layout::Rect, a
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([
+            Constraint::Percentage(55),
+            Constraint::Min(8),
+            Constraint::Length(8),
+        ])
         .split(area);
 
     draw_eq_internals_panel(frame, rows[0], app);
@@ -899,6 +919,67 @@ fn draw_debug_explorer_focused(frame: &mut Frame, area: ratatui::layout::Rect, a
 
     draw_hex_panel_legacy(frame, bottom[0], app);
     draw_spawn_list(frame, bottom[1], app);
+    draw_gemma_observer_panel(frame, rows[2], app);
+}
+
+fn gemma_level_style(level: GemmaObservationLevel) -> Style {
+    match level {
+        GemmaObservationLevel::Info => Style::default().fg(Color::White),
+        GemmaObservationLevel::Warning => Style::default().fg(Color::Yellow),
+        GemmaObservationLevel::Critical => {
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+        }
+    }
+}
+
+fn gemma_observer_lines(app: &App, visible_rows: usize) -> Vec<Line<'static>> {
+    let observations: Vec<_> = app.gemma_observations().collect();
+    if observations.is_empty() {
+        return vec![Line::from(Span::styled(
+            "No Gemma observations yet",
+            Style::default().fg(app.theme.text_muted),
+        ))];
+    }
+
+    let start = observations.len().saturating_sub(visible_rows.max(1));
+    observations[start..]
+        .iter()
+        .map(|observation| {
+            Line::from(vec![
+                Span::styled(
+                    format!("[{}] ", observation.timestamp),
+                    Style::default().fg(app.theme.text_muted),
+                ),
+                Span::styled(
+                    observation.message.clone(),
+                    gemma_level_style(observation.level),
+                ),
+            ])
+        })
+        .collect()
+}
+
+fn draw_gemma_observer_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
+    let t = &app.theme;
+    let pending = app.pending_gemma_observation_count();
+    let title = if app.gemma_observer_paused() {
+        format!(" Gemma Observer  PAUSED  queued:{pending}  p:resume ")
+    } else {
+        String::from(" Gemma Observer  p:pause ")
+    };
+    let border = if app.gemma_observer_paused() {
+        t.border_warn
+    } else {
+        t.border_server
+    };
+    let blk = panel(title.as_str(), border, t);
+    let visible_rows = blk.inner(area).height as usize;
+    let lines = gemma_observer_lines(app, visible_rows);
+
+    frame.render_widget(
+        Paragraph::new(lines).block(blk).wrap(Wrap { trim: false }),
+        area,
+    );
 }
 
 fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
@@ -1165,8 +1246,19 @@ pub fn draw_hook_rotation_panel(frame: &mut Frame, area: ratatui::layout::Rect, 
 
 #[cfg(test)]
 mod tests {
-    use super::current_spellset_lines;
-    use crate::eq::structs::SpellSlot;
+    use super::{current_spellset_lines, gemma_observer_lines};
+    use crate::{
+        eq::structs::SpellSlot,
+        tui::app::{App, GemmaObservationLevel},
+    };
+    use ratatui::text::Line;
+
+    fn line_text(line: &Line<'_>) -> String {
+        line.spans
+            .iter()
+            .map(|span| span.content.as_ref())
+            .collect()
+    }
 
     #[test]
     fn current_spellset_lines_groups_spells_by_three_slots() {
@@ -1207,5 +1299,35 @@ mod tests {
         }]);
 
         assert_eq!(lines, vec!["G7 Spell 789"]);
+    }
+
+    #[test]
+    fn gemma_observer_lines_show_last_50_in_render_order() {
+        let mut app = App::new();
+        for idx in 0..55 {
+            let level = match idx % 3 {
+                0 => GemmaObservationLevel::Info,
+                1 => GemmaObservationLevel::Warning,
+                _ => GemmaObservationLevel::Critical,
+            };
+            app.push_gemma_observation(
+                format!("23:41:{idx:02}"),
+                level,
+                format!("observation-{idx:02}"),
+            );
+        }
+
+        let lines = gemma_observer_lines(&app, 50);
+        let rendered: Vec<String> = lines.iter().map(line_text).collect();
+
+        assert_eq!(rendered.len(), 50);
+        assert!(rendered[0].contains("[23:41:05] observation-05"));
+        assert!(rendered[49].contains("[23:41:54] observation-54"));
+        assert!(!rendered.iter().any(|line| line.contains("observation-04")));
+
+        let scrolled = gemma_observer_lines(&app, 3);
+        let scrolled: Vec<String> = scrolled.iter().map(line_text).collect();
+        assert!(scrolled[0].contains("observation-52"));
+        assert!(scrolled[2].contains("observation-54"));
     }
 }
