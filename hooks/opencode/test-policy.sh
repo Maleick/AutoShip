@@ -210,6 +210,11 @@ chmod +x "$SETUP_REPO/bin/opencode"
   jq '.models = [{"id":"manual/model","cost":"selected","strength":99,"max_task_types":["docs"]}] | .defaultFallback = "manual/model"' .autoship/model-routing.json > .autoship/model-routing.json.tmp && mv .autoship/model-routing.json.tmp .autoship/model-routing.json
   PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
   jq -e '.models[0].id == "manual/model"' .autoship/model-routing.json >/dev/null || fail "setup preserves manual model-routing edits by default"
+  PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --max-agents=9 >/dev/null
+  jq -e '.models[0].id == "manual/model"' .autoship/model-routing.json >/dev/null || fail "noninteractive setup preserves manual model-routing edits by default"
+  PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --refresh-models >/dev/null
+  jq -e '.models | length == 5' .autoship/model-routing.json >/dev/null || fail "setup --refresh-models regenerates manual model routing when explicitly requested"
+  jq '.models = [{"id":"manual/model","cost":"selected","strength":99,"max_task_types":["docs"]}] | .defaultFallback = "manual/model"' .autoship/model-routing.json > .autoship/model-routing.json.tmp && mv .autoship/model-routing.json.tmp .autoship/model-routing.json
   AUTOSHIP_REFRESH_MODELS=1 PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
   jq -e '.models | length == 5' .autoship/model-routing.json >/dev/null || fail "setup refreshes generated model routing when requested"
   AUTOSHIP_MODELS='opencode/gpt-5,opencode-go/qwen3.6-plus,openai/gpt-5.3-codex-spark' PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
