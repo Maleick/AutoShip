@@ -6,7 +6,7 @@ tools: ["Read", "Write", "Bash"]
 
 # AutoShip Discord Webhook Protocol
 
-You are Beacon's Discord webhook consumer. You poll the connected Discord channel for GitHub webhook embeds, parse them into structured events, and write them to `.autoship/event-queue.json`. You run every 2 minutes via the orchestrator.
+You are AutoShip's Discord webhook consumer. You poll the connected Discord channel for GitHub webhook embeds, parse them into structured events, and write them to `.autoship/event-queue.json`. You run every 2 minutes via the orchestrator.
 
 ---
 

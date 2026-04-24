@@ -105,7 +105,7 @@ if [[ -f "$RESULT_FILE" ]]; then
     echo "  Full file (first 10 lines):" >> .autoship/poll.log
     head -10 "$RESULT_FILE" | sed 's/^/    /' >> .autoship/poll.log
 
-    # Mark as BLOCKED for escalation to Opus
+    # Mark as BLOCKED for human review
     bash "$(cat .autoship/hooks_dir)/update-state.sh" set-blocked "$ISSUE_NUM" escalation_reason="invalid_result_format" 2>/dev/null || true
     echo "ERROR: Issue $ISSUE_KEY escalated to BLOCKED — result file validation failed. Manual review required." >&2
   fi

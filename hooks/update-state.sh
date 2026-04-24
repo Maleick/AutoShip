@@ -3,7 +3,7 @@ set -euo pipefail
 
 # update-state.sh — Update .autoship/state.json for a given issue.
 # Usage: update-state.sh <action> <issue-id> [key=value ...]
-# Actions: set-claimed, set-running, set-verifying, set-completed, set-blocked, set-merged, set-failed, set-paused
+# Actions: set-claimed, set-queued, set-running, set-verifying, set-completed, set-blocked, set-merged, set-failed, set-paused
 
 AUTOSHIP_DIR=".autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
@@ -50,7 +50,7 @@ fi
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: $0 <action> <issue-id> [key=value ...]" >&2
-  echo "Actions: set-claimed, set-running, set-verifying, set-completed, set-blocked, set-merged, set-failed, set-paused" >&2
+  echo "Actions: set-claimed, set-queued, set-running, set-verifying, set-completed, set-blocked, set-merged, set-failed, set-paused" >&2
   exit 1
 fi
 
@@ -206,14 +206,16 @@ append_ledger_record() {
 }
 
 ACTION="$1"
-ISSUE_ID="$2"
+RAW_ISSUE_ID="$2"
 shift 2
 
 # Validate ISSUE_ID format: reject malformed values before they reach jq keys or GitHub API calls
-if [[ ! "$ISSUE_ID" =~ ^(issue-)?[0-9]+[a-z0-9-]*$ ]]; then
-  echo "Error: invalid ISSUE_ID: $ISSUE_ID" >&2
+if [[ ! "$RAW_ISSUE_ID" =~ ^(issue-)?[0-9]+$ ]]; then
+  echo "Error: invalid ISSUE_ID: $RAW_ISSUE_ID" >&2
   exit 1
 fi
+ISSUE_NUMBER="${RAW_ISSUE_ID#issue-}"
+ISSUE_ID="issue-${ISSUE_NUMBER}"
 
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -232,6 +234,12 @@ case "$ACTION" in
     ADD_LABEL=""
     REMOVE_LABELS=()
     ;;
+  set-queued)
+    NEW_STATE="queued"
+    STAT_KEY=""
+    ADD_LABEL=""
+    REMOVE_LABELS=()
+    ;;
   set-running)
     NEW_STATE="running"
     STAT_KEY="dispatched"  # signals: increment session_dispatched + total_dispatched_all_time
@@ -245,7 +253,7 @@ case "$ACTION" in
     REMOVE_LABELS=()
     ;;
   set-completed)
-    NEW_STATE="approved"
+    NEW_STATE="completed"
     STAT_KEY="completed"  # signals: increment session_completed + total_completed_all_time
     ADD_LABEL=""
     REMOVE_LABELS=()
@@ -374,7 +382,7 @@ fi
 
 # Manage GitHub labels for lifecycle transitions
 if [[ -n "$ADD_LABEL" ]] || [[ ${#REMOVE_LABELS[@]} -gt 0 ]]; then
-  manage_labels "$ISSUE_ID" "$ADD_LABEL" "${REMOVE_LABELS[@]}"
+  manage_labels "$ISSUE_NUMBER" "$ADD_LABEL" "${REMOVE_LABELS[@]}"
 fi
 
 # Apply optional key=value overrides
@@ -384,7 +392,6 @@ for pair in "$@"; do
 
   # Validate PR→issue assignment before writing pr_number
   if [[ "$KEY" == "pr_number" ]]; then
-    ISSUE_NUMBER=$(echo "$ISSUE_ID" | grep -o '[0-9]*')
     if command -v gh >/dev/null 2>&1; then
       PR_ISSUE=$(
         gh pr view "$VALUE" --json body --jq '.body' 2>/dev/null \
@@ -411,18 +418,6 @@ for pair in "$@"; do
       "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
   fi
 
-  # When agent is set to a Claude model (non-worktree dispatch), mark worktree_free=true
-  # so monitor-agents.sh skips the issue and defers to monitor-prs.sh for completion.
-  if [[ "$KEY" == "agent" ]]; then
-    case "$VALUE" in
-      claude-haiku|claude-sonnet|claude-haiku-*|claude-sonnet-*)
-        TMP=$(make_tmp)
-        jq --arg id "$ISSUE_ID" \
-          '.issues[$id].worktree_free = true' \
-          "$STATE_FILE" > "$TMP" && mv "$TMP" "$STATE_FILE"
-        ;;
-    esac
-  fi
 done
 
 echo "Updated issue $ISSUE_ID: state=$NEW_STATE"

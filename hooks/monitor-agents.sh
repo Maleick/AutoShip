@@ -84,9 +84,8 @@ check_dead_panes() {
 }
 
 # Return true (0) if the issue with the given key has worktree_free=true in state.json.
-# These issues are dispatched without a worktree (e.g. claude-haiku/claude-sonnet subagents)
-# and their completion is detected by monitor-prs.sh when the PR merges — not by watching
-# a pane.log that doesn't exist.
+# This is retained only for compatibility with older state files; OpenCode workers
+# use workspaces and status files.
 is_worktree_free() {
   local key="$1"
   local issue_num="${key#issue-}"

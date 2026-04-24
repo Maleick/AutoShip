@@ -115,14 +115,14 @@ while true; do
             '.issues | to_entries[] | select(.value.pr_number == $pr) | .key' \
             "$STATE_FILE" 2>/dev/null | head -1)
           if [[ -n "$ISSUE_ID" ]]; then
-            beacon_key="${num}:BEACON_MERGED"
-            beacon_seen=$(jq -r --arg k "$beacon_key" '.[$k] // empty' "$SEEN_FILE")
-            if [[ -z "$beacon_seen" ]]; then
+            autoship_key="${num}:AUTOSHIP_MERGED"
+            autoship_seen=$(jq -r --arg k "$autoship_key" '.[$k] // empty' "$SEEN_FILE")
+            if [[ -z "$autoship_seen" ]]; then
               COMPLETED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
               bash "$REPO_ROOT/hooks/update-state.sh" set-merged "$ISSUE_ID" \
                 completed_at="$COMPLETED_AT" 2>/dev/null || true
-              echo "[BEACON] Transitioned issue $ISSUE_ID to merged (PR #$num, completed_at=$COMPLETED_AT)"
-              jq --arg k "$beacon_key" --arg now "$(date -u +%s)" '.[$k] = $now' \
+              echo "[AUTOSHIP] Transitioned issue $ISSUE_ID to merged (PR #$num, completed_at=$COMPLETED_AT)"
+              jq --arg k "$autoship_key" --arg now "$(date -u +%s)" '.[$k] = $now' \
                 "$SEEN_FILE" > "$_SEEN_TMP" && mv "$_SEEN_TMP" "$SEEN_FILE"
             fi
           fi
