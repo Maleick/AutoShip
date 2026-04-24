@@ -221,6 +221,7 @@ cat > "$SELECT_REPO/.autoship/model-routing.json" <<'JSON'
   ]
 }
 JSON
+assert_eq "free/strong:free" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh simple_code 101)" "selector treats missing model history as empty"
 cat > "$SELECT_REPO/.autoship/model-history.json" <<'JSON'
 {
   "free/strong:free": {"success": 0, "fail": 6},

@@ -13,6 +13,9 @@ ROUTING_FILE=".autoship/model-routing.json"
 HISTORY_FILE=".autoship/model-history.json"
 
 [[ -f "$ROUTING_FILE" ]] || exit 0
+if [[ ! -f "$HISTORY_FILE" ]]; then
+  HISTORY_FILE="/dev/null"
+fi
 
 if [[ -n "$ROLE" ]]; then
   jq -r --arg role "$ROLE" '.roles[$role] // empty' "$ROUTING_FILE"
