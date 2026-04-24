@@ -311,6 +311,84 @@ fn handle_orchestrator_dashboard_shortcut(
     }
 }
 
+fn open_help_search_panel(app: &mut App) {
+    app.help_visible = false;
+    app.help_focus = None;
+    app.help_panel.close();
+    app.help_search_visible = true;
+    app.spawns_state.search_mode = false;
+    app.help_search_state.clear_query();
+    app.status_message = String::from("Help search: type to filter, q closes");
+}
+
+fn close_help_search_panel(app: &mut App) {
+    app.help_search_visible = false;
+    app.help_search_state.expanded = false;
+    app.status_message = String::from("Help search closed");
+}
+
+fn handle_help_search_panel(app: &mut App, key: KeyEvent) -> bool {
+    if !app.help_search_visible {
+        return false;
+    }
+
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q' | 'Q') => close_help_search_panel(app),
+        KeyCode::Tab => app.help_search_state.next_tab(),
+        KeyCode::BackTab => app.help_search_state.prev_tab(),
+        KeyCode::Enter => {
+            if !crate::tui::ui::help::filtered_entries(&app.help_search_state).is_empty() {
+                app.help_search_state.toggle_expanded();
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') => app.help_search_state.select_prev(),
+        KeyCode::Down | KeyCode::Char('j') => {
+            let max = crate::tui::ui::help::filtered_entries(&app.help_search_state).len();
+            app.help_search_state.select_next(max);
+            app.help_search_state.ensure_visible(8);
+        }
+        KeyCode::PageUp => {
+            for _ in 0..5 {
+                app.help_search_state.select_prev();
+            }
+        }
+        KeyCode::PageDown => {
+            let max = crate::tui::ui::help::filtered_entries(&app.help_search_state).len();
+            for _ in 0..5 {
+                app.help_search_state.select_next(max);
+            }
+            app.help_search_state.ensure_visible(8);
+        }
+        KeyCode::Home => {
+            app.help_search_state.selected = 0;
+            app.help_search_state.scroll = 0;
+            app.help_search_state.expanded = false;
+        }
+        KeyCode::End => {
+            let max = crate::tui::ui::help::filtered_entries(&app.help_search_state).len();
+            app.help_search_state.selected = max.saturating_sub(1);
+            app.help_search_state.ensure_visible(8);
+            app.help_search_state.expanded = false;
+        }
+        KeyCode::Backspace => app.help_search_state.pop_char(),
+        KeyCode::Char('/')
+            if !key.modifiers.contains(KeyModifiers::CONTROL)
+                && !key.modifiers.contains(KeyModifiers::ALT) =>
+        {
+            app.help_search_state.clear_query();
+        }
+        KeyCode::Char(c)
+            if !key.modifiers.contains(KeyModifiers::CONTROL)
+                && !key.modifiers.contains(KeyModifiers::ALT) =>
+        {
+            app.help_search_state.push_char(c);
+        }
+        _ => {}
+    }
+
+    true
+}
+
 /// Poll for keyboard events and update app state.
 /// Returns true if an event was handled.
 ///
@@ -391,6 +469,10 @@ pub fn handle_events(
                 }
                 _ => return Ok(false),
             }
+        }
+
+        if handle_help_search_panel(app, key) {
+            return Ok(true);
         }
 
         // ── Wizard modal ──
@@ -879,10 +961,7 @@ pub fn handle_events(
                 return Ok(true);
             }
             (KeyCode::Char('/'), _) => {
-                app.spawns_state.search_mode = true;
-                app.spawns_state.spawn_filter.clear();
-                app.set_active_screen(ActiveScreen::Tactical);
-                app.active_panel = ActivePanel::TacticalSpawns;
+                open_help_search_panel(app);
                 return Ok(true);
             }
             (KeyCode::Char('f'), _) => {

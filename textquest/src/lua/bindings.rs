@@ -1089,6 +1089,10 @@ fn read_player_snapshot(state: &Arc<RwLock<LuaRuntimeState>>) -> Option<LuaPlaye
 
 fn player_snapshot_table(lua: &Lua, player: Option<LuaPlayerSnapshot>) -> LuaResult<Table> {
     let player = player.unwrap_or_default();
+    let hp_percent = player.hp_percent();
+    let mana_percent = player.mana_percent();
+    let endurance_percent = player.endurance_percent();
+    let is_moving = player.is_moving();
     let table = lua.create_table()?;
     table.set("name", player.name)?;
     table.set("level", player.level)?;
@@ -1096,17 +1100,17 @@ fn player_snapshot_table(lua: &Lua, player: Option<LuaPlayerSnapshot>) -> LuaRes
     table.set("class_id", player.class_id)?;
     table.set("race_id", player.race_id)?;
     table.set("hp", player.hp)?;
-    table.set("hp_percent", player.hp_percent())?;
+    table.set("hp_percent", hp_percent)?;
     table.set("mana", player.mana)?;
-    table.set("mana_percent", player.mana_percent())?;
+    table.set("mana_percent", mana_percent)?;
     table.set("endurance", player.endurance)?;
-    table.set("endurance_percent", player.endurance_percent())?;
+    table.set("endurance_percent", endurance_percent)?;
     table.set("x", player.x)?;
     table.set("y", player.y)?;
     table.set("z", player.z)?;
     table.set("heading", player.heading)?;
     table.set("speed", player.speed)?;
-    table.set("is_moving", player.is_moving())?;
+    table.set("is_moving", is_moving)?;
     table.set("is_feigned", player.is_feigned)?;
     table.set("is_dead", player.is_dead)?;
     table.set("is_gm", player.is_gm)?;

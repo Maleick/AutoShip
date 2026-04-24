@@ -131,7 +131,7 @@ impl ReserveRule {
 /// Within each tier, the rule with the highest `priority` wins.  When
 /// priorities are equal the action with the safest outcome wins:
 /// Keep > Distribute > Bank > Vendor.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct WishlistManager {
     /// Per-character rules: `ClientId` → list of rules.
     char_rules: HashMap<ClientId, Vec<WishlistRule>>,

@@ -1,11 +1,6 @@
 //! Help search panel — centered overlay modal with search bar, tab selector,
 //! scrollable result list, detail view, and footer keybinding hints.
 //!
-//! # Coordination note
-//! Issue #1110 (HelpPanelState) may not be merged yet.  This module defines a
-//! minimal `HelpPanelState` stub so the renderer can compile independently.
-//! When #1110 lands, replace the stub with the canonical type and delete this
-//! note.  Mark: PARTIAL — pending #1110.
 
 use ratatui::{
     Frame,
@@ -30,7 +25,6 @@ pub enum HelpTab {
     Commands,
     Faq,
     Tips,
-    Results,
 }
 
 impl HelpTab {
@@ -39,21 +33,31 @@ impl HelpTab {
             HelpTab::Commands => "Commands",
             HelpTab::Faq => "FAQ",
             HelpTab::Tips => "Tips",
-            HelpTab::Results => "Results",
         }
     }
 
     fn all() -> &'static [HelpTab] {
-        &[
-            HelpTab::Commands,
-            HelpTab::Faq,
-            HelpTab::Tips,
-            HelpTab::Results,
-        ]
+        &[HelpTab::Commands, HelpTab::Faq, HelpTab::Tips]
+    }
+
+    fn next(self) -> Self {
+        match self {
+            HelpTab::Commands => HelpTab::Faq,
+            HelpTab::Faq => HelpTab::Tips,
+            HelpTab::Tips => HelpTab::Commands,
+        }
+    }
+
+    fn prev(self) -> Self {
+        match self {
+            HelpTab::Commands => HelpTab::Tips,
+            HelpTab::Faq => HelpTab::Commands,
+            HelpTab::Tips => HelpTab::Faq,
+        }
     }
 }
 
-/// Minimal help panel state — stub pending #1110.
+/// State for the interactive help search panel.
 #[derive(Debug, Clone, Default)]
 pub struct HelpPanelState {
     /// Current search query entered by the operator.
@@ -66,6 +70,8 @@ pub struct HelpPanelState {
     pub selected: usize,
     /// Scroll offset for the result list.
     pub scroll: usize,
+    /// Whether the selected item is expanded into a full content pane.
+    pub expanded: bool,
 }
 
 impl HelpPanelState {
@@ -81,6 +87,7 @@ impl HelpPanelState {
         if self.selected < self.scroll {
             self.scroll = self.selected;
         }
+        self.expanded = false;
     }
 
     /// Move selection down by one row; clamp at `max`.
@@ -88,6 +95,7 @@ impl HelpPanelState {
         if self.selected + 1 < max {
             self.selected += 1;
         }
+        self.expanded = false;
     }
 
     /// Adjust scroll so `selected` is always visible inside `page_height` rows.
@@ -109,6 +117,7 @@ impl HelpPanelState {
         self.cursor = self.query.len();
         self.selected = 0;
         self.scroll = 0;
+        self.expanded = false;
     }
 
     /// Delete the last character before the cursor.
@@ -118,7 +127,38 @@ impl HelpPanelState {
             self.cursor = self.query.len();
             self.selected = 0;
             self.scroll = 0;
+            self.expanded = false;
         }
+    }
+
+    /// Cycle to the next category tab and reset result position.
+    pub fn next_tab(&mut self) {
+        self.tab = self.tab.next();
+        self.selected = 0;
+        self.scroll = 0;
+        self.expanded = false;
+    }
+
+    /// Cycle to the previous category tab and reset result position.
+    pub fn prev_tab(&mut self) {
+        self.tab = self.tab.prev();
+        self.selected = 0;
+        self.scroll = 0;
+        self.expanded = false;
+    }
+
+    /// Toggle between split list/detail view and full detail view.
+    pub fn toggle_expanded(&mut self) {
+        self.expanded = !self.expanded;
+    }
+
+    /// Clear the search query and return to the first result.
+    pub fn clear_query(&mut self) {
+        self.query.clear();
+        self.cursor = 0;
+        self.selected = 0;
+        self.scroll = 0;
+        self.expanded = false;
     }
 }
 
@@ -213,7 +253,7 @@ pub fn filtered_entries<'a>(state: &HelpPanelState) -> Vec<HelpEntry<'a>> {
     let q = state.query.to_lowercase();
 
     match state.tab {
-        HelpTab::Commands | HelpTab::Results => command_entries()
+        HelpTab::Commands => command_entries()
             .iter()
             .filter(|cmd| {
                 q.is_empty()
@@ -278,7 +318,7 @@ pub fn draw_help_search_panel(frame: &mut Frame, area: Rect, app: &App) {
     let t = &app.theme;
     let state = &app.help_search_state;
 
-    // ── Popup geometry: ~80 wide × 24 tall, centered ──────────────────────
+    // Popup geometry: centered, but clamped by `centered_popup` for small terminals.
     let popup = centered_popup(area, 80, 70, 80, 24, 80, 30, 1);
 
     frame.render_widget(Clear, popup);
@@ -369,6 +409,11 @@ fn draw_tab_row(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Split lower area into result list (left/top) and detail pane (right/bottom).
 fn draw_result_and_detail(frame: &mut Frame, area: Rect, app: &App) {
+    if app.help_search_state.expanded {
+        draw_detail_pane(frame, area, app);
+        return;
+    }
+
     // Use vertical split: results on top (60%), detail below (40%).
     let split = Layout::default()
         .direction(Direction::Vertical)
@@ -386,8 +431,14 @@ fn draw_result_list(frame: &mut Frame, area: Rect, app: &App) {
     let entries = filtered_entries(state);
 
     let page_height = area.height.saturating_sub(2) as usize; // subtract borders
-    let scroll = state.scroll;
-    let selected = state.selected;
+    let selected = state.selected.min(entries.len().saturating_sub(1));
+    let scroll = if page_height == 0 {
+        state.scroll
+    } else if selected >= state.scroll + page_height {
+        selected - page_height + 1
+    } else {
+        state.scroll.min(selected)
+    };
     let count = entries.len();
 
     let title = if entries.is_empty() {
@@ -504,7 +555,7 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
         ),
         Span::styled("search  ", Style::default().fg(t.text_muted)),
         Span::styled(
-            "Esc ",
+            "q/Esc ",
             Style::default()
                 .fg(t.text_accent)
                 .add_modifier(Modifier::BOLD),
@@ -523,7 +574,7 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
                 .fg(t.text_accent)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled("show detail  ", Style::default().fg(t.text_muted)),
+        Span::styled("expand  ", Style::default().fg(t.text_muted)),
         Span::styled(
             "Tab ",
             Style::default()
@@ -643,6 +694,30 @@ mod tests {
         assert_eq!(state.selected, 0);
         state.select_prev(); // should not underflow
         assert_eq!(state.selected, 0);
+    }
+
+    #[test]
+    fn help_panel_tabs_cycle_across_issue_sections() {
+        let mut state = HelpPanelState::new();
+        assert_eq!(state.tab, HelpTab::Commands);
+        state.next_tab();
+        assert_eq!(state.tab, HelpTab::Faq);
+        state.next_tab();
+        assert_eq!(state.tab, HelpTab::Tips);
+        state.next_tab();
+        assert_eq!(state.tab, HelpTab::Commands);
+        state.prev_tab();
+        assert_eq!(state.tab, HelpTab::Tips);
+    }
+
+    #[test]
+    fn help_panel_expanded_resets_when_search_changes() {
+        let mut state = HelpPanelState::new();
+        state.toggle_expanded();
+        assert!(state.expanded);
+        state.push_char('n');
+        assert!(!state.expanded);
+        assert_eq!(state.query, "n");
     }
 
     #[test]
