@@ -9,6 +9,7 @@ members = [
     "plugins/example-inventory-plugin",
     "tools/llm-client",
     "tools/eqdiff",
+    "tools/etw-consumer",
 ]
 resolver = "2"
 

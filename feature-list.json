@@ -166,6 +166,16 @@
         "cargo check -p textquest"
       ],
       "notes": "PARTIAL: Added shared EQBC-line parsing/serialization, native relay event variants for tell/channel forwarding, relay-side auto-detection for legacy EQBC-line peers, and protocol documentation. Full OpenVanilla/MQ2EQBC handshake compatibility, DLL chat-hook publishing, and external tool validation remain follow-up work."
+    },
+    {
+      "id": "issue-921-etw-ti-consumer-crate",
+      "name": "Issue #921 Rust ETW-TI consumer crate",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check -p etw-consumer --all-targets",
+        "RUSTC=\"$(rustup which --toolchain nightly rustc)\" rustup run nightly cargo check -p etw-consumer --target x86_64-pc-windows-msvc"
+      ],
+      "notes": "PARTIAL: Added tools/etw-consumer with CLI parsing, ETW-TI keyword masks, process-name filtering, JSONL serialization, pipe wire decoding for current and legacy headers, Windows-gated StartTraceW/EnableTraceEx2/OpenTraceW/ProcessTrace/TDH runtime, named-pipe reader, driver IOCTL start/stop wrapper, README setup notes, and 13 unit tests that compile. Live ETW/provider and loaded-driver validation still requires a patched Windows VM."
     }
   ]
 }
