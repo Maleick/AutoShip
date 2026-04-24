@@ -12,6 +12,7 @@ PLANNER_MODEL="${AUTOSHIP_PLANNER_MODEL:-openai/gpt-5.5}"
 COORDINATOR_MODEL="${AUTOSHIP_COORDINATOR_MODEL:-$PLANNER_MODEL}"
 ORCHESTRATOR_MODEL="${AUTOSHIP_ORCHESTRATOR_MODEL:-$PLANNER_MODEL}"
 REVIEWER_MODEL="${AUTOSHIP_REVIEWER_MODEL:-$PLANNER_MODEL}"
+LEAD_MODEL="${AUTOSHIP_LEAD_MODEL:-$PLANNER_MODEL}"
 LABELS="${AUTOSHIP_LABELS:-agent:ready}"
 
 NO_TUI=0
@@ -30,7 +31,8 @@ OPTIONS:
   --max-agents N        Set max concurrent agents (default: 15)
   --labels LABEL,...   Comma-separated labels to monitor (default: agent:ready)
   --refresh-models     Force refresh model inventory from OpenCode
-  --planner-model MODEL Set planner/coordinator/orchestrator/reviewer model (default: openai/gpt-5.5)
+  --planner-model MODEL Set planner/coordinator/orchestrator/reviewer/lead model (default: openai/gpt-5.5)
+  --lead-model MODEL   Set lead model separately (default: same as planner)
   --worker-models MODELS Comma-separated worker models (default: auto-detect free)
   -h, --help           Show this help message
 
@@ -49,6 +51,7 @@ ENVIRONMENT VARIABLES:
   AUTOSHIP_MODELS          Comma-separated worker models
   AUTOSHIP_REFRESH_MODELS  Set to 1 to force refresh
   AUTOSHIP_PLANNER_MODEL   Planner model (default: openai/gpt-5.5)
+  AUTOSHIP_LEAD_MODEL    Lead model (default: same as planner)
   AUTOSHIP_LABELS          Comma-separated labels (default: agent:ready)
   GH_TOKEN                 GitHub token (for gh auth)
 EOF
@@ -90,6 +93,7 @@ parse_args() {
         COORDINATOR_MODEL="$2"
         ORCHESTRATOR_MODEL="$2"
         REVIEWER_MODEL="$2"
+        LEAD_MODEL="$2"
         shift 2
         ;;
       --planner-model=*)
@@ -97,6 +101,16 @@ parse_args() {
         COORDINATOR_MODEL="$PLANNER_MODEL"
         ORCHESTRATOR_MODEL="$PLANNER_MODEL"
         REVIEWER_MODEL="$PLANNER_MODEL"
+        LEAD_MODEL="$PLANNER_MODEL"
+        shift
+        ;;
+      --lead-model)
+        [[ $# -ge 2 ]] || { echo "Error: --lead-model requires a value" >&2; usage 2; }
+        LEAD_MODEL="$2"
+        shift 2
+        ;;
+      --lead-model=*)
+        LEAD_MODEL="${1#*=}"
         shift
         ;;
       --worker-models)
@@ -214,19 +228,19 @@ if [[ -n "$missing_models" ]]; then
   exit 1
 fi
 
-missing_role_models=$(find_missing_models "$available_model_ids" "$PLANNER_MODEL" "$COORDINATOR_MODEL" "$ORCHESTRATOR_MODEL" "$REVIEWER_MODEL")
+missing_role_models=$(find_missing_models "$available_model_ids" "$PLANNER_MODEL" "$COORDINATOR_MODEL" "$ORCHESTRATOR_MODEL" "$REVIEWER_MODEL" "$LEAD_MODEL")
 if [[ -n "$missing_role_models" ]]; then
-  echo "Error: planner/coordinator/orchestrator models are not currently available in this OpenCode instance:" >&2
+  echo "Error: planner/coordinator/orchestrator/reviewer/lead models are not currently available in this OpenCode instance:" >&2
   printf '%s\n' "$missing_role_models" >&2
   exit 1
 fi
 
-python3 - "$ROUTING_FILE" "$CONFIG_FILE" "$SELECTED_MODELS" "$MAX_AGENTS" "$PLANNER_MODEL" "$COORDINATOR_MODEL" "$ORCHESTRATOR_MODEL" "$REVIEWER_MODEL" "$LABELS" <<'PY'
+python3 - "$ROUTING_FILE" "$CONFIG_FILE" "$SELECTED_MODELS" "$MAX_AGENTS" "$PLANNER_MODEL" "$COORDINATOR_MODEL" "$ORCHESTRATOR_MODEL" "$REVIEWER_MODEL" "$LEAD_MODEL" "$LABELS" <<'PY'
 import json
 import sys
 import os
 
-routing_path, config_path, selected_models, max_agents, planner_model, coordinator_model, orchestrator_model, reviewer_model, labels = sys.argv[1:]
+routing_path, config_path, selected_models, max_agents, planner_model, coordinator_model, orchestrator_model, reviewer_model, lead_model, labels = sys.argv[1:]
 models = [m.strip() for m in selected_models.split(",") if m.strip()]
 labels_list = [l.strip() for l in labels.split(",") if l.strip()]
 
@@ -282,6 +296,29 @@ with open(routing_path, "w", encoding="utf-8") as f:
             "coordinator": coordinator_model,
             "orchestrator": orchestrator_model,
             "reviewer": reviewer_model,
+            "lead": lead_model,
+        },
+        "pools": {
+            "default": {
+                "description": "Default worker pool for general tasks",
+                "models": [e["id"] for e in entries],
+            },
+            "frontend": {
+                "description": "Frontend development tasks",
+                "models": [e["id"] for e in entries if "frontend" in e.get("max_task_types", []) or "docs" in e.get("max_task_types", [])],
+            },
+            "backend": {
+                "description": "Backend development tasks",
+                "models": [e["id"] for e in entries if "medium_code" in e.get("max_task_types", []) or "complex" in e.get("max_task_types", [])],
+            },
+            "docs": {
+                "description": "Documentation tasks",
+                "models": [e["id"] for e in entries if "docs" in e.get("max_task_types", [])],
+            },
+            "mechanical": {
+                "description": "Mechanical/boilerplate tasks",
+                "models": [e["id"] for e in entries if "mechanical" in e.get("max_task_types", [])],
+            },
         },
         "defaultFallback": default,
         "models": entries,
@@ -297,6 +334,7 @@ with open(config_path, "w", encoding="utf-8") as f:
         "coordinatorModel": coordinator_model,
         "orchestratorModel": orchestrator_model,
         "reviewerModel": reviewer_model,
+        "leadModel": lead_model,
         "models": models,
         "labels": labels_list,
         "refreshModels": int(os.environ.get("AUTOSHIP_REFRESH_MODELS", "0")) == 1,

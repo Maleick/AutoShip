@@ -206,7 +206,8 @@ chmod +x "$SETUP_REPO/bin/opencode"
   printf '%s\n' "$setup_output" | grep -F '/autoship' >/dev/null || fail "setup prints autoship next step"
   jq -e '.models | length == 5' .autoship/model-routing.json >/dev/null || fail "setup writes all live free models by default"
   jq -e '.maxConcurrentAgents == 15 and .max_agents == 15' .autoship/config.json >/dev/null || fail "setup writes default concurrency cap consumed by runtime"
-  jq -e '.roles.planner == "openai/gpt-5.5" and .roles.coordinator == "openai/gpt-5.5" and .roles.orchestrator == "openai/gpt-5.5"' .autoship/model-routing.json >/dev/null || fail "setup configures GPT-5.5 as planner/coordinator/orchestrator"
+  jq -e '.roles.planner == "openai/gpt-5.5" and .roles.coordinator == "openai/gpt-5.5" and .roles.orchestrator == "openai/gpt-5.5" and .roles.lead == "openai/gpt-5.5"' .autoship/model-routing.json >/dev/null || fail "setup configures GPT-5.5 as planner/coordinator/orchestrator/lead"
+  jq -e '.pools != null and .pools.default != null and .pools.frontend != null and .pools.backend != null and .pools.docs != null' .autoship/model-routing.json >/dev/null || fail "setup writes worker pools"
   jq -e 'all(.models[]; .cost == "free")' .autoship/model-routing.json >/dev/null || fail "default setup excludes paid worker models"
   jq -e 'all(.models[]; .id != "openai/gpt-5.5")' .autoship/model-routing.json >/dev/null || fail "planner model is not used as a default worker"
   jq -e 'any(.models[]; .id == "openrouter/google/gemma-3-27b-it:free")' .autoship/model-routing.json >/dev/null || fail "setup includes OpenRouter free models from live OpenCode list"
@@ -229,6 +230,8 @@ chmod +x "$SETUP_REPO/bin/opencode"
   if AUTOSHIP_MODELS='openai/gpt-5.5-fast' PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null 2>&1; then
     fail "setup rejects gpt-5.5-fast"
   fi
+  AUTOSHIP_LEAD_MODEL=openai/gpt-5.5 PATH="$SETUP_REPO/bin:$PATH" bash hooks/opencode/setup.sh >/dev/null
+  jq -e '.roles.lead == "openai/gpt-5.5"' .autoship/model-routing.json >/dev/null || fail "setup accepts lead model override via AUTOSHIP_LEAD_MODEL"
 )
 
 SELECT_REPO="$TMP_DIR/select-repo"
@@ -240,7 +243,13 @@ cat > "$SELECT_REPO/.autoship/model-routing.json" <<'JSON'
     "planner": "openai/gpt-5.5",
     "coordinator": "openai/gpt-5.5",
     "orchestrator": "openai/gpt-5.5",
-    "reviewer": "openai/gpt-5.5"
+    "reviewer": "openai/gpt-5.5",
+    "lead": "openai/gpt-5.5"
+  },
+  "pools": {
+    "default": {"description": "Default pool", "models": ["free/strong:free", "free/reliable:free"]},
+    "frontend": {"description": "Frontend", "models": ["free/strong:free"]},
+    "backend": {"description": "Backend", "models": ["free/reliable:free"]}
   },
   "models": [
     {"id":"free/strong:free","cost":"free","strength":90,"max_task_types":["simple_code"]},
@@ -262,6 +271,11 @@ assert_eq "openai/gpt-5.3-codex-spark" "$(cd "$SELECT_REPO" && bash hooks/openco
 assert_eq "opencode-go/qwen3.6-plus" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh medium_code 103)" "selector can choose Go model when best for task"
 assert_eq "openai/gpt-5.5" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --role planner)" "selector returns GPT-5.5 planner role"
 assert_eq "openai/gpt-5.5" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --role reviewer)" "selector returns GPT-5.5 reviewer role"
+assert_eq "openai/gpt-5.5" "$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --role lead)" "selector returns GPT-5.5 lead role"
+POOL_MODELS=$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --pool default)
+assert_eq "true" "$(echo "$POOL_MODELS" | grep -q "free/strong:free" && echo "true" || echo "false")" "selector --pool default returns pool models"
+POOL_MODELS=$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --pool frontend)
+assert_eq "true" "$(echo "$POOL_MODELS" | grep -q "free/strong:free" && echo "true" || echo "false")" "selector --pool frontend returns frontend pool models"
 
 UPDATE_REPO="$TMP_DIR/update-repo"
 mkdir -p "$UPDATE_REPO/.autoship" "$UPDATE_REPO/bin" "$UPDATE_REPO/hooks"

@@ -2,8 +2,13 @@
 set -euo pipefail
 
 ROLE=""
+POOL=""
 if [[ "${1:-}" == "--role" ]]; then
   ROLE="${2:?Role required}"
+  shift 2
+fi
+if [[ "${1:-}" == "--pool" ]]; then
+  POOL="${2:?Pool required}"
   shift 2
 fi
 
@@ -19,6 +24,11 @@ fi
 
 if [[ -n "$ROLE" ]]; then
   jq -r --arg role "$ROLE" '.roles[$role] // empty' "$ROUTING_FILE"
+  exit 0
+fi
+
+if [[ -n "$POOL" ]]; then
+  jq -r --arg pool "$POOL" '.pools[$pool].models[] // empty' "$ROUTING_FILE" 2>/dev/null || exit 0
   exit 0
 fi
 
