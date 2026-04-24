@@ -9,6 +9,8 @@ use goblin::pe::PE;
 
 pub mod matcher;
 pub mod offset_export;
+pub mod rtti;
+pub mod similarity;
 pub mod xref;
 pub use matcher::{
     FunctionMatch, StringFunctionRef, apply_matches_to_offsets_json,
@@ -17,6 +19,13 @@ pub use matcher::{
 pub use offset_export::{
     BinaryDiffFunction, BinaryDiffOffsetExport, BinaryDiffOffsetReport, ExportedOffsetUpdate,
     export_offsets_from_binary_diff, map_function_to_offset_key,
+};
+pub use rtti::{
+    ClassRttiMatch, RttiClass, VTable, VTableSlotMatch, extract_rtti_type_descriptors_from_rdata,
+    match_classes_by_rtti_name, match_vtable_slots_by_index, parse_vtable_slots,
+};
+pub use similarity::{
+    ByteSimilarityMatch, FunctionBytes, byte_similarity, rank_candidates_by_byte_similarity,
 };
 pub use xref::{
     ImportedSymbol, StringRefMatch, build_string_xref_index, extract_imports,
