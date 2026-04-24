@@ -11,11 +11,34 @@ AUTOSHIP_BACKUP=""
 if [[ -d "$REPO_ROOT/.autoship" ]]; then
   AUTOSHIP_BACKUP="$(mktemp -d)"
   cp -R "$REPO_ROOT/.autoship" "$AUTOSHIP_BACKUP/"
+  rm -rf "$REPO_ROOT/.autoship"
 fi
 
 trap 'rm -rf "$CONFIG_HOME"; if [[ -n "$AUTOSHIP_BACKUP" && -d "$AUTOSHIP_BACKUP/.autoship" ]]; then rm -rf "$REPO_ROOT/.autoship"; cp -R "$AUTOSHIP_BACKUP/.autoship" "$REPO_ROOT/"; fi; rm -rf "$AUTOSHIP_BACKUP"' EXIT
 
 export XDG_CONFIG_HOME="$CONFIG_HOME"
+BIN_DIR="$CONFIG_HOME/bin"
+mkdir -p "$BIN_DIR"
+cat > "$BIN_DIR/opencode" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1" == "models" ]]; then
+  printf '%s\n' 'opencode/minimax-m2.5-free' 'opencode/nemotron-3-super-free' 'openai/gpt-5.5'
+  exit 0
+fi
+printf '%s\n' '1.14.22'
+SH
+cat > "$BIN_DIR/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "auth status" ]]; then
+  exit 0
+fi
+if [[ "$1 $2" == "label create" ]]; then
+  exit 0
+fi
+exit 0
+SH
+chmod +x "$BIN_DIR/opencode" "$BIN_DIR/gh"
+export PATH="$BIN_DIR:$PATH"
 
 PACKAGE_REPO="$(mktemp -d)"
 cp -R "$REPO_ROOT/." "$PACKAGE_REPO/"
