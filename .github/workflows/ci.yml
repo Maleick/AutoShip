@@ -184,7 +184,6 @@ jobs:
 
   test-matrix:
     name: Unit tests on ${{ matrix.os-name }} (rust-${{ matrix.rust }})
-    needs: merge_gate
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     strategy:
       fail-fast: false
