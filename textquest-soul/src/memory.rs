@@ -91,6 +91,29 @@ pub struct MemoryStore {
     fallback_cache: RefCell<VecDeque<CachedMemory>>,
 }
 
+/// Data needed to persist a three-party gossip memory.
+#[derive(Debug, Clone, Copy)]
+pub struct GossipMemoryInput<'a> {
+    /// Character who shared the gossip.
+    pub gossiper_id: ClientId,
+    /// Character who heard the gossip and owns the witnessed memory.
+    pub listener_id: ClientId,
+    /// Character the gossip was about.
+    pub subject_id: ClientId,
+    /// Display name of the gossiper.
+    pub gossiper_name: &'a str,
+    /// Display name of the listener.
+    pub listener_name: &'a str,
+    /// Display name of the subject.
+    pub subject_name: &'a str,
+    /// Human-readable memory/shared-reference description.
+    pub description: &'a str,
+    /// Listener mood when the gossip was heard.
+    pub mood: MoodState,
+    /// Memory importance score.
+    pub importance: f32,
+}
+
 const SCHEMA: &str = "
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
@@ -690,6 +713,52 @@ impl MemoryStore {
             .context("Failed to record shared reference")?;
 
         Ok(())
+    }
+
+    /// Record a listener memory for gossip and connect all three participants
+    /// through pairwise shared references.
+    ///
+    /// The current schema stores shared references as pairs, so a three-party
+    /// gossip context is represented by the A-B, B-C, and A-C participant
+    /// pairs pointing at the same witnessed memory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the witnessed memory or any shared-reference insert
+    /// fails.
+    pub fn record_gossip_memory(&self, input: &GossipMemoryInput<'_>) -> Result<i64> {
+        let description = if input.description.trim().is_empty() {
+            format!(
+                "{} heard from {} that {} came up in gossip",
+                input.listener_name, input.gossiper_name, input.subject_name
+            )
+        } else {
+            input.description.to_string()
+        };
+
+        let event = SoulEvent::Witnessed {
+            description: description.clone(),
+        };
+        let memory_id = self.record(input.listener_id, &event, input.mood, input.importance)?;
+
+        if memory_id > 0 {
+            for (character_a, character_b) in [
+                (input.gossiper_id, input.listener_id),
+                (input.listener_id, input.subject_id),
+                (input.gossiper_id, input.subject_id),
+            ] {
+                if character_a != character_b {
+                    self.record_shared_reference(
+                        character_a,
+                        character_b,
+                        memory_id,
+                        &description,
+                    )?;
+                }
+            }
+        }
+
+        Ok(memory_id)
     }
 
     /// Get underlying connection for use by extensions.
@@ -1741,6 +1810,38 @@ mod tests {
             .unwrap();
         let result = store.record_shared_reference(1, 2, id, "Killed gnoll together");
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn record_gossip_memory_creates_witnessed_memory_and_shared_context() {
+        let store = open_memory_store();
+        let input = GossipMemoryInput {
+            gossiper_id: 1,
+            listener_id: 2,
+            subject_id: 3,
+            gossiper_name: "Alice",
+            listener_name: "Bob",
+            subject_name: "Charlie",
+            description: "Bob heard from Alice that Charlie was described in a negative way",
+            mood: MoodState::Angry,
+            importance: 2.0,
+        };
+
+        let memory_id = store.record_gossip_memory(&input).unwrap();
+
+        let memories = store.recall_about(2, "Charlie", 10).unwrap();
+        assert_eq!(memories.len(), 1);
+        assert_eq!(memories[0].id, memory_id);
+        assert_eq!(memories[0].event_type, "witnessed");
+        let shared_count: i64 = store
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM shared_references WHERE memory_id = ?1",
+                params![memory_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(shared_count, 3);
     }
 
     #[test]

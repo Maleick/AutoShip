@@ -1,12 +1,16 @@
 use std::collections::HashMap;
 
-use textquest_common::soul::SocialTag;
+use textquest_common::soul::{MoodState, SocialTag};
 
 use super::config::RelationshipSeed;
 
 /// Faction score bounds (EQ-style).
 const FACTION_MIN: i32 = -1000;
 const FACTION_MAX: i32 = 1000;
+const GOSSIP_BOND_FACTION_DELTA: i32 = 20;
+const GOSSIP_DISCLOSURE_FACTION_DELTA: i32 = -15;
+const GOSSIP_BASE_INFLUENCE: f32 = 120.0;
+const GOSSIP_MOOD_THRESHOLD: i32 = 45;
 
 /// A directed relationship from one character to another.
 #[derive(Debug, Clone)]
@@ -60,6 +64,46 @@ impl Relationship {
             _ => "scowling",
         }
     }
+}
+
+/// Runtime behavior switches for gossip propagation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GossipConfig {
+    /// If false, listeners remember gossip but do not change their relationship
+    /// to the subject from hearing it.
+    pub influence_enabled: bool,
+}
+
+impl Default for GossipConfig {
+    fn default() -> Self {
+        Self {
+            influence_enabled: true,
+        }
+    }
+}
+
+impl GossipConfig {
+    /// Configuration for paranoid groups that do not let gossip affect third
+    /// party relationships.
+    #[must_use]
+    pub fn disabled() -> Self {
+        Self {
+            influence_enabled: false,
+        }
+    }
+}
+
+/// Result of applying a gossip interaction.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GossipOutcome {
+    /// Faction delta applied to `listener -> subject`.
+    pub listener_subject_delta: i32,
+    /// Suggested listener mood after hearing gossip about a known character.
+    pub listener_mood: Option<MoodState>,
+    /// Memory/shared-reference description to persist for the listener.
+    pub description: String,
+    /// True when third-party relationship influence was enabled and applied.
+    pub influence_applied: bool,
 }
 
 /// Events that modify social relationships.
@@ -231,21 +275,22 @@ impl SocialGraph {
     ///
     /// - `gossiper → listener`: +faction bond (shared conversation).
     /// - `gossiper → subject`: −faction (potential betrayal/disclosure).
-    /// - `listener → subject`: influenced by gossiper's current opinion of the
-    ///   subject, scaled by `tone` (−1.0 insulting … 1.0 praising) and a 30%
-    ///   propagation factor.  Clamped to [-1000, 1000].
+    /// - `listener → subject`: influenced by the gossiper's current opinion,
+    ///   explicit tone (−1.0 insulting … 1.0 praising), and how much the
+    ///   listener trusts the gossiper.
     ///
     /// Self-gossip (`gossiper == subject` or `listener == subject`) is a no-op.
     ///
-    /// Returns the faction delta applied to the `listener → subject` edge, or
+    /// Returns a [`GossipOutcome`] describing relationship and mood effects, or
     /// `None` when the call is a no-op.
-    pub fn apply_gossip(
+    pub fn gossip(
         &mut self,
         gossiper: &str,
         listener: &str,
         subject: &str,
         tone: f32,
-    ) -> Option<i32> {
+        config: &GossipConfig,
+    ) -> Option<GossipOutcome> {
         // Self-gossip guard
         if gossiper == subject || listener == subject {
             return None;
@@ -256,30 +301,61 @@ impl SocialGraph {
         // Snapshot gossiper's opinion of subject BEFORE modifying any edges,
         // so the propagation reflects the opinion at the moment of gossip.
         let gossiper_opinion = self.get(gossiper, subject).map_or(0, |r| r.faction_score);
+        let listener_knows_subject = self.get(listener, subject).is_some();
+        let trust_weight = gossip_trust_weight(
+            self.get(listener, gossiper)
+                .or_else(|| self.get(gossiper, listener)),
+        );
 
-        // gossiper → listener: +20 faction (conversation bond)
+        // gossiper → listener: conversation bond.
         {
             let rel = self.get_or_create(gossiper, listener);
-            rel.adjust_faction(20);
+            rel.adjust_faction(GOSSIP_BOND_FACTION_DELTA);
+            rel.adjust_trust(0.01);
         }
 
-        // gossiper → subject: −15 faction (disclosure / betrayal)
+        // gossiper → subject: disclosure / betrayal.
         {
             let rel = self.get_or_create(gossiper, subject);
-            rel.adjust_faction(-15);
+            rel.adjust_faction(GOSSIP_DISCLOSURE_FACTION_DELTA);
+            rel.adjust_trust(-0.01);
         }
 
-        // listener → subject: 30% of gossiper's opinion of subject, scaled by tone
-        let propagated = (gossiper_opinion as f32 * tone * 0.30)
-            .round()
-            .clamp(FACTION_MIN as f32, FACTION_MAX as f32) as i32;
+        let listener_subject_delta = if config.influence_enabled {
+            gossip_influence_delta(gossiper_opinion, tone, trust_weight, listener_knows_subject)
+        } else {
+            0
+        };
 
         {
             let rel = self.get_or_create(listener, subject);
-            rel.adjust_faction(propagated);
+            rel.adjust_faction(listener_subject_delta);
         }
 
-        Some(propagated)
+        let listener_mood = if config.influence_enabled && listener_knows_subject {
+            gossip_mood(listener_subject_delta)
+        } else {
+            None
+        };
+
+        Some(GossipOutcome {
+            listener_subject_delta,
+            listener_mood,
+            description: gossip_description(gossiper, listener, subject, tone),
+            influence_applied: config.influence_enabled,
+        })
+    }
+
+    /// Compatibility wrapper for existing coordinator code.
+    pub fn apply_gossip(
+        &mut self,
+        gossiper: &str,
+        listener: &str,
+        subject: &str,
+        tone: f32,
+    ) -> Option<i32> {
+        self.gossip(gossiper, listener, subject, tone, &GossipConfig::default())
+            .map(|outcome| outcome.listener_subject_delta)
     }
 }
 
@@ -331,6 +407,59 @@ fn tag_label(tag: &SocialTag) -> &'static str {
         SocialTag::Nemesis => "nemesis",
         SocialTag::Crush => "crush",
     }
+}
+
+fn gossip_trust_weight(rel: Option<&Relationship>) -> f32 {
+    let Some(rel) = rel else {
+        return 0.675;
+    };
+
+    let faction_component = (rel.faction_score.max(0) as f32 / FACTION_MAX as f32) * 0.30;
+    (0.45 + rel.trust * 0.45 + faction_component).clamp(0.25, 1.25)
+}
+
+fn gossip_influence_delta(
+    gossiper_opinion: i32,
+    tone: f32,
+    trust_weight: f32,
+    listener_knows_subject: bool,
+) -> i32 {
+    let source_view = (gossiper_opinion as f32 / FACTION_MAX as f32).clamp(-1.0, 1.0);
+    let signal = if tone.abs() < 0.05 && source_view.abs() < 0.05 {
+        0.0
+    } else if tone.abs() < 0.05 {
+        source_view
+    } else if source_view.abs() < 0.05 {
+        tone
+    } else {
+        (source_view * 0.70 + tone * 0.30).clamp(-1.0, 1.0)
+    };
+    let familiarity_weight = if listener_knows_subject { 1.0 } else { 0.6 };
+
+    (signal * GOSSIP_BASE_INFLUENCE * trust_weight * familiarity_weight)
+        .round()
+        .clamp(FACTION_MIN as f32, FACTION_MAX as f32) as i32
+}
+
+fn gossip_mood(listener_subject_delta: i32) -> Option<MoodState> {
+    if listener_subject_delta >= GOSSIP_MOOD_THRESHOLD {
+        Some(MoodState::Happy)
+    } else if listener_subject_delta <= -GOSSIP_MOOD_THRESHOLD {
+        Some(MoodState::Angry)
+    } else {
+        None
+    }
+}
+
+fn gossip_description(gossiper: &str, listener: &str, subject: &str, tone: f32) -> String {
+    let sentiment = if tone >= 0.25 {
+        "positive"
+    } else if tone <= -0.25 {
+        "negative"
+    } else {
+        "mixed"
+    };
+    format!("{listener} heard from {gossiper} that {subject} was described in a {sentiment} way")
 }
 
 #[cfg(test)]
@@ -691,7 +820,48 @@ mod tests {
         assert!((rel.trust - 1.0).abs() < 0.01);
     }
 
-    // --- apply_gossip tests ---
+    // --- gossip tests ---
+
+    #[test]
+    fn gossip_updates_three_edges_and_suggests_listener_mood() {
+        let mut graph = SocialGraph::new();
+        graph.get_or_create("Alice", "Charlie").faction_score = -600;
+        let bob_alice = graph.get_or_create("Bob", "Alice");
+        bob_alice.faction_score = 600;
+        bob_alice.trust = 0.9;
+        graph.get_or_create("Bob", "Charlie").faction_score = 100;
+
+        let outcome = graph
+            .gossip("Alice", "Bob", "Charlie", -1.0, &GossipConfig::default())
+            .unwrap();
+
+        assert!(outcome.listener_subject_delta < 0);
+        assert_eq!(outcome.listener_mood, Some(MoodState::Angry));
+        assert!(outcome.description.contains("heard from Alice"));
+        assert_eq!(graph.get("Alice", "Bob").unwrap().faction_score, 20);
+        assert_eq!(graph.get("Alice", "Charlie").unwrap().faction_score, -615);
+        assert!(graph.get("Bob", "Charlie").unwrap().faction_score < 100);
+    }
+
+    #[test]
+    fn gossip_config_can_disable_listener_influence() {
+        let mut graph = SocialGraph::new();
+        graph.get_or_create("Alice", "Charlie").faction_score = -600;
+        graph.get_or_create("Bob", "Charlie").faction_score = 100;
+
+        let outcome = graph
+            .gossip("Alice", "Bob", "Charlie", -1.0, &GossipConfig::disabled())
+            .unwrap();
+
+        assert_eq!(outcome.listener_subject_delta, 0);
+        assert_eq!(outcome.listener_mood, None);
+        assert!(!outcome.influence_applied);
+        assert_eq!(graph.get("Alice", "Bob").unwrap().faction_score, 20);
+        assert_eq!(graph.get("Alice", "Charlie").unwrap().faction_score, -615);
+        assert_eq!(graph.get("Bob", "Charlie").unwrap().faction_score, 100);
+    }
+
+    // --- apply_gossip compatibility tests ---
 
     #[test]
     fn apply_gossip_propagates_negative_opinion_to_listener() {
@@ -703,9 +873,9 @@ mod tests {
         let delta = graph.apply_gossip("Alice", "Bob", "Charlie", -1.0);
 
         assert!(delta.is_some());
-        // listener → subject gets 30% of -600 * -1.0 = +180 (tone flips sign)
         let bob_charlie = graph.get("Bob", "Charlie").unwrap();
-        assert_eq!(bob_charlie.faction_score, 180);
+        assert!(delta.unwrap() < 0);
+        assert!(bob_charlie.faction_score < 0);
     }
 
     #[test]
@@ -731,9 +901,9 @@ mod tests {
         graph.get_or_create("Alice", "Charlie").faction_score = 500;
         graph.apply_gossip("Alice", "Bob", "Charlie", 1.0);
 
-        // listener → subject = 500 * 1.0 * 0.30 = 150
+        // Positive tone and positive gossiper opinion improve listener→subject.
         let bob_charlie = graph.get("Bob", "Charlie").unwrap();
-        assert_eq!(bob_charlie.faction_score, 150);
+        assert!(bob_charlie.faction_score > 0);
     }
 
     #[test]
@@ -765,12 +935,11 @@ mod tests {
     }
 
     #[test]
-    fn apply_gossip_neutral_tone_zero_propagation() {
+    fn apply_gossip_neutral_tone_still_carries_source_view() {
         let mut graph = SocialGraph::new();
         graph.get_or_create("Alice", "Charlie").faction_score = 800;
         graph.apply_gossip("Alice", "Bob", "Charlie", 0.0);
-        // tone=0 → propagated = 800 * 0.0 * 0.30 = 0
         let bob_charlie = graph.get("Bob", "Charlie").unwrap();
-        assert_eq!(bob_charlie.faction_score, 0);
+        assert!(bob_charlie.faction_score > 0);
     }
 }

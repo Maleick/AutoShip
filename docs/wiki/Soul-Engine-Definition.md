@@ -2,7 +2,7 @@
 
 **Status**: Phase 1 (deterministic fallback with persistent memory); Phase 2 (local LLM integration) deferred to M11.
 
-**Last updated**: 2026-04-12
+**Last updated**: 2026-04-24
 
 ## Overview
 
@@ -139,6 +139,15 @@ The engine bridges between:
 - `IdleTogether`: low-weight bond building
 - `Mentored`: mentor +faction, mentee +trust
 
+**Gossip propagation**:
+- `SocialGraph::gossip(A, B, C, tone, config)` models A telling B about C
+- A → B gains faction/trust from the shared conversation bond
+- A → C loses faction/trust from disclosure or betrayal
+- B → C shifts toward A's view of C, weighted by the message tone and B's trust in A
+- If B already knows C, strong gossip can suggest a listener mood shift (`Happy` for positive influence, `Angry` for negative influence)
+- `GossipConfig::disabled()` keeps the memory/shared context but disables third-party relationship influence for paranoid groups
+- `MemoryStore::record_gossip_memory()` records B's `SoulEvent::Witnessed` memory and represents the A/B/C context with pairwise shared references attached to that memory
+
 **Standing labels** (EQ-style):
 - 750–1000: ally
 - 400–749: warmly
@@ -150,10 +159,9 @@ The engine bridges between:
 - ≤-750: scowling
 
 **Current limitations**:
-- Gossip events exist but propagation mechanics not defined
-- No memory of why relationships changed
-- No influence on other characters' moods when a third-party gossips
-- Shared references are tracked but not used for relation building
+- Gossip detection is still deterministic and heuristic-driven; M11 may replace it with LLM-driven interpretation
+- Shared references are pairwise in the schema, so three-party gossip context is stored as three pair links to the same witnessed memory
+- Mood influence is returned as a suggested mood for the caller to apply; the social graph does not own character mood state
 
 ### 4. Idle Behavior System (`idle.rs`)
 
