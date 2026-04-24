@@ -439,6 +439,12 @@ fn immediate_response_for_command(
         Command::PollChat => Response::ChatBatch {
             messages: drain_chat_messages(),
         },
+        Command::WatchList => Response::WatchList {
+            watchpoints: crate::debug::watchpoints::list(),
+        },
+        Command::WatchLog => Response::WatchLog {
+            events: crate::debug::watchpoints::drain_log(),
+        },
         Command::QueryBazaarResults { filter } => {
             let eq_base = crate::EQ_BASE.load(Ordering::Relaxed);
             Response::BazaarResults {

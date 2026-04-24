@@ -1106,6 +1106,26 @@ pub enum Command {
         /// Reward selection rules keyed by task title matching.
         config: RewardAutomationConfig,
     },
+    /// Add or replace a memory watchpoint.
+    WatchAdd {
+        /// Absolute virtual address to monitor.
+        address: usize,
+        /// Number of bytes to compare for changes.
+        size: usize,
+        /// Operator-facing unique label for this watchpoint.
+        label: String,
+        /// Watch implementation mode.
+        mode: WatchMode,
+    },
+    /// Remove an active memory watchpoint by label.
+    WatchRemove {
+        /// Operator-facing unique label passed to `WatchAdd`.
+        label: String,
+    },
+    /// List active memory watchpoints.
+    WatchList,
+    /// Drain recent memory watchpoint change events.
+    WatchLog,
     /// Read raw bytes from an absolute process address for the EQ debugger.
     ///
     /// New debugger-facing spelling of `ReadMemory`; returns
@@ -1285,6 +1305,53 @@ pub struct ChatMessageInfo {
     pub color: i32,
     /// Timestamp in milliseconds when the message was captured.
     pub timestamp_ms: u64,
+}
+
+/// Memory watchpoint backend requested by the operator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum WatchMode {
+    /// Hardware write breakpoint. Exact but constrained by DR0-DR3 slot availability.
+    Hwbp,
+    /// Periodic memory snapshot comparison from the game-loop tick.
+    Poll,
+}
+
+/// Active memory watchpoint metadata returned by `Command::WatchList`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct WatchpointInfo {
+    /// Operator-facing unique label.
+    pub label: String,
+    /// Absolute virtual address being watched.
+    pub address: usize,
+    /// Number of bytes compared for changes.
+    pub size: usize,
+    /// Backend mode used by this watchpoint.
+    pub mode: WatchMode,
+    /// Last snapshot captured by the DLL.
+    pub last_value: Vec<u8>,
+}
+
+/// Memory watchpoint change event returned by `Response::WatchLog`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct WatchpointEvent {
+    /// Operator-facing watchpoint label.
+    pub label: String,
+    /// Absolute virtual address that changed.
+    pub address: usize,
+    /// Number of bytes compared.
+    pub size: usize,
+    /// Backend mode that detected the change.
+    pub mode: WatchMode,
+    /// Previous value snapshot.
+    pub old_value: Vec<u8>,
+    /// New value snapshot.
+    pub new_value: Vec<u8>,
+    /// Epoch milliseconds when the change was detected.
+    pub timestamp_ms: u64,
+    /// Writer instruction pointer when available from HWBP mode.
+    pub writer_rip: Option<usize>,
+    /// Best-effort return-address walk captured with the event.
+    pub call_stack: Vec<usize>,
 }
 
 /// Discrete lifecycle states for the EQ client process.
@@ -1602,6 +1669,16 @@ pub enum Response {
     ChecksumMismatchAlertBatch {
         /// Alerts raised since the previous alert poll/drain.
         alerts: Vec<ChecksumMismatchAlert>,
+    },
+    /// Active memory watchpoints.
+    WatchList {
+        /// Watchpoints currently registered in the DLL.
+        watchpoints: Vec<WatchpointInfo>,
+    },
+    /// Recent memory watchpoint changes.
+    WatchLog {
+        /// Watchpoint change events since the previous drain.
+        events: Vec<WatchpointEvent>,
     },
     /// Active function-call traces.
     TraceList {
@@ -3513,5 +3590,45 @@ mod tests {
                 delay_ms: 3_000,
             }
         );
+    }
+
+    #[test]
+    fn watchpoint_commands_are_debuggable() {
+        let cmd = Command::WatchAdd {
+            address: 0x1234,
+            size: 4,
+            label: "player.hp".to_string(),
+            mode: WatchMode::Poll,
+        };
+
+        let debug = format!("{cmd:?}");
+        assert!(debug.contains("WatchAdd"));
+        assert!(debug.contains("player.hp"));
+    }
+
+    #[test]
+    fn watchpoint_log_response_carries_old_and_new_values() {
+        let event = WatchpointEvent {
+            label: "player.hp".to_string(),
+            address: 0x1234,
+            size: 4,
+            mode: WatchMode::Poll,
+            old_value: vec![0x10, 0x00, 0x00, 0x00],
+            new_value: vec![0x0f, 0x00, 0x00, 0x00],
+            timestamp_ms: 42,
+            writer_rip: None,
+            call_stack: Vec::new(),
+        };
+
+        let response = Response::WatchLog {
+            events: vec![event.clone()],
+        };
+
+        match response {
+            Response::WatchLog { events } => {
+                assert_eq!(events, vec![event]);
+            }
+            _ => panic!("expected WatchLog"),
+        }
     }
 }

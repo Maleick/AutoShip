@@ -1471,6 +1471,10 @@ fn on_game_tick() {
     process_pending_commands(tick);
     process_pending_bandolier_restore(tick);
 
+    // Poll debug memory watchpoints after command dispatch so newly added
+    // watchpoints establish their baseline before change detection.
+    crate::debug::watchpoints::tick();
+
     // Tick the active casting loop (kill / recast) every frame.
     tick_cast_loop(tick);
 
@@ -3616,6 +3620,44 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
                     format!("Unknown or unreadable memory global: {global_name}"),
                 );
             }
+        }
+        Command::WatchAdd {
+            address,
+            size,
+            label,
+            mode,
+        } => {
+            let display_label = label.clone();
+            match crate::debug::watchpoints::add(address, size, label, mode) {
+                Ok(()) => send_command_result(
+                    true,
+                    format!(
+                        "Watchpoint {display_label} added at 0x{address:X} ({size} bytes, {mode:?})"
+                    ),
+                ),
+                Err(error) => send_command_result(
+                    false,
+                    format!("Watchpoint {display_label} not added: {error}"),
+                ),
+            }
+        }
+        Command::WatchRemove { label } => {
+            let removed = crate::debug::watchpoints::remove(&label);
+            if removed {
+                send_command_result(true, format!("Watchpoint {label} removed"));
+            } else {
+                send_command_result(false, format!("Watchpoint {label} was not active"));
+            }
+        }
+        Command::WatchList => {
+            crate::ipc::send_response(textquest_common::ipc::Response::WatchList {
+                watchpoints: crate::debug::watchpoints::list(),
+            });
+        }
+        Command::WatchLog => {
+            crate::ipc::send_response(textquest_common::ipc::Response::WatchLog {
+                events: crate::debug::watchpoints::drain_log(),
+            });
         }
         Command::SetChatTimestampConfig { enabled, format } => {
             tracing::info!(enabled, format = ?format, "SetChatTimestampConfig received");
