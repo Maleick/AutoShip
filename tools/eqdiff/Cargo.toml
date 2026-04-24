@@ -9,5 +9,6 @@ goblin = "0.9"
 anyhow = { workspace = true }
 iced-x86 = "1.21"
 textquest-common = { path = "../../textquest-common" }
+serde_json = { workspace = true }
 
 [dev-dependencies]

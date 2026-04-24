@@ -34,6 +34,7 @@
 - [Architecture Overview](Architecture-Overview)
 - [DLL Injection and IPC Pipeline](DLL-Injection-and-IPC-Pipeline)
 - [Offsets, EQ Internals, and MacroQuest References](Offsets-EQ-Internals-and-MacroQuest-References)
+- [EQDiff Patch-Day Binary Diff](EQDiff-Patch-Day-Binary-Diff)
 
 ### Anti-Cheat & Injection
 
