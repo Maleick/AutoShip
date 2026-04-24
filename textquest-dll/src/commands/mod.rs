@@ -37,13 +37,18 @@
 //! assert!(matches!(result, CommandResult::Ok));
 //! ```
 
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+const COMMAND_HELP_TOML: &str = include_str!("../../../config/help/commands.toml");
+const FAQ_HELP_TOML: &str = include_str!("../../../config/help/faq.toml");
+
 /// Global slash-command registry used by DLL command hooks, Lua scripts, and
 /// plugin bridges.
 static GLOBAL_REGISTRY: OnceLock<Mutex<CommandRegistry>> = OnceLock::new();
+static HELP_DATABASE: OnceLock<Result<HelpDatabase, String>> = OnceLock::new();
 static DEBUG_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
 static COMMAND_TRACING_ENABLED: AtomicBool = AtomicBool::new(false);
 
@@ -154,6 +159,170 @@ impl ArgType {
             ArgType::Float => "float",
             ArgType::Bool => "bool",
         }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct CommandHelpFile {
+    #[serde(default)]
+    commands: Vec<HelpCommand>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FaqHelpFile {
+    #[serde(default)]
+    faqs: Vec<FaqEntry>,
+    #[serde(default)]
+    tips: Vec<TipEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct HelpCommand {
+    name: String,
+    #[serde(default)]
+    aliases: Vec<String>,
+    usage: String,
+    description: String,
+    #[serde(default)]
+    examples: Vec<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FaqEntry {
+    id: String,
+    question: String,
+    answer: String,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TipEntry {
+    id: String,
+    text: String,
+    context: String,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+#[derive(Debug)]
+struct HelpDatabase {
+    commands: Vec<HelpCommand>,
+    faqs: Vec<FaqEntry>,
+    tips: Vec<TipEntry>,
+}
+
+impl HelpDatabase {
+    fn load() -> Result<Self, String> {
+        let command_file = toml::from_str::<CommandHelpFile>(COMMAND_HELP_TOML)
+            .map_err(|err| format!("command help TOML parse failed: {err}"))?;
+        let faq_file = toml::from_str::<FaqHelpFile>(FAQ_HELP_TOML)
+            .map_err(|err| format!("FAQ help TOML parse failed: {err}"))?;
+
+        Ok(Self {
+            commands: command_file.commands,
+            faqs: faq_file.faqs,
+            tips: faq_file.tips,
+        })
+    }
+
+    fn command(&self, lookup: &str) -> Option<&HelpCommand> {
+        let lookup = normalize_help_lookup(lookup);
+        self.commands
+            .iter()
+            .find(|command| command.matches_name(&lookup))
+    }
+
+    fn command_matches(&self, query: &str) -> Vec<&HelpCommand> {
+        let query = normalized_search(query);
+        self.commands
+            .iter()
+            .filter(|command| command.matches_search(&query))
+            .collect()
+    }
+
+    fn faq_matches(&self, query: &str) -> Vec<&FaqEntry> {
+        let query = normalized_search(query);
+        self.faqs
+            .iter()
+            .filter(|faq| faq.matches_search(&query))
+            .collect()
+    }
+
+    fn tip_matches(&self, query: &str) -> Vec<&TipEntry> {
+        let query = normalized_search(query);
+        self.tips
+            .iter()
+            .filter(|tip| tip.matches_search(&query))
+            .collect()
+    }
+
+    fn config_faqs(&self) -> Vec<&FaqEntry> {
+        self.faqs
+            .iter()
+            .filter(|faq| {
+                faq.tags.iter().any(|tag| {
+                    matches!(
+                        normalized_search(tag).as_str(),
+                        "setup" | "config" | "class" | "camp"
+                    )
+                }) || faq.matches_search("config")
+                    || faq.matches_search("camp")
+            })
+            .collect()
+    }
+}
+
+impl HelpCommand {
+    fn matches_name(&self, lookup: &str) -> bool {
+        normalized_search(&self.name) == lookup
+            || self
+                .aliases
+                .iter()
+                .any(|alias| normalized_search(alias) == lookup)
+    }
+
+    fn matches_search(&self, query: &str) -> bool {
+        searchable_contains(
+            query,
+            [
+                self.name.as_str(),
+                self.usage.as_str(),
+                self.description.as_str(),
+            ]
+            .into_iter()
+            .chain(self.aliases.iter().map(String::as_str))
+            .chain(self.examples.iter().map(String::as_str))
+            .chain(self.tags.iter().map(String::as_str)),
+        )
+    }
+}
+
+impl FaqEntry {
+    fn matches_search(&self, query: &str) -> bool {
+        searchable_contains(
+            query,
+            [
+                self.id.as_str(),
+                self.question.as_str(),
+                self.answer.as_str(),
+            ]
+            .into_iter()
+            .chain(self.tags.iter().map(String::as_str)),
+        )
+    }
+}
+
+impl TipEntry {
+    fn matches_search(&self, query: &str) -> bool {
+        searchable_contains(
+            query,
+            [self.id.as_str(), self.text.as_str(), self.context.as_str()]
+                .into_iter()
+                .chain(self.tags.iter().map(String::as_str)),
+        )
     }
 }
 
@@ -268,7 +437,6 @@ impl CommandRegistry {
     }
 
     fn dispatch_inner(&self, input: &str) -> CommandResult {
-
         if !input.starts_with('/') {
             return CommandResult::Error("Input must start with '/'".to_string());
         }
@@ -381,16 +549,25 @@ impl CommandRegistry {
 
         let subcommand = tokens.get(1).map(|s| s.to_lowercase());
         let message = match subcommand.as_deref() {
-            None | Some("help") => {
-                if tokens.len() > 2 {
-                    let filter = format!("/{}", tokens[2..].join(" "));
-                    self.help(Some(&filter))
-                } else {
-                    self.help(None)
-                }
-            }
+            None | Some("help") => self.builtin_help_message(&root, &tokens[2..]),
+            Some("search") => builtin_search_message(&tokens[2..]),
+            Some("faq") | Some("faqs") => builtin_faq_message(&tokens[2..]),
+            Some("tip") | Some("tips") => builtin_tips_message(&tokens[2..]),
+            Some("config") | Some("guide") => builtin_config_message(&tokens[2..]),
             Some("commands") | Some("list_commands") => {
-                let paths = self.command_paths();
+                let mut paths = help_database()
+                    .map(|database| {
+                        database
+                            .commands
+                            .iter()
+                            .map(|command| format!("/mercs {}", command.name))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                paths.extend(self.command_paths());
+                paths.sort();
+                paths.dedup();
+
                 if paths.is_empty() {
                     "No commands registered.".to_string()
                 } else {
@@ -404,13 +581,39 @@ impl CommandRegistry {
             Some("set") => "Runtime settings are pending config integration.".to_string(),
             Some("debug") => return Some(dispatch_debug_command(&tokens[2..])),
             _ => format!(
-                "Unknown TextQuest command '{}'. Try /textquest help.",
+                "Unknown TextQuest command '{}'. Try /{root} help.",
                 tokens.join(" ")
             ),
         };
 
         tracing::debug!(root, ?subcommand, "dispatching built-in metadata command");
         Some(CommandResult::Message(message))
+    }
+
+    fn builtin_help_message(&self, root: &str, args: &[&str]) -> String {
+        let Ok(database) = help_database() else {
+            return help_unavailable_message();
+        };
+
+        if args.is_empty() {
+            return format_help_overview(root, database, self);
+        }
+
+        let lookup = args.join(" ");
+        if let Some(command) = database.command(&lookup) {
+            return format_help_command(command);
+        }
+
+        let registry_filter = format!("/{}", args.join(" "));
+        let registry_help = self.help(Some(&registry_filter));
+        if !registry_help.starts_with("No command registered") {
+            return registry_help;
+        }
+
+        format!(
+            "No in-game help found for '{}'. Try /{root} search {}.",
+            lookup, lookup
+        )
     }
 
     /// Find the longest registered prefix matching the input tokens.
@@ -441,6 +644,271 @@ impl Default for CommandRegistry {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+fn help_database() -> Result<&'static HelpDatabase, &'static str> {
+    match HELP_DATABASE.get_or_init(HelpDatabase::load) {
+        Ok(database) => Ok(database),
+        Err(err) => Err(err.as_str()),
+    }
+}
+
+fn help_unavailable_message() -> String {
+    match help_database() {
+        Ok(_) => "Help content unavailable.".to_string(),
+        Err(err) => format!("Help content unavailable: {err}"),
+    }
+}
+
+fn builtin_search_message(args: &[&str]) -> String {
+    if args.is_empty() {
+        return "Usage: /mercs search <text>\nSearches commands, FAQ entries, and tips."
+            .to_string();
+    }
+
+    let Ok(database) = help_database() else {
+        return help_unavailable_message();
+    };
+
+    let query = args.join(" ");
+    let commands = database.command_matches(&query);
+    let faqs = database.faq_matches(&query);
+    let tips = database.tip_matches(&query);
+
+    if commands.is_empty() && faqs.is_empty() && tips.is_empty() {
+        return format!("No help results found for '{query}'. Full docs: docs/wiki/");
+    }
+
+    let mut lines = vec![format!("Help search: {query}")];
+
+    if !commands.is_empty() {
+        lines.push("Commands:".to_string());
+        for command in commands {
+            lines.push(format!(
+                "  /mercs {} - {}",
+                command.usage, command.description
+            ));
+        }
+    }
+
+    if !faqs.is_empty() {
+        lines.push("FAQ:".to_string());
+        for faq in faqs {
+            lines.push(format!("  {} - {}", faq.id, faq.question));
+        }
+    }
+
+    if !tips.is_empty() {
+        lines.push("Tips:".to_string());
+        for tip in tips {
+            lines.push(format!("  [{}] {}", tip.context, tip.text));
+        }
+    }
+
+    lines.push("Full docs: docs/wiki/".to_string());
+    lines.join("\n")
+}
+
+fn builtin_faq_message(args: &[&str]) -> String {
+    let Ok(database) = help_database() else {
+        return help_unavailable_message();
+    };
+
+    if args.is_empty() {
+        let mut lines = vec![
+            "FAQ".to_string(),
+            "Use /mercs faq <text> to search questions and answers.".to_string(),
+        ];
+        for faq in &database.faqs {
+            lines.push(format!("  {} - {}", faq.id, faq.question));
+        }
+        lines.push("Full docs: docs/wiki/".to_string());
+        return lines.join("\n");
+    }
+
+    let query = args.join(" ");
+    let matches = database.faq_matches(&query);
+    if matches.is_empty() {
+        return format!("No FAQ results found for '{query}'. Try /mercs search {query}.");
+    }
+
+    let mut lines = vec![format!("FAQ search: {query}")];
+    for faq in matches {
+        lines.push(format_faq_entry(faq));
+    }
+    lines.push("Full docs: docs/wiki/".to_string());
+    lines.join("\n\n")
+}
+
+fn builtin_tips_message(args: &[&str]) -> String {
+    let Ok(database) = help_database() else {
+        return help_unavailable_message();
+    };
+
+    let tips = if args.is_empty() {
+        database.tips.iter().collect::<Vec<_>>()
+    } else {
+        database.tip_matches(&args.join(" "))
+    };
+
+    if tips.is_empty() {
+        let query = args.join(" ");
+        return format!("No tips found for '{query}'. Try /mercs tips or /mercs search {query}.");
+    }
+
+    let mut lines = vec!["Quick tips".to_string()];
+    for tip in tips {
+        lines.push(format!("  [{}] {}", tip.context, tip.text));
+    }
+    lines.join("\n")
+}
+
+fn builtin_config_message(args: &[&str]) -> String {
+    let Ok(database) = help_database() else {
+        return help_unavailable_message();
+    };
+
+    if !args.is_empty() {
+        let query = args.join(" ");
+        let commands = database.command_matches(&query);
+        let faqs = database.faq_matches(&query);
+
+        if commands.is_empty() && faqs.is_empty() {
+            return format!(
+                "No configuration guide results found for '{query}'. Full docs: docs/wiki/"
+            );
+        }
+
+        let mut lines = vec![format!("Configuration guide: {query}")];
+        if !commands.is_empty() {
+            lines.push("Relevant commands:".to_string());
+            for command in commands {
+                lines.push(format!(
+                    "  /mercs {} - {}",
+                    command.usage, command.description
+                ));
+            }
+        }
+        if !faqs.is_empty() {
+            lines.push("Walkthroughs:".to_string());
+            for faq in faqs {
+                lines.push(format!("  {} - {}", faq.id, faq.question));
+            }
+        }
+        lines.push("Full docs: docs/wiki/".to_string());
+        return lines.join("\n");
+    }
+
+    let mut lines = vec![
+        "Configuration guide".to_string(),
+        "Start with config/textquest.toml, then class files under config/classes/.".to_string(),
+        "Useful commands:".to_string(),
+    ];
+
+    for name in ["camp", "assist", "group"] {
+        if let Some(command) = database.command(name) {
+            lines.push(format!(
+                "  /mercs {} - {}",
+                command.usage, command.description
+            ));
+        }
+    }
+
+    let faqs = database.config_faqs();
+    if !faqs.is_empty() {
+        lines.push("Walkthroughs:".to_string());
+        for faq in faqs {
+            lines.push(format!("  {} - {}", faq.id, faq.question));
+        }
+    }
+
+    lines.push("Full docs: docs/wiki/".to_string());
+    lines.join("\n")
+}
+
+fn format_help_overview(root: &str, database: &HelpDatabase, registry: &CommandRegistry) -> String {
+    let mut lines = vec![
+        "TextQuest in-game help".to_string(),
+        format!(
+            "Usage: /{root} help <command>, /{root} search <text>, /{root} faq [text], /{root} tips [context], /{root} config [text]"
+        ),
+        "Commands:".to_string(),
+    ];
+
+    for command in &database.commands {
+        lines.push(format!(
+            "  /mercs {:<28} {}",
+            command.usage, command.description
+        ));
+    }
+
+    let runtime_paths = registry.command_paths();
+    if !runtime_paths.is_empty() {
+        lines.push("Runtime commands:".to_string());
+        lines.extend(runtime_paths.into_iter().map(|path| format!("  {path}")));
+    }
+
+    lines.push("Full docs: docs/wiki/".to_string());
+    lines.join("\n")
+}
+
+fn format_help_command(command: &HelpCommand) -> String {
+    let mut lines = vec![
+        format!("Command: /mercs {}", command.name),
+        format!("Usage: /mercs {}", command.usage),
+        command.description.clone(),
+    ];
+
+    if !command.aliases.is_empty() {
+        lines.push(format!("Aliases: {}", command.aliases.join(", ")));
+    }
+
+    if !command.examples.is_empty() {
+        let examples = command
+            .examples
+            .iter()
+            .map(|example| format!("/mercs {example}"))
+            .collect::<Vec<_>>()
+            .join("; ");
+        lines.push(format!("Examples: {examples}"));
+    }
+
+    if !command.tags.is_empty() {
+        lines.push(format!("Tags: {}", command.tags.join(", ")));
+    }
+
+    lines.push("Full docs: docs/wiki/".to_string());
+    lines.join("\n")
+}
+
+fn format_faq_entry(faq: &FaqEntry) -> String {
+    format!("Q: {}\nA: {}", faq.question, faq.answer.trim())
+}
+
+fn searchable_contains<'a>(query: &str, fields: impl IntoIterator<Item = &'a str>) -> bool {
+    query.is_empty()
+        || fields
+            .into_iter()
+            .any(|field| normalized_search(field).contains(query))
+}
+
+fn normalize_help_lookup(input: &str) -> String {
+    let mut lookup = input.trim().trim_start_matches('/').to_lowercase();
+    for prefix in ["mercs ", "textquest ", "help "] {
+        if let Some(rest) = lookup.strip_prefix(prefix) {
+            lookup = rest.trim().to_string();
+        }
+    }
+
+    lookup
+        .split_ascii_whitespace()
+        .next()
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn normalized_search(value: &str) -> String {
+    value.trim().to_lowercase()
+}
 
 /// Normalize a command path for use as a HashMap key.
 ///
@@ -494,7 +962,10 @@ fn set_command_tracing(mode: Option<&str>) -> String {
 
     DEBUG_MODE_ENABLED.store(enabled, Ordering::Relaxed);
     COMMAND_TRACING_ENABLED.store(enabled, Ordering::Relaxed);
-    format!("TextQuest command tracing {}.", if enabled { "enabled" } else { "disabled" })
+    format!(
+        "TextQuest command tracing {}.",
+        if enabled { "enabled" } else { "disabled" }
+    )
 }
 
 fn debug_hex_request(address: Option<&str>, size: Option<&str>) -> String {
@@ -881,6 +1352,54 @@ mod tests {
         match result {
             CommandResult::Message(message) => assert!(message.contains("/mercs pull")),
             other => panic!("expected command listing message, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn builtin_mercs_help_uses_static_command_database() {
+        let reg = CommandRegistry::new();
+
+        let result = reg.dispatch("/mercs help pull");
+
+        match result {
+            CommandResult::Message(message) => {
+                assert!(message.contains("Usage: /mercs pull <npc_name>"));
+                assert!(message.contains("Pull the named NPC"));
+                assert!(message.contains("Examples: /mercs pull golem"));
+            }
+            other => panic!("expected help message, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn builtin_mercs_search_returns_commands_and_faqs() {
+        let reg = CommandRegistry::new();
+
+        let result = reg.dispatch("/mercs search ranger");
+
+        match result {
+            CommandResult::Message(message) => {
+                assert!(message.contains("Help search: ranger"));
+                assert!(message.contains("FAQ:"));
+                assert!(message.contains("How do I configure a ranger class?"));
+            }
+            other => panic!("expected search message, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn builtin_mercs_faq_search_returns_answer_text() {
+        let reg = CommandRegistry::new();
+
+        let result = reg.dispatch("/mercs faq zone");
+
+        match result {
+            CommandResult::Message(message) => {
+                assert!(message.contains("FAQ search: zone"));
+                assert!(message.contains("Some clients are stuck at the zone line"));
+                assert!(message.contains("Use 'pause' to stop automation"));
+            }
+            other => panic!("expected FAQ message, got {other:?}"),
         }
     }
 

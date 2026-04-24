@@ -4386,10 +4386,7 @@ P 50.0, 50.0, 0.0, 0, 255, 255, 1, Point1
             zone_exit_display_label("Qeynos", 37.4, 140.0),
             "Qeynos z:37"
         );
-        assert_eq!(
-            zone_exit_display_label("Qeynos", 37.4, 20.0),
-            "Qeynos"
-        );
+        assert_eq!(zone_exit_display_label("Qeynos", 37.4, 20.0), "Qeynos");
     }
 
     #[test]

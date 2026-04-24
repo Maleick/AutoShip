@@ -631,8 +631,7 @@ impl LuaBindings {
         debug.set(
             "enable_command_tracing",
             self.lua.create_function(|_, ()| {
-                LUA_COMMAND_TRACING_ENABLED
-                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                LUA_COMMAND_TRACING_ENABLED.store(true, std::sync::atomic::Ordering::Relaxed);
                 tracing::debug!("lua debug command tracing enabled");
                 Ok(true)
             })?,
