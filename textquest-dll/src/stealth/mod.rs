@@ -20,6 +20,8 @@ pub mod page_guard;
 pub mod pe_erase;
 #[cfg(windows)]
 pub mod peb_unlink;
+#[cfg(windows)]
+pub mod section_remap;
 pub mod stack_spoof;
 pub mod text_encrypt;
 pub mod thread_pool;

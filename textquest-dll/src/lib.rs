@@ -346,6 +346,9 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
 
     #[cfg(windows)]
     if !_dll_base.is_null() {
+        if let Err(e) = stealth::section_remap::remap_sections(_dll_base) {
+            tracing::warn!("Section remap verification failed (non-fatal): {}", e);
+        }
         // PEB unlinking + PE header erasure removes module/envelope visibility
         // from conventional in-process enumeration paths (PEB lists / PE exports).
         if let Err(e) = stealth::peb_unlink::unlink_module(_dll_base) {
@@ -540,7 +543,9 @@ fn install_remaining_hooks(eq_base: u64) -> Result<(), Box<dyn std::error::Error
     #[cfg(windows)]
     {
         // Trampoline hardening is defensive-only and must never block initialization.
-        stealth::trampoline::TrampolineHardener::new().protect_registered();
+        let trampoline_hardener = stealth::trampoline::TrampolineHardener::new();
+        trampoline_hardener.protect_registered();
+        trampoline_hardener.harden_private_rwx_allocations();
     }
 
     Ok(())

@@ -15,8 +15,33 @@ pub const TRAMPOLINE_XOR_KEY: u8 = 0xA5;
 /// addr -> (size, is_concealed)
 static TRAMPOLINE_REGISTRY: OnceLock<Mutex<HashMap<usize, (usize, bool)>>> = OnceLock::new();
 
+#[cfg(any(windows, test))]
+const PAGE_PROTECTION_BASE_MASK: u32 = 0xff;
+#[cfg(any(windows, test))]
+const PAGE_EXECUTE_READ_BITS: u32 = 0x20;
+#[cfg(any(windows, test))]
+const PAGE_EXECUTE_READWRITE_BITS: u32 = 0x40;
+#[cfg(any(windows, test))]
+const PAGE_EXECUTE_WRITECOPY_BITS: u32 = 0x80;
+#[cfg(windows)]
+const MAX_PRIVATE_RWX_TRAMPOLINE_SIZE: usize = 64 * 1024;
+
 fn registry() -> &'static Mutex<HashMap<usize, (usize, bool)>> {
     TRAMPOLINE_REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[cfg(any(windows, test))]
+fn private_region_has_rwx_protection(protection: u32) -> bool {
+    matches!(
+        protection & PAGE_PROTECTION_BASE_MASK,
+        PAGE_EXECUTE_READWRITE_BITS | PAGE_EXECUTE_WRITECOPY_BITS
+    )
+}
+
+#[cfg(any(windows, test))]
+fn hardened_private_execute_protection(protection: u32) -> Option<u32> {
+    private_region_has_rwx_protection(protection)
+        .then_some((protection & !PAGE_PROTECTION_BASE_MASK) | PAGE_EXECUTE_READ_BITS)
 }
 
 /// Hardens retour/trampoline allocations.
@@ -84,6 +109,91 @@ impl TrampolineHardener {
     /// Stub implementation on non-Windows platforms.
     #[cfg(not(windows))]
     pub fn protect(&self, _addr: *mut u8, _size: usize) {}
+
+    /// Convert small private execute-write regions, typical of detour trampoline
+    /// slabs, to RX after hook installation.
+    #[cfg(windows)]
+    pub fn harden_private_rwx_allocations(&self) -> usize {
+        use std::mem::size_of;
+
+        use windows::Win32::System::Memory::{
+            MEM_COMMIT, MEM_PRIVATE, MEMORY_BASIC_INFORMATION, PAGE_PROTECTION_FLAGS,
+            VirtualProtect, VirtualQuery,
+        };
+
+        let mut address = 0usize;
+        let mut hardened = 0usize;
+
+        for _ in 0..1_048_576 {
+            let mut mbi = MEMORY_BASIC_INFORMATION::default();
+            // SAFETY: VirtualQuery accepts arbitrary process addresses and fills
+            // `mbi` for the containing region when the address is queryable.
+            let queried = unsafe {
+                VirtualQuery(
+                    Some(address as *const _),
+                    &mut mbi,
+                    size_of::<MEMORY_BASIC_INFORMATION>(),
+                )
+            };
+            if queried == 0 || mbi.RegionSize == 0 {
+                break;
+            }
+
+            if mbi.State == MEM_COMMIT
+                && mbi.Type == MEM_PRIVATE
+                && mbi.RegionSize <= MAX_PRIVATE_RWX_TRAMPOLINE_SIZE
+            {
+                if let Some(new_protect) = hardened_private_execute_protection(mbi.Protect.0) {
+                    let mut old = PAGE_PROTECTION_FLAGS(0);
+                    // SAFETY: The region is committed memory in the current process.
+                    // The hardening pass only removes write permission from private
+                    // executable pages after hook installation has completed.
+                    match unsafe {
+                        VirtualProtect(
+                            mbi.BaseAddress as *const _,
+                            mbi.RegionSize,
+                            PAGE_PROTECTION_FLAGS(new_protect),
+                            &mut old,
+                        )
+                    } {
+                        Ok(()) => {
+                            hardened += 1;
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                base = ?mbi.BaseAddress,
+                                size = mbi.RegionSize,
+                                protect = mbi.Protect.0,
+                                error = %e,
+                                "VirtualProtect(private RWX -> RX) failed"
+                            );
+                        }
+                    }
+                }
+            }
+
+            let base = mbi.BaseAddress as usize;
+            let next = base.saturating_add(mbi.RegionSize);
+            if next <= address {
+                break;
+            }
+            address = next;
+        }
+
+        if hardened > 0 {
+            tracing::info!(
+                regions = hardened,
+                "Hardened private execute-write trampoline allocations"
+            );
+        }
+        hardened
+    }
+
+    /// Stub implementation on non-Windows platforms.
+    #[cfg(not(windows))]
+    pub fn harden_private_rwx_allocations(&self) -> usize {
+        0
+    }
 
     /// Apply XOR concealment to trampoline bytes.
     pub fn conceal(&self, addr: *mut u8, size: usize) {
@@ -203,5 +313,25 @@ mod tests {
 
         hardener.reveal(data.as_mut_ptr(), data.len());
         assert_eq!(hardener.is_concealed(data.as_mut_ptr()), Some(false));
+    }
+
+    #[test]
+    fn rwx_private_detection_matches_virtualquery_masks() {
+        assert!(private_region_has_rwx_protection(0x40));
+        assert!(private_region_has_rwx_protection(0x80));
+        assert!(private_region_has_rwx_protection(0x140));
+
+        assert!(!private_region_has_rwx_protection(0x20));
+        assert!(!private_region_has_rwx_protection(0x04));
+    }
+
+    #[test]
+    fn rwx_private_hardening_drops_write_and_preserves_modifiers() {
+        assert_eq!(hardened_private_execute_protection(0x40), Some(0x20));
+        assert_eq!(hardened_private_execute_protection(0x80), Some(0x20));
+        assert_eq!(hardened_private_execute_protection(0x140), Some(0x120));
+
+        assert_eq!(hardened_private_execute_protection(0x20), None);
+        assert_eq!(hardened_private_execute_protection(0x04), None);
     }
 }
