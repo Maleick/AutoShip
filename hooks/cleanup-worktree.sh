@@ -124,7 +124,8 @@ fi
 
 # SAFETY: Verify PR merge in git history before cleanup (prevent race condition)
 # If this is a merged PR cleanup, ensure the merge commit exists in origin before nuking worktree
-if [[ "$ISSUE_STATE" == "merged" ]]; then
+ISSUE_STATE_FROM_FILE=$(jq -r --arg key "$ISSUE_KEY" '.issues[$key].state // "unknown"' ".autoship/state.json" 2>/dev/null) || ISSUE_STATE_FROM_FILE="unknown"
+if [[ "$ISSUE_STATE_FROM_FILE" == "merged" ]]; then
   git fetch origin main 2>/dev/null || true
   # Try to find the branch in git log (crude check, but prevents accidental orphan commits)
   if ! git log --oneline origin/main 2>/dev/null | grep -qi "$ISSUE_KEY\|#$ISSUE_NUM"; then
@@ -164,14 +165,27 @@ if [[ -n "$REPO_SLUG" ]] && command -v gh >/dev/null 2>&1; then
     gh issue edit "$ISSUE_NUM" --remove-label "$label" --repo "$REPO_SLUG" 2>/dev/null || true
   done
   
-  # Check if issue is still open and close it if needed
+  # Check if issue is still open and close it if needed.
+  # SAFETY: Only close if a linked PR exists AND is actually MERGED on GitHub.
+  # Prevents closing in-flight issues on session restart when state.json says "merged"
+  # but no PR was ever opened / merged (see issue #2224).
   ISSUE_STATE=$(gh issue view "$ISSUE_NUM" --repo "$REPO_SLUG" --json state --jq '.state' 2>/dev/null) || ISSUE_STATE=""
-  
+  PR_NUM=$(jq -r --arg key "$ISSUE_KEY" '.issues[$key].pr_number // empty' ".autoship/state.json" 2>/dev/null) || PR_NUM=""
+  PR_STATE=""
+  if [[ -n "$PR_NUM" ]]; then
+    PR_STATE=$(gh pr view "$PR_NUM" --repo "$REPO_SLUG" --json state --jq '.state' 2>/dev/null) || PR_STATE=""
+  fi
+
   if [[ "$ISSUE_STATE" == "OPEN" ]]; then
-    echo "Closing issue $ISSUE_NUM on GitHub"
-    gh issue close "$ISSUE_NUM" --repo "$REPO_SLUG" --comment "Closed by AutoShip worktree cleanup after merge." 2>/dev/null || {
-      echo "Warning: failed to close issue $ISSUE_NUM"
-    }
+    if [[ -n "$PR_NUM" && "$PR_STATE" == "MERGED" ]]; then
+      echo "Closing issue $ISSUE_NUM on GitHub (PR #$PR_NUM merged)"
+      gh issue close "$ISSUE_NUM" --repo "$REPO_SLUG" --comment "Closed by AutoShip worktree cleanup after PR #$PR_NUM merged." 2>/dev/null || {
+        echo "Warning: failed to close issue $ISSUE_NUM"
+      }
+    else
+      echo "Skipping close of issue $ISSUE_NUM — PR merge not verified (pr_number='${PR_NUM:-none}', pr_state='${PR_STATE:-none}')"
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] cleanup-worktree: refused to close $ISSUE_KEY — pr_number=${PR_NUM:-none} pr_state=${PR_STATE:-none}" >> .autoship/poll.log 2>/dev/null || true
+    fi
   fi
 else
   echo "Warning: could not determine repo slug or gh CLI not available; skipping GitHub cleanup"

@@ -77,8 +77,8 @@ while true; do
     # Skip pull requests (GitHub issues API returns PRs too)
     is_pr=$(gh api "repos/$REPO_SLUG/issues/$num" --jq '.pull_request != null' 2>/dev/null) || is_pr="false"
     if [[ "$is_pr" == "false" ]]; then
-      # Only emit if not already tracked in state
-      tracked=$(jq -r --arg n "$num" '.issues[$n] // empty' "$STATE_FILE" 2>/dev/null)
+      # Only emit if not already tracked in state (state uses prefixed key "issue-<N>")
+      tracked=$(jq -r --arg n "issue-$num" '.issues[$n] // empty' "$STATE_FILE" 2>/dev/null)
       if [[ -z "$tracked" ]]; then
         echo "[ISSUE_NEW] number=$num"
       fi
@@ -93,8 +93,8 @@ while true; do
   for num in $closed_issues; do
     is_pr=$(gh api "repos/$REPO_SLUG/issues/$num" --jq '.pull_request != null' 2>/dev/null) || is_pr="false"
     if [[ "$is_pr" == "false" ]]; then
-      # Only emit if we were tracking this issue
-      tracked=$(jq -r --arg n "$num" '.issues[$n] // empty' "$STATE_FILE" 2>/dev/null)
+      # Only emit if we were tracking this issue (state uses prefixed key "issue-<N>")
+      tracked=$(jq -r --arg n "issue-$num" '.issues[$n] // empty' "$STATE_FILE" 2>/dev/null)
       if [[ -n "$tracked" ]]; then
         echo "[ISSUE_CLOSED] number=$num"
       fi

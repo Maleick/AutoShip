@@ -98,25 +98,33 @@ while true; do
     --repo "$REPO_SLUG" 2>/dev/null | \
     jq -r '.[] | "\(.number) \(.mergedAt)"' | \
     while read -r num merged_at; do
-      # Only emit for merges in the last 60 seconds
-      merged_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$merged_at" "+%s" 2>/dev/null || \
-                     date -d "$merged_at" "+%s" 2>/dev/null || echo 0)
-      now_epoch=$(date +%s)
+      # Only emit for merges in the last 60 seconds.
+      # macOS `date -j -f` treats input as local time unless -u is set; force UTC.
+      merged_epoch=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$merged_at" "+%s" 2>/dev/null || \
+                     date -u -d "$merged_at" "+%s" 2>/dev/null || echo 0)
+      now_epoch=$(date -u +%s)
       age=$((now_epoch - merged_epoch))
       if [[ $age -lt 60 ]]; then
         emit_if_changed "$num" "[PR_MERGED]"
 
         # Transition state to merged and write completed_at for the linked issue.
         # Look up which issue this PR belongs to by matching pr_number in state.json.
+        # BEACON is gated by the same seen-set as [PR_MERGED] so it fires once per PR.
         if [[ -f "$STATE_FILE" ]] && command -v jq >/dev/null 2>&1; then
           ISSUE_ID=$(jq -r --argjson pr "$num" \
             '.issues | to_entries[] | select(.value.pr_number == $pr) | .key' \
             "$STATE_FILE" 2>/dev/null | head -1)
           if [[ -n "$ISSUE_ID" ]]; then
-            COMPLETED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-            bash "$REPO_ROOT/hooks/update-state.sh" set-merged "$ISSUE_ID" \
-              completed_at="$COMPLETED_AT" 2>/dev/null || true
-            echo "[AUTOSHIP] Transitioned issue $ISSUE_ID to merged (PR #$num, completed_at=$COMPLETED_AT)"
+            autoship_key="${num}:AUTOSHIP_MERGED"
+            autoship_seen=$(jq -r --arg k "$autoship_key" '.[$k] // empty' "$SEEN_FILE")
+            if [[ -z "$autoship_seen" ]]; then
+              COMPLETED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+              bash "$REPO_ROOT/hooks/update-state.sh" set-merged "$ISSUE_ID" \
+                completed_at="$COMPLETED_AT" 2>/dev/null || true
+              echo "[AUTOSHIP] Transitioned issue $ISSUE_ID to merged (PR #$num, completed_at=$COMPLETED_AT)"
+              jq --arg k "$autoship_key" --arg now "$(date -u +%s)" '.[$k] = $now' \
+                "$SEEN_FILE" > "$_SEEN_TMP" && mv "$_SEEN_TMP" "$SEEN_FILE"
+            fi
           fi
         fi
       fi
