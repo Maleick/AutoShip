@@ -149,6 +149,352 @@ pub fn is_system_dll(dll_name: &str) -> bool {
 }
 
 const MAX_REMOTE_EXPORT_ENTRIES: usize = 65_536;
+const MAX_SHELLCODE_JUNK_DENSITY_PERCENT: u8 = 50;
+
+/// Environment variable that enables DllMain shellcode junk insertion.
+///
+/// Values above 50 are clamped to keep junk bounded relative to the real
+/// instruction stream.
+pub const SHELLCODE_JUNK_DENSITY_ENV: &str = "TEXTQUEST_SHELLCODE_JUNK_DENSITY";
+
+/// Optional deterministic seed for DllMain shellcode junk template selection.
+pub const SHELLCODE_JUNK_SEED_ENV: &str = "TEXTQUEST_SHELLCODE_JUNK_SEED";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShellcodeJunkConfig {
+    density_percent: u8,
+    seed: u64,
+}
+
+impl ShellcodeJunkConfig {
+    /// Disable junk insertion.
+    pub const fn disabled() -> Self {
+        Self {
+            density_percent: 0,
+            seed: 0,
+        }
+    }
+
+    /// Create a junk insertion config, clamping density to the supported 0-50%
+    /// range.
+    pub const fn new(density_percent: u8, seed: u64) -> Self {
+        let density_percent = if density_percent > MAX_SHELLCODE_JUNK_DENSITY_PERCENT {
+            MAX_SHELLCODE_JUNK_DENSITY_PERCENT
+        } else {
+            density_percent
+        };
+
+        Self {
+            density_percent,
+            seed,
+        }
+    }
+
+    pub const fn density_percent(self) -> u8 {
+        self.density_percent
+    }
+
+    pub const fn seed(self) -> u64 {
+        self.seed
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShellcodeStub {
+    pub bytes: Vec<u8>,
+    pub real_instruction_count: usize,
+    pub inserted_junk_count: usize,
+}
+
+struct ShellcodeInstruction {
+    bytes: Vec<u8>,
+    reads_flags: bool,
+    writes_flags: bool,
+    stack_delta: i32,
+}
+
+impl ShellcodeInstruction {
+    fn new(bytes: impl Into<Vec<u8>>) -> Self {
+        Self {
+            bytes: bytes.into(),
+            reads_flags: false,
+            writes_flags: false,
+            stack_delta: 0,
+        }
+    }
+
+    fn writes_flags(mut self) -> Self {
+        self.writes_flags = true;
+        self
+    }
+
+    fn stack_delta(mut self, stack_delta: i32) -> Self {
+        self.stack_delta = stack_delta;
+        self
+    }
+}
+
+#[derive(Clone, Copy)]
+struct JunkTemplate {
+    bytes: &'static [u8],
+    preserves_flags: bool,
+    stack_delta: i32,
+}
+
+const JUNK_TEMPLATES: &[JunkTemplate] = &[
+    // mov r10, imm32: dead store to a volatile non-argument register.
+    JunkTemplate {
+        bytes: &[0x49, 0xC7, 0xC2, 0x73, 0x08, 0x00, 0x00],
+        preserves_flags: true,
+        stack_delta: 0,
+    },
+    // push r10; pop r10: stack noise with no net stack change.
+    JunkTemplate {
+        bytes: &[0x41, 0x52, 0x41, 0x5A],
+        preserves_flags: true,
+        stack_delta: 0,
+    },
+    // jmp +0: control-flow noise to the next instruction.
+    JunkTemplate {
+        bytes: &[0xEB, 0x00],
+        preserves_flags: true,
+        stack_delta: 0,
+    },
+    // add r10, 0: arithmetic identity, allowed only when flags are dead.
+    JunkTemplate {
+        bytes: &[0x49, 0x83, 0xC2, 0x00],
+        preserves_flags: false,
+        stack_delta: 0,
+    },
+    // sub r10, 0: arithmetic identity, allowed only when flags are dead.
+    JunkTemplate {
+        bytes: &[0x49, 0x83, 0xEA, 0x00],
+        preserves_flags: false,
+        stack_delta: 0,
+    },
+    // xor r10, 0: arithmetic identity, allowed only when flags are dead.
+    JunkTemplate {
+        bytes: &[0x49, 0x83, 0xF2, 0x00],
+        preserves_flags: false,
+        stack_delta: 0,
+    },
+    // imul r10, r10, 1: arithmetic identity, allowed only when flags are dead.
+    JunkTemplate {
+        bytes: &[0x4D, 0x6B, 0xD2, 0x01],
+        preserves_flags: false,
+        stack_delta: 0,
+    },
+    // pushfq; clc; stc; popfq: flag noise with restored flags and net-zero stack.
+    JunkTemplate {
+        bytes: &[0x9C, 0xF8, 0xF9, 0x9D],
+        preserves_flags: true,
+        stack_delta: 0,
+    },
+    // push rax; lahf; sahf; pop rax: LAHF/SAHF noise while preserving RAX.
+    JunkTemplate {
+        bytes: &[0x50, 0x9F, 0x9E, 0x58],
+        preserves_flags: true,
+        stack_delta: 0,
+    },
+];
+
+/// Build the x64 shellcode stub used to call `DllMain(base, attach, null)`.
+pub fn build_dllmain_shellcode_stub(
+    base_addr: usize,
+    entry_addr: usize,
+    junk_config: ShellcodeJunkConfig,
+) -> ShellcodeStub {
+    let real_ops = dllmain_shellcode_ops(base_addr, entry_addr);
+    apply_shellcode_junk(&real_ops, junk_config)
+}
+
+fn configured_shellcode_junk_config(base_addr: usize, entry_addr: usize) -> ShellcodeJunkConfig {
+    let Ok(raw_density) = std::env::var(SHELLCODE_JUNK_DENSITY_ENV) else {
+        return ShellcodeJunkConfig::disabled();
+    };
+
+    let density = match raw_density.trim().parse::<u8>() {
+        Ok(density) => density,
+        Err(error) => {
+            tracing::warn!(
+                var = SHELLCODE_JUNK_DENSITY_ENV,
+                value = raw_density,
+                %error,
+                "invalid shellcode junk density; disabling junk insertion"
+            );
+            return ShellcodeJunkConfig::disabled();
+        }
+    };
+
+    let seed = std::env::var(SHELLCODE_JUNK_SEED_ENV)
+        .ok()
+        .and_then(|seed| parse_shellcode_junk_seed(&seed))
+        .unwrap_or_else(|| {
+            (base_addr as u64).rotate_left(17)
+                ^ (entry_addr as u64).rotate_right(7)
+                ^ 0xA5A5_0738_D11D_C0DE
+        });
+
+    ShellcodeJunkConfig::new(density, seed)
+}
+
+fn parse_shellcode_junk_seed(seed: &str) -> Option<u64> {
+    let seed = seed.trim();
+    let hex = seed.strip_prefix("0x").or_else(|| seed.strip_prefix("0X"));
+
+    match hex {
+        Some(hex) => u64::from_str_radix(hex, 16).ok(),
+        None => seed.parse().ok(),
+    }
+}
+
+fn dllmain_shellcode_ops(base_addr: usize, entry_addr: usize) -> Vec<ShellcodeInstruction> {
+    let mut mov_rcx = vec![0x48, 0xB9];
+    mov_rcx.extend_from_slice(&(base_addr as u64).to_le_bytes());
+
+    let mut mov_rax = vec![0x48, 0xB8];
+    mov_rax.extend_from_slice(&(entry_addr as u64).to_le_bytes());
+
+    vec![
+        // sub rsp, 0x28: 32 bytes shadow space + 8 bytes alignment.
+        ShellcodeInstruction::new([0x48, 0x83, 0xEC, 0x28])
+            .writes_flags()
+            .stack_delta(-0x28),
+        // mov rcx, imm64 (base_addr = hinstDLL)
+        ShellcodeInstruction::new(mov_rcx),
+        // mov edx, 1 (DLL_PROCESS_ATTACH)
+        ShellcodeInstruction::new([0xBA, 0x01, 0x00, 0x00, 0x00]),
+        // xor r8, r8 (lpvReserved = NULL)
+        ShellcodeInstruction::new([0x4D, 0x31, 0xC0]).writes_flags(),
+        // mov rax, imm64 (entry_addr)
+        ShellcodeInstruction::new(mov_rax),
+        // call rax
+        ShellcodeInstruction::new([0xFF, 0xD0]),
+        // add rsp, 0x28
+        ShellcodeInstruction::new([0x48, 0x83, 0xC4, 0x28])
+            .writes_flags()
+            .stack_delta(0x28),
+        // xor eax, eax (return 0)
+        ShellcodeInstruction::new([0x31, 0xC0]).writes_flags(),
+        // ret
+        ShellcodeInstruction::new([0xC3]),
+    ]
+}
+
+fn apply_shellcode_junk(
+    real_ops: &[ShellcodeInstruction],
+    junk_config: ShellcodeJunkConfig,
+) -> ShellcodeStub {
+    let real_instruction_count = real_ops.len();
+    let mut bytes = Vec::with_capacity(real_instruction_count * 8);
+    let target_junk_count = real_instruction_count * junk_config.density_percent() as usize / 100;
+
+    if target_junk_count == 0 || real_instruction_count < 2 {
+        for op in real_ops {
+            bytes.extend_from_slice(&op.bytes);
+        }
+
+        return ShellcodeStub {
+            bytes,
+            real_instruction_count,
+            inserted_junk_count: 0,
+        };
+    }
+
+    let mut rng = JunkRng::new(junk_config.seed());
+    let mut inserted_junk_count = 0;
+    let mut stack_delta = 0;
+
+    for (index, op) in real_ops.iter().enumerate() {
+        bytes.extend_from_slice(&op.bytes);
+        stack_delta += op.stack_delta;
+
+        if index + 1 == real_instruction_count {
+            continue;
+        }
+
+        let remaining_boundaries = real_instruction_count - index - 1;
+        let remaining_to_insert = target_junk_count.saturating_sub(inserted_junk_count);
+        if remaining_to_insert == 0 {
+            continue;
+        }
+
+        if rng.next_usize(remaining_boundaries) >= remaining_to_insert {
+            continue;
+        }
+
+        let next = &real_ops[index + 1];
+        let preserve_flags_only = op.reads_flags || op.writes_flags || next.reads_flags;
+        let template = choose_junk_template(&mut rng, preserve_flags_only)
+            .expect("at least one preserving junk template must exist");
+
+        debug_assert_eq!(
+            template.stack_delta, 0,
+            "junk templates must preserve stack alignment"
+        );
+        bytes.extend_from_slice(template.bytes);
+        stack_delta += template.stack_delta;
+        inserted_junk_count += 1;
+    }
+
+    debug_assert_eq!(stack_delta, 0, "shellcode stack delta must balance");
+
+    ShellcodeStub {
+        bytes,
+        real_instruction_count,
+        inserted_junk_count,
+    }
+}
+
+fn choose_junk_template(rng: &mut JunkRng, preserve_flags_only: bool) -> Option<JunkTemplate> {
+    let eligible_count = JUNK_TEMPLATES
+        .iter()
+        .filter(|template| !preserve_flags_only || template.preserves_flags)
+        .count();
+    if eligible_count == 0 {
+        return None;
+    }
+
+    let selected = rng.next_usize(eligible_count);
+    JUNK_TEMPLATES
+        .iter()
+        .filter(|template| !preserve_flags_only || template.preserves_flags)
+        .nth(selected)
+        .copied()
+}
+
+struct JunkRng {
+    state: u64,
+}
+
+impl JunkRng {
+    fn new(seed: u64) -> Self {
+        Self {
+            state: if seed == 0 {
+                0xA5A5_0738_D11D_C0DE
+            } else {
+                seed
+            },
+        }
+    }
+
+    fn next(&mut self) -> u64 {
+        let mut x = self.state;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.state = x;
+        x
+    }
+
+    fn next_usize(&mut self, upper_bound: usize) -> usize {
+        if upper_bound == 0 {
+            0
+        } else {
+            (self.next() as usize) % upper_bound
+        }
+    }
+}
 
 fn checked_remote_export_table_len(
     count: usize,
@@ -890,31 +1236,12 @@ mod platform {
             entry_addr: usize,
             base_addr: usize,
         ) -> Result<(), InjectError> {
-            // Build x64 shellcode stub for DllMain(base, DLL_PROCESS_ATTACH, NULL)
-            // x64 ABI requires 32 bytes of shadow space for the callee.
-            // sub rsp, 0x28 = 32 shadow + 8 alignment (call pushes 8-byte return addr,
-            // so 0x28 keeps RSP 16-byte aligned at the callee's entry).
-            let mut stub = Vec::with_capacity(64);
-            // sub rsp, 0x28
-            stub.extend_from_slice(&[0x48, 0x83, 0xEC, 0x28]);
-            // mov rcx, imm64 (base_addr = hinstDLL)
-            stub.extend_from_slice(&[0x48, 0xB9]);
-            stub.extend_from_slice(&(base_addr as u64).to_le_bytes());
-            // mov edx, 1 (DLL_PROCESS_ATTACH)
-            stub.extend_from_slice(&[0xBA, 0x01, 0x00, 0x00, 0x00]);
-            // xor r8, r8 (lpvReserved = NULL)
-            stub.extend_from_slice(&[0x4D, 0x31, 0xC0]);
-            // mov rax, imm64 (entry_addr)
-            stub.extend_from_slice(&[0x48, 0xB8]);
-            stub.extend_from_slice(&(entry_addr as u64).to_le_bytes());
-            // call rax
-            stub.extend_from_slice(&[0xFF, 0xD0]);
-            // add rsp, 0x28
-            stub.extend_from_slice(&[0x48, 0x83, 0xC4, 0x28]);
-            // xor eax, eax (return 0)
-            stub.extend_from_slice(&[0x31, 0xC0]);
-            // ret
-            stub.push(0xC3);
+            let stub = build_dllmain_shellcode_stub(
+                base_addr,
+                entry_addr,
+                configured_shellcode_junk_config(base_addr, entry_addr),
+            )
+            .bytes;
 
             // Allocate RWX memory in target for the stub
             let stub_mem = unsafe {
@@ -1357,27 +1684,12 @@ mod tests {
         let base_addr: u64 = 0x7FF000000;
         let entry_addr: u64 = 0x7FF001000;
 
-        let mut stub = Vec::with_capacity(64);
-        // sub rsp, 0x28
-        stub.extend_from_slice(&[0x48, 0x83, 0xEC, 0x28]);
-        // mov rcx, imm64
-        stub.extend_from_slice(&[0x48, 0xB9]);
-        stub.extend_from_slice(&base_addr.to_le_bytes());
-        // mov edx, 1
-        stub.extend_from_slice(&[0xBA, 0x01, 0x00, 0x00, 0x00]);
-        // xor r8, r8
-        stub.extend_from_slice(&[0x4D, 0x31, 0xC0]);
-        // mov rax, imm64
-        stub.extend_from_slice(&[0x48, 0xB8]);
-        stub.extend_from_slice(&entry_addr.to_le_bytes());
-        // call rax
-        stub.extend_from_slice(&[0xFF, 0xD0]);
-        // add rsp, 0x28
-        stub.extend_from_slice(&[0x48, 0x83, 0xC4, 0x28]);
-        // xor eax, eax
-        stub.extend_from_slice(&[0x31, 0xC0]);
-        // ret
-        stub.push(0xC3);
+        let stub = build_dllmain_shellcode_stub(
+            base_addr as usize,
+            entry_addr as usize,
+            ShellcodeJunkConfig::disabled(),
+        )
+        .bytes;
 
         // Verify shadow space: sub rsp, 0x28 at start
         assert_eq!(&stub[0..4], &[0x48, 0x83, 0xEC, 0x28]);
@@ -1391,6 +1703,58 @@ mod tests {
 
         // Verify total stub size is reasonable
         assert!(stub.len() < 64);
+    }
+
+    #[test]
+    fn shellcode_junk_density_inserts_bounded_neutral_bytes() {
+        let base_addr: u64 = 0x7FF000000;
+        let entry_addr: u64 = 0x7FF001000;
+
+        let clean = build_dllmain_shellcode_stub(
+            base_addr as usize,
+            entry_addr as usize,
+            ShellcodeJunkConfig::disabled(),
+        );
+        let junked = build_dllmain_shellcode_stub(
+            base_addr as usize,
+            entry_addr as usize,
+            ShellcodeJunkConfig::new(50, 0xA5A5_738),
+        );
+
+        assert_ne!(junked.bytes, clean.bytes);
+        assert!(junked.bytes.len() > clean.bytes.len());
+        assert_eq!(junked.real_instruction_count, clean.real_instruction_count);
+        assert!(junked.inserted_junk_count > 0);
+        assert!(
+            junked.inserted_junk_count <= clean.real_instruction_count * 50 / 100,
+            "junk insertion must obey density cap"
+        );
+        assert_real_shellcode_ops_in_order(&junked.bytes, base_addr, entry_addr);
+    }
+
+    fn assert_real_shellcode_ops_in_order(bytes: &[u8], base_addr: u64, entry_addr: u64) {
+        let mut offset = 0;
+        let mut expect_next = |needle: &[u8]| {
+            let rel = bytes[offset..]
+                .windows(needle.len())
+                .position(|window| window == needle)
+                .expect("real shellcode operation missing");
+            offset += rel + needle.len();
+        };
+
+        expect_next(&[0x48, 0x83, 0xEC, 0x28]);
+        let mut mov_rcx = vec![0x48, 0xB9];
+        mov_rcx.extend_from_slice(&base_addr.to_le_bytes());
+        expect_next(&mov_rcx);
+        expect_next(&[0xBA, 0x01, 0x00, 0x00, 0x00]);
+        expect_next(&[0x4D, 0x31, 0xC0]);
+        let mut mov_rax = vec![0x48, 0xB8];
+        mov_rax.extend_from_slice(&entry_addr.to_le_bytes());
+        expect_next(&mov_rax);
+        expect_next(&[0xFF, 0xD0]);
+        expect_next(&[0x48, 0x83, 0xC4, 0x28]);
+        expect_next(&[0x31, 0xC0]);
+        expect_next(&[0xC3]);
     }
 
     #[test]
