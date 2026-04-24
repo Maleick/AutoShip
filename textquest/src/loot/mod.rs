@@ -10,6 +10,7 @@
 pub mod intent;
 mod item_score;
 pub mod ledger;
+pub mod smartloot;
 mod store;
 pub mod vendor_cycle;
 mod wishlist;
@@ -20,6 +21,11 @@ pub use item_score::{
     compare_item_upgrade,
 };
 pub use ledger::{DaySummary, EconomyLedger, EntrySource, LedgerEntry, TrendReport};
+pub use smartloot::{
+    LootAndScootSession, LootCandidate, LootFilter, LootFilterSettings, LootLogEntry, LootRarity,
+    PickupReason, PlannedLootPickup, ScootPlan, SkipReason, SkippedLoot, SmartLootConfig,
+    SmartLootContext, SmartLootPlan, SmartLootPlanner,
+};
 pub use store::{
     DropRateRow, ImportItem, ItemRow, ItemSearchFilter, LootHistoryRow, LootStore, LootTableRow,
     WishlistRow,
