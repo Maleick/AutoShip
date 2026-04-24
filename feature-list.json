@@ -149,6 +149,15 @@
       "notes": "PARTIAL: Added shared auto-group awareness reporting for configured roles, raid-wide online/grouped/missing aggregation, formation suggestions, and role-based targeting priority ordering. The TUI group rows now include class-derived role markers. Remaining work includes live buff/debuff aggregation, persistent group history, raid-wide UI panels, and role-based spell targeting execution."
     },
     {
+      "id": "issue-975-performance-monitoring-dashboard",
+      "name": "Issue #975 performance monitoring dashboard",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check"
+      ],
+      "notes": "PARTIAL: Added a metrics-side performance dashboard snapshot API with combat, movement, loot, system placeholder, tab metadata, and simple alert aggregation. Full TUI rendering, SQLite history, live system telemetry producers, and richer anomaly detection remain follow-up work."
+    },
+    {
       "id": "issue-819-plugin-system-openvanilla-parity",
       "name": "Plugin system for extensibility",
       "status": "in_progress",

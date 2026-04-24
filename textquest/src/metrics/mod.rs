@@ -37,7 +37,12 @@ pub use events::{FleetEvent, FleetEventLog};
 pub use kill_reporter::KillReporter;
 pub use kill_session_store::KillSessionStore;
 pub use kill_tracker::{ClientDpsStats, EfficiencyScore, KillRecord, KillTracker, MobStats};
-pub use performance::{FarmEfficiencySnapshot, PerformanceMetricsApi, PerformanceMonitor};
+pub use performance::{
+    CharacterDpsSnapshot, DashboardCombatMetrics, DashboardLootMetrics, DashboardMovementMetrics,
+    DashboardSystemMetrics, FarmEfficiencySnapshot, PerformanceAlertSeverity,
+    PerformanceDashboardAlert, PerformanceDashboardSnapshot, PerformanceDashboardTab,
+    PerformanceMetricsApi, PerformanceMonitor,
+};
 pub use progress::{ClientProgressSnapshot, ProgressReport, ProgressTracker};
 pub use store::MetricsStore;
 pub use types::{
