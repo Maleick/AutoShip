@@ -37,9 +37,7 @@ use super::{
 use crate::{eq::structs::SpawnInfo, orchestrator::Orchestrator};
 #[cfg(any(windows, test))]
 use textquest_common::nav::{NavStatus, PauseReason};
-use textquest_common::observability::{
-    should_warn_tui_tick_latency, tui_tick_latency_elapsed_ms,
-};
+use textquest_common::observability::{should_warn_tui_tick_latency, tui_tick_latency_elapsed_ms};
 
 #[cfg(windows)]
 use super::live_cast_capture::{

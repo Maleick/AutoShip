@@ -313,8 +313,8 @@ mod tests {
         let mut state = crate::test_app_state();
         state.api_token = Some("secret-token".to_string());
         state.auth_disabled = false; // enforce auth for this test
-        state.live_session_snapshot_path = crate::data_dir()
-            .join("data/runtime/ws-auth-test-live-sessions.json");
+        state.live_session_snapshot_path =
+            crate::data_dir().join("data/runtime/ws-auth-test-live-sessions.json");
         let state_with_token = Arc::new(state);
 
         // Spawn server with authenticated state

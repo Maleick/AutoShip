@@ -170,7 +170,10 @@ mod tests {
         let state = demo_state();
         let settings = DiscordSettings {
             webhook_url: " https://discord.com/api/webhooks/default ".into(),
-            channels: HashMap::from([("kills".into(), " https://discordapp.com/api/webhooks/kills ".into())]),
+            channels: HashMap::from([(
+                "kills".into(),
+                " https://discordapp.com/api/webhooks/kills ".into(),
+            )]),
             notification_routes: HashMap::from([(
                 "death".into(),
                 DiscordRouteConfig {
@@ -194,7 +197,10 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
 
         let stored = state.discord_state.settings.read().await.clone();
-        assert_eq!(stored.webhook_url, "https://discord.com/api/webhooks/default");
+        assert_eq!(
+            stored.webhook_url,
+            "https://discord.com/api/webhooks/default"
+        );
         assert_eq!(
             stored.channels.get("kills").map(String::as_str),
             Some("https://discordapp.com/api/webhooks/kills")
@@ -230,9 +236,10 @@ mod tests {
     async fn put_settings_rejects_non_discord_https_webhook_url() {
         let state = demo_state();
         let mut settings = DiscordSettings::default();
-        settings
-            .channels
-            .insert("kills".into(), "https://example.com/api/webhooks/kills".into());
+        settings.channels.insert(
+            "kills".into(),
+            "https://example.com/api/webhooks/kills".into(),
+        );
 
         let response = put_settings(State(state), trusted_headers(), Json(settings))
             .await

@@ -15,6 +15,20 @@ use ratatui::{
 use super::widgets::panel;
 use crate::tui::app::{ActivePanel, App};
 
+const ECONOMY_STACK_WIDTH: u16 = 120;
+const ECONOMY_MAIN_MIN_WIDTH: u16 = 74;
+const ECONOMY_SIDEBAR_WIDTH: u16 = 44;
+const VENDOR_BANK_HEIGHT: u16 = 15;
+const ROSTER_MIN_HEIGHT: u16 = 8;
+const RULES_HEIGHT: u16 = 12;
+const LEDGER_MIN_HEIGHT: u16 = 8;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EconomyLayoutMode {
+    Wide,
+    Stacked,
+}
+
 /// Color-code a vendor cycle status string.
 fn vendor_cycle_color(
     status: &VendorCycleStatus,
@@ -91,26 +105,65 @@ impl BankingStatus {
 
 /// Draw the Economy Controls screen.
 pub fn draw_economy_screen(frame: &mut Frame, area: Rect, app: &App) {
-    // Main layout: main area (~60%) + sidebar (44 cols)
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(101), Constraint::Length(44)])
-        .split(area);
+    let (_mode, main_area, sidebar_area) = economy_screen_areas(area);
 
-    // ── Main area: Vendor/Bank + Roster ────────────────────────────────
+    draw_economy_main_area(frame, main_area, app);
+    draw_economy_sidebar_area(frame, sidebar_area, app);
+}
+
+fn economy_screen_areas(area: Rect) -> (EconomyLayoutMode, Rect, Rect) {
+    if area.width < ECONOMY_STACK_WIDTH {
+        let sidebar_height = RULES_HEIGHT + LEDGER_MIN_HEIGHT;
+        let main_min_height = VENDOR_BANK_HEIGHT + ROSTER_MIN_HEIGHT;
+        let main_height = area
+            .height
+            .saturating_sub(sidebar_height)
+            .max(main_min_height);
+        let rows = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(main_height.max(5)),
+                Constraint::Length(sidebar_height),
+            ])
+            .split(area);
+
+        (EconomyLayoutMode::Stacked, rows[0], rows[1])
+    } else {
+        let sidebar_width =
+            ECONOMY_SIDEBAR_WIDTH.min(area.width.saturating_sub(ECONOMY_MAIN_MIN_WIDTH));
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Min(ECONOMY_MAIN_MIN_WIDTH),
+                Constraint::Length(sidebar_width),
+            ])
+            .split(area);
+
+        (EconomyLayoutMode::Wide, cols[0], cols[1])
+    }
+}
+
+fn draw_economy_main_area(frame: &mut Frame, area: Rect, app: &App) {
     let main_rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(15), Constraint::Min(8)])
-        .split(cols[0]);
+        .constraints([
+            Constraint::Length(VENDOR_BANK_HEIGHT),
+            Constraint::Min(ROSTER_MIN_HEIGHT),
+        ])
+        .split(area);
 
     draw_vendor_bank_panel(frame, main_rows[0], app);
     draw_roster_panel(frame, main_rows[1], app);
+}
 
-    // ── Sidebar: Rules + Ledger ────────────────────────────────────────
+fn draw_economy_sidebar_area(frame: &mut Frame, area: Rect, app: &App) {
     let sidebar_rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(12), Constraint::Min(8)])
-        .split(cols[1]);
+        .constraints([
+            Constraint::Length(RULES_HEIGHT),
+            Constraint::Min(LEDGER_MIN_HEIGHT),
+        ])
+        .split(area);
 
     draw_rules_panel(frame, sidebar_rows[0], app);
     draw_ledger_panel(frame, sidebar_rows[1], app);
@@ -318,7 +371,6 @@ fn draw_roster_panel(frame: &mut Frame, area: Rect, app: &App) {
         Constraint::Min(34),    // Reason/Notes
     ];
 
-    let inner = blk.inner(area);
     frame.render_widget(
         Table::new(rows, constraints).header(header).block(blk),
         area,
@@ -332,7 +384,7 @@ fn draw_rules_panel(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = Style::default().fg(t.text_accent); // cyan
     let blk = panel(" Rules ", border_style, t);
 
-    let mut lines = vec![
+    let lines = vec![
         Line::from(vec![
             Span::styled(
                 "active rule set default.ron",
@@ -541,5 +593,17 @@ mod tests {
         assert_eq!(BankingStatus::Consolidating.label(), "Consolidating");
         assert_eq!(BankingStatus::Idle.label(), "Idle");
         assert_eq!(BankingStatus::Error.label(), "Error");
+    }
+
+    #[test]
+    fn economy_layout_stacks_sidebar_below_main_when_narrow() {
+        let (mode, main, sidebar) = economy_screen_areas(Rect::new(0, 0, 119, 50));
+
+        assert_eq!(mode, EconomyLayoutMode::Stacked);
+        assert_eq!(main.x, 0);
+        assert_eq!(sidebar.x, 0);
+        assert_eq!(main.width, 119);
+        assert_eq!(sidebar.width, 119);
+        assert!(sidebar.y > main.y);
     }
 }

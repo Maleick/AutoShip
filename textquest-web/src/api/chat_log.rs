@@ -154,7 +154,7 @@ mod tests {
     use super::*;
     use axum::{Router, body::Body, http::Request, response::IntoResponse, routing::put};
     use http_body_util::BodyExt;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use std::time::Duration;
     use tower::ServiceExt;
 
