@@ -99,6 +99,42 @@ pub struct ScanEntry {
     pub expected_preferred: Option<u64>,
 }
 
+impl ScanEntry {
+    /// Whether this entry still uses a synthetic placeholder pattern.
+    ///
+    /// Real IDA patterns may contain wildcard bytes, but they must not be made
+    /// entirely of wildcards or all-`CC` stub bytes.
+    #[must_use]
+    pub fn has_placeholder_pattern(&self) -> bool {
+        is_placeholder_scan_pattern(&self.pattern)
+    }
+}
+
+/// Check whether an IDA-style pattern is a placeholder stub.
+#[must_use]
+pub fn is_placeholder_scan_pattern(pattern: &str) -> bool {
+    let mut saw_token = false;
+    let mut all_cc = true;
+    let mut all_wildcards = true;
+
+    for token in pattern.split_whitespace() {
+        saw_token = true;
+        all_cc &= token.eq_ignore_ascii_case("CC");
+        all_wildcards &= token == "?" || token == "??";
+    }
+
+    saw_token && (all_cc || all_wildcards)
+}
+
+/// Built-in scan entries that have locally verified, non-placeholder patterns.
+#[must_use]
+pub fn built_in_scan_entries() -> Vec<ScanEntry> {
+    let mut entries = field_displacement_scan_entries();
+    entries.extend(active_hack_scan_entries());
+    entries.shrink_to_fit();
+    entries
+}
+
 /// Seed scan entries that recover struct field offsets from accessor bytecode.
 ///
 /// These entries are separate from function/global address scans because their
@@ -417,6 +453,32 @@ mod tests {
         assert_eq!(
             hp_current.expected_preferred,
             Some(crate::offsets::player_zone::HP_CURRENT as u64)
+        );
+    }
+
+    #[test]
+    fn placeholder_scan_pattern_detects_stub_patterns() {
+        assert!(is_placeholder_scan_pattern("?? ?? ?? ??"));
+        assert!(is_placeholder_scan_pattern("? ?? ?"));
+        assert!(is_placeholder_scan_pattern("CC CC CC CC"));
+        assert!(is_placeholder_scan_pattern("cc Cc cC"));
+    }
+
+    #[test]
+    fn placeholder_scan_pattern_rejects_real_patterns() {
+        assert!(!is_placeholder_scan_pattern(""));
+        assert!(!is_placeholder_scan_pattern("48 8B 05 ?? ?? ?? ??"));
+        assert!(!is_placeholder_scan_pattern("CC 48 89 5C"));
+    }
+
+    #[test]
+    fn built_in_scan_entries_have_verified_non_placeholder_patterns() {
+        let entries = built_in_scan_entries();
+
+        assert_eq!(entries.len(), 4);
+        assert!(
+            entries.iter().all(|entry| !entry.has_placeholder_pattern()),
+            "built-in entries must not regress to all-wildcard or all-CC placeholders"
         );
     }
 
