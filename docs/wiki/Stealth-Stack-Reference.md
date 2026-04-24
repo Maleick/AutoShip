@@ -8,24 +8,24 @@ This document is **excluded from the public site** and serves as internal archit
 
 ## Module Inventory
 
-| # | Module | Location | Layer | Purpose |
-|----|--------|----------|-------|---------|
-| 1 | PEB Unlink | `stealth/peb_unlink` | Visibility | Remove DLL from 3 PEB module lists |
-| 2 | Page Encryption | `stealth/page_encrypt` | Memory | Nighthawk-style VEH-based page encryption (~2% plaintext) |
-| 3 | Text Encrypt | `stealth/text_encrypt` | Code | Layer 2: SSE2 SIMD XOR of .text section |
-| 4 | Page Guard | `stealth/page_guard` | Code | Layer 1: VirtualProtect RW/RX toggle |
-| 5 | PE Header Erase | `stealth/pe_erase` | Forensics | Zero DOS + NT headers of loaded DLL |
-| 6 | ETW Blinding | `stealth/etw_blind` | Telemetry | Patchless via DR0 HWBP on `NtTraceEvent` |
-| 7 | Stealth Allocator | `stealth/alloc` | Memory | Avoids VirtualAlloc: RtlAllocateHeap + NtCreateSection |
-| 8 | Trampoline Hardening | `stealth/trampoline` | Code | XOR concealment + RX protection for detours |
-| 9 | Stack Spoof | `stealth/stack_spoof` | Call Stack | RBP chain walk, replace rets with ntdll/kernel32 gadgets |
-| 10 | Section Remap | `stealth/section_remap` | Memory | Trigger COW: MEM_IMAGE → MEM_PRIVATE conversion |
-| 11 | Thread Pool Injection | `stealth/thread_pool` | Execution | PoolParty-style: `CreateThreadpoolWork` + `SubmitThreadpoolWork` |
-| 12 | Sleep Orchestrator | `stealth/mod` | Code | Gargoyle-style 3-layer per-frame sleep (pg + text + spoof) |
-| 13 | RecycledGate + TartarusGate | `syscall/` | Syscalls | Indirect syscalls via `syscall;ret` gadget in real ntdll |
-| 14 | HWBP Engine | `hooks/hwbp` | Hooking | DR0-DR3 execution BPs, VEH dispatch, zero code modification |
-| 15 | Fingerprint Spoofing | `hooks/fingerprint` | EQ Protocol | Hook `SystemFingerprint` → unique per-client IDs from session token |
-| 16 | Hook Integrity Check | `hooks/integrity` | Validation | HWBP slot self-check pre-IPC activation, SAFE_MODE gate |
+| #   | Module                      | Location                | Layer       | Purpose                                                             |
+| --- | --------------------------- | ----------------------- | ----------- | ------------------------------------------------------------------- |
+| 1   | PEB Unlink                  | `stealth/peb_unlink`    | Visibility  | Remove DLL from 3 PEB module lists                                  |
+| 2   | Page Encryption             | `stealth/page_encrypt`  | Memory      | Nighthawk-style VEH-based page encryption (~2% plaintext)           |
+| 3   | Text Encrypt                | `stealth/text_encrypt`  | Code        | Layer 2: SSE2 SIMD XOR of .text section                             |
+| 4   | Page Guard                  | `stealth/page_guard`    | Code        | Layer 1: VirtualProtect RW/RX toggle                                |
+| 5   | PE Header Erase             | `stealth/pe_erase`      | Forensics   | Zero DOS + NT headers of loaded DLL                                 |
+| 6   | ETW Blinding                | `stealth/etw_blind`     | Telemetry   | Patchless via DR0 HWBP on `NtTraceEvent`                            |
+| 7   | Stealth Allocator           | `stealth/alloc`         | Memory      | Avoids VirtualAlloc: RtlAllocateHeap + NtCreateSection              |
+| 8   | Trampoline Hardening        | `stealth/trampoline`    | Code        | XOR concealment + RX protection for detours                         |
+| 9   | Stack Spoof                 | `stealth/stack_spoof`   | Call Stack  | RBP chain walk, replace rets with ntdll/kernel32 gadgets            |
+| 10  | Section Remap               | `stealth/section_remap` | Memory      | Trigger COW: MEM_IMAGE → MEM_PRIVATE conversion                     |
+| 11  | Thread Pool Injection       | `stealth/thread_pool`   | Execution   | PoolParty-style: `CreateThreadpoolWork` + `SubmitThreadpoolWork`    |
+| 12  | Sleep Orchestrator          | `stealth/mod`           | Code        | Gargoyle-style 3-layer per-frame sleep (pg + text + spoof)          |
+| 13  | RecycledGate + TartarusGate | `syscall/`              | Syscalls    | Indirect syscalls via `syscall;ret` gadget in real ntdll            |
+| 14  | HWBP Engine                 | `hooks/hwbp`            | Hooking     | DR0-DR3 execution BPs, VEH dispatch, zero code modification         |
+| 15  | Fingerprint Spoofing        | `hooks/fingerprint`     | EQ Protocol | Hook `SystemFingerprint` → unique per-client IDs from session token |
+| 16  | Hook Integrity Check        | `hooks/integrity`       | Validation  | HWBP slot self-check pre-IPC activation, SAFE_MODE gate             |
 
 ---
 
@@ -36,6 +36,7 @@ This document is **excluded from the public site** and serves as internal archit
 **Purpose:** Remove the injected DLL from the Process Environment Block's three module lists.
 
 **Implementation:**
+
 - Walks `PEB_LDR_DATA` inbound from `PEB.Ldr` (via `gs:[0x60]`)
 - Unlinks from `InLoadOrderModuleList`, `InMemoryOrder`, and `InInitializationOrder`
 - Validates all pointers before dereferencing (user-mode canonical address range)
@@ -43,11 +44,13 @@ This document is **excluded from the public site** and serves as internal archit
 - Iteration limit: 4096 max steps to detect corruption
 
 **Coverage:**
+
 - Defeats loader-backed enumeration (e.g., tools that walk `PEB_LDR_DATA` first before export inspection).
 - Does **not** prevent Process Hacker or direct memory scans of the module.
 
 **Known Limits:**
-- Timing: if a memory snapshot is taken *before* PEB unlink runs, the module remains visible in that snapshot.
+
+- Timing: if a memory snapshot is taken _before_ PEB unlink runs, the module remains visible in that snapshot.
 - Forensics: removed entries leave evidence in heap/memory dump if analyzed post-hoc.
 
 ---
@@ -59,6 +62,7 @@ This document is **excluded from the public site** and serves as internal archit
 **Purpose:** Encrypt all code pages except the currently executing one, leaving only ~2% of code readable at any moment.
 
 **Implementation:**
+
 - **Windows VEH handler:** intercepts `EXCEPTION_ACCESS_VIOLATION` (0xC0000005)
   - Decrypts faulted page, re-encrypts previously-active page
   - Tracks active page via atomic index
@@ -67,6 +71,7 @@ This document is **excluded from the public site** and serves as internal archit
 - **Concurrency:** LIVE_GATE and MANAGER_PTR double-check synchronization to prevent TOCTOU during cleanup
 
 **Coverage:**
+
 - Reduces memory-scanner exposure: scanner can only see 1 page (4KB) of plaintext code out of potentially megabytes
 - Defeats static code analysis from memory dumps
 - Does **not** protect against:
@@ -74,6 +79,7 @@ This document is **excluded from the public site** and serves as internal archit
   - Runtime behavioral analysis (DLL still executes)
 
 **Known Limits:**
+
 - Requires single-threaded access to encrypted pages (concurrent page faults cause race)
 - Cleanup must synchronize with VEH removal (RemoveVectoredExceptionHandler blocks)
 
@@ -86,16 +92,19 @@ This document is **excluded from the public site** and serves as internal archit
 **Implementation:** Three-layer stack executed at frame end (sleep) and frame start (wake):
 
 **Layer 1: Page Guard (`page_guard`)**
+
 - `VirtualProtect` toggle: `.text` → PAGE_READWRITE (before encryption)
 - After encryption: `.text` → PAGE_NOACCESS
 - Functions in `.tq` section stay executable (separate section)
 
 **Layer 2: Text Encrypt (`text_encrypt`)**
+
 - SSE2 SIMD XOR: 16-byte key, 128-bit lanes
 - Key regenerated fresh each encrypt cycle (OS entropy fallback to PRNG)
 - Scalar fallback for non-SIMD architectures
 
 **Layer 3: Stack Spoof (`stack_spoof` stubs)**
+
 - Stub functions reserved for per-frame stack spoofing (wired after #345 HWBP hooks)
 - Will overwrite return addresses on encrypted frame boundaries
 
@@ -117,6 +126,7 @@ Frame N+1 begins:
 ```
 
 **Coverage:**
+
 - DLL code is encrypted ~97% of the time (only 1 frame awake per cycle)
 - ~2-5ms per frame = encrypted state duration
 - Defeats:
@@ -125,6 +135,7 @@ Frame N+1 begins:
   - Static code analysis from crash dumps
 
 **Known Limits:**
+
 - **Incompatible with IPC background threads:** sleep obfuscation init fails if IPC is running (prevents race on shared .text)
 - Frame timing: encryption cycle must complete before next game loop
 - Stack spoofing layer not yet active (reserved for HWBP implementation)
@@ -138,17 +149,20 @@ Frame N+1 begins:
 **Purpose:** SSE2 SIMD XOR encryption of the DLL's `.text` section.
 
 **Key Details:**
+
 - Scans PE headers to locate `.text` section (base + size)
 - Uses OS entropy (`getrandom`) to generate 16-byte key each cycle
 - Fallback: time-based PRNG if `getrandom` fails (with warning log)
 - **Single-threaded access:** game loop thread only, no synchronization needed
 
 **SIMD Implementation:**
+
 - x86_64: SSE2 `_mm_xor_si128` on 16-byte lanes
 - ARM/other: scalar fallback (portable)
 - Tail: scalar XOR for remainder bytes
 
 **Coverage:**
+
 - Protects against byte-pattern scanning while encrypted
 - Encrypts all code uniformly (no selective key regions)
 
@@ -159,10 +173,12 @@ Frame N+1 begins:
 **Purpose:** VirtualProtect state machine for `.text` during sleep/wake cycle.
 
 **Operations:**
+
 - `set_writable()`: `.text` → PAGE_READWRITE (before encryption)
 - `set_executable()`: `.text` → PAGE_EXECUTE_READ (after decryption)
 
 **Error Handling:**
+
 - Logs on VirtualProtect failure (does not panic)
 - Called from single-threaded game loop context
 
@@ -173,6 +189,7 @@ Frame N+1 begins:
 **Purpose:** Mask return addresses on the call stack with legitimate ntdll/kernel32 gadgets.
 
 **Implementation:**
+
 - **Gadget cache:** scanned once per module (ntdll, kernel32) for `ret` (0xC3) instructions
   - Heuristic: preceded by 4 non-zero bytes (avoid padding)
   - Typically hundreds of gadgets per module
@@ -182,6 +199,7 @@ Frame N+1 begins:
 - **API:** `with_spoofed_stack<F>` closure-based wrapper
 
 **Coverage:**
+
 - Stack walks by anti-cheat see ntdll/kernel32 addresses instead of injected DLL addresses
 - Defeats stack unwinding detection
 - Does **not** protect:
@@ -189,6 +207,7 @@ Frame N+1 begins:
   - Advanced return-address validation (some EDR checks RIP at each frame)
 
 **Known Limits:**
+
 - Gadget heuristic is not fool-proof (may pick padding or misaligned rets)
 - Works only on caller frame boundaries (mid-function rets not masked)
 - The frame walker rewrites the current RBP chain heuristically; it does not verify that each original return address belongs to a specific trusted module before swapping in a gadget
@@ -205,31 +224,38 @@ Frame N+1 begins:
 **Windows Implementation:**
 
 **Heap Allocation:**
+
 ```
 RtlAllocateHeap(heap_from_PEB, 0, size)
 ```
+
 - Reads process default heap from PEB (offset 0x30 on x64)
 - Uses `gs:[0x60]` (PEB pointer) + offset to resolve heap
 - Fallback to system heap if resolution fails
 
 **Section Allocation:**
+
 ```
 NtCreateSection(pagefile-backed)
 ↓
 NtMapViewOfSection(into current process)
 ```
+
 - Creates anonymous section (no file backing)
 - Maps with SECTION_ALL_ACCESS, VIEW_UNMAP flag
 - Closes section handle (mapping persists)
 
 **Non-Windows Stub:**
+
 - Falls back to `std::alloc` with size header for freeing
 
 **Coverage:**
+
 - Common detection signature: VirtualAlloc in ETW/WMI logs
 - These APIs are normal for system processes → less suspicious
 
 **Known Limits:**
+
 - Heap allocations still appear in heap snapshots
 - Section mapping still shows in VirtualAlloc calls (just through a different path)
 - No protection against EDR hooking of RtlAllocateHeap
@@ -241,6 +267,7 @@ NtMapViewOfSection(into current process)
 **Purpose:** Trigger copy-on-write (COW) to convert loaded DLL pages from MEM_IMAGE → MEM_PRIVATE.
 
 **Implementation:**
+
 1. Walk all pages in DLL (via VirtualQuery)
 2. For each MEM_IMAGE page:
    - Allocate temp buffer
@@ -253,10 +280,12 @@ NtMapViewOfSection(into current process)
 **Effect:** Forces Windows to replace loader-mapped pages with private copies, breaking memory-map signatures.
 
 **Coverage:**
+
 - Defeats detection based on MEM_IMAGE type detection
 - Private pages blend with normal heap activity
 
 **Known Limits:**
+
 - Timing: must run early in DLL init before module caches its own image
 - Expensive: O(code_size) multiple copies
 - Does not hide the DLL itself, only its memory type
@@ -268,12 +297,14 @@ NtMapViewOfSection(into current process)
 **Purpose:** Protect detour/trampoline regions (return-oriented gadgets) from inspection.
 
 **Implementation:**
+
 - Registry (HashMap): tracks `(addr, (size, is_concealed))` per trampoline
 - **Concealment:** XOR with key 0xA5 when not executing
 - **Protection:** VirtualProtect to PAGE_EXECUTE_READ (RX after setup)
 - **Reveal/conceal:** toggle concealment state in registry
 
 **API:**
+
 ```rust
 hardener.register(addr, size);
 hardener.conceal(addr, size);
@@ -282,6 +313,7 @@ hardener.protect(addr, size);  // Windows only
 ```
 
 **Coverage:**
+
 - XOR concealment hides trampoline bytes from memory scans
 - RX protection prevents modification after setup
 - Registry queries support live checking of concealment state
@@ -295,6 +327,7 @@ hardener.protect(addr, size);  // Windows only
 **Pattern:** SafeBreach PoolParty (8 variants, using variant 1: simple work item)
 
 **Implementation:**
+
 ```rust
 CreateThreadpoolWork(callback, context, nullptr)
 ↓
@@ -304,11 +337,13 @@ CloseThreadpoolWork(work)  // work still runs, just unreferenced
 ```
 
 **Coverage:**
+
 - No `CreateThread` or `CreateRemoteThread` events in ETW
 - Worker thread identity hidden (OS-managed pool)
 - Callback runs indistinguishably from normal app activity
 
 **Known Limits:**
+
 - Callback must be thread-safe (no loader-lock dependencies)
 - Execution latency depends on OS pool congestion
 - Must not hold high-level locks during callback
@@ -324,10 +359,12 @@ CloseThreadpoolWork(work)  // work still runs, just unreferenced
 **Architecture:**
 
 **1. Hash Layer (`hash.rs`)**
+
 - DJB2 hashing of API names (e.g., "NtProtectVirtualMemory")
 - No plaintext strings in binary (defeats import scanning)
 
 **2. Table Layer (`table.rs`)**
+
 - **TartarusGate:** Map fresh ntdll from KnownDlls
   - Walk PE exports, extract SSNs (system service numbers)
   - Pattern match Zw/Nt stubs: `mov r10, rcx` → `mov eax, SSN` → ...
@@ -336,17 +373,20 @@ CloseThreadpoolWork(work)  // work still runs, just unreferenced
 - **SyscallTable:** stores (hash, SSN, gadget_addr) triples
 
 **3. Gate Layer (`gate.rs`)**
+
 - Assembly stubs: load SSN into EAX, copy first arg to R10 (syscall ABI)
 - JMP to gadget address (inside real ntdll)
 - `ret` from gadget returns to our caller, stack appears clean
 
 **Supported Syscalls:**
+
 - `NtProtectVirtualMemory` (memory protection)
 - `NtAllocateVirtualMemory` (memory allocation)
 - `NtSetContextThread` (register modification)
 - `NtGetContextThread` (register inspection)
 
 **Coverage:**
+
 - Stack walks see return addresses inside ntdll, not our DLL
 - Defeats:
   - Call stack origin detection (stack RIPs legitimate)
@@ -357,6 +397,7 @@ CloseThreadpoolWork(work)  // work still runs, just unreferenced
   - Syscall sequence analysis
 
 **Known Limits:**
+
 - Only 4 target syscalls implemented
 - Gadget scanning is one-time at init (if no gadget found, falls back to normal `syscall`)
 - Windows-only (macOS stubs return STATUS_SUCCESS)
@@ -370,12 +411,14 @@ CloseThreadpoolWork(work)  // work still runs, just unreferenced
 **Purpose:** Zero-modification hooking engine using x86_64 debug registers.
 
 **Architecture:**
+
 - **Debug registers:** DR0-DR3 (4 execution breakpoint slots)
 - **Vectored Exception Handler:** intercepts EXCEPTION_SINGLE_STEP
 - **Callback dispatch:** maps slot → callback function pointer
 - **No code modifications:** original function bytes untouched (invisible to integrity checks)
 
 **Usage:**
+
 ```rust
 register_hook(addr, slot, callback)?  // arm breakpoint
 unregister_hook(slot)?                 // disarm
@@ -383,11 +426,13 @@ is_active(slot)?                       // query state
 ```
 
 **Limitations:**
+
 - MAX_SLOTS = 4 (only 4 simultaneous hooks)
 - Execution breakpoints fire on every instruction execution at target address
 - Callback must be fast (runs in exception context)
 
 **Typical Hooks:**
+
 - SystemFingerprint interception (fingerprint spoofing)
 - Integrity validation checks
 - EQ protocol inspection points
@@ -403,22 +448,26 @@ is_active(slot)?                       // query state
 **Solution:** Derive unique, deterministic IDs from session token:
 
 **Fields:**
+
 1. **VideoCardId:** PCI vendor:device format (e.g., "PCI\VEN_10DE&DEV_2684")
 2. **NetworkCardId:** MAC address format (e.g., "00-1A-2B-3C-4D-5E")
 3. **HardriveId:** Volume serial (e.g., "A1B2-C3D4")
 4. **ComputerName:** Windows hostname format (e.g., "DESKTOP-A1B2C3D")
 
 **Implementation:**
+
 - **Domain-separated hashing:** FNV-1a 128-bit with per-field domain prefixes
 - **Deterministic:** same token → same fingerprints across client restarts
 - **Plausible:** outputs look like real hardware IDs (format-compliant)
 
 **Initialization:**
+
 ```rust
 fingerprint::init(session_token)  // called during DLL init
 ```
 
 **Coverage:**
+
 - Each client gets unique fingerprint (multibox now passes this check)
 - Persistent across reconnects for same account slot
 - Does **not** protect against:
@@ -434,24 +483,29 @@ fingerprint::init(session_token)  // called during DLL init
 **Check Logic:**
 
 A slot is **consistent** when:
+
 - **If active:** `address != 0` AND `callback != null`
 - **If inactive:** `address == 0` AND `callback == null`
 
 A slot is **corrupted** when:
+
 - Active with zero address (VEH would JMP to 0x00000000)
 - Active with null callback (would call function pointer 0)
 - Inactive with residual address or callback (cleanup failed)
 
 **Failure Response:**
+
 - Sets global `SAFE_MODE` flag
 - IPC layer rejects all commands while `SAFE_MODE` is true
 - Prevents cascading failures from corrupted hooks
 
 **Timing:**
+
 - Runs after all hooks are installed, before IPC listener activates
 - Post-injection initialization sequence
 
 **Coverage:**
+
 - Early detection of hook setup failures
 - Prevents silent execution of corrupted hooks
 - Operator visibility: IPC failure indicates hook problem
@@ -463,17 +517,20 @@ A slot is **corrupted** when:
 **Purpose:** Load textquest-dll.dll into running eqgame.exe without calling `LoadLibraryW`.
 
 **Implementation:**
+
 - **Manual PE mapping:** reads PE headers, allocates sections, applies relocations
 - **No loader involvement:** bypasses `LoadLibraryW` call tracing
 - **TLS handling:** initializes thread-local storage for DLL callbacks
 - **Entry point:** calls DLL's `DllMain(DLL_PROCESS_ATTACH, ...)`
 
 **Coverage:**
+
 - Defeats detection based on `LoadLibraryW` API call tracing
 - DLL still appears in module list (PEB unlink removes it post-injection)
 - No suspicious string in loaded modules before PEB unlink
 
 **Known Limits:**
+
 - PE parsing must be robust (malformed headers can crash)
 - Relocation fixups must match Windows loader semantics
 - Import table resolution can expose API calls (mitigated by syscall layer)
@@ -574,6 +631,8 @@ At DLL load, the following sequence executes (from `lib.rs` entrypoint):
 1. **Order matters:** wake/sleep must call in strict order (page_guard → text_encrypt → stack_spoof)
 2. **Timing budget:** all three layers must complete in <5ms per frame
 3. **Test on Windows:** stubs on macOS; only Windows impl is functional
+4. **Sleep-cycle lock stays in `.tq`:** `wake()`/`sleep()` serialize on a spin-lock guarded by `SleepCycleGuard`. The guard's `acquire`/`drop` are both annotated `#[link_section = ".tq"]` so the lock path remains executable while `.text` is encrypted. The RAII guard also keeps the critical section panic-safe — if any helper (`restore_real_frame`, `encrypt`, `decrypt`) unwinds, `SLEEP_CYCLE_LOCKED` is cleared on drop instead of stranding at `true`.
+5. **Spin-lock ordering:** compare-exchange uses `Acquire`/`Relaxed` (success/failure). The `Release` store on drop pairs with the next acquirer's `Acquire`. A `std::hint::spin_loop()` sits in the retry path to avoid burning a core under contention between the timer-queue thread and the frame thread.
 
 ### When Adding Syscalls to RecycledGate
 
