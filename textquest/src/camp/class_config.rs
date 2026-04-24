@@ -629,10 +629,7 @@ mod tests {
 
     #[test]
     fn beastlord_config_breakpoints_are_explicit_and_group_safe() {
-        let classes_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("config/classes");
+        let classes_dir = crate::paths::data_dir().join("config/classes");
         let path = classes_dir.join("beastlord.toml");
         let config = ClassConfig::load(&path)
             .unwrap_or_else(|e| panic!("Failed to parse {}: {e}", path.display()));
@@ -701,10 +698,7 @@ mod tests {
     /// Validate all shipped class TOML files parse correctly.
     #[test]
     fn test_all_shipped_configs_parse() {
-        let classes_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("config/classes");
+        let classes_dir = crate::paths::data_dir().join("config/classes");
 
         if !classes_dir.exists() {
             panic!(
@@ -808,10 +802,7 @@ mod tests {
 
     #[test]
     fn shipped_necromancer_config_matches_live_breakpoints() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("config/classes/necromancer.toml");
+        let path = crate::paths::data_dir().join("config/classes/necromancer.toml");
         let config = ClassConfig::load(&path)
             .unwrap_or_else(|error| panic!("Failed to parse {}: {error}", path.display()));
 
@@ -862,10 +853,7 @@ mod tests {
 
     #[test]
     fn shipped_ranger_config_tracks_level_rotation_overrides() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("config/classes/ranger.toml");
+        let path = crate::paths::data_dir().join("config/classes/ranger.toml");
         let config = ClassConfig::load(&path).expect("ranger config should parse");
 
         let at_60 = config.profile_for_level(Some(60));
@@ -904,10 +892,7 @@ mod tests {
 
     #[test]
     fn cleric_live_config_profiles_fall_back_to_base_when_no_level_override_exists() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("config/classes/cleric.toml");
+        let path = crate::paths::data_dir().join("config/classes/cleric.toml");
         let config = ClassConfig::load(&path).expect("load cleric class config");
 
         let base_profile = config.profile_for_level(None);

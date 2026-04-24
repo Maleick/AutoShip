@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn test_checked_in_sebilis_disco_config_parses() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../config/camps/sebilis_disco.toml");
+        let path = crate::paths::data_dir().join("config/camps/sebilis_disco.toml");
         let contents = std::fs::read_to_string(&path).unwrap();
         let config: CampConfig = toml::from_str(&contents).unwrap();
 

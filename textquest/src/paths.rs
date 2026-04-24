@@ -9,6 +9,22 @@ pub fn resolve_log_dir() -> PathBuf {
     select_writable_log_dir(log_dir_candidates())
 }
 
+pub fn data_dir() -> PathBuf {
+    if let Some(path) = std::env::var_os("TEXTQUEST_DATA_DIR")
+        && !path.is_empty()
+    {
+        return PathBuf::from(path);
+    }
+
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(parent) = exe_path.parent()
+    {
+        return parent.to_path_buf();
+    }
+
+    PathBuf::from(".")
+}
+
 fn rolling_log_path_pattern(file_prefix: &str) -> PathBuf {
     resolve_log_dir().join(format!("{file_prefix}.*"))
 }

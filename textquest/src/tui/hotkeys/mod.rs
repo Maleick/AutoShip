@@ -435,7 +435,6 @@ impl Default for HotkeyRegistry {
 mod tests {
     use super::*;
     use std::fs;
-    use std::path::PathBuf;
 
     #[test]
     fn key_binding_simple() {
@@ -641,8 +640,7 @@ mod tests {
 
     #[test]
     fn shipped_hotkeys_config_deserializes() {
-        let mut config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        config_path.push("../config/hotkeys.toml");
+        let config_path = crate::paths::data_dir().join("config/hotkeys.toml");
 
         let content = fs::read_to_string(&config_path).expect("failed to read config/hotkeys.toml");
         let config: HotkeyConfig =

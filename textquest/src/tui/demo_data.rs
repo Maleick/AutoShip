@@ -1956,7 +1956,6 @@ pub fn demo_spawns_for_zone(zone: &str) -> Vec<SpawnInfo> {
 mod tests {
     use super::*;
     use crate::eq::map_parser;
-    use std::path::Path;
 
     fn map_name_for_zone(zone: &str) -> &'static str {
         match zone {
@@ -1968,7 +1967,7 @@ mod tests {
     }
 
     fn in_demo_map_bounds(map_name: &str, spawn: &crate::eq::structs::SpawnInfo) -> bool {
-        let map_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../config/maps");
+        let map_dir = crate::paths::data_dir().join("config/maps");
         let Ok(map) = map_parser::load_zone_map(&map_dir, map_name) else {
             return false;
         };

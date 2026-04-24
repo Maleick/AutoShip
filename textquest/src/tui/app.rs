@@ -3826,8 +3826,7 @@ impl App {
             .as_deref()
             .unwrap_or("gm_alert.wav");
 
-        let base_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let config_dir = base_path.join("config");
+        let config_dir = crate::paths::data_dir().join("config");
         let sounds_dir = config_dir.join("sounds");
         let sound_path = sounds_dir.join(sound_file);
 
