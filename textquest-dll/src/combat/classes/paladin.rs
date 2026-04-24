@@ -548,7 +548,7 @@ impl ClassStrategy for PaladinStrategy {
 #[cfg(test)]
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
-    use std::{collections::BTreeSet, path::Path};
+    use std::{collections::BTreeSet, path::PathBuf};
 
     use serde::Deserialize;
     use textquest_common::{
@@ -558,6 +558,36 @@ mod tests {
 
     use super::*;
     use crate::combat::strategy::GroupMemberState;
+
+    fn crate_manifest_dir() -> PathBuf {
+        let mut dir = std::env::current_dir().expect("test working directory should be readable");
+
+        loop {
+            if dir.join("Cargo.toml").exists()
+                && dir.file_name().and_then(|name| name.to_str()) == Some("textquest-dll")
+            {
+                return dir;
+            }
+
+            let nested = dir.join("textquest-dll");
+            if nested.join("Cargo.toml").exists() {
+                return nested;
+            }
+
+            if !dir.pop() {
+                panic!("could not locate textquest-dll crate root from test working directory");
+            }
+        }
+    }
+
+    fn class_config_path(file_name: &str) -> PathBuf {
+        crate_manifest_dir()
+            .parent()
+            .expect("textquest-dll crate should have a workspace parent")
+            .join("config")
+            .join("classes")
+            .join(file_name)
+    }
 
     fn make_ctx<'a>(
         player: &'a SpawnData,
@@ -974,11 +1004,11 @@ mod tests {
 
     #[test]
     fn paladin_toml_matches_runtime_profile() {
-        let doc: PaladinDocConfig = toml::from_str(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../config/classes/paladin.toml"
-        )))
-        .expect("paladin.toml should parse");
+        let paladin_config = class_config_path("paladin.toml");
+        let doc_contents =
+            std::fs::read_to_string(&paladin_config).expect("paladin.toml should be readable");
+        let doc: PaladinDocConfig =
+            toml::from_str(&doc_contents).expect("paladin.toml should parse");
 
         assert_eq!(
             doc.resource_thresholds.emergency_heal_hp_pct,
@@ -1070,12 +1100,6 @@ mod tests {
             );
         }
 
-        assert!(
-            Path::new(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../config/classes/paladin.toml"
-            ))
-            .exists()
-        );
+        assert!(paladin_config.exists());
     }
 }

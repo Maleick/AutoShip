@@ -529,6 +529,8 @@ fn mez_duration_ticks_for_level(level: u8) -> u32 {
 #[cfg(test)]
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
     use serde::Deserialize;
     use textquest_common::{
@@ -537,6 +539,36 @@ mod tests {
         },
         types::SpawnData,
     };
+
+    fn crate_manifest_dir() -> PathBuf {
+        let mut dir = std::env::current_dir().expect("test working directory should be readable");
+
+        loop {
+            if dir.join("Cargo.toml").exists()
+                && dir.file_name().and_then(|name| name.to_str()) == Some("textquest-dll")
+            {
+                return dir;
+            }
+
+            let nested = dir.join("textquest-dll");
+            if nested.join("Cargo.toml").exists() {
+                return nested;
+            }
+
+            if !dir.pop() {
+                panic!("could not locate textquest-dll crate root from test working directory");
+            }
+        }
+    }
+
+    fn class_config_path(file_name: &str) -> PathBuf {
+        crate_manifest_dir()
+            .parent()
+            .expect("textquest-dll crate should have a workspace parent")
+            .join("config")
+            .join("classes")
+            .join(file_name)
+    }
 
     #[derive(Clone, Debug, Deserialize)]
     struct ConfigCombatAbility {
@@ -599,11 +631,10 @@ mod tests {
 
     impl ConfigProfile {
         fn load() -> Self {
-            toml::from_str(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../config/classes/enchanter.toml"
-            )))
-            .expect("enchanter.toml should parse")
+            let config_path = class_config_path("enchanter.toml");
+            let contents =
+                std::fs::read_to_string(config_path).expect("enchanter.toml should be readable");
+            toml::from_str(&contents).expect("enchanter.toml should parse")
         }
 
         fn profile_for_level(&self, level: u8) -> ResolvedConfigProfile {

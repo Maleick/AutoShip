@@ -548,6 +548,12 @@ fn is_scan_active() -> bool {
     std::env::var("TEXTQUEST_SKIP_SCAN").map_or(true, |v: String| v != "1")
 }
 
+fn current_exe_dir() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+}
+
 #[allow(dead_code)]
 fn has_scanned_offsets() -> bool {
     OFFSET_DB
@@ -567,10 +573,8 @@ fn scan_offsets() {
     }
 
     let mut paths = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(root) = exe.parent() {
-            paths.push(root.join("config").join("offsets.json"));
-        }
+    if let Some(root) = current_exe_dir() {
+        paths.push(root.join("config").join("offsets.json"));
     }
     paths.push(PathBuf::from("config/offsets.json"));
     paths.push(PathBuf::from(r"C:\textquest\config\offsets.json"));
@@ -829,7 +833,7 @@ pub fn activate_packet_validation(client_id: u32) -> Result<(), Box<dyn std::err
 #[cfg(test)]
 mod tests {
     use std::{
-        path::Path,
+        path::PathBuf,
         sync::{Mutex, OnceLock},
     };
 
@@ -853,11 +857,75 @@ mod tests {
         unsafe { std::env::remove_var(key) };
     }
 
+    fn crate_manifest_dir() -> PathBuf {
+        let mut dir = std::env::current_dir().expect("test working directory should be readable");
+
+        loop {
+            if dir.join("Cargo.toml").exists()
+                && dir.file_name().and_then(|name| name.to_str()) == Some("textquest-dll")
+            {
+                return dir;
+            }
+
+            let nested = dir.join("textquest-dll");
+            if nested.join("Cargo.toml").exists() {
+                return nested;
+            }
+
+            if !dir.pop() {
+                panic!("could not locate textquest-dll crate root from test working directory");
+            }
+        }
+    }
+
+    #[test]
+    fn source_does_not_use_compile_time_manifest_dir() {
+        let manifest_key = ["CARGO", "MANIFEST", "DIR"].join("_");
+        let forbidden = format!("{}(\"{}\")", "env!", manifest_key);
+        let mut stack = vec![crate_manifest_dir().join("src")];
+        let mut hits = Vec::new();
+
+        while let Some(path) = stack.pop() {
+            let entries = std::fs::read_dir(path)
+                .expect("source directories must be readable")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("source entries must be readable");
+
+            for entry in entries {
+                let ty = entry.file_type().expect("entry type should be readable");
+                if ty.is_dir() {
+                    stack.push(entry.path());
+                    continue;
+                }
+
+                if entry.path().extension().and_then(|ext| ext.to_str()) != Some("rs") {
+                    continue;
+                }
+
+                let contents =
+                    std::fs::read_to_string(entry.path()).expect("rust source should be readable");
+                for (line_idx, line) in contents.lines().enumerate() {
+                    if line.contains(&forbidden) {
+                        hits.push(format!(
+                            "{}:{}",
+                            entry.path().display(),
+                            line_idx.saturating_add(1)
+                        ));
+                    }
+                }
+            }
+        }
+
+        assert!(
+            hits.is_empty(),
+            "compile-time manifest paths leak source locations into textquest-dll: {hits:?}"
+        );
+    }
+
     #[test]
     fn manifest_declares_cdylib() {
-        let manifest =
-            std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
-                .expect("cargo manifest should be readable");
+        let manifest = std::fs::read_to_string(crate_manifest_dir().join("Cargo.toml"))
+            .expect("cargo manifest should be readable");
         let manifest: Value = manifest
             .parse()
             .expect("cargo manifest should be valid TOML");
@@ -881,7 +949,7 @@ mod tests {
 
     #[test]
     fn no_public_export_symbols_in_textquest_dll_src() {
-        let src_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let src_root = crate_manifest_dir().join("src");
         let mut stack = vec![src_root];
         let mut no_mangle_attrs = 0usize;
         let mut other_no_mangle_exports = Vec::new();
