@@ -37,6 +37,9 @@ use super::{
 use crate::{eq::structs::SpawnInfo, orchestrator::Orchestrator};
 #[cfg(any(windows, test))]
 use textquest_common::nav::{NavStatus, PauseReason};
+use textquest_common::observability::{
+    should_warn_tui_tick_latency, tui_tick_latency_elapsed_ms,
+};
 
 #[cfg(windows)]
 use super::live_cast_capture::{
@@ -140,6 +143,8 @@ fn run_loop(
     let mut shared_state_reader_retry_at: HashMap<u32, Instant> = HashMap::new();
 
     while app.running {
+        let tick_start = Instant::now();
+
         // Draw the UI
         terminal.draw(|frame| draw(frame, app))?;
 
@@ -343,6 +348,15 @@ fn run_loop(
             tracing::debug!(
                 address = app.hex_state.hex_address,
                 "pending_memory_poll consumed — ReadMemory poll would fire here"
+            );
+        }
+
+        let tick_elapsed = tick_start.elapsed();
+        if should_warn_tui_tick_latency(tick_elapsed, *PERF_TRACE_ENABLED) {
+            tracing::warn!(
+                target: "textquest::perf",
+                elapsed_ms = tui_tick_latency_elapsed_ms(tick_elapsed),
+                "TUI tick exceeded 50ms budget"
             );
         }
     }
@@ -1735,6 +1749,9 @@ mod tests {
     use std::time::{Duration, Instant};
     use textquest_common::combat::CombatStatus;
     use textquest_common::nav::{NavStatus, PauseReason};
+    use textquest_common::observability::{
+        should_warn_tui_tick_latency, tui_tick_latency_elapsed_ms,
+    };
     use textquest_common::types::{GameState, SpawnData};
     use textquest_soul::config::{CharacterSoulConfig, SoulConfig};
     use textquest_soul::coordinator::SoulCoordinator;
@@ -1777,6 +1794,27 @@ mod tests {
 
         assert!(spawn_refresh_due(None, now, true));
         assert!(spawn_refresh_due(None, now, false));
+    }
+
+    #[test]
+    fn tui_tick_latency_warning_requires_perf_trace_and_exceeded_budget() {
+        assert!(!should_warn_tui_tick_latency(
+            Duration::from_millis(51),
+            false,
+        ));
+        assert!(!should_warn_tui_tick_latency(
+            Duration::from_millis(50),
+            true,
+        ));
+        assert!(should_warn_tui_tick_latency(
+            Duration::from_millis(51),
+            true,
+        ));
+    }
+
+    #[test]
+    fn tui_tick_latency_warning_reports_elapsed_milliseconds() {
+        assert_eq!(tui_tick_latency_elapsed_ms(Duration::from_millis(51)), 51);
     }
 
     #[test]

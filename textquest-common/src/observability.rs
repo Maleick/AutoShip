@@ -54,8 +54,21 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
+
+/// Wall-clock latency budget for one TUI render-thread tick.
+pub const TUI_TICK_WARN_BUDGET: Duration = Duration::from_millis(50);
+
+/// Return whether a TUI tick should emit a latency warning.
+pub fn should_warn_tui_tick_latency(elapsed: Duration, perf_trace_enabled: bool) -> bool {
+    perf_trace_enabled && elapsed > TUI_TICK_WARN_BUDGET
+}
+
+/// Convert a TUI tick wall-clock duration into the logged millisecond field.
+pub fn tui_tick_latency_elapsed_ms(elapsed: Duration) -> u128 {
+    elapsed.as_millis()
+}
 
 /// Metric kind enumeration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -420,6 +433,30 @@ mod tests {
     fn test_average_by_name_empty() {
         let collector = InMemoryCollector::new();
         assert_eq!(collector.average_by_name("nonexistent"), None);
+    }
+
+    #[test]
+    fn tui_tick_latency_warning_requires_perf_trace_and_exceeded_budget() {
+        assert!(!should_warn_tui_tick_latency(
+            std::time::Duration::from_millis(51),
+            false,
+        ));
+        assert!(!should_warn_tui_tick_latency(
+            std::time::Duration::from_millis(50),
+            true,
+        ));
+        assert!(should_warn_tui_tick_latency(
+            std::time::Duration::from_millis(51),
+            true,
+        ));
+    }
+
+    #[test]
+    fn tui_tick_latency_warning_reports_elapsed_milliseconds() {
+        assert_eq!(
+            tui_tick_latency_elapsed_ms(std::time::Duration::from_millis(51)),
+            51
+        );
     }
 
     #[test]
