@@ -354,8 +354,8 @@ pub fn check_version(data: &[u8]) -> (Option<String>, bool) {
 // Database merging
 // ---------------------------------------------------------------------------
 
-/// Merge scan results into an `OffsetDatabase`, overwriting matching keys
-/// in the `globals` and `functions` maps.
+/// Merge scan results into an `OffsetDatabase`, overwriting matching keys in
+/// the map matching the scanned module and offset category.
 ///
 /// Only results with a non-zero resolved address are applied — zero indicates
 /// a resolution failure and should not overwrite compiled/JSON offsets.
@@ -364,16 +364,15 @@ pub fn apply_to_offset_db(report: &ScanReport, db: &mut OffsetDatabase) {
         if result.resolved_preferred == 0 {
             continue;
         }
-        match result.category {
-            OffsetCategory::Function => {
-                db.functions
-                    .insert(result.name.clone(), result.resolved_preferred);
-            }
-            OffsetCategory::Global => {
-                db.globals
-                    .insert(result.name.clone(), result.resolved_preferred);
-            }
+        match (report.module, result.category) {
+            (ScanModule::EqGame, OffsetCategory::Function) => &mut db.functions,
+            (ScanModule::EqGame, OffsetCategory::Global) => &mut db.globals,
+            (ScanModule::EqMain, OffsetCategory::Function) => &mut db.eqmain_functions,
+            (ScanModule::EqMain, OffsetCategory::Global) => &mut db.eqmain_globals,
+            (ScanModule::EqGraphics, OffsetCategory::Function) => &mut db.eqgraphics_functions,
+            (ScanModule::EqGraphics, OffsetCategory::Global) => &mut db.eqgraphics_globals,
         }
+        .insert(result.name.clone(), result.resolved_preferred);
     }
 }
 
@@ -688,6 +687,72 @@ mod tests {
 
         apply_to_offset_db(&report, &mut db);
         assert_eq!(db.get_global("pinstLocalPlayer"), Some(original + 0x200));
+    }
+
+    #[test]
+    fn apply_to_offset_db_routes_results_by_module() {
+        let mut db = OffsetDatabase::from_compiled_offsets();
+        let report = ScanReport {
+            module: ScanModule::EqMain,
+            entries_scanned: 2,
+            entries_found: 2,
+            entries_validated: 0,
+            entries_failed: vec![],
+            entries_skipped: vec![],
+            entries_moved: vec![],
+            results: vec![
+                ScanResult {
+                    name: "cxwndManager".to_string(),
+                    category: OffsetCategory::Global,
+                    resolved_preferred: 0x0001_8038_24C8,
+                    matched_at_offset: 0,
+                    validated: false,
+                },
+                ScanResult {
+                    name: "joinServer".to_string(),
+                    category: OffsetCategory::Function,
+                    resolved_preferred: 0x0001_8001_8060,
+                    matched_at_offset: 0,
+                    validated: false,
+                },
+            ],
+        };
+
+        apply_to_offset_db(&report, &mut db);
+
+        assert_eq!(db.get_eqmain_global("cxwndManager"), Some(0x0001_8038_24C8));
+        assert_eq!(db.get_eqmain_function("joinServer"), Some(0x0001_8001_8060));
+        assert!(db.get_global("cxwndManager").is_none());
+        assert!(db.get_function("joinServer").is_none());
+    }
+
+    #[test]
+    fn apply_to_offset_db_keeps_eqgraphics_globals_module_scoped() {
+        let mut db = OffsetDatabase::from_compiled_offsets();
+        let report = ScanReport {
+            module: ScanModule::EqGraphics,
+            entries_scanned: 1,
+            entries_found: 1,
+            entries_validated: 0,
+            entries_failed: vec![],
+            entries_skipped: vec![],
+            entries_moved: vec![],
+            results: vec![ScanResult {
+                name: "graphicsSingleton".to_string(),
+                category: OffsetCategory::Global,
+                resolved_preferred: 0x0001_40A0_9000,
+                matched_at_offset: 0,
+                validated: false,
+            }],
+        };
+
+        apply_to_offset_db(&report, &mut db);
+
+        assert_eq!(
+            db.get_eqgraphics_global("graphicsSingleton"),
+            Some(0x0001_40A0_9000)
+        );
+        assert!(db.get_global("graphicsSingleton").is_none());
     }
 
     #[test]

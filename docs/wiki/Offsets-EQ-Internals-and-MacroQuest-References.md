@@ -92,6 +92,34 @@ added, removed, and unmapped functions before promoting an offset snapshot.
 - Offset work is inherently patch-sensitive.
 - Treat any successful build without live EQ validation as incomplete proof for offset changes.
 
+## Module-Scoped Offset Parity (issue #762 / PR #2422)
+
+TextQuest now tracks offsets per EQ module, not just `eqgame.exe`. The offset database and scan engine understand addresses that live inside auxiliary modules loaded at independent runtime bases.
+
+### Supported module scopes
+
+`config/offsets.json` now carries module-scoped sections alongside the existing `eqgame` groups:
+
+- `eqmain_globals` — login-stage globals in `eqmain.dll` (e.g. `sidlManager`, `loginServerApi`, `cxwndManager`, `loginViewManager`, `pinstLoginClient`, `pinstLoginController`)
+- `eqmain_functions` — login-stage entry points in `eqmain.dll` (e.g. `joinServer`, `charSelectEnterWorld`, `serverSelect`, `handleSplash`, `charSelectSelectCharacter`, `charSelectSetFocus`, `loginControllerGiveTime`)
+- `eqgraphics_globals` / `eqgraphics_functions` — render-pipeline hooks in `eqgraphicsdx9.dll` (e.g. `realRenderWorld`, `deviceReset`, `initRender`, `renderFrame`, `dxPresent`)
+
+Each entry is stored at its module's preferred base — same rule as the pre-existing `eqgame` groups. `rebase(preferred_addr, actual_module_base)` is still mandatory, but the `actual_module_base` must now come from the matching module handle (`GetModuleHandleA("eqmain.dll")` / `GetModuleHandleA("eqgraphicsdx9.dll")`) rather than the main-image base.
+
+### Scan engine behavior
+
+`textquest-common/src/scan_engine.rs` accepts a module scope on every resolution request and resolves the active base per module. Mixing modules in a single scan pass is supported; each address is rebased against its declaring module.
+
+### Validation
+
+`scripts/validate_offsets_sync.py` validates that every module-scoped group in `config/offsets.json` has a matching compiled entry in `textquest-common/src/offset_db.rs`. Coverage is checked by `tests/test_validate_offsets_sync.py`. Run:
+
+```
+python scripts/validate_offsets_sync.py
+```
+
+before landing new module-scoped offsets, and re-validate on a live Windows client since offsets remain patch-sensitive.
+
 ## Related References
 
 - [EQ Coordinate System](../eq-coordinate-system.md) — Mapping between game coordinates and navigation systems

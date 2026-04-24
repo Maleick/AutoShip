@@ -40,5 +40,30 @@
   },
   "spawn_manager": {
     "playerList": 16
+  },
+  "eqmain_globals": {
+    "sidlManager": 6446130368,
+    "loginServerApi": 6444020944,
+    "cxwndManager": 6446130360,
+    "loginViewManager": 6442561760,
+    "pinstLoginClient": 6444020960,
+    "pinstLoginController": 6444020976
+  },
+  "eqmain_functions": {
+    "joinServer": 6442549328,
+    "charSelectEnterWorld": 6442516992,
+    "serverSelect": 6442517008,
+    "handleSplash": 6442517024,
+    "charSelectSelectCharacter": 6442517040,
+    "charSelectSetFocus": 6442517056,
+    "loginControllerGiveTime": 6442542656
+  },
+  "eqgraphics_globals": {},
+  "eqgraphics_functions": {
+    "realRenderWorld": 5379195136,
+    "deviceReset": 5379195392,
+    "initRender": 5379195648,
+    "renderFrame": 5379195904,
+    "dxPresent": 5379196160
   }
 }

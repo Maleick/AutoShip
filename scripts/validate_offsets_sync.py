@@ -60,6 +60,33 @@ PLAYER_ZONE_FIELDS = [
 
 SPAWN_MANAGER_FIELDS = [("playerList", "PLAYER_LIST")]
 
+EQMAIN_GLOBAL_FIELDS = [
+    ("sidlManager", "SIDL_MANAGER"),
+    ("loginServerApi", "LOGIN_SERVER_API"),
+    ("cxwndManager", "CXWND_MANAGER"),
+    ("loginViewManager", "LOGIN_VIEW_MANAGER"),
+    ("pinstLoginClient", "PINST_LOGIN_CLIENT"),
+    ("pinstLoginController", "PINST_LOGIN_CONTROLLER"),
+]
+
+EQMAIN_FUNCTION_FIELDS = [
+    ("joinServer", "JOIN_SERVER"),
+    ("charSelectEnterWorld", "CHAR_SELECT_ENTER_WORLD"),
+    ("serverSelect", "SERVER_SELECT"),
+    ("handleSplash", "HANDLE_SPLASH"),
+    ("charSelectSelectCharacter", "CHAR_SELECT_SELECT_CHARACTER"),
+    ("charSelectSetFocus", "CHAR_SELECT_SET_FOCUS"),
+    ("loginControllerGiveTime", "LOGIN_CONTROLLER_GIVE_TIME"),
+]
+
+EQGRAPHICS_FUNCTION_FIELDS = [
+    ("realRenderWorld", "EQGRAPHICS_REALRENDER_WORLD"),
+    ("deviceReset", "EQGRAPHICS_DEVICE_RESET"),
+    ("initRender", "EQGRAPHICS_INIT_RENDER"),
+    ("renderFrame", "EQGRAPHICS_RENDER_FRAME"),
+    ("dxPresent", "EQGRAPHICS_DX_PRESENT"),
+]
+
 
 def parse_rust_literal(raw: str) -> object:
     raw = raw.strip()
@@ -128,6 +155,19 @@ def load_compiled_offsets(path: Path) -> dict[str, object]:
         "spawn_manager": {
             json_name: extract_module_const(source, "spawn_manager", rust_name)
             for json_name, rust_name in SPAWN_MANAGER_FIELDS
+        },
+        "eqmain_globals": {
+            json_name: extract_module_const(source, "eqmain", rust_name)
+            for json_name, rust_name in EQMAIN_GLOBAL_FIELDS
+        },
+        "eqmain_functions": {
+            json_name: extract_module_const(source, "eqmain", rust_name)
+            for json_name, rust_name in EQMAIN_FUNCTION_FIELDS
+        },
+        "eqgraphics_globals": {},
+        "eqgraphics_functions": {
+            json_name: extract_const(source, rust_name)
+            for json_name, rust_name in EQGRAPHICS_FUNCTION_FIELDS
         },
     }
 

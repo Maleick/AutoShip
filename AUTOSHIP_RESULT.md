@@ -1,17 +1,20 @@
-# PR #2423 AutoShip Result
+# AUTOSHIP_RESULT — PR #2422 rebase + auto-merge
 
-## Diagnosis
-- Wiki-gate actually PASSED in run 24868974527: "Wiki update detected alongside source changes."
-- PR gate failure was a flaky Rust tarpaulin infra issue (zerocopy dep-info parse error), unrelated to source or docs changes.
+## Outcome
+- Rebased `autoship/issue-762` onto `origin/master` (1 conflict in AUTOSHIP_RESULT.md, took PR #2422 side).
+- `cargo check -p textquest-common` passes clean.
+- Force-pushed; auto-merge (squash) enabled.
 
-## Actions
-Addressed actionable Copilot + Codex inline review comments on `scripts/export_ghidra_patterns.py`:
-- Docstring documents `address` as optional (emits `expected_preferred: null` when absent).
-- `_parse_addr` accepts bare hex strings like `14028E0F0` (falls back to base-16 when base-0 parse fails).
-- Added `_normalize_module` (EqGame/EqMain/EqGraphics) and `_normalize_category` (Function/Global) with case-insensitive matching and clear errors.
-- argparse `--module` uses `choices=VALID_MODULES`.
-- Wiki page updated to note optional `address`, bare-hex support, and module/category normalization.
+## Actions Taken
+- `git fetch origin master && git rebase origin/master`
+- Resolved conflict with `git checkout --theirs AUTOSHIP_RESULT.md`.
+- `git push --force-with-lease`
+- `gh pr merge 2422 --auto --squash`
 
-## Verification
-- `pytest tests/test_export_ghidra_patterns.py`: 4 passed
-- Commit pushed to `autoship/issue-763` (HEAD of PR #2423)
+## Earlier Work (preserved)
+- Addressed Copilot inline comment on `textquest-common/src/offset_db.rs:42` documenting module-scoped offset maps.
+- Appended **Module-Scoped Offset Parity (issue #762 / PR #2422)** section to `docs/wiki/Offsets-EQ-Internals-and-MacroQuest-References.md`.
+- Covered eqmain.dll + eqgraphicsdx9.dll globals/functions, per-module rebase rule, scan-engine scope resolution, validator usage.
+
+## Notes
+- Merges automatically once required checks pass.

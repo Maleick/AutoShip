@@ -41,6 +41,22 @@ class OffsetSyncTests(unittest.TestCase):
 
         self.assertEqual(diffs, ["globals.pinstLocalPlayer: JSON=0x1 compiled=0x2"])
 
+    def test_compiled_offsets_include_module_specific_maps(self) -> None:
+        compiled_offsets = self.module.load_compiled_offsets(
+            REPO_ROOT / "textquest-common" / "src" / "offsets.rs"
+        )
+
+        self.assertEqual(
+            compiled_offsets["eqmain_globals"]["cxwndManager"], 0x0001_8038_24B8
+        )
+        self.assertEqual(
+            compiled_offsets["eqmain_functions"]["joinServer"], 0x0001_8001_8050
+        )
+        self.assertEqual(
+            compiled_offsets["eqgraphics_functions"]["realRenderWorld"],
+            0x0001_40A0_0100,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

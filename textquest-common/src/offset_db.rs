@@ -28,6 +28,18 @@ pub struct OffsetDatabase {
     /// Internal function addresses keyed by name (e.g. "castSpell").
     #[serde(default)]
     pub functions: HashMap<String, u64>,
+    /// eqmain.dll global pointer addresses keyed by name.
+    #[serde(default)]
+    pub eqmain_globals: HashMap<String, u64>,
+    /// eqmain.dll function addresses keyed by name.
+    #[serde(default)]
+    pub eqmain_functions: HashMap<String, u64>,
+    /// eqgraphicsdx9.dll global pointer addresses keyed by name.
+    #[serde(default)]
+    pub eqgraphics_globals: HashMap<String, u64>,
+    /// eqgraphicsdx9.dll function addresses keyed by name.
+    #[serde(default)]
+    pub eqgraphics_functions: HashMap<String, u64>,
 }
 
 impl OffsetDatabase {
@@ -88,6 +100,30 @@ impl OffsetDatabase {
         self.context_menu.get(name).copied()
     }
 
+    /// Look up an eqmain.dll global pointer address by name.
+    #[must_use]
+    pub fn get_eqmain_global(&self, name: &str) -> Option<u64> {
+        self.eqmain_globals.get(name).copied()
+    }
+
+    /// Look up an eqmain.dll function address by name.
+    #[must_use]
+    pub fn get_eqmain_function(&self, name: &str) -> Option<u64> {
+        self.eqmain_functions.get(name).copied()
+    }
+
+    /// Look up an eqgraphicsdx9.dll global pointer address by name.
+    #[must_use]
+    pub fn get_eqgraphics_global(&self, name: &str) -> Option<u64> {
+        self.eqgraphics_globals.get(name).copied()
+    }
+
+    /// Look up an eqgraphicsdx9.dll function address by name.
+    #[must_use]
+    pub fn get_eqgraphics_function(&self, name: &str) -> Option<u64> {
+        self.eqgraphics_functions.get(name).copied()
+    }
+
     /// Convert a preferred-base address to a runtime address using this
     /// database's preferred base.
     #[must_use]
@@ -127,7 +163,9 @@ impl OffsetDatabase {
             CONTEXT_MENU_MGR_HANDLE_MENU, DO_ATTACK, DO_COMBAT_ABILITY, DO_LOOT, DSP_CHAT,
             EQ_BEGIN_ZONE, EQ_BUFF_PLAYER, EQ_BUY_ITEM, EQ_COMPLETE_TRADE, EQ_DISBAND, EQ_END_ZONE,
             EQ_FINISH_ZONE, EQ_FOLLOW_PLAYER, EQ_INVITE_PLAYER, EQ_MAKE_LEADER, EQ_OPEN_TRADE,
-            EQ_PREFERRED_BASE, EQ_REMOVE_BUFF, EQ_SELL_ITEM, EQ_ZONE_CHANGE, EXECUTE_CMD,
+            EQ_PREFERRED_BASE, EQ_REMOVE_BUFF, EQ_SELL_ITEM, EQ_ZONE_CHANGE,
+            EQGRAPHICS_DEVICE_RESET, EQGRAPHICS_DX_PRESENT, EQGRAPHICS_INIT_RENDER,
+            EQGRAPHICS_REALRENDER_WORLD, EQGRAPHICS_RENDER_FRAME, EXECUTE_CMD,
             FILE_INTEGRITY_DISPATCHER, FIX_HEADING, FREE_TARGET_CAST_SPELL, GET_BEARING,
             GET_CON_LEVEL, GET_PC_CLIENT, INBOUND_MSG_COUNTER, INTERPRET_CMD,
             INV_SLOT_GET_ITEM_BASE, INV_SLOT_MGR_FIND_SLOT, INV_SLOT_MGR_MOVE_ITEM,
@@ -138,8 +176,8 @@ impl OffsetDatabase {
             PINST_SGRAPHICSENGINE, PINST_SPAWN_MANAGER, PINST_SPELL_MANAGER, PINST_TARGET,
             PROCESS_GAME_EVENTS, REAL_RENDER_WORLD, RIGHT_CLICKED_ON_PLAYER,
             SERVER_MEMCHECK_HANDLER, SPELL_BOOK_WND_MEMORIZE_SET, SYSTEM_FINGERPRINT, USE_SKILL,
-            WORLD_AUTHENTICATE, ZONE_GUIDE_MANAGER, context_menu_mgr, player_base, player_zone,
-            spawn_manager, zone_info,
+            WORLD_AUTHENTICATE, ZONE_GUIDE_MANAGER, context_menu_mgr, eqmain, player_base,
+            player_zone, spawn_manager, zone_info,
         };
         let mut globals = HashMap::new();
         globals.insert("pinstLocalPlayer".to_string(), PINST_LOCAL_PLAYER);
@@ -321,6 +359,50 @@ impl OffsetDatabase {
         functions.insert("eqBuffPlayer".into(), EQ_BUFF_PLAYER);
         functions.insert("eqRemoveBuff".into(), EQ_REMOVE_BUFF);
 
+        let eqmain_globals = [
+            ("sidlManager", eqmain::SIDL_MANAGER),
+            ("loginServerApi", eqmain::LOGIN_SERVER_API),
+            ("cxwndManager", eqmain::CXWND_MANAGER),
+            ("loginViewManager", eqmain::LOGIN_VIEW_MANAGER),
+            ("pinstLoginClient", eqmain::PINST_LOGIN_CLIENT),
+            ("pinstLoginController", eqmain::PINST_LOGIN_CONTROLLER),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+
+        let eqmain_functions = [
+            ("joinServer", eqmain::JOIN_SERVER),
+            ("charSelectEnterWorld", eqmain::CHAR_SELECT_ENTER_WORLD),
+            ("serverSelect", eqmain::SERVER_SELECT),
+            ("handleSplash", eqmain::HANDLE_SPLASH),
+            (
+                "charSelectSelectCharacter",
+                eqmain::CHAR_SELECT_SELECT_CHARACTER,
+            ),
+            ("charSelectSetFocus", eqmain::CHAR_SELECT_SET_FOCUS),
+            (
+                "loginControllerGiveTime",
+                eqmain::LOGIN_CONTROLLER_GIVE_TIME,
+            ),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+
+        let eqgraphics_globals = HashMap::new();
+
+        let eqgraphics_functions = [
+            ("realRenderWorld", EQGRAPHICS_REALRENDER_WORLD),
+            ("deviceReset", EQGRAPHICS_DEVICE_RESET),
+            ("initRender", EQGRAPHICS_INIT_RENDER),
+            ("renderFrame", EQGRAPHICS_RENDER_FRAME),
+            ("dxPresent", EQGRAPHICS_DX_PRESENT),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+
         Self {
             client_date: crate::offsets::CLIENT_DATE.to_string(),
             eq_preferred_base: EQ_PREFERRED_BASE,
@@ -331,6 +413,10 @@ impl OffsetDatabase {
             context_menu_manager,
             context_menu,
             functions,
+            eqmain_globals,
+            eqmain_functions,
+            eqgraphics_globals,
+            eqgraphics_functions,
         }
     }
 }
@@ -837,6 +923,44 @@ mod tests {
             restored.get_context_menu_offset("numItems"),
             db.get_context_menu_offset("numItems")
         );
+    }
+
+    #[test]
+    fn from_compiled_offsets_exposes_module_specific_offsets() {
+        let db = OffsetDatabase::from_compiled_offsets();
+
+        assert_eq!(
+            db.get_eqmain_global("cxwndManager"),
+            Some(crate::offsets::eqmain::CXWND_MANAGER)
+        );
+        assert_eq!(
+            db.get_eqmain_function("joinServer"),
+            Some(crate::offsets::eqmain::JOIN_SERVER)
+        );
+        assert_eq!(
+            db.get_eqgraphics_function("realRenderWorld"),
+            Some(crate::offsets::EQGRAPHICS_REALRENDER_WORLD)
+        );
+    }
+
+    #[test]
+    fn load_from_legacy_json_defaults_module_specific_offsets() {
+        let loaded: OffsetDatabase = serde_json::from_str(
+            r#"{
+                "client_date": "20260415",
+                "eq_preferred_base": 5368709120,
+                "globals": {},
+                "player_base": {},
+                "player_zone": {},
+                "spawn_manager": {}
+            }"#,
+        )
+        .expect("deserialize legacy offsets");
+
+        assert!(loaded.eqmain_globals.is_empty());
+        assert!(loaded.eqmain_functions.is_empty());
+        assert!(loaded.eqgraphics_globals.is_empty());
+        assert!(loaded.eqgraphics_functions.is_empty());
     }
 
     // ─── load/save edge cases ───────────────────────────────────────────
