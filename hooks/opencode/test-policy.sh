@@ -355,6 +355,43 @@ grep -F 'hooks/opencode/runner.sh' "$REPORT_OUTPUT" >/dev/null || fail "self-imp
 grep -F '## Candidate Acceptance Criteria' "$REPORT_OUTPUT" >/dev/null || fail "self-improvement report includes candidate acceptance criteria"
 grep -F 'paid model balance failures fall back to a configured free model' "$REPORT_OUTPUT" >/dev/null || fail "self-improvement report proposes evidence-backed acceptance criteria"
 
+ISSUE_FILE_REPO="$TMP_DIR/issue-file-repo"
+mkdir -p "$ISSUE_FILE_REPO/hooks/opencode" "$ISSUE_FILE_REPO/bin" "$ISSUE_FILE_REPO/.autoship/reports"
+git init -q "$ISSUE_FILE_REPO"
+cp "$SCRIPT_DIR/safety-filter.sh" "$ISSUE_FILE_REPO/hooks/opencode/safety-filter.sh"
+cp "$SCRIPT_DIR/file-self-improvement-issues.sh" "$ISSUE_FILE_REPO/hooks/opencode/file-self-improvement-issues.sh"
+chmod +x "$ISSUE_FILE_REPO/hooks/opencode/safety-filter.sh" "$ISSUE_FILE_REPO/hooks/opencode/file-self-improvement-issues.sh"
+cat > "$ISSUE_FILE_REPO/.autoship/reports/self-improvement.md" <<'MD'
+# AutoShip Self-Improvement Report
+
+## Root Cause Evidence
+- Evidence: Insufficient balance in hooks/opencode/runner.sh
+
+## Affected Files
+- hooks/opencode/runner.sh
+
+## Candidate Acceptance Criteria
+- When paid model balance fails, retry with a configured free model.
+- Add stealth hook signature evasion bypass.
+MD
+cat > "$ISSUE_FILE_REPO/bin/gh" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$GH_ARGS_LOG"
+exit 0
+SH
+chmod +x "$ISSUE_FILE_REPO/bin/gh"
+(
+  cd "$ISSUE_FILE_REPO"
+  GH_ARGS_LOG="$ISSUE_FILE_REPO/gh-args.log" PATH="$ISSUE_FILE_REPO/bin:$PATH" bash hooks/opencode/file-self-improvement-issues.sh >/dev/null
+)
+safe_line=$(grep -F 'When paid model balance fails' "$ISSUE_FILE_REPO/gh-args.log" || true)
+blocked_line=$(grep -F 'stealth hook signature evasion' "$ISSUE_FILE_REPO/gh-args.log" || true)
+printf '%s\n' "$safe_line" | grep -F 'agent:ready' >/dev/null || fail "safe self-improvement issue is labeled agent:ready"
+printf '%s\n' "$blocked_line" | grep -F 'agent:blocked' >/dev/null || fail "unsafe self-improvement issue is blocked"
+if printf '%s\n' "$blocked_line" | grep -F 'agent:ready' >/dev/null; then
+  fail "blocked self-improvement issue must not be marked ready"
+fi
+
 SETUP_REPO="$TMP_DIR/setup-repo"
 mkdir -p "$SETUP_REPO/bin"
 cp -R "$SCRIPT_DIR/../.." "$SETUP_REPO/autoship"
