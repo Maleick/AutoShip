@@ -124,79 +124,79 @@ async function doctor() {
     message: string;
   }
 
-  const checks: Check[] = []
-  let hasFailure = false
+  const checks: Check[] = [];
+  let hasFailure = false;
 
-  const configDir = resolveConfigDir()
-  const autoshipDir = join(configDir, ".autoship")
+  const configDir = resolveConfigDir();
+  const autoshipDir = join(configDir, ".autoship");
 
   try {
-    await access(join(autoshipDir, ".onboarded"))
-    checks.push({ name: "onboarding", status: "PASS", message: "AutoShip is onboarded" })
+    await access(join(autoshipDir, ".onboarded"));
+    checks.push({ name: "onboarding", status: "PASS", message: "AutoShip is onboarded" });
   } catch {
-    checks.push({ name: "onboarding", status: "WARN", message: "AutoShip has not been onboarded yet" })
+    checks.push({ name: "onboarding", status: "WARN", message: "AutoShip has not been onboarded yet" });
   }
 
   try {
-    await access(join(autoshipDir, "config.json"))
-    checks.push({ name: "config", status: "PASS", message: "Config file exists" })
+    await access(join(autoshipDir, "config.json"));
+    checks.push({ name: "config", status: "PASS", message: "Config file exists" });
   } catch {
-    checks.push({ name: "config", status: "FAIL", message: "Config file not found" })
-    hasFailure = true
+    checks.push({ name: "config", status: "FAIL", message: "Config file not found" });
+    hasFailure = true;
   }
 
   try {
-    await access(join(autoshipDir, "model-routing.json"))
-    checks.push({ name: "model-routing", status: "PASS", message: "Model routing file exists" })
+    await access(join(autoshipDir, "model-routing.json"));
+    checks.push({ name: "model-routing", status: "PASS", message: "Model routing file exists" });
   } catch {
-    checks.push({ name: "model-routing", status: "FAIL", message: "Model routing file not found" })
-    hasFailure = true
+    checks.push({ name: "model-routing", status: "FAIL", message: "Model routing file not found" });
+    hasFailure = true;
   }
 
   try {
-    await access(join(autoshipDir, "hooks"))
-    checks.push({ name: "hooks", status: "PASS", message: "Hooks directory exists" })
+    await access(join(autoshipDir, "hooks"));
+    checks.push({ name: "hooks", status: "PASS", message: "Hooks directory exists" });
   } catch {
-    checks.push({ name: "hooks", status: "FAIL", message: "Hooks directory not found" })
-    hasFailure = true
+    checks.push({ name: "hooks", status: "FAIL", message: "Hooks directory not found" });
+    hasFailure = true;
   }
 
   try {
-    await access(join(autoshipDir, "commands"))
-    checks.push({ name: "commands", status: "PASS", message: "Commands directory exists" })
+    await access(join(autoshipDir, "commands"));
+    checks.push({ name: "commands", status: "PASS", message: "Commands directory exists" });
   } catch {
-    checks.push({ name: "commands", status: "FAIL", message: "Commands directory not found" })
-    hasFailure = true
+    checks.push({ name: "commands", status: "FAIL", message: "Commands directory not found" });
+    hasFailure = true;
   }
 
   try {
-    await access(join(autoshipDir, "skills"))
-    checks.push({ name: "skills", status: "PASS", message: "Skills directory exists" })
+    await access(join(autoshipDir, "skills"));
+    checks.push({ name: "skills", status: "PASS", message: "Skills directory exists" });
   } catch {
-    checks.push({ name: "skills", status: "FAIL", message: "Skills directory not found" })
-    hasFailure = true
+    checks.push({ name: "skills", status: "FAIL", message: "Skills directory not found" });
+    hasFailure = true;
   }
 
-  const passChecks = checks.filter(c => c.status === "PASS")
-  const warnChecks = checks.filter(c => c.status === "WARN")
-  const failChecks = checks.filter(c => c.status === "FAIL")
+  const passChecks = checks.filter(c => c.status === "PASS");
+  const warnChecks = checks.filter(c => c.status === "WARN");
+  const failChecks = checks.filter(c => c.status === "FAIL");
 
   for (const check of passChecks) {
-    console.log(`[PASS] ${check.name}: ${check.message}`)
+    console.log(`[PASS] ${check.name}: ${check.message}`);
   }
   for (const check of warnChecks) {
-    console.log(`[WARN] ${check.name}: ${check.message}`)
+    console.log(`[WARN] ${check.name}: ${check.message}`);
   }
   for (const check of failChecks) {
-    console.log(`[FAIL] ${check.name}: ${check.message}`)
+    console.log(`[FAIL] ${check.name}: ${check.message}`);
   }
-  console.log()
-  console.log(`Summary: ${passChecks.length} passed, ${warnChecks.length} warnings, ${failChecks.length} failed`)
+  console.log();
+  console.log(`Summary: ${passChecks.length} passed, ${warnChecks.length} warnings, ${failChecks.length} failed`);
 
   if (hasFailure) {
-    console.log()
-    console.log("Run 'opencode-autoship setup' to fix failures.")
-    process.exit(1)
+    console.log();
+    console.log("Run 'opencode-autoship install', then /autoship-setup to fix failures.");
+    process.exit(1);
   }
 }
 
