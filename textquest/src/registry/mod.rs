@@ -56,6 +56,20 @@ impl std::fmt::Display for Priority {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CommandId(u64);
 
+impl CommandId {
+    /// Recreate an opaque command ID previously returned across the Lua API.
+    #[must_use]
+    pub fn from_raw(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    /// Expose the registry ID for script-facing handles.
+    #[must_use]
+    pub fn as_raw(self) -> u64 {
+        self.0
+    }
+}
+
 /// A single command registration entry.
 struct CommandEntry {
     id: CommandId,
@@ -208,6 +222,20 @@ impl Default for CommandRegistry {
 /// Opaque identifier for a registered script/plugin hotkey.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ScriptHotkeyId(u64);
+
+impl ScriptHotkeyId {
+    /// Recreate an opaque hotkey ID previously returned across the Lua API.
+    #[must_use]
+    pub fn from_raw(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    /// Expose the registry ID for script-facing handles.
+    #[must_use]
+    pub fn as_raw(self) -> u64 {
+        self.0
+    }
+}
 
 /// A single hotkey registration entry.
 struct HotkeyEntry {

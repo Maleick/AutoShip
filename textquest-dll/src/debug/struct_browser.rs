@@ -458,8 +458,8 @@ fn read_field_snapshot(base_address: usize, field: &FieldDef) -> StructFieldSnap
         }
     };
 
-    let value = read_field_value(address, field.field_type)
-        .unwrap_or_else(|error| StructFieldValue::Unreadable(error));
+    let value =
+        read_field_value(address, field.field_type).unwrap_or_else(StructFieldValue::Unreadable);
     field_snapshot(field, address, value)
 }
 

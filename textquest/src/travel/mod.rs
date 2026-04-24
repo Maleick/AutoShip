@@ -282,10 +282,10 @@ impl TravelPlanner for TravelCoordinator {
 
         let destination = configured.cloned().unwrap_or_default();
         let mut required_actions = destination.requires_spells;
-        if required_actions.is_empty() {
-            if let Some(spell_name) = portal.as_ref().and_then(|portal| portal.spell_name.clone()) {
-                required_actions.push(spell_name);
-            }
+        if required_actions.is_empty()
+            && let Some(spell_name) = portal.as_ref().and_then(|portal| portal.spell_name.clone())
+        {
+            required_actions.push(spell_name);
         }
 
         let mut steps = Vec::new();

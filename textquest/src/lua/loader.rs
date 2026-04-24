@@ -23,6 +23,12 @@ pub enum LuaLoaderError {
 
     #[error("Invalid state transition for script '{id}': {reason}")]
     InvalidTransition { id: String, reason: String },
+
+    #[error("Lua API error: {0}")]
+    ApiError(#[from] LuaApiError),
+
+    #[error("Lua error: {0}")]
+    LuaError(#[from] mlua::Error),
 }
 
 /// Lifecycle state for a managed Lua script.
@@ -156,7 +162,7 @@ impl ScriptLoader {
 
         match exec_result {
             Ok(()) => {
-                let mut scripts = self.loaded_scripts.write();
+                let mut scripts = self.write_loaded_scripts();
                 if let Some(entry) = scripts.iter_mut().find(|s| s.id == id) {
                     entry.state = ScriptState::Running;
                 }
@@ -213,7 +219,7 @@ impl ScriptLoader {
         match &entry.state {
             ScriptState::Paused => {
                 tracing::debug!(script_id = %id, "pause_script: already Paused, no-op");
-                return Ok(());
+                Ok(())
             }
             ScriptState::Running => {
                 entry.state = ScriptState::Paused;
@@ -238,7 +244,7 @@ impl ScriptLoader {
         match &entry.state {
             ScriptState::Running => {
                 tracing::debug!(script_id = %id, "resume_script: already Running, no-op");
-                return Ok(());
+                Ok(())
             }
             ScriptState::Paused => {
                 entry.state = ScriptState::Running;
@@ -398,13 +404,9 @@ mod tests {
     fn test_execute_string() {
         let (loader, _dir) = make_loader();
 
-        let result: i64 = loader
-            .execute_string("return 42")
-            .expect("execute")
-            .cast()
-            .expect("cast to i64");
+        let result = loader.execute_string("return 42").expect("execute");
 
-        assert_eq!(result, 42);
+        assert_eq!(result, Value::Integer(42));
     }
 
     #[test]
@@ -584,12 +586,10 @@ mod tests {
         let first = loader.execute_string("while true do end");
         assert!(first.is_err(), "first script should trip the CPU limiter");
 
-        let second: i64 = loader
+        let second = loader
             .execute_string("return 7")
-            .expect("second script should run with a fresh CPU budget")
-            .cast()
-            .expect("cast to i64");
-        assert_eq!(second, 7);
+            .expect("second script should run with a fresh CPU budget");
+        assert_eq!(second, Value::Integer(7));
     }
 
     /// Syntax error on load → ScriptState::Error (not Running).

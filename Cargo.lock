@@ -4208,6 +4208,7 @@ dependencies = [
  "tempfile",
  "textquest-common",
  "textquest-soul",
+ "thiserror 2.0.18",
  "tokio",
  "toml",
  "tracing",

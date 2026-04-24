@@ -132,10 +132,13 @@ mod tests {
 
     #[test]
     fn hooked_mechanic_reports_unavailable_until_client_hook_lands() {
-        let request = drag_corpse_to(Waypoint::new(100.0, 200.0, 3.0))
-            .expect("valid corpse drag request");
+        let request =
+            drag_corpse_to(Waypoint::new(100.0, 200.0, 3.0)).expect("valid corpse drag request");
         let mut mechanic = HookedDragMechanic;
 
-        assert_eq!(mechanic.begin_drag(&request), Err(DragError::HookUnavailable));
+        assert_eq!(
+            mechanic.begin_drag(&request),
+            Err(DragError::HookUnavailable)
+        );
     }
 }

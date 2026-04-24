@@ -127,7 +127,7 @@ impl LootCandidate {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct SmartLootContext<'a> {
     pub looter: ClientId,
     pub level: u8,

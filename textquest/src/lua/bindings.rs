@@ -271,12 +271,11 @@ impl LuaBindings {
         group.set(
             "get_member",
             self.lua
-                .create_function(|_, index: usize| Ok(mlua::Value::Nil))?,
+                .create_function(|_, _index: usize| Ok(mlua::Value::Nil))?,
         )?;
         group.set(
             "get_members",
-            self.lua
-                .create_function(|_, ()| Ok(self.lua.create_table()?))?,
+            self.lua.create_function(|lua, ()| lua.create_table())?,
         )?;
         group.set(
             "get_tank",
@@ -405,18 +404,17 @@ impl LuaBindings {
 
         state.set(
             "get_spawns",
-            self.lua
-                .create_function(|_, ()| Ok(self.lua.create_table()?))?,
+            self.lua.create_function(|lua, ()| lua.create_table())?,
         )?;
         state.set(
             "get_spawn",
             self.lua
-                .create_function(|_, name: String| Ok(mlua::Value::Nil))?,
+                .create_function(|_, _name: String| Ok(mlua::Value::Nil))?,
         )?;
         state.set(
             "find_spawns",
             self.lua
-                .create_function(|_, filter: String| Ok(self.lua.create_table()?))?,
+                .create_function(|lua, _filter: String| lua.create_table())?,
         )?;
         state.set(
             "get_target",
@@ -424,12 +422,11 @@ impl LuaBindings {
         )?;
         state.set(
             "set_target",
-            self.lua.create_function(|_, target: String| Ok(true))?,
+            self.lua.create_function(|_, _target: String| Ok(true))?,
         )?;
         state.set(
             "get_xtargets",
-            self.lua
-                .create_function(|_, ()| Ok(self.lua.create_table()?))?,
+            self.lua.create_function(|lua, ()| lua.create_table())?,
         )?;
 
         parent.set("state", state)?;
@@ -443,7 +440,7 @@ impl LuaBindings {
         config.set(
             "get",
             self.lua
-                .create_function(|_, key: String| Ok(mlua::Value::Nil))?,
+                .create_function(|_, _key: String| Ok(mlua::Value::Nil))?,
         )?;
         config.set(
             "set",
@@ -516,7 +513,7 @@ impl LuaBindings {
         events.set(
             "on",
             self.lua
-                .create_function(|_, (event, callback): (String, mlua::Function)| {
+                .create_function(|_, (event, _callback): (String, mlua::Function)| {
                     tracing::debug!("events.on(\"{}\")", event);
                     Ok(())
                 })?,
@@ -573,7 +570,7 @@ impl LuaBindings {
                         }),
                     );
                     tracing::debug!(combo = %combo, id = ?id, "Lua registered hotkey");
-                    Ok(id.0)
+                    Ok(id.as_raw())
                 },
             )?,
         )?;
@@ -584,7 +581,10 @@ impl LuaBindings {
             "unregister",
             self.lua.create_function(move |_lua, id: u64| {
                 use crate::registry::ScriptHotkeyId;
-                let removed = hk_unreg.lock().unwrap().unregister(ScriptHotkeyId(id));
+                let removed = hk_unreg
+                    .lock()
+                    .unwrap()
+                    .unregister(ScriptHotkeyId::from_raw(id));
                 Ok(removed)
             })?,
         )?;
@@ -694,7 +694,7 @@ impl LuaBindings {
                         }),
                     );
                     tracing::debug!(path = %path, id = ?id, "Lua registered command");
-                    Ok(id.0)
+                    Ok(id.as_raw())
                 })?,
         )?;
 
@@ -704,7 +704,10 @@ impl LuaBindings {
             "unregister",
             self.lua.create_function(move |_lua, id: u64| {
                 use crate::registry::CommandId;
-                let removed = cmd_unreg.lock().unwrap().unregister(CommandId(id));
+                let removed = cmd_unreg
+                    .lock()
+                    .unwrap()
+                    .unregister(CommandId::from_raw(id));
                 Ok(removed)
             })?,
         )?;

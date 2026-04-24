@@ -277,7 +277,8 @@ fn load_platform(
     unsafe fn get_textquest_initialize(
         library: windows::Win32::Foundation::HMODULE,
     ) -> Option<TextQuestInitializePlugin> {
-        let proc = unsafe { GetProcAddress(library, PCSTR(b"TextQuestInitializePlugin\0".as_ptr())) }?;
+        let proc =
+            unsafe { GetProcAddress(library, PCSTR(b"TextQuestInitializePlugin\0".as_ptr())) }?;
         Some(unsafe { std::mem::transmute(proc) })
     }
 
@@ -288,9 +289,7 @@ fn load_platform(
         Some(unsafe { std::mem::transmute(proc) })
     }
 
-    unsafe fn get_shutdown(
-        library: windows::Win32::Foundation::HMODULE,
-    ) -> Option<ShutdownPlugin> {
+    unsafe fn get_shutdown(library: windows::Win32::Foundation::HMODULE) -> Option<ShutdownPlugin> {
         let proc = unsafe { GetProcAddress(library, PCSTR(b"ShutdownPlugin\0".as_ptr())) }?;
         Some(unsafe { std::mem::transmute(proc) })
     }

@@ -218,8 +218,10 @@ mod tests {
     #[tokio::test]
     async fn put_settings_rejects_non_https_webhook_url() {
         let state = demo_state();
-        let mut settings = DiscordSettings::default();
-        settings.webhook_url = "http://discord.com/api/webhooks/default".into();
+        let settings = DiscordSettings {
+            webhook_url: "http://discord.com/api/webhooks/default".into(),
+            ..DiscordSettings::default()
+        };
 
         let response = put_settings(State(state), trusted_headers(), Json(settings))
             .await
@@ -255,8 +257,10 @@ mod tests {
     #[tokio::test]
     async fn put_settings_accepts_empty_webhook_url_to_clear() {
         let state = demo_state();
-        let mut settings = DiscordSettings::default();
-        settings.webhook_url = "   ".into();
+        let mut settings = DiscordSettings {
+            webhook_url: "   ".into(),
+            ..DiscordSettings::default()
+        };
         settings.channels.insert("kills".into(), " ".into());
         settings.notification_routes.insert(
             "death".into(),

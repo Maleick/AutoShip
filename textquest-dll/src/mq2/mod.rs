@@ -60,7 +60,7 @@ pub mod plugin_loader;
 pub use bridge::MQ2Bridge;
 pub use plugin_loader::{
     LoadedMacroQuestPlugin, MacroQuestPluginApi, MacroQuestPluginLoader, PluginCandidate,
-    PluginConfig, PluginLoadError, TextQuestMq2Api, TEXTQUEST_MQ2_API_VERSION,
+    PluginConfig, PluginLoadError, TEXTQUEST_MQ2_API_VERSION, TextQuestMq2Api,
 };
 
 use std::ptr::NonNull;

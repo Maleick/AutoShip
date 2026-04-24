@@ -1,4 +1,3 @@
-use mlua::{Lua, Result as LuaResult};
 use textquest_common::types::SpawnData;
 
 pub struct LuaPlayer {
