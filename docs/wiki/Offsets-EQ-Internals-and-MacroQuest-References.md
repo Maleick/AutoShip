@@ -80,6 +80,25 @@ added, removed, and unmapped functions before promoting an offset snapshot.
 6. update the relevant wiki page if the operator or developer workflow changed
 7. if the work changes roadmap assumptions or evidence state, update `docs/implementation-roadmap.md`
 
+## Ghidra Function Prologue Export
+
+Use `scripts/ghidra_export_function_prologues.py` from Ghidra headless when Auto Patch needs raw bytes for signature derivation. The script exports labeled functions and functions covered by bookmarks, reading the first 32-64 bytes from each function entry and writing JSON records with `name`, `address`, `size`, and `bytes` fields.
+
+Example headless invocation:
+
+```bash
+analyzeHeadless <project_dir> <project_name> \
+  -process eqgame.exe \
+  -scriptPath scripts \
+  -postScript ghidra_export_function_prologues.py function_prologues.json 64
+```
+
+The exported addresses remain preferred-base Ghidra addresses. Rebase them before runtime pointer use, following the offset model above.
+
+### Repo boundary
+
+The production Ghidra tooling lives in the sibling `TextQuest-Ghidra` repo (issue #748). The script is vendored here because Auto Patch ingests its JSON output and the signature-derivation tests exercise the pure Python helpers without a Ghidra runtime. Keep the two copies in sync: any change here should be mirrored upstream, and environment assumptions (Ghidra version, `analyzeHeadless` flags) should match that repo's headless bootstrap. No new env vars are required — operators invoke the script with two positional arguments (output path, byte count) via `analyzeHeadless -postScript`.
+
 ## Current Behavior vs Roadmap
 
 ### Current behavior
