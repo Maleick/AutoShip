@@ -516,8 +516,14 @@ pub struct HexDumpState {
     pub hex_address: usize,
     /// Raw bytes to display in the hex viewer.
     pub hex_data: Vec<u8>,
+    /// Previous byte snapshot, used to highlight changed bytes after refresh.
+    pub previous_hex_data: Vec<u8>,
     /// Label shown above the hex dump (e.g., spawn name).
     pub hex_label: String,
+    /// Known global pointer for relative reads, when the view follows one.
+    pub relative_global: Option<String>,
+    /// Byte offset from `relative_global` for relative reads.
+    pub relative_offset: usize,
     /// Whether struct field annotations are shown.
     pub show_annotations: bool,
     /// Known field annotations for the current hex data context.
@@ -533,11 +539,61 @@ impl HexDumpState {
         Self {
             hex_address: 0,
             hex_data: Vec::new(),
+            previous_hex_data: Vec::new(),
             hex_label: String::from("No address selected"),
+            relative_global: None,
+            relative_offset: 0,
             show_annotations: false,
             annotations: Vec::new(),
             pending_memory_poll: false,
         }
+    }
+
+    /// Replace the current view with a fully materialized byte snapshot.
+    pub fn set_view(&mut self, address: usize, label: impl Into<String>, bytes: Vec<u8>) {
+        self.hex_address = address;
+        self.hex_label = label.into();
+        self.hex_data = bytes;
+        self.previous_hex_data.clear();
+        self.relative_global = None;
+        self.relative_offset = 0;
+        self.pending_memory_poll = false;
+    }
+
+    /// Request a live absolute memory read on the next poll.
+    pub fn request_absolute(&mut self, address: usize, label: impl Into<String>) {
+        self.hex_address = address;
+        self.hex_label = label.into();
+        self.previous_hex_data.clear();
+        self.relative_global = None;
+        self.relative_offset = 0;
+        self.pending_memory_poll = true;
+    }
+
+    /// Request a live read relative to a known EQ global pointer.
+    pub fn request_relative(&mut self, global_name: impl Into<String>, offset: usize) {
+        let global_name = global_name.into();
+        self.hex_address = 0;
+        self.hex_label = format!("{global_name} + 0x{offset:X}");
+        self.previous_hex_data.clear();
+        self.relative_global = Some(global_name);
+        self.relative_offset = offset;
+        self.pending_memory_poll = true;
+    }
+
+    /// Apply freshly read live memory while retaining the previous snapshot.
+    pub fn update_live_bytes(&mut self, address: usize, bytes: Vec<u8>) {
+        self.hex_address = address;
+        self.previous_hex_data = std::mem::replace(&mut self.hex_data, bytes);
+    }
+
+    /// Returns true when a byte differs from the previous live snapshot.
+    #[must_use]
+    pub fn byte_changed_at(&self, offset: usize) -> bool {
+        self.previous_hex_data
+            .get(offset)
+            .zip(self.hex_data.get(offset))
+            .is_some_and(|(old, new)| old != new)
     }
 
     /// Look up the annotation covering a given byte offset, if any.

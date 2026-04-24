@@ -1106,6 +1106,39 @@ pub enum Command {
         /// Reward selection rules keyed by task title matching.
         config: RewardAutomationConfig,
     },
+    /// Read raw bytes from an absolute process address for the EQ debugger.
+    ///
+    /// New debugger-facing spelling of `ReadMemory`; returns
+    /// `Response::MemoryData`.
+    MemoryRead {
+        /// Absolute virtual address to read from.
+        address: usize,
+        /// Number of bytes to read (capped at 4096).
+        length: usize,
+    },
+    /// Read raw bytes relative to a known EQ global pointer.
+    ///
+    /// The DLL rebases `global_name`, dereferences it, then reads from
+    /// `(*global + offset)`. Returns `Response::MemoryData`.
+    MemoryReadRelative {
+        /// Known global pointer name, such as `pinstLocalPlayer` or
+        /// `PINST_LOCAL_PLAYER`.
+        global_name: String,
+        /// Byte offset from the dereferenced global pointer.
+        offset: usize,
+        /// Number of bytes to read (capped at 4096).
+        length: usize,
+    },
+    /// Read raw bytes for an annotated debugger view.
+    ///
+    /// Annotation metadata is applied by clients that know the selected struct
+    /// context; the wire response remains `Response::MemoryData`.
+    MemoryAnnotate {
+        /// Absolute virtual address to read from.
+        address: usize,
+        /// Number of bytes to read (capped at 4096).
+        length: usize,
+    },
     /// Start tracing a function call with a hardware breakpoint.
     ///
     /// `function_name` may be an absolute address (`0x...` or decimal) or a

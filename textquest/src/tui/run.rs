@@ -272,19 +272,31 @@ fn run_loop(
         }
 
         // Poll live memory for the Debug hex dump.
-        if last_memory_poll.elapsed() >= MEMORY_POLL_INTERVAL
+        if (last_memory_poll.elapsed() >= MEMORY_POLL_INTERVAL || app.hex_state.pending_memory_poll)
             && app.active_screen == super::app::ActiveScreen::Debug
-            && app.hex_state.hex_address != 0
+            && (app.hex_state.hex_address != 0 || app.hex_state.relative_global.is_some())
         {
             // Use the first live (non-demo) client PID.
             let pid = app.clients.iter().find(|c| !c.is_demo).map(|c| c.pid);
-            if let Some(pid) = pid
-                && let Some((address, bytes)) =
+            if let Some(pid) = pid {
+                let read_result = if let Some(global_name) = app.hex_state.relative_global.clone() {
+                    orchestrator.read_memory_relative(
+                        pid,
+                        global_name,
+                        app.hex_state.relative_offset,
+                        0x200,
+                    )
+                } else {
                     orchestrator.read_memory(pid, app.hex_state.hex_address, 0x200)
-                && app.hex_state.hex_address == address
-            {
-                app.hex_state.hex_data = bytes;
+                };
+                if let Some((address, bytes)) = read_result
+                    && (app.hex_state.relative_global.is_some()
+                        || app.hex_state.hex_address == address)
+                {
+                    app.hex_state.update_live_bytes(address, bytes);
+                }
             }
+            app.hex_state.pending_memory_poll = false;
             last_memory_poll = Instant::now();
         }
 
@@ -339,13 +351,12 @@ fn run_loop(
             last_soul_tick = Instant::now();
         }
 
-        // Consume the pending_memory_poll flag set by :addr command.
-        // When ReadMemory IPC is available, this is where the live poll is triggered.
+        // Consume the pending_memory_poll flag set by :addr when no live poll ran.
         if app.hex_state.pending_memory_poll {
             app.hex_state.pending_memory_poll = false;
             tracing::debug!(
                 address = app.hex_state.hex_address,
-                "pending_memory_poll consumed — ReadMemory poll would fire here"
+                "pending_memory_poll consumed without live memory poll"
             );
         }
 

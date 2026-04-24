@@ -713,9 +713,9 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         phrase: "addr",
         aliases: &[],
         section: HelpSection::Troubleshooting,
-        usage: "addr <hex_address>",
-        summary: "Set the Debug panel hex dump address and trigger an immediate ReadMemory poll.",
-        example: "addr 0x00A3B210",
+        usage: "addr <hex_address|global[+offset]>",
+        summary: "Set the Debug panel hex dump address and trigger an immediate memory poll.",
+        example: "addr pinstLocalPlayer+0x78",
     },
     CommandEntry {
         phrase: "camera",

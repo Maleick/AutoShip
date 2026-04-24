@@ -3042,33 +3042,39 @@ impl App {
 
             if is_absolute {
                 // Preferred-base address — show hex at that address.
-                self.hex_state.hex_label = format!("{} @ 0x{:X}", entry.name, entry.value);
                 #[cfg(windows)]
                 {
                     // On Windows with a live process, rebase and read real memory.
                     // For now, set address to the preferred-base value.
-                    self.hex_state.hex_address = entry.value as usize;
-                    self.hex_state.hex_data = vec![0u8; 0x200];
+                    self.hex_state.request_absolute(
+                        entry.value as usize,
+                        format!("{} @ 0x{:X}", entry.name, entry.value),
+                    );
                 }
                 #[cfg(not(windows))]
                 {
-                    self.hex_state.hex_address = entry.value as usize;
-                    self.hex_state.hex_data =
-                        generate_demo_hex_data_for_offset(&entry.name, entry.value);
+                    self.hex_state.set_view(
+                        entry.value as usize,
+                        format!("{} @ 0x{:X}", entry.name, entry.value),
+                        generate_demo_hex_data_for_offset(&entry.name, entry.value),
+                    );
                 }
             } else {
                 // Struct field offset — display it as a relative offset.
-                self.hex_state.hex_label = format!("{} (offset +0x{:X})", entry.name, entry.value);
                 #[cfg(windows)]
                 {
-                    self.hex_state.hex_address = entry.value as usize;
-                    self.hex_state.hex_data = vec![0u8; 0x200];
+                    self.hex_state.request_absolute(
+                        entry.value as usize,
+                        format!("{} (offset +0x{:X})", entry.name, entry.value),
+                    );
                 }
                 #[cfg(not(windows))]
                 {
-                    self.hex_state.hex_address = entry.value as usize;
-                    self.hex_state.hex_data =
-                        generate_demo_hex_data_for_offset(&entry.name, entry.value);
+                    self.hex_state.set_view(
+                        entry.value as usize,
+                        format!("{} (offset +0x{:X})", entry.name, entry.value),
+                        generate_demo_hex_data_for_offset(&entry.name, entry.value),
+                    );
                 }
             }
 
@@ -3093,12 +3099,24 @@ impl App {
 
     /// Scrolls the hex dump view down by 256 bytes.
     pub fn hex_scroll_down(&mut self) {
-        self.hex_state.hex_address = self.hex_state.hex_address.wrapping_add(0x100);
+        if let Some(global) = self.hex_state.relative_global.clone() {
+            self.hex_state.relative_offset = self.hex_state.relative_offset.wrapping_add(0x100);
+            self.hex_state.hex_label = format!("{global} + 0x{:X}", self.hex_state.relative_offset);
+        } else {
+            self.hex_state.hex_address = self.hex_state.hex_address.wrapping_add(0x100);
+        }
+        self.hex_state.pending_memory_poll = true;
     }
 
     /// Scrolls the hex dump view up by 256 bytes.
     pub fn hex_scroll_up(&mut self) {
-        self.hex_state.hex_address = self.hex_state.hex_address.wrapping_sub(0x100);
+        if let Some(global) = self.hex_state.relative_global.clone() {
+            self.hex_state.relative_offset = self.hex_state.relative_offset.wrapping_sub(0x100);
+            self.hex_state.hex_label = format!("{global} + 0x{:X}", self.hex_state.relative_offset);
+        } else {
+            self.hex_state.hex_address = self.hex_state.hex_address.wrapping_sub(0x100);
+        }
+        self.hex_state.pending_memory_poll = true;
     }
 
     /// Set the debug pane to view a specific spawn's raw memory.
@@ -3110,19 +3128,24 @@ impl App {
                 .map(|s| (s.displayed_name.clone(), s.spawn_id, sel))
         };
         if let Some((name, id, _idx)) = info {
-            self.hex_state.hex_label = format!("Raw memory: {name} (ID {id})");
             self.status_message = format!("Debug: {name}");
 
             // On Windows, read real spawn memory; on macOS, generate demo hex data
             #[cfg(windows)]
             {
-                self.hex_state.hex_data = self.read_spawn_hex_data(id);
-                self.hex_state.hex_address = 0;
+                self.hex_state.set_view(
+                    0,
+                    format!("Raw memory: {name} (ID {id})"),
+                    self.read_spawn_hex_data(id),
+                );
             }
             #[cfg(not(windows))]
             {
-                self.hex_state.hex_data = generate_demo_hex_data(&name, id);
-                self.hex_state.hex_address = 0x1000;
+                self.hex_state.set_view(
+                    0x1000,
+                    format!("Raw memory: {name} (ID {id})"),
+                    generate_demo_hex_data(&name, id),
+                );
             }
 
             // Pre-load PlayerBase annotations for spawn memory context.
@@ -3415,7 +3438,13 @@ impl App {
                 .all_entries
                 .iter()
                 .filter(|e| e.value > 0)
-                .map(|e| format!("0x{:X}", e.value))
+                .flat_map(|e| {
+                    if e.category == super::state::OffsetCategory::Globals {
+                        vec![format!("0x{:X}", e.value), e.name.clone()]
+                    } else {
+                        vec![format!("0x{:X}", e.value)]
+                    }
+                })
                 .collect();
             self.complete_with_candidates("addr ", rest, &offset_candidates);
             return;
@@ -5356,6 +5385,37 @@ impl App {
         self.execute_normalized_command(&input, orchestrator);
     }
 
+    fn parse_memory_global_reference(&self, input: &str) -> Option<(String, usize)> {
+        let trimmed = input.trim();
+        let (name, offset) = trimmed
+            .split_once('+')
+            .map_or((trimmed, "0"), |(name, offset)| {
+                (name.trim(), offset.trim())
+            });
+        let normalized = Self::normalize_memory_global_name(name);
+        let entry = self.eq_internals_state.all_entries.iter().find(|entry| {
+            entry.category == super::state::OffsetCategory::Globals
+                && Self::normalize_memory_global_name(&entry.name) == normalized
+        })?;
+        let offset = Self::parse_memory_offset_literal(offset)?;
+        Some((entry.name.clone(), offset))
+    }
+
+    fn normalize_memory_global_name(name: &str) -> String {
+        name.chars()
+            .filter(|ch| ch.is_ascii_alphanumeric())
+            .flat_map(char::to_uppercase)
+            .collect()
+    }
+
+    fn parse_memory_offset_literal(input: &str) -> Option<usize> {
+        let trimmed = input
+            .trim()
+            .trim_start_matches("0x")
+            .trim_start_matches("0X");
+        usize::from_str_radix(trimmed, 16).ok()
+    }
+
     fn execute_normalized_command(&mut self, input: &str, orchestrator: &mut Orchestrator) {
         let input = command::normalize_command_alias(input);
 
@@ -6139,8 +6199,17 @@ impl App {
                 if rest.is_empty() {
                     self.usage_feedback(
                         "addr",
-                        "Usage: addr <hex_address>  (e.g. addr 0x00A3B210)",
+                        "Usage: addr <hex_address|global[+offset]>  (e.g. addr 0x00A3B210)",
                     );
+                } else if let Some((global_name, offset)) = self.parse_memory_global_reference(rest)
+                {
+                    self.hex_state.request_relative(global_name.clone(), offset);
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Debug address set to {global_name}+0x{offset:X}"),
+                        false,
+                    );
+                    self.set_active_screen(ActiveScreen::Debug);
                 } else {
                     let hex_str = rest
                         .trim()
@@ -6148,9 +6217,8 @@ impl App {
                         .trim_start_matches("0X");
                     match usize::from_str_radix(hex_str, 16) {
                         Ok(addr) => {
-                            self.hex_state.hex_address = addr;
-                            self.hex_state.hex_label = format!("Manual: 0x{addr:X}");
-                            self.hex_state.pending_memory_poll = true;
+                            self.hex_state
+                                .request_absolute(addr, format!("Manual: 0x{addr:X}"));
                             self.set_feedback(
                                 ToastLevel::Info,
                                 format!("Debug address set to 0x{addr:X}"),

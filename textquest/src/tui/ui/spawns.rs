@@ -628,8 +628,16 @@ pub fn draw_hex_panel_legacy(frame: &mut Frame, area: ratatui::layout::Rect, app
     } else {
         ""
     };
+    let change_indicator = if app.hex_state.previous_hex_data.is_empty() {
+        ""
+    } else {
+        " [changed bytes highlighted]"
+    };
     let blk = panel(
-        format!(" Hex — {} {ann_indicator}", app.hex_state.hex_label),
+        format!(
+            " Hex — {} {ann_indicator}{change_indicator}",
+            app.hex_state.hex_label
+        ),
         border_style,
         t,
     );
@@ -668,11 +676,17 @@ pub fn draw_hex_panel_legacy(frame: &mut Frame, area: ratatui::layout::Rect, app
                 // Build per-byte colored hex spans.
                 for (i, b) in chunk.iter().enumerate() {
                     let byte_offset = row_offset + i;
-                    let style = if let Some(ann) = app.hex_state.annotation_at(byte_offset) {
+                    let mut style = if let Some(ann) = app.hex_state.annotation_at(byte_offset) {
                         Style::default().fg(ANNOTATION_COLORS[ann.color_idx as usize % 6])
                     } else {
                         Style::default().fg(t.text_normal)
                     };
+                    if app.hex_state.byte_changed_at(byte_offset) {
+                        style = style
+                            .fg(Color::LightRed)
+                            .add_modifier(Modifier::BOLD)
+                            .add_modifier(Modifier::REVERSED);
+                    }
                     spans.push(Span::styled(format!("{b:02x} "), style));
                 }
                 // Pad if row is short.
@@ -681,11 +695,21 @@ pub fn draw_hex_panel_legacy(frame: &mut Frame, area: ratatui::layout::Rect, app
                     spans.push(Span::raw(" ".repeat(pad * 3)));
                 }
             } else {
-                let hex_str: String = chunk.iter().map(|b| format!("{b:02x} ")).collect();
-                spans.push(Span::styled(
-                    format!("{hex_str:<48}"),
-                    Style::default().fg(t.text_normal),
-                ));
+                for (i, b) in chunk.iter().enumerate() {
+                    let byte_offset = row_offset + i;
+                    let mut style = Style::default().fg(t.text_normal);
+                    if app.hex_state.byte_changed_at(byte_offset) {
+                        style = style
+                            .fg(Color::LightRed)
+                            .add_modifier(Modifier::BOLD)
+                            .add_modifier(Modifier::REVERSED);
+                    }
+                    spans.push(Span::styled(format!("{b:02x} "), style));
+                }
+                let pad = 16usize.saturating_sub(chunk.len());
+                if pad > 0 {
+                    spans.push(Span::raw(" ".repeat(pad * 3)));
+                }
             }
 
             spans.push(Span::raw(" "));

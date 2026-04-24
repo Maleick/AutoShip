@@ -2640,6 +2640,86 @@ fn send_unsupported_command(command_name: &'static str) {
     );
 }
 
+fn read_debug_memory(address: usize, length: usize) -> Vec<u8> {
+    let length = length.min(4096);
+    let mut buf = vec![0u8; length];
+    let bytes_read = {
+        #[cfg(windows)]
+        {
+            use windows::Win32::System::{
+                Diagnostics::Debug::ReadProcessMemory, Threading::GetCurrentProcess,
+            };
+            let mut bytes_read = 0usize;
+            let _ = unsafe {
+                ReadProcessMemory(
+                    GetCurrentProcess(),
+                    address as *const core::ffi::c_void,
+                    buf.as_mut_ptr() as *mut core::ffi::c_void,
+                    length,
+                    Some(&mut bytes_read),
+                )
+            };
+            bytes_read
+        }
+        #[cfg(not(windows))]
+        {
+            // Non-Windows stub — return deterministic zero bytes for UI checks.
+            let _ = address;
+            length
+        }
+    };
+    buf.truncate(bytes_read);
+    buf
+}
+
+fn send_debug_memory_response(address: usize, length: usize, operation: &'static str) {
+    let bytes = read_debug_memory(address, length);
+    tracing::debug!(
+        address = format!("{:#x}", address),
+        bytes_read = bytes.len(),
+        operation,
+        "debug memory read"
+    );
+    crate::ipc::send_response(textquest_common::ipc::Response::MemoryData { address, bytes });
+}
+
+fn normalize_global_name(name: &str) -> String {
+    name.chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(char::to_uppercase)
+        .collect()
+}
+
+fn compiled_global_address(global_name: &str) -> Option<u64> {
+    let needle = normalize_global_name(global_name);
+    textquest_common::offset_db::OffsetDatabase::from_compiled_offsets()
+        .globals
+        .into_iter()
+        .find_map(|(name, addr)| (normalize_global_name(&name) == needle).then_some(addr))
+}
+
+fn resolve_debug_global_pointer(global_name: &str) -> Option<usize> {
+    let preferred_addr = compiled_global_address(global_name)?;
+    let eq_base = crate::EQ_BASE.load(std::sync::atomic::Ordering::Acquire);
+    let global_addr = textquest_common::offsets::rebase(preferred_addr, eq_base)?;
+
+    #[cfg(windows)]
+    {
+        if !is_readable(global_addr, size_of::<usize>()) {
+            return None;
+        }
+        let ptr = unsafe { core::ptr::read_unaligned(global_addr as *const usize) };
+        (ptr != 0).then_some(ptr)
+    }
+
+    #[cfg(not(windows))]
+    {
+        // Demo builds do not have an EQ process to dereference. Report the
+        // rebased global address so callers still get stable hex-dump output.
+        Some(global_addr)
+    }
+}
+
 /// Dispatch a single IPC command received from the orchestrator.
 fn dispatch_command(cmd: textquest_common::ipc::Command) {
     use std::borrow::Cow;
@@ -3508,42 +3588,34 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             crate::login::switch_character(character_name);
         }
         Command::ReadMemory { address, size } => {
-            let size = size.min(4096);
-            let mut buf = vec![0u8; size];
-            let bytes_read = {
-                #[cfg(windows)]
-                {
-                    use windows::Win32::System::{
-                        Diagnostics::Debug::ReadProcessMemory, Threading::GetCurrentProcess,
-                    };
-                    let mut bytes_read = 0usize;
-                    let _ = unsafe {
-                        ReadProcessMemory(
-                            GetCurrentProcess(),
-                            address as *const core::ffi::c_void,
-                            buf.as_mut_ptr() as *mut core::ffi::c_void,
-                            size,
-                            Some(&mut bytes_read),
-                        )
-                    };
-                    bytes_read
-                }
-                #[cfg(not(windows))]
-                {
-                    // Non-Windows stub — return zeros
-                    size
-                }
-            };
-            buf.truncate(bytes_read);
-            tracing::debug!(
-                address = format!("{:#x}", address),
-                bytes_read,
-                "ReadMemory"
-            );
-            crate::ipc::send_response(textquest_common::ipc::Response::MemoryData {
-                address,
-                bytes: buf,
-            });
+            send_debug_memory_response(address, size, "ReadMemory");
+        }
+        Command::MemoryRead { address, length } => {
+            send_debug_memory_response(address, length, "MemoryRead");
+        }
+        Command::MemoryAnnotate { address, length } => {
+            send_debug_memory_response(address, length, "MemoryAnnotate");
+        }
+        Command::MemoryReadRelative {
+            global_name,
+            offset,
+            length,
+        } => {
+            if let Some(base) = resolve_debug_global_pointer(&global_name)
+                && let Some(address) = base.checked_add(offset)
+            {
+                send_debug_memory_response(address, length, "MemoryReadRelative");
+            } else {
+                tracing::warn!(
+                    global = %global_name,
+                    offset = format!("{:#x}", offset),
+                    "MemoryReadRelative could not resolve global"
+                );
+                send_command_result(
+                    false,
+                    format!("Unknown or unreadable memory global: {global_name}"),
+                );
+            }
         }
         Command::SetChatTimestampConfig { enabled, format } => {
             tracing::info!(enabled, format = ?format, "SetChatTimestampConfig received");

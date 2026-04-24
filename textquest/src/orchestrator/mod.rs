@@ -1412,7 +1412,7 @@ impl Orchestrator {
     }
 
     /// Read raw bytes from the EQ process address space via IPC.
-    /// Sends `ReadMemory` and returns `(address, bytes)` on success, or `None`
+    /// Sends `MemoryRead` and returns `(address, bytes)` on success, or `None`
     /// if the pipe is unavailable or the DLL returns an unexpected response.
     pub fn read_memory(
         &mut self,
@@ -1422,7 +1422,10 @@ impl Orchestrator {
     ) -> Option<(usize, Vec<u8>)> {
         let started_at = Instant::now();
         let pipe = self.get_pipe(pid).ok()?;
-        match pipe.send(&Command::ReadMemory { address, size }) {
+        match pipe.send(&Command::MemoryRead {
+            address,
+            length: size,
+        }) {
             Ok(Response::MemoryData { address, bytes }) => {
                 self.record_ipc_latency_for_pid(pid, started_at);
                 Some((address, bytes))
@@ -1434,6 +1437,44 @@ impl Orchestrator {
             Err(e) => {
                 self.record_ipc_error_for_pid(pid, SessionErrorKind::IpcDispatch);
                 tracing::debug!(pid, address, error = %e, "Failed to read memory");
+                None
+            }
+        }
+    }
+
+    /// Read raw bytes relative to a known EQ global pointer via IPC.
+    pub fn read_memory_relative(
+        &mut self,
+        pid: u32,
+        global_name: impl Into<String>,
+        offset: usize,
+        size: usize,
+    ) -> Option<(usize, Vec<u8>)> {
+        let started_at = Instant::now();
+        let global_name = global_name.into();
+        let pipe = self.get_pipe(pid).ok()?;
+        match pipe.send(&Command::MemoryReadRelative {
+            global_name: global_name.clone(),
+            offset,
+            length: size,
+        }) {
+            Ok(Response::MemoryData { address, bytes }) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
+                Some((address, bytes))
+            }
+            Ok(_) => {
+                self.record_ipc_latency_for_pid(pid, started_at);
+                None
+            }
+            Err(e) => {
+                self.record_ipc_error_for_pid(pid, SessionErrorKind::IpcDispatch);
+                tracing::debug!(
+                    pid,
+                    global = %global_name,
+                    offset,
+                    error = %e,
+                    "Failed to read relative memory"
+                );
                 None
             }
         }
