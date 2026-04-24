@@ -10,7 +10,7 @@
 
 use std::{
     sync::{
-        LazyLock, Mutex,
+        LazyLock, Mutex, PoisonError,
         atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
@@ -66,7 +66,7 @@ pub fn set_enabled(enabled: bool) {
     AUTO_ACCEPT_ENABLED.store(enabled, Ordering::Relaxed);
     AUTO_ACCEPT_SETTINGS
         .lock()
-        .expect("auto accept settings lock poisoned")
+        .unwrap_or_else(PoisonError::into_inner)
         .enabled = enabled;
     tracing::info!(enabled, "Auto-accept dialog handling toggled");
 }
@@ -87,7 +87,7 @@ pub fn set_rez_config(config: AutoRezConfig) {
     {
         let mut guard = AUTO_REZ_CONFIG
             .lock()
-            .expect("auto rez config lock poisoned");
+            .unwrap_or_else(PoisonError::into_inner);
         *guard = config;
     }
 
@@ -110,30 +110,30 @@ pub fn set_settings(settings: AutoAcceptSettings) {
     AUTO_ACCEPT_ENABLED.store(settings.enabled, Ordering::Relaxed);
     *AUTO_ACCEPT_SETTINGS
         .lock()
-        .expect("auto accept settings lock poisoned") = settings;
+        .unwrap_or_else(PoisonError::into_inner) = settings;
     tracing::info!("Auto-accept settings updated");
 }
 
 fn current_rez_config() -> AutoRezConfig {
     AUTO_REZ_CONFIG
         .lock()
-        .expect("auto rez config lock poisoned")
+        .unwrap_or_else(PoisonError::into_inner)
         .clone()
 }
 
 fn clear_rez_runtime_state() {
     *PENDING_REZ_OFFER
         .lock()
-        .expect("pending rez offer lock poisoned") = None;
+        .unwrap_or_else(PoisonError::into_inner) = None;
     *RECENT_REZ_CONTEXT
         .lock()
-        .expect("recent rez context lock poisoned") = None;
+        .unwrap_or_else(PoisonError::into_inner) = None;
 }
 
 fn current_auto_accept_settings() -> AutoAcceptSettings {
     AUTO_ACCEPT_SETTINGS
         .lock()
-        .expect("auto accept settings lock poisoned")
+        .unwrap_or_else(PoisonError::into_inner)
         .clone()
 }
 
@@ -152,7 +152,7 @@ fn generic_dialog_kind(parent_sidl: &str) -> Option<AutoAcceptRequestKind> {
 fn mark_recent_rez_context(at: Instant) {
     *RECENT_REZ_CONTEXT
         .lock()
-        .expect("recent rez context lock poisoned") = Some(at);
+        .unwrap_or_else(PoisonError::into_inner) = Some(at);
 }
 
 fn rez_offer_matches_policy(config: &AutoRezConfig, offer: &RezOffer) -> bool {
@@ -367,7 +367,7 @@ unsafe fn handle_rez_confirmation_dialog(mgr: usize, config: &AutoRezConfig) -> 
     ) else {
         *PENDING_REZ_OFFER
             .lock()
-            .expect("pending rez offer lock poisoned") = None;
+            .unwrap_or_else(PoisonError::into_inner) = None;
         return false;
     };
 
@@ -382,7 +382,7 @@ unsafe fn handle_rez_confirmation_dialog(mgr: usize, config: &AutoRezConfig) -> 
     let elapsed_ms = {
         let mut guard = PENDING_REZ_OFFER
             .lock()
-            .expect("pending rez offer lock poisoned");
+            .unwrap_or_else(PoisonError::into_inner);
         match guard.as_mut() {
             Some(pending) if pending.offer == offer => {
                 pending.first_seen_at.elapsed().as_millis() as u64
@@ -414,7 +414,7 @@ unsafe fn handle_rez_confirmation_dialog(mgr: usize, config: &AutoRezConfig) -> 
                 mark_recent_rez_context(now);
                 *PENDING_REZ_OFFER
                     .lock()
-                    .expect("pending rez offer lock poisoned") = None;
+                    .unwrap_or_else(PoisonError::into_inner) = None;
             }
             true
         }
@@ -428,7 +428,7 @@ unsafe fn handle_rez_confirmation_dialog(mgr: usize, config: &AutoRezConfig) -> 
                 );
                 *PENDING_REZ_OFFER
                     .lock()
-                    .expect("pending rez offer lock poisoned") = None;
+                    .unwrap_or_else(PoisonError::into_inner) = None;
             }
             true
         }
@@ -501,7 +501,7 @@ unsafe fn handle_recent_rez_respawn(mgr: usize) -> bool {
     {
         let mut guard = RECENT_REZ_CONTEXT
             .lock()
-            .expect("recent rez context lock poisoned");
+            .unwrap_or_else(PoisonError::into_inner);
         let Some(context_at) = *guard else {
             return false;
         };
@@ -534,7 +534,7 @@ unsafe fn handle_recent_rez_respawn(mgr: usize) -> bool {
     crate::eq::widgets::click_button_via_vtable(button_wnd);
     *RECENT_REZ_CONTEXT
         .lock()
-        .expect("recent rez context lock poisoned") = None;
+        .unwrap_or_else(PoisonError::into_inner) = None;
     true
 }
 
