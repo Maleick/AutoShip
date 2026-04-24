@@ -53,6 +53,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
   status_file="$dir/status"
   prompt_file="$dir/AUTOSHIP_PROMPT.md"
   model_file="$dir/model"
+  role_file="$dir/role"
   [[ -f "$status_file" && -f "$prompt_file" ]] || continue
   status=$(tr -d '[:space:]' < "$status_file")
   [[ "$status" == "QUEUED" ]] || continue
@@ -64,9 +65,11 @@ for dir in "$WORKSPACES_DIR"/*/; do
   fi
 
   model="opencode/nemotron-3-super-free"
+  role="implementer"
   [[ -f "$model_file" ]] && model=$(cat "$model_file")
+  [[ -f "$role_file" ]] && role=$(cat "$role_file")
   echo "RUNNING" > "$status_file"
-  bash "$REPO_ROOT/hooks/update-state.sh" set-running "$(basename "$dir")" agent="$model" 2>/dev/null || true
+  bash "$REPO_ROOT/hooks/update-state.sh" set-running "$(basename "$dir")" agent="$model" model="$model" role="$role" 2>/dev/null || true
 
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "DRY_RUN start $(basename "$dir") with $model"

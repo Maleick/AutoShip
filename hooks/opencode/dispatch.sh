@@ -78,7 +78,21 @@ resolve_model() {
   printf '%s\n' ""
 }
 
+resolve_role() {
+  case "$1" in
+    docs|documentation) printf '%s\n' docs ;;
+    review|code_review) printf '%s\n' reviewer ;;
+    test|tests|ci_fix) printf '%s\n' tester ;;
+    release) printf '%s\n' release ;;
+    simplify|refactor) printf '%s\n' simplifier ;;
+    plan|planning) printf '%s\n' planner ;;
+    lead|orchestration|coordination) printf '%s\n' lead ;;
+    *) printf '%s\n' implementer ;;
+  esac
+}
+
 MODEL=$(resolve_model "$TASK_TYPE" "$ISSUE_NUM" "$MODEL_OVERRIDE")
+ROLE=$(resolve_role "$TASK_TYPE")
 if [[ -z "$MODEL" ]]; then
   mkdir -p "$WORKSPACE_PATH"
   printf 'BLOCKED\n' > "$WORKSPACE_PATH/status"
@@ -101,6 +115,7 @@ mkdir -p "$WORKSPACE_PATH"
 date -u +%Y-%m-%dT%H:%M:%SZ > "$WORKSPACE_PATH/started_at"
 printf 'QUEUED\n' > "$WORKSPACE_PATH/status"
 printf '%s\n' "$MODEL" > "$WORKSPACE_PATH/model"
+printf '%s\n' "$ROLE" > "$WORKSPACE_PATH/role"
 
 cat > "$WORKSPACE_PATH/AUTOSHIP_PROMPT.md" <<EOF
 # AutoShip Agent Prompt
@@ -115,6 +130,9 @@ $TASK_TYPE
 
 ## Selected Model
 $MODEL
+
+## Specialized Role
+$ROLE
 
 ## Body
 $BODY
@@ -132,9 +150,9 @@ Use this conventional PR title when creating a PR:
 $(bash "$SCRIPT_DIR/pr-title.sh" --issue "$ISSUE_NUM" --title "$TITLE" --labels "$LABELS")
 EOF
 
-bash "$REPO_ROOT/hooks/update-state.sh" set-queued "$ISSUE_KEY" agent="$MODEL" task_type="$TASK_TYPE" 2>/dev/null || true
+bash "$REPO_ROOT/hooks/update-state.sh" set-queued "$ISSUE_KEY" agent="$MODEL" model="$MODEL" role="$ROLE" task_type="$TASK_TYPE" 2>/dev/null || true
 
-echo "Queued issue #$ISSUE_NUM for $MODEL ($TASK_TYPE)"
+echo "Queued issue #$ISSUE_NUM for $MODEL ($TASK_TYPE, role=$ROLE)"
 [[ -n "$cap_note" ]] && echo "$cap_note"
 echo "Worktree: $FULL_WORKSPACE_PATH"
 echo "Run: bash hooks/opencode/runner.sh"

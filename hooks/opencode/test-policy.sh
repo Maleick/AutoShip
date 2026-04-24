@@ -346,6 +346,52 @@ chmod +x "$UPDATE_REPO/bin/gh" "$UPDATE_REPO/hooks/update-state.sh"
 assert_eq "running" "$(jq -r '.issues["issue-123"].state' "$UPDATE_REPO/.autoship/state.json")" "update-state stores normalized issue key"
 assert_eq "123" "$(head -1 "$UPDATE_REPO/gh-issues.log")" "update-state passes numeric issue to gh"
 
+DISPATCH_REPO="$TMP_DIR/dispatch-repo"
+mkdir -p "$DISPATCH_REPO/.autoship" "$DISPATCH_REPO/hooks/opencode" "$DISPATCH_REPO/hooks" "$DISPATCH_REPO/bin"
+git init -q "$DISPATCH_REPO"
+git -C "$DISPATCH_REPO" config user.email autoship@example.invalid
+git -C "$DISPATCH_REPO" config user.name AutoShip
+git -C "$DISPATCH_REPO" remote add origin git@github.com:owner/repo.git
+printf 'base\n' > "$DISPATCH_REPO/README.md"
+git -C "$DISPATCH_REPO" add README.md
+git -C "$DISPATCH_REPO" commit -q -m initial
+cp "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/safety-filter.sh" "$SCRIPT_DIR/pr-title.sh" "$DISPATCH_REPO/hooks/opencode/"
+cp "$SCRIPT_DIR/../update-state.sh" "$DISPATCH_REPO/hooks/update-state.sh"
+cat > "$DISPATCH_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+cat > "$DISPATCH_REPO/.autoship/model-routing.json" <<'JSON'
+{"models":[{"id":"free/strong:free","cost":"free","strength":90,"max_task_types":["docs","medium_code"]}]}
+JSON
+cat > "$DISPATCH_REPO/bin/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "issue view" ]]; then
+  case "$4" in
+    title) printf 'Issue title\n' ;;
+    body) printf 'Issue body\n' ;;
+    labels) printf 'agent:ready\n' ;;
+  esac
+  exit 0
+fi
+if [[ "$1 $2" == "label list" ]]; then
+  printf '%s\n' autoship:in-progress autoship:blocked autoship:paused autoship:done
+  exit 0
+fi
+if [[ "$1 $2" == "issue edit" ]]; then
+  exit 0
+fi
+exit 0
+SH
+chmod +x "$DISPATCH_REPO/bin/gh" "$DISPATCH_REPO/hooks/opencode/dispatch.sh" "$DISPATCH_REPO/hooks/opencode/create-worktree.sh" "$DISPATCH_REPO/hooks/opencode/select-model.sh" "$DISPATCH_REPO/hooks/opencode/safety-filter.sh" "$DISPATCH_REPO/hooks/opencode/pr-title.sh" "$DISPATCH_REPO/hooks/update-state.sh"
+(
+  cd "$DISPATCH_REPO"
+  PATH="$DISPATCH_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 456 docs >/dev/null
+)
+assert_eq "docs" "$(cat "$DISPATCH_REPO/.autoship/workspaces/issue-456/role")" "dispatch records specialized role file"
+assert_eq "docs" "$(jq -r '.issues["issue-456"].role' "$DISPATCH_REPO/.autoship/state.json")" "dispatch records specialized role in state"
+assert_eq "free/strong:free" "$(jq -r '.issues["issue-456"].model' "$DISPATCH_REPO/.autoship/state.json")" "dispatch records selected model in state"
+grep -F '## Specialized Role' "$DISPATCH_REPO/.autoship/workspaces/issue-456/AUTOSHIP_PROMPT.md" >/dev/null || fail "dispatch records specialized role in prompt"
+
 PACKAGE_REPO="$TMP_DIR/package-repo"
 cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
 (
