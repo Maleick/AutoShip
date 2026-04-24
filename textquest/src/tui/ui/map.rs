@@ -2,7 +2,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    sync::LazyLock,
+    sync::{Arc, LazyLock, Mutex},
     time::Instant,
 };
 
@@ -40,6 +40,12 @@ static PERF_TRACE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
         })
         .unwrap_or(false)
 });
+
+const MAP_LAYER_COUNT: usize = 4;
+const MAP_LAYER_CACHE_MAX_ENTRIES: usize = 64;
+
+static MAP_LAYER_RENDER_CACHE: LazyLock<Mutex<HashMap<MapLayerRenderKey, Arc<CachedMapLayer>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Draw the zone map screen with spawn positions and navigation overlay.
 ///
@@ -176,6 +182,147 @@ struct PendingSpawnCell {
     count: u16,
     last_glyph: Option<(char, Color)>,
     selected_glyph: Option<(char, Color)>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct MapLayerRenderKey {
+    map_ptr: usize,
+    lines_ptr: usize,
+    points_ptr: usize,
+    line_count: usize,
+    point_count: usize,
+    layer: u8,
+    width: u16,
+    height: u16,
+    player_z_bits: Option<u32>,
+    z_filter_bits: u32,
+    theme_kind: u8,
+    center_x_bits: u32,
+    center_y_bits: u32,
+    scale_x_bits: u32,
+    scale_y_bits: u32,
+}
+
+#[derive(Debug)]
+struct CachedMapLayer {
+    lines: Vec<CachedProjectedLine>,
+    points: Vec<CachedProjectedPoint>,
+}
+
+#[derive(Debug)]
+struct CachedProjectedLine {
+    order: usize,
+    c1: i32,
+    r1: i32,
+    c2: i32,
+    r2: i32,
+    color: Color,
+}
+
+#[derive(Debug)]
+struct CachedProjectedPoint {
+    order: usize,
+    col: i32,
+    row: i32,
+    marker: char,
+    color: Color,
+    label: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MapLayer {
+    Base,
+    Labels,
+    Annotations,
+    Extended,
+}
+
+impl MapLayer {
+    const ALL: [Self; MAP_LAYER_COUNT] =
+        [Self::Base, Self::Labels, Self::Annotations, Self::Extended];
+
+    fn from_raw(layer: u8) -> Self {
+        match layer {
+            0 => Self::Base,
+            1 => Self::Labels,
+            2 => Self::Annotations,
+            _ => Self::Extended,
+        }
+    }
+
+    fn index(self) -> usize {
+        match self {
+            Self::Base => 0,
+            Self::Labels => 1,
+            Self::Annotations => 2,
+            Self::Extended => 3,
+        }
+    }
+
+    fn id(self) -> u8 {
+        self.index() as u8
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Base => "base",
+            Self::Labels => "labels",
+            Self::Annotations => "annotations",
+            Self::Extended => "extended",
+        }
+    }
+
+    fn short_label(self) -> &'static str {
+        match self {
+            Self::Base => "B",
+            Self::Labels => "L",
+            Self::Annotations => "A",
+            Self::Extended => "E",
+        }
+    }
+}
+
+fn map_line_layer_visible(layer: MapLayer, app: &App) -> bool {
+    match layer {
+        MapLayer::Base => app.map_state.show_geometry,
+        MapLayer::Labels => app.map_state.show_labels,
+        MapLayer::Annotations => app.map_state.show_annotations,
+        MapLayer::Extended => app.map_state.show_extended,
+    }
+}
+
+fn map_point_layer_visible(layer: MapLayer, app: &App) -> bool {
+    app.map_state.show_labels
+        && match layer {
+            MapLayer::Base | MapLayer::Labels => true,
+            MapLayer::Annotations => app.map_state.show_annotations,
+            MapLayer::Extended => app.map_state.show_extended,
+        }
+}
+
+fn map_layer_status(app: &App) -> String {
+    MapLayer::ALL
+        .iter()
+        .map(|layer| {
+            let active =
+                map_line_layer_visible(*layer, app) || map_point_layer_visible(*layer, app);
+            format!(
+                "{}:{}",
+                layer.short_label(),
+                if active { "on" } else { "off" }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn theme_kind_cache_id(kind: crate::tui::theme::ThemeKind) -> u8 {
+    match kind {
+        crate::tui::theme::ThemeKind::DarkModern => 0,
+        crate::tui::theme::ThemeKind::Classic => 1,
+        crate::tui::theme::ThemeKind::Dracula => 2,
+        crate::tui::theme::ThemeKind::Neriak => 3,
+    }
 }
 
 fn map_spawn_cache_key(
@@ -688,7 +835,7 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         .unwrap_or_else(|| String::from(" | Sel none"));
     let filter_label = app.map_state.filters.inline_flags();
     let layer_label = format!(
-        " [{}{}{}{}{}{}{}]",
+        " [{}{}{}{}{}{}{} | {}]",
         if app.map_state.show_geometry {
             "G"
         } else {
@@ -712,6 +859,7 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         } else {
             "-"
         },
+        map_layer_status(app),
     );
 
     let border_style = if app.is_panel_focused(ActivePanel::TacticalMap) {
@@ -818,92 +966,20 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         (col, row)
     };
 
-    if app.map_state.show_geometry
-        && let Some(map) = &app.map_state.zone_map
-    {
-        let hide_annotations = !app.map_state.show_annotations;
-        let hide_extended = !app.map_state.show_extended;
-        for ml in &map.lines {
-            if hide_annotations && ml.layer == 2 {
-                continue;
-            }
-            if hide_extended && ml.layer == 3 {
-                continue;
-            }
-            if !visible_region.contains_line(ml.x1, ml.y1, ml.x2, ml.y2) {
-                continue;
-            }
-            let color = map_rgb_to_color(ml.r, ml.g, ml.b, t);
-            clip_project_draw_line(
-                ml.x1,
-                ml.y1,
-                ml.z1,
-                ml.x2,
-                ml.y2,
-                ml.z2,
-                player_z,
-                z_range,
-                &to_grid,
-                w,
-                h,
-                &mut grid,
-                color,
-                LinePaintMode::BlankOnly,
-            );
-        }
-    }
-
-    if app.map_state.show_labels
-        && let Some(map) = &app.map_state.zone_map
-    {
-        let hide_annotations = !app.map_state.show_annotations;
-        let hide_extended = !app.map_state.show_extended;
-        let show_labels = app.map_state.zoom >= 0.8;
-        for mp in &map.points {
-            if hide_annotations && mp.layer == 2 {
-                continue;
-            }
-            if hide_extended && mp.layer == 3 {
-                continue;
-            }
-            if !visible_region.contains_point(mp.x, mp.y) {
-                continue;
-            }
-            let (col, row) = to_grid(mp.x, mp.y);
-            if grid_in_bounds(col, row, w, h) {
-                let marker = if mp.label.is_empty() {
-                    '*'
-                } else {
-                    mp.label.chars().next().unwrap_or('*')
-                };
-                let point_color = map_rgb_to_color(mp.r, mp.g, mp.b, t);
-                grid[row as usize][col as usize] = (marker, point_color);
-
-                if show_labels {
-                    let label_budget = if app.map_state.zoom > 1.8 {
-                        20
-                    } else if app.map_state.zoom > 1.1 {
-                        16
-                    } else if w > 120 {
-                        12
-                    } else {
-                        8
-                    };
-                    let max_label_len = w.saturating_sub(col as usize + 1);
-                    for (i, c) in mp
-                        .label
-                        .chars()
-                        .take(max_label_len.min(label_budget))
-                        .enumerate()
-                    {
-                        let lc = col as usize + 1 + i;
-                        if lc < w && grid[row as usize][lc].0 == ' ' {
-                            grid[row as usize][lc] = (c, point_color);
-                        }
-                    }
-                }
-            }
-        }
+    if let Some(map) = &app.map_state.zone_map {
+        draw_cached_map_layers(
+            map,
+            app,
+            &transform,
+            &visible_region,
+            player_z,
+            z_range,
+            &to_grid,
+            w,
+            h,
+            &mut grid,
+            t,
+        );
     }
 
     if app.map_state.show_navmesh
@@ -1564,6 +1640,340 @@ impl VisibleMapRegion {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn draw_cached_map_layers(
+    map: &crate::eq::map_parser::ZoneMap,
+    app: &App,
+    transform: &MapTransform,
+    visible_region: &VisibleMapRegion,
+    player_z: Option<f32>,
+    z_range: f32,
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    w: usize,
+    h: usize,
+    grid: &mut [Vec<(char, Color)>],
+    t: &Theme,
+) {
+    let perf_total_start = if *PERF_TRACE_ENABLED {
+        Some(Instant::now())
+    } else {
+        None
+    };
+    let mut cached_layers: Vec<(MapLayer, Arc<CachedMapLayer>)> = Vec::with_capacity(4);
+
+    for layer in MapLayer::ALL {
+        let line_visible = map_line_layer_visible(layer, app);
+        let point_visible = map_point_layer_visible(layer, app);
+        if !line_visible && !point_visible {
+            continue;
+        }
+
+        let perf_layer_start = if *PERF_TRACE_ENABLED {
+            Some(Instant::now())
+        } else {
+            None
+        };
+        let key = map_layer_render_key(app, map, layer, transform, w, h, player_z, z_range);
+        let (cached, cache_hit) = cached_map_layer(
+            key,
+            map,
+            layer,
+            visible_region,
+            player_z,
+            z_range,
+            to_grid,
+            w,
+            h,
+            t,
+        );
+
+        if let Some(start) = perf_layer_start {
+            tracing::info!(
+                target: "textquest::perf",
+                layer = layer.label(),
+                cache_hit,
+                line_count = cached.lines.len(),
+                point_count = cached.points.len(),
+                elapsed_ms = start.elapsed().as_secs_f64() * 1000.0,
+                "Tactical map layer cache read"
+            );
+        }
+
+        cached_layers.push((layer, cached));
+    }
+
+    paint_cached_map_lines(&cached_layers, app, w, h, grid);
+    paint_cached_map_points(&cached_layers, app, w, grid);
+
+    if let Some(start) = perf_total_start {
+        tracing::info!(
+            target: "textquest::perf",
+            active_layers = map_layer_status(app),
+            elapsed_ms = start.elapsed().as_secs_f64() * 1000.0,
+            "Tactical map layers rendered"
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cached_map_layer(
+    key: MapLayerRenderKey,
+    map: &crate::eq::map_parser::ZoneMap,
+    layer: MapLayer,
+    visible_region: &VisibleMapRegion,
+    player_z: Option<f32>,
+    z_range: f32,
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    w: usize,
+    h: usize,
+    t: &Theme,
+) -> (Arc<CachedMapLayer>, bool) {
+    if let Ok(cache) = MAP_LAYER_RENDER_CACHE.lock()
+        && let Some(cached) = cache.get(&key)
+    {
+        return (Arc::clone(cached), true);
+    }
+
+    let cached = Arc::new(build_cached_map_layer(
+        map,
+        layer,
+        visible_region,
+        player_z,
+        z_range,
+        to_grid,
+        w,
+        h,
+        t,
+    ));
+
+    if let Ok(mut cache) = MAP_LAYER_RENDER_CACHE.lock() {
+        if cache.len() >= MAP_LAYER_CACHE_MAX_ENTRIES {
+            cache.clear();
+        }
+        cache.insert(key, Arc::clone(&cached));
+    }
+
+    (cached, false)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_cached_map_layer(
+    map: &crate::eq::map_parser::ZoneMap,
+    layer: MapLayer,
+    visible_region: &VisibleMapRegion,
+    player_z: Option<f32>,
+    z_range: f32,
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    w: usize,
+    h: usize,
+    t: &Theme,
+) -> CachedMapLayer {
+    let mut lines = Vec::new();
+    for (order, ml) in map.lines.iter().enumerate() {
+        if MapLayer::from_raw(ml.layer) != layer {
+            continue;
+        }
+        if !visible_region.contains_line(ml.x1, ml.y1, ml.x2, ml.y2) {
+            continue;
+        }
+        let (lx1, ly1, lx2, ly2) = if let Some(pz) = player_z {
+            match clip_line_z(ml.x1, ml.y1, ml.z1, ml.x2, ml.y2, ml.z2, pz, z_range) {
+                Some(coords) => coords,
+                None => continue,
+            }
+        } else {
+            (ml.x1, ml.y1, ml.x2, ml.y2)
+        };
+        let (c1, r1) = to_grid(lx1, ly1);
+        let (c2, r2) = to_grid(lx2, ly2);
+        if let Some((c1, r1, c2, r2)) = clip_grid_line(c1, r1, c2, r2, w, h) {
+            lines.push(CachedProjectedLine {
+                order,
+                c1,
+                r1,
+                c2,
+                r2,
+                color: map_rgb_to_color(ml.r, ml.g, ml.b, t),
+            });
+        }
+    }
+
+    let mut points = Vec::new();
+    for (order, mp) in map.points.iter().enumerate() {
+        if MapLayer::from_raw(mp.layer) != layer {
+            continue;
+        }
+        if !visible_region.contains_point(mp.x, mp.y) {
+            continue;
+        }
+        let (col, row) = to_grid(mp.x, mp.y);
+        if grid_in_bounds(col, row, w, h) {
+            points.push(CachedProjectedPoint {
+                order,
+                col,
+                row,
+                marker: mp.label.chars().next().unwrap_or('*'),
+                color: map_rgb_to_color(mp.r, mp.g, mp.b, t),
+                label: mp.label.clone(),
+            });
+        }
+    }
+
+    CachedMapLayer { lines, points }
+}
+
+fn map_layer_render_key(
+    app: &App,
+    map: &crate::eq::map_parser::ZoneMap,
+    layer: MapLayer,
+    transform: &MapTransform,
+    w: usize,
+    h: usize,
+    player_z: Option<f32>,
+    z_range: f32,
+) -> MapLayerRenderKey {
+    MapLayerRenderKey {
+        map_ptr: std::ptr::from_ref(map) as usize,
+        lines_ptr: map.lines.as_ptr() as usize,
+        points_ptr: map.points.as_ptr() as usize,
+        line_count: map.lines.len(),
+        point_count: map.points.len(),
+        layer: layer.id(),
+        width: w.min(usize::from(u16::MAX)) as u16,
+        height: h.min(usize::from(u16::MAX)) as u16,
+        player_z_bits: player_z.map(f32::to_bits),
+        z_filter_bits: z_range.to_bits(),
+        theme_kind: theme_kind_cache_id(app.theme_kind),
+        center_x_bits: transform.center_x.to_bits(),
+        center_y_bits: transform.center_y.to_bits(),
+        scale_x_bits: transform.scale_x.to_bits(),
+        scale_y_bits: transform.scale_y.to_bits(),
+    }
+}
+
+fn paint_cached_map_lines(
+    cached_layers: &[(MapLayer, Arc<CachedMapLayer>)],
+    app: &App,
+    w: usize,
+    h: usize,
+    grid: &mut [Vec<(char, Color)>],
+) {
+    let active_layers: Vec<(MapLayer, &CachedMapLayer)> = cached_layers
+        .iter()
+        .filter(|(layer, _)| map_line_layer_visible(*layer, app))
+        .map(|(layer, cached)| (*layer, cached.as_ref()))
+        .collect();
+    let mut next_indices = vec![0usize; active_layers.len()];
+
+    loop {
+        let mut selected_index = None;
+        let mut selected_order = usize::MAX;
+        for (idx, (_, cached)) in active_layers.iter().enumerate() {
+            if let Some(line) = cached.lines.get(next_indices[idx])
+                && line.order < selected_order
+            {
+                selected_index = Some(idx);
+                selected_order = line.order;
+            }
+        }
+
+        let Some(idx) = selected_index else {
+            break;
+        };
+        let line = &active_layers[idx].1.lines[next_indices[idx]];
+        bresenham_line(
+            line.c1,
+            line.r1,
+            line.c2,
+            line.r2,
+            w,
+            h,
+            grid,
+            line.color,
+            LinePaintMode::BlankOnly,
+        );
+        next_indices[idx] += 1;
+    }
+}
+
+fn paint_cached_map_points(
+    cached_layers: &[(MapLayer, Arc<CachedMapLayer>)],
+    app: &App,
+    w: usize,
+    grid: &mut [Vec<(char, Color)>],
+) {
+    let active_layers: Vec<(MapLayer, &CachedMapLayer)> = cached_layers
+        .iter()
+        .filter(|(layer, _)| map_point_layer_visible(*layer, app))
+        .map(|(layer, cached)| (*layer, cached.as_ref()))
+        .collect();
+    let mut next_indices = vec![0usize; active_layers.len()];
+    let show_labels = app.map_state.zoom >= 0.8;
+
+    loop {
+        let mut selected_index = None;
+        let mut selected_order = usize::MAX;
+        for (idx, (_, cached)) in active_layers.iter().enumerate() {
+            if let Some(point) = cached.points.get(next_indices[idx])
+                && point.order < selected_order
+            {
+                selected_index = Some(idx);
+                selected_order = point.order;
+            }
+        }
+
+        let Some(idx) = selected_index else {
+            break;
+        };
+        let point = &active_layers[idx].1.points[next_indices[idx]];
+        paint_cached_map_point(point, show_labels, app.map_state.zoom, w, grid);
+        next_indices[idx] += 1;
+    }
+}
+
+fn paint_cached_map_point(
+    point: &CachedProjectedPoint,
+    show_labels: bool,
+    zoom: f32,
+    w: usize,
+    grid: &mut [Vec<(char, Color)>],
+) {
+    let h = grid.len();
+    if !grid_in_bounds(point.col, point.row, w, h) {
+        return;
+    }
+
+    let row = point.row as usize;
+    let col = point.col as usize;
+    grid[row][col] = (point.marker, point.color);
+
+    if !show_labels {
+        return;
+    }
+
+    let label_budget = if zoom > 1.8 {
+        20
+    } else if zoom > 1.1 {
+        16
+    } else if w > 120 {
+        12
+    } else {
+        8
+    };
+    let max_label_len = w.saturating_sub(col + 1);
+    for (i, c) in point
+        .label
+        .chars()
+        .take(max_label_len.min(label_budget))
+        .enumerate()
+    {
+        let lc = col + 1 + i;
+        if lc < w && grid[row][lc].0 == ' ' {
+            grid[row][lc] = (c, point.color);
+        }
+    }
+}
+
 const MULTI_FLOOR_ZONE_Z_SPAN: f32 = 40.0;
 
 fn draw_zone_exit_overlay(
@@ -2139,6 +2549,101 @@ fn clip_line_z(
 
 /// Returns true if `(col, row)` is within a `w × h` grid (both non-negative and
 /// in-bounds).
+fn clip_grid_line(
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    w: usize,
+    h: usize,
+) -> Option<(i32, i32, i32, i32)> {
+    if w == 0 || h == 0 {
+        return None;
+    }
+
+    const LEFT: u8 = 0b0001;
+    const RIGHT: u8 = 0b0010;
+    const TOP: u8 = 0b0100;
+    const BOTTOM: u8 = 0b1000;
+
+    let max_x = (w - 1) as f32;
+    let max_y = (h - 1) as f32;
+    let mut x0 = x0 as f32;
+    let mut y0 = y0 as f32;
+    let mut x1 = x1 as f32;
+    let mut y1 = y1 as f32;
+
+    let out_code = |x: f32, y: f32| -> u8 {
+        let mut code = 0;
+        if x < 0.0 {
+            code |= LEFT;
+        } else if x > max_x {
+            code |= RIGHT;
+        }
+        if y < 0.0 {
+            code |= TOP;
+        } else if y > max_y {
+            code |= BOTTOM;
+        }
+        code
+    };
+
+    loop {
+        let code0 = out_code(x0, y0);
+        let code1 = out_code(x1, y1);
+        if (code0 | code1) == 0 {
+            return Some((
+                x0.round().clamp(0.0, max_x) as i32,
+                y0.round().clamp(0.0, max_y) as i32,
+                x1.round().clamp(0.0, max_x) as i32,
+                y1.round().clamp(0.0, max_y) as i32,
+            ));
+        }
+        if (code0 & code1) != 0 {
+            return None;
+        }
+
+        let code_out = if code0 != 0 { code0 } else { code1 };
+        let (x, y) = if (code_out & BOTTOM) != 0 {
+            if (y1 - y0).abs() <= f32::EPSILON {
+                return None;
+            }
+            let y = max_y;
+            let x = x0 + (x1 - x0) * (y - y0) / (y1 - y0);
+            (x, y)
+        } else if (code_out & TOP) != 0 {
+            if (y1 - y0).abs() <= f32::EPSILON {
+                return None;
+            }
+            let y = 0.0;
+            let x = x0 + (x1 - x0) * (y - y0) / (y1 - y0);
+            (x, y)
+        } else if (code_out & RIGHT) != 0 {
+            if (x1 - x0).abs() <= f32::EPSILON {
+                return None;
+            }
+            let x = max_x;
+            let y = y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+            (x, y)
+        } else {
+            if (x1 - x0).abs() <= f32::EPSILON {
+                return None;
+            }
+            let x = 0.0;
+            let y = y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+            (x, y)
+        };
+
+        if code_out == code0 {
+            x0 = x;
+            y0 = y;
+        } else {
+            x1 = x;
+            y1 = y;
+        }
+    }
+}
+
 fn grid_in_bounds(col: i32, row: i32, w: usize, h: usize) -> bool {
     col >= 0 && (col as usize) < w && row >= 0 && (row as usize) < h
 }
@@ -2272,6 +2777,10 @@ fn bresenham_line(
     color: ratatui::style::Color,
     paint_mode: LinePaintMode,
 ) {
+    let Some((x0, y0, x1, y1)) = clip_grid_line(x0, y0, x1, y1, w, h) else {
+        return;
+    };
+    let glyph = line_char(x0, y0, x1, y1);
     let dx = (x1 - x0).abs();
     let dy = -(y1 - y0).abs();
     let sx: i32 = if x0 < x1 { 1 } else { -1 };
@@ -2285,7 +2794,7 @@ fn bresenham_line(
         if grid_in_bounds(cx, cy, w, h) {
             let (ux, uy) = (cx as usize, cy as usize);
             if can_paint_line_cell(grid[uy][ux].0, paint_mode) {
-                grid[uy][ux] = (line_char(x0, y0, x1, y1), color);
+                grid[uy][ux] = (glyph, color);
             }
         }
         if cx == x1 && cy == y1 {
