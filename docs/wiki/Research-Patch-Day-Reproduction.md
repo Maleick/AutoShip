@@ -564,3 +564,45 @@ As of this document update:
 - the desktop test folder now has repo-generated launchers that target the fresh desktop artifacts instead of stale workspace-root copies
 - a fresh in-world Test retest is still required after these rebuilt artifacts because `eqgame.exe` was not running at the time of the rebuild/package step
 - the next Test retest should confirm whether `instEQZoneInfo` is direct or pointer-indirect on the current patch; both shapes are now logged in dump mode
+
+## 2026-04-15 → 2026-04-23 OpenVanilla Signal Trail
+
+`CLIENT_DATE` in `textquest-common/src/offsets.rs` is currently `20260415` (stamp: `Apr 15 2026`). The following RedGuides/openvanilla master-branch commits landed after that stamp; they are the upstream signals for the next patch-day sync. Times UTC.
+
+### eqlib submodule bumps (Apr 18 → Apr 22) — offset-drift evidence
+
+| Date (UTC) | Author | Message |
+|------------|--------|---------|
+| 2026-04-18 | brainiac | `Update eqlib (rof2)` |
+| 2026-04-19 | Redbot | `updating draft eqlib for live` |
+| 2026-04-19 | Redbot | `update eqlib submodule` |
+| 2026-04-19 | Redbot | `[auto] updating live submodules` |
+| 2026-04-20 | Redbot | `updating eqlib submodule` |
+| 2026-04-20 | Redbot | `another pointer update for eqlib` |
+| 2026-04-21 | Redbot | `eqlib update` |
+| 2026-04-22 | Redbot | `Merge remote-tracking branch 'mq/master'` |
+| 2026-04-23 | Redbot | `Merge tag 'rel-emu-rof2'` (emu-rof2 release cut) |
+
+Interpretation: the compressed four-day pointer-update cadence on the live branch is the classic MQ post-patch drift pattern. The Apr 19 cluster is the most likely live-patch day. Treat `20260415` as stale until the eqlib headers are re-imported and offsets re-validated.
+
+### Other patch-day-relevant changes
+
+| Date (UTC) | Author | Message | Relevance |
+|------------|--------|---------|-----------|
+| 2026-04-18 | brainiac | `emu-rof2: Implement fix for D3DXEffects::CEffect::FindValue crash` | EMU RoF2 only — not applicable to live TextQuest |
+| 2026-04-19 | brainiac | `Fix expansion check in MQ2Windows` | Potential relevance to TextQuest's window-state detection; worth a cross-check |
+| 2026-04-19 | brainiac | `Fix ImGuiTextureObject to be trivially copyable` | Overlay-rendering path; TextQuest overlay is independent but confirms ImGui surface instability this cycle |
+| 2026-04-21 | Redbot | `autoaccept update` | MQ2AutoAccept plugin change — post-patch dialog string or widget drift is plausible. If we see `dialog.rs` rez-accept regressions, cross-reference MQ2AutoAccept diffs |
+| 2026-04-21 | johnfking | `Fix context menu losing focus and not closing on focus loss` | UI lifecycle; not directly hookable by TextQuest but indicates widget focus edge-cases may have shifted |
+| 2026-04-22 | Knightly1 | `Update vcpkg gitmodule` (switched from MacroQuest fork to Microsoft official repo, branch `master`) | Build-time only |
+| 2026-04-23 | Knightly1 | `Fix foreground in some situations` (thread input attachment) | Potentially relevant to TextQuest's foregrounding / window-title runtime; if multi-client focus regressions appear after sync, diff this change |
+| 2026-04-23 | Knightly1 | `lua imgui: Fix BeginPopupModal and add mq.candelay()` (#994) | Lua-only — no TextQuest impact |
+| 2026-04-23 | brainiac | `rof2: Fix alt ability inspector crash` | EMU RoF2 only |
+
+### Action items for the next sync pass
+
+1. Bump `CLIENT_DATE` and `EXPECTED_VERSION_DATE` (and `ACTUAL_VERSION_DATE` address) to the post-patch values after importing the refreshed eqlib headers. Follow the promotion gate in `docs/patch-day-runbook.md` — do not bump from upstream alone without Ghidra-backed address verification (the 2026-04-09 `ZoneGuideManagerClient` false-promotion incident is the precedent).
+2. Run `scripts/import_mq_offsets.py` with the post-patch `eqgame.h` / `eqmain.h` from `macroquest/eqlib:live`.
+3. Re-validate the anti-cheat offsets in `offsets.rs` lines 353–384 (`NET_SEND`, `OUTBOUND_MSG_COUNTER`, `INBOUND_MSG_COUNTER`, `FILE_INTEGRITY_DISPATCHER`, `SERVER_MEMCHECK_HANDLER`, `WORLD_AUTHENTICATE`, `SYSTEM_FINGERPRINT`, `CHEATER_LD_FLAG_VAR`) — these are not in MQ headers, so pointer drift applies via bulk delta from a known-good function.
+4. Cross-reference MQ2AutoAccept and "Fix expansion check in MQ2Windows" diffs before trusting TextQuest's `dialog.rs` rez-accept path and any window-state detection under the new client.
+5. Run a fresh Frostreaver in-world Test retest per the existing checklist sections above.
