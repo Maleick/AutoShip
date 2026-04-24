@@ -16,7 +16,10 @@
     clippy::redundant_field_names
 )]
 
-use std::{collections::HashMap, sync::{Mutex, PoisonError}};
+use std::{
+    collections::HashMap,
+    sync::{Mutex, PoisonError},
+};
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};

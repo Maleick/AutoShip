@@ -1,7 +1,7 @@
 //! Chat log settings API handlers.
 
-use axum::{Json, http::StatusCode, response::IntoResponse};
-use std::path::PathBuf;
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use std::{path::PathBuf, sync::Arc};
 use textquest_common::chat::{ChatChannel, ChatLogConfig, LogLevel, LogRotation};
 
 pub fn textquest_config_path() -> PathBuf {
@@ -134,7 +134,11 @@ pub async fn get_chat_log_settings() -> impl IntoResponse {
     }
 }
 
-pub async fn put_chat_log_settings(Json(settings): Json<ChatLogConfig>) -> impl IntoResponse {
+pub async fn put_chat_log_settings(
+    State(state): State<Arc<crate::AppState>>,
+    Json(settings): Json<ChatLogConfig>,
+) -> impl IntoResponse {
+    let _write_guard = state.chat_log_write_lock.lock().await;
     match write_chat_log_settings_to_disk(&settings) {
         Ok(()) => (StatusCode::OK, Json(settings)).into_response(),
         Err(error) => (
@@ -148,9 +152,11 @@ pub async fn put_chat_log_settings(Json(settings): Json<ChatLogConfig>) -> impl 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::response::IntoResponse;
+    use axum::{Router, body::Body, http::Request, response::IntoResponse, routing::put};
     use http_body_util::BodyExt;
-    use serde_json::Value;
+    use serde_json::{json, Value};
+    use std::time::Duration;
+    use tower::ServiceExt;
 
     struct ConfigPathGuard {
         previous: Option<PathBuf>,
@@ -179,6 +185,112 @@ mod tests {
     fn config_path_lock() -> &'static tokio::sync::Mutex<()> {
         static LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
         LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+    }
+
+    async fn put_settings(app: Router, body: Vec<u8>) -> StatusCode {
+        let request = Request::builder()
+            .method("PUT")
+            .uri("/api/chat-log/settings")
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body))
+            .expect("put request");
+        app.oneshot(request).await.expect("put response").status()
+    }
+
+    #[tokio::test]
+    async fn concurrent_put_chat_log_settings_wait_for_write_lock_and_persist_one_complete_payload()
+    {
+        let _lock = config_path_lock().lock().await;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("textquest.toml");
+        std::fs::write(&path, "[general]\nname = \"keeper\"\n").expect("write config");
+        let _guard = ConfigPathGuard::set(&path);
+        let state = std::sync::Arc::new(crate::test_app_state());
+        let write_guard = state.chat_log_write_lock.lock().await;
+        let app = Router::new()
+            .route("/api/chat-log/settings", put(put_chat_log_settings))
+            .with_state(state.clone());
+
+        let first = ChatLogConfig {
+            enabled: true,
+            rotation: LogRotation::Daily,
+            level: LogLevel::Debug,
+            channels: vec![ChatChannel::Say, ChatChannel::Group],
+        };
+        let second = ChatLogConfig {
+            enabled: false,
+            rotation: LogRotation::None,
+            level: LogLevel::Info,
+            channels: vec![ChatChannel::Tell, ChatChannel::Guild],
+        };
+        let first_body = serde_json::to_vec(&first).expect("serialize first settings");
+        let second_body = serde_json::to_vec(&second).expect("serialize second settings");
+        let expected_first = json!({
+            "enabled": true,
+            "rotation": "daily",
+            "level": "debug",
+            "channels": ["say", "group"],
+        });
+        let expected_second = json!({
+            "enabled": false,
+            "rotation": "none",
+            "level": "info",
+            "channels": ["tell", "guild"],
+        });
+
+        let first_task = tokio::spawn(put_settings(app.clone(), first_body));
+        let second_task = tokio::spawn(put_settings(app, second_body));
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            !first_task.is_finished() && !second_task.is_finished(),
+            "PUT requests completed while the chat-log write lock was held"
+        );
+
+        drop(write_guard);
+        assert_eq!(
+            first_task.await.expect("first put task"),
+            StatusCode::OK,
+            "first PUT status"
+        );
+        assert_eq!(
+            second_task.await.expect("second put task"),
+            StatusCode::OK,
+            "second PUT status"
+        );
+
+        let content = std::fs::read_to_string(&path).expect("read final config");
+        let doc = toml::from_str::<toml::Value>(&content).expect("parse final config");
+        let chat_log = doc
+            .get("chat_log")
+            .and_then(toml::Value::as_table)
+            .expect("chat_log table");
+        let channels = chat_log
+            .get("channels")
+            .and_then(toml::Value::as_array)
+            .expect("channels array")
+            .iter()
+            .map(|value| value.as_str().expect("channel string"))
+            .collect::<Vec<_>>();
+        let final_value = json!({
+            "enabled": chat_log
+                .get("enabled")
+                .and_then(toml::Value::as_bool)
+                .expect("enabled bool"),
+            "rotation": chat_log
+                .get("rotation")
+                .and_then(toml::Value::as_str)
+                .expect("rotation string"),
+            "level": chat_log
+                .get("level")
+                .and_then(toml::Value::as_str)
+                .expect("level string"),
+            "channels": channels,
+        });
+        assert!(
+            final_value == expected_first || final_value == expected_second,
+            "final settings should match one complete PUT payload, got {final_value}"
+        );
     }
 
     #[tokio::test]

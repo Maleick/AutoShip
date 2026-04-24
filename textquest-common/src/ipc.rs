@@ -1572,8 +1572,8 @@ fn token_dir() -> std::io::Result<std::path::PathBuf> {
         // Verify directory ownership on Unix.
         #[cfg(unix)]
         {
-            use std::os::unix::fs::MetadataExt;
             use nix::unistd::getuid;
+            use std::os::unix::fs::MetadataExt;
             if meta.uid() != getuid().as_raw() {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::PermissionDenied,
@@ -1619,8 +1619,8 @@ fn read_session_token_path(path: &std::path::Path) -> Option<SessionToken> {
     // Validate file ownership on Unix before reading.
     #[cfg(unix)]
     {
-        use std::os::unix::fs::MetadataExt;
         use nix::unistd::getuid;
+        use std::os::unix::fs::MetadataExt;
         if let Ok(meta) = std::fs::metadata(path) {
             if meta.uid() != getuid().as_raw() {
                 eprintln!(

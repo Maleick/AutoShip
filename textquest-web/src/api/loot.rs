@@ -996,6 +996,7 @@ mod tests {
                 "loot-test-character-configs.json",
             ),
             character_config_write_lock: tokio::sync::Mutex::new(()),
+            chat_log_write_lock: tokio::sync::Mutex::new(()),
             auto_group_settings: tokio::sync::RwLock::new(
                 textquest_common::auto_group::AutoGroupSettings::default(),
             ),

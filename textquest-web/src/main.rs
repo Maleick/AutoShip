@@ -67,6 +67,9 @@ pub struct AppState {
     /// Reads are unaffected — they still go through the `character_configs`
     /// RwLock.
     pub character_config_write_lock: tokio::sync::Mutex<()>,
+    /// Serializes chat-log settings writes to the shared textquest TOML file
+    /// so concurrent read-modify-write updates cannot overwrite each other.
+    pub chat_log_write_lock: tokio::sync::Mutex<()>,
     /// Persisted auto-group profiles consumed by the orchestrator runtime.
     pub auto_group_settings: tokio::sync::RwLock<AutoGroupSettings>,
     /// In-memory loot configuration state.
@@ -544,6 +547,7 @@ fn build_state() -> Arc<AppState> {
         tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
         character_config_path,
         character_config_write_lock: tokio::sync::Mutex::new(()),
+        chat_log_write_lock: tokio::sync::Mutex::new(()),
         auto_group_settings: tokio::sync::RwLock::new(auto_group_settings),
         loot_state: api::loot::LootState::new_demo(),
         economy_state: api::economy::EconomyState::new_demo(),
@@ -610,6 +614,7 @@ pub(crate) fn test_app_state() -> AppState {
             uuid::Uuid::new_v4()
         )),
         character_config_write_lock: tokio::sync::Mutex::new(()),
+        chat_log_write_lock: tokio::sync::Mutex::new(()),
         auto_group_settings: tokio::sync::RwLock::new(AutoGroupSettings::default()),
         auto_accept_settings: tokio::sync::RwLock::new(Default::default()),
         tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
@@ -987,6 +992,7 @@ mod tests {
             tradeskill_trophy_settings: tokio::sync::RwLock::new(Default::default()),
             character_config_path: path.with_file_name("character-configs.json"),
             character_config_write_lock: tokio::sync::Mutex::new(()),
+            chat_log_write_lock: tokio::sync::Mutex::new(()),
             auto_group_settings: tokio::sync::RwLock::new(AutoGroupSettings::default()),
             loot_state: api::loot::LootState::new_demo(),
             economy_state: api::economy::EconomyState::new_demo(),

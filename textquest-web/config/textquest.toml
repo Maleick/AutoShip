@@ -1,0 +1,5 @@
+[chat_log]
+enabled = false
+rotation = "none"
+level = "info"
+channels = ["tell", "guild"]

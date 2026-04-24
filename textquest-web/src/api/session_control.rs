@@ -653,6 +653,7 @@ mod tests {
             ),
             character_config_path: std::path::PathBuf::from("/tmp/test-char-configs.json"),
             character_config_write_lock: tokio::sync::Mutex::new(()),
+            chat_log_write_lock: tokio::sync::Mutex::new(()),
             loot_state: api::loot::LootState::new_demo(),
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: api::dashboard::DashboardState::new_demo(),

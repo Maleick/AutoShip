@@ -36,6 +36,7 @@ pub(crate) fn demo_app_state_with_snapshot(name: &str) -> Arc<AppState> {
             "test-character-configs-{name}"
         )),
         character_config_write_lock: tokio::sync::Mutex::new(()),
+        chat_log_write_lock: tokio::sync::Mutex::new(()),
         auto_group_settings: tokio::sync::RwLock::new(AutoGroupSettings::default()),
         loot_state: api::loot::LootState::new_demo(),
         economy_state: api::economy::EconomyState::new_demo(),

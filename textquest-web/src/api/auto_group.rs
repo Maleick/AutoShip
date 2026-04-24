@@ -386,6 +386,7 @@ mod tests {
             character_configs: RwLock::new(crate::api::demo_character_configs()),
             character_config_path: std::env::temp_dir().join("tq-test-cfg.json"),
             character_config_write_lock: tokio::sync::Mutex::new(()),
+            chat_log_write_lock: tokio::sync::Mutex::new(()),
             loot_state: crate::api::loot::LootState::new_demo(),
             economy_state: crate::api::economy::EconomyState::new_demo(),
             dashboard_state: crate::api::dashboard::DashboardState::new_demo(),
