@@ -11,15 +11,13 @@ Analyze open GitHub issues and show the dispatch plan without executing.
 ## Fetch Open Issues
 
 ```bash
-gh issue list --state open --json number,title,body,labels --limit 200
+gh issue list --state open --json number,title,body,labels --limit 200 | jq 'sort_by(.number)'
 ```
 
 ## Classify Each Issue
 
 ```bash
-for issue in $(gh issue list --state open --json number --jq '.[].number'); do
-  bash hooks/classify-issue.sh "$issue"
-done
+bash hooks/opencode/plan-issues.sh --limit 10
 ```
 
 ## Build Plan
@@ -38,14 +36,14 @@ For each issue:
 
 Phase 1 (3 issues)
 ───────────────────────────────────────────
-  #42  simple_code    → Codex/Haiku
-  #45  medium_code     → Codex/Sonnet
-  #48  docs           → Gemini
+  #42  simple_code    → OpenCode free-first
+  #45  medium_code     → OpenCode free-first
+  #48  docs           → OpenCode free-first
 
 Phase 2 (2 issues)
 ───────────────────────────────────────────
-  #51  complex         → Sonnet + Opus advisor
-  #53  ci_fix          → Haiku
+  #51  complex         → OpenCode capable model
+  #53  ci_fix          → OpenCode free-first
 
 Blocked (1 issue)
 ───────────────────────────────────────────
@@ -54,9 +52,7 @@ Blocked (1 issue)
 ═══════════════════════════════════════════
 Quota Estimate
 ───────────────────────────────────────────
-  Codex:   ~40% remaining
-  Gemini:  ~30% remaining
-  Claude:  Claude Max (unlimited)
+  OpenCode: provider-managed
 
 Total: 6 issues across 2 phases
 ═══════════════════════════════════════════
@@ -65,3 +61,4 @@ Total: 6 issues across 2 phases
 ## No Execution
 
 This command only reads and analyzes. No agents are dispatched, no changes made.
+Eligible issues are ordered by ascending issue number. Unsafe/evasion issues appear in the blocked section instead of the dispatch plan.

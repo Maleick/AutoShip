@@ -61,7 +61,7 @@ Spawn reviewer agent:
 
 ```
 Agent({
-  model: "sonnet",
+  model: "<configured OpenCode reviewer model>",
   prompt: "You are an AutoShip verification reviewer. Evaluate whether the agent's work meets acceptance criteria.
 
 ## Issue: <issue-title>
@@ -105,8 +105,8 @@ ACCEPTANCE_CRITERIA_MET:
 ## Step 2: On FAIL
 
 - Attempt < 2: Re-dispatch with failure context appended
-- Attempt >= 2: Escalate to Sonnet
-- Attempt >= 3: Spawn Opus advisor
+- Attempt >= 2: Retry on a stronger configured OpenCode model
+- Attempt >= 3: Mark blocked for human review
 
 ---
 
@@ -125,7 +125,7 @@ Get changed files:
 SIMPLIFY_FILES=$(git -C .autoship/workspaces/<issue-key> diff --name-only main...HEAD)
 ```
 
-Spawn Sonnet to simplify. Must not break tests.
+Spawn an OpenCode worker to simplify. Must not break tests.
 
 ### Re-verify
 
@@ -150,7 +150,7 @@ Dispatched by AutoShip."
 
 # Create PR
 gh pr create \
-  --title "issue-<number>: <issue-title>" \
+  --title "$(bash hooks/opencode/pr-title.sh --issue <number>)" \
   --body "## Summary
 <from AUTOSHIP_RESULT.md>
 
@@ -199,4 +199,4 @@ gh issue close <number>
 | Empty diff | FAIL, re-dispatch |
 | Tests fail | FAIL, re-dispatch with fix |
 | PR creation fails | Retry once, then block |
-| Merge conflict | Spawn Opus advisor |
+| Merge conflict | Mark blocked for human review |

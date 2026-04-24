@@ -13,6 +13,12 @@ Display the current state of the AutoShip orchestration session.
 
 ## Process
 
+Prefer the real status hook:
+
+```bash
+bash hooks/opencode/status.sh
+```
+
 ### Step 1: Read State File
 
 ```bash
@@ -72,19 +78,15 @@ Uptime:       Xh Ym
 Phase:        N/M (checkpoint: yes/no)
 
 ───────────────────────────────────────────
-AGENTS (N active / 20 max)
+AGENTS (N active / 15 max)
 ───────────────────────────────────────────
-  [Haiku]   #42 — Fix login validation     (12m)
-  [Sonnet]  #45 — Add rate limiting        (8m)
-  [Codex]   #48 — Update docs             (3m)
-  [Gemini]  #51 — Refactor API            (1m)
+  [OpenCode] #42 — Fix login validation    (12m)
+  [OpenCode] #45 — Add rate limiting       (8m)
 
 ───────────────────────────────────────────
 QUOTA
 ───────────────────────────────────────────
-  Claude:      Claude Max — N dispatches
-  Codex:       ████████░░░░░░░░░░░░ ~40%  (7 dispatches)
-  Gemini:      ██████░░░░░░░░░░░░░░ ~30%  (5 dispatches)
+  OpenCode:    provider-managed
 
 ───────────────────────────────────────────
 PROGRESS

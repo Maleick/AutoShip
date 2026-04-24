@@ -8,6 +8,12 @@ platform: opencode
 
 Display current AutoShip orchestration status.
 
+Run the real status hook:
+
+```bash
+bash hooks/opencode/status.sh
+```
+
 ## Run Status Skill
 
 Invoke the `autoship-status` skill which reads:
@@ -27,18 +33,16 @@ Uptime:       Xh Ym
 Phase:        N/M
 
 ───────────────────────────────────────────
-AGENTS (N active / 20 max)
+AGENTS (N active / 15 max)
 ───────────────────────────────────────────
-  [Haiku]   #42 — Fix login validation
-  [Sonnet]  #45 — Add rate limiting
+  [OpenCode] #42 — Fix login validation
+  [OpenCode] #45 — Add rate limiting
   ...
 
 ───────────────────────────────────────────
 QUOTA
 ───────────────────────────────────────────
-  Claude:   Claude Max — N dispatches
-  Codex:    ████████░░░░░░░░░░░░ ~40%
-  Gemini:   ██████░░░░░░░░░░░░░ ~30%
+  OpenCode: provider-managed
 
 ───────────────────────────────────────────
 PROGRESS

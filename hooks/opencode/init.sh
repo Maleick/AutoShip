@@ -69,12 +69,7 @@ if [[ ! -f "$STATE_FILE" ]]; then
       },
       issues: {},
       tools: {
-        "claude-haiku": {"status": "available", "quota_pct": 100},
-        "claude-sonnet": {"status": "available", "quota_pct": 100},
-        "claude-opus": {"status": "available", "quota_pct": 100},
-        "codex-spark": {"status": "unavailable", "quota_pct": -1},
-        "codex-gpt": {"status": "unavailable", "quota_pct": -1},
-        "gemini": {"status": "unavailable", "quota_pct": -1}
+        "opencode": {"status": "available", "quota_pct": -1}
       },
       stats: {
         session_dispatched: 0,
@@ -83,6 +78,9 @@ if [[ ! -f "$STATE_FILE" ]]; then
         total_completed_all_time: 0,
         failed: 0,
         blocked: 0
+      },
+      config: {
+        maxConcurrentAgents: 15
       }
     }' > "$STATE_FILE"
   echo "Initialized $STATE_FILE"
@@ -93,25 +91,21 @@ else
     '.updated_at = $now |
      .stats.session_dispatched = 0 |
      .stats.session_completed = 0 |
-     .platform = "opencode"' \
-    "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
+     .platform = "opencode" |
+     .config.maxConcurrentAgents = (.config.maxConcurrentAgents // 15)' \
+     "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
   echo "Refreshed $STATE_FILE"
 fi
 
-# Detect tools for OpenCode
+# Detect OpenCode runtime
 DETECTED_TOOLS="{}"
-if command -v codex >/dev/null 2>&1; then
-  DETECTED_TOOLS=$(jq '.codex = {"available": true}' <<< "$DETECTED_TOOLS")
-fi
-if command -v gemini >/dev/null 2>&1; then
-  DETECTED_TOOLS=$(jq '.gemini = {"available": true}' <<< "$DETECTED_TOOLS")
+if command -v opencode >/dev/null 2>&1; then
+  DETECTED_TOOLS=$(jq '.opencode = {"available": true}' <<< "$DETECTED_TOOLS")
 fi
 
 # Update tools in state
 jq --argjson tools "$DETECTED_TOOLS" \
-  '.tools["codex-spark"].status = (if $tools.codex.available == true then "available" else "unavailable" end) |
-   .tools["codex-gpt"].status = (if $tools.codex.available == true then "available" else "unavailable" end) |
-   .tools["gemini"].status = (if $tools.gemini.available == true then "available" else "unavailable" end)' \
+  '.tools = {"opencode": {"status": (if $tools.opencode.available == true then "available" else "unavailable" end), "quota_pct": -1}}' \
   "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
 
 # Initialize token ledger
@@ -147,8 +141,22 @@ fi
 # Load routing config
 load_routing_config() {
   local routing_file="$AUTOSHIP_DIR/routing.json"
+  local model_routing_file="$AUTOSHIP_DIR/model-routing.json"
   local autoship_md="AUTOSHIP.md"
-  local DEFAULT_ROUTING='{"routing":{"research":["gemini","claude-haiku"],"docs":["gemini","claude-haiku"],"simple_code":["codex-spark","gemini","claude-haiku"],"medium_code":["codex-gpt","claude-sonnet"],"complex":["claude-sonnet"],"mechanical":["claude-haiku","gemini"],"ci_fix":["claude-haiku","gemini"],"rust_unsafe":["claude-haiku","claude-sonnet"]},"max_concurrent_agents":20}'
+  local DEFAULT_ROUTING='{"routing":{"research":["opencode"],"docs":["opencode"],"simple_code":["opencode"],"medium_code":["opencode"],"complex":["opencode"],"mechanical":["opencode"],"ci_fix":["opencode"],"rust_unsafe":["opencode"]},"max_concurrent_agents":15}'
+  write_model_routing() {
+    if [[ -f "$model_routing_file" ]] && jq -e '(.models // []) | length > 0' "$model_routing_file" >/dev/null 2>&1; then
+      return 0
+    fi
+    rm -f "$model_routing_file"
+    if command -v opencode >/dev/null 2>&1 && [[ -x "$SCRIPT_DIR/setup.sh" ]]; then
+      AUTOSHIP_MAX_AGENTS="${AUTOSHIP_MAX_AGENTS:-10}" bash "$SCRIPT_DIR/setup.sh" >/dev/null 2>&1 || true
+    fi
+    if [[ ! -f "$model_routing_file" ]]; then
+      jq -n '{defaultFallback: null, models: []}' > "$model_routing_file"
+    fi
+  }
+  write_model_routing
   if [[ ! -f "$autoship_md" ]]; then
     printf '%s\n' "$DEFAULT_ROUTING" > "$routing_file"
     return 0

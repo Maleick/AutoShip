@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make AutoShip install and run as an OpenCode-first plugin in the same repository, while keeping Claude support only as legacy compatibility.
+**Goal:** Make AutoShip install and run as an OpenCode-only plugin in the same repository.
 
-**Architecture:** The repo remains the single source of truth. OpenCode becomes the primary install/runtime path via a repo-local plugin entrypoint, repo-root path resolution, and an OpenCode bootstrap script that installs/symlinks the plugin into `~/.config/opencode`. Claude Code packaging stays available only for compatibility. Public docs and GitHub Pages content must say OpenCode is the default.
+**Architecture:** The repo remains the single source of truth. OpenCode becomes the only install/runtime path via a repo-local plugin entrypoint, repo-root path resolution, and an OpenCode bootstrap script that installs the plugin into `~/.config/opencode`. Public docs and GitHub Pages content must say OpenCode is the only worker runtime.
 
 **Tech Stack:** Bash hooks, OpenCode config, TypeScript plugin modules, Markdown docs, HTML site content, GitHub CLI.
 
@@ -37,7 +37,6 @@
 - Modify: `wiki/Architecture.md`
 - Modify: `wiki/Configuration.md`
 - Modify: `wiki/Troubleshooting.md`
-- Modify: `CLAUDE.md`
 - Modify: `AGENTS.md`
 - Modify: `AUTOSHIP.md`
 - Modify: `AUTOSHIP_ARCHITECTURE.md`
@@ -76,11 +75,11 @@ Create `hooks/opencode/install.sh` to:
 - add `file:///Users/maleick/.config/opencode/plugins/autoship.ts` to the `plugin` array in `~/.config/opencode/opencode.json` if missing
 - run `hooks/opencode/init.sh` after install
 
-Use the repo-local plugin file as the source of truth; do not fetch from `~/.claude/plugins/cache/autoship`.
+Use the repo-local plugin file as the source of truth; do not fetch from external plugin cache paths.
 
 - [ ] **Step 3: Make the bootstrap path OpenCode-native**
 
-Update `hooks/opencode/init.sh` so it writes state for OpenCode and records the repo-root hooks directory. Keep the existing `.autoship/` layout, but remove any dependency on Claude cache paths for locating AutoShip scripts.
+Update `hooks/opencode/init.sh` so it writes state for OpenCode and records the repo-root hooks directory. Keep the existing `.autoship/` layout, but remove any dependency on external cache paths for locating AutoShip scripts.
 
 - [ ] **Step 4: Document install and bootstrap**
 
@@ -101,7 +100,7 @@ Expected:
 
 ---
 
-### Task 2: Remove Claude-cache assumptions from OpenCode runtime paths
+### Task 2: Remove external cache assumptions from OpenCode runtime paths
 
 **Files:**
 - Modify: `commands/start.md`
@@ -122,7 +121,7 @@ Expected:
 
 - [ ] **Step 1: Replace cache-path lookups with repo-root resolution**
 
-Search and replace all OpenCode-facing references to `~/.claude/plugins/cache/autoship` with either:
+Search and replace all OpenCode-facing external cache references with either:
 - the repo root returned by `git rev-parse --show-toplevel`, or
 - the absolute hooks directory stored in `.autoship/hooks_dir`
 
@@ -134,17 +133,17 @@ Make sure the OpenCode runtime still writes `state.json`, `event-queue.json`, `q
 
 - [ ] **Step 3: Align all start/stop/plan/status commands**
 
-Update the command files so they describe the OpenCode workflow and use the repo-local paths produced by the installer. The commands should no longer mention Claude plugin cache lookups as the source of truth.
+Update the command files so they describe the OpenCode workflow and use the repo-local paths produced by the installer. The commands should no longer mention plugin cache lookups as the source of truth.
 
 - [ ] **Step 4: Re-check the hooks**
 
-Ensure `classify-issue.sh`, `monitor-agents.sh`, and `cleanup-worktree.sh` all derive paths from the repo checkout or `.autoship/hooks_dir` and do not assume Claude installation directories.
+Ensure `classify-issue.sh`, `monitor-agents.sh`, and `cleanup-worktree.sh` all derive paths from the repo checkout or `.autoship/hooks_dir` and do not assume external installation directories.
 
 - [ ] **Step 5: Verify with a cache-path search**
 
 Run:
 ```bash
-grep -R "~/.claude/plugins/cache/autoship" README.md AUTOSHIP.md CLAUDE.md AGENTS.md commands skills hooks docs wiki
+grep -R "plugin cache" README.md AUTOSHIP.md AGENTS.md commands skills hooks docs wiki
 ```
 
 Expected:
@@ -163,18 +162,17 @@ Expected:
 - Modify: `wiki/Architecture.md`
 - Modify: `wiki/Configuration.md`
 - Modify: `wiki/Troubleshooting.md`
-- Modify: `CLAUDE.md`
 - Modify: `AGENTS.md`
 - Modify: `AUTOSHIP_ARCHITECTURE.md`
 - Modify: `CHANGELOG.md`
 
 - [ ] **Step 1: Rewrite the README install story**
 
-Make `README.md` open with OpenCode-first positioning, then keep Claude compatibility as a secondary path. Update the install snippets and platform bullets to match the new default.
+Make `README.md` open with OpenCode-only positioning. Update the install snippets and platform bullets to match the new default.
 
 - [ ] **Step 2: Update the public site content**
 
-Change `docs/index.html` so the hero text, badges, install command, and meta description describe OpenCode-first AutoShip instead of a Claude-only plugin. Keep the page layout, but replace the install CTA and copy to point at the OpenCode install path.
+Change `docs/index.html` so the hero text, badges, install command, and meta description describe OpenCode-only AutoShip. Keep the page layout, but replace the install CTA and copy to point at the OpenCode install path.
 
 - [ ] **Step 3: Refresh the port and wiki docs**
 
@@ -182,19 +180,19 @@ Update `docs/OPENCODE_INSTALL.md`, `docs/OPENCODE_PORT_SPEC.md`, and the `wiki/*
 
 - [ ] **Step 4: Update operator docs**
 
-Keep `CLAUDE.md` and `AGENTS.md` in sync with the new OpenCode install path so both automation surfaces tell the same story.
+Keep `AGENTS.md` in sync with the new OpenCode install path.
 
 - [ ] **Step 5: Verify the public-facing text**
 
-Search for Claude-only marketing language and update it where it conflicts with the OpenCode-first story.
+Search for legacy runtime marketing language and update it where it conflicts with the OpenCode-only story.
 
 Run:
 ```bash
-grep -R "Claude Code plugin" README.md docs wiki CLAUDE.md AGENTS.md AUTOSHIP_ARCHITECTURE.md CHANGELOG.md
+grep -R "legacy worker runtime" README.md docs wiki AGENTS.md AUTOSHIP_ARCHITECTURE.md CHANGELOG.md
 ```
 
 Expected:
-- any remaining Claude references are explicitly legacy/compatibility references
+- no public docs advertise non-OpenCode worker runtimes
 
 ---
 
@@ -236,13 +234,13 @@ Check that `README.md`, `docs/index.html`, and `docs/OPENCODE_INSTALL.md` all sa
 
 Run:
 ```bash
-grep -R "~/.claude/plugins/cache/autoship" README.md AUTOSHIP.md CLAUDE.md AGENTS.md commands skills hooks docs wiki
-grep -R "Claude Code plugin" README.md docs wiki CLAUDE.md AGENTS.md AUTOSHIP_ARCHITECTURE.md CHANGELOG.md
+grep -R "plugin cache" README.md AUTOSHIP.md AGENTS.md commands skills hooks docs wiki
+grep -R "legacy worker runtime" README.md docs wiki AGENTS.md AUTOSHIP_ARCHITECTURE.md CHANGELOG.md
 ```
 
 Expected:
-- no OpenCode path still depends on the Claude cache location
-- remaining Claude mentions are legacy-only
+- no OpenCode path still depends on external cache locations
+- public docs do not advertise non-OpenCode worker runtimes
 
 - [ ] **Step 5: Commit-ready check**
 

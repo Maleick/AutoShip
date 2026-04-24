@@ -4,7 +4,7 @@
 
 **Goal:** Make AutoShip install and run as an OpenCode-first orchestration package while keeping the same repository as the single source of truth.
 
-**Architecture:** AutoShip remains one repo, but OpenCode becomes the primary runtime target. The OpenCode path should resolve from the repo itself and `~/.config/opencode`, not Claude plugin cache paths. Claude plugin files stay only as compatibility scaffolding. Documentation and GitHub Pages content must present OpenCode as the default install path everywhere users would look.
+**Architecture:** AutoShip remains one repo, and OpenCode becomes the only supported worker runtime. The OpenCode path should resolve from the repo itself and `~/.config/opencode`. Documentation and GitHub Pages content must present OpenCode-only operation everywhere users would look.
 
 **Tech Stack:** Bash hooks, OpenCode config, GitHub Pages content, Markdown docs, existing AutoShip skills/commands, GitHub CLI.
 
@@ -22,10 +22,10 @@ It does not change AutoShip's core orchestration model:
 ## Target State
 
 - OpenCode is the default install and runtime path.
-- AutoShip starts from the current repo without relying on `~/.claude/plugins/cache/autoship`.
+- AutoShip starts from the current repo without relying on external plugin cache paths.
 - The repo includes a clear OpenCode install/bootstrap path.
 - GitHub Pages and docs describe OpenCode first.
-- Claude Code support remains available, but as legacy compatibility.
+- OpenCode model discovery is the only worker path.
 
 ## Design
 
@@ -36,12 +36,12 @@ Add a repo-local OpenCode install path that bootstraps the package into `~/.conf
 This path should:
 - initialize `.autoship/`
 - register OpenCode hooks
-- resolve scripts from the repo or OpenCode config, not Claude cache locations
+- resolve scripts from the repo or OpenCode config
 - keep `VERSION` as the release source of truth
 
 ### 2. Runtime Resolution
 
-Replace all Claude-specific path lookups in OpenCode-facing entrypoints with repo-root or OpenCode-config resolution.
+Replace all external cache path lookups in OpenCode-facing entrypoints with repo-root or OpenCode-config resolution.
 
 The important rule is:
 - repo execution should work from `~/Projects/<repo>`
@@ -53,7 +53,7 @@ The important rule is:
 Update the primary docs so they clearly say:
 - OpenCode is the default
 - the install path lives in this repo
-- Claude is compatibility mode
+- OpenCode is the only supported worker runtime
 
 Update GitHub Pages content to match the same message, using the repo's existing published content tree (`docs/` and `wiki/`) so the website and repo docs do not diverge.
 
@@ -66,7 +66,7 @@ Update GitHub Pages content to match the same message, using the repo's existing
 - `commands/*.md`: OpenCode command entrypoints and help text
 - `skills/*/SKILL.md`: OpenCode orchestration protocols
 - `README.md`: first-stop install and usage docs
-- `CLAUDE.md` / `AGENTS.md`: compatibility notes and install guidance
+- `AGENTS.md`: install guidance and repo conventions
 - `docs/OPENCODE_INSTALL.md`: primary OpenCode install guide
 - `docs/OPENCODE_PORT_SPEC.md`: architecture and port reference
 - `wiki/*` and `docs/*`: public-facing OpenCode-first messaging for the GitHub Pages site
@@ -74,21 +74,21 @@ Update GitHub Pages content to match the same message, using the repo's existing
 ## Acceptance Criteria
 
 - OpenCode install and startup instructions are the first documented path.
-- No OpenCode entrypoint references `~/.claude/plugins/cache/autoship`.
+- No OpenCode entrypoint references external plugin cache paths.
 - The repo can be installed and run from `~/Projects/<repo>` using OpenCode.
 - GitHub Pages content matches the repo docs and says OpenCode is the default.
-- Claude plugin support still exists, but only as compatibility documentation/files.
+- OpenCode model discovery and setup are the only supported worker path.
 
 ## Verification
 
 - Run the OpenCode init/bootstrap path from a clean checkout.
 - Verify the startup path creates `.autoship/state.json` and `hooks_dir` correctly.
 - Verify the main OpenCode commands load from the repo root.
-- Search the repo for Claude-cache path assumptions and remove them from OpenCode paths.
+- Search the repo for external cache path assumptions and remove them from OpenCode paths.
 - Verify the website/docs render the OpenCode-first installation story consistently.
 
 ## Non-Goals
 
 - No repo split.
 - No rewrite of the core issue-dispatch model.
-- No removal of Claude compatibility unless it is explicitly part of a later cleanup step.
+- No support for non-OpenCode worker runtimes.

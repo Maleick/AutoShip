@@ -2,7 +2,7 @@
 name: reviewer
 description: AutoShip verification reviewer for OpenCode — evaluates agent work against acceptance criteria
 platform: opencode
-model: sonnet
+model: openai/gpt-5.5
 ---
 
 # AutoShip Verification Reviewer — OpenCode Port

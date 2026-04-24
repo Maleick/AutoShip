@@ -6,7 +6,7 @@
   <title>AutoShip — ship GitHub issues on autopilot</title>
   <meta name="description" content="AutoShip is an OpenCode plugin that autonomously routes GitHub issues to AI agents, verifies results, opens PRs, and merges them." />
   <meta property="og:title" content="AutoShip — ship GitHub issues on autopilot" />
-  <meta property="og:description" content="Autonomous multi-agent orchestration for OpenCode. Routes GitHub issues to Codex, Gemini, Copilot, or Claude — verifies results, opens PRs, merges." />
+  <meta property="og:description" content="Autonomous OpenCode orchestration. Routes GitHub issues to live OpenCode models, verifies results, opens PRs, merges." />
   <meta property="og:image" content="https://raw.githubusercontent.com/Maleick/AutoShip/main/assets/autoship-banner.svg" />
   <meta name="twitter:card" content="summary_large_image" />
   <style>
@@ -214,8 +214,8 @@
 
 <!-- Hero -->
 <div class="hero">
-  <img src="https://raw.githubusercontent.com/Maleick/AutoShip/main/assets/autoship-banner.svg"
-       alt="AutoShip — ship GitHub issues on autopilot" />
+   <img src="../assets/autoship-banner.svg"
+        alt="AutoShip — ship GitHub issues on autopilot" />
 
   <div class="hero-badges">
     <img src="https://img.shields.io/github/stars/Maleick/AutoShip?style=flat&color=f59e0b" alt="Stars" />
@@ -225,7 +225,7 @@
   </div>
 
   <p class="hero-desc">
-    An <strong>OpenCode-first plugin</strong> that autonomously routes GitHub issues to AI agents,
+    An <strong>OpenCode-only plugin</strong> that autonomously routes GitHub issues to live OpenCode models,
     verifies their work, opens pull requests, and merges them.
   </p>
 
@@ -250,8 +250,8 @@
     <div class="stat-label">avg issue → merged PR</div>
   </div>
   <div class="stat">
-    <span class="stat-num">20</span>
-    <div class="stat-label">parallel agents</div>
+    <span class="stat-num">10</span>
+    <div class="stat-label">default active workers</div>
   </div>
   <div class="stat">
     <span class="stat-num">8</span>
@@ -268,7 +268,7 @@
 <!-- Before / After -->
 <section id="before-after">
   <h2>Before / <span>After</span></h2>
-  <p class="section-sub">Same 20 issues. Very different afternoon.</p>
+  <p class="section-sub">Same backlog. Very different afternoon.</p>
   <div class="ba-grid">
     <div class="ba-card">
       <h3>📋 Without AutoShip</h3>
@@ -278,7 +278,7 @@
         <li>Pick an issue manually</li>
         <li>Open a worktree or branch</li>
         <li>Write a dispatch prompt</li>
-        <li>Paste into Codex / Claude / Gemini</li>
+        <li>Choose or auto-detect OpenCode models</li>
         <li>Babysit the agent</li>
         <li>Review output yourself</li>
         <li>Open a PR manually</li>
@@ -292,7 +292,7 @@
       <h3>🚀 With AutoShip</h3>
       <pre class="hero-code">/autoship:start</pre>
       <p style="font-size:.88rem;color:var(--muted);line-height:1.6;">
-        AutoShip reads your issues, classifies each one, picks the best agent,
+        AutoShip reads your issues, classifies each one, picks a configured OpenCode model,
         creates an isolated worktree, dispatches with a focused prompt,
         verifies the result, opens a PR, waits for CI, merges, closes the issue,
         and immediately starts the next one.
@@ -314,28 +314,28 @@
       <div class="step-num">1</div>
       <div class="step-content">
         <h4>Classify</h4>
-        <p>Each open issue is classified into one of 7 task types: research, docs, simple_code, medium_code, mechanical, ci_fix, or complex. Labels are applied to GitHub for visibility.</p>
+        <p>Each open issue is classified into task types such as docs, simple_code, medium_code, mechanical, ci_fix, or complex. Unsafe/evasion-prone work is blocked for human review.</p>
       </div>
     </div>
     <div class="pipeline-step">
       <div class="step-num">2</div>
       <div class="step-content">
         <h4>Route</h4>
-        <p>Task type + available quota determines the agent. Codex and Gemini are used first to save Claude tokens. Routing is configured in <code>AUTOSHIP.md</code> and hot-reloads on change.</p>
+        <p>Task type + the live <code>opencode models</code> inventory determines the worker model. Setup defaults to currently available free models; operators can explicitly select models.</p>
       </div>
     </div>
     <div class="pipeline-step">
       <div class="step-num">3</div>
       <div class="step-content">
         <h4>Dispatch</h4>
-        <p>A git worktree is created for isolation. The agent gets a focused prompt with the issue body, acceptance criteria, and test command. Codex runs via JSON-RPC app-server — no tmux needed.</p>
+        <p>A git worktree is created for isolation. The worker gets a focused prompt with the issue body, acceptance criteria, and test command. <code>runner.sh</code> starts queued workspaces with OpenCode.</p>
       </div>
     </div>
     <div class="pipeline-step">
       <div class="step-num">4</div>
       <div class="step-content">
         <h4>Verify</h4>
-        <p>When the agent reports COMPLETE, a Sonnet reviewer checks <code>AUTOSHIP_RESULT.md</code> against the actual diff and acceptance criteria. On FAIL: re-dispatches. After 3 failures: Opus advisor re-slices the issue.</p>
+        <p>When the worker reports COMPLETE, verification checks <code>AUTOSHIP_RESULT.md</code> against the actual diff and acceptance criteria. Repeated failures are blocked for human review.</p>
       </div>
     </div>
     <div class="pipeline-step">
@@ -364,13 +364,13 @@
   <div class="cards">
     <div class="card">
       <div class="card-icon">🤖</div>
-      <h3>Multi-agent dispatch</h3>
-      <p>Codex, Gemini, Copilot, Claude Haiku, and Claude Sonnet — AutoShip picks the right tool for each task type and falls back gracefully on quota exhaustion.</p>
+      <h3>OpenCode model dispatch</h3>
+      <p>AutoShip discovers the current OpenCode model inventory and picks configured models per task type, defaulting to free models.</p>
     </div>
     <div class="card">
       <div class="card-icon">⚡</div>
       <h3>Parallel execution</h3>
-      <p>Up to 20 issues in flight simultaneously. Bash monitors watch every agent every 5 seconds without blocking the orchestrator.</p>
+      <p>Up to 15 active workers by default. Bash hooks monitor workspace status files without blocking the orchestrator.</p>
     </div>
     <div class="card">
       <div class="card-icon">🔍</div>
@@ -379,8 +379,8 @@
     </div>
     <div class="card">
       <div class="card-icon">🗺️</div>
-      <h3>Live routing config</h3>
-      <p>Edit the YAML front matter in <code>AUTOSHIP.md</code> to change which agent handles which task type. Takes effect on the next dispatch — no restart needed.</p>
+      <h3>Live model routing</h3>
+      <p>Run setup to detect the live <code>opencode models</code> list, or set <code>AUTOSHIP_MODELS</code> to choose exact model IDs.</p>
     </div>
     <div class="card">
       <div class="card-icon">💾</div>
@@ -389,28 +389,28 @@
     </div>
     <div class="card">
       <div class="card-icon">📊</div>
-      <h3>Token ledger</h3>
-      <p>Per-issue and per-session token spend tracked in <code>.autoship/token-ledger.json</code>. <code>/autoship:status</code> shows per-model cost breakdown.</p>
+      <h3>Status dashboard</h3>
+      <p><code>/autoship:status</code> shows active, queued, completed, blocked, and stuck workspace counts plus configured concurrency.</p>
     </div>
     <div class="card">
       <div class="card-icon">🦀</div>
-      <h3>Rust/unsafe routing</h3>
-      <p><code>rust_unsafe</code> task type and <code>rust_windows</code> profile route unsafe Rust, DLL injection, and Windows-specific issues directly to Claude — skipping Gemini/Codex which have a 100% STUCK rate on these patterns.</p>
+      <h3>Safety filter</h3>
+      <p>Anti-cheat evasion, stealth, VM/fingerprint evasion, shellcode, hook signature evasion, and similar work is blocked for human review.</p>
     </div>
     <div class="card">
       <div class="card-icon">🏗️</div>
       <h3>Project context injection</h3>
-      <p>AutoShip extracts Patterns/Conventions/Gotchas from <code>CLAUDE.md</code> and <code>AGENTS.md</code> at startup, injecting project conventions into every dispatch prompt so agents arrive with full context.</p>
+      <p>AutoShip extracts project conventions from repo guidance files at startup, injecting focused context into every dispatch prompt.</p>
     </div>
     <div class="card">
       <div class="card-icon">🎯</div>
-      <h3>Opus pre-dispatch advisor</h3>
-      <p>Complex issues with <code>unsafe</code> code, DLL hooks, or cross-crate scope trigger an Opus advisor call before dispatch. The advisor produces a 200-word implementation brief prepended to the worker prompt.</p>
+      <h3>Lowest issue first</h3>
+      <p>Planning processes open <code>agent:ready</code> issues in ascending issue-number order instead of newest-first order.</p>
     </div>
     <div class="card">
       <div class="card-icon">⚕️</div>
-      <h3>Codex health check &amp; stuck tracking</h3>
-      <p>Fast-fail <code>codex --version</code> probe (10s timeout) before each dispatch. Per-tool <code>tool_stuck_count</code> in quota.json — tool marked exhausted after 3 consecutive STUCKs, emits <code>TOOL_DEGRADED</code> event.</p>
+      <h3>State reconciliation</h3>
+      <p>Workspace status files are reconciled into <code>.autoship/state.json</code> so completed, blocked, stuck, queued, and running work stays visible.</p>
     </div>
   </div>
 </section>
@@ -420,25 +420,25 @@
 <!-- Agent matrix -->
 <section id="agents">
   <h2>Dispatch <span>Matrix</span></h2>
-  <p class="section-sub">AutoShip picks the best agent per task type, with quota-aware fallback.</p>
+  <p class="section-sub">AutoShip picks from the live OpenCode model inventory, preferring free models by default.</p>
   <table>
     <thead>
       <tr>
         <th>Task Type</th>
-        <th>Primary</th>
-        <th>Fallback</th>
+        <th>Default Selection</th>
+        <th>Custom Selection</th>
         <th>Last Resort</th>
       </tr>
     </thead>
     <tbody>
-      <tr><td>research</td><td>Gemini</td><td>Claude Haiku</td><td>—</td></tr>
-      <tr><td>docs</td><td>Gemini</td><td>Claude Haiku</td><td>—</td></tr>
-      <tr><td>simple_code</td><td><strong>Codex Spark</strong></td><td>Gemini · Copilot</td><td>Claude Haiku</td></tr>
-      <tr><td>medium_code</td><td><strong>Codex GPT</strong></td><td>Claude Sonnet</td><td>—</td></tr>
-      <tr><td>mechanical</td><td>Claude Haiku</td><td>Gemini</td><td>Codex Spark</td></tr>
-      <tr><td>ci_fix</td><td>Claude Haiku</td><td>Gemini</td><td>—</td></tr>
-      <tr><td>rust_unsafe</td><td><strong>Claude Haiku</strong></td><td>Claude Sonnet</td><td>—</td></tr>
-      <tr><td>complex</td><td><strong>Sonnet + Opus advisor</strong></td><td>Sonnet retry</td><td>Opus re-slice</td></tr>
+      <tr><td>research</td><td>Live free OpenCode model</td><td>Operator-selected model</td><td>Human review</td></tr>
+      <tr><td>docs</td><td>Live free OpenCode model</td><td>Operator-selected model</td><td>Human review</td></tr>
+      <tr><td>simple_code</td><td><strong>Live free OpenCode model</strong></td><td>Operator-selected model</td><td>Human review</td></tr>
+      <tr><td>medium_code</td><td><strong>Capable free OpenCode model</strong></td><td>Operator-selected model</td><td>Human review</td></tr>
+      <tr><td>mechanical</td><td>Live free OpenCode model</td><td>Operator-selected model</td><td>Human review</td></tr>
+      <tr><td>ci_fix</td><td>Live free OpenCode model</td><td>Operator-selected model</td><td>Human review</td></tr>
+      <tr><td>rust_unsafe</td><td><strong>Blocked by safety policy when abuse-prone</strong></td><td>Human-approved selected model</td><td>Human review</td></tr>
+      <tr><td>complex</td><td><strong>Capable free OpenCode model</strong></td><td>Operator-selected model</td><td>Human review</td></tr>
     </tbody>
   </table>
 </section>

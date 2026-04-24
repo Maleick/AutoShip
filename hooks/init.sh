@@ -73,9 +73,7 @@ if [[ ! -f "$EVENT_QUEUE_FILE" ]]; then
   echo "Initialized $EVENT_QUEUE_FILE"
 fi
 
-# Detect tools and parse quotas.
-# detect-tools.sh outputs: {"claude": {"available": bool, "quota_pct": N}, ...}
-# Transform to state.json format:  {"claude": {"status": "available"|"unavailable", "quota_pct": N}, ...}
+# Detect OpenCode runtime and parse provider status.
 TOOLS_RAW=$(bash "$SCRIPT_DIR/detect-tools.sh" 2>/dev/null) || TOOLS_RAW='{}'
 TOOLS_JSON=$(printf '%s' "$TOOLS_RAW" | jq '
   to_entries
@@ -87,12 +85,7 @@ TOOLS_JSON=$(printf '%s' "$TOOLS_RAW" | jq '
       }
     })
   | from_entries
-' 2>/dev/null) || TOOLS_JSON='{
-    "claude":     {"status": "available",   "quota_pct": 100},
-    "codex-spark":{"status": "unavailable", "quota_pct": -1},
-    "codex-gpt":  {"status": "unavailable", "quota_pct": -1},
-    "gemini":     {"status": "unavailable", "quota_pct": -1}
-  }'
+  ' 2>/dev/null) || TOOLS_JSON='{"opencode":{"status":"available","quota_pct":-1}}'
 
 # Initialize quota.json if it doesn't exist (creates decay-tracking file for third-party tools)
 if [[ ! -f "$AUTOSHIP_DIR/quota.json" ]]; then
@@ -467,18 +460,18 @@ check_available_never_dispatched || true
 # Default routing matrix used when AUTOSHIP.md is absent or YAML is malformed.
 DEFAULT_ROUTING='{
   "routing": {
-    "research":     ["gemini", "claude-haiku"],
-    "docs":         ["gemini", "claude-haiku"],
-    "simple_code":  ["codex-spark", "gemini"],
-    "medium_code":  ["codex-gpt", "claude-sonnet"],
-    "complex":      ["claude-sonnet", "codex-gpt"],
-    "mechanical":   ["claude-haiku", "gemini"],
-    "ci_fix":       ["claude-haiku", "gemini"],
-    "rust_unsafe":  ["claude-haiku", "claude-sonnet"]
+    "research":     ["opencode"],
+    "docs":         ["opencode"],
+    "simple_code":  ["opencode"],
+    "medium_code":  ["opencode"],
+    "complex":      ["opencode"],
+    "mechanical":   ["opencode"],
+    "ci_fix":       ["opencode"],
+    "rust_unsafe":  ["opencode"]
   },
   "quota_thresholds": {"low": 10, "exhausted": 0},
   "stall_timeout_ms": 300000,
-  "max_concurrent_agents": 20
+  "max_concurrent_agents": 10
 }'
 
 load_routing_config() {
@@ -582,7 +575,7 @@ PYEOF
     return 0
   fi
 
-  # Detect project profile: rust_windows prefers Claude.
+  # Detect project profile; all profiles remain on OpenCode.
   local project_profile="standard"
   if [[ -f "Cargo.toml" ]] && grep -qr "\[cfg(windows)\]" src/ 2>/dev/null; then
     project_profile="rust_windows"
@@ -601,7 +594,7 @@ PYEOF
       | if ($profile == "rust_windows") then
           .routing |= with_entries(
             if .key == "rust_unsafe" then .
-            else .value = ["claude-haiku", "claude-sonnet"]
+            else .value = ["opencode"]
             end
           )
         else . end

@@ -7,6 +7,7 @@ AUTOSHIP_DIR=".autoship"
 WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
 EVENT_QUEUE="$AUTOSHIP_DIR/event-queue.json"
 LOCK_FILE="$AUTOSHIP_DIR/event-queue.lock"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 [[ ! -d "$WORKSPACES_DIR" ]] && exit 0
 
@@ -14,6 +15,9 @@ emit_event() {
   local type="$1"
   local issue="$2"
   local status="$3"
+  local workspace_dir="$WORKSPACES_DIR/$issue"
+  local marker="$workspace_dir/.autoship-event-${status}.sent"
+  [[ -f "$marker" ]] && return 0
   local event
   event=$(jq -n \
     --arg type "$type" \
@@ -26,6 +30,7 @@ emit_event() {
     flock -x 200 || exit 1
     jq --argjson evt "$event" '. + [$evt]' "$EVENT_QUEUE" > "${EVENT_QUEUE}.tmp" 2>/dev/null
     mv "${EVENT_QUEUE}.tmp" "$EVENT_QUEUE" 2>/dev/null || true
+    touch "$marker" 2>/dev/null || true
   ) 200>"$LOCK_FILE"
 }
 
@@ -78,3 +83,5 @@ for dir in "$WORKSPACES_DIR"/*/; do
       ;;
   esac
 done
+
+bash "$SCRIPT_DIR/reconcile-state.sh" >/dev/null 2>&1 || true

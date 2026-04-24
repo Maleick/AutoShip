@@ -13,51 +13,41 @@ Guide users through model selection and configuration on first run.
 
 ## Flow Overview
 
-1. **Model Selection** — Which tools?
-2. **Tool Detection** — Check for Codex CLI and Gemini
+1. **Runtime Detection** — Check for OpenCode CLI
+2. **Model Discovery** — List models from the current `opencode models` output
+3. **Model Selection** — Default to free models, or let the operator choose explicit models
 3. **Concurrency** — How many agents?
 4. **Summary** — Ready to go
 
 ---
 
-## Step 1: Model Configuration
+## Step 1: Runtime Detection
+
+```bash
+command -v opencode >/dev/null 2>&1 && opencode --version
+```
+
+## Step 2: Model Discovery
+
+```bash
+opencode models
+```
+
+## Step 3: Model Configuration
 
 Ask the user:
 
 ```
 Which model configuration?
 
-◉ Lean (Claude only)
-  └ Haiku for simple, Sonnet for complex
-  └ No external dependencies
-  └ Single quota pool
-  └ Recommended if: limited Claude quota, prefer simplicity
+◉ Free-first OpenCode
+  └ Prefer configured free OpenCode models
+  └ Do not include paid models by default
 
-◯ Balanced (Claude + Codex)
-  └ Codex CLI for simple/medium
-  └ Claude for complex/risky issues
-  └ Requires: Codex CLI installed
-
-◯ Maxed (All tools)
-  └ Claude + Codex CLI + Gemini CLI
-  └ Maximum parallelism
-  └ Requires: Codex CLI + Gemini CLI
-```
-
----
-
-## Step 2: Tool Detection
-
-**For Balanced/Maxed:**
-
-```bash
-command -v codex >/dev/null 2>&1 && echo "✓ Codex CLI available" || echo "⚠ Codex CLI not found"
-```
-
-**For Maxed:**
-
-```bash
-command -v gemini >/dev/null 2>&1 && echo "✓ Gemini CLI available" || echo "⚠ Gemini CLI not found"
+◯ Custom OpenCode models
+  └ Operator chooses model IDs from the current `opencode models` output
+  └ Writes `.autoship/model-routing.json`
+  └ Explicitly selected non-free models are allowed
 ```
 
 ---
@@ -75,8 +65,8 @@ How many concurrent agents?
 ◯ Standard (10 agents)
   └ Balanced throughput/cost
 
-◯ Aggressive (20 agents)
-  └ Maximum parallelism
+◯ Aggressive (15 agents)
+  └ Higher parallelism for trusted queues
 ```
 
 ---
@@ -87,19 +77,10 @@ How many concurrent agents?
 # Create .autoship directory
 mkdir -p .autoship
 
-# Write config
-jq -n \
-  --arg config "$CONFIG" \
-  --arg max_agents "$MAX_AGENTS" \
-  '{
-    model_config: $config,
-    max_agents: ($max_agents | tonumber),
-    onboarded_at: (now | todate)
-  }' > .autoship/config.json
-
-# Mark as onboarded
-date -u +%Y-%m-%dT%H:%M:%SZ > .autoship/.onboarded
+AUTOSHIP_MAX_AGENTS="$MAX_AGENTS" AUTOSHIP_MODELS="$SELECTED_MODELS" bash hooks/opencode/setup.sh
 ```
+
+Setup preserves existing `.autoship/model-routing.json` by default so operators can edit it manually. Use `AUTOSHIP_REFRESH_MODELS=1` to regenerate free defaults from the current OpenCode model inventory.
 
 ---
 
@@ -109,7 +90,8 @@ date -u +%Y-%m-%dT%H:%M:%SZ > .autoship/.onboarded
 ✓ AutoShip configured!
 
 Model configuration: <config>
-Available tools: Claude<, Codex, Gemini>
+Runtime: OpenCode
+Models: <free discovered models or explicit operator selection>
 Concurrency: <N> agents
 
 Next: Run /autoship to start
@@ -121,8 +103,7 @@ Next: Run /autoship to start
 
 | Error | Recovery |
 |-------|----------|
-| Codex not found | Fallback to Lean |
-| Gemini not found | Optional, proceed without |
+| OpenCode not found | Install OpenCode before starting workers |
 | Config write fails | Check file permissions |
 
 ---

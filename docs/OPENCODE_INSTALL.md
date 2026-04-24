@@ -95,25 +95,30 @@ Monitor CI → merge
 AutoShip maintains state in `.autoship/`:
 
 - `state.json` — Issue lifecycle, plan phases
-- `quota.json` — Tool quota percentages
+- `quota.json` — OpenCode provider availability
 - `token-ledger.json` — Token usage tracking
 - `event-queue.json` — Pending events
 - `config.json` — Project configuration
-- `routing.json` — Parsed from AUTOSHIP.md
+- `routing.json` — Task type routing metadata
+- `model-routing.json` — Live OpenCode model selections
 
 ## Routing Matrix
 
-Configure in `AUTOSHIP.md`:
+Configure available models with setup:
 
-```yaml
----
-routing:
-  simple_code: [codex-spark, gemini, claude-haiku]
-  medium_code: [codex-gpt, claude-sonnet]
-  complex: [claude-sonnet]
-  docs: [gemini, claude-haiku]
----
+```bash
+bash hooks/opencode/setup.sh
+
+# Or choose exact models from the current opencode models output:
+AUTOSHIP_MODELS="provider/model-a,provider/model-b" bash hooks/opencode/setup.sh
+
+# Regenerate free defaults from the current opencode models output:
+AUTOSHIP_REFRESH_MODELS=1 bash hooks/opencode/setup.sh
 ```
+
+`setup.sh` writes `.autoship/model-routing.json`. This file is intentionally user-editable and is preserved on later setup runs unless `AUTOSHIP_REFRESH_MODELS=1` or `AUTOSHIP_MODELS=...` is provided.
+
+By default, `openai/gpt-5.5` is used for planner/coordinator/orchestrator/reviewer roles. Worker models are selected per task by the model selector using task compatibility, configured strength, cost class, and previous success/failure history. Go-provider and Spark models can be selected manually and can win when they are the best configured fit. `openai/gpt-5.5-fast` is rejected.
 
 ## Troubleshooting
 

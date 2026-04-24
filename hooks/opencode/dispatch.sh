@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DRY_RUN=false
+POSITIONAL=()
+
+for arg in "$@"; do
+  if [[ "$arg" == "--dry-run" ]]; then
+    DRY_RUN=true
+  else
+    POSITIONAL+=("$arg")
+  fi
+done
+
+ISSUE_NUM="${POSITIONAL[0]:?Issue number required}"
+TASK_TYPE="${POSITIONAL[1]:-medium_code}"
+MODEL_OVERRIDE="${POSITIONAL[2]:-}"
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
+  echo "Error: not inside a git repository" >&2
+  exit 1
+}
+cd "$REPO_ROOT"
+
+AUTOSHIP_DIR=".autoship"
+STATE_FILE="$AUTOSHIP_DIR/state.json"
+ROUTING_FILE="$AUTOSHIP_DIR/model-routing.json"
+ISSUE_KEY="issue-${ISSUE_NUM}"
+WORKSPACE_PATH="$AUTOSHIP_DIR/workspaces/$ISSUE_KEY"
+
+max_agents=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // empty' "$STATE_FILE" 2>/dev/null || true)
+if [[ -z "$max_agents" && -f "$AUTOSHIP_DIR/config.json" ]]; then
+  max_agents=$(jq -r '.maxConcurrentAgents // .max_agents // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)
+fi
+max_agents="${max_agents:-15}"
+running=$(jq '[.issues | to_entries[] | select((.value.state // .value.status) == "running")] | length' "$STATE_FILE" 2>/dev/null || echo 0)
+cap_note=""
+if (( running >= max_agents )); then
+  cap_note="CAP_REACHED: $running active / $max_agents max; workspace will remain queued"
+fi
+
+TITLE=$(gh issue view "$ISSUE_NUM" --json title --jq '.title' 2>/dev/null || echo "Issue $ISSUE_NUM")
+BODY=$(gh issue view "$ISSUE_NUM" --json body --jq '.body' 2>/dev/null || echo "")
+LABELS=$(gh issue view "$ISSUE_NUM" --json labels --jq '[.labels[].name] | join(",")' 2>/dev/null || echo "")
+
+safety=$(bash "$SCRIPT_DIR/safety-filter.sh" --text "$TITLE" "$LABELS" "$BODY" || true)
+if [[ "$safety" == BLOCKED:* ]]; then
+  mkdir -p "$WORKSPACE_PATH"
+  printf 'BLOCKED\n' > "$WORKSPACE_PATH/status"
+  printf '%s\n' "$safety" > "$WORKSPACE_PATH/BLOCKED_REASON.txt"
+  bash "$REPO_ROOT/hooks/update-state.sh" set-blocked "$ISSUE_KEY" reason="$safety" 2>/dev/null || true
+  echo "BLOCKED $ISSUE_KEY: $safety"
+  exit 0
+fi
+
+resolve_model() {
+  local task_type="$1"
+  local issue_num="$2"
+  local override="$3"
+  if [[ -n "$override" ]]; then
+    printf '%s\n' "$override"
+    return 0
+  fi
+  if [[ -f "$ROUTING_FILE" ]]; then
+    bash "$SCRIPT_DIR/select-model.sh" "$task_type" "$issue_num"
+    return 0
+  fi
+  printf '%s\n' ""
+}
+
+MODEL=$(resolve_model "$TASK_TYPE" "$ISSUE_NUM" "$MODEL_OVERRIDE")
+if [[ -z "$MODEL" ]]; then
+  mkdir -p "$WORKSPACE_PATH"
+  printf 'BLOCKED\n' > "$WORKSPACE_PATH/status"
+  printf 'No configured OpenCode model is available for task type %s. Run hooks/opencode/setup.sh to choose models.\n' "$TASK_TYPE" > "$WORKSPACE_PATH/BLOCKED_REASON.txt"
+  bash "$REPO_ROOT/hooks/update-state.sh" set-blocked "$ISSUE_KEY" reason="no configured OpenCode model for $TASK_TYPE" 2>/dev/null || true
+  echo "BLOCKED $ISSUE_KEY: no configured OpenCode model for $TASK_TYPE"
+  exit 0
+fi
+
+if [[ "$DRY_RUN" == true ]]; then
+  echo "Dry run: would dispatch issue #$ISSUE_NUM to $MODEL ($TASK_TYPE)"
+  echo "Prompt path: $WORKSPACE_PATH/AUTOSHIP_PROMPT.md"
+  echo "Worktree path: $WORKSPACE_PATH"
+  echo "Status path: $WORKSPACE_PATH/status"
+  exit 0
+fi
+
+FULL_WORKSPACE_PATH=$(bash "$SCRIPT_DIR/create-worktree.sh" "$ISSUE_KEY" "autoship/issue-${ISSUE_NUM}")
+mkdir -p "$WORKSPACE_PATH"
+date -u +%Y-%m-%dT%H:%M:%SZ > "$WORKSPACE_PATH/started_at"
+printf 'QUEUED\n' > "$WORKSPACE_PATH/status"
+printf '%s\n' "$MODEL" > "$WORKSPACE_PATH/model"
+
+cat > "$WORKSPACE_PATH/AUTOSHIP_PROMPT.md" <<EOF
+# AutoShip Agent Prompt
+
+## Issue #$ISSUE_NUM: $TITLE
+
+## Labels
+$LABELS
+
+## Task Type
+$TASK_TYPE
+
+## Selected Model
+$MODEL
+
+## Body
+$BODY
+
+## Instructions
+- Work only in this worktree: $FULL_WORKSPACE_PATH
+- Implement the issue per its acceptance criteria.
+- Run relevant project checks before finishing.
+- Commit changes on branch autoship/issue-$ISSUE_NUM.
+- Write AUTOSHIP_RESULT.md in the worktree.
+- Write COMPLETE, BLOCKED, or STUCK to $FULL_WORKSPACE_PATH/status.
+
+## PR Title
+Use this conventional PR title when creating a PR:
+$(bash "$SCRIPT_DIR/pr-title.sh" --issue "$ISSUE_NUM" --title "$TITLE" --labels "$LABELS")
+EOF
+
+bash "$REPO_ROOT/hooks/update-state.sh" set-queued "$ISSUE_KEY" agent="$MODEL" task_type="$TASK_TYPE" 2>/dev/null || true
+
+echo "Queued issue #$ISSUE_NUM for $MODEL ($TASK_TYPE)"
+[[ -n "$cap_note" ]] && echo "$cap_note"
+echo "Worktree: $FULL_WORKSPACE_PATH"
+echo "Run: bash hooks/opencode/runner.sh"

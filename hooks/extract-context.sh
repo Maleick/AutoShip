@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # extract-context.sh — Extract project-specific conventions and config for agents.
-# Output: .autoship/project-context.md (capped at 1500 chars to force Codex toward implementation)
+# Output: .autoship/project-context.md (capped at 1500 chars to keep worker context focused)
 
 AUTOSHIP_DIR=".autoship"
 CONTEXT_FILE="$AUTOSHIP_DIR/project-context.md"
@@ -67,7 +67,7 @@ is_safe_repo_file() {
     echo ""
   fi
 
-  # 3. Read AGENTS.md if present - keep SHORT for Codex context
+  # 3. Read AGENTS.md if present - keep SHORT for worker context
   if is_safe_repo_file "AGENTS.md"; then
     echo "### Agent Constraints"
     head -15 "AGENTS.md"
@@ -75,7 +75,7 @@ is_safe_repo_file() {
   fi
 } > "$TEMP_FILE"
 
-# Capping at 1500 chars (~250 tokens proxy) to force Codex toward implementation
+# Capping at 1500 chars (~250 tokens proxy) keeps OpenCode worker prompts focused
 head -c 1500 "$TEMP_FILE" > "$CONTEXT_FILE"
 
 echo "Project context extracted to $CONTEXT_FILE ($(wc -c < "$CONTEXT_FILE") chars)"

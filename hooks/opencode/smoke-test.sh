@@ -36,5 +36,11 @@ bash "$REPO_ROOT/hooks/opencode/init.sh" >/dev/null
 
 [[ -f "$STATE_FILE" ]]
 [[ "$(cat "$HOOKS_FILE")" == "$REPO_ROOT/hooks" ]]
+jq -e '.config.maxConcurrentAgents == 15' "$STATE_FILE" >/dev/null
+[[ -f "$REPO_ROOT/.autoship/model-routing.json" ]]
+jq -e '[.models[] | select(.cost == "free")] | length > 0' "$REPO_ROOT/.autoship/model-routing.json" >/dev/null
+jq -e 'all(.models[]; .id | test("^[a-z0-9._-]+/.+"))' "$REPO_ROOT/.autoship/model-routing.json" >/dev/null
+
+bash "$REPO_ROOT/hooks/opencode/test-policy.sh" >/dev/null
 
 echo "OpenCode install smoke test passed"

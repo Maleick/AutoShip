@@ -1,13 +1,13 @@
 ---
 name: autoship-dispatch
-description: Agent dispatch for OpenCode — creates worktrees, generates prompts, and dispatches via Agent subagents with quota-aware routing
+description: OpenCode dispatch — creates worktrees, generates prompts, queues work, and starts workers through the runner
 platform: opencode
-tools: ["Bash", "Agent", "Write", "Read"]
+tools: ["Bash", "Write", "Read"]
 ---
 
 # AutoShip Dispatch Protocol — OpenCode Port
 
-Third-party tools (Codex/Gemini) are dispatched first for simple and medium issues. Claude agents are reserved for complex work and fallback.
+Configured free OpenCode models are dispatched first when they are capable of the task. Operator-selected models are used only when they exist in the live OpenCode model inventory.
 
 ---
 
@@ -15,11 +15,22 @@ Third-party tools (Codex/Gemini) are dispatched first for simple and medium issu
 
 | Complexity | Primary | Fallback | Last Resort |
 | ---------- | ------- | -------- | ----------- |
-| Simple | Codex/Gemini (quota > 10%) | Claude Haiku | Claude Sonnet |
-| Medium | Codex/Gemini (quota > 10%) | Claude Sonnet | Claude Sonnet |
-| Complex | Claude Sonnet | Claude Sonnet retry | Opus advisor |
+| Simple | Live free OpenCode models | Operator-selected model | Human review |
+| Medium | Free capable OpenCode models | Operator-selected model | Human review |
+| Complex | Free capable OpenCode models | Operator-selected model | Human review |
 
 ---
+
+## Step 0: Enforce Safety and Concurrency
+
+Use the repo hooks before creating work:
+
+```bash
+bash hooks/opencode/safety-filter.sh <issue-number>
+MAX=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // 10' .autoship/state.json)
+```
+
+Unsafe/evasion work must be blocked or marked human-required, not auto-dispatched.
 
 ## Step 1: Create Worktree
 
@@ -37,31 +48,32 @@ git worktree add .autoship/workspaces/$ISSUE_KEY -b autoship/$ISSUE_KEY main
 
 ---
 
-## Step 2: Check Quota
+## Step 2: Check OpenCode Runtime
 
 ```bash
-# Read quota from .autoship/quota.json
-quota_codex=$(jq -r '.["codex-spark"].quota_pct // 100' .autoship/quota.json)
-quota_gemini=$(jq -r '.gemini.quota_pct // 100' .autoship/quota.json)
+opencode_available=$(jq -r '.opencode.available // false' .autoship/quota.json 2>/dev/null || echo false)
 ```
 
-Skip tools with quota_pct <= 10 (warning zone) or quota_pct == 0 (exhausted).
+Model cost/capability routing comes from `.autoship/model-routing.json`, with free OpenCode models sorted before paid fallbacks.
 
 ---
 
-## Step 3: Dispatch Agent
+## Step 3: Dispatch or Queue Agent
 
-### Claude Haiku/Sonnet (OpenCode Agent)
+The persistent OpenCode path is:
 
-```
-Agent({
-  model: "haiku",  # or "sonnet"
-  prompt: "<dispatch prompt>",
-  description: "AutoShip: issue-<number>"
-})
+```bash
+bash hooks/opencode/dispatch.sh <issue-number> <task-type>
+bash hooks/opencode/runner.sh
 ```
 
-#### Dispatch Prompt Template
+`dispatch.sh` creates the worktree and prompt, marks the issue queued in state, and writes `QUEUED` status. `runner.sh` starts queued workspaces up to the configured concurrency cap.
+
+## Step 4: OpenCode Worker Execution
+
+`runner.sh` starts queued workspaces with `opencode run --model <selected-model>`.
+
+### Dispatch Prompt Template
 
 ```markdown
 You are an AutoShip worker agent. Implement the following GitHub issue.
@@ -116,26 +128,6 @@ Then write your status to `.autoship/workspaces/<issue-key>/status`:
 Print COMPLETE, BLOCKED, or STUCK as your final output.
 ```
 
-### Third-Party Tools (Codex/Gemini)
-
-```bash
-cd .autoship/workspaces/$ISSUE_KEY
-
-# Write prompt file
-cat > AUTOSHIP_PROMPT.md << 'EOF'
-<dispatch prompt>
-EOF
-
-# Dispatch via CLI
-codex -p "$(cat AUTOSHIP_PROMPT.md)" &
-# or
-gemini -p "$(cat AUTOSHIP_PROMPT.md)" --yolo &
-
-# Wait for completion, then check for AUTOSHIP_RESULT.md
-```
-
----
-
 ## Step 4: Update State
 
 ```bash
@@ -181,42 +173,18 @@ echo "RUNNING" > .autoship/workspaces/<issue-key>/status
 
 ---
 
-## Haiku Failure Escalation
+## Failure Escalation
 
-If Haiku fails verification:
-- **Attempt 1 fail**: Re-dispatch Haiku with failure context
-- **Attempt 2 fail**: Automatically escalate to Sonnet
-- **Attempt 3+ fail**: Spawn Opus advisor
+If an OpenCode worker fails verification:
+- **Attempt 1 fail**: Re-dispatch with failure context
+- **Attempt 2 fail**: Retry on a stronger configured OpenCode model
+- **Attempt 3+ fail**: Mark blocked for human review
 
 ---
 
-## Opus Advisor (Complex Issues)
+## Human Review Escalation
 
-For complex issues, spawn Opus first for architectural guidance:
-
-```
-Agent({
-  model: "opus",
-  prompt: "You are the AutoShip Architectural Advisor. Analyze this issue and provide implementation guidance.
-
-## Issue
-<issue body>
-
-## Project Context
-$(cat .autoship/project-context.md 2>/dev/null || echo "")
-
-## Instructions
-Output a JSON object with:
-- key_files: most relevant files
-- approach: implementation strategy
-- risks: potential pitfalls
-
-Keep response under 200 words.",
-  description: "Opus advisor: issue-<number>"
-})
-```
-
-Insert the brief into the Sonnet dispatch prompt.
+For unsafe, repeatedly failing, or ambiguous work, mark the issue blocked and require human review before another automated attempt.
 
 ---
 
@@ -225,8 +193,9 @@ Insert the brief into the Sonnet dispatch prompt.
 Before dispatching, check running count:
 
 ```bash
-RUNNING=$(jq '[.issues | to_entries[] | select(.value.state == "running")] | length' .autoship/state.json)
-if (( RUNNING >= 20 )); then
+RUNNING=$(jq '[.issues | to_entries[] | select((.value.state // .value.status) == "running")] | length' .autoship/state.json)
+MAX=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // 10' .autoship/state.json)
+if (( RUNNING >= MAX )); then
   echo "CAP_REACHED: $RUNNING agents running"
   # Queue for next poll cycle
   exit 0

@@ -1,27 +1,24 @@
 # AutoShip Wiki
 
-Autonomous multi-agent orchestration plugin for OpenCode, with Claude compatibility preserved.
+![AutoShip — OpenCode-only GitHub issue to PR automation](../assets/autoship-banner.svg)
 
-## Latest Release: [v1.4.0](v1.4.0-Release-Notes)
+AutoShip is an OpenCode-only orchestration plugin that turns GitHub issues into pull requests.
 
-9 self-improvement issues shipped in a single AutoShip session. Zero manual PRs. Zero manual merges.
+## Core Behavior
 
----
+- Plans `agent:ready` issues in ascending issue-number order
+- Blocks unsafe/evasion-prone work for human review
+- Uses `openai/gpt-5.5` for planner, coordinator, orchestrator, and reviewer roles
+- Selects worker models from the live `opencode models` inventory
+- Defaults to currently available free worker models
+- Allows operator-selected Spark, Go-provider, Nvidia, OpenRouter, and other OpenCode models when available
+- Runs up to 15 active workers by default
 
-## Contents
+## Pages
 
-| Page                                         | Description                                        |
-| -------------------------------------------- | -------------------------------------------------- |
-| [Architecture](Architecture)                 | Four-tier model: Bash → Haiku → Sonnet → Opus      |
-| [Configuration](Configuration)               | AUTOSHIP.md front matter, routing.json, quota.json |
-| [Design Decisions](Design-Decisions)         | Key architectural trade-offs and why               |
-| [Troubleshooting](Troubleshooting)           | Common issues and fixes                            |
-| [v1.4.0 Release Notes](v1.4.0-Release-Notes) | 9 self-improvement features                        |
-
----
-
-## Quick Links
-
-- [GitHub Releases](https://github.com/Maleick/AutoShip/releases)
-- [Landing Page](https://autoship.teamoperator.red)
-- [AUTOSHIP_SPEC.md](https://github.com/Maleick/AutoShip/blob/main/AUTOSHIP_SPEC.md)
+| Page | Purpose |
+| --- | --- |
+| [Architecture](Architecture) | Runtime flow and hook responsibilities |
+| [Configuration](Configuration) | `.autoship/` files and model routing |
+| [Troubleshooting](Troubleshooting) | Common recovery steps |
+| [Design Decisions](Design-Decisions) | Current OpenCode-only policy decisions |

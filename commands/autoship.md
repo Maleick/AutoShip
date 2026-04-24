@@ -23,7 +23,7 @@ Run: /autoship
 
 1. **Reads** open GitHub issues
 2. **Classifies** each by complexity (simple/medium/complex)
-3. **Dispatches** agents (Claude Haiku, Sonnet, Codex, Gemini)
+3. **Dispatches** OpenCode workers using free-first model routing
 4. **Verifies** work against acceptance criteria
 5. **Creates** pull requests
 6. **Monitors** CI
@@ -45,29 +45,25 @@ Run: /autoship
 - Git repo with GitHub remote
 - Open issues to work on
 
-## Optional Tools
+## Runtime
 
-- `codex` — For simple/medium tasks (burns OpenAI quota first)
-- `gemini` — For simple/medium tasks (burns Google AI quota first)
+- `opencode` — The only worker runtime
 
 ## How It Works
 
 ```
 Issue → Classify → Dispatch Agent → Verify → PR → CI → Merge
          ↓
-    Routing by complexity + quota
+    Routing by task type + model capability
 ```
 
-## Third-Party First
+## Free First
 
-AutoShip burns Codex/Gemini quota before Claude:
-- Simple: Codex → Gemini → Haiku
-- Medium: Codex → Sonnet
-- Complex: Sonnet (always Claude)
+AutoShip routes to configured OpenCode models, preferring free models before paid fallbacks when the model is capable of the task.
 
-## Token Budget
+## Provider Budget
 
-Quotas tracked in `.autoship/quota.json`. Third-party tools exhausted first to preserve Claude budget.
+OpenCode provider availability is tracked in `.autoship/quota.json`; model routing lives in `.autoship/model-routing.json`.
 
 ## State Files
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # activate.sh — SessionStart hook
 # Initializes .autoship/ state directory, then injects a brief system note
-# so Claude knows AutoShip is installed and ready.
+# so OpenCode knows AutoShip is installed and ready.
 
 set -euo pipefail
 
@@ -21,6 +21,6 @@ fi
 cat <<EOF
 AutoShip ${VERSION} is installed. Autonomous multi-agent orchestration is available.
 Commands: /autoship:start (launch), /autoship:plan (dry-run), /autoship:stop (shutdown), /autoship:status (dashboard).
-AutoShip routes GitHub issues to AI agents (Codex/Gemini/Claude), verifies results, and opens PRs automatically.
+AutoShip routes GitHub issues to OpenCode workers, verifies results, and opens PRs automatically.
 Run /autoship:start to begin.
 EOF

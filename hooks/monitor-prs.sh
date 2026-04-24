@@ -116,7 +116,7 @@ while true; do
             COMPLETED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
             bash "$REPO_ROOT/hooks/update-state.sh" set-merged "$ISSUE_ID" \
               completed_at="$COMPLETED_AT" 2>/dev/null || true
-            echo "[BEACON] Transitioned issue $ISSUE_ID to merged (PR #$num, completed_at=$COMPLETED_AT)"
+            echo "[AUTOSHIP] Transitioned issue $ISSUE_ID to merged (PR #$num, completed_at=$COMPLETED_AT)"
           fi
         fi
       fi

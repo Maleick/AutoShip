@@ -80,7 +80,7 @@ Process each matched command in order:
 
 ### 4a. `work on #N` — Force Dispatch
 
-Write a priority event to the event queue so Sonnet picks it up immediately:
+Write a priority event to the event queue so the orchestrator picks it up immediately:
 
 ```bash
 EVENT='{"type":"force_dispatch","issue":"'"$ISSUE_NUM"'","priority":1,"source":"discord","queued_at":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}'

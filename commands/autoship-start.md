@@ -22,8 +22,7 @@ Fail messages:
 ## Probe Available Tools
 
 ```bash
-command -v codex >/dev/null && echo "Codex available" || echo "Codex not found"
-command -v gemini >/dev/null && echo "Gemini available" || echo "Gemini not found"
+command -v opencode >/dev/null && echo "OpenCode available" || echo "OpenCode not found"
 ```
 
 ## Initialize State
@@ -40,8 +39,14 @@ Run the `autoship-orchestrate` skill:
 2. Classify each by complexity
 3. Build dispatch plan
 4. Start monitoring loop
-5. Dispatch agents up to concurrency cap
+5. Dispatch or queue agents up to the configured concurrency cap, default 15
 
 ## Monitoring
 
 Agents write status to `.autoship/workspaces/<issue-key>/status`. The orchestrator polls for COMPLETE/BLOCKED/STUCK and runs the verification pipeline.
+
+If dispatch queued workspaces instead of starting workers directly, run:
+
+```bash
+bash hooks/opencode/runner.sh
+```
