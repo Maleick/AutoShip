@@ -7,6 +7,7 @@ import {
   copyFile,
   readdir,
   stat,
+  access,
 } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
@@ -115,8 +116,88 @@ async function install() {
 async function doctor() {
   console.log("opencode-autoship doctor");
   console.log("=====================");
-  console.log("This command is not yet implemented.");
-  console.log("Full diagnostics will be available in future releases.");
+  console.log();
+
+  interface Check {
+    name: string;
+    status: "PASS" | "WARN" | "FAIL";
+    message: string;
+  }
+
+  const checks: Check[] = [];
+  let hasFailure = false;
+
+  const configDir = resolveConfigDir();
+  const autoshipDir = join(configDir, ".autoship");
+
+  try {
+    await access(join(autoshipDir, ".onboarded"));
+    checks.push({ name: "onboarding", status: "PASS", message: "AutoShip is onboarded" });
+  } catch {
+    checks.push({ name: "onboarding", status: "WARN", message: "AutoShip has not been onboarded yet" });
+  }
+
+  try {
+    await access(join(autoshipDir, "config.json"));
+    checks.push({ name: "config", status: "PASS", message: "Config file exists" });
+  } catch {
+    checks.push({ name: "config", status: "FAIL", message: "Config file not found" });
+    hasFailure = true;
+  }
+
+  try {
+    await access(join(autoshipDir, "model-routing.json"));
+    checks.push({ name: "model-routing", status: "PASS", message: "Model routing file exists" });
+  } catch {
+    checks.push({ name: "model-routing", status: "FAIL", message: "Model routing file not found" });
+    hasFailure = true;
+  }
+
+  try {
+    await access(join(autoshipDir, "hooks"));
+    checks.push({ name: "hooks", status: "PASS", message: "Hooks directory exists" });
+  } catch {
+    checks.push({ name: "hooks", status: "FAIL", message: "Hooks directory not found" });
+    hasFailure = true;
+  }
+
+  try {
+    await access(join(autoshipDir, "commands"));
+    checks.push({ name: "commands", status: "PASS", message: "Commands directory exists" });
+  } catch {
+    checks.push({ name: "commands", status: "FAIL", message: "Commands directory not found" });
+    hasFailure = true;
+  }
+
+  try {
+    await access(join(autoshipDir, "skills"));
+    checks.push({ name: "skills", status: "PASS", message: "Skills directory exists" });
+  } catch {
+    checks.push({ name: "skills", status: "FAIL", message: "Skills directory not found" });
+    hasFailure = true;
+  }
+
+  const passChecks = checks.filter(c => c.status === "PASS");
+  const warnChecks = checks.filter(c => c.status === "WARN");
+  const failChecks = checks.filter(c => c.status === "FAIL");
+
+  for (const check of passChecks) {
+    console.log(`[PASS] ${check.name}: ${check.message}`);
+  }
+  for (const check of warnChecks) {
+    console.log(`[WARN] ${check.name}: ${check.message}`);
+  }
+  for (const check of failChecks) {
+    console.log(`[FAIL] ${check.name}: ${check.message}`);
+  }
+  console.log();
+  console.log(`Summary: ${passChecks.length} passed, ${warnChecks.length} warnings, ${failChecks.length} failed`);
+
+  if (hasFailure) {
+    console.log();
+    console.log("Run 'opencode-autoship install', then /autoship-setup to fix failures.");
+    process.exit(1);
+  }
 }
 
 function help() {
@@ -126,13 +207,13 @@ Usage: opencode-autoship <command>
 
 Commands:
   install   Install opencode-autoship to OpenCode config directory
-  doctor   Run diagnostics (not yet implemented)
+  doctor    Run diagnostics
   help     Show this help message
 
 Examples:
   opencode-autoship install
   opencode-autoship doctor
-`);
+ `);
 }
 
 async function main() {

@@ -310,6 +310,22 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   test -d "$CONFIG_DIR/.autoship/skills" || fail "package installer copies skills"
   test -f "$CONFIG_DIR/.autoship/AGENTS.md" || fail "package installer copies AGENTS.md"
   test -f "$CONFIG_DIR/.autoship/VERSION" || fail "package installer copies VERSION"
+  DOCTOR_CONFIG="$TMP_DIR/doctor-config"
+  mkdir -p "$DOCTOR_CONFIG"
+  if OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-fail-1.txt" 2>&1; then
+    fail "doctor exits non-zero when required checks fail"
+  fi
+  OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-fail-2.txt" 2>&1 || true
+  cmp "$TMP_DIR/doctor-fail-1.txt" "$TMP_DIR/doctor-fail-2.txt" >/dev/null || fail "doctor failure output is deterministic"
+  grep -F '[FAIL]' "$TMP_DIR/doctor-fail-1.txt" >/dev/null || fail "doctor prints FAIL checks"
+  grep -F '[WARN]' "$TMP_DIR/doctor-fail-1.txt" >/dev/null || fail "doctor prints WARN checks"
+  mkdir -p "$DOCTOR_CONFIG/.autoship/hooks" "$DOCTOR_CONFIG/.autoship/commands" "$DOCTOR_CONFIG/.autoship/skills"
+  printf '{}\n' > "$DOCTOR_CONFIG/.autoship/config.json"
+  printf '{}\n' > "$DOCTOR_CONFIG/.autoship/model-routing.json"
+  date -u +%Y-%m-%dT%H:%M:%SZ > "$DOCTOR_CONFIG/.autoship/.onboarded"
+  OPENCODE_CONFIG_DIR="$DOCTOR_CONFIG" node dist/cli.js doctor >/"$TMP_DIR/doctor-pass.txt"
+  grep -F '[PASS]' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor prints PASS checks"
+  grep -F '0 failed' "$TMP_DIR/doctor-pass.txt" >/dev/null || fail "doctor summary reports zero failures"
 )
 
 bash "$SCRIPT_DIR/test-model-parsing.sh" >/dev/null
