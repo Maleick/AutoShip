@@ -34,7 +34,7 @@ pub fn set_settings(settings: TradeskillTrophySettings) {
     let trophy_item_name = settings.trophy_item_name.trim().to_string();
     let mut manager = TROPHY_MANAGER
         .lock()
-        .expect("tradeskill trophy manager lock poisoned");
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     manager.update_settings(settings);
     tracing::info!(
         enabled,
@@ -47,7 +47,7 @@ pub fn set_settings(settings: TradeskillTrophySettings) {
 pub fn status() -> TradeskillTrophyStatus {
     TROPHY_MANAGER
         .lock()
-        .expect("tradeskill trophy manager lock poisoned")
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .status()
 }
 
@@ -71,7 +71,7 @@ pub fn check() {
     let (settings, previous_status, active_trophy_item_name) = {
         let manager = TROPHY_MANAGER
             .lock()
-            .expect("tradeskill trophy manager lock poisoned");
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         (
             manager.settings().clone(),
             manager.status(),
@@ -91,7 +91,7 @@ pub fn check() {
     let command = {
         let mut manager = TROPHY_MANAGER
             .lock()
-            .expect("tradeskill trophy manager lock poisoned");
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         manager.tick(&observation)
     };
 
