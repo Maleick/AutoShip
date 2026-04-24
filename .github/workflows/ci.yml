@@ -18,13 +18,13 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  merge_gate:
-    name: PR gate (fmt + clippy + coverage) on Linux
+  pr_gate:
+    name: PR gate (fmt + clippy) on Linux
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     runs-on: [self-hosted, Linux, X64, textquest]
-    timeout-minutes: 90
+    timeout-minutes: 15
     env:
-      CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/${{ github.run_id }}/merge-gate
+      CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/${{ github.run_id }}/pr-gate
     steps:
       - uses: actions/checkout@v4
         with:
@@ -169,6 +169,94 @@ jobs:
         if: steps.scope.outputs.docs_only != 'true'
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+  coverage:
+    name: Coverage (tarpaulin) on Linux
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    runs-on: [self-hosted, Linux, X64, textquest]
+    timeout-minutes: 90
+    continue-on-error: true
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/${{ github.run_id }}/coverage
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect docs-only change set
+        id: scope
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "Unsupported event for diff scoping; running full coverage."
+            exit 0
+          fi
+
+          if ! diff_output="$(git diff --name-only "$base" "$head")"; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "Failed to diff $base..$head; running full coverage."
+            exit 0
+          fi
+
+          mapfile -t changed_files < <(printf '%s\n' "$diff_output")
+
+          if [[ ${#changed_files[@]} -eq 0 ]]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          docs_only=true
+          for file in "${changed_files[@]}"; do
+            case "$file" in
+              docs/**|site/**|*.md|requirements-docs.txt|.github/workflows/docs-pages.yml|tests/test_*docs*.py|tests/test_workflow_contract.py)
+                ;;
+              *)
+                docs_only=false
+                break
+                ;;
+            esac
+          done
+
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+
+      - name: Install native build dependencies
+        if: steps.scope.outputs.docs_only != 'true'
+        run: |
+          sudo flock /tmp/textquest-apt.lock bash -c '
+            set -euo pipefail
+            apt-get -o DPkg::Lock::Timeout=300 update
+            apt-get -o DPkg::Lock::Timeout=300 install -y cmake clang libclang-dev llvm-dev pkg-config libssl-dev libasound2-dev
+          '
+          echo "LIBCLANG_PATH=$(llvm-config --libdir)" >> "$GITHUB_ENV"
+
+      - name: Setup Python
+        if: steps.scope.outputs.docs_only != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python test dependencies
+        if: steps.scope.outputs.docs_only != 'true'
+        run: python3 -m pip install PyYAML==6.0.3
+
+      - name: Setup Rust
+        if: steps.scope.outputs.docs_only != 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        if: steps.scope.outputs.docs_only != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
+
       - name: Install cargo-tarpaulin
         if: steps.scope.outputs.docs_only != 'true'
         uses: taiki-e/install-action@v2
@@ -178,7 +266,6 @@ jobs:
       - name: Run coverage (threshold 68%)
         if: steps.scope.outputs.docs_only != 'true'
         env:
-          CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/${{ github.run_id }}/coverage
           CARGO_BUILD_JOBS: "1"
         run: python3 scripts/coverage-report.py --threshold 68
 
