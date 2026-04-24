@@ -4,7 +4,37 @@
   <img src="assets/autoship-banner.svg" width="900" alt="AutoShip — OpenCode-only GitHub issue to PR automation" />
 </p>
 
+<p align="center">
+  <a href="https://github.com/Maleick/AutoShip/stargazers"><img src="https://img.shields.io/github/stars/Maleick/AutoShip?style=flat&color=f59e0b" alt="Stars"></a>
+  <a href="https://github.com/Maleick/AutoShip/commits/main"><img src="https://img.shields.io/github/last-commit/Maleick/AutoShip?style=flat" alt="Last Commit"></a>
+  <a href="https://github.com/Maleick/AutoShip/releases"><img src="https://img.shields.io/github/v/release/Maleick/AutoShip?style=flat" alt="Version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Maleick/AutoShip?style=flat" alt="License"></a>
+  <a href="https://autoship.teamoperator.red"><img src="https://img.shields.io/badge/docs-autoship.teamoperator.red-blue?style=flat" alt="Docs"></a>
+  <a href="https://github.com/sponsors/Maleick"><img src="https://img.shields.io/github/sponsors/Maleick?label=Sponsor&logo=GitHub&color=EA4AAA&style=flat" alt="Sponsor"></a>
+</p>
+
+<p align="center">
+  <a href="https://autoship.teamoperator.red">Docs</a> •
+  <a href="https://github.com/Maleick/AutoShip/wiki">Wiki</a> •
+  <a href="#commands">Commands</a> •
+  <a href="#runtime">Runtime</a> •
+  <a href="#local-testing">Testing</a> •
+  <a href="https://github.com/sponsors/Maleick">Sponsor</a>
+</p>
+
+<p align="center"><strong>Issues in. OpenCode workers out. PRs ready.</strong></p>
+
 AutoShip is an OpenCode-first-party orchestration plugin that turns GitHub issues into pull requests.
+
+```text
+┌──────────────────────────────────────────┐
+│  ISSUE PLANNING        GPT-5.5           │
+│  MODEL SELECTION       LIVE OPENCODE     │
+│  WORKER DISPATCH       15 ACTIVE MAX     │
+│  REVIEW                GPT-5.5           │
+│  PR CREATION           CONVENTIONAL      │
+└──────────────────────────────────────────┘
+```
 
 ## What It Does
 

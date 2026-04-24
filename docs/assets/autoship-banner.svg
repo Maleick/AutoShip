@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-labelledby="title desc">
+  <title id="title">AutoShip OpenCode orchestration</title>
+  <desc id="desc">AutoShip routes GitHub issues through OpenCode model planning, dispatch, review, and pull requests.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="0.55" stop-color="#111827"/>
+      <stop offset="1" stop-color="#1f2937"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1200" height="420" rx="28" fill="url(#bg)"/>
+  <g opacity="0.08" fill="#93c5fd">
+    <circle cx="760" cy="64" r="3"/><circle cx="835" cy="64" r="3"/><circle cx="910" cy="64" r="3"/><circle cx="985" cy="64" r="3"/><circle cx="1060" cy="64" r="3"/>
+    <circle cx="760" cy="139" r="3"/><circle cx="835" cy="139" r="3"/><circle cx="910" cy="139" r="3"/><circle cx="985" cy="139" r="3"/><circle cx="1060" cy="139" r="3"/>
+    <circle cx="760" cy="214" r="3"/><circle cx="835" cy="214" r="3"/><circle cx="910" cy="214" r="3"/><circle cx="985" cy="214" r="3"/><circle cx="1060" cy="214" r="3"/>
+    <circle cx="760" cy="289" r="3"/><circle cx="835" cy="289" r="3"/><circle cx="910" cy="289" r="3"/><circle cx="985" cy="289" r="3"/><circle cx="1060" cy="289" r="3"/>
+  </g>
+  <g transform="translate(72 78)">
+    <rect x="0" y="0" width="118" height="118" rx="26" fill="#111827" stroke="#374151"/>
+    <path d="M28 64h50c16 0 28-13 28-29S93 6 77 6H54" fill="none" stroke="url(#amber)" stroke-width="12" stroke-linecap="round"/>
+    <path d="M90 61 70 41m20 20L70 81" fill="none" stroke="#fbbf24" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="72" y="242" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="72" font-weight="900" fill="#f9fafb" letter-spacing="-3">AutoShip</text>
+  <text x="76" y="292" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="25" fill="#cbd5e1">OpenCode-only GitHub issue → PR automation</text>
+  <text x="78" y="337" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#fbbf24">plan with GPT-5.5 · dispatch 15 workers · verify · open PRs</text>
+  <g transform="translate(620 85)">
+    <rect x="0" y="0" width="500" height="250" rx="24" fill="#0f172a" stroke="#334155"/>
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18">
+      <rect x="38" y="40" width="154" height="48" rx="12" fill="#1e293b" stroke="#475569"/><text x="58" y="71" fill="#e5e7eb">Issues</text>
+      <rect x="38" y="162" width="154" height="48" rx="12" fill="#1e293b" stroke="#475569"/><text x="58" y="193" fill="#e5e7eb">Pull Requests</text>
+      <rect x="270" y="24" width="188" height="52" rx="14" fill="#7c2d12" stroke="#f97316" filter="url(#glow)"/><text x="292" y="57" fill="#fff7ed">GPT-5.5 Plan</text>
+      <rect x="270" y="100" width="188" height="52" rx="14" fill="#1e3a8a" stroke="#60a5fa"/><text x="292" y="133" fill="#dbeafe">Best Worker</text>
+      <rect x="270" y="176" width="188" height="52" rx="14" fill="#14532d" stroke="#4ade80"/><text x="292" y="209" fill="#dcfce7">Reviewer</text>
+    </g>
+    <path d="M196 64h58" stroke="#fbbf24" stroke-width="5" stroke-linecap="round"/><path d="M252 64l-14-10m14 10-14 10" stroke="#fbbf24" stroke-width="5" stroke-linecap="round"/>
+    <path d="M364 78v18" stroke="#60a5fa" stroke-width="5" stroke-linecap="round"/><path d="M364 154v18" stroke="#4ade80" stroke-width="5" stroke-linecap="round"/>
+    <path d="M270 202h-74" stroke="#4ade80" stroke-width="5" stroke-linecap="round"/><path d="M196 202l14-10m-14 10 14 10" stroke="#4ade80" stroke-width="5" stroke-linecap="round"/>
+  </g>
+</svg>
