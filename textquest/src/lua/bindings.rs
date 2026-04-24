@@ -7,16 +7,19 @@
 //! - combat: textquest.combat.*
 //! - state: textquest.state.*
 /// - config: textquest.config.*
+/// - debug: textquest.debug.*
 /// - log: textquest.log.*
 /// - hotkeys: textquest.hotkeys.*
 /// - commands: textquest.commands.*
 use mlua::{Error as LuaError, Lua, LuaOptions, Result as LuaResult, Table, Value, Variadic};
 use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 
 use crate::lua::error::LuaApiError;
 use crate::lua::sandbox;
 use crate::registry::{Priority, SharedCommandRegistry, SharedHotkeyRegistry};
+
+static LUA_COMMAND_TRACING_ENABLED: AtomicBool = AtomicBool::new(false);
 
 pub struct LuaBindings {
     lua: Lua,
@@ -89,6 +92,7 @@ impl LuaBindings {
         self.register_combat_api(&textquest)?;
         self.register_state_api(&textquest)?;
         self.register_config_api(&textquest)?;
+        self.register_debug_api(&textquest)?;
         self.register_log_api(&textquest)?;
         self.register_events_api(&textquest)?;
         self.register_hotkeys_api(&textquest)?;
@@ -599,6 +603,66 @@ impl LuaBindings {
         Ok(())
     }
 
+    fn register_debug_api(&self, parent: &Table) -> LuaResult<()> {
+        let debug = self.lua.create_table()?;
+
+        debug.set(
+            "hex_dump",
+            self.lua.create_function(|_, args: Variadic<Value>| {
+                let args: Vec<Value> = args.into_iter().collect();
+                let address = method_usize_arg(&args, 0, "address")?;
+                let size = method_optional_usize_arg(&args, 1, "size")?
+                    .unwrap_or(64)
+                    .min(4096);
+                if size == 0 {
+                    return Err(LuaError::RuntimeError(
+                        "debug.hex_dump size must be greater than zero".to_string(),
+                    ));
+                }
+
+                tracing::debug!(
+                    address = format_args!("{address:#x}"),
+                    size,
+                    "lua debug hex_dump requested"
+                );
+                Ok(format_debug_hex_dump_request(address, size))
+            })?,
+        )?;
+        debug.set(
+            "enable_command_tracing",
+            self.lua.create_function(|_, ()| {
+                LUA_COMMAND_TRACING_ENABLED
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+                tracing::debug!("lua debug command tracing enabled");
+                Ok(true)
+            })?,
+        )?;
+        debug.set(
+            "command_tracing_enabled",
+            self.lua.create_function(|_, ()| {
+                Ok(LUA_COMMAND_TRACING_ENABLED.load(std::sync::atomic::Ordering::Relaxed))
+            })?,
+        )?;
+        debug.set(
+            "inspect_camp_state",
+            self.lua.create_function(|lua, ()| {
+                let state = lua.create_table()?;
+                state.set("status", "unavailable")?;
+                state.set("ipc_queue_depth", 0u32)?;
+                state.set("scripts", lua.create_table()?)?;
+                state.set("plugins", lua.create_table()?)?;
+                state.set(
+                    "command_tracing_enabled",
+                    LUA_COMMAND_TRACING_ENABLED.load(std::sync::atomic::Ordering::Relaxed),
+                )?;
+                Ok(state)
+            })?,
+        )?;
+
+        parent.set("debug", debug)?;
+        Ok(())
+    }
+
     // ── Commands API ─────────────────────────────────────────────────────────
 
     /// Expose `textquest.commands.*` to Lua.
@@ -690,6 +754,47 @@ fn method_string_arg(args: &[Value], index: usize) -> Option<String> {
         Value::String(value) => Some(value.to_string_lossy()),
         _ => None,
     }
+}
+
+fn method_usize_arg(args: &[Value], index: usize, name: &str) -> LuaResult<usize> {
+    method_optional_usize_arg(args, index, name)?.ok_or_else(|| {
+        LuaError::RuntimeError(format!("debug.hex_dump missing required {name} argument"))
+    })
+}
+
+fn method_optional_usize_arg(args: &[Value], index: usize, name: &str) -> LuaResult<Option<usize>> {
+    let Some(value) = method_arg(args, index) else {
+        return Ok(None);
+    };
+
+    match value {
+        Value::Integer(value) if *value >= 0 => Ok(Some(*value as usize)),
+        Value::Number(value) if value.is_finite() && *value >= 0.0 && value.fract() == 0.0 => {
+            Ok(Some(*value as usize))
+        }
+        Value::String(value) => parse_lua_usize(&value.to_string_lossy())
+            .map(Some)
+            .map_err(|_| LuaError::RuntimeError(format!("debug.hex_dump invalid {name}"))),
+        _ => Err(LuaError::RuntimeError(format!(
+            "debug.hex_dump {name} must be a non-negative integer"
+        ))),
+    }
+}
+
+fn parse_lua_usize(raw: &str) -> Result<usize, std::num::ParseIntError> {
+    let trimmed = raw.trim();
+    if let Some(hex) = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+    {
+        usize::from_str_radix(hex, 16)
+    } else {
+        trimmed.parse::<usize>()
+    }
+}
+
+fn format_debug_hex_dump_request(address: usize, size: usize) -> String {
+    format!("hex_dump address={address:#x} size={size} backend=MemoryRead")
 }
 
 fn trace_lua_log(level: &str, message: &str) {
@@ -959,6 +1064,32 @@ return removed and not fired
         "#;
         let ok: bool = lua.load(script).eval().expect("log API callable");
         assert!(ok);
+    }
+
+    #[test]
+    fn debug_api_hex_dump_and_state_are_callable() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        let script = r#"
+            local dump = textquest.debug:hex_dump("0x1000", 32)
+            local tracing_ok = textquest.debug.enable_command_tracing()
+            local tracing_enabled = textquest.debug.command_tracing_enabled()
+            local state = textquest.debug.inspect_camp_state()
+            return dump, tracing_ok, tracing_enabled, state.status, state.ipc_queue_depth
+        "#;
+        let (dump, tracing_ok, tracing_enabled, status, queue_depth): (
+            String,
+            bool,
+            bool,
+            String,
+            u32,
+        ) = lua.load(script).eval().expect("debug API callable");
+        assert!(dump.contains("address=0x1000"));
+        assert!(dump.contains("size=32"));
+        assert!(tracing_ok);
+        assert!(tracing_enabled);
+        assert_eq!(status, "unavailable");
+        assert_eq!(queue_depth, 0);
     }
 
     #[test]

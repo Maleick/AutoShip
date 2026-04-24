@@ -38,11 +38,14 @@
 //! ```
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 /// Global slash-command registry used by DLL command hooks, Lua scripts, and
 /// plugin bridges.
 static GLOBAL_REGISTRY: OnceLock<Mutex<CommandRegistry>> = OnceLock::new();
+static DEBUG_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
+static COMMAND_TRACING_ENABLED: AtomicBool = AtomicBool::new(false);
 
 /// Returns the process-wide command registry.
 pub fn global() -> &'static Mutex<CommandRegistry> {
@@ -78,6 +81,18 @@ pub fn dispatch_global_command(input: &str) -> CommandResult {
             CommandResult::Error("TextQuest command registry unavailable".to_string())
         }
     }
+}
+
+/// Returns whether runtime debug diagnostics are enabled.
+#[must_use]
+pub fn debug_mode_enabled() -> bool {
+    DEBUG_MODE_ENABLED.load(Ordering::Relaxed)
+}
+
+/// Returns whether runtime command tracing is enabled.
+#[must_use]
+pub fn command_tracing_enabled() -> bool {
+    COMMAND_TRACING_ENABLED.load(Ordering::Relaxed)
 }
 
 // ─── Trace feature ────────────────────────────────────────────────────────────
@@ -245,6 +260,14 @@ impl CommandRegistry {
     /// Returns [`CommandResult::NotFound`] when no command matches.
     pub fn dispatch(&self, input: &str) -> CommandResult {
         let input = input.trim();
+        trace_command_received(input);
+
+        let result = self.dispatch_inner(input);
+        trace_command_result(input, &result);
+        result
+    }
+
+    fn dispatch_inner(&self, input: &str) -> CommandResult {
 
         if !input.starts_with('/') {
             return CommandResult::Error("Input must start with '/'".to_string());
@@ -379,6 +402,7 @@ impl CommandRegistry {
             }
             Some("reload") => "Script reload is pending Lua runtime integration.".to_string(),
             Some("set") => "Runtime settings are pending config integration.".to_string(),
+            Some("debug") => return Some(dispatch_debug_command(&tokens[2..])),
             _ => format!(
                 "Unknown TextQuest command '{}'. Try /textquest help.",
                 tokens.join(" ")
@@ -423,6 +447,104 @@ impl Default for CommandRegistry {
 /// Strips leading `/`, trims whitespace, and lowercases.
 fn normalize_path(path: &str) -> String {
     path.trim_start_matches('/').trim().to_lowercase()
+}
+
+fn dispatch_debug_command(args: &[&str]) -> CommandResult {
+    let message = match args.first().map(|arg| arg.to_ascii_lowercase()).as_deref() {
+        None | Some("status") => debug_status_message(),
+        Some("on") => {
+            DEBUG_MODE_ENABLED.store(true, Ordering::Relaxed);
+            "TextQuest debug mode enabled.".to_string()
+        }
+        Some("off") => {
+            DEBUG_MODE_ENABLED.store(false, Ordering::Relaxed);
+            COMMAND_TRACING_ENABLED.store(false, Ordering::Relaxed);
+            "TextQuest debug mode disabled.".to_string()
+        }
+        Some("trace") => set_command_tracing(args.get(1).copied()),
+        Some("hex") => debug_hex_request(args.get(1).copied(), args.get(2).copied()),
+        Some("profile") => "Script profiling is pending Lua runtime integration.".to_string(),
+        Some(other) => format!(
+            "Unknown debug command '{other}'. Usage: /textquest debug [on|off|status|trace|hex <addr> [size]|profile]"
+        ),
+    };
+
+    CommandResult::Message(message)
+}
+
+fn debug_status_message() -> String {
+    format!(
+        "TextQuest debug mode: {}; command tracing: {}",
+        on_off(debug_mode_enabled()),
+        on_off(command_tracing_enabled())
+    )
+}
+
+fn set_command_tracing(mode: Option<&str>) -> String {
+    let enabled = match mode.map(str::to_ascii_lowercase).as_deref() {
+        None | Some("on") => true,
+        Some("off") => false,
+        Some("toggle") => !command_tracing_enabled(),
+        Some(other) => {
+            return format!(
+                "Unknown trace mode '{other}'. Usage: /textquest debug trace [on|off|toggle]"
+            );
+        }
+    };
+
+    DEBUG_MODE_ENABLED.store(enabled, Ordering::Relaxed);
+    COMMAND_TRACING_ENABLED.store(enabled, Ordering::Relaxed);
+    format!("TextQuest command tracing {}.", if enabled { "enabled" } else { "disabled" })
+}
+
+fn debug_hex_request(address: Option<&str>, size: Option<&str>) -> String {
+    let Some(address) = address else {
+        return "Usage: /textquest debug hex <addr> [size]".to_string();
+    };
+
+    let Ok(address) = parse_address(address) else {
+        return format!("Invalid debug hex address '{address}'. Use decimal or 0x-prefixed hex.");
+    };
+
+    let size = match size {
+        Some(raw) => match raw.parse::<usize>() {
+            Ok(value) if value > 0 => value.min(4096),
+            _ => return format!("Invalid debug hex size '{raw}'. Use a positive byte count."),
+        },
+        None => 64,
+    };
+
+    format!(
+        "Debug hex request queued: address={address:#x}, size={size} bytes. Use MemoryRead IPC for bytes."
+    )
+}
+
+fn parse_address(raw: &str) -> Result<usize, std::num::ParseIntError> {
+    let trimmed = raw.trim();
+    if let Some(hex) = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+    {
+        usize::from_str_radix(hex, 16)
+    } else {
+        trimmed.parse::<usize>()
+    }
+}
+
+fn on_off(value: bool) -> &'static str {
+    if value { "on" } else { "off" }
+}
+
+fn trace_command_received(input: &str) {
+    if command_tracing_enabled() {
+        tracing::info!(input, "TextQuest command trace received");
+    }
+}
+
+fn trace_command_result(input: &str, result: &CommandResult) {
+    if command_tracing_enabled() {
+        tracing::info!(input, ?result, "TextQuest command trace result");
+    }
 }
 
 /// Validate arguments against a command's declared types.
@@ -760,6 +882,36 @@ mod tests {
             CommandResult::Message(message) => assert!(message.contains("/mercs pull")),
             other => panic!("expected command listing message, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn builtin_textquest_debug_controls_runtime_flags() {
+        let reg = CommandRegistry::new();
+
+        let result = reg.dispatch("/textquest debug on");
+        assert!(matches!(result, CommandResult::Message(_)));
+        assert!(debug_mode_enabled());
+
+        let result = reg.dispatch("/textquest debug trace");
+        match result {
+            CommandResult::Message(message) => assert!(message.contains("enabled")),
+            other => panic!("expected debug trace message, got {other:?}"),
+        }
+        assert!(command_tracing_enabled());
+
+        let result = reg.dispatch("/textquest debug hex 0x40 16");
+        match result {
+            CommandResult::Message(message) => {
+                assert!(message.contains("address=0x40"));
+                assert!(message.contains("size=16"));
+            }
+            other => panic!("expected debug hex message, got {other:?}"),
+        }
+
+        let result = reg.dispatch("/textquest debug off");
+        assert!(matches!(result, CommandResult::Message(_)));
+        assert!(!debug_mode_enabled());
+        assert!(!command_tracing_enabled());
     }
 
     #[test]
