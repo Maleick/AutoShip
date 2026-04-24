@@ -147,6 +147,52 @@ artifact_file=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' 
 jq -e '.issue == "issue-996" and .model == "opencode/test-free" and .role == "implementer" and .workspace != "" and .hook == "hooks/opencode/runner.sh" and .failure_category == "stuck" and (.logs | contains("ok")) and .attempt == 2' "$artifact_file" >/dev/null || fail "failure artifact includes issue, model, workspace, hook, logs, category, role, and attempt"
 test -s "$RUNNER_REPO/.autoship/workspaces/issue-996/worker.pid" || fail "runner records worker pid for lifecycle monitoring"
 
+FALLBACK_REPO="$TMP_DIR/fallback-runner-repo"
+mkdir -p "$FALLBACK_REPO/.autoship/workspaces/issue-208" "$FALLBACK_REPO/hooks/opencode" "$FALLBACK_REPO/hooks" "$FALLBACK_REPO/bin"
+git init -q "$FALLBACK_REPO"
+cp "$SCRIPT_DIR/runner.sh" "$FALLBACK_REPO/hooks/opencode/runner.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$FALLBACK_REPO/hooks/update-state.sh"
+cp "$SCRIPT_DIR/../capture-failure.sh" "$FALLBACK_REPO/hooks/capture-failure.sh"
+chmod +x "$FALLBACK_REPO/hooks/opencode/runner.sh" "$FALLBACK_REPO/hooks/update-state.sh" "$FALLBACK_REPO/hooks/capture-failure.sh"
+cat > "$FALLBACK_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-208":{"state":"queued","model":"opencode/paid-model","role":"implementer","attempt":1,"task_type":"medium_code"}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+cat > "$FALLBACK_REPO/.autoship/model-routing.json" <<'JSON'
+{"models":[{"id":"opencode/paid-model","cost":"selected","strength":100,"max_task_types":["medium_code"]},{"id":"opencode/free-fallback","cost":"free","strength":80,"max_task_types":["medium_code"]}]}
+JSON
+printf 'QUEUED\n' > "$FALLBACK_REPO/.autoship/workspaces/issue-208/status"
+printf 'test prompt\n' > "$FALLBACK_REPO/.autoship/workspaces/issue-208/AUTOSHIP_PROMPT.md"
+printf 'opencode/paid-model\n' > "$FALLBACK_REPO/.autoship/workspaces/issue-208/model"
+cat > "$FALLBACK_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+model=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --model) model="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+if [[ "$model" == "opencode/paid-model" ]]; then
+  printf 'Error: Insufficient balance. Manage your billing here\n' >&2
+  exit 1
+fi
+printf 'COMPLETE\n' > status
+printf 'fallback succeeded\n' > AUTOSHIP_RESULT.md
+exit 0
+SH
+chmod +x "$FALLBACK_REPO/bin/opencode"
+(
+  cd "$FALLBACK_REPO"
+  PATH="$FALLBACK_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
+)
+for _ in 1 2 3 4 5; do
+  [[ "$(tr -d '[:space:]' < "$FALLBACK_REPO/.autoship/workspaces/issue-208/status")" != "RUNNING" ]] && break
+  sleep 1
+done
+assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$FALLBACK_REPO/.autoship/workspaces/issue-208/status")" "runner retries billing failures with a free fallback model"
+assert_eq "opencode/free-fallback" "$(tr -d '[:space:]' < "$FALLBACK_REPO/.autoship/workspaces/issue-208/model")" "runner records fallback model in workspace"
+jq -e '."opencode/paid-model".fail == 1 and (."opencode/paid-model".last_error | test("Insufficient balance"))' "$FALLBACK_REPO/.autoship/model-history.json" >/dev/null || fail "runner records paid model billing failure in model history"
+
 MONITOR_REPO="$TMP_DIR/monitor-repo"
 mkdir -p "$MONITOR_REPO/.autoship/workspaces/issue-997" "$MONITOR_REPO/hooks/opencode" "$MONITOR_REPO/hooks"
 git init -q "$MONITOR_REPO"
