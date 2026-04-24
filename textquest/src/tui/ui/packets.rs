@@ -81,8 +81,9 @@ fn draw_packet_stream(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         let header = themed_header_row(&["", "Time", "Dir", "Opcode", "Size", "Payload"], t);
 
-        // Calculate visible rows (area height minus borders, header, and filter line)
-        let visible_rows = area.height.saturating_sub(6) as usize;
+        // Outer border (2) + header row (1) + filter line (1) + inner padding (2) = 6 rows reserved.
+        const PACKETS_CHROME_ROWS: u16 = 6;
+        let visible_rows = area.height.saturating_sub(PACKETS_CHROME_ROWS) as usize;
         let total = filtered.len();
         let selected_idx = state.selected_index(total).unwrap_or(0);
         let skip = if state.auto_scroll {
@@ -125,7 +126,7 @@ fn draw_packet_stream(frame: &mut Frame, area: Rect, app: &App) {
                     }
                 };
 
-                let opcode_name = format_opcode_name(pkt.opcode);
+                let opcode_name = opcode_hex_label(pkt.opcode);
                 let opcode_style = if is_selected {
                     Style::default()
                         .fg(t.text_bright)
@@ -223,7 +224,7 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("opcode   ", Style::default().fg(t.text_secondary)),
             Span::styled(
-                format_opcode_name(pkt.opcode),
+                opcode_hex_label(pkt.opcode),
                 Style::default()
                     .fg(t.text_accent)
                     .add_modifier(Modifier::BOLD),
@@ -294,7 +295,7 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Get the color style for an opcode based on its type.
 fn get_opcode_color_style(opcode: u16, t: &crate::tui::theme::Theme) -> Style {
-    let name = format_opcode_name(opcode);
+    let name = opcode_hex_label(opcode);
     if name.contains("HP") || name.contains("Mana") {
         Style::default().fg(ratatui::style::Color::Yellow) // amber
     } else if name.contains("Cast") || name.contains("MemorizeSpell") {
@@ -306,9 +307,9 @@ fn get_opcode_color_style(opcode: u16, t: &crate::tui::theme::Theme) -> Style {
     }
 }
 
-/// Format opcode as name (currently hex, TODO: resolve to actual names).
-fn format_opcode_name(opcode: u16) -> String {
-    // TODO: Resolve opcode to actual spell/packet names
+/// Format opcode as hex label. Name resolution is tracked as a separate issue —
+/// until a lookup table lands, all opcodes render as `0xNNNN`.
+fn opcode_hex_label(opcode: u16) -> String {
     format!("0x{:04X}", opcode)
 }
 

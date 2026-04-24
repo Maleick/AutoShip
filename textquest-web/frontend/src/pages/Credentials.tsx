@@ -82,34 +82,38 @@ export function Credentials() {
         title="Credentials"
         subtitle={
           <>
-            <KeyRound className="w-3.5 h-3.5 text-[#cc44ff]" strokeWidth={1.75} />
+            <KeyRound className="w-3.5 h-3.5 text-neriak-magenta" strokeWidth={1.75} />
             <span>{creds.length} accounts</span>
-            <span className="text-[#503c6e]">·</span>
-            <span className="flex items-center gap-1 text-[#34d399]">
+            <span className="text-neriak-dim">·</span>
+            <span className="flex items-center gap-1 text-state-ok">
               <ShieldCheck className="w-3 h-3" strokeWidth={1.75} />
               encrypted at rest
             </span>
           </>
         }
         meta={
-          <span className="text-[10px] font-mono text-[#fbbf24] border border-[#fbbf24]/40 bg-[#fbbf24]/5 rounded-sm px-2 py-1 uppercase tracking-[0.2em]">
+          <span className="text-[10px] font-mono text-state-warn border border-state-warn/40 bg-state-warn/5 rounded-sm px-2 py-1 uppercase tracking-[0.2em]">
             mock data
           </span>
         }
       />
 
       <div className="p-6 space-y-4">
-        <section className="border border-[#503c6e] rounded-md bg-[#1a0a2e] overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-[#503c6e] text-xs font-mono text-[#a096b4] uppercase tracking-[0.15em]">
-            <KeyRound className="w-3.5 h-3.5 text-[#cc44ff]" strokeWidth={1.75} />
+        <section className="border border-neriak-dim rounded-md bg-panel overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-neriak-dim text-xs font-mono text-neriak-muted uppercase tracking-[0.15em]">
+            <KeyRound className="w-3.5 h-3.5 text-neriak-magenta" strokeWidth={1.75} />
             accounts
-            <button className="ml-auto flex items-center gap-1 text-[#cc44ff] hover:text-[#ff00ff]">
+            <button
+              type="button"
+              aria-label="Add credential"
+              className="ml-auto flex items-center gap-1 text-neriak-magenta hover:text-neriak-magenta-bright"
+            >
               <Plus className="w-3 h-3" strokeWidth={2} />
               add credential
             </button>
           </div>
           <table className="w-full font-mono text-sm">
-            <thead className="text-[#a096b4] uppercase tracking-[0.15em] text-[10px] bg-[#0d0618]">
+            <thead className="text-neriak-muted uppercase tracking-[0.15em] text-[10px] bg-void">
               <tr>
                 <th className="px-3 py-2 text-left">label</th>
                 <th className="px-3 py-2 text-left">account</th>
@@ -125,18 +129,18 @@ export function Credentials() {
                 return (
                   <tr
                     key={c.id}
-                    className="group border-t border-[#503c6e]/40 hover:bg-[#2d1e41]/40"
+                    className="group border-t border-neriak-dim/40 hover:bg-elevated/40"
                   >
-                    <td className="px-3 py-2 text-[#e2d7f4]">{c.label}</td>
-                    <td className="px-3 py-2 text-[#cc44ff]">{c.account}</td>
+                    <td className="px-3 py-2 text-neriak-text">{c.label}</td>
+                    <td className="px-3 py-2 text-neriak-magenta">{c.account}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-[#a096b4] font-mono">
+                        <span className="text-neriak-muted font-mono">
                           {isRevealed ? "redacted_in_demo" : c.password_hint}
                         </span>
                         <button
                           onClick={() => toggleReveal(c.id)}
-                          className="text-[#503c6e] hover:text-[#cc44ff]"
+                          className="text-neriak-dim hover:text-neriak-magenta"
                         >
                           {isRevealed ? (
                             <EyeOff className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -146,12 +150,12 @@ export function Credentials() {
                         </button>
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-[#a096b4]">{c.server}</td>
-                    <td className="px-3 py-2 text-[#503c6e] text-xs">{c.last_used ?? "—"}</td>
+                    <td className="px-3 py-2 text-neriak-muted">{c.server}</td>
+                    <td className="px-3 py-2 text-neriak-dim text-xs">{c.last_used ?? "—"}</td>
                     <td className="px-3 py-2 text-right">
                       <button
                         onClick={() => remove(c.id)}
-                        className="opacity-0 group-hover:opacity-100 text-[#503c6e] hover:text-[#ef4444] transition-opacity"
+                        className="opacity-0 group-hover:opacity-100 text-neriak-dim hover:text-state-danger transition-opacity"
                       >
                         <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                       </button>
@@ -163,10 +167,10 @@ export function Credentials() {
           </table>
         </section>
 
-        <section className="border border-[#fbbf24]/40 bg-[#fbbf24]/5 rounded-md p-4 flex items-start gap-3">
-          <ShieldCheck className="w-4 h-4 text-[#fbbf24] shrink-0 mt-0.5" strokeWidth={1.75} />
-          <div className="font-mono text-xs text-[#a096b4] space-y-1">
-            <div className="text-[#fbbf24] uppercase tracking-[0.2em] text-[10px]">
+        <section className="border border-state-warn/40 bg-state-warn/5 rounded-md p-4 flex items-start gap-3">
+          <ShieldCheck className="w-4 h-4 text-state-warn shrink-0 mt-0.5" strokeWidth={1.75} />
+          <div className="font-mono text-xs text-neriak-muted space-y-1">
+            <div className="text-state-warn uppercase tracking-[0.2em] text-[10px]">
               security notice
             </div>
             <p>

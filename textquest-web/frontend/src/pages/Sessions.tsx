@@ -15,17 +15,17 @@ import type {
 const GROUP_IDS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 const STATE_COLOR: Record<SessionState, string> = {
-  active: "text-[#34d399]",
-  idle: "text-[#a096b4]",
-  paused: "text-[#fbbf24]",
-  error: "text-[#ef4444]",
+  active: "text-state-ok",
+  idle: "text-neriak-muted",
+  paused: "text-state-warn",
+  error: "text-state-danger",
 };
 
 const STATE_DOT: Record<SessionState, string> = {
-  active: "bg-[#34d399] shadow-[0_0_6px_#34d399]",
-  idle: "bg-[#a096b4]",
-  paused: "bg-[#fbbf24]",
-  error: "bg-[#ef4444] animate-pulse",
+  active: "bg-state-ok shadow-[0_0_6px_#34d399]",
+  idle: "bg-neriak-muted",
+  paused: "bg-state-warn",
+  error: "bg-state-danger animate-pulse",
 };
 
 function bulkEndpoint(id: number, op: "pause" | "resume") {
@@ -132,20 +132,20 @@ export function Sessions() {
         title="Sessions"
         subtitle={
           <>
-            <Users className="w-3.5 h-3.5 text-[#00e5ff]" strokeWidth={1.75} />
+            <Users className="w-3.5 h-3.5 text-neriak-cyan" strokeWidth={1.75} />
             <span>{rows.length} clients</span>
-            <span className="text-[#503c6e]">·</span>
-            <span className="text-[#34d399]">{activeCount} active</span>
+            <span className="text-neriak-dim">·</span>
+            <span className="text-state-ok">{activeCount} active</span>
             {pausedCount > 0 && (
               <>
-                <span className="text-[#503c6e]">·</span>
-                <span className="text-[#fbbf24]">{pausedCount} paused</span>
+                <span className="text-neriak-dim">·</span>
+                <span className="text-state-warn">{pausedCount} paused</span>
               </>
             )}
             {errorCount > 0 && (
               <>
-                <span className="text-[#503c6e]">·</span>
-                <span className="text-[#ef4444]">{errorCount} error</span>
+                <span className="text-neriak-dim">·</span>
+                <span className="text-state-danger">{errorCount} error</span>
               </>
             )}
           </>
@@ -154,13 +154,13 @@ export function Sessions() {
           <>
             {loading && <span>loading…</span>}
             {error && (
-              <span className="flex items-center gap-1 text-[#ef4444]">
+              <span className="flex items-center gap-1 text-state-danger">
                 <AlertTriangle className="w-3.5 h-3.5" /> {error}
               </span>
             )}
             <button
               onClick={refetch}
-              className="border border-[#503c6e] hover:border-[#00e5ff] rounded-sm px-2 py-1"
+              className="border border-neriak-dim hover:border-neriak-cyan rounded-sm px-2 py-1"
             >
               refresh
             </button>
@@ -169,45 +169,45 @@ export function Sessions() {
       />
       <div className="p-6 space-y-4">
         {useMockData && (
-          <div className="text-[10px] font-mono text-[#fbbf24] border border-[#fbbf24]/40 bg-[#fbbf24]/5 rounded-sm px-2 py-1 inline-block uppercase tracking-[0.2em]">
+          <div className="text-[10px] font-mono text-state-warn border border-state-warn/40 bg-state-warn/5 rounded-sm px-2 py-1 inline-block uppercase tracking-[0.2em]">
             mock data · backend offline
           </div>
         )}
 
         {selected.size > 0 && (
-          <div className="flex items-center gap-3 border border-[#cc44ff]/50 bg-[#1a0a2e] rounded-sm px-3 py-2 font-mono text-xs">
-            <span className="text-[#cc44ff]">{selected.size} selected</span>
+          <div className="flex items-center gap-3 border border-neriak-magenta/50 bg-panel rounded-sm px-3 py-2 font-mono text-xs">
+            <span className="text-neriak-magenta">{selected.size} selected</span>
             <button
               onClick={() => bulk("pause")}
-              className="flex items-center gap-1 text-[#fbbf24] hover:text-[#fde68a]"
+              className="flex items-center gap-1 text-state-warn hover:text-[#fde68a]"
             >
               <Pause className="w-3.5 h-3.5" strokeWidth={1.75} /> pause all
             </button>
             <button
               onClick={() => bulk("resume")}
-              className="flex items-center gap-1 text-[#34d399] hover:text-[#6ee7b7]"
+              className="flex items-center gap-1 text-state-ok hover:text-[#6ee7b7]"
             >
               <Play className="w-3.5 h-3.5" strokeWidth={1.75} /> resume all
             </button>
             <button
               onClick={() => setSelected(new Set())}
-              className="ml-auto text-[#a096b4] hover:text-[#e2d7f4]"
+              className="ml-auto text-neriak-muted hover:text-neriak-text"
             >
               clear
             </button>
           </div>
         )}
 
-        <div className="border border-[#503c6e] rounded-md overflow-hidden">
-          <table className="w-full font-mono text-sm">
-            <thead className="bg-[#0d0618] text-[#a096b4] uppercase tracking-[0.15em] text-[10px]">
+        <div className="border border-neriak-dim rounded-md overflow-hidden overflow-x-auto">
+          <table className="w-full min-w-[720px] font-mono text-sm">
+            <thead className="bg-void text-neriak-muted uppercase tracking-[0.15em] text-[10px]">
               <tr>
                 <th className="w-8 px-3 py-2 text-left">
                   <input
                     type="checkbox"
                     checked={selected.size === rows.length && rows.length > 0}
                     onChange={toggleAll}
-                    className="accent-[#cc44ff]"
+                    className="accent-neriak-magenta"
                   />
                 </th>
                 <th className="px-3 py-2 text-left">id</th>
@@ -228,8 +228,8 @@ export function Sessions() {
                 return (
                   <tr
                     key={r.session_id}
-                    className={`border-t border-[#503c6e]/50 hover:bg-[#2d1e41]/60 ${
-                      isSel ? "bg-[#2d1e41]" : ""
+                    className={`border-t border-neriak-dim/50 hover:bg-elevated/60 ${
+                      isSel ? "bg-elevated" : ""
                     }`}
                   >
                     <td className="px-3 py-2">
@@ -237,34 +237,34 @@ export function Sessions() {
                         type="checkbox"
                         checked={isSel}
                         onChange={() => toggleSelect(r.session_id)}
-                        className="accent-[#cc44ff]"
+                        className="accent-neriak-magenta"
                       />
                     </td>
-                    <td className="px-3 py-2 text-[#a096b4]">{r.session_id}</td>
-                    <td className="px-3 py-2 text-[#e2d7f4]">
+                    <td className="px-3 py-2 text-neriak-muted">{r.session_id}</td>
+                    <td className="px-3 py-2 text-neriak-text">
                       {r.character_name ?? "—"}
                       {r.class && (
-                        <span className="ml-2 text-[10px] text-[#503c6e]">
+                        <span className="ml-2 text-[10px] text-neriak-dim">
                           {r.class.toUpperCase()}
                         </span>
                       )}
                       {r.level && (
-                        <span className="ml-1 text-[10px] text-[#503c6e]">L{r.level}</span>
+                        <span className="ml-1 text-[10px] text-neriak-dim">L{r.level}</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-[#a096b4] text-xs">{r.zone ?? "—"}</td>
+                    <td className="px-3 py-2 text-neriak-muted text-xs">{r.zone ?? "—"}</td>
                     <td className="px-3 py-2">
                       {r.hp_pct !== undefined ? (
                         <StatBar pct={r.hp_pct} kind="hp" />
                       ) : (
-                        <span className="text-[#503c6e]">—</span>
+                        <span className="text-neriak-dim">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2">
                       {r.mana_pct !== undefined ? (
                         <StatBar pct={r.mana_pct} kind="mp" />
                       ) : (
-                        <span className="text-[#503c6e]">—</span>
+                        <span className="text-neriak-dim">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -272,7 +272,7 @@ export function Sessions() {
                         value={r.group_id}
                         onChange={(e) => moveToGroup(r.session_id, Number(e.target.value))}
                         disabled={isBusy}
-                        className="bg-[#0d0618] border border-[#503c6e] rounded-sm px-1.5 py-0.5 text-[#e2d7f4] focus:border-[#00e5ff] outline-none"
+                        className="bg-void border border-neriak-dim rounded-sm px-1.5 py-0.5 text-neriak-text focus:border-neriak-cyan outline-none"
                       >
                         {GROUP_IDS.map((g) => (
                           <option key={g} value={g}>
@@ -281,7 +281,7 @@ export function Sessions() {
                         ))}
                       </select>
                     </td>
-                    <td className="px-3 py-2 text-[#a096b4]">{r.routing_scope}</td>
+                    <td className="px-3 py-2 text-neriak-muted">{r.routing_scope}</td>
                     <td className="px-3 py-2">
                       <span className={`flex items-center gap-2 ${STATE_COLOR[r.state]}`}>
                         <span
@@ -295,7 +295,7 @@ export function Sessions() {
                         <button
                           disabled={isBusy}
                           onClick={() => runOp(r.session_id, "resume")}
-                          className="inline-flex items-center gap-1 text-[#34d399] hover:text-[#6ee7b7] disabled:opacity-40"
+                          className="inline-flex items-center gap-1 text-state-ok hover:text-[#6ee7b7] disabled:opacity-40"
                         >
                           <Play className="w-3.5 h-3.5" strokeWidth={1.75} /> resume
                         </button>
@@ -303,7 +303,7 @@ export function Sessions() {
                         <button
                           disabled={isBusy || r.state === "error"}
                           onClick={() => runOp(r.session_id, "pause")}
-                          className="inline-flex items-center gap-1 text-[#fbbf24] hover:text-[#fde68a] disabled:opacity-40"
+                          className="inline-flex items-center gap-1 text-state-warn hover:text-[#fde68a] disabled:opacity-40"
                         >
                           <Pause className="w-3.5 h-3.5" strokeWidth={1.75} /> pause
                         </button>
@@ -314,7 +314,7 @@ export function Sessions() {
               })}
               {rows.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-[#503c6e] italic">
+                  <td colSpan={10} className="px-3 py-8 text-center text-neriak-dim italic">
                     no sessions
                   </td>
                 </tr>
@@ -323,50 +323,52 @@ export function Sessions() {
           </table>
         </div>
 
-        <section className="border border-[#503c6e] rounded-md bg-[#1a0a2e]">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-[#503c6e] text-xs font-mono text-[#a096b4] uppercase tracking-[0.15em]">
-            <Terminal className="w-3.5 h-3.5 text-[#00e5ff]" strokeWidth={1.75} />
+        <section className="border border-neriak-dim rounded-md bg-panel">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-neriak-dim text-xs font-mono text-neriak-muted uppercase tracking-[0.15em]">
+            <Terminal className="w-3.5 h-3.5 text-neriak-cyan" strokeWidth={1.75} />
             command relay
           </div>
           <div className="flex items-center gap-2 p-3">
             <select
+              aria-label="Command scope"
               value={cmdScope}
               onChange={(e) => setCmdScope(e.target.value as CommandScope)}
-              className="bg-[#0d0618] border border-[#503c6e] rounded-sm px-2 py-1.5 text-xs font-mono text-[#e2d7f4] focus:border-[#00e5ff] outline-none"
+              className="bg-void border border-neriak-dim rounded-sm px-2 py-1.5 text-xs font-mono text-neriak-text focus:border-neriak-cyan outline-none"
             >
               <option value="self">self</option>
               <option value="group">group</option>
               <option value="all">all</option>
             </select>
-            <div className="flex-1 flex items-center gap-2 bg-[#0d0618] border border-[#503c6e] rounded-sm px-2 py-1.5 focus-within:border-[#cc44ff]">
-              <Radio className="w-3.5 h-3.5 text-[#cc44ff]" strokeWidth={1.75} />
+            <div className="flex-1 flex items-center gap-2 bg-void border border-neriak-dim rounded-sm px-2 py-1.5 focus-within:border-neriak-magenta">
+              <Radio className="w-3.5 h-3.5 text-neriak-magenta" strokeWidth={1.75} />
               <input
+                aria-label="Slash command"
                 value={cmdText}
                 onChange={(e) => setCmdText(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendCommand()}
                 placeholder="/shout camp check"
-                className="flex-1 bg-transparent font-mono text-sm text-[#e2d7f4] placeholder-[#503c6e] outline-none"
+                className="flex-1 bg-transparent font-mono text-sm text-neriak-text placeholder-neriak-dim outline-none"
               />
             </div>
             <button
               onClick={sendCommand}
               disabled={!cmdText.trim()}
-              className="flex items-center gap-1 bg-[#cc44ff]/20 border border-[#cc44ff] text-[#cc44ff] hover:bg-[#cc44ff]/30 disabled:opacity-40 rounded-sm px-3 py-1.5 text-xs font-mono uppercase tracking-wider"
+              className="flex items-center gap-1 bg-neriak-magenta/20 border border-neriak-magenta text-neriak-magenta hover:bg-neriak-magenta/30 disabled:opacity-40 rounded-sm px-3 py-1.5 text-xs font-mono uppercase tracking-wider"
             >
               <Send className="w-3.5 h-3.5" strokeWidth={1.75} /> send
             </button>
           </div>
           {cmdLog.length > 0 && (
-            <div className="max-h-40 overflow-y-auto border-t border-[#503c6e] p-2 space-y-1 font-mono text-[11px]">
+            <div className="max-h-40 overflow-y-auto border-t border-neriak-dim p-2 space-y-1 font-mono text-[11px]">
               {cmdLog.map((r, i) => (
                 <div key={i} className="flex items-start gap-2">
-                  <span className={r.accepted ? "text-[#34d399]" : "text-[#ef4444]"}>
+                  <span className={r.accepted ? "text-state-ok" : "text-state-danger"}>
                     {r.accepted ? "✓" : "✗"}
                   </span>
-                  <span className="text-[#503c6e]">#{r.session_id}</span>
-                  <span className="text-[#a096b4]">[{r.scope_used}]</span>
-                  <span className="text-[#e2d7f4]">{r.command}</span>
-                  <span className="ml-auto text-[#503c6e]">{r.message}</span>
+                  <span className="text-neriak-dim">#{r.session_id}</span>
+                  <span className="text-neriak-muted">[{r.scope_used}]</span>
+                  <span className="text-neriak-text">{r.command}</span>
+                  <span className="ml-auto text-neriak-dim">{r.message}</span>
                 </div>
               ))}
             </div>

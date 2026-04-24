@@ -37,9 +37,11 @@ export function SortableItem({ id, children }: SortableItemProps) {
   const handle = (
     <button
       ref={undefined}
+      type="button"
+      aria-label="Drag to reorder"
       {...attributes}
       {...listeners}
-      className="touch-none cursor-grab active:cursor-grabbing text-[#503c6e] hover:text-[#cc44ff]"
+      className="touch-none cursor-grab active:cursor-grabbing text-neriak-dim hover:text-neriak-magenta"
     >
       <GripVertical className="w-3.5 h-3.5" strokeWidth={1.75} />
     </button>

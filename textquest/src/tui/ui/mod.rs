@@ -143,7 +143,8 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         let popup_area = centered_popup(area, 92, 72, 96, 28, 96, 36, 1); // Fixed 96-wide
         frame.render_widget(Clear, popup_area);
         frame.render_widget(
-            ChChainWidget::new(&app.ch_chain_panel_state).accent_color(app.theme.text_server), // magenta
+            ChChainWidget::new(&app.ch_chain_panel_state, &app.theme)
+                .accent_color(app.theme.text_server), // magenta
             popup_area,
         );
     }
@@ -188,7 +189,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
         frame.render_widget(Clear, toast_area);
 
-        let title = " Toast ";
+        let title = " Notice ";
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
@@ -443,7 +444,13 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     let width_class = classify_width(area.width);
 
     // ─── Line 1: Top border with title inset ───
-    let title = "TextQuest";
+    // Wordmark sourced from `tui::branding::WORDMARK` — kept in lockstep with
+    // the web frontend's "TEXTQUEST" Cinzel display treatment.
+    let title = format!(
+        "{} v{}",
+        crate::tui::branding::WORDMARK,
+        crate::tui::branding::VERSION
+    );
     let border_char = "─";
     let left_border = "╭";
     let right_border = "╮";

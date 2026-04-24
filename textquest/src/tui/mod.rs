@@ -3,6 +3,8 @@
 
 /// Achievement system — milestones, raid firsts, and progression unlocks.
 pub mod achievements;
+/// Shared branding constants (wordmark, version) for TUI surfaces.
+pub mod branding;
 /// Application state — tracks active screen, selections, and all runtime data.
 pub mod app;
 /// Audio alert definitions and configurable playback controls.

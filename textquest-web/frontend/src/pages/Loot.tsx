@@ -32,7 +32,7 @@ function ItemList({
   const [input, setInput] = useState("");
   return (
     <section
-      className="border rounded-md bg-[#1a0a2e] flex flex-col"
+      className="border rounded-md bg-panel flex flex-col"
       style={{ borderColor: `${color}44` }}
     >
       <div
@@ -40,28 +40,30 @@ function ItemList({
         style={{ borderColor: `${color}44`, color }}
       >
         {title}
-        <span className="ml-auto text-[#503c6e]">{items.length}</span>
+        <span className="ml-auto text-neriak-dim">{items.length}</span>
       </div>
       <div className="flex-1 p-2 space-y-1 min-h-[180px] max-h-[320px] overflow-y-auto">
         {items.map((it) => (
           <div
             key={it}
-            className="group flex items-center gap-2 px-2 py-1 border border-[#503c6e]/30 bg-[#0d0618] rounded-sm font-mono text-sm text-[#e2d7f4]"
+            className="group flex items-center gap-2 px-2 py-1 border border-neriak-dim/30 bg-void rounded-sm font-mono text-sm text-neriak-text"
           >
             <span className="flex-1">{it}</span>
             <button
+              type="button"
+              aria-label={`Remove ${it}`}
               onClick={() => onRemove(it)}
-              className="opacity-0 group-hover:opacity-100 text-[#503c6e] hover:text-[#ef4444]"
+              className="opacity-0 group-hover:opacity-100 text-neriak-dim hover:text-state-danger"
             >
               <X className="w-3 h-3" strokeWidth={2} />
             </button>
           </div>
         ))}
         {items.length === 0 && (
-          <div className="px-2 py-6 text-center text-[#503c6e] font-mono text-xs italic">empty</div>
+          <div className="px-2 py-6 text-center text-neriak-dim font-mono text-xs italic">empty</div>
         )}
       </div>
-      <div className="flex items-center gap-2 p-2 border-t border-[#503c6e]/50">
+      <div className="flex items-center gap-2 p-2 border-t border-neriak-dim/50">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -72,7 +74,7 @@ function ItemList({
             }
           }}
           placeholder={placeholder}
-          className="flex-1 bg-[#0d0618] border border-[#503c6e] rounded-sm px-2 py-1 font-mono text-xs text-[#e2d7f4] placeholder-[#503c6e] focus:border-[color:var(--ring)] outline-none"
+          className="flex-1 bg-void border border-neriak-dim rounded-sm px-2 py-1 font-mono text-xs text-neriak-text placeholder-neriak-dim focus:border-[color:var(--ring)] outline-none"
           style={{ ["--ring" as string]: color } as React.CSSProperties}
         />
         <button
@@ -82,7 +84,7 @@ function ItemList({
               setInput("");
             }
           }}
-          className="text-[#503c6e] hover:text-[color:var(--accent)]"
+          className="text-neriak-dim hover:text-[color:var(--accent)]"
           style={{ ["--accent" as string]: color } as React.CSSProperties}
         >
           <Plus className="w-3.5 h-3.5" strokeWidth={2} />
@@ -108,22 +110,22 @@ export function Loot() {
         title="Loot"
         subtitle={
           <>
-            <Package className="w-3.5 h-3.5 text-[#cc44ff]" strokeWidth={1.75} />
-            <span className="text-[#34d399]">{rules.keep_items.length} keep</span>
-            <span className="text-[#503c6e]">·</span>
-            <span className="text-[#fbbf24]">{rules.sell_items.length} sell</span>
-            <span className="text-[#503c6e]">·</span>
-            <span className="text-[#ef4444]">{rules.destroy_items.length} destroy</span>
+            <Package className="w-3.5 h-3.5 text-neriak-magenta" strokeWidth={1.75} />
+            <span className="text-state-ok">{rules.keep_items.length} keep</span>
+            <span className="text-neriak-dim">·</span>
+            <span className="text-state-warn">{rules.sell_items.length} sell</span>
+            <span className="text-neriak-dim">·</span>
+            <span className="text-state-danger">{rules.destroy_items.length} destroy</span>
           </>
         }
         meta={
-          <span className="text-[10px] font-mono text-[#fbbf24] border border-[#fbbf24]/40 bg-[#fbbf24]/5 rounded-sm px-2 py-1 uppercase tracking-[0.2em]">
+          <span className="text-[10px] font-mono text-state-warn border border-state-warn/40 bg-state-warn/5 rounded-sm px-2 py-1 uppercase tracking-[0.2em]">
             mock data
           </span>
         }
       />
 
-      <div className="px-6 pt-4 flex items-center gap-1 border-b border-[#503c6e]/40">
+      <div className="px-6 pt-4 flex items-center gap-1 border-b border-neriak-dim/40">
         {TABS.map(({ id, label, icon: Icon }) => {
           const active = tab === id;
           return (
@@ -132,8 +134,8 @@ export function Loot() {
               onClick={() => setTab(id)}
               className={`flex items-center gap-2 px-4 py-2 font-mono text-xs uppercase tracking-[0.18em] border-b-2 transition-colors ${
                 active
-                  ? "border-[#cc44ff] text-[#cc44ff]"
-                  : "border-transparent text-[#a096b4] hover:text-[#e2d7f4]"
+                  ? "border-neriak-magenta text-neriak-magenta"
+                  : "border-transparent text-neriak-muted hover:text-neriak-text"
               }`}
             >
               <Icon className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -141,13 +143,13 @@ export function Loot() {
             </button>
           );
         })}
-        <div className="ml-auto flex items-center gap-4 pb-2 font-mono text-xs text-[#a096b4]">
+        <div className="ml-auto flex items-center gap-4 pb-2 font-mono text-xs text-neriak-muted">
           <label className="flex items-center gap-1.5">
             <input
               type="checkbox"
               checked={rules.loot_all}
               onChange={() => setRules({ ...rules, loot_all: !rules.loot_all })}
-              className="accent-[#cc44ff]"
+              className="accent-neriak-magenta"
             />
             loot all
           </label>
@@ -156,7 +158,7 @@ export function Loot() {
               type="checkbox"
               checked={rules.auto_split}
               onChange={() => setRules({ ...rules, auto_split: !rules.auto_split })}
-              className="accent-[#cc44ff]"
+              className="accent-neriak-magenta"
             />
             auto split
           </label>
@@ -195,16 +197,16 @@ export function Loot() {
         )}
 
         {tab === "master" && (
-          <section className="border border-[#503c6e] rounded-md bg-[#1a0a2e] p-6 max-w-xl">
-            <div className="flex items-center gap-2 mb-4 text-xs font-mono text-[#a096b4] uppercase tracking-[0.15em]">
-              <Users className="w-3.5 h-3.5 text-[#cc44ff]" strokeWidth={1.75} />
+          <section className="border border-neriak-dim rounded-md bg-panel p-6 max-w-xl">
+            <div className="flex items-center gap-2 mb-4 text-xs font-mono text-neriak-muted uppercase tracking-[0.15em]">
+              <Users className="w-3.5 h-3.5 text-neriak-magenta" strokeWidth={1.75} />
               master looter
             </div>
             <label className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#a096b4]">
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-neriak-muted">
                 designated character
               </span>
-              <select className="bg-[#0d0618] border border-[#503c6e] rounded-sm px-2 py-1.5 font-mono text-sm text-[#e2d7f4] focus:border-[#cc44ff] outline-none">
+              <select className="bg-void border border-neriak-dim rounded-sm px-2 py-1.5 font-mono text-sm text-neriak-text focus:border-neriak-magenta outline-none">
                 <option value="">— none —</option>
                 <option>Thurgrek</option>
                 <option>Sylunariel</option>
@@ -215,16 +217,16 @@ export function Loot() {
         )}
 
         {tab === "distribution" && (
-          <section className="border border-[#503c6e] rounded-md bg-[#1a0a2e]">
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-[#503c6e] text-xs font-mono text-[#a096b4] uppercase tracking-[0.15em]">
-              <Settings2 className="w-3.5 h-3.5 text-[#cc44ff]" strokeWidth={1.75} />
+          <section className="border border-neriak-dim rounded-md bg-panel">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-neriak-dim text-xs font-mono text-neriak-muted uppercase tracking-[0.15em]">
+              <Settings2 className="w-3.5 h-3.5 text-neriak-magenta" strokeWidth={1.75} />
               distribution rules
-              <button className="ml-auto flex items-center gap-1 text-[#cc44ff] hover:text-[#ff00ff]">
+              <button className="ml-auto flex items-center gap-1 text-neriak-magenta hover:text-neriak-magenta-bright">
                 <Plus className="w-3 h-3" strokeWidth={2} /> add rule
               </button>
             </div>
             <table className="w-full font-mono text-sm">
-              <thead className="text-[#a096b4] uppercase tracking-[0.15em] text-[10px] bg-[#0d0618]">
+              <thead className="text-neriak-muted uppercase tracking-[0.15em] text-[10px] bg-void">
                 <tr>
                   <th className="px-3 py-2 text-left">item type</th>
                   <th className="px-3 py-2 text-left">quality</th>
@@ -239,12 +241,16 @@ export function Loot() {
                   { t: "armor", q: "any", m: "round_robin" },
                   { t: "spell", q: "any", m: "random" },
                 ].map((r, i) => (
-                  <tr key={i} className="border-t border-[#503c6e]/40">
-                    <td className="px-3 py-2 text-[#e2d7f4]">{r.t}</td>
-                    <td className="px-3 py-2 text-[#a096b4]">{r.q}</td>
-                    <td className="px-3 py-2 text-[#cc44ff]">{r.m}</td>
+                  <tr key={i} className="border-t border-neriak-dim/40">
+                    <td className="px-3 py-2 text-neriak-text">{r.t}</td>
+                    <td className="px-3 py-2 text-neriak-muted">{r.q}</td>
+                    <td className="px-3 py-2 text-neriak-magenta">{r.m}</td>
                     <td className="px-3 py-2 text-right">
-                      <button className="text-[#503c6e] hover:text-[#ef4444]">
+                      <button
+                        type="button"
+                        aria-label={`Remove rule ${r.t}`}
+                        className="text-neriak-dim hover:text-state-danger"
+                      >
                         <X className="w-3 h-3" strokeWidth={2} />
                       </button>
                     </td>
@@ -256,14 +262,14 @@ export function Loot() {
         )}
 
         {tab === "history" && (
-          <section className="border border-[#503c6e] rounded-md bg-[#1a0a2e] overflow-hidden">
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-[#503c6e] text-xs font-mono text-[#a096b4] uppercase tracking-[0.15em]">
-              <History className="w-3.5 h-3.5 text-[#cc44ff]" strokeWidth={1.75} />
+          <section className="border border-neriak-dim rounded-md bg-panel overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-neriak-dim text-xs font-mono text-neriak-muted uppercase tracking-[0.15em]">
+              <History className="w-3.5 h-3.5 text-neriak-magenta" strokeWidth={1.75} />
               recent loot
-              <span className="ml-auto text-[#503c6e]">{MOCK_LOOT_HISTORY.length} entries</span>
+              <span className="ml-auto text-neriak-dim">{MOCK_LOOT_HISTORY.length} entries</span>
             </div>
             <table className="w-full font-mono text-sm">
-              <thead className="text-[#a096b4] uppercase tracking-[0.15em] text-[10px] bg-[#0d0618]">
+              <thead className="text-neriak-muted uppercase tracking-[0.15em] text-[10px] bg-void">
                 <tr>
                   <th className="px-3 py-2 text-left">time</th>
                   <th className="px-3 py-2 text-left">item</th>
@@ -276,19 +282,19 @@ export function Loot() {
               </thead>
               <tbody>
                 {MOCK_LOOT_HISTORY.map((h) => (
-                  <tr key={h.id} className="border-t border-[#503c6e]/40 hover:bg-[#2d1e41]/40">
-                    <td className="px-3 py-2 text-[#503c6e] tabular-nums">{h.timestamp}</td>
-                    <td className="px-3 py-2 text-[#cc44ff]">{h.item_name}</td>
-                    <td className="px-3 py-2 text-[#e2d7f4]">{h.recipient}</td>
-                    <td className="px-3 py-2 text-[#a096b4] flex items-center gap-1.5">
-                      <Skull className="w-3 h-3 text-[#503c6e]" strokeWidth={1.75} />
+                  <tr key={h.id} className="border-t border-neriak-dim/40 hover:bg-elevated/40">
+                    <td className="px-3 py-2 text-neriak-dim tabular-nums">{h.timestamp}</td>
+                    <td className="px-3 py-2 text-neriak-magenta">{h.item_name}</td>
+                    <td className="px-3 py-2 text-neriak-text">{h.recipient}</td>
+                    <td className="px-3 py-2 text-neriak-muted flex items-center gap-1.5">
+                      <Skull className="w-3 h-3 text-neriak-dim" strokeWidth={1.75} />
                       {h.source_mob}
                     </td>
-                    <td className="px-3 py-2 text-[#a096b4]">{h.zone}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-[#e2d7f4]">
+                    <td className="px-3 py-2 text-neriak-muted">{h.zone}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-neriak-text">
                       {h.quantity}
                     </td>
-                    <td className="px-3 py-2 text-[10px] text-[#a096b4] uppercase tracking-[0.15em]">
+                    <td className="px-3 py-2 text-[10px] text-neriak-muted uppercase tracking-[0.15em]">
                       {h.assigned_by ?? "—"}
                     </td>
                   </tr>

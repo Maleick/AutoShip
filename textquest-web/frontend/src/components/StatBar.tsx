@@ -22,7 +22,7 @@ export function StatBar({ pct, kind, width = 64 }: StatBarProps) {
   return (
     <span className="inline-flex items-center gap-2">
       <span
-        className="relative inline-block h-2 rounded-sm bg-[#0d0618] border border-[#503c6e] overflow-hidden"
+        className="relative inline-block h-2 rounded-sm bg-void border border-neriak-dim overflow-hidden"
         style={{ width }}
       >
         <span

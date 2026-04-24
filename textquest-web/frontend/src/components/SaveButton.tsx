@@ -21,10 +21,10 @@ export function SaveButton({ state, error, onClick, disabled, label = "save" }: 
         disabled={disabled || isSaving}
         className={`flex items-center gap-1.5 rounded-sm px-4 py-1.5 text-xs font-mono uppercase tracking-[0.2em] border transition-colors ${
           isSaved
-            ? "bg-[#34d399]/20 border-[#34d399] text-[#34d399]"
+            ? "bg-state-ok/20 border-state-ok text-state-ok"
             : isError
-              ? "bg-[#ef4444]/20 border-[#ef4444] text-[#ef4444]"
-              : "bg-[#cc44ff]/20 border-[#cc44ff] text-[#cc44ff] hover:bg-[#cc44ff]/30"
+              ? "bg-state-danger/20 border-state-danger text-state-danger"
+              : "bg-neriak-magenta/20 border-neriak-magenta text-neriak-magenta hover:bg-neriak-magenta/30"
         } disabled:opacity-40`}
       >
         {isSaving ? (
@@ -39,7 +39,7 @@ export function SaveButton({ state, error, onClick, disabled, label = "save" }: 
         {isSaving ? "saving…" : isSaved ? "saved" : isError ? "retry" : label}
       </button>
       {error && (
-        <span className="font-mono text-[10px] text-[#ef4444] uppercase tracking-[0.15em]">
+        <span className="font-mono text-[10px] text-state-danger uppercase tracking-[0.15em]">
           {error}
         </span>
       )}

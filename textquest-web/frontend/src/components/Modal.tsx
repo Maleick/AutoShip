@@ -10,11 +10,26 @@ interface ModalProps {
 export function Modal({ open, onClose, title, children }: ModalProps) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-lg p-6 max-w-lg w-full mx-4 shadow-xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={title ? "modal-title" : undefined}
+    >
+      <div className="absolute inset-0 bg-void/80" onClick={onClose} />
+      <div className="relative bg-panel border border-neriak-magenta/40 rounded-lg p-6 max-w-lg w-full mx-4 shadow-xl">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute top-3 right-3 text-neriak-muted hover:text-neriak-text focus:outline-none focus:ring-2 focus:ring-neriak-cyan rounded"
+        >
+          ×
+        </button>
         {title && (
-          <h2 className="text-lg font-semibold text-gray-100 mb-4">{title}</h2>
+          <h2 id="modal-title" className="text-lg font-semibold text-neriak-text mb-4 pr-8">
+            {title}
+          </h2>
         )}
         {children}
       </div>

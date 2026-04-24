@@ -5,6 +5,7 @@
 
 use crate::tui::{
     cast::CastDisplay,
+    theme::Theme,
     ui::widgets::{render_cast_bar, truncate_inline},
 };
 use ratatui::{
@@ -14,6 +15,19 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Widget},
 };
+
+/// Semantic colors for cast state visualization. Maps raw cast outcomes to
+/// themed colors so palette swaps (e.g., Neriak → classic) propagate uniformly.
+fn cast_state_color(state: &CastState, t: &Theme) -> Color {
+    match state {
+        CastState::Idle => t.text_muted,
+        CastState::Casting(pct) if *pct > 0.75 => t.hp_high,
+        CastState::Casting(pct) if *pct > 0.25 => t.con_yellow,
+        CastState::Casting(_) => t.text_bright,
+        CastState::Completed => t.hp_high,
+        CastState::Missed => t.hp_low,
+    }
+}
 
 const COMPACT_LAYOUT_WIDTH_THRESHOLD: u16 = 72;
 const COMPACT_LAYOUT_HEIGHT_THRESHOLD: u16 = 20;
@@ -191,14 +205,16 @@ impl ChChainPanelState {
 /// Widget that draws the CH chain configuration panel.
 pub struct ChChainWidget<'a> {
     state: &'a ChChainPanelState,
+    theme: &'a Theme,
     accent_color: Color,
 }
 
 impl<'a> ChChainWidget<'a> {
-    pub fn new(state: &'a ChChainPanelState) -> Self {
+    pub fn new(state: &'a ChChainPanelState, theme: &'a Theme) -> Self {
         Self {
             state,
-            accent_color: Color::Cyan,
+            theme,
+            accent_color: Color::Reset,
         }
     }
 
@@ -254,6 +270,7 @@ impl Widget for ChChainWidget<'_> {
 
 impl ChChainWidget<'_> {
     fn render_header(&self, area: Rect, buf: &mut Buffer, compact: bool) {
+        let t = self.theme;
         let target_prefix = if compact { "Tgt:" } else { "Target:" };
         let target_name = if self.state.target_name.is_empty() {
             String::from("(none)")
@@ -269,17 +286,17 @@ impl ChChainWidget<'_> {
         let adaptive_label = if self.state.adaptive {
             Span::styled(
                 if compact { " ADAPT " } else { " ADAPTIVE " },
-                Style::default().fg(Color::Green),
+                Style::default().fg(t.hp_high),
             )
         } else {
-            Span::styled(" FIXED ", Style::default().fg(Color::Yellow))
+            Span::styled(" FIXED ", Style::default().fg(t.con_yellow))
         };
 
         let lines = vec![
             Line::from(vec![
                 Span::styled(
                     format!("{target_prefix} {target_label} [{}]", self.state.target_id),
-                    Style::default().fg(Color::White),
+                    Style::default().fg(t.text_bright),
                 ),
                 Span::raw("  "),
                 adaptive_label,
@@ -298,7 +315,7 @@ impl ChChainWidget<'_> {
                         self.state.chain_delay_secs
                     )
                 },
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(t.text_muted),
             )),
         ];
 
@@ -307,17 +324,18 @@ impl ChChainWidget<'_> {
     }
 
     fn render_chain_list(&self, area: Rect, buf: &mut Buffer, compact: bool) {
+        let t = self.theme;
         let block = Block::default()
             .title(if compact { " Chain " } else { " Chain Order " })
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray));
+            .border_style(Style::default().fg(t.text_muted));
         let inner = block.inner(area);
         block.render(area, buf);
 
         if self.state.clerics.is_empty() {
             let hint = Paragraph::new(Span::styled(
                 "No clerics in chain. Use :ch add <pid> to add.",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(t.text_muted),
             ));
             hint.render(inner, buf);
             return;
@@ -345,24 +363,53 @@ impl ChChainWidget<'_> {
                     .bg(self.accent_color)
                     .add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::White)
+                Style::default().fg(t.text_bright)
             };
 
-            // Cast state indicator
-            let (state_char, state_color) = match cleric.cast_state {
-                CastState::Idle => (if compact { "." } else { "○" }, Color::DarkGray),
-                CastState::Casting(pct) => {
-                    if pct > 0.75 {
-                        (if compact { "*" } else { "◕" }, Color::Green)
-                    } else if pct > 0.25 {
-                        (if compact { ">" } else { "◑" }, Color::Yellow)
+            // Cast state indicator — glyph picked locally, color threaded through theme.
+            let state_char = match cleric.cast_state {
+                CastState::Idle => {
+                    if compact {
+                        "."
                     } else {
-                        (if compact { "-" } else { "◔" }, Color::White)
+                        "○"
                     }
                 }
-                CastState::Completed => (if compact { "*" } else { "●" }, Color::Green),
-                CastState::Missed => (if compact { "x" } else { "✗" }, Color::Red),
+                CastState::Casting(pct) => {
+                    if pct > 0.75 {
+                        if compact {
+                            "*"
+                        } else {
+                            "◕"
+                        }
+                    } else if pct > 0.25 {
+                        if compact {
+                            ">"
+                        } else {
+                            "◑"
+                        }
+                    } else if compact {
+                        "-"
+                    } else {
+                        "◔"
+                    }
+                }
+                CastState::Completed => {
+                    if compact {
+                        "*"
+                    } else {
+                        "●"
+                    }
+                }
+                CastState::Missed => {
+                    if compact {
+                        "x"
+                    } else {
+                        "✗"
+                    }
+                }
             };
+            let state_color = cast_state_color(&cleric.cast_state, t);
             let pos_text = format!(" {}. ", cleric.position);
             let offset_text = if cleric.timing_offset_ms != 0 {
                 format!(" {:+}ms", cleric.timing_offset_ms)
@@ -408,7 +455,7 @@ impl ChChainWidget<'_> {
                 ),
                 Span::styled(
                     offset_text,
-                    Style::default().fg(Color::DarkGray).bg(if is_selected {
+                    Style::default().fg(t.text_muted).bg(if is_selected {
                         self.accent_color
                     } else {
                         Color::Reset
@@ -416,7 +463,7 @@ impl ChChainWidget<'_> {
                 ),
                 Span::styled(
                     inline_cast,
-                    Style::default().fg(Color::DarkGray).bg(if is_selected {
+                    Style::default().fg(t.text_muted).bg(if is_selected {
                         self.accent_color
                     } else {
                         Color::Reset
@@ -434,21 +481,21 @@ impl ChChainWidget<'_> {
                     cast_display,
                     inner.width.saturating_sub(2) as usize,
                     if cast_display.exact {
-                        Color::Green
+                        t.hp_high
                     } else {
-                        Color::White
+                        t.text_bright
                     },
                     if cast_display.exact {
-                        Color::Green
+                        t.hp_high
                     } else {
-                        Color::Yellow
+                        t.con_yellow
                     },
                     if cast_display.exact {
-                        Color::White
+                        t.text_bright
                     } else {
-                        Color::Gray
+                        t.text_muted
                     },
-                    Color::DarkGray,
+                    t.text_muted,
                 );
                 cast_line.spans.insert(0, Span::raw("  "));
                 if is_selected {
@@ -462,30 +509,31 @@ impl ChChainWidget<'_> {
     }
 
     fn render_timing(&self, area: Rect, buf: &mut Buffer) {
+        let t = self.theme;
         let block = Block::default()
             .title(" Timing ")
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray));
+            .border_style(Style::default().fg(t.text_muted));
         let inner = block.inner(area);
         block.render(area, buf);
 
         let line = Line::from(vec![
-            Span::styled("Cast: ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Cast: ", Style::default().fg(t.text_muted)),
             Span::styled(
                 format!("{:.1}s", self.state.cast_time_secs),
-                Style::default().fg(Color::White),
+                Style::default().fg(t.text_bright),
             ),
             Span::raw("  "),
-            Span::styled("Overlap: ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Overlap: ", Style::default().fg(t.text_muted)),
             Span::styled(
                 format!("{:.1}s", self.state.overlap_buffer_secs),
-                Style::default().fg(Color::White),
+                Style::default().fg(t.text_bright),
             ),
             Span::raw("  "),
-            Span::styled("Delay: ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Delay: ", Style::default().fg(t.text_muted)),
             Span::styled(
                 format!("{:.1}s", self.state.chain_delay_secs),
-                Style::default().fg(Color::White),
+                Style::default().fg(t.text_bright),
             ),
         ]);
 
@@ -497,7 +545,7 @@ impl ChChainWidget<'_> {
         let block = Block::default()
             .title(" Chain Health ")
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray));
+            .border_style(Style::default().fg(self.theme.text_muted));
         let inner = block.inner(area);
         block.render(area, buf);
 
@@ -505,18 +553,19 @@ impl ChChainWidget<'_> {
             return;
         }
 
+        let t = self.theme;
         let health = self.state.chain_health();
         let health_color = if health > 0.9 {
-            Color::Green
+            t.hp_high
         } else if health > 0.7 {
-            Color::Yellow
+            t.hp_mid
         } else {
-            Color::Red
+            t.hp_low
         };
 
         let stats = &self.state.stats;
         let line = Line::from(vec![
-            Span::styled("Health: ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Health: ", Style::default().fg(t.text_muted)),
             Span::styled(
                 format!("{:.0}%", health * 100.0),
                 Style::default().fg(health_color),
@@ -527,7 +576,7 @@ impl ChChainWidget<'_> {
                     "Heals: {}  Missed: {}  Late: {}",
                     stats.total_heals, stats.missed_heals, stats.late_casts
                 ),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(t.text_muted),
             ),
         ]);
 
@@ -536,10 +585,11 @@ impl ChChainWidget<'_> {
     }
 
     fn render_compact_footer(&self, area: Rect, buf: &mut Buffer) {
+        let t = self.theme;
         let block = Block::default()
             .title(" Timing / Health ")
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(Color::DarkGray));
+            .border_style(Style::default().fg(t.text_muted));
         let inner = block.inner(area);
         block.render(area, buf);
 
@@ -557,7 +607,7 @@ impl ChChainWidget<'_> {
         );
         let line = Line::from(Span::styled(
             truncate_inline(&summary, inner.width as usize),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(t.text_muted),
         ));
         Paragraph::new(line).render(inner, buf);
     }
@@ -662,7 +712,8 @@ mod tests {
 
         let area = Rect::new(0, 0, 50, 12);
         let mut buf = Buffer::empty(area);
-        ChChainWidget::new(&state).render(area, &mut buf);
+        let theme = crate::tui::theme::neriak();
+        ChChainWidget::new(&state, &theme).render(area, &mut buf);
         let rendered = buffer_contents(&buf, area);
 
         assert!(rendered.contains("Complete Heal") || rendered.contains("CH"));
@@ -674,7 +725,8 @@ mod tests {
         let state = sample_state();
         let area = Rect::new(0, 0, 48, 14);
         let mut buf = Buffer::empty(area);
-        ChChainWidget::new(&state).render(area, &mut buf);
+        let theme = crate::tui::theme::neriak();
+        ChChainWidget::new(&state, &theme).render(area, &mut buf);
         let rendered = buffer_contents(&buf, area);
 
         assert!(rendered.contains("Tgt:"));
@@ -688,7 +740,8 @@ mod tests {
         let state = sample_state();
         let area = Rect::new(0, 0, 80, 22);
         let mut buf = Buffer::empty(area);
-        ChChainWidget::new(&state).render(area, &mut buf);
+        let theme = crate::tui::theme::neriak();
+        ChChainWidget::new(&state, &theme).render(area, &mut buf);
         let rendered = buffer_contents(&buf, area);
 
         assert!(rendered.contains("Target:"));

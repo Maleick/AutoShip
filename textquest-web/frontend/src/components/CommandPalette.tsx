@@ -76,15 +76,15 @@ export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) 
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[#0d0618]/80 backdrop-blur-sm flex items-start justify-center pt-[12vh]"
+      className="fixed inset-0 z-50 bg-void/80 backdrop-blur-sm flex items-start justify-center pt-[12vh]"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[560px] max-w-[90vw] bg-[#1a0a2e] border border-[#cc44ff]/40 rounded-md shadow-[0_0_40px_-8px_rgba(204,68,255,0.5)] overflow-hidden"
+        className="w-[560px] max-w-[90vw] bg-panel border border-neriak-magenta/40 rounded-md shadow-[0_0_40px_-8px_rgba(204,68,255,0.5)] overflow-hidden"
       >
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-[#503c6e]">
-          <Search className="w-4 h-4 text-[#cc44ff]" strokeWidth={1.75} />
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-neriak-dim">
+          <Search className="w-4 h-4 text-neriak-magenta" strokeWidth={1.75} />
           <input
             ref={inputRef}
             value={query}
@@ -93,20 +93,27 @@ export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) 
               setActive(0);
             }}
             placeholder="type a command…"
-            className="flex-1 bg-transparent outline-none font-mono text-sm text-[#e2d7f4] placeholder-[#503c6e]"
+            aria-label="Command search"
+            role="combobox"
+            aria-expanded={grouped.length > 0}
+            aria-controls="command-palette-list"
+            aria-activedescendant={
+              filtered[active] ? `palette-option-${filtered[active].id}` : undefined
+            }
+            className="flex-1 bg-transparent outline-none font-mono text-sm text-neriak-text placeholder-neriak-dim"
           />
-          <kbd className="font-mono text-[10px] text-[#503c6e] border border-[#503c6e] rounded-sm px-1.5 py-0.5">
+          <kbd className="font-mono text-[10px] text-neriak-dim border border-neriak-dim rounded-sm px-1.5 py-0.5">
             esc
           </kbd>
         </div>
 
-        <div className="max-h-[50vh] overflow-y-auto py-1">
+        <div className="max-h-[50vh] overflow-y-auto py-1" role="listbox" id="command-palette-list">
           {grouped.length === 0 ? (
-            <div className="px-4 py-6 text-center text-[#503c6e] font-mono text-sm">no matches</div>
+            <div className="px-4 py-6 text-center text-neriak-dim font-mono text-sm">no matches</div>
           ) : (
             grouped.map(([section, items]) => (
               <div key={section}>
-                <div className="px-4 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[#503c6e]">
+                <div className="px-4 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-neriak-dim">
                   {section}
                 </div>
                 {items.map((a) => {
@@ -115,6 +122,10 @@ export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) 
                   return (
                     <button
                       key={a.id}
+                      type="button"
+                      id={`palette-option-${a.id}`}
+                      role="option"
+                      aria-selected={isActive}
                       onMouseEnter={(() => {
                         const idx = counter;
                         return () => setActive(idx);
@@ -125,18 +136,18 @@ export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) 
                       }}
                       className={`w-full flex items-center gap-3 px-4 py-2 font-mono text-sm ${
                         isActive
-                          ? "bg-[#2d1e41] text-[#cc44ff]"
-                          : "text-[#e2d7f4] hover:bg-[#2d1e41]/50"
+                          ? "bg-elevated text-neriak-magenta"
+                          : "text-neriak-text hover:bg-elevated/50"
                       }`}
                     >
                       <span className="flex-1 text-left">{a.label}</span>
                       {a.shortcut && (
-                        <kbd className="font-mono text-[10px] text-[#a096b4] border border-[#503c6e] rounded-sm px-1.5 py-0.5">
+                        <kbd className="font-mono text-[10px] text-neriak-muted border border-neriak-dim rounded-sm px-1.5 py-0.5">
                           {a.shortcut}
                         </kbd>
                       )}
                       {isActive && (
-                        <CornerDownLeft className="w-3 h-3 text-[#cc44ff]" strokeWidth={1.75} />
+                        <CornerDownLeft className="w-3 h-3 text-neriak-magenta" strokeWidth={1.75} />
                       )}
                     </button>
                   );
@@ -146,7 +157,7 @@ export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) 
           )}
         </div>
 
-        <div className="flex items-center gap-3 px-4 py-2 border-t border-[#503c6e] font-mono text-[10px] text-[#503c6e] uppercase tracking-[0.15em]">
+        <div className="flex items-center gap-3 px-4 py-2 border-t border-neriak-dim font-mono text-[10px] text-neriak-dim uppercase tracking-[0.15em]">
           <Command className="w-3 h-3" strokeWidth={2} />
           <span>palette</span>
           <span className="ml-auto">↑↓ nav · ⏎ run · esc close</span>
