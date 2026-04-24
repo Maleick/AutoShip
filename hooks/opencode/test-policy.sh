@@ -278,4 +278,28 @@ chmod +x "$UPDATE_REPO/bin/gh" "$UPDATE_REPO/hooks/update-state.sh"
 assert_eq "running" "$(jq -r '.issues["issue-123"].state' "$UPDATE_REPO/.autoship/state.json")" "update-state stores normalized issue key"
 assert_eq "123" "$(head -1 "$UPDATE_REPO/gh-issues.log")" "update-state passes numeric issue to gh"
 
+PACKAGE_REPO="$TMP_DIR/package-repo"
+cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
+(
+  cd "$PACKAGE_REPO"
+  rm -rf .autoship node_modules dist
+  npm install --package-lock=false --no-audit --no-fund >/dev/null
+  npm run build >/dev/null
+  CONFIG_DIR="$TMP_DIR/package-config"
+  mkdir -p "$CONFIG_DIR"
+  printf '%s\n' '{"plugin":["file:///tmp/legacy/autoship.ts","other-plugin"],"customSetting":true}' > "$CONFIG_DIR/opencode.json"
+  OPENCODE_CONFIG_DIR="$CONFIG_DIR" node dist/cli.js install >/dev/null
+  jq -e '.plugin | index("opencode-autoship")' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer registers opencode-autoship plugin"
+  jq -e '.plugin | index("other-plugin")' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer preserves unrelated plugins"
+  jq -e '.customSetting == true' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer preserves unrelated config"
+  if jq -e '.plugin[] | select(type == "string" and contains("autoship.ts"))' "$CONFIG_DIR/opencode.json" >/dev/null; then
+    fail "package installer removes legacy autoship.ts plugin entries"
+  fi
+  test -d "$CONFIG_DIR/.autoship/hooks" || fail "package installer copies hooks"
+  test -d "$CONFIG_DIR/.autoship/commands" || fail "package installer copies commands"
+  test -d "$CONFIG_DIR/.autoship/skills" || fail "package installer copies skills"
+  test -f "$CONFIG_DIR/.autoship/AGENTS.md" || fail "package installer copies AGENTS.md"
+  test -f "$CONFIG_DIR/.autoship/VERSION" || fail "package installer copies VERSION"
+)
+
 echo "OpenCode policy tests passed"

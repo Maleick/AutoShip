@@ -17,20 +17,27 @@ trap 'rm -rf "$CONFIG_HOME"; if [[ -n "$AUTOSHIP_BACKUP" && -d "$AUTOSHIP_BACKUP
 
 export XDG_CONFIG_HOME="$CONFIG_HOME"
 
-bash "$REPO_ROOT/hooks/opencode/install.sh" >/dev/null
+PACKAGE_REPO="$(mktemp -d)"
+cp -R "$REPO_ROOT/." "$PACKAGE_REPO/"
+rm -rf "$PACKAGE_REPO/.git" "$PACKAGE_REPO/.autoship" "$PACKAGE_REPO/node_modules" "$PACKAGE_REPO/dist"
+(cd "$PACKAGE_REPO" && npm install --package-lock=false --no-audit --no-fund >/dev/null && npm run build >/dev/null)
+node "$PACKAGE_REPO/dist/cli.js" install >/dev/null
 
 CONFIG_FILE="$CONFIG_HOME/opencode/opencode.json"
 STATE_FILE="$REPO_ROOT/.autoship/state.json"
 HOOKS_FILE="$REPO_ROOT/.autoship/hooks_dir"
-PLUGIN_DEST="$CONFIG_HOME/opencode/plugins/autoship.ts"
-VERSION_FILE="$CONFIG_HOME/opencode/plugins/autoship.version"
-PLUGIN_URL="file://$PLUGIN_DEST"
+AUTOSHIP_INSTALL_DIR="$CONFIG_HOME/opencode/.autoship"
 
-[[ -f "$PLUGIN_DEST" ]]
-[[ -f "$VERSION_FILE" ]]
-[[ -f "$STATE_FILE" ]]
-[[ "$(cat "$HOOKS_FILE")" == "$REPO_ROOT/hooks" ]]
-grep -F "\"$PLUGIN_URL\"" "$CONFIG_FILE" >/dev/null
+jq -e '.plugin | index("opencode-autoship")' "$CONFIG_FILE" >/dev/null
+if jq -e '.plugin[] | select(type == "string" and contains("autoship.ts"))' "$CONFIG_FILE" >/dev/null; then
+  echo "FAIL: package install registered legacy autoship.ts plugin" >&2
+  exit 1
+fi
+[[ -d "$AUTOSHIP_INSTALL_DIR/hooks" ]]
+[[ -d "$AUTOSHIP_INSTALL_DIR/commands" ]]
+[[ -d "$AUTOSHIP_INSTALL_DIR/skills" ]]
+[[ -f "$AUTOSHIP_INSTALL_DIR/AGENTS.md" ]]
+[[ -f "$AUTOSHIP_INSTALL_DIR/VERSION" ]]
 
 bash "$REPO_ROOT/hooks/opencode/init.sh" >/dev/null
 
