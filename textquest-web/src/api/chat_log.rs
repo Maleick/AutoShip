@@ -144,3 +144,69 @@ pub async fn put_chat_log_settings(Json(settings): Json<ChatLogConfig>) -> impl 
             .into_response(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::response::IntoResponse;
+    use http_body_util::BodyExt;
+    use serde_json::Value;
+
+    struct ConfigPathGuard {
+        previous: Option<PathBuf>,
+    }
+
+    impl ConfigPathGuard {
+        fn set(path: &std::path::Path) -> Self {
+            let mut lock = crate::api::test_config_override()
+                .write()
+                .expect("test_config_override lock poisoned");
+            let previous = lock.take();
+            *lock = Some(path.to_path_buf());
+            Self { previous }
+        }
+    }
+
+    impl Drop for ConfigPathGuard {
+        fn drop(&mut self) {
+            let mut lock = crate::api::test_config_override()
+                .write()
+                .expect("test_config_override lock poisoned");
+            *lock = self.previous.take();
+        }
+    }
+
+    fn config_path_lock() -> &'static tokio::sync::Mutex<()> {
+        static LOCK: std::sync::OnceLock<tokio::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
+    }
+
+    #[tokio::test]
+    async fn get_chat_log_settings_error_response_omits_filesystem_paths() {
+        let _lock = config_path_lock().lock().await;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("textquest.toml");
+        std::fs::write(&path, "chat_log =").expect("write malformed config");
+        let _guard = ConfigPathGuard::set(&path);
+
+        let response = get_chat_log_settings().await.into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("collect response body")
+            .to_bytes();
+        let json: Value = serde_json::from_slice(&body).expect("json error response");
+        let error = json
+            .get("error")
+            .and_then(Value::as_str)
+            .expect("error message field");
+
+        assert!(
+            !error.contains('/') && !error.contains('\\'),
+            "error leaked filesystem path characters: {error}"
+        );
+    }
+}
