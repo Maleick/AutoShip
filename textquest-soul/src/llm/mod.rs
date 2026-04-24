@@ -5,9 +5,13 @@ pub mod fallback;
 /// Priority queue for LLM requests — ensures high-priority requests are
 /// processed first.
 pub mod priority_queue;
+/// Gemma/local-LLM response validation before operator display.
+pub mod validator;
 
 use anyhow::Result;
 use textquest_common::soul::{MoodState, PersonalityTraits, SpeechStyle};
+
+pub use validator::{ValidationError, validate_observation};
 
 /// Priority level for LLM requests. Higher priority = processed first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

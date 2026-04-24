@@ -6,7 +6,7 @@
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 
-use super::{LlmProvider, LlmRequest, LlmResponse, Situation};
+use super::{LlmProvider, LlmRequest, LlmResponse, Situation, validate_observation};
 use crate::config::{BotPersonalityConfig, LlmConfig, LlmProviderKind};
 
 /// LLM API client that routes to the configured provider.
@@ -128,6 +128,9 @@ impl LlmProvider for ApiLlmClient {
                 bail!("No LLM provider configured");
             }
         };
+
+        let text =
+            validate_observation(&text).context("LLM observation failed safety validation")?;
 
         Ok(LlmResponse {
             text,
