@@ -63,14 +63,22 @@ Use it for:
 - tracking live-client corrections in a reviewable file
 - comparing JSON-backed offset data with the compiled defaults in `textquest-common/src/offsets.rs`
 
+The `eqdiff` crate can now convert binary-diff function matches into this same
+schema. Its offset export layer maps matched function names such as
+`CharacterZoneClient::CastSpell` to TextQuest function keys such as `castSpell`,
+then returns an `OffsetDatabase` that is ready for `save_to_file()` or
+`load_from_file()` validation. Review the generated diff report for moved,
+added, removed, and unmapped functions before promoting an offset snapshot.
+
 ## Recommended Investigation Workflow
 
 1. inspect the current checked-in code path using the offset
 2. compare against the current code path using the offset
-3. update `textquest-common/src/offsets.rs` and, if needed, `config/offsets.json`
-4. validate on a live Windows client
-5. update the relevant wiki page if the operator or developer workflow changed
-6. if the work changes roadmap assumptions or evidence state, update `docs/implementation-roadmap.md`
+3. for binary-diff evidence, export matches through `eqdiff` and inspect the generated report
+4. update `textquest-common/src/offsets.rs` and, if needed, `config/offsets.json`
+5. validate on a live Windows client
+6. update the relevant wiki page if the operator or developer workflow changed
+7. if the work changes roadmap assumptions or evidence state, update `docs/implementation-roadmap.md`
 
 ## Current Behavior vs Roadmap
 

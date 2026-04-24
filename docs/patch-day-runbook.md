@@ -84,7 +84,8 @@ For patches that reorganize code (rare):
 2. Run auto-analysis
 3. Use Ghidra's Version Tracking to match functions from old session
 4. Export matched addresses
-5. Update `offsets.rs` manually
+5. Run the matches through `eqdiff`'s offset export layer to produce an `OffsetDatabase` JSON snapshot and diff report
+6. Update `offsets.rs` manually when compiled constants need the same promotion
 
 ## What Gets Updated
 
@@ -140,5 +141,7 @@ After updating offsets:
 
 - **Pattern scanning** (#746-#750): Once real byte patterns replace placeholder stubs,
   the scan engine can auto-detect most address offsets without manual updates
-- **Binary diff tool** (#757-#760): Automated function matching between old/new binaries
+- **Binary diff tool** (#757-#760): Automated function matching between old/new binaries,
+  with `eqdiff` offset export producing `offsets.json`-compatible data and a
+  human-readable moved/added/removed-function report
 - **Ghidra export** (#748): Script to export function prologues for pattern authoring

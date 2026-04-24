@@ -7,7 +7,12 @@
 use anyhow::{Context, Result};
 use goblin::pe::PE;
 
+pub mod offset_export;
 pub mod xref;
+pub use offset_export::{
+    BinaryDiffFunction, BinaryDiffOffsetExport, BinaryDiffOffsetReport, ExportedOffsetUpdate,
+    export_offsets_from_binary_diff, map_function_to_offset_key,
+};
 pub use xref::{
     ImportedSymbol, StringRefMatch, build_string_xref_index, extract_imports,
     match_string_references,
