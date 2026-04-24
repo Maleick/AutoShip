@@ -13,6 +13,15 @@ use std::sync::OnceLock;
 /// Per-client spoofed fingerprint values, generated once from the session
 /// token.
 static SPOOFED: OnceLock<SpoofedFingerprint> = OnceLock::new();
+static FIRMWARE: OnceLock<SpoofedFirmwareTables> = OnceLock::new();
+
+const RSMB_PROVIDER: u32 = fourcc(*b"RSMB");
+const ACPI_PROVIDER: u32 = fourcc(*b"ACPI");
+const RSMB_TABLE_ID: u32 = 0;
+
+const fn fourcc(tag: [u8; 4]) -> u32 {
+    (tag[0] as u32) | ((tag[1] as u32) << 8) | ((tag[2] as u32) << 16) | ((tag[3] as u32) << 24)
+}
 
 /// The four hardware fingerprint fields that EQ's SystemFingerprint sends.
 #[derive(Debug, Clone)]
@@ -23,12 +32,25 @@ pub struct SpoofedFingerprint {
     pub computer_name: String,
 }
 
+#[derive(Debug, Clone)]
+struct SpoofedFirmwareTables {
+    rsmb: Vec<u8>,
+    acpi: Vec<SpoofedAcpiTable>,
+}
+
+#[derive(Debug, Clone)]
+struct SpoofedAcpiTable {
+    id: u32,
+    data: Vec<u8>,
+}
+
 /// Initialize spoofed fingerprint values from the session token.
 ///
 /// Must be called before the fingerprint hook fires (i.e., during DLL init).
 /// Uses domain-separated hashing to derive plausible-looking unique values.
 pub fn init(session_token: &[u8; 32]) {
     let fp = generate_fingerprint(session_token);
+    let firmware = generate_firmware_tables(session_token);
     tracing::info!(
         video = %fp.video_card_id,
         nic = %fp.network_card_id,
@@ -37,11 +59,16 @@ pub fn init(session_token: &[u8; 32]) {
         "Spoofed fingerprint initialized"
     );
     let _ = SPOOFED.set(fp);
+    let _ = FIRMWARE.set(firmware);
 }
 
 /// Get the spoofed fingerprint (None if init hasn't been called).
 pub fn spoofed() -> Option<&'static SpoofedFingerprint> {
     SPOOFED.get()
+}
+
+fn spoofed_firmware() -> Option<&'static SpoofedFirmwareTables> {
+    FIRMWARE.get()
 }
 
 /// Generate deterministic per-client fingerprint values from the session token.
@@ -128,16 +155,253 @@ fn generate_hostname(token: &[u8; 32]) -> String {
     format!("DESKTOP-{suffix}")
 }
 
+fn generate_firmware_tables(token: &[u8; 32]) -> SpoofedFirmwareTables {
+    let mut rsmb_table = Vec::new();
+    append_smbios_bios_info(&mut rsmb_table, token);
+    append_smbios_system_info(&mut rsmb_table, token);
+    append_smbios_baseboard_info(&mut rsmb_table, token);
+    append_smbios_chassis_info(&mut rsmb_table, token);
+    append_smbios_end_of_table(&mut rsmb_table);
+
+    let mut rsmb = Vec::with_capacity(8 + rsmb_table.len());
+    rsmb.push(0);
+    rsmb.push(3);
+    rsmb.push(2);
+    rsmb.push(0);
+    rsmb.extend_from_slice(&(rsmb_table.len() as u32).to_le_bytes());
+    rsmb.extend_from_slice(&rsmb_table);
+
+    let acpi = [
+        (*b"FACP", b"acpi-facp".as_slice()),
+        (*b"APIC", b"acpi-apic".as_slice()),
+        (*b"HPET", b"acpi-hpet".as_slice()),
+        (*b"MCFG", b"acpi-mcfg".as_slice()),
+        (*b"DSDT", b"acpi-dsdt".as_slice()),
+    ]
+    .into_iter()
+    .map(|(signature, domain)| SpoofedAcpiTable {
+        id: fourcc(signature),
+        data: generate_acpi_header(token, signature, domain),
+    })
+    .collect();
+
+    SpoofedFirmwareTables { rsmb, acpi }
+}
+
+fn append_smbios_bios_info(out: &mut Vec<u8>, token: &[u8; 32]) {
+    let bytes = derive_bytes(token, b"smbios-bios");
+    let mut formatted = vec![0u8; 0x18];
+    formatted[0] = 0;
+    formatted[1] = 0x18;
+    formatted[2..4].copy_from_slice(&0x0000_u16.to_le_bytes());
+    formatted[4] = 1;
+    formatted[5] = 2;
+    formatted[8] = 3;
+    formatted[9] = 0x20;
+    formatted[0x12] = 0x03;
+    formatted[0x13] = 0x0D;
+    formatted[0x14] = 3;
+    formatted[0x15] = 2;
+    formatted[0x16] = 0xFF;
+    formatted[0x17] = 0xFF;
+    out.extend_from_slice(&formatted);
+    append_smbios_strings(
+        out,
+        &[
+            "American Megatrends Inc.",
+            &format!(
+                "1.{:02}.{:04}",
+                bytes[0] % 20,
+                u16::from_le_bytes([bytes[1], bytes[2]])
+            ),
+            "05/18/2023",
+        ],
+    );
+}
+
+fn append_smbios_system_info(out: &mut Vec<u8>, token: &[u8; 32]) {
+    let uuid = generate_smbios_uuid(token);
+    let serial = generate_serial(token, b"smbios-system-serial", "SYS");
+    let sku = generate_serial(token, b"smbios-sku", "SKU");
+
+    let mut formatted = vec![0u8; 0x1B];
+    formatted[0] = 1;
+    formatted[1] = 0x1B;
+    formatted[2..4].copy_from_slice(&0x0100_u16.to_le_bytes());
+    formatted[4] = 1;
+    formatted[5] = 2;
+    formatted[6] = 3;
+    formatted[7] = 4;
+    formatted[8..24].copy_from_slice(&uuid);
+    formatted[24] = 0x06;
+    formatted[25] = 5;
+    formatted[26] = 6;
+    out.extend_from_slice(&formatted);
+    append_smbios_strings(
+        out,
+        &[
+            "Dell Inc.",
+            "OptiPlex 7070",
+            "A00",
+            &serial,
+            &sku,
+            "OptiPlex",
+        ],
+    );
+}
+
+fn append_smbios_baseboard_info(out: &mut Vec<u8>, token: &[u8; 32]) {
+    let serial = generate_serial(token, b"smbios-board-serial", "BRD");
+    let asset = generate_serial(token, b"smbios-board-asset", "AST");
+
+    let mut formatted = vec![0u8; 0x0F];
+    formatted[0] = 2;
+    formatted[1] = 0x0F;
+    formatted[2..4].copy_from_slice(&0x0200_u16.to_le_bytes());
+    formatted[4] = 1;
+    formatted[5] = 2;
+    formatted[6] = 3;
+    formatted[7] = 4;
+    formatted[8] = 5;
+    formatted[9] = 0x0A;
+    formatted[10..12].copy_from_slice(&0x0300_u16.to_le_bytes());
+    formatted[12] = 0;
+    formatted[13] = 0;
+    formatted[14] = 0x0A;
+    out.extend_from_slice(&formatted);
+    append_smbios_strings(out, &["Dell Inc.", "0T2HR0", "A02", &serial, &asset]);
+}
+
+fn append_smbios_chassis_info(out: &mut Vec<u8>, token: &[u8; 32]) {
+    let serial = generate_serial(token, b"smbios-chassis-serial", "CHS");
+    let asset = generate_serial(token, b"smbios-chassis-asset", "TAG");
+
+    let mut formatted = vec![0u8; 0x16];
+    formatted[0] = 3;
+    formatted[1] = 0x16;
+    formatted[2..4].copy_from_slice(&0x0300_u16.to_le_bytes());
+    formatted[4] = 1;
+    formatted[5] = 0x03;
+    formatted[6] = 2;
+    formatted[7] = 3;
+    formatted[0x11] = 0x01;
+    formatted[0x12] = 0x03;
+    formatted[0x13] = 0x03;
+    formatted[0x14] = 0;
+    out.extend_from_slice(&formatted);
+    append_smbios_strings(out, &["Dell Inc.", &serial, &asset]);
+}
+
+fn append_smbios_end_of_table(out: &mut Vec<u8>) {
+    out.extend_from_slice(&[127, 4, 0x7F, 0x00, 0, 0]);
+}
+
+fn append_smbios_strings(out: &mut Vec<u8>, strings: &[&str]) {
+    for value in strings {
+        out.extend_from_slice(value.as_bytes());
+        out.push(0);
+    }
+    out.push(0);
+}
+
+fn generate_serial(token: &[u8; 32], domain: &[u8], prefix: &str) -> String {
+    let bytes = derive_bytes(token, domain);
+    format!(
+        "{prefix}{:02X}{:02X}{:02X}{:02X}{:02X}",
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4]
+    )
+}
+
+fn generate_smbios_uuid(token: &[u8; 32]) -> [u8; 16] {
+    let mut uuid = derive_bytes(token, b"smbios-uuid");
+    uuid[6] = (uuid[6] & 0x0F) | 0x40;
+    uuid[8] = (uuid[8] & 0x3F) | 0x80;
+    uuid
+}
+
+fn generate_acpi_header(token: &[u8; 32], signature: [u8; 4], domain: &[u8]) -> Vec<u8> {
+    let bytes = derive_bytes(token, domain);
+    let mut table = Vec::with_capacity(36);
+    table.extend_from_slice(&signature);
+    table.extend_from_slice(&36_u32.to_le_bytes());
+    table.push(2);
+    table.push(0);
+    table.extend_from_slice(b"DELL  ");
+    table.extend_from_slice(&[
+        b'T',
+        b'Q',
+        b'F',
+        b'W',
+        hex_nibble(bytes[0] >> 4),
+        hex_nibble(bytes[0]),
+        hex_nibble(bytes[1] >> 4),
+        hex_nibble(bytes[1]),
+    ]);
+    table.extend_from_slice(
+        &u32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]).to_le_bytes(),
+    );
+    table.extend_from_slice(b"MSFT");
+    table.extend_from_slice(&0x0001_0013_u32.to_le_bytes());
+
+    let checksum = 0_u8.wrapping_sub(table.iter().fold(0_u8, |sum, byte| sum.wrapping_add(*byte)));
+    table[9] = checksum;
+    table
+}
+
+fn hex_nibble(value: u8) -> u8 {
+    b"0123456789ABCDEF"[(value & 0x0F) as usize]
+}
+
+fn firmware_table_bytes(
+    firmware: &SpoofedFirmwareTables,
+    provider: u32,
+    table_id: u32,
+) -> Option<&[u8]> {
+    match provider {
+        RSMB_PROVIDER if table_id == RSMB_TABLE_ID => Some(&firmware.rsmb),
+        ACPI_PROVIDER => firmware
+            .acpi
+            .iter()
+            .find(|table| table.id == table_id)
+            .map(|table| table.data.as_slice()),
+        _ => None,
+    }
+}
+
+fn firmware_table_enum_bytes(firmware: &SpoofedFirmwareTables, provider: u32) -> Option<Vec<u8>> {
+    match provider {
+        RSMB_PROVIDER => Some(RSMB_TABLE_ID.to_le_bytes().to_vec()),
+        ACPI_PROVIDER => {
+            let mut bytes = Vec::with_capacity(firmware.acpi.len() * 4);
+            for table in &firmware.acpi {
+                bytes.extend_from_slice(&table.id.to_le_bytes());
+            }
+            Some(bytes)
+        }
+        _ => None,
+    }
+}
+
 #[cfg(windows)]
 mod inner {
+    use core::ffi::c_void;
+
     use retour::static_detour;
+    use windows::{
+        Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress},
+        core::s,
+    };
 
     // SystemFingerprint signature from Ghidra.
     // void SystemFingerprint(void* this) — thiscall on x64.
     type FingerprintFn = unsafe extern "system" fn(*mut core::ffi::c_void);
+    type GetSystemFirmwareTableFn = unsafe extern "system" fn(u32, u32, *mut c_void, u32) -> u32;
+    type EnumSystemFirmwareTablesFn = unsafe extern "system" fn(u32, *mut c_void, u32) -> u32;
 
     static_detour! {
         static FingerprintHook: unsafe extern "system" fn(*mut core::ffi::c_void);
+        static GetSystemFirmwareTableHook: unsafe extern "system" fn(u32, u32, *mut c_void, u32) -> u32;
+        static EnumSystemFirmwareTablesHook: unsafe extern "system" fn(u32, *mut c_void, u32) -> u32;
     }
 
     /// The detour — replaces the fingerprint payload with spoofed values.
@@ -181,6 +445,47 @@ mod inner {
                 "Fingerprint hook fired but no spoofed values — sending real fingerprint"
             );
         }
+    }
+
+    fn get_system_firmware_table_detour(
+        provider: u32,
+        table_id: u32,
+        buffer: *mut c_void,
+        buffer_size: u32,
+    ) -> u32 {
+        if let Some(firmware) = super::spoofed_firmware()
+            && let Some(table) = super::firmware_table_bytes(firmware, provider, table_id)
+        {
+            return copy_firmware_response(table, buffer, buffer_size);
+        }
+
+        unsafe { GetSystemFirmwareTableHook.call(provider, table_id, buffer, buffer_size) }
+    }
+
+    fn enum_system_firmware_tables_detour(
+        provider: u32,
+        buffer: *mut c_void,
+        buffer_size: u32,
+    ) -> u32 {
+        if let Some(firmware) = super::spoofed_firmware()
+            && let Some(table_ids) = super::firmware_table_enum_bytes(firmware, provider)
+        {
+            return copy_firmware_response(&table_ids, buffer, buffer_size);
+        }
+
+        unsafe { EnumSystemFirmwareTablesHook.call(provider, buffer, buffer_size) }
+    }
+
+    fn copy_firmware_response(data: &[u8], buffer: *mut c_void, buffer_size: u32) -> u32 {
+        let required = data.len() as u32;
+        if buffer.is_null() || buffer_size < required {
+            return required;
+        }
+
+        unsafe {
+            core::ptr::copy_nonoverlapping(data.as_ptr(), buffer.cast::<u8>(), data.len());
+        }
+        required
     }
 
     /// Write a Rust string into a CXStr at the given offset from `base`.
@@ -238,12 +543,40 @@ mod inner {
         Ok(())
     }
 
+    pub fn install_firmware_hooks() -> Result<(), Box<dyn std::error::Error>> {
+        unsafe {
+            let kernel32 = GetModuleHandleA(s!("kernel32.dll"))?;
+            let get_addr = GetProcAddress(kernel32, s!("GetSystemFirmwareTable"))
+                .ok_or("GetSystemFirmwareTable not exported by kernel32.dll")?;
+            let enum_addr = GetProcAddress(kernel32, s!("EnumSystemFirmwareTables"))
+                .ok_or("EnumSystemFirmwareTables not exported by kernel32.dll")?;
+
+            let get_target: GetSystemFirmwareTableFn = std::mem::transmute(get_addr);
+            let enum_target: EnumSystemFirmwareTablesFn = std::mem::transmute(enum_addr);
+
+            GetSystemFirmwareTableHook.initialize(get_target, get_system_firmware_table_detour)?;
+            GetSystemFirmwareTableHook.enable()?;
+            EnumSystemFirmwareTablesHook
+                .initialize(enum_target, enum_system_firmware_tables_detour)?;
+            EnumSystemFirmwareTablesHook.enable()?;
+        }
+
+        tracing::info!("Firmware table fingerprint hooks installed");
+        Ok(())
+    }
+
     /// Remove the fingerprint hook.
     pub fn remove() {
         // SAFETY: Disabling a retour hook restores the original function bytes.
         unsafe {
             if FingerprintHook.is_enabled() {
                 let _ = FingerprintHook.disable();
+            }
+            if GetSystemFirmwareTableHook.is_enabled() {
+                let _ = GetSystemFirmwareTableHook.disable();
+            }
+            if EnumSystemFirmwareTablesHook.is_enabled() {
+                let _ = EnumSystemFirmwareTablesHook.disable();
             }
         }
         tracing::info!("Fingerprint spoof hook removed");
@@ -257,13 +590,18 @@ mod inner {
         Ok(())
     }
 
+    pub fn install_firmware_hooks() -> Result<(), Box<dyn std::error::Error>> {
+        tracing::warn!("Firmware table hooks not available on this platform (stub)");
+        Ok(())
+    }
+
     pub fn remove() {
         tracing::warn!("Fingerprint spoof hook removal not available (stub)");
     }
 }
 
 #[allow(unused_imports)]
-pub use inner::{install, remove};
+pub use inner::{install, install_firmware_hooks, remove};
 
 #[cfg(test)]
 mod tests {
@@ -351,6 +689,27 @@ mod tests {
         let a = derive_bytes(&token, b"gpu");
         let b = derive_bytes(&token, b"nic");
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn firmware_tables_are_deterministic_distinct_and_vm_free() {
+        let token_a = [0x11u8; 32];
+        let token_b = [0x22u8; 32];
+
+        let a1 = generate_firmware_tables(&token_a);
+        let a2 = generate_firmware_tables(&token_a);
+        let b = generate_firmware_tables(&token_b);
+
+        assert_eq!(a1.rsmb, a2.rsmb);
+        assert_ne!(a1.rsmb, b.rsmb);
+
+        let upper = String::from_utf8_lossy(&a1.rsmb).to_ascii_uppercase();
+        for forbidden in ["VBOX", "VIRTUALBOX", "VMWARE", "QEMU", "BOCHS", "XEN"] {
+            assert!(
+                !upper.contains(forbidden),
+                "spoofed SMBIOS data contained {forbidden}"
+            );
+        }
     }
 
     #[test]

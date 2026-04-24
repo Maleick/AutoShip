@@ -249,6 +249,16 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
+    let client_id = std::process::id();
+    let session_token = generate_session_token(client_id);
+    hooks::fingerprint::init(&session_token);
+    if let Err(e) = hooks::fingerprint::install_firmware_hooks() {
+        tracing::warn!(
+            "Firmware table fingerprint hooks failed (continuing with real firmware tables): {}",
+            e
+        );
+    }
+
     // 3. Install function hooks. If the EQ window isn't available yet (e.g.,
     //    injected at login screen), spawn a background thread that retries until
     //    the window appears and the HWBP can be set on the main thread.
@@ -321,8 +331,6 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // 6. Start IPC listener.
-    let client_id = std::process::id();
-    let session_token = generate_session_token(client_id);
     match ipc::start(client_id, session_token) {
         Ok(()) => {
             // IPC uses a long-lived background thread that executes regular
