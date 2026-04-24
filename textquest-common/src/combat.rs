@@ -370,6 +370,247 @@ impl BuffInfo {
     }
 }
 
+/// Specific crowd-control effect class for detrimental buffs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CrowdControlEffect {
+    /// Prevents actions for a short duration.
+    Stun,
+    /// Prevents movement in place.
+    Root,
+    /// Reduces movement speed.
+    Snare,
+    /// Mesmerizes the target until broken.
+    Mez,
+    /// Transfers control to another caster.
+    Charm,
+    /// Reduces attack or cast cadence.
+    Slow,
+    /// Crowd control that does not fit a narrower class yet.
+    Other,
+}
+
+impl CrowdControlEffect {
+    /// Compact roster label for the effect.
+    #[must_use]
+    pub const fn short_label(self) -> &'static str {
+        match self {
+            Self::Stun => "Stun",
+            Self::Root => "Root",
+            Self::Snare => "Snare",
+            Self::Mez => "Mez",
+            Self::Charm => "Charm",
+            Self::Slow => "Slow",
+            Self::Other => "CC",
+        }
+    }
+}
+
+/// High-level detrimental effect kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DebuffEffectKind {
+    /// Crowd-control debuff with a specific subtype.
+    CrowdControl(CrowdControlEffect),
+    /// Disease-counter debuff.
+    Disease,
+    /// Poison-counter debuff.
+    Poison,
+    /// Curse-counter debuff.
+    Curse,
+}
+
+impl DebuffEffectKind {
+    /// Returns true when this effect blocks or impairs control of a character.
+    #[must_use]
+    pub const fn is_crowd_control(self) -> bool {
+        matches!(self, Self::CrowdControl(_))
+    }
+
+    /// Compact roster label for the effect kind.
+    #[must_use]
+    pub const fn short_label(self) -> &'static str {
+        match self {
+            Self::CrowdControl(effect) => effect.short_label(),
+            Self::Disease => "Disease",
+            Self::Poison => "Poison",
+            Self::Curse => "Curse",
+        }
+    }
+}
+
+/// Known detrimental buff metadata shared by UI and automation surfaces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KnownDebuffEffect {
+    /// EQ spell ID.
+    pub spell_id: i32,
+    /// Operator-facing effect name.
+    pub name: &'static str,
+    /// Debuff and CC classification.
+    pub kind: DebuffEffectKind,
+    /// Lower values are more urgent.
+    pub priority: u8,
+    /// Recommended countermeasure family.
+    pub cleanse_hint: &'static str,
+}
+
+impl KnownDebuffEffect {
+    /// Whether the debuff is crowd control.
+    #[must_use]
+    pub const fn is_crowd_control(self) -> bool {
+        self.kind.is_crowd_control()
+    }
+}
+
+const KNOWN_DEBUFF_EFFECTS: &[KnownDebuffEffect] = &[
+    KnownDebuffEffect {
+        spell_id: 1234,
+        name: "Paralyzing Bite",
+        kind: DebuffEffectKind::CrowdControl(CrowdControlEffect::Stun),
+        priority: 1,
+        cleanse_hint: "stun break",
+    },
+    KnownDebuffEffect {
+        spell_id: 1235,
+        name: "Hamstring",
+        kind: DebuffEffectKind::CrowdControl(CrowdControlEffect::Snare),
+        priority: 3,
+        cleanse_hint: "snare break",
+    },
+    KnownDebuffEffect {
+        spell_id: 1236,
+        name: "Entangle",
+        kind: DebuffEffectKind::CrowdControl(CrowdControlEffect::Root),
+        priority: 2,
+        cleanse_hint: "root break",
+    },
+    KnownDebuffEffect {
+        spell_id: 1237,
+        name: "Ensnare",
+        kind: DebuffEffectKind::CrowdControl(CrowdControlEffect::Snare),
+        priority: 3,
+        cleanse_hint: "snare break",
+    },
+    KnownDebuffEffect {
+        spell_id: 1238,
+        name: "Root",
+        kind: DebuffEffectKind::CrowdControl(CrowdControlEffect::Root),
+        priority: 2,
+        cleanse_hint: "root break",
+    },
+    KnownDebuffEffect {
+        spell_id: 1239,
+        name: "Stun",
+        kind: DebuffEffectKind::CrowdControl(CrowdControlEffect::Stun),
+        priority: 1,
+        cleanse_hint: "stun break",
+    },
+    KnownDebuffEffect {
+        spell_id: 1240,
+        name: "Mesmerize",
+        kind: DebuffEffectKind::CrowdControl(CrowdControlEffect::Mez),
+        priority: 4,
+        cleanse_hint: "mez break",
+    },
+    KnownDebuffEffect {
+        spell_id: 1241,
+        name: "Charm",
+        kind: DebuffEffectKind::CrowdControl(CrowdControlEffect::Charm),
+        priority: 4,
+        cleanse_hint: "charm break",
+    },
+    KnownDebuffEffect {
+        spell_id: 1300,
+        name: "Plague",
+        kind: DebuffEffectKind::Disease,
+        priority: 7,
+        cleanse_hint: "cure disease",
+    },
+    KnownDebuffEffect {
+        spell_id: 1301,
+        name: "Plague of Insects",
+        kind: DebuffEffectKind::Disease,
+        priority: 7,
+        cleanse_hint: "cure disease",
+    },
+    KnownDebuffEffect {
+        spell_id: 1302,
+        name: "Rotting Flesh",
+        kind: DebuffEffectKind::Disease,
+        priority: 7,
+        cleanse_hint: "cure disease",
+    },
+    KnownDebuffEffect {
+        spell_id: 1400,
+        name: "Poison",
+        kind: DebuffEffectKind::Poison,
+        priority: 8,
+        cleanse_hint: "cure poison",
+    },
+    KnownDebuffEffect {
+        spell_id: 1401,
+        name: "Venom",
+        kind: DebuffEffectKind::Poison,
+        priority: 8,
+        cleanse_hint: "cure poison",
+    },
+    KnownDebuffEffect {
+        spell_id: 1500,
+        name: "Curse",
+        kind: DebuffEffectKind::Curse,
+        priority: 6,
+        cleanse_hint: "remove curse",
+    },
+    KnownDebuffEffect {
+        spell_id: 1501,
+        name: "Curse of Magi",
+        kind: DebuffEffectKind::Curse,
+        priority: 6,
+        cleanse_hint: "remove curse",
+    },
+];
+
+/// Aggregate debuff state for a buff list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct DebuffEffectSummary {
+    /// Number of known active debuffs.
+    pub active_count: usize,
+    /// Number of known active crowd-control debuffs.
+    pub crowd_control_count: usize,
+    /// Highest-priority known debuff, if any.
+    pub top_priority: Option<&'static KnownDebuffEffect>,
+}
+
+/// Look up a known detrimental effect by spell ID.
+#[must_use]
+pub fn lookup_debuff_effect(spell_id: i32) -> Option<&'static KnownDebuffEffect> {
+    KNOWN_DEBUFF_EFFECTS
+        .iter()
+        .find(|effect| effect.spell_id == spell_id)
+}
+
+/// Summarize known detrimental effects from spell IDs.
+#[must_use]
+pub fn summarize_debuff_effects(spell_ids: impl IntoIterator<Item = i32>) -> DebuffEffectSummary {
+    let mut summary = DebuffEffectSummary::default();
+
+    for spell_id in spell_ids {
+        let Some(effect) = lookup_debuff_effect(spell_id) else {
+            continue;
+        };
+        summary.active_count += 1;
+        if effect.is_crowd_control() {
+            summary.crowd_control_count += 1;
+        }
+        if summary
+            .top_priority
+            .map_or(true, |current| effect.priority < current.priority)
+        {
+            summary.top_priority = Some(effect);
+        }
+    }
+
+    summary
+}
+
 /// Current state of a character in the combat FSM.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum CombatStatus {
@@ -2370,5 +2611,26 @@ mod tests {
             let back: HateTargetCategory = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(back, *cat);
         }
+    }
+
+    #[test]
+    fn lookup_debuff_effect_classifies_cc_subtype() {
+        let effect = lookup_debuff_effect(1239).expect("stun debuff");
+        assert_eq!(
+            effect.kind,
+            DebuffEffectKind::CrowdControl(CrowdControlEffect::Stun)
+        );
+        assert!(effect.is_crowd_control());
+    }
+
+    #[test]
+    fn summarize_debuff_effects_prioritizes_crowd_control() {
+        let summary = summarize_debuff_effects([1400, 1235, 999_999]);
+        assert_eq!(summary.active_count, 2);
+        assert_eq!(summary.crowd_control_count, 1);
+        assert_eq!(
+            summary.top_priority.map(|effect| effect.kind),
+            Some(DebuffEffectKind::CrowdControl(CrowdControlEffect::Snare))
+        );
     }
 }

@@ -19,7 +19,10 @@ use crate::{
     eq::structs::{EqClass, StandState},
     tui::app::{ActivePanel, App, ClientState},
 };
-use textquest_common::types::SlotLifecycle;
+use textquest_common::{
+    combat::{DebuffEffectSummary, summarize_debuff_effects},
+    types::SlotLifecycle,
+};
 
 const MIN_HEIGHT_FOR_FOCUS_STRIP: u16 = 28;
 const STACKED_ROSTER_TALL_HEIGHT_THRESHOLD: u16 = 28;
@@ -143,7 +146,8 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
 
     // Fixed column layout matching design mock
     let headers = vec![
-        "", "Name", "Grp", "Cls", "Lvl", "Zone", "HP", "Mana", "Cond", "State", "Activity",
+        "", "Name", "Grp", "Cls", "Lvl", "Zone", "HP", "Mana", "Cond", "Effect", "State",
+        "Activity",
     ];
     let header = themed_header_row(headers.as_slice(), t);
     let highlight_style = Style::default()
@@ -173,6 +177,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                 let mana_pct = player.mana_pct();
                 let name = app.redact_name(&player.displayed_name).into_owned();
                 let (condition_label, condition_style) = client_condition(client, t);
+                let (effect_label, effect_style) = client_debuff_effect(client, t);
                 let (activity_label, activity_style) = client_activity(app, client, false);
 
                 let mut cells = vec![
@@ -213,6 +218,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                 }
 
                 cells.push(Cell::from(condition_label).style(condition_style));
+                cells.push(Cell::from(effect_label).style(effect_style));
 
                 let state_label = if let Some(player) = &client.local_player {
                     match player.stand_state {
@@ -254,6 +260,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
                     Cell::from("--").style(Style::default().fg(t.hp_low)),
                     Cell::from("--").style(Style::default().fg(t.text_muted)),
                     Cell::from("Offline").style(Style::default().fg(t.hp_low)),
+                    Cell::from("--").style(Style::default().fg(t.text_muted)),
                     Cell::from("—").style(Style::default().fg(t.text_muted)),
                     Cell::from("• Wait").style(Style::default().fg(t.text_muted)),
                 ];
@@ -278,6 +285,7 @@ fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
         Constraint::Length(16), // HP
         Constraint::Length(12), // Mana
         Constraint::Length(9),  // Cond
+        Constraint::Length(9),  // Effect
         Constraint::Length(8),  // State
         Constraint::Min(10),    // Activity
     ];
@@ -571,6 +579,47 @@ fn client_condition(client: &ClientState, t: &crate::tui::theme::Theme) -> (&'st
     } else {
         ("Stable", Style::default().fg(t.hp_high))
     }
+}
+
+fn client_debuff_effect(client: &ClientState, t: &crate::tui::theme::Theme) -> (String, Style) {
+    let Some(player) = &client.local_player else {
+        return ("--".to_string(), Style::default().fg(t.text_muted));
+    };
+
+    let summary = summarize_debuff_effects(player.buff_slots.iter().filter_map(|slot| {
+        if slot.is_empty() {
+            return None;
+        }
+        i32::try_from(slot.spell_id).ok()
+    }));
+
+    let Some(label) = debuff_effect_label(summary) else {
+        return ("Clear".to_string(), Style::default().fg(t.hp_high));
+    };
+
+    let color = if summary.crowd_control_count > 0 {
+        t.hp_low
+    } else {
+        t.text_highlight
+    };
+    (
+        truncate_inline(&label, 9),
+        Style::default().fg(color).add_modifier(Modifier::BOLD),
+    )
+}
+
+fn debuff_effect_label(summary: DebuffEffectSummary) -> Option<String> {
+    let top = summary.top_priority?;
+    let extra_count = summary.active_count.saturating_sub(1);
+    let mut label = if summary.crowd_control_count > 0 {
+        format!("CC {}", top.kind.short_label())
+    } else {
+        top.kind.short_label().to_string()
+    };
+    if extra_count > 0 {
+        label.push_str(&format!("+{extra_count}"));
+    }
+    Some(label)
 }
 
 fn client_activity(app: &App, client: &ClientState, compact: bool) -> (&'static str, Style) {
@@ -1917,6 +1966,22 @@ mod tests {
     #[test]
     fn debuffer_class_none() {
         assert!(!is_debuffer_class(None));
+    }
+
+    #[test]
+    fn debuff_effect_label_shows_cc_and_extra_count() {
+        let summary = DebuffEffectSummary {
+            active_count: 2,
+            crowd_control_count: 1,
+            top_priority: textquest_common::combat::lookup_debuff_effect(1235),
+        };
+
+        assert_eq!(debuff_effect_label(summary).as_deref(), Some("CC Snare+1"));
+    }
+
+    #[test]
+    fn debuff_effect_label_none_when_clear() {
+        assert_eq!(debuff_effect_label(DebuffEffectSummary::default()), None);
     }
 
     // ── group_focus_strip_height ─────────────────────────────────────
