@@ -139,6 +139,16 @@
       "notes": "Partial DLL-side scaffold: global script/plugin slash-command registration and dispatch, built-in /textquest command listing, EQ-style hotkey parsing, command hotkey binding, and TOML persistence helpers. Lua/MQ2/runtime EQ UI hook integration remains follow-up work."
     },
     {
+      "id": "issue-836-advanced-group-management-targeting",
+      "name": "Issue #836 advanced group management and targeting",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check -p textquest-common --tests",
+        "cargo check -p textquest --lib"
+      ],
+      "notes": "PARTIAL: Added shared auto-group awareness reporting for configured roles, raid-wide online/grouped/missing aggregation, formation suggestions, and role-based targeting priority ordering. The TUI group rows now include class-derived role markers. Remaining work includes live buff/debuff aggregation, persistent group history, raid-wide UI panels, and role-based spell targeting execution."
+    },
+    {
       "id": "issue-819-plugin-system-openvanilla-parity",
       "name": "Plugin system for extensibility",
       "status": "in_progress",

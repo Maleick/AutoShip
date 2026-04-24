@@ -10,6 +10,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::Paragraph,
 };
+use textquest_common::auto_group::GroupCombatRole;
 
 use super::widgets::{
     WidthClass, classify_width, hp_color, panel, render_cast_bar, truncate_inline,
@@ -52,12 +53,14 @@ fn member_line<'a>(
 
     let leader_marker = if is_leader { "*" } else { " " };
     let short_name = truncate_inline(&display_name, 12);
+    let class_name = player.class_str();
+    let role_marker = GroupCombatRole::from_class_name(class_name).marker();
 
     Line::from(vec![
         Span::styled(leader_marker, Style::default().fg(t.text_accent)),
         Span::styled(format!("{short_name:<12}"), name_style),
         Span::styled(
-            format!("{:<4}", player.class_str()),
+            format!("{class_name:<3}{role_marker}"),
             Style::default().fg(t.text_accent),
         ),
         Span::styled(

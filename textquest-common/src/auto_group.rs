@@ -77,12 +77,280 @@ impl AutoGroupRole {
             Self::MasterLooter => Some(5),
         }
     }
+
+    #[must_use]
+    pub fn combat_role(self) -> GroupCombatRole {
+        match self {
+            Self::None => GroupCombatRole::Unknown,
+            Self::MainTank => GroupCombatRole::Tank,
+            Self::MainAssist => GroupCombatRole::Assist,
+            Self::Puller => GroupCombatRole::Puller,
+            Self::MarkNpc => GroupCombatRole::Assist,
+            Self::MasterLooter => GroupCombatRole::Utility,
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupCombatRole {
+    Tank,
+    Assist,
+    Puller,
+    Healer,
+    CrowdControl,
+    Support,
+    Damage,
+    Utility,
+    #[default]
+    Unknown,
+}
+
+impl GroupCombatRole {
+    #[must_use]
+    pub fn from_class_name(class_name: &str) -> Self {
+        match normalize_name(class_name).as_str() {
+            "war" | "warrior" | "pal" | "paladin" | "shd" | "shadowknight" | "shadow knight" => {
+                Self::Tank
+            }
+            "clr" | "cleric" | "dru" | "druid" | "shm" | "shaman" => Self::Healer,
+            "enc" | "enchanter" => Self::CrowdControl,
+            "brd" | "bard" | "bst" | "beastlord" => Self::Support,
+            "mnk" | "monk" | "rng" | "ranger" | "rog" | "rogue" | "ber" | "berserker" | "wiz"
+            | "wizard" | "mag" | "magician" | "nec" | "necromancer" => Self::Damage,
+            _ => Self::Unknown,
+        }
+    }
+
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Tank => "tank",
+            Self::Assist => "assist",
+            Self::Puller => "puller",
+            Self::Healer => "healer",
+            Self::CrowdControl => "cc",
+            Self::Support => "support",
+            Self::Damage => "dps",
+            Self::Utility => "utility",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    #[must_use]
+    pub fn marker(self) -> &'static str {
+        match self {
+            Self::Tank => "T",
+            Self::Assist => "A",
+            Self::Puller => "P",
+            Self::Healer => "H",
+            Self::CrowdControl => "C",
+            Self::Support => "S",
+            Self::Damage => "D",
+            Self::Utility => "U",
+            Self::Unknown => "?",
+        }
+    }
+
+    #[must_use]
+    pub fn targeting_rank(self) -> u8 {
+        match self {
+            Self::Tank => 10,
+            Self::Assist => 20,
+            Self::Puller => 30,
+            Self::CrowdControl => 40,
+            Self::Healer => 50,
+            Self::Support => 60,
+            Self::Damage => 70,
+            Self::Utility => 80,
+            Self::Unknown => 100,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AutoGroupObservation {
     pub live_characters: BTreeSet<String>,
     pub leader_group_members: BTreeMap<String, Vec<String>>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutoGroupAwarenessReport {
+    pub raid: AutoGroupRaidSummary,
+    pub groups: Vec<AutoGroupGroupAwareness>,
+    pub targeting_priority: Vec<AutoGroupTargetCandidate>,
+    pub formation_suggestions: Vec<AutoGroupFormationSuggestion>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutoGroupRaidSummary {
+    pub expected_members: usize,
+    pub live_members: usize,
+    pub grouped_members: usize,
+    pub missing_members: usize,
+    pub role_counts: BTreeMap<GroupCombatRole, usize>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutoGroupGroupAwareness {
+    pub name: String,
+    pub leader_name: String,
+    pub online_count: usize,
+    pub grouped_count: usize,
+    pub missing_count: usize,
+    pub members: Vec<AutoGroupMemberAwareness>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutoGroupMemberAwareness {
+    pub name: String,
+    pub role: GroupCombatRole,
+    pub assignment_role: AutoGroupRole,
+    pub online: bool,
+    pub grouped: bool,
+    pub leader: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutoGroupTargetCandidate {
+    pub name: String,
+    pub role: GroupCombatRole,
+    pub priority: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutoGroupFormationSuggestion {
+    pub group_name: String,
+    pub character_name: String,
+    pub action: AutoGroupFormationAction,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoGroupFormationAction {
+    BringLeaderOnline,
+    BringMemberOnline,
+    InviteMember,
+}
+
+pub trait AutoGroupAwareness {
+    fn build_awareness_report(
+        &self,
+        observation: &AutoGroupObservation,
+    ) -> AutoGroupAwarenessReport;
+}
+
+impl AutoGroupAwareness for AutoGroupSettings {
+    fn build_awareness_report(
+        &self,
+        observation: &AutoGroupObservation,
+    ) -> AutoGroupAwarenessReport {
+        let live_characters: BTreeSet<_> = observation
+            .live_characters
+            .iter()
+            .map(|name| normalize_name(name))
+            .collect();
+        let observed_groups: BTreeMap<_, _> = observation
+            .leader_group_members
+            .iter()
+            .map(|(leader, members)| {
+                (
+                    normalize_name(leader),
+                    members
+                        .iter()
+                        .map(|member| normalize_name(member))
+                        .collect::<BTreeSet<_>>(),
+                )
+            })
+            .collect();
+
+        let mut report = AutoGroupAwarenessReport::default();
+        for profile in self
+            .groups
+            .iter()
+            .filter(|profile| profile.enabled && !profile.leader_name.trim().is_empty())
+        {
+            let leader_name = normalize_name(&profile.leader_name);
+            let mut observed_group = observed_groups
+                .get(&leader_name)
+                .cloned()
+                .unwrap_or_default();
+            observed_group.insert(leader_name.clone());
+
+            let mut group = AutoGroupGroupAwareness {
+                name: profile.name.clone(),
+                leader_name: profile.leader_name.clone(),
+                ..AutoGroupGroupAwareness::default()
+            };
+
+            for member in &profile.members {
+                let member_name = normalize_name(&member.name);
+                let role = member.role.combat_role();
+                let online = live_characters.contains(&member_name);
+                let grouped = observed_group.contains(&member_name);
+                let leader = member_name == leader_name;
+
+                group.online_count += usize::from(online);
+                group.grouped_count += usize::from(grouped);
+                group.missing_count += usize::from(!grouped);
+                report.raid.expected_members += 1;
+                report.raid.live_members += usize::from(online);
+                report.raid.grouped_members += usize::from(grouped);
+                report.raid.missing_members += usize::from(!grouped);
+                *report.raid.role_counts.entry(role).or_default() += 1;
+
+                if !online {
+                    report
+                        .formation_suggestions
+                        .push(AutoGroupFormationSuggestion {
+                            group_name: profile.name.clone(),
+                            character_name: member.name.clone(),
+                            action: if leader {
+                                AutoGroupFormationAction::BringLeaderOnline
+                            } else {
+                                AutoGroupFormationAction::BringMemberOnline
+                            },
+                        });
+                } else if !grouped {
+                    report
+                        .formation_suggestions
+                        .push(AutoGroupFormationSuggestion {
+                            group_name: profile.name.clone(),
+                            character_name: member.name.clone(),
+                            action: AutoGroupFormationAction::InviteMember,
+                        });
+                }
+
+                if online && grouped && role != GroupCombatRole::Unknown {
+                    report.targeting_priority.push(AutoGroupTargetCandidate {
+                        name: member.name.clone(),
+                        role,
+                        priority: role.targeting_rank(),
+                    });
+                }
+
+                group.members.push(AutoGroupMemberAwareness {
+                    name: member.name.clone(),
+                    role,
+                    assignment_role: member.role,
+                    online,
+                    grouped,
+                    leader,
+                });
+            }
+
+            report.groups.push(group);
+        }
+
+        report.targeting_priority.sort_by(|a, b| {
+            a.priority
+                .cmp(&b.priority)
+                .then_with(|| a.name.cmp(&b.name))
+        });
+        report
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -535,5 +803,132 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn class_role_detection_handles_eq_abbreviations() {
+        assert_eq!(
+            GroupCombatRole::from_class_name("WAR"),
+            GroupCombatRole::Tank
+        );
+        assert_eq!(
+            GroupCombatRole::from_class_name("Cleric"),
+            GroupCombatRole::Healer
+        );
+        assert_eq!(
+            GroupCombatRole::from_class_name("ENC"),
+            GroupCombatRole::CrowdControl
+        );
+        assert_eq!(
+            GroupCombatRole::from_class_name("Bard"),
+            GroupCombatRole::Support
+        );
+        assert_eq!(
+            GroupCombatRole::from_class_name("Wizard"),
+            GroupCombatRole::Damage
+        );
+    }
+
+    #[test]
+    fn awareness_report_aggregates_status_and_suggestions() {
+        let settings = AutoGroupSettings {
+            groups: vec![AutoGroupProfile {
+                name: "Raid One".into(),
+                leader_name: "Alpha".into(),
+                enabled: true,
+                invite_retry_interval_secs: 5,
+                max_invite_retries: 3,
+                completion_command: None,
+                members: vec![
+                    AutoGroupMember {
+                        name: "Alpha".into(),
+                        role: AutoGroupRole::MainTank,
+                    },
+                    AutoGroupMember {
+                        name: "Bravo".into(),
+                        role: AutoGroupRole::MainAssist,
+                    },
+                    AutoGroupMember {
+                        name: "Charlie".into(),
+                        role: AutoGroupRole::Puller,
+                    },
+                    AutoGroupMember {
+                        name: "Delta".into(),
+                        role: AutoGroupRole::None,
+                    },
+                ],
+            }],
+        };
+        let observation = AutoGroupObservation {
+            live_characters: ["Alpha", "Bravo", "Delta"]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+            leader_group_members: BTreeMap::from([(
+                String::from("Alpha"),
+                vec![String::from("Alpha"), String::from("Bravo")],
+            )]),
+        };
+
+        let report = settings.build_awareness_report(&observation);
+
+        assert_eq!(report.raid.expected_members, 4);
+        assert_eq!(report.raid.live_members, 3);
+        assert_eq!(report.raid.grouped_members, 2);
+        assert_eq!(report.raid.missing_members, 2);
+        assert_eq!(report.groups[0].online_count, 3);
+        assert_eq!(report.groups[0].grouped_count, 2);
+        assert_eq!(
+            report.raid.role_counts.get(&GroupCombatRole::Tank),
+            Some(&1)
+        );
+        assert!(
+            report
+                .formation_suggestions
+                .contains(&AutoGroupFormationSuggestion {
+                    group_name: "Raid One".into(),
+                    character_name: "Charlie".into(),
+                    action: AutoGroupFormationAction::BringMemberOnline,
+                })
+        );
+        assert!(
+            report
+                .formation_suggestions
+                .contains(&AutoGroupFormationSuggestion {
+                    group_name: "Raid One".into(),
+                    character_name: "Delta".into(),
+                    action: AutoGroupFormationAction::InviteMember,
+                })
+        );
+    }
+
+    #[test]
+    fn awareness_report_orders_targeting_priorities_by_role() {
+        let observation = AutoGroupObservation {
+            live_characters: ["Alpha", "Bravo", "Charlie"]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+            leader_group_members: BTreeMap::from([(
+                String::from("Alpha"),
+                vec![
+                    String::from("Alpha"),
+                    String::from("Bravo"),
+                    String::from("Charlie"),
+                ],
+            )]),
+        };
+        let report = AutoGroupSettings {
+            groups: vec![group_profile()],
+        }
+        .build_awareness_report(&observation);
+
+        let names: Vec<_> = report
+            .targeting_priority
+            .iter()
+            .map(|candidate| candidate.name.as_str())
+            .collect();
+
+        assert_eq!(names, vec!["Bravo", "Charlie"]);
     }
 }
