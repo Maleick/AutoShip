@@ -4273,6 +4273,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "textquest-example-inventory-plugin"
+version = "0.1.0"
+dependencies = [
+ "textquest-common",
+]
+
+[[package]]
 name = "textquest-soul"
 version = "0.6.0"
 dependencies = [

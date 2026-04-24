@@ -1,0 +1,9 @@
+[package]
+name = "textquest-example-inventory-plugin"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Example non-core TextQuest inventory plugin"
+
+[dependencies]
+textquest-common = { path = "../../textquest-common" }

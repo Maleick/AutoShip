@@ -6,6 +6,7 @@ members = [
     "textquest-common",
     "textquest-web",
     "textquest-web-sdk",
+    "plugins/example-inventory-plugin",
     "tools/llm-client",
     "tools/eqdiff",
 ]

@@ -131,18 +131,21 @@ pub enum WireMessage {
 impl EqbcLineCodec for WireMessage {
     fn to_eqbc_line(&self) -> Option<String> {
         match self {
-            Self::Broadcast { command } | Self::ExecuteBroadcast { command } => {
-                Some(OutboundRoute::Broadcast {
+            Self::Broadcast { command } | Self::ExecuteBroadcast { command } => Some(
+                OutboundRoute::Broadcast {
                     command: command.clone(),
                 }
-                .eqbc_command_line())
+                .eqbc_command_line(),
+            ),
+            Self::Target { character, command } | Self::ExecuteTarget { character, command } => {
+                Some(
+                    OutboundRoute::Target {
+                        character: character.clone(),
+                        command: command.clone(),
+                    }
+                    .eqbc_command_line(),
+                )
             }
-            Self::Target { character, command }
-            | Self::ExecuteTarget { character, command } => Some(OutboundRoute::Target {
-                character: character.clone(),
-                command: command.clone(),
-            }
-            .eqbc_command_line()),
             Self::TellForward { from, to, message } => {
                 Some(format!("/bc [tell] {from} -> {to}: {message}"))
             }

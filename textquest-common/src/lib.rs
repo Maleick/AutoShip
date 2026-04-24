@@ -65,6 +65,8 @@ pub mod pattern_db;
 pub mod peer_discovery;
 /// Data persistence framework with schema migration support.
 pub mod persistence;
+/// Extensibility contracts, plugin lifecycle, and plugin registry scaffolding.
+pub mod plugins;
 /// Wire protocol definitions for serialized IPC messages.
 pub mod protocol;
 /// Routing scope types for cross-client command dispatch (M8 Orchestrator).

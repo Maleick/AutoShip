@@ -120,6 +120,15 @@
       "notes": "Partial DLL-side scaffold: global script/plugin slash-command registration and dispatch, built-in /textquest command listing, EQ-style hotkey parsing, command hotkey binding, and TOML persistence helpers. Lua/MQ2/runtime EQ UI hook integration remains follow-up work."
     },
     {
+      "id": "issue-819-plugin-system-openvanilla-parity",
+      "name": "Plugin system for extensibility",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check"
+      ],
+      "notes": "Partial first-pass plugin scaffold: shared plugin trait, lifecycle registry, domain capability API, non-core inventory example crate, mkplugin scaffold script, and wiki design/API documentation. Dynamic dylib discovery and runtime host wiring remain follow-up work."
+    },
+    {
       "id": "issue-822-eqbc-style-inter-character-communication",
       "name": "Issue #822 EQBC-style inter-character communication",
       "status": "in_progress",
