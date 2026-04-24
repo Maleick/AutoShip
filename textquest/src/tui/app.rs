@@ -2,7 +2,8 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet, VecDeque, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
-    sync::LazyLock,
+    sync::{LazyLock, mpsc},
+    thread,
     time::Duration,
 };
 
@@ -48,6 +49,43 @@ static GM_SYNC_CLIENT: LazyLock<reqwest::blocking::Client> = LazyLock::new(|| {
         .build()
         .expect("GM sync HTTP client init failed")
 });
+
+const GM_SYNC_QUEUE_CAPACITY: usize = 16;
+
+#[derive(Debug)]
+struct GmSyncPayload {
+    url: String,
+    body: serde_json::Value,
+}
+
+fn spawn_gm_sync_worker() -> (mpsc::SyncSender<GmSyncPayload>, thread::JoinHandle<()>) {
+    let (tx, rx) = mpsc::sync_channel(GM_SYNC_QUEUE_CAPACITY);
+    let handle = thread::Builder::new()
+        .name("gm-state-sync".to_string())
+        .spawn(move || gm_sync_worker_loop(rx))
+        .expect("failed to spawn GM state sync thread");
+
+    (tx, handle)
+}
+
+fn gm_sync_worker_loop(rx: mpsc::Receiver<GmSyncPayload>) {
+    for payload in rx {
+        match GM_SYNC_CLIENT.post(&payload.url).json(&payload.body).send() {
+            Ok(resp) if resp.status().is_success() => {
+                tracing::debug!("GM state synced to web dashboard");
+            }
+            Ok(resp) => {
+                tracing::debug!(
+                    status = %resp.status(),
+                    "GM state sync to web returned non-success"
+                );
+            }
+            Err(e) => {
+                tracing::debug!(%e, "Failed to sync GM state to web");
+            }
+        }
+    }
+}
 
 // Re-export extracted types so existing `use tui::app::*` paths still work.
 use super::state::{
@@ -963,6 +1001,10 @@ pub struct App {
     pub gm_detector: GmDetector,
     /// Whether automation was auto-paused due to GM presence.
     pub gm_auto_paused: bool,
+    /// Queue for web dashboard GM state sync payloads.
+    gm_sync_tx: mpsc::SyncSender<GmSyncPayload>,
+    /// Background worker that sends queued GM state sync payloads.
+    _gm_sync_handle: thread::JoinHandle<()>,
     /// Kill tracker reporter for auto-reporting kill statistics to chat channels.
     pub kill_reporter: crate::metrics::KillReporter,
     /// Session kill tracker for the current session.
@@ -1156,6 +1198,7 @@ impl App {
     pub fn new() -> Self {
         let alert_store = default_alert_store();
         let alert_manager = AlertManager::new(alert_store.clone());
+        let (gm_sync_tx, gm_sync_handle) = spawn_gm_sync_worker();
         let mut app = Self {
             running: true,
             active_screen: ActiveScreen::Overview,
@@ -1276,6 +1319,8 @@ impl App {
             top_loot: Vec::new(),
             gm_detector: GmDetector::new(GmAlertConfig::default()),
             gm_auto_paused: false,
+            gm_sync_tx,
+            _gm_sync_handle: gm_sync_handle,
             kill_reporter: crate::metrics::KillReporter::default(),
             kill_tracker: crate::metrics::KillTracker::new(chrono::Utc::now().timestamp()),
             kill_session_store: crate::metrics::KillSessionStore::new(),
@@ -3886,24 +3931,16 @@ impl App {
             "automationPaused": self.gm_auto_paused,
         });
 
-        let _ = std::thread::Builder::new()
-            .name("gm-state-sync".to_string())
-            .spawn(move || {
-                match GM_SYNC_CLIENT.post(&url).json(&payload).send() {
-                    Ok(resp) if resp.status().is_success() => {
-                        tracing::debug!("GM state synced to web dashboard");
-                    }
-                    Ok(resp) => {
-                        tracing::debug!(
-                            status = %resp.status(),
-                            "GM state sync to web returned non-success"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::debug!(%e, "Failed to sync GM state to web");
-                    }
-                }
-            });
+        let payload = GmSyncPayload { url, body: payload };
+        match self.gm_sync_tx.try_send(payload) {
+            Ok(()) => {}
+            Err(mpsc::TrySendError::Full(_)) => {
+                tracing::debug!("GM state sync queue full; dropping payload");
+            }
+            Err(mpsc::TrySendError::Disconnected(_)) => {
+                tracing::debug!("GM state sync worker disconnected; dropping payload");
+            }
+        }
     }
 
     fn check_watched_spawn_changes(&mut self) {
@@ -8405,6 +8442,11 @@ mod tests {
             members: members.iter().map(|member| (*member).to_string()).collect(),
             member_count: members.len() as u8,
         }
+    }
+
+    #[test]
+    fn gm_sync_queue_capacity_is_bounded_for_backpressure() {
+        assert!((8..=16).contains(&GM_SYNC_QUEUE_CAPACITY));
     }
 
     #[test]
