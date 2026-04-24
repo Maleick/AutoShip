@@ -12,6 +12,8 @@ pub mod coordinator;
 pub mod events;
 /// Cross-group heal arbitration — prevents double-healing, priority ordering.
 pub mod heal_coordinator;
+/// Named NPC and boss encounter tracking.
+pub mod named;
 /// Spell database — spell IDs, casting times, resist types, levels.
 pub mod spell_db;
 /// Advanced spell optimizer and casting predictor — mana efficiency ranking,

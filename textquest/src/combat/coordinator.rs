@@ -10,6 +10,7 @@ use super::{
     camp_loop::{CampEvent, CampLoop, CampState},
     ch_chain::ChChain,
     heal_coordinator::{CureCoordinator, HealCoordinator},
+    named::{NamedAssistTarget, NamedEncounterDatabase, NamedEncounterTracker},
 };
 
 /// Coordinates group combat — assist targeting, CC assignments, and camp loop
@@ -29,6 +30,8 @@ pub struct CombatCoordinator {
     pub heal_coordinator: HealCoordinator,
     /// Cross-group cure coordination — prevents duplicate curing.
     pub cure_coordinator: CureCoordinator,
+    /// Named NPC and boss tracking for assist priority and encounter history.
+    pub named_tracker: NamedEncounterTracker,
     /// Pending soul events to be consumed by the orchestrator each tick.
     pending_soul_events: Vec<(ClientId, SoulEvent)>,
     /// Name of the current assist target mob (for kill event attribution).
@@ -49,6 +52,7 @@ impl CombatCoordinator {
             ch_chain: None,
             heal_coordinator: HealCoordinator::new(),
             cure_coordinator: CureCoordinator::new(),
+            named_tracker: NamedEncounterTracker::default(),
             pending_soul_events: Vec::new(),
             assist_target_name: None,
         }
@@ -89,18 +93,46 @@ impl CombatCoordinator {
         self.camp_loop.set_puller(client_id);
     }
 
+    /// Replace the named NPC database used for priority targeting.
+    pub fn set_named_database(&mut self, database: NamedEncounterDatabase) {
+        self.named_tracker.replace_database(database);
+    }
+
     /// Called each orchestrator tick with all client states.
     /// Returns commands to send to specific clients.
     pub fn tick(&mut self, states: &HashMap<ClientId, GameState>) -> Vec<(ClientId, Command)> {
         let mut commands = Vec::new();
 
-        // 1. Find MA's target (main tank's current target)
-        if let Some(new_assist) = self.decide_assist_target(states)
+        let named_scan = self.named_tracker.scan_states(states);
+        for alert in &named_scan.alerts {
+            tracing::info!(
+                named = %alert.name,
+                zone = %alert.zone,
+                spawn_id = alert.spawn_id,
+                loot_priority = alert.loot_priority,
+                strategy = ?alert.special_strategy,
+                "Named found"
+            );
+        }
+
+        // 1. Find MA's target, with named spawns overriding normal assist.
+        if let Some(new_assist) =
+            self.decide_assist_target(states, named_scan.priority_target.as_ref())
             && self.assist_target != Some(new_assist)
         {
             self.assist_target = Some(new_assist);
-            // Track the target name for kill event attribution
-            if let Some(tank_id) = self.main_tank_id
+            // Track the target name for kill event attribution.
+            if let Some(named_target) = named_scan.priority_target.as_ref() {
+                self.assist_target_name = Some(named_target.name.clone());
+                tracing::info!(
+                    named = %named_target.name,
+                    zone = %named_target.zone,
+                    spawn_id = named_target.spawn_id,
+                    loot_priority = named_target.loot_priority,
+                    strategy = ?named_target.special_strategy,
+                    "Named target overriding assist priority"
+                );
+            } else if let Some(tank_id) = self.main_tank_id
                 && let Some(tank_state) = states.get(&tank_id)
                 && let Some(ref target) = tank_state.target
             {
@@ -202,6 +234,22 @@ impl CombatCoordinator {
         // Detect combat end (edge: was in combat, now nobody is)
         if !any_in_combat && self.prev_in_combat {
             events.push(CampEvent::CombatEnded);
+            let observed_at_ms = states
+                .values()
+                .map(|state| state.timestamp_ms)
+                .max()
+                .unwrap_or_default();
+            if let Some(spawn_id) = self.assist_target
+                && let Some(event) = self.named_tracker.record_death(spawn_id, observed_at_ms)
+            {
+                tracing::info!(
+                    named = %event.name,
+                    zone = %event.zone,
+                    spawn_id,
+                    loot_priority = event.loot_priority,
+                    "Named death recorded"
+                );
+            }
 
             // Emit a Kill soul event for each living client — we won the fight.
             let kill_target = self
@@ -270,7 +318,15 @@ impl CombatCoordinator {
         events
     }
 
-    fn decide_assist_target(&self, states: &HashMap<ClientId, GameState>) -> Option<u32> {
+    fn decide_assist_target(
+        &self,
+        states: &HashMap<ClientId, GameState>,
+        named_target: Option<&NamedAssistTarget>,
+    ) -> Option<u32> {
+        if let Some(named_target) = named_target {
+            return Some(named_target.spawn_id);
+        }
+
         // Read main tank's target
         let tank_id = self.main_tank_id?;
         let tank_state = states.get(&tank_id)?;
