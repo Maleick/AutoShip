@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use crate::ipc;
 
 pub mod camp;
+pub mod drag;
 #[cfg(not(windows))]
 #[path = "mesh_stub.rs"]
 pub mod mesh;

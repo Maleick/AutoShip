@@ -1,5 +1,6 @@
 //! Navigation module — autonomous waypoint-based movement.
 
+pub mod drag;
 pub mod humanize;
 pub mod state;
 pub mod stick;
