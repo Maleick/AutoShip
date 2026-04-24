@@ -2,7 +2,7 @@
 //! overlay).
 //!
 //! Each screen lives in its own sub-module:
-//! - [`dashboard`]   — character grid + health gauges + session stats
+//! - [`roster`]      — character grid + health gauges + session stats
 //! - [`spawns`]      — filterable spawn list + hex dump
 //! - [`map`]         — zone map + named tracker
 //! - [`groups`]      — per-group panels with buff timer columns
@@ -11,7 +11,6 @@
 //!   …)
 
 pub mod ch_chain;
-pub mod dashboard;
 pub mod dps_bars;
 pub mod economy_controls;
 pub mod eq_internals;
@@ -22,6 +21,7 @@ pub mod map;
 pub mod navigation;
 pub mod orchestrator_panel;
 pub mod packets;
+pub mod roster;
 pub mod spawns;
 pub mod widgets;
 pub mod zone_blocker_panel;
@@ -70,7 +70,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     draw_header(frame, outer[0], app);
 
     match app.active_screen {
-        ActiveScreen::Overview => dashboard::draw_dashboard(frame, outer[1], app),
+        ActiveScreen::Overview => roster::draw_roster(frame, outer[1], app),
         ActiveScreen::Tactical => map::draw_map_screen(frame, outer[1], app),
         ActiveScreen::Navigation => navigation::draw_navigation_screen(frame, outer[1], app),
         ActiveScreen::Debug => spawns::draw_debug_screen(frame, outer[1], app),
@@ -1465,7 +1465,7 @@ mod tests {
     }
 
     #[test]
-    fn overview_screen_dispatches_to_dashboard_renderer() {
+    fn overview_screen_dispatches_to_roster_renderer() {
         let overview = render_app(sample_app(), 150, 36);
 
         let mut navigation_app = sample_app();

@@ -14,7 +14,7 @@ use crate::{
 };
 
 // ─── Layout breakpoints ─────────────────────────────────────────────────────
-// Named constants for width-based layout transitions so dashboard.rs and map.rs
+// Named constants for width-based layout transitions so roster.rs and map.rs
 // stay in sync when thresholds are tuned.
 
 /// Below this width the overview switches from side-by-side to stacked layout.

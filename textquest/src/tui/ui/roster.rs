@@ -34,8 +34,8 @@ const STACKED_ROSTER_MIN_COMPACT: u16 = 11;
 const STACKED_ROSTER_MIN_TINY: u16 = 8;
 const CAST_PROGRESS_BAR_WIDTH: usize = 22;
 
-/// Draw the main overview dashboard with roster and status panels.
-pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &mut App) {
+/// Draw the main overview roster with status panels.
+pub fn draw_roster(frame: &mut Frame, area: Rect, app: &mut App) {
     let stacked = area.width < WIDTH_OVERVIEW_STACK;
     let sections = overview_sections(app, area, stacked);
 
@@ -48,7 +48,7 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &mut App) {
             .constraints([Constraint::Min(50), Constraint::Length(map_width)])
             .split(area);
 
-        // Draw dashboard on the left
+        // Draw roster on the left
         let sidebar_width = if cols[0].width >= WIDTH_SIDEBAR_WIDE {
             46
         } else if cols[0].width >= WIDTH_SIDEBAR_MEDIUM {
@@ -64,9 +64,9 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &mut App) {
             ])
             .split(cols[0]);
 
-        draw_dashboard_grid(frame, chunks[0], app);
+        draw_roster_grid(frame, chunks[0], app);
         if !sections.is_empty() {
-            draw_dashboard_sidebar(frame, chunks[1], app, &sections);
+            draw_roster_sidebar(frame, chunks[1], app, &sections);
         }
 
         // Draw map on the right
@@ -102,15 +102,15 @@ pub fn draw_dashboard(frame: &mut Frame, area: Rect, app: &mut App) {
             .split(area)
     };
 
-    draw_dashboard_grid(frame, chunks[0], app);
+    draw_roster_grid(frame, chunks[0], app);
     if !sections.is_empty() {
-        draw_dashboard_sidebar(frame, chunks[1], app, &sections);
+        draw_roster_sidebar(frame, chunks[1], app, &sections);
     }
 }
 
 // ─── Character grid ──────────────────────────────────────────────────────────
 
-fn draw_dashboard_grid(frame: &mut Frame, area: Rect, app: &App) {
+fn draw_roster_grid(frame: &mut Frame, area: Rect, app: &App) {
     let focus_height = group_focus_strip_height(area);
     let roster_area = if focus_height > 0 {
         let chunks = Layout::default()
@@ -753,7 +753,7 @@ struct OverviewSectionLayout {
     collapsed: bool,
 }
 
-fn draw_dashboard_sidebar(
+fn draw_roster_sidebar(
     frame: &mut Frame,
     area: Rect,
     app: &App,
