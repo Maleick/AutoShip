@@ -1569,6 +1569,18 @@ fn token_dir() -> std::io::Result<std::path::PathBuf> {
                 "Token path is not a directory",
             ));
         }
+        // Verify directory ownership on Unix.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            use nix::unistd::getuid;
+            if meta.uid() != getuid().as_raw() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "Token directory not owned by current user",
+                ));
+            }
+        }
     }
     Ok(dir)
 }
@@ -1602,6 +1614,24 @@ fn write_session_token_path(path: &std::path::Path, token: SessionToken) -> std:
 fn read_session_token_path(path: &std::path::Path) -> Option<SessionToken> {
     if verify_not_symlink_path(path).is_err() {
         return None;
+    }
+
+    // Validate file ownership on Unix before reading.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        use nix::unistd::getuid;
+        if let Ok(meta) = std::fs::metadata(path) {
+            if meta.uid() != getuid().as_raw() {
+                eprintln!(
+                    "Warning: session token file {:?} not owned by current user, rejecting",
+                    path
+                );
+                return None;
+            }
+        } else {
+            return None;
+        }
     }
 
     if let Ok(data) = std::fs::read(path)
@@ -1638,8 +1668,19 @@ pub fn generate_random_token() -> SessionToken {
 ///
 /// Returns an error if the operation fails.
 pub fn write_session_token_file(pid: u32) -> std::io::Result<()> {
+    let token_dir_path = std::env::temp_dir().join(SESSION_TOKEN_DIR);
+
+    // Create directory with restrictive permissions (0o700 on Unix).
+    if !token_dir_path.exists() {
+        std::fs::create_dir(&token_dir_path)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&token_dir_path, std::fs::Permissions::from_mode(0o700))?;
+        }
+    }
+
     let token_dir = token_dir()?;
-    std::fs::create_dir_all(&token_dir)?;
     let token_path = token_dir.join(format!("token_{pid}.bin"));
 
     let token = generate_random_token();
