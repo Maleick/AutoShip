@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     io::Write,
     path::{Path, PathBuf},
     time::{Duration, Instant},
@@ -2308,8 +2308,9 @@ pub struct PacketEntry {
 
 /// State for the packet/opcode monitor panel.
 pub struct PacketMonitorState {
-    /// Ring buffer of captured packets (newest at the end).
-    pub packets: Vec<PacketRecord>,
+    /// Ring buffer of captured packets (newest at the end). Uses `VecDeque`
+    /// so evicting the oldest packet is O(1) under sustained capture load.
+    pub packets: VecDeque<PacketRecord>,
     /// Packet table selection in the filtered view.
     pub table_state: TableState,
     /// Maximum number of packets to retain.
@@ -2342,7 +2343,7 @@ impl PacketMonitorState {
         let mut table_state = TableState::default();
         table_state.select(Some(0));
         Self {
-            packets: Vec::with_capacity(1024),
+            packets: VecDeque::with_capacity(1024),
             table_state,
             capacity: 10_000,
             auto_scroll: true,
@@ -2356,16 +2357,16 @@ impl PacketMonitorState {
         }
     }
 
-    /// Push a new packet record, evicting the oldest if at capacity.
+    /// Push a new packet record, evicting the oldest in O(1) if at capacity.
     pub fn push(&mut self, record: PacketRecord) {
         // Track the earliest captured timestamp for "session age" display.
         if self.capture_start_ms.is_none() {
             self.capture_start_ms = Some(record.timestamp_ms);
         }
         if self.packets.len() >= self.capacity {
-            self.packets.remove(0);
+            self.packets.pop_front();
         }
-        self.packets.push(record);
+        self.packets.push_back(record);
 
         // Update peak rate from the current measurement.
         let (_, new_peak) = self.packet_rates();
@@ -2529,6 +2530,13 @@ mod packet_monitor_tests {
             payload_size: 4,
             payload: vec![0x34, 0x12, 0xAA, 0xBB],
         }
+    }
+
+    #[test]
+    fn packet_buffer_uses_vecdeque_for_front_eviction() {
+        let state = PacketMonitorState::new();
+
+        let _: &std::collections::VecDeque<PacketRecord> = &state.packets;
     }
 
     #[test]
