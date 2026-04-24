@@ -23,7 +23,7 @@ use textquest_common::chat_pattern_rules::ChatPatternRuleEngine;
 
 use axum::{
     Router,
-    extract::Request,
+    extract::{DefaultBodyLimit, Request},
     http::{HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::Response,
@@ -464,12 +464,16 @@ fn build_state() -> Arc<AppState> {
         .ok()
         .filter(|password| !password.trim().is_empty())
         .and_then(
-            |password| match accounts::CredentialStore::open(&credentials_db_path(), &password) {
-                Ok(store) => Some(store),
-                Err(error) => {
-                    tracing::error!(%error, "Failed to initialize credential store; password routes will return 501");
-                    None
+            |password| {
+                let _password_zeroizing = zeroize::Zeroizing::new(password);
+                match accounts::CredentialStore::open(&credentials_db_path(), _password_zeroizing.as_str()) {
+                    Ok(store) => Some(store),
+                    Err(error) => {
+                        tracing::error!(%error, "Failed to initialize credential store; password routes will return 501");
+                        None
+                    }
                 }
+                // _password_zeroizing is automatically zeroized when dropped here
             },
         );
 
@@ -918,6 +922,7 @@ fn build_app(state: Arc<AppState>) -> Router {
         .route("/ws", get(ws::ws_handler))
         .fallback_service(serve_spa)
         .layer(cors)
+        .layer(DefaultBodyLimit::max(1024 * 1024)) // 1 MB global body-size cap
         .with_state(state)
 }
 

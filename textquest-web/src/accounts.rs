@@ -271,9 +271,14 @@ fn argon2_instance() -> Result<Argon2<'static>> {
 fn derive_key(master_password: &str, salt: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
     let argon2 = argon2_instance()?;
     let mut key = Zeroizing::new([0u8; 32]);
+
+    // Wrap password in Zeroizing to ensure plaintext is cleared after derivation
+    let _password_bytes = Zeroizing::new(master_password.as_bytes().to_vec());
     argon2
-        .hash_password_into(master_password.as_bytes(), salt, &mut *key)
+        .hash_password_into(&_password_bytes, salt, &mut *key)
         .map_err(|e| anyhow::anyhow!("argon2 key derivation failed: {e}"))?;
+    // _password_bytes is automatically zeroized when dropped
+
     Ok(key)
 }
 
