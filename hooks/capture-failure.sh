@@ -8,8 +8,8 @@
 #   stuck              — Worker exited without terminal status
 #   failed_verification — Verification hook(s) failed
 #   reviewer_rejection  — PR reviewer rejected the work
-#   model_failure     — Model/API returned an error
-#   e2e_failure      — End-to-end test failed
+#   model_failure       — Model/API returned an error
+#   e2e_failure         — End-to-end test failed
 #
 # Artifacts captured:
 #   - issue: issue number/ID
@@ -57,7 +57,7 @@ if [[ ! "$ISSUE_ID" =~ ^(issue-)?[0-9]+$ ]]; then
   exit 1
 fi
 
-ISSUE_NUMBER=$(echo "$ISSUE_ID" | grep -o '[0-9]*' | head -1)
+ISSUE_NUMBER="${ISSUE_ID#issue-}"
 ISSUE_ID="issue-${ISSUE_NUMBER}"
 
 mkdir -p "$FAILURES_DIR"
@@ -66,13 +66,14 @@ FAILURE_ID="$(date -u +"%Y%m%dT%H%M%SZ")-${ISSUE_ID}"
 FAILURE_FILE="$FAILURES_DIR/${FAILURE_ID}.json"
 
 WORKSPACE_DIR="$AUTOSHIP_DIR/workspaces/${ISSUE_ID}"
+WORKSPACE_PATH="$REPO_ROOT/$WORKSPACE_DIR"
 MODEL="unknown"
 ROLE="unknown"
 ATTEMPT=1
 
 if [[ -f "$STATE_FILE" ]]; then
   MODEL=$(jq -r --arg k "$ISSUE_ID" '.issues[$k].model // "unknown"' "$STATE_FILE" 2>/dev/null || echo "unknown")
-  ROLE=$(jq -r --arg k "$ISSUE_ID" '.issues[$k].agent // "unknown"' "$STATE_FILE" 2>/dev/null || echo "unknown")
+  ROLE=$(jq -r --arg k "$ISSUE_ID" '.issues[$k].role // .issues[$k].agent // "unknown"' "$STATE_FILE" 2>/dev/null || echo "unknown")
   ATTEMPT=$(jq -r --arg k "$ISSUE_ID" '.issues[$k].attempt // 1' "$STATE_FILE" 2>/dev/null || echo 1)
 fi
 
@@ -91,27 +92,32 @@ for pair in "$@"; do
   fi
 done
 
-LOGS=""
-if [[ -f "$WORKSPACE_DIR/AUTOSHIP_RUNNER.log" ]]; then
-  LOGS=$(cat "$WORKSPACE_DIR/AUTOSHIP_RUNNER.log" 2>/dev/null | tail -100 || true)
+if [[ ! "$ATTEMPT" =~ ^[0-9]+$ ]]; then
+  ATTEMPT=1
 fi
 
-HOOK=""
+LOG_FILE="${AUTOSHIP_FAILURE_LOG:-$WORKSPACE_DIR/AUTOSHIP_RUNNER.log}"
+LOGS=""
+if [[ -f "$LOG_FILE" ]]; then
+  LOGS=$(tail -100 "$LOG_FILE" 2>/dev/null || true)
+fi
+
+HOOK="${AUTOSHIP_FAILURE_HOOK:-}"
 case "$CATEGORY" in
   stuck)
-    HOOK="hooks/opencode/runner.sh"
+    HOOK="${HOOK:-hooks/opencode/runner.sh}"
     ;;
   failed_verification)
-    HOOK="hooks/opencode/test-policy.sh"
+    HOOK="${HOOK:-hooks/opencode/test-policy.sh}"
     ;;
   reviewer_rejection)
-    HOOK="hooks/opencode/reviewer.sh"
+    HOOK="${HOOK:-hooks/opencode/reviewer.sh}"
     ;;
   model_failure)
-    HOOK="hooks/opencode/select-model.sh"
+    HOOK="${HOOK:-hooks/opencode/runner.sh}"
     ;;
   e2e_failure)
-    HOOK="hooks/opencode/smoke-test.sh"
+    HOOK="${HOOK:-hooks/opencode/smoke-test.sh}"
     ;;
 esac
 
@@ -121,7 +127,7 @@ jq -n \
   --arg category "$CATEGORY" \
   --arg model "$MODEL" \
   --arg role "$ROLE" \
-  --arg workspace "$WORKSPACE_DIR" \
+  --arg workspace "$WORKSPACE_PATH" \
   --arg hook "$HOOK" \
   --arg logs "$LOGS" \
   --arg error "$ERROR_SUMMARY" \
@@ -141,4 +147,4 @@ jq -n \
     timestamp: $now
   }' > "$FAILURE_FILE"
 
-echo "Failure artfact captured: $FAILURE_FILE"
+echo "Failure artifact captured: $FAILURE_FILE"

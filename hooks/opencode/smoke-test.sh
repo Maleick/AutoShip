@@ -6,6 +6,14 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   exit 1
 }
 
+capture_e2e_failure() {
+  local status="$1"
+  if [[ $status -ne 0 && -n "${AUTOSHIP_FAILURE_ISSUE:-${AUTOSHIP_ISSUE_ID:-}}" && -x "$REPO_ROOT/hooks/capture-failure.sh" ]]; then
+    AUTOSHIP_FAILURE_HOOK="hooks/opencode/smoke-test.sh" \
+      bash "$REPO_ROOT/hooks/capture-failure.sh" e2e_failure "${AUTOSHIP_FAILURE_ISSUE:-${AUTOSHIP_ISSUE_ID:-}}" "error_summary=smoke test failed with exit $status" 2>/dev/null || true
+  fi
+}
+
 CONFIG_HOME="$(mktemp -d)"
 AUTOSHIP_BACKUP=""
 if [[ -d "$REPO_ROOT/.autoship" ]]; then
@@ -14,7 +22,7 @@ if [[ -d "$REPO_ROOT/.autoship" ]]; then
   rm -rf "$REPO_ROOT/.autoship"
 fi
 
-trap 'rm -rf "$CONFIG_HOME"; if [[ -n "$AUTOSHIP_BACKUP" && -d "$AUTOSHIP_BACKUP/.autoship" ]]; then rm -rf "$REPO_ROOT/.autoship"; cp -R "$AUTOSHIP_BACKUP/.autoship" "$REPO_ROOT/"; fi; rm -rf "$AUTOSHIP_BACKUP"' EXIT
+trap 'status=$?; capture_e2e_failure "$status"; rm -rf "$CONFIG_HOME"; if [[ -n "$AUTOSHIP_BACKUP" && -d "$AUTOSHIP_BACKUP/.autoship" ]]; then rm -rf "$REPO_ROOT/.autoship"; cp -R "$AUTOSHIP_BACKUP/.autoship" "$REPO_ROOT/"; fi; rm -rf "$AUTOSHIP_BACKUP"; exit $status' EXIT
 
 export XDG_CONFIG_HOME="$CONFIG_HOME"
 BIN_DIR="$CONFIG_HOME/bin"

@@ -7,6 +7,10 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
+  if [[ -n "${AUTOSHIP_FAILURE_ISSUE:-${AUTOSHIP_ISSUE_ID:-}}" && -x "$SCRIPT_DIR/../capture-failure.sh" ]]; then
+    AUTOSHIP_FAILURE_HOOK="hooks/opencode/test-policy.sh" \
+      bash "$SCRIPT_DIR/../capture-failure.sh" failed_verification "${AUTOSHIP_FAILURE_ISSUE:-${AUTOSHIP_ISSUE_ID:-}}" "error_summary=$1" 2>/dev/null || true
+  fi
   exit 1
 }
 
@@ -107,9 +111,10 @@ mkdir -p "$RUNNER_REPO/.autoship/workspaces/issue-996" "$RUNNER_REPO/hooks/openc
 git init -q "$RUNNER_REPO"
 cp "$SCRIPT_DIR/runner.sh" "$RUNNER_REPO/hooks/opencode/runner.sh"
 cp "$SCRIPT_DIR/../update-state.sh" "$RUNNER_REPO/hooks/update-state.sh"
-chmod +x "$RUNNER_REPO/hooks/opencode/runner.sh" "$RUNNER_REPO/hooks/update-state.sh"
+cp "$SCRIPT_DIR/../capture-failure.sh" "$RUNNER_REPO/hooks/capture-failure.sh"
+chmod +x "$RUNNER_REPO/hooks/opencode/runner.sh" "$RUNNER_REPO/hooks/update-state.sh" "$RUNNER_REPO/hooks/capture-failure.sh"
 cat > "$RUNNER_REPO/.autoship/state.json" <<'JSON'
-{"repo":"owner/repo","issues":{"issue-996":{"state":"queued"}},"stats":{},"config":{"maxConcurrentAgents":15}}
+{"repo":"owner/repo","issues":{"issue-996":{"state":"queued","model":"opencode/test-free","role":"implementer","attempt":2}},"stats":{},"config":{"maxConcurrentAgents":15}}
 JSON
 printf 'QUEUED\n' > "$RUNNER_REPO/.autoship/workspaces/issue-996/status"
 printf 'test prompt\n' > "$RUNNER_REPO/.autoship/workspaces/issue-996/AUTOSHIP_PROMPT.md"
@@ -136,6 +141,10 @@ assert_eq "STUCK" "$(tr -d '[:space:]' < "$RUNNER_REPO/.autoship/workspaces/issu
 if grep -F 'ENV_LEAK' "$RUNNER_REPO/.autoship/workspaces/issue-996/AUTOSHIP_RUNNER.log" >/dev/null 2>&1; then
   fail "runner must unset parent OpenCode session environment before nested opencode run"
 fi
+artifact_count=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' 2>/dev/null | wc -l | tr -d '[:space:]')
+assert_eq "1" "$artifact_count" "runner captures a stuck worker failure artifact"
+artifact_file=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' | head -1)
+jq -e '.issue == "issue-996" and .model == "opencode/test-free" and .role == "implementer" and .workspace != "" and .hook == "hooks/opencode/runner.sh" and .failure_category == "stuck" and (.logs | contains("ok")) and .attempt == 2' "$artifact_file" >/dev/null || fail "failure artifact includes issue, model, workspace, hook, logs, category, role, and attempt"
 
 grep -F 'AUTOSHIP_VERSION="1.5.0-opencode"' "$SCRIPT_DIR/init.sh" >/dev/null 2>&1 && fail "init must not hardcode stale 1.5.0-opencode version"
 
