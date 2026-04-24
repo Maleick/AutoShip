@@ -22,9 +22,11 @@ pub use item_score::{
 };
 pub use ledger::{DaySummary, EconomyLedger, EntrySource, LedgerEntry, TrendReport};
 pub use smartloot::{
+    AutoLootInventoryManagement, CursorItemAction, EquipmentSet, EquipmentSetStatus,
+    InventoryManagementContext, InventoryManagementPlan, InventorySortPlacement,
     LootAndScootSession, LootCandidate, LootFilter, LootFilterSettings, LootLogEntry, LootRarity,
-    PickupReason, PlannedLootPickup, ScootPlan, SkipReason, SkippedLoot, SmartLootConfig,
-    SmartLootContext, SmartLootPlan, SmartLootPlanner,
+    ManagedInventoryItem, PickupReason, PlannedLootPickup, ScootPlan, SkipReason, SkippedLoot,
+    SmartLootConfig, SmartLootContext, SmartLootPlan, SmartLootPlanner,
 };
 pub use store::{
     DropRateRow, ImportItem, ItemRow, ItemSearchFilter, LootHistoryRow, LootStore, LootTableRow,

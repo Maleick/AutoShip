@@ -1,7 +1,9 @@
-//! Smart loot filtering and loot-and-scoot planning.
+//! Smart loot filtering, loot-and-scoot planning, and inventory management.
 //!
 //! This module keeps filtering and timing decisions pure so the camp loop can
 //! batch pickup commands without re-evaluating every item on every DLL tick.
+
+use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
 use textquest_common::types::ClientId;
@@ -127,7 +129,93 @@ impl LootCandidate {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ManagedInventoryItem {
+    pub item_id: Option<u32>,
+    pub item_name: String,
+    #[serde(default = "default_quantity")]
+    pub quantity: u32,
+    #[serde(default)]
+    pub value_platinum: u32,
+    #[serde(default)]
+    pub weight: f32,
+    #[serde(default)]
+    pub rarity: LootRarity,
+    #[serde(default)]
+    pub equipped: bool,
+}
+
+impl ManagedInventoryItem {
+    #[must_use]
+    pub fn from_loot_candidate(item: LootCandidate) -> Self {
+        Self {
+            item_id: item.item_id,
+            item_name: item.item_name,
+            quantity: item.quantity,
+            value_platinum: item.value_platinum,
+            weight: item.weight,
+            rarity: item.rarity,
+            equipped: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EquipmentSet {
+    pub name: String,
+    #[serde(default)]
+    pub item_ids: Vec<u32>,
+    #[serde(default)]
+    pub item_names: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct InventoryManagementContext {
+    #[serde(default)]
+    pub inventory: Vec<ManagedInventoryItem>,
+    #[serde(default)]
+    pub cursor_item: Option<ManagedInventoryItem>,
+    #[serde(default)]
+    pub equipment_sets: Vec<EquipmentSet>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InventorySortPlacement {
+    pub target_index: usize,
+    pub item: ManagedInventoryItem,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CursorItemAction {
+    #[default]
+    None,
+    StowInInventory,
+    ManualReview,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EquipmentSetStatus {
+    pub name: String,
+    pub present_count: usize,
+    pub missing_item_names: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct InventoryManagementPlan {
+    pub sorted_items: Vec<InventorySortPlacement>,
+    pub cursor_action: CursorItemAction,
+    pub equipment_sets: Vec<EquipmentSetStatus>,
+}
+
+pub trait AutoLootInventoryManagement {
+    fn plan_inventory_management(
+        &self,
+        context: &InventoryManagementContext,
+    ) -> InventoryManagementPlan;
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct SmartLootContext<'a> {
     pub looter: ClientId,
     pub level: u8,
@@ -396,6 +484,129 @@ impl SmartLootPlanner {
             navigate: true,
         })
     }
+}
+
+impl AutoLootInventoryManagement for SmartLootPlanner {
+    fn plan_inventory_management(
+        &self,
+        context: &InventoryManagementContext,
+    ) -> InventoryManagementPlan {
+        let mut sorted_inventory = context.inventory.clone();
+        sorted_inventory
+            .sort_by(|left, right| compare_inventory_items(left, right, &context.equipment_sets));
+
+        InventoryManagementPlan {
+            sorted_items: sorted_inventory
+                .into_iter()
+                .enumerate()
+                .map(|(target_index, item)| InventorySortPlacement { target_index, item })
+                .collect(),
+            cursor_action: context
+                .cursor_item
+                .as_ref()
+                .map(|item| self.cursor_action_for(item))
+                .unwrap_or_default(),
+            equipment_sets: context
+                .equipment_sets
+                .iter()
+                .map(|set| equipment_set_status(set, context))
+                .collect(),
+        }
+    }
+}
+
+impl SmartLootPlanner {
+    fn cursor_action_for(&self, item: &ManagedInventoryItem) -> CursorItemAction {
+        if !self.config.auto_loot || self.is_managed_item_heavy_vendor_trash(item) {
+            CursorItemAction::ManualReview
+        } else {
+            CursorItemAction::StowInInventory
+        }
+    }
+
+    fn is_managed_item_heavy_vendor_trash(&self, item: &ManagedInventoryItem) -> bool {
+        self.filters.weight
+            && item.value_platinum <= self.config.vendor_trash_threshold
+            && item.weight > self.config.max_vendor_trash_weight
+    }
+}
+
+fn compare_inventory_items(
+    left: &ManagedInventoryItem,
+    right: &ManagedInventoryItem,
+    equipment_sets: &[EquipmentSet],
+) -> Ordering {
+    let left_equipment_set_item = belongs_to_equipment_set(left, equipment_sets);
+    let right_equipment_set_item = belongs_to_equipment_set(right, equipment_sets);
+
+    right_equipment_set_item
+        .cmp(&left_equipment_set_item)
+        .then_with(|| right.equipped.cmp(&left.equipped))
+        .then_with(|| right.rarity.cmp(&left.rarity))
+        .then_with(|| right.value_platinum.cmp(&left.value_platinum))
+        .then_with(|| {
+            left.weight
+                .partial_cmp(&right.weight)
+                .unwrap_or(Ordering::Equal)
+        })
+        .then_with(|| left.item_name.cmp(&right.item_name))
+        .then_with(|| left.item_id.cmp(&right.item_id))
+}
+
+fn belongs_to_equipment_set(item: &ManagedInventoryItem, equipment_sets: &[EquipmentSet]) -> bool {
+    equipment_sets.iter().any(|set| item_matches_set(item, set))
+}
+
+fn equipment_set_status(
+    set: &EquipmentSet,
+    context: &InventoryManagementContext,
+) -> EquipmentSetStatus {
+    let mut present_count = 0;
+    let mut missing_item_names = Vec::new();
+
+    for item_name in &set.item_names {
+        if context
+            .inventory
+            .iter()
+            .chain(context.cursor_item.iter())
+            .any(|item| normalized_item_name(&item.item_name) == normalized_item_name(item_name))
+        {
+            present_count += 1;
+        } else {
+            missing_item_names.push(item_name.clone());
+        }
+    }
+
+    present_count += set
+        .item_ids
+        .iter()
+        .filter(|item_id| {
+            context
+                .inventory
+                .iter()
+                .chain(context.cursor_item.iter())
+                .any(|item| item.item_id == Some(**item_id))
+        })
+        .count();
+
+    EquipmentSetStatus {
+        name: set.name.clone(),
+        present_count,
+        missing_item_names,
+    }
+}
+
+fn item_matches_set(item: &ManagedInventoryItem, set: &EquipmentSet) -> bool {
+    item.item_id
+        .is_some_and(|item_id| set.item_ids.contains(&item_id))
+        || set
+            .item_names
+            .iter()
+            .any(|name| normalized_item_name(name) == normalized_item_name(&item.item_name))
+}
+
+fn normalized_item_name(name: &str) -> String {
+    name.trim().to_ascii_lowercase()
 }
 
 fn default_true() -> bool {
