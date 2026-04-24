@@ -24,6 +24,8 @@ mod combat;
 #[allow(dead_code)]
 pub mod commands;
 #[allow(dead_code)]
+mod debug;
+#[allow(dead_code)]
 mod dialog;
 #[allow(dead_code)]
 mod eq;

@@ -451,6 +451,43 @@ fn immediate_response_for_command(
                 windows: crate::eq::merchant::query_merchant_items(eq_base, filter),
             }
         }
+        Command::TraceStart {
+            function_name,
+            capture_args,
+            capture_return,
+        } => {
+            match crate::debug::tracer::start(function_name.clone(), *capture_args, *capture_return)
+            {
+                Ok(status) => Response::CommandResult {
+                    success: true,
+                    message: format!(
+                        "trace started: {} at {:#x} in {:?}",
+                        status.function_name, status.address, status.slot
+                    ),
+                },
+                Err(message) => Response::Error { message },
+            }
+        }
+        Command::TraceStop { function_name } => match crate::debug::tracer::stop(function_name) {
+            Ok(status) => Response::CommandResult {
+                success: true,
+                message: format!(
+                    "trace stopped: {} at {:#x} after {} calls",
+                    status.function_name, status.address, status.call_count
+                ),
+            },
+            Err(message) => Response::Error { message },
+        },
+        Command::TraceList => Response::TraceList {
+            traces: crate::debug::tracer::list(),
+        },
+        Command::TraceDump => {
+            let (events, dropped_events) = crate::debug::tracer::dump();
+            Response::TraceDump {
+                events,
+                dropped_events,
+            }
+        }
         _ => return None,
     };
 

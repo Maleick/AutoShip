@@ -471,6 +471,50 @@ pub enum SessionControlCommand {
     BroadcastAll,
 }
 
+/// Runtime metadata for an active function trace.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TraceStatus {
+    /// Operator-provided trace label or address string.
+    pub function_name: String,
+    /// Absolute virtual address where the HWBP is installed.
+    pub address: usize,
+    /// Whether the tracer captures x64 register arguments.
+    pub capture_args: bool,
+    /// Whether the tracer records the call return address for later return-value work.
+    pub capture_return: bool,
+    /// Debug-register slot used by this trace, if installed.
+    pub slot: Option<u8>,
+    /// Total calls observed since the trace was started.
+    pub call_count: u64,
+    /// Ring-buffer entries overwritten before the orchestrator drained them.
+    pub dropped_events: u64,
+}
+
+/// One function-call trace event drained from the DLL-side ring buffer.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TraceRecord {
+    /// Operator-provided trace label or address string.
+    pub function_name: String,
+    /// Absolute virtual address that triggered the HWBP.
+    pub address: usize,
+    /// Monotonic per-DLL trace sequence number.
+    pub sequence: u64,
+    /// Low-overhead timestamp counter captured in the HWBP handler.
+    pub timestamp_ticks: u64,
+    /// OS thread ID observed by the handler, or 0 when unavailable.
+    pub thread_id: u32,
+    /// Captured RCX/RDX/R8/R9 argument registers when requested.
+    pub args: Option<[u64; 4]>,
+    /// Captured stack pointer when argument capture is requested.
+    pub stack_pointer: Option<u64>,
+    /// Return address read from the stack when return capture is requested.
+    pub return_address: Option<u64>,
+    /// Captured return value. Reserved for the return-HWBP follow-up path.
+    pub return_value: Option<u64>,
+    /// Elapsed timestamp ticks for entry-to-return capture. Reserved for follow-up.
+    pub elapsed_ticks: Option<u64>,
+}
+
 /// Commands sent from the manager to an injected DLL
 ///
 /// NOTE: `Command` is serialized over IPC with bincode's implicit enum variant
@@ -1062,6 +1106,27 @@ pub enum Command {
         /// Reward selection rules keyed by task title matching.
         config: RewardAutomationConfig,
     },
+    /// Start tracing a function call with a hardware breakpoint.
+    ///
+    /// `function_name` may be an absolute address (`0x...` or decimal) or a
+    /// label containing an address suffix (`name@0x...` / `name=0x...`).
+    TraceStart {
+        /// Function label or address to trace.
+        function_name: String,
+        /// Capture RCX/RDX/R8/R9 and RSP on each call.
+        capture_args: bool,
+        /// Capture the stack return address for each call.
+        capture_return: bool,
+    },
+    /// Stop tracing a function by label or address string.
+    TraceStop {
+        /// Function label or address used when the trace was started.
+        function_name: String,
+    },
+    /// List all currently active function traces.
+    TraceList,
+    /// Drain the DLL-side trace ring buffer.
+    TraceDump,
 }
 
 impl std::fmt::Debug for Command {
@@ -1504,6 +1569,18 @@ pub enum Response {
     ChecksumMismatchAlertBatch {
         /// Alerts raised since the previous alert poll/drain.
         alerts: Vec<ChecksumMismatchAlert>,
+    },
+    /// Active function-call traces.
+    TraceList {
+        /// Current trace installations and counters.
+        traces: Vec<TraceStatus>,
+    },
+    /// Drained function-call trace events.
+    TraceDump {
+        /// Trace records captured since the previous dump.
+        events: Vec<TraceRecord>,
+        /// Records overwritten before this dump could drain them.
+        dropped_events: u64,
     },
 }
 
@@ -2018,6 +2095,16 @@ mod tests {
                 settings: TradeskillTrophySettings::default(),
             },
             Command::QueryTradeskillTrophyStatus,
+            Command::TraceStart {
+                function_name: "target@0x1234".into(),
+                capture_args: true,
+                capture_return: true,
+            },
+            Command::TraceStop {
+                function_name: "target@0x1234".into(),
+            },
+            Command::TraceList,
+            Command::TraceDump,
         ];
         for cmd in &commands {
             let encoded = encode(cmd).expect("encode failed");
@@ -2183,6 +2270,32 @@ mod tests {
                 ],
             },
             Response::ChatBatch { messages: vec![] },
+            Response::TraceList {
+                traces: vec![TraceStatus {
+                    function_name: "target@0x1234".into(),
+                    address: 0x1234,
+                    capture_args: true,
+                    capture_return: true,
+                    slot: Some(3),
+                    call_count: 2,
+                    dropped_events: 0,
+                }],
+            },
+            Response::TraceDump {
+                events: vec![TraceRecord {
+                    function_name: "target@0x1234".into(),
+                    address: 0x1234,
+                    sequence: 1,
+                    timestamp_ticks: 99,
+                    thread_id: 7,
+                    args: Some([1, 2, 3, 4]),
+                    stack_pointer: Some(0x9000),
+                    return_address: Some(0x5678),
+                    return_value: None,
+                    elapsed_ticks: None,
+                }],
+                dropped_events: 0,
+            },
         ];
         for resp in &responses {
             let encoded = encode(resp).expect("encode failed");

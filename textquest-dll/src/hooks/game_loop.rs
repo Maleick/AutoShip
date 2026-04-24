@@ -3561,6 +3561,12 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             configure_window_title(format, server_name);
             update_window_title();
         }
+        Command::TraceStart { .. }
+        | Command::TraceStop { .. }
+        | Command::TraceList
+        | Command::TraceDump => {
+            tracing::debug!("Trace command already handled by the IPC listener");
+        }
     }
 }
 
