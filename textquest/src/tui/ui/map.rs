@@ -810,48 +810,6 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         }
     }
 
-    // Render zone exit markers (always visible if geometry shown)
-    if app.map_state.show_geometry
-        && let Some(map) = &app.map_state.zone_map
-    {
-        let show_zone_exit_labels = app.map_state.zoom >= 0.7;
-        for zone_exit in &map.zone_exits {
-            if !visible_region.contains_point(zone_exit.x, zone_exit.y) {
-                continue;
-            }
-            let (col, row) = to_grid(zone_exit.x, zone_exit.y);
-            if grid_in_bounds(col, row, w, h) {
-                // Render distinct zone exit marker glyph
-                grid[row as usize][col as usize] = ('◇', t.text_accent);
-
-                // Render destination label if zoom sufficient
-                if show_zone_exit_labels {
-                    let label_budget = if app.map_state.zoom > 1.8 {
-                        20
-                    } else if app.map_state.zoom > 1.1 {
-                        16
-                    } else if w > 120 {
-                        10
-                    } else {
-                        6
-                    };
-                    let max_label_len = w.saturating_sub(col as usize + 2);
-                    for (i, c) in zone_exit
-                        .destination
-                        .chars()
-                        .take(max_label_len.min(label_budget))
-                        .enumerate()
-                    {
-                        let lc = col as usize + 2 + i;
-                        if lc < w && grid[row as usize][lc].0 == ' ' {
-                            grid[row as usize][lc] = (c, t.text_accent);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     if app.map_state.show_navmesh
         && let Some(overlay) = &app.map_state.navmesh_overlay
     {
@@ -998,6 +956,20 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         if grid_in_bounds(tc, tr, w, h) {
             grid[tr as usize][tc as usize] = ('✚', t.text_highlight);
         }
+    }
+
+    if app.map_state.show_geometry
+        && let Some(map) = &app.map_state.zone_map
+    {
+        draw_zone_exit_overlay(
+            map,
+            &visible_region,
+            &to_grid,
+            app.map_state.zoom,
+            (w, h),
+            &mut grid,
+            t,
+        );
     }
 
     // ─── Player marker + FOV cone ────────────────────────────────────────
@@ -1176,7 +1148,7 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             Span::styled("†", Style::default().fg(t.spawn_corpse)),
             Span::raw(" Corpse  ·  "),
             Span::styled("◇", Style::default().fg(t.text_accent)),
-            Span::raw(" Zone Exit  ·  "),
+            Span::raw(" Zone Exit (z on floors)  ·  "),
             Span::styled(
                 "C",
                 Style::default()
@@ -1461,6 +1433,107 @@ impl VisibleMapRegion {
 
     fn contains_point(&self, x: f32, y: f32) -> bool {
         x >= self.min_x && x <= self.max_x && y >= self.min_y && y <= self.max_y
+    }
+}
+
+const MULTI_FLOOR_ZONE_Z_SPAN: f32 = 40.0;
+
+fn draw_zone_exit_overlay(
+    map: &crate::eq::map_parser::ZoneMap,
+    visible_region: &VisibleMapRegion,
+    to_grid: &impl Fn(f32, f32) -> (i32, i32),
+    zoom: f32,
+    size: (usize, usize),
+    grid: &mut [Vec<(char, Color)>],
+    theme: &Theme,
+) {
+    let (w, h) = size;
+    let show_labels = zoom >= 0.7;
+    let z_span = map.bounds.max_z - map.bounds.min_z;
+
+    for zone_exit in &map.zone_exits {
+        if !visible_region.contains_point(zone_exit.x, zone_exit.y) {
+            continue;
+        }
+
+        let (col, row) = to_grid(zone_exit.x, zone_exit.y);
+        if !grid_in_bounds(col, row, w, h) {
+            continue;
+        }
+
+        let exit_color = zone_exit_color(&zone_exit.destination, theme);
+        grid[row as usize][col as usize] = ('◇', exit_color);
+
+        if show_labels {
+            let label = zone_exit_display_label(&zone_exit.destination, zone_exit.z, z_span);
+            draw_inline_label(
+                &label,
+                col + 2,
+                row,
+                zone_exit_label_budget(zoom, w),
+                size,
+                grid,
+                exit_color,
+            );
+        }
+    }
+}
+
+fn zone_exit_color(destination: &str, theme: &Theme) -> Color {
+    let palette = [
+        theme.text_accent,
+        theme.text_highlight,
+        Color::Cyan,
+        Color::Yellow,
+        Color::Magenta,
+    ];
+    let hash = destination
+        .bytes()
+        .fold(0usize, |acc, byte| acc.wrapping_add(byte as usize));
+    palette[hash % palette.len()]
+}
+
+fn zone_exit_display_label(destination: &str, z: f32, z_span: f32) -> String {
+    if z_span > MULTI_FLOOR_ZONE_Z_SPAN {
+        format!("{destination} z:{z:.0}")
+    } else {
+        destination.to_string()
+    }
+}
+
+fn zone_exit_label_budget(zoom: f32, width: usize) -> usize {
+    if zoom > 1.8 {
+        24
+    } else if zoom > 1.1 {
+        18
+    } else if width > 120 {
+        12
+    } else {
+        8
+    }
+}
+
+fn draw_inline_label(
+    label: &str,
+    col: i32,
+    row: i32,
+    budget: usize,
+    size: (usize, usize),
+    grid: &mut [Vec<(char, Color)>],
+    color: Color,
+) {
+    let (w, h) = size;
+    if row < 0 || row >= h as i32 || col >= w as i32 {
+        return;
+    }
+
+    let start_col = col.max(0) as usize;
+    let available = w.saturating_sub(start_col);
+    for (i, c) in label.chars().take(available.min(budget)).enumerate() {
+        let lc = start_col + i;
+        if grid[row as usize][lc].0 == ' ' {
+            grid[row as usize][lc] = (c, color);
+        }
     }
 }
 
@@ -3163,6 +3236,30 @@ mod tests {
             .join("\n")
     }
 
+    fn test_zone_map_with_exit(destination: &str, z: f32) -> crate::eq::map_parser::ZoneMap {
+        use crate::eq::map_parser::{MapBounds, ZoneExit, ZoneMap};
+
+        ZoneMap {
+            name: "testzone".to_string(),
+            lines: Vec::new(),
+            points: Vec::new(),
+            bounds: MapBounds {
+                min_x: -50.0,
+                max_x: 50.0,
+                min_y: -50.0,
+                max_y: 50.0,
+                min_z: -20.0,
+                max_z: 120.0,
+            },
+            zone_exits: vec![ZoneExit {
+                x: 10.0,
+                y: 10.0,
+                z,
+                destination: destination.to_string(),
+            }],
+        }
+    }
+
     #[test]
     fn rebuild_map_spawn_cache_reuses_cached_cells_for_unchanged_inputs() {
         let mut app = test_app_with_spawns();
@@ -4100,17 +4197,7 @@ P 50.0, 50.0, 0.0, 0, 255, 255, 1, Point1
         client.local_player = Some(test_spawn(99, "Player", 0.0, 0.0));
         app.clients[0] = client.clone();
         app.sync_from_selected_client();
-
-        // Create a minimal zone map with a zone exit
-        if let Some(map) = &mut app.map_state.zone_map {
-            use crate::eq::map_parser::ZoneExit;
-            map.zone_exits.push(ZoneExit {
-                x: 10.0,
-                y: 10.0,
-                z: 0.0,
-                destination: "Qeynos".to_string(),
-            });
-        }
+        app.map_state.zone_map = Some(test_zone_map_with_exit("Qeynos", 0.0));
 
         let rendered = render_map_view_text(app, 100, 20);
 
@@ -4131,17 +4218,7 @@ P 50.0, 50.0, 0.0, 0, 255, 255, 1, Point1
 
         // Set zoom high enough to show labels
         app.map_state.zoom = 1.0;
-
-        // Create a minimal zone map with a zone exit
-        if let Some(map) = &mut app.map_state.zone_map {
-            use crate::eq::map_parser::ZoneExit;
-            map.zone_exits.push(ZoneExit {
-                x: 10.0,
-                y: 10.0,
-                z: 0.0,
-                destination: "Qeynos".to_string(),
-            });
-        }
+        app.map_state.zone_map = Some(test_zone_map_with_exit("Qeynos", 0.0));
 
         let rendered = render_map_view_text(app, 100, 20);
 
@@ -4165,17 +4242,7 @@ P 50.0, 50.0, 0.0, 0, 255, 255, 1, Point1
 
         // Set map center far from the zone exit
         app.map_state.center = [1000.0, 1000.0];
-
-        // Create a minimal zone map with a zone exit at origin
-        if let Some(map) = &mut app.map_state.zone_map {
-            use crate::eq::map_parser::ZoneExit;
-            map.zone_exits.push(ZoneExit {
-                x: 10.0,
-                y: 10.0,
-                z: 0.0,
-                destination: "Qeynos".to_string(),
-            });
-        }
+        app.map_state.zone_map = Some(test_zone_map_with_exit("Qeynos", 0.0));
 
         let rendered = render_map_view_text(app, 50, 15);
 
@@ -4183,6 +4250,18 @@ P 50.0, 50.0, 0.0, 0, 255, 255, 1, Point1
         // Note: We can't guarantee it won't render, but if it does, it should be outside bounds
         // So we just verify the rendering completes without error
         assert!(!rendered.is_empty());
+    }
+
+    #[test]
+    fn zone_exit_display_label_includes_z_for_multi_floor_maps() {
+        assert_eq!(
+            zone_exit_display_label("Qeynos", 37.4, 140.0),
+            "Qeynos z:37"
+        );
+        assert_eq!(
+            zone_exit_display_label("Qeynos", 37.4, 20.0),
+            "Qeynos"
+        );
     }
 
     #[test]
@@ -4200,8 +4279,11 @@ P 50.0, 50.0, 0.0, 0, 255, 255, 1, Point1
             max_z: 0.0,
         };
         let zone_map = ZoneMap {
+            name: "testzone".to_string(),
             bounds,
             lines: Vec::new(),
+            points: Vec::new(),
+            zone_exits: Vec::new(),
         };
 
         let view_bounds = ViewBounds::from_zone_map(&zone_map);

@@ -158,39 +158,137 @@ impl MapBounds {
 }
 
 /// Detect zone exits from map points by matching common zone exit label patterns.
-/// Labels like "to Qeynos", "zone to Crushbone", or "Neriak entrance" are detected.
+/// Labels like "to Qeynos", "zone to Crushbone", "Crushbone zone line",
+/// or "Neriak entrance" are detected.
 fn detect_zone_exits(points: &[MapPoint]) -> Vec<ZoneExit> {
     points
         .iter()
         .filter_map(|point| {
-            let label_lower = point.label.to_ascii_lowercase();
-            // Match patterns like "to Zone", "zone to Zone", "-> Zone", etc.
-            let destination = if label_lower.contains("to ") {
-                // Extract text after "to "
-                label_lower
-                    .split("to ")
-                    .nth(1)
-                    .map(|s| s.trim().to_string())
-            } else if label_lower.contains("->") {
-                // Extract text after "->"
-                label_lower.split("->").nth(1).map(|s| s.trim().to_string())
-            } else if label_lower.contains("entrance") || label_lower.contains("exit") {
-                // Use full label for entrance/exit markers
-                Some(point.label.clone())
-            } else {
-                None
-            };
-
-            destination
-                .filter(|d| !d.is_empty())
-                .map(|destination| ZoneExit {
-                    x: point.x,
-                    y: point.y,
-                    z: point.z,
-                    destination,
-                })
+            zone_exit_destination(&point.label).map(|destination| ZoneExit {
+                x: point.x,
+                y: point.y,
+                z: point.z,
+                destination,
+            })
         })
         .collect()
+}
+
+fn zone_exit_destination(label: &str) -> Option<String> {
+    let label = label.trim();
+    if label.is_empty() {
+        return None;
+    }
+
+    let lower = label.to_ascii_lowercase();
+    for prefix in [
+        "zone line to ",
+        "zone line ",
+        "zoneline to ",
+        "zoneline ",
+        "zone gate to ",
+        "zone gate ",
+        "zone to ",
+        "portal to ",
+        "portal ",
+        "teleport pad to ",
+        "teleport to ",
+        "gate to ",
+        "exit to ",
+        "entrance to ",
+        "to: ",
+        "to:",
+        "to ",
+    ] {
+        if lower.starts_with(prefix) {
+            return clean_zone_exit_destination(&label[prefix.len()..]);
+        }
+    }
+
+    for marker in [" -> ", "->", " to "] {
+        if let Some(index) = lower.find(marker) {
+            return clean_zone_exit_destination(&label[index + marker.len()..]);
+        }
+    }
+
+    for suffix in [
+        " zone line",
+        " zoneline",
+        " zone gate",
+        " portal",
+        " teleport pad",
+        " entrance",
+        " exit",
+    ] {
+        if lower.ends_with(suffix) {
+            return clean_zone_exit_destination(&label[..label.len() - suffix.len()]);
+        }
+    }
+
+    if [
+        "zone line",
+        "zoneline",
+        "zone gate",
+        "portal",
+        "teleport pad",
+        "entrance",
+        "exit",
+    ]
+    .iter()
+    .any(|term| lower.contains(term))
+    {
+        return Some(label.to_string());
+    }
+
+    None
+}
+
+fn clean_zone_exit_destination(value: &str) -> Option<String> {
+    let mut destination = value
+        .trim()
+        .trim_matches(|c: char| c == '-' || c == '>' || c == ':' || c.is_whitespace());
+
+    loop {
+        let lower = destination.to_ascii_lowercase();
+        let mut changed = false;
+
+        for prefix in ["to ", "to:"] {
+            if lower.starts_with(prefix) {
+                destination = destination[prefix.len()..].trim();
+                changed = true;
+                break;
+            }
+        }
+        if changed {
+            continue;
+        }
+
+        for suffix in [
+            " zone line",
+            " zoneline",
+            " zone gate",
+            " portal",
+            " teleport pad",
+            " entrance",
+            " exit",
+        ] {
+            if lower.ends_with(suffix) {
+                destination = destination[..destination.len() - suffix.len()].trim();
+                changed = true;
+                break;
+            }
+        }
+
+        if !changed {
+            break;
+        }
+    }
+
+    if destination.is_empty() {
+        None
+    } else {
+        Some(destination.to_string())
+    }
 }
 
 /// Load a zone map from all layer files in the given directory.
@@ -451,6 +549,32 @@ mod tests {
         assert_eq!(map.points[0].label, "Zone Line");
         assert!((map.bounds.min_x - (-100.0)).abs() < 0.01);
         assert!((map.bounds.max_x - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn detect_zone_exits_preserves_destination_labels() {
+        let points = vec![
+            parse_p_line("P 10, 20, 0, 255, 255, 0, 2, to_Crushbone").unwrap(),
+            parse_p_line("P 30, 40, 0, 255, 255, 0, 2, Crescent_Reach_zone_line").unwrap(),
+            parse_p_line("P 50, 60, 0, 255, 255, 0, 2, Portal_to_Plane_of_Knowledge").unwrap(),
+        ];
+
+        let exits = detect_zone_exits(&points);
+
+        assert_eq!(exits.len(), 3);
+        assert_eq!(exits[0].destination, "Crushbone");
+        assert_eq!(exits[1].destination, "Crescent Reach");
+        assert_eq!(exits[2].destination, "Plane of Knowledge");
+    }
+
+    #[test]
+    fn detect_zone_exits_keeps_generic_transition_labels() {
+        let points = vec![parse_p_line("P 10, 20, 0, 255, 255, 0, 2, Zone_Line").unwrap()];
+
+        let exits = detect_zone_exits(&points);
+
+        assert_eq!(exits.len(), 1);
+        assert_eq!(exits[0].destination, "Zone Line");
     }
 
     #[test]
