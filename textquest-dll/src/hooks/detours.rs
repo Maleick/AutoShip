@@ -21,6 +21,13 @@ impl Display for DetourError {
 
 impl Error for DetourError {}
 
+#[derive(Clone, Copy)]
+struct DetourCandidate {
+    name: &'static str,
+    preferred_addr: u64,
+    hook_fn: *const (),
+}
+
 #[cfg(all(windows, not(test)))]
 enum DetourRecord {
     Active(RawDetour),
@@ -149,33 +156,56 @@ pub fn remove_all() {
     get_manager().remove_all()
 }
 
+fn detour_candidates() -> [DetourCandidate; 6] {
+    [
+        DetourCandidate {
+            name: "hook_sidl_screen_wnd_init",
+            preferred_addr: offsets::SIDL_SCREEN_WND_INIT,
+            hook_fn: hook_sidl_screen_wnd_init as *const (),
+        },
+        DetourCandidate {
+            name: "hook_cxwnd_manager_remove_wnd",
+            preferred_addr: offsets::CXWND_MANAGER_REMOVE_WND,
+            hook_fn: hook_cxwnd_manager_remove_wnd as *const (),
+        },
+        DetourCandidate {
+            name: "hook_cmerchantwnd_purchasepagehandler_update_list",
+            preferred_addr: offsets::CMERCHANTWND_PURCHASEPAGEHANDLER_UPDATELIST,
+            hook_fn: hook_cmerchantwnd_purchasepagehandler_update_list as *const (),
+        },
+        DetourCandidate {
+            name: "hook_process_mouse_events",
+            preferred_addr: offsets::PROCESS_MOUSE_EVENTS,
+            hook_fn: hook_process_mouse_events as *const (),
+        },
+        DetourCandidate {
+            name: "hook_process_keyboard_events",
+            preferred_addr: offsets::PROCESS_KEYBOARD_EVENTS,
+            hook_fn: hook_process_keyboard_events as *const (),
+        },
+        DetourCandidate {
+            name: "hook_crender_reset_device",
+            preferred_addr: offsets::CRENDER_RESET_DEVICE,
+            hook_fn: hook_crender_reset_device as *const (),
+        },
+    ]
+}
+
 pub fn install_all(eq_base: u64) -> Result<(), Box<dyn Error>> {
     let mut failures = Vec::new();
-    let candidates: [(&str, u64, *const ()); 2] = [
-        (
-            "hook_sidl_screen_wnd_init",
-            offsets::SIDL_SCREEN_WND_INIT,
-            hook_sidl_screen_wnd_init as *const (),
-        ),
-        (
-            "hook_crender_reset_device",
-            offsets::CRENDER_RESET_DEVICE,
-            hook_crender_reset_device as *const (),
-        ),
-    ];
 
-    for (name, preferred_addr, hook_fn) in candidates {
-        let Some(target_addr) = offsets::rebase(preferred_addr, eq_base) else {
+    for candidate in detour_candidates() {
+        let Some(target_addr) = offsets::rebase(candidate.preferred_addr, eq_base) else {
             tracing::warn!(
-                name,
-                preferred_addr = format!("{:#x}", preferred_addr),
+                name = candidate.name,
+                preferred_addr = format!("{:#x}", candidate.preferred_addr),
                 "Skipping detour because preferred address is not valid"
             );
             continue;
         };
 
-        if let Err(err) = install(name, target_addr, hook_fn) {
-            failures.push(format!("{name}: {err}"));
+        if let Err(err) = install(candidate.name, target_addr, candidate.hook_fn) {
+            failures.push(format!("{}: {err}", candidate.name));
         }
     }
 
@@ -193,6 +223,31 @@ pub unsafe extern "system" fn hook_sidl_screen_wnd_init(_this: *mut std::ffi::c_
 }
 
 #[cfg(windows)]
+pub unsafe extern "system" fn hook_cxwnd_manager_remove_wnd(
+    _this: *mut std::ffi::c_void,
+    _wnd: *mut std::ffi::c_void,
+) {
+    tracing::trace!("cxwnd manager remove wnd detour hook invoked");
+}
+
+#[cfg(windows)]
+pub unsafe extern "system" fn hook_cmerchantwnd_purchasepagehandler_update_list(
+    _this: *mut std::ffi::c_void,
+) {
+    tracing::trace!("merchant purchase page update list detour hook invoked");
+}
+
+#[cfg(windows)]
+pub unsafe extern "system" fn hook_process_mouse_events() {
+    tracing::trace!("process mouse events detour hook invoked");
+}
+
+#[cfg(windows)]
+pub unsafe extern "system" fn hook_process_keyboard_events() {
+    tracing::trace!("process keyboard events detour hook invoked");
+}
+
+#[cfg(windows)]
 #[allow(non_snake_case)]
 pub unsafe extern "system" fn hook_crender_reset_device() {
     tracing::trace!("crender reset device detour hook invoked");
@@ -201,6 +256,26 @@ pub unsafe extern "system" fn hook_crender_reset_device() {
 #[cfg(not(windows))]
 pub fn hook_sidl_screen_wnd_init() {
     tracing::trace!("stub hook_sidl_screen_wnd_init");
+}
+
+#[cfg(not(windows))]
+pub fn hook_cxwnd_manager_remove_wnd() {
+    tracing::trace!("stub hook_cxwnd_manager_remove_wnd");
+}
+
+#[cfg(not(windows))]
+pub fn hook_cmerchantwnd_purchasepagehandler_update_list() {
+    tracing::trace!("stub hook_cmerchantwnd_purchasepagehandler_update_list");
+}
+
+#[cfg(not(windows))]
+pub fn hook_process_mouse_events() {
+    tracing::trace!("stub hook_process_mouse_events");
+}
+
+#[cfg(not(windows))]
+pub fn hook_process_keyboard_events() {
+    tracing::trace!("stub hook_process_keyboard_events");
 }
 
 #[cfg(not(windows))]
@@ -313,5 +388,21 @@ mod tests {
     #[test]
     fn detour_install_noop_when_offsets_are_placeholder() {
         assert!(install_all(0x1400_0000).is_ok());
+    }
+
+    #[test]
+    fn detour_candidates_cover_parity_hooks() {
+        let names = detour_candidates()
+            .iter()
+            .map(|candidate| candidate.name)
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(names.len(), 6);
+        assert!(names.contains("hook_sidl_screen_wnd_init"));
+        assert!(names.contains("hook_cxwnd_manager_remove_wnd"));
+        assert!(names.contains("hook_cmerchantwnd_purchasepagehandler_update_list"));
+        assert!(names.contains("hook_process_mouse_events"));
+        assert!(names.contains("hook_process_keyboard_events"));
+        assert!(names.contains("hook_crender_reset_device"));
     }
 }
