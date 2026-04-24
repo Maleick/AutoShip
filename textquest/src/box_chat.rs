@@ -16,7 +16,10 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 use textquest_common::{
-    box_chat::{BoxChatConfig, OutboundRoute, WireMessage, parse_slash_route},
+    box_chat::{
+        BoxChatConfig, EqbcLineCodec, OutboundRoute, WireMessage, parse_eqbc_line,
+        parse_slash_route,
+    },
     box_controller::{
         BoxControllerClientSnapshot, BoxControllerClientState, BoxControllerCommand,
         BoxControllerSnapshot,
@@ -233,16 +236,7 @@ impl ConnectorHandle {
     }
 
     fn send_route(&self, route: &OutboundRoute) {
-        let message = match route {
-            OutboundRoute::Broadcast { command } => WireMessage::Broadcast {
-                command: command.clone(),
-            },
-            OutboundRoute::Target { character, command } => WireMessage::Target {
-                character: character.clone(),
-                command: command.clone(),
-            },
-        };
-        self.send_message(message);
+        self.send_message(route.submit_message());
     }
 
     fn send_box_controller_command(&self, command: BoxControllerCommand) {
@@ -303,16 +297,7 @@ impl HubState {
     }
 
     fn relay_execute(&self, route: &OutboundRoute, skip_peer: Option<usize>) -> bool {
-        let message = match route {
-            OutboundRoute::Broadcast { command } => WireMessage::ExecuteBroadcast {
-                command: command.clone(),
-            },
-            OutboundRoute::Target { character, command } => WireMessage::ExecuteTarget {
-                character: character.clone(),
-                command: command.clone(),
-            },
-        };
-        self.broadcast(message, skip_peer)
+        self.broadcast(route.execute_message(), skip_peer)
     }
 
     fn broadcast(&self, message: WireMessage, skip_peer: Option<usize>) -> bool {
@@ -698,6 +683,23 @@ impl BoxChatManager {
         }
     }
 
+    fn publish_relay_event(&self, message: WireMessage) -> bool {
+        let runtime = self.runtime.lock().expect("box chat runtime lock");
+        let relayed_to_peers = runtime
+            .listener
+            .as_ref()
+            .is_some_and(|listener| listener.hub.broadcast(message.clone(), None));
+
+        let forwarded_to_server = if let Some(connector) = runtime.connector.as_ref() {
+            connector.send_message(message);
+            true
+        } else {
+            false
+        };
+
+        relayed_to_peers || forwarded_to_server
+    }
+
     fn controller_snapshot(&self) -> BoxControllerSnapshot {
         let runtime = self.runtime.lock().expect("box chat runtime lock");
         let relay_enabled = runtime.listener.is_some()
@@ -794,6 +796,24 @@ pub fn dispatch_if_box_chat(input: &str) -> Result<Option<DispatchReport>> {
 /// chat clients.
 pub fn dispatch_box_controller_command(command: BoxControllerCommand) {
     BoxChatManager::global().dispatch_box_controller_command(command);
+}
+
+/// Forward a tell event across the box-chat relay for peers that display
+/// cross-character chat events.
+#[must_use]
+pub fn forward_tell(from: String, to: String, message: String) -> bool {
+    BoxChatManager::global().publish_relay_event(WireMessage::TellForward { from, to, message })
+}
+
+/// Forward a named channel message across the box-chat relay for peers that
+/// display cross-character chat events.
+#[must_use]
+pub fn broadcast_channel(channel: String, from: String, message: String) -> bool {
+    BoxChatManager::global().publish_relay_event(WireMessage::ChannelBroadcast {
+        channel,
+        from,
+        message,
+    })
 }
 
 /// Snapshot the current unified box-controller state known to this process.
@@ -998,11 +1018,18 @@ fn spawn_hub_peer(
     let writer_hub = Arc::clone(&hub);
     let writer_shared = Arc::clone(&shared);
     let writer_stop = Arc::clone(&stop);
+    let peer_uses_eqbc_lines = Arc::new(AtomicBool::new(false));
+    let writer_peer_uses_eqbc_lines = Arc::clone(&peer_uses_eqbc_lines);
     thread::spawn(move || {
         while !writer_stop.load(Ordering::Relaxed) {
             match rx.recv_timeout(IO_POLL_INTERVAL) {
                 Ok(message) => {
-                    if let Err(error) = write_message(&mut writer_stream, &message) {
+                    let result = if writer_peer_uses_eqbc_lines.load(Ordering::Relaxed) {
+                        write_eqbc_line_message(&mut writer_stream, &message)
+                    } else {
+                        write_message(&mut writer_stream, &message)
+                    };
+                    if let Err(error) = result {
                         tracing::warn!(%error, peer_id, "Box-chat peer write failed");
                         break;
                     }
@@ -1022,8 +1049,11 @@ fn spawn_hub_peer(
             match reader.read_line(&mut line) {
                 Ok(0) => break,
                 Ok(_) => {
-                    if let Some(message) = parse_message(&line) {
-                        handle_hub_message(&hub, &shared, peer_id, message);
+                    if let Some(parsed) = parse_peer_message(&line) {
+                        if parsed.format == PeerMessageFormat::EqbcLine {
+                            peer_uses_eqbc_lines.store(true, Ordering::Relaxed);
+                        }
+                        handle_hub_message(&hub, &shared, peer_id, parsed.message);
                     }
                 }
                 Err(error)
@@ -1065,6 +1095,9 @@ fn handle_hub_message(hub: &HubState, shared: &SharedState, peer_id: usize, mess
                 WireMessage::BoxControllerState { node_name, clients },
                 Some(peer_id),
             );
+        }
+        WireMessage::TellForward { .. } | WireMessage::ChannelBroadcast { .. } => {
+            let _ = hub.broadcast(message, Some(peer_id));
         }
         WireMessage::ExecuteBroadcast { command } => {
             let _ = execute_route_locally(shared, &OutboundRoute::Broadcast { command });
@@ -1183,10 +1216,12 @@ fn connector_loop(
                     match reader.read_line(&mut line) {
                         Ok(0) => break 'connected,
                         Ok(_) => {
-                            if let Some(message) = parse_message(&line) {
-                                let publish_local_state =
-                                    matches!(message, WireMessage::BoxControllerCommand { .. });
-                                handle_connector_message(&shared, message);
+                            if let Some(parsed) = parse_peer_message(&line) {
+                                let publish_local_state = matches!(
+                                    parsed.message,
+                                    WireMessage::BoxControllerCommand { .. }
+                                );
+                                handle_connector_message(&shared, parsed.message);
                                 if publish_local_state {
                                     let has_local_clients = shared
                                         .controller
@@ -1335,20 +1370,65 @@ fn handle_connector_message(shared: &SharedState, message: WireMessage) {
             track_connector_node(shared, &node_name);
             update_remote_controller_state(shared, &node_name, clients);
         }
+        WireMessage::TellForward { from, to, message } => {
+            tracing::info!(%from, %to, %message, "Box-chat tell forwarded");
+        }
+        WireMessage::ChannelBroadcast {
+            channel,
+            from,
+            message,
+        } => {
+            tracing::info!(%channel, %from, %message, "Box-chat channel message forwarded");
+        }
         WireMessage::Broadcast { .. } | WireMessage::Target { .. } => {
             tracing::debug!("Ignoring routed box-chat payload from upstream");
         }
     }
 }
 
-fn parse_message(line: &str) -> Option<WireMessage> {
-    match serde_json::from_str::<WireMessage>(line.trim()) {
-        Ok(message) => Some(message),
-        Err(error) => {
-            tracing::warn!(payload = line.trim(), %error, "Failed to parse box-chat message");
-            None
-        }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PeerMessageFormat {
+    TextQuestJson,
+    EqbcLine,
+}
+
+#[derive(Debug)]
+struct ParsedPeerMessage {
+    message: WireMessage,
+    format: PeerMessageFormat,
+}
+
+fn parse_peer_message(line: &str) -> Option<ParsedPeerMessage> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return None;
     }
+
+    match serde_json::from_str::<WireMessage>(trimmed) {
+        Ok(message) => {
+            return Some(ParsedPeerMessage {
+                message,
+                format: PeerMessageFormat::TextQuestJson,
+            });
+        }
+        Err(json_error) => match parse_eqbc_line(trimmed) {
+            Some(Ok(message)) => {
+                return Some(ParsedPeerMessage {
+                    message,
+                    format: PeerMessageFormat::EqbcLine,
+                });
+            }
+            Some(Err(error)) => {
+                tracing::warn!(payload = trimmed, %error, "Failed to parse EQBC line message");
+                return None;
+            }
+            None => {
+                tracing::warn!(payload = trimmed, %json_error, "Failed to parse box-chat message");
+            }
+        },
+    }
+
+    None
 }
 
 fn write_message(stream: &mut TcpStream, message: &WireMessage) -> Result<()> {
@@ -1359,6 +1439,24 @@ fn write_message(stream: &mut TcpStream, message: &WireMessage) -> Result<()> {
         .write_all(&payload)
         .map_err(|error| anyhow!(error))
         .context("failed to write box-chat message")?;
+    stream.flush().map_err(|error| anyhow!(error))?;
+    Ok(())
+}
+
+fn write_eqbc_line_message(stream: &mut TcpStream, message: &WireMessage) -> Result<()> {
+    let Some(line) = message.to_eqbc_line() else {
+        tracing::debug!(?message, "Skipping native-only message for EQBC line peer");
+        return Ok(());
+    };
+
+    stream
+        .write_all(line.as_bytes())
+        .map_err(|error| anyhow!(error))
+        .context("failed to write EQBC line message")?;
+    stream
+        .write_all(b"\n")
+        .map_err(|error| anyhow!(error))
+        .context("failed to terminate EQBC line message")?;
     stream.flush().map_err(|error| anyhow!(error))?;
     Ok(())
 }

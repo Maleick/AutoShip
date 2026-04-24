@@ -29,6 +29,14 @@ impl Default for BoxChatConfig {
     }
 }
 
+/// Minimal bridge for peers that speak legacy EQBC-style line commands instead
+/// of TextQuest's native JSON-line messages.
+pub trait EqbcLineCodec {
+    /// Return a legacy line representation when this message can be expressed
+    /// as an EQBC-style text command.
+    fn to_eqbc_line(&self) -> Option<String>;
+}
+
 /// Parsed outbound route for a local `/bc`-style command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OutboundRoute {
@@ -36,6 +44,45 @@ pub enum OutboundRoute {
     Broadcast { command: String },
     /// Send a slash command to one named character.
     Target { character: String, command: String },
+}
+
+impl OutboundRoute {
+    /// Convert this local route into the submit message sent to a relay hub.
+    #[must_use]
+    pub fn submit_message(&self) -> WireMessage {
+        match self {
+            Self::Broadcast { command } => WireMessage::Broadcast {
+                command: command.clone(),
+            },
+            Self::Target { character, command } => WireMessage::Target {
+                character: character.clone(),
+                command: command.clone(),
+            },
+        }
+    }
+
+    /// Convert this route into the execute message delivered by a relay hub.
+    #[must_use]
+    pub fn execute_message(&self) -> WireMessage {
+        match self {
+            Self::Broadcast { command } => WireMessage::ExecuteBroadcast {
+                command: command.clone(),
+            },
+            Self::Target { character, command } => WireMessage::ExecuteTarget {
+                character: character.clone(),
+                command: command.clone(),
+            },
+        }
+    }
+
+    /// Render this route as the EQBC command family operators expect.
+    #[must_use]
+    pub fn eqbc_command_line(&self) -> String {
+        match self {
+            Self::Broadcast { command } => format!("/bc {command}"),
+            Self::Target { character, command } => format!("/bct {character} {command}"),
+        }
+    }
 }
 
 /// JSON-line message exchanged between TextQuest box-chat peers.
@@ -53,6 +100,20 @@ pub enum WireMessage {
     Broadcast { command: String },
     /// Submit a targeted route to the hub.
     Target { character: String, command: String },
+    /// Forward an in-game tell over the relay without executing a slash
+    /// command on receivers.
+    TellForward {
+        from: String,
+        to: String,
+        message: String,
+    },
+    /// Publish an in-game channel message over the relay without executing a
+    /// slash command on receivers.
+    ChannelBroadcast {
+        channel: String,
+        from: String,
+        message: String,
+    },
     /// Broadcast a structured unified controller command to all connected
     /// clients.
     BoxControllerCommand { command: BoxControllerCommand },
@@ -65,6 +126,37 @@ pub enum WireMessage {
     ExecuteBroadcast { command: String },
     /// Execute a targeted command on the receiving peer.
     ExecuteTarget { character: String, command: String },
+}
+
+impl EqbcLineCodec for WireMessage {
+    fn to_eqbc_line(&self) -> Option<String> {
+        match self {
+            Self::Broadcast { command } | Self::ExecuteBroadcast { command } => {
+                Some(OutboundRoute::Broadcast {
+                    command: command.clone(),
+                }
+                .eqbc_command_line())
+            }
+            Self::Target { character, command }
+            | Self::ExecuteTarget { character, command } => Some(OutboundRoute::Target {
+                character: character.clone(),
+                command: command.clone(),
+            }
+            .eqbc_command_line()),
+            Self::TellForward { from, to, message } => {
+                Some(format!("/bc [tell] {from} -> {to}: {message}"))
+            }
+            Self::ChannelBroadcast {
+                channel,
+                from,
+                message,
+            } => Some(format!("/bc [{channel}] {from}: {message}")),
+            Self::Hello { .. }
+            | Self::UpdateCharacters { .. }
+            | Self::BoxControllerCommand { .. }
+            | Self::BoxControllerState { .. } => None,
+        }
+    }
 }
 
 /// Parse an EQBC-style slash command into a structured outbound route.
@@ -92,6 +184,24 @@ pub fn parse_slash_route(input: &str) -> Option<Result<OutboundRoute, String>> {
         "/bct" => Some(parse_target_route(rest)),
         _ => None,
     }
+}
+
+/// Parse a legacy EQBC line into the native TextQuest wire message that should
+/// be submitted to the relay hub.
+#[must_use]
+pub fn parse_eqbc_line(input: &str) -> Option<Result<WireMessage, String>> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() || trimmed.starts_with('{') {
+        return None;
+    }
+
+    let route_input = if trimmed.starts_with('/') {
+        trimmed.to_string()
+    } else {
+        format!("/{trimmed}")
+    };
+
+    parse_slash_route(&route_input).map(|result| result.map(|route| route.submit_message()))
 }
 
 fn parse_target_route(rest: &str) -> Result<OutboundRoute, String> {
@@ -128,4 +238,49 @@ fn normalize_payload(payload: &str) -> Result<String, String> {
     }
 
     Err("Box chat payload must start with '/' or '//'".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_eqbc_line_accepts_unslashed_broadcast_alias() {
+        let parsed = parse_eqbc_line("bc //sit")
+            .expect("legacy line should be recognized")
+            .expect("legacy line should parse");
+
+        assert_eq!(
+            parsed,
+            WireMessage::Broadcast {
+                command: "/sit".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn parse_eqbc_line_accepts_target_alias() {
+        let parsed = parse_eqbc_line("bct Cleric01 //cast 1")
+            .expect("legacy target should be recognized")
+            .expect("legacy target should parse");
+
+        assert_eq!(
+            parsed,
+            WireMessage::Target {
+                character: "Cleric01".to_string(),
+                command: "/cast 1".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn wire_message_renders_legacy_target_line() {
+        let line = WireMessage::ExecuteTarget {
+            character: "Cleric01".to_string(),
+            command: "/cast 1".to_string(),
+        }
+        .to_eqbc_line();
+
+        assert_eq!(line.as_deref(), Some("/bct Cleric01 /cast 1"));
+    }
 }

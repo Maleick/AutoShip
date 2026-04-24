@@ -118,6 +118,16 @@
         "cargo check -p textquest-dll --all-targets"
       ],
       "notes": "Partial DLL-side scaffold: global script/plugin slash-command registration and dispatch, built-in /textquest command listing, EQ-style hotkey parsing, command hotkey binding, and TOML persistence helpers. Lua/MQ2/runtime EQ UI hook integration remains follow-up work."
+    },
+    {
+      "id": "issue-822-eqbc-style-inter-character-communication",
+      "name": "Issue #822 EQBC-style inter-character communication",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check -p textquest-common --tests",
+        "cargo check -p textquest"
+      ],
+      "notes": "PARTIAL: Added shared EQBC-line parsing/serialization, native relay event variants for tell/channel forwarding, relay-side auto-detection for legacy EQBC-line peers, and protocol documentation. Full OpenVanilla/MQ2EQBC handshake compatibility, DLL chat-hook publishing, and external tool validation remain follow-up work."
     }
   ]
 }
