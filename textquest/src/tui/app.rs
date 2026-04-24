@@ -38,6 +38,7 @@ use crate::{
         spawn_alert::{MatchSource, SpawnAlertEvent, SpawnAlertFeed},
         structs::{SpawnInfo, SpawnType},
     },
+    help::HelpDatabase,
     orchestrator::Orchestrator,
 };
 use anyhow::Context;
@@ -50,6 +51,7 @@ static GM_SYNC_CLIENT: LazyLock<reqwest::blocking::Client> = LazyLock::new(|| {
         .build()
         .expect("GM sync HTTP client init failed")
 });
+static HELP_DATABASE: LazyLock<HelpDatabase> = LazyLock::new(HelpDatabase::load_default);
 
 const GM_SYNC_QUEUE_CAPACITY: usize = 16;
 pub const GEMMA_OBSERVATION_LIMIT: usize = 50;
@@ -933,6 +935,8 @@ pub struct App {
     /// Decoupled from `help_visible`/`help_scroll`/`help_focus` so rendering
     /// (`#1117`) can land independently.
     pub help_panel: HelpPanelState,
+    /// Parsed help content loaded from `config/help/` and cached for TUI access.
+    pub help_database: HelpDatabase,
 
     /// Whether the help search panel overlay is visible.
     pub help_search_visible: bool,
@@ -1238,6 +1242,8 @@ impl App {
         let alert_store = default_alert_store();
         let alert_manager = AlertManager::new(alert_store.clone());
         let (gm_sync_tx, gm_sync_handle) = spawn_gm_sync_worker();
+        let help_database = HELP_DATABASE.clone();
+        let help_topics = Self::build_help_topics(&help_database);
         let mut app = Self {
             running: true,
             active_screen: ActiveScreen::Overview,
@@ -1306,7 +1312,8 @@ impl App {
             help_visible: false,
             help_scroll: 0,
             help_focus: None,
-            help_panel: HelpPanelState::with_topics(Self::build_help_topics()),
+            help_panel: HelpPanelState::with_topics(help_topics),
+            help_database,
 
             help_search_visible: false,
             help_search_state: crate::tui::ui::help::HelpPanelState::new(),
@@ -1474,8 +1481,20 @@ impl App {
         aliases
     }
 
-    /// Build the canonical help topic list from command metadata.
-    fn build_help_topics() -> Vec<HelpTopic> {
+    /// Build the canonical help topic list from loaded help content.
+    fn build_help_topics(database: &HelpDatabase) -> Vec<HelpTopic> {
+        let topics = database.topics();
+        if !topics.is_empty() {
+            return topics
+                .into_iter()
+                .map(|topic| HelpTopic {
+                    key: topic.id,
+                    title: topic.title,
+                    section: topic.category.label().to_string(),
+                })
+                .collect();
+        }
+
         command::command_entries()
             .iter()
             .map(|entry| HelpTopic {

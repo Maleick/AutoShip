@@ -4,7 +4,7 @@
 //!
 //! Two file shapes are supported:
 //!
-//! **commands.toml** — slash-command reference entries:
+//! **commands.toml** - slash-command reference entries:
 //! ```toml
 //! [[commands]]
 //! name = "pull"
@@ -15,12 +15,12 @@
 //! tags = ["combat", "targeting"]
 //! ```
 //!
-//! **faq.toml** — FAQ entries and operator tips:
+//! **faq.toml** - FAQ entries and operator tips:
 //! ```toml
 //! [[faqs]]
 //! id = "setup-ranger"
 //! question = "How do I set up my ranger?"
-//! answer = "Configure ranger.toml with…"
+//! answer = "Configure ranger.toml with class = ranger"
 //! tags = ["setup", "ranger"]
 //!
 //! [[tips]]
@@ -29,23 +29,21 @@
 //! context = "overview"
 //! tags = ["tips", "monitoring"]
 //! ```
-//!
-//! # Loading
-//!
-//! [`HelpLoader::load_all`] reads every `*.toml` file in a directory, converts
-//! each entry to a [`HelpTopic`], and merges the results.  Malformed files are
-//! skipped with a `tracing::warn!` so a single bad file does not prevent the
-//! rest from loading.
 
 use std::{
+    collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
 };
 
+use anyhow::{Context, anyhow};
 use serde::Deserialize;
 use tracing::warn;
 
-// ─── Unified topic type ───────────────────────────────────────────────────────
+/// Default project-relative directory for operator help content.
+pub const DEFAULT_HELP_DIR: &str = "config/help";
+
+// --- Unified topic type ------------------------------------------------------
 
 /// Category of a help topic.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,6 +58,7 @@ pub enum HelpCategory {
 
 impl HelpCategory {
     /// Human-readable label.
+    #[must_use]
     pub fn label(&self) -> &'static str {
         match self {
             Self::Command => "Command",
@@ -69,80 +68,362 @@ impl HelpCategory {
     }
 }
 
-/// A single help entry in the unified database.
-///
-/// All fields are `String`-owned so the database can be held independently of
-/// the raw TOML buffers.
-#[derive(Debug, Clone)]
+/// A single help entry in the unified topic list used by older TUI paths.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HelpTopic {
-    /// Unique identifier (slug or command name).
+    /// Unique identifier.
     pub id: String,
-    /// Short display title shown in the result list.
+    /// Short display title.
     pub title: String,
-    /// Full body text rendered in the detail pane.
+    /// Full body text.
     pub body: String,
-    /// Category used for tab filtering.
+    /// Category used for filtering.
     pub category: HelpCategory,
-    /// Search keywords (lower-cased at load time).
+    /// Search keywords, lower-cased at load time.
     pub keywords: Vec<String>,
 }
 
-// ─── Raw TOML deserialization types ──────────────────────────────────────────
+// --- Structured help data ----------------------------------------------------
 
-/// Raw TOML shape for a command entry.
-#[derive(Debug, Deserialize)]
-struct RawCommand {
-    name: String,
+/// Operator slash-command help entry.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+pub struct HelpCommand {
+    /// Canonical command name.
     #[serde(default)]
-    aliases: Vec<String>,
+    pub name: String,
+    /// Alternate command names that resolve to `name`.
     #[serde(default)]
-    usage: String,
+    pub aliases: Vec<String>,
+    /// Usage string shown in command help.
     #[serde(default)]
-    description: String,
+    pub usage: String,
+    /// Human-readable command description.
     #[serde(default)]
-    examples: Vec<String>,
+    pub description: String,
+    /// Concrete invocation examples.
     #[serde(default)]
-    tags: Vec<String>,
+    pub examples: Vec<String>,
+    /// Search/filter tags.
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
-/// Raw TOML shape for an FAQ entry.
-#[derive(Debug, Deserialize)]
-struct RawFaq {
-    id: String,
-    question: String,
-    #[serde(default)]
-    answer: String,
-    #[serde(default)]
-    tags: Vec<String>,
+impl HelpCommand {
+    fn validate(&self) -> Result<(), String> {
+        require_text("command name", &self.name)?;
+        require_text("command usage", &self.usage)?;
+        require_text("command description", &self.description)?;
+        require_non_empty("command examples", &self.examples)?;
+        require_text_values("command examples", &self.examples)?;
+        require_text_values("command aliases", &self.aliases)?;
+        require_text_values("command tags", &self.tags)?;
+
+        let mut keys = HashSet::new();
+        keys.insert(normalize_key(&self.name));
+        for alias in &self.aliases {
+            if !keys.insert(normalize_key(alias)) {
+                return Err(format!("duplicate command key or alias: {alias}"));
+            }
+        }
+        Ok(())
+    }
 }
 
-/// Raw TOML shape for a tip entry.
-#[derive(Debug, Deserialize)]
-struct RawTip {
-    id: String,
-    text: String,
+/// Frequently asked help question.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+pub struct HelpFaq {
+    /// Canonical FAQ identifier used for lookup.
     #[serde(default)]
-    context: String,
+    pub id: String,
+    /// Operator-facing question.
     #[serde(default)]
-    tags: Vec<String>,
+    pub question: String,
+    /// Answer body.
+    #[serde(default)]
+    pub answer: String,
+    /// Search/filter tags.
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
-/// Top-level TOML document — all sections are optional so a file can contain
-/// any mix of commands, faqs, and tips.
+impl HelpFaq {
+    fn validate(&self) -> Result<(), String> {
+        require_text("FAQ id", &self.id)?;
+        require_text("FAQ question", &self.question)?;
+        require_text("FAQ answer", &self.answer)?;
+        require_non_empty("FAQ tags", &self.tags)?;
+        require_text_values("FAQ tags", &self.tags)
+    }
+}
+
+/// Short contextual operator tip.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+pub struct HelpTip {
+    /// Canonical tip identifier used for lookup.
+    #[serde(default)]
+    pub id: String,
+    /// Tip text rendered to the operator.
+    #[serde(default)]
+    pub text: String,
+    /// UI context or trigger where this tip is relevant.
+    #[serde(default)]
+    pub context: String,
+    /// Search/filter tags.
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+impl HelpTip {
+    fn validate(&self) -> Result<(), String> {
+        require_text("tip id", &self.id)?;
+        require_text("tip text", &self.text)?;
+        require_text("tip context", &self.context)?;
+        require_text_values("tip tags", &self.tags)
+    }
+}
+
+/// Top-level TOML document. All sections are optional so a file can contain any
+/// mix of commands, FAQs, and tips.
 #[derive(Debug, Deserialize, Default)]
 struct HelpFile {
     #[serde(default)]
-    commands: Vec<RawCommand>,
+    commands: Vec<HelpCommand>,
     #[serde(default)]
-    faqs: Vec<RawFaq>,
+    faqs: Vec<HelpFaq>,
     #[serde(default)]
-    tips: Vec<RawTip>,
+    tips: Vec<HelpTip>,
 }
 
-// ─── Conversions ──────────────────────────────────────────────────────────────
+/// In-memory help content database with lookup indexes for TUI access.
+#[derive(Debug, Clone, Default)]
+pub struct HelpDatabase {
+    /// Slash-command help entries.
+    pub commands: Vec<HelpCommand>,
+    /// FAQ entries.
+    pub faqs: Vec<HelpFaq>,
+    /// Contextual tips.
+    pub tips: Vec<HelpTip>,
+    command_index: HashMap<String, usize>,
+    faq_index: HashMap<String, usize>,
+    tip_index: HashMap<String, usize>,
+}
 
-impl From<RawCommand> for HelpTopic {
-    fn from(c: RawCommand) -> Self {
+impl HelpDatabase {
+    /// Load help content from [`DEFAULT_HELP_DIR`].
+    #[must_use]
+    pub fn load_default() -> Self {
+        Self::load_from_dir(DEFAULT_HELP_DIR)
+    }
+
+    /// Load all valid help entries from a directory of `*.toml` files.
+    ///
+    /// Missing directories and malformed files are logged and skipped so the
+    /// TUI can start even when optional help content is unavailable.
+    #[must_use]
+    pub fn load_from_dir(dir: impl AsRef<Path>) -> Self {
+        let dir = dir.as_ref();
+        let entries = match HelpLoader::toml_paths(dir) {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("help: cannot read directory {}: {e}", dir.display());
+                return Self::default();
+            }
+        };
+
+        let mut database = Self::default();
+        for path in entries {
+            match HelpLoader::load_file(&path) {
+                Ok(file) => database.extend_file(file, &path),
+                Err(e) => warn!("help: skipping {}: {e}", path.display()),
+            }
+        }
+        database
+    }
+
+    /// Parse a single TOML document into a help database.
+    pub fn from_toml_str(text: &str) -> anyhow::Result<Self> {
+        let file: HelpFile = toml::from_str(text).context("parse help TOML")?;
+        let mut database = Self::default();
+        database.extend_file(file, Path::new("<inline>"));
+        Ok(database)
+    }
+
+    /// Number of validated help entries in the database.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.commands.len() + self.faqs.len() + self.tips.len()
+    }
+
+    /// Whether the database has no help entries.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Lookup a command by canonical name or alias.
+    #[must_use]
+    pub fn command(&self, name_or_alias: &str) -> Option<&HelpCommand> {
+        self.command_index
+            .get(&normalize_key(name_or_alias))
+            .and_then(|index| self.commands.get(*index))
+    }
+
+    /// Lookup an FAQ by id.
+    #[must_use]
+    pub fn faq(&self, id: &str) -> Option<&HelpFaq> {
+        self.faq_index
+            .get(&normalize_key(id))
+            .and_then(|index| self.faqs.get(*index))
+    }
+
+    /// Lookup a tip by id.
+    #[must_use]
+    pub fn tip(&self, id: &str) -> Option<&HelpTip> {
+        self.tip_index
+            .get(&normalize_key(id))
+            .and_then(|index| self.tips.get(*index))
+    }
+
+    /// Convert typed entries into the legacy unified topic representation.
+    #[must_use]
+    pub fn topics(&self) -> Vec<HelpTopic> {
+        let mut topics = Vec::with_capacity(self.len());
+        topics.extend(self.commands.iter().map(HelpTopic::from));
+        topics.extend(self.faqs.iter().map(HelpTopic::from));
+        topics.extend(self.tips.iter().map(HelpTopic::from));
+        topics
+    }
+
+    /// Validate the current database contents and duplicate-key constraints.
+    pub fn validate(&self) -> anyhow::Result<()> {
+        let mut command_keys = HashSet::new();
+        for command in &self.commands {
+            command
+                .validate()
+                .map_err(|reason| anyhow!("invalid command {}: {reason}", command.name))?;
+            insert_unique(&mut command_keys, "command", &command.name)?;
+            for alias in &command.aliases {
+                insert_unique(&mut command_keys, "command alias", alias)?;
+            }
+        }
+
+        let mut faq_ids = HashSet::new();
+        for faq in &self.faqs {
+            faq.validate()
+                .map_err(|reason| anyhow!("invalid FAQ {}: {reason}", faq.id))?;
+            insert_unique(&mut faq_ids, "FAQ", &faq.id)?;
+        }
+
+        let mut tip_ids = HashSet::new();
+        for tip in &self.tips {
+            tip.validate()
+                .map_err(|reason| anyhow!("invalid tip {}: {reason}", tip.id))?;
+            insert_unique(&mut tip_ids, "tip", &tip.id)?;
+        }
+
+        Ok(())
+    }
+
+    fn extend_file(&mut self, file: HelpFile, source: &Path) {
+        for command in file.commands {
+            self.add_command(command, source);
+        }
+        for faq in file.faqs {
+            self.add_faq(faq, source);
+        }
+        for tip in file.tips {
+            self.add_tip(tip, source);
+        }
+    }
+
+    fn add_command(&mut self, command: HelpCommand, source: &Path) {
+        if let Err(reason) = command.validate() {
+            warn!(
+                source = %source.display(),
+                "help: skipping invalid command entry: {reason}"
+            );
+            return;
+        }
+
+        let primary = normalize_key(&command.name);
+        if self.command_index.contains_key(&primary) {
+            warn!(
+                source = %source.display(),
+                command = %command.name,
+                "help: skipping duplicate command"
+            );
+            return;
+        }
+
+        let index = self.commands.len();
+        self.command_index.insert(primary, index);
+        for alias in &command.aliases {
+            let alias_key = normalize_key(alias);
+            if self.command_index.contains_key(&alias_key) {
+                warn!(
+                    source = %source.display(),
+                    alias = %alias,
+                    command = %command.name,
+                    "help: duplicate command alias ignored"
+                );
+            } else {
+                self.command_index.insert(alias_key, index);
+            }
+        }
+        self.commands.push(command);
+    }
+
+    fn add_faq(&mut self, faq: HelpFaq, source: &Path) {
+        if let Err(reason) = faq.validate() {
+            warn!(
+                source = %source.display(),
+                "help: skipping invalid FAQ entry: {reason}"
+            );
+            return;
+        }
+
+        let key = normalize_key(&faq.id);
+        if self.faq_index.contains_key(&key) {
+            warn!(
+                source = %source.display(),
+                faq = %faq.id,
+                "help: skipping duplicate FAQ"
+            );
+            return;
+        }
+
+        self.faq_index.insert(key, self.faqs.len());
+        self.faqs.push(faq);
+    }
+
+    fn add_tip(&mut self, tip: HelpTip, source: &Path) {
+        if let Err(reason) = tip.validate() {
+            warn!(
+                source = %source.display(),
+                "help: skipping invalid tip entry: {reason}"
+            );
+            return;
+        }
+
+        let key = normalize_key(&tip.id);
+        if self.tip_index.contains_key(&key) {
+            warn!(
+                source = %source.display(),
+                tip = %tip.id,
+                "help: skipping duplicate tip"
+            );
+            return;
+        }
+
+        self.tip_index.insert(key, self.tips.len());
+        self.tips.push(tip);
+    }
+}
+
+// --- Conversions -------------------------------------------------------------
+
+impl From<&HelpCommand> for HelpTopic {
+    fn from(c: &HelpCommand) -> Self {
         let mut keywords: Vec<String> = c.tags.iter().map(|t| t.to_lowercase()).collect();
         keywords.push(c.name.to_lowercase());
         for alias in &c.aliases {
@@ -150,24 +431,18 @@ impl From<RawCommand> for HelpTopic {
         }
 
         let mut body = String::new();
-        if !c.usage.is_empty() {
-            body.push_str("Usage: ");
-            body.push_str(&c.usage);
+        body.push_str("Usage: ");
+        body.push_str(&c.usage);
+        body.push('\n');
+        body.push('\n');
+        body.push_str(&c.description);
+        body.push('\n');
+        body.push('\n');
+        body.push_str("Examples:\n");
+        for ex in &c.examples {
+            body.push_str("  ");
+            body.push_str(ex);
             body.push('\n');
-        }
-        if !c.description.is_empty() {
-            body.push('\n');
-            body.push_str(&c.description);
-            body.push('\n');
-        }
-        if !c.examples.is_empty() {
-            body.push('\n');
-            body.push_str("Examples:\n");
-            for ex in &c.examples {
-                body.push_str("  ");
-                body.push_str(ex);
-                body.push('\n');
-            }
         }
         if !c.aliases.is_empty() {
             body.push('\n');
@@ -178,7 +453,7 @@ impl From<RawCommand> for HelpTopic {
 
         HelpTopic {
             id: c.name.clone(),
-            title: c.name,
+            title: c.name.clone(),
             body: body.trim_end().to_string(),
             category: HelpCategory::Command,
             keywords,
@@ -186,44 +461,38 @@ impl From<RawCommand> for HelpTopic {
     }
 }
 
-impl From<RawFaq> for HelpTopic {
-    fn from(f: RawFaq) -> Self {
+impl From<&HelpFaq> for HelpTopic {
+    fn from(f: &HelpFaq) -> Self {
         let mut keywords: Vec<String> = f.tags.iter().map(|t| t.to_lowercase()).collect();
         keywords.push(f.id.to_lowercase());
 
-        let body = format!("{}\n\n{}", f.question, f.answer);
-
         HelpTopic {
-            id: f.id,
-            title: f.question,
-            body,
+            id: f.id.clone(),
+            title: f.question.clone(),
+            body: format!("{}\n\n{}", f.question, f.answer),
             category: HelpCategory::Faq,
             keywords,
         }
     }
 }
 
-impl From<RawTip> for HelpTopic {
-    fn from(t: RawTip) -> Self {
+impl From<&HelpTip> for HelpTopic {
+    fn from(t: &HelpTip) -> Self {
         let mut keywords: Vec<String> = t.tags.iter().map(|k| k.to_lowercase()).collect();
         keywords.push(t.id.to_lowercase());
-        if !t.context.is_empty() {
-            keywords.push(t.context.to_lowercase());
-        }
-
-        let title = t.text.lines().next().unwrap_or(&t.text).to_string();
+        keywords.push(t.context.to_lowercase());
 
         HelpTopic {
-            id: t.id,
-            title,
-            body: t.text,
+            id: t.id.clone(),
+            title: t.text.lines().next().unwrap_or(&t.text).to_string(),
+            body: t.text.clone(),
             category: HelpCategory::Tip,
             keywords,
         }
     }
 }
 
-// ─── Loader ───────────────────────────────────────────────────────────────────
+// --- Loader ------------------------------------------------------------------
 
 /// Loads help topics from a directory of TOML files.
 pub struct HelpLoader;
@@ -233,40 +502,18 @@ impl HelpLoader {
     ///
     /// Malformed files are skipped with a warning; missing directories return an
     /// empty `Vec` without error.
-    ///
-    /// # Errors
-    ///
-    /// This function never returns an error — all failures are logged and
-    /// skipped so the application always starts.
+    #[must_use]
     pub fn load_all(dir: impl AsRef<Path>) -> Vec<HelpTopic> {
-        let dir = dir.as_ref();
-
-        let entries = match Self::toml_paths(dir) {
-            Ok(v) => v,
-            Err(e) => {
-                warn!("help: cannot read directory {}: {e}", dir.display());
-                return Vec::new();
-            }
-        };
-
-        let mut topics = Vec::new();
-        for path in entries {
-            match Self::load_file(&path) {
-                Ok(mut t) => topics.append(&mut t),
-                Err(e) => warn!("help: skipping {}: {e}", path.display()),
-            }
-        }
-        topics
+        HelpDatabase::load_from_dir(dir).topics()
     }
 
-    /// Collect sorted `*.toml` paths from `dir`, returning empty vec if the
-    /// directory doesn't exist.
     fn toml_paths(dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
         if !dir.exists() {
             return Ok(Vec::new());
         }
+
         let mut paths: Vec<PathBuf> = fs::read_dir(dir)?
-            .filter_map(|e| e.ok())
+            .filter_map(Result::ok)
             .map(|e| e.path())
             .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("toml"))
             .collect();
@@ -274,26 +521,48 @@ impl HelpLoader {
         Ok(paths)
     }
 
-    /// Parse a single TOML file into help topics.
-    fn load_file(path: &Path) -> anyhow::Result<Vec<HelpTopic>> {
+    fn load_file(path: &Path) -> anyhow::Result<HelpFile> {
         let text = fs::read_to_string(path)?;
-        let file: HelpFile = toml::from_str(&text)?;
-
-        let mut topics: Vec<HelpTopic> = Vec::new();
-        for c in file.commands {
-            topics.push(HelpTopic::from(c));
-        }
-        for f in file.faqs {
-            topics.push(HelpTopic::from(f));
-        }
-        for t in file.tips {
-            topics.push(HelpTopic::from(t));
-        }
-        Ok(topics)
+        toml::from_str(&text).context("parse help TOML")
     }
 }
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
+fn normalize_key(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn require_text(label: &str, value: &str) -> Result<(), String> {
+    if value.trim().is_empty() {
+        Err(format!("{label} is required"))
+    } else {
+        Ok(())
+    }
+}
+
+fn require_non_empty(label: &str, values: &[String]) -> Result<(), String> {
+    if values.is_empty() {
+        Err(format!("{label} must contain at least one entry"))
+    } else {
+        Ok(())
+    }
+}
+
+fn require_text_values(label: &str, values: &[String]) -> Result<(), String> {
+    if values.iter().any(|value| value.trim().is_empty()) {
+        Err(format!("{label} cannot contain empty entries"))
+    } else {
+        Ok(())
+    }
+}
+
+fn insert_unique(keys: &mut HashSet<String>, label: &str, value: &str) -> anyhow::Result<()> {
+    let key = normalize_key(value);
+    if keys.insert(key) {
+        Ok(())
+    } else {
+        Err(anyhow!("duplicate {label}: {value}"))
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -308,55 +577,33 @@ mod tests {
         (dir, path)
     }
 
-    // ── Commands ──────────────────────────────────────────────────────────────
-
-    #[test]
-    fn parses_command_entry() {
-        let toml = r#"
+    fn command_toml(name: &str) -> String {
+        format!(
+            r#"
 [[commands]]
-name = "pull"
-aliases = ["p"]
-usage = "pull <npc_name>"
-description = "Pull target NPC to camp location"
-examples = ["pull golem", "pull all"]
-tags = ["combat", "targeting"]
-"#;
-        let (dir, _path) = write_temp("commands.toml", toml);
-        let topics = HelpLoader::load_all(dir.path());
-
-        assert_eq!(topics.len(), 1);
-        let t = &topics[0];
-        assert_eq!(t.id, "pull");
-        assert_eq!(t.category, HelpCategory::Command);
-        assert!(t.body.contains("pull <npc_name>"), "usage in body");
-        assert!(t.body.contains("pull golem"), "example in body");
-        assert!(t.keywords.contains(&"combat".to_string()));
-        assert!(t.keywords.contains(&"pull".to_string()));
+name = "{name}"
+aliases = ["{name}-alias"]
+usage = "{name} <target>"
+description = "Run {name} against a target"
+examples = ["{name} goblin"]
+tags = ["Combat", "CONTROL"]
+"#
+        )
     }
 
     #[test]
-    fn parses_multiple_commands() {
-        let toml = r#"
-[[commands]]
-name = "pull"
-description = "Pull NPC"
+    fn parses_command_entry_into_database() {
+        let database = HelpDatabase::from_toml_str(&command_toml("pull")).expect("parse help");
 
-[[commands]]
-name = "camp"
-description = "Control camp mode"
-"#;
-        let (dir, _path) = write_temp("commands.toml", toml);
-        let topics = HelpLoader::load_all(dir.path());
-        assert_eq!(topics.len(), 2);
-        let ids: Vec<&str> = topics.iter().map(|t| t.id.as_str()).collect();
-        assert!(ids.contains(&"pull"));
-        assert!(ids.contains(&"camp"));
+        assert_eq!(database.commands.len(), 1);
+        assert_eq!(database.len(), 1);
+        assert_eq!(database.command("pull").unwrap().usage, "pull <target>");
+        assert_eq!(database.command("PULL-ALIAS").unwrap().name, "pull");
+        database.validate().expect("valid database");
     }
 
-    // ── FAQ / Tips ────────────────────────────────────────────────────────────
-
     #[test]
-    fn parses_faq_and_tip() {
+    fn indexes_faqs_and_tips() {
         let toml = r#"
 [[faqs]]
 id = "setup-ranger"
@@ -366,109 +613,88 @@ tags = ["setup", "ranger"]
 
 [[tips]]
 id = "tip-dps"
-text = "Enable DPS tracking in the metrics panel (Tab)"
+text = "Enable DPS tracking in the metrics panel"
 context = "overview"
 tags = ["tips", "monitoring"]
 "#;
-        let (dir, _path) = write_temp("faq.toml", toml);
-        let topics = HelpLoader::load_all(dir.path());
+        let database = HelpDatabase::from_toml_str(toml).expect("parse help");
 
-        assert_eq!(topics.len(), 2);
-
-        let faq = topics.iter().find(|t| t.id == "setup-ranger").unwrap();
-        assert_eq!(faq.category, HelpCategory::Faq);
-        assert!(faq.body.contains("ranger.toml"));
-        assert!(faq.keywords.contains(&"setup".to_string()));
-
-        let tip = topics.iter().find(|t| t.id == "tip-dps").unwrap();
-        assert_eq!(tip.category, HelpCategory::Tip);
-        assert!(tip.keywords.contains(&"overview".to_string()));
+        assert_eq!(
+            database.faq("SETUP-RANGER").unwrap().question,
+            "How do I set up my ranger?"
+        );
+        assert_eq!(database.tip("tip-dps").unwrap().context, "overview");
+        database.validate().expect("valid database");
     }
-
-    // ── Merging ───────────────────────────────────────────────────────────────
 
     #[test]
-    fn merges_multiple_files() {
-        let dir = tempfile::tempdir().expect("tempdir");
-
-        let cmd_toml = r#"
+    fn skips_invalid_entries_without_rejecting_file() {
+        let toml = r#"
 [[commands]]
-name = "pull"
-description = "Pull NPC"
-"#;
-        let faq_toml = r#"
-[[faqs]]
-id = "faq-one"
-question = "What is pull?"
-answer = "It pulls the NPC."
-"#;
-        let mut f1 = fs::File::create(dir.path().join("commands.toml")).unwrap();
-        f1.write_all(cmd_toml.as_bytes()).unwrap();
-        let mut f2 = fs::File::create(dir.path().join("faq.toml")).unwrap();
-        f2.write_all(faq_toml.as_bytes()).unwrap();
+name = ""
+usage = "bad"
+description = "missing name"
+examples = ["bad"]
 
-        let topics = HelpLoader::load_all(dir.path());
-        assert_eq!(topics.len(), 2, "both files merged");
+[[commands]]
+name = "camp"
+usage = "camp on"
+description = "Start camp mode"
+examples = ["camp on"]
+"#;
+        let database = HelpDatabase::from_toml_str(toml).expect("parse help");
+
+        assert_eq!(database.commands.len(), 1);
+        assert!(database.command("camp").is_some());
+        assert!(database.command("").is_none());
     }
-
-    // ── Error tolerance ───────────────────────────────────────────────────────
 
     #[test]
     fn skips_malformed_file() {
         let dir = tempfile::tempdir().expect("tempdir");
 
-        // Bad file
         let mut bad = fs::File::create(dir.path().join("bad.toml")).unwrap();
         bad.write_all(b"[[commands\nthis is not valid toml {{{{")
             .unwrap();
 
-        // Good file alongside it
-        let good_toml = r#"
-[[commands]]
-name = "camp"
-description = "Camp control"
-"#;
         let mut good = fs::File::create(dir.path().join("good.toml")).unwrap();
-        good.write_all(good_toml.as_bytes()).unwrap();
+        good.write_all(command_toml("camp").as_bytes()).unwrap();
+
+        let database = HelpDatabase::load_from_dir(dir.path());
+        assert_eq!(database.commands.len(), 1);
+        assert_eq!(database.command("camp").unwrap().name, "camp");
+    }
+
+    #[test]
+    fn load_all_preserves_legacy_topics() {
+        let (dir, _path) = write_temp("commands.toml", &command_toml("pull"));
 
         let topics = HelpLoader::load_all(dir.path());
-        // Only the good file's entry should appear
+
         assert_eq!(topics.len(), 1);
-        assert_eq!(topics[0].id, "camp");
+        assert_eq!(topics[0].id, "pull");
+        assert_eq!(topics[0].category, HelpCategory::Command);
+        assert!(topics[0].body.contains("pull <target>"));
     }
 
     #[test]
     fn missing_directory_returns_empty() {
-        let topics = HelpLoader::load_all("/this/path/does/not/exist/ever");
-        assert!(topics.is_empty());
+        let database = HelpDatabase::load_from_dir("/this/path/does/not/exist/ever");
+        assert!(database.is_empty());
+        assert!(HelpLoader::load_all("/this/path/does/not/exist/ever").is_empty());
     }
-
-    #[test]
-    fn empty_directory_returns_empty() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let topics = HelpLoader::load_all(dir.path());
-        assert!(topics.is_empty());
-    }
-
-    // ── Keyword search ────────────────────────────────────────────────────────
 
     #[test]
     fn keywords_are_lowercased() {
-        let toml = r#"
-[[commands]]
-name = "Camp"
-tags = ["Combat", "CONTROL"]
-"#;
-        let (dir, _path) = write_temp("kw.toml", toml);
-        let topics = HelpLoader::load_all(dir.path());
+        let database = HelpDatabase::from_toml_str(&command_toml("Camp")).expect("parse help");
+        let topics = database.topics();
         let kw = &topics[0].keywords;
+
         assert!(
             kw.iter().all(|k| k == k.to_lowercase().as_str()),
             "all lowercase: {kw:?}"
         );
     }
-
-    // ── Category labels ───────────────────────────────────────────────────────
 
     #[test]
     fn category_labels() {
