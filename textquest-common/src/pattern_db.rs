@@ -120,6 +120,54 @@ pub fn field_displacement_scan_entries() -> Vec<ScanEntry> {
     }]
 }
 
+/// Scan entries for the active-hack packet send/scrambler research surfaces.
+///
+/// Seeded from the March 10, 2026 live client after the January 2025 literal
+/// offsets moved. The packet-scrambler entry resolves the RIP-relative global
+/// used at opcode-scrambler call sites; the send and hton entries resolve
+/// directly to function starts.
+#[must_use]
+pub fn active_hack_scan_entries() -> Vec<ScanEntry> {
+    vec![
+        ScanEntry {
+            name: "packetScrambler".to_string(),
+            module: ScanModule::EqGame,
+            pattern:
+                "48 8B 1D ?? ?? ?? ?? 48 8B 43 08 48 63 50 04 48 8D 4B 10 48 03 CA E8 ?? ?? ?? ?? 4C 8B C0 41 8B D6 48 8B CB E8 ?? ?? ?? ??"
+                    .to_string(),
+            category: OffsetCategory::Global,
+            resolve: ResolveMode::RipRelative { disp_offset: 3 },
+            expected_preferred: Some(
+                crate::offsets::EQ_PREFERRED_BASE + crate::offsets::OFFSET_PACKET_SCRAMBLER as u64,
+            ),
+        },
+        ScanEntry {
+            name: "opcodeScramblerHton".to_string(),
+            module: ScanModule::EqGame,
+            pattern:
+                "48 89 5C 24 10 48 89 6C 24 18 56 48 83 EC 20 49 8B E8 8B DA 48 8B F1 83 FA 15 75 ?? 48 8B 41 08 4C 63 48 04 41 8B 84 09 B0 02 00 00 48 0F BA E0 0C"
+                    .to_string(),
+            category: OffsetCategory::Function,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(
+                crate::offsets::EQ_PREFERRED_BASE + crate::offsets::OFFSET_HTON as u64,
+            ),
+        },
+        ScanEntry {
+            name: "networkSend".to_string(),
+            module: ScanModule::EqGame,
+            pattern:
+                "48 89 5C 24 08 48 89 6C 24 10 56 57 41 56 48 83 EC 40 49 63 E9 49 8B F0 44 8B F2 48 8B F9 45 85 C9 0F 84 ?? ?? ?? ?? 4D 85 C0"
+                    .to_string(),
+            category: OffsetCategory::Function,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(
+                crate::offsets::EQ_PREFERRED_BASE + crate::offsets::OFFSET_NETWORK_SEND as u64,
+            ),
+        },
+    ]
+}
+
 // ── Internal entry
 // ────────────────────────────────────────────────────────────
 

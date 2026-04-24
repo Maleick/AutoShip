@@ -113,12 +113,13 @@ pub const PINST_ADVANCED_LOOT_WND: u64 = 0x0;
 /// Placeholder address, scan signature still needs RE work.
 pub const PINST_REAL_ESTATE_ITEMS: u64 = 0x0;
 
-// ─── Active Hacks Offsets (Pending verification for 20260310) ───
-// These are offsets from the eqgame.exe base address, currently reflecting
-// January 2025.
-pub const OFFSET_PACKET_SCRAMBLER: usize = 0x00dc_6340;
-pub const OFFSET_HTON: usize = 0x0068_2e50;
-pub const OFFSET_NETWORK_SEND: usize = 0x0055_7090;
+// ─── Active Hacks Offsets (Ghidra/pattern verified for 20260310) ───
+// Offsets are from the eqgame.exe base address. Verified 2026-04-24 against
+// TextQuest-Ghidra snapshot 2026-04-11-live-working (client string
+// "Mar 10 2026").
+pub const OFFSET_PACKET_SCRAMBLER: usize = 0x00e9_09a8;
+pub const OFFSET_HTON: usize = 0x0067_9380;
+pub const OFFSET_NETWORK_SEND: usize = 0x0056_3130;
 
 pub const OPCODE_LIVING_SHIELD: u16 = 0x3A44;
 
