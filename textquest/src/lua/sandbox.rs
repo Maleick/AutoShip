@@ -4,18 +4,20 @@
 //! - `os`, `io` — filesystem and shell access
 //! - `debug` — introspection / escape hatches
 //! - `load`, `loadstring`, `loadfile`, `dofile` — dynamic code loading
-//! - `require` — native C modules
+//! - general `require` — native C modules and arbitrary packages
 //! - `package` — not loaded at all
 //!
 //! # What is allowed
 //! `math`, `string`, `table`, `utf8`, `coroutine` — all pure computation.
+//! After TextQuest APIs are registered, `require("textquest")` is restored as
+//! the only allowed module import.
 //!
 //! # Resource limits
 //! - Memory: 64 MiB hard cap via `Lua::set_memory_limit`.
 //! - CPU: instruction-count hook; aborts after 10 million instructions.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use mlua::{Error as LuaError, HookTriggers, Lua, Result as LuaResult, StdLib, VmState};
 
@@ -124,8 +126,8 @@ mod tests {
     /// Create a sandboxed Lua VM the same way production code does:
     /// load only safe libs, then apply the sandbox.
     fn sandboxed_lua() -> (Lua, Arc<AtomicU64>) {
-        let lua = Lua::new_with(sandbox_libs(), LuaOptions::default())
-            .expect("create sandboxed Lua");
+        let lua =
+            Lua::new_with(sandbox_libs(), LuaOptions::default()).expect("create sandboxed Lua");
         let counter = apply(&lua).expect("apply sandbox");
         (lua, counter)
     }
@@ -136,10 +138,7 @@ mod tests {
     fn os_execute_is_blocked() {
         let (lua, _) = sandboxed_lua();
         let result = lua.load("os.execute('echo pwned')").exec();
-        assert!(
-            result.is_err(),
-            "os.execute must be blocked; got Ok(())"
-        );
+        assert!(result.is_err(), "os.execute must be blocked; got Ok(())");
         let msg = result.unwrap_err().to_string();
         assert!(
             msg.contains("nil") || msg.contains("attempt to index"),

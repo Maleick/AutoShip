@@ -16,7 +16,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true
 anyhow.workspace = true
-mlua = { workspace = true, features = ["lua54", "vendored"] }
+mlua = { workspace = true, features = ["lua54", "vendored", "send"] }
 ratatui = "0.30"
 crossterm = "0.28"
 rusqlite = { version = "0.32", features = ["bundled"] }

@@ -10,14 +10,12 @@
 /// - log: textquest.log.*
 /// - hotkeys: textquest.hotkeys.*
 /// - commands: textquest.commands.*
-
-use mlua::{Lua, LuaOptions, Result as LuaResult, Table};
-use std::sync::atomic::AtomicU64;
+use mlua::{Error as LuaError, Lua, LuaOptions, Result as LuaResult, Table, Value, Variadic};
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 
 use crate::lua::error::LuaApiError;
 use crate::lua::sandbox;
-use crate::lua::types::{LuaGroupMember, LuaPlayer, LuaSpawn, LuaTarget};
 use crate::registry::{Priority, SharedCommandRegistry, SharedHotkeyRegistry};
 
 pub struct LuaBindings {
@@ -95,8 +93,122 @@ impl LuaBindings {
         self.register_events_api(&textquest)?;
         self.register_hotkeys_api(&textquest)?;
         self.register_commands_api(&textquest)?;
+        self.register_issue_791_compat_api(&textquest)?;
 
-        globals.set("textquest", textquest)?;
+        globals.set("textquest", textquest.clone())?;
+        self.register_textquest_require(&globals, &textquest)?;
+
+        Ok(())
+    }
+
+    fn register_textquest_require(&self, globals: &Table, textquest: &Table) -> LuaResult<()> {
+        let textquest_module = textquest.clone();
+        globals.set(
+            "require",
+            self.lua.create_function(move |_, module: String| {
+                if module == "textquest" {
+                    Ok(textquest_module.clone())
+                } else {
+                    Err(LuaError::RuntimeError(format!(
+                        "sandbox: require('{module}') not allowed"
+                    )))
+                }
+            })?,
+        )?;
+
+        Ok(())
+    }
+
+    fn register_issue_791_compat_api(&self, parent: &Table) -> LuaResult<()> {
+        parent.set(
+            "get_spawns",
+            self.lua.create_function(|lua, ()| lua.create_table())?,
+        )?;
+        parent.set(
+            "get_player",
+            self.lua.create_function(|lua, ()| {
+                let player = lua.create_table()?;
+                player.set("name", "")?;
+                player.set("level", 0u8)?;
+                player.set("class", "")?;
+                player.set("hp_percent", 0.0f32)?;
+                player.set("mana_percent", 0.0f32)?;
+                player.set("x", 0.0f32)?;
+                player.set("y", 0.0f32)?;
+                player.set("z", 0.0f32)?;
+                Ok(player)
+            })?,
+        )?;
+        parent.set(
+            "cast_spell",
+            self.lua.create_function(|_, spell: String| {
+                tracing::debug!(spell = %spell, "lua cast_spell requested");
+                Ok(true)
+            })?,
+        )?;
+        parent.set(
+            "move_to",
+            self.lua.create_function(|_, (x, y, z): (f32, f32, f32)| {
+                tracing::debug!(x, y, z, "lua move_to requested");
+                Ok(true)
+            })?,
+        )?;
+        parent.set(
+            "execute_command",
+            self.lua.create_function(|_, command: String| {
+                tracing::debug!(command = %command, "lua execute_command requested");
+                Ok(true)
+            })?,
+        )?;
+        parent.set(
+            "set_camp_state",
+            self.lua.create_function(|_, state: String| {
+                tracing::debug!(state = %state, "lua set_camp_state requested");
+                Ok(true)
+            })?,
+        )?;
+
+        let camp_config = self.lua.create_table()?;
+        camp_config.set(
+            "get",
+            self.lua.create_function(|_, args: Variadic<Value>| {
+                let args: Vec<Value> = args.into_iter().collect();
+                let key = method_string_arg(&args, 0).unwrap_or_default();
+                tracing::debug!(key = %key, "lua camp_config.get requested");
+                Ok(Value::Nil)
+            })?,
+        )?;
+        camp_config.set(
+            "set",
+            self.lua.create_function(|_, args: Variadic<Value>| {
+                let args: Vec<Value> = args.into_iter().collect();
+                let key = method_string_arg(&args, 0).unwrap_or_default();
+                let value = method_arg(&args, 1).cloned().unwrap_or(Value::Nil);
+                tracing::debug!(key = %key, value = ?value, "lua camp_config.set requested");
+                Ok(true)
+            })?,
+        )?;
+        parent.set("camp_config", camp_config)?;
+
+        self.make_log_table_callable(parent)?;
+
+        Ok(())
+    }
+
+    fn make_log_table_callable(&self, parent: &Table) -> LuaResult<()> {
+        let log: Table = parent.get("log")?;
+        let metatable = self.lua.create_table()?;
+        metatable.set(
+            "__call",
+            self.lua.create_function(|_, args: Variadic<Value>| {
+                let args: Vec<Value> = args.into_iter().collect();
+                let level = method_string_arg(&args, 0).unwrap_or_else(|| "info".to_string());
+                let message = method_string_arg(&args, 1).unwrap_or_default();
+                trace_lua_log(&level, &message);
+                Ok(())
+            })?,
+        )?;
+        log.set_metatable(Some(metatable))?;
 
         Ok(())
     }
@@ -105,14 +217,29 @@ impl LuaBindings {
         let player = self.lua.create_table()?;
 
         player.set("get_hp", self.lua.create_function(|_, ()| Ok(0i64))?)?;
-        player.set("get_hp_percent", self.lua.create_function(|_, ()| Ok(0f32))?)?;
+        player.set(
+            "get_hp_percent",
+            self.lua.create_function(|_, ()| Ok(0f32))?,
+        )?;
         player.set("get_mana", self.lua.create_function(|_, ()| Ok(0i32))?)?;
-        player.set("get_mana_percent", self.lua.create_function(|_, ()| Ok(0f32))?)?;
+        player.set(
+            "get_mana_percent",
+            self.lua.create_function(|_, ()| Ok(0f32))?,
+        )?;
         player.set("get_endurance", self.lua.create_function(|_, ()| Ok(0i32))?)?;
-        player.set("get_endurance_percent", self.lua.create_function(|_, ()| Ok(0f32))?)?;
-        player.set("get_name", self.lua.create_function(|_, ()| Ok("".to_string()))?)?;
+        player.set(
+            "get_endurance_percent",
+            self.lua.create_function(|_, ()| Ok(0f32))?,
+        )?;
+        player.set(
+            "get_name",
+            self.lua.create_function(|_, ()| Ok("".to_string()))?,
+        )?;
         player.set("get_level", self.lua.create_function(|_, ()| Ok(0u8))?)?;
-        player.set("get_class", self.lua.create_function(|_, ()| Ok("".to_string()))?)?;
+        player.set(
+            "get_class",
+            self.lua.create_function(|_, ()| Ok("".to_string()))?,
+        )?;
         player.set("get_class_id", self.lua.create_function(|_, ()| Ok(0u8))?)?;
         player.set("get_race_id", self.lua.create_function(|_, ()| Ok(0u32))?)?;
         player.set("get_x", self.lua.create_function(|_, ()| Ok(0f32))?)?;
@@ -144,7 +271,8 @@ impl LuaBindings {
         )?;
         group.set(
             "get_members",
-            self.lua.create_function(|_, ()| Ok(self.lua.create_table()?))?,
+            self.lua
+                .create_function(|_, ()| Ok(self.lua.create_table()?))?,
         )?;
         group.set(
             "get_tank",
@@ -197,10 +325,11 @@ impl LuaBindings {
         )?;
         nav.set(
             "add_waypoint",
-            self.lua.create_function(|_, (x, y, z, name): (f32, f32, f32, String)| {
-                tracing::debug!("nav.add_waypoint({}, {}, {}, \"{}\")", x, y, z, name);
-                Ok(true)
-            })?,
+            self.lua
+                .create_function(|_, (x, y, z, name): (f32, f32, f32, String)| {
+                    tracing::debug!("nav.add_waypoint({}, {}, {}, \"{}\")", x, y, z, name);
+                    Ok(true)
+                })?,
         )?;
         nav.set(
             "clear_waypoints",
@@ -220,10 +349,11 @@ impl LuaBindings {
 
         combat.set(
             "cast",
-            self.lua.create_function(|_, (spell, target): (String, Option<String>)| {
-                tracing::debug!("combat.cast(\"{:?}\", {:?})", spell, target);
-                Ok(true)
-            })?,
+            self.lua
+                .create_function(|_, (spell, target): (String, Option<String>)| {
+                    tracing::debug!("combat.cast(\"{:?}\", {:?})", spell, target);
+                    Ok(true)
+                })?,
         )?;
         combat.set(
             "assist",
@@ -271,7 +401,8 @@ impl LuaBindings {
 
         state.set(
             "get_spawns",
-            self.lua.create_function(|_, ()| Ok(self.lua.create_table()?))?,
+            self.lua
+                .create_function(|_, ()| Ok(self.lua.create_table()?))?,
         )?;
         state.set(
             "get_spawn",
@@ -293,7 +424,8 @@ impl LuaBindings {
         )?;
         state.set(
             "get_xtargets",
-            self.lua.create_function(|_, ()| Ok(self.lua.create_table()?))?,
+            self.lua
+                .create_function(|_, ()| Ok(self.lua.create_table()?))?,
         )?;
 
         parent.set("state", state)?;
@@ -311,10 +443,11 @@ impl LuaBindings {
         )?;
         config.set(
             "set",
-            self.lua.create_function(|_, (key, value): (String, mlua::Value)| {
-                tracing::debug!("config.set(\"{}\", {:?})", key, value);
-                Ok(true)
-            })?,
+            self.lua
+                .create_function(|_, (key, value): (String, mlua::Value)| {
+                    tracing::debug!("config.set(\"{}\", {:?})", key, value);
+                    Ok(true)
+                })?,
         )?;
         config.set(
             "save",
@@ -378,12 +511,11 @@ impl LuaBindings {
 
         events.set(
             "on",
-            self.lua.create_function(
-                |_, (event, callback): (String, mlua::Function)| {
+            self.lua
+                .create_function(|_, (event, callback): (String, mlua::Function)| {
                     tracing::debug!("events.on(\"{}\")", event);
                     Ok(())
-                },
-            )?,
+                })?,
         )?;
         events.set(
             "off",
@@ -394,10 +526,11 @@ impl LuaBindings {
         )?;
         events.set(
             "emit",
-            self.lua.create_function(|_, (event, data): (String, mlua::Value)| {
-                tracing::debug!("events.emit(\"{}\", {:?})", event, data);
-                Ok(())
-            })?,
+            self.lua
+                .create_function(|_, (event, data): (String, mlua::Value)| {
+                    tracing::debug!("events.emit(\"{}\", {:?})", event, data);
+                    Ok(())
+                })?,
         )?;
 
         parent.set("events", events)?;
@@ -422,25 +555,23 @@ impl LuaBindings {
         let hk_reg = Arc::clone(&self.hotkey_registry);
         hotkeys.set(
             "register",
-            self.lua.create_function(move |_lua, (combo, callback): (String, mlua::Function)| {
-                // Store the Lua function as a persistent reference.
-                // We use mlua's `into_owned()` so the Function outlives the
-                // current Lua call frame.  The OwnedFunction keeps the Lua VM
-                // alive via the Arc<Lua> hidden inside mlua.
-                let owned_cb: mlua::OwnedFunction = callback.into_owned();
-                let id = hk_reg.lock().unwrap().register(
-                    &combo,
-                    Priority::Script,
-                    "lua",
-                    Box::new(move || {
-                        if let Err(e) = owned_cb.call::<()>(()) {
-                            tracing::warn!(error = %e, "Lua hotkey callback error");
-                        }
-                    }),
-                );
-                tracing::debug!(combo = %combo, id = ?id, "Lua registered hotkey");
-                Ok(id.0)
-            })?,
+            self.lua.create_function(
+                move |_lua, (combo, callback): (String, mlua::Function)| {
+                    let callback = callback.clone();
+                    let id = hk_reg.lock().unwrap().register(
+                        &combo,
+                        Priority::Script,
+                        "lua",
+                        Box::new(move || {
+                            if let Err(e) = callback.call::<()>(()) {
+                                tracing::warn!(error = %e, "Lua hotkey callback error");
+                            }
+                        }),
+                    );
+                    tracing::debug!(combo = %combo, id = ?id, "Lua registered hotkey");
+                    Ok(id.0)
+                },
+            )?,
         )?;
 
         // textquest.hotkeys.unregister(hotkey_id) → boolean
@@ -485,21 +616,22 @@ impl LuaBindings {
         let cmd_reg = Arc::clone(&self.command_registry);
         commands.set(
             "register",
-            self.lua.create_function(move |_lua, (path, callback): (String, mlua::Function)| {
-                let owned_cb: mlua::OwnedFunction = callback.into_owned();
-                let id = cmd_reg.lock().unwrap().register(
-                    &path,
-                    Priority::Script,
-                    "lua",
-                    Box::new(move |tail: &str| {
-                        if let Err(e) = owned_cb.call::<()>(tail.to_string()) {
-                            tracing::warn!(error = %e, "Lua command callback error");
-                        }
-                    }),
-                );
-                tracing::debug!(path = %path, id = ?id, "Lua registered command");
-                Ok(id.0)
-            })?,
+            self.lua
+                .create_function(move |_lua, (path, callback): (String, mlua::Function)| {
+                    let callback = callback.clone();
+                    let id = cmd_reg.lock().unwrap().register(
+                        &path,
+                        Priority::Script,
+                        "lua",
+                        Box::new(move |tail: &str| {
+                            if let Err(e) = callback.call::<()>(tail.to_string()) {
+                                tracing::warn!(error = %e, "Lua command callback error");
+                            }
+                        }),
+                    );
+                    tracing::debug!(path = %path, id = ?id, "Lua registered command");
+                    Ok(id.0)
+                })?,
         )?;
 
         // textquest.commands.unregister(command_id) → boolean
@@ -517,10 +649,11 @@ impl LuaBindings {
         let cmd_disp = Arc::clone(&self.command_registry);
         commands.set(
             "dispatch",
-            self.lua.create_function(move |_lua, command_line: String| {
-                let fired = cmd_disp.lock().unwrap().dispatch(&command_line);
-                Ok(fired)
-            })?,
+            self.lua
+                .create_function(move |_lua, command_line: String| {
+                    let fired = cmd_disp.lock().unwrap().dispatch(&command_line);
+                    Ok(fired)
+                })?,
         )?;
 
         parent.set("commands", commands)?;
@@ -540,6 +673,31 @@ impl LuaBindings {
 impl Default for LuaBindings {
     fn default() -> Self {
         Self::new().expect("Failed to create Lua context")
+    }
+}
+
+fn method_arg(args: &[Value], index: usize) -> Option<&Value> {
+    let offset = if matches!(args.first(), Some(Value::Table(_))) {
+        1
+    } else {
+        0
+    };
+    args.get(offset + index)
+}
+
+fn method_string_arg(args: &[Value], index: usize) -> Option<String> {
+    match method_arg(args, index)? {
+        Value::String(value) => Some(value.to_string_lossy()),
+        _ => None,
+    }
+}
+
+fn trace_lua_log(level: &str, message: &str) {
+    match level {
+        "debug" => tracing::debug!("[Lua] {}", message),
+        "warn" | "warning" => tracing::warn!("[Lua] {}", message),
+        "error" => tracing::error!("[Lua] {}", message),
+        _ => tracing::info!("[Lua] {}", message),
     }
 }
 
@@ -566,18 +724,14 @@ mod tests {
 
         // Register a callback from Rust side (simulates what Lua does) directly
         // via the shared registry so we can control the counter.
-        let id = bindings
-            .hotkey_registry()
-            .lock()
-            .unwrap()
-            .register(
-                "ctrl+f9",
-                Priority::Script,
-                "test_lua",
-                Box::new(move || {
-                    fired_clone.fetch_add(1, Ordering::Relaxed);
-                }),
-            );
+        let id = bindings.hotkey_registry().lock().unwrap().register(
+            "ctrl+f9",
+            Priority::Script,
+            "test_lua",
+            Box::new(move || {
+                fired_clone.fetch_add(1, Ordering::Relaxed);
+            }),
+        );
 
         assert!(bindings.hotkey_registry().lock().unwrap().fire("ctrl+f9"));
         assert_eq!(fired.load(Ordering::Relaxed), 1);
@@ -808,6 +962,31 @@ return removed and not fired
     }
 
     #[test]
+    fn issue_791_top_level_api_shape_is_callable() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        let script = r#"
+            local textquest = require("textquest")
+            local spawns = textquest.get_spawns()
+            local player = textquest.get_player()
+            local cast_ok = textquest.cast_spell("group heal")
+            local move_ok = textquest.move_to(1.0, 2.0, 3.0)
+            local config_ok = textquest.camp_config:set("heal_mana_pct", 50)
+            textquest.log("info", "My message")
+            return type(spawns) == "table"
+                and type(player) == "table"
+                and cast_ok
+                and move_ok
+                and config_ok
+        "#;
+        let ok: bool = lua
+            .load(script)
+            .eval()
+            .expect("issue #791 API shape callable");
+        assert!(ok);
+    }
+
+    #[test]
     fn events_api_all_fns_callable() {
         let b = make_bindings();
         let lua = b.get_lua();
@@ -866,9 +1045,8 @@ return removed and not fired
         );
 
         // Create bindings that share those registries.
-        let bindings =
-            LuaBindings::with_registries(Arc::clone(&cmd_reg), Arc::clone(&hk_reg))
-                .expect("with_registries");
+        let bindings = LuaBindings::with_registries(Arc::clone(&cmd_reg), Arc::clone(&hk_reg))
+            .expect("with_registries");
         bindings.register_apis().expect("register APIs");
 
         // Dispatch via the Lua API — should reach the externally-registered handler.

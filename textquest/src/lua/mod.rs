@@ -11,5 +11,5 @@ pub mod types;
 
 pub use bindings::LuaBindings;
 pub use error::LuaApiError;
-pub use loader::{create_loader, LoadedScript, LuaLoaderError, ScriptLoader, ScriptState};
+pub use loader::{LoadedScript, LuaLoaderError, ScriptLoader, ScriptState, create_loader};
 pub use types::*;

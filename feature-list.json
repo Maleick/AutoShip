@@ -54,6 +54,15 @@
       "notes": "Centralized the `mlua` version in the workspace manifest and kept `textquest` on Lua 5.4 with vendored Lua enabled so macOS and Windows builds do not depend on a preinstalled Lua runtime."
     },
     {
+      "id": "issue-791-lua-scripting-engine-integration",
+      "name": "Issue #791 Lua 5.4 scripting engine integration",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check -p textquest"
+      ],
+      "notes": "Wired the existing Lua runtime into the textquest crate, exposed the issue #791 top-level API shape, and kept this partial because live game-state/DLL-backed APIs remain stubbed."
+    },
+    {
       "id": "issue-2172-stack-spoof-invalid-module-name",
       "name": "stack spoof invalid module name handling",
       "status": "complete",

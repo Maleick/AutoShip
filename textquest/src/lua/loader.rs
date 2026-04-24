@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use mlua::{Lua, Result as LuaResult, Value};
+use mlua::Value;
 use thiserror::Error;
 
 use crate::lua::bindings::LuaBindings;
@@ -124,7 +124,7 @@ impl ScriptLoader {
 
         // Mark as Loading while we execute.
         {
-            let mut scripts = self.loaded_scripts.write();
+            let mut scripts = self.write_loaded_scripts();
             // If already tracked, transition back to Loading for the reload case.
             if let Some(entry) = scripts.iter_mut().find(|s| s.id == id) {
                 entry.state = ScriptState::Loading;
@@ -141,7 +141,7 @@ impl ScriptLoader {
         tracing::info!(script_id = %id, path = ?path, "lifecycle: Loading");
 
         let source = std::fs::read_to_string(path).map_err(|e| {
-            let mut scripts = self.loaded_scripts.write();
+            let mut scripts = self.write_loaded_scripts();
             if let Some(entry) = scripts.iter_mut().find(|s| s.id == id) {
                 entry.state = ScriptState::Error(e.to_string());
             }
@@ -165,7 +165,7 @@ impl ScriptLoader {
             }
             Err(e) => {
                 let msg = e.to_string();
-                let mut scripts = self.loaded_scripts.write();
+                let mut scripts = self.write_loaded_scripts();
                 if let Some(entry) = scripts.iter_mut().find(|s| s.id == id) {
                     entry.state = ScriptState::Error(msg.clone());
                 }
@@ -178,7 +178,7 @@ impl ScriptLoader {
     /// Unload a script by ID: removes its Lua global and transitions state to `Unloaded`.
     /// Calling `unload_script` on an already-unloaded script is a no-op.
     pub fn unload_script(&self, id: &str) -> Result<(), LuaLoaderError> {
-        let mut scripts = self.loaded_scripts.write();
+        let mut scripts = self.write_loaded_scripts();
         let entry = scripts
             .iter_mut()
             .find(|s| s.id == id)
@@ -204,7 +204,7 @@ impl ScriptLoader {
     /// Pause a running script: transitions `Running` → `Paused`.
     /// Has no effect on scripts already paused; errors on scripts not in a pausable state.
     pub fn pause_script(&self, id: &str) -> Result<(), LuaLoaderError> {
-        let mut scripts = self.loaded_scripts.write();
+        let mut scripts = self.write_loaded_scripts();
         let entry = scripts
             .iter_mut()
             .find(|s| s.id == id)
@@ -229,7 +229,7 @@ impl ScriptLoader {
 
     /// Resume a paused script: transitions `Paused` → `Running`.
     pub fn resume_script(&self, id: &str) -> Result<(), LuaLoaderError> {
-        let mut scripts = self.loaded_scripts.write();
+        let mut scripts = self.write_loaded_scripts();
         let entry = scripts
             .iter_mut()
             .find(|s| s.id == id)
@@ -255,7 +255,7 @@ impl ScriptLoader {
     /// Reload a script: re-reads from disk and re-executes while preserving the script ID.
     pub fn reload_script(&self, id: &str) -> Result<(), LuaLoaderError> {
         let path = {
-            let scripts = self.loaded_scripts.read();
+            let scripts = self.read_loaded_scripts();
             scripts
                 .iter()
                 .find(|s| s.id == id)
@@ -269,8 +269,7 @@ impl ScriptLoader {
 
     /// Return the current state of a script by ID.
     pub fn script_state(&self, id: &str) -> Option<ScriptState> {
-        self.loaded_scripts
-            .read()
+        self.read_loaded_scripts()
             .iter()
             .find(|s| s.id == id)
             .map(|s| s.state.clone())
@@ -294,7 +293,7 @@ impl ScriptLoader {
     }
 
     pub fn loaded_scripts(&self) -> Vec<LoadedScript> {
-        self.loaded_scripts.read().clone()
+        self.read_loaded_scripts().clone()
     }
 
     pub fn execute_string(&self, code: &str) -> Result<Value, LuaLoaderError> {
@@ -338,11 +337,23 @@ impl ScriptLoader {
     }
 
     pub fn reload(&self) -> Result<(), LuaLoaderError> {
-        self.loaded_scripts.write().clear();
+        self.write_loaded_scripts().clear();
 
         self.load_init_script()?;
 
         Ok(())
+    }
+
+    fn read_loaded_scripts(&self) -> RwLockReadGuard<'_, Vec<LoadedScript>> {
+        self.loaded_scripts
+            .read()
+            .expect("lua loaded_scripts lock poisoned")
+    }
+
+    fn write_loaded_scripts(&self) -> RwLockWriteGuard<'_, Vec<LoadedScript>> {
+        self.loaded_scripts
+            .write()
+            .expect("lua loaded_scripts lock poisoned")
     }
 }
 

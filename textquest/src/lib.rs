@@ -114,6 +114,10 @@ pub mod operator_utils;
 /// Plugin discovery and loading — MQ2-compatible DLL plugin infrastructure.
 pub mod plugins;
 
+/// Lua 5.4 scripting runtime — sandboxed VM, TextQuest API bindings, and
+/// script lifecycle management.
+pub mod lua;
+
 /// Help content TOML format and file loader — provides `HelpTopic` entries
 /// for the TUI help search panel.
 pub mod help;
