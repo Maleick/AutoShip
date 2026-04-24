@@ -35,7 +35,7 @@ max="${max:-15}"
 repo=$(jq -r '.repo // "unknown"' "$STATE_FILE")
 active=0
 if [[ -d "$WORKSPACES_DIR" ]]; then
-  active=$(grep -Rsl '^RUNNING$' "$WORKSPACES_DIR"/*/status 2>/dev/null | wc -l | tr -d ' ')
+  active=$((grep -Rsl '^RUNNING$' "$WORKSPACES_DIR"/*/status 2>/dev/null || true) | wc -l | tr -d ' ')
 fi
 queued=$(jq '[.issues | to_entries[] | select((.value.state // .value.status) == "queued")] | length' "$STATE_FILE")
 completed=$(jq '[.issues | to_entries[] | select((.value.state // .value.status) == "completed" or (.value.state // .value.status) == "approved")] | length' "$STATE_FILE")

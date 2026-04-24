@@ -3,13 +3,18 @@
 
 set -euo pipefail
 
-AUTOSHIP_VERSION="1.5.0-opencode"
 AUTOSHIP_DIR=".autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
 WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
 LEDGER_FILE="$AUTOSHIP_DIR/token-ledger.json"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RELEASE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+if [[ -f "$RELEASE_ROOT/VERSION" ]]; then
+  AUTOSHIP_VERSION="$(tr -d '[:space:]' < "$RELEASE_ROOT/VERSION")"
+else
+  AUTOSHIP_VERSION="dev"
+fi
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
   echo "Error: not inside a git repository" >&2
@@ -88,10 +93,12 @@ else
   # Refresh tools and reset session counters
   NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   jq --arg now "$NOW" \
-    '.updated_at = $now |
+     --arg ver "$AUTOSHIP_VERSION" \
+     '.updated_at = $now |
      .stats.session_dispatched = 0 |
      .stats.session_completed = 0 |
      .platform = "opencode" |
+     .autoship_version = $ver |
      .config.maxConcurrentAgents = (.config.maxConcurrentAgents // 15)' \
      "$STATE_FILE" > "$STATE_FILE.tmp" && mv "$STATE_FILE.tmp" "$STATE_FILE"
   echo "Refreshed $STATE_FILE"

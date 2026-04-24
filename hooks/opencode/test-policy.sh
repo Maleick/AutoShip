@@ -62,6 +62,7 @@ assert_eq "docs: mandate poison recovery pattern (#2296)" "$docs_title" "documen
 STATE_REPO="$TMP_DIR/repo"
 mkdir -p "$STATE_REPO/.autoship/workspaces/issue-746" "$STATE_REPO/.autoship/workspaces/issue-749" "$STATE_REPO/.autoship/workspaces/issue-750"
 mkdir -p "$STATE_REPO/.autoship/workspaces/issue-751"
+mkdir -p "$STATE_REPO/.autoship/workspaces/issue-752"
 cat > "$STATE_REPO/.autoship/state.json" <<'JSON'
 {"config":{"maxConcurrentAgents":15},"issues":{"issue-746":{"state":"running"},"issue-749":{"state":"running"},"issue-750":{"state":"running"},"issue-751":{"state":"queued"}},"stats":{}}
 JSON
@@ -70,12 +71,18 @@ printf 'BLOCKED\n' > "$STATE_REPO/.autoship/workspaces/issue-749/status"
 printf 'RUNNING\n' > "$STATE_REPO/.autoship/workspaces/issue-750/status"
 printf 'QUEUED\n' > "$STATE_REPO/.autoship/workspaces/issue-751/status"
 printf 'changed\n' > "$STATE_REPO/.autoship/workspaces/issue-746/AUTOSHIP_RESULT.md"
+printf 'STUCK\n' > "$STATE_REPO/.autoship/workspaces/issue-752/status"
+printf '2026-04-24T00:00:00Z\n' > "$STATE_REPO/.autoship/workspaces/issue-752/started_at"
+printf 'stale result from issue-762\n' > "$STATE_REPO/.autoship/workspaces/issue-752/AUTOSHIP_RESULT.md"
+touch -t 202604230000 "$STATE_REPO/.autoship/workspaces/issue-752/AUTOSHIP_RESULT.md"
+touch -t 202604240000 "$STATE_REPO/.autoship/workspaces/issue-752/started_at"
 
 bash "$SCRIPT_DIR/reconcile-state.sh" --repo "$STATE_REPO" >/dev/null
 assert_eq "completed" "$(jq -r '.issues["issue-746"].state' "$STATE_REPO/.autoship/state.json")" "COMPLETE workspace reconciles to completed"
 assert_eq "blocked" "$(jq -r '.issues["issue-749"].state' "$STATE_REPO/.autoship/state.json")" "BLOCKED workspace reconciles to blocked"
 assert_eq "running" "$(jq -r '.issues["issue-750"].state' "$STATE_REPO/.autoship/state.json")" "RUNNING workspace remains running"
 assert_eq "queued" "$(jq -r '.issues["issue-751"].state' "$STATE_REPO/.autoship/state.json")" "QUEUED workspace remains queued"
+assert_eq "false" "$(jq -r '.issues["issue-752"].has_result' "$STATE_REPO/.autoship/state.json")" "stale result older than started_at is ignored"
 assert_eq "1" "$(jq -r '.stats.session_completed' "$STATE_REPO/.autoship/state.json")" "reconcile increments completion stats"
 assert_eq "1" "$(jq -r '.stats.blocked' "$STATE_REPO/.autoship/state.json")" "reconcile increments blocked stats"
 
@@ -84,6 +91,68 @@ printf '%s\n' "$STATUS_OUTPUT" | grep -F 'AGENTS (1 active / 15 max)' >/dev/null
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Queued:    1' >/dev/null || fail "status shows queued count"
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Completed: 1' >/dev/null || fail "status shows completed count"
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Blocked:   1' >/dev/null || fail "status shows blocked count"
+
+NO_RUNNING_REPO="$TMP_DIR/no-running-repo"
+mkdir -p "$NO_RUNNING_REPO/.autoship/workspaces/issue-999"
+cat > "$NO_RUNNING_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-999":{"state":"stuck"}},"stats":{"failed":1},"config":{"maxConcurrentAgents":15}}
+JSON
+printf 'STUCK\n' > "$NO_RUNNING_REPO/.autoship/workspaces/issue-999/status"
+NO_RUNNING_STATUS=$(bash "$SCRIPT_DIR/status.sh" --repo "$NO_RUNNING_REPO")
+printf '%s\n' "$NO_RUNNING_STATUS" | grep -F 'AGENTS (0 active / 15 max)' >/dev/null || fail "status handles zero running workspaces under pipefail"
+printf '%s\n' "$NO_RUNNING_STATUS" | grep -F 'STUCK:     1' >/dev/null || fail "status shows stuck workspace when none are running"
+
+RUNNER_REPO="$TMP_DIR/runner-repo"
+mkdir -p "$RUNNER_REPO/.autoship/workspaces/issue-996" "$RUNNER_REPO/hooks/opencode" "$RUNNER_REPO/hooks" "$RUNNER_REPO/bin"
+git init -q "$RUNNER_REPO"
+cp "$SCRIPT_DIR/runner.sh" "$RUNNER_REPO/hooks/opencode/runner.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$RUNNER_REPO/hooks/update-state.sh"
+chmod +x "$RUNNER_REPO/hooks/opencode/runner.sh" "$RUNNER_REPO/hooks/update-state.sh"
+cat > "$RUNNER_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-996":{"state":"queued"}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+printf 'QUEUED\n' > "$RUNNER_REPO/.autoship/workspaces/issue-996/status"
+printf 'test prompt\n' > "$RUNNER_REPO/.autoship/workspaces/issue-996/AUTOSHIP_PROMPT.md"
+printf 'opencode/test-free\n' > "$RUNNER_REPO/.autoship/workspaces/issue-996/model"
+cat > "$RUNNER_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+if [[ -n "${OPENCODE_RUN_ID:-}" || -n "${OPENCODE_SERVER_PASSWORD:-}" ]]; then
+  printf 'ENV_LEAK\n'
+  exit 0
+fi
+printf 'ok\n'
+exit 0
+SH
+chmod +x "$RUNNER_REPO/bin/opencode"
+(
+  cd "$RUNNER_REPO"
+  OPENCODE_RUN_ID=leaked OPENCODE_SERVER_PASSWORD=leaked PATH="$RUNNER_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
+)
+for _ in 1 2 3 4 5; do
+  [[ "$(tr -d '[:space:]' < "$RUNNER_REPO/.autoship/workspaces/issue-996/status")" != "RUNNING" ]] && break
+  sleep 1
+done
+assert_eq "STUCK" "$(tr -d '[:space:]' < "$RUNNER_REPO/.autoship/workspaces/issue-996/status")" "runner marks successful worker exit without terminal artifact as stuck"
+if grep -F 'ENV_LEAK' "$RUNNER_REPO/.autoship/workspaces/issue-996/AUTOSHIP_RUNNER.log" >/dev/null 2>&1; then
+  fail "runner must unset parent OpenCode session environment before nested opencode run"
+fi
+
+grep -F 'AUTOSHIP_VERSION="1.5.0-opencode"' "$SCRIPT_DIR/init.sh" >/dev/null 2>&1 && fail "init must not hardcode stale 1.5.0-opencode version"
+
+INIT_REPO="$TMP_DIR/init-repo"
+mkdir -p "$INIT_REPO"
+git init -q "$INIT_REPO"
+git -C "$INIT_REPO" remote add origin https://github.com/owner/repo.git
+mkdir -p "$INIT_REPO/.autoship"
+cat > "$INIT_REPO/.autoship/state.json" <<'JSON'
+{"autoship_version":"old","platform":"opencode","repo":"owner/repo","issues":{},"stats":{"session_dispatched":2,"session_completed":1},"config":{"maxConcurrentAgents":15}}
+JSON
+(
+  cd "$INIT_REPO"
+  bash "$SCRIPT_DIR/init.sh" >/dev/null
+)
+expected_version=$(tr -d '[:space:]' < "$SCRIPT_DIR/../../VERSION")
+assert_eq "$expected_version" "$(jq -r '.autoship_version' "$INIT_REPO/.autoship/state.json")" "init refreshes autoship_version from VERSION file"
 
 SETUP_REPO="$TMP_DIR/setup-repo"
 mkdir -p "$SETUP_REPO/bin"

@@ -20,9 +20,31 @@ DRY_RUN="${AUTOSHIP_RUNNER_DRY_RUN:-false}"
 active_count() {
   local count=0
   if [[ -d "$WORKSPACES_DIR" ]]; then
-    count=$(grep -Rsl '^RUNNING$' "$WORKSPACES_DIR"/*/status 2>/dev/null | wc -l | tr -d ' ')
+    count=$((grep -Rsl '^RUNNING$' "$WORKSPACES_DIR"/*/status 2>/dev/null || true) | wc -l | tr -d ' ')
   fi
   printf '%s\n' "$count"
+}
+
+run_worker() {
+  local model="$1"
+  env \
+    -u OPENCODE \
+    -u OPENCODE_CLIENT \
+    -u OPENCODE_PID \
+    -u OPENCODE_PROCESS_ROLE \
+    -u OPENCODE_RUN_ID \
+    -u OPENCODE_SERVER_PASSWORD \
+    -u OPENCODE_SERVER_USERNAME \
+    opencode run --model "$model" "$(cat AUTOSHIP_PROMPT.md)"
+}
+
+mark_stuck_unless_terminal() {
+  local current=""
+  [[ -f status ]] && current=$(tr -d '[:space:]' < status)
+  case "$current" in
+    COMPLETE|BLOCKED|STUCK) ;;
+    *) echo "STUCK" > status ;;
+  esac
 }
 
 started=0
@@ -52,7 +74,11 @@ for dir in "$WORKSPACES_DIR"/*/; do
     (
       cd "$dir"
       if command -v opencode >/dev/null 2>&1; then
-        opencode run --model "$model" "$(cat AUTOSHIP_PROMPT.md)" > AUTOSHIP_RUNNER.log 2>&1 || echo "STUCK" > status
+        if run_worker "$model" > AUTOSHIP_RUNNER.log 2>&1; then
+          mark_stuck_unless_terminal
+        else
+          echo "STUCK" > status
+        fi
       else
         echo "opencode CLI not found" > AUTOSHIP_RUNNER.log
         echo "STUCK" > status

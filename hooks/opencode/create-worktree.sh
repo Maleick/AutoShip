@@ -29,4 +29,13 @@ if ! git worktree add -B "$TARGET_BRANCH" "$WORKSPACE" "$BASE_REF" 2>/dev/null; 
   git worktree add -B "$TARGET_BRANCH" "$WORKSPACE" "$BASE_REF"
 fi
 
+rm -f \
+  "$WORKSPACE/AUTOSHIP_PROMPT.md" \
+  "$WORKSPACE/AUTOSHIP_RESULT.md" \
+  "$WORKSPACE/AUTOSHIP_RUNNER.log" \
+  "$WORKSPACE/BLOCKED_REASON.txt" \
+  "$WORKSPACE/model" \
+  "$WORKSPACE/started_at" \
+  "$WORKSPACE/status"
+
 printf '%s\n' "$REPO_ROOT/$WORKSPACE"

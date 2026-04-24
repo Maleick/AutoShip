@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.6.2
+
+- Fix OpenCode worker launches by clearing inherited parent OpenCode session environment variables.
+- Mark workers stuck when they exit without writing a terminal workspace status.
+- Load initialized runtime version from `VERSION` instead of a stale hardcoded value.
+- Prevent zero-running status checks from failing under `set -euo pipefail`.
+- Clear and validate AutoShip workspace artifacts so stale results do not pollute new runs.
+
 ## v1.6.1
 
 - Sync full OpenCode plugin assets from the latest GitHub release, not just `autoship.ts`.

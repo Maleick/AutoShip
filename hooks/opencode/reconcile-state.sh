@@ -36,7 +36,13 @@ for dir in "$WORKSPACES_DIR"/*/; do
   esac
 
   has_result=false
-  [[ -s "$dir/AUTOSHIP_RESULT.md" ]] && has_result=true
+  result_file="$dir/AUTOSHIP_RESULT.md"
+  started_file="$dir/started_at"
+  if [[ -s "$result_file" ]]; then
+    if [[ ! -f "$started_file" || "$result_file" -nt "$started_file" ]]; then
+      has_result=true
+    fi
+  fi
   has_uncommitted=false
   if [[ -d "$dir/.git" || -f "$dir/.git" ]]; then
     if git -C "$dir" status --porcelain 2>/dev/null | grep -q .; then
