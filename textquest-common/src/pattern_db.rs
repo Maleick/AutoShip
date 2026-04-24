@@ -41,16 +41,21 @@ pub enum ScanModule {
 
 // ── Offset category ──────────────────────────────────────────────────────────
 
-/// Categorizes an offset as a function pointer or global data address.
+/// Categorizes an offset as an address or struct field offset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OffsetCategory {
     Function,
     Global,
+    PlayerBaseField,
+    PlayerZoneField,
+    SpawnManagerField,
+    ContextMenuManagerField,
+    ContextMenuField,
 }
 
 // ── Offset resolution mode ───────────────────────────────────────────────────
 
-/// Mode for resolving a matched pattern to a preferred-base address.
+/// Mode for resolving a matched pattern to an address or field offset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResolveMode {
     /// Direct offset at match location.
@@ -58,6 +63,14 @@ pub enum ResolveMode {
     /// RIP-relative (e.g., LEA instruction); disp_offset is the byte offset
     /// from match start to the displacement field.
     RipRelative { disp_offset: usize },
+    /// Extract a struct field displacement directly from matched instruction bytes.
+    ///
+    /// `disp_offset` is the byte offset from match start to the displacement
+    /// field, and `disp_size` is the encoded field width in bytes.
+    ExtractDisplacement {
+        disp_offset: usize,
+        disp_size: usize,
+    },
 }
 
 // ── Scan entry ───────────────────────────────────────────────────────────────
@@ -73,10 +86,38 @@ pub struct ScanEntry {
     pub pattern: String,
     /// Function or global data.
     pub category: OffsetCategory,
-    /// How to resolve the matched offset to a preferred-base address.
+    /// How to resolve the matched offset. Depending on `ResolveMode`, the
+    /// resolved value is either a preferred-base module address (for
+    /// `Direct`/`RipRelative`) or a relative struct-field offset in bytes
+    /// (for `ExtractDisplacement`). The interpretation is also governed by
+    /// `category`: function/global categories hold preferred-base addresses;
+    /// struct-field categories hold byte offsets.
     pub resolve: ResolveMode,
-    /// Expected compiled-time offset (for validation against scanned results).
+    /// Expected compiled-time value (for validation against scanned results).
+    /// This is a preferred-base address for function/global entries, or a
+    /// struct-field byte offset for `ExtractDisplacement` entries.
     pub expected_preferred: Option<u64>,
+}
+
+/// Seed scan entries that recover struct field offsets from accessor bytecode.
+///
+/// These entries are separate from function/global address scans because their
+/// resolved values are relative struct offsets, not preferred-base addresses.
+/// Additional Ghidra-exported accessor patterns can extend this catalog as they
+/// are curated.
+#[must_use]
+pub fn field_displacement_scan_entries() -> Vec<ScanEntry> {
+    vec![ScanEntry {
+        name: "hpCurrent".to_string(),
+        module: ScanModule::EqGame,
+        pattern: "8B 81 ?? ?? 00 00 3B 81".to_string(),
+        category: OffsetCategory::PlayerZoneField,
+        resolve: ResolveMode::ExtractDisplacement {
+            disp_offset: 2,
+            disp_size: 4,
+        },
+        expected_preferred: Some(crate::offsets::player_zone::HP_CURRENT as u64),
+    }]
 }
 
 // ── Internal entry
@@ -305,6 +346,30 @@ mod tests {
         let mut db = PatternDb::new();
         db.insert("raw".to_string(), Pattern::from_ida("48 8B"));
         assert!(db.get("raw").is_some());
+    }
+
+    #[test]
+    fn field_displacement_scan_entries_include_hp_current_accessor() {
+        let entries = field_displacement_scan_entries();
+        let hp_current = entries
+            .iter()
+            .find(|entry| entry.name == "hpCurrent")
+            .expect("hpCurrent field scan entry missing");
+
+        assert_eq!(hp_current.module, ScanModule::EqGame);
+        assert_eq!(hp_current.category, OffsetCategory::PlayerZoneField);
+        assert_eq!(hp_current.pattern, "8B 81 ?? ?? 00 00 3B 81");
+        assert_eq!(
+            hp_current.resolve,
+            ResolveMode::ExtractDisplacement {
+                disp_offset: 2,
+                disp_size: 4,
+            }
+        );
+        assert_eq!(
+            hp_current.expected_preferred,
+            Some(crate::offsets::player_zone::HP_CURRENT as u64)
+        );
     }
 
     #[test]

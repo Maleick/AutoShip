@@ -1,7 +1,7 @@
 //! Scan engine for runtime offset auto-detection.
 //!
 //! Orchestrates byte-pattern scanning against loaded EQ modules, resolves
-//! matched offsets into preferred-base addresses, validates results against
+//! matched offsets into preferred-base addresses or field offsets, validates results against
 //! compiled constants, and merges findings into an `OffsetDatabase`.
 //!
 //! See #746 (Auto Patch) for the roadmap.
@@ -21,9 +21,9 @@ use crate::{
 pub struct ScanResult {
     /// Symbolic name (matches `ScanEntry::name` and `OffsetDatabase` keys).
     pub name: String,
-    /// Whether this is a function or global.
+    /// Whether this is an address or struct field offset.
     pub category: OffsetCategory,
-    /// Resolved address in preferred-base space.
+    /// Resolved address in preferred-base space, or a struct field offset.
     pub resolved_preferred: u64,
     /// Raw byte offset where the pattern matched within the module.
     pub matched_at_offset: usize,
@@ -84,7 +84,7 @@ fn is_placeholder_pattern(pattern: &str) -> bool {
 ///   `module_base`. Both `Direct` and `RipRelative` resolution assume byte
 ///   offset 0 in `data` corresponds to `module_base` (i.e. the image's DOS
 ///   header). Passing a sub-section (e.g. `.text` only) will produce incorrect
-///   preferred-base addresses.
+///   preferred-base addresses for `Direct` and `RipRelative` entries.
 /// * `module_base` — runtime virtual address of the module (e.g. the actual
 ///   base of eqgame.exe as returned by `GetModuleHandle`).
 /// * `preferred_base` — the compile-time preferred base of the module (e.g.
@@ -131,7 +131,7 @@ pub fn scan_module(
             continue;
         };
 
-        // Resolve the match offset into a preferred-base address.
+        // Resolve the match offset into a preferred-base address or field offset.
         let resolved = match entry.resolve {
             ResolveMode::Direct => {
                 // The match offset is the function RVA.
@@ -140,6 +140,10 @@ pub fn scan_module(
             ResolveMode::RipRelative { disp_offset } => {
                 resolve_rip_relative(data, offset, disp_offset, module_base, preferred_base)
             }
+            ResolveMode::ExtractDisplacement {
+                disp_offset,
+                disp_size,
+            } => resolve_displacement(data, offset, disp_offset, disp_size),
         };
 
         let Some(resolved) = resolved else {
@@ -223,6 +227,44 @@ fn resolve_rip_relative(
     // Convert from runtime address to preferred-base address.
     let offset_within_module = target.checked_sub(module_base)?;
     preferred_base.checked_add(offset_within_module)
+}
+
+/// Extract a signed little-endian displacement from matched instruction bytes.
+///
+/// x86/x64 memory displacements are signed two's-complement values. This
+/// function sign-extends the decoded 1/2/4-byte displacement to `i64` before
+/// returning. Struct-field offsets are expected to be non-negative; a negative
+/// displacement (e.g., `[rcx-0x10]`) is rejected with `None` so that
+/// `apply_to_offset_db` never persists a bogus large positive value.
+///
+/// This is used for struct field offsets encoded directly in instructions such
+/// as `mov eax, [rcx+0x3A0]`, where the displacement is the offset to apply to
+/// the object pointer rather than a module address that needs rebasing.
+fn resolve_displacement(
+    data: &[u8],
+    match_off: usize,
+    disp_offset: usize,
+    disp_size: usize,
+) -> Option<u64> {
+    let disp_pos = match_off.checked_add(disp_offset)?;
+    let disp_end = disp_pos.checked_add(disp_size)?;
+    let bytes = data.get(disp_pos..disp_end)?;
+
+    let signed: i64 = match disp_size {
+        1 => i64::from(bytes[0] as i8),
+        2 => i64::from(i16::from_le_bytes(bytes.try_into().ok()?)),
+        4 => i64::from(i32::from_le_bytes(bytes.try_into().ok()?)),
+        8 => i64::from_le_bytes(bytes.try_into().ok()?),
+        _ => return None,
+    };
+
+    // Struct-field offsets are non-negative; negative displacements are not
+    // valid targets for offset-DB merging and would otherwise be stored as a
+    // huge unsigned value after casting.
+    if signed < 0 {
+        return None;
+    }
+    Some(signed as u64)
 }
 
 // ---------------------------------------------------------------------------
@@ -357,22 +399,55 @@ pub fn check_version(data: &[u8]) -> (Option<String>, bool) {
 /// Merge scan results into an `OffsetDatabase`, overwriting matching keys in
 /// the map matching the scanned module and offset category.
 ///
-/// Only results with a non-zero resolved address are applied — zero indicates
-/// a resolution failure and should not overwrite compiled/JSON offsets.
+/// Only function/global results with a non-zero resolved address are applied —
+/// zero indicates an address resolution failure. Field offsets may legitimately
+/// be zero and are applied when they fit in `usize`.
 pub fn apply_to_offset_db(report: &ScanReport, db: &mut OffsetDatabase) {
     for result in &report.results {
-        if result.resolved_preferred == 0 {
-            continue;
+        match result.category {
+            OffsetCategory::Function | OffsetCategory::Global => {
+                if result.resolved_preferred == 0 {
+                    continue;
+                }
+                let map = match (report.module, result.category) {
+                    (ScanModule::EqGame, OffsetCategory::Function) => &mut db.functions,
+                    (ScanModule::EqGame, OffsetCategory::Global) => &mut db.globals,
+                    (ScanModule::EqMain, OffsetCategory::Function) => &mut db.eqmain_functions,
+                    (ScanModule::EqMain, OffsetCategory::Global) => &mut db.eqmain_globals,
+                    (ScanModule::EqGraphics, OffsetCategory::Function) => {
+                        &mut db.eqgraphics_functions
+                    }
+                    (ScanModule::EqGraphics, OffsetCategory::Global) => &mut db.eqgraphics_globals,
+                    _ => unreachable!(),
+                };
+                map.insert(result.name.clone(), result.resolved_preferred);
+            }
+            OffsetCategory::PlayerBaseField => {
+                if let Ok(offset) = usize::try_from(result.resolved_preferred) {
+                    db.player_base.insert(result.name.clone(), offset);
+                }
+            }
+            OffsetCategory::PlayerZoneField => {
+                if let Ok(offset) = usize::try_from(result.resolved_preferred) {
+                    db.player_zone.insert(result.name.clone(), offset);
+                }
+            }
+            OffsetCategory::SpawnManagerField => {
+                if let Ok(offset) = usize::try_from(result.resolved_preferred) {
+                    db.spawn_manager.insert(result.name.clone(), offset);
+                }
+            }
+            OffsetCategory::ContextMenuManagerField => {
+                if let Ok(offset) = usize::try_from(result.resolved_preferred) {
+                    db.context_menu_manager.insert(result.name.clone(), offset);
+                }
+            }
+            OffsetCategory::ContextMenuField => {
+                if let Ok(offset) = usize::try_from(result.resolved_preferred) {
+                    db.context_menu.insert(result.name.clone(), offset);
+                }
+            }
         }
-        match (report.module, result.category) {
-            (ScanModule::EqGame, OffsetCategory::Function) => &mut db.functions,
-            (ScanModule::EqGame, OffsetCategory::Global) => &mut db.globals,
-            (ScanModule::EqMain, OffsetCategory::Function) => &mut db.eqmain_functions,
-            (ScanModule::EqMain, OffsetCategory::Global) => &mut db.eqmain_globals,
-            (ScanModule::EqGraphics, OffsetCategory::Function) => &mut db.eqgraphics_functions,
-            (ScanModule::EqGraphics, OffsetCategory::Global) => &mut db.eqgraphics_globals,
-        }
-        .insert(result.name.clone(), result.resolved_preferred);
     }
 }
 
@@ -523,6 +598,104 @@ mod tests {
         // preferred = preferred_base + 0x37
         let expected_preferred = preferred_base + 0x37;
         assert_eq!(report.results[0].resolved_preferred, expected_preferred);
+    }
+
+    #[test]
+    fn extract_displacement_reads_four_byte_field_offset() {
+        // Simulate: `mov eax, [rcx+0x3A0]`.
+        // Instruction encoding: 8B 81 <disp32>
+        let mut data = vec![0x00u8; 256];
+        data[0x20] = 0x8B;
+        data[0x21] = 0x81;
+        data[0x22] = 0xA0;
+        data[0x23] = 0x03;
+        data[0x24] = 0x00;
+        data[0x25] = 0x00;
+
+        let mut hp_current = entry(
+            "player_zone::hpCurrent",
+            "8B 81 ?? ?? 00 00",
+            ResolveMode::ExtractDisplacement {
+                disp_offset: 2,
+                disp_size: 4,
+            },
+        );
+        hp_current.category = OffsetCategory::PlayerZoneField;
+        let entries = [hp_current];
+
+        let report = scan_module(
+            &data,
+            0x7FF6_0000_0000,
+            0x0001_4000_0000,
+            ScanModule::EqGame,
+            &entries,
+        );
+
+        assert_eq!(report.entries_found, 1);
+        assert_eq!(report.results[0].resolved_preferred, 0x3A0);
+        assert_eq!(report.results[0].matched_at_offset, 0x20);
+    }
+
+    #[test]
+    fn extract_displacement_reads_one_byte_field_offset() {
+        // Simulate: `movzx eax, byte ptr [rcx+0x64]`.
+        let mut data = vec![0x00u8; 256];
+        data[0x10] = 0x0F;
+        data[0x11] = 0xB6;
+        data[0x12] = 0x41;
+        data[0x13] = 0x64;
+
+        let mut level = entry(
+            "player_zone::level",
+            "0F B6 41 ??",
+            ResolveMode::ExtractDisplacement {
+                disp_offset: 3,
+                disp_size: 1,
+            },
+        );
+        level.category = OffsetCategory::PlayerZoneField;
+        let entries = [level];
+
+        let report = scan_module(
+            &data,
+            0x7FF6_0000_0000,
+            0x0001_4000_0000,
+            ScanModule::EqGame,
+            &entries,
+        );
+
+        assert_eq!(report.entries_found, 1);
+        assert_eq!(report.results[0].resolved_preferred, 0x64);
+    }
+
+    #[test]
+    fn extract_displacement_out_of_bounds_records_failure() {
+        let mut data = vec![0x00u8; 16];
+        data[13] = 0x8B;
+        data[14] = 0x81;
+        data[15] = 0xA0;
+
+        let entries = [entry(
+            "player_zone::hpCurrent",
+            "8B 81 A0",
+            ResolveMode::ExtractDisplacement {
+                disp_offset: 2,
+                disp_size: 4,
+            },
+        )];
+
+        let report = scan_module(
+            &data,
+            0x7FF6_0000_0000,
+            0x0001_4000_0000,
+            ScanModule::EqGame,
+            &entries,
+        );
+
+        assert_eq!(report.entries_scanned, 1);
+        assert_eq!(report.entries_found, 0);
+        assert!(report.results.is_empty());
+        assert_eq!(report.entries_failed, vec!["player_zone::hpCurrent"]);
     }
 
     #[test]
@@ -753,6 +926,56 @@ mod tests {
             Some(0x0001_40A0_9000)
         );
         assert!(db.get_global("graphicsSingleton").is_none());
+    }
+
+    #[test]
+    fn apply_to_offset_db_merges_player_zone_field_offsets() {
+        let mut db = OffsetDatabase::from_compiled_offsets();
+
+        let report = ScanReport {
+            module: ScanModule::EqGame,
+            entries_scanned: 1,
+            entries_found: 1,
+            entries_validated: 1,
+            entries_failed: vec![],
+            entries_skipped: vec![],
+            entries_moved: vec![],
+            results: vec![ScanResult {
+                name: "hpCurrent".to_string(),
+                category: OffsetCategory::PlayerZoneField,
+                resolved_preferred: 0x3A0,
+                matched_at_offset: 0x20,
+                validated: true,
+            }],
+        };
+
+        apply_to_offset_db(&report, &mut db);
+        assert_eq!(db.get_player_zone_offset("hpCurrent"), Some(0x3A0));
+    }
+
+    #[test]
+    fn apply_to_offset_db_merges_player_base_field_offsets() {
+        let mut db = OffsetDatabase::from_compiled_offsets();
+
+        let report = ScanReport {
+            module: ScanModule::EqGame,
+            entries_scanned: 1,
+            entries_found: 1,
+            entries_validated: 1,
+            entries_failed: vec![],
+            entries_skipped: vec![],
+            entries_moved: vec![],
+            results: vec![ScanResult {
+                name: "spawnId".to_string(),
+                category: OffsetCategory::PlayerBaseField,
+                resolved_preferred: 0x158,
+                matched_at_offset: 0x20,
+                validated: true,
+            }],
+        };
+
+        apply_to_offset_db(&report, &mut db);
+        assert_eq!(db.get_player_base_offset("spawnId"), Some(0x158));
     }
 
     #[test]
