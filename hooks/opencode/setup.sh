@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AUTOSHIP_DIR=".autoship"
 ROUTING_FILE="$AUTOSHIP_DIR/model-routing.json"
 CONFIG_FILE="$AUTOSHIP_DIR/config.json"
@@ -15,6 +16,8 @@ LABELS="${AUTOSHIP_LABELS:-agent:ready}"
 
 NO_TUI=0
 POSITIONAL=()
+
+source "$SCRIPT_DIR/model-parser.sh"
 
 usage() {
   cat <<EOF
@@ -53,23 +56,6 @@ EOF
 }
 
 parse_args() {
-  if [[ $# -eq 0 ]]; then
-    return 0
-  fi
-
-  if ! command -v getopt >/dev/null 2>&1; then
-    echo "Error: getopt not found. Install via 'brew install gnu-getopt' or use environment variables." >&2
-    exit 1
-  fi
-
-  local opts
-  opts=$(getopt -o h -l no-tui,max-agents:,labels:,refresh-models,planner-model:,worker-models:,help -- "$@" 2>&1) || {
-    echo "Error: $opts" >&2
-    usage 2
-  }
-
-  eval set -- "$opts"
-
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --no-tui)
@@ -77,27 +63,50 @@ parse_args() {
         shift
         ;;
       --max-agents)
+        [[ $# -ge 2 ]] || { echo "Error: --max-agents requires a value" >&2; usage 2; }
         MAX_AGENTS="$2"
         shift 2
         ;;
+      --max-agents=*)
+        MAX_AGENTS="${1#*=}"
+        shift
+        ;;
       --labels)
+        [[ $# -ge 2 ]] || { echo "Error: --labels requires a value" >&2; usage 2; }
         LABELS="$2"
         shift 2
+        ;;
+      --labels=*)
+        LABELS="${1#*=}"
+        shift
         ;;
       --refresh-models)
         REFRESH_MODELS=1
         shift
         ;;
       --planner-model)
+        [[ $# -ge 2 ]] || { echo "Error: --planner-model requires a value" >&2; usage 2; }
         PLANNER_MODEL="$2"
         COORDINATOR_MODEL="$2"
         ORCHESTRATOR_MODEL="$2"
         REVIEWER_MODEL="$2"
         shift 2
         ;;
+      --planner-model=*)
+        PLANNER_MODEL="${1#*=}"
+        COORDINATOR_MODEL="$PLANNER_MODEL"
+        ORCHESTRATOR_MODEL="$PLANNER_MODEL"
+        REVIEWER_MODEL="$PLANNER_MODEL"
+        shift
+        ;;
       --worker-models)
+        [[ $# -ge 2 ]] || { echo "Error: --worker-models requires a value" >&2; usage 2; }
         SELECTED_MODELS="$2"
         shift 2
+        ;;
+      --worker-models=*)
+        SELECTED_MODELS="${1#*=}"
+        shift
         ;;
       -h|--help)
         usage 0
@@ -106,14 +115,21 @@ parse_args() {
         shift
         break
         ;;
-      *)
+      -*)
         echo "Unknown option: $1" >&2
         usage 2
+        ;;
+      *)
+        POSITIONAL+=("$1")
+        shift
         ;;
     esac
   done
 
-  POSITIONAL=("$@")
+  while [[ $# -gt 0 ]]; do
+    POSITIONAL+=("$1")
+    shift
+  done
 }
 
 parse_args "$@"
@@ -174,50 +190,31 @@ if [[ -z "$available_models" ]]; then
   exit 1
 fi
 
-available_model_ids=$(printf '%s\n' "$available_models" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | grep -E '^[a-z0-9._-]+/.+' | sort -u || true)
+available_model_ids=$(normalize_model_ids "$available_models")
 if [[ -z "$available_model_ids" ]]; then
   echo "Error: no OpenCode model IDs found in model list" >&2
   exit 1
 fi
 
 if [[ -z "$SELECTED_MODELS" ]]; then
-  SELECTED_MODELS=$(printf '%s\n' "$available_model_ids" | grep -E '(:free$|(^|[-/])free($|[-/]))' | paste -sd ',' -)
+  SELECTED_MODELS=$(default_free_models "$available_model_ids")
 fi
 
-if printf '%s\n%s\n%s\n%s\n%s\n' "$SELECTED_MODELS" "$PLANNER_MODEL" "$COORDINATOR_MODEL" "$ORCHESTRATOR_MODEL" "$REVIEWER_MODEL" | grep -Eq '(^|,)openai/gpt-5\.5-fast(,|$)'; then
-  echo "Error: openai/gpt-5.5-fast is not allowed for AutoShip. Use openai/gpt-5.5 instead." >&2
-  exit 1
-fi
+reject_forbidden_models "$SELECTED_MODELS,$PLANNER_MODEL,$COORDINATOR_MODEL,$ORCHESTRATOR_MODEL,$REVIEWER_MODEL"
 
 if [[ -z "$SELECTED_MODELS" ]]; then
   echo "Error: no free OpenCode models found. Set AUTOSHIP_MODELS to choose models explicitly." >&2
   exit 1
 fi
 
-missing_models=$(AVAILABLE_MODEL_IDS="$available_model_ids" python3 - "$SELECTED_MODELS" <<'PY'
-import os
-import sys
-selected = [m.strip() for m in sys.argv[1].split(',') if m.strip()]
-available = {line.strip() for line in os.environ.get('AVAILABLE_MODEL_IDS', '').splitlines() if line.strip()}
-missing = [m for m in selected if m not in available]
-print('\n'.join(missing))
-PY
-)
+missing_models=$(find_missing_models "$available_model_ids" "$SELECTED_MODELS")
 if [[ -n "$missing_models" ]]; then
   echo "Error: selected models are not currently available in this OpenCode instance:" >&2
   printf '%s\n' "$missing_models" >&2
   exit 1
 fi
 
-missing_role_models=$(AVAILABLE_MODEL_IDS="$available_model_ids" python3 - "$PLANNER_MODEL" "$COORDINATOR_MODEL" "$ORCHESTRATOR_MODEL" "$REVIEWER_MODEL" <<'PY'
-import os
-import sys
-selected = [m.strip() for m in sys.argv[1:] if m.strip()]
-available = {line.strip() for line in os.environ.get('AVAILABLE_MODEL_IDS', '').splitlines() if line.strip()}
-missing = [m for m in selected if m not in available]
-print('\n'.join(dict.fromkeys(missing)))
-PY
-)
+missing_role_models=$(find_missing_models "$available_model_ids" "$PLANNER_MODEL" "$COORDINATOR_MODEL" "$ORCHESTRATOR_MODEL" "$REVIEWER_MODEL")
 if [[ -n "$missing_role_models" ]]; then
   echo "Error: planner/coordinator/orchestrator models are not currently available in this OpenCode instance:" >&2
   printf '%s\n' "$missing_role_models" >&2

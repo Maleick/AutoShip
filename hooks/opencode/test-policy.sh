@@ -303,4 +303,6 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   test -f "$CONFIG_DIR/.autoship/VERSION" || fail "package installer copies VERSION"
 )
 
+bash "$SCRIPT_DIR/test-model-parsing.sh" >/dev/null
+
 echo "OpenCode policy tests passed"

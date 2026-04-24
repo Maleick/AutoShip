@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+fail() {
+  printf 'FAIL: %s\n' "$1" >&2
+  exit 1
+}
+
+assert_eq() {
+  local expected="$1"
+  local actual="$2"
+  local message="$3"
+  if [[ "$expected" != "$actual" ]]; then
+    fail "$message: expected '$expected', got '$actual'"
+  fi
+}
+
+source "$SCRIPT_DIR/model-parser.sh"
+
+AVAILABLE="opencode/nemotron-3-super-free
+opencode/minimax-m2.5-free
+openrouter/google/gemma-3-27b-it:free
+openai/gpt-5.5
+openai/gpt-5.3-codex-spark"
+AVAILABLE_IDS=$(normalize_model_ids "$AVAILABLE")
+
+echo "=== Test: free model IDs ==="
+DEFAULT_FREE=$(default_free_models "$AVAILABLE_IDS")
+DEFAULT_FREE_NL=$(printf '%s\n' "$DEFAULT_FREE" | tr ',' '\n')
+assert_eq "3" "$(classify_models "$DEFAULT_FREE_NL" | grep -c ':free' || true)" "default model pool prefers free models"
+
+echo "=== Test: explicit selected model IDs ==="
+SELECTED_INPUT="openai/gpt-5.5,openai/gpt-5.3-codex-spark"
+SELECTED_NL=$(printf '%s\n' "$SELECTED_INPUT" | tr ',' '\n')
+assert_eq "2" "$(classify_models "$SELECTED_NL" | grep -c ':selected' || true)" "explicit selected models should be marked selected"
+
+echo "=== Test: unavailable model IDs ==="
+MISSING=$(find_missing_models "$AVAILABLE_IDS" "opencode/unavailable-model,openai/gpt-5.5")
+assert_eq "opencode/unavailable-model" "$MISSING" "unavailable selected models are reported"
+
+echo "=== Test: forbidden model IDs ==="
+if reject_forbidden_models "openai/gpt-5.5-fast" 2>/dev/null; then
+  fail "gpt-5.5-fast must be rejected"
+fi
+
+echo "=== Test: setup accepts portable --no-tui flags ==="
+MODEL_REPO="$TMP_DIR/model-repo"
+mkdir -p "$MODEL_REPO/bin" "$MODEL_REPO/autoship/hooks/opencode"
+cp "$SCRIPT_DIR/setup.sh" "$SCRIPT_DIR/model-parser.sh" "$MODEL_REPO/autoship/hooks/opencode/"
+chmod +x "$MODEL_REPO/autoship/hooks/opencode/setup.sh"
+cat > "$MODEL_REPO/bin/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "auth status" ]]; then
+  exit 0
+fi
+exit 0
+SH
+cat > "$MODEL_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1" == "models" ]]; then
+  printf '%s\n' 'opencode/nemotron-3-super-free' 'opencode/minimax-m2.5-free' 'openai/gpt-5.5' 'openai/gpt-5.3-codex-spark'
+  exit 0
+fi
+printf '%s\n' '1.0.0'
+SH
+chmod +x "$MODEL_REPO/bin/gh" "$MODEL_REPO/bin/opencode"
+(
+  cd "$MODEL_REPO/autoship"
+  PATH="$MODEL_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --max-agents=7 --labels=agent:ready,needs-review --worker-models=openai/gpt-5.3-codex-spark >/dev/null
+)
+assert_eq "openai/gpt-5.3-codex-spark" "$(jq -r '.models[0].id' "$MODEL_REPO/autoship/.autoship/model-routing.json")" "setup writes explicit selected worker model"
+assert_eq "selected" "$(jq -r '.models[0].cost' "$MODEL_REPO/autoship/.autoship/model-routing.json")" "setup classifies explicit worker model as selected"
+assert_eq "7" "$(jq -r '.maxConcurrentAgents' "$MODEL_REPO/autoship/.autoship/config.json")" "setup honors portable --max-agents flag"
+assert_eq "agent:ready,needs-review" "$(jq -r '.labels | join(",")' "$MODEL_REPO/autoship/.autoship/config.json")" "setup honors portable --labels flag"
+
+echo "=== Test: setup rejects unavailable and forbidden models ==="
+if (cd "$MODEL_REPO/autoship" && PATH="$MODEL_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --refresh-models --worker-models=missing/model >/dev/null 2>&1); then
+  fail "setup should reject unavailable worker models"
+fi
+if (cd "$MODEL_REPO/autoship" && PATH="$MODEL_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --refresh-models --planner-model=openai/gpt-5.5-fast >/dev/null 2>&1); then
+  fail "setup should reject forbidden planner models"
+fi
+
+echo "OpenCode model parsing tests passed"
