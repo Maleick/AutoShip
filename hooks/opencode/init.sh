@@ -49,7 +49,7 @@ mkdir -p "$AUTOSHIP_DIR/results"
 # Initialize files
 [[ ! -f "$AUTOSHIP_DIR/event-queue.json" ]] && echo '[]' > "$AUTOSHIP_DIR/event-queue.json"
 [[ ! -f "$AUTOSHIP_DIR/.pr-monitor-seen.json" ]] && echo '{}' > "$AUTOSHIP_DIR/.pr-monitor-seen.json"
-[[ ! -f "$AUTOSHIP_DIR/quota.json" ]] && bash "$SCRIPT_DIR/quota-update.sh" init 2>/dev/null || true
+[[ ! -f "$AUTOSHIP_DIR/quota.json" ]] && bash "$(dirname "$SCRIPT_DIR")/quota-update.sh" init 2>/dev/null || true
 [[ ! -f "$AUTOSHIP_DIR/config.json" ]] && echo '{}' > "$AUTOSHIP_DIR/config.json"
 
 # Initialize state.json

@@ -153,6 +153,7 @@ JSON
 )
 expected_version=$(tr -d '[:space:]' < "$SCRIPT_DIR/../../VERSION")
 assert_eq "$expected_version" "$(jq -r '.autoship_version' "$INIT_REPO/.autoship/state.json")" "init refreshes autoship_version from VERSION file"
+test -f "$INIT_REPO/.autoship/quota.json" || fail "init creates quota.json using the shared quota-update hook"
 
 WORKTREE_REPO="$TMP_DIR/worktree-repo"
 mkdir -p "$WORKTREE_REPO"
