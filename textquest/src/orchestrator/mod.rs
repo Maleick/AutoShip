@@ -26,7 +26,9 @@ use crate::{
     economy::price_monitor::TradePriceMonitor,
     ipc::{pipe::CommandPipe, shared::SharedStateReader},
     loot::vendor_cycle::VendorInventoryItem,
-    metrics::{AdminMonitoringStore, SessionErrorKind, SessionMonitoringSnapshot},
+    metrics::{
+        AdminMonitoringStore, MetricsCollector, SessionErrorKind, SessionMonitoringSnapshot,
+    },
     say_detection::{SayAction, SayDetector, SayPattern, SayRule},
 };
 use std::{
@@ -169,6 +171,9 @@ pub struct Orchestrator {
     persisted_live_spawn_snapshot: bool,
     /// Stable admin-monitoring store reused by later diagnostics surfaces.
     monitoring: AdminMonitoringStore,
+    /// Real-time fleet metrics collector fed from game state, IPC, loot, and
+    /// combat-event hooks.
+    metrics_collector: MetricsCollector,
     // Pipe connections are created per-command (connect → token → command → drop).
     // The DLL's pipe server disconnects after each command, so persistent
     // connections would fail on the second write.
@@ -261,6 +266,7 @@ impl Orchestrator {
             last_live_spawn_snapshot: LiveSpawnSnapshot::default(),
             persisted_live_spawn_snapshot: false,
             monitoring: AdminMonitoringStore::new(),
+            metrics_collector: MetricsCollector::new(),
             operating_mode: OperatingMode::Camp,
             active_hunt: None,
             sell_cycle: None,
@@ -594,6 +600,9 @@ impl Orchestrator {
         self.last_dispatched.clear();
 
         self.poll_game_states();
+        self.metrics_collector
+            .collect_game_state_snapshots(&self.client_names, &self.game_states);
+        self.metrics_collector.tick();
         if self.tick_count == 1 || self.tick_count.is_multiple_of(REWARD_CONFIG_SYNC_INTERVAL) {
             self.sync_reward_automation_configs();
         }
@@ -1104,6 +1113,9 @@ impl Orchestrator {
         self.bind_monitored_client(client_id, pid);
         self.monitoring
             .record_memory_sample(client_id, memory_bytes);
+        let character_name = self.metrics_character_name_for_pid(pid);
+        self.metrics_collector
+            .record_system_sample(&character_name, Some(memory_bytes), None);
     }
 
     /// Record an operational error against a managed session.
@@ -1120,6 +1132,37 @@ impl Orchestrator {
     #[must_use]
     pub fn monitoring_snapshot(&self, client_id: ClientId) -> Option<SessionMonitoringSnapshot> {
         self.monitoring.snapshot(client_id, Instant::now())
+    }
+
+    /// Return the live metrics collector.
+    #[must_use]
+    pub fn metrics_collector(&self) -> &MetricsCollector {
+        &self.metrics_collector
+    }
+
+    /// Return the live metrics collector mutably for source-specific hooks.
+    pub fn metrics_collector_mut(&mut self) -> &mut MetricsCollector {
+        &mut self.metrics_collector
+    }
+
+    fn metrics_character_name_for_pid(&self, pid: u32) -> String {
+        self.client_names
+            .get(&pid)
+            .filter(|name| !name.trim().is_empty())
+            .cloned()
+            .or_else(|| {
+                self.game_states.get(&pid).and_then(|state| {
+                    state.local_player.as_ref().and_then(|player| {
+                        let name = if player.displayed_name.trim().is_empty() {
+                            &player.name
+                        } else {
+                            &player.displayed_name
+                        };
+                        (!name.trim().is_empty()).then(|| name.clone())
+                    })
+                })
+            })
+            .unwrap_or_else(|| format!("pid:{pid}"))
     }
 
     /// Cache the character name used by admin inventory and cross-group
@@ -1279,6 +1322,9 @@ impl Orchestrator {
             .max(1) as u64;
         self.monitoring
             .record_ipc_latency_at(client_id, latency_ms, finished_at);
+        let character_name = self.metrics_character_name_for_pid(pid);
+        self.metrics_collector
+            .record_system_sample(&character_name, None, Some(latency_ms));
     }
 
     fn record_ipc_error_for_pid(&mut self, pid: u32, kind: SessionErrorKind) {
