@@ -39,11 +39,19 @@ run_worker() {
 }
 
 mark_stuck_unless_terminal() {
+  local wid="$1"
+  local repo_root="$2"
   local current=""
   [[ -f status ]] && current=$(tr -d '[:space:]' < status)
   case "$current" in
     COMPLETE|BLOCKED|STUCK) ;;
-    *) echo "STUCK" > status ;;
+    *)
+      echo "STUCK" > status
+      if [[ -x "$repo_root/hooks/capture-failure.sh" ]]; then
+        error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker exited without terminal status")
+        bash "$repo_root/hooks/capture-failure.sh" stuck "$wid" "error_summary=$error_msg" 2>/dev/null || true
+      fi
+      ;;
   esac
 }
 
@@ -68,6 +76,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
   role="implementer"
   [[ -f "$model_file" ]] && model=$(cat "$model_file")
   [[ -f "$role_file" ]] && role=$(cat "$role_file")
+  issue_id="$(basename "$dir")"
   echo "RUNNING" > "$status_file"
   bash "$REPO_ROOT/hooks/update-state.sh" set-running "$(basename "$dir")" agent="$model" model="$model" role="$role" 2>/dev/null || true
 
@@ -78,13 +87,20 @@ for dir in "$WORKSPACES_DIR"/*/; do
       cd "$dir"
       if command -v opencode >/dev/null 2>&1; then
         if run_worker "$model" > AUTOSHIP_RUNNER.log 2>&1; then
-          mark_stuck_unless_terminal
+          mark_stuck_unless_terminal "$issue_id" "$REPO_ROOT"
         else
           echo "STUCK" > status
+          if [[ -x "$REPO_ROOT/hooks/capture-failure.sh" ]]; then
+            error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker run failed")
+            bash "$REPO_ROOT/hooks/capture-failure.sh" model_failure "$issue_id" "error_summary=$error_msg" 2>/dev/null || true
+          fi
         fi
       else
         echo "opencode CLI not found" > AUTOSHIP_RUNNER.log
         echo "STUCK" > status
+        if [[ -x "$REPO_ROOT/hooks/capture-failure.sh" ]]; then
+          bash "$REPO_ROOT/hooks/capture-failure.sh" model_failure "$issue_id" "error_summary=opencode CLI not found" 2>/dev/null || true
+        fi
       fi
     ) &
     echo "Started $(basename "$dir") with $model"
