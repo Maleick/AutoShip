@@ -277,6 +277,50 @@ assert_eq "true" "$(echo "$POOL_MODELS" | grep -q "free/strong:free" && echo "tr
 POOL_MODELS=$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --pool frontend)
 assert_eq "true" "$(echo "$POOL_MODELS" | grep -q "free/strong:free" && echo "true" || echo "false")" "selector --pool frontend returns frontend pool models"
 
+ROUTING_LOG=$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --log simple_code 101)
+assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "routing_log:" && echo "true" || echo "false")" "selector --log outputs routing log"
+assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "selection: free/strong:free" && echo "true" || echo "false")" "routing log shows free model selection"
+assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "score:" && echo "true" || echo "false")" "routing log shows score"
+assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "reason:" && echo "true" || echo "false")" "routing log shows reason"
+assert_eq "true" "$(echo "$ROUTING_LOG" | grep -q "final_selection: free/reliable:free" && echo "true" || echo "false")" "routing log shows final selection"
+
+cat > "$SELECT_REPO/.autoship/model-history.json" <<'JSON'
+{
+  "free/strong:free": {"success": 0, "fail": 6},
+  "free/reliable:free": {"success": 4, "fail": 0}
+}
+JSON
+
+ROUTING_LOG_ESCALATE=$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --log simple_code 101)
+assert_eq "true" "$(echo "$ROUTING_LOG_ESCALATE" | grep -q "free model selected by default" && echo "true" || echo "false")" "routing log shows free selection reason"
+
+cat > "$SELECT_REPO/.autoship/model-routing.json" <<'JSON'
+{
+  "roles": {
+    "planner": "openai/gpt-5.5",
+    "coordinator": "openai/gpt-5.5",
+    "orchestrator": "openai/gpt-5.5",
+    "reviewer": "openai/gpt-5.5",
+    "lead": "openai/gpt-5.5"
+  },
+  "pools": {
+    "default": {"description": "Default pool", "models": ["free/strong:free", "free/reliable:free"]},
+    "frontend": {"description": "Frontend", "models": ["free/strong:free"]},
+    "backend": {"description": "Backend", "models": ["free/reliable:free"]}
+  },
+  "models": [
+    {"id":"free/strong:free","cost":"free","strength":90,"max_task_types":["simple_code"]},
+    {"id":"free/reliable:free","cost":"free","strength":70,"max_task_types":["simple_code"]},
+    {"id":"openai/gpt-5.3-codex-spark","cost":"selected","strength":95,"max_task_types":["complex"]},
+    {"id":"opencode-go/qwen3.6-plus","cost":"selected","strength":110,"max_task_types":["medium_code"]}
+  ]
+}
+JSON
+
+ROUTING_LOG_COMPLEX=$(cd "$SELECT_REPO" && bash hooks/opencode/select-model.sh --log complex 102)
+assert_eq "true" "$(echo "$ROUTING_LOG_COMPLEX" | grep -q "final_selection: openai/gpt-5.3-codex-spark" && echo "true" || echo "false")" "routing log shows Spark for complex task"
+assert_eq "true" "$(echo "$ROUTING_LOG_COMPLEX" | grep -q "Spark model selected for complex task" && echo "true" || echo "false")" "routing log shows escalation reason for Spark"
+
 UPDATE_REPO="$TMP_DIR/update-repo"
 mkdir -p "$UPDATE_REPO/.autoship" "$UPDATE_REPO/bin" "$UPDATE_REPO/hooks"
 git init -q "$UPDATE_REPO"
