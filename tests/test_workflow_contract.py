@@ -85,6 +85,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("    name: Advisory dependency checks (manual)", advisory_checks)
         self.assertIn("    if: github.event_name == 'workflow_dispatch'", advisory_checks)
         self.assertIn("    continue-on-error: true", advisory_checks)
+        self.assertIn("    needs: merge_gate", test_matrix)
         self.assertIn(
             "    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false",
             test_matrix,
@@ -161,11 +162,40 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(text.count("DPkg::Lock::Timeout=300 update"), 2)
         self.assertEqual(text.count("DPkg::Lock::Timeout=300 install -y"), 2)
 
-    def test_metrics_workflow_refreshes_static_badges_without_looping(self) -> None:
+    def test_ci_uses_isolated_target_dirs_without_target_cache(self) -> None:
+        text = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/${{ github.run_id }}/merge-gate",
+            text,
+        )
+        self.assertIn(
+            "CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/${{ github.run_id }}/test-${{ matrix.os-name }}-${{ matrix.rust }}",
+            text,
+        )
+        self.assertIn(
+            "CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/${{ github.run_id }}/advisory",
+            text,
+        )
+        self.assertIn(
+            "CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/${{ github.run_id }}/coverage",
+            text,
+        )
+        self.assertIn('CARGO_BUILD_JOBS: "1"', text)
+        self.assertEqual(text.count("cache-targets: false"), 3)
+
+    def test_ci_installs_python_test_dependencies(self) -> None:
+        text = (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+
+        self.assertIn("Install Python test dependencies", text)
+        self.assertIn("python3 -m pip install PyYAML==6.0.3", text)
+
+    def test_metrics_workflow_checks_static_badges_without_protected_branch_push(self) -> None:
         text = (WORKFLOWS / "metrics.yml").read_text(encoding="utf-8")
         workflow = self._load_workflow("metrics.yml")
         push = workflow["on"]["push"]
 
+        self.assertEqual(workflow["permissions"]["contents"], "read")
         self.assertEqual(push.get("branches"), ["master"])
         self.assertNotIn("paths:", text)
         self.assertNotIn("paths-ignore:", text)
@@ -176,6 +206,9 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("[skip metrics]", text)
         self.assertIn("fetch-depth: 0", text)
         self.assertIn("fetch-tags: true", text)
+        self.assertIn("README metrics are stale; update them in a normal PR.", text)
+        self.assertNotIn("git commit", text)
+        self.assertNotIn("git push", text)
 
     def test_pages_workflow_deploys_checked_in_site(self) -> None:
         text = (WORKFLOWS / "docs-pages.yml").read_text(encoding="utf-8")

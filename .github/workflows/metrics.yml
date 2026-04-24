@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   update-metrics:
@@ -23,7 +23,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
           fetch-tags: true
 
@@ -42,14 +41,11 @@ jobs:
       - name: Run metrics update
         run: python3 scripts/update_readme_metrics.py
 
-      - name: Commit if changed
+      - name: Report metrics drift
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add README.md docs/wiki/Project-Metrics.md
-          if git diff --staged --quiet; then
-            echo "No metrics change"
+          if git diff --quiet -- README.md docs/wiki/Project-Metrics.md; then
+            echo "No metrics drift"
           else
-            git commit -m "chore(docs): auto-refresh metrics [skip ci] [skip metrics]"
-            git push
+            echo "::notice::README metrics are stale; update them in a normal PR."
+            git diff -- README.md docs/wiki/Project-Metrics.md
           fi

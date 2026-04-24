@@ -23,6 +23,8 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 90
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/${{ github.run_id }}/merge-gate
     steps:
       - uses: actions/checkout@v4
         with:
@@ -95,6 +97,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install Python test dependencies
+        if: steps.scope.outputs.docs_only != 'true'
+        run: python3 -m pip install PyYAML==6.0.3
+
       - name: Setup Rust
         if: steps.scope.outputs.docs_only != 'true'
         uses: dtolnay/rust-toolchain@stable
@@ -104,6 +110,8 @@ jobs:
       - name: Cache cargo registry
         if: steps.scope.outputs.docs_only != 'true'
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
 
       - name: Check Rust formatting
         if: steps.scope.outputs.docs_only != 'true'
@@ -169,10 +177,14 @@ jobs:
 
       - name: Run coverage (threshold 68%)
         if: steps.scope.outputs.docs_only != 'true'
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/${{ github.run_id }}/coverage
+          CARGO_BUILD_JOBS: "1"
         run: python3 scripts/coverage-report.py --threshold 68
 
   test-matrix:
     name: Unit tests on ${{ matrix.os-name }} (rust-${{ matrix.rust }})
+    needs: merge_gate
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     strategy:
       fail-fast: false
@@ -196,6 +208,8 @@ jobs:
             test-command: cargo test --lib --all-features
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/${{ github.run_id }}/test-${{ matrix.os-name }}-${{ matrix.rust }}
     steps:
       - uses: actions/checkout@v4
 
@@ -225,6 +239,8 @@ jobs:
 
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
 
       - name: Run unit tests
         continue-on-error: ${{ matrix.continue-on-error == true }}
@@ -251,6 +267,8 @@ jobs:
     runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 15
     continue-on-error: true
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/${{ github.run_id }}/advisory
     steps:
       - uses: actions/checkout@v4
 
@@ -259,6 +277,8 @@ jobs:
 
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: false
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
