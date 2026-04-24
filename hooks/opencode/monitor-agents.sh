@@ -24,14 +24,22 @@ emit_event() {
     --arg issue "$issue" \
     --arg status "$status" \
     --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{type: $type, issue: $issue, priority: 2, data: {status: $status}, queued_at: $ts}')
+      '{type: $type, issue: $issue, priority: 2, data: {status: $status}, queued_at: $ts}')
 
-  (
-    flock -x 200 || exit 1
+  write_event() {
     jq --argjson evt "$event" '. + [$evt]' "$EVENT_QUEUE" > "${EVENT_QUEUE}.tmp" 2>/dev/null
     mv "${EVENT_QUEUE}.tmp" "$EVENT_QUEUE" 2>/dev/null || true
     touch "$marker" 2>/dev/null || true
-  ) 200>"$LOCK_FILE"
+  }
+
+  if command -v flock >/dev/null 2>&1; then
+    (
+      flock -x 200 || exit 1
+      write_event
+    ) 200>"$LOCK_FILE"
+  else
+    write_event
+  fi
 }
 
 check_stalled() {
@@ -59,6 +67,40 @@ check_stalled() {
   fi
 }
 
+is_worker_live() {
+  local pid_file="$1/worker.pid"
+  [[ -s "$pid_file" ]] || return 0
+  local pid
+  pid=$(tr -d '[:space:]' < "$pid_file")
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+has_fresh_result() {
+  local dir="$1"
+  local result_file="$dir/AUTOSHIP_RESULT.md"
+  local started_file="$dir/started_at"
+  [[ -s "$result_file" ]] || return 1
+  [[ ! -f "$started_file" || "$result_file" -nt "$started_file" ]]
+}
+
+reconcile_exited_worker() {
+  local dir="$1"
+  local key
+  key=$(basename "$dir")
+  local status_file="$dir/status"
+
+  is_worker_live "$dir" && return 0
+
+  if has_fresh_result "$dir"; then
+    echo "COMPLETE" > "$status_file"
+    emit_event "verify" "$key" "COMPLETE"
+  else
+    echo "STUCK" > "$status_file"
+    emit_event "stuck" "$key" "STUCK"
+  fi
+}
+
 for dir in "$WORKSPACES_DIR"/*/; do
   [[ -d "$dir" ]] || continue
   key=$(basename "$dir")
@@ -79,6 +121,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
       emit_event "stuck" "$key" "STUCK"
       ;;
     RUNNING)
+      reconcile_exited_worker "$dir"
       check_stalled "$dir"
       ;;
   esac
