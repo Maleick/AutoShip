@@ -443,6 +443,248 @@ pub struct AutoClaimPreferences {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BankLocationHint {
+    pub zone: String,
+    pub banker_name: String,
+    pub nav_waypoint: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AutoBankingRuleAction {
+    Deposit,
+    Withdraw,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AutoBankingRule {
+    pub item_matcher: String,
+    pub action: AutoBankingRuleAction,
+    pub keep_on_hand: u32,
+    pub enabled: bool,
+}
+
+impl AutoBankingRule {
+    #[must_use]
+    pub fn deposit(item_matcher: impl Into<String>, keep_on_hand: u32) -> Self {
+        Self {
+            item_matcher: item_matcher.into(),
+            action: AutoBankingRuleAction::Deposit,
+            keep_on_hand,
+            enabled: true,
+        }
+    }
+
+    #[must_use]
+    pub fn withdraw(item_matcher: impl Into<String>, keep_on_hand: u32) -> Self {
+        Self {
+            item_matcher: item_matcher.into(),
+            action: AutoBankingRuleAction::Withdraw,
+            keep_on_hand,
+            enabled: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AutoBankingCurrencyRule {
+    pub enabled: bool,
+    pub keep_platinum_on_hand: u64,
+    pub deposit_platinum_above: u64,
+    pub withdraw_platinum_below: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AutoBankingInventoryTrigger {
+    pub min_free_inventory_slots: u32,
+    pub return_to_camp_after_banking: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AutoBankingConfig {
+    pub enabled: bool,
+    #[serde(default)]
+    pub bank_locations: Vec<BankLocationHint>,
+    #[serde(default)]
+    pub item_rules: Vec<AutoBankingRule>,
+    pub currency: AutoBankingCurrencyRule,
+    pub inventory_trigger: AutoBankingInventoryTrigger,
+}
+
+impl Default for AutoBankingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bank_locations: vec![BankLocationHint {
+                zone: "poknowledge".into(),
+                banker_name: "Banker Griphon".into(),
+                nav_waypoint: "bank".into(),
+            }],
+            item_rules: vec![
+                AutoBankingRule::deposit("Silk Swatch", 20),
+                AutoBankingRule::withdraw("Peridot", 20),
+            ],
+            currency: AutoBankingCurrencyRule {
+                enabled: true,
+                keep_platinum_on_hand: 5_000,
+                deposit_platinum_above: 10_000,
+                withdraw_platinum_below: 1_000,
+            },
+            inventory_trigger: AutoBankingInventoryTrigger {
+                min_free_inventory_slots: 4,
+                return_to_camp_after_banking: true,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AutoBankingItemState {
+    pub item_name: String,
+    pub carried_count: u32,
+    pub bank_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AutoBankingContext {
+    pub current_zone: Option<String>,
+    pub at_bank: bool,
+    pub free_inventory_slots: u32,
+    pub platinum: u64,
+    pub item: Option<AutoBankingItemState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", tag = "action")]
+pub enum AutoBankingDecision {
+    Idle,
+    NavigateToBank {
+        zone: String,
+        nav_waypoint: String,
+        banker_name: String,
+    },
+    DepositItem {
+        item_name: String,
+        quantity: u32,
+    },
+    WithdrawItem {
+        item_name: String,
+        quantity: u32,
+    },
+    DepositPlatinum {
+        amount: u64,
+    },
+    WithdrawPlatinum {
+        amount: u64,
+    },
+}
+
+pub trait AutoBankingPlanner {
+    fn plan_auto_banking(&self, context: AutoBankingContext) -> AutoBankingDecision;
+}
+
+impl AutoBankingPlanner for InventoryUtilityConfig {
+    fn plan_auto_banking(&self, context: AutoBankingContext) -> AutoBankingDecision {
+        let config = &self.auto_banking;
+        if !config.enabled {
+            return AutoBankingDecision::Idle;
+        }
+
+        let location = context.current_zone.as_ref().and_then(|zone| {
+            let normalized_zone = normalize_matcher(zone);
+            config
+                .bank_locations
+                .iter()
+                .find(|location| normalize_matcher(&location.zone) == normalized_zone)
+        });
+
+        let item_action_pending = context.item.as_ref().is_some_and(|item| {
+            let normalized_item = normalize_matcher(&item.item_name);
+            config
+                .item_rules
+                .iter()
+                .find(|rule| {
+                    rule.enabled && normalize_matcher(&rule.item_matcher) == normalized_item
+                })
+                .is_some_and(|rule| match rule.action {
+                    AutoBankingRuleAction::Deposit => item.carried_count > rule.keep_on_hand,
+                    AutoBankingRuleAction::Withdraw => {
+                        item.carried_count < rule.keep_on_hand && item.bank_count > 0
+                    }
+                })
+        });
+        let currency_action_pending = config.currency.enabled
+            && (context.platinum > config.currency.deposit_platinum_above
+                || context.platinum < config.currency.withdraw_platinum_below);
+        let inventory_trigger_pending =
+            context.free_inventory_slots <= config.inventory_trigger.min_free_inventory_slots;
+
+        if !context.at_bank
+            && (inventory_trigger_pending || item_action_pending || currency_action_pending)
+        {
+            if let Some(location) = location {
+                return AutoBankingDecision::NavigateToBank {
+                    zone: location.zone.clone(),
+                    nav_waypoint: location.nav_waypoint.clone(),
+                    banker_name: location.banker_name.clone(),
+                };
+            }
+        }
+
+        if config.currency.enabled && context.platinum > config.currency.deposit_platinum_above {
+            return AutoBankingDecision::DepositPlatinum {
+                amount: context
+                    .platinum
+                    .saturating_sub(config.currency.keep_platinum_on_hand),
+            };
+        }
+
+        if config.currency.enabled && context.platinum < config.currency.withdraw_platinum_below {
+            return AutoBankingDecision::WithdrawPlatinum {
+                amount: config
+                    .currency
+                    .keep_platinum_on_hand
+                    .saturating_sub(context.platinum),
+            };
+        }
+
+        let Some(item) = context.item else {
+            return AutoBankingDecision::Idle;
+        };
+        let normalized_item = normalize_matcher(&item.item_name);
+        let Some(rule) = config
+            .item_rules
+            .iter()
+            .find(|rule| rule.enabled && normalize_matcher(&rule.item_matcher) == normalized_item)
+        else {
+            return AutoBankingDecision::Idle;
+        };
+
+        match rule.action {
+            AutoBankingRuleAction::Deposit if item.carried_count > rule.keep_on_hand => {
+                AutoBankingDecision::DepositItem {
+                    item_name: item.item_name,
+                    quantity: item.carried_count - rule.keep_on_hand,
+                }
+            }
+            AutoBankingRuleAction::Withdraw if item.carried_count < rule.keep_on_hand => {
+                let wanted = rule.keep_on_hand - item.carried_count;
+                let quantity = wanted.min(item.bank_count);
+                if quantity == 0 {
+                    AutoBankingDecision::Idle
+                } else {
+                    AutoBankingDecision::WithdrawItem {
+                        item_name: item.item_name,
+                        quantity,
+                    }
+                }
+            }
+            _ => AutoBankingDecision::Idle,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct InventoryUtilityConfig {
     #[serde(default)]
     pub plugin_mappings: Vec<PluginMapping>,
@@ -462,6 +704,8 @@ pub struct InventoryUtilityConfig {
     pub relocation_rules: Vec<RelocationRule>,
     pub trophy_preferences: TrophyPreferences,
     pub auto_claim: AutoClaimPreferences,
+    #[serde(default)]
+    pub auto_banking: AutoBankingConfig,
 }
 
 impl Default for InventoryUtilityConfig {
@@ -565,6 +809,13 @@ pub fn default_inventory_utility_config() -> InventoryUtilityConfig {
                 config_surface: "Loot Config > Inventory Utilities".into(),
                 notes: "Claim policies are tracked in the shared inventory surface while popup automation remains adapter-backed.".into(),
             },
+            PluginMapping {
+                plugin: "MQ2AutoBank".into(),
+                owner: "inventory_utility.auto_banking".into(),
+                status: PluginCoverageStatus::Deferred,
+                config_surface: "Camp Settings > Auto Banking".into(),
+                notes: "Bank locations, item transfer rules, currency thresholds, and inventory triggers are modeled for camp-loop integration.".into(),
+            },
         ],
         legacy_adapters: vec![
             LegacyAdapterWarning {
@@ -651,5 +902,6 @@ pub fn default_inventory_utility_config() -> InventoryUtilityConfig {
             claim_task_windows: true,
             once_per_session: true,
         },
+        auto_banking: AutoBankingConfig::default(),
     }
 }

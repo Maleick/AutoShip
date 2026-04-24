@@ -1,4 +1,5 @@
 use textquest_common::inventory_utility::{
+    AutoBankingContext, AutoBankingDecision, AutoBankingItemState, AutoBankingPlanner,
     CollectionRoute, CollectionRoutingRule, ConsumableKind, ConsumablePreferences, ConsumableStack,
     CursorAction, CursorRule, RewardClaimDecision, RewardRoutingRule, VendorListing,
     VendorWatchRule, decide_cursor_action, default_inventory_utility_config,
@@ -17,7 +18,7 @@ fn default_config_covers_every_plugin_in_scope() {
         .map(|entry| entry.plugin.as_str())
         .collect::<Vec<_>>();
 
-    assert_eq!(plugins.len(), 13);
+    assert_eq!(plugins.len(), 14);
     assert!(plugins.contains(&"MQ2LinkDB"));
     assert!(plugins.contains(&"MQ2ItemScore"));
     assert!(plugins.contains(&"MQ2Cursor"));
@@ -31,6 +32,7 @@ fn default_config_covers_every_plugin_in_scope() {
     assert!(plugins.contains(&"MQ2Relocate"));
     assert!(plugins.contains(&"MQ2Vendors"));
     assert!(plugins.contains(&"MQ2AutoClaim"));
+    assert!(plugins.contains(&"MQ2AutoBank"));
 
     let item_score = config
         .plugin_mappings
@@ -46,6 +48,68 @@ fn default_config_covers_every_plugin_in_scope() {
         .find(|entry| entry.plugin == "MQ2PortalSetter")
         .expect("portal setter mapping");
     assert_eq!(portal_setter.status.as_str(), "adapted");
+}
+
+#[test]
+fn auto_banking_navigates_to_configured_bank_when_inventory_is_low() {
+    let mut config = default_inventory_utility_config();
+    config.auto_banking.enabled = true;
+
+    assert_eq!(
+        config.plan_auto_banking(AutoBankingContext {
+            current_zone: Some("poknowledge".into()),
+            at_bank: false,
+            free_inventory_slots: 1,
+            platinum: 5_000,
+            item: None,
+        }),
+        AutoBankingDecision::NavigateToBank {
+            zone: "poknowledge".into(),
+            nav_waypoint: "bank".into(),
+            banker_name: "Banker Griphon".into(),
+        }
+    );
+}
+
+#[test]
+fn auto_banking_deposits_items_above_keep_count() {
+    let mut config = default_inventory_utility_config();
+    config.auto_banking.enabled = true;
+
+    assert_eq!(
+        config.plan_auto_banking(AutoBankingContext {
+            current_zone: Some("poknowledge".into()),
+            at_bank: true,
+            free_inventory_slots: 8,
+            platinum: 5_000,
+            item: Some(AutoBankingItemState {
+                item_name: "Silk Swatch".into(),
+                carried_count: 42,
+                bank_count: 0,
+            }),
+        }),
+        AutoBankingDecision::DepositItem {
+            item_name: "Silk Swatch".into(),
+            quantity: 22,
+        }
+    );
+}
+
+#[test]
+fn auto_banking_deposits_currency_above_threshold() {
+    let mut config = default_inventory_utility_config();
+    config.auto_banking.enabled = true;
+
+    assert_eq!(
+        config.plan_auto_banking(AutoBankingContext {
+            current_zone: Some("poknowledge".into()),
+            at_bank: true,
+            free_inventory_slots: 8,
+            platinum: 12_500,
+            item: None,
+        }),
+        AutoBankingDecision::DepositPlatinum { amount: 7_500 }
+    );
 }
 
 #[test]
