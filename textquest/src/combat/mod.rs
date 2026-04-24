@@ -5,6 +5,8 @@
 pub mod camp_loop;
 /// Complete Heal chain coordination for multi-cleric rotations.
 pub mod ch_chain;
+/// Charm and pet management primitives.
+pub mod charm;
 /// Combat coordinator — manages assist targets and broadcasts commands.
 pub mod coordinator;
 /// Structured combat event tracking — DPS meters, kill counts, damage

@@ -9,6 +9,7 @@ use textquest_common::{
 use super::{
     camp_loop::{CampEvent, CampLoop, CampState},
     ch_chain::ChChain,
+    charm::CharmManager,
     heal_coordinator::{CureCoordinator, HealCoordinator},
     named::{NamedAssistTarget, NamedEncounterDatabase, NamedEncounterTracker},
 };
@@ -26,6 +27,8 @@ pub struct CombatCoordinator {
     prev_dead: HashMap<ClientId, bool>,
     /// Complete Heal chain coordinator — rotates CH casts across clerics.
     pub ch_chain: Option<ChChain>,
+    /// Charm and controlled-pet manager.
+    pub charm_manager: CharmManager,
     /// Cross-group heal arbitration — prevents double-healing across groups.
     pub heal_coordinator: HealCoordinator,
     /// Cross-group cure coordination — prevents duplicate curing.
@@ -50,6 +53,7 @@ impl CombatCoordinator {
             prev_in_combat: false,
             prev_dead: HashMap::new(),
             ch_chain: None,
+            charm_manager: CharmManager::new(),
             heal_coordinator: HealCoordinator::new(),
             cure_coordinator: CureCoordinator::new(),
             named_tracker: NamedEncounterTracker::default(),

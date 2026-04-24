@@ -84,6 +84,15 @@
       "notes": "Add TOML-backed zone metadata, neutral fallback for unknown zones, coordinator-time zone loading, and zone-aware idle weighting for behavior and mood interactions."
     },
     {
+      "id": "issue-799-enhanced-charm-pet-management",
+      "name": "Enhanced charm/pet management",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check -p textquest"
+      ],
+      "notes": "Partial scaffold: combat charm manager tracks charmed and summoned pets, supports charm recast threshold decisions, candidate affinity selection, and first pet follow command. Remaining work includes real spell-slot selection, charm-break conditions, full pet focus/aggression commands, Lua API bindings, and operator configuration loading."
+    },
+    {
       "id": "issue-792-macroquest-plugin-loader-compat-layer",
       "name": "Issue #792 MacroQuest plugin loader and compatibility layer",
       "status": "in_progress",
