@@ -262,7 +262,7 @@ impl MacroQuestPluginLoader {
     }
 
     fn load_with_context(
-        &self,
+        &mut self,
         candidate: &PluginCandidate,
         api: &TextQuestMq2Api,
         loaded_names: &std::collections::BTreeSet<String>,

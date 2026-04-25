@@ -764,6 +764,31 @@ pub enum ConditionExpr {
     HasXTargetAggro,
     /// Burn is in the Ready state and can be activated now.
     BurnReadyAndTriggered,
+    /// The player is positioned behind their current target.
+    BehindTarget,
+    /// The player has a ranged weapon equipped in their ranged slot.
+    RangedWeaponEquipped,
+    /// Target level is below the given value.
+    TargetLevelBelow(u8),
+    /// Player has a piercing weapon equipped in their primary slot.
+    PiercerEquipped,
+}
+
+/// Positional data for the player relative to their current target.
+///
+/// This is a lightweight snapshot populated each frame and passed into the
+/// rotation engine so that positional conditions (backstab, etc.) can be
+/// evaluated without directly accessing EQ memory from condition eval code.
+#[derive(Debug, Clone, Default)]
+pub struct PositionalContext {
+    /// Whether the player is currently positioned behind the target.
+    pub is_behind_target: bool,
+    /// Whether the player has a ranged weapon equipped.
+    pub ranged_weapon_equipped: bool,
+    /// Whether the player has a piercing weapon in the primary slot.
+    pub piercer_equipped: bool,
+    /// Level of the current target (0 = unknown/no target).
+    pub target_level: u8,
 }
 
 /// An emergency reaction rule that fires when conditions are met.

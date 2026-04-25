@@ -175,9 +175,14 @@ impl LeadActor {
     }
 }
 
-#[derive(Debug)]
 struct ReplayStreamWriter {
     writer: Box<dyn Write + Send>,
+}
+
+impl std::fmt::Debug for ReplayStreamWriter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReplayStreamWriter").finish_non_exhaustive()
+    }
 }
 
 impl ReplayStreamWriter {
@@ -489,7 +494,7 @@ fn stream_path(file_name: &str) -> PathBuf {
 }
 
 fn write_json_line<T: Serialize>(writer: &mut dyn Write, value: &T) -> std::io::Result<()> {
-    serde_json::to_writer(writer, value).map_err(std::io::Error::other)?;
+    serde_json::to_writer(&mut *writer, value).map_err(std::io::Error::other)?;
     writer.write_all(b"\n")?;
     writer.flush()
 }

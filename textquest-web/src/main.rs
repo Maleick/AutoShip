@@ -166,6 +166,12 @@ pub struct AppState {
     pub session_logs: tokio::sync::RwLock<HashMap<u32, Vec<String>>>,
     /// Self-improvement suggestions state — events, metrics, and operator feedback.
     pub self_improvement_state: Arc<api::self_improvement::SelfImprovementState>,
+    /// In-memory suggestion state for the suggestion engine.
+    pub suggestion_state: Arc<api::suggestions::SuggestionState>,
+    /// History of configuration changes applied this session.
+    pub config_change_history: tokio::sync::RwLock<Vec<serde_json::Value>>,
+    /// Most recently accepted configuration change (used for promote-to-config).
+    pub last_config_change: tokio::sync::RwLock<Option<serde_json::Value>>,
 }
 
 /// Axum middleware: enforce `X-API-Token` header on all `/api` routes.
@@ -532,6 +538,9 @@ fn build_state() -> Arc<AppState> {
         session_control_state: api::session_control::SessionControlState::new(),
         session_logs: tokio::sync::RwLock::new(HashMap::new()),
         self_improvement_state: Arc::new(api::self_improvement::SelfImprovementState::new()),
+        suggestion_state: api::suggestions::SuggestionState::new(),
+        config_change_history: tokio::sync::RwLock::new(Vec::new()),
+        last_config_change: tokio::sync::RwLock::new(None),
     })
 }
 
@@ -618,6 +627,9 @@ pub(crate) fn test_app_state() -> AppState {
         session_control_state: api::session_control::SessionControlState::new(),
         session_logs: tokio::sync::RwLock::new(HashMap::new()),
         self_improvement_state: Arc::new(api::self_improvement::SelfImprovementState::new()),
+        suggestion_state: api::suggestions::SuggestionState::new(),
+        config_change_history: tokio::sync::RwLock::new(Vec::new()),
+        last_config_change: tokio::sync::RwLock::new(None),
     }
 }
 

@@ -28,6 +28,27 @@ pub struct OpeReport {
     pub beats_bc: bool,
 }
 
+/// Metadata recorded alongside an exported behavior-cloning model.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicyMetadata {
+    /// Character class this model was trained for.
+    pub class: String,
+    /// Map from session_id → (start_flag_idx, end_flag_idx) for the training corpus.
+    pub training_data_manifest: Vec<(String, (u64, u64))>,
+    /// Version string of the context schema used when building the dataset.
+    pub context_schema_version: String,
+    /// Git SHA of the exporter binary at training time.
+    pub exporter_git_sha: String,
+    /// Action-match rate on the held-out split (0–1).
+    pub held_out_action_match_rate: f32,
+    /// Total training samples used.
+    pub total_training_samples: usize,
+    /// Total held-out samples used for evaluation.
+    pub total_heldout_samples: usize,
+    /// Context cluster names that were under-fitted (below coverage threshold).
+    pub underfitted_context_clusters: Vec<String>,
+}
+
 /// Policy artifact holder (ONNX inference handled via Python sidecar)
 pub struct Policy {
     onnx_path: PathBuf,

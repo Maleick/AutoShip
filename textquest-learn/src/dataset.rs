@@ -44,7 +44,8 @@ impl FlaggedSegmentDataset {
             return Err(crate::BehaviorCloningError::Dataset(format!(
                 "No flagged segments found for class '{}'",
                 class
-            )));
+            ))
+            .into());
         }
 
         Ok(FlaggedSegmentDataset {
@@ -61,9 +62,9 @@ impl FlaggedSegmentDataset {
                     .map(|v| {
                         v.as_f64()
                             .ok_or_else(|| {
-                                crate::BehaviorCloningError::Dataset(
+                                anyhow::anyhow!(crate::BehaviorCloningError::Dataset(
                                     "Context element is not a number".to_string(),
-                                )
+                                ))
                             })
                             .map(|f| f as f32)
                     })
@@ -77,16 +78,16 @@ impl FlaggedSegmentDataset {
                     }
                 }
                 if vec.is_empty() {
-                    Err(crate::BehaviorCloningError::Dataset(
+                    Err(anyhow::anyhow!(crate::BehaviorCloningError::Dataset(
                         "Failed to extract numeric values from context".to_string(),
-                    ))
+                    )))
                 } else {
                     Ok(vec)
                 }
             }
-            _ => Err(crate::BehaviorCloningError::Dataset(
+            _ => Err(anyhow::anyhow!(crate::BehaviorCloningError::Dataset(
                 "Context must be array or object".to_string(),
-            )),
+            ))),
         }
     }
 

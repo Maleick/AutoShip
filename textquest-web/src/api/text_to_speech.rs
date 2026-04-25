@@ -32,6 +32,17 @@ pub enum TtsEngine {
     Festival,
 }
 
+impl std::fmt::Display for TtsEngine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TtsEngine::System => write!(f, "system"),
+            TtsEngine::Sapi5 => write!(f, "sapi5"),
+            TtsEngine::AvFoundation => write!(f, "avfoundation"),
+            TtsEngine::Festival => write!(f, "festival"),
+        }
+    }
+}
+
 impl Default for TtsEngine {
     fn default() -> Self {
         #[cfg(target_os = "windows")]
@@ -58,6 +69,22 @@ pub enum TtsChatChannel {
     Shout,
     Ooc,
     Auction,
+}
+
+impl std::fmt::Display for TtsChatChannel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TtsChatChannel::Say => write!(f, "say"),
+            TtsChatChannel::Tell => write!(f, "tell"),
+            TtsChatChannel::TellOut => write!(f, "tell_out"),
+            TtsChatChannel::Group => write!(f, "group"),
+            TtsChatChannel::Guild => write!(f, "guild"),
+            TtsChatChannel::Raid => write!(f, "raid"),
+            TtsChatChannel::Shout => write!(f, "shout"),
+            TtsChatChannel::Ooc => write!(f, "ooc"),
+            TtsChatChannel::Auction => write!(f, "auction"),
+        }
+    }
 }
 
 /// TTS voice settings per-channel.
@@ -136,8 +163,8 @@ impl Default for TextToSpeechState {
 pub async fn get_tts_config(
     State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    let tts_state = state.text_to_speech_state.read().await;
-    (StatusCode::OK, Json(tts_state.config.read().await.clone())).into_response()
+    let config = state.text_to_speech_state.config.read().await;
+    (StatusCode::OK, Json(config.clone())).into_response()
 }
 
 /// PUT /api/tts/config
@@ -145,8 +172,7 @@ pub async fn put_tts_config(
     State(state): State<Arc<AppState>>,
     Json(config): Json<TextToSpeechConfig>,
 ) -> impl IntoResponse {
-    let mut tts_state = state.text_to_speech_state.write().await;
-    *tts_state.config.write().await = config.clone();
+    *state.text_to_speech_state.config.write().await = config.clone();
     (StatusCode::OK, Json(config)).into_response()
 }
 
@@ -171,8 +197,7 @@ pub async fn list_tts_engines() -> impl IntoResponse {
 
 /// GET /api/tts/status — check if TTS system is ready.
 pub async fn get_tts_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let tts_state = state.text_to_speech_state.read().await;
-    let config = tts_state.config.read().await;
+    let config = state.text_to_speech_state.config.read().await;
 
     let status = serde_json::json!({
         "enabled": config.enabled,

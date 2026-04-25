@@ -9,7 +9,7 @@ use rand::Rng;
 /// Box-Muller transform — sample one value from N(0,1).
 fn sample_standard_normal<R: Rng>(rng: &mut R) -> f32 {
     let u1: f32 = rng.gen_range(1e-10_f32..1.0_f32);
-    let u2: f32 = rng.gen::<f32>();
+    let u2: f32 = rng.r#gen::<f32>();
     (-2.0 * u1.ln()).sqrt() * (2.0 * std::f32::consts::PI * u2).cos()
 }
 

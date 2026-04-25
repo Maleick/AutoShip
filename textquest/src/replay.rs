@@ -447,7 +447,7 @@ pub fn list_bundles(root: impl AsRef<Path>, filters: &ReplayListFilters) -> Resu
             }
 
             if let Some(cutoff) = cutoff
-                && let Ok(created) = UNIX_EPOCH.checked_add(Duration::from_secs(meta.created_unix_seconds))
+                && let Some(created) = UNIX_EPOCH.checked_add(Duration::from_secs(meta.created_unix_seconds))
                 && created < cutoff
             {
                 continue;

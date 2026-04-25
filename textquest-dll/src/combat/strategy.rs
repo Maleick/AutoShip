@@ -86,6 +86,9 @@ pub struct CombatContext<'a> {
     pub burnnow_triggered: bool,
     /// Remaining cooldown for burn in combat ticks (0 = ready to activate).
     pub burn_cooldown_ticks: u32,
+    /// Positional context snapshot for the current frame.
+    /// `None` when positional data is not available (e.g., no target).
+    pub positional: Option<&'a PositionalContext>,
 }
 
 impl CombatContext<'_> {

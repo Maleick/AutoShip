@@ -367,7 +367,12 @@ pub struct AppConfig {
     #[serde(default)]
     pub log: LogConfig,
 
+    /// Self-improvement loop configuration for Bayesian suggestion engine.
+    #[serde(default)]
+    pub improve: ImprovementConfig,
+
     /// Session recording configuration for self-improvement loop.
+    #[cfg(windows)]
     #[serde(default)]
     pub session_recorder: crate::metrics::SessionRecorderConfig,
 }

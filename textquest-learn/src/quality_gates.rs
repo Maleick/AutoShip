@@ -61,7 +61,8 @@ impl QualityGates {
                 "Action match rate {:.2}% < {:.2}% minimum",
                 metrics.action_match_rate * 100.0,
                 MIN_ACTION_MATCH_RATE * 100.0
-            )))
+            ))
+            .into())
         }
     }
 

@@ -81,6 +81,24 @@ pub struct SpawnentryRow {
     pub level: Option<u8>,
 }
 
+impl SpawnentryRow {
+    /// Derive a mob family label from the NPC name.
+    ///
+    /// Strips trailing numeric suffixes (e.g. `a_goblin_warrior_3` → `a goblin warrior`)
+    /// so related mobs cluster under the same family.
+    pub fn family_label(&self) -> String {
+        let raw = self.npc_name.as_deref().unwrap_or("unknown");
+        // Replace underscores with spaces, then strip trailing numeric segments.
+        let spaced = raw.replace('_', " ");
+        let trimmed = spaced.trim_end_matches(|c: char| c.is_ascii_digit() || c == ' ');
+        if trimmed.is_empty() {
+            spaced
+        } else {
+            trimmed.to_string()
+        }
+    }
+}
+
 /// In-memory PEQ snapshot used by the camp enumerator.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PeqSnapshot {
@@ -676,8 +694,8 @@ pub fn apply_overrides(
 
         let mut spawngroup_ids = BTreeSet::new();
         let mut mob_families = BTreeSet::new();
-        let mut level_min = None;
-        let mut level_max = None;
+        let mut level_min: Option<u8> = None;
+        let mut level_max: Option<u8> = None;
         for camp in &source_camps {
             spawngroup_ids.extend(camp.spawngroup_ids.iter().copied());
             mob_families.extend(camp.mob_families.iter().cloned());
@@ -822,7 +840,7 @@ fn camp_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Camp> {
             rusqlite::Error::FromSqlConversionFailure(
                 0,
                 rusqlite::types::Type::Text,
-                Box::new(error),
+                error.into(),
             )
         })?,
     })

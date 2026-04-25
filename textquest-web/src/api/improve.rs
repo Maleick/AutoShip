@@ -69,9 +69,9 @@ pub async fn put_auto_promote_settings(
             drop(configs);
 
             let _lock = state.character_config_write_lock.lock().await;
-            if let Err(e) = textquest_common::character_config::save_character_configs(
+            if let Err(e) = crate::api::write_character_configs_to_path(
                 &state.character_config_path,
-                &state.character_configs.read().await,
+                &*state.character_configs.read().await,
             ) {
                 return json_error(
                     StatusCode::INTERNAL_SERVER_ERROR,

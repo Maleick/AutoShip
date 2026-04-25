@@ -6,6 +6,7 @@
 //! The engine iterates groups in priority order, executing entries that pass
 //! their conditions, respecting step limits per frame.
 
+use serde::{Deserialize, Serialize};
 use textquest_common::combat::{ActionType, BurnState, CombatStateReq, ConditionExpr, TargetSelector};
 
 use super::strategy::CombatContext;
@@ -283,6 +284,18 @@ pub fn evaluate_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
         ConditionExpr::BurnReadyAndTriggered => {
             ctx.burn_state == BurnState::Ready && ctx.burnnow_triggered
         }
+        ConditionExpr::BehindTarget => ctx
+            .positional
+            .is_some_and(|p| p.is_behind_target),
+        ConditionExpr::RangedWeaponEquipped => ctx
+            .positional
+            .is_some_and(|p| p.ranged_weapon_equipped),
+        ConditionExpr::PiercerEquipped => ctx
+            .positional
+            .is_some_and(|p| p.piercer_equipped),
+        ConditionExpr::TargetLevelBelow(max_level) => ctx
+            .positional
+            .is_some_and(|p| p.target_level > 0 && p.target_level < *max_level),
     }
 }
 

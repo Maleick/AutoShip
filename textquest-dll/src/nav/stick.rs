@@ -243,6 +243,11 @@ impl StickEngine {
         self.active && self.config.always
     }
 
+    /// Return the active break-condition flags for this stick session.
+    pub fn break_conditions(&self) -> textquest_common::nav::StickBreakConditions {
+        self.config.break_conditions
+    }
+
     /// Build a [`NavStatus::Sticking`] variant for IPC reporting.
     pub fn nav_status(&self, target_id: u32, distance: f32) -> NavStatus {
         let effective_dist = self.effective_distance();
@@ -250,6 +255,7 @@ impl StickEngine {
             target_id,
             distance,
             in_range: distance <= effective_dist + STICK_ARRIVAL_THRESHOLD,
+            break_reason: None,
         }
     }
 

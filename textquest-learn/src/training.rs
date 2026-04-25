@@ -39,7 +39,8 @@ impl BehaviorCloningTrainer {
         if contexts.is_empty() {
             return Err(BehaviorCloningError::Training(
                 "No training samples available".to_string(),
-            ));
+            )
+            .into());
         }
 
 
@@ -139,7 +140,8 @@ impl TrainedModel {
                 "Context dimension mismatch: expected {}, got {}",
                 self.context_dim,
                 context.len()
-            )));
+            ))
+            .into());
         }
 
         let context_vec = ndarray::Array1::from_vec(context.to_vec());
@@ -148,9 +150,9 @@ impl TrainedModel {
         let action = logits
             .iter()
             .enumerate()
-            .max_by(|(_, &a), (_, &b)| a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(idx, _)| idx as u32)
-            .ok_or_else(|| BehaviorCloningError::Training("No actions available".to_string()))?;
+            .ok_or_else(|| anyhow::anyhow!(BehaviorCloningError::Training("No actions available".to_string())))?;
 
         Ok(action)
     }

@@ -111,6 +111,8 @@ pub mod transport_config;
 pub mod types;
 /// Struct size/range validation helpers.
 pub mod validation;
+/// Self-improvement loop shared types — Bayesian posteriors, suggestion events.
+pub mod self_improvement;
 /// Runtime non-persistent setting overrides (rgmercs `tempset` parity, gap #3).
 pub mod tempset;
 /// Window placement, layout persistence, and external HUD integration contracts.

@@ -153,7 +153,9 @@ impl SuggestionState {
 
 impl Default for SuggestionState {
     fn default() -> Self {
-        Self::new().as_ref().clone()
+        Self {
+            suggestions: tokio::sync::RwLock::new(Vec::new()),
+        }
     }
 }
 

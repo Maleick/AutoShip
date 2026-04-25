@@ -1374,6 +1374,23 @@ pub enum Command {
     SendMailToMule {
         /// All fields required to compose and send the mail.
         params: SendMailParams,
+    /// Query the link database for items matching the given criteria.
+    ///
+    /// Returns item-link entries from the in-process link DB cache.
+    QueryLinkdb {
+        /// Optional item name fragment to filter by (empty = return all).
+        name_filter: String,
+        /// Maximum number of results to return.
+        limit: u32,
+    },
+    /// Record an item link in the persistent link database.
+    ///
+    /// Stores the link string and associated metadata for later recall.
+    RecordLinkdbItem {
+        /// The raw EQ item-link string.
+        link: String,
+        /// Human-readable item name extracted from the link.
+        name: String,
     },
 }
 

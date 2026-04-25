@@ -719,7 +719,7 @@ impl Navigator {
             State::Paused(_) => self.tick_paused(),
             State::Moving => self.tick_moving(),
             State::Following { .. } => self.tick_following(nearby),
-            State::Sticking => self.tick_sticking(current_target, nearby, self.cached_stick_target_sample.as_ref()),
+            State::Sticking => self.tick_sticking(current_target, nearby, None),
             State::MovingTo => self.tick_moveto(nearby),
             State::Circling { .. } => self.tick_circling(nearby),
             State::StickBroken { .. } => {}
@@ -850,7 +850,7 @@ impl Navigator {
         }
     }
 
-    fn tick_sticking(&mut self, current_target: Option<&SpawnData>, nearby: &[SpawnData]) {
+    fn tick_sticking(&mut self, current_target: Option<&SpawnData>, nearby: &[SpawnData], _stick_target_sample: Option<&TargetSample>) {
         use super::stick::StickTickResult;
 
         let player_pos = self.controller.read_position();
@@ -1400,6 +1400,16 @@ impl Navigator {
             success: false,
             message: message.to_string(),
         });
+    }
+
+    /// Break stick with a specific reason and transition to `StickBroken` state.
+    fn break_stick(&mut self, reason: StickBreakReason, message: &str) {
+        self.controller.stop_forward();
+        self.controller.stop_back();
+        self.warp.reset();
+        self.pre_pause_state = None;
+        self.state = State::StickBroken { reason };
+        tracing::info!(%message, ?reason, "Stick broken by break condition");
     }
 
     /// Update velocity cache based on position delta.

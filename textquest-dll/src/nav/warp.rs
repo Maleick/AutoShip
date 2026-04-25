@@ -14,6 +14,7 @@ const STABLE_JITTER_DISTANCE: f32 = 5.0;
 const STABLE_TICKS_REQUIRED: u32 = 10;
 
 /// Minimal target snapshot for warp detection.
+#[derive(Clone)]
 pub struct TargetSample {
     /// Spawn ID of the current target.
     pub id: u32,

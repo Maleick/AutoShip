@@ -921,6 +921,8 @@ impl Combatant {
             burn_state: textquest_common::combat::BurnState::Ready,
             burnnow_triggered: false,
             burn_cooldown_ticks: 0,
+
+            positional: None,
                 };
                 self.strategy.on_action_complete(&cleanup_ctx);
                 self.group_members = group_members;
@@ -973,6 +975,8 @@ impl Combatant {
             burn_state: textquest_common::combat::BurnState::Ready,
             burnnow_triggered: false,
             burn_cooldown_ticks: 0,
+
+            positional: None,
             };
 
             // --- Call on_engage when first entering Engaging state ---
@@ -1009,6 +1013,8 @@ impl Combatant {
             burn_state: textquest_common::combat::BurnState::Ready,
             burnnow_triggered: false,
             burn_cooldown_ticks: 0,
+
+            positional: None,
         };
 
         // --- HolyShit evaluation (always runs first) ---
@@ -1108,6 +1114,8 @@ impl Combatant {
             burn_state: textquest_common::combat::BurnState::Ready,
             burnnow_triggered: false,
             burn_cooldown_ticks: 0,
+
+            positional: None,
                     };
                     self.strategy.on_action_complete(&flee_ctx);
                     self.assist_target = None;
@@ -1774,6 +1782,8 @@ impl Combatant {
             burn_state: textquest_common::combat::BurnState::Ready,
             burnnow_triggered: false,
             burn_cooldown_ticks: 0,
+
+            positional: None,
         };
         self.strategy.on_action_complete(&ctx);
 
@@ -1867,6 +1877,8 @@ impl Combatant {
             burn_state: textquest_common::combat::BurnState::Ready,
             burnnow_triggered: false,
             burn_cooldown_ticks: 0,
+
+            positional: None,
         };
 
         self.pending_cast_result = None;

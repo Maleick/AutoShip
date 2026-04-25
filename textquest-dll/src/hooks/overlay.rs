@@ -60,6 +60,86 @@ static LAST_RENDER_NS: AtomicU64 = AtomicU64::new(0);
 /// Count of frames that exceeded [`OVERLAY_RENDER_BUDGET_NS`].
 static OVER_BUDGET_FRAMES: AtomicU64 = AtomicU64::new(0);
 
+// ─── Frame context and result types ──────────────────────────────────────────
+
+/// Input context for a single overlay frame (one Direct3D Present call).
+#[derive(Debug, Clone, Copy)]
+pub struct OverlayFrameContext {
+    /// Which Direct3D backend is active.
+    pub backend: Direct3DBackend,
+    /// Current backbuffer width in pixels.
+    pub width: u32,
+    /// Current backbuffer height in pixels.
+    pub height: u32,
+    /// Number of active render targets tracked by the overlay.
+    pub render_target_count: u32,
+    /// Whether the swap chain is currently in exclusive fullscreen mode.
+    pub fullscreen: bool,
+}
+
+impl OverlayFrameContext {
+    /// Construct an `OverlayFrameContext` for a DX11 Present with the given
+    /// backbuffer dimensions and a single render target.
+    pub fn dx11(width: u32, height: u32) -> Self {
+        Self {
+            backend: Direct3DBackend::Dx11,
+            width,
+            height,
+            render_target_count: 1,
+            fullscreen: false,
+        }
+    }
+
+    /// Override the render-target count (used by swap chains with > 1 buffer).
+    pub fn with_render_targets(mut self, count: u32) -> Self {
+        self.render_target_count = count;
+        self
+    }
+}
+
+/// Result returned from [`render_present`] after one overlay frame.
+#[derive(Debug, Clone, Copy)]
+pub struct OverlayFrameResult {
+    /// Backend that was active for this frame.
+    pub backend: Direct3DBackend,
+    /// CPU-side time spent on overlay rendering, in nanoseconds.
+    pub render_time_ns: u64,
+    /// Number of render targets active during this frame.
+    pub render_target_count: u32,
+    /// `true` if the overlay CPU work exceeded [`OVERLAY_RENDER_BUDGET_NS`].
+    pub over_budget: bool,
+}
+
+// ─── Render pipeline ──────────────────────────────────────────────────────────
+
+/// Minimal pipeline contract: accept a frame context and produce a result.
+trait RenderPipeline: Send {
+    fn sync_targets(&mut self, frame: &OverlayFrameContext);
+    fn render(&mut self, frame: &OverlayFrameContext) -> OverlayFrameResult;
+}
+
+struct NullPipeline;
+
+impl RenderPipeline for NullPipeline {
+    fn sync_targets(&mut self, _frame: &OverlayFrameContext) {}
+    fn render(&mut self, frame: &OverlayFrameContext) -> OverlayFrameResult {
+        let start = std::time::Instant::now();
+        let render_time_ns = start.elapsed().as_nanos() as u64;
+        OverlayFrameResult {
+            backend: frame.backend,
+            render_time_ns,
+            render_target_count: frame.render_target_count.max(1),
+            over_budget: false,
+        }
+    }
+}
+
+static PIPELINE: OnceLock<Mutex<Box<dyn RenderPipeline>>> = OnceLock::new();
+
+fn pipeline() -> &'static Mutex<Box<dyn RenderPipeline>> {
+    PIPELINE.get_or_init(|| Mutex::new(Box::new(NullPipeline)))
+}
+
 // ─── State machine ───────────────────────────────────────────────────────────
 
 /// Overlay lifecycle state.

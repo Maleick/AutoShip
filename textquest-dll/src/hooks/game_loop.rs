@@ -3791,6 +3791,9 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             let paused = crate::boxr::is_paused();
             crate::ipc::send_response(textquest_common::ipc::Response::PauseStatus { paused });
         }
+        Command::QueryLinkdb { .. } | Command::RecordLinkdbItem { .. } => {
+            send_unsupported_command("Linkdb");
+        }
     }
 }
 

@@ -28,9 +28,11 @@ pub mod session_control;
 pub mod soul;
 pub mod sound;
 pub mod spawn_alerts;
+pub mod self_improvement;
 pub mod suggestions;
-pub mod vendor_watch;
+pub mod text_to_speech;
 pub mod transport;
+pub mod vendor_watch;
 pub mod xassist;
 use axum::{
     Json,
@@ -866,6 +868,8 @@ pub struct CharacterConfig {
     pub tribute_preferences: TributePreferences,
     #[serde(default)]
     pub tribute_status: TributeStatus,
+    #[serde(default)]
+    pub improve_auto_promote: shared_character_config::ImproveAutoPromoteConfig,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -921,6 +925,8 @@ pub struct CharacterConfigUpdate {
     pub window_title_format: Option<String>,
     pub reward_automation: Option<shared_character_config::RewardAutomationConfig>,
     pub tribute_preferences: Option<TributePreferences>,
+    #[serde(default)]
+    pub improve_auto_promote: Option<shared_character_config::ImproveAutoPromoteConfig>,
 }
 
 fn copy_subset_requires_rotation(subset: &ConfigCopySubset) -> bool {
@@ -1184,6 +1190,7 @@ fn from_shared_character_config(
             active_tributes: config.tribute_status.active_tributes,
             alert_state: from_shared_tribute_alert_state(config.tribute_status.alert_state),
         },
+        improve_auto_promote: config.improve_auto_promote,
     }
 }
 
@@ -1228,6 +1235,7 @@ fn to_shared_character_config(config: CharacterConfig) -> shared_character_confi
             active_tributes: config.tribute_status.active_tributes,
             alert_state: to_shared_tribute_alert_state(config.tribute_status.alert_state),
         },
+        improve_auto_promote: config.improve_auto_promote,
     }
 }
 
@@ -1337,6 +1345,7 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 &["Marr's Gift"],
                 TributeAlertState::Expiring,
             ),
+            improve_auto_promote: shared_character_config::ImproveAutoPromoteConfig::default(),
         },
         CharacterConfig {
             character_name: "Noxus".into(),
@@ -1371,6 +1380,7 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 &["Stalwart Ward", "Champion's Aura"],
                 TributeAlertState::Ok,
             ),
+            improve_auto_promote: shared_character_config::ImproveAutoPromoteConfig::default(),
         },
         CharacterConfig {
             character_name: "Aelrindel".into(),
@@ -1402,6 +1412,7 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
             reward_automation: shared_character_config::RewardAutomationConfig::default(),
             tribute_preferences: tribute_preferences(&["Arcane Fury", "Hero's Fortitude"], 180),
             tribute_status: tribute_status(false, 0, 875, &[], TributeAlertState::Expired),
+            improve_auto_promote: shared_character_config::ImproveAutoPromoteConfig::default(),
         },
         CharacterConfig {
             character_name: "Grok".into(),
@@ -1439,6 +1450,7 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 &["Ancient Bulwark"],
                 TributeAlertState::Ok,
             ),
+            improve_auto_promote: shared_character_config::ImproveAutoPromoteConfig::default(),
         },
         CharacterConfig {
             character_name: "Valerius".into(),
@@ -1479,6 +1491,7 @@ pub fn demo_character_configs() -> HashMap<String, CharacterConfig> {
                 &["Fervor of Shadows"],
                 TributeAlertState::Expiring,
             ),
+            improve_auto_promote: shared_character_config::ImproveAutoPromoteConfig::default(),
         },
     ] {
         configs.insert(cfg.character_name.clone(), cfg);
@@ -1547,6 +1560,10 @@ pub async fn put_character_config(
         tribute_status: existing
             .as_ref()
             .map(|cfg| cfg.tribute_status.clone())
+            .unwrap_or_default(),
+        improve_auto_promote: config
+            .improve_auto_promote
+            .or_else(|| existing.as_ref().map(|cfg| cfg.improve_auto_promote.clone()))
             .unwrap_or_default(),
     };
     let previous = configs_map.insert(saved.character_name.clone(), saved.clone());
