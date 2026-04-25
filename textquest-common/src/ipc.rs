@@ -345,6 +345,51 @@ pub struct ContainerSlotQuery {
     pub include_empty: bool,
 }
 
+// ─── Mail Window Types (M10: Mail to Bazaar Mule) ───
+
+/// Snapshot of the EQ in-game mail compose window state.
+///
+/// Returned by `Response::MailWindowState` in response to
+/// `Command::QueryMailWindowState`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MailWindowSnapshot {
+    /// Whether the mail compose window is currently open.
+    pub is_open: bool,
+    /// Current text in the recipient name field (empty if window is closed).
+    pub recipient: String,
+    /// Current text in the subject field.
+    pub subject: String,
+    /// Current text in the body field.
+    pub body: String,
+    /// Item names attached in each attachment slot (`None` = slot empty).
+    /// Slots are zero-indexed; the EQ mail window supports up to 12 attachments.
+    pub attachment_slots: Vec<Option<String>>,
+}
+
+/// Command parameters for mailing items/plat to a bazaar mule character.
+///
+/// Used with `Command::SendMailToMule`. The DLL will open the mail window (if
+/// not already open), fill each field, optionally attach the item from the
+/// given inventory slot, and click Send. Delivery is confirmed when the chat
+/// log contains the standard EQ "Mail sent." confirmation or the window closes
+/// and `is_open` transitions to `false`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SendMailParams {
+    /// Target character name (case-insensitive; must exactly match an active
+    /// character on the same server).
+    pub recipient: String,
+    /// Subject line for the mail message.
+    pub subject: String,
+    /// Body text for the mail message.
+    pub body: String,
+    /// Inventory bag slot numbers to attach (0-based; up to 12 items).
+    /// Each entry is a `(bag_index, slot_index)` pair identifying an item in
+    /// the character's main inventory bags.
+    pub attach_slots: Vec<(u8, u8)>,
+    /// Amount of platinum to include. `0` means no plat is attached.
+    pub plat: u32,
+}
+
 /// Filter for querying passive bazaar search results from the injected client.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BazaarQuery {
@@ -1304,6 +1349,32 @@ pub enum Command {
     /// Returns `Response::PauseStatus` with the current session state.
     /// Used to implement `${TextQuest.Paused}` TLO.
     QueryPauseStatus,
+
+    // ─── Mail Window Commands (M10: Mail to Bazaar Mule) ───
+
+    /// Open the EQ in-game mail compose window.
+    ///
+    /// No-op if the window is already open. Returns `Response::CommandResult`
+    /// with `success = true` once the window is confirmed visible, or `false`
+    /// with a reason string on failure.
+    OpenMailWindow,
+
+    /// Query the current state of the EQ in-game mail compose window.
+    ///
+    /// Returns `Response::MailWindowState` with a `MailWindowSnapshot`.
+    QueryMailWindowState,
+
+    /// Fill the mail compose window fields and send mail to a bazaar mule.
+    ///
+    /// The DLL opens the mail window if needed, populates recipient/subject/body,
+    /// attaches any requested inventory items and plat, then clicks Send.
+    /// Returns `Response::CommandResult` indicating send success or failure.
+    /// Delivery is confirmed when the EQ chat log emits "Mail sent." or the
+    /// window closes.
+    SendMailToMule {
+        /// All fields required to compose and send the mail.
+        params: SendMailParams,
+    },
 }
 
 impl std::fmt::Debug for Command {
@@ -1933,6 +2004,16 @@ pub enum Response {
         /// Whether the session is paused (true) or active (false).
         paused: bool,
     },
+
+    // ─── Mail Window Responses (M10: Mail to Bazaar Mule) ───
+
+    /// Snapshot of the EQ in-game mail compose window state.
+    ///
+    /// Returned in response to `Command::QueryMailWindowState`.
+    MailWindowState {
+        /// Current mail compose window snapshot.
+        snapshot: MailWindowSnapshot,
+    },
 }
 
 /// Alert payload for checksum-mismatch and `CheaterLdFlag` detections.
@@ -2468,6 +2549,8 @@ mod tests {
             },
             Command::TraceList,
             Command::TraceDump,
+            Command::OpenMailWindow,
+            Command::QueryMailWindowState,
         ];
         for cmd in &commands {
             let encoded = encode(cmd).expect("encode failed");
@@ -2603,6 +2686,9 @@ mod tests {
                 status: TradeskillTrophyStatus::default(),
             },
             Response::ZoneGraph { zones: vec![] },
+            Response::MailWindowState {
+                snapshot: MailWindowSnapshot::default(),
+            },
             Response::RenderModeChanged {
                 mode: RenderMode::NullRender,
             },
@@ -2664,6 +2750,71 @@ mod tests {
             let encoded = encode(resp).expect("encode failed");
             let (decoded, _): (Response, usize) = decode(&encoded).expect("decode failed");
             let _ = format!("{:?}", decoded);
+        }
+    }
+
+    // ─── Mail Window Tests (M10: Mail to Bazaar Mule) ───
+
+    #[test]
+    fn command_open_mail_window_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let cmd = Command::OpenMailWindow;
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        assert_eq!(cmd, decoded);
+    }
+
+    #[test]
+    fn command_query_mail_window_state_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let cmd = Command::QueryMailWindowState;
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        assert_eq!(cmd, decoded);
+    }
+
+    #[test]
+    fn command_send_mail_to_mule_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let cmd = Command::SendMailToMule {
+            params: SendMailParams {
+                recipient: "BazaarMule".into(),
+                subject: "Items from raid".into(),
+                body: "Sending tonight's drops.".into(),
+                attach_slots: vec![(0, 1), (0, 2)],
+                plat: 500,
+            },
+        };
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        assert_eq!(cmd, decoded);
+    }
+
+    #[test]
+    fn response_mail_window_state_roundtrip() {
+        use crate::protocol::{decode, encode};
+
+        let resp = Response::MailWindowState {
+            snapshot: MailWindowSnapshot {
+                is_open: true,
+                recipient: "BazaarMule".into(),
+                subject: "Test".into(),
+                body: "Body text".into(),
+                attachment_slots: vec![Some("Fungi Tunic".into()), None, None],
+            },
+        };
+        let encoded = encode(&resp).expect("encode");
+        let (decoded, _): (Response, _) = decode(&encoded).expect("decode");
+        if let Response::MailWindowState { snapshot } = decoded {
+            assert!(snapshot.is_open);
+            assert_eq!(snapshot.recipient, "BazaarMule");
+            assert_eq!(snapshot.attachment_slots[0], Some("Fungi Tunic".into()));
+            assert_eq!(snapshot.attachment_slots[1], None);
+        } else {
+            panic!("expected MailWindowState response");
         }
     }
 

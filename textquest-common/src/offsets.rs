@@ -113,6 +113,38 @@ pub const PINST_ADVANCED_LOOT_WND: u64 = 0x0;
 /// Placeholder address, scan signature still needs RE work.
 pub const PINST_REAL_ESTATE_ITEMS: u64 = 0x0;
 
+// ─── Mail Window Offsets (M10: Mail to Bazaar Mule) ───
+// Memory offsets for EQ's in-game mail (CMailWindow) window struct.
+// Source: eqlib/UI/MailWindow.h — scan signatures still need RE against client
+// date 20260415. All values are 0x0 until Ghidra confirms the real addresses.
+
+/// Pointer to the active `CMailWindow` instance.
+/// Placeholder — RE work tracked in issue #899.
+pub const PINST_MAIL_WINDOW: u64 = 0x0;
+
+/// `CMailWindow` field offsets (relative to the window base pointer).
+pub mod mail_window {
+    /// Byte offset of the `bVisible` / open-state flag within `CMailWindow`.
+    /// A non-zero value indicates the mail window is currently open.
+    pub const IS_OPEN: u64 = 0x0;
+
+    /// Byte offset of the recipient name `CXStr` field within `CMailWindow`.
+    pub const RECIPIENT_FIELD: u64 = 0x0;
+
+    /// Byte offset of the subject `CXStr` field within `CMailWindow`.
+    pub const SUBJECT_FIELD: u64 = 0x0;
+
+    /// Byte offset of the body `CXStr` field within `CMailWindow`.
+    pub const BODY_FIELD: u64 = 0x0;
+
+    /// Number of attachment slots available in the mail compose window.
+    pub const ATTACHMENT_SLOT_COUNT: usize = 12;
+
+    /// Byte offset of the first attachment-slot pointer array within
+    /// `CMailWindow`. Each slot is an `ItemClient*` (8 bytes, x64).
+    pub const ATTACHMENT_SLOTS_BASE: u64 = 0x0;
+}
+
 // ─── Active Hacks Offsets (Ghidra/pattern verified for 20260310) ───
 // Offsets are from the eqgame.exe base address. Verified 2026-04-24 against
 // TextQuest-Ghidra snapshot 2026-04-11-live-working (client string
