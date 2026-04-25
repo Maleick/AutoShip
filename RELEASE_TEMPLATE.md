@@ -124,10 +124,10 @@ cargo build --release
    ```
 
 2. **Extract release artifacts**
-   ```bash
-   # Download vX.Y.Z release zip from GitHub
-   # Extract to TextQuest installation directory
-   ```
+  ```bash
+  # Download vX.Y.Z release zip from GitHub
+  # Extract to TextQuest installation directory
+  ```
 
 3. **Verify installation**
    ```bash
@@ -138,6 +138,37 @@ cargo build --release
 4. **Update configuration (if breaking changes)**
    - See [Migration Guide](docs/migration/vX.Y.Z-MIGRATION.md) if applicable
    - Test configuration: `textquest.exe --validate-config`
+
+### Required Environment Variables (Frostreaver deployment)
+
+Set these variables before starting `textquest.exe` or `textquest-web.exe`:
+
+| Variable | Purpose | Expected Value | Fallback when unset |
+|----------|---------|----------------|---------------------|
+| `TEXTQUEST_DATA_DIR` | Runtime root for `config/`, `data/`, and generated runtime files. | Absolute path to the deployment root (for example `C:\\TextQuest\\live`). | Resolver falls back to executable directory, then to current working directory (`"."`). |
+| `TEXTQUEST_ALERT_DB_PATH` | Optional override for the alert DB SQLite file path. | Absolute path to `alerts.db`. | Falls back to `${TEXTQUEST_DATA_DIR}/data/alerts.db` (or discovered runtime layout). |
+
+Recommended Frostreaver layout relative to `TEXTQUEST_DATA_DIR`:
+
+```text
+TextQuest/
+├── textquest.exe
+├── textquest-web.exe
+├── config/
+│   ├── character-configs.json
+│   ├── camps/
+│   ├── maps/
+│   └── alerting.toml
+└── data/
+    ├── alerts.db
+    ├── credentials.db
+    ├── runtime/
+    │   ├── live_sessions.json
+    │   └── admin_sessions.json
+    └── live_sessions.json
+```
+
+With this layout, set `TEXTQUEST_DATA_DIR` to the `TextQuest/` directory.
 
 ## Migration & Upgrade Notes
 

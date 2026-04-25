@@ -74,6 +74,12 @@ python3 scripts/dev-preflight.py   # bundles wiki/lint/test/python — mirrors C
 - Do not `#[allow(...)]` clippy lints without an inline comment explaining why.
 - `cargo test` on macOS runs all workspace crates. Windows-only tests are gated `#[cfg(windows)]`.
 
+## Agent-Facing Environment Requirements
+
+- `TEXTQUEST_DATA_DIR` is mandatory for Frostreaver-style deployments and should be set to the absolute deployment root containing `config/` and `data/`.
+- `TEXTQUEST_ALERT_DB_PATH` is optional and can be used to relocate the shared alert SQLite database independently of `TEXTQUEST_DATA_DIR`.
+- If `TEXTQUEST_DATA_DIR` is not set, runtime fallback is executable parent directory, then `.` (current working directory), which is still valid only for local launch and not recommended for production hosts.
+
 ## Requesting Code Review
 
 **Use the `requesting-code-review` skill before opening a PR or marking implementation complete.** It guides verification of scope, coverage, and code quality before requesting human review.
