@@ -28,3 +28,5 @@ P 400.0, -600.0, 0.0, 128, 128, 128, 2, Guard_Post
 P 0.0, -550.0, -50.0, 240, 127, 0, 2, Ambassador_DVinn_(Raid)
 P -300.0, 600.0, 0.0, 127, 64, 0, 2, Crushbone_Guard_(Hunter)
 P 0.0, 0.0, -50.0, 127, 64, 0, 2, Emperor_Crush_(Hunter)
+P -500.0, 200.0, 3.0, 0, 255, 0, 2, crushbone_entrance_camp
+P -200.0, -100.0, 25.0, 0, 255, 0, 2, crushbone_throne_camp
