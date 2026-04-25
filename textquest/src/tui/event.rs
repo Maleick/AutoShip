@@ -1235,6 +1235,32 @@ pub fn handle_events(
                 }
                 _ => {}
             },
+            ActivePanel::DebugPatchReconciliation => match key.code {
+                KeyCode::Char('f' | 'F') => {
+                    let filter = app.patch_reconciliation_state.cycle_filter();
+                    app.status_message = format!("Patch reconciliation: {}", filter.label());
+                    return Ok(true);
+                }
+                KeyCode::Char('r' | 'R') => {
+                    match app.patch_reconciliation_state.reload() {
+                        Ok(()) => {
+                            app.status_message = format!(
+                                "Patch reconciliation: reloaded {}",
+                                app.patch_reconciliation_state.source_path().display()
+                            );
+                        }
+                        Err(e) => {
+                            app.status_message = format!("Patch reconciliation: {e}");
+                        }
+                    }
+                    return Ok(true);
+                }
+                KeyCode::Char('p' | 'P') => {
+                    app.toggle_gemma_observer_pause();
+                    return Ok(true);
+                }
+                _ => {}
+            },
             ActivePanel::PacketMonitorLog => match key.code {
                 KeyCode::Down | KeyCode::Char('j') => app.packet_monitor_state.select_next(),
                 KeyCode::Up | KeyCode::Char('k') => app.packet_monitor_state.select_prev(),

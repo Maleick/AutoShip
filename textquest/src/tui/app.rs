@@ -189,6 +189,8 @@ pub enum ActivePanel {
     DebugHexDump,
     /// Ghidra offset explorer panel (debug).
     DebugExplorer,
+    /// Patch-day binary diff reconciliation panel (debug).
+    DebugPatchReconciliation,
     /// Packet monitor scrolling log.
     PacketMonitorLog,
     /// EQ Internals offset browser panel (debug).
@@ -918,6 +920,8 @@ pub struct App {
     pub explorer_state: super::state::ExplorerScreenState,
     /// EQ Internals offset browser state.
     pub eq_internals_state: super::state::EqInternalsState,
+    /// Patch-day binary diff reconciliation state.
+    pub patch_reconciliation_state: crate::tui::ui::patch_reconciliation::PatchReconciliationState,
     /// Optional Ghidra runtime/debug cache handle, if loaded.
     pub ghidra_db: Option<textquest_common::ghidra_db::GhidraDatabase>,
 
@@ -1330,6 +1334,8 @@ impl App {
             hex_state: HexDumpState::new(),
             explorer_state: super::state::ExplorerScreenState::new(),
             eq_internals_state: super::state::EqInternalsState::new(),
+            patch_reconciliation_state:
+                crate::tui::ui::patch_reconciliation::PatchReconciliationState::new(),
             ghidra_db: None,
 
             refresh_rate_ms: 250,
@@ -1968,6 +1974,7 @@ impl App {
                     ActivePanel::DebugSpawns,
                     ActivePanel::DebugHexDump,
                     ActivePanel::DebugExplorer,
+                    ActivePanel::DebugPatchReconciliation,
                     ActivePanel::DebugInternals,
                 ]
             }

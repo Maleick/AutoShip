@@ -4,7 +4,12 @@ use eqdiff::{
     match_string_references, parse_pe, string_function_refs_from_xrefs,
 };
 use serde_json::Value;
-use std::{env, ffi::OsString, fs, path::PathBuf};
+use std::{
+    env,
+    ffi::OsString,
+    fs,
+    path::{Path, PathBuf},
+};
 
 fn main() -> Result<()> {
     let args = Args::parse(env::args_os().skip(1))?;
@@ -40,6 +45,9 @@ fn main() -> Result<()> {
     let report_path = args
         .report
         .unwrap_or_else(|| args.offsets.with_extension("eqdiff-report.md"));
+    let patch_report_path = args
+        .patch_report
+        .unwrap_or_else(|| PathBuf::from("patch-report.json"));
 
     fs::write(
         &output_path,
@@ -51,12 +59,25 @@ fn main() -> Result<()> {
         build_report(old_base, new_base, &offsets, &matches),
     )
     .with_context(|| format!("failed to write {}", report_path.display()))?;
+    fs::write(
+        &patch_report_path,
+        serde_json::to_string_pretty(&build_patch_report_json(
+            patch_label(&args.old_binary),
+            patch_label(&args.new_binary),
+            old_base,
+            new_base,
+            &offsets,
+            &matches,
+        ))?,
+    )
+    .with_context(|| format!("failed to write {}", patch_report_path.display()))?;
 
     println!(
-        "matched {} functions; wrote {} and {}",
+        "matched {} functions; wrote {}, {}, and {}",
         matches.len(),
         output_path.display(),
-        report_path.display()
+        report_path.display(),
+        patch_report_path.display()
     );
     Ok(())
 }
@@ -67,6 +88,7 @@ struct Args {
     offsets: PathBuf,
     output: Option<PathBuf>,
     report: Option<PathBuf>,
+    patch_report: Option<PathBuf>,
 }
 
 impl Args {
@@ -75,6 +97,7 @@ impl Args {
         let mut offsets = None;
         let mut output = None;
         let mut report = None;
+        let mut patch_report = None;
         let mut args = raw_args.peekable();
 
         while let Some(arg) = args.next() {
@@ -82,6 +105,7 @@ impl Args {
                 "--offsets" => offsets = Some(next_path(&mut args, "--offsets")?),
                 "--output" => output = Some(next_path(&mut args, "--output")?),
                 "--report" => report = Some(next_path(&mut args, "--report")?),
+                "--patch-report" => patch_report = Some(next_path(&mut args, "--patch-report")?),
                 "--help" | "-h" => bail!(usage()),
                 flag if flag.starts_with('-') => bail!("unknown flag {flag}\n{}", usage()),
                 _ => positional.push(PathBuf::from(arg)),
@@ -98,6 +122,7 @@ impl Args {
             offsets: offsets.context("missing required --offsets <path>")?,
             output,
             report,
+            patch_report,
         })
     }
 }
@@ -109,7 +134,7 @@ fn next_path(args: &mut impl Iterator<Item = OsString>, flag: &str) -> Result<Pa
 }
 
 fn usage() -> &'static str {
-    "usage: eqdiff <old-eqgame.exe> <new-eqgame.exe> --offsets <offsets.json> [--output <path>] [--report <path>]"
+    "usage: eqdiff <old-eqgame.exe> <new-eqgame.exe> --offsets <offsets.json> [--output <path>] [--report <path>] [--patch-report <path>]"
 }
 
 fn build_report(
@@ -149,4 +174,76 @@ fn build_report(
     }
 
     report
+}
+
+fn build_patch_report_json(
+    old_patch: String,
+    new_patch: String,
+    old_base: u64,
+    new_base: u64,
+    offsets: &Value,
+    matches: &[eqdiff::FunctionMatch],
+) -> Value {
+    let mut functions = offsets
+        .get("functions")
+        .and_then(Value::as_object)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|(name, value)| value.as_u64().map(|addr| (name.clone(), addr)))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    functions.sort_by(|(left, _), (right, _)| left.cmp(right));
+
+    let matches_by_old_addr = matches
+        .iter()
+        .map(|entry| (old_base + u64::from(entry.old_rva), entry))
+        .collect::<std::collections::HashMap<_, _>>();
+
+    let entries = functions
+        .into_iter()
+        .map(|(name, old_address)| {
+            if let Some(entry) = matches_by_old_addr.get(&old_address) {
+                serde_json::json!({
+                    "name": name,
+                    "old_address": old_address,
+                    "new_address": new_base + u64::from(entry.new_rva),
+                    "confidence": entry.confidence,
+                    "matched": true
+                })
+            } else {
+                serde_json::json!({
+                    "name": name,
+                    "old_address": old_address,
+                    "new_address": null,
+                    "confidence": null,
+                    "matched": false,
+                    "notes": "needs RE"
+                })
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let matched = entries
+        .iter()
+        .filter(|entry| entry.get("matched").and_then(Value::as_bool) == Some(true))
+        .count();
+    let unmatched = entries.len().saturating_sub(matched);
+
+    serde_json::json!({
+        "old_patch": old_patch,
+        "new_patch": new_patch,
+        "matched": matched,
+        "unmatched": unmatched,
+        "entries": entries
+    })
+}
+
+fn patch_label(path: &Path) -> String {
+    path.file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| !stem.is_empty())
+        .unwrap_or("unknown")
+        .to_string()
 }

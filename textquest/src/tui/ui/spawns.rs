@@ -796,7 +796,7 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
 
         draw_debug_spawn_list(frame, cols[0], app);
         draw_hex_panel(frame, cols[1], app);
-        draw_gemma_observer_panel(frame, observer, app);
+        draw_debug_footer(frame, observer, app);
         return;
     }
 
@@ -822,7 +822,7 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
         draw_hex_panel_legacy(frame, rows[1], app);
         draw_hook_rotation_panel(frame, rows[2], app);
         draw_spawn_list(frame, rows[3], app);
-        draw_gemma_observer_panel(frame, observer, app);
+        draw_debug_footer(frame, observer, app);
         return;
     }
 
@@ -846,7 +846,7 @@ fn draw_debug_default(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut 
     draw_hook_rotation_panel(frame, left[2], app);
     draw_hex_panel_legacy(frame, left[3], app);
     draw_spawn_list(frame, cols[1], app);
-    draw_gemma_observer_panel(frame, observer, app);
+    draw_debug_footer(frame, observer, app);
 }
 
 /// 3-column layout: detail/hex | spawns | EQ Internals + explorer stacked.
@@ -894,7 +894,7 @@ fn draw_debug_with_explorer(frame: &mut Frame, area: ratatui::layout::Rect, app:
     draw_eq_internals_panel(frame, right[0], app);
     draw_hook_rotation_panel(frame, right[1], app);
     draw_explorer_panel(frame, right[2], app);
-    draw_gemma_observer_panel(frame, rows[1], app);
+    draw_debug_footer(frame, rows[1], app);
 }
 
 /// EQ Internals-focused layout: internals + hex, minimal spawns.
@@ -919,7 +919,24 @@ fn draw_debug_explorer_focused(frame: &mut Frame, area: ratatui::layout::Rect, a
 
     draw_hex_panel_legacy(frame, bottom[0], app);
     draw_spawn_list(frame, bottom[1], app);
-    draw_gemma_observer_panel(frame, rows[2], app);
+    draw_debug_footer(frame, rows[2], app);
+}
+
+fn draw_debug_footer(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
+    use super::patch_reconciliation::draw_patch_reconciliation_panel;
+
+    if area.width < 90 {
+        draw_patch_reconciliation_panel(frame, area, app);
+        return;
+    }
+
+    let cols = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(62), Constraint::Percentage(38)])
+        .split(area);
+
+    draw_patch_reconciliation_panel(frame, cols[0], app);
+    draw_gemma_observer_panel(frame, cols[1], app);
 }
 
 fn gemma_level_style(level: GemmaObservationLevel) -> Style {

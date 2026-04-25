@@ -83,6 +83,16 @@
       "notes": "PARTIAL: Extended the existing mlua scaffold with injected player snapshots, drainable navigation and slash-command request queues, real Lua event callback registration/emission, and current API docs/example. Live process-state producers, orchestrator/DLL IPC draining, LuaJIT compatibility, and full OpenVanilla API parity remain follow-up work."
     },
     {
+      "id": "issue-958-eq-binary-diff-tui-patch-reconciliation",
+      "name": "Issue #958 EQ Binary Diff TUI patch-day reconciliation panel",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check",
+        "cargo check -p eqdiff"
+      ],
+      "notes": "Implemented the Debug screen patch reconciliation panel, filter state, fixture-backed render coverage, and eqdiff patch-report.json output. Full cargo check is currently blocked by unrelated pre-existing textquest errors in loot/smartloot.rs and lua/bindings.rs; cargo check -p eqdiff passes."
+    },
+    {
       "id": "issue-2172-stack-spoof-invalid-module-name",
       "name": "stack spoof invalid module name handling",
       "status": "complete",

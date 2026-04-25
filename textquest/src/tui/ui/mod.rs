@@ -23,7 +23,7 @@ pub mod map;
 pub mod navigation;
 pub mod orchestrator_panel;
 pub mod packets;
-pub mod roster;
+pub mod patch_reconciliation;
 pub mod spawns;
 pub mod widgets;
 pub mod zone_blocker_panel;
