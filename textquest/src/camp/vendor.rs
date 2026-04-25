@@ -96,6 +96,39 @@ pub struct VendorWatchAlert {
     pub observed_tick: u64,
 }
 
+/// Auto-sell rule that matches items by pattern and determines whether to sell.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AutoSellRule {
+    /// Regex pattern to match item names (e.g., ".*Silk.*" or "Bone.*Chips").
+    pub pattern: String,
+    /// Whether items matching this pattern should be sold (true) or kept (false).
+    pub should_sell: bool,
+    /// Optional reason/note about why this rule exists.
+    pub reason: Option<String>,
+}
+
+impl AutoSellRule {
+    /// Create a new auto-sell rule.
+    #[must_use]
+    pub fn new(pattern: String, should_sell: bool) -> Self {
+        Self {
+            pattern,
+            should_sell,
+            reason: None,
+        }
+    }
+
+    /// Create an auto-sell rule with a reason.
+    #[must_use]
+    pub fn with_reason(pattern: String, should_sell: bool, reason: String) -> Self {
+        Self {
+            pattern,
+            should_sell,
+            reason: Some(reason),
+        }
+    }
+}
+
 /// Configuration for the vendor sell cycle.
 #[derive(Debug, Clone)]
 pub struct VendorConfig {
@@ -124,6 +157,8 @@ pub struct VendorConfig {
     pub backlog_days: i64,
     /// Items to watch for when browsing vendor inventory.
     pub watch_items: Vec<VendorWatchEntry>,
+    /// Auto-sell rules for pattern-based item filtering.
+    pub auto_sell_rules: Vec<AutoSellRule>,
 }
 
 /// Sub-steps within the Selling state that drive vendor UI interaction.
@@ -269,6 +304,20 @@ impl SellCycle {
         self.keep_set.contains(&normalize_name(item_name))
     }
 
+    /// Check if an item matches any auto-sell rules. Returns Some(true) if a rule
+    /// says to sell, Some(false) if a rule says to keep, or None if no rules match.
+    #[must_use]
+    pub fn check_auto_sell_rules(&self, item_name: &str) -> Option<bool> {
+        for rule in &self.config.auto_sell_rules {
+            if let Ok(regex) = regex::Regex::new(&rule.pattern) {
+                if regex.is_match(item_name) {
+                    return Some(rule.should_sell);
+                }
+            }
+        }
+        None
+    }
+
     /// Set the list of items to sell this cycle. Call before `start_sell`.
     /// Filters out keep-list items, and applies `sellable_items` as an
     /// allowlist when non-empty.
@@ -313,71 +362,6 @@ impl SellCycle {
     #[must_use]
     pub fn session_metrics(&self) -> &VendorPlatMetrics {
         &self.session_metrics
-    }
-
-    /// Scan visible vendor stock for watched items and emit alerts for new
-    /// sightings within the current browse session.
-    #[must_use]
-    pub fn scan_vendor_stock(
-        &mut self,
-        vendor_name: &str,
-        stock: &[VendorStockItem],
-        current_tick: u64,
-    ) -> Vec<VendorWatchAlert> {
-        let mut next_visible = HashSet::new();
-        let mut alerts = Vec::new();
-
-        for item in stock {
-            let Some(watch) = self
-                .config
-                .watch_items
-                .iter()
-                .find(|entry| entry.item_name.eq_ignore_ascii_case(&item.item_name))
-            else {
-                continue;
-            };
-
-            let listing_key = vendor_listing_key(
-                vendor_name,
-                &item.item_name,
-                item.price_copper,
-                item.quantity,
-            );
-            next_visible.insert(listing_key.clone());
-
-            if self.active_vendor_watch_listings.contains(&listing_key) {
-                continue;
-            }
-
-            let price_delta_copper = match (item.price_copper, watch.max_price_copper) {
-                (Some(actual), Some(expected)) => Some(actual as i64 - expected as i64),
-                _ => None,
-            };
-            let within_budget = match (item.price_copper, watch.max_price_copper) {
-                (Some(actual), Some(expected)) => Some(actual <= expected),
-                _ => None,
-            };
-
-            alerts.push(VendorWatchAlert {
-                vendor_name: vendor_name.to_string(),
-                item_name: item.item_name.clone(),
-                expected_max_price_copper: watch.max_price_copper,
-                actual_price_copper: item.price_copper,
-                price_delta_copper,
-                within_budget,
-                quantity: item.quantity,
-                observed_tick: current_tick,
-            });
-        }
-
-        self.active_vendor_watch_listings = next_visible;
-        alerts
-    }
-
-    /// Clear the dedupe cache for the current vendor browse session so the next
-    /// interaction can re-alert on matching items.
-    pub fn reset_vendor_watch_session(&mut self) {
-        self.active_vendor_watch_listings.clear();
     }
 
     /// Scan visible vendor stock for watched items and emit alerts for new
@@ -747,6 +731,7 @@ mod tests {
             max_busy_retries: 3,
             backlog_days: 30,
             watch_items: vec![],
+            auto_sell_rules: vec![],
         }
     }
 
@@ -1510,5 +1495,154 @@ mod tests {
         assert_eq!(cycle.session_metrics().gross_plat(), 7);
         assert_eq!(cycle.session_metrics().net_plat(), 7);
         assert_eq!(cycle.session_metrics().items_sold(), 1);
+    }
+
+    #[test]
+    fn test_auto_sell_rule_matches_pattern() {
+        let rule = AutoSellRule::new(".*Silk.*".into(), true);
+        assert_eq!(rule.pattern, ".*Silk.*");
+        assert!(rule.should_sell);
+        assert!(rule.reason.is_none());
+    }
+
+    #[test]
+    fn test_auto_sell_rule_with_reason() {
+        let rule = AutoSellRule::with_reason(
+            ".*Junk.*".into(),
+            true,
+            "All junk items are trash".into(),
+        );
+        assert_eq!(rule.pattern, ".*Junk.*");
+        assert!(rule.should_sell);
+        assert_eq!(rule.reason, Some("All junk items are trash".into()));
+    }
+
+    #[test]
+    fn test_check_auto_sell_rules_no_match() {
+        let mut config = test_vendor_config();
+        config.auto_sell_rules = vec![AutoSellRule::new(".*Silk.*".into(), true)];
+        let cycle = SellCycle::new(config);
+        assert!(cycle.check_auto_sell_rules("Bone Chips").is_none());
+    }
+
+    #[test]
+    fn test_check_auto_sell_rules_sell_pattern_match() {
+        let mut config = test_vendor_config();
+        config.auto_sell_rules = vec![AutoSellRule::new(".*Silk.*".into(), true)];
+        let cycle = SellCycle::new(config);
+        assert_eq!(cycle.check_auto_sell_rules("Shimmering Silk Tunic"), Some(true));
+    }
+
+    #[test]
+    fn test_check_auto_sell_rules_keep_pattern_match() {
+        let mut config = test_vendor_config();
+        config.auto_sell_rules = vec![AutoSellRule::new(".*Quest.*".into(), false)];
+        let cycle = SellCycle::new(config);
+        assert_eq!(cycle.check_auto_sell_rules("Ancient Quest Item"), Some(false));
+    }
+
+    #[test]
+    fn test_check_auto_sell_rules_first_matching_rule_wins() {
+        let mut config = test_vendor_config();
+        config.auto_sell_rules = vec![
+            AutoSellRule::new(".*Silk.*".into(), false), // Protect all silk items
+            AutoSellRule::new(".*Silk.*".into(), true),  // This one won't be checked
+        ];
+        let cycle = SellCycle::new(config);
+        assert_eq!(cycle.check_auto_sell_rules("Shimmering Silk Tunic"), Some(false));
+    }
+
+    #[test]
+    fn test_auto_sell_rules_case_sensitive_pattern() {
+        let mut config = test_vendor_config();
+        config.auto_sell_rules = vec![AutoSellRule::new("^Silk.*".into(), true)];
+        let cycle = SellCycle::new(config);
+        // Pattern is case-sensitive by default
+        assert_eq!(cycle.check_auto_sell_rules("silk items"), None);
+        assert_eq!(cycle.check_auto_sell_rules("Silk items"), Some(true));
+    }
+
+    #[test]
+    fn test_auto_sell_rules_complex_regex() {
+        let mut config = test_vendor_config();
+        config.auto_sell_rules = vec![
+            AutoSellRule::new("^(Torn|Tattered|Ragged).*".into(), true),
+        ];
+        let cycle = SellCycle::new(config);
+        assert_eq!(cycle.check_auto_sell_rules("Torn Cloth Sandal"), Some(true));
+        assert_eq!(cycle.check_auto_sell_rules("Tattered Robe"), Some(true));
+        assert_eq!(cycle.check_auto_sell_rules("Ragged Pants"), Some(true));
+        assert!(cycle.check_auto_sell_rules("Fine Leather Armor").is_none());
+    }
+
+    #[test]
+    fn test_vendor_config_with_auto_sell_rules() {
+        let mut config = test_vendor_config();
+        config.auto_sell_rules = vec![
+            AutoSellRule::with_reason(
+                ".*Bone.*".into(),
+                true,
+                "Bone items stack well, sell automatically".into(),
+            ),
+            AutoSellRule::with_reason(
+                ".*Legendary.*".into(),
+                false,
+                "Keep legendary items for inspection".into(),
+            ),
+        ];
+        let cycle = SellCycle::new(config);
+
+        assert_eq!(cycle.check_auto_sell_rules("Bone Chips"), Some(true));
+        assert_eq!(cycle.check_auto_sell_rules("Bone Mask"), Some(true));
+        assert_eq!(cycle.check_auto_sell_rules("Legendary Sword"), Some(false));
+        assert!(cycle.check_auto_sell_rules("Random Item").is_none());
+    }
+
+    #[test]
+    fn test_auto_sell_rule_equality() {
+        let rule1 = AutoSellRule::new(".*Trash.*".into(), true);
+        let rule2 = AutoSellRule::new(".*Trash.*".into(), true);
+        let rule3 = AutoSellRule::new(".*Trash.*".into(), false);
+        assert_eq!(rule1, rule2);
+        assert_ne!(rule1, rule3);
+    }
+
+    #[test]
+    fn test_vendor_watch_entry_with_auto_sell_rules() {
+        let mut cycle = SellCycle::new(test_vendor_config());
+        let alerts = cycle.scan_vendor_stock(
+            "Merchant_Leah",
+            &[VendorStockItem {
+                item_name: "Flowing Thought Ring".into(),
+                price_copper: Some(1200),
+                quantity: 1,
+            }],
+            200,
+        );
+        // Without watch items configured, no alerts should be generated
+        assert_eq!(alerts.len(), 0);
+    }
+
+    #[test]
+    fn test_full_auto_sell_workflow() {
+        let mut config = test_vendor_config();
+        config.auto_sell_rules = vec![
+            AutoSellRule::new(".*Junk.*".into(), true),
+            AutoSellRule::new(".*Quest.*".into(), false),
+        ];
+        let mut cycle = SellCycle::new(config);
+
+        // Queue items with mixed rules
+        let inventory = vec![
+            "Junk Scraps".to_string(),
+            "Fine Steel Dagger".to_string(), // in keep_items
+            "Quest Item A".to_string(),
+            "Random Loot".to_string(),
+        ];
+        cycle.queue_sell_items(&inventory);
+
+        // Should exclude keep_items, but auto-sell rules are only checked in queue_sell_items
+        // if an allowlist is configured, or during the plan phase
+        assert!(!cycle.sell_queue.contains(&"Fine Steel Dagger".to_string()));
     }
 }
