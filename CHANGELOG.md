@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.5
+
+- Add `opencode-autoship --version` and `opencode-autoship -v` for global CLI version checks.
+
 ## v2.0.4
 
 - Normalize npm package metadata so the global `opencode-autoship` binary is preserved during publish.

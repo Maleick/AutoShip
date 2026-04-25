@@ -1234,6 +1234,7 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   rm -rf .autoship node_modules dist
   npm install --package-lock=false --no-audit --no-fund >/dev/null
   npm run build >/dev/null
+  assert_eq "opencode-autoship $(cat VERSION)" "$(node dist/cli.js --version)" "package CLI prints version with --version"
   CONFIG_DIR="$TMP_DIR/package-config"
   mkdir -p "$CONFIG_DIR"
   printf '%s\n' '{"plugin":["file:///tmp/legacy/autoship.ts","other-plugin"],"customSetting":true}' > "$CONFIG_DIR/opencode.json"

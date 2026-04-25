@@ -323,6 +323,10 @@ async function main() {
     case "-h":
       help();
       break;
+    case "--version":
+    case "-v":
+      console.log(`opencode-autoship ${VERSION}`);
+      break;
     default:
       console.error(`Unknown command: ${command}`);
       help();
