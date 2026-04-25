@@ -1,9 +1,39 @@
 //! Pull target selection — picks the best mob to pull from nearby spawns.
+//! Pull state machine — manages four pull modes (Normal, Chain, Hunt, Farm) with mode transition callbacks.
 
 use crate::{
     camp::{cc::CcTracker, config::CampConfig, positioning::distance_2d},
     eq::named_tracker::NamedTracker,
 };
+use std::fmt;
+
+/// Pull mode determines the pulling behavior and strategy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PullMode {
+    /// Standard pull — single pull at a time, wait for fight to finish before next pull.
+    Normal,
+    /// Continuous pull loop — keep pulling while group is fighting or recovering.
+    Chain,
+    /// Seek and pull named mobs — prioritize named/epic mobs when available.
+    Hunt,
+    /// Stationary camp farming — stay in one fixed position and pull nearby mobs.
+    Farm,
+}
+
+impl fmt::Display for PullMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Normal => write!(f, "Normal"),
+            Self::Chain => write!(f, "Chain"),
+            Self::Hunt => write!(f, "Hunt"),
+            Self::Farm => write!(f, "Farm"),
+        }
+    }
+}
+
+/// Callback function type for mode change events.
+/// Called when the pull state machine transitions to a new mode.
+pub type OnModeChangeCallback = Box<dyn Fn(PullMode, PullMode) + Send + Sync>;
 
 /// Spawn type discriminator matching EQ's internal spawn types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,6 +63,94 @@ pub struct NearbySpawn {
     pub y: f32,
     /// Z coordinate in EQ world units.
     pub z: f32,
+}
+
+/// Pull state machine managing mode transitions and callbacks.
+pub struct PullStateMachine {
+    /// Current pull mode.
+    current_mode: PullMode,
+    /// Optional callback fired on mode transitions.
+    on_mode_change: Option<OnModeChangeCallback>,
+}
+
+impl PullStateMachine {
+    /// Creates a new pull state machine starting in Normal mode.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            current_mode: PullMode::Normal,
+            on_mode_change: None,
+        }
+    }
+
+    /// Creates a pull state machine with an initial mode and callback.
+    #[must_use]
+    pub fn with_mode_and_callback(
+        initial_mode: PullMode,
+        callback: OnModeChangeCallback,
+    ) -> Self {
+        Self {
+            current_mode: initial_mode,
+            on_mode_change: Some(callback),
+        }
+    }
+
+    /// Returns the current pull mode.
+    #[must_use]
+    pub fn current_mode(&self) -> PullMode {
+        self.current_mode
+    }
+
+    /// Sets a new mode change callback.
+    pub fn set_on_mode_change(&mut self, callback: OnModeChangeCallback) {
+        self.on_mode_change = Some(callback);
+    }
+
+    /// Transitions to a new pull mode.
+    /// Fires the OnModeChange callback if registered, passing the old and new modes.
+    pub fn transition_to(&mut self, new_mode: PullMode) {
+        if self.current_mode == new_mode {
+            return; // No transition needed
+        }
+
+        let old_mode = self.current_mode;
+        self.current_mode = new_mode;
+
+        // Fire callback if registered
+        if let Some(ref callback) = self.on_mode_change {
+            callback(old_mode, new_mode);
+        }
+    }
+
+    /// Returns true if currently in Chain mode (continuous pulling).
+    #[must_use]
+    pub fn is_chain_mode(&self) -> bool {
+        self.current_mode == PullMode::Chain
+    }
+
+    /// Returns true if currently in Hunt mode (named mob focus).
+    #[must_use]
+    pub fn is_hunt_mode(&self) -> bool {
+        self.current_mode == PullMode::Hunt
+    }
+
+    /// Returns true if currently in Farm mode (stationary camp).
+    #[must_use]
+    pub fn is_farm_mode(&self) -> bool {
+        self.current_mode == PullMode::Farm
+    }
+
+    /// Returns true if currently in Normal mode (single pull).
+    #[must_use]
+    pub fn is_normal_mode(&self) -> bool {
+        self.current_mode == PullMode::Normal
+    }
+}
+
+impl Default for PullStateMachine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Select the best pull target from nearby spawns.
@@ -149,6 +267,7 @@ pub fn select_pull_target_with_named(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
 
     fn test_config() -> CampConfig {
         CampConfig {
@@ -407,5 +526,158 @@ mod tests {
         // distance_2d(160, 250, 150, 250) = 10.0, equal to pull_radius => should be
         // included
         assert_eq!(result, Some("boundary orc".into()));
+    }
+
+    // -- Pull mode and state machine tests --
+
+    #[test]
+    fn test_pull_mode_display() {
+        assert_eq!(format!("{}", PullMode::Normal), "Normal");
+        assert_eq!(format!("{}", PullMode::Chain), "Chain");
+        assert_eq!(format!("{}", PullMode::Hunt), "Hunt");
+        assert_eq!(format!("{}", PullMode::Farm), "Farm");
+    }
+
+    #[test]
+    fn test_pull_mode_equality() {
+        assert_eq!(PullMode::Normal, PullMode::Normal);
+        assert_eq!(PullMode::Chain, PullMode::Chain);
+        assert_ne!(PullMode::Normal, PullMode::Chain);
+    }
+
+    #[test]
+    fn test_pull_state_machine_default() {
+        let fsm = PullStateMachine::default();
+        assert_eq!(fsm.current_mode(), PullMode::Normal);
+    }
+
+    #[test]
+    fn test_pull_state_machine_new() {
+        let fsm = PullStateMachine::new();
+        assert_eq!(fsm.current_mode(), PullMode::Normal);
+    }
+
+    #[test]
+    fn test_pull_state_machine_starts_normal() {
+        let fsm = PullStateMachine::new();
+        assert!(fsm.is_normal_mode());
+        assert!(!fsm.is_chain_mode());
+        assert!(!fsm.is_hunt_mode());
+        assert!(!fsm.is_farm_mode());
+    }
+
+    #[test]
+    fn test_pull_state_machine_transition_to_chain() {
+        let mut fsm = PullStateMachine::new();
+        fsm.transition_to(PullMode::Chain);
+        assert_eq!(fsm.current_mode(), PullMode::Chain);
+        assert!(fsm.is_chain_mode());
+        assert!(!fsm.is_normal_mode());
+    }
+
+    #[test]
+    fn test_pull_state_machine_transition_to_hunt() {
+        let mut fsm = PullStateMachine::new();
+        fsm.transition_to(PullMode::Hunt);
+        assert_eq!(fsm.current_mode(), PullMode::Hunt);
+        assert!(fsm.is_hunt_mode());
+    }
+
+    #[test]
+    fn test_pull_state_machine_transition_to_farm() {
+        let mut fsm = PullStateMachine::new();
+        fsm.transition_to(PullMode::Farm);
+        assert_eq!(fsm.current_mode(), PullMode::Farm);
+        assert!(fsm.is_farm_mode());
+    }
+
+    #[test]
+    fn test_pull_state_machine_no_op_transition() {
+        let mut fsm = PullStateMachine::new();
+        fsm.transition_to(PullMode::Normal); // Already in Normal
+        assert_eq!(fsm.current_mode(), PullMode::Normal);
+    }
+
+    #[test]
+    fn test_pull_state_machine_callback_fires_on_transition() {
+        let callback_log = Arc::new(Mutex::new(Vec::new()));
+        let log_clone = callback_log.clone();
+
+        let callback = Box::new(move |from: PullMode, to: PullMode| {
+            let mut log = log_clone.lock().unwrap();
+            log.push((from, to));
+        });
+
+        let mut fsm = PullStateMachine::with_mode_and_callback(PullMode::Normal, callback);
+        fsm.transition_to(PullMode::Chain);
+
+        let log = callback_log.lock().unwrap();
+        assert_eq!(log.len(), 1);
+        assert_eq!(log[0], (PullMode::Normal, PullMode::Chain));
+    }
+
+    #[test]
+    fn test_pull_state_machine_callback_no_fire_on_same_mode() {
+        let callback_log = Arc::new(Mutex::new(Vec::new()));
+        let log_clone = callback_log.clone();
+
+        let callback = Box::new(move |_from: PullMode, _to: PullMode| {
+            let mut log = log_clone.lock().unwrap();
+            log.push(true);
+        });
+
+        let mut fsm = PullStateMachine::with_mode_and_callback(PullMode::Normal, callback);
+        fsm.transition_to(PullMode::Normal); // No transition
+
+        let log = callback_log.lock().unwrap();
+        assert!(log.is_empty());
+    }
+
+    #[test]
+    fn test_pull_state_machine_multiple_transitions() {
+        let callback_log = Arc::new(Mutex::new(Vec::new()));
+        let log_clone = callback_log.clone();
+
+        let callback = Box::new(move |from: PullMode, to: PullMode| {
+            let mut log = log_clone.lock().unwrap();
+            log.push((from, to));
+        });
+
+        let mut fsm = PullStateMachine::with_mode_and_callback(PullMode::Normal, callback);
+        fsm.transition_to(PullMode::Chain);
+        fsm.transition_to(PullMode::Hunt);
+        fsm.transition_to(PullMode::Farm);
+
+        let log = callback_log.lock().unwrap();
+        assert_eq!(log.len(), 3);
+        assert_eq!(log[0], (PullMode::Normal, PullMode::Chain));
+        assert_eq!(log[1], (PullMode::Chain, PullMode::Hunt));
+        assert_eq!(log[2], (PullMode::Hunt, PullMode::Farm));
+    }
+
+    #[test]
+    fn test_pull_state_machine_set_callback() {
+        let callback_log = Arc::new(Mutex::new(Vec::new()));
+        let log_clone = callback_log.clone();
+
+        let callback = Box::new(move |from: PullMode, to: PullMode| {
+            let mut log = log_clone.lock().unwrap();
+            log.push((from, to));
+        });
+
+        let mut fsm = PullStateMachine::new();
+        fsm.set_on_mode_change(callback);
+        fsm.transition_to(PullMode::Chain);
+
+        let log = callback_log.lock().unwrap();
+        assert_eq!(log.len(), 1);
+        assert_eq!(log[0], (PullMode::Normal, PullMode::Chain));
+    }
+
+    #[test]
+    fn test_pull_mode_copy() {
+        let mode1 = PullMode::Chain;
+        let mode2 = mode1;
+        assert_eq!(mode1, mode2);
     }
 }
