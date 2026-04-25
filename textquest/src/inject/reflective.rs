@@ -4,8 +4,7 @@
 //! On non-Windows platforms this module compiles to a stub that logs a warning.
 
 use std::{
-    fmt,
-    process,
+    fmt, process,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -507,7 +506,10 @@ fn dllmain_shellcode_ops(
     };
 
     let mut base_load_ops = if rng.next_usize(2) == 0 {
-        vec![ShellcodeInstruction::new(mov_reg_imm64(GeneralRegister::Rcx, base_addr as u64))]
+        vec![ShellcodeInstruction::new(mov_reg_imm64(
+            GeneralRegister::Rcx,
+            base_addr as u64,
+        ))]
     } else {
         vec![
             ShellcodeInstruction::new(mov_reg_imm64(scratch_for_base, base_addr as u64)),
@@ -534,7 +536,10 @@ fn dllmain_shellcode_ops(
     };
 
     let mut entry_load_ops = if rng.next_usize(2) == 0 {
-        vec![ShellcodeInstruction::new(mov_reg_imm64(entry_reg, entry_addr as u64))]
+        vec![ShellcodeInstruction::new(mov_reg_imm64(
+            entry_reg,
+            entry_addr as u64,
+        ))]
     } else {
         vec![
             ShellcodeInstruction::new(mov_reg_imm64(scratch_for_entry, entry_addr as u64)),
