@@ -1,5 +1,8 @@
 //! Camp loop state machine — pulls, fights, loots, meds, buffs.
 
+/// Camp posterior fusion — Normal-Normal updater for camp × party telemetry.
+pub mod posterior;
+
 /// AA spend automation — prioritized alternate advancement point spending.
 #[cfg(windows)]
 pub mod aa_spend;
