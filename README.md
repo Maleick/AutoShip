@@ -46,6 +46,33 @@ AutoShip is the OpenCode plugin for solo maintainers who want their GitHub issue
 - Creates PRs with conventional commit titles
 - Tracks local state in `.autoship/`
 
+## Installation
+
+Install AutoShip into your OpenCode config from any GitHub-backed project:
+
+```bash
+bunx opencode-autoship install
+```
+
+Then start the setup wizard inside OpenCode:
+
+```text
+/autoship-setup
+```
+
+## Quick Start
+
+```bash
+# 1. Install AutoShip for OpenCode
+bunx opencode-autoship install
+
+# 2. Navigate to your project
+cd ~/Projects/my-project
+
+# 3. Start AutoShip in OpenCode
+/autoship
+```
+
 ## Runtime
 
 OpenCode is the only supported worker runtime. AutoShip discovers current model availability from:
@@ -119,6 +146,24 @@ flowchart TD
 bash hooks/opencode/test-policy.sh
 bash -n hooks/opencode/*.sh hooks/*.sh
 bash hooks/opencode/smoke-test.sh
+```
+
+## Troubleshooting
+
+Run diagnostics first:
+
+```bash
+bunx opencode-autoship doctor
+```
+
+If checks fail, reinstall the package assets and rerun setup:
+
+```bash
+bunx opencode-autoship install
+```
+
+```text
+/autoship-setup
 ```
 
 ## Runtime Artifacts

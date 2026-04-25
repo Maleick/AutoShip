@@ -27,6 +27,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "verify:pack": "bash hooks/opencode/verify-package.sh",
     "prepack": "tsc"
   },
   "keywords": [

@@ -23,6 +23,11 @@ assert_eq() {
   fi
 }
 
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+test -f "$REPO_ROOT/commands/autoship-setup.md" || fail "canonical /autoship-setup command file is installed"
+grep -F '| `/autoship-setup` |' "$REPO_ROOT/README.md" >/dev/null || fail "README public command table includes /autoship-setup"
+grep -F '| `/autoship-setup` |' "$REPO_ROOT/commands/autoship.md" >/dev/null || fail "/autoship command table includes /autoship-setup"
+
 ISSUES_FILE="$TMP_DIR/issues.json"
 cat > "$ISSUES_FILE" <<'JSON'
 [
@@ -62,6 +67,30 @@ fix_title=$(bash "$SCRIPT_DIR/pr-title.sh" --issue 2298 --title "Validate Discor
 docs_title=$(bash "$SCRIPT_DIR/pr-title.sh" --issue 2296 --title "mandate poison recovery pattern" --labels "documentation,agent:ready")
 assert_eq "fix: Validate Discord webhook URLs (#2298)" "$fix_title" "bug/security title uses fix prefix"
 assert_eq "docs: mandate poison recovery pattern (#2296)" "$docs_title" "documentation title uses docs prefix"
+
+PACKAGE_VERIFY_REPO="$TMP_DIR/package-verify-repo"
+mkdir -p "$PACKAGE_VERIFY_REPO/dist" "$PACKAGE_VERIFY_REPO/hooks" "$PACKAGE_VERIFY_REPO/commands" "$PACKAGE_VERIFY_REPO/skills" "$PACKAGE_VERIFY_REPO/.autoship"
+cp "$SCRIPT_DIR/../../package.json" "$PACKAGE_VERIFY_REPO/package.json"
+jq '.files += [".autoship", "unintended.tmp"]' "$PACKAGE_VERIFY_REPO/package.json" > "$PACKAGE_VERIFY_REPO/package.json.tmp" && mv "$PACKAGE_VERIFY_REPO/package.json.tmp" "$PACKAGE_VERIFY_REPO/package.json"
+printf 'runtime state\n' > "$PACKAGE_VERIFY_REPO/.autoship/state.json"
+printf 'unintended\n' > "$PACKAGE_VERIFY_REPO/unintended.tmp"
+printf 'built\n' > "$PACKAGE_VERIFY_REPO/dist/index.js"
+printf 'hook\n' > "$PACKAGE_VERIFY_REPO/hooks/init.sh"
+printf 'command\n' > "$PACKAGE_VERIFY_REPO/commands/autoship.md"
+printf 'skill\n' > "$PACKAGE_VERIFY_REPO/skills/autoship-orchestrate.md"
+printf 'agents\n' > "$PACKAGE_VERIFY_REPO/AGENTS.md"
+printf '1.0.0\n' > "$PACKAGE_VERIFY_REPO/VERSION"
+printf 'readme\n' > "$PACKAGE_VERIFY_REPO/README.md"
+printf 'license\n' > "$PACKAGE_VERIFY_REPO/LICENSE"
+(
+  cd "$PACKAGE_VERIFY_REPO"
+  if bash "$SCRIPT_DIR/verify-package.sh" >/dev/null 2>&1; then
+    fail "package verification should reject runtime state and unintended files"
+  fi
+  rm -rf .autoship unintended.tmp
+  cp "$SCRIPT_DIR/../../package.json" package.json
+  bash "$SCRIPT_DIR/verify-package.sh" >/dev/null
+)
 
 STATE_REPO="$TMP_DIR/repo"
 mkdir -p "$STATE_REPO/.autoship/workspaces/issue-746" "$STATE_REPO/.autoship/workspaces/issue-749" "$STATE_REPO/.autoship/workspaces/issue-750"

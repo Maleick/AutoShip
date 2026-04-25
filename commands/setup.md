@@ -3,7 +3,7 @@ name: setup
 description: Configure AutoShip for OpenCode-first-party routing
 ---
 
-# /autoship:setup
+# /autoship-setup
 
 Configure AutoShip for OpenCode-only workers.
 
