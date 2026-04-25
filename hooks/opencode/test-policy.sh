@@ -438,6 +438,46 @@ grep -F -- '--body-file .autoship/workspaces/issue-184/AUTOSHIP_PR_BODY.md' "$VE
 grep -F 'Reviewer: PASS' "$VERIFY_PASS_REPO/.autoship/workspaces/issue-184/AUTOSHIP_PR_BODY.md" >/dev/null || fail "generated PR body records reviewer pass"
 assert_eq "completed" "$(jq -r '.issues["issue-184"].state' "$VERIFY_PASS_REPO/.autoship/state.json")" "verified PASS completes issue after PR creation"
 
+REVIEWER_REPO="$TMP_DIR/reviewer-repo"
+mkdir -p "$REVIEWER_REPO/hooks/opencode" "$REVIEWER_REPO/hooks" "$REVIEWER_REPO/bin" "$REVIEWER_REPO/.autoship/workspaces/issue-183"
+git init -q "$REVIEWER_REPO"
+cp "$SCRIPT_DIR/reviewer.sh" "$REVIEWER_REPO/hooks/opencode/reviewer.sh"
+cp "$SCRIPT_DIR/select-model.sh" "$REVIEWER_REPO/hooks/opencode/select-model.sh"
+cp "$SCRIPT_DIR/../capture-failure.sh" "$REVIEWER_REPO/hooks/capture-failure.sh"
+chmod +x "$REVIEWER_REPO/hooks/opencode/reviewer.sh" "$REVIEWER_REPO/hooks/opencode/select-model.sh" "$REVIEWER_REPO/hooks/capture-failure.sh"
+cat > "$REVIEWER_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-183":{"state":"verifying","model":"opencode/test","role":"reviewer","attempt":1}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+printf 'result\n' > "$REVIEWER_REPO/.autoship/workspaces/issue-183/AUTOSHIP_RESULT.md"
+cat > "$REVIEWER_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+case "${AUTOSHIP_FAKE_REVIEW:-pass}" in
+  pass) printf 'analysis\nVERDICT: PASS\n' ;;
+  fail) printf 'analysis\nVERDICT: FAIL\n' ;;
+  missing) printf 'analysis without verdict\n' ;;
+esac
+exit 0
+SH
+chmod +x "$REVIEWER_REPO/bin/opencode"
+(
+  cd "$REVIEWER_REPO"
+  PATH="$REVIEWER_REPO/bin:$PATH" AUTOSHIP_FAKE_REVIEW=pass bash hooks/opencode/reviewer.sh issue-183 .autoship/workspaces/issue-183 .autoship/workspaces/issue-183/AUTOSHIP_RESULT.md none >/tmp/reviewer-pass.out
+)
+if (
+  cd "$REVIEWER_REPO"
+  PATH="$REVIEWER_REPO/bin:$PATH" AUTOSHIP_FAKE_REVIEW=fail bash hooks/opencode/reviewer.sh issue-183 .autoship/workspaces/issue-183 .autoship/workspaces/issue-183/AUTOSHIP_RESULT.md none >/tmp/reviewer-fail.out 2>&1
+); then
+  fail "reviewer exits non-zero on explicit FAIL verdict"
+fi
+if (
+  cd "$REVIEWER_REPO"
+  PATH="$REVIEWER_REPO/bin:$PATH" AUTOSHIP_FAKE_REVIEW=missing bash hooks/opencode/reviewer.sh issue-183 .autoship/workspaces/issue-183 .autoship/workspaces/issue-183/AUTOSHIP_RESULT.md none >/tmp/reviewer-missing.out 2>&1
+); then
+  fail "reviewer fails closed when verdict is missing"
+fi
+reviewer_artifacts=$(find "$REVIEWER_REPO/.autoship/failures" -name '*-issue-183.json' 2>/dev/null | wc -l | tr -d '[:space:]')
+[[ "$reviewer_artifacts" -ge 1 ]] || fail "reviewer records failure evidence for rejected and malformed verdicts"
+
 grep -F 'AUTOSHIP_VERSION="1.5.0-opencode"' "$SCRIPT_DIR/init.sh" >/dev/null 2>&1 && fail "init must not hardcode stale 1.5.0-opencode version"
 
 INIT_REPO="$TMP_DIR/init-repo"
