@@ -121,6 +121,12 @@ impl OrchestratorLoop {
 
     /// Build from an `AppConfig` and a shutdown channel.
     pub fn from_config(app_config: &AppConfig, shutdown_rx: watch::Receiver<bool>) -> Self {
+        let config_hash = serde_json::to_value(&app_config.orchestrator)
+            .ok()
+            .map(|value| crate::session_replay::canonical_inputs_hash(&value))
+            .unwrap_or_else(|| String::from("unknown"));
+        crate::session_replay::set_orchestrator_config_hash(config_hash);
+
         let client_manager = ClientManager::new(&app_config.process_name)
             .with_discovery_config(&app_config.discovery);
         let launch_coordinator = LaunchCoordinator::new(

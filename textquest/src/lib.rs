@@ -52,6 +52,8 @@ pub mod exit_code;
 pub mod launcher;
 /// Log file rotation and retention — size-based and age-based cleanup.
 pub mod log_retention;
+/// Session replay streams — operator keycast and orchestrator decision logs.
+pub mod session_replay;
 
 /// Discord webhook and bridge integration.
 #[cfg_attr(not(windows), allow(dead_code))]

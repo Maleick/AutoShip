@@ -9,6 +9,7 @@ use super::{
     positioning::distance_2d,
     state::{CampMember, Role},
 };
+use serde::{Deserialize, Serialize};
 
 /// Operating mode for a group — camp (stationary) or hunt (roaming).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,7 +52,7 @@ pub enum HuntState {
 }
 
 /// Position in 2D space (EQ x, y).
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Pos2D {
     /// X coordinate in EQ world units.
     pub x: f32,
@@ -74,7 +75,7 @@ impl Pos2D {
 }
 
 /// Snapshot of real-time state for the hunt loop.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HuntSnapshot {
     /// Tank's current position.
     pub tank_pos: Pos2D,

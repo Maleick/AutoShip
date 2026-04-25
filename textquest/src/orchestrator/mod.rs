@@ -33,7 +33,7 @@ use crate::{
     say_detection::{SayAction, SayDetector, SayPattern, SayRule},
 };
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     env, fs, io,
     path::{Path, PathBuf},
     time::{Duration, Instant, SystemTime},
@@ -686,9 +686,29 @@ impl Orchestrator {
         self.poll_chat_log_if_due();
         let say_matches = self.poll_and_evaluate_say_detection();
 
+        let camp_snapshot = matches!(self.operating_mode, OperatingMode::Camp)
+            .then(|| self.build_camp_snapshot())
+            .flatten();
+        let hunt_snapshot = matches!(self.operating_mode, OperatingMode::Hunt)
+            .then(|| self.build_hunt_snapshot())
+            .flatten();
+        let decision_inputs = match self.operating_mode {
+            OperatingMode::Camp => self.decision_inputs_for_camp(camp_snapshot.as_ref()),
+            OperatingMode::Hunt => self.decision_inputs_for_hunt(hunt_snapshot.as_ref()),
+        };
+        let inputs_hash = crate::session_replay::canonical_inputs_hash(&decision_inputs);
+
         let commands = match self.operating_mode {
-            OperatingMode::Camp => self.tick_camp(),
-            OperatingMode::Hunt => self.tick_hunt(),
+            OperatingMode::Camp => self.tick_camp(
+                camp_snapshot,
+                &decision_inputs,
+                &inputs_hash,
+            ),
+            OperatingMode::Hunt => self.tick_hunt(
+                hunt_snapshot,
+                &decision_inputs,
+                &inputs_hash,
+            ),
         };
         // Filter to in-scope PIDs so the operator's routing scope is respected
         // by camp/hunt loop commands just as it is for TUI-initiated commands.
@@ -697,6 +717,11 @@ impl Orchestrator {
             .into_iter()
             .filter(|(pid, _)| in_scope.is_empty() || in_scope.contains(pid))
             .collect();
+        let decision_actor = match self.operating_mode {
+            OperatingMode::Camp => "camp_loop",
+            OperatingMode::Hunt => "hunt_loop",
+        };
+        self.record_decision_batch(decision_actor, &decision_inputs, &inputs_hash, &scoped);
         let xassist_commands = self.xassist.tick(&self.game_states);
         let emergency = self.cross_group.tick(
             &self.session_controls,
@@ -717,6 +742,10 @@ impl Orchestrator {
             .into_iter()
             .filter(|(pid, _)| in_scope.is_empty() || in_scope.contains(pid))
             .collect();
+
+        self.record_decision_batch("cross_group", &decision_inputs, &inputs_hash, &emergency);
+        self.record_ipc_decisions("rotation", &decision_inputs, &inputs_hash, &heal_commands_scoped);
+        self.record_xassist_decisions(&decision_inputs, &inputs_hash, &xassist_commands);
 
         let count = scoped.len() + emergency.len() + xassist_commands.len() + heal_commands_scoped.len();
         for (pid, action) in &scoped {
@@ -764,8 +793,16 @@ impl Orchestrator {
 
     /// Tick the camp loop, including sell cycle, progression checks, and event
     /// production.
-    fn tick_camp(&mut self) -> Vec<(u32, CampAction)> {
-        let snapshot = self.build_camp_snapshot();
+    fn tick_camp(
+        &mut self,
+        snapshot: Option<CampSnapshot>,
+        decision_inputs: &serde_json::Value,
+        inputs_hash: &str,
+    ) -> Vec<(u32, CampAction)> {
+        let before_phase = self
+            .active_camp
+            .as_ref()
+            .map(|camp| format!("{:?}", camp.state));
 
         // --- Task 5: Event production (charm breaks, adds, CC expiry) ---
         self.produce_camp_events(&snapshot);
@@ -799,16 +836,52 @@ impl Orchestrator {
             );
         }
 
+        let after_phase = self
+            .active_camp
+            .as_ref()
+            .map(|camp| format!("{:?}", camp.state));
+        if before_phase != after_phase {
+            self.record_phase_change(
+                "camp_loop",
+                decision_inputs,
+                inputs_hash,
+                before_phase.as_deref().unwrap_or("unknown"),
+                after_phase.as_deref().unwrap_or("unknown"),
+            );
+        }
+
         commands
     }
 
     /// Tick the hunt loop.
-    fn tick_hunt(&mut self) -> Vec<(u32, CampAction)> {
-        let hunt_snapshot = self.build_hunt_snapshot();
+    fn tick_hunt(
+        &mut self,
+        hunt_snapshot: Option<HuntSnapshot>,
+        decision_inputs: &serde_json::Value,
+        inputs_hash: &str,
+    ) -> Vec<(u32, CampAction)> {
+        let before_phase = self
+            .active_hunt
+            .as_ref()
+            .map(|hunt| format!("{:?}", hunt.state));
         match self.active_hunt.as_mut() {
             Some(hunt) => {
                 let slash_cmds = hunt.tick(hunt_snapshot.as_ref());
-                CampAction::from_slash_vec(slash_cmds)
+                let commands = CampAction::from_slash_vec(slash_cmds);
+                let after_phase = self
+                    .active_hunt
+                    .as_ref()
+                    .map(|hunt| format!("{:?}", hunt.state));
+                if before_phase != after_phase {
+                    self.record_phase_change(
+                        "hunt_loop",
+                        decision_inputs,
+                        inputs_hash,
+                        before_phase.as_deref().unwrap_or("unknown"),
+                        after_phase.as_deref().unwrap_or("unknown"),
+                    );
+                }
+                commands
             }
             None => Vec::new(),
         }

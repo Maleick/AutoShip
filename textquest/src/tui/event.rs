@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 use super::app::{ActivePanel, ActiveScreen, App, HelpFocus, MapViewportMode, ToastLevel};
 use crate::{
     orchestrator::Orchestrator,
+    session_replay,
     tui::{state::MapFilterKind, ui::ch_chain::ChPanelFocus},
 };
 
@@ -505,6 +506,8 @@ pub fn handle_events(
         if key.kind != KeyEventKind::Press {
             return Ok(false);
         }
+
+        session_replay::record_operator_keypress(key);
 
         if app.cmd_state.command_mode {
             match key.code {

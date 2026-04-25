@@ -34,6 +34,7 @@ use crate::camp::{
     personality::PersonalityProfile,
     recovery::{RecoveryTracker, death_commands_with_roles},
 };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use textquest_common::combat::HateTargetCategory;
 
@@ -64,7 +65,7 @@ pub enum CampEvent {
 /// Real-time game state snapshot for the camp loop.
 /// When available, the camp loop uses these values for smarter transitions
 /// instead of fixed tick timers.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CampSnapshot {
     /// Healer's current mana as a percentage (0.0-100.0).
     pub healer_mana_pct: f32,

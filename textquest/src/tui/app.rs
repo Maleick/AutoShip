@@ -6747,6 +6747,8 @@ impl App {
         }
         let input = command::normalize_command_alias(&input);
 
+        crate::session_replay::record_operator_command(&input);
+
         // Save to history and track frequency for favorites
         self.cmd_state.command_history.push(input.clone());
         self.cmd_state.record_command(&input);
@@ -7159,6 +7161,7 @@ impl App {
             "mode" => match parts.get(1).copied() {
                 Some("camp") => {
                     self.operating_mode = crate::camp::hunt::OperatingMode::Camp;
+                    crate::session_replay::record_operator_mode("camp");
                     self.set_feedback(
                         ToastLevel::Success,
                         String::from("Switched to Camp mode"),
@@ -7167,6 +7170,7 @@ impl App {
                 }
                 Some("hunt") => {
                     self.operating_mode = crate::camp::hunt::OperatingMode::Hunt;
+                    crate::session_replay::record_operator_mode("hunt");
                     self.set_feedback(
                         ToastLevel::Success,
                         String::from("Switched to Hunt mode"),
@@ -9215,6 +9219,7 @@ impl App {
                     zone,
                 };
                 self.map_state.named_markers.push(marker);
+                crate::session_replay::record_operator_bookmark(&name);
 
                 let msg = format!("Marker \"{name}\" set at ({x:.0}, {y:.0})");
                 if let Err(e) = save_named_markers(
