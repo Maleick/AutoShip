@@ -497,6 +497,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         assert!(druid.should_assist(&ctx));
     }
@@ -553,6 +554,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let (id, hp) = strategy::lowest_hp_member(&ctx).unwrap();
@@ -585,6 +587,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         assert_eq!(druid.select_target(&ctx), Some(10));
@@ -638,6 +641,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         assert_eq!(druid.select_spell(&ctx).unwrap().name, "Radiant Cure");
@@ -689,6 +693,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let spell = druid.select_spell(&ctx).unwrap();
@@ -746,6 +751,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let spell = druid.select_spell(&ctx).unwrap();
@@ -825,6 +831,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let spell = druid.select_spell(&ctx).unwrap();
@@ -876,6 +883,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let spell = druid.select_spell(&ctx).unwrap();

@@ -335,6 +335,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         }
     }
 
@@ -578,6 +579,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)
@@ -620,6 +622,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)
@@ -675,6 +678,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)
@@ -718,6 +722,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)

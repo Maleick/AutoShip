@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use textquest_common::{
     combat::{
         AbilitySet, BuffInfo, CastResult, CombatConfig, CombatRole, ExtendedTargetList,
-        HpPreference, KnownAbility, NamedPreference, ResolvedAbility, SpellEntry, TargetScanConfig,
+        HpPreference, KnownAbility, NamedPreference, PositionalContext, ResolvedAbility,
+        SpellEntry, TargetScanConfig,
     },
     types::SpawnData,
 };

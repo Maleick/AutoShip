@@ -701,6 +701,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: target.is_some_and(strategy::is_mezzed),
             extended_targets: None,
+            positional: None,
         }
     }
 
@@ -1095,6 +1096,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: Some(&xtargets),
+            positional: None,
         };
         let status = ctx.pet_status();
         assert!(
@@ -1124,6 +1126,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         let status = ctx.pet_status();
         assert!(!status.has_pet(), "no MyPet slot means charm is broken");
@@ -1191,6 +1194,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: Some(&xtargets),
+            positional: None,
         };
         assert_eq!(
             pet_attack_action(&ctx),
@@ -1242,6 +1246,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: Some(&xtargets),
+            positional: None,
         };
         assert_eq!(
             pet_attack_action(&ctx),

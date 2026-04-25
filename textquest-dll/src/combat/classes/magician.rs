@@ -417,6 +417,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         }
     }
 
@@ -805,6 +806,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: Some(&xtargets),
+            positional: None,
         };
 
         let first = mage.pet_action(&ctx);

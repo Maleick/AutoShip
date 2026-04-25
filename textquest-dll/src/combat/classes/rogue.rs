@@ -97,6 +97,36 @@ impl RogueStrategy {
     }
 
     fn build_rotations() -> Vec<RotationGroup> {
+        // Backstab opener: fires only when behind the target with a piercer in
+        // hand. Runs at highest priority so it preempts disc burns on the first
+        // swing. Steps=0 means at most one action per frame.
+        let mut opener =
+            rotation::group("Opener", TargetSelector::AutoTarget, CombatStateReq::Combat);
+        opener.steps_per_frame = 1;
+        opener.entries = vec![rotation::entry_if(
+            "Backstab",
+            ActionType::Ability("Backstab".into()),
+            ConditionExpr::And(vec![
+                ConditionExpr::BehindTarget,
+                ConditionExpr::PiercerEquipped,
+            ]),
+        )];
+
+        // Assassinate: behind + piercer + target must be low-level (≤20).
+        // Listed after Backstab so Backstab always fires first when both pass.
+        let mut assassinate =
+            rotation::group("Assassinate", TargetSelector::AutoTarget, CombatStateReq::Combat);
+        assassinate.steps_per_frame = 1;
+        assassinate.entries = vec![rotation::entry_if(
+            "Assassinate",
+            ActionType::AA("Assassinate".into()),
+            ConditionExpr::And(vec![
+                ConditionExpr::BehindTarget,
+                ConditionExpr::PiercerEquipped,
+                ConditionExpr::TargetLevelBelow(20),
+            ]),
+        )];
+
         let mut burn = rotation::group("Burn", TargetSelector::AutoTarget, CombatStateReq::Combat);
         burn.steps_per_frame = 1;
         burn.entries = vec![
@@ -117,7 +147,7 @@ impl RogueStrategy {
             ),
         ];
 
-        vec![burn]
+        vec![opener, assassinate, burn]
     }
 
     fn metadata_for_resolved_name(
@@ -272,7 +302,7 @@ impl ClassStrategy for RogueStrategy {
 mod tests {
     use super::*;
     use textquest_common::{
-        combat::{CombatConfig, KnownAbility},
+        combat::{CombatConfig, KnownAbility, PositionalContext},
         types::SpawnData,
     };
 
@@ -298,6 +328,30 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
+        }
+    }
+
+    fn make_ctx_positional<'a>(
+        player: &'a SpawnData,
+        target: Option<&'a SpawnData>,
+        config: &'a CombatConfig,
+        positional: &'a PositionalContext,
+    ) -> CombatContext<'a> {
+        CombatContext {
+            player,
+            target,
+            nearby_enemies: &[],
+            group_members: &[],
+            config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+            positional: Some(positional),
         }
     }
 
@@ -470,16 +524,31 @@ mod tests {
     #[test]
     fn burn_rotation_prioritizes_precision_then_duelist_then_weapon_affinity() {
         let groups = RogueStrategy::build_rotations();
-        assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].name, "Burn");
+        assert_eq!(groups.len(), 3);
+        let burn = groups.iter().find(|g| g.name == "Burn").unwrap();
         assert_eq!(
-            groups[0]
-                .entries
+            burn.entries
                 .iter()
                 .map(|entry| entry.name.as_str())
                 .collect::<Vec<_>>(),
             vec!["Precision", "Duelist", "WeaponAffinity"]
         );
+    }
+
+    #[test]
+    fn opener_rotation_requires_behind_and_piercer() {
+        let groups = RogueStrategy::build_rotations();
+        let opener = groups.iter().find(|g| g.name == "Opener").unwrap();
+        assert_eq!(opener.entries.len(), 1);
+        assert_eq!(opener.entries[0].name, "Backstab");
+    }
+
+    #[test]
+    fn assassinate_rotation_exists_with_level_gate() {
+        let groups = RogueStrategy::build_rotations();
+        let assassinate = groups.iter().find(|g| g.name == "Assassinate").unwrap();
+        assert_eq!(assassinate.entries.len(), 1);
+        assert_eq!(assassinate.entries[0].name, "Assassinate");
     }
 
     #[test]
@@ -490,9 +559,9 @@ mod tests {
 
         rogue.sync_resolved_rotation_groups(&mut groups, &resolved);
 
+        let burn = groups.iter().find(|g| g.name == "Burn").unwrap();
         assert_eq!(
-            groups[0]
-                .entries
+            burn.entries
                 .iter()
                 .map(|entry| entry.name.as_str())
                 .collect::<Vec<_>>(),
@@ -510,9 +579,9 @@ mod tests {
         rogue.sync_resolved_rotation_groups(&mut groups, &resolved_60);
         rogue.sync_resolved_rotation_groups(&mut groups, &resolved_61);
 
+        let burn = groups.iter().find(|g| g.name == "Burn").unwrap();
         assert_eq!(
-            groups[0]
-                .entries
+            burn.entries
                 .iter()
                 .map(|entry| entry.name.as_str())
                 .collect::<Vec<_>>(),
@@ -574,6 +643,138 @@ mod tests {
         assert_eq!(
             utility.shared_cooldown_key.as_deref(),
             Some(ROGUE_TIMER_UTILITY)
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Positional gate tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn backstab_fires_when_behind_with_piercer() {
+        let mut player = SpawnData::default();
+        player.spawn_id = 1;
+        player.endurance_current = 100;
+        player.endurance_max = 1000;
+        let target = SpawnData {
+            spawn_id: 42,
+            ..SpawnData::default()
+        };
+        let pos = PositionalContext {
+            is_behind_target: true,
+            piercer_equipped: true,
+            ..PositionalContext::default()
+        };
+        let ctx = make_ctx_positional(&player, Some(&target), &DEFAULT_CONFIG, &pos);
+        let mut groups = RogueStrategy::build_rotations();
+
+        let selected = rotation::execute_rotations(&mut groups, &ctx).unwrap();
+        assert_eq!(selected.entry_name, "Backstab", "Opener should fire first");
+    }
+
+    #[test]
+    fn backstab_blocked_when_not_behind() {
+        let mut player = SpawnData::default();
+        player.spawn_id = 1;
+        player.endurance_current = 100;
+        player.endurance_max = 1000;
+        let target = SpawnData {
+            spawn_id: 42,
+            ..SpawnData::default()
+        };
+        let pos = PositionalContext {
+            is_behind_target: false,
+            piercer_equipped: true,
+            ..PositionalContext::default()
+        };
+        let ctx = make_ctx_positional(&player, Some(&target), &DEFAULT_CONFIG, &pos);
+        let mut groups = RogueStrategy::build_rotations();
+
+        // Opener and Assassinate both fail; low endurance means Burn also fails
+        let selected = rotation::execute_rotations(&mut groups, &ctx);
+        assert!(
+            selected.map_or(true, |a| a.entry_name != "Backstab"),
+            "Backstab must not fire from front"
+        );
+    }
+
+    #[test]
+    fn backstab_blocked_without_piercer() {
+        let mut player = SpawnData::default();
+        player.spawn_id = 1;
+        player.endurance_current = 100;
+        player.endurance_max = 1000;
+        let target = SpawnData {
+            spawn_id: 42,
+            ..SpawnData::default()
+        };
+        let pos = PositionalContext {
+            is_behind_target: true,
+            piercer_equipped: false,
+            ..PositionalContext::default()
+        };
+        let ctx = make_ctx_positional(&player, Some(&target), &DEFAULT_CONFIG, &pos);
+        let mut groups = RogueStrategy::build_rotations();
+
+        let selected = rotation::execute_rotations(&mut groups, &ctx);
+        assert!(
+            selected.map_or(true, |a| a.entry_name != "Backstab"),
+            "Backstab must not fire without a piercer"
+        );
+    }
+
+    #[test]
+    fn assassinate_fires_when_behind_with_piercer_and_low_level_target() {
+        let mut player = SpawnData::default();
+        player.spawn_id = 1;
+        player.endurance_current = 100;
+        player.endurance_max = 1000;
+        let target = SpawnData {
+            spawn_id: 42,
+            level: 10,
+            ..SpawnData::default()
+        };
+        let pos = PositionalContext {
+            is_behind_target: true,
+            piercer_equipped: true,
+            ..PositionalContext::default()
+        };
+        let ctx = make_ctx_positional(&player, Some(&target), &DEFAULT_CONFIG, &pos);
+        let mut groups = RogueStrategy::build_rotations();
+
+        // Opener fires "Backstab" (highest priority), not Assassinate
+        let selected = rotation::execute_rotations(&mut groups, &ctx).unwrap();
+        assert_eq!(
+            selected.entry_name, "Backstab",
+            "Opener takes priority over Assassinate"
+        );
+    }
+
+    #[test]
+    fn assassinate_blocked_when_target_too_high_level() {
+        let mut player = SpawnData::default();
+        player.spawn_id = 1;
+        player.endurance_current = 100;
+        player.endurance_max = 1000;
+        let target = SpawnData {
+            spawn_id: 42,
+            level: 55,
+            ..SpawnData::default()
+        };
+        let pos = PositionalContext {
+            is_behind_target: true,
+            piercer_equipped: true,
+            ..PositionalContext::default()
+        };
+        let ctx = make_ctx_positional(&player, Some(&target), &DEFAULT_CONFIG, &pos);
+        // Manually test Assassinate group — strip Opener first
+        let mut groups = RogueStrategy::build_rotations();
+        groups.retain(|g| g.name == "Assassinate");
+
+        let selected = rotation::execute_rotations(&mut groups, &ctx);
+        assert!(
+            selected.is_none(),
+            "Assassinate must not fire against level-55 target"
         );
     }
 }

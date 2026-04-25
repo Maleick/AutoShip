@@ -441,6 +441,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         let spell = bl.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Affordable");

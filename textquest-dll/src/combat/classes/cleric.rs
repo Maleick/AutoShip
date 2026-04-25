@@ -543,6 +543,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         assert!(!cleric.should_assist(&ctx));
     }
@@ -571,6 +572,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -601,6 +603,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -631,6 +634,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         assert!(cleric.select_spell(&ctx).is_none());
@@ -655,6 +659,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         assert!(cleric.should_cancel_heal(&ctx));
     }
@@ -678,6 +683,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         assert!(!cleric.should_cancel_heal(&ctx));
     }
@@ -719,6 +725,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -763,6 +770,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -805,6 +813,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -845,6 +854,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         // In combat with everyone healthy — should return None (med)
@@ -876,6 +886,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let (id, hp) = strategy::lowest_hp_member(&ctx).unwrap();
@@ -919,6 +930,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -952,6 +964,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         assert_eq!(cleric.select_target(&ctx), Some(11));
@@ -1003,6 +1016,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         assert_eq!(cleric.select_spell(&ctx).unwrap().name, "Radiant Cure");
@@ -1046,6 +1060,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         // Emergency heal fires before cure — keeping the member alive is
@@ -1089,6 +1104,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -1129,6 +1145,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -1270,6 +1287,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         let spell = cleric.select_spell(&ctx).unwrap();
@@ -1314,6 +1332,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         assert!(cleric.select_spell(&ctx).is_none());

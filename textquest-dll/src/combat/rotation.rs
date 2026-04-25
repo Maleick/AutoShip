@@ -699,6 +699,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         }
     }
 
@@ -1023,6 +1024,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         let mut g = group(
             "Heals",
@@ -1180,6 +1182,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: Some(&xtargets),
+            positional: None,
         };
 
         assert!(evaluate_condition(&ConditionExpr::AggroOnMe, &ctx));
@@ -1210,8 +1213,168 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: Some(&xtargets),
+            positional: None,
         };
 
         assert!(!evaluate_condition(&ConditionExpr::AggroOnMe, &ctx));
+    }
+
+    // -----------------------------------------------------------------------
+    // Positional / equipment condition tests
+    // -----------------------------------------------------------------------
+
+    use textquest_common::combat::PositionalContext;
+
+    fn build_ctx_positional<'a>(
+        player: &'a SpawnData,
+        target: Option<&'a SpawnData>,
+        config: &'a CombatConfig,
+        positional: &'a PositionalContext,
+    ) -> CombatContext<'a> {
+        CombatContext {
+            player,
+            target,
+            nearby_enemies: &[],
+            group_members: &[],
+            config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+            positional: Some(positional),
+        }
+    }
+
+    #[test]
+    fn behind_target_true_when_positional_set() {
+        let (player, target, config) = make_ctx(true, 80.0, 80.0);
+        let pos = PositionalContext {
+            is_behind_target: true,
+            ..PositionalContext::default()
+        };
+        let ctx = build_ctx_positional(&player, Some(&target), &config, &pos);
+        assert!(evaluate_condition(&ConditionExpr::BehindTarget, &ctx));
+    }
+
+    #[test]
+    fn behind_target_false_when_positional_absent() {
+        let (player, target, config) = make_ctx(true, 80.0, 80.0);
+        let ctx = build_ctx(&player, Some(&target), &config, true);
+        assert!(!evaluate_condition(&ConditionExpr::BehindTarget, &ctx));
+    }
+
+    #[test]
+    fn behind_target_false_when_not_behind() {
+        let (player, target, config) = make_ctx(true, 80.0, 80.0);
+        let pos = PositionalContext {
+            is_behind_target: false,
+            ..PositionalContext::default()
+        };
+        let ctx = build_ctx_positional(&player, Some(&target), &config, &pos);
+        assert!(!evaluate_condition(&ConditionExpr::BehindTarget, &ctx));
+    }
+
+    #[test]
+    fn piercer_equipped_gates_correctly() {
+        let (player, target, config) = make_ctx(true, 80.0, 80.0);
+        let pos_with = PositionalContext {
+            piercer_equipped: true,
+            ..PositionalContext::default()
+        };
+        let pos_without = PositionalContext {
+            piercer_equipped: false,
+            ..PositionalContext::default()
+        };
+        let ctx_with = build_ctx_positional(&player, Some(&target), &config, &pos_with);
+        let ctx_without = build_ctx_positional(&player, Some(&target), &config, &pos_without);
+        assert!(evaluate_condition(&ConditionExpr::PiercerEquipped, &ctx_with));
+        assert!(!evaluate_condition(
+            &ConditionExpr::PiercerEquipped,
+            &ctx_without
+        ));
+    }
+
+    #[test]
+    fn ranged_weapon_equipped_gates_correctly() {
+        let (player, target, config) = make_ctx(true, 80.0, 80.0);
+        let pos = PositionalContext {
+            ranged_weapon_equipped: true,
+            ..PositionalContext::default()
+        };
+        let ctx = build_ctx_positional(&player, Some(&target), &config, &pos);
+        assert!(evaluate_condition(&ConditionExpr::RangedWeaponEquipped, &ctx));
+    }
+
+    #[test]
+    fn target_level_below_fires_when_target_low() {
+        let (player, _, config) = make_ctx(true, 80.0, 80.0);
+        let mut target = SpawnData::default();
+        target.spawn_id = 42;
+        target.level = 10;
+        let ctx = build_ctx(&player, Some(&target), &config, true);
+        assert!(evaluate_condition(
+            &ConditionExpr::TargetLevelBelow(20),
+            &ctx
+        ));
+        assert!(!evaluate_condition(
+            &ConditionExpr::TargetLevelBelow(10),
+            &ctx
+        ));
+    }
+
+    #[test]
+    fn target_level_below_false_when_no_target() {
+        let (player, _, config) = make_ctx(true, 80.0, 80.0);
+        let ctx = build_ctx(&player, None, &config, true);
+        assert!(!evaluate_condition(
+            &ConditionExpr::TargetLevelBelow(60),
+            &ctx
+        ));
+    }
+
+    #[test]
+    fn player_is_stealthed_gates_correctly() {
+        let (player, target, config) = make_ctx(true, 80.0, 80.0);
+        let pos = PositionalContext {
+            is_stealthed: true,
+            ..PositionalContext::default()
+        };
+        let ctx = build_ctx_positional(&player, Some(&target), &config, &pos);
+        assert!(evaluate_condition(&ConditionExpr::PlayerIsStealthed, &ctx));
+    }
+
+    #[test]
+    fn and_condition_behind_and_piercer() {
+        let (player, target, config) = make_ctx(true, 80.0, 80.0);
+        let pos = PositionalContext {
+            is_behind_target: true,
+            piercer_equipped: true,
+            ..PositionalContext::default()
+        };
+        let ctx = build_ctx_positional(&player, Some(&target), &config, &pos);
+        let cond = ConditionExpr::And(vec![
+            ConditionExpr::BehindTarget,
+            ConditionExpr::PiercerEquipped,
+        ]);
+        assert!(evaluate_condition(&cond, &ctx));
+    }
+
+    #[test]
+    fn and_condition_behind_without_piercer_fails() {
+        let (player, target, config) = make_ctx(true, 80.0, 80.0);
+        let pos = PositionalContext {
+            is_behind_target: true,
+            piercer_equipped: false,
+            ..PositionalContext::default()
+        };
+        let ctx = build_ctx_positional(&player, Some(&target), &config, &pos);
+        let cond = ConditionExpr::And(vec![
+            ConditionExpr::BehindTarget,
+            ConditionExpr::PiercerEquipped,
+        ]);
+        assert!(!evaluate_condition(&cond, &ctx));
     }
 }

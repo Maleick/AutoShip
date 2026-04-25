@@ -270,6 +270,28 @@ impl RangerStrategy {
                 group
             },
             {
+                // Headshot: ranged AA that instant-kills trivial mobs on a
+                // ranged auto-attack hit. Requires bow in ranged slot + target
+                // must be low-level (below 20). This rotation entry queues the
+                // AA activation; the actual kill proc fires on the next ranged
+                // auto-attack.
+                let mut group = rotation::group(
+                    "Headshot",
+                    TargetSelector::AutoTarget,
+                    CombatStateReq::Combat,
+                );
+                group.steps_per_frame = 1;
+                group.entries = vec![rotation::entry_if(
+                    "Headshot",
+                    ActionType::AA("Headshot".into()),
+                    ConditionExpr::And(vec![
+                        ConditionExpr::RangedWeaponEquipped,
+                        ConditionExpr::TargetLevelBelow(20),
+                    ]),
+                )];
+                group
+            },
+            {
                 let mut group =
                     rotation::group("Debuff", TargetSelector::AutoTarget, CombatStateReq::Combat);
                 group.entries = vec![rotation::entry_if(
@@ -442,7 +464,7 @@ impl ClassStrategy for RangerStrategy {
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
-    use textquest_common::combat::{CombatConfig, SpellEntry};
+    use textquest_common::combat::{CombatConfig, PositionalContext, SpellEntry};
 
     fn make_ctx<'a>(
         player: &'a SpawnData,
@@ -464,6 +486,30 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
+        }
+    }
+
+    fn make_ctx_positional<'a>(
+        player: &'a SpawnData,
+        target: Option<&'a SpawnData>,
+        config: &'a CombatConfig,
+        positional: &'a PositionalContext,
+    ) -> CombatContext<'a> {
+        CombatContext {
+            player,
+            target,
+            nearby_enemies: &[],
+            group_members: &[],
+            config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+            positional: Some(positional),
         }
     }
 
@@ -503,6 +549,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         assert!(ranger.should_assist(&ctx));
     }
@@ -816,5 +863,102 @@ mod tests {
         let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx)
             .expect("expected an emergency rotation action");
         assert_eq!(action.entry_name, "EmergencyHeal");
+    }
+
+    // -----------------------------------------------------------------------
+    // Headshot gate tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn headshot_fires_with_ranged_weapon_and_low_level_target() {
+        let player = SpawnData {
+            spawn_id: 1,
+            hp_current: 10_000,
+            hp_max: 10_000,
+            mana_current: 10_000,
+            mana_max: 10_000,
+            ..SpawnData::default()
+        };
+        let target = SpawnData {
+            spawn_id: 42,
+            level: 10,
+            hp_current: 1_000,
+            hp_max: 1_000,
+            ..SpawnData::default()
+        };
+        let config = CombatConfig::default();
+        let pos = PositionalContext {
+            ranged_weapon_equipped: true,
+            ..PositionalContext::default()
+        };
+        let ctx = make_ctx_positional(&player, Some(&target), &config, &pos);
+        let mut groups = RangerStrategy::build_rotations();
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx).unwrap();
+        assert_eq!(action.entry_name, "Headshot");
+    }
+
+    #[test]
+    fn headshot_blocked_when_target_too_high_level() {
+        let player = SpawnData {
+            spawn_id: 1,
+            hp_current: 10_000,
+            hp_max: 10_000,
+            mana_current: 10_000,
+            mana_max: 10_000,
+            ..SpawnData::default()
+        };
+        let target = SpawnData {
+            spawn_id: 42,
+            level: 50,
+            hp_current: 1_000,
+            hp_max: 1_000,
+            ..SpawnData::default()
+        };
+        let config = CombatConfig::default();
+        let pos = PositionalContext {
+            ranged_weapon_equipped: true,
+            ..PositionalContext::default()
+        };
+        let ctx = make_ctx_positional(&player, Some(&target), &config, &pos);
+        let mut groups = RangerStrategy::build_rotations();
+        // Keep only headshot group to isolate the gate
+        groups.retain(|g| g.name == "Headshot");
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx);
+        assert!(
+            action.is_none(),
+            "Headshot must not fire against level-50 target"
+        );
+    }
+
+    #[test]
+    fn headshot_blocked_without_ranged_weapon() {
+        let player = SpawnData {
+            spawn_id: 1,
+            hp_current: 10_000,
+            hp_max: 10_000,
+            mana_current: 10_000,
+            mana_max: 10_000,
+            ..SpawnData::default()
+        };
+        let target = SpawnData {
+            spawn_id: 42,
+            level: 5,
+            hp_current: 1_000,
+            hp_max: 1_000,
+            ..SpawnData::default()
+        };
+        let config = CombatConfig::default();
+        let pos = PositionalContext {
+            ranged_weapon_equipped: false,
+            ..PositionalContext::default()
+        };
+        let ctx = make_ctx_positional(&player, Some(&target), &config, &pos);
+        let mut groups = RangerStrategy::build_rotations();
+        groups.retain(|g| g.name == "Headshot");
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx);
+        assert!(action.is_none(), "Headshot must not fire without bow");
     }
 }

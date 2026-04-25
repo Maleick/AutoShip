@@ -595,6 +595,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         let spell = shaman.select_spell(&ctx);
         assert!(spell.is_some());
@@ -633,6 +634,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         let spell = shaman.select_spell(&ctx);
         assert!(spell.is_some());
@@ -662,6 +664,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         let spell = shaman.select_spell(&ctx);
         assert!(spell.is_some());
@@ -692,6 +695,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         assert!(shaman.should_assist(&ctx));
     }
@@ -727,6 +731,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         assert_eq!(shaman.select_target(&ctx), Some(42));
     }
@@ -753,6 +758,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         assert_eq!(shaman.select_target(&ctx), Some(99));
     }
@@ -809,6 +815,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         assert_eq!(shaman.select_target(&ctx), Some(42));
     }
@@ -851,6 +858,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         assert_eq!(shaman.select_spell(&ctx).unwrap().name, "Turgur's Insects");
@@ -920,6 +928,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         assert_eq!(shaman.select_spell(&ctx).unwrap().name, "Radiant Cure");
@@ -950,6 +959,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         shaman.on_engage(&ctx);
         assert!(!shaman.target_slowed);
@@ -980,6 +990,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         shaman.on_engage(&ctx);
         assert!(shaman.target_slowed);
@@ -1004,6 +1015,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         assert!(shaman.select_spell(&ctx).is_none());
     }
@@ -1036,6 +1048,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         shaman.on_engage(&ctx);
@@ -1120,6 +1133,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         shaman.on_cast_outcome(&ctx, 4, CastResult::Success);
@@ -1168,6 +1182,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         assert_eq!(shaman.select_spell(&ctx).unwrap().name, "Kragg's Mending");
@@ -1204,6 +1219,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         assert_eq!(shaman.select_spell(&ctx).unwrap().name, "Cannibalize IV");
@@ -1251,6 +1267,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
 
         assert!(shaman.select_spell(&ctx).is_none());

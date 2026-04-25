@@ -119,6 +119,26 @@ impl BerserkerStrategy {
                 g
             },
             {
+                // Decapitate: instant-kill AA that fires when the target's HP
+                // drops below 20%. Requires endurance to activate; the engine
+                // queues the AA and the proc fires on the next melee swing.
+                let mut g = rotation::group(
+                    "Decapitate",
+                    TargetSelector::AutoTarget,
+                    CombatStateReq::Combat,
+                );
+                g.steps_per_frame = 1;
+                g.entries = vec![rotation::entry_if(
+                    "Decapitate",
+                    ActionType::AA("Decapitate".into()),
+                    ConditionExpr::And(vec![
+                        ConditionExpr::TargetHpBelow(20.0),
+                        ConditionExpr::EnduranceAbove(15.0),
+                    ]),
+                )];
+                g
+            },
+            {
                 let mut g =
                     rotation::group("Combat", TargetSelector::AutoTarget, CombatStateReq::Combat);
                 g.steps_per_frame = 1;
@@ -192,7 +212,7 @@ impl ClassStrategy for BerserkerStrategy {
 mod tests {
     use super::*;
     use textquest_common::{
-        combat::{CombatConfig, KnownAbility},
+        combat::{CombatConfig, KnownAbility, PositionalContext},
         types::SpawnData,
     };
 
@@ -218,6 +238,29 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
+        }
+    }
+
+    fn make_ctx_positional<'a>(
+        player: &'a SpawnData,
+        target: Option<&'a SpawnData>,
+        positional: &'a PositionalContext,
+    ) -> CombatContext<'a> {
+        CombatContext {
+            player,
+            target,
+            nearby_enemies: &[],
+            group_members: &[],
+            config: &DEFAULT_CONFIG,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+            positional: Some(positional),
         }
     }
 
@@ -362,6 +405,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         let spell = ber.select_spell(&ctx).unwrap();
         assert_eq!(spell.name, "Frenzy");
@@ -372,7 +416,7 @@ mod tests {
         let ber = BerserkerStrategy::new(16);
         let groups = ber.rotation_groups().unwrap();
         let names: Vec<&str> = groups.iter().map(|g| g.name.as_str()).collect();
-        assert_eq!(names, vec!["Burn", "Combat"]);
+        assert_eq!(names, vec!["Burn", "Decapitate", "Combat"]);
     }
 
     #[test]
@@ -499,5 +543,70 @@ mod tests {
             .expect("level 65 should resolve cleave");
         assert_eq!(cleave.ability_name, "Cleaving Anger Discipline");
         assert_eq!(cleave.spell_id, 5043);
+    }
+
+    // -----------------------------------------------------------------------
+    // Decapitate gate tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn decapitate_fires_when_target_hp_low_and_endurance_ok() {
+        let mut player = SpawnData::default();
+        player.spawn_id = 1;
+        player.endurance_current = 500;
+        player.endurance_max = 1000;
+        let mut target = SpawnData::default();
+        target.spawn_id = 42;
+        target.hp_current = 100;
+        target.hp_max = 1000; // 10% HP → below 20% threshold
+        let ctx = make_ctx(&player, Some(&target), &[], true);
+        let mut groups = BerserkerStrategy::new(16).rotation_groups().unwrap();
+        // Strip Burn group to isolate Decapitate
+        groups.retain(|g| g.name == "Decapitate");
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx).unwrap();
+        assert_eq!(action.entry_name, "Decapitate");
+    }
+
+    #[test]
+    fn decapitate_blocked_when_target_hp_above_threshold() {
+        let mut player = SpawnData::default();
+        player.spawn_id = 1;
+        player.endurance_current = 500;
+        player.endurance_max = 1000;
+        let mut target = SpawnData::default();
+        target.spawn_id = 42;
+        target.hp_current = 5000;
+        target.hp_max = 10_000; // 50% HP → above 20% threshold
+        let ctx = make_ctx(&player, Some(&target), &[], true);
+        let mut groups = BerserkerStrategy::new(16).rotation_groups().unwrap();
+        groups.retain(|g| g.name == "Decapitate");
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx);
+        assert!(
+            action.is_none(),
+            "Decapitate must not fire when target HP is above 20%"
+        );
+    }
+
+    #[test]
+    fn decapitate_blocked_when_endurance_too_low() {
+        let mut player = SpawnData::default();
+        player.spawn_id = 1;
+        player.endurance_current = 10;
+        player.endurance_max = 1000; // 1% endurance
+        let mut target = SpawnData::default();
+        target.spawn_id = 42;
+        target.hp_current = 100;
+        target.hp_max = 1000; // 10% HP
+        let ctx = make_ctx(&player, Some(&target), &[], true);
+        let mut groups = BerserkerStrategy::new(16).rotation_groups().unwrap();
+        groups.retain(|g| g.name == "Decapitate");
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx);
+        assert!(
+            action.is_none(),
+            "Decapitate must not fire with insufficient endurance"
+        );
     }
 }

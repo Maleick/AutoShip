@@ -124,6 +124,27 @@ impl MonkStrategy {
     fn build_rotations() -> Vec<RotationGroup> {
         vec![
             {
+                // Flying Kick Priority: when positioned behind or to the side
+                // of the target, Flying Kick deals bonus damage. This rotation
+                // group pre-empts the standard kick in the Combat group so the
+                // engine issues Flying Kick first when the positional is set.
+                let mut g = rotation::group(
+                    "FlyingKickPriority",
+                    TargetSelector::AutoTarget,
+                    CombatStateReq::Combat,
+                );
+                g.steps_per_frame = 1;
+                g.entries = vec![rotation::entry_if(
+                    "Flying Kick",
+                    ActionType::Ability("Flying Kick".into()),
+                    ConditionExpr::And(vec![
+                        ConditionExpr::BehindTarget,
+                        ConditionExpr::EnduranceAbove(15.0),
+                    ]),
+                )];
+                g
+            },
+            {
                 let mut g = rotation::group(
                     "Emergency",
                     TargetSelector::AutoTarget,
@@ -288,7 +309,7 @@ mod tests {
     use super::*;
     use crate::combat::rotation;
     use textquest_common::{
-        combat::{CombatConfig, KnownAbility, SpellEntry, resolve_abilities},
+        combat::{CombatConfig, KnownAbility, PositionalContext, SpellEntry, resolve_abilities},
         types::SpawnData,
     };
 
@@ -315,6 +336,30 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
+        }
+    }
+
+    fn make_ctx_positional<'a>(
+        player: &'a SpawnData,
+        target: Option<&'a SpawnData>,
+        config: &'a CombatConfig,
+        positional: &'a PositionalContext,
+    ) -> CombatContext<'a> {
+        CombatContext {
+            player,
+            target,
+            nearby_enemies: &[],
+            group_members: &[],
+            config,
+            tick: 0,
+            in_combat: true,
+            ch_chain_slot: None,
+            active_buffs: &[],
+            buff_info: &[],
+            target_is_mezzed: false,
+            extended_targets: None,
+            positional: Some(positional),
         }
     }
 
@@ -354,6 +399,7 @@ mod tests {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            positional: None,
         };
         assert!(monk.should_assist(&ctx));
     }
@@ -666,6 +712,87 @@ mod tests {
                 .expect("defense disc")
                 .ability_name,
             "Earthwalk Discipline"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Flying Kick positional priority tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn flying_kick_fires_when_behind_target_with_endurance() {
+        let mut player = SpawnData::default();
+        player.spawn_id = 1;
+        player.endurance_current = 800;
+        player.endurance_max = 1000;
+        let target = SpawnData {
+            spawn_id: 42,
+            ..SpawnData::default()
+        };
+        let config = test_config();
+        let pos = PositionalContext {
+            is_behind_target: true,
+            ..PositionalContext::default()
+        };
+        let ctx = make_ctx_positional(&player, Some(&target), &config, &pos);
+        let mut groups = MonkStrategy::new(7).rotation_groups().unwrap();
+        // Isolate to FlyingKickPriority group
+        groups.retain(|g| g.name == "FlyingKickPriority");
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx).unwrap();
+        assert_eq!(action.entry_name, "Flying Kick");
+    }
+
+    #[test]
+    fn flying_kick_blocked_when_not_behind_target() {
+        let mut player = SpawnData::default();
+        player.spawn_id = 1;
+        player.endurance_current = 800;
+        player.endurance_max = 1000;
+        let target = SpawnData {
+            spawn_id: 42,
+            ..SpawnData::default()
+        };
+        let config = test_config();
+        let pos = PositionalContext {
+            is_behind_target: false,
+            ..PositionalContext::default()
+        };
+        let ctx = make_ctx_positional(&player, Some(&target), &config, &pos);
+        let mut groups = MonkStrategy::new(7).rotation_groups().unwrap();
+        groups.retain(|g| g.name == "FlyingKickPriority");
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx);
+        assert!(
+            action.is_none(),
+            "Flying Kick priority should not fire from front"
+        );
+    }
+
+    #[test]
+    fn flying_kick_preempts_other_groups_when_behind() {
+        let mut player = SpawnData::default();
+        player.spawn_id = 1;
+        player.endurance_current = 800;
+        player.endurance_max = 1000;
+        let target = SpawnData {
+            spawn_id: 42,
+            hp_current: 5000,
+            hp_max: 10_000,
+            ..SpawnData::default()
+        };
+        let config = test_config();
+        let pos = PositionalContext {
+            is_behind_target: true,
+            ..PositionalContext::default()
+        };
+        let ctx = make_ctx_positional(&player, Some(&target), &config, &pos);
+        let mut groups = MonkStrategy::new(7).rotation_groups().unwrap();
+
+        let action = crate::combat::rotation::execute_rotations(&mut groups, &ctx).unwrap();
+        assert_eq!(
+            action.entry_name, "Flying Kick",
+            "FlyingKickPriority group should preempt Burn group"
         );
     }
 }
