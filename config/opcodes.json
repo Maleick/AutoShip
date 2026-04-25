@@ -1,32 +1,2258 @@
 [
   {
-    "code": 20479,
-    "handler_addr": null,
+    "code": "0x0042",
+    "name": "OP_ZoneEntry",
     "direction": "inbound",
-    "description": "OP_ZoneEntry — server sends zone data when client enters a zone"
+    "description": "Server sends zone entry data when client enters a zone. Triggers full zone load sequence. Confirmed 0x42 in Ghidra test fixtures (textquest-common/src/ghidra_db.rs line 737).",
+    "source": "ghidra-confirmed",
+    "client": "20260310"
   },
   {
-    "code": 20480,
-    "handler_addr": null,
+    "code": "0x0080",
+    "name": "OP_ClientUpdate",
     "direction": "outbound",
-    "description": "OP_ZoneEntryRequest — client requests zone entry"
+    "description": "Client sends position/state acknowledgment to server. Confirmed 0x80 in Ghidra test fixtures (textquest-common/src/ghidra_db.rs line 763). Also mapped as 0x1643 in Dec 2024 binary research via UdpConnection::SendMessage hook.",
+    "source": "ghidra-confirmed",
+    "client": "20260310"
   },
   {
-    "code": 4096,
-    "handler_addr": null,
+    "code": "0x1643",
+    "name": "OP_ClientUpdate_Alt",
+    "direction": "outbound",
+    "description": "Per-frame position update (raw position + velocity, fires ~15ms when moving). Confirmed via MQ2reachit hook on UdpConnection::SendMessage in Dec 2024 binary. May be same logical opcode as 0x80 on a different patch. Requires reconciliation. See docs/research/C1-movement-agreement-packet.md.",
+    "source": "binary-research-dec2024",
+    "client": "~20241200"
+  },
+  {
+    "code": "0x471d",
+    "name": "OP_AckPacket",
+    "direction": "both",
+    "description": "Acknowledgment packet for reliable UDP sequencing. Used in stream identification. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7887",
+    "name": "OP_ReqNewZone",
+    "direction": "outbound",
+    "description": "Client requests new zone data after zone entry acknowledgment. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x1795",
+    "name": "OP_NewZone",
     "direction": "inbound",
-    "description": "OP_PlayerProfile — server sends full player profile on login"
+    "description": "Server sends full zone data (zone name, sky, fog, music, etc.) after zone entry. Alternative naming for zone entry data. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
   },
   {
-    "code": 4097,
-    "handler_addr": null,
-    "direction": "bidirectional",
-    "description": "OP_ChatMessage — in-game chat (say, shout, tells, group)"
-  },
-  {
-    "code": 8192,
-    "handler_addr": null,
+    "code": "0x5237",
+    "name": "OP_ZoneSpawns",
     "direction": "inbound",
-    "description": "OP_SpawnAppearance — spawn model/anim state change"
+    "description": "Server sends spawn list for the current zone on zone-in. Contains all NPCs, PCs, and objects present in zone. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x6097",
+    "name": "OP_NewSpawn",
+    "direction": "inbound",
+    "description": "Server notifies client of a new spawn entering the zone (NPC or PC). Sent after initial ZoneSpawns for arrivals. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x6506",
+    "name": "OP_PlayerProfile",
+    "direction": "inbound",
+    "description": "Server sends full player profile on login \u2014 all stats, skills, spells, inventory. Sent once per zone-in. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x0971",
+    "name": "OP_SpawnAppearance",
+    "direction": "inbound",
+    "description": "Server sends NPC/PC appearance data \u2014 model state changes, animations, visibility. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x2828",
+    "name": "OP_HPUpdate",
+    "direction": "inbound",
+    "description": "Server sends HP/mana/endurance update for a spawn. Sent on damage, healing, regeneration. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5467",
+    "name": "OP_ManaChange",
+    "direction": "inbound",
+    "description": "Server sends mana change update. Separate from HPUpdate for mana-only changes. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x20ed",
+    "name": "OP_ExpUpdate",
+    "direction": "inbound",
+    "description": "Server sends experience point update. Triggered on mob kill or quest completion. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x1eec",
+    "name": "OP_LevelUpdate",
+    "direction": "inbound",
+    "description": "Server notifies client of level change. Sent on level up or down. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7d14",
+    "name": "OP_AAExpUpdate",
+    "direction": "inbound",
+    "description": "Server sends Alternate Advancement experience update. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x2d18",
+    "name": "OP_ZoneChange",
+    "direction": "inbound",
+    "description": "Server initiates zone change sequence \u2014 begins zone transition state machine. First packet in zone transition flow. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x3fcf",
+    "name": "OP_RequestClientZoneChange",
+    "direction": "outbound",
+    "description": "Client requests zone change (e.g., clicking a zone line or book). Sent client-to-server. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x578f",
+    "name": "OP_EnterWorld",
+    "direction": "outbound",
+    "description": "Client sends enter world packet after character selection. World server packet. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7a09",
+    "name": "OP_SendLoginInfo",
+    "direction": "outbound",
+    "description": "Client sends login credentials to login server. Initial authentication packet. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x00d2",
+    "name": "OP_SendCharInfo",
+    "direction": "inbound",
+    "description": "Server sends character list to client on world login. Includes all characters on account. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x590d",
+    "name": "OP_ExpansionInfo",
+    "direction": "inbound",
+    "description": "Server sends expansion pack bitmask to client. Determines available content. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x6bbf",
+    "name": "OP_CharacterCreate",
+    "direction": "outbound",
+    "description": "Client sends new character creation data. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x1808",
+    "name": "OP_DeleteCharacter",
+    "direction": "outbound",
+    "description": "Client requests deletion of a character. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5ca6",
+    "name": "OP_CharInventory",
+    "direction": "inbound",
+    "description": "Server sends full character inventory on zone-in. Contains all equipped and bag items. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7994",
+    "name": "OP_WearChange",
+    "direction": "inbound",
+    "description": "Server notifies client of equipment change on a spawn. Updates visible model. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x345d",
+    "name": "OP_ClientReady",
+    "direction": "outbound",
+    "description": "Client signals ready to receive zone data after zone-in sequence completes. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x35fa",
+    "name": "OP_ReqClientSpawn",
+    "direction": "inbound",
+    "description": "Server requests client spawn data after zone entry. Part of zone-in handshake. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7291",
+    "name": "OP_SpawnDoor",
+    "direction": "inbound",
+    "description": "Server sends door/object spawn data for zone. Includes clickable objects, doors, portals. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x6fca",
+    "name": "OP_GroundSpawn",
+    "direction": "inbound",
+    "description": "Server sends ground item spawn data. Items dropped on zone floor. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x69a4",
+    "name": "OP_SendZonepoints",
+    "direction": "inbound",
+    "description": "Server sends zone point list \u2014 zone lines and zone connection data. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5ae2",
+    "name": "OP_WorldObjectsSent",
+    "direction": "inbound",
+    "description": "Server signals completion of world objects transmission. Zone-in sequence complete marker. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5070",
+    "name": "OP_TimeOfDay",
+    "direction": "inbound",
+    "description": "Server sends current Norrath in-game time of day. Used for day/night cycle. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x661e",
+    "name": "OP_Weather",
+    "direction": "inbound",
+    "description": "Server sends current zone weather state. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x66b5",
+    "name": "OP_SendAATable",
+    "direction": "inbound",
+    "description": "Server sends Alternate Advancement ability table. Sent on zone-in to communicate available/purchased AAs. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x43c8",
+    "name": "OP_SendAAStats",
+    "direction": "inbound",
+    "description": "Server sends AA experience statistics for new zone. Part of zone-in sequence. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5f8e",
+    "name": "OP_SendExpZonein",
+    "direction": "inbound",
+    "description": "Server sends experience state for new zone-in context. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x0083",
+    "name": "OP_SpecialMesg",
+    "direction": "inbound",
+    "description": "Server sends special formatted message (system messages, NPC dialog, zone messages). RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x3c7d",
+    "name": "OP_ChannelMessage",
+    "direction": "both",
+    "description": "In-game chat messages: say, shout, group, guild, ooc, tells. Bidirectional \u2014 sent and received. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x3033",
+    "name": "OP_BlockedBuffs",
+    "direction": "both",
+    "description": "Player-configured buff block list. Client sends to update; server sends current list. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x0de7",
+    "name": "OP_RemoveBlockedBuffs",
+    "direction": "outbound",
+    "description": "Client removes a buff from its blocked buff list. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x34cb",
+    "name": "OP_ClearBlockedBuffs",
+    "direction": "outbound",
+    "description": "Client clears all blocked buffs. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x4c44",
+    "name": "OP_ZoneServerInfo",
+    "direction": "inbound",
+    "description": "World server sends zone server IP/port info to client for zone connection. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7acc",
+    "name": "OP_SendMembership",
+    "direction": "inbound",
+    "description": "Server sends membership/subscription status to client. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x057b",
+    "name": "OP_SendMembershipDetails",
+    "direction": "inbound",
+    "description": "Server sends detailed membership entitlements. RoF2-specific encode. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x0c22",
+    "name": "OP_MOTD",
+    "direction": "inbound",
+    "description": "Message of the day from world server. Displayed on login. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5a28",
+    "name": "OP_Action",
+    "direction": "inbound",
+    "description": "Server notifies client of a combat action (melee hit, spell hit, miss). RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x4707",
+    "name": "OP_ChangeSize",
+    "direction": "inbound",
+    "description": "Server sends spawn size change notification. Triggered by spells, effects. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5306",
+    "name": "OP_Forage",
+    "direction": "both",
+    "description": "Forage skill action \u2014 client requests, server responds with foraged item. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x3a8f",
+    "name": "OP_ClickDoor",
+    "direction": "outbound",
+    "description": "Client sends door click/activate request. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x08e8",
+    "name": "OP_MoveDoor",
+    "direction": "inbound",
+    "description": "Server sends door state change (open/close). RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x51fd",
+    "name": "OP_EnvDamage",
+    "direction": "inbound",
+    "description": "Server sends environmental damage notification (fall damage, lava, etc.). RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x1a6a",
+    "name": "OP_BuyerItems",
+    "direction": "both",
+    "description": "Buyer system \u2014 client requests buyer item list; server responds. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x39d6",
+    "name": "OP_BazaarSearch",
+    "direction": "both",
+    "description": "Bazaar search \u2014 client sends search request; server returns results. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x61b3",
+    "name": "OP_BecomeTrader",
+    "direction": "outbound",
+    "description": "Client sends become/leave trader request for bazaar trading. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x31df",
+    "name": "OP_TraderShop",
+    "direction": "both",
+    "description": "Trader shop interaction \u2014 browse trader inventory. RoF2-specific encode/decode. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5829",
+    "name": "OP_TraderDelItem",
+    "direction": "outbound",
+    "description": "Client removes item from trader inventory. RoF2-specific encode. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x4ef5",
+    "name": "OP_Trader",
+    "direction": "both",
+    "description": "Trader system generic packet for bazaar/trader interactions. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x243a",
+    "name": "OP_Barter",
+    "direction": "both",
+    "description": "Barter system interaction. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x0adf",
+    "name": "OP_LootRequest",
+    "direction": "outbound",
+    "description": "Client requests to loot a corpse. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x30f7",
+    "name": "OP_EndLootRequest",
+    "direction": "outbound",
+    "description": "Client closes loot window and ends loot session. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x4dc9",
+    "name": "OP_LootItem",
+    "direction": "outbound",
+    "description": "Client requests to take a specific item from corpse. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x55c4",
+    "name": "OP_LootComplete",
+    "direction": "inbound",
+    "description": "Server confirms loot operation completion. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x12a6",
+    "name": "OP_GuildMemberList",
+    "direction": "inbound",
+    "description": "Server sends full guild member list. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x3e13",
+    "name": "OP_GuildMOTD",
+    "direction": "inbound",
+    "description": "Server sends guild message of the day. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7099",
+    "name": "OP_GuildInvite",
+    "direction": "both",
+    "description": "Guild invite \u2014 player sends invite to another; target receives it. Bidirectional. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x1444",
+    "name": "OP_GuildRemove",
+    "direction": "outbound",
+    "description": "Client requests guild member removal or self-removal. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x69b9",
+    "name": "OP_GuildMemberUpdate",
+    "direction": "inbound",
+    "description": "Server sends guild member status update (online/offline, level change). RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x0b9c",
+    "name": "OP_SetGuildRank",
+    "direction": "outbound",
+    "description": "Client sets guild member rank. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x76d9",
+    "name": "OP_GuildCreate",
+    "direction": "outbound",
+    "description": "Client sends guild creation request. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x507a",
+    "name": "OP_GuildsList",
+    "direction": "inbound",
+    "description": "Server sends list of all guilds on the server. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5134",
+    "name": "OP_GuildBank",
+    "direction": "both",
+    "description": "Guild bank interaction \u2014 deposit, withdraw, view items. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7850",
+    "name": "OP_GuildBankItemList",
+    "direction": "inbound",
+    "description": "Server sends guild bank item list. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7a27",
+    "name": "OP_RespondAA",
+    "direction": "outbound",
+    "description": "Client responds to AA ability prompt. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x66f0",
+    "name": "OP_UpdateAA",
+    "direction": "inbound",
+    "description": "Server sends AA ability update (purchased/unpurchased state). RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x6da5",
+    "name": "OP_ClearLeadershipAbilities",
+    "direction": "inbound",
+    "description": "Server clears leadership ability state. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x0f50",
+    "name": "OP_ClearAA",
+    "direction": "inbound",
+    "description": "Server clears AA state on zone-in. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x2a79",
+    "name": "OP_Stamina",
+    "direction": "inbound",
+    "description": "Server sends stamina/endurance state update. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x0876",
+    "name": "OP_TGB",
+    "direction": "both",
+    "description": "Toggle Group Buffs (TGB) state change. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5961",
+    "name": "OP_TributeUpdate",
+    "direction": "inbound",
+    "description": "Server sends tribute system update. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x073d",
+    "name": "OP_TributeTimer",
+    "direction": "inbound",
+    "description": "Server sends tribute timer countdown. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x4254",
+    "name": "OP_TributeInfo",
+    "direction": "inbound",
+    "description": "Server sends tribute ability info and cost. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x729b",
+    "name": "OP_SendTributes",
+    "direction": "inbound",
+    "description": "Server sends full tribute list on zone-in. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x444d",
+    "name": "OP_SetServerFilter",
+    "direction": "outbound",
+    "description": "Client sets spawn filter preferences (NPC vs PC visibility, etc.). RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x17e5",
+    "name": "OP_Track",
+    "direction": "inbound",
+    "description": "Server sends tracking results to ranger/druid. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x695e",
+    "name": "OP_TrackTarget",
+    "direction": "outbound",
+    "description": "Client requests track on a specific target. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x4211",
+    "name": "OP_BoardBoat",
+    "direction": "outbound",
+    "description": "Client sends board boat request. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7617",
+    "name": "OP_LeaveBoat",
+    "direction": "outbound",
+    "description": "Client sends leave boat request. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x0ae7",
+    "name": "OP_ControlBoat",
+    "direction": "outbound",
+    "description": "Client sends take/release control of boat request. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x52e5",
+    "name": "OP_Shielding",
+    "direction": "both",
+    "description": "Warrior shielding ability state. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x3af1",
+    "name": "OP_RequestDuel",
+    "direction": "both",
+    "description": "Duel request \u2014 client sends request; target receives. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x2c57",
+    "name": "OP_MobRename",
+    "direction": "inbound",
+    "description": "Server sends mob/spawn name change notification. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x661b",
+    "name": "OP_AugmentItem",
+    "direction": "outbound",
+    "description": "Client requests item augmentation operation. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x34a7",
+    "name": "OP_WeaponEquip1",
+    "direction": "inbound",
+    "description": "Server sends weapon equip confirmation. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x559a",
+    "name": "OP_PlayerStateAdd",
+    "direction": "inbound",
+    "description": "Server sends player state addition (running, combat, etc.). RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x2d25",
+    "name": "OP_PlayerStateRemove",
+    "direction": "inbound",
+    "description": "Server removes a player state flag. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x31e6",
+    "name": "OP_ApplyPoison",
+    "direction": "outbound",
+    "description": "Client applies poison to weapon. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x4a39",
+    "name": "OP_Save",
+    "direction": "inbound",
+    "description": "Server confirms character save operation. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x100e",
+    "name": "OP_CustomTitles",
+    "direction": "inbound",
+    "description": "Server sends custom title list for character. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x760d",
+    "name": "OP_RezzComplete",
+    "direction": "outbound",
+    "description": "Client accepts resurrection. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x3c21",
+    "name": "OP_RezzRequest",
+    "direction": "inbound",
+    "description": "Server sends resurrection offer to client. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x701c",
+    "name": "OP_RezzAnswer",
+    "direction": "outbound",
+    "description": "Client accepts or declines resurrection. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x2219",
+    "name": "OP_SafeFallSuccess",
+    "direction": "inbound",
+    "description": "Server confirms safe fall skill activation. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5475",
+    "name": "OP_SendMaxCharacters",
+    "direction": "inbound",
+    "description": "Server sends max character slot count to client. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x4493",
+    "name": "OP_WorldComplete",
+    "direction": "inbound",
+    "description": "World server signals connection handshake complete. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x23c1",
+    "name": "OP_WorldClientReady",
+    "direction": "outbound",
+    "description": "Client signals ready to world server. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x46c6",
+    "name": "OP_FloatListThing",
+    "direction": "inbound",
+    "description": "Server sends floating object list (unknown purpose). RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x4cb4",
+    "name": "OP_ZoneUnavail",
+    "direction": "inbound",
+    "description": "Server notifies client that requested zone is unavailable. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x6259",
+    "name": "OP_PostEnterWorld",
+    "direction": "outbound",
+    "description": "Post enter world sequence packet. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x2301",
+    "name": "OP_WorldUnknown001",
+    "direction": "outbound",
+    "description": "World server packet of unknown purpose. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x6773",
+    "name": "OP_CharacterCreateRequest",
+    "direction": "outbound",
+    "description": "Client requests character creation form/options. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5954",
+    "name": "OP_RandomNameGenerator",
+    "direction": "both",
+    "description": "Client requests random name; server returns generated name. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x56a2",
+    "name": "OP_ApproveName",
+    "direction": "inbound",
+    "description": "Server approves character name request. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x1bc5",
+    "name": "OP_SetChatServer",
+    "direction": "inbound",
+    "description": "Server sends chat server connection info. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7eec",
+    "name": "OP_SetChatServer2",
+    "direction": "inbound",
+    "description": "Server sends secondary chat server connection info. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x27f2",
+    "name": "OP_MercenaryCommand",
+    "direction": "outbound",
+    "description": "Client sends mercenary command (hire, fire, suspend, revive). RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x4407",
+    "name": "OP_MercenarySuspendRequest",
+    "direction": "outbound",
+    "description": "Client requests mercenary suspension. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x6f03",
+    "name": "OP_MercenarySuspendResponse",
+    "direction": "inbound",
+    "description": "Server responds to mercenary suspension request. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x1b37",
+    "name": "OP_MercenarySwitch",
+    "direction": "outbound",
+    "description": "Client switches active mercenary type/stance. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x27a0",
+    "name": "OP_MercenaryUnsuspendResponse",
+    "direction": "inbound",
+    "description": "Server responds to mercenary unsuspend request. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5d26",
+    "name": "OP_MercenaryUnknown1",
+    "direction": "inbound",
+    "description": "Mercenary packet of unknown purpose. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x0763",
+    "name": "OP_MercenaryTimer",
+    "direction": "inbound",
+    "description": "Server sends mercenary hire/revive timer. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x36e0",
+    "name": "OP_GetGuildMOTD",
+    "direction": "outbound",
+    "description": "Client requests guild message of the day. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x4f1f",
+    "name": "OP_GetGuildMOTDReply",
+    "direction": "inbound",
+    "description": "Server responds with guild MOTD. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x0b0b",
+    "name": "OP_SetGuildMOTD",
+    "direction": "outbound",
+    "description": "Guild officer/leader sets new guild MOTD. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x1ffb",
+    "name": "OP_GuildWar",
+    "direction": "outbound",
+    "description": "Client declares guild war. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x67e3",
+    "name": "OP_GuildPeace",
+    "direction": "outbound",
+    "description": "Client proposes guild peace. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7e09",
+    "name": "OP_GuildLeader",
+    "direction": "inbound",
+    "description": "Server sends guild leader information. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x3708",
+    "name": "OP_GuildDelete",
+    "direction": "outbound",
+    "description": "Client disbands/deletes the guild. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7053",
+    "name": "OP_GuildInviteAccept",
+    "direction": "outbound",
+    "description": "Client accepts guild invite. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x2d4e",
+    "name": "OP_GuildDemote",
+    "direction": "outbound",
+    "description": "Guild officer demotes a member. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x6a98",
+    "name": "OP_GuildPromote",
+    "direction": "outbound",
+    "description": "Guild officer promotes a member. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5053",
+    "name": "OP_GuildPublicNote",
+    "direction": "outbound",
+    "description": "Guild member updates their public note. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x3f35",
+    "name": "OP_GuildManageBanker",
+    "direction": "outbound",
+    "description": "Guild officer manages banker permissions. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x2958",
+    "name": "OP_GuildUpdate",
+    "direction": "inbound",
+    "description": "Server sends guild information update. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x7326",
+    "name": "OP_GuildStatus",
+    "direction": "inbound",
+    "description": "Server sends guild status notification. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x0276",
+    "name": "OP_GuildOpenGuildWindow",
+    "direction": "outbound",
+    "description": "Client opens guild management window. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x1bd3",
+    "name": "OP_GuildMemberLevel",
+    "direction": "inbound",
+    "description": "Server notifies guild of member level change. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x2925",
+    "name": "OP_GuildMemberAdd",
+    "direction": "inbound",
+    "description": "Server sends new guild member addition notice. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x3b26",
+    "name": "OP_GuildMemberRename",
+    "direction": "inbound",
+    "description": "Server notifies guild of member name change. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x3141",
+    "name": "OP_GuildMemberDelete",
+    "direction": "inbound",
+    "description": "Server notifies guild of member removal. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x3165",
+    "name": "OP_LFGuild",
+    "direction": "both",
+    "description": "Looking For Guild \u2014 client searches/advertises; server responds with results. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x6dab",
+    "name": "OP_GuildDeleteGuild",
+    "direction": "outbound",
+    "description": "Client disband guild alternate command. RoF2 reference code.",
+    "source": "eqemu-rof2-reference",
+    "client": "rof2-reference"
+  },
+  {
+    "code": "0x5a50",
+    "name": "OP_BeginCast",
+    "direction": "both",
+    "description": "Spell cast begin notification. Client sends when casting; server broadcasts to zone. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x7f5d",
+    "name": "OP_CastSpell",
+    "direction": "outbound",
+    "description": "Client sends spell cast request to server. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x6a93",
+    "name": "OP_MemorizeSpell",
+    "direction": "outbound",
+    "description": "Client requests spell memorization or forget. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x3bc7",
+    "name": "OP_ColoredText",
+    "direction": "inbound",
+    "description": "Server sends colored text message to client chat window. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x7647",
+    "name": "OP_MobUpdate",
+    "direction": "inbound",
+    "description": "Server sends NPC/mob position update. Periodic position sync for non-PC spawns. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x59d4",
+    "name": "OP_GroupFollow",
+    "direction": "outbound",
+    "description": "Client sends follow group member command. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x596c",
+    "name": "OP_GroupCancelInvite",
+    "direction": "outbound",
+    "description": "Client cancels pending group invite. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x2716",
+    "name": "OP_SetRunMode",
+    "direction": "outbound",
+    "description": "Client toggles run/walk mode. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x65ff",
+    "name": "OP_Hide",
+    "direction": "outbound",
+    "description": "Client sends sneak/hide action. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x34d4",
+    "name": "OP_WhoAllRequest",
+    "direction": "outbound",
+    "description": "Client sends /who all search request. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x29e0",
+    "name": "OP_SkillUpdate",
+    "direction": "inbound",
+    "description": "Server sends skill level update. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x07f6",
+    "name": "OP_GroupInvite2",
+    "direction": "both",
+    "description": "Secondary group invite packet (used in some group scenarios). SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x7871",
+    "name": "OP_Jump",
+    "direction": "outbound",
+    "description": "Client sends jump action to server. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x649c",
+    "name": "OP_RandomReply",
+    "direction": "inbound",
+    "description": "Server sends /random roll result. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x0292",
+    "name": "OP_CorpseLocResponse",
+    "direction": "inbound",
+    "description": "Server responds to /corpse locate request with corpse location. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x10ff",
+    "name": "OP_SenseTraps",
+    "direction": "outbound",
+    "description": "Client uses sense traps skill. SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x2de4",
+    "name": "OP_ItemLinkClick",
+    "direction": "outbound",
+    "description": "Client sends item link click request (inspect item from chat link). SoF reference code.",
+    "source": "eqemu-sof-reference",
+    "client": "sof-reference"
+  },
+  {
+    "code": "0x0193",
+    "name": "OP_0x0193",
+    "direction": "inbound",
+    "description": "Unknown opcode 0x0193 \u2014 purpose unresolved. Present in EQEmu emu_oplist.h. Reference code.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0347",
+    "name": "OP_0x0347",
+    "direction": "inbound",
+    "description": "Unknown opcode 0x0347 \u2014 purpose unresolved. Present in EQEmu emu_oplist.h. Reference code.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Camp",
+    "direction": "outbound",
+    "description": "Client sends /camp command to begin logout sequence.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Death",
+    "direction": "inbound",
+    "description": "Server sends death notification for a spawn. Triggers death animation and corpse creation.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Damage",
+    "direction": "inbound",
+    "description": "Server sends combat damage notification. Includes attacker, defender, damage type, amount.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_DeleteSpawn",
+    "direction": "inbound",
+    "description": "Server removes a spawn from the zone (mob killed, player zoned out, despawn).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Buff",
+    "direction": "inbound",
+    "description": "Server sends buff/debuff state update for a spawn.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_BuffCreate",
+    "direction": "inbound",
+    "description": "Server sends new buff application notification.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_BuffRemoveRequest",
+    "direction": "outbound",
+    "description": "Client requests removal of a buff (right-click remove).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Animation",
+    "direction": "inbound",
+    "description": "Server sends animation state for a spawn (emotes, actions, combat animations).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_GroupInvite",
+    "direction": "both",
+    "description": "Group invite \u2014 client sends to invite another player; invitee receives the packet.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_GroupUpdate",
+    "direction": "inbound",
+    "description": "Server sends group membership update (member added, removed, leader change).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_GroupDisband",
+    "direction": "outbound",
+    "description": "Client leaves group or disbands group (if leader).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_RaidUpdate",
+    "direction": "inbound",
+    "description": "Server sends raid membership/status update.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_RaidJoin",
+    "direction": "outbound",
+    "description": "Client joins a raid group.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_ItemPacket",
+    "direction": "inbound",
+    "description": "Server sends item data packet. Used for item inspection, trade, and loot display.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_MoveItem",
+    "direction": "outbound",
+    "description": "Client requests item move (inventory slot to slot, bag management).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_DeleteItem",
+    "direction": "outbound",
+    "description": "Client destroys an item from inventory.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Consider",
+    "direction": "both",
+    "description": "Client sends /consider request; server responds with con color/faction result.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Emote",
+    "direction": "outbound",
+    "description": "Client sends emote action to server.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_FaceChange",
+    "direction": "outbound",
+    "description": "Client sends character face/appearance customization change.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AutoAttack",
+    "direction": "outbound",
+    "description": "Client toggles auto-attack on/off.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_CombatAbility",
+    "direction": "outbound",
+    "description": "Client uses a combat ability (discipline, special attack).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Assist",
+    "direction": "outbound",
+    "description": "Client sends /assist target command.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AssistGroup",
+    "direction": "outbound",
+    "description": "Client sends /assist group command (assist main assist).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Bandolier",
+    "direction": "outbound",
+    "description": "Client activates a bandolier weapon set.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Charm",
+    "direction": "inbound",
+    "description": "Server sends charm effect notification (mob charmed/uncharged).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_FeignDeath",
+    "direction": "outbound",
+    "description": "Client uses feign death skill (monk/shadowknight).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_MarkNPC",
+    "direction": "outbound",
+    "description": "Raid leader marks an NPC with a number marker.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_MarkRaidNPC",
+    "direction": "outbound",
+    "description": "Raid leader marks an NPC in raid context.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Illusion",
+    "direction": "inbound",
+    "description": "Server sends illusion effect \u2014 race/model change for a spawn.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Stun",
+    "direction": "inbound",
+    "description": "Server sends stun notification for a spawn.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Mend",
+    "direction": "outbound",
+    "description": "Client uses mend skill (monk).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_DisciplineUpdate",
+    "direction": "inbound",
+    "description": "Server sends discipline timer/state update.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_FinishTrade",
+    "direction": "outbound",
+    "description": "Client confirms trade completion.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_CancelTrade",
+    "direction": "outbound",
+    "description": "Client cancels active trade.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Consent",
+    "direction": "outbound",
+    "description": "Client grants corpse access consent to another player.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_CorpseDrag",
+    "direction": "outbound",
+    "description": "Client drags a corpse.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_CorpseDrop",
+    "direction": "outbound",
+    "description": "Client drops a dragged corpse.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_ReadBook",
+    "direction": "both",
+    "description": "Client requests book content; server responds with text.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_InspectRequest",
+    "direction": "outbound",
+    "description": "Client requests to inspect another player's equipment.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_InspectBuffs",
+    "direction": "both",
+    "description": "Inspect buffs on another player. Client sends request; server responds.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_FormattedMessage",
+    "direction": "inbound",
+    "description": "Server sends a formatted message string (using eqstr_us.txt message IDs).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_TaskDescription",
+    "direction": "inbound",
+    "description": "Server sends task/quest description data.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AcceptNewTask",
+    "direction": "outbound",
+    "description": "Client accepts a new task/quest.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_CancelTask",
+    "direction": "outbound",
+    "description": "Client abandons an active task/quest.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_CompletedTasks",
+    "direction": "inbound",
+    "description": "Server sends list of completed tasks.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_DzExpeditionInfo",
+    "direction": "inbound",
+    "description": "Server sends Dynamic Zone expedition information.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_DzExpeditionInvite",
+    "direction": "inbound",
+    "description": "Server sends Dynamic Zone expedition invite.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_DzMemberList",
+    "direction": "inbound",
+    "description": "Server sends Dynamic Zone expedition member list.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_DzChooseZone",
+    "direction": "inbound",
+    "description": "Server sends Dynamic Zone selection UI.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_DzExpeditionLockoutTimers",
+    "direction": "inbound",
+    "description": "Server sends expedition lockout timer data.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_FellowshipUpdate",
+    "direction": "inbound",
+    "description": "Server sends fellowship (friend group) status update.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_FindPersonRequest",
+    "direction": "outbound",
+    "description": "Client sends /who or person locate request.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_FindPersonReply",
+    "direction": "inbound",
+    "description": "Server responds to person locate with location data.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_LocInfo",
+    "direction": "inbound",
+    "description": "Server sends /loc coordinates response.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Fishing",
+    "direction": "outbound",
+    "description": "Client uses fishing skill.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Consume",
+    "direction": "outbound",
+    "description": "Client eats food or drinks liquid.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Bind_Wound",
+    "direction": "outbound",
+    "description": "Client uses bind wound skill.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Begging",
+    "direction": "outbound",
+    "description": "Client uses begging skill.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_ShopPlayerBuy",
+    "direction": "outbound",
+    "description": "Client buys item from NPC merchant.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_ShopPlayerSell",
+    "direction": "outbound",
+    "description": "Client sells item to NPC merchant.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_ClickObject",
+    "direction": "outbound",
+    "description": "Client interacts with a zone object.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_ClickObjectAction",
+    "direction": "both",
+    "description": "Zone object interaction response/action.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_GiveMoney",
+    "direction": "outbound",
+    "description": "Client gives coins to another player or NPC.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Disarm",
+    "direction": "outbound",
+    "description": "Client uses disarm skill.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_DisarmTraps",
+    "direction": "outbound",
+    "description": "Client uses disarm traps skill.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_PickPocket",
+    "direction": "outbound",
+    "description": "Client uses pick pocket skill on target.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Dye",
+    "direction": "outbound",
+    "description": "Client dyes armor a custom color.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_ZonePlayerToBind",
+    "direction": "inbound",
+    "description": "Server zones player to their bind point (on death without resurrection).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Logout",
+    "direction": "outbound",
+    "description": "Client sends logout packet.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_LogoutReply",
+    "direction": "inbound",
+    "description": "Server confirms logout.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_CashReward",
+    "direction": "inbound",
+    "description": "Server sends coin reward (quest, loot).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_ManaUpdate",
+    "direction": "inbound",
+    "description": "Server sends mana pool update.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_EnduranceUpdate",
+    "direction": "inbound",
+    "description": "Server sends endurance pool update.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AAAction",
+    "direction": "outbound",
+    "description": "Client activates an Alternate Advancement ability.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_CrystalCountUpdate",
+    "direction": "inbound",
+    "description": "Server sends crystal currency count update (NoS/later expansions).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AltCurrency",
+    "direction": "inbound",
+    "description": "Server sends alternate currency balance update.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AltCurrencySell",
+    "direction": "outbound",
+    "description": "Client sells item using alternate currency.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Marquee",
+    "direction": "inbound",
+    "description": "Server sends marquee (scrolling text overlay) message to client.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_OnLevelMessage",
+    "direction": "inbound",
+    "description": "Server sends level-specific congratulations/unlock message.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Fling",
+    "direction": "inbound",
+    "description": "Server sends fling/knockback effect for a spawn.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_CameraEffect",
+    "direction": "inbound",
+    "description": "Server triggers a camera effect (screen shake, zoom).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_LoadSpellSet",
+    "direction": "outbound",
+    "description": "Client loads a saved spell set.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_DisciplineTimer",
+    "direction": "inbound",
+    "description": "Server sends discipline timer state.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Petition",
+    "direction": "outbound",
+    "description": "Client submits a GM petition.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Bug",
+    "direction": "outbound",
+    "description": "Client submits a bug report.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_GMTrainSkill",
+    "direction": "outbound",
+    "description": "Client purchases skill training from NPC trainer.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_GMTrainSkillConfirm",
+    "direction": "inbound",
+    "description": "Server confirms skill training purchase.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_PotionBelt",
+    "direction": "outbound",
+    "description": "Client uses an item from the potion belt.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_RecipeAutoCombine",
+    "direction": "outbound",
+    "description": "Client requests auto-combine tradeskill recipe.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_LeadershipExpUpdate",
+    "direction": "inbound",
+    "description": "Server sends leadership experience update.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_PurchaseLeadershipAA",
+    "direction": "outbound",
+    "description": "Client purchases a leadership AA ability.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_ItemLinkResponse",
+    "direction": "inbound",
+    "description": "Server responds to item link click with full item data.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_ItemVerifyReply",
+    "direction": "inbound",
+    "description": "Server verifies item existence/availability.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_ItemPreviewRequest",
+    "direction": "outbound",
+    "description": "Client requests item preview before purchase.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_EvolveItem",
+    "direction": "inbound",
+    "description": "Server sends evolving item state update.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AugmentInfo",
+    "direction": "both",
+    "description": "Augmentation information \u2014 client requests; server sends augment slot data.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AdventureData",
+    "direction": "inbound",
+    "description": "Server sends adventure (LDoN) data.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AdventureRequest",
+    "direction": "outbound",
+    "description": "Client requests an adventure (LDoN dungeon).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AdventureFinish",
+    "direction": "inbound",
+    "description": "Server sends adventure completion notification.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AggroMeterUpdate",
+    "direction": "inbound",
+    "description": "Server sends aggro meter data for target's threat list.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AggroMeterTargetInfo",
+    "direction": "inbound",
+    "description": "Server sends target-specific aggro meter info.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AggroMeterLockTarget",
+    "direction": "outbound",
+    "description": "Client locks aggro meter to specific target.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_DzExpeditionEndsWarning",
+    "direction": "inbound",
+    "description": "Server sends DZ expedition expiry warning.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_DzListTimers",
+    "direction": "inbound",
+    "description": "Server sends DZ lockout timer list.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_MercenaryAssign",
+    "direction": "inbound",
+    "description": "Server assigns mercenary to client.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_MercenaryDataResponse",
+    "direction": "inbound",
+    "description": "Server sends mercenary hire options/data.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_MercenaryDataUpdate",
+    "direction": "inbound",
+    "description": "Server updates mercenary stats/state.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_MercenaryDataRequest",
+    "direction": "outbound",
+    "description": "Client requests mercenary hire options from NPC.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_VetClaimReply",
+    "direction": "inbound",
+    "description": "Server responds to veteran reward claim.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_VetRewardsAvaliable",
+    "direction": "inbound",
+    "description": "Server sends available veteran rewards list.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_TargetBuffs",
+    "direction": "inbound",
+    "description": "Server sends target's active buff list.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_PetBuffWindow",
+    "direction": "inbound",
+    "description": "Server sends pet buff window data.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Feedback",
+    "direction": "outbound",
+    "description": "Client sends feedback/suggestion to Daybreak.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Bazaar",
+    "direction": "both",
+    "description": "Bazaar system generic interaction packet.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_BazaarInspect",
+    "direction": "outbound",
+    "description": "Client inspects item in bazaar.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AdventureDetails",
+    "direction": "inbound",
+    "description": "Server sends adventure detail information.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AdventureInfo",
+    "direction": "inbound",
+    "description": "Server sends adventure zone info.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AdventureMerchantPurchase",
+    "direction": "outbound",
+    "description": "Client purchases item from adventure merchant (LDoN).",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_AdventureMerchantSell",
+    "direction": "outbound",
+    "description": "Client sells item to adventure merchant.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_Hail",
+    "direction": "outbound",
+    "description": "Client hails an NPC to begin conversation.",
+    "source": "eqemu-oplist",
+    "client": "reference"
+  },
+  {
+    "code": "0x0000",
+    "name": "OP_BecomeCorpse",
+    "direction": "inbound",
+    "description": "Server sends become-corpse notification (character died and is now a corpse spawn).",
+    "source": "eqemu-oplist",
+    "client": "reference"
   }
 ]
