@@ -79,6 +79,8 @@ pub mod raid;
 pub mod routing;
 /// Safe coordinate types for zone transition recovery and position validation.
 pub mod safe_coords;
+/// Tier-3 Multi-Armed Bandit for operator-opt-in config variant exploration.
+pub mod self_improvement;
 /// Scan engine for runtime offset auto-detection (Auto Patch #746).
 pub mod scan_engine;
 /// Byte-pattern signature scanner for offset resolution across EQ patches.
