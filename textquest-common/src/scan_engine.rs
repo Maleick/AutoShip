@@ -57,6 +57,19 @@ pub struct ScanReport {
     pub results: Vec<ScanResult>,
 }
 
+/// Borrowed view of one module image to scan.
+#[derive(Debug, Clone, Copy)]
+pub struct ModuleImage<'a> {
+    /// Module identifier.
+    pub module: ScanModule,
+    /// Runtime base address of the module image.
+    pub module_base: u64,
+    /// Compile-time preferred base address of the module image.
+    pub preferred_base: u64,
+    /// Full module bytes starting at offset 0.
+    pub data: &'a [u8],
+}
+
 // ---------------------------------------------------------------------------
 // Scanning
 // ---------------------------------------------------------------------------
@@ -175,6 +188,38 @@ pub fn scan_module(
     }
 
     report
+}
+
+/// Scan multiple module images using the same entry catalog.
+#[must_use]
+pub fn scan_modules(images: &[ModuleImage<'_>], entries: &[ScanEntry]) -> Vec<ScanReport> {
+    images
+        .iter()
+        .map(|image| {
+            scan_module(
+                image.data,
+                image.module_base,
+                image.preferred_base,
+                image.module,
+                entries,
+            )
+        })
+        .collect()
+}
+
+/// Scan multiple modules and merge the resolved offsets into a database.
+///
+/// Reports are returned in the same order as `images`.
+pub fn scan_modules_into_offset_db(
+    images: &[ModuleImage<'_>],
+    entries: &[ScanEntry],
+    db: &mut OffsetDatabase,
+) -> Vec<ScanReport> {
+    let reports = scan_modules(images, entries);
+    for report in &reports {
+        db.merge_scan_results(report);
+    }
+    reports
 }
 
 /// Resolve a RIP-relative displacement from a matched pattern.
@@ -926,6 +971,65 @@ mod tests {
             Some(0x0001_40A0_9000)
         );
         assert!(db.get_global("graphicsSingleton").is_none());
+    }
+
+    #[test]
+    fn scan_modules_into_offset_db_merges_each_module_snapshot() {
+        let mut eqgame_data = vec![0x90_u8; 64];
+        eqgame_data[0x10..0x15].copy_from_slice(&[0x48, 0x89, 0x5C, 0x24, 0x08]);
+
+        let mut eqmain_data = vec![0x90_u8; 64];
+        eqmain_data[0x18..0x1D].copy_from_slice(&[0x48, 0x89, 0x5C, 0x24, 0x08]);
+
+        let entries = [
+            ScanEntry {
+                name: "castSpell".to_string(),
+                category: OffsetCategory::Function,
+                module: ScanModule::EqGame,
+                pattern: "48 89 5C 24 08".to_string(),
+                resolve: ResolveMode::Direct,
+                expected_preferred: None,
+            },
+            ScanEntry {
+                name: "joinServer".to_string(),
+                category: OffsetCategory::Function,
+                module: ScanModule::EqMain,
+                pattern: "48 89 5C 24 08".to_string(),
+                resolve: ResolveMode::Direct,
+                expected_preferred: None,
+            },
+        ];
+
+        let eqgame_image = ModuleImage {
+            module: ScanModule::EqGame,
+            module_base: 0x7FF6_0000_0000,
+            preferred_base: 0x0001_4000_0000,
+            data: &eqgame_data,
+        };
+        let eqmain_image = ModuleImage {
+            module: ScanModule::EqMain,
+            module_base: 0x7FF7_0000_0000,
+            preferred_base: 0x0001_8000_0000,
+            data: &eqmain_data,
+        };
+
+        let mut db = OffsetDatabase::from_compiled_offsets();
+        let original_cast_spell = db.get_function("castSpell").unwrap();
+        let original_join_server = db.get_eqmain_function("joinServer").unwrap();
+
+        db.functions
+            .insert("castSpell".to_string(), original_cast_spell + 0x200);
+        db.eqmain_functions
+            .insert("joinServer".to_string(), original_join_server + 0x200);
+
+        let reports =
+            scan_modules_into_offset_db(&[eqgame_image, eqmain_image], &entries, &mut db);
+
+        assert_eq!(reports.len(), 2);
+        assert_eq!(reports[0].module, ScanModule::EqGame);
+        assert_eq!(reports[1].module, ScanModule::EqMain);
+        assert_eq!(db.get_function("castSpell"), Some(0x0001_4000_0010));
+        assert_eq!(db.get_eqmain_function("joinServer"), Some(0x0001_8000_0018));
     }
 
     #[test]

@@ -14,6 +14,16 @@
       "notes": "Completed pruning and simplification work, then reopened on 2026-04-14 to remove the redundant merged-branch cleanup workflow, collapse CI into one merge gate, switch agent-ready linked-PR detection from failing GraphQL to REST timeline reads, repair the fmt/clippy drift that was leaving master red after PR #1600, restore the missing pull_request_target closed trigger for post-merge cleanup, guard self-hosted CI lanes from fork PR execution, and finish the Windows self-hosted Rust bootstrap repair and branch/PR audit backfill tracked through issues #2201 and #2196."
     },
     {
+      "id": "issue-746-auto-patch-runtime-offset-auto-detection",
+      "name": "Issue #746 Auto Patch: Runtime Offset Auto-Detection via Pattern Scanning",
+      "status": "blocked",
+      "acceptance_tests": [
+        "cargo test -p textquest-common --lib",
+        "cargo test -p textquest-dll --lib"
+      ],
+      "notes": "The runtime offset overlay pipeline is already in the tree: the DLL loads compiled offsets, overlays config/offsets.json, and optionally applies shadow scans from eqgame.exe and eqmain.dll when TEXTQUEST_SCAN_OFFSETS=1. Verified the new phase-1 shadow catalog with `cargo test -p textquest-common --lib pattern_db::tests::shadow_scan_entries_include_eqmain_placeholders -- --nocapture`. Full workspace verification is blocked by unrelated pre-existing failures in `cargo test -p textquest-common --lib` (account_safety/risk_model tests) and `cargo test -p textquest-dll --lib` (missing bandit/overlay/combat exports)."
+    },
+    {
       "id": "issue-2706-tts-backend-abstraction",
       "name": "X-6: TTS backend abstraction - Coqui XTTS-v2 default + Piper + SAPI + ElevenLabs adapters",
       "status": "in_progress",

@@ -238,8 +238,9 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
     }
     let _ = EQ_ACTUAL_VERSION.set(actual_version);
 
-    // 2.1. Auto-detect offsets via pattern scanning. Scanning is now default-on;
-    // TEXTQUEST_SKIP_SCAN=1 keeps the compiled-offset fallback path available.
+    // 2.1. Load runtime offsets and optionally apply the live shadow scan.
+    // TEXTQUEST_SKIP_SCAN=1 keeps the compiled-offset fallback path available,
+    // while TEXTQUEST_SCAN_OFFSETS=1 turns on the in-process scan overlay.
     if is_scan_active() {
         scan_offsets();
     }
@@ -574,8 +575,17 @@ pub(crate) fn eq_actual_version() -> Option<String> {
         .and_then(|value: &Option<String>| value.clone())
 }
 
-fn is_scan_active() -> bool {
+fn runtime_offsets_enabled() -> bool {
     std::env::var("TEXTQUEST_SKIP_SCAN").map_or(true, |v: String| v != "1")
+}
+
+fn is_scan_active() -> bool {
+    runtime_offsets_enabled()
+}
+
+fn shadow_scan_enabled() -> bool {
+    runtime_offsets_enabled()
+        && std::env::var("TEXTQUEST_SCAN_OFFSETS").map_or(false, |v: String| v == "1")
 }
 
 fn current_exe_dir() -> Option<PathBuf> {
@@ -588,10 +598,68 @@ fn current_exe_dir() -> Option<PathBuf> {
 fn has_scanned_offsets() -> bool {
     OFFSET_DB
         .get()
-        .is_some_and(|db: &OffsetDatabase| !db.globals.is_empty() || !db.functions.is_empty())
+        .is_some_and(|db: &OffsetDatabase| {
+            !db.globals.is_empty()
+                || !db.functions.is_empty()
+                || !db.eqmain_globals.is_empty()
+                || !db.eqmain_functions.is_empty()
+                || !db.eqgraphics_globals.is_empty()
+                || !db.eqgraphics_functions.is_empty()
+        })
+}
+
+#[derive(Debug)]
+struct ModuleSnapshot {
+    module: textquest_common::pattern_db::ScanModule,
+    module_base: u64,
+    preferred_base: u64,
+    bytes: Vec<u8>,
+}
+
+impl ModuleSnapshot {
+    fn as_module_image(&self) -> textquest_common::scan_engine::ModuleImage<'_> {
+        textquest_common::scan_engine::ModuleImage {
+            module: self.module,
+            module_base: self.module_base,
+            preferred_base: self.preferred_base,
+            data: &self.bytes,
+        }
+    }
 }
 
 fn scan_offsets() {
+    if !runtime_offsets_enabled() {
+        tracing::info!("Runtime offset loading disabled; using compiled constants only");
+        return;
+    }
+
+    let mut db = textquest_common::offset_db::OffsetDatabase::from_compiled_offsets();
+    let mut source_path = None;
+
+    if let Some((resolved_path, runtime_db)) = load_runtime_offset_snapshot() {
+        db.overlay_from(&runtime_db);
+        source_path = Some(resolved_path);
+    } else {
+        tracing::debug!("No runtime offset snapshot found; continuing with compiled offsets");
+    }
+
+    let apply_shadow_scan = shadow_scan_enabled();
+    if apply_shadow_scan {
+        apply_shadow_scan_offsets(&mut db);
+    }
+
+    let message = if apply_shadow_scan {
+        "Loaded runtime offsets and applied shadow scan"
+    } else if source_path.is_some() {
+        "Loaded runtime offsets into OFFSET_DB"
+    } else {
+        "Loaded compiled offsets into OFFSET_DB"
+    };
+
+    install_offset_db(db, source_path.as_deref(), message);
+}
+
+fn load_runtime_offset_snapshot() -> Option<(PathBuf, OffsetDatabase)> {
     let mut paths = Vec::new();
     if let Some(root) = current_exe_dir() {
         paths.push(root.join("config").join("offsets.json"));
@@ -600,34 +668,138 @@ fn scan_offsets() {
     paths.push(PathBuf::from(r"C:\textquest\config\offsets.json"));
     paths.push(std::env::temp_dir().join("textquest").join("offsets.json"));
 
-    let db = paths.into_iter().find_map(|path| {
+    for path in paths {
         match textquest_common::offset_db::OffsetDatabase::load_from_file(&path) {
-            Ok(db) => Some((path, db)),
+            Ok(db) => return Some((path, db)),
             Err(err) => {
                 tracing::debug!(
                     path = path.display().to_string(),
                     error = %err,
-                    "Failed to load scan offsets candidate"
+                    "Failed to load runtime offsets candidate"
                 );
-                None
             }
         }
-    });
+    }
 
-    let Some((resolved_path, db)) = db else {
-        tracing::warn!("Scan offsets enabled but no readable offsets source found");
+    None
+}
+
+fn apply_shadow_scan_offsets(db: &mut OffsetDatabase) {
+    let snapshots = capture_shadow_scan_modules();
+    if snapshots.is_empty() {
+        tracing::info!("Shadow scan enabled, but no module snapshots were available");
         return;
-    };
+    }
 
-    install_offset_db(
-        db,
-        Some(&resolved_path),
-        "Loaded scan offsets into OFFSET_DB",
+    let images: Vec<_> = snapshots.iter().map(ModuleSnapshot::as_module_image).collect();
+    let entries = textquest_common::pattern_db::shadow_scan_entries();
+    let reports = textquest_common::scan_engine::scan_modules_into_offset_db(&images, &entries, db);
+
+    let scanned = reports.iter().map(|report| report.entries_scanned).sum::<usize>();
+    let found = reports.iter().map(|report| report.entries_found).sum::<usize>();
+    let validated = reports
+        .iter()
+        .map(|report| report.entries_validated)
+        .sum::<usize>();
+    let skipped = reports
+        .iter()
+        .map(|report| report.entries_skipped.len())
+        .sum::<usize>();
+    let failed = reports
+        .iter()
+        .map(|report| report.entries_failed.len())
+        .sum::<usize>();
+
+    tracing::info!(
+        modules = reports.len(),
+        scanned,
+        found,
+        validated,
+        skipped,
+        failed,
+        "Shadow scan completed"
     );
+
+    for report in &reports {
+        if !report.entries_failed.is_empty() {
+            tracing::debug!(
+                module = ?report.module,
+                failed = ?report.entries_failed,
+                "Shadow scan unresolved entries"
+            );
+        }
+        for (name, expected, found) in &report.entries_moved {
+            tracing::warn!(
+                module = ?report.module,
+                name = %name,
+                expected = format!("{:#x}", expected),
+                found = format!("{:#x}", found),
+                "Shadow scan resolved offset moved"
+            );
+        }
+    }
+}
+
+fn capture_shadow_scan_modules() -> Vec<ModuleSnapshot> {
+    let mut snapshots = Vec::new();
+
+    let eqgame_base = resolve_eq_base();
+    if eqgame_base != 0 {
+        if let Some(snapshot) = capture_module_snapshot(
+            textquest_common::pattern_db::ScanModule::EqGame,
+            eqgame_base,
+            textquest_common::offsets::EQ_PREFERRED_BASE,
+        ) {
+            snapshots.push(snapshot);
+        }
+    }
+
+    let eqmain_base = login::eqmain::find_eqmain();
+    if eqmain_base != 0 {
+        if let Some(snapshot) = capture_module_snapshot(
+            textquest_common::pattern_db::ScanModule::EqMain,
+            eqmain_base,
+            textquest_common::offsets::eqmain::EQMAIN_PREFERRED_BASE,
+        ) {
+            snapshots.push(snapshot);
+        }
+    }
+
+    snapshots
+}
+
+fn capture_module_snapshot(
+    module: textquest_common::pattern_db::ScanModule,
+    module_base: u64,
+    preferred_base: u64,
+) -> Option<ModuleSnapshot> {
+    let module_size = get_module_size(module_base);
+    if module_size == 0 {
+        return None;
+    }
+
+    let mut bytes = vec![0u8; module_size];
+    // SAFETY: `module_base` is a live module base resolved from the Windows
+    // loader and `module_size` is the image size reported by `GetModuleInformation`.
+    unsafe {
+        std::ptr::copy_nonoverlapping(module_base as *const u8, bytes.as_mut_ptr(), module_size);
+    }
+
+    Some(ModuleSnapshot {
+        module,
+        module_base,
+        preferred_base,
+        bytes,
+    })
 }
 
 fn install_offset_db(db: OffsetDatabase, path: Option<&Path>, message: &'static str) {
-    let count = db.functions.len() + db.globals.len();
+    let count = db.functions.len()
+        + db.globals.len()
+        + db.eqmain_functions.len()
+        + db.eqmain_globals.len()
+        + db.eqgraphics_functions.len()
+        + db.eqgraphics_globals.len();
     textquest_common::bindings::install_fallback_database(db.clone());
     textquest_common::offsets::install_runtime_database(db.clone());
     match OFFSET_DB.set(db) {
@@ -971,24 +1143,42 @@ mod tests {
     }
 
     #[test]
-    fn is_scan_active_defaults_to_enabled() {
+    fn runtime_offsets_enabled_defaults_to_enabled() {
         let _guard = env_test_lock();
-        clear_env("TEXTQUEST_SCAN_OFFSETS");
-        clear_env("TEXTQUEST_SCAN_ACTIVE");
         clear_env("TEXTQUEST_SKIP_SCAN");
 
-        assert!(super::is_scan_active());
+        assert!(super::runtime_offsets_enabled());
     }
 
     #[test]
-    fn is_scan_active_respects_skip_scan_escape_hatch() {
+    fn runtime_offsets_enabled_respects_skip_scan_escape_hatch() {
         let _guard = env_test_lock();
-        clear_env("TEXTQUEST_SCAN_OFFSETS");
-        clear_env("TEXTQUEST_SCAN_ACTIVE");
-        set_env("TEXTQUEST_SKIP_SCAN", "1");
+        clear_env("TEXTQUEST_SKIP_SCAN");
 
-        assert!(!super::is_scan_active());
+        assert!(super::runtime_offsets_enabled());
+
+        set_env("TEXTQUEST_SKIP_SCAN", "1");
+        assert!(!super::runtime_offsets_enabled());
 
         clear_env("TEXTQUEST_SKIP_SCAN");
+    }
+
+    #[test]
+    fn shadow_scan_requires_explicit_enable_and_respects_skip_scan() {
+        let _guard = env_test_lock();
+        clear_env("TEXTQUEST_SKIP_SCAN");
+        set_env("TEXTQUEST_SCAN_OFFSETS", "1");
+
+        assert!(super::shadow_scan_enabled());
+
+        clear_env("TEXTQUEST_SCAN_OFFSETS");
+        assert!(!super::shadow_scan_enabled());
+
+        set_env("TEXTQUEST_SCAN_OFFSETS", "1");
+        set_env("TEXTQUEST_SKIP_SCAN", "1");
+        assert!(!super::shadow_scan_enabled());
+
+        clear_env("TEXTQUEST_SKIP_SCAN");
+        clear_env("TEXTQUEST_SCAN_OFFSETS");
     }
 }

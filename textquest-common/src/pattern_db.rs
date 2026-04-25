@@ -135,6 +135,20 @@ pub fn built_in_scan_entries() -> Vec<ScanEntry> {
     entries
 }
 
+/// Shadow-mode scan entries reserved for phase-1 runtime offset auto-detection.
+///
+/// These entries intentionally use placeholder patterns until Ghidra-exported
+/// signatures are ready. The scan engine will skip them, but keeping the
+/// entries in the catalog makes the phase-1 runtime path explicit and keeps the
+/// eventual real signatures close to the fallback keys they will populate.
+#[must_use]
+pub fn shadow_scan_entries() -> Vec<ScanEntry> {
+    let mut entries = built_in_scan_entries();
+    entries.extend(eqmain_shadow_scan_entries());
+    entries.shrink_to_fit();
+    entries
+}
+
 /// Seed scan entries that recover struct field offsets from accessor bytecode.
 ///
 /// These entries are separate from function/global address scans because their
@@ -200,6 +214,119 @@ pub fn active_hack_scan_entries() -> Vec<ScanEntry> {
             expected_preferred: Some(
                 crate::offsets::EQ_PREFERRED_BASE + crate::offsets::OFFSET_NETWORK_SEND as u64,
             ),
+        },
+    ]
+}
+
+/// Placeholder eqmain.dll entries used to exercise the shadow-mode scan path.
+#[must_use]
+pub fn eqmain_shadow_scan_entries() -> Vec<ScanEntry> {
+    let placeholder = "CC CC CC CC CC CC CC CC".to_string();
+
+    vec![
+        ScanEntry {
+            name: "sidlManager".to_string(),
+            module: ScanModule::EqMain,
+            pattern: placeholder.clone(),
+            category: OffsetCategory::Global,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(crate::offsets::eqmain::SIDL_MANAGER),
+        },
+        ScanEntry {
+            name: "loginServerApi".to_string(),
+            module: ScanModule::EqMain,
+            pattern: placeholder.clone(),
+            category: OffsetCategory::Global,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(crate::offsets::eqmain::LOGIN_SERVER_API),
+        },
+        ScanEntry {
+            name: "cxwndManager".to_string(),
+            module: ScanModule::EqMain,
+            pattern: placeholder.clone(),
+            category: OffsetCategory::Global,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(crate::offsets::eqmain::CXWND_MANAGER),
+        },
+        ScanEntry {
+            name: "loginViewManager".to_string(),
+            module: ScanModule::EqMain,
+            pattern: placeholder.clone(),
+            category: OffsetCategory::Global,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(crate::offsets::eqmain::LOGIN_VIEW_MANAGER),
+        },
+        ScanEntry {
+            name: "pinstLoginClient".to_string(),
+            module: ScanModule::EqMain,
+            pattern: placeholder.clone(),
+            category: OffsetCategory::Global,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(crate::offsets::eqmain::PINST_LOGIN_CLIENT),
+        },
+        ScanEntry {
+            name: "pinstLoginController".to_string(),
+            module: ScanModule::EqMain,
+            pattern: placeholder.clone(),
+            category: OffsetCategory::Global,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(crate::offsets::eqmain::PINST_LOGIN_CONTROLLER),
+        },
+        ScanEntry {
+            name: "joinServer".to_string(),
+            module: ScanModule::EqMain,
+            pattern: placeholder.clone(),
+            category: OffsetCategory::Function,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(crate::offsets::eqmain::JOIN_SERVER),
+        },
+        ScanEntry {
+            name: "charSelectEnterWorld".to_string(),
+            module: ScanModule::EqMain,
+            pattern: placeholder.clone(),
+            category: OffsetCategory::Function,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(crate::offsets::eqmain::CHAR_SELECT_ENTER_WORLD),
+        },
+        ScanEntry {
+            name: "serverSelect".to_string(),
+            module: ScanModule::EqMain,
+            pattern: placeholder.clone(),
+            category: OffsetCategory::Function,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(crate::offsets::eqmain::SERVER_SELECT),
+        },
+        ScanEntry {
+            name: "handleSplash".to_string(),
+            module: ScanModule::EqMain,
+            pattern: placeholder.clone(),
+            category: OffsetCategory::Function,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(crate::offsets::eqmain::HANDLE_SPLASH),
+        },
+        ScanEntry {
+            name: "charSelectSelectCharacter".to_string(),
+            module: ScanModule::EqMain,
+            pattern: placeholder.clone(),
+            category: OffsetCategory::Function,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(crate::offsets::eqmain::CHAR_SELECT_SELECT_CHARACTER),
+        },
+        ScanEntry {
+            name: "charSelectSetFocus".to_string(),
+            module: ScanModule::EqMain,
+            pattern: placeholder.clone(),
+            category: OffsetCategory::Function,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(crate::offsets::eqmain::CHAR_SELECT_SET_FOCUS),
+        },
+        ScanEntry {
+            name: "loginControllerGiveTime".to_string(),
+            module: ScanModule::EqMain,
+            pattern: placeholder,
+            category: OffsetCategory::Function,
+            resolve: ResolveMode::Direct,
+            expected_preferred: Some(crate::offsets::eqmain::LOGIN_CONTROLLER_GIVE_TIME),
         },
     ]
 }
@@ -479,6 +606,23 @@ mod tests {
         assert!(
             entries.iter().all(|entry| !entry.has_placeholder_pattern()),
             "built-in entries must not regress to all-wildcard or all-CC placeholders"
+        );
+    }
+
+    #[test]
+    fn shadow_scan_entries_include_eqmain_placeholders() {
+        let entries = shadow_scan_entries();
+        let eqmain_entries: Vec<_> = entries
+            .iter()
+            .filter(|entry| entry.module == ScanModule::EqMain)
+            .collect();
+
+        assert_eq!(eqmain_entries.len(), 13);
+        assert!(
+            eqmain_entries
+                .iter()
+                .all(|entry| entry.has_placeholder_pattern()),
+            "shadow-mode eqmain entries should remain placeholder signatures until real bytes are exported"
         );
     }
 

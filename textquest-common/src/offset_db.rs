@@ -184,6 +184,40 @@ impl OffsetDatabase {
         crate::scan_engine::apply_to_offset_db(report, self);
     }
 
+    /// Overlay another database on top of this one.
+    ///
+    /// Scalar metadata is replaced outright. Map entries from `overlay`
+    /// override matching keys in `self`, while keys that are not present in the
+    /// overlay remain unchanged.
+    pub fn overlay_from(&mut self, overlay: &Self) {
+        self.client_date = overlay.client_date.clone();
+        self.eq_preferred_base = overlay.eq_preferred_base;
+
+        self.globals.extend(overlay.globals.clone());
+        self.player_base.extend(overlay.player_base.clone());
+        self.player_zone.extend(overlay.player_zone.clone());
+        self.spawn_manager.extend(overlay.spawn_manager.clone());
+        self.struct_sizes.extend(overlay.struct_sizes.clone());
+        self.context_menu_manager
+            .extend(overlay.context_menu_manager.clone());
+        self.context_menu.extend(overlay.context_menu.clone());
+        self.functions.extend(overlay.functions.clone());
+        self.eqmain_globals.extend(overlay.eqmain_globals.clone());
+        self.eqmain_functions
+            .extend(overlay.eqmain_functions.clone());
+        self.eqgraphics_globals
+            .extend(overlay.eqgraphics_globals.clone());
+        self.eqgraphics_functions
+            .extend(overlay.eqgraphics_functions.clone());
+
+        for (struct_name, fields) in &overlay.structs {
+            self.structs
+                .entry(struct_name.clone())
+                .or_default()
+                .extend(fields.clone());
+        }
+    }
+
     /// Create from the current compile-time constants in offsets.rs
     #[must_use]
     pub fn from_compiled_offsets() -> Self {
@@ -886,6 +920,36 @@ mod tests {
         assert_eq!(db.get_function("castSpell"), Some(original_function + 0x40));
         assert_eq!(db.get_function("useSkill"), Some(original_other_function));
         assert_eq!(db.get_player_base_offset("x"), Some(original_player_base));
+    }
+
+    #[test]
+    fn overlay_from_preserves_base_offsets_while_overriding_runtime_values() {
+        let mut base = OffsetDatabase::from_compiled_offsets();
+        let original_global = base.get_global("pinstLocalPlayer").unwrap();
+        let original_function = base.get_function("castSpell").unwrap();
+        let original_spawn_manager = base.get_global("pinstSpawnManager").unwrap();
+
+        let mut overlay = OffsetDatabase::from_compiled_offsets();
+        overlay.client_date = "20991231".to_string();
+        overlay.eq_preferred_base = 0x1_8000_0000;
+        overlay
+            .globals
+            .insert("pinstLocalPlayer".to_string(), original_global + 0x20);
+        overlay
+            .functions
+            .insert("castSpell".to_string(), original_function + 0x40);
+        overlay
+            .player_zone
+            .insert("hpCurrent".to_string(), 0x3A0);
+
+        base.overlay_from(&overlay);
+
+        assert_eq!(base.client_date, "20991231");
+        assert_eq!(base.eq_preferred_base, 0x1_8000_0000);
+        assert_eq!(base.get_global("pinstLocalPlayer"), Some(original_global + 0x20));
+        assert_eq!(base.get_function("castSpell"), Some(original_function + 0x40));
+        assert_eq!(base.get_global("pinstSpawnManager"), Some(original_spawn_manager));
+        assert_eq!(base.get_player_zone_offset("hpCurrent"), Some(0x3A0));
     }
 
     #[test]

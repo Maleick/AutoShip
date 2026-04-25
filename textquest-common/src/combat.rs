@@ -2564,6 +2564,7 @@ mod tests {
                     spell_id: 900,
                 },
             ],
+            min_expansion: EQExpansion::Classic,
         }
     }
 
@@ -2627,6 +2628,7 @@ mod tests {
                 min_level: 39,
                 spell_id: 13,
             }],
+            min_expansion: EQExpansion::Classic,
         };
         let known = vec![
             KnownAbility {
@@ -2680,6 +2682,7 @@ mod tests {
                 min_level: 55,
                 spell_id: -1,
             }],
+            min_expansion: EQExpansion::Classic,
         }];
         let known = vec![KnownAbility {
             name: "Breather".into(),

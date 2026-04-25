@@ -2936,6 +2936,7 @@ mod tests {
             backup_dist: 5.0,
             healer: false,
             autopause: false,
+            break_conditions: crate::nav::StickBreakConditions::NONE,
         };
         let cmd = Command::StickTo { config };
         let encoded = encode(&cmd).expect("encode StickTo");
@@ -3182,6 +3183,7 @@ mod tests {
                 target_id: 99,
                 distance: 12.5,
                 in_range: true,
+                break_reason: None,
             },
         };
         let encoded = encode(&resp).expect("encode");
@@ -3192,12 +3194,14 @@ mod tests {
                     target_id,
                     distance,
                     in_range,
+                    break_reason,
                 },
         } = decoded
         {
             assert_eq!(target_id, 99);
             assert!((distance - 12.5).abs() < f32::EPSILON);
             assert!(in_range);
+            assert!(break_reason.is_none());
         } else {
             panic!("expected NavUpdate(Sticking)");
         }

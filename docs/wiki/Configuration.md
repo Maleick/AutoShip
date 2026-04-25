@@ -20,13 +20,14 @@
 
 ## Runtime Offset Resolution
 
-The injected DLL now loads runtime offset data by default during startup. The loaded database is installed into both typed function bindings and generic `offsets::rebase(...)` consumers, so scan-updated function/global addresses take priority over compiled constants while preserving compiled fallbacks.
+The injected DLL loads the compiled offset table at startup, overlays the configured `offsets.json` snapshot when present, and can optionally apply a live shadow scan when `TEXTQUEST_SCAN_OFFSETS=1` is set. The resulting database is installed into both typed function bindings and generic `offsets::rebase(...)` consumers, so scan results win over JSON overrides, which win over compiled constants.
 
 Current behavior:
 
-- `TEXTQUEST_SKIP_SCAN=1` disables runtime offset loading and uses compiled constants only.
-- Runtime offset data is loaded from configured `offsets.json` sources on each startup.
-- If runtime data is unavailable or a named offset is missing, consumers fall back to the compiled constant and continue logging through the normal DLL startup path.
+- `TEXTQUEST_SKIP_SCAN=1` disables runtime offset loading and shadow scanning, leaving compiled constants only.
+- Runtime offset snapshots are loaded from configured `offsets.json` sources on each startup and overlaid onto the compiled base.
+- `TEXTQUEST_SCAN_OFFSETS=1` enables shadow scanning of `eqgame.exe` and `eqmain.dll`; scan results are merged on top of the runtime snapshot before installation.
+- If a runtime snapshot is unavailable or a named offset is missing, consumers still fall back to the compiled constant and continue logging through the normal DLL startup path.
 
 ## Main App Config
 
