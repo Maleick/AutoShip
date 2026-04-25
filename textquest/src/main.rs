@@ -341,6 +341,21 @@ enum Commands {
 }
 
 #[derive(Subcommand, Debug)]
+enum CampAction {
+    /// List canonical camps
+    List {
+        /// Filter by zone short name or zone id
+        #[arg(long)]
+        zone: Option<String>,
+    },
+    /// Show one canonical camp
+    Show {
+        /// Camp id generated from zone short name + spawngroup ids
+        camp_id: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 enum NavMeshAction {
     /// Redownload and validate the zone navmesh cache
     Reload {

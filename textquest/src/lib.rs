@@ -42,6 +42,8 @@ pub mod config_share;
 /// recovery commands.
 #[cfg(windows)]
 pub mod crash_reporter;
+/// Camp knowledge layer — PEQ camp clustering, overrides, and catalog storage.
+pub mod camp_knowledge;
 /// Encrypted credential store (Argon2id + AES-256-GCM).
 #[cfg(windows)]
 #[allow(dead_code)]
