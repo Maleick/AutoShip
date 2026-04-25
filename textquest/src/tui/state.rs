@@ -2392,6 +2392,31 @@ pub struct PacketRecord {
     pub payload: Vec<u8>,
 }
 
+impl PacketRecord {
+    /// Return a compact payload preview for compact list rendering.
+    pub fn payload_preview(&self) -> String {
+        if self.payload.is_empty() {
+            return String::from("(empty)");
+        }
+
+        self.payload
+            .iter()
+            .take(16)
+            .map(|byte| format!("{byte:02X}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Return a readable client label for this packet.
+    pub fn client_label(&self) -> String {
+        if self.process_name.is_empty() {
+            format!("PID {}", self.client_id)
+        } else {
+            self.process_name.clone()
+        }
+    }
+}
+
 /// Entry for a decoded packet with field names and values.
 #[derive(Debug, Clone)]
 pub struct PacketEntry {
@@ -2482,6 +2507,15 @@ impl PacketMonitorState {
                     && self.filter_client_id.is_none_or(|id| p.client_id == id)
             })
             .collect()
+    }
+
+    /// Resolve a PID to the latest known process name from captured packets.
+    #[must_use]
+    pub fn resolved_client_label(&self, client_id: u32) -> Option<&str> {
+        self.packets.iter().rev().find_map(|packet| {
+            (packet.client_id == client_id && !packet.process_name.is_empty())
+                .then_some(packet.process_name.as_str())
+        })
     }
 
     /// Scroll up by one line.

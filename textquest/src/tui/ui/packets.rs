@@ -136,7 +136,7 @@ fn draw_packet_stream(frame: &mut Frame, area: Rect, app: &App) {
                     get_opcode_color_style(pkt.opcode, t)
                 };
 
-                let hex_preview = format_payload_preview(&pkt.payload);
+                let hex_preview = pkt.payload_preview();
 
                 Row::new(vec![
                     cursor,
@@ -197,11 +197,7 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     // Use the name resolved at capture time (stored in the record itself).
-    let client_label = if pkt.process_name.is_empty() {
-        format!("PID {}", pkt.client_id)
-    } else {
-        pkt.process_name.clone()
-    };
+    let client_label = pkt.client_label();
     let (hex_lines, text_lines) = format_payload_dump(&pkt.payload, area.width.saturating_sub(4));
 
     let mut lines = vec![
@@ -342,7 +338,13 @@ fn format_filter_line<'a>(
         None => String::from("dir=any"),
     };
     let client_label = match state.filter_client_id {
-        Some(pid) => format!("client={pid}"),
+        Some(pid) => {
+            let label = state
+                .resolved_client_label(pid)
+                .unwrap_or("WIP")
+                .to_owned();
+            format!("client={label}")
+        }
         None => String::from("client=*"),
     };
     let scroll_label = if state.auto_scroll {
