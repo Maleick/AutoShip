@@ -1,8 +1,9 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, path::Path};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::persistence::{load_json_config, save_json_config};
 use crate::{ipc::AutoRezConfig, window_title::default_window_title_format};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RotationEntry {
@@ -175,30 +176,14 @@ fn normalize_matcher(input: &str) -> String {
 }
 
 pub fn load_character_configs(path: &Path) -> Result<CharacterConfigMap> {
-    if !path.exists() {
-        return Ok(HashMap::new());
-    }
-
-    let raw = fs::read_to_string(path)
-        .with_context(|| format!("failed to read character config file: {}", path.display()))?;
-    serde_json::from_str(&raw)
-        .with_context(|| format!("failed to parse character config file: {}", path.display()))
+    let configs: CharacterConfigMap = load_json_config(path)
+        .with_context(|| format!("failed to load character configs: {}", path.display()))?;
+    Ok(configs)
 }
 
 pub fn save_character_configs(path: &Path, configs: &CharacterConfigMap) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create character config parent directory: {}",
-                parent.display()
-            )
-        })?;
-    }
-
-    let encoded =
-        serde_json::to_string_pretty(configs).context("failed to serialize character configs")?;
-    fs::write(path, encoded)
-        .with_context(|| format!("failed to write character config file: {}", path.display()))
+    save_json_config(path, configs)
+        .with_context(|| format!("failed to save character configs: {}", path.display()))
 }
 
 pub fn reward_preference_for_task<'a>(

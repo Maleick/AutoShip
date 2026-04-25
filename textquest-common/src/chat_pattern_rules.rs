@@ -20,9 +20,11 @@
 //! - **SendIpcCommand**: Send an IPC command to other sessions
 //! - **TriggerAlert**: Trigger a sound/visual alert
 
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
+use crate::persistence::{load_toml_config, save_toml_config};
 use crate::chat::ChatChannel;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -342,21 +344,13 @@ pub struct ChatPatternRulesConfig {
 
 impl ChatPatternRulesConfig {
     pub fn load(path: &std::path::Path) -> anyhow::Result<Self> {
-        if !path.exists() {
-            return Ok(Self::default());
-        }
-        let content = std::fs::read_to_string(path)?;
-        let config: Self = toml::from_str(&content)?;
+        let config: Self =
+            load_toml_config(path).context("failed to load chat pattern rules config")?;
         Ok(config)
     }
 
     pub fn save(&self, path: &std::path::Path) -> anyhow::Result<()> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let content = toml::to_string_pretty(self)?;
-        std::fs::write(path, content)?;
-        Ok(())
+        save_toml_config(path, self).context("failed to save chat pattern rules config")
     }
 }
 

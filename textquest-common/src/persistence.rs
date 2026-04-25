@@ -37,8 +37,73 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
+use anyhow::{Context, Result, anyhow};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+fn ensure_parent_dir(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    Ok(())
+}
+
+pub fn load_json_config<T>(path: &Path) -> Result<T>
+where
+    T: DeserializeOwned + Default,
+{
+    if !path.exists() {
+        return Ok(T::default());
+    }
+
+    let raw = fs::read_to_string(path).with_context(|| {
+        format!("failed to read JSON config file: {}", path.display())
+    })?;
+    serde_json::from_str(&raw).with_context(|| {
+        format!("failed to parse JSON config file: {}", path.display())
+    })
+}
+
+pub fn save_json_config<T>(path: &Path, value: &T) -> Result<()>
+where
+    T: Serialize,
+{
+    ensure_parent_dir(path)?;
+    let encoded = serde_json::to_string_pretty(value)
+        .context("failed to serialize JSON config data")?;
+    fs::write(path, encoded).with_context(|| {
+        format!("failed to write JSON config file: {}", path.display())
+    })?;
+    Ok(())
+}
+
+pub fn load_toml_config<T>(path: &Path) -> Result<T>
+where
+    T: DeserializeOwned + Default,
+{
+    if !path.exists() {
+        return Ok(T::default());
+    }
+
+    let raw = fs::read_to_string(path).with_context(|| {
+        format!("failed to read TOML config file: {}", path.display())
+    })?;
+    toml::from_str(&raw).with_context(|| {
+        format!("failed to parse TOML config file: {}", path.display())
+    })
+}
+
+pub fn save_toml_config<T>(path: &Path, value: &T) -> Result<()>
+where
+    T: Serialize,
+{
+    ensure_parent_dir(path)?;
+    let encoded =
+        toml::to_string_pretty(value).context("failed to serialize TOML config data")?;
+    fs::write(path, encoded).with_context(|| {
+        format!("failed to write TOML config file: {}", path.display())
+    })?;
+    Ok(())
+}
 
 /// Semantic version for data schemas: major.minor.patch
 ///
@@ -351,6 +416,60 @@ mod tests {
         fn exists(&self, key: &str) -> Result<bool> {
             Ok(self.data.lock().unwrap().contains_key(key))
         }
+    }
+
+    #[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+    struct ConfigIoFixture {
+        enabled: bool,
+        label: String,
+    }
+
+    #[test]
+    fn load_json_config_returns_default_for_missing_file() {
+        let tmpdir = tempfile::tempdir().expect("create tempdir");
+        let path = tmpdir.path().join("missing.json");
+
+        let loaded: ConfigIoFixture = load_json_config(&path).expect("load missing file");
+        assert_eq!(loaded, ConfigIoFixture::default());
+    }
+
+    #[test]
+    fn save_and_load_json_config_round_trip() {
+        let tmpdir = tempfile::tempdir().expect("create tempdir");
+        let path = tmpdir.path().join("config.json");
+        let fixture = ConfigIoFixture {
+            enabled: true,
+            label: "json".into(),
+        };
+
+        save_json_config(&path, &fixture).expect("save");
+        let loaded: ConfigIoFixture = load_json_config(&path).expect("load");
+
+        assert_eq!(loaded, fixture);
+    }
+
+    #[test]
+    fn load_toml_config_returns_default_for_missing_file() {
+        let tmpdir = tempfile::tempdir().expect("create tempdir");
+        let path = tmpdir.path().join("missing.toml");
+
+        let loaded: ConfigIoFixture = load_toml_config(&path).expect("load missing file");
+        assert_eq!(loaded, ConfigIoFixture::default());
+    }
+
+    #[test]
+    fn save_and_load_toml_config_round_trip() {
+        let tmpdir = tempfile::tempdir().expect("create tempdir");
+        let path = tmpdir.path().join("config.toml");
+        let fixture = ConfigIoFixture {
+            enabled: false,
+            label: "toml".into(),
+        };
+
+        save_toml_config(&path, &fixture).expect("save");
+        let loaded: ConfigIoFixture = load_toml_config(&path).expect("load");
+
+        assert_eq!(loaded, fixture);
     }
 
     // Test migration
