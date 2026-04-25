@@ -64,7 +64,6 @@ use std::{
     },
 };
 
-use serde::{Deserialize, Serialize};
 use textquest_common::offset_db::OffsetDatabase;
 
 /// Base address of eqgame.exe in memory. Set during initialization.
@@ -586,16 +585,6 @@ fn has_scanned_offsets() -> bool {
 }
 
 fn scan_offsets() {
-    let module_hash = module_hash(resolve_eq_base(), get_module_size(resolve_eq_base()));
-    let cache_path = offset_cache_path(module_hash.as_deref());
-
-    if let (Some(hash), Some(path)) = (module_hash.as_deref(), cache_path.as_deref()) {
-        if let Some(db) = load_offset_cache(path, hash) {
-            install_offset_db(db, Some(path), "Loaded cached scan offsets into OFFSET_DB");
-            return;
-        }
-    }
-
     let mut paths = Vec::new();
     if let Some(root) = current_exe_dir() {
         paths.push(root.join("config").join("offsets.json"));
@@ -623,27 +612,11 @@ fn scan_offsets() {
         return;
     };
 
-    if let (Some(hash), Some(path)) = (module_hash.as_deref(), cache_path.as_deref()) {
-        if let Err(err) = save_offset_cache(path, hash, &db) {
-            tracing::debug!(
-                path = path.display().to_string(),
-                error = %err,
-                "Failed to write scan offset cache"
-            );
-        }
-    }
-
     install_offset_db(
         db,
         Some(&resolved_path),
         "Loaded scan offsets into OFFSET_DB",
     );
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct OffsetCacheFile {
-    module_hash: String,
-    db: OffsetDatabase,
 }
 
 fn install_offset_db(db: OffsetDatabase, path: Option<&Path>, message: &'static str) {
@@ -665,59 +638,6 @@ fn install_offset_db(db: OffsetDatabase, path: Option<&Path>, message: &'static 
                 "OFFSET_DB was already initialized; skipping newly loaded scan offsets"
             );
         }
-    }
-}
-
-fn offset_cache_path(module_hash: Option<&str>) -> Option<PathBuf> {
-    let hash = module_hash?;
-    Some(
-        std::env::temp_dir()
-            .join("textquest")
-            .join(format!("offset-cache-{hash}.json")),
-    )
-}
-
-fn load_offset_cache(path: &Path, expected_module_hash: &str) -> Option<OffsetDatabase> {
-    let content = std::fs::read_to_string(path).ok()?;
-    let cache: OffsetCacheFile = serde_json::from_str(&content).ok()?;
-    (cache.module_hash == expected_module_hash).then_some(cache.db)
-}
-
-fn save_offset_cache(path: &Path, module_hash: &str, db: &OffsetDatabase) -> anyhow::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let cache = OffsetCacheFile {
-        module_hash: module_hash.to_string(),
-        db: db.clone(),
-    };
-    std::fs::write(path, serde_json::to_string_pretty(&cache)?)?;
-    Ok(())
-}
-
-fn module_hash(base_addr: u64, module_size: usize) -> Option<String> {
-    if base_addr == 0 || module_size == 0 {
-        return None;
-    }
-
-    #[cfg(windows)]
-    {
-        // FNV-1a keeps this dependency-free and is enough to invalidate stale
-        // offset caches when the loaded module image changes.
-        const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-        const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
-
-        let data = unsafe { std::slice::from_raw_parts(base_addr as *const u8, module_size) };
-        let hash = data.iter().fold(FNV_OFFSET, |hash, byte| {
-            (hash ^ u64::from(*byte)).wrapping_mul(FNV_PRIME)
-        });
-        Some(format!("{hash:016x}"))
-    }
-
-    #[cfg(not(windows))]
-    {
-        let _ = (base_addr, module_size);
-        None
     }
 }
 
@@ -861,7 +781,6 @@ mod tests {
         sync::{Mutex, OnceLock},
     };
 
-    use textquest_common::offset_db::OffsetDatabase;
     use toml::Value;
 
     static ENV_TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
@@ -1064,16 +983,5 @@ mod tests {
         assert!(!super::is_scan_active());
 
         clear_env("TEXTQUEST_SKIP_SCAN");
-    }
-
-    #[test]
-    fn offset_cache_load_requires_matching_module_hash() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join("offset-cache.json");
-        let db = OffsetDatabase::from_compiled_offsets();
-        super::save_offset_cache(&path, "abc123", &db).expect("save cache");
-
-        assert!(super::load_offset_cache(&path, "abc123").is_some());
-        assert!(super::load_offset_cache(&path, "different").is_none());
     }
 }

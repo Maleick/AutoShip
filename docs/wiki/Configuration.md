@@ -25,8 +25,7 @@ The injected DLL now loads runtime offset data by default during startup. The lo
 Current behavior:
 
 - `TEXTQUEST_SKIP_SCAN=1` disables runtime offset loading and uses compiled constants only.
-- Cached offset data is stored under the system temp `textquest` directory with a module-hash-qualified filename.
-- A cache is accepted only when its module hash matches the loaded EQ image; stale caches are ignored.
+- Runtime offset data is loaded from configured `offsets.json` sources on each startup.
 - If runtime data is unavailable or a named offset is missing, consumers fall back to the compiled constant and continue logging through the normal DLL startup path.
 
 ## Main App Config
