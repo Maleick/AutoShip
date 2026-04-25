@@ -23,8 +23,9 @@ This document is the source of truth for roadmap order, milestone gates, evidenc
 | M5        | Anti-Cheat              | **COMPLETE** | #355 closed — launchpad bypassed via /patchme                      |
 | M6        | Web Dashboard           | **COMPLETE** | TUI enhancements, axum + React/Vite/Tailwind SPA, fleet metrics   |
 | M7–M11    | Future                  | Planned      | Zoning, Orchestrator, RL, Economy, Soul Engine                     |
+| M12       | Shadow Learning System  | Planned      | Serpent-AI-inspired closed-loop gameplay improvement on top of M9/M11 |
 
-_Last updated: 2026-04-08._
+_Last updated: 2026-04-25._
 
 ## Historical Base
 
@@ -334,6 +335,68 @@ Initial slices:
 - local model hosting and inference pipeline (Gemma 4, ollama, or similar)
 - TUI and operator controls for safe AI usage
 - personality and idle behavior driven by local inference
+
+### `M12` Shadow Learning System
+
+Objective:
+
+- add a Serpent-AI-inspired closed-loop learning system that improves gameplay over time by learning from recorded sessions — layered strictly on top of the M9 tuning scaffolding, the M9 replay engine, and the M11 Soul Engine, without widening live-runtime authority, packet usage, or anti-cheat exposure
+
+Framing:
+
+- Serpent AI trains pixel-conditioned DQN/PPO agents online on live games. That model is the wrong fit here: EQ is account-sanction-sensitive, state is already structured (`SpawnInfo`, combat events, HolyShit telemetry), and the DLL already encodes an expert policy. M12 instead runs learning **offline on recorded replays**, keeps rule-based FSMs in authoritative control at runtime, and only promotes learned policies through the same canary/replay gate M9 defines.
+- The framework separates perception (already done by M1/M3/M4 + R-1 snapshotter), decision (the layered learners below), and action (unchanged — `textquest-dll` is still the only thing that touches the client) — the same separation Serpent AI uses.
+
+Layered learning loops (safe → ambitious):
+
+| Layer | Algorithm                                  | What it tunes                                                             | Runtime risk                        |
+| ----- | ------------------------------------------ | ------------------------------------------------------------------------- | ----------------------------------- |
+| L0    | none — experience ledger only              | records `(state, action, reward, next_state)` on top of R-1 replay bundles | zero                                |
+| L1    | Bayesian opt / CMA-ES                      | numeric FSM knobs (med thresholds, pull distance, rotation priorities)    | zero — offline only                 |
+| L2    | LinUCB / Thompson sampling                 | per-decision-point choices inside combat rotation (context-dependent ability selection) | low — shadowed first                |
+| L3    | Offline RL (CQL / IQL) + Behavior Cloning  | full per-class rotation policy trained on recorded traces                 | medium — canary-gated rollout       |
+| L4    | LLM-as-advisor (Soul Engine bridge)        | macro-strategy suggestions (camp selection, group comp, recovery choices) | operator-approved, non-autonomous   |
+
+Initial slices (new `textquest-learn` crate):
+
+- experience ledger recorder on top of R-1 / R-3 replay bundles
+- reward function library (per-class, per-camp, operator-authored YAML with validation)
+- offline Bayesian/CMA-ES parameter-tuning harness
+- contextual-bandit runtime for combat rotation decisions, with shadow-mode default
+- offline RL training harness (Python sidecar, ONNX export for Rust-side inference)
+- behavior cloning warm-start from operator-flagged "good" sessions
+- canary / replay evaluator that reuses M9's regression-budget machinery
+- versioned policy store with hot-swap into `textquest-dll` and rollback path
+- LLM advisor bridge into `textquest-soul` that produces operator-facing justifications
+
+Scope constraints (inherited and sharpened from M9):
+
+- all training is offline, on recorded replays — no online exploration against a live EQ client
+- rule-based FSMs remain in authoritative control; learned policies either tune their parameters (L1), advise at decision points in shadow mode (L2), or replace named strategy modules after passing the canary gate (L3)
+- every learned policy carries a named baseline, success metric, regression budget, and rollback path — M9's exit-gate contract is binding for M12
+- no learned policy may widen packet usage, anti-cheat exposure, zoning shortcuts, or autonomous runtime authority beyond what the incumbent rule-based strategy it replaces already has
+- the LLM advisor (L4) is strictly advisory: its suggestions surface in the TUI for operator approval and never execute autonomously
+
+Current curated intake:
+
+- `textquest-soul/src/llm/` (provider trait, priority queue, validator)
+- `textquest/src/testing/` (scenario runner, event log, metrics capture)
+- `textquest/src/metrics/store.rs`
+- `docs/self-improvement-round3-research-2026-04-25.md`
+
+Entry gate:
+
+- M9 tuning-loop guardrails, replay storage (R-1/R-3), and regression-budget machinery are live
+- M11 Soul Engine local-inference pipeline is stable enough to host the L4 advisor without external APIs
+- a baseline scorecard per camp × class exists in the fleet metrics store, so learned candidates have something to beat
+
+Exit gate:
+
+- `textquest-learn` crate builds, tests, and CI-gates on the merge lane
+- at least one learned policy per layer (L1, L2, L3) has shipped end-to-end through the canary gate with a named baseline and rollback artifact
+- every promoted policy carries a version, a training-data manifest, a reward-function reference, a canary report, and an operator-visible diff against the incumbent
+- the LLM advisor produces suggestions only on explicit operator request and logs every suggestion alongside the game state that produced it
+- no M12 slice widens the authenticated control boundary established by M5 / M8
 
 ## Domain Tracks
 
