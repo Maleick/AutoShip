@@ -3,6 +3,9 @@
 //!
 //! Inspired by MQ2Events (OpenVanilla parity). Users define triggers that fire
 //! actions when game events match their conditions.
+//!
+//! Extended for MQ2React parity: regex pattern matching on chat messages and
+//! `/say` channel monitoring (MQ2Say), plus audio and TTS action variants.
 
 /// A game event that can be matched by trigger conditions.
 #[derive(Debug, Clone, PartialEq)]
@@ -11,8 +14,11 @@ pub enum GameEvent {
     SpawnDied { name: String },
     /// A player character died.
     PlayerDied { character: String },
-    /// A chat message was received.
+    /// A chat message was received on any channel.
     ChatReceived { message: String },
+    /// A `/say` channel message was received — monitored separately from
+    /// general chat for MQ2Say parity.
+    SayReceived { message: String, speaker: String },
     /// A character leveled up.
     LeveledUp { character: String },
 }
@@ -29,6 +35,14 @@ pub enum TriggerCondition {
     /// Fires when a chat message contains the given pattern (case-insensitive
     /// substring).
     ChatMessage { pattern: String },
+    /// Fires when a chat message matches a case-insensitive regular expression.
+    /// Regex syntax follows the Rust `regex` crate (RE2-compatible).
+    ChatMessageRegex { pattern: String },
+    /// Fires when a `/say` channel message contains the given substring
+    /// (case-insensitive). MQ2Say parity.
+    SayMessage { pattern: String },
+    /// Fires when a `/say` channel message matches the given regex.
+    SayMessageRegex { pattern: String },
     /// Fires when a specific character levels up (exact match,
     /// case-insensitive).
     LevelUp { character: String },
@@ -74,12 +88,33 @@ impl TriggerCondition {
             (TriggerCondition::ChatMessage { pattern }, GameEvent::ChatReceived { message }) => {
                 Self::ascii_icontains(message, pattern)
             }
+            (
+                TriggerCondition::ChatMessageRegex { pattern },
+                GameEvent::ChatReceived { message },
+            ) => Self::regex_imatches(pattern, message),
+            (TriggerCondition::SayMessage { pattern }, GameEvent::SayReceived { message, .. }) => {
+                Self::ascii_icontains(message, pattern)
+            }
+            (
+                TriggerCondition::SayMessageRegex { pattern },
+                GameEvent::SayReceived { message, .. },
+            ) => Self::regex_imatches(pattern, message),
             (TriggerCondition::LevelUp { character }, GameEvent::LeveledUp { character: c }) => {
                 Self::ascii_ieq(c, character)
             }
             (TriggerCondition::AnyDeath, GameEvent::SpawnDied { .. })
             | (TriggerCondition::AnyDeath, GameEvent::PlayerDied { .. }) => true,
             _ => false,
+        }
+    }
+
+    fn regex_imatches(pattern: &str, text: &str) -> bool {
+        match regex::Regex::new(&format!("(?i){pattern}")) {
+            Ok(re) => re.is_match(text),
+            Err(e) => {
+                tracing::warn!("invalid trigger regex {pattern:?}: {e}");
+                false
+            }
         }
     }
 }
@@ -93,6 +128,13 @@ pub enum TriggerAction {
     LogMessage(String),
     /// Send an alert to Discord.
     DiscordAlert(String),
+    /// Play a sound file (absolute path). Empty string → system beep.
+    /// Requires MQ2Sound / `alert_channels::sound` to be wired by the caller.
+    PlaySound(String),
+    /// Speak text via TTS.  `{event}` in the template is substituted with a
+    /// short description of the triggering event by the caller.
+    /// Requires MQTextToSpeech / `alert_channels::tts` to be wired by the caller.
+    Speak(String),
 }
 
 /// A named, configurable event trigger: condition → action.

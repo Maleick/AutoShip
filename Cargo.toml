@@ -39,6 +39,7 @@ toml_edit = "0.22"
 regex = "1"
 thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
 arc-swap = "1"
 
 # Release profile for the injected DLL and orchestrator.

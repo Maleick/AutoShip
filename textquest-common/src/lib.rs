@@ -26,6 +26,8 @@ pub mod box_controller;
 pub mod dannet;
 /// Shared character configuration schema and persistence helpers.
 pub mod character_config;
+/// Database-backed persistent configuration with base64 sharing support.
+pub mod db_config;
 /// Chat channel types, STML stripping, and structured chat event parsing.
 pub mod chat;
 /// User-defined chat pattern rule engine (MQ2Events/MQ2React parity).
