@@ -262,6 +262,14 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         example: "nav gfay",
     },
     CommandEntry {
+        phrase: "find",
+        aliases: &[],
+        section: HelpSection::Navigation,
+        usage: "find <poi> [zone]",
+        summary: "Route to a named point-of-interest in the current or target zone.",
+        example: "find banker ro",
+    },
+    CommandEntry {
         phrase: "nav ui",
         aliases: &[],
         section: HelpSection::Navigation,
@@ -973,6 +981,7 @@ mod tests {
         assert!(candidates.contains(&String::from("h")));
         assert!(candidates.contains(&String::from("login")));
         assert!(candidates.contains(&String::from("launch")));
+        assert!(candidates.contains(&String::from("find")));
         assert!(candidates.contains(&String::from("assist")));
         assert!(candidates.contains(&String::from("tank")));
         assert!(candidates.contains(&String::from("pull")));

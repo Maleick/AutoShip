@@ -29,6 +29,7 @@ use crate::{
         state::{CampMember, Role},
     },
     config::AccountsConfig,
+    travel::{self, FindMatch, FindRouter, TravelStepKind},
     eq::{
         gm_detector::{GmAlertConfig, GmDetector, GmEventType},
         log_parser::{ChatEvent, LootDatabase},
@@ -3650,6 +3651,15 @@ impl App {
             return;
         }
 
+        // :find <Tab> → POI names from config/poi.
+        if let Some(rest) = prefix.strip_prefix("find ") {
+            let names = FindRouter::load_default()
+                .all_poi_names()
+                .unwrap_or_default();
+            self.complete_with_candidates("find ", rest, &names);
+            return;
+        }
+
         // :nav <Tab> → zone short names from cached meshes + saved camps
         if let Some(rest) = prefix.strip_prefix("nav ") {
             let mut zone_names = self.list_available_zones();
@@ -4679,6 +4689,256 @@ impl App {
 
         self.find_client_index_by_name(target)
             .map(|idx| (idx, rest))
+    }
+
+    fn execute_find_command(&mut self, args: &[&str]) {
+        if args.is_empty() {
+            self.usage_feedback("find", "Missing POI name.");
+            return;
+        }
+
+        let poi_query = args[0];
+        let destination_zone = args
+            .get(1..)
+            .filter(|parts| !parts.is_empty())
+            .map(|parts| super::run::zone_to_short_name(&parts.join(" ")));
+        let destination_zone = destination_zone.as_deref();
+
+        let current_zone = self.current_zone_short_name();
+        let zone_graph = current_zone
+            .as_deref()
+            .and_then(|_| self.query_active_client_zone_graph());
+
+        let router = FindRouter::load_default();
+        let resolved = match router.resolve(
+            poi_query,
+            current_zone.as_deref(),
+            destination_zone,
+            zone_graph.as_ref(),
+        ) {
+            Ok(Some(found)) => found,
+            Ok(None) => {
+                let zone_msg = destination_zone.unwrap_or("current/adjacent");
+                self.set_feedback(
+                    ToastLevel::Warning,
+                    format!("No POI '{poi_query}' found in {zone_msg}"),
+                    true,
+                );
+                return;
+            }
+            Err(error) => {
+                self.set_feedback(
+                    ToastLevel::Error,
+                    format!("Failed to resolve POI '{poi_query}': {error}"),
+                    true,
+                );
+                return;
+            }
+        };
+
+        let destination_is_current = current_zone
+            .as_ref()
+            .is_some_and(|zone| zone.eq_ignore_ascii_case(&resolved.zone));
+        if destination_zone.is_none() && destination_is_current {
+            self.execute_find_within_current_zone(&resolved);
+            return;
+        }
+
+        if destination_zone.is_none() && self.current_zone_short_name().is_none() && resolved.position.is_none()
+        {
+            self.execute_find_within_current_zone(&resolved);
+            return;
+        }
+
+        if destination_zone.is_none()
+            && !destination_is_current
+            && self.current_zone_short_name().is_none()
+        {
+            self.execute_find_cross_zone(&resolved);
+            return;
+        }
+
+        match destination_is_current {
+            true => self.execute_find_within_current_zone(&resolved),
+            false => self.execute_find_cross_zone(&resolved),
+        }
+    }
+
+    fn execute_find_within_current_zone(&mut self, poi: &FindMatch) {
+        let destination_label = format!("{} ({})", poi.poi_name, poi.zone);
+        if let Some(pos) = poi.position.map(|p| textquest_common::nav::Waypoint::new(p.x, p.y, p.z)) {
+            self.execute_waypoint_navigation(&destination_label, pos, Some(&poi.zone));
+        } else if let Some((name, waypoint)) = self.find_named_spawn_in_active_zone(&poi.spawn_search) {
+            self.execute_waypoint_navigation(&format!("{destination_label} → {name}"), waypoint, Some(&poi.zone));
+        } else if !poi.spawn_search.trim().is_empty() {
+            self.set_feedback(
+                ToastLevel::Info,
+                format!("No direct coord for '{}'; targeting by name.", poi.poi_name),
+                false,
+            );
+            let sent = self.send_ipc_to_focused(&textquest_common::ipc::Command::SlashCommand {
+                command: format!("/target {}", poi.spawn_search),
+            });
+            self.set_feedback(
+                if sent > 0 {
+                    ToastLevel::Success
+                } else {
+                    ToastLevel::Warning
+                },
+                if sent > 0 {
+                    format!("Target sent for {} ({} clients)", poi.poi_name, sent)
+                } else {
+                    format!("No connected clients could target '{}'", poi.spawn_search)
+                },
+                true,
+            );
+        }
+
+        self.execute_find_post_arrival_hooks(&poi.post_arrival);
+    }
+
+    fn execute_find_cross_zone(&mut self, poi: &FindMatch) {
+        let plan = match travel::travel_to(&poi.zone) {
+            Ok(plan) => plan,
+            Err(error) => {
+                self.set_feedback(
+                    ToastLevel::Error,
+                    format!("No route to {}: {error}", poi.zone),
+                    true,
+                );
+                return;
+            }
+        };
+
+        let mut sent_steps = 0usize;
+        let mut sent_hooks = 0usize;
+        for step in &plan.steps {
+            if let Some(command) = &step.command {
+                let count = self.send_ipc_to_focused(&textquest_common::ipc::Command::SlashCommand {
+                    command: command.clone(),
+                });
+                sent_steps += 1;
+                if count > 0 {
+                    sent_hooks += 1;
+                }
+                tracing::info!(
+                    zone = &step.zone,
+                    kind = ?step.kind,
+                    command = command,
+                    sent = count,
+                    "Executing travel step command for :find"
+                );
+            }
+
+            if let Some(target) = step.target {
+                let label = format!("{} ({})", poi.poi_name, step.zone);
+                let waypoint = textquest_common::nav::Waypoint::new(target.x, target.y, target.z);
+                self.execute_waypoint_navigation(&label, waypoint, Some(&step.zone));
+            }
+        }
+
+        if let Some(pos) = poi.position.map(|p| textquest_common::nav::Waypoint::new(p.x, p.y, p.z)) {
+            self.execute_waypoint_navigation(
+                &format!("{} ({})", poi.poi_name, poi.zone),
+                pos,
+                Some(&poi.zone),
+            );
+        }
+
+        if sent_steps == 0 && poi.post_arrival.is_empty() && poi.position.is_none() {
+            self.set_feedback(
+                ToastLevel::Warning,
+                format!("No route steps returned for {}", poi.poi_name),
+                true,
+            );
+            return;
+        }
+
+        self.set_feedback(
+            ToastLevel::Success,
+            format!(
+                "Travel plan queued to {} ({} step commands)",
+                poi.zone,
+                sent_steps
+            ),
+            true,
+        );
+        self.execute_find_post_arrival_hooks(&poi.post_arrival);
+    }
+
+    fn execute_find_post_arrival_hooks(&mut self, hooks: &[String]) {
+        if hooks.is_empty() {
+            return;
+        }
+        let sent = hooks.iter().fold(0usize, |acc, hook| {
+            if self
+                .send_ipc_to_focused(&textquest_common::ipc::Command::SlashCommand {
+                    command: hook.clone(),
+                })
+                > 0
+            {
+                acc.saturating_add(1)
+            } else {
+                acc
+            }
+        });
+        self.set_feedback(
+            if sent > 0 {
+                ToastLevel::Info
+            } else {
+                ToastLevel::Warning
+            },
+            format!("Post-arrival hooks sent to {sent} clients"),
+            true,
+        );
+    }
+
+    fn find_named_spawn_in_active_zone(
+        &self,
+        target: &str,
+    ) -> Option<(String, textquest_common::nav::Waypoint)> {
+        let active = self.active_client()?;
+        let player = active.local_player.as_ref()?;
+        let from = textquest_common::nav::Waypoint::new(player.x, player.y, player.z);
+
+        let target = target
+            .trim()
+            .to_ascii_lowercase()
+            .replace([' ', '_', '-'], "");
+        if target.is_empty() {
+            return None;
+        }
+
+        let mut best: Option<(f32, String, textquest_common::nav::Waypoint)> = None;
+        for spawn in &active.spawns {
+            if spawn.spawn_id == player.spawn_id {
+                continue;
+            }
+            let displayed = spawn.displayed_name.to_ascii_lowercase().replace([' ', '_', '-'], "");
+            let name = spawn.name.to_ascii_lowercase().replace([' ', '_', '-'], "");
+            if !displayed.contains(&target) && !name.contains(&target) {
+                continue;
+            }
+
+            let candidate = textquest_common::nav::Waypoint::new(spawn.x, spawn.y, spawn.z);
+            let distance = from.distance_3d(&candidate);
+            let display_name = if spawn.displayed_name.is_empty() {
+                spawn.name.clone()
+            } else {
+                spawn.displayed_name.clone()
+            };
+            match &best {
+                Some((best_distance, ..)) if *best_distance <= distance => {}
+                _ => best = Some((distance, display_name, candidate)),
+            }
+        }
+
+        best.map(|(_, name, waypoint)| (name, waypoint))
+    }
+
+    fn query_active_client_zone_graph(&self) -> Option<textquest_common::nav::ZoneGraph> {
+        let pid = self.active_client()?.pid;
+        query_zone_graph_sync(pid)
     }
 
     fn resolve_nav_target(
@@ -5716,6 +5976,9 @@ impl App {
                         }
                     }
                 }
+            }
+            "find" => {
+                self.execute_find_command(&parts[1..]);
             }
             "mapfilter" => self.handle_mapfilter_command(&parts),
             "mapclick" => self.handle_mapclick_command(&parts),

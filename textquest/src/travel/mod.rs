@@ -3,6 +3,7 @@
 
 use std::{
     collections::BTreeMap,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -87,6 +88,284 @@ pub struct TravelConfigFile {
     /// Zone short name to destination metadata, loaded from `[travel.<zone>]`.
     #[serde(default)]
     pub travel: BTreeMap<String, TravelDestination>,
+}
+
+/// On-disk TOML format for point-of-interest targets.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PoiFile {
+    /// Point-of-interest definitions loaded from `[[poi]]` entries.
+    #[serde(default)]
+    pub poi: Vec<PoiDefinition>,
+}
+
+/// Single POI definition from `config/poi/<zone>.toml`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PoiDefinition {
+    /// Canonical name used for `:find` input matching.
+    pub name: String,
+    /// Search text to identify the spawned target in EQ spawn lists.
+    #[serde(rename = "spawn_search")]
+    pub spawn_search: String,
+    /// Optional explicit point override to path directly to a coordinate.
+    #[serde(default)]
+    pub pos: Option<TravelPoint>,
+    /// Optional slash commands to run after arrival.
+    #[serde(default)]
+    pub post_arrival: Vec<String>,
+}
+
+/// Resolved POI route target used by TUI routing.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FindMatch {
+    /// Human-facing POI name.
+    pub poi_name: String,
+    /// Destination zone short name.
+    pub zone: String,
+    /// Fallback spawn query string when `position` is not set.
+    pub spawn_search: String,
+    /// Optional direct destination coordinate.
+    pub position: Option<TravelPoint>,
+    /// Slash commands to send after arrival.
+    pub post_arrival: Vec<String>,
+}
+
+impl FindMatch {
+    fn from_entry(zone: String, poi: &PoiDefinition) -> Self {
+        let mut post_arrival = poi.post_arrival.clone();
+
+        if post_arrival.is_empty() {
+            post_arrival.extend_from_slice(&infer_default_post_arrival(&poi.spawn_search));
+        }
+
+        Self {
+            poi_name: poi.name.clone(),
+            zone,
+            spawn_search: poi.spawn_search.clone(),
+            position: poi.pos,
+            post_arrival,
+        }
+    }
+}
+
+fn infer_default_post_arrival(spawn_search: &str) -> Vec<String> {
+    let target = spawn_search.trim();
+    if target.is_empty() {
+        return Vec::new();
+    }
+
+    let mut hooks = vec![format!("/target {}", target)];
+    let lower = target.to_ascii_lowercase();
+    hooks.push(format!("/hail {}", target));
+    if lower == "banker" {
+        hooks.push(String::from("/open bank"));
+    }
+    hooks
+}
+
+#[derive(Debug, Clone)]
+struct ZonePoiEntry {
+    zone: String,
+    definition: PoiDefinition,
+}
+
+/// Resolver that combines per-zone POI tables and optional zone graph adjacency.
+#[derive(Debug, Clone)]
+pub struct FindRouter {
+    /// Directory containing one `config/poi/<zone>.toml` per zone.
+    poi_dir: PathBuf,
+}
+
+impl FindRouter {
+    /// Default POI directory: `config/poi`.
+    #[must_use]
+    pub fn default_path() -> PathBuf {
+        Path::new("config/poi").to_path_buf()
+    }
+
+    /// Construct a router using a specific POI directory.
+    #[must_use]
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self {
+            poi_dir: path.into(),
+        }
+    }
+
+    /// Construct a router using the default POI directory.
+    #[must_use]
+    pub fn load_default() -> Self {
+        Self::new(Self::default_path())
+    }
+
+    /// All configured POI names (deduplicated by normalized form).
+    pub fn all_poi_names(&self) -> Result<Vec<String>> {
+        let mut names: Vec<String> = self
+            .load_entries()?
+            .into_iter()
+            .map(|entry| entry.definition.name)
+            .collect();
+        names.sort_by_key(normalize_name);
+        names.dedup_by_key(normalize_name);
+        Ok(names)
+    }
+
+    /// Resolve a requested POI.
+    ///
+    /// Order of resolution:
+    /// 1) explicit destination zone,
+    /// 2) current zone,
+    /// 3) adjacent zone in `zone_graph`.
+    pub fn resolve(
+        &self,
+        poi_query: &str,
+        current_zone: Option<&str>,
+        destination_zone: Option<&str>,
+        zone_graph: Option<&textquest_common::nav::ZoneGraph>,
+    ) -> Result<Option<FindMatch>> {
+        let normalized = normalize_name(poi_query);
+        if normalized.is_empty() {
+            return Ok(None);
+        }
+
+        let entries = self.load_entries()?;
+        if entries.is_empty() {
+            return Ok(None);
+        }
+
+        if let Some(zone) = destination_zone {
+            if let Some(found) = find_in_zone(&entries, zone, &normalized) {
+                return Ok(Some(found));
+            }
+            return Ok(None);
+        }
+
+        if let Some(zone) = current_zone
+            && let Some(found) = find_in_zone(&entries, zone, &normalized)
+        {
+            return Ok(Some(found));
+        }
+
+        if let (Some(graph), Some(zone)) = (zone_graph, current_zone) {
+            if let Some(found) = find_in_adjacent(
+                &entries,
+                graph,
+                zone,
+                &normalized,
+            ) {
+                return Ok(Some(found));
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn load_entries(&self) -> Result<Vec<ZonePoiEntry>> {
+        let mut entries: Vec<ZonePoiEntry> = Vec::new();
+
+        let path = &self.poi_dir;
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+
+        for file in fs::read_dir(path)
+            .with_context(|| format!("Failed to read POI directory {}", path.display()))?
+        {
+            let file = file.with_context(|| format!("Failed to read POI entry in {}", path.display()))?;
+            let p = file.path();
+            if !p.is_file() {
+                continue;
+            }
+
+            if p.extension().is_none_or(|ext| ext != "toml") {
+                continue;
+            }
+
+            let zone = p
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .map(normalize_name)
+                .unwrap_or_default();
+            if zone.is_empty() {
+                continue;
+            }
+
+            let raw = fs::read_to_string(&p).with_context(|| {
+                format!("Failed to read POI file {}", p.display())
+            })?;
+            let file: PoiFile = toml::from_str(&raw).with_context(|| {
+                format!("Failed to parse POI file {}", p.display())
+            })?;
+
+            let mut file_items = file
+                .poi
+                .into_iter()
+                .filter(|poi| !poi.name.trim().is_empty())
+                .map(|poi| ZonePoiEntry {
+                    zone: zone.clone(),
+                    definition: poi,
+                })
+                .collect::<Vec<_>>();
+
+            entries.append(&mut file_items);
+        }
+
+        entries.sort_by(|a, b| normalize_name(&a.definition.name).cmp(&normalize_name(&b.definition.name)));
+        Ok(entries)
+    }
+}
+
+fn normalize_name(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace([' ', '_', '-'], "")
+}
+
+fn find_in_zone(
+    entries: &[ZonePoiEntry],
+    zone: &str,
+    poi_query: &str,
+) -> Option<FindMatch> {
+    let zone = normalize_name(zone);
+    entries
+        .iter()
+        .find(|entry| {
+            normalize_name(&entry.zone) == zone
+                && normalize_name(&entry.definition.name) == poi_query
+        })
+        .map(|entry| FindMatch::from_entry(entry.zone.clone(), &entry.definition))
+}
+
+fn find_in_adjacent(
+    entries: &[ZonePoiEntry],
+    graph: &textquest_common::nav::ZoneGraph,
+    current_zone: &str,
+    poi_query: &str,
+) -> Option<FindMatch> {
+    let current_zone_id = graph
+        .zones
+        .iter()
+        .find(|(_, node)| normalize_zone(node.name.as_str()) == normalize_zone(current_zone))
+        .map(|(id, _)| *id);
+    let current_zone_id = current_zone_id?;
+
+    let node = graph.zones.get(&current_zone_id)?;
+    for conn in &node.connections {
+        if conn.disabled {
+            continue;
+        }
+        let zone_id = conn.dest_zone_id;
+        let zone_name = graph
+            .zones
+            .get(&zone_id)
+            .map(|n| n.name.as_str())
+            .unwrap_or_default();
+
+        if let Some(found) = find_in_zone(entries, zone_name, poi_query) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn normalize_zone(zone: &str) -> String {
+    zone.trim().to_ascii_lowercase().replace([' ', '_', '-'], "")
 }
 
 impl TravelConfigFile {
@@ -487,5 +766,62 @@ mod tests {
         assert!(plan.portal.is_some());
         assert!(plan.safe_camp.is_some());
         assert!(!plan.required_actions.is_empty());
+    }
+
+    #[test]
+    fn resolve_uses_adjacent_zone_when_current_zone_has_no_match() {
+        use textquest_common::nav::{ZoneConnection, ZoneGraph, ZoneNode};
+
+        let mut graph = ZoneGraph::default();
+        graph.zones.insert(
+            1,
+            ZoneNode {
+                zone_id: 1,
+                name: String::from("qeynos"),
+                min_level: 1,
+                max_level: 100,
+                connections: vec![ZoneConnection {
+                    dest_zone_id: 2,
+                    transfer_type: 0,
+                    disabled: false,
+                }],
+            },
+        );
+        graph.zones.insert(
+            2,
+            ZoneNode {
+                zone_id: 2,
+                name: String::from("nro"),
+                min_level: 1,
+                max_level: 100,
+                connections: Vec::new(),
+            },
+        );
+
+        let tmp = std::env::temp_dir().join(format!("textquest-find-router-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).expect("create fixture dir");
+
+        std::fs::write(tmp.join("qeynos.toml"), r#"
+            [[poi]]
+            name = "Mage"
+            spawn_search = "Apprentice Mage"
+        "#)
+        .expect("write current zone poi fixture");
+        std::fs::write(tmp.join("nro.toml"), r#"
+            [[poi]]
+            name = "Banker"
+            spawn_search = "Moklin Bankkeeper"
+        "#)
+        .expect("write adjacent zone poi fixture");
+
+        let router = FindRouter::new(&tmp);
+        let found = router
+            .resolve("banker", Some("qeynos"), None, Some(&graph))
+            .expect("resolve")
+            .expect("expected fallback to adjacent zone match");
+
+        assert_eq!(found.poi_name, "Banker");
+        assert_eq!(found.zone, "nro");
     }
 }
