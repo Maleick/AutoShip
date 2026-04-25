@@ -9,6 +9,8 @@ pub use paste;
 
 /// Audio alert configuration, registry, and playback backend scaffolding.
 pub mod audio_alerts;
+/// Voice trigger engine, queue, and operator controls.
+pub mod voice_triggers;
 /// Auto-group configuration and invite/role controller logic.
 pub mod auto_group;
 /// Configuration types for auto-acceptance and safety features (AutoAccept, AutoCamp, Paranoid).
