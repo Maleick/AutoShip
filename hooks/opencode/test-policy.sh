@@ -149,6 +149,11 @@ for _ in 1 2 3 4 5; do
   sleep 1
 done
 artifact_count=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' 2>/dev/null | wc -l | tr -d '[:space:]')
+for _ in 1 2 3 4 5; do
+  [[ "$artifact_count" != "0" ]] && break
+  sleep 1
+  artifact_count=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' 2>/dev/null | wc -l | tr -d '[:space:]')
+done
 assert_eq "1" "$artifact_count" "runner captures a stuck worker failure artifact"
 artifact_file=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' | head -1)
 jq -e '.issue == "issue-996" and .model == "opencode/test-free" and .role == "implementer" and .workspace != "" and .hook == "hooks/opencode/runner.sh" and .failure_category == "stuck" and (.logs | contains("ok")) and .attempt == 2' "$artifact_file" >/dev/null || fail "failure artifact includes issue, model, workspace, hook, logs, category, role, and attempt"
@@ -849,6 +854,111 @@ assert_eq "docs" "$(cat "$DISPATCH_REPO/.autoship/workspaces/issue-456/role")" "
 assert_eq "docs" "$(jq -r '.issues["issue-456"].role' "$DISPATCH_REPO/.autoship/state.json")" "dispatch records specialized role in state"
 assert_eq "free/strong:free" "$(jq -r '.issues["issue-456"].model' "$DISPATCH_REPO/.autoship/state.json")" "dispatch records selected model in state"
 grep -F '## Specialized Role' "$DISPATCH_REPO/.autoship/workspaces/issue-456/AUTOSHIP_PROMPT.md" >/dev/null || fail "dispatch records specialized role in prompt"
+
+FIXTURE_REPO="$TMP_DIR/fixture-pipeline-repo"
+mkdir -p "$FIXTURE_REPO/.autoship" "$FIXTURE_REPO/hooks/opencode" "$FIXTURE_REPO/hooks" "$FIXTURE_REPO/bin"
+git init -q "$FIXTURE_REPO"
+git -C "$FIXTURE_REPO" config user.email autoship@example.invalid
+git -C "$FIXTURE_REPO" config user.name AutoShip
+git -C "$FIXTURE_REPO" remote add origin git@github.com:owner/repo.git
+printf 'base\n' > "$FIXTURE_REPO/README.md"
+git -C "$FIXTURE_REPO" add README.md
+git -C "$FIXTURE_REPO" commit -q -m initial
+cp "$SCRIPT_DIR/plan-issues.sh" "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/safety-filter.sh" "$SCRIPT_DIR/pr-title.sh" "$SCRIPT_DIR/runner.sh" "$SCRIPT_DIR/reviewer.sh" "$SCRIPT_DIR/create-pr.sh" "$FIXTURE_REPO/hooks/opencode/"
+cp "$SCRIPT_DIR/../update-state.sh" "$SCRIPT_DIR/../capture-failure.sh" "$FIXTURE_REPO/hooks/"
+chmod +x "$FIXTURE_REPO"/hooks/opencode/*.sh "$FIXTURE_REPO"/hooks/*.sh
+cat > "$FIXTURE_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+cat > "$FIXTURE_REPO/.autoship/model-routing.json" <<'JSON'
+{"roles":{"reviewer":"openai/gpt-5.5"},"models":[{"id":"free/strong:free","cost":"free","strength":90,"max_task_types":["medium_code"]}]}
+JSON
+cat > "$FIXTURE_REPO/issues.json" <<'JSON'
+[
+  {"number":188,"title":"unsafe bypass fixture","body":"hide detour hooks from anti-cheat detection","labels":[{"name":"agent:ready"},{"name":"security"}]},
+  {"number":189,"title":"safe fixture pipeline","body":"Add a small fixture file","labels":[{"name":"agent:ready"},{"name":"type:test"}]}
+]
+JSON
+cat > "$FIXTURE_REPO/bin/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "issue view" ]]; then
+  number="$3"
+  case "$7" in
+    .title) jq -r --argjson number "$number" '.[] | select(.number == $number) | .title' issues.json ;;
+    .body) jq -r --argjson number "$number" '.[] | select(.number == $number) | .body' issues.json ;;
+    '[.labels[].name] | join(",")') jq -r --argjson number "$number" '.[] | select(.number == $number) | [.labels[].name] | join(",")' issues.json ;;
+  esac
+  exit 0
+fi
+if [[ "$1 $2" == "label list" ]]; then
+  printf '%s\n' autoship:in-progress autoship:blocked autoship:done
+  exit 0
+fi
+if [[ "$1 $2" == "issue edit" ]]; then
+  exit 0
+fi
+if [[ "$1 $2" == "pr create" ]]; then
+  printf 'LIVE_PR_CREATE %s\n' "$*" >> "$AUTOSHIP_GH_MUTATIONS_LOG"
+  printf 'https://github.com/owner/repo/pull/42\n'
+  exit 0
+fi
+if [[ "$1 $2" == "pr view" ]]; then
+  printf 'Closes #189\n'
+  exit 0
+fi
+exit 0
+SH
+cat > "$FIXTURE_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+if printf '%s\n' "$*" | grep -F 'AutoShip reviewer' >/dev/null; then
+  printf 'VERDICT: PASS\n'
+  exit 0
+fi
+printf 'fixture change\n' > fixture-output.txt
+printf 'Fixture pipeline completed\n' > AUTOSHIP_RESULT.md
+printf 'COMPLETE\n' > status
+exit 0
+SH
+chmod +x "$FIXTURE_REPO/bin/gh" "$FIXTURE_REPO/bin/opencode"
+(
+  cd "$FIXTURE_REPO"
+  plan_output=$(PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/plan-issues.sh --issues-file issues.json --limit 10)
+  assert_eq "189" "$(jq -r '.eligible[].number' <<< "$plan_output")" "fixture plan keeps only safe eligible issue"
+  assert_eq "188" "$(jq -r '.blocked[].number' <<< "$plan_output")" "fixture plan blocks unsafe issue"
+  PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 188 medium_code >/dev/null
+  assert_eq "BLOCKED" "$(tr -d '[:space:]' < .autoship/workspaces/issue-188/status)" "fixture dispatch blocks unsafe issue"
+  PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 189 medium_code >/dev/null
+  assert_eq "QUEUED" "$(tr -d '[:space:]' < .autoship/workspaces/issue-189/status)" "fixture dispatch creates queued safe worktree"
+  PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
+  for _ in 1 2 3 4 5; do
+    [[ "$(tr -d '[:space:]' < .autoship/workspaces/issue-189/status)" != "RUNNING" ]] && break
+    sleep 1
+  done
+  assert_eq "COMPLETE" "$(tr -d '[:space:]' < .autoship/workspaces/issue-189/status)" "fixture runner records completed worker state"
+  PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/reviewer.sh issue-189 "$FIXTURE_REPO/.autoship/workspaces/issue-189" >/dev/null
+  AUTOSHIP_GH_MUTATIONS_LOG="$FIXTURE_REPO/gh-mutations.log" PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-189 "$FIXTURE_REPO/.autoship/workspaces/issue-189" >/dev/null
+  test ! -e "$FIXTURE_REPO/gh-mutations.log" || fail "fixture PR dry-run must not call gh pr create"
+  assert_eq "dry-run" "$(jq -r '.issues["issue-189"].pr_mode' .autoship/state.json)" "fixture PR dry-run records runner state without live mutation"
+  artifact_workspace="$FIXTURE_REPO/.autoship/workspaces/issue-artifact-only"
+  mkdir -p "$artifact_workspace"
+  git -C "$FIXTURE_REPO" worktree add -q "$artifact_workspace" HEAD
+  printf 'artifact only\n' > "$artifact_workspace/AUTOSHIP_RESULT.md"
+  printf 'COMPLETE\n' > "$artifact_workspace/status"
+  if PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-190 "$artifact_workspace" >/dev/null 2>&1; then
+    fail "PR dry-run must reject artifact-only worktrees"
+  fi
+  live_workspace="$FIXTURE_REPO/.autoship/workspaces/issue-191"
+  git -C "$FIXTURE_REPO" worktree add -q -b autoship/issue-191 "$live_workspace" HEAD
+  printf 'implementation\n' > "$live_workspace/implementation.txt"
+  printf 'live result\n' > "$live_workspace/AUTOSHIP_RESULT.md"
+  printf 'runner log\n' > "$live_workspace/AUTOSHIP_RUNNER.log"
+  printf 'COMPLETE\n' > "$live_workspace/status"
+  AUTOSHIP_ENABLE_PR_CREATE=true AUTOSHIP_GH_MUTATIONS_LOG="$FIXTURE_REPO/live-gh-mutations.log" PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/create-pr.sh issue-191 "$live_workspace" >/dev/null
+  git -C "$live_workspace" show --name-only --format= HEAD | grep -F 'implementation.txt' >/dev/null || fail "live PR path commits implementation changes"
+  if git -C "$live_workspace" show --name-only --format= HEAD | grep -E 'AUTOSHIP_RESULT.md|AUTOSHIP_RUNNER.log|status' >/dev/null; then
+    fail "live PR path must not commit AutoShip runtime artifacts"
+  fi
+)
 
 PACKAGE_REPO="$TMP_DIR/package-repo"
 cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
