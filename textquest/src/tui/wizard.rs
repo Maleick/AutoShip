@@ -1,8 +1,7 @@
-//! Onboarding wizard for first-run setup.
+//! Onboarding wizard stub — delegates config to web UI.
 //!
-//! Launches when no config file exists or via the `:wizard` command.
-//! Guides the operator through EQ client detection, character assignment,
-//! camp configuration, and class role setup.
+//! Detects running EQ clients and opens web dashboard at /characters
+//! for character assignment, camp configuration, and class roles setup.
 
 use ratatui::{
     buffer::Buffer,
@@ -12,36 +11,23 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Widget, Wrap},
 };
 
-/// Wizard step identifier.
+/// Wizard step identifier (simplified: detect clients, then open web).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WizardStep {
     Welcome,
     ClientDetection,
-    CharacterAssignment,
-    CampConfiguration,
-    ClassRoles,
-    ReviewConfirm,
+    OpenWeb,
 }
 
 impl WizardStep {
-    pub const ALL: [WizardStep; 6] = [
-        Self::Welcome,
-        Self::ClientDetection,
-        Self::CharacterAssignment,
-        Self::CampConfiguration,
-        Self::ClassRoles,
-        Self::ReviewConfirm,
-    ];
+    pub const ALL: [WizardStep; 3] = [Self::Welcome, Self::ClientDetection, Self::OpenWeb];
 
     /// 1-indexed step number.
     pub fn number(self) -> u8 {
         match self {
             Self::Welcome => 1,
             Self::ClientDetection => 2,
-            Self::CharacterAssignment => 3,
-            Self::CampConfiguration => 4,
-            Self::ClassRoles => 5,
-            Self::ReviewConfirm => 6,
+            Self::OpenWeb => 3,
         }
     }
 
@@ -49,21 +35,15 @@ impl WizardStep {
         match self {
             Self::Welcome => "Welcome",
             Self::ClientDetection => "EQ Client Detection",
-            Self::CharacterAssignment => "Character Assignment",
-            Self::CampConfiguration => "Camp Configuration",
-            Self::ClassRoles => "Class Roles",
-            Self::ReviewConfirm => "Review & Confirm",
+            Self::OpenWeb => "Opening Web Dashboard",
         }
     }
 
     pub fn next(self) -> Option<Self> {
         match self {
             Self::Welcome => Some(Self::ClientDetection),
-            Self::ClientDetection => Some(Self::CharacterAssignment),
-            Self::CharacterAssignment => Some(Self::CampConfiguration),
-            Self::CampConfiguration => Some(Self::ClassRoles),
-            Self::ClassRoles => Some(Self::ReviewConfirm),
-            Self::ReviewConfirm => None,
+            Self::ClientDetection => Some(Self::OpenWeb),
+            Self::OpenWeb => None,
         }
     }
 
@@ -71,85 +51,21 @@ impl WizardStep {
         match self {
             Self::Welcome => None,
             Self::ClientDetection => Some(Self::Welcome),
-            Self::CharacterAssignment => Some(Self::ClientDetection),
-            Self::CampConfiguration => Some(Self::CharacterAssignment),
-            Self::ClassRoles => Some(Self::CampConfiguration),
-            Self::ReviewConfirm => Some(Self::ClassRoles),
+            Self::OpenWeb => Some(Self::ClientDetection),
         }
     }
 }
 
-/// A character entry being configured in the wizard.
-#[derive(Debug, Clone)]
-pub struct WizardCharacter {
-    pub name: String,
-    pub class: String,
-    pub level: u8,
-    pub group: u8,
-    pub roles: WizardRoles,
-}
-
-/// Role toggles for a character.
-#[derive(Debug, Clone, Default)]
-pub struct WizardRoles {
-    pub tank: bool,
-    pub healer: bool,
-    pub dps: bool,
-    pub puller: bool,
-    pub cc: bool,
-}
-
-/// Camp template presets.
-#[derive(Debug, Clone)]
-pub struct CampTemplate {
-    pub name: &'static str,
-    pub zone: &'static str,
-    pub description: &'static str,
-}
-
-pub const CAMP_TEMPLATES: &[CampTemplate] = &[
-    CampTemplate {
-        name: "Permafrost Entrance",
-        zone: "permafrost",
-        description: "Safe camp near the zone entrance with steady ice giant pulls",
-    },
-    CampTemplate {
-        name: "Eastern Wastes - Coldain",
-        zone: "eastwastes",
-        description: "Camp near the Coldain settlement, good for faction and experience",
-    },
-    CampTemplate {
-        name: "Great Divide - Spires",
-        zone: "greatdivide",
-        description: "Near the Wizard Spires, central location with diverse pulls",
-    },
-    CampTemplate {
-        name: "Custom",
-        zone: "",
-        description: "Create a custom camp configuration from scratch",
-    },
-];
-
-/// Full wizard state.
+/// Full wizard state (stub: detect clients and open web).
 pub struct WizardState {
     /// Whether the wizard is currently active.
     pub active: bool,
     /// Current step in the wizard flow.
     pub step: WizardStep,
-    /// Detected EQ client PIDs (populated during client detection step).
+    /// Detected EQ client PIDs.
     pub detected_clients: Vec<u32>,
-    /// Characters being configured.
-    pub characters: Vec<WizardCharacter>,
-    /// Selected camp template index.
-    pub selected_camp: usize,
-    /// Currently focused field index within the active step.
-    pub field_index: usize,
-    /// Input buffer for text fields.
-    pub input_buffer: String,
     /// Whether the wizard completed successfully.
     pub completed: bool,
-    /// Zone search filter text.
-    pub zone_filter: String,
 }
 
 impl WizardState {
@@ -159,12 +75,7 @@ impl WizardState {
             active: false,
             step: WizardStep::Welcome,
             detected_clients: Vec::new(),
-            characters: Vec::new(),
-            selected_camp: 0,
-            field_index: 0,
-            input_buffer: String::new(),
             completed: false,
-            zone_filter: String::new(),
         }
     }
 
@@ -172,7 +83,6 @@ impl WizardState {
     pub fn start(&mut self) {
         self.active = true;
         self.step = WizardStep::Welcome;
-        self.field_index = 0;
         self.completed = false;
     }
 
@@ -180,7 +90,6 @@ impl WizardState {
     pub fn advance(&mut self) {
         if let Some(next) = self.step.next() {
             self.step = next;
-            self.field_index = 0;
         } else {
             self.completed = true;
             self.active = false;
@@ -191,7 +100,6 @@ impl WizardState {
     pub fn go_back(&mut self) {
         if let Some(prev) = self.step.prev() {
             self.step = prev;
-            self.field_index = 0;
         }
     }
 
@@ -225,9 +133,9 @@ impl<'a> WizardWidget<'a> {
 
 impl Widget for WizardWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // Center the wizard popup (96 cols wide, 36 high)
-        let w = 96_u16.min(area.width);
-        let h = 36_u16.min(area.height);
+        // Center the wizard popup
+        let w = 80_u16.min(area.width);
+        let h = 20_u16.min(area.height);
         let x = area.x + (area.width.saturating_sub(w)) / 2;
         let y = area.y + (area.height.saturating_sub(h)) / 2;
         let popup = Rect::new(x, y, w, h);
@@ -243,12 +151,12 @@ impl Widget for WizardWidget<'_> {
 
         let block = Block::default()
             .title(format!(
-                " Fleet Setup · wizard · Step {} of {} ",
+                " TextQuest Setup Wizard · Step {} of {} ",
                 self.state.step.number(),
                 WizardStep::ALL.len()
             ))
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.accent_color)) // magenta border
+            .border_style(Style::default().fg(self.accent_color))
             .style(Style::default().bg(Color::Black));
 
         let inner = block.inner(popup);
@@ -271,31 +179,20 @@ impl Widget for WizardWidget<'_> {
         match self.state.step {
             WizardStep::Welcome => self.render_welcome(layout[0], buf),
             WizardStep::ClientDetection => self.render_client_detection(layout[0], buf),
-            WizardStep::CharacterAssignment => self.render_character_assignment(layout[0], buf),
-            WizardStep::CampConfiguration => self.render_camp_config(layout[0], buf),
-            WizardStep::ClassRoles => self.render_class_roles(layout[0], buf),
-            WizardStep::ReviewConfirm => self.render_review(layout[0], buf),
+            WizardStep::OpenWeb => self.render_open_web(layout[0], buf),
         }
 
         // Progress bar
         self.render_progress(layout[2], buf);
 
-        // Navigation hints with styled buttons
+        // Navigation hints
         let nav_style = Style::default().fg(Color::DarkGray);
-        match self.state.step {
-            WizardStep::Welcome => {
-                let hint = "◀ Skip  │  Next ▶";
-                buf.set_string(layout[3].x, layout[3].y, hint, nav_style);
-            }
-            WizardStep::ReviewConfirm => {
-                let hint = "◀ Back  │  Confirm ▶";
-                buf.set_string(layout[3].x, layout[3].y, hint, nav_style);
-            }
-            _ => {
-                let hint = "◀ Back  │  Next ▶  │  esc cancel";
-                buf.set_string(layout[3].x, layout[3].y, hint, nav_style);
-            }
-        }
+        let hint = match self.state.step {
+            WizardStep::Welcome => "◀ Skip  │  Next ▶",
+            WizardStep::OpenWeb => "Opening web dashboard...",
+            _ => "◀ Back  │  Next ▶  │  esc cancel",
+        };
+        buf.set_string(layout[3].x, layout[3].y, hint, nav_style);
     }
 }
 
@@ -304,53 +201,31 @@ impl WizardWidget<'_> {
         let lines = vec![
             Line::from(""),
             Line::from(Span::styled(
-                "╔══════════════════════════════════════╗",
-                Style::default().fg(self.accent_color),
-            )),
-            Line::from(Span::styled(
-                "║            TextQuest                      ║",
-                Style::default()
-                    .fg(self.accent_color)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(Span::styled(
-                "║      EverQuest Multibox Controller     ║",
-                Style::default().fg(self.accent_color),
-            )),
-            Line::from(Span::styled(
-                "╚══════════════════════════════════════╝",
-                Style::default().fg(self.accent_color),
-            )),
-            Line::from(""),
-            Line::from(Span::styled(
-                "Welcome to the TextQuest Setup Wizard!",
+                "Welcome to TextQuest Setup",
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
             )),
             Line::from(""),
-            Line::from("This wizard will help you configure:"),
+            Line::from("This quick wizard will:"),
             Line::from(""),
             Line::from(Span::styled(
-                "  1. Detect running EQ clients",
+                "  1. Detect your running EQ clients",
                 Style::default().fg(Color::White),
             )),
             Line::from(Span::styled(
-                "  2. Assign characters to groups",
-                Style::default().fg(Color::White),
-            )),
-            Line::from(Span::styled(
-                "  3. Set up camp configurations",
-                Style::default().fg(Color::White),
-            )),
-            Line::from(Span::styled(
-                "  4. Configure class roles and strategies",
+                "  2. Open the web dashboard at /characters",
                 Style::default().fg(Color::White),
             )),
             Line::from(""),
             Line::from(Span::styled(
-                "Press Enter to begin or Esc to skip.",
+                "Configure characters, camps, and roles in the web UI.",
                 Style::default().fg(Color::DarkGray),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Press Enter to continue.",
+                Style::default().fg(Color::Yellow),
             )),
         ];
         let para = Paragraph::new(lines).wrap(Wrap { trim: false });
@@ -374,211 +249,56 @@ impl WizardWidget<'_> {
                 Style::default().fg(Color::Yellow),
             )));
             lines.push(Line::from(""));
-            lines.push(Line::from("Start EQ clients and press Enter to re-scan,"));
-            lines.push(Line::from("or continue with demo mode."));
+            lines.push(Line::from("Start EQ clients (eqgame.exe) and press Enter"));
+            lines.push(Line::from("to re-scan, or continue anyway."));
         } else {
             lines.push(Line::from(format!(
                 "Found {} EQ client(s):",
                 self.state.detected_clients.len()
             )));
             lines.push(Line::from(""));
-            for (i, pid) in self.state.detected_clients.iter().enumerate() {
-                let marker = if i == self.state.field_index {
-                    "▸"
-                } else {
-                    " "
-                };
-                lines.push(Line::from(format!(" {marker} PID {pid}")));
+            for pid in &self.state.detected_clients {
+                lines.push(Line::from(format!("  • PID {pid}")));
             }
         }
 
-        let para = Paragraph::new(lines).wrap(Wrap { trim: false });
-        para.render(area, buf);
-    }
-
-    fn render_character_assignment(&self, area: Rect, buf: &mut Buffer) {
-        let mut lines = vec![
-            Line::from(Span::styled(
-                "Character Assignment",
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from("Assign characters to groups (G1-G6)."),
-            Line::from("Tab to switch fields, Enter to confirm."),
-            Line::from(""),
-        ];
-
-        if self.state.characters.is_empty() {
-            lines.push(Line::from(Span::styled(
-                "No characters configured yet.",
-                Style::default().fg(Color::Yellow),
-            )));
-            lines.push(Line::from("Press Enter to add characters."));
-        } else {
-            lines.push(Line::from(format!(
-                " {:12} {:6} {:3} {:5} Roles",
-                "Name", "Class", "Lvl", "Group"
-            )));
-            lines.push(Line::from(Span::styled(
-                " ────────────────────────────────────────",
-                Style::default().fg(Color::DarkGray),
-            )));
-            for (i, ch) in self.state.characters.iter().enumerate() {
-                let marker = if i == self.state.field_index {
-                    "▸"
-                } else {
-                    " "
-                };
-                let roles = format!(
-                    "{}{}{}{}{}",
-                    if ch.roles.tank { "T" } else { "." },
-                    if ch.roles.healer { "H" } else { "." },
-                    if ch.roles.dps { "D" } else { "." },
-                    if ch.roles.puller { "P" } else { "." },
-                    if ch.roles.cc { "C" } else { "." },
-                );
-                lines.push(Line::from(format!(
-                    "{marker} {:12} {:6} {:3} G{:1}    {roles}",
-                    ch.name, ch.class, ch.level, ch.group
-                )));
-            }
-        }
-
-        let para = Paragraph::new(lines).wrap(Wrap { trim: false });
-        para.render(area, buf);
-    }
-
-    fn render_camp_config(&self, area: Rect, buf: &mut Buffer) {
-        let mut lines = vec![
-            Line::from(Span::styled(
-                "Camp Configuration",
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from("Select a camp template or create a custom configuration."),
-            Line::from(""),
-        ];
-
-        for (i, tpl) in CAMP_TEMPLATES.iter().enumerate() {
-            let marker = if i == self.state.selected_camp {
-                "◉"
-            } else {
-                "○"
-            };
-            let style = if i == self.state.selected_camp {
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(Color::White)
-            };
-            lines.push(Line::from(Span::styled(
-                format!(" {marker} {}", tpl.name),
-                style,
-            )));
-            lines.push(Line::from(Span::styled(
-                format!("     {}", tpl.description),
-                Style::default().fg(Color::DarkGray),
-            )));
-            lines.push(Line::from(""));
-        }
-
-        let para = Paragraph::new(lines).wrap(Wrap { trim: false });
-        para.render(area, buf);
-    }
-
-    fn render_class_roles(&self, area: Rect, buf: &mut Buffer) {
-        let mut lines = vec![
-            Line::from(Span::styled(
-                "Class Roles & Strategies",
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-            Line::from("Configure the strategy for each class in your group."),
-            Line::from(""),
-        ];
-
-        let class_strategies = [
-            ("Warrior", &["Main Tank", "Off-Tank", "DPS"][..]),
-            (
-                "Cleric",
-                &["Main Healer", "CH Chain Participant", "Battle Cleric"],
-            ),
-            ("Enchanter", &["CC Primary", "Buff Bot", "DPS Enchanter"]),
-            ("Bard", &["Puller", "Melee DPS + Songs", "Kiter"]),
-            ("Ranger", &["Puller", "Ranged DPS", "Off-Tank"]),
-            ("Wizard", &["Nuke DPS", "Porter", "AE DPS"]),
-        ];
-
-        for (i, (class, strategies)) in class_strategies.iter().enumerate() {
-            let marker = if i == self.state.field_index {
-                "▸"
-            } else {
-                " "
-            };
-            lines.push(Line::from(Span::styled(
-                format!(" {marker} {class}"),
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )));
-            for (j, strat) in strategies.iter().enumerate() {
-                let sel = if j == 0 { "●" } else { "○" };
-                lines.push(Line::from(format!("     {sel} {strat}")));
-            }
-            lines.push(Line::from(""));
-        }
-
-        let para = Paragraph::new(lines).wrap(Wrap { trim: false });
-        para.render(area, buf);
-    }
-
-    fn render_review(&self, area: Rect, buf: &mut Buffer) {
-        let mut lines = vec![
-            Line::from(Span::styled(
-                "Review & Confirm",
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(""),
-        ];
-
-        lines.push(Line::from(format!(
-            "  Clients detected: {}",
-            self.state.detected_clients.len()
-        )));
-        lines.push(Line::from(format!(
-            "  Characters configured: {}",
-            self.state.characters.len()
-        )));
-        lines.push(Line::from(format!(
-            "  Camp template: {}",
-            CAMP_TEMPLATES
-                .get(self.state.selected_camp)
-                .map_or("None", |t| t.name)
-        )));
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(
-            "Press Enter to save configuration and start.",
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-        )));
-        lines.push(Line::from(Span::styled(
-            "Press Esc to go back and make changes.",
-            Style::default().fg(Color::DarkGray),
+            "Press Enter to continue to web dashboard.",
+            Style::default().fg(Color::Yellow),
         )));
 
         let para = Paragraph::new(lines).wrap(Wrap { trim: false });
         para.render(area, buf);
     }
+
+    fn render_open_web(&self, area: Rect, buf: &mut Buffer) {
+        let lines = vec![
+            Line::from(Span::styled(
+                "Opening Web Dashboard",
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from("Opening browser to:"),
+            Line::from(""),
+            Line::from(Span::styled(
+                "  http://localhost:3001/characters",
+                Style::default().fg(Color::Cyan),
+            )),
+            Line::from(""),
+            Line::from("Complete your configuration in the web UI:"),
+            Line::from(""),
+            Line::from("  • Assign characters to groups"),
+            Line::from("  • Select camp configurations"),
+            Line::from("  • Set class roles and strategies"),
+        ];
+
+        let para = Paragraph::new(lines).wrap(Wrap { trim: false });
+        para.render(area, buf);
+    }
+
 
     fn render_progress(&self, area: Rect, buf: &mut Buffer) {
         if area.width < 4 {
@@ -619,6 +339,12 @@ mod tests {
         state.advance();
         assert_eq!(state.step, WizardStep::ClientDetection);
 
+        state.advance();
+        assert_eq!(state.step, WizardStep::OpenWeb);
+
+        state.go_back();
+        assert_eq!(state.step, WizardStep::ClientDetection);
+
         state.go_back();
         assert_eq!(state.step, WizardStep::Welcome);
 
@@ -632,14 +358,14 @@ mod tests {
         state.start();
         assert!(state.progress() > 0.0);
 
-        state.step = WizardStep::ReviewConfirm;
+        state.step = WizardStep::OpenWeb;
         assert!((state.progress() - 1.0).abs() < f64::EPSILON);
     }
 
     #[test]
     fn wizard_completes_on_final_advance() {
         let mut state = WizardState::new();
-        state.step = WizardStep::ReviewConfirm;
+        state.step = WizardStep::OpenWeb;
         state.active = true;
         state.advance();
         assert!(state.completed);

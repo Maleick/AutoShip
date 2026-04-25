@@ -586,36 +586,6 @@ pub fn handle_events(
                         app.wizard_state.go_back();
                     }
                 }
-                KeyCode::Tab => {
-                    app.wizard_state.field_index += 1;
-                }
-                KeyCode::BackTab => {
-                    app.wizard_state.field_index = app.wizard_state.field_index.saturating_sub(1);
-                }
-                KeyCode::Up => {
-                    if app.wizard_state.step == super::wizard::WizardStep::CampConfiguration {
-                        app.wizard_state.selected_camp =
-                            app.wizard_state.selected_camp.saturating_sub(1);
-                    } else {
-                        app.wizard_state.field_index =
-                            app.wizard_state.field_index.saturating_sub(1);
-                    }
-                }
-                KeyCode::Down => {
-                    if app.wizard_state.step == super::wizard::WizardStep::CampConfiguration {
-                        let max = super::wizard::CAMP_TEMPLATES.len().saturating_sub(1);
-                        app.wizard_state.selected_camp =
-                            (app.wizard_state.selected_camp + 1).min(max);
-                    } else {
-                        app.wizard_state.field_index += 1;
-                    }
-                }
-                KeyCode::Char(c) => {
-                    app.wizard_state.input_buffer.push(c);
-                }
-                KeyCode::Backspace => {
-                    app.wizard_state.input_buffer.pop();
-                }
                 _ => {}
             }
             return Ok(true);
