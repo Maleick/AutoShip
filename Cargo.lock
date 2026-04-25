@@ -3565,10 +3565,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7753b721174eb8ff87a9a0e799e2d7bc3749323e773db92e0984debb00019d6e"
 dependencies = [
  "bitflags 2.11.1",
+ "chrono",
  "fallible-iterator",
  "fallible-streaming-iterator",
  "hashlink",
  "libsqlite3-sys",
+ "serde_json",
  "smallvec",
 ]
 
@@ -4343,12 +4345,14 @@ name = "textquest-dll"
 version = "0.6.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "bincode",
  "bitflags 2.11.1",
  "criterion",
  "getrandom 0.2.17",
  "once_cell",
  "retour",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

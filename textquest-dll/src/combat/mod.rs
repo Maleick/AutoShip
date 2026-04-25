@@ -3,6 +3,7 @@ pub mod aggro;
 pub mod buffs;
 pub mod charm_config;
 pub mod classes;
+pub mod config_storage;
 pub mod debuff_tracker;
 pub mod debuffs;
 pub mod dispel_engine;

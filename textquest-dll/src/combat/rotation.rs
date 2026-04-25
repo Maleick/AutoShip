@@ -19,7 +19,7 @@ use super::strategy::CombatContext;
 /// Each entry represents one ability (spell, disc, AA, etc.) with a condition
 /// that gates its execution. Entries are evaluated in order; the first entry
 /// whose condition passes and whose action is ready gets executed.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RotationEntry {
     /// Human-readable name (matches an AbilitySet name or literal ability
     /// name).
@@ -55,7 +55,7 @@ pub struct RotationEntry {
 }
 
 /// Hook action to execute before or after a rotation entry fires.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ActivationHook {
     /// Stop all movement before casting.
     StopMovement,
@@ -72,7 +72,7 @@ pub enum ActivationHook {
 /// Rotation groups are evaluated in the order defined by the class strategy.
 /// Each group targets a specific set of entities (self, auto-target, lowest HP
 /// member, etc.) and only runs when its combat state requirement is met.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RotationGroup {
     /// Name of this rotation group (e.g., "Downtime", "Combat", "Emergency").
     pub name: String,
@@ -98,6 +98,7 @@ pub struct RotationGroup {
     /// The rotation entries in priority order.
     pub entries: Vec<RotationEntry>,
     /// Current position for round-robin resumption (runtime state, not config).
+    #[serde(skip)]
     pub current_step: usize,
 }
 
