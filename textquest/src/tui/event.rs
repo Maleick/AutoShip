@@ -222,6 +222,28 @@ fn handle_tactical_map_focused_shortcut(app: &mut App, key: KeyEvent) -> bool {
     true
 }
 
+fn handle_metrics_dashboard_shortcut(app: &mut App, key: KeyEvent) -> bool {
+    if app.active_screen != ActiveScreen::Metrics {
+        return false;
+    }
+
+    match (key.code, key.modifiers) {
+        (KeyCode::Tab, _) => app.metrics_next_tab(),
+        (KeyCode::BackTab, _) => app.metrics_prev_tab(),
+        (KeyCode::Right, _) | (KeyCode::Char('l'), _) => app.metrics_next_tab(),
+        (KeyCode::Left, _) | (KeyCode::Char('h'), _) => app.metrics_prev_tab(),
+        (KeyCode::Down, _) | (KeyCode::Char('j'), _) => app.metrics_select_next(),
+        (KeyCode::Up, _) | (KeyCode::Char('k'), _) => app.metrics_select_prev(),
+        (KeyCode::Enter, _) => app.metrics_toggle_detail(),
+        (KeyCode::Char('s' | 'S'), _) => app.metrics_toggle_sort(),
+        (KeyCode::Char('f' | 'F'), _) => app.metrics_toggle_scope(),
+        (KeyCode::Char(' '), _) => app.metrics_toggle_selected_metric(),
+        _ => return false,
+    }
+
+    true
+}
+
 fn execute_dashboard_command(app: &mut App, orchestrator: &mut Orchestrator, command: &str) {
     let started_at = Instant::now();
     let session_id = app.routing_scope.label();
@@ -864,20 +886,8 @@ pub fn handle_events(
             return Ok(true);
         }
 
-        if app.keyboard_config.style == crate::tui::hotkeys::KeyboardStyle::Emacs
-            && key.modifiers.contains(KeyModifiers::CONTROL)
-        {
-            match key.code {
-                KeyCode::Char('n' | 'N') => {
-                    app.next_client();
-                    return Ok(true);
-                }
-                KeyCode::Char('p' | 'P') => {
-                    app.prev_client();
-                    return Ok(true);
-                }
-                _ => {}
-            }
+        if handle_metrics_dashboard_shortcut(app, key) {
+            return Ok(true);
         }
 
         match (key.code, key.modifiers) {
@@ -934,6 +944,10 @@ pub fn handle_events(
                 app.set_active_screen(ActiveScreen::Debug);
                 return Ok(true);
             }
+            (KeyCode::Char('5'), _) => {
+                app.set_active_screen(ActiveScreen::PacketMonitor);
+                return Ok(true);
+            }
             (KeyCode::Char('6'), _) => {
                 app.set_active_screen(ActiveScreen::Economy);
                 return Ok(true);
@@ -942,7 +956,11 @@ pub fn handle_events(
                 app.set_active_screen(ActiveScreen::Orchestrator);
                 return Ok(true);
             }
-            (KeyCode::Tab, _) if app.keyboard_config.tab_navigation => {
+            (KeyCode::Char('8'), _) => {
+                app.set_active_screen(ActiveScreen::Metrics);
+                return Ok(true);
+            }
+            (KeyCode::Tab, _) => {
                 app.toggle_panel();
                 return Ok(true);
             }

@@ -216,22 +216,13 @@
       "notes": "PARTIAL: Added tools/etw-consumer with CLI parsing, ETW-TI keyword masks, process-name filtering, JSONL serialization, pipe wire decoding for current and legacy headers, Windows-gated StartTraceW/EnableTraceEx2/OpenTraceW/ProcessTrace/TDH runtime, named-pipe reader, driver IOCTL start/stop wrapper, README setup notes, and 13 unit tests that compile. Live ETW/provider and loaded-driver validation still requires a patched Windows VM."
     },
     {
-      "id": "issue-974-tui-help-panel-ui-navigation",
-      "name": "Issue #974 TUI Help Panel UI & Navigation",
-      "status": "complete",
-      "acceptance_tests": [
-        "cargo check"
-      ],
-      "notes": "Wired the existing help search panel to /, q/Esc close, tab cycling across Commands/FAQ/Tips, result navigation, typed filtering, and Enter detail expansion. Cargo check also required two minimal pre-existing compile repairs in wishlist equality and Lua player snapshot table generation."
-    },
-    {
-      "id": "issue-988-direct3d-overlay-rendering-system",
-      "name": "Issue #988 Direct3D overlay rendering system",
+      "id": "issue-977-metrics-tui-dashboard-panel",
+      "name": "Issue #977 Metrics TUI dashboard panel",
       "status": "in_progress",
       "acceptance_tests": [
         "cargo check"
       ],
-      "notes": "PARTIAL: Added backend-aware Direct3D overlay pipeline scaffolding, DX11 Present-to-overlay render wiring, multiple render-target tracking, device-reset reinitialization API, and CPU render budget accounting. Full DX12 Present hook installation, real ImGui/custom widget drawing, live fullscreen detection, and Windows validation remain follow-up work."
+      "notes": "PARTIAL: Added a dedicated Metrics TUI screen scaffold with Combat/Movement/Loot/System tabs, live gauges, 5m/60m sparklines, value sorting, row selection, detail drilldown, metric visibility toggles, and fleet/selected-character scope. Full production metric source integration and clean workspace-wide cargo check remain follow-up work because this worktree currently fails in unrelated smartloot/lua files."
     }
   ]
 }

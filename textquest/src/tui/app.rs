@@ -129,6 +129,8 @@ pub enum ActiveScreen {
     Economy,
     /// Orchestrator control surface — camp loop, group coordination.
     Orchestrator,
+    /// Real-time metrics dashboard with trend panels.
+    Metrics,
 }
 
 impl ActiveScreen {
@@ -143,11 +145,12 @@ impl ActiveScreen {
             Self::PacketMonitor => "Aethergram",
             Self::Economy => "Coinmark",
             Self::Orchestrator => "Third Gate",
+            Self::Metrics => "Metrics",
         }
     }
 
     /// All screen variants for iteration.
-    pub const ALL: [ActiveScreen; 7] = [
+    pub const ALL: [ActiveScreen; 8] = [
         Self::Overview,
         Self::Tactical,
         Self::Navigation,
@@ -155,6 +158,7 @@ impl ActiveScreen {
         Self::PacketMonitor,
         Self::Economy,
         Self::Orchestrator,
+        Self::Metrics,
     ];
 }
 
@@ -201,6 +205,8 @@ pub enum ActivePanel {
     OrchestratorDashboard,
     /// Spawn event feed panel (zone in/out notifications).
     SpawnEvents,
+    /// Metrics dashboard panel.
+    MetricsDashboard,
 }
 
 impl ActivePanel {
@@ -848,6 +854,208 @@ impl ClickyWindowState {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MetricsDashboardTab {
+    Combat,
+    Movement,
+    Loot,
+    System,
+}
+
+impl MetricsDashboardTab {
+    pub const ALL: [Self; 4] = [Self::Combat, Self::Movement, Self::Loot, Self::System];
+
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Combat => "Combat",
+            Self::Movement => "Movement",
+            Self::Loot => "Loot",
+            Self::System => "System",
+        }
+    }
+
+    #[must_use]
+    pub fn next(self) -> Self {
+        let idx = Self::ALL
+            .iter()
+            .position(|tab| *tab == self)
+            .unwrap_or_default();
+        Self::ALL[(idx + 1) % Self::ALL.len()]
+    }
+
+    #[must_use]
+    pub fn prev(self) -> Self {
+        let idx = Self::ALL
+            .iter()
+            .position(|tab| *tab == self)
+            .unwrap_or_default();
+        Self::ALL[(idx + Self::ALL.len() - 1) % Self::ALL.len()]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MetricId {
+    CombatEngaged,
+    CombatCriticalHp,
+    CombatKillsPerHour,
+    CombatDeaths,
+    MovementMoving,
+    MovementStuck,
+    MovementProgress,
+    MovementPathsReady,
+    LootKills,
+    LootItems,
+    LootPlatPerHour,
+    LootTopItemCount,
+    SystemConnected,
+    SystemRefreshMs,
+    SystemUnreadAlerts,
+    SystemAutomationPaused,
+}
+
+impl MetricId {
+    pub const COMBAT: [Self; 4] = [
+        Self::CombatEngaged,
+        Self::CombatCriticalHp,
+        Self::CombatKillsPerHour,
+        Self::CombatDeaths,
+    ];
+    pub const MOVEMENT: [Self; 4] = [
+        Self::MovementMoving,
+        Self::MovementStuck,
+        Self::MovementProgress,
+        Self::MovementPathsReady,
+    ];
+    pub const LOOT: [Self; 4] = [
+        Self::LootKills,
+        Self::LootItems,
+        Self::LootPlatPerHour,
+        Self::LootTopItemCount,
+    ];
+    pub const SYSTEM: [Self; 4] = [
+        Self::SystemConnected,
+        Self::SystemRefreshMs,
+        Self::SystemUnreadAlerts,
+        Self::SystemAutomationPaused,
+    ];
+    pub const ALL: [Self; 16] = [
+        Self::CombatEngaged,
+        Self::CombatCriticalHp,
+        Self::CombatKillsPerHour,
+        Self::CombatDeaths,
+        Self::MovementMoving,
+        Self::MovementStuck,
+        Self::MovementProgress,
+        Self::MovementPathsReady,
+        Self::LootKills,
+        Self::LootItems,
+        Self::LootPlatPerHour,
+        Self::LootTopItemCount,
+        Self::SystemConnected,
+        Self::SystemRefreshMs,
+        Self::SystemUnreadAlerts,
+        Self::SystemAutomationPaused,
+    ];
+
+    #[must_use]
+    pub fn for_tab(tab: MetricsDashboardTab) -> &'static [Self] {
+        match tab {
+            MetricsDashboardTab::Combat => &Self::COMBAT,
+            MetricsDashboardTab::Movement => &Self::MOVEMENT,
+            MetricsDashboardTab::Loot => &Self::LOOT,
+            MetricsDashboardTab::System => &Self::SYSTEM,
+        }
+    }
+
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::CombatEngaged => "Engaged clients",
+            Self::CombatCriticalHp => "Critical HP",
+            Self::CombatKillsPerHour => "Kills / hour",
+            Self::CombatDeaths => "Deaths",
+            Self::MovementMoving => "Moving clients",
+            Self::MovementStuck => "Stuck clients",
+            Self::MovementProgress => "Nav progress",
+            Self::MovementPathsReady => "Paths ready",
+            Self::LootKills => "Session kills",
+            Self::LootItems => "Looted items",
+            Self::LootPlatPerHour => "Plat / hour",
+            Self::LootTopItemCount => "Top item count",
+            Self::SystemConnected => "Connected clients",
+            Self::SystemRefreshMs => "Refresh interval",
+            Self::SystemUnreadAlerts => "Unread alerts",
+            Self::SystemAutomationPaused => "Automation paused",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MetricTrendSample {
+    pub recorded_at: Instant,
+    pub values: Vec<(MetricId, f64)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MetricsDashboardState {
+    pub active_tab: MetricsDashboardTab,
+    pub selected_row: usize,
+    pub scroll: usize,
+    pub sort_desc: bool,
+    pub fleet_view: bool,
+    pub detail_open: bool,
+    pub selected_metrics: HashSet<MetricId>,
+    pub displayed_metric_order: Vec<MetricId>,
+    pub history: VecDeque<MetricTrendSample>,
+    pub last_sample_at: Option<Instant>,
+}
+
+impl MetricsDashboardState {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            active_tab: MetricsDashboardTab::Combat,
+            selected_row: 0,
+            scroll: 0,
+            sort_desc: true,
+            fleet_view: true,
+            detail_open: false,
+            selected_metrics: MetricId::ALL.into_iter().collect(),
+            displayed_metric_order: Vec::new(),
+            history: VecDeque::with_capacity(360),
+            last_sample_at: None,
+        }
+    }
+
+    #[must_use]
+    pub fn is_metric_selected(&self, id: MetricId) -> bool {
+        self.selected_metrics.contains(&id)
+    }
+
+    pub fn reset_position(&mut self) {
+        self.selected_row = 0;
+        self.scroll = 0;
+    }
+
+    pub fn clamp_selection(&mut self, row_count: usize, viewport_rows: usize) {
+        if row_count == 0 {
+            self.selected_row = 0;
+            self.scroll = 0;
+            return;
+        }
+
+        self.selected_row = self.selected_row.min(row_count.saturating_sub(1));
+        if self.selected_row < self.scroll {
+            self.scroll = self.selected_row;
+        }
+        if viewport_rows > 0 && self.selected_row >= self.scroll + viewport_rows {
+            self.scroll = self.selected_row + 1 - viewport_rows;
+        }
+        self.scroll = self.scroll.min(row_count.saturating_sub(1));
+    }
+}
+
 pub struct App {
     /// Whether the application is still running (false triggers shutdown).
     pub running: bool,
@@ -860,7 +1068,7 @@ pub struct App {
     /// Basic accessibility preferences for status/help behavior.
     pub accessibility_config: UiAccessibilityConfig,
     /// Per-screen layout presets (cycled with Ctrl+E).
-    pub layout_presets: [LayoutPreset; 7],
+    pub layout_presets: [LayoutPreset; 8],
 
     /// Connected EQ client states.
     pub clients: Vec<ClientState>,
@@ -1078,6 +1286,8 @@ pub struct App {
     /// Orchestrator dashboard state (tab selection, telemetry history, error
     /// log).
     pub orchestrator_state: super::ui::orchestrator_panel::OrchestratorDashboardState,
+    /// Metrics dashboard state (tab selection, sorting, trends).
+    pub metrics_dashboard_state: MetricsDashboardState,
 
     /// Top loot items by value or frequency for session display.
     pub top_loot: Vec<(String, u32)>,
@@ -1299,9 +1509,7 @@ impl App {
             running: true,
             active_screen: ActiveScreen::Overview,
             active_panel: ActivePanel::OverviewRoster,
-            keyboard_config: UiKeyboardConfig::default(),
-            accessibility_config: UiAccessibilityConfig::default(),
-            layout_presets: [LayoutPreset::Default; 7],
+            layout_presets: [LayoutPreset::Default; 8],
 
             clients: Vec::new(),
             selected_client: 0,
@@ -1425,6 +1633,7 @@ impl App {
             priority_snapshots: Vec::new(),
             economy_state: super::state::EconomyState::default(),
             orchestrator_state: super::ui::orchestrator_panel::OrchestratorDashboardState::new(),
+            metrics_dashboard_state: MetricsDashboardState::new(),
             top_loot: Vec::new(),
             gm_detector: GmDetector::new(GmAlertConfig::default()),
             gm_auto_paused: false,
@@ -1938,6 +2147,7 @@ impl App {
             // panel set. Align with Economy until a dedicated Orchestrator
             // renderer ships.
             ActiveScreen::Orchestrator => ActivePanel::EconomyControls,
+            ActiveScreen::Metrics => ActivePanel::MetricsDashboard,
         }
     }
 
@@ -1981,6 +2191,7 @@ impl App {
             ActiveScreen::PacketMonitor => vec![ActivePanel::PacketMonitorLog],
             ActiveScreen::Economy => vec![ActivePanel::EconomyControls],
             ActiveScreen::Orchestrator => vec![ActivePanel::OrchestratorDashboard],
+            ActiveScreen::Metrics => vec![ActivePanel::MetricsDashboard],
         }
     }
 
@@ -2076,6 +2287,94 @@ impl App {
             ActiveScreen::PacketMonitor => 4,
             ActiveScreen::Economy => 5,
             ActiveScreen::Orchestrator => 6,
+            ActiveScreen::Metrics => 7,
+        }
+    }
+
+    pub fn metrics_next_tab(&mut self) {
+        self.metrics_dashboard_state.active_tab = self.metrics_dashboard_state.active_tab.next();
+        self.metrics_dashboard_state.reset_position();
+        self.status_message = format!(
+            "Metrics: {} view",
+            self.metrics_dashboard_state.active_tab.label()
+        );
+    }
+
+    pub fn metrics_prev_tab(&mut self) {
+        self.metrics_dashboard_state.active_tab = self.metrics_dashboard_state.active_tab.prev();
+        self.metrics_dashboard_state.reset_position();
+        self.status_message = format!(
+            "Metrics: {} view",
+            self.metrics_dashboard_state.active_tab.label()
+        );
+    }
+
+    pub fn metrics_select_next(&mut self) {
+        let row_count = MetricId::for_tab(self.metrics_dashboard_state.active_tab).len();
+        if row_count == 0 {
+            self.metrics_dashboard_state.selected_row = 0;
+        } else {
+            self.metrics_dashboard_state.selected_row =
+                (self.metrics_dashboard_state.selected_row + 1).min(row_count - 1);
+        }
+    }
+
+    pub fn metrics_select_prev(&mut self) {
+        self.metrics_dashboard_state.selected_row =
+            self.metrics_dashboard_state.selected_row.saturating_sub(1);
+    }
+
+    pub fn metrics_toggle_sort(&mut self) {
+        self.metrics_dashboard_state.sort_desc = !self.metrics_dashboard_state.sort_desc;
+        self.metrics_dashboard_state.reset_position();
+        self.status_message = if self.metrics_dashboard_state.sort_desc {
+            String::from("Metrics: sorted high to low")
+        } else {
+            String::from("Metrics: sorted low to high")
+        };
+    }
+
+    pub fn metrics_toggle_scope(&mut self) {
+        self.metrics_dashboard_state.fleet_view = !self.metrics_dashboard_state.fleet_view;
+        self.status_message = if self.metrics_dashboard_state.fleet_view {
+            String::from("Metrics: fleet view")
+        } else {
+            String::from("Metrics: selected character view")
+        };
+    }
+
+    pub fn metrics_toggle_detail(&mut self) {
+        self.metrics_dashboard_state.detail_open = !self.metrics_dashboard_state.detail_open;
+        self.status_message = if self.metrics_dashboard_state.detail_open {
+            String::from("Metrics: detail panel open")
+        } else {
+            String::from("Metrics: detail panel closed")
+        };
+    }
+
+    pub fn metrics_toggle_selected_metric(&mut self) {
+        let id = self
+            .metrics_dashboard_state
+            .displayed_metric_order
+            .get(self.metrics_dashboard_state.selected_row)
+            .copied()
+            .or_else(|| {
+                MetricId::for_tab(self.metrics_dashboard_state.active_tab)
+                    .get(self.metrics_dashboard_state.selected_row)
+                    .copied()
+            });
+        let Some(id) = id else { return };
+
+        if self.metrics_dashboard_state.selected_metrics.contains(&id) {
+            if self.metrics_dashboard_state.selected_metrics.len() <= 1 {
+                self.status_message = String::from("Metrics: at least one metric must stay active");
+                return;
+            }
+            self.metrics_dashboard_state.selected_metrics.remove(&id);
+            self.status_message = format!("Metrics: {} hidden from active set", id.label());
+        } else {
+            self.metrics_dashboard_state.selected_metrics.insert(id);
+            self.status_message = format!("Metrics: {} restored to active set", id.label());
         }
     }
 

@@ -81,6 +81,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         ActiveScreen::Orchestrator => {
             orchestrator_panel::draw_orchestrator_screen(frame, outer[1], app)
         }
+        ActiveScreen::Metrics => roster::draw_metrics_dashboard(frame, outer[1], app),
     }
 
     draw_status_bar(frame, outer[2], app);
@@ -278,6 +279,7 @@ fn header_tab_label(screen: ActiveScreen, width_class: WidthClass) -> &'static s
             ActiveScreen::PacketMonitor => "Aeth",
             ActiveScreen::Economy => "Coin",
             ActiveScreen::Orchestrator => "Gate",
+            ActiveScreen::Metrics => "Metr",
         },
         WidthClass::Narrow => match screen {
             ActiveScreen::Overview => "1",
@@ -287,6 +289,7 @@ fn header_tab_label(screen: ActiveScreen, width_class: WidthClass) -> &'static s
             ActiveScreen::PacketMonitor => "5",
             ActiveScreen::Economy => "6",
             ActiveScreen::Orchestrator => "7",
+            ActiveScreen::Metrics => "8",
         },
     }
 }
@@ -560,17 +563,48 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
 // ─── Status bar ──────────────────────────────────────────────────────────────
 
 fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, &'static str)] {
-    if app.active_screen == ActiveScreen::Tactical {
+    if app.active_screen == ActiveScreen::Metrics {
         match width_class {
             WidthClass::Narrow => &[
-                ("1-7", "screen"),
+                ("1-8", "screen"),
+                ("Tab", "view"),
+                ("↑↓", "row"),
+                ("S", "sort"),
+                ("?", "help"),
+            ],
+            WidthClass::Medium => &[
+                ("1-8", "screen"),
+                ("Tab", "view"),
+                ("Shift+Tab", "prev"),
+                ("↑↓", "row"),
+                ("Enter", "detail"),
+                ("S", "sort"),
+                ("F", "fleet"),
+                ("?", "help"),
+            ],
+            WidthClass::Wide => &[
+                ("1-8", "screen"),
+                ("Tab", "next view"),
+                ("Shift+Tab", "prev view"),
+                ("↑↓", "scroll"),
+                ("Enter", "detail"),
+                ("S", "sort"),
+                ("Space", "select"),
+                ("F", "fleet/individual"),
+                ("?", "help"),
+            ],
+        }
+    } else if app.active_screen == ActiveScreen::Tactical {
+        match width_class {
+            WidthClass::Narrow => &[
+                ("1-8", "screen"),
                 ("+/-", "zoom"),
                 ("n", "mesh"),
                 ("v", "view"),
                 ("?", "help"),
             ],
             WidthClass::Medium => &[
-                ("1-7", "screen"),
+                ("1-8", "screen"),
                 ("+/-", "zoom"),
                 ("g", "geo"),
                 ("s", "spawns"),
@@ -581,7 +615,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
                 ("?", "help"),
             ],
             WidthClass::Wide => &[
-                ("1-7", "screen"),
+                ("1-8", "screen"),
                 ("Tab", "pane"),
                 ("+/-", "zoom"),
                 ("g", "geo"),
@@ -599,7 +633,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
     } else {
         match width_class {
             WidthClass::Narrow => &[
-                ("1-7", "screen"),
+                ("1-8", "screen"),
                 ("Tab", "pane"),
                 ("[ ]", "client"),
                 ("/", "search"),
@@ -608,7 +642,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
                 ("?", "help"),
             ],
             WidthClass::Medium => &[
-                ("1-7", "screen"),
+                ("1-8", "screen"),
                 ("Shift+1-6", "group"),
                 ("Tab", "pane"),
                 ("[ ]", "client"),
@@ -620,7 +654,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
                 ("?", "help"),
             ],
             WidthClass::Wide => &[
-                ("1-7", "screen"),
+                ("1-8", "screen"),
                 ("Shift+1-6", "group"),
                 ("Tab", "pane"),
                 ("[ ]", "client"),
@@ -650,6 +684,7 @@ fn build_status_left(app: &App, width_class: WidthClass, max_width: usize) -> Ve
         ActiveScreen::PacketMonitor => "AETHERGRAM",
         ActiveScreen::Economy => "COINMARK",
         ActiveScreen::Orchestrator => "THIRD GATE",
+        ActiveScreen::Metrics => "METRICS",
     };
     spans.push(Span::styled(
         screen_name,
@@ -1333,6 +1368,26 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
         ActiveScreen::Orchestrator => {
             push_heading(&mut rows, None, "Third Gate Controls");
         }
+        ActiveScreen::Metrics => {
+            push_heading(&mut rows, None, "Metrics Controls");
+            push_kv(&mut rows, None, "Tab", "Switch metric view forward");
+            push_kv(&mut rows, None, "Shift+Tab", "Switch metric view backward");
+            push_kv(&mut rows, None, "Up/Down", "Scroll metric rows");
+            push_kv(&mut rows, None, "Enter", "Open or close metric detail");
+            push_kv(&mut rows, None, "S", "Toggle metric value sort direction");
+            push_kv(
+                &mut rows,
+                None,
+                "Space",
+                "Select or hide the current metric",
+            );
+            push_kv(
+                &mut rows,
+                None,
+                "F",
+                "Toggle fleet and selected-character metrics",
+            );
+        }
     }
     rows.push(help_row(None, HelpCell::Text(String::new())));
 
@@ -1340,8 +1395,8 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
     push_kv(
         &mut rows,
         None,
-        "1-7",
-        "Switch screen: Soul Tethers / Cartography / Waypath / Oracle / Aethergram / Coinmark / Third Gate",
+        "1-8",
+        "Switch screen: Soul Tethers / Cartography / Waypath / Oracle / Aethergram / Coinmark / Third Gate / Metrics",
     );
     push_kv(&mut rows, None, "[ ]", "Previous / next client");
     push_kv(&mut rows, None, "Tab", "Cycle panel focus");

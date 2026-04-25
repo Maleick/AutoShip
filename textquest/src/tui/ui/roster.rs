@@ -1,5 +1,9 @@
-//! Character screen — operator roster, group scope, and selected character
-//! detail.
+//! Character and metrics dashboard screens.
+
+use std::{
+    cmp::Ordering,
+    time::{Duration, Instant},
+};
 
 use ratatui::{
     Frame,
@@ -11,13 +15,14 @@ use ratatui::{
 };
 
 use super::widgets::{
-    WIDTH_OVERVIEW_STACK, WIDTH_SHOW_CLASS_COL, WIDTH_SHOW_GROUP_COL, WIDTH_SHOW_ZONE_COL,
-    WIDTH_SIDEBAR_MEDIUM, WIDTH_SIDEBAR_WIDE, WidthClass, classify_width, hp_color, panel,
-    render_cast_bar, stand_state_color, themed_header_row, truncate_inline,
+    Sparkline, WIDTH_OVERVIEW_STACK, WIDTH_SHOW_CLASS_COL, WIDTH_SHOW_GROUP_COL,
+    WIDTH_SHOW_ZONE_COL, WIDTH_SIDEBAR_MEDIUM, WIDTH_SIDEBAR_WIDE, WidthClass, classify_width,
+    hp_color, panel, render_cast_bar, render_sparkline, stand_state_color, themed_header_row,
+    truncate_inline,
 };
 use crate::{
     eq::structs::{EqClass, StandState},
-    tui::app::{ActivePanel, App, ClientState},
+    tui::app::{ActivePanel, App, ClientState, MetricId, MetricTrendSample, MetricsDashboardTab},
 };
 use textquest_common::{
     combat::{DebuffEffectSummary, summarize_debuff_effects},
@@ -33,6 +38,9 @@ const STACKED_ROSTER_MIN_MEDIUM: u16 = 13;
 const STACKED_ROSTER_MIN_COMPACT: u16 = 11;
 const STACKED_ROSTER_MIN_TINY: u16 = 8;
 const CAST_PROGRESS_BAR_WIDTH: usize = 22;
+const METRIC_HISTORY_SAMPLE_INTERVAL: Duration = Duration::from_secs(1);
+const METRIC_HISTORY_MAX_SAMPLES: usize = 3600;
+const METRIC_SPARK_POINTS: usize = 18;
 
 /// Draw the main overview roster with status panels.
 pub fn draw_roster(frame: &mut Frame, area: Rect, app: &mut App) {
@@ -105,6 +113,753 @@ pub fn draw_roster(frame: &mut Frame, area: Rect, app: &mut App) {
     draw_roster_grid(frame, chunks[0], app);
     if !sections.is_empty() {
         draw_roster_sidebar(frame, chunks[1], app, &sections);
+    }
+}
+
+// ─── Metrics dashboard ──────────────────────────────────────────────────────
+
+#[derive(Clone, Copy)]
+enum MetricHealth {
+    Good,
+    Warn,
+    Bad,
+    Neutral,
+}
+
+struct MetricRow {
+    id: MetricId,
+    label: &'static str,
+    value: f64,
+    display: String,
+    gauge_ratio: f64,
+    health: MetricHealth,
+    selected: bool,
+    note: String,
+}
+
+/// Draw the dedicated real-time metrics dashboard with tabs, gauges, and
+/// trend sparklines.
+pub fn draw_metrics_dashboard(frame: &mut Frame, area: Rect, app: &mut App) {
+    update_metrics_history(app);
+
+    let active_tab = app.metrics_dashboard_state.active_tab;
+    let mut rows = metric_rows(app, active_tab);
+    sort_metric_rows(&mut rows, app.metrics_dashboard_state.sort_desc);
+    app.metrics_dashboard_state.displayed_metric_order = rows.iter().map(|row| row.id).collect();
+
+    let detail_open = app.metrics_dashboard_state.detail_open && area.height >= 20;
+    let summary_height = if area.height >= 18 { 7 } else { 5 };
+    let constraints = if detail_open {
+        vec![
+            Constraint::Length(3),
+            Constraint::Length(summary_height),
+            Constraint::Min(5),
+            Constraint::Length(5),
+        ]
+    } else {
+        vec![
+            Constraint::Length(3),
+            Constraint::Length(summary_height),
+            Constraint::Min(5),
+        ]
+    };
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(constraints)
+        .split(area);
+
+    let table_rows = chunks[2].height.saturating_sub(3) as usize;
+    app.metrics_dashboard_state
+        .clamp_selection(rows.len(), table_rows);
+
+    draw_metrics_tabs(frame, chunks[0], app);
+    draw_metrics_summary(frame, chunks[1], app, &rows);
+    draw_metrics_table(frame, chunks[2], app, &rows);
+    if detail_open {
+        draw_metric_detail(frame, chunks[3], app, &rows);
+    }
+}
+
+fn update_metrics_history(app: &mut App) {
+    let now = Instant::now();
+    let should_sample = app
+        .metrics_dashboard_state
+        .last_sample_at
+        .map_or(true, |last| {
+            now.duration_since(last) >= METRIC_HISTORY_SAMPLE_INTERVAL
+        });
+    if !should_sample {
+        return;
+    }
+
+    let values = MetricId::ALL
+        .into_iter()
+        .map(|id| (id, metric_current_value(app, id)))
+        .collect();
+    let state = &mut app.metrics_dashboard_state;
+    state.history.push_back(MetricTrendSample {
+        recorded_at: now,
+        values,
+    });
+    while state.history.len() > METRIC_HISTORY_MAX_SAMPLES {
+        state.history.pop_front();
+    }
+    state.last_sample_at = Some(now);
+}
+
+fn draw_metrics_tabs(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
+    let border_style = if app.is_panel_focused(ActivePanel::MetricsDashboard) {
+        t.border_active
+    } else {
+        t.border_primary
+    };
+    let blk = panel(" Metrics Dashboard ", border_style, t);
+    let inner = blk.inner(area);
+    frame.render_widget(blk, area);
+
+    let mut spans = Vec::new();
+    for tab in MetricsDashboardTab::ALL {
+        let active = tab == app.metrics_dashboard_state.active_tab;
+        spans.push(Span::styled(
+            format!(" {} ", tab.label()),
+            if active {
+                Style::default()
+                    .fg(t.text_bright)
+                    .bg(t.row_selected_bg)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(t.text_secondary)
+            },
+        ));
+        spans.push(Span::raw(" "));
+    }
+    spans.push(Span::styled(
+        if app.metrics_dashboard_state.fleet_view {
+            " Fleet "
+        } else {
+            " Individual "
+        },
+        Style::default().fg(t.text_accent),
+    ));
+    spans.push(Span::styled(
+        if app.metrics_dashboard_state.sort_desc {
+            " Sort: high "
+        } else {
+            " Sort: low "
+        },
+        Style::default().fg(t.text_muted),
+    ));
+
+    frame.render_widget(Paragraph::new(Line::from(spans)), inner);
+}
+
+fn draw_metrics_summary(frame: &mut Frame, area: Rect, app: &App, rows: &[MetricRow]) {
+    let t = &app.theme;
+    let title = format!(
+        " {} Summary · {} active metrics ",
+        app.metrics_dashboard_state.active_tab.label(),
+        app.metrics_dashboard_state.selected_metrics.len()
+    );
+    let blk = panel(title.as_str(), t.border_primary, t);
+    let inner = blk.inner(area);
+    frame.render_widget(blk, area);
+
+    let scope = metric_scope_label(app);
+    let mut lines = vec![Line::from(vec![
+        Span::styled("Scope ", Style::default().fg(t.text_secondary)),
+        Span::styled(scope, Style::default().fg(t.text_bright)),
+        Span::raw("  "),
+        Span::styled("Keys ", Style::default().fg(t.text_secondary)),
+        Span::styled(
+            "Tab/Shift+Tab views  ↑↓ scroll  Enter detail  S sort  Space select  F fleet",
+            Style::default().fg(t.text_muted),
+        ),
+    ])];
+
+    for row in rows.iter().filter(|row| row.selected).take(4) {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{:<18}", truncate_inline(row.label, 18)),
+                Style::default().fg(t.text_secondary),
+            ),
+            Span::styled(
+                metric_bar(row.gauge_ratio, 18),
+                Style::default().fg(metric_health_color(row.health, app)),
+            ),
+            Span::raw(" "),
+            Span::styled(row.display.clone(), Style::default().fg(t.text_bright)),
+            Span::raw(" "),
+            Span::styled(row.note.clone(), Style::default().fg(t.text_muted)),
+        ]));
+    }
+
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: true }), inner);
+}
+
+fn draw_metrics_table(frame: &mut Frame, area: Rect, app: &App, rows: &[MetricRow]) {
+    let t = &app.theme;
+    let blk = panel(
+        " Metric Rows · value gauges and 5/60m trends ",
+        t.border_primary,
+        t,
+    );
+    let inner = blk.inner(area);
+    let visible_rows = inner.height.saturating_sub(1) as usize;
+    let start = app.metrics_dashboard_state.scroll.min(rows.len());
+    let selected = app.metrics_dashboard_state.selected_row;
+    let now = Instant::now();
+
+    let table_rows: Vec<Row> = rows
+        .iter()
+        .enumerate()
+        .skip(start)
+        .take(visible_rows)
+        .map(|(idx, row)| {
+            let is_selected = idx == selected;
+            let base_style = if row.selected {
+                Style::default().fg(t.text_bright)
+            } else {
+                Style::default().fg(t.text_muted)
+            };
+            let five = trend_points(app, row.id, now, Duration::from_secs(5 * 60));
+            let sixty = trend_points(app, row.id, now, Duration::from_secs(60 * 60));
+            let trend_max = five
+                .iter()
+                .chain(sixty.iter())
+                .copied()
+                .fold(row.value.max(1.0), f64::max);
+            let marker = if is_selected { "▶" } else { " " };
+            Row::new(vec![
+                Cell::from(marker).style(Style::default().fg(t.text_accent)),
+                Cell::from(row.label).style(base_style),
+                Cell::from(row.display.clone()).style(base_style),
+                Cell::from(metric_bar(row.gauge_ratio, 12))
+                    .style(Style::default().fg(metric_health_color(row.health, app))),
+                Cell::from(render_sparkline(
+                    &Sparkline::new(five).with_max(trend_max),
+                    metric_health_color(row.health, app),
+                )),
+                Cell::from(render_sparkline(
+                    &Sparkline::new(sixty).with_max(trend_max),
+                    metric_health_color(row.health, app),
+                )),
+                Cell::from(metric_health_label(row.health)).style(
+                    Style::default()
+                        .fg(metric_health_color(row.health, app))
+                        .add_modifier(if matches!(row.health, MetricHealth::Bad) {
+                            Modifier::BOLD
+                        } else {
+                            Modifier::empty()
+                        }),
+                ),
+            ])
+            .style(if is_selected {
+                Style::default()
+                    .bg(t.row_selected_bg)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            })
+        })
+        .collect();
+
+    let header = themed_header_row(&["", "Metric", "Value", "Gauge", "5m", "60m", "Health"], t);
+    let constraints = if area.width < 92 {
+        vec![
+            Constraint::Length(2),
+            Constraint::Min(14),
+            Constraint::Length(10),
+            Constraint::Length(12),
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(7),
+        ]
+    } else {
+        vec![
+            Constraint::Length(2),
+            Constraint::Length(22),
+            Constraint::Length(14),
+            Constraint::Length(14),
+            Constraint::Length(18),
+            Constraint::Length(18),
+            Constraint::Min(8),
+        ]
+    };
+
+    frame.render_widget(
+        Table::new(table_rows, constraints)
+            .header(header)
+            .block(blk),
+        area,
+    );
+}
+
+fn draw_metric_detail(frame: &mut Frame, area: Rect, app: &App, rows: &[MetricRow]) {
+    let t = &app.theme;
+    let selected = app.metrics_dashboard_state.selected_row;
+    let Some(row) = rows.get(selected) else {
+        frame.render_widget(
+            Paragraph::new("No metric selected").block(panel(
+                " Metric Detail ",
+                t.border_primary,
+                t,
+            )),
+            area,
+        );
+        return;
+    };
+
+    let now = Instant::now();
+    let five = trend_points(app, row.id, now, Duration::from_secs(5 * 60));
+    let sixty = trend_points(app, row.id, now, Duration::from_secs(60 * 60));
+    let (min_5, avg_5, max_5) = trend_stats(&five);
+    let (min_60, avg_60, max_60) = trend_stats(&sixty);
+    let title = format!(" Detail · {} ", row.label);
+    let lines = vec![
+        Line::from(vec![
+            Span::styled("Current ", Style::default().fg(t.text_secondary)),
+            Span::styled(row.display.clone(), Style::default().fg(t.text_bright)),
+            Span::raw("  "),
+            Span::styled("Health ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                metric_health_label(row.health),
+                Style::default().fg(metric_health_color(row.health, app)),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                if row.selected { "Selected" } else { "Hidden" },
+                Style::default().fg(if row.selected {
+                    t.hp_high
+                } else {
+                    t.text_muted
+                }),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("5m ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                format!("min {min_5:.1} avg {avg_5:.1} max {max_5:.1}"),
+                Style::default().fg(t.text_bright),
+            ),
+            Span::raw("  "),
+            Span::styled("60m ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                format!("min {min_60:.1} avg {avg_60:.1} max {max_60:.1}"),
+                Style::default().fg(t.text_bright),
+            ),
+        ]),
+        Line::from(Span::styled(
+            row.note.clone(),
+            Style::default().fg(t.text_muted),
+        )),
+    ];
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(panel(title.as_str(), t.border_primary, t))
+            .wrap(Wrap { trim: true }),
+        area,
+    );
+}
+
+fn sort_metric_rows(rows: &mut [MetricRow], sort_desc: bool) {
+    rows.sort_by(|a, b| a.value.partial_cmp(&b.value).unwrap_or(Ordering::Equal));
+    if sort_desc {
+        rows.reverse();
+    }
+}
+
+fn metric_rows(app: &App, tab: MetricsDashboardTab) -> Vec<MetricRow> {
+    MetricId::for_tab(tab)
+        .iter()
+        .copied()
+        .map(|id| metric_row(app, id))
+        .collect()
+}
+
+fn metric_row(app: &App, id: MetricId) -> MetricRow {
+    let value = metric_current_value(app, id);
+    let selected = app.metrics_dashboard_state.is_metric_selected(id);
+    let (display, gauge_ratio, health, note) = metric_presentation(app, id, value);
+    MetricRow {
+        id,
+        label: id.label(),
+        value,
+        display,
+        gauge_ratio,
+        health,
+        selected,
+        note,
+    }
+}
+
+fn metric_current_value(app: &App, id: MetricId) -> f64 {
+    let clients = scoped_metric_clients(app);
+    match id {
+        MetricId::CombatEngaged => clients
+            .iter()
+            .filter(|client| client.target.is_some())
+            .count() as f64,
+        MetricId::CombatCriticalHp => clients
+            .iter()
+            .filter(|client| {
+                client
+                    .local_player
+                    .as_ref()
+                    .is_some_and(|player| player.hp_pct() < 30.0)
+            })
+            .count() as f64,
+        MetricId::CombatKillsPerHour => {
+            let kills = app.loot_database.kills.values().sum::<u32>() as f64;
+            kills / session_hours(app).max(0.01)
+        }
+        MetricId::CombatDeaths => f64::from(app.loot_database.deaths),
+        MetricId::MovementMoving => clients
+            .iter()
+            .filter(|client| {
+                app.nav_state
+                    .nav_statuses
+                    .get(&client.pid)
+                    .is_some_and(|nav| nav.status.is_moving())
+            })
+            .count() as f64,
+        MetricId::MovementStuck => clients
+            .iter()
+            .filter(|client| {
+                app.nav_state
+                    .nav_statuses
+                    .get(&client.pid)
+                    .is_some_and(|nav| nav.status.is_stuck())
+            })
+            .count() as f64,
+        MetricId::MovementProgress => {
+            let statuses: Vec<_> = clients
+                .iter()
+                .filter_map(|client| app.nav_state.nav_statuses.get(&client.pid))
+                .collect();
+            if statuses.is_empty() {
+                0.0
+            } else {
+                statuses
+                    .iter()
+                    .map(|status| f64::from(status.progress_pct))
+                    .sum::<f64>()
+                    / statuses.len() as f64
+            }
+        }
+        MetricId::MovementPathsReady => {
+            let statuses: Vec<_> = clients
+                .iter()
+                .filter_map(|client| app.nav_state.nav_statuses.get(&client.pid))
+                .collect();
+            if statuses.is_empty() {
+                0.0
+            } else {
+                statuses.iter().filter(|status| status.path_exists).count() as f64 * 100.0
+                    / statuses.len() as f64
+            }
+        }
+        MetricId::LootKills => app.loot_database.kills.values().sum::<u32>() as f64,
+        MetricId::LootItems => app.loot_database.items.values().sum::<u32>() as f64,
+        MetricId::LootPlatPerHour => session_platinum(app) / session_hours(app).max(0.01),
+        MetricId::LootTopItemCount => app
+            .loot_database
+            .items
+            .values()
+            .copied()
+            .max()
+            .unwrap_or_default() as f64,
+        MetricId::SystemConnected => clients.len() as f64,
+        MetricId::SystemRefreshMs => app.refresh_rate_ms as f64,
+        MetricId::SystemUnreadAlerts => app.alert_unread_count as f64,
+        MetricId::SystemAutomationPaused => {
+            if app.automation_paused {
+                1.0
+            } else {
+                0.0
+            }
+        }
+    }
+}
+
+fn metric_presentation(app: &App, id: MetricId, value: f64) -> (String, f64, MetricHealth, String) {
+    let client_count = scoped_metric_clients(app).len().max(1) as f64;
+    match id {
+        MetricId::CombatEngaged => (
+            format!("{value:.0}/{client_count:.0}"),
+            value / client_count,
+            if value > 0.0 {
+                MetricHealth::Good
+            } else {
+                MetricHealth::Neutral
+            },
+            String::from("clients currently targeting a mob"),
+        ),
+        MetricId::CombatCriticalHp => (
+            format!("{value:.0}"),
+            (value / client_count).min(1.0),
+            if value > 0.0 {
+                MetricHealth::Bad
+            } else {
+                MetricHealth::Good
+            },
+            String::from("red when any scoped character is below 30% HP"),
+        ),
+        MetricId::CombatKillsPerHour => (
+            format!("{value:.1}/h"),
+            (value / 20.0).min(1.0),
+            if value > 0.0 {
+                MetricHealth::Good
+            } else {
+                MetricHealth::Neutral
+            },
+            String::from("session kill velocity from log-derived kill counts"),
+        ),
+        MetricId::CombatDeaths => (
+            format!("{value:.0}"),
+            (value / 3.0).min(1.0),
+            if value >= 3.0 {
+                MetricHealth::Bad
+            } else if value > 0.0 {
+                MetricHealth::Warn
+            } else {
+                MetricHealth::Good
+            },
+            String::from("session deaths; any death degrades health"),
+        ),
+        MetricId::MovementMoving => (
+            format!("{value:.0}/{client_count:.0}"),
+            value / client_count,
+            MetricHealth::Neutral,
+            String::from("characters with active movement/navigation state"),
+        ),
+        MetricId::MovementStuck => (
+            format!("{value:.0}"),
+            (value / client_count).min(1.0),
+            if value > 0.0 {
+                MetricHealth::Bad
+            } else {
+                MetricHealth::Good
+            },
+            String::from("red when navigation reports a recovery/stuck state"),
+        ),
+        MetricId::MovementProgress => (
+            format!("{value:.0}%"),
+            value / 100.0,
+            if value >= 75.0 {
+                MetricHealth::Good
+            } else if value > 0.0 {
+                MetricHealth::Warn
+            } else {
+                MetricHealth::Neutral
+            },
+            String::from("average scoped route progress"),
+        ),
+        MetricId::MovementPathsReady => (
+            format!("{value:.0}%"),
+            value / 100.0,
+            if value >= 90.0 {
+                MetricHealth::Good
+            } else if value > 0.0 {
+                MetricHealth::Warn
+            } else {
+                MetricHealth::Neutral
+            },
+            String::from("share of nav statuses with a path available"),
+        ),
+        MetricId::LootKills => (
+            format!("{value:.0}"),
+            (value / 100.0).min(1.0),
+            if value > 0.0 {
+                MetricHealth::Good
+            } else {
+                MetricHealth::Neutral
+            },
+            String::from("total session kills by mob name"),
+        ),
+        MetricId::LootItems => (
+            format!("{value:.0}"),
+            (value / 200.0).min(1.0),
+            if value > 0.0 {
+                MetricHealth::Good
+            } else {
+                MetricHealth::Neutral
+            },
+            String::from("total looted item stack count"),
+        ),
+        MetricId::LootPlatPerHour => (
+            format!("{value:.1}/h"),
+            (value / 500.0).min(1.0),
+            if value > 0.0 {
+                MetricHealth::Good
+            } else {
+                MetricHealth::Neutral
+            },
+            String::from("coin velocity normalized by session uptime"),
+        ),
+        MetricId::LootTopItemCount => (
+            format!("{value:.0}"),
+            (value / 20.0).min(1.0),
+            if value > 0.0 {
+                MetricHealth::Good
+            } else {
+                MetricHealth::Neutral
+            },
+            String::from("highest count for any looted item"),
+        ),
+        MetricId::SystemConnected => (
+            format!("{value:.0}"),
+            (value / 18.0).min(1.0),
+            if value > 0.0 {
+                MetricHealth::Good
+            } else {
+                MetricHealth::Warn
+            },
+            String::from("currently visible connected clients"),
+        ),
+        MetricId::SystemRefreshMs => (
+            format!("{value:.0} ms"),
+            (value / 1000.0).min(1.0),
+            if value <= 250.0 {
+                MetricHealth::Good
+            } else if value <= 500.0 {
+                MetricHealth::Warn
+            } else {
+                MetricHealth::Bad
+            },
+            String::from("lower is healthier for dashboard responsiveness"),
+        ),
+        MetricId::SystemUnreadAlerts => (
+            format!("{value:.0}"),
+            (value / 10.0).min(1.0),
+            if value > 0.0 {
+                MetricHealth::Bad
+            } else {
+                MetricHealth::Good
+            },
+            String::from("unacknowledged operational alerts"),
+        ),
+        MetricId::SystemAutomationPaused => (
+            if value > 0.0 {
+                String::from("yes")
+            } else {
+                String::from("no")
+            },
+            value.min(1.0),
+            if value > 0.0 {
+                MetricHealth::Warn
+            } else {
+                MetricHealth::Good
+            },
+            String::from("operator pause state for automation"),
+        ),
+    }
+}
+
+fn scoped_metric_clients(app: &App) -> Vec<&ClientState> {
+    if app.metrics_dashboard_state.fleet_view {
+        app.visible_clients()
+    } else {
+        app.active_client().into_iter().collect()
+    }
+}
+
+fn metric_scope_label(app: &App) -> String {
+    if app.metrics_dashboard_state.fleet_view {
+        return format!("Fleet · {} clients", app.visible_clients().len());
+    }
+
+    app.active_client().map_or_else(
+        || String::from("Individual · no client"),
+        |client| {
+            client.local_player.as_ref().map_or_else(
+                || format!("Individual · PID {}", client.pid),
+                |player| {
+                    format!(
+                        "Individual · {}",
+                        app.redact_name(&player.displayed_name).into_owned()
+                    )
+                },
+            )
+        },
+    )
+}
+
+fn session_hours(app: &App) -> f64 {
+    app.session_start.elapsed().as_secs_f64() / 3600.0
+}
+
+fn session_platinum(app: &App) -> f64 {
+    app.loot_database.total_plat as f64
+        + app.loot_database.total_gold as f64 / 10.0
+        + app.loot_database.total_silver as f64 / 100.0
+        + app.loot_database.total_copper as f64 / 1000.0
+}
+
+fn trend_points(app: &App, id: MetricId, now: Instant, window: Duration) -> Vec<f64> {
+    let mut data: Vec<f64> = app
+        .metrics_dashboard_state
+        .history
+        .iter()
+        .filter(|sample| now.duration_since(sample.recorded_at) <= window)
+        .filter_map(|sample| {
+            sample
+                .values
+                .iter()
+                .find_map(|(metric_id, value)| (*metric_id == id).then_some(*value))
+        })
+        .collect();
+
+    if data.is_empty() {
+        data.push(metric_current_value(app, id));
+    }
+
+    if data.len() <= METRIC_SPARK_POINTS {
+        return data;
+    }
+
+    let step = data.len() as f64 / METRIC_SPARK_POINTS as f64;
+    (0..METRIC_SPARK_POINTS)
+        .map(|idx| {
+            let data_idx = ((idx as f64 * step).floor() as usize).min(data.len() - 1);
+            data[data_idx]
+        })
+        .collect()
+}
+
+fn trend_stats(data: &[f64]) -> (f64, f64, f64) {
+    if data.is_empty() {
+        return (0.0, 0.0, 0.0);
+    }
+    let min = data.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = data.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let avg = data.iter().sum::<f64>() / data.len() as f64;
+    (min, avg, max)
+}
+
+fn metric_bar(ratio: f64, width: usize) -> String {
+    let ratio = ratio.clamp(0.0, 1.0);
+    let filled = ((ratio * width as f64).round() as usize).min(width);
+    format!("{}{}", "█".repeat(filled), "░".repeat(width - filled))
+}
+
+fn metric_health_label(health: MetricHealth) -> &'static str {
+    match health {
+        MetricHealth::Good => "good",
+        MetricHealth::Warn => "warn",
+        MetricHealth::Bad => "bad",
+        MetricHealth::Neutral => "info",
+    }
+}
+
+fn metric_health_color(health: MetricHealth, app: &App) -> Color {
+    let t = &app.theme;
+    match health {
+        MetricHealth::Good => t.hp_high,
+        MetricHealth::Warn => t.hp_mid,
+        MetricHealth::Bad => t.hp_low,
+        MetricHealth::Neutral => t.text_accent,
     }
 }
 
