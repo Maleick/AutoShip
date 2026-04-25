@@ -20,8 +20,11 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
 };
 
+use crate::overlay::{manager::WindowManager, theme::Theme, window::Window};
+
 /// Rolling frame window size for FPS / peak-time averaging.
 const FRAME_WINDOW: usize = 64;
+const DEFAULT_HUD_WINDOW_ID: &str = "textquest_hud";
 
 /// Overlay render budget: keep CPU-side overlay work under 1ms per Present.
 pub const OVERLAY_RENDER_BUDGET_NS: u64 = 1_000_000;
@@ -221,122 +224,95 @@ pub fn perf_snapshot() -> OverlayPerfSnapshot {
     }
 }
 
-// ─── Backend render pipeline ─────────────────────────────────────────────────
+// ─── HUD window runtime ──────────────────────────────────────────────────────
 
-/// One backbuffer/render target visible to the overlay renderer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OverlayRenderTarget {
-    pub index: u32,
-    pub width: u32,
-    pub height: u32,
+/// Minimal backend contract used by the DX11 hook until the ImGui renderer is
+/// linked in. Production builds use a no-op backend; the hook still owns window
+/// state, frame dispatch, and persistence-ready layout data.
+pub trait HudRenderer: Send {
+    fn render_hud(&mut self, windows: &WindowManager, perf: &OverlayPerfSnapshot);
 }
 
-/// Per-Present context passed from a Direct3D hook to the overlay renderer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OverlayFrameContext {
-    pub backend: Direct3DBackend,
-    pub width: u32,
-    pub height: u32,
-    pub render_target_count: u32,
-    pub fullscreen: bool,
+#[derive(Default)]
+struct NullHudRenderer;
+
+impl HudRenderer for NullHudRenderer {
+    fn render_hud(&mut self, _windows: &WindowManager, _perf: &OverlayPerfSnapshot) {}
 }
 
-impl OverlayFrameContext {
-    pub fn dx11(width: u32, height: u32) -> Self {
-        Self {
-            backend: Direct3DBackend::Dx11,
-            width,
-            height,
-            render_target_count: 1,
-            fullscreen: false,
-        }
-    }
-
-    pub fn with_render_targets(mut self, render_target_count: u32) -> Self {
-        self.render_target_count = render_target_count.max(1);
-        self
-    }
+struct HudRuntime {
+    windows: WindowManager,
+    renderer: Box<dyn HudRenderer>,
+    rendered_frames: u64,
 }
 
-/// Result of one overlay renderer pass.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OverlayFrameResult {
-    pub backend: Direct3DBackend,
-    pub render_time_ns: u64,
-    pub render_target_count: u32,
-    pub over_budget: bool,
-}
-
-/// Minimal Direct3D overlay renderer contract.
-pub trait OverlayRenderer {
-    fn render(&mut self, frame: &OverlayFrameContext) -> OverlayFrameResult;
-}
-
-#[derive(Debug)]
-struct Direct3DOverlayPipeline {
-    backend: Direct3DBackend,
-    render_targets: Vec<OverlayRenderTarget>,
-}
-
-impl Default for Direct3DOverlayPipeline {
+impl Default for HudRuntime {
     fn default() -> Self {
         Self {
-            backend: Direct3DBackend::Dx11,
-            render_targets: Vec::new(),
+            windows: WindowManager::new(Theme::Dark),
+            renderer: Box::<NullHudRenderer>::default(),
+            rendered_frames: 0,
         }
     }
 }
 
-impl Direct3DOverlayPipeline {
-    fn sync_targets(&mut self, frame: &OverlayFrameContext) {
-        let target_count = frame.render_target_count.max(1);
-        let needs_recreate = self.backend != frame.backend
-            || self.render_targets.len() != target_count as usize
-            || self
-                .render_targets
-                .first()
-                .map_or(true, |t| t.width != frame.width || t.height != frame.height);
-
-        if !needs_recreate {
-            return;
+impl HudRuntime {
+    fn ensure_default_window(&mut self) {
+        if self.windows.get_window(DEFAULT_HUD_WINDOW_ID).is_none() {
+            self.windows.add_window(default_hud_window());
         }
-
-        self.backend = frame.backend;
-        self.render_targets.clear();
-        self.render_targets
-            .extend((0..target_count).map(|index| OverlayRenderTarget {
-                index,
-                width: frame.width,
-                height: frame.height,
-            }));
     }
-}
 
-impl OverlayRenderer for Direct3DOverlayPipeline {
-    fn render(&mut self, frame: &OverlayFrameContext) -> OverlayFrameResult {
-        self.sync_targets(frame);
+    fn render_frame(&mut self, perf: &OverlayPerfSnapshot) {
+        self.ensure_default_window();
+        self.rendered_frames = self.rendered_frames.saturating_add(1);
+        self.renderer.render_hud(&self.windows, perf);
+    }
 
-        let started = std::time::Instant::now();
-        #[cfg(windows)]
-        if state() == OverlayState::Active {
-            inner::render_frame(frame.backend);
-        }
-        let render_time_ns = started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
-        let over_budget = render_time_ns > OVERLAY_RENDER_BUDGET_NS;
-
-        OverlayFrameResult {
-            backend: frame.backend,
-            render_time_ns,
-            render_target_count: self.render_targets.len() as u32,
-            over_budget,
+    fn snapshot(&self) -> HudRuntimeSnapshot {
+        HudRuntimeSnapshot {
+            window_count: self.windows.windows().len(),
+            theme: self.windows.theme,
+            rendered_frames: self.rendered_frames,
+            has_default_hud_window: self.windows.get_window(DEFAULT_HUD_WINDOW_ID).is_some(),
         }
     }
 }
 
-static PIPELINE: OnceLock<Mutex<Direct3DOverlayPipeline>> = OnceLock::new();
+static HUD_RUNTIME: OnceLock<Mutex<HudRuntime>> = OnceLock::new();
 
-fn pipeline() -> &'static Mutex<Direct3DOverlayPipeline> {
-    PIPELINE.get_or_init(|| Mutex::new(Direct3DOverlayPipeline::default()))
+fn hud_runtime() -> &'static Mutex<HudRuntime> {
+    HUD_RUNTIME.get_or_init(|| Mutex::new(HudRuntime::default()))
+}
+
+fn default_hud_window() -> Window {
+    let mut window = Window::new(DEFAULT_HUD_WINDOW_ID, "TextQuest HUD");
+    window.x = 24.0;
+    window.y = 24.0;
+    window.width = 320.0;
+    window.height = 180.0;
+    window.closeable = false;
+    window
+}
+
+fn render_hud_frame() {
+    let perf = perf_snapshot();
+    let mut runtime = hud_runtime().lock().unwrap_or_else(|e| e.into_inner());
+    runtime.render_frame(&perf);
+}
+
+/// Snapshot the current HUD runtime wiring for diagnostics and tests.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HudRuntimeSnapshot {
+    pub window_count: usize,
+    pub theme: Theme,
+    pub rendered_frames: u64,
+    pub has_default_hud_window: bool,
+}
+
+pub fn hud_snapshot() -> HudRuntimeSnapshot {
+    let runtime = hud_runtime().lock().unwrap_or_else(|e| e.into_inner());
+    runtime.snapshot()
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -374,6 +350,11 @@ pub fn initialize_for_backend(
         guard.sync_targets(&frame);
     }
 
+    hud_runtime()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .ensure_default_window();
+
     #[cfg(windows)]
     inner::init_render_context(
         backend,
@@ -401,9 +382,11 @@ pub fn initialize_for_backend(
 pub fn tick() {
     tick_frame_time();
 
-    #[cfg(windows)]
     if state() == OverlayState::Active {
-        inner::render_frame(active_backend().unwrap_or(Direct3DBackend::Dx11));
+        render_hud_frame();
+
+        #[cfg(windows)]
+        inner::render_frame();
     }
 }
 
@@ -631,8 +614,8 @@ pub(crate) fn reset_test_state() {
         ring.head = 0;
         ring.count = 0;
     }
-    if let Ok(mut guard) = pipeline().lock() {
-        *guard = Direct3DOverlayPipeline::default();
+    if let Some(runtime) = HUD_RUNTIME.get() {
+        *runtime.lock().unwrap_or_else(|e| e.into_inner()) = HudRuntime::default();
     }
 }
 
@@ -688,6 +671,43 @@ mod tests {
         initialize(1920, 1080);
         assert_eq!(state(), OverlayState::Active);
         assert_eq!(current_resolution(), (1920, 1080));
+    }
+
+    #[test]
+    fn initialize_seeds_default_hud_window() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        assert_eq!(hud_snapshot().window_count, 0);
+
+        initialize(1280, 720);
+        let snapshot = hud_snapshot();
+
+        assert_eq!(snapshot.window_count, 1);
+        assert_eq!(snapshot.theme, Theme::Dark);
+        assert!(snapshot.has_default_hud_window);
+    }
+
+    #[test]
+    fn active_tick_renders_hud_frame() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        initialize(1280, 720);
+
+        tick();
+
+        assert_eq!(hud_snapshot().rendered_frames, 1);
+    }
+
+    #[test]
+    fn suspended_tick_does_not_render_hud_frame() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        initialize(1280, 720);
+        suspend();
+
+        tick();
+
+        assert_eq!(hud_snapshot().rendered_frames, 0);
     }
 
     #[test]

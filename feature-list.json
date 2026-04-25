@@ -206,23 +206,14 @@
       "notes": "PARTIAL: Added shared EQBC-line parsing/serialization, native relay event variants for tell/channel forwarding, relay-side auto-detection for legacy EQBC-line peers, and protocol documentation. Full OpenVanilla/MQ2EQBC handshake compatibility, DLL chat-hook publishing, and external tool validation remain follow-up work."
     },
     {
-      "id": "issue-921-etw-ti-consumer-crate",
-      "name": "Issue #921 Rust ETW-TI consumer crate",
+      "id": "issue-845-hud-customization-window-management",
+      "name": "Issue #845 HUD customization and window management",
       "status": "in_progress",
       "acceptance_tests": [
-        "cargo check -p etw-consumer --all-targets",
-        "RUSTC=\"$(rustup which --toolchain nightly rustc)\" rustup run nightly cargo check -p etw-consumer --target x86_64-pc-windows-msvc"
+        "cargo check -p textquest-dll",
+        "cargo check -p textquest-dll --tests"
       ],
-      "notes": "PARTIAL: Added tools/etw-consumer with CLI parsing, ETW-TI keyword masks, process-name filtering, JSONL serialization, pipe wire decoding for current and legacy headers, Windows-gated StartTraceW/EnableTraceEx2/OpenTraceW/ProcessTrace/TDH runtime, named-pipe reader, driver IOCTL start/stop wrapper, README setup notes, and 13 unit tests that compile. Live ETW/provider and loaded-driver validation still requires a patched Windows VM."
-    },
-    {
-      "id": "issue-977-metrics-tui-dashboard-panel",
-      "name": "Issue #977 Metrics TUI dashboard panel",
-      "status": "in_progress",
-      "acceptance_tests": [
-        "cargo check"
-      ],
-      "notes": "PARTIAL: Added a dedicated Metrics TUI screen scaffold with Combat/Movement/Loot/System tabs, live gauges, 5m/60m sparklines, value sorting, row selection, detail drilldown, metric visibility toggles, and fleet/selected-character scope. Full production metric source integration and clean workspace-wide cargo check remain follow-up work because this worktree currently fails in unrelated smartloot/lua files."
+      "notes": "PARTIAL: Wired the DX11 overlay hook to own a default TextQuest HUD window through the existing WindowManager, added a minimal HudRenderer trait for the future ImGui backend, and added compile-checked unit coverage for default HUD window creation and active/suspended render dispatch. Real ImGui DX11 drawing, configuration UI, and full per-character profile loading remain follow-up work."
     }
   ]
 }
