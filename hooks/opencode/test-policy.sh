@@ -313,6 +313,86 @@ assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$FALLBACK_REPO/.autoship/workspaces
 assert_eq "opencode/free-fallback" "$(tr -d '[:space:]' < "$FALLBACK_REPO/.autoship/workspaces/issue-208/model")" "runner records fallback model in workspace"
 jq -e '."opencode/paid-model".fail == 1 and (."opencode/paid-model".last_error | test("Insufficient balance"))' "$FALLBACK_REPO/.autoship/model-history.json" >/dev/null || fail "runner records paid model billing failure in model history"
 
+AUTOCOMMIT_REPO="$TMP_DIR/autocommit-runner-repo"
+mkdir -p "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" "$AUTOCOMMIT_REPO/hooks/opencode" "$AUTOCOMMIT_REPO/hooks" "$AUTOCOMMIT_REPO/bin"
+git init -q "$AUTOCOMMIT_REPO"
+cp "$SCRIPT_DIR/runner.sh" "$AUTOCOMMIT_REPO/hooks/opencode/runner.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$AUTOCOMMIT_REPO/hooks/update-state.sh"
+cp "$SCRIPT_DIR/../capture-failure.sh" "$AUTOCOMMIT_REPO/hooks/capture-failure.sh"
+chmod +x "$AUTOCOMMIT_REPO/hooks/opencode/runner.sh" "$AUTOCOMMIT_REPO/hooks/update-state.sh" "$AUTOCOMMIT_REPO/hooks/capture-failure.sh"
+git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" init -q
+git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" config user.email autoship@example.invalid
+git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" config user.name AutoShip
+mkdir -p "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/src"
+printf 'base\n' > "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/src/lib.rs"
+git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" add src/lib.rs
+git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" commit -q -m initial
+cat > "$AUTOCOMMIT_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-253":{"state":"queued","model":"opencode/test-free","role":"implementer","attempt":1,"task_type":"medium_code"}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+printf 'QUEUED\n' > "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status"
+printf 'test prompt\n' > "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/AUTOSHIP_PROMPT.md"
+printf 'opencode/test-free\n' > "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/model"
+cat > "$AUTOCOMMIT_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+printf 'impl\n' >> src/lib.rs
+printf 'COMPLETE\n' > status
+printf 'implemented\n' > AUTOSHIP_RESULT.md
+exit 0
+SH
+chmod +x "$AUTOCOMMIT_REPO/bin/opencode"
+(
+  cd "$AUTOCOMMIT_REPO"
+  PATH="$AUTOCOMMIT_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
+)
+for _ in 1 2 3 4 5; do
+  [[ "$(tr -d '[:space:]' < "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status")" != "RUNNING" ]] && break
+  sleep 1
+done
+assert_eq "COMPLETE" "$(tr -d '[:space:]' < "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253/status")" "runner keeps complete status after auto-committing production changes"
+assert_eq "2" "$(git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" rev-list --count HEAD)" "runner auto-commits worker changes before completion"
+git -C "$AUTOCOMMIT_REPO/.autoship/workspaces/issue-253" diff --quiet || fail "runner leaves no unstaged worker changes after auto-commit"
+
+TESTS_ONLY_REPO="$TMP_DIR/tests-only-runner-repo"
+mkdir -p "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" "$TESTS_ONLY_REPO/hooks/opencode" "$TESTS_ONLY_REPO/hooks" "$TESTS_ONLY_REPO/bin"
+git init -q "$TESTS_ONLY_REPO"
+cp "$SCRIPT_DIR/runner.sh" "$TESTS_ONLY_REPO/hooks/opencode/runner.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$TESTS_ONLY_REPO/hooks/update-state.sh"
+cp "$SCRIPT_DIR/../capture-failure.sh" "$TESTS_ONLY_REPO/hooks/capture-failure.sh"
+chmod +x "$TESTS_ONLY_REPO/hooks/opencode/runner.sh" "$TESTS_ONLY_REPO/hooks/update-state.sh" "$TESTS_ONLY_REPO/hooks/capture-failure.sh"
+git -C "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" init -q
+git -C "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" config user.email autoship@example.invalid
+git -C "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" config user.name AutoShip
+mkdir -p "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/src"
+printf 'base\n' > "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/src/lib.rs"
+git -C "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" add src/lib.rs
+git -C "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254" commit -q -m initial
+cat > "$TESTS_ONLY_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-254":{"state":"queued","model":"opencode/test-free","role":"implementer","attempt":1,"task_type":"medium_code"}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+printf 'QUEUED\n' > "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status"
+printf 'test prompt\n' > "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/AUTOSHIP_PROMPT.md"
+printf 'opencode/test-free\n' > "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/model"
+cat > "$TESTS_ONLY_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+mkdir -p tests
+printf 'test only\n' > tests/new.test.ts
+printf 'COMPLETE\n' > status
+printf 'tests only\n' > AUTOSHIP_RESULT.md
+exit 0
+SH
+chmod +x "$TESTS_ONLY_REPO/bin/opencode"
+(
+  cd "$TESTS_ONLY_REPO"
+  PATH="$TESTS_ONLY_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
+)
+for _ in 1 2 3 4 5; do
+  [[ "$(tr -d '[:space:]' < "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status")" != "RUNNING" ]] && break
+  sleep 1
+done
+assert_eq "STUCK" "$(tr -d '[:space:]' < "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/status")" "runner rejects tests-only complete results"
+grep -F 'REJECT: tests-only diff' "$TESTS_ONLY_REPO/.autoship/workspaces/issue-254/AUTOSHIP_RUNNER.log" >/dev/null || fail "runner records tests-only rejection reason"
+
 SESSION_REPO="$TMP_DIR/session-runner-repo"
 mkdir -p "$SESSION_REPO/.autoship/workspaces/issue-997" "$SESSION_REPO/hooks/opencode" "$SESSION_REPO/hooks" "$SESSION_REPO/bin"
 git init -q "$SESSION_REPO"

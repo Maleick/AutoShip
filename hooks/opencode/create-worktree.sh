@@ -14,6 +14,8 @@ cd "$REPO_ROOT"
 
 mkdir -p "$(dirname "$WORKSPACE")"
 
+git fetch origin master --quiet 2>/dev/null || git fetch origin main --quiet 2>/dev/null || true
+
 BASE_REF="origin/master"
 if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
   BASE_REF="origin/main"
@@ -21,8 +23,6 @@ fi
 if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
   BASE_REF="HEAD"
 fi
-
-git fetch origin master --quiet 2>/dev/null || git fetch origin main --quiet 2>/dev/null || true
 
 if ! git worktree add -B "$TARGET_BRANCH" "$WORKSPACE" "$BASE_REF" >/dev/null 2>&1; then
   git worktree remove --force "$WORKSPACE" >/dev/null 2>&1 || true

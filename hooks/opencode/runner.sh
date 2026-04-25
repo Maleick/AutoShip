@@ -56,6 +56,80 @@ EOF
   fi
 }
 
+base_ref_for_workspace() {
+  for ref in origin/master origin/main master main HEAD~1; do
+    if git rev-parse --verify "$ref" >/dev/null 2>&1; then
+      printf '%s\n' "$ref"
+      return 0
+    fi
+  done
+  return 1
+}
+
+auto_commit_workspace_changes() {
+  local issue_key="$1"
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if git diff --quiet && git diff --cached --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
+    return 0
+  fi
+
+  git add -A
+  if git diff --cached --quiet; then
+    return 0
+  fi
+
+  git \
+    -c user.name="AutoShip" \
+    -c user.email="autoship@local" \
+    commit -m "autoship: ${issue_key} auto-commit" >> AUTOSHIP_RUNNER.log 2>&1 || true
+}
+
+is_test_path() {
+  case "$1" in
+    tests/*|test/*|*/tests/*|*/test/*|__tests__/*|*/__tests__/*|*.test.*|*.spec.*|*_test.*|*.snap|snapshots/*|*/snapshots/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+production_additions_count() {
+  local base_ref="$1"
+  local count=0 file
+  while IFS= read -r file; do
+    [[ -n "$file" ]] || continue
+    if ! is_test_path "$file"; then
+      count=$((count + 1))
+    fi
+  done < <(git diff --name-only "$base_ref"...HEAD 2>/dev/null || git diff --name-only "$base_ref" HEAD 2>/dev/null || true)
+  printf '%s\n' "$count"
+}
+
+reject_tests_only_complete() {
+  local issue_key="$1"
+  local repo_root="$2"
+  local current base_ref prod_changes
+  current=$(tr -d '[:space:]' < status 2>/dev/null || true)
+  [[ "$current" == "COMPLETE" ]] || return 0
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 0
+  fi
+  base_ref=$(base_ref_for_workspace || true)
+  [[ -n "$base_ref" ]] || return 0
+  if git diff --quiet "$base_ref"...HEAD 2>/dev/null || git diff --quiet "$base_ref" HEAD 2>/dev/null; then
+    return 0
+  fi
+  prod_changes=$(production_additions_count "$base_ref")
+  if [[ "$prod_changes" == "0" ]]; then
+    printf '%s\n' "REJECT: tests-only diff" >> AUTOSHIP_RUNNER.log
+    printf 'STUCK\n' > status
+    if [[ -x "$repo_root/hooks/capture-failure.sh" ]]; then
+      bash "$repo_root/hooks/capture-failure.sh" tests_only "$issue_key" "error_summary=worker reported COMPLETE with tests-only diff" 2>/dev/null || true
+    fi
+  fi
+}
+
 record_model_failure() {
   local model="$1"
   local log_file="${2:-AUTOSHIP_RUNNER.log}"
@@ -142,6 +216,8 @@ for dir in "$WORKSPACES_DIR"/*/; do
       cd "$dir"
       if command -v opencode >/dev/null 2>&1; then
         if run_worker "$model" > AUTOSHIP_RUNNER.log 2>&1; then
+          auto_commit_workspace_changes "$issue_id"
+          reject_tests_only_complete "$issue_id" "$REPO_ROOT"
           mark_stuck_unless_terminal "$issue_id" "$REPO_ROOT"
         else
           if is_billing_or_quota_failure AUTOSHIP_RUNNER.log; then
@@ -151,6 +227,8 @@ for dir in "$WORKSPACES_DIR"/*/; do
               printf '%s\n' "$fallback_model" > model
               bash "$REPO_ROOT/hooks/update-state.sh" set-running "$issue_id" agent="$fallback_model" model="$fallback_model" role="$role" 2>/dev/null || true
               if run_worker "$fallback_model" >> AUTOSHIP_RUNNER.log 2>&1; then
+                auto_commit_workspace_changes "$issue_id"
+                reject_tests_only_complete "$issue_id" "$REPO_ROOT"
                 mark_stuck_unless_terminal "$issue_id" "$REPO_ROOT"
               else
                 echo "STUCK" > status
