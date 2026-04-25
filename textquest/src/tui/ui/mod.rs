@@ -1364,192 +1364,256 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
         HelpCell::Text(format!("Active: {}", app.active_screen.label())),
     ));
     rows.push(help_row(None, HelpCell::Text(String::new())));
-    match app.active_screen {
-        ActiveScreen::Overview => {
-            push_heading(&mut rows, None, "Soul Tethers Controls");
-            push_kv(&mut rows, None, "j/k", "Navigate the client roster");
-            push_kv(
-                &mut rows,
-                None,
-                "Enter",
-                "Expand selected character details",
-            );
-            push_kv(&mut rows, None, "g", "Toggle group roster section");
-            push_kv(&mut rows, None, "v", "Toggle scope / filters section");
-            push_kv(&mut rows, None, "z", "Collapse or expand focused section");
-            rows.push(help_row(None, HelpCell::Text(String::new())));
-            push_heading(&mut rows, None, "Quick Commands");
-            push_kv(&mut rows, None, "e", "Engage combat on current target");
-            push_kv(&mut rows, None, "d", "Disengage from combat");
-            push_kv(&mut rows, None, "l", "Loot nearby corpses");
-            push_kv(&mut rows, None, "r", "Repeat last command");
-        }
-        ActiveScreen::Tactical => {
-            push_heading(&mut rows, None, "Cartography Controls");
-            push_kv(&mut rows, None, "?", "Toggle this help overlay");
-            push_kv(&mut rows, None, "+ / -", "Zoom in / out");
-            push_kv(&mut rows, None, "Arrows", "Pan the map viewport");
-            push_kv(&mut rows, None, "Home", "Center on player (local view)");
-            push_kv(&mut rows, None, "End", "Fit the full zone / global view");
-            push_kv(
-                &mut rows,
-                None,
-                "v",
-                "Cycle viewport: Auto / Local / Global",
-            );
-            push_kv(
-                &mut rows,
-                None,
-                "Ctrl+A / Ctrl+L / Ctrl+G",
-                "Set Auto / Local / Global view directly",
-            );
-            push_kv(&mut rows, None, "m", "Maximize / restore map panel");
-            push_kv(
-                &mut rows,
-                None,
-                "Shift+I",
-                "Show zone/map stats in the status lane",
-            );
-            push_kv(
-                &mut rows,
-                None,
-                "< / >",
-                "Adjust Z-depth slice (height filter)",
-            );
-            rows.push(help_row(None, HelpCell::Text(String::new())));
-            push_heading(&mut rows, None, "Map Layers");
-            push_kv(
-                &mut rows,
-                None,
-                "g",
-                "Geometry: zone walls, floors, and boundaries from map files",
-            );
-            push_kv(
-                &mut rows,
-                None,
-                "s",
-                "Spawns: NPC/PC markers showing mob and player positions",
-            );
-            push_kv(
-                &mut rows,
-                None,
-                "w",
-                "Paths: navigation waypoint routes your characters follow",
-            );
-            push_kv(
-                &mut rows,
-                None,
-                "x / Shift+N",
-                "Mesh: navigation mesh walkable-area overlay for pathfinding",
-            );
-            push_kv(
-                &mut rows,
-                None,
-                "l",
-                "Labels: text POI markers (zone connections, banks, NPCs)",
-            );
-            push_kv(
-                &mut rows,
-                None,
-                "a",
-                "Annotations: Brewall layer-2 extras (compass roses, grid marks)",
-            );
-            rows.push(help_row(None, HelpCell::Text(String::new())));
-            push_heading(&mut rows, None, "Map Filters");
-            push_kv(
-                &mut rows,
-                None,
-                "n / p / c / Shift+G",
-                "Toggle NPC / PC / corpse / ground markers",
-            );
-            push_kv(
-                &mut rows,
-                None,
-                "t / r / u",
-                "Toggle pet / named / untargetable markers",
-            );
-            push_kv(
-                &mut rows,
-                None,
-                "Alt+1-6",
-                "Toggle geometry, spawns, paths, mesh, labels, annotations from anywhere on Map",
-            );
-            push_kv(
-                &mut rows,
-                None,
-                "Alt+N / P / C / G / T / R / U",
-                "Toggle the same entity filters when another tactical panel has focus",
-            );
-            rows.push(help_row(None, HelpCell::Text(String::new())));
-            push_heading(&mut rows, None, "Spawn List");
-            push_kv(&mut rows, None, "/", "Search spawns by name");
-            push_kv(&mut rows, None, "f", "Cycle filter: All / PC / NPC / Named");
-            push_kv(&mut rows, None, "j/k", "Navigate spawn list");
-            push_kv(&mut rows, None, "t", "Navigate to selected spawn");
-            push_kv(&mut rows, None, "a", "Target selected spawn (/target)");
-        }
-        ActiveScreen::Navigation => {
-            push_kv(
-                &mut rows,
-                None,
-                "j/k or Up/Down",
-                "Navigate client nav statuses",
-            );
-            push_kv(&mut rows, None, "Enter", "Jump back to the map panel");
-            push_kv(&mut rows, None, ":nav <dest>", "Send a navigation command");
-            push_kv(
-                &mut rows,
-                None,
-                ":nav reload",
-                "Refresh the active zone navmesh",
-            );
-        }
-        ActiveScreen::Debug => {
-            push_heading(&mut rows, None, "Oracle Controls");
-            push_kv(&mut rows, None, "j/k", "Navigate focused debug panel");
-            push_kv(&mut rows, None, "Enter", "Load selected offset or explorer row into Hex");
-            push_kv(&mut rows, None, "h/x", "Open Hex memory for the selected spawn");
-            push_kv(&mut rows, None, "/", "Search offsets or explorer rows");
-            push_kv(&mut rows, None, "a", "Toggle hex dump annotations");
-            push_kv(&mut rows, None, "c", "Cycle EQ Internals category filter");
-            push_kv(&mut rows, None, "Tab", "Cycle Spawns / Hex / Explorer / Internals");
-        }
-        ActiveScreen::PacketMonitor => {
-            push_kv(&mut rows, None, "Space", "Pause / resume packet capture");
-            push_kv(&mut rows, None, "j/k or ↑/↓", "Move the packet selection");
-            push_kv(&mut rows, None, "PgUp/PgDn", "Scroll packet log");
-            push_kv(&mut rows, None, "c", "Clear captured packets");
-        }
-        ActiveScreen::Economy => {
-            push_heading(&mut rows, None, "Coinmark Controls");
-            push_kv(&mut rows, None, "P", "Pause vendor/bank cycle");
-            push_kv(&mut rows, None, "R", "Resume vendor/bank cycle");
-            push_kv(&mut rows, None, "A", "Abort current cycle");
-            push_kv(&mut rows, None, "S", "Skip current cycle");
-        }
-        ActiveScreen::Orchestrator => {
-            push_heading(&mut rows, None, "Third Gate Controls");
-        }
-        ActiveScreen::Metrics => {
-            push_heading(&mut rows, None, "Metrics Controls");
-            push_kv(&mut rows, None, "Tab", "Switch metric view forward");
-            push_kv(&mut rows, None, "Shift+Tab", "Switch metric view backward");
-            push_kv(&mut rows, None, "Up/Down", "Scroll metric rows");
-            push_kv(&mut rows, None, "Enter", "Open or close metric detail");
-            push_kv(&mut rows, None, "S", "Toggle metric value sort direction");
-            push_kv(
-                &mut rows,
-                None,
-                "Space",
-                "Select or hide the current metric",
-            );
-            push_kv(
-                &mut rows,
-                None,
-                "F",
-                "Toggle fleet and selected-character metrics",
-            );
-        }
+
+    // Overview screen
+    {
+        let marker = if app.active_screen == ActiveScreen::Overview {
+            Some(HelpFocus::Command("overview"))
+        } else {
+            None
+        };
+        push_heading(&mut rows, marker, "Overview — Soul Tethers Controls");
+        push_kv(&mut rows, None, "j/k", "Navigate the client roster");
+        push_kv(
+            &mut rows,
+            None,
+            "Enter",
+            "Expand selected character details",
+        );
+        push_kv(&mut rows, None, "g", "Toggle group roster section");
+        push_kv(&mut rows, None, "v", "Toggle scope / filters section");
+        push_kv(&mut rows, None, "z", "Collapse or expand focused section");
+        rows.push(help_row(None, HelpCell::Text(String::new())));
+        push_heading(&mut rows, None, "Quick Commands");
+        push_kv(&mut rows, None, "e", "Engage combat on current target");
+        push_kv(&mut rows, None, "d", "Disengage from combat");
+        push_kv(&mut rows, None, "l", "Loot nearby corpses");
+        push_kv(&mut rows, None, "r", "Repeat last command");
+        rows.push(help_row(None, HelpCell::Text(String::new())));
+    }
+
+    // Tactical screen
+    {
+        let marker = if app.active_screen == ActiveScreen::Tactical {
+            Some(HelpFocus::Command("tactical"))
+        } else {
+            None
+        };
+        push_heading(&mut rows, marker, "Tactical — Cartography Controls");
+        push_kv(&mut rows, None, "?", "Toggle this help overlay");
+        push_kv(&mut rows, None, "+ / -", "Zoom in / out");
+        push_kv(&mut rows, None, "Arrows", "Pan the map viewport");
+        push_kv(&mut rows, None, "Home", "Center on player (local view)");
+        push_kv(&mut rows, None, "End", "Fit the full zone / global view");
+        push_kv(
+            &mut rows,
+            None,
+            "v",
+            "Cycle viewport: Auto / Local / Global",
+        );
+        push_kv(
+            &mut rows,
+            None,
+            "Ctrl+A / Ctrl+L / Ctrl+G",
+            "Set Auto / Local / Global view directly",
+        );
+        push_kv(&mut rows, None, "m", "Maximize / restore map panel");
+        push_kv(
+            &mut rows,
+            None,
+            "Shift+I",
+            "Show zone/map stats in the status lane",
+        );
+        push_kv(
+            &mut rows,
+            None,
+            "< / >",
+            "Adjust Z-depth slice (height filter)",
+        );
+        rows.push(help_row(None, HelpCell::Text(String::new())));
+        push_heading(&mut rows, None, "Map Layers");
+        push_kv(
+            &mut rows,
+            None,
+            "g",
+            "Geometry: zone walls, floors, and boundaries from map files",
+        );
+        push_kv(
+            &mut rows,
+            None,
+            "s",
+            "Spawns: NPC/PC markers showing mob and player positions",
+        );
+        push_kv(
+            &mut rows,
+            None,
+            "w",
+            "Paths: navigation waypoint routes your characters follow",
+        );
+        push_kv(
+            &mut rows,
+            None,
+            "x / Shift+N",
+            "Mesh: navigation mesh walkable-area overlay for pathfinding",
+        );
+        push_kv(
+            &mut rows,
+            None,
+            "l",
+            "Labels: text POI markers (zone connections, banks, NPCs)",
+        );
+        push_kv(
+            &mut rows,
+            None,
+            "a",
+            "Annotations: Brewall layer-2 extras (compass roses, grid marks)",
+        );
+        rows.push(help_row(None, HelpCell::Text(String::new())));
+        push_heading(&mut rows, None, "Map Filters");
+        push_kv(
+            &mut rows,
+            None,
+            "n / p / c / Shift+G",
+            "Toggle NPC / PC / corpse / ground markers",
+        );
+        push_kv(
+            &mut rows,
+            None,
+            "t / r / u",
+            "Toggle pet / named / untargetable markers",
+        );
+        push_kv(
+            &mut rows,
+            None,
+            "Alt+1-6",
+            "Toggle geometry, spawns, paths, mesh, labels, annotations from anywhere on Map",
+        );
+        push_kv(
+            &mut rows,
+            None,
+            "Alt+N / P / C / G / T / R / U",
+            "Toggle the same entity filters when another tactical panel has focus",
+        );
+        rows.push(help_row(None, HelpCell::Text(String::new())));
+        push_heading(&mut rows, None, "Spawn List");
+        push_kv(&mut rows, None, "/", "Search spawns by name");
+        push_kv(&mut rows, None, "f", "Cycle filter: All / PC / NPC / Named");
+        push_kv(&mut rows, None, "j/k", "Navigate spawn list");
+        push_kv(&mut rows, None, "t", "Navigate to selected spawn");
+        push_kv(&mut rows, None, "a", "Target selected spawn (/target)");
+        rows.push(help_row(None, HelpCell::Text(String::new())));
+    }
+
+    // Navigation screen
+    {
+        let marker = if app.active_screen == ActiveScreen::Navigation {
+            Some(HelpFocus::Command("navigation"))
+        } else {
+            None
+        };
+        push_heading(&mut rows, marker, "Navigation — Pathfinding Controls");
+        push_kv(
+            &mut rows,
+            None,
+            "j/k or Up/Down",
+            "Navigate client nav statuses",
+        );
+        push_kv(&mut rows, None, "Enter", "Jump back to the map panel");
+        push_kv(&mut rows, None, ":nav <dest>", "Send a navigation command");
+        push_kv(
+            &mut rows,
+            None,
+            ":nav reload",
+            "Refresh the active zone navmesh",
+        );
+        rows.push(help_row(None, HelpCell::Text(String::new())));
+    }
+
+    // Debug screen
+    {
+        let marker = if app.active_screen == ActiveScreen::Debug {
+            Some(HelpFocus::Command("debug"))
+        } else {
+            None
+        };
+        push_heading(&mut rows, marker, "Debug — Oracle Controls");
+        push_kv(&mut rows, None, "j/k", "Navigate focused debug panel");
+        push_kv(&mut rows, None, "Enter", "Load selected offset or explorer row into Hex");
+        push_kv(&mut rows, None, "h/x", "Open Hex memory for the selected spawn");
+        push_kv(&mut rows, None, "/", "Search offsets or explorer rows");
+        push_kv(&mut rows, None, "a", "Toggle hex dump annotations");
+        push_kv(&mut rows, None, "c", "Cycle EQ Internals category filter");
+        push_kv(&mut rows, None, "Tab", "Cycle Spawns / Hex / Explorer / Internals");
+        rows.push(help_row(None, HelpCell::Text(String::new())));
+    }
+
+    // PacketMonitor screen
+    {
+        let marker = if app.active_screen == ActiveScreen::PacketMonitor {
+            Some(HelpFocus::Command("packet_monitor"))
+        } else {
+            None
+        };
+        push_heading(&mut rows, marker, "PacketMonitor — Aethergram Controls");
+        push_kv(&mut rows, None, "Space", "Pause / resume packet capture");
+        push_kv(&mut rows, None, "j/k or ↑/↓", "Move the packet selection");
+        push_kv(&mut rows, None, "PgUp/PgDn", "Scroll packet log");
+        push_kv(&mut rows, None, "c", "Clear captured packets");
+        rows.push(help_row(None, HelpCell::Text(String::new())));
+    }
+
+    // Economy screen
+    {
+        let marker = if app.active_screen == ActiveScreen::Economy {
+            Some(HelpFocus::Command("economy"))
+        } else {
+            None
+        };
+        push_heading(&mut rows, marker, "Economy — Coinmark Controls");
+        push_kv(&mut rows, None, "P", "Pause vendor/bank cycle");
+        push_kv(&mut rows, None, "R", "Resume vendor/bank cycle");
+        push_kv(&mut rows, None, "A", "Abort current cycle");
+        push_kv(&mut rows, None, "S", "Skip current cycle");
+        rows.push(help_row(None, HelpCell::Text(String::new())));
+    }
+
+    // Orchestrator screen
+    {
+        let marker = if app.active_screen == ActiveScreen::Orchestrator {
+            Some(HelpFocus::Command("orchestrator"))
+        } else {
+            None
+        };
+        push_heading(&mut rows, marker, "Orchestrator — Third Gate Controls");
+        rows.push(help_row(None, HelpCell::Text(String::new())));
+    }
+
+    // Metrics screen
+    {
+        let marker = if app.active_screen == ActiveScreen::Metrics {
+            Some(HelpFocus::Command("metrics"))
+        } else {
+            None
+        };
+        push_heading(&mut rows, marker, "Metrics — Dashboard Controls");
+        push_kv(&mut rows, None, "Tab", "Switch metric view forward");
+        push_kv(&mut rows, None, "Shift+Tab", "Switch metric view backward");
+        push_kv(&mut rows, None, "Up/Down", "Scroll metric rows");
+        push_kv(&mut rows, None, "Enter", "Open or close metric detail");
+        push_kv(&mut rows, None, "S", "Toggle metric value sort direction");
+        push_kv(
+            &mut rows,
+            None,
+            "Space",
+            "Select or hide the current metric",
+        );
+        push_kv(
+            &mut rows,
+            None,
+            "F",
+            "Toggle fleet and selected-character metrics",
+        );
+        rows.push(help_row(None, HelpCell::Text(String::new())));
     }
     rows.push(help_row(None, HelpCell::Text(String::new())));
 

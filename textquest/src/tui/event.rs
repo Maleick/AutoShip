@@ -2,7 +2,7 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::time::{Duration, Instant};
 
-use super::app::{ActivePanel, ActiveScreen, App, MapViewportMode, ToastLevel};
+use super::app::{ActivePanel, ActiveScreen, App, HelpFocus, MapViewportMode, ToastLevel};
 use crate::{
     orchestrator::Orchestrator,
     tui::{state::MapFilterKind, ui::ch_chain::ChPanelFocus},
@@ -1087,7 +1087,16 @@ pub fn handle_events(
             (KeyCode::Char('?'), _) => {
                 app.help_visible = !app.help_visible;
                 if app.help_visible {
-                    app.help_focus = None;
+                    app.help_focus = Some(HelpFocus::Command(match app.active_screen {
+                        ActiveScreen::Overview => "overview",
+                        ActiveScreen::Tactical => "tactical",
+                        ActiveScreen::Navigation => "navigation",
+                        ActiveScreen::Debug => "debug",
+                        ActiveScreen::PacketMonitor => "packet_monitor",
+                        ActiveScreen::Economy => "economy",
+                        ActiveScreen::Orchestrator => "orchestrator",
+                        ActiveScreen::Metrics => "metrics",
+                    }));
                     app.help_scroll = 0;
                 } else {
                     app.help_focus = None;
