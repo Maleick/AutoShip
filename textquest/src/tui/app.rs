@@ -1505,6 +1505,7 @@ impl App {
             tracing::warn!("help: no help topics loaded; TUI help database is unavailable");
         }
         let help_topics = Self::build_help_topics(&help_database);
+        let saved_theme = ThemeKind::load_saved();
         let mut app = Self {
             running: true,
             active_screen: ActiveScreen::Overview,
@@ -1608,8 +1609,8 @@ impl App {
 
             launch_eq_path: String::from(r"C:\EverQuest"),
 
-            theme_kind: ThemeKind::load_saved(),
-            theme: ThemeKind::load_saved().build(),
+            theme_kind: saved_theme,
+            theme: saved_theme.build(),
 
             discord_webhook: None,
             discord_bridge: None,
@@ -2129,9 +2130,30 @@ impl App {
 
     /// Cycle to the next theme.
     pub fn cycle_theme(&mut self) {
-        self.theme_kind = self.theme_kind.next();
-        self.theme = self.theme_kind.build();
-        self.theme_kind.save();
+        self.set_theme_kind(self.theme_kind.next());
+    }
+
+    /// Switch to a specific built-in theme and persist the selection.
+    pub fn set_theme_kind(&mut self, theme_kind: ThemeKind) {
+        self.theme_kind = theme_kind;
+        self.theme = theme_kind.build();
+        theme_kind.save();
+    }
+
+    /// Switch themes by command-line name.
+    pub fn set_theme_by_name(&mut self, theme_name: &str) -> Result<(), String> {
+        let Some(theme_kind) = ThemeKind::from_name(theme_name) else {
+            let valid = ThemeKind::ALL
+                .iter()
+                .map(|kind| kind.label())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(format!(
+                "Unknown theme '{theme_name}'. Available themes: {valid}"
+            ));
+        };
+        self.set_theme_kind(theme_kind);
+        Ok(())
     }
 
     fn default_panel_for_screen(screen: ActiveScreen) -> ActivePanel {
@@ -7262,12 +7284,23 @@ impl App {
                 }
             },
             "theme" => {
-                self.cycle_theme();
-                self.set_feedback(
-                    ToastLevel::Success,
-                    format!("Theme: {}", self.theme_kind.label()),
-                    true,
-                );
+                if rest.is_empty() {
+                    self.cycle_theme();
+                    self.set_feedback(
+                        ToastLevel::Success,
+                        format!("Theme: {}", self.theme_kind.label()),
+                        true,
+                    );
+                } else {
+                    match self.set_theme_by_name(rest) {
+                        Ok(()) => self.set_feedback(
+                            ToastLevel::Success,
+                            format!("Theme: {}", self.theme_kind.label()),
+                            true,
+                        ),
+                        Err(message) => self.set_feedback(ToastLevel::Warning, message, true),
+                    }
+                }
             }
             "privacy" => {
                 self.toggle_privacy();

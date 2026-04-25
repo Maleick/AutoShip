@@ -319,9 +319,12 @@ fn map_layer_status(app: &App) -> String {
 fn theme_kind_cache_id(kind: crate::tui::theme::ThemeKind) -> u8 {
     match kind {
         crate::tui::theme::ThemeKind::DarkModern => 0,
-        crate::tui::theme::ThemeKind::Classic => 1,
-        crate::tui::theme::ThemeKind::Dracula => 2,
+        crate::tui::theme::ThemeKind::Light => 1,
+        crate::tui::theme::ThemeKind::HighContrast => 2,
         crate::tui::theme::ThemeKind::Neriak => 3,
+        crate::tui::theme::ThemeKind::Minimal => 4,
+        crate::tui::theme::ThemeKind::Dracula => 5,
+        crate::tui::theme::ThemeKind::Classic => 6,
     }
 }
 

@@ -178,6 +178,15 @@
       "notes": "PARTIAL: Added a metrics-side performance dashboard snapshot API with combat, movement, loot, system placeholder, tab metadata, and simple alert aggregation. Full TUI rendering, SQLite history, live system telemetry producers, and richer anomaly detection remain follow-up work."
     },
     {
+      "id": "issue-994-tui-theme-system-customization",
+      "name": "Issue #994 TUI theme system and customization",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check"
+      ],
+      "notes": "PARTIAL: Added missing built-in TUI themes, foreground/background contrast helpers, named runtime theme switching, and persistent preference scaffolding with per-character override data. Full custom theme import/export UI, live preview panel, and renderer-level per-character theme application remain follow-up work."
+    },
+    {
       "id": "issue-819-plugin-system-openvanilla-parity",
       "name": "Plugin system for extensibility",
       "status": "in_progress",

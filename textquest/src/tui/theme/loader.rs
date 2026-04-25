@@ -125,6 +125,12 @@ fn default_border_style() -> String {
 /// accepted via [`parse_hex_color`].
 #[derive(Debug, Deserialize)]
 struct ThemeColors {
+    // Base colors
+    #[serde(default)]
+    background: Option<String>,
+    #[serde(default)]
+    foreground: Option<String>,
+
     // Borders
     border_dim: String,
     border_primary: String,
@@ -395,9 +401,19 @@ fn theme_from_file(file: ThemeFile) -> Result<Theme, ThemeLoadError> {
     let tab_fg = parse_field("colors.tab_active_fg", &c.tab_active_fg)?;
     let tab_bg = parse_field("colors.tab_active_bg", &c.tab_active_bg)?;
     let help_bg = parse_field("colors.help_bg", &c.help_bg)?;
+    let background = match &c.background {
+        Some(value) => parse_field("colors.background", value)?,
+        None => help_bg,
+    };
+    let foreground = match &c.foreground {
+        Some(value) => parse_field("colors.foreground", value)?,
+        None => parse_field("colors.text_normal", &c.text_normal)?,
+    };
 
     Ok(Theme {
         border_type,
+        background,
+        foreground,
 
         border_dim: fg("colors.border_dim", &c.border_dim)?,
         border_primary: fg("colors.border_primary", &c.border_primary)?,

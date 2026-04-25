@@ -1,20 +1,22 @@
-# Result: #1103 — Task: Implement help search & fuzzy matching
+# Result: #994 — Feature: TUI Theme System & Customization
 
 Status: DONE
 
 Changes Made:
-- Added `HelpDatabase::search` and `HelpDatabase::search_advanced` with substring matching, fuzzy matching through `strsim`, category filtering, tag filtering, relevance ranking, default 20-result limiting, and cached plain-query results.
-- Added command-term inverted indexing during help database loading.
-- Added public `SearchQuery`, `SearchResult`, and `HelpItemType` types.
-- Added focused help-search unit coverage for substring matching, fuzzy typo matching, category/tag filtering, ranking, limits, and empty queries.
-- Added `strsim` as a direct `textquest` dependency.
+- Added Light, High Contrast, and Minimal built-in TUI themes alongside the existing Dark, Neriak, Dracula, and Classic themes.
+- Added base foreground/background colors and WCAG-style body contrast helpers to the TUI theme model.
+- Added Vim-style named runtime switching through `:theme <name>` while preserving `:theme` cycling and persistent selection.
+- Added persistent theme preference scaffolding with per-character override storage and lookup.
+- Kept existing TOML custom theme loading compatible with optional foreground/background fields.
+- Updated map cache theme identifiers for the expanded theme set.
+- Updated `feature-list.json` to track the issue as partial.
 
 Tests:
-- `cargo check -p textquest --tests`
-- `/Users/maleick/.Codex/bin/verify`
+- `cargo check` passed after production wiring.
+- `cargo check --tests` passed after adding focused theme tests.
+- Focused theme tests were added for built-in cycling, name parsing, accessibility contrast, and per-character preferences.
 
 Notes:
-- The issue body referenced `textquest/src/tui/help/search.rs`, but this worktree's help database lives under `textquest/src/help/`; the new search module was added there and re-exported through the existing help module.
-- Full `cargo test` and `dev-preflight.py` were not run because the issue instructions restricted verification to cargo check.
+- Full custom theme import/export UI, save-custom-theme workflows, live preview panels, renderer-level per-character theme application, and auto dark/light scheduling remain follow-up work.
 
 COMPLETE

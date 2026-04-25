@@ -13,6 +13,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::BorderType,
 };
+use std::collections::BTreeMap;
 
 /// All semantic colors/styles consumed by the UI renderer.
 #[derive(Debug, Clone)]
@@ -20,6 +21,10 @@ pub struct Theme {
     // ── Border chrome ────────────────────────────────────────────────
     /// Unicode border character set (Rounded vs Plain).
     pub border_type: BorderType,
+    /// Base terminal background color for contrast checks and future full-screen fills.
+    pub background: Color,
+    /// Base terminal foreground color for contrast checks and plain text fallback.
+    pub foreground: Color,
     /// Default panel borders — inactive, low-emphasis.
     pub border_dim: Style,
     /// Primary panel borders — main content areas (e.g., character grid).
@@ -183,6 +188,7 @@ pub struct Theme {
 /// A polished dark theme using RGB colors and rounded borders.
 #[must_use]
 pub fn dark_modern() -> Theme {
+    let bg = Color::Rgb(8, 11, 18); // deep neutral background
     let accent = Color::Rgb(0, 200, 210); // teal-cyan
     let gold = Color::Rgb(240, 185, 40); // warm gold
     let green = Color::Rgb(80, 210, 100); // vivid green
@@ -197,6 +203,8 @@ pub fn dark_modern() -> Theme {
 
     Theme {
         border_type: BorderType::Rounded,
+        background: bg,
+        foreground: white,
 
         border_dim: Style::default().fg(dim),
         border_primary: Style::default().fg(green),
@@ -292,6 +300,8 @@ pub fn dark_modern() -> Theme {
 pub fn classic() -> Theme {
     Theme {
         border_type: BorderType::Plain,
+        background: Color::Black,
+        foreground: Color::White,
 
         border_dim: Style::default().fg(Color::DarkGray),
         border_primary: Style::default().fg(Color::Green),
@@ -390,6 +400,266 @@ pub fn classic() -> Theme {
     }
 }
 
+// ─── Light ──────────────────────────────────────────────────────────────────
+
+/// Light theme for bright terminals and daytime use.
+#[must_use]
+pub fn light() -> Theme {
+    let bg = Color::Rgb(248, 250, 252);
+    let fg = Color::Rgb(15, 23, 42);
+    let slate = Color::Rgb(71, 85, 105);
+    let dim = Color::Rgb(100, 116, 139);
+    let line = Color::Rgb(148, 163, 184);
+    let cyan = Color::Rgb(8, 145, 178);
+    let blue = Color::Rgb(37, 99, 235);
+    let green = Color::Rgb(21, 128, 61);
+    let amber = Color::Rgb(180, 83, 9);
+    let red = Color::Rgb(185, 28, 28);
+    let violet = Color::Rgb(109, 40, 217);
+
+    Theme {
+        border_type: BorderType::Plain,
+        background: bg,
+        foreground: fg,
+
+        border_dim: Style::default().fg(line),
+        border_primary: Style::default().fg(green),
+        border_active: Style::default().fg(cyan),
+        border_warn: Style::default().fg(amber),
+        border_danger: Style::default().fg(red),
+        border_server: Style::default().fg(violet),
+
+        tab_active: Style::default()
+            .fg(Color::White)
+            .bg(cyan)
+            .add_modifier(Modifier::BOLD),
+        tab_inactive: Style::default().fg(dim),
+
+        text_bright: fg,
+        text_normal: fg,
+        text_secondary: slate,
+        text_muted: dim,
+        text_accent: cyan,
+        text_highlight: amber,
+        text_server: violet,
+
+        hp_high: green,
+        hp_mid: amber,
+        hp_low: red,
+        mana_color: blue,
+        bar_empty: Color::Rgb(226, 232, 240),
+
+        spawn_pc: green,
+        spawn_npc: fg,
+        spawn_named: amber,
+        spawn_corpse: dim,
+        spawn_unknown: red,
+
+        table_header: Style::default().fg(cyan).add_modifier(Modifier::BOLD),
+        row_selected_bg: Color::Rgb(219, 234, 254),
+
+        state_dead: red,
+        state_sitting: amber,
+        state_feigned: violet,
+        state_frozen: blue,
+        state_normal: green,
+
+        mode_camp: green,
+        mode_hunt: amber,
+
+        statusbar_message: Style::default().fg(amber).add_modifier(Modifier::BOLD),
+        statusbar_key: Style::default().fg(cyan),
+        statusbar_dim: Style::default().fg(dim),
+        statusbar_cmd: Style::default().fg(cyan).add_modifier(Modifier::BOLD),
+        statusbar_badge: Style::default()
+            .fg(Color::White)
+            .bg(amber)
+            .add_modifier(Modifier::BOLD),
+
+        map_you: cyan,
+        map_pc: green,
+        map_group: blue,
+        map_npc: fg,
+        map_named: amber,
+        map_dead_named: red,
+        map_corpse: dim,
+        map_lines: line,
+        map_geometry: slate,
+
+        header_title: Style::default().fg(cyan).add_modifier(Modifier::BOLD),
+        header_client_count: Style::default().fg(amber).add_modifier(Modifier::BOLD),
+        header_selected: Style::default().fg(green).add_modifier(Modifier::BOLD),
+        header_zone: Style::default().fg(fg),
+        header_group: Style::default().fg(dim),
+        header_group_active: Style::default().fg(cyan).add_modifier(Modifier::BOLD),
+
+        help_key: Style::default().fg(cyan),
+        help_desc: Style::default().fg(slate),
+        help_heading: Style::default().fg(cyan).add_modifier(Modifier::BOLD),
+        help_dim: Style::default().fg(dim),
+        help_bg: bg,
+        help_border: Style::default().fg(cyan),
+
+        con_red: red,
+        con_yellow: amber,
+        con_white: fg,
+        con_light_blue: cyan,
+        con_blue: blue,
+        con_green: green,
+    }
+}
+
+// ─── High Contrast ──────────────────────────────────────────────────────────
+
+/// High contrast theme for low-vision and color-sensitive operation.
+#[must_use]
+pub fn high_contrast() -> Theme {
+    Theme {
+        border_type: BorderType::Plain,
+        background: Color::Black,
+        foreground: Color::White,
+
+        border_dim: Style::default().fg(Color::Gray),
+        border_primary: Style::default().fg(Color::White),
+        border_active: Style::default().fg(Color::LightCyan),
+        border_warn: Style::default().fg(Color::LightYellow),
+        border_danger: Style::default().fg(Color::LightRed),
+        border_server: Style::default().fg(Color::LightMagenta),
+
+        tab_active: Style::default()
+            .fg(Color::Black)
+            .bg(Color::White)
+            .add_modifier(Modifier::BOLD),
+        tab_inactive: Style::default().fg(Color::Gray),
+
+        text_bright: Color::White,
+        text_normal: Color::White,
+        text_secondary: Color::LightCyan,
+        text_muted: Color::Gray,
+        text_accent: Color::LightCyan,
+        text_highlight: Color::LightYellow,
+        text_server: Color::LightMagenta,
+
+        hp_high: Color::LightGreen,
+        hp_mid: Color::LightYellow,
+        hp_low: Color::LightRed,
+        mana_color: Color::LightBlue,
+        bar_empty: Color::DarkGray,
+
+        spawn_pc: Color::LightGreen,
+        spawn_npc: Color::White,
+        spawn_named: Color::LightYellow,
+        spawn_corpse: Color::Gray,
+        spawn_unknown: Color::LightRed,
+
+        table_header: Style::default()
+            .fg(Color::LightCyan)
+            .add_modifier(Modifier::BOLD),
+        row_selected_bg: Color::DarkGray,
+
+        state_dead: Color::LightRed,
+        state_sitting: Color::LightYellow,
+        state_feigned: Color::LightMagenta,
+        state_frozen: Color::LightBlue,
+        state_normal: Color::LightGreen,
+
+        mode_camp: Color::LightGreen,
+        mode_hunt: Color::LightYellow,
+
+        statusbar_message: Style::default()
+            .fg(Color::LightYellow)
+            .add_modifier(Modifier::BOLD),
+        statusbar_key: Style::default().fg(Color::LightCyan),
+        statusbar_dim: Style::default().fg(Color::Gray),
+        statusbar_cmd: Style::default()
+            .fg(Color::LightCyan)
+            .add_modifier(Modifier::BOLD),
+        statusbar_badge: Style::default()
+            .fg(Color::Black)
+            .bg(Color::White)
+            .add_modifier(Modifier::BOLD),
+
+        map_you: Color::LightCyan,
+        map_pc: Color::LightGreen,
+        map_group: Color::LightBlue,
+        map_npc: Color::White,
+        map_named: Color::LightYellow,
+        map_dead_named: Color::LightRed,
+        map_corpse: Color::Gray,
+        map_lines: Color::DarkGray,
+        map_geometry: Color::Gray,
+
+        header_title: Style::default()
+            .fg(Color::LightCyan)
+            .add_modifier(Modifier::BOLD),
+        header_client_count: Style::default()
+            .fg(Color::LightYellow)
+            .add_modifier(Modifier::BOLD),
+        header_selected: Style::default()
+            .fg(Color::LightGreen)
+            .add_modifier(Modifier::BOLD),
+        header_zone: Style::default().fg(Color::White),
+        header_group: Style::default().fg(Color::Gray),
+        header_group_active: Style::default()
+            .fg(Color::LightCyan)
+            .add_modifier(Modifier::BOLD),
+
+        help_key: Style::default().fg(Color::LightCyan),
+        help_desc: Style::default().fg(Color::White),
+        help_heading: Style::default()
+            .fg(Color::LightCyan)
+            .add_modifier(Modifier::BOLD),
+        help_dim: Style::default().fg(Color::Gray),
+        help_bg: Color::Black,
+        help_border: Style::default().fg(Color::White),
+
+        con_red: Color::LightRed,
+        con_yellow: Color::LightYellow,
+        con_white: Color::White,
+        con_light_blue: Color::LightCyan,
+        con_blue: Color::LightBlue,
+        con_green: Color::LightGreen,
+    }
+}
+
+// ─── Minimal ────────────────────────────────────────────────────────────────
+
+/// Minimal theme with restrained color use for quiet terminals.
+#[must_use]
+pub fn minimal() -> Theme {
+    let mut theme = classic();
+    theme.background = Color::Black;
+    theme.foreground = Color::White;
+    theme.border_type = BorderType::Plain;
+    theme.border_primary = Style::default().fg(Color::Gray);
+    theme.border_active = Style::default().fg(Color::White);
+    theme.border_warn = Style::default().fg(Color::Yellow);
+    theme.border_server = Style::default().fg(Color::Gray);
+    theme.tab_active = Style::default()
+        .fg(Color::Black)
+        .bg(Color::Gray)
+        .add_modifier(Modifier::BOLD);
+    theme.text_secondary = Color::Gray;
+    theme.text_muted = Color::DarkGray;
+    theme.text_accent = Color::White;
+    theme.text_highlight = Color::Yellow;
+    theme.text_server = Color::Gray;
+    theme.table_header = Style::default()
+        .fg(Color::White)
+        .add_modifier(Modifier::BOLD);
+    theme.row_selected_bg = Color::DarkGray;
+    theme.map_you = Color::White;
+    theme.map_group = Color::LightBlue;
+    theme.map_lines = Color::DarkGray;
+    theme.map_geometry = Color::Gray;
+    theme.help_key = Style::default().fg(Color::White);
+    theme.help_heading = Style::default()
+        .fg(Color::White)
+        .add_modifier(Modifier::BOLD);
+    theme.help_border = Style::default().fg(Color::Gray);
+    theme
+}
+
 // ─── Dracula ────────────────────────────────────────────────────────────────
 
 /// Dracula color scheme — dark purples, pinks, and vivid accents.
@@ -410,6 +680,8 @@ pub fn dracula() -> Theme {
 
     Theme {
         border_type: BorderType::Rounded,
+        background: bg,
+        foreground: fg,
 
         border_dim: Style::default().fg(comment),
         border_primary: Style::default().fg(purple),
@@ -522,6 +794,8 @@ pub fn neriak() -> Theme {
 
     Theme {
         border_type: BorderType::Rounded,
+        background: void,
+        foreground: lavender,
 
         border_dim: Style::default().fg(shadow),
         border_primary: Style::default().fg(magenta),
@@ -625,6 +899,108 @@ pub fn parse_color_name(s: &str) -> Option<Color> {
     }
 }
 
+impl Theme {
+    /// Return the WCAG contrast ratio between the theme foreground and background.
+    #[must_use]
+    pub fn body_contrast_ratio(&self) -> f32 {
+        contrast_ratio(self.foreground, self.background)
+    }
+
+    /// Whether the theme body foreground/background pair satisfies WCAG AA text contrast.
+    #[must_use]
+    pub fn meets_accessible_body_contrast(&self) -> bool {
+        self.body_contrast_ratio() >= 4.5
+    }
+}
+
+fn contrast_ratio(foreground: Color, background: Color) -> f32 {
+    let fg = relative_luminance(foreground);
+    let bg = relative_luminance(background);
+    let (lighter, darker) = if fg >= bg { (fg, bg) } else { (bg, fg) };
+    (lighter + 0.05) / (darker + 0.05)
+}
+
+fn relative_luminance(color: Color) -> f32 {
+    let (r, g, b) = color_to_rgb(color);
+    fn channel(value: u8) -> f32 {
+        let scaled = f32::from(value) / 255.0;
+        if scaled <= 0.03928 {
+            scaled / 12.92
+        } else {
+            ((scaled + 0.055) / 1.055).powf(2.4)
+        }
+    }
+
+    0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+}
+
+fn color_to_rgb(color: Color) -> (u8, u8, u8) {
+    match color {
+        Color::Reset => (255, 255, 255),
+        Color::Black => (0, 0, 0),
+        Color::Red => (205, 49, 49),
+        Color::Green => (13, 188, 121),
+        Color::Yellow => (229, 229, 16),
+        Color::Blue => (36, 114, 200),
+        Color::Magenta => (188, 63, 188),
+        Color::Cyan => (17, 168, 205),
+        Color::Gray => (229, 229, 229),
+        Color::DarkGray => (102, 102, 102),
+        Color::LightRed => (241, 76, 76),
+        Color::LightGreen => (35, 209, 139),
+        Color::LightYellow => (245, 245, 67),
+        Color::LightBlue => (59, 142, 234),
+        Color::LightMagenta => (214, 112, 214),
+        Color::LightCyan => (41, 184, 219),
+        Color::White => (255, 255, 255),
+        Color::Rgb(r, g, b) => (r, g, b),
+        Color::Indexed(index) => indexed_color_to_rgb(index),
+    }
+}
+
+fn indexed_color_to_rgb(index: u8) -> (u8, u8, u8) {
+    const BASIC: [(u8, u8, u8); 16] = [
+        (0, 0, 0),
+        (128, 0, 0),
+        (0, 128, 0),
+        (128, 128, 0),
+        (0, 0, 128),
+        (128, 0, 128),
+        (0, 128, 128),
+        (192, 192, 192),
+        (128, 128, 128),
+        (255, 0, 0),
+        (0, 255, 0),
+        (255, 255, 0),
+        (0, 0, 255),
+        (255, 0, 255),
+        (0, 255, 255),
+        (255, 255, 255),
+    ];
+
+    if index < 16 {
+        return BASIC[usize::from(index)];
+    }
+
+    if index >= 232 {
+        let value = 8 + (index - 232) * 10;
+        return (value, value, value);
+    }
+
+    let cube = index - 16;
+    let r = cube / 36;
+    let g = (cube % 36) / 6;
+    let b = cube % 6;
+    let scale = |component: u8| {
+        if component == 0 {
+            0
+        } else {
+            55 + component * 40
+        }
+    };
+    (scale(r), scale(g), scale(b))
+}
+
 // ─── ThemeKind ───────────────────────────────────────────────────────────────
 
 /// Enum so the app can store which theme is active and cycle through them.
@@ -634,6 +1010,12 @@ pub enum ThemeKind {
     /// Polished dark theme with RGB colors and rounded borders.
     #[default]
     DarkModern,
+    /// Light theme for bright terminals and daytime use.
+    Light,
+    /// High contrast theme for accessibility-sensitive operation.
+    HighContrast,
+    /// Minimal theme with restrained color use.
+    Minimal,
     /// Classic terminal theme with named colors and plain borders.
     Classic,
     /// Dracula color scheme with dark purples and vivid accents.
@@ -643,12 +1025,26 @@ pub enum ThemeKind {
 }
 
 impl ThemeKind {
+    /// Built-in themes available for runtime selection.
+    pub const ALL: [Self; 7] = [
+        Self::DarkModern,
+        Self::Light,
+        Self::HighContrast,
+        Self::Neriak,
+        Self::Minimal,
+        Self::Dracula,
+        Self::Classic,
+    ];
+
     /// Cycles to the next theme variant.
     #[must_use]
     pub fn next(self) -> Self {
         match self {
-            Self::DarkModern => Self::Neriak,
-            Self::Neriak => Self::Dracula,
+            Self::DarkModern => Self::Light,
+            Self::Light => Self::HighContrast,
+            Self::HighContrast => Self::Neriak,
+            Self::Neriak => Self::Minimal,
+            Self::Minimal => Self::Dracula,
             Self::Dracula => Self::Classic,
             Self::Classic => Self::DarkModern,
         }
@@ -659,9 +1055,34 @@ impl ThemeKind {
     pub fn label(self) -> &'static str {
         match self {
             Self::DarkModern => "Dark",
+            Self::Light => "Light",
+            Self::HighContrast => "High Contrast",
+            Self::Minimal => "Minimal",
             Self::Classic => "Classic",
             Self::Dracula => "Dracula",
             Self::Neriak => "Neriak",
+        }
+    }
+
+    /// Parse a theme name as accepted by Vim-style `:theme <name>` commands.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        let normalized = name
+            .trim()
+            .chars()
+            .filter(|ch| !matches!(ch, '-' | '_' | ' '))
+            .flat_map(char::to_lowercase)
+            .collect::<String>();
+
+        match normalized.as_str() {
+            "dark" | "darkmodern" | "default" => Some(Self::DarkModern),
+            "light" => Some(Self::Light),
+            "highcontrast" | "contrast" | "accessible" => Some(Self::HighContrast),
+            "minimal" | "minimalist" => Some(Self::Minimal),
+            "classic" => Some(Self::Classic),
+            "dracula" => Some(Self::Dracula),
+            "neriak" | "fantasy" => Some(Self::Neriak),
+            _ => None,
         }
     }
 
@@ -670,6 +1091,9 @@ impl ThemeKind {
     pub fn build(self) -> Theme {
         match self {
             Self::DarkModern => dark_modern(),
+            Self::Light => light(),
+            Self::HighContrast => high_contrast(),
+            Self::Minimal => minimal(),
             Self::Classic => classic(),
             Self::Dracula => dracula(),
             Self::Neriak => neriak(),
@@ -683,12 +1107,9 @@ impl ThemeKind {
 
     /// Save the current theme preference to disk.
     pub fn save(self) {
-        #[derive(serde::Serialize)]
-        struct Prefs {
-            theme: ThemeKind,
-        }
-        let content = toml::to_string_pretty(&Prefs { theme: self }).unwrap_or_default();
-        if let Err(e) = std::fs::write(Self::prefs_path(), content) {
+        let mut prefs = ThemePreferences::load().unwrap_or_default();
+        prefs.theme = self;
+        if let Err(e) = prefs.save() {
             tracing::warn!("failed to save theme preference: {e}");
         }
     }
@@ -696,16 +1117,119 @@ impl ThemeKind {
     /// Load the saved theme preference from disk, or return the default.
     #[must_use]
     pub fn load_saved() -> Self {
-        #[derive(serde::Deserialize)]
-        struct Prefs {
-            #[serde(default)]
-            theme: ThemeKind,
-        }
-        std::fs::read_to_string(Self::prefs_path())
+        ThemePreferences::load()
             .ok()
-            .and_then(|s| toml::from_str::<Prefs>(&s).ok())
-            .map(|p| p.theme)
+            .map(|prefs| prefs.theme)
             .unwrap_or_default()
+    }
+}
+
+/// Persistent TUI theme preferences, including per-character overrides.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ThemePreferences {
+    /// Default theme used when no character-specific override exists.
+    #[serde(default)]
+    pub theme: ThemeKind,
+    /// Per-character theme overrides keyed by lowercase character name.
+    #[serde(default)]
+    pub character_overrides: BTreeMap<String, ThemeKind>,
+}
+
+impl Default for ThemePreferences {
+    fn default() -> Self {
+        Self {
+            theme: ThemeKind::default(),
+            character_overrides: BTreeMap::new(),
+        }
+    }
+}
+
+impl ThemePreferences {
+    /// Load preferences from the default config path.
+    pub fn load() -> Result<Self, ThemePreferencesError> {
+        Self::load_from_path(&ThemeKind::prefs_path())
+    }
+
+    /// Save preferences to the default config path.
+    pub fn save(&self) -> Result<(), ThemePreferencesError> {
+        self.save_to_path(&ThemeKind::prefs_path())
+    }
+
+    /// Load preferences from a specific TOML path.
+    pub fn load_from_path(path: &std::path::Path) -> Result<Self, ThemePreferencesError> {
+        match std::fs::read_to_string(path) {
+            Ok(content) => toml::from_str(&content).map_err(ThemePreferencesError::Parse),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(error) => Err(ThemePreferencesError::Io(error)),
+        }
+    }
+
+    /// Save preferences to a specific TOML path.
+    pub fn save_to_path(&self, path: &std::path::Path) -> Result<(), ThemePreferencesError> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(ThemePreferencesError::Io)?;
+        }
+        let content = toml::to_string_pretty(self).map_err(ThemePreferencesError::Serialize)?;
+        std::fs::write(path, content).map_err(ThemePreferencesError::Io)
+    }
+
+    /// Resolve the active theme for a character, falling back to the global theme.
+    #[must_use]
+    pub fn theme_for_character(&self, character_name: &str) -> ThemeKind {
+        let key = normalize_character_name(character_name);
+        self.character_overrides
+            .get(&key)
+            .copied()
+            .unwrap_or(self.theme)
+    }
+
+    /// Set or replace a per-character theme override.
+    pub fn set_character_override(&mut self, character_name: &str, theme: ThemeKind) {
+        let key = normalize_character_name(character_name);
+        if !key.is_empty() {
+            self.character_overrides.insert(key, theme);
+        }
+    }
+
+    /// Remove a per-character theme override.
+    pub fn clear_character_override(&mut self, character_name: &str) {
+        self.character_overrides
+            .remove(&normalize_character_name(character_name));
+    }
+}
+
+fn normalize_character_name(character_name: &str) -> String {
+    character_name.trim().to_ascii_lowercase()
+}
+
+/// Errors that can occur while loading or saving theme preferences.
+#[derive(Debug)]
+pub enum ThemePreferencesError {
+    /// Could not read or write the preferences file.
+    Io(std::io::Error),
+    /// Preferences TOML could not be parsed.
+    Parse(toml::de::Error),
+    /// Preferences TOML could not be serialized.
+    Serialize(toml::ser::Error),
+}
+
+impl std::fmt::Display for ThemePreferencesError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io(error) => write!(f, "theme preferences IO error: {error}"),
+            Self::Parse(error) => write!(f, "theme preferences parse error: {error}"),
+            Self::Serialize(error) => write!(f, "theme preferences serialize error: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for ThemePreferencesError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(error) => Some(error),
+            Self::Parse(error) => Some(error),
+            Self::Serialize(error) => Some(error),
+        }
     }
 }
 
@@ -714,21 +1238,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn theme_kind_next_cycles_all_four() {
-        let start = ThemeKind::DarkModern;
-        let second = start.next();
-        assert_eq!(second, ThemeKind::Neriak);
-        let third = second.next();
-        assert_eq!(third, ThemeKind::Dracula);
-        let fourth = third.next();
-        assert_eq!(fourth, ThemeKind::Classic);
-        let back = fourth.next();
-        assert_eq!(back, ThemeKind::DarkModern);
+    fn theme_kind_next_cycles_all_built_ins() {
+        let mut seen = Vec::new();
+        let mut current = ThemeKind::DarkModern;
+        for _ in 0..ThemeKind::ALL.len() {
+            seen.push(current);
+            current = current.next();
+        }
+
+        assert_eq!(seen, ThemeKind::ALL);
+        assert_eq!(current, ThemeKind::DarkModern);
     }
 
     #[test]
     fn theme_kind_labels() {
         assert_eq!(ThemeKind::DarkModern.label(), "Dark");
+        assert_eq!(ThemeKind::Light.label(), "Light");
+        assert_eq!(ThemeKind::HighContrast.label(), "High Contrast");
+        assert_eq!(ThemeKind::Minimal.label(), "Minimal");
         assert_eq!(ThemeKind::Classic.label(), "Classic");
         assert_eq!(ThemeKind::Dracula.label(), "Dracula");
         assert_eq!(ThemeKind::Neriak.label(), "Neriak");
@@ -784,6 +1311,15 @@ mod tests {
         let dm = ThemeKind::DarkModern.build();
         assert_eq!(dm.border_type, BorderType::Rounded);
 
+        let lt = ThemeKind::Light.build();
+        assert_eq!(lt.border_type, BorderType::Plain);
+
+        let hc = ThemeKind::HighContrast.build();
+        assert_eq!(hc.border_type, BorderType::Plain);
+
+        let mn = ThemeKind::Minimal.build();
+        assert_eq!(mn.border_type, BorderType::Plain);
+
         let cl = ThemeKind::Classic.build();
         assert_eq!(cl.border_type, BorderType::Plain);
 
@@ -821,12 +1357,7 @@ mod tests {
 
     #[test]
     fn all_themes_have_distinct_spawn_colors() {
-        for kind in [
-            ThemeKind::DarkModern,
-            ThemeKind::Classic,
-            ThemeKind::Dracula,
-            ThemeKind::Neriak,
-        ] {
+        for kind in ThemeKind::ALL {
             let theme = kind.build();
             // PC and corpse should always be visually distinct
             assert_ne!(
@@ -867,12 +1398,7 @@ mod tests {
 
     #[test]
     fn all_themes_have_distinct_state_colors() {
-        for kind in [
-            ThemeKind::DarkModern,
-            ThemeKind::Classic,
-            ThemeKind::Dracula,
-            ThemeKind::Neriak,
-        ] {
+        for kind in ThemeKind::ALL {
             let theme = kind.build();
             assert_ne!(
                 theme.state_dead, theme.state_normal,
@@ -894,12 +1420,7 @@ mod tests {
 
     #[test]
     fn all_themes_have_distinct_map_colors() {
-        for kind in [
-            ThemeKind::DarkModern,
-            ThemeKind::Classic,
-            ThemeKind::Dracula,
-            ThemeKind::Neriak,
-        ] {
+        for kind in ThemeKind::ALL {
             let theme = kind.build();
             assert_ne!(
                 theme.map_you, theme.map_npc,
@@ -916,12 +1437,7 @@ mod tests {
 
     #[test]
     fn all_themes_have_distinct_mode_colors() {
-        for kind in [
-            ThemeKind::DarkModern,
-            ThemeKind::Classic,
-            ThemeKind::Dracula,
-            ThemeKind::Neriak,
-        ] {
+        for kind in ThemeKind::ALL {
             let theme = kind.build();
             assert_ne!(
                 theme.mode_camp, theme.mode_hunt,
@@ -933,12 +1449,7 @@ mod tests {
 
     #[test]
     fn all_themes_hp_colors_are_distinct() {
-        for kind in [
-            ThemeKind::DarkModern,
-            ThemeKind::Classic,
-            ThemeKind::Dracula,
-            ThemeKind::Neriak,
-        ] {
+        for kind in ThemeKind::ALL {
             let theme = kind.build();
             assert_ne!(theme.hp_high, theme.hp_mid, "{:?} hp_high == hp_mid", kind);
             assert_ne!(theme.hp_mid, theme.hp_low, "{:?} hp_mid == hp_low", kind);
@@ -948,12 +1459,7 @@ mod tests {
 
     #[test]
     fn all_themes_have_six_con_colors() {
-        for kind in [
-            ThemeKind::DarkModern,
-            ThemeKind::Classic,
-            ThemeKind::Dracula,
-            ThemeKind::Neriak,
-        ] {
+        for kind in ThemeKind::ALL {
             let theme = kind.build();
             let cons = [
                 theme.con_red,
@@ -1017,12 +1523,7 @@ mod tests {
         struct W {
             theme: ThemeKind,
         }
-        for kind in [
-            ThemeKind::DarkModern,
-            ThemeKind::Classic,
-            ThemeKind::Dracula,
-            ThemeKind::Neriak,
-        ] {
+        for kind in ThemeKind::ALL {
             let serialized = toml::to_string(&W { theme: kind }).unwrap();
             let deserialized: W = toml::from_str(&serialized).unwrap();
             assert_eq!(kind, deserialized.theme, "round-trip failed for {:?}", kind);
@@ -1031,12 +1532,7 @@ mod tests {
 
     #[test]
     fn all_themes_text_accent_differs_from_normal() {
-        for kind in [
-            ThemeKind::DarkModern,
-            ThemeKind::Classic,
-            ThemeKind::Dracula,
-            ThemeKind::Neriak,
-        ] {
+        for kind in ThemeKind::ALL {
             let theme = kind.build();
             assert_ne!(
                 theme.text_accent, theme.text_normal,
@@ -1044,5 +1540,44 @@ mod tests {
                 kind
             );
         }
+    }
+
+    #[test]
+    fn theme_kind_from_name_accepts_command_aliases() {
+        assert_eq!(ThemeKind::from_name("dark"), Some(ThemeKind::DarkModern));
+        assert_eq!(
+            ThemeKind::from_name("high-contrast"),
+            Some(ThemeKind::HighContrast)
+        );
+        assert_eq!(ThemeKind::from_name("fantasy"), Some(ThemeKind::Neriak));
+        assert_eq!(ThemeKind::from_name("minimal"), Some(ThemeKind::Minimal));
+        assert_eq!(ThemeKind::from_name("unknown"), None);
+    }
+
+    #[test]
+    fn all_built_in_themes_meet_body_contrast_threshold() {
+        for kind in ThemeKind::ALL {
+            let theme = kind.build();
+            assert!(
+                theme.meets_accessible_body_contrast(),
+                "{kind:?} body contrast ratio {} is below WCAG AA text threshold",
+                theme.body_contrast_ratio()
+            );
+        }
+    }
+
+    #[test]
+    fn theme_preferences_resolve_character_overrides() {
+        let mut prefs = ThemePreferences {
+            theme: ThemeKind::Light,
+            character_overrides: BTreeMap::new(),
+        };
+        prefs.set_character_override(" Xalek ", ThemeKind::Neriak);
+
+        assert_eq!(prefs.theme_for_character("xalek"), ThemeKind::Neriak);
+        assert_eq!(prefs.theme_for_character("other"), ThemeKind::Light);
+
+        prefs.clear_character_override("XALEK");
+        assert_eq!(prefs.theme_for_character("xalek"), ThemeKind::Light);
     }
 }
