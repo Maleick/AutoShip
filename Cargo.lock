@@ -4494,6 +4494,7 @@ dependencies = [
  "url",
  "windows",
  "zeroize",
+ "zstd",
 ]
 
 [[package]]

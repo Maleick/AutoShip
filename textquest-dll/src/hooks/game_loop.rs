@@ -1912,6 +1912,7 @@ fn read_and_publish_state(tick: u64) {
         };
         let frame = state.to_shared_frame(spawn_epoch, refresh_spawns);
         crate::ipc::publish_state(&frame);
+        crate::replay::record_state(&frame);
     }
 }
 

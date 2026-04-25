@@ -46,6 +46,8 @@ mod login;
 #[allow(dead_code)]
 pub mod mq2;
 #[allow(dead_code)]
+mod replay;
+#[allow(dead_code)]
 mod nav;
 #[allow(dead_code)]
 pub mod overlay;

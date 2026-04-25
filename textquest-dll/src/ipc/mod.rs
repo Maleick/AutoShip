@@ -77,6 +77,9 @@ pub fn start(client_id: ClientId, token: SessionToken) -> Result<(), Box<dyn std
 
     IPC_RUNNING.store(true, Ordering::SeqCst);
     backend_ws::start_sender(client_id, session_id);
+    if let Err(e) = crate::replay::start(client_id, session_id) {
+        tracing::warn!(client_id, error = %e, "State replay recorder disabled");
+    }
 
     // --- Command listener thread ---
     thread::Builder::new()
@@ -102,6 +105,7 @@ pub fn stop() {
 
     // The listener thread checks IPC_RUNNING and will exit on its own.
     backend_ws::stop_sender();
+    crate::replay::stop();
     // SharedStateWriter and CommandListener clean up via Drop.
     tracing::info!("IPC stopped");
 }
