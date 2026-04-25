@@ -1,5 +1,5 @@
 #[cfg(windows)]
-use textquest::{cli, log_retention, paths};
+use textquest::{cli, log_retention, paths, replay};
 
 #[cfg(windows)]
 use anyhow::{Context, Result};
@@ -360,6 +360,27 @@ enum NavMeshAction {
         /// state
         #[arg(long)]
         pid: Option<u32>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum ReplayAction {
+    /// Compare two policy versions against one replay session
+    Diff {
+        /// Session identifier emitted by the orchestrator replay stream
+        session_id: String,
+        /// Policy version SHA to evaluate as policy A
+        #[arg(long = "policy-a")]
+        policy_a: String,
+        /// Policy version SHA to evaluate as policy B
+        #[arg(long = "policy-b")]
+        policy_b: String,
+        /// Optional JSON output path (defaults to the session replay directory)
+        #[arg(long = "json-output")]
+        json_output: Option<std::path::PathBuf>,
+        /// Optional markdown output path. If omitted, markdown is printed to stdout.
+        #[arg(long = "markdown-output")]
+        markdown_output: Option<std::path::PathBuf>,
     },
 }
 

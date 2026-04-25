@@ -90,6 +90,8 @@ pub mod orchestrator;
 pub mod orchestrator_loop;
 /// Shared runtime paths for logs and local state.
 pub mod paths;
+/// Replay archives, FlatBuffers cache, and policy diff tooling.
+pub mod replay;
 /// OS-level process interaction — open, read memory, find processes.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub mod process;

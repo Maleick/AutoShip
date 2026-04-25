@@ -56,6 +56,7 @@ petgraph = "0.6"
 
 [build-dependencies]
 cc = "1"
+flatbuffers-build = "=0.2.4+flatc-25.12.19"
 
 [features]
 default = []

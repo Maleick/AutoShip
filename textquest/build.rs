@@ -5,6 +5,7 @@ fn main() {
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/index");
     println!("cargo:rerun-if-changed=csrc/detour_query_shim.cpp");
+    println!("cargo:rerun-if-changed=schemas/replay.fbs");
     println!("cargo:rerun-if-env-changed=CARGO_HOME");
     println!("cargo:rerun-if-env-changed=USERPROFILE");
     println!("cargo:rerun-if-env-changed=HOME");
@@ -12,6 +13,10 @@ fn main() {
         "cargo:rustc-env=TEXTQUEST_POLICY_SHA={}",
         policy_sha().unwrap_or_else(|| String::from("unknown"))
     );
+
+    flatbuffers_build::BuilderOptions::new_with_files(["schemas/replay.fbs"])
+        .compile()
+        .expect("flatbuffer compilation failed");
 
     // Find the recastnavigation-sys source directory in the cargo registry
     // to get the Detour include headers.

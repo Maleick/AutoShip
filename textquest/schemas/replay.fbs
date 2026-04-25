@@ -1,0 +1,72 @@
+namespace textquest.replay;
+
+enum FrameKind:ubyte {
+  Keyframe = 0,
+  Delta = 1,
+  Event = 2
+}
+
+table PcState {
+  name:string;
+  class_name:string;
+  zone:string;
+  x:float;
+  y:float;
+  z:float;
+  heading:float;
+  hp:int;
+  mana:int;
+  endurance:int;
+  target:string;
+}
+
+table NpcState {
+  name:string;
+  kind:string;
+  x:float;
+  y:float;
+  z:float;
+  hp:int;
+  distance:float;
+}
+
+table DeltaField {
+  name:string;
+  before:string;
+  after:string;
+}
+
+table StateDelta {
+  fields:[DeltaField];
+}
+
+table ReplayEvent {
+  kind:string;
+  message:string;
+  inputs_hash:string;
+}
+
+table PolicyAction {
+  inputs_hash:string;
+  policy_sha:string;
+  actions:[string];
+}
+
+table ReplayFrame {
+  tick:ulong;
+  kind:FrameKind;
+  pc:PcState;
+  npcs:[NpcState];
+  delta:StateDelta;
+  events:[ReplayEvent];
+}
+
+table ReplayArchive {
+  session_id:string;
+  bundle_hash:string;
+  frames:[ReplayFrame];
+  policies:[PolicyAction];
+}
+
+root_type ReplayArchive;
+file_identifier "TQRP";
