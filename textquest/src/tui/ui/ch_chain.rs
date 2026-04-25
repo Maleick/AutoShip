@@ -6,7 +6,7 @@
 use crate::tui::{
     cast::CastDisplay,
     theme::Theme,
-    ui::widgets::{render_cast_bar, truncate_inline},
+    ui::widgets::{cast_state_color, render_cast_bar, truncate_inline},
 };
 use ratatui::{
     buffer::Buffer,
@@ -214,7 +214,7 @@ impl<'a> ChChainWidget<'a> {
         Self {
             state,
             theme,
-            accent_color: Color::Reset,
+            accent_color: theme.text_accent,
         }
     }
 
@@ -229,7 +229,7 @@ impl Widget for ChChainWidget<'_> {
         let block = Block::default()
             .title(" CH Chain · panel ")
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(self.accent_color)); // magenta border
+            .border_style(Style::default().fg(self.accent_color));
 
         let inner = block.inner(area);
         block.render(area, buf);
@@ -289,7 +289,7 @@ impl ChChainWidget<'_> {
                 Style::default().fg(t.hp_high),
             )
         } else {
-            Span::styled(" FIXED ", Style::default().fg(t.con_yellow))
+            Span::styled(" FIXED ", Style::default().fg(t.text_accent))
         };
 
         let lines = vec![
@@ -328,7 +328,7 @@ impl ChChainWidget<'_> {
         let block = Block::default()
             .title(if compact { " Chain " } else { " Chain Order " })
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(t.text_muted));
+            .border_style(t.border_dim);
         let inner = block.inner(area);
         block.render(area, buf);
 
@@ -366,7 +366,7 @@ impl ChChainWidget<'_> {
                 Style::default().fg(t.text_bright)
             };
 
-            // Cast state indicator — glyph picked locally, color threaded through theme.
+            // Cast state indicator
             let state_char = match cleric.cast_state {
                 CastState::Idle => {
                     if compact {
@@ -380,10 +380,8 @@ impl ChChainWidget<'_> {
                         if compact { "*" } else { "◕" }
                     } else if pct > 0.25 {
                         if compact { ">" } else { "◑" }
-                    } else if compact {
-                        "-"
                     } else {
-                        "◔"
+                        if compact { "-" } else { "◔" }
                     }
                 }
                 CastState::Completed => {
@@ -475,12 +473,12 @@ impl ChChainWidget<'_> {
                     if cast_display.exact {
                         t.hp_high
                     } else {
-                        t.text_bright
+                        t.text_accent
                     },
                     if cast_display.exact {
                         t.hp_high
                     } else {
-                        t.con_yellow
+                        t.text_accent
                     },
                     if cast_display.exact {
                         t.text_bright
@@ -505,7 +503,7 @@ impl ChChainWidget<'_> {
         let block = Block::default()
             .title(" Timing ")
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(t.text_muted));
+            .border_style(t.border_dim);
         let inner = block.inner(area);
         block.render(area, buf);
 
@@ -534,10 +532,11 @@ impl ChChainWidget<'_> {
     }
 
     fn render_stats(&self, area: Rect, buf: &mut Buffer) {
+        let t = self.theme;
         let block = Block::default()
             .title(" Chain Health ")
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(self.theme.text_muted));
+            .border_style(t.border_dim);
         let inner = block.inner(area);
         block.render(area, buf);
 
@@ -550,7 +549,7 @@ impl ChChainWidget<'_> {
         let health_color = if health > 0.9 {
             t.hp_high
         } else if health > 0.7 {
-            t.hp_mid
+            t.text_accent
         } else {
             t.hp_low
         };
@@ -581,7 +580,7 @@ impl ChChainWidget<'_> {
         let block = Block::default()
             .title(" Timing / Health ")
             .borders(Borders::TOP)
-            .border_style(Style::default().fg(t.text_muted));
+            .border_style(t.border_dim);
         let inner = block.inner(area);
         block.render(area, buf);
 
@@ -628,6 +627,7 @@ fn apply_row_background(mut line: Line<'static>, background: Color) -> Line<'sta
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tui::theme::dark_modern;
     use ratatui::{buffer::Buffer, layout::Rect};
 
     #[test]
@@ -701,10 +701,10 @@ mod tests {
     #[test]
     fn chain_widget_renders_cast_strip_for_active_cleric() {
         let state = sample_state();
+        let theme = dark_modern();
 
         let area = Rect::new(0, 0, 50, 12);
         let mut buf = Buffer::empty(area);
-        let theme = crate::tui::theme::neriak();
         ChChainWidget::new(&state, &theme).render(area, &mut buf);
         let rendered = buffer_contents(&buf, area);
 
@@ -715,9 +715,9 @@ mod tests {
     #[test]
     fn chain_widget_compact_layout_merges_footer_and_shortens_header() {
         let state = sample_state();
+        let theme = dark_modern();
         let area = Rect::new(0, 0, 48, 14);
         let mut buf = Buffer::empty(area);
-        let theme = crate::tui::theme::neriak();
         ChChainWidget::new(&state, &theme).render(area, &mut buf);
         let rendered = buffer_contents(&buf, area);
 
@@ -730,9 +730,9 @@ mod tests {
     #[test]
     fn chain_widget_medium_layout_keeps_full_sections() {
         let state = sample_state();
+        let theme = dark_modern();
         let area = Rect::new(0, 0, 80, 22);
         let mut buf = Buffer::empty(area);
-        let theme = crate::tui::theme::neriak();
         ChChainWidget::new(&state, &theme).render(area, &mut buf);
         let rendered = buffer_contents(&buf, area);
 

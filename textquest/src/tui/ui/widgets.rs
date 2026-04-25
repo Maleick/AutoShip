@@ -9,7 +9,8 @@ use ratatui::{
 
 use crate::{
     combat::spell_db,
-    eq::structs::{CastState, SpawnInfo, SpawnType},
+    eq::structs::{CastState as EqCastState, SpawnInfo, SpawnType},
+    tui::ui::ch_chain::CastState as ChainCastState,
     tui::{cast::CastDisplay, command, theme::Theme},
 };
 
@@ -148,6 +149,19 @@ pub fn hp_color(hp_pct: f64, t: &Theme) -> Color {
     }
 }
 
+/// Map a CH chain cast state to themed semantic colors.
+#[must_use]
+pub fn cast_state_color(state: &ChainCastState, t: &Theme) -> Color {
+    match *state {
+        ChainCastState::Idle => t.text_muted,
+        ChainCastState::Casting(progress) if progress > 0.75 => t.hp_high,
+        ChainCastState::Casting(progress) if progress > 0.25 => t.text_accent,
+        ChainCastState::Casting(_) => t.text_muted,
+        ChainCastState::Completed => t.hp_high,
+        ChainCastState::Missed => t.hp_low,
+    }
+}
+
 /// Map a stand state (dead, sitting, feigned, etc.) to a themed color.
 #[must_use]
 pub fn stand_state_color(state: &crate::eq::structs::StandState, t: &Theme) -> Color {
@@ -207,7 +221,7 @@ pub fn spawn_row_style(
 
 /// Human-readable cast label for a `LaunchSpellData` snapshot.
 #[must_use]
-pub fn cast_summary(cast: &CastState) -> String {
+pub fn cast_summary(cast: &EqCastState) -> String {
     let spell_name = cast
         .spell_name
         .clone()
@@ -227,7 +241,7 @@ pub fn cast_summary(cast: &CastState) -> String {
 
 /// Format remaining cast time in a compact user-facing form.
 #[must_use]
-pub fn cast_time_remaining_label(cast: &CastState) -> Option<String> {
+pub fn cast_time_remaining_label(cast: &EqCastState) -> Option<String> {
     let remaining_ms = cast.cast_time_remaining_ms()?;
     if remaining_ms >= 1_000 {
         Some(format!("{:.1}s", f64::from(remaining_ms) / 1_000.0))
@@ -2026,6 +2040,28 @@ mod tests {
         let t = dark_modern();
         assert_eq!(con_color(30, 23, &t), t.con_green);
         assert_eq!(con_color(30, 1, &t), t.con_green);
+    }
+
+    #[test]
+    fn cast_state_color_uses_theme_semantics() {
+        use crate::tui::ui::ch_chain::CastState as ChainCastState;
+
+        let t = dark_modern();
+        assert_eq!(cast_state_color(&ChainCastState::Idle, &t), t.text_muted);
+        assert_eq!(
+            cast_state_color(&ChainCastState::Casting(0.90), &t),
+            t.hp_high
+        );
+        assert_eq!(
+            cast_state_color(&ChainCastState::Casting(0.50), &t),
+            t.text_accent
+        );
+        assert_eq!(
+            cast_state_color(&ChainCastState::Casting(0.10), &t),
+            t.text_muted
+        );
+        assert_eq!(cast_state_color(&ChainCastState::Completed, &t), t.hp_high);
+        assert_eq!(cast_state_color(&ChainCastState::Missed, &t), t.hp_low);
     }
 
     #[test]

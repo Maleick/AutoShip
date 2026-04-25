@@ -147,7 +147,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         frame.render_widget(Clear, popup_area);
         frame.render_widget(
             ChChainWidget::new(&app.ch_chain_panel_state, &app.theme)
-                .accent_color(app.theme.text_server), // magenta
+                .accent_color(app.theme.text_server),
             popup_area,
         );
     }
