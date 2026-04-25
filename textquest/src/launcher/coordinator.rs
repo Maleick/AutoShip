@@ -12,6 +12,7 @@ use std::{
     path::Path,
     time::{Duration, Instant},
 };
+use reqwest;
 use textquest_common::{
     login::{AccountInfo, LoginError},
     types::ClientId,
@@ -34,8 +35,14 @@ pub struct LaunchCoordinator {
     /// `LoginAction::Retry`.
     retry_not_before: HashMap<ClientId, Instant>,
     paused: bool,
+    /// True when we have an active server status gate in effect.
+    server_status_paused: bool,
     last_launch: Option<Instant>,
     next_stagger: Duration,
+    /// Interval for polling server status.
+    server_status_check_interval: Duration,
+    /// Last time we checked server status.
+    last_server_status_check: Option<Instant>,
 }
 
 #[derive(Debug)]
@@ -100,8 +107,11 @@ impl LaunchCoordinator {
             account_trackers: HashMap::new(),
             retry_not_before: HashMap::new(),
             paused: false,
+            server_status_paused: false,
             last_launch: None,
             next_stagger,
+            server_status_check_interval: Duration::from_secs(30),
+            last_server_status_check: None,
         }
     }
 
@@ -113,9 +123,12 @@ impl LaunchCoordinator {
     /// Advances all active logins and launches queued clients. Returns events.
     pub fn tick(&mut self) -> Vec<CoordinatorEvent> {
         let mut events = Vec::new();
+        if let Some(event) = self.refresh_server_status() {
+            events.push(event);
+        }
 
         // 1. If paused, return empty
-        if self.paused {
+        if self.is_paused() {
             return events;
         }
 
@@ -342,7 +355,73 @@ impl LaunchCoordinator {
     /// Whether the coordinator is paused (e.g., due to mass failure).
     #[must_use]
     pub fn is_paused(&self) -> bool {
-        self.paused
+        self.paused || self.server_status_paused
+    }
+
+    fn refresh_server_status(&mut self) -> Option<CoordinatorEvent> {
+        let Some(raw_status_url) = self.server_config.status_url.as_ref() else {
+            self.server_status_paused = false;
+            return None;
+        };
+        let status_url = raw_status_url.trim();
+        if status_url.is_empty() {
+            self.server_status_paused = false;
+            return None;
+        }
+
+        if let Some(last_check) = self.last_server_status_check
+            && last_check.elapsed() < self.server_status_check_interval
+        {
+            return None;
+        }
+
+        self.last_server_status_check = Some(Instant::now());
+        let timeout = Duration::from_secs(self.server_config.status_check_timeout_secs.max(1));
+        let available = match reqwest::blocking::Client::builder().timeout(timeout).build() {
+            Ok(client) => match client.get(status_url).send() {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        true
+                    } else {
+                        tracing::warn!(
+                            status_url,
+                            status = %response.status(),
+                            "Server status endpoint returned non-success"
+                        );
+                        false
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(status_url, error = %error, "Server status check request failed");
+                    false
+                }
+            },
+            Err(error) => {
+                tracing::warn!(
+                    status_url,
+                    error = %error,
+                    "Failed to construct server status HTTP client"
+                );
+                false
+            }
+        };
+
+        if available {
+            if self.server_status_paused {
+                tracing::info!(status_url, "Server status recovered, resuming launches");
+            }
+            self.server_status_paused = false;
+            None
+        } else {
+            if self.server_status_paused {
+                None
+            } else {
+                self.server_status_paused = true;
+                Some(CoordinatorEvent::AllPaused {
+                    reason: format!("Server unavailable at status endpoint: {status_url}"),
+                })
+            }
+        }
     }
 
     /// Number of clients waiting in the launch queue.

@@ -614,6 +614,7 @@ impl OrchestratorLoop {
     /// - Crashed clients are re-enqueued for relaunch.
     fn tick_health_checks(&mut self) -> Vec<LoopEvent> {
         let mut events = Vec::new();
+        self.purge_banned_clients();
         let memory_samples = self
             .client_manager
             .all_sessions()
@@ -640,6 +641,18 @@ impl OrchestratorLoop {
         let healthy_count = total.saturating_sub(unhealthy_count);
 
         for client_id in needs_restart {
+            if self.orchestrator.is_banned_client(client_id) {
+                tracing::warn!(
+                    client_id,
+                    "Client banned — removing without relaunch"
+                );
+                if let Some(session) = self.client_manager.remove(client_id) {
+                    self.orchestrator.remove_client(session.pid);
+                    self.orchestrator.mark_session_exited(client_id);
+                }
+                continue;
+            }
+
             let Some(session) = self.client_manager.get_mut(client_id) else {
                 continue;
             };
@@ -714,6 +727,23 @@ impl OrchestratorLoop {
                     }
                 }
                 CoordinatorEvent::ClientReady { client_id } => {
+                    if self.orchestrator.is_banned_client(client_id) {
+                        if let Some(session) = self.client_manager.remove(client_id) {
+                            tracing::warn!(
+                                client_id,
+                                pid = session.pid,
+                                "Skipping registration for banned client"
+                            );
+                            self.orchestrator.remove_client(session.pid);
+                        } else {
+                            tracing::warn!(
+                                client_id,
+                                "Skipping registration for banned client"
+                            );
+                        }
+                        continue;
+                    }
+
                     if let Some(session) = self.client_manager.get_mut(client_id) {
                         let pid = session.pid;
                         session.slot_lifecycle = SlotLifecycle::Live;
@@ -798,6 +828,29 @@ impl OrchestratorLoop {
         };
         self.orchestrator.send_ipc_command(pid, cmd);
         tracing::info!(pid, "Requested /camp desktop for unhealthy client");
+    }
+
+    fn purge_banned_clients(&mut self) {
+        let banned_client_ids = self
+            .client_manager
+            .all_sessions()
+            .filter_map(|session| {
+                self.orchestrator
+                    .is_banned_client(session.client_id)
+                    .then_some(session.client_id)
+            })
+            .collect::<Vec<_>>();
+
+        for client_id in banned_client_ids {
+            if let Some(session) = self.client_manager.remove(client_id) {
+                tracing::warn!(
+                    client_id,
+                    pid = session.pid,
+                    "Purged banned client from session manager"
+                );
+                self.orchestrator.remove_client(session.pid);
+            }
+        }
     }
 }
 

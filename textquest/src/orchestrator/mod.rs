@@ -39,6 +39,11 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use textquest_common::{
+    account_safety::{
+        self,
+        BannedAccountRegistry,
+        BanHandlingResult,
+    },
     character_config::{CharacterConfigMap, RewardAutomationConfig, load_character_configs},
     combat::HateTargetCategory,
     ipc::{ChatMessageInfo, Command, Response, SessionControlCommand, SessionToken},
@@ -65,6 +70,8 @@ const PROGRESSION_CHECK_INTERVAL: u64 = 50;
 const CC_EXPIRY_BUFFER: u64 = 3;
 /// How often to check the persisted character config file for reward updates.
 const REWARD_CONFIG_SYNC_INTERVAL: u64 = 50;
+/// Cooldown window for security alerts to avoid spam.
+const SECURITY_ALERT_COOLDOWN: Duration = Duration::from_secs(120);
 
 /// Returns the runtime data root: `TEXTQUEST_DATA_DIR`, exe parent, then cwd fallback.
 fn data_dir() -> PathBuf {
@@ -228,10 +235,10 @@ pub struct Orchestrator {
     say_detection_config: crate::config::SayDetectionConfig,
     /// Optional Discord webhook sender for say alerts.
     say_detection_webhook: Option<crate::discord::webhook::WebhookSender>,
-    /// Shared slash command registry for Lua/plugin/orchestrator command routing.
-    pub command_registry: SharedCommandRegistry,
-    /// Shared hotkey registry for Lua/plugin/orchestrator keyboard routing.
-    pub hotkey_registry: SharedHotkeyRegistry,
+    /// Clients that have triggered account safety or anti-ban detections.
+    ban_registry: BannedAccountRegistry,
+    /// Last time a given security signature emitted an alert.
+    security_alert_cooldowns: HashMap<String, Instant>,
 
     // --- M8 Orchestrator routing ---
     /// Active routing scope (synced from TUI `App::routing_scope` each tick).
@@ -296,8 +303,8 @@ impl Orchestrator {
             say_detector: SayDetector::new(),
             say_detection_config: crate::config::SayDetectionConfig::default(),
             say_detection_webhook: None,
-            command_registry,
-            hotkey_registry,
+            ban_registry: BannedAccountRegistry::new(),
+            security_alert_cooldowns: HashMap::new(),
             routing_scope: RoutingScope::AllSession,
             scope_pids: Vec::new(),
         };
@@ -1134,6 +1141,12 @@ impl Orchestrator {
         self.monitoring.register_session(client_id, pid);
     }
 
+    /// Check whether the given client ID has been flagged for ban/suspension.
+    #[must_use]
+    pub fn is_banned_client(&self, client_id: ClientId) -> bool {
+        self.ban_registry.is_banned(client_id)
+    }
+
     /// Record a memory sample for a managed session.
     pub fn record_memory_sample(&mut self, client_id: ClientId, pid: u32, memory_bytes: u64) {
         self.bind_monitored_client(client_id, pid);
@@ -1727,9 +1740,12 @@ impl Orchestrator {
                 continue;
             };
 
-            let mut gm_tells: Vec<(String, String)> = Vec::new();
-
             for message in messages {
+                if account_safety::detect_ban_message(&message.text) {
+                    self.handle_ban_detection(pid, "chat", message.text.clone());
+                    continue;
+                }
+
                 let Some(chat) = textquest_common::chat::parse_chat_text(&message.text) else {
                     if manager.get_config().log_eq_chat {
                         let _ = manager.log_message(&server, &character, &message, None);
@@ -1742,7 +1758,7 @@ impl Orchestrator {
                 if matches!(channel, ChatChannel::Tell)
                     && textquest_common::gm_detection::detect_gm_tell(&chat.sender, &chat.message)
                 {
-                    gm_tells.push((chat.sender.clone(), chat.message.clone()));
+                    self.emit_gm_alert(&character, &chat.sender, &chat.message);
                 }
 
                 if let Err(error) =
@@ -1756,10 +1772,6 @@ impl Orchestrator {
                         "Failed to log chat message"
                     );
                 }
-            }
-
-            for (sender, msg_text) in gm_tells {
-                self.emit_gm_alert(&character, &sender, &msg_text);
             }
         }
     }
@@ -1951,13 +1963,74 @@ impl Orchestrator {
     }
 
     /// Emit a GM interaction alert and log the event.
-    fn emit_gm_alert(&self, actor: &str, sender: &str, message: &str) {
+    fn should_emit_security_alert(&mut self, key: &str) -> bool {
+        let now = Instant::now();
+        match self.security_alert_cooldowns.get_mut(key) {
+            Some(last) if now.duration_since(*last) < SECURITY_ALERT_COOLDOWN => false,
+            Some(last) => {
+                *last = now;
+                true
+            }
+            None => {
+                self.security_alert_cooldowns
+                    .insert(key.to_string(), now);
+                true
+            }
+        }
+    }
+
+    /// Emit a GM interaction alert and log the event.
+    fn emit_gm_alert(&mut self, actor: &str, sender: &str, message: &str) {
+        let key = format!("gm:{actor}:{sender}");
+        if !self.should_emit_security_alert(&key) {
+            return;
+        }
+
         tracing::warn!(
             actor = %actor,
             sender = %sender,
             message = %message,
             "**SECURITY ALERT** GM/CSR interaction detected — operator review required"
         );
+    }
+
+    fn handle_ban_detection(&mut self, pid: u32, context: &str, message: String) {
+        let Some(client_id) = self.monitoring.client_id_for_pid(pid) else {
+            tracing::warn!(pid, "Unable to map banned message to client_id");
+            return;
+        };
+
+        let was_banned = self.ban_registry.is_banned(client_id);
+        match account_safety::handle_ban_detection(
+            client_id,
+            message.clone(),
+            context.to_string(),
+            &mut self.ban_registry,
+        ) {
+            BanHandlingResult::Halted { detection, reason } => {
+                tracing::error!(
+                    client_id,
+                    pid,
+                    context = %detection.context,
+                    reason = %reason,
+                    "Security risk detected — isolating client"
+                );
+
+                if !was_banned {
+                    self.send_slash_command(pid, "/camp desktop");
+                    self.remove_client(pid);
+                }
+            }
+            _ => {
+                tracing::warn!(
+                    client_id,
+                    pid,
+                    context = context,
+                    message = %message,
+                    "Unhandled ban handling result"
+                );
+            }
+        }
     }
 
     /// Send a slash command to all registered clients.

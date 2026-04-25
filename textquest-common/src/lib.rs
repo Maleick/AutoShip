@@ -47,6 +47,8 @@ pub mod ipc;
 pub mod launch_profile;
 /// Login automation shared types (credentials, server selection, login phases).
 pub mod login;
+/// Account ban/suspension detection utilities and registry.
+pub mod account_safety;
 /// Navigation shared types (waypoints, zones, pathfinding requests).
 pub mod nav;
 /// Observability infrastructure for metrics collection and structured logging.
