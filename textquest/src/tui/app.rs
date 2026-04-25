@@ -1767,6 +1767,12 @@ impl App {
         };
         app.cmd_state.load_history_from_disk();
         app.refresh_alert_history();
+
+        // Load opcode names from ghidra_db into packet monitor state for live display
+        if let Some(db) = &app.ghidra_db {
+            app.packet_monitor_state.load_opcodes_from_db(db);
+        }
+
         app
     }
 

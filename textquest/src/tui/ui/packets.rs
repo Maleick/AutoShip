@@ -126,14 +126,21 @@ fn draw_packet_stream(frame: &mut Frame, area: Rect, app: &App) {
                     }
                 };
 
-                let opcode_name = opcode_hex_label(pkt.opcode);
+                let opcode_name = state
+                    .get_opcode_name(pkt.opcode)
+                    .map(|s| s.to_string())
+                    .or_else(|| {
+                        // Fall back to hardcoded names if not in ghidra_db
+                        opcode_hex_label_static(pkt.opcode).map(|s| s.to_string())
+                    })
+                    .unwrap_or_else(|| format!("0x{:04X}", pkt.opcode));
                 let opcode_style = if is_selected {
                     Style::default()
                         .fg(t.text_bright)
                         .bg(t.text_accent)
                         .add_modifier(Modifier::REVERSED)
                 } else {
-                    get_opcode_color_style(pkt.opcode, t)
+                    get_opcode_color_style(&opcode_name, t)
                 };
 
                 let hex_preview = pkt.payload_preview();
@@ -220,7 +227,9 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("opcode   ", Style::default().fg(t.text_secondary)),
             Span::styled(
-                opcode_hex_label(pkt.opcode),
+                state
+                    .get_opcode_name(pkt.opcode)
+                    .unwrap_or_else(|| opcode_hex_label_static(pkt.opcode).unwrap_or("Unknown")),
                 Style::default()
                     .fg(t.text_accent)
                     .add_modifier(Modifier::BOLD),
@@ -290,8 +299,7 @@ fn draw_packet_detail(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 /// Get the color style for an opcode based on its type.
-fn get_opcode_color_style(opcode: u16, t: &crate::tui::theme::Theme) -> Style {
-    let name = opcode_hex_label(opcode);
+fn get_opcode_color_style(name: &str, t: &crate::tui::theme::Theme) -> Style {
     if name.contains("HP") || name.contains("Mana") {
         Style::default().fg(ratatui::style::Color::Yellow) // amber
     } else if name.contains("Cast") || name.contains("MemorizeSpell") {
@@ -303,8 +311,9 @@ fn get_opcode_color_style(opcode: u16, t: &crate::tui::theme::Theme) -> Style {
     }
 }
 
-/// EverQuest opcode name lookup table. Maps known opcodes to their canonical names.
-const OPCODE_NAMES: &[(u16, &str)] = &[
+/// EverQuest opcode name lookup table (fallback). Maps known opcodes to their canonical names.
+/// Used as a fallback when ghidra_db is unavailable.
+const OPCODE_NAMES_STATIC: &[(u16, &str)] = &[
     (0x0001, "OP_ZoneEntry"),
     (0x0002, "OP_ZoneSpawns"),
     (0x0004, "OP_ZoneDespawn"),
@@ -358,15 +367,15 @@ const OPCODE_NAMES: &[(u16, &str)] = &[
     (0x0702, "OP_ServerNotification"),
 ];
 
-/// Format opcode as name or hex label. Looks up known EQ opcodes by code;
+/// Format opcode as name or hex label (fallback). Looks up known EQ opcodes by code;
 /// falls back to `0xNNNN` hex format for unknown opcodes.
-fn opcode_hex_label(opcode: u16) -> String {
-    OPCODE_NAMES
+/// This is a fallback function used when ghidra_db is unavailable.
+fn opcode_hex_label_static(opcode: u16) -> Option<&'static str> {
+    OPCODE_NAMES_STATIC
         .binary_search_by_key(&opcode, |&(code, _)| code)
         .ok()
-        .and_then(|idx| OPCODE_NAMES.get(idx))
-        .map(|&(_, name)| name.to_string())
-        .unwrap_or_else(|| format!("0x{:04X}", opcode))
+        .and_then(|idx| OPCODE_NAMES_STATIC.get(idx))
+        .map(|&(_, name)| name)
 }
 
 /// Format a one-line payload preview.

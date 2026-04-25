@@ -444,6 +444,26 @@ impl GhidraDatabase {
         })
     }
 
+    /// Get all opcodes from the database as a HashMap<opcode_code, description>.
+    /// Returns an empty map if the database has no opcodes.
+    pub fn get_opcode_map(&self) -> Result<std::collections::HashMap<u16, String>> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT code, description FROM opcodes WHERE description IS NOT NULL ORDER BY code"
+        )?;
+        let mut map = std::collections::HashMap::new();
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)? as u16,
+                row.get::<_, String>(1)?,
+            ))
+        })?;
+        for row in rows {
+            let (code, description) = row?;
+            map.insert(code, description);
+        }
+        Ok(map)
+    }
+
     /// Load opcode entries from a JSON file and bulk-insert them into the
     /// database.
     ///

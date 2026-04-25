@@ -2585,6 +2585,8 @@ pub struct PacketMonitorState {
     /// Updated on every `push()` so the sidebar can display it without a full
     /// linear scan over all historical packets.
     pub peak_rate: usize,
+    /// Opcode name map loaded from ghidra_db. Maps opcode code (u16) to human-readable name.
+    pub opcode_names: HashMap<u16, String>,
 }
 
 impl PacketMonitorState {
@@ -2604,6 +2606,7 @@ impl PacketMonitorState {
             paused: false,
             capture_start_ms: None,
             peak_rate: 0,
+            opcode_names: HashMap::new(),
         }
     }
 
@@ -2648,6 +2651,20 @@ impl PacketMonitorState {
             (packet.client_id == client_id && !packet.process_name.is_empty())
                 .then_some(packet.process_name.as_str())
         })
+    }
+
+    /// Load opcode names from ghidra_db into the opcode_names map.
+    /// If ghidra_db is not available or has no opcodes, the map remains as-is.
+    pub fn load_opcodes_from_db(&mut self, db: &textquest_common::ghidra_db::GhidraDatabase) {
+        if let Ok(map) = db.get_opcode_map() {
+            self.opcode_names = map;
+        }
+    }
+
+    /// Look up an opcode name by code. Returns the name if found, otherwise None.
+    #[must_use]
+    pub fn get_opcode_name(&self, code: u16) -> Option<&str> {
+        self.opcode_names.get(&code).map(|s| s.as_str())
     }
 
     /// Scroll up by one line.
