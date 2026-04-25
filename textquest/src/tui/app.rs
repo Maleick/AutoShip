@@ -10,7 +10,6 @@ use std::{
 use super::{
     cast::{CastDisplay, live_cast_display, short_cast_label},
     command::{self, HelpSection},
-    config_panel::ConfigPanelState,
     demo_data::{DemoRole, demo_client_cast_info, demo_client_profile},
     hotkeys::{KeyboardStyle, TextSize, UiAccessibilityConfig, UiKeyboardConfig},
     menu::MenuState,
@@ -1337,8 +1336,6 @@ pub struct App {
     pub menu_state: MenuState,
     /// Onboarding wizard state.
     pub wizard_state: WizardState,
-    /// Configuration panel state.
-    pub config_panel_state: ConfigPanelState,
     /// CH chain configuration panel state.
     pub ch_chain_panel_state: ChChainPanelState,
 
@@ -1719,7 +1716,6 @@ impl App {
 
             menu_state: MenuState::new(),
             wizard_state: WizardState::new(),
-            config_panel_state: ConfigPanelState::new(),
             ch_chain_panel_state: ChChainPanelState::new(),
 
             command_aliases: Self::build_default_aliases(),
@@ -2952,20 +2948,26 @@ impl App {
         let default_names = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"];
 
         if let Ok(accts) = AccountsConfig::load(std::path::Path::new("config/accounts.toml")) {
-            // Discover unique group IDs from account config
-            let mut group_ids: Vec<u32> = accts.accounts.iter().map(|a| a.group).collect();
-            group_ids.sort();
-            group_ids.dedup();
-            group_ids.retain(|&id| id > 0); // skip ungrouped (0)
+            let mut groups_by_id: HashMap<u32, Vec<&crate::config::AccountEntry>> =
+                HashMap::new();
+            for acct in &accts.accounts {
+                if acct.group > 0 {
+                    groups_by_id.entry(acct.group).or_default().push(acct);
+                }
+            }
 
-            if !group_ids.is_empty() {
+            if !groups_by_id.is_empty() {
+                let mut group_ids: Vec<u32> = groups_by_id.keys().copied().collect();
+                group_ids.sort_unstable();
+
                 return group_ids
-                    .iter()
-                    .map(|&id| {
-                        let accounts_in_group: Vec<&crate::config::AccountEntry> =
-                            accts.accounts.iter().filter(|a| a.group == id).collect();
+                    .into_iter()
+                    .map(|id| {
+                        let mut accounts_in_group = groups_by_id.remove(&id).unwrap_or_default();
+                        accounts_in_group.sort_by_key(|acct| {
+                            extract_account_number(&acct.name).unwrap_or(u8::MAX)
+                        });
 
-                        // Derive account range from actual account numbers
                         let account_nums: Vec<u8> = accounts_in_group
                             .iter()
                             .filter_map(|a| extract_account_number(&a.name))
@@ -2973,13 +2975,12 @@ impl App {
                         let lo = account_nums.iter().copied().min().unwrap_or(1);
                         let hi = account_nums.iter().copied().max().unwrap_or(lo);
 
-                        let name = default_names.get((id - 1) as usize).map_or_else(
-                            || format!("Group {id}"),
-                            std::string::ToString::to_string,
-                        );
+                        let name = default_names
+                            .get((id as usize).saturating_sub(1))
+                            .map_or_else(|| format!("Group {id}"), std::string::ToString::to_string);
 
                         GroupDef {
-                            id: id as u8,
+                            id: id.min(u32::from(u8::MAX)) as u8,
                             name,
                             account_range: (lo, hi),
                             default_camp: format!("Camp {id}"),
@@ -3002,6 +3003,72 @@ impl App {
                 }
             })
             .collect()
+    }
+
+    fn configured_group_id_for_character_name(&self, name: &str) -> Option<u8> {
+        if name.is_empty() {
+            return None;
+        }
+
+        if let Some(cfg) = &self.accounts_config {
+            for group in &self.groups {
+                let matches = cfg
+                    .accounts
+                    .iter()
+                    .any(|acct| acct.group == u32::from(group.id) && acct.character.eq_ignore_ascii_case(name));
+                if matches {
+                    return Some(group.id);
+                }
+            }
+        }
+
+        extract_account_number(name).and_then(|account_num| {
+            self.groups
+                .iter()
+                .find(|group| {
+                    let (lo, hi) = group.account_range;
+                    account_num >= lo && account_num <= hi
+                })
+                .map(|group| group.id)
+        })
+    }
+
+    fn configured_group_members(
+        &self,
+        group: &GroupDef,
+    ) -> Option<HashSet<String>> {
+        let cfg = self.accounts_config.as_ref()?;
+        let names: HashSet<String> = cfg
+            .accounts
+            .iter()
+            .filter(|acct| acct.group == u32::from(group.id))
+            .filter_map(|acct| {
+                let name = acct.character.trim();
+                if name.is_empty() {
+                    None
+                } else {
+                    Some(name.to_ascii_lowercase())
+                }
+            })
+            .collect();
+
+        if names.is_empty() {
+            None
+        } else {
+            Some(names)
+        }
+    }
+
+    fn group_idx_for_id(&self, group_id: u8) -> Option<usize> {
+        self.groups.iter().position(|group| group.id == group_id)
+    }
+
+    fn configured_group_ids_description(&self) -> String {
+        self.groups
+            .iter()
+            .map(|group| format!("G{}", group.id))
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     /// Get the currently selected client, if any.
@@ -7070,9 +7137,6 @@ impl App {
                         if self.wizard_state.active {
                             self.status_message.push_str(" | wizard active");
                         }
-                        if self.config_panel_state.active {
-                            self.status_message.push_str(" | config panel open");
-                        }
                     }
                     _ => {
                         if self.active_group.is_some() {
@@ -7470,42 +7534,7 @@ impl App {
                 self.execute_session_command(&parts[1..]);
             }
             "wizard" => {
-                self.wizard_state.start();
-                self.set_feedback(
-                    ToastLevel::Info,
-                    String::from("Starting setup wizard..."),
-                    false,
-                );
-            }
-            "config" => {
-                self.config_panel_state.active = !self.config_panel_state.active;
-                if self.config_panel_state.active {
-                    let group_names: Vec<String> =
-                        self.groups.iter().map(|g| g.name.clone()).collect();
-                    let toon_names = self.list_character_names();
-                    self.config_panel_state
-                        .set_available_scopes(group_names, toon_names);
-                    self.config_panel_state.rebuild_tree();
-                    self.config_panel_state.sync_from_app(
-                        self.theme_kind.label(),
-                        self.privacy_mode,
-                        self.main_assist.as_deref(),
-                        self.main_tank.as_deref(),
-                        self.heal_cancel_enabled,
-                        &format!("{}", self.operating_mode),
-                    );
-                    self.set_feedback(
-                        ToastLevel::Info,
-                        String::from("Configuration panel opened"),
-                        false,
-                    );
-                } else {
-                    self.set_feedback(
-                        ToastLevel::Info,
-                        String::from("Configuration panel closed"),
-                        false,
-                    );
-                }
+                self.open_web_onboarding();
             }
             "chui" => match parts.get(1).copied() {
                 Some("open") => {
@@ -10226,7 +10255,6 @@ tags = ["test"]
         assert_eq!(command::normalize_command_alias("h"), "help");
         assert_eq!(command::normalize_command_alias("q"), "quit");
         assert_eq!(command::normalize_command_alias("chui"), "chui");
-        assert_eq!(command::normalize_command_alias("cfg"), "config");
         assert_eq!(command::normalize_command_alias("cmds"), "commands");
         assert_eq!(command::normalize_command_alias("s"), "status");
         assert_eq!(
@@ -10262,7 +10290,6 @@ tags = ["test"]
     fn command_help_detail_aliases() {
         assert!(command_help_detail("h").is_some());
         assert!(command_help_detail("cmds").is_some());
-        assert!(command_help_detail("cfg").is_some());
         assert!(command_help_detail("assist").is_some());
         assert!(command_help_detail("tank").is_some());
         assert!(command_help_detail("pull").is_some());
@@ -10314,7 +10341,6 @@ tags = ["test"]
             "session",
             "cmds",
             "quit",
-            "config",
         ] {
             assert!(
                 names.contains(expected),

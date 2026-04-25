@@ -280,12 +280,6 @@ pub const MENU_CATEGORIES: &[MenuCategory] = &[
                 shortcut: "T",
             },
             MenuItem {
-                label: "Config Panel",
-                command: "config",
-                requires_input: false,
-                shortcut: "",
-            },
-            MenuItem {
                 label: "Privacy Toggle",
                 command: "privacy",
                 requires_input: false,

@@ -1,6 +1,10 @@
 //! EverQuest data layer — spawn reading, log parsing, map loading, named mob
 //! tracking.
 
+/// Auto-accept prompts handler — MQ2AutoAccept parity.
+pub mod auto_accept;
+/// AutoCamp death handler — MQ2AutoCamp parity.
+pub mod auto_camp;
 /// Anti-cheat state reads for EQ memory inspection.
 pub mod cheater;
 /// Game Master detection — zone-wide GM alerts with MQ2GMCheck parity.

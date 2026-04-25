@@ -621,64 +621,6 @@ pub fn handle_events(
             return Ok(true);
         }
 
-        // ── Config panel modal ──
-        if app.config_panel_state.active {
-            if app.config_panel_state.editing {
-                match key.code {
-                    KeyCode::Esc => app.config_panel_state.cancel_edit(),
-                    KeyCode::Enter => app.config_panel_state.commit_edit(),
-                    KeyCode::Backspace => {
-                        app.config_panel_state.edit_buffer.pop();
-                    }
-                    KeyCode::Char(c) => {
-                        app.config_panel_state.edit_buffer.push(c);
-                    }
-                    _ => {}
-                }
-            } else if app.config_panel_state.scope_selector_focused {
-                // Scope selector is focused — left/right to switch scope
-                match key.code {
-                    KeyCode::Esc | KeyCode::Char('q') => {
-                        app.config_panel_state.active = false;
-                    }
-                    KeyCode::Left | KeyCode::Char('h') => app.config_panel_state.scope_prev(),
-                    KeyCode::Right | KeyCode::Char('l') => app.config_panel_state.scope_next(),
-                    KeyCode::Tab | KeyCode::Down => {
-                        app.config_panel_state.scope_selector_focused = false;
-                    }
-                    KeyCode::Char('R') => app.config_panel_state.reset_to_defaults(),
-                    _ => {}
-                }
-            } else {
-                match key.code {
-                    KeyCode::Esc | KeyCode::Char('q') => {
-                        app.config_panel_state.active = false;
-                    }
-                    KeyCode::Tab => {
-                        app.config_panel_state.scope_selector_focused = true;
-                    }
-                    KeyCode::Up | KeyCode::Char('k') => app.config_panel_state.select_prev(),
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        app.config_panel_state.select_next();
-                    }
-                    KeyCode::Enter => {
-                        let node = &app.config_panel_state.nodes[app.config_panel_state.selected];
-                        if node.value.is_none() {
-                            app.config_panel_state.toggle_expand();
-                        } else if node.is_toggle {
-                            app.config_panel_state.toggle_value();
-                        } else {
-                            app.config_panel_state.start_edit();
-                        }
-                    }
-                    KeyCode::Char(' ') => app.config_panel_state.toggle_value(),
-                    KeyCode::Char('R') => app.config_panel_state.reset_to_defaults(),
-                    _ => {}
-                }
-            }
-            return Ok(true);
-        }
-
         // ── CH chain panel modal ──
         if app.ch_chain_panel_state.active {
             match key.code {
@@ -1183,6 +1125,10 @@ pub fn handle_events(
             }
             (KeyCode::F(10), _) => {
                 app.menu_state.toggle();
+                return Ok(true);
+            }
+            (KeyCode::F(4), _) => {
+                app.open_web_onboarding();
                 return Ok(true);
             }
             (KeyCode::F(n), _) if (1..=9).contains(&n) => {

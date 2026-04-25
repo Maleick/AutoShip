@@ -2229,6 +2229,39 @@ fn load_or_create_master_salt(db_path: &std::path::Path) -> Result<[u8; 32]> {
     Ok(salt)
 }
 
+// ─── Statistics & aggregation ───────────────────────────────────────────────
+
+pub fn run_stats_compact_mode(
+    session: Option<String>,
+    all_pending: bool,
+    db_path: Option<std::path::PathBuf>,
+    events_dir: Option<std::path::PathBuf>,
+) -> Result<()> {
+    use crate::paths;
+    use crate::stats;
+
+    let db_path = db_path.unwrap_or_else(|| paths::metrics_db_path());
+    let events_dir = events_dir.unwrap_or_else(|| paths::sessions_dir());
+
+    if all_pending {
+        stats::compact_all_pending(&db_path, &events_dir)?;
+        eprintln!("Compacted all pending sessions");
+    } else if let Some(session_id) = session {
+        let session_dir = events_dir.join(&session_id);
+        if !session_dir.exists() {
+            return Err(anyhow::anyhow!("Session directory not found: {:?}", session_dir));
+        }
+        stats::compact_session(&db_path, &session_dir, &session_id)?;
+        eprintln!("Compacted session {}", session_id);
+    } else {
+        return Err(anyhow::anyhow!(
+            "Either --session <id> or --all-pending is required"
+        ));
+    }
+
+    Ok(())
+}
+
 // ─── Platform helpers ───────────────────────────────────────────────────────
 
 /// Check if a process with the given PID is still alive.

@@ -18,8 +18,6 @@ pub mod command;
 /// Tamagotchi-style fleet companion — creature that evolves with fleet
 /// performance.
 pub mod companion;
-/// Configuration panel with tree view and inline editing.
-pub mod config_panel;
 /// Demo data generator — synthetic spawns and player data for macOS
 /// development.
 pub mod demo_data;

@@ -11,6 +11,10 @@ pub use paste;
 pub mod audio_alerts;
 /// Auto-group configuration and invite/role controller logic.
 pub mod auto_group;
+/// Configuration types for auto-acceptance and safety features (AutoAccept, AutoCamp, Paranoid).
+pub mod safety_features;
+/// Shared trust list used across AutoAccept, Rez, and Paranoid.
+pub mod trust_list;
 /// Typed, runtime-rebased function bindings.
 pub mod bindings;
 /// Box-chat config, slash-route parsing, and TCP relay wire types.

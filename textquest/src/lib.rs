@@ -79,6 +79,9 @@ pub mod improvement;
 /// Fleet metrics — SQLite-backed storage for events, DPS, loot, lockouts, plat.
 #[cfg(windows)]
 pub mod metrics;
+/// Session stats aggregation — JSONL → SQLite aggregate tables.
+#[cfg(windows)]
+pub mod stats;
 /// Navigation — waypoint recording, zone routing, navmesh integration.
 #[cfg(windows)]
 #[allow(dead_code)]

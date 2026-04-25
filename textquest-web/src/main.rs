@@ -688,6 +688,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .nest("/admin", api::admin::router())
         .nest("/dashboard", api::dashboard::router())
         .nest("/extensions", api::extensions::router())
+        .nest("/improve", api::improve::router())
         .route(
             "/box-chat/settings",
             get(api::get_box_chat_settings).put(api::put_box_chat_settings),

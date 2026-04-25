@@ -131,17 +131,6 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         help::draw_help_search_panel(frame, area, app);
     }
 
-    // Config panel overlay
-    if app.config_panel_state.active {
-        use crate::tui::config_panel::ConfigPanelWidget;
-        let popup_area = centered_popup(area, 92, 72, 96, 30, 96, 40, 1); // Fixed 96-wide
-        frame.render_widget(Clear, popup_area);
-        frame.render_widget(
-            ConfigPanelWidget::new(&app.config_panel_state).accent_color(app.theme.text_accent),
-            popup_area,
-        );
-    }
-
     // CH chain panel overlay
     if app.ch_chain_panel_state.active {
         use crate::tui::ui::ch_chain::ChChainWidget;

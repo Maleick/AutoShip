@@ -165,8 +165,7 @@ fn draw_economy_sidebar_area(frame: &mut Frame, area: Rect, app: &App) {
         ])
         .split(area);
 
-    draw_rules_panel(frame, sidebar_rows[0], app);
-    draw_ledger_panel(frame, sidebar_rows[1], app);
+    draw_ledger_panel(frame, sidebar_rows[0], app);
 }
 
 fn draw_vendor_bank_panel(frame: &mut Frame, area: Rect, app: &App) {
@@ -278,14 +277,7 @@ fn draw_vendor_bank_panel(frame: &mut Frame, area: Rect, app: &App) {
                 .fg(t.text_highlight)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" skip client · "),
-        Span::styled(
-            "r",
-            Style::default()
-                .fg(t.text_highlight)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" reload rules"),
+        Span::raw(" skip client"),
     ]));
 
     frame.render_widget(Paragraph::new(lines).block(blk), area);

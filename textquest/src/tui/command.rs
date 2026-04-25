@@ -678,14 +678,6 @@ pub const COMMAND_ENTRIES: &[CommandEntry] = &[
         example: "restart Dmft01",
     },
     CommandEntry {
-        phrase: "config",
-        aliases: &["cfg"],
-        section: HelpSection::Lifecycle,
-        usage: "config",
-        summary: "Open or close the configuration panel.",
-        example: "config",
-    },
-    CommandEntry {
         phrase: "theme",
         aliases: &[],
         section: HelpSection::Lifecycle,

@@ -38,6 +38,7 @@ export type ActiveView =
   | "say"
   | "chat_pattern_rules"
   | "xassist"
+  | "improve"
   | "credentials"
   | "config_copy"
   | "sessions"
@@ -65,6 +66,7 @@ const navItems: {
   { icon: Broadcast, label: "Network Box Chat", id: "boxchat" },
   { icon: Cpu, label: "Extension Catalog", id: "extensions", pulse: true },
   { icon: ChatCircle, label: "Chat Pattern Rules", id: "chat_pattern_rules" },
+  { icon: Brain, label: "Self-Improvement", id: "improve" },
   { icon: Key, label: "Credentials Management", id: "credentials" },
   { icon: Copy, label: "Config Copy", id: "config_copy" },
   { icon: Heartbeat, label: "Session Monitor", id: "sessions", pulse: true },

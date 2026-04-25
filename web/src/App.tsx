@@ -12,6 +12,7 @@ import EconomyPanel from "./components/EconomyPanel";
 import ExtensionCatalogPanel from "./components/ExtensionCatalogPanel";
 import GroupBuilder from "./components/GroupBuilder";
 import GroupsPage from "./components/GroupsPage";
+import ImprovePanel from "./components/ImprovePanel";
 import LeftSidebar, { type ActiveView } from "./components/LeftSidebar";
 import LootConfig from "./components/LootConfig";
 import OperatorDashboard from "./components/OperatorDashboard";
@@ -65,6 +66,8 @@ function App() {
           <SayDetectionPanel />
         ) : activeView === "xassist" ? (
           <XAssistPanel />
+        ) : activeView === "improve" ? (
+          <ImprovePanel />
         ) : activeView === "boxchat" ? (
           <BoxChatPanel />
         ) : activeView === "credentials" ? (

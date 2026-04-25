@@ -725,6 +725,13 @@ fn main() -> Result<()> {
             }
         },
 
+        // Statistics & aggregation
+        Some(Commands::Stats { action }) => match action {
+            StatsAction::Compact { session, all_pending, db, events_dir } => {
+                cli::run_stats_compact_mode(session, all_pending, db, events_dir)
+            }
+        },
+
         None => {
             // Check top-level flags for backward compatibility
             if args.dump {

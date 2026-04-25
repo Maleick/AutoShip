@@ -23,3 +23,11 @@ runtime-only = []
 [[bin]]
 name = "textquest-learn"
 path = "src/main.rs"
+
+[features]
+# Enables the runtime-inference path used by textquest-dll.
+# Training-only dependencies (ndarray, clap, tokio) are available in all
+# configurations for now; this feature gate exists so the DLL can opt in
+# with `default-features = false, features = ["runtime-only"]` without
+# cargo rejecting the unknown feature name.
+runtime-only = []
