@@ -1,19 +1,19 @@
-//! DirectX 11 overlay hook — frame timing, state management, and resolution
-//! tracking for the EQ in-process overlay.
+//! Direct3D overlay hook state — frame timing, render-target tracking, and
+//! backend-aware Present integration for the EQ in-process overlay.
 //!
 //! ## Architecture
 //!
-//! `overlay` is a thin state layer driven by `dx11_null::hooked_present`:
-//! - `initialize(w, h)` — called once when the DX11 device is first available.
-//! - `tick()` — called each Present; updates the frame-time ring buffer.
-//! - `on_resize(w, h)` — called when the swap chain backbuffer is resized.
+//! `overlay` is a thin state layer driven by Direct3D Present hooks:
+//! - `initialize_for_backend(...)` — called once when a D3D device is available.
+//! - `render_present(...)` — called each Present; updates frame/render timing.
+//! - `on_device_reset(...)` — called when the swap chain/backbuffer is recreated.
 //! - `shutdown()` — releases resources and resets state.
 //!
-//! ## ImGui integration
+//! ## Renderer integration
 //!
-//! The Windows `inner` module stubs out ImGui DX11 init/render/shutdown.
-//! Real integration is tracked in #1107 (window manager) and requires
-//! `imgui` + `imgui-dx11` crates to be added as dependencies.
+//! The Windows `inner` module is the platform seam for ImGui/custom-widget
+//! drawing. It is intentionally dependency-light here; backend crates can be
+//! added behind this API without changing the Present hook contract.
 
 use std::sync::{
     Mutex, OnceLock,
@@ -23,15 +23,24 @@ use std::sync::{
 /// Rolling frame window size for FPS / peak-time averaging.
 const FRAME_WINDOW: usize = 64;
 
+/// Overlay render budget: keep CPU-side overlay work under 1ms per Present.
+pub const OVERLAY_RENDER_BUDGET_NS: u64 = 1_000_000;
+
 /// Overlay lifecycle state (encoded as u32).
 /// 0 = Uninitialized, 1 = Initializing, 2 = Active, 3 = Suspended.
 static OVERLAY_STATE: AtomicU32 = AtomicU32::new(0);
+
+/// Active Direct3D backend (encoded as u32; 0 = unknown, 11 = DX11, 12 = DX12).
+static ACTIVE_BACKEND: AtomicU32 = AtomicU32::new(0);
 
 /// Last known backbuffer width.
 static LAST_WIDTH: AtomicU32 = AtomicU32::new(0);
 
 /// Last known backbuffer height.
 static LAST_HEIGHT: AtomicU32 = AtomicU32::new(0);
+
+/// Last known number of overlay render targets.
+static LAST_RENDER_TARGET_COUNT: AtomicU32 = AtomicU32::new(0);
 
 /// Set when a resolution change is detected; cleared by `take_resolution_changed`.
 static RESOLUTION_CHANGED: AtomicBool = AtomicBool::new(false);
@@ -41,6 +50,12 @@ static LAST_TICK_NS: AtomicU64 = AtomicU64::new(0);
 
 /// Most recent frame delta in nanoseconds.
 static LAST_FRAME_DELTA_NS: AtomicU64 = AtomicU64::new(0);
+
+/// Most recent CPU-side overlay render time in nanoseconds.
+static LAST_RENDER_NS: AtomicU64 = AtomicU64::new(0);
+
+/// Count of frames that exceeded [`OVERLAY_RENDER_BUDGET_NS`].
+static OVER_BUDGET_FRAMES: AtomicU64 = AtomicU64::new(0);
 
 // ─── State machine ───────────────────────────────────────────────────────────
 
@@ -73,6 +88,30 @@ impl OverlayState {
     }
 }
 
+/// Direct3D runtime that supplied the Present callback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direct3DBackend {
+    Dx11,
+    Dx12,
+}
+
+impl Direct3DBackend {
+    fn encode(self) -> u32 {
+        match self {
+            Self::Dx11 => 11,
+            Self::Dx12 => 12,
+        }
+    }
+
+    fn decode(v: u32) -> Option<Self> {
+        match v {
+            11 => Some(Self::Dx11),
+            12 => Some(Self::Dx12),
+            _ => None,
+        }
+    }
+}
+
 /// Return the current overlay state.
 pub fn state() -> OverlayState {
     OverlayState::decode(OVERLAY_STATE.load(Ordering::Acquire))
@@ -81,6 +120,11 @@ pub fn state() -> OverlayState {
 fn set_state(new_state: OverlayState) {
     OVERLAY_STATE.store(new_state.encode(), Ordering::Release);
     tracing::debug!(state = ?new_state, "Overlay state transition");
+}
+
+/// Return the active Direct3D backend, if one has been initialized.
+pub fn active_backend() -> Option<Direct3DBackend> {
+    Direct3DBackend::decode(ACTIVE_BACKEND.load(Ordering::Acquire))
 }
 
 // ─── Frame timing ring buffer ─────────────────────────────────────────────────
@@ -151,6 +195,14 @@ pub struct OverlayPerfSnapshot {
     pub width: u32,
     /// Current backbuffer height.
     pub height: u32,
+    /// Current Direct3D backend, if known.
+    pub backend: Option<Direct3DBackend>,
+    /// Number of active render targets tracked by the overlay.
+    pub render_target_count: u32,
+    /// Most recent CPU-side overlay render time.
+    pub last_render_ns: u64,
+    /// Frames whose CPU-side overlay work exceeded 1ms.
+    pub over_budget_frames: u64,
 }
 
 /// Snapshot current performance metrics.
@@ -162,7 +214,129 @@ pub fn perf_snapshot() -> OverlayPerfSnapshot {
         peak_frame_ns: ring.peak_ns(),
         width: LAST_WIDTH.load(Ordering::Acquire),
         height: LAST_HEIGHT.load(Ordering::Acquire),
+        backend: active_backend(),
+        render_target_count: LAST_RENDER_TARGET_COUNT.load(Ordering::Acquire),
+        last_render_ns: LAST_RENDER_NS.load(Ordering::Acquire),
+        over_budget_frames: OVER_BUDGET_FRAMES.load(Ordering::Acquire),
     }
+}
+
+// ─── Backend render pipeline ─────────────────────────────────────────────────
+
+/// One backbuffer/render target visible to the overlay renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OverlayRenderTarget {
+    pub index: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Per-Present context passed from a Direct3D hook to the overlay renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OverlayFrameContext {
+    pub backend: Direct3DBackend,
+    pub width: u32,
+    pub height: u32,
+    pub render_target_count: u32,
+    pub fullscreen: bool,
+}
+
+impl OverlayFrameContext {
+    pub fn dx11(width: u32, height: u32) -> Self {
+        Self {
+            backend: Direct3DBackend::Dx11,
+            width,
+            height,
+            render_target_count: 1,
+            fullscreen: false,
+        }
+    }
+
+    pub fn with_render_targets(mut self, render_target_count: u32) -> Self {
+        self.render_target_count = render_target_count.max(1);
+        self
+    }
+}
+
+/// Result of one overlay renderer pass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OverlayFrameResult {
+    pub backend: Direct3DBackend,
+    pub render_time_ns: u64,
+    pub render_target_count: u32,
+    pub over_budget: bool,
+}
+
+/// Minimal Direct3D overlay renderer contract.
+pub trait OverlayRenderer {
+    fn render(&mut self, frame: &OverlayFrameContext) -> OverlayFrameResult;
+}
+
+#[derive(Debug)]
+struct Direct3DOverlayPipeline {
+    backend: Direct3DBackend,
+    render_targets: Vec<OverlayRenderTarget>,
+}
+
+impl Default for Direct3DOverlayPipeline {
+    fn default() -> Self {
+        Self {
+            backend: Direct3DBackend::Dx11,
+            render_targets: Vec::new(),
+        }
+    }
+}
+
+impl Direct3DOverlayPipeline {
+    fn sync_targets(&mut self, frame: &OverlayFrameContext) {
+        let target_count = frame.render_target_count.max(1);
+        let needs_recreate = self.backend != frame.backend
+            || self.render_targets.len() != target_count as usize
+            || self
+                .render_targets
+                .first()
+                .map_or(true, |t| t.width != frame.width || t.height != frame.height);
+
+        if !needs_recreate {
+            return;
+        }
+
+        self.backend = frame.backend;
+        self.render_targets.clear();
+        self.render_targets
+            .extend((0..target_count).map(|index| OverlayRenderTarget {
+                index,
+                width: frame.width,
+                height: frame.height,
+            }));
+    }
+}
+
+impl OverlayRenderer for Direct3DOverlayPipeline {
+    fn render(&mut self, frame: &OverlayFrameContext) -> OverlayFrameResult {
+        self.sync_targets(frame);
+
+        let started = std::time::Instant::now();
+        #[cfg(windows)]
+        if state() == OverlayState::Active {
+            inner::render_frame(frame.backend);
+        }
+        let render_time_ns = started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
+        let over_budget = render_time_ns > OVERLAY_RENDER_BUDGET_NS;
+
+        OverlayFrameResult {
+            backend: frame.backend,
+            render_time_ns,
+            render_target_count: self.render_targets.len() as u32,
+            over_budget,
+        }
+    }
+}
+
+static PIPELINE: OnceLock<Mutex<Direct3DOverlayPipeline>> = OnceLock::new();
+
+fn pipeline() -> &'static Mutex<Direct3DOverlayPipeline> {
+    PIPELINE.get_or_init(|| Mutex::new(Direct3DOverlayPipeline::default()))
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -171,28 +345,113 @@ pub fn perf_snapshot() -> OverlayPerfSnapshot {
 ///
 /// Called from `dx11_null::hook_device_from_swap_chain` on the first Present.
 pub fn initialize(width: u32, height: u32) {
+    initialize_for_backend(Direct3DBackend::Dx11, width, height, 1, false);
+}
+
+/// Initialize the overlay for a specific Direct3D backend.
+pub fn initialize_for_backend(
+    backend: Direct3DBackend,
+    width: u32,
+    height: u32,
+    render_target_count: u32,
+    fullscreen: bool,
+) {
     set_state(OverlayState::Initializing);
 
+    ACTIVE_BACKEND.store(backend.encode(), Ordering::Release);
     LAST_WIDTH.store(width, Ordering::Release);
     LAST_HEIGHT.store(height, Ordering::Release);
+    LAST_RENDER_TARGET_COUNT.store(render_target_count.max(1), Ordering::Release);
+
+    let frame = OverlayFrameContext {
+        backend,
+        width,
+        height,
+        render_target_count: render_target_count.max(1),
+        fullscreen,
+    };
+    if let Ok(mut guard) = pipeline().lock() {
+        guard.sync_targets(&frame);
+    }
 
     #[cfg(windows)]
-    inner::init_render_context(width, height);
+    inner::init_render_context(
+        backend,
+        width,
+        height,
+        frame.render_target_count,
+        fullscreen,
+    );
 
     set_state(OverlayState::Active);
-    tracing::info!(width, height, "Overlay initialized");
+    tracing::info!(
+        ?backend,
+        width,
+        height,
+        render_targets = frame.render_target_count,
+        fullscreen,
+        "Overlay initialized"
+    );
 }
 
 /// Tick the overlay — call once per Present.
 ///
-/// Updates the frame-time ring buffer and drives rendering when `Active`.
+/// Legacy entry point: updates frame timing and drives rendering for callers
+/// that cannot pass a full [`OverlayFrameContext`].
 pub fn tick() {
     tick_frame_time();
 
     #[cfg(windows)]
     if state() == OverlayState::Active {
-        inner::render_frame();
+        inner::render_frame(active_backend().unwrap_or(Direct3DBackend::Dx11));
     }
+}
+
+/// Render one overlay frame from a Direct3D Present callback.
+pub fn render_present(frame: OverlayFrameContext) -> OverlayFrameResult {
+    tick_frame_time();
+
+    if state() == OverlayState::Uninitialized {
+        initialize_for_backend(
+            frame.backend,
+            frame.width,
+            frame.height,
+            frame.render_target_count,
+            frame.fullscreen,
+        );
+    } else {
+        ACTIVE_BACKEND.store(frame.backend.encode(), Ordering::Release);
+        LAST_RENDER_TARGET_COUNT.store(frame.render_target_count.max(1), Ordering::Release);
+        if current_resolution() != (frame.width, frame.height) {
+            on_resize(frame.width, frame.height);
+        }
+    }
+
+    let result = if state() == OverlayState::Active {
+        let mut guard = pipeline()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard.render(&frame)
+    } else {
+        OverlayFrameResult {
+            backend: frame.backend,
+            render_time_ns: 0,
+            render_target_count: frame.render_target_count.max(1),
+            over_budget: false,
+        }
+    };
+
+    LAST_RENDER_NS.store(result.render_time_ns, Ordering::Release);
+    if result.over_budget {
+        OVER_BUDGET_FRAMES.fetch_add(1, Ordering::AcqRel);
+        tracing::warn!(
+            render_time_ns = result.render_time_ns,
+            budget_ns = OVERLAY_RENDER_BUDGET_NS,
+            "Overlay render exceeded budget"
+        );
+    }
+
+    result
 }
 
 /// Notify the overlay that the swap chain backbuffer was resized.
@@ -217,12 +476,34 @@ pub fn on_resize(width: u32, height: u32) {
     }
 }
 
+/// Notify the overlay that the Direct3D device or swap-chain targets were reset.
+pub fn on_device_reset(
+    backend: Direct3DBackend,
+    width: u32,
+    height: u32,
+    render_target_count: u32,
+    fullscreen: bool,
+) {
+    tracing::info!(
+        ?backend,
+        width,
+        height,
+        render_targets = render_target_count.max(1),
+        fullscreen,
+        "Overlay device reset"
+    );
+    shutdown();
+    initialize_for_backend(backend, width, height, render_target_count, fullscreen);
+}
+
 /// Shut down the overlay and release render resources.
 pub fn shutdown() {
     #[cfg(windows)]
     inner::destroy_render_context();
 
     set_state(OverlayState::Uninitialized);
+    ACTIVE_BACKEND.store(0, Ordering::Release);
+    LAST_RENDER_TARGET_COUNT.store(0, Ordering::Release);
     tracing::info!("Overlay shut down");
 }
 
@@ -284,22 +565,33 @@ fn wall_clock_ns() -> u64 {
 
 #[cfg(windows)]
 mod inner {
+    use super::Direct3DBackend;
+
     /// Initialize ImGui DX11 render context.
     ///
-    /// Stub — real initialization requires `imgui` + `imgui-dx11` crates
-    /// (tracked in #1107).
-    pub fn init_render_context(width: u32, height: u32) {
+    /// Stub — real initialization requires backend-specific ImGui/custom widget
+    /// renderer crates.
+    pub fn init_render_context(
+        backend: Direct3DBackend,
+        width: u32,
+        height: u32,
+        render_target_count: u32,
+        fullscreen: bool,
+    ) {
         tracing::info!(
+            ?backend,
             width,
             height,
-            "Overlay render context: ImGui DX11 init deferred (see #1107)"
+            render_targets = render_target_count,
+            fullscreen,
+            "Overlay render context init deferred"
         );
     }
 
     /// Render one overlay frame.
     ///
-    /// Stub — will call `imgui_dx11::render()` once #1107 is implemented.
-    pub fn render_frame() {}
+    /// Stub — will call the backend renderer once the widget draw backend lands.
+    pub fn render_frame(_backend: Direct3DBackend) {}
 
     /// Handle a backbuffer resize — tear down and recreate render targets.
     ///
@@ -325,15 +617,22 @@ mod inner {
 #[cfg(test)]
 pub(crate) fn reset_test_state() {
     OVERLAY_STATE.store(0, Ordering::Relaxed);
+    ACTIVE_BACKEND.store(0, Ordering::Relaxed);
     LAST_WIDTH.store(0, Ordering::Relaxed);
     LAST_HEIGHT.store(0, Ordering::Relaxed);
+    LAST_RENDER_TARGET_COUNT.store(0, Ordering::Relaxed);
     RESOLUTION_CHANGED.store(false, Ordering::Relaxed);
     LAST_TICK_NS.store(0, Ordering::Relaxed);
     LAST_FRAME_DELTA_NS.store(0, Ordering::Relaxed);
+    LAST_RENDER_NS.store(0, Ordering::Relaxed);
+    OVER_BUDGET_FRAMES.store(0, Ordering::Relaxed);
     if let Ok(mut ring) = frame_ring().lock() {
         ring.buf = [0u64; FRAME_WINDOW];
         ring.head = 0;
         ring.count = 0;
+    }
+    if let Ok(mut guard) = pipeline().lock() {
+        *guard = Direct3DOverlayPipeline::default();
     }
 }
 
@@ -531,6 +830,41 @@ mod tests {
         let snap = perf_snapshot();
         assert_eq!(snap.width, 3840);
         assert_eq!(snap.height, 2160);
+    }
+
+    #[test]
+    fn initialize_for_backend_tracks_targets() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        initialize_for_backend(Direct3DBackend::Dx12, 2560, 1440, 3, true);
+        let snap = perf_snapshot();
+        assert_eq!(state(), OverlayState::Active);
+        assert_eq!(snap.backend, Some(Direct3DBackend::Dx12));
+        assert_eq!(snap.render_target_count, 3);
+    }
+
+    #[test]
+    fn render_present_records_cpu_budget() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        let result = render_present(OverlayFrameContext::dx11(1920, 1080).with_render_targets(2));
+        let snap = perf_snapshot();
+        assert_eq!(result.render_target_count, 2);
+        assert_eq!(snap.render_target_count, 2);
+        assert!(snap.last_render_ns <= OVERLAY_RENDER_BUDGET_NS);
+        assert_eq!(snap.over_budget_frames, 0);
+    }
+
+    #[test]
+    fn device_reset_reinitializes_overlay_targets() {
+        let _guard = test_state_lock();
+        reset_test_state();
+        initialize_for_backend(Direct3DBackend::Dx11, 1280, 720, 1, false);
+        on_device_reset(Direct3DBackend::Dx12, 3840, 2160, 4, true);
+        let snap = perf_snapshot();
+        assert_eq!(current_resolution(), (3840, 2160));
+        assert_eq!(snap.backend, Some(Direct3DBackend::Dx12));
+        assert_eq!(snap.render_target_count, 4);
     }
 
     #[test]

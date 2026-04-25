@@ -1,19 +1,20 @@
-# Result: #997 — Feature: TUI Keyboard Shortcuts & Accessibility
+# Result: #988 — Feature: Direct3D Overlay Rendering System
 
 Status: DONE
 
 Changes Made:
-- Added serializable TUI keyboard and accessibility preference structs for the requested `[ui.keyboard]` shape.
-- Added built-in shortcut documentation and Markdown cheat sheet export support.
-- Wired `:help keyboard`, `:help keyboard export [path]`, `:keyboard ...`, and `:accessibility ...` command handling.
-- Added Shift-Tab reverse panel focus, text-first focus announcements, and Emacs `Ctrl+N` / `Ctrl+P` aliases.
-- Added a Shortcuts tab to the searchable help overlay.
-- Updated `feature-list.json` with issue #997 partial status and remaining scope.
+- Added backend-aware Direct3D overlay pipeline scaffolding in `textquest-dll/src/hooks/overlay.rs`.
+- Added DX11 Present-to-overlay render wiring in `textquest-dll/src/hooks/dx11_null.rs`.
+- Added multiple render-target tracking, device reset reinitialization API, active backend tracking, and CPU render budget accounting for the 1ms target.
+- Added focused overlay unit coverage for backend/target tracking, render budget accounting, and reset reinitialization.
+- Updated `feature-list.json` with the partial issue #988 state.
 
 Tests:
+- `cargo fmt` passed.
 - `cargo check` passed.
+- `cargo check -p textquest-dll --tests` passed.
 
 Notes:
-- PARTIAL because full config-file loading, renderer-wide text sizing, mouse click focus/select routing, copy-paste handling, and complete customizable shortcut routing are larger than one focused worktree pass.
+- PARTIAL because this issue is larger than one worktree pass. DX11 Present is wired into the overlay pipeline, but real ImGui/custom widget drawing, DX12 Present hook installation, live fullscreen detection, and Windows runtime validation remain follow-up work.
 
 COMPLETE

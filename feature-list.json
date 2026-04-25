@@ -27,7 +27,8 @@
       "name": "Issue #824 auto-loot sorting and inventory management",
       "status": "in_progress",
       "acceptance_tests": [
-        "cargo check"
+        "cargo check",
+        "cargo check -p textquest-dll --tests"
       ],
       "notes": "PARTIAL: Added a core auto-loot inventory management planning scaffold for deterministic post-loot sorting, cursor handling, and equipment-set presence checks. Full rule UI, live inventory integration, swapping, and scenario integration tests remain follow-up work."
     },
@@ -214,13 +215,13 @@
       "notes": "Wired the existing help search panel to /, q/Esc close, tab cycling across Commands/FAQ/Tips, result navigation, typed filtering, and Enter detail expansion. Cargo check also required two minimal pre-existing compile repairs in wishlist equality and Lua player snapshot table generation."
     },
     {
-      "id": "issue-997-tui-keyboard-shortcuts-accessibility",
-      "name": "Issue #997 TUI Keyboard Shortcuts & Accessibility",
+      "id": "issue-988-direct3d-overlay-rendering-system",
+      "name": "Issue #988 Direct3D overlay rendering system",
       "status": "in_progress",
       "acceptance_tests": [
         "cargo check"
       ],
-      "notes": "PARTIAL: Added serializable TUI keyboard/accessibility preferences, focus announcements for Tab and Shift-Tab panel navigation, Emacs client navigation aliases, :help keyboard discoverability, shortcut help content, and Markdown cheat sheet export. Full config-file loading, renderer-wide text scaling, mouse focus routing, and complete shortcut customization remain follow-up work."
+      "notes": "PARTIAL: Added backend-aware Direct3D overlay pipeline scaffolding, DX11 Present-to-overlay render wiring, multiple render-target tracking, device-reset reinitialization API, and CPU render budget accounting. Full DX12 Present hook installation, real ImGui/custom widget drawing, live fullscreen detection, and Windows validation remain follow-up work."
     }
   ]
 }

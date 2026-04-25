@@ -265,8 +265,13 @@ unsafe extern "system" fn hooked_present(
     let original: PresentFn = unsafe { core::mem::transmute(ORIG_PRESENT.load(Ordering::Acquire)) };
     let result = unsafe { original(this, sync_interval, flags) };
 
-    // Tick overlay frame timing on every present.
-    super::overlay::tick();
+    // Drive the backend-aware overlay pipeline on every present.
+    let (width, height) = super::overlay::current_resolution();
+    if width > 0 && height > 0 {
+        super::overlay::render_present(super::overlay::OverlayFrameContext::dx11(width, height));
+    } else {
+        super::overlay::tick();
+    }
 
     // Clear screenshot passthrough after the frame has been presented.
     if SCREENSHOT_FRAME.swap(false, Ordering::AcqRel) {
@@ -755,7 +760,13 @@ mod inner {
 
         // Initialize the overlay with the current backbuffer dimensions.
         if let Some((w, h)) = get_swap_chain_dims(swap_chain) {
-            super::super::overlay::initialize(w, h);
+            super::super::overlay::initialize_for_backend(
+                super::super::overlay::Direct3DBackend::Dx11,
+                w,
+                h,
+                1,
+                false,
+            );
         } else {
             tracing::warn!("Could not read swap chain dims — overlay init skipped");
         }
