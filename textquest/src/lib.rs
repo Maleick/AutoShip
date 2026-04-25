@@ -135,6 +135,10 @@ pub mod lua;
 /// for the TUI help search panel.
 pub mod help;
 
+/// Self-improvement loop — heuristic suggestion engine for operator-tunable
+/// config knobs based on aggregated session metrics.
+pub mod improve;
+
 /// Shared hotkey/command registries — used by Lua and plugin subsystems for
 /// script/plugin-registered bindings with priority ordering and lifecycle
 /// cleanup.
