@@ -79,6 +79,14 @@ impl Default for DiscordSettings {
                 ..DiscordRouteConfig::default()
             },
         );
+        notification_routes.insert(
+            "suggestions_available".into(),
+            DiscordRouteConfig {
+                level: Severity::Info,
+                mention_policy: DiscordMentionPolicy::None,
+                ..DiscordRouteConfig::default()
+            },
+        );
 
         Self {
             webhook_url: String::new(),

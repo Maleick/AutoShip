@@ -700,6 +700,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .route("/soul", get(api::soul::list_soul_states))
         .route("/soul/{character_id}", get(api::soul::get_soul_state))
         .nest("/alerts", api::alerts::router())
+        .nest("/suggestions", api::suggestions::router())
         .route(
             "/raid/config",
             get(api::get_raid_config).put(api::put_raid_config),

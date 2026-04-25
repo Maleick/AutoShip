@@ -23,6 +23,7 @@ pub mod say_detection;
 pub mod session_control;
 pub mod soul;
 pub mod spawn_alerts;
+pub mod suggestions;
 pub mod vendor_watch;
 pub mod xassist;
 use axum::{
