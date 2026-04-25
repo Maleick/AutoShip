@@ -1,5 +1,5 @@
 use textquest_common::combat::{
-    AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+    AbilityCandidate, EQExpansion, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
     SpellEntry, TargetSelector,
 };
 
@@ -48,6 +48,7 @@ impl NecromancerStrategy {
                     min_level: 60,
                     spell_id: -1,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "DiseaseDot".into(),
@@ -63,6 +64,7 @@ impl NecromancerStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "FireDot".into(),
@@ -83,6 +85,7 @@ impl NecromancerStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "PoisonDot".into(),
@@ -98,6 +101,7 @@ impl NecromancerStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Lifetap".into(),
@@ -118,6 +122,7 @@ impl NecromancerStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "FeignDeath".into(),
@@ -126,6 +131,7 @@ impl NecromancerStrategy {
                     min_level: 60,
                     spell_id: -1,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "SelfBuff".into(),
@@ -134,6 +140,7 @@ impl NecromancerStrategy {
                     min_level: 60,
                     spell_id: -1,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "PetBuff".into(),
@@ -142,6 +149,7 @@ impl NecromancerStrategy {
                     min_level: 62,
                     spell_id: -1,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Root".into(),
@@ -150,6 +158,7 @@ impl NecromancerStrategy {
                     min_level: 60,
                     spell_id: -1,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "ManaTap".into(),
@@ -158,6 +167,7 @@ impl NecromancerStrategy {
                     min_level: 64,
                     spell_id: -1,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
         ]
     }

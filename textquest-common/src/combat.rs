@@ -762,6 +762,8 @@ pub enum ConditionExpr {
     /// We have aggro from at least one mob (checked via the XTarget auto-hater
     /// list).
     HasXTargetAggro,
+    /// Burn is in the Ready state and can be activated now.
+    BurnReadyAndTriggered,
 }
 
 /// An emergency reaction rule that fires when conditions are met.
@@ -1248,6 +1250,58 @@ pub enum CombatStateReq {
     Any,
 }
 
+// ── Burn State Machine ──────────────────────────────────────────────────────
+
+/// State of the burn rotation (manual trigger + auto-progression).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum BurnState {
+    /// Burn is ready to activate via burnnow command.
+    Ready,
+    /// Burn rotation is currently active.
+    Active,
+    /// Burn is on cooldown and cannot be triggered yet.
+    Cooldown,
+}
+
+// ── EQ Expansion Versions ───────────────────────────────────────────────────
+
+/// EQ expansion/era for ability versioning — ensures abilities resolve on TLP servers.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum EQExpansion {
+    Classic,
+    Kunark,
+    Velious,
+    Luclin,
+    PoP,
+    LDoN,
+    GoD,
+    OoW,
+    DoN,
+    DoD,
+    PoR,
+    TSS,
+    TBS,
+    SoF,
+    SoD,
+    UF,
+    HoT,
+    VoA,
+    CotF,
+    TDS,
+    TBM,
+    EoK,
+    RoS,
+    TBL,
+    GMM,
+    NoV,
+}
+
+impl Default for EQExpansion {
+    fn default() -> Self {
+        Self::Classic
+    }
+}
+
 // ── Ability Resolution (AbilitySets) ────────────────────────────────────────
 
 /// A single candidate in an ability set — one rank of a spell line.
@@ -1270,6 +1324,50 @@ pub struct AbilitySet {
     pub name: String,
     /// Candidates, ordered strongest → weakest.
     pub candidates: Vec<AbilityCandidate>,
+    /// Minimum expansion required for this ability set (defaults to Classic).
+    /// Used for TLP server compatibility - abilities from newer expansions
+    /// won't be selected on servers that haven't reached that expansion.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "is_classic_expansion")]
+    pub min_expansion: EQExpansion,
+}
+
+fn is_classic_expansion(exp: &EQExpansion) -> bool {
+    *exp == EQExpansion::Classic
+}
+
+impl Default for AbilitySet {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            candidates: Vec::new(),
+            min_expansion: EQExpansion::Classic,
+        }
+    }
+}
+
+impl AbilitySet {
+    /// Create a new ability set with no expansion requirement.
+    pub fn new(name: impl Into<String>, candidates: Vec<AbilityCandidate>) -> Self {
+        Self {
+            name: name.into(),
+            candidates,
+            min_expansion: EQExpansion::Classic,
+        }
+    }
+
+    /// Create a new ability set with a specific minimum expansion.
+    pub fn with_expansion(
+        name: impl Into<String>,
+        candidates: Vec<AbilityCandidate>,
+        min_expansion: EQExpansion,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            candidates,
+            min_expansion,
+        }
+    }
 }
 
 /// The result of resolving an AbilitySet for a specific character.

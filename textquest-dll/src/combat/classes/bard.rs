@@ -1,5 +1,5 @@
 use textquest_common::combat::{
-    AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+    AbilityCandidate, EQExpansion, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
     CastResult, SpellEntry, TargetSelector,
 };
 
@@ -322,6 +322,7 @@ impl BardStrategy {
                         spell_id: 2610,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "ManaSong".into(),
@@ -347,6 +348,7 @@ impl BardStrategy {
                         spell_id: 1452,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "FocusSong".into(),
@@ -367,6 +369,7 @@ impl BardStrategy {
                         spell_id: 8926,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "ProcSong".into(),
@@ -387,6 +390,7 @@ impl BardStrategy {
                         spell_id: 2936,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "DebuffSong".into(),
@@ -407,6 +411,7 @@ impl BardStrategy {
                         spell_id: 4210,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "InsultSong".into(),
@@ -427,6 +432,7 @@ impl BardStrategy {
                         spell_id: 1747,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "CrowdControlSong".into(),
@@ -447,6 +453,7 @@ impl BardStrategy {
                         spell_id: 728,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "TravelSong".into(),
@@ -455,6 +462,7 @@ impl BardStrategy {
                     min_level: 51,
                     spell_id: 1750,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
         ]
     }

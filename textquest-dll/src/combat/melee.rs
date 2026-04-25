@@ -192,6 +192,8 @@ pub fn build_disc_rotation_group(
         steps_per_frame: 1,
         full_rotation: false,
         hp_threshold: None,
+        burn_duration_ticks: None,
+        burn_cooldown_duration_ticks: None,
         entries,
         current_step: 0,
     }

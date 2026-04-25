@@ -1,6 +1,6 @@
 use textquest_common::{
     combat::{
-        AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+        AbilityCandidate, AbilitySet, EQExpansion, ActionType, CombatRole, CombatStateReq, ConditionExpr,
         SpellEntry, TargetSelector,
     },
     nav::Waypoint,
@@ -65,6 +65,7 @@ impl RangerStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "ProcBuff".into(),
@@ -85,6 +86,7 @@ impl RangerStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "PrimaryNuke".into(),
@@ -110,6 +112,7 @@ impl RangerStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "ColdNuke".into(),
@@ -125,6 +128,7 @@ impl RangerStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Dot".into(),
@@ -150,6 +154,7 @@ impl RangerStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Debuff".into(),
@@ -165,6 +170,7 @@ impl RangerStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "EmergencyHeal".into(),
@@ -185,6 +191,7 @@ impl RangerStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "BurnDisc".into(),
@@ -193,6 +200,7 @@ impl RangerStrategy {
                     min_level: 55,
                     spell_id: -1,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "DefenseDisc".into(),
@@ -201,6 +209,7 @@ impl RangerStrategy {
                     min_level: 60,
                     spell_id: -1,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
         ]
     }

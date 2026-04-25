@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use textquest_common::combat::{
-    AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+    AbilityCandidate, EQExpansion, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
     KnownAbility, SpellEntry, TargetSelector,
 };
 
@@ -55,6 +55,7 @@ impl RogueStrategy {
                         spell_id: 4677,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Duelist".into(),
@@ -63,6 +64,7 @@ impl RogueStrategy {
                     min_level: 59,
                     spell_id: 4676,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "WeaponAffinity".into(),
@@ -71,6 +73,7 @@ impl RogueStrategy {
                     min_level: 61,
                     spell_id: 4696,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "CrowdControl".into(),
@@ -79,6 +82,7 @@ impl RogueStrategy {
                     min_level: 61,
                     spell_id: 6751,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "StealthStrike".into(),
@@ -87,6 +91,7 @@ impl RogueStrategy {
                     min_level: 65,
                     spell_id: 5017,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
         ]
     }

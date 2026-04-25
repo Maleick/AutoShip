@@ -1,5 +1,5 @@
 use textquest_common::combat::{
-    AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+    AbilityCandidate, EQExpansion, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
     SpellEntry, TargetSelector,
 };
 
@@ -40,6 +40,7 @@ impl BerserkerStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Volley".into(),
@@ -48,6 +49,7 @@ impl BerserkerStrategy {
                     min_level: 61,
                     spell_id: -1,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "BattleCry".into(),
@@ -68,6 +70,7 @@ impl BerserkerStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Cleave".into(),
@@ -76,6 +79,7 @@ impl BerserkerStrategy {
                     min_level: 65,
                     spell_id: -1,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
         ]
     }

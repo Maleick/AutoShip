@@ -1,0 +1,35 @@
+use textquest_common::combat::{
+    AbilityCandidate, AbilitySet, EQExpansion, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+    SpellEntry, TargetSelector,
+};
+
+use crate::combat::{
+    rotation::{self, RotationGroup},
+    strategy::{self, ClassStrategy, CombatContext},
+};
+
+const MONK_TIMER_2_IDS: &[i32] = &[4502, 4509, 4510, 4690];
+const MONK_TIMER_4_IDS: &[i32] = &[4507, 4508, 4511];
+const MONK_TIMER_5_IDS: &[i32] = &[4692];
+const MONK_TIMER_11_IDS: &[i32] = &[4691];
+
+const TICKS_PER_SECOND: u32 = 20;
+const MONK_CD_3M54S: u32 = 234 * TICKS_PER_SECOND;
+const MONK_CD_10M: u32 = 600 * TICKS_PER_SECOND;
+const MONK_CD_22M: u32 = 1320 * TICKS_PER_SECOND;
+const MONK_CD_30M: u32 = 1800 * TICKS_PER_SECOND;
+const MONK_CD_40M: u32 = 2400 * TICKS_PER_SECOND;
+
+/// Monk strategy: melee DPS + puller, flying kick/round kick priority, feign
+/// death escape. EQ class ID: 7
+pub struct MonkStrategy {
+    class_id: u8,
+}
+
+impl MonkStrategy {
+    pub fn new(class_id: u8) -> Self {
+        Self { class_id }
+    }
+
+    fn build_ability_sets() -> Vec<AbilitySet> {
+        vec![

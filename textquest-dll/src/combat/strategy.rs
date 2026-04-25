@@ -79,6 +79,12 @@ pub struct CombatContext<'a> {
     /// Extended target list snapshot (hate list, group roles, etc.).
     /// `None` if the data couldn't be read (not yet loaded, zoning, etc.).
     pub extended_targets: Option<&'a ExtendedTargetList>,
+    /// Current state of burn rotation (Ready, Active, Cooldown).
+    pub burn_state: textquest_common::combat::BurnState,
+    /// Whether burnnow manual trigger was activated this frame.
+    pub burnnow_triggered: bool,
+    /// Remaining cooldown for burn in combat ticks (0 = ready to activate).
+    pub burn_cooldown_ticks: u32,
 }
 
 impl CombatContext<'_> {

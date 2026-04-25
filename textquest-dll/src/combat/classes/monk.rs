@@ -1,5 +1,5 @@
 use textquest_common::combat::{
-    AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+    AbilityCandidate, EQExpansion, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
     SpellEntry, TargetSelector,
 };
 
@@ -47,6 +47,7 @@ impl MonkStrategy {
                         spell_id: 4511,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "PrecisionStrikes".into(),
@@ -55,6 +56,7 @@ impl MonkStrategy {
                     min_level: 59,
                     spell_id: 4507,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "DamageBoost".into(),
@@ -75,6 +77,7 @@ impl MonkStrategy {
                         spell_id: 4512,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "DefenseDisc".into(),
@@ -95,6 +98,7 @@ impl MonkStrategy {
                         spell_id: 4510,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "MobilityDisc".into(),
@@ -103,6 +107,7 @@ impl MonkStrategy {
                     min_level: 61,
                     spell_id: 4692,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "AoeRiposte".into(),
@@ -111,6 +116,7 @@ impl MonkStrategy {
                     min_level: 53,
                     spell_id: 4509,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
         ]
     }

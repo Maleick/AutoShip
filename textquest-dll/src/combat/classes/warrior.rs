@@ -170,6 +170,7 @@ impl From<&WarriorAbilitySetConfig> for AbilitySet {
                     spell_id: candidate.spell_id,
                 })
                 .collect(),
+            min_expansion: textquest_common::combat::EQExpansion::Classic,
         }
     }
 }

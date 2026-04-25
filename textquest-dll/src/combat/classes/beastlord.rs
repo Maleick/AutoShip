@@ -1,5 +1,5 @@
 use textquest_common::combat::{
-    AbilityCandidate, AbilitySet, CombatRole, CombatStateReq, ConditionExpr, SpellEntry,
+    AbilityCandidate, EQExpansion, AbilitySet, CombatRole, CombatStateReq, ConditionExpr, SpellEntry,
     TargetSelector,
 };
 
@@ -45,6 +45,7 @@ impl BeastlordStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "BestialFury".into(),
@@ -53,6 +54,7 @@ impl BeastlordStrategy {
                     min_level: 60,
                     spell_id: -1,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Nuke".into(),
@@ -68,6 +70,7 @@ impl BeastlordStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "SelfHeal".into(),
@@ -76,6 +79,7 @@ impl BeastlordStrategy {
                     min_level: 65,
                     spell_id: -1,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "PetHeal".into(),
@@ -84,6 +88,7 @@ impl BeastlordStrategy {
                     min_level: 61,
                     spell_id: 3455,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "HpAttackBuff".into(),
@@ -99,6 +104,7 @@ impl BeastlordStrategy {
                         spell_id: 2630,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "DirectHpBuff".into(),
@@ -107,6 +113,7 @@ impl BeastlordStrategy {
                     min_level: 62,
                     spell_id: -1,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "StatBuff".into(),
@@ -122,6 +129,7 @@ impl BeastlordStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "PetBuff".into(),
@@ -130,6 +138,7 @@ impl BeastlordStrategy {
                     min_level: 63,
                     spell_id: 3458,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
         ]
     }

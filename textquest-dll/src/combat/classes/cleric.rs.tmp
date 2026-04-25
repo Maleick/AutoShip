@@ -1,0 +1,44 @@
+use textquest_common::combat::{AbilityCandidate, AbilitySet, EQExpansion, CombatRole, SpellEntry};
+
+use crate::combat::strategy::{self, ClassStrategy, CombatContext};
+
+/// HP threshold above which clerics should cancel current heal (duck to
+/// interrupt). Prevents wasting mana on a heal when the target is already
+/// healthy.
+const HEAL_CANCEL_THRESHOLD: f32 = 85.0;
+
+/// HP threshold for emergency heals — anyone below this gets top-priority
+/// healing.
+const EMERGENCY_HP: f32 = 30.0;
+
+/// HP threshold for moderate heals — below this, cast a standard heal.
+const MODERATE_HP: f32 = 65.0;
+
+/// Mana reserve threshold: skip non-essential “primary target” debuffs when
+/// mana is too low.
+const DEBUFF_RESERVE_MANA: f32 = 80.0;
+
+/// Cleric strategy: healer with resurrection, prioritized heal tiers, buff
+/// support.
+///
+/// Priority order (MQ2-style cascade):
+/// 0. CH chain override (when active, cast Complete Heal on chain target)
+/// 1. Resurrect dead group members (out of combat)
+/// 2. Emergency heal (group member < 30% HP)
+/// 3. Cure detrimental effects (poison/disease/curse)
+/// 4. Moderate heal (group member < 65% HP)
+/// 5. Out-of-combat: group buffs
+/// 6. Med (sit for mana regen)
+pub struct ClericStrategy {
+    class_id: u8,
+}
+
+impl ClericStrategy {
+    pub fn new(class_id: u8) -> Self {
+        Self { class_id }
+    }
+
+    /// Build cleric ability sets — maps heal/buff/rez lines to
+    /// level-tiered candidates, strongest first.
+    fn build_ability_sets() -> Vec<AbilitySet> {
+        vec![

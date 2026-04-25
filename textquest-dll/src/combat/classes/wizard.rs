@@ -1,5 +1,5 @@
 use textquest_common::combat::{
-    AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
+    AbilityCandidate, EQExpansion, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
     SpellEntry, TargetSelector,
 };
 
@@ -65,6 +65,7 @@ impl WizardStrategy {
                         spell_id: 68,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "IceNuke".into(),
@@ -100,6 +101,7 @@ impl WizardStrategy {
                         spell_id: 66,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "MagicNuke".into(),
@@ -120,6 +122,7 @@ impl WizardStrategy {
                         spell_id: 69,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "AoENuke".into(),
@@ -140,6 +143,7 @@ impl WizardStrategy {
                         spell_id: 1396,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Harvest".into(),
@@ -155,6 +159,7 @@ impl WizardStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Root".into(),
@@ -170,6 +175,7 @@ impl WizardStrategy {
                         spell_id: 230,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Evac".into(),
@@ -190,6 +196,7 @@ impl WizardStrategy {
                         spell_id: 2161,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
         ]
     }

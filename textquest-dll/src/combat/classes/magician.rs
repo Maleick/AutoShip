@@ -4,7 +4,7 @@ use std::{
 };
 
 use textquest_common::combat::{
-    AbilityCandidate, AbilitySet, ActionType, CastResult, CombatRole, CombatStateReq,
+    AbilityCandidate, EQExpansion, AbilitySet, ActionType, CastResult, CombatRole, CombatStateReq,
     ConditionExpr, ResolvedAbility, SpellEntry, TargetSelector,
 };
 
@@ -89,6 +89,7 @@ impl MagicianStrategy {
                         spell_id: 1033,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "PrimaryNuke".into(),
@@ -104,6 +105,7 @@ impl MagicianStrategy {
                         spell_id: 1713,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "SecondaryNuke".into(),
@@ -119,6 +121,7 @@ impl MagicianStrategy {
                         spell_id: 1713,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "AoeNuke".into(),
@@ -127,6 +130,7 @@ impl MagicianStrategy {
                     min_level: 62,
                     spell_id: 5989,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Debuff".into(),
@@ -135,6 +139,7 @@ impl MagicianStrategy {
                     min_level: 60,
                     spell_id: 1717,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "UtilitySummon".into(),
@@ -150,6 +155,7 @@ impl MagicianStrategy {
                         spell_id: 1719,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "PetSummon".into(),
@@ -158,6 +164,7 @@ impl MagicianStrategy {
                     min_level: 60,
                     spell_id: 1718,
                 }],
+                min_expansion: EQExpansion::Classic,
             },
         ]
     }

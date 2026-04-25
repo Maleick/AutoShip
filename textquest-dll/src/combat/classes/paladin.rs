@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use textquest_common::combat::{
-    AbilityCandidate, AbilitySet, CombatRole, ResolvedAbility, SpellEntry,
+    AbilityCandidate, EQExpansion, AbilitySet, CombatRole, ResolvedAbility, SpellEntry,
 };
 
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
@@ -123,6 +123,7 @@ impl PaladinStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: GROUP_HEAL_SET.into(),
@@ -148,6 +149,7 @@ impl PaladinStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: CURE_SET.into(),
@@ -178,6 +180,7 @@ impl PaladinStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: STUN_SET.into(),
@@ -203,6 +206,7 @@ impl PaladinStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: NUKE_SET.into(),
@@ -228,6 +232,7 @@ impl PaladinStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: HP_BUFF_SET.into(),
@@ -253,6 +258,7 @@ impl PaladinStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: SELF_BUFF_SET.into(),
@@ -278,6 +284,7 @@ impl PaladinStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
         ]
     }

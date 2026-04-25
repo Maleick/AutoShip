@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use textquest_common::combat::{
-    AbilityCandidate, AbilitySet, ActionType, CastResult, CombatRole, CombatStateReq,
+    AbilityCandidate, EQExpansion, AbilitySet, ActionType, CastResult, CombatRole, CombatStateReq,
     ConditionExpr, SpellEntry, TargetSelector,
 };
 
@@ -78,6 +78,7 @@ impl EnchanterStrategy {
                         spell_id: 185,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "ColorStun".into(),
@@ -103,6 +104,7 @@ impl EnchanterStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Haste".into(),
@@ -138,6 +140,7 @@ impl EnchanterStrategy {
                         spell_id: 171,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Clarity".into(),
@@ -158,6 +161,7 @@ impl EnchanterStrategy {
                         spell_id: -1,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Slow".into(),
@@ -183,6 +187,7 @@ impl EnchanterStrategy {
                         spell_id: 190,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Nuke".into(),
@@ -203,6 +208,7 @@ impl EnchanterStrategy {
                         spell_id: 186,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Tash".into(),
@@ -233,6 +239,7 @@ impl EnchanterStrategy {
                         spell_id: 188,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Charm".into(),
@@ -268,6 +275,7 @@ impl EnchanterStrategy {
                         spell_id: 193,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
         ]
     }

@@ -6,7 +6,7 @@
 //! The engine iterates groups in priority order, executing entries that pass
 //! their conditions, respecting step limits per frame.
 
-use textquest_common::combat::{ActionType, CombatStateReq, ConditionExpr, TargetSelector};
+use textquest_common::combat::{ActionType, BurnState, CombatStateReq, ConditionExpr, TargetSelector};
 
 use super::strategy::CombatContext;
 
@@ -89,10 +89,114 @@ pub struct RotationGroup {
     /// Optional HP threshold — group only runs when player HP is below this.
     /// Used for emergency rotations. `None` means no HP gate.
     pub hp_threshold: Option<f32>,
+    /// Optional burn duration in combat ticks (only for "Burn" group).
+    /// Once the burn group activates, it runs for this duration, then cooldown.
+    pub burn_duration_ticks: Option<u32>,
+    /// Optional burn cooldown duration in combat ticks (only for "Burn" group).
+    /// After burn expires, cooldown prevents re-trigger for this duration.
+    pub burn_cooldown_duration_ticks: Option<u32>,
     /// The rotation entries in priority order.
     pub entries: Vec<RotationEntry>,
     /// Current position for round-robin resumption (runtime state, not config).
     pub current_step: usize,
+}
+
+/// Tracks the runtime state of the burn rotation state machine.
+///
+/// Manages transitions between Ready → Active → Cooldown states based on:
+/// - burnnow manual trigger
+/// - burn_duration (how long active phase lasts)
+/// - burn_cooldown_duration (how long cooldown phase lasts)
+#[derive(Debug, Clone)]
+pub struct BurnRotationState {
+    /// Current burn phase.
+    pub state: BurnState,
+    /// Tick when the current phase started (for duration tracking).
+    pub phase_start_tick: u32,
+    /// Tick when burn group expires (start_tick + burn_duration_ticks).
+    pub burn_expiry_tick: Option<u32>,
+    /// Tick when cooldown expires (burn_expiry_tick + cooldown_duration_ticks).
+    pub cooldown_expiry_tick: Option<u32>,
+}
+
+impl Default for BurnRotationState {
+    fn default() -> Self {
+        Self {
+            state: BurnState::Ready,
+            phase_start_tick: 0,
+            burn_expiry_tick: None,
+            cooldown_expiry_tick: None,
+        }
+    }
+}
+
+impl BurnRotationState {
+    /// Update burn state machine based on current tick and manual triggers.
+    ///
+    /// Returns the new BurnState to use in CombatContext.
+    pub fn update(
+        &mut self,
+        current_tick: u32,
+        burnnow_triggered: bool,
+        group: &RotationGroup,
+    ) -> BurnState {
+        match self.state {
+            BurnState::Ready => {
+                if burnnow_triggered {
+                    if let Some(duration) = group.burn_duration_ticks {
+                        self.phase_start_tick = current_tick;
+                        self.burn_expiry_tick = Some(current_tick + duration);
+                        self.state = BurnState::Active;
+                    }
+                }
+            }
+            BurnState::Active => {
+                if let Some(expiry) = self.burn_expiry_tick {
+                    if current_tick >= expiry {
+                        if let Some(cooldown_duration) = group.burn_cooldown_duration_ticks {
+                            self.phase_start_tick = current_tick;
+                            self.cooldown_expiry_tick = Some(current_tick + cooldown_duration);
+                            self.state = BurnState::Cooldown;
+                        } else {
+                            self.state = BurnState::Ready;
+                            self.burn_expiry_tick = None;
+                        }
+                    }
+                }
+            }
+            BurnState::Cooldown => {
+                if let Some(expiry) = self.cooldown_expiry_tick {
+                    if current_tick >= expiry {
+                        self.state = BurnState::Ready;
+                        self.cooldown_expiry_tick = None;
+                    }
+                }
+            }
+        }
+        self.state
+    }
+
+    /// Calculate remaining ticks for burn duration (only in Active state).
+    pub fn burn_remaining_ticks(&self, current_tick: u32) -> u32 {
+        if self.state == BurnState::Active {
+            self.burn_expiry_tick
+                .map(|expiry| expiry.saturating_sub(current_tick))
+                .unwrap_or(0)
+        } else {
+            0
+        }
+    }
+
+    /// Calculate remaining ticks for cooldown (only in Cooldown state).
+    pub fn cooldown_remaining_ticks(&self, current_tick: u32) -> u32 {
+        if self.state == BurnState::Cooldown {
+            self.cooldown_expiry_tick
+                .map(|expiry| expiry.saturating_sub(current_tick))
+                .unwrap_or(0)
+        } else {
+            0
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +279,9 @@ pub fn evaluate_condition(expr: &ConditionExpr, ctx: &CombatContext) -> bool {
             ctx.extended_targets.is_some_and(|xt| xt.hater_count() > 0)
         }
         ConditionExpr::PlayerLevelAtLeast(level) => ctx.player.level >= *level,
+        ConditionExpr::BurnReadyAndTriggered => {
+            ctx.burn_state == BurnState::Ready && ctx.burnnow_triggered
+        }
     }
 }
 
@@ -532,6 +639,8 @@ pub fn group(name: &str, target: TargetSelector, state: CombatStateReq) -> Rotat
         steps_per_frame: 1,
         full_rotation: false,
         hp_threshold: None,
+        burn_duration_ticks: None,
+        burn_cooldown_duration_ticks: None,
         entries: Vec::new(),
         current_step: 0,
     }

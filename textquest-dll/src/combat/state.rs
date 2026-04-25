@@ -918,6 +918,9 @@ impl Combatant {
                     buff_info: &[],
                     target_is_mezzed: false,
                     extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
                 };
                 self.strategy.on_action_complete(&cleanup_ctx);
                 self.group_members = group_members;
@@ -967,6 +970,9 @@ impl Combatant {
                 buff_info: &[],
                 target_is_mezzed: target.is_some_and(super::strategy::is_mezzed),
                 extended_targets: extended_targets.as_ref(),
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
             };
 
             // --- Call on_engage when first entering Engaging state ---
@@ -1000,6 +1006,9 @@ impl Combatant {
             buff_info: &[],
             target_is_mezzed: target.is_some_and(super::strategy::is_mezzed),
             extended_targets: extended_targets.as_ref(),
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         // --- HolyShit evaluation (always runs first) ---
@@ -1096,6 +1105,9 @@ impl Combatant {
                         buff_info: &[],
                         target_is_mezzed: target.is_some_and(super::strategy::is_mezzed),
                         extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
                     };
                     self.strategy.on_action_complete(&flee_ctx);
                     self.assist_target = None;
@@ -1759,6 +1771,9 @@ impl Combatant {
             buff_info: &[],
             target_is_mezzed: false,
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
         self.strategy.on_action_complete(&ctx);
 
@@ -1849,6 +1864,9 @@ impl Combatant {
             buff_info: &[],
             target_is_mezzed: target.is_some_and(super::strategy::is_mezzed),
             extended_targets: None,
+            burn_state: textquest_common::combat::BurnState::Ready,
+            burnnow_triggered: false,
+            burn_cooldown_ticks: 0,
         };
 
         self.pending_cast_result = None;

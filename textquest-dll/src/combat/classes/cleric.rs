@@ -1,4 +1,4 @@
-use textquest_common::combat::{AbilityCandidate, AbilitySet, CombatRole, SpellEntry};
+use textquest_common::combat::{AbilityCandidate, EQExpansion, AbilitySet, CombatRole, SpellEntry};
 
 use crate::combat::strategy::{self, ClassStrategy, CombatContext};
 
@@ -86,6 +86,7 @@ impl ClericStrategy {
                         spell_id: 201,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "GroupHeal".into(),
@@ -106,6 +107,7 @@ impl ClericStrategy {
                         spell_id: 2176,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "Rez".into(),
@@ -126,6 +128,7 @@ impl ClericStrategy {
                         spell_id: 392,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "HpBuff".into(),
@@ -156,6 +159,7 @@ impl ClericStrategy {
                         spell_id: 14,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "CureDisease".into(),
@@ -171,6 +175,7 @@ impl ClericStrategy {
                         spell_id: 2054,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
             AbilitySet {
                 name: "CurePoison".into(),
@@ -186,6 +191,7 @@ impl ClericStrategy {
                         spell_id: 2055,
                     },
                 ],
+                min_expansion: EQExpansion::Classic,
             },
         ]
     }

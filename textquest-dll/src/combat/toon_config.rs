@@ -153,6 +153,8 @@ impl From<ToonRotationGroup> for RotationGroup {
             steps_per_frame: value.steps_per_frame,
             full_rotation: value.full_rotation,
             hp_threshold: value.hp_threshold,
+            burn_duration_ticks: None,
+            burn_cooldown_duration_ticks: None,
             entries: value.entries.into_iter().map(Into::into).collect(),
             current_step: 0,
         }
