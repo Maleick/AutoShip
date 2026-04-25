@@ -1,5 +1,10 @@
-# Result: #727 — Per-patch detection function diffing via MemoryQuest pipeline
-- Added detection-aware anti-cheat fingerprinting to `scripts/collect_patch_evidence.py`.
-- Manifest now emits `anti_cheat_diffs` and `detection_change_gate` in live/test module comparisons.
-- Added detection signature rules for SystemFingerprint, CheaterLdFlag strings, VM detection APIs, and module enumeration API/function chain.
-- Updated `feature-list.json` to mark issue-727 complete.
+# Result: #2462 — Cross-check openvanilla Fix foreground in some situations (thread-input attachment) against TextQuest foreground paths
+
+Outcome: **No-applicable race path found.**
+
+- Upstream openvanilla commit `16605f7` adds `AttachThreadInput` around `SetForegroundWindow` activation with fallback checks.
+- TextQuest codepaths reviewed (`textquest/src/window_title_runtime.rs`, `textquest/src/launcher/`, `textquest-dll/src/overlay/`) do not call `SetForegroundWindow`, `AttachThreadInput`, `AllowSetForegroundWindow`, or related foreground APIs.
+- Audit note added: `docs/research/2462-openvanilla-foreground-race-audit.md`.
+- Patch-day log updated: `docs/wiki/Research-Patch-Day-Reproduction.md`.
+
+Next step: none (documentation complete).
