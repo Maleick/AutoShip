@@ -14,7 +14,7 @@ use textquest_common::{
     nav::{
         CampSpot, CircleConfig, CircleMode, FollowConfig, HeadingMode, LOOSE_MAX_TURN_PER_TICK,
         MoveToConfig, NavCampConfig, NavDiagnostics, NavStateSignals, NavStatus, PauseReason,
-        StickConfig, Waypoint, step_toward_heading,
+        StickBreakConditions, StickBreakReason, StickConfig, Waypoint, step_toward_heading,
     },
     types::SpawnData,
 };
@@ -43,6 +43,11 @@ enum State {
         returning: bool,
     },
     Sticking,
+    /// Stick was broken by a configured break condition.
+    StickBroken {
+        /// Why the stick session ended.
+        reason: StickBreakReason,
+    },
     /// Advanced moveto — tracking a destination with break conditions (#184).
     MovingTo,
     /// Circle-kiting around a center point.
@@ -79,6 +84,8 @@ pub struct Navigator {
     stick: StickEngine,
     /// Cached stick reporting fields (updated each Sticking tick).
     cached_stick_target_id: u32,
+    /// Previous resolved stick target sample used for gate detection.
+    cached_stick_target_sample: Option<TargetSample>,
     cached_stick_distance: f32,
     /// Warp detection + pause gate.
     warp: WarpMonitor,
@@ -113,6 +120,10 @@ const SUMMON_DISTANCE_THRESHOLD: f32 = 60.0;
 
 /// Radius for GM proximity check (break-on-GM detection), in EQ world units.
 const GM_CHECK_RADIUS: f32 = 500.0;
+/// Distance delta that classifies a target jump as a gate transition.
+const STICK_GATE_DISTANCE: f32 = 500.0;
+/// Distance delta that classifies a target jump as a target warp.
+const STICK_WARP_DISTANCE: f32 = 60.0;
 
 /// Returns true if any hostile NPC (type=1, moving) is within aggro radius.
 fn has_hostile_nearby(nearby: &[SpawnData], pos: &Waypoint) -> bool {
@@ -162,6 +173,7 @@ impl Navigator {
             cached_distance: 0.0,
             stick: StickEngine::new(),
             cached_stick_target_id: 0,
+            cached_stick_target_sample: None,
             cached_stick_distance: 0.0,
             warp: WarpMonitor::new(),
             pre_pause_state: None,
@@ -228,6 +240,9 @@ impl Navigator {
         self.stuck.reset();
         self.stick.stop();
         self.warp.reset();
+        self.cached_stick_target_id = 0;
+        self.cached_stick_distance = 0.0;
+        self.cached_stick_target_sample = None;
         self.moveto_config = None;
         self.last_moveto_hp = None;
         self.last_hp_current = None;
@@ -242,10 +257,10 @@ impl Navigator {
             State::Moving | State::Following { .. } | State::Sticking | State::Circling { .. } => {
                 self.controller.stop_forward();
                 self.controller.stop_back();
-                let old_state = std::mem::replace(&mut self.state, State::Idle);
-                self.pre_pause_state = Some(old_state);
-                self.state = State::Paused(PauseReason::UserPause);
-                tracing::info!("Navigation paused by user");
+        let old_state = std::mem::replace(&mut self.state, State::Idle);
+        self.pre_pause_state = Some(old_state);
+        self.state = State::Paused(PauseReason::UserPause);
+        tracing::info!("Navigation paused by user");
             }
             _ => {
                 tracing::debug!("Pause requested but not in a pauseable state");
@@ -388,6 +403,9 @@ impl Navigator {
         self.camp = None;
         self.camp_config = None;
         self.stuck.reset();
+        self.cached_stick_target_id = current_target_id.unwrap_or(0);
+        self.cached_stick_distance = 0.0;
+        self.cached_stick_target_sample = None;
         self.stick.start(config, current_target_id);
         self.state = State::Sticking;
     }
@@ -396,6 +414,9 @@ impl Navigator {
     pub fn stick_off(&mut self) {
         self.controller.stop_forward();
         self.stick.stop();
+        self.cached_stick_target_id = 0;
+        self.cached_stick_distance = 0.0;
+        self.cached_stick_target_sample = None;
         self.state = State::Idle;
         tracing::info!("Stick off — returning to Idle");
     }
@@ -422,6 +443,9 @@ impl Navigator {
         self.stuck.reset();
         self.stick.stop();
         self.warp.reset();
+        self.cached_stick_target_id = 0;
+        self.cached_stick_distance = 0.0;
+        self.cached_stick_target_sample = None;
         self.last_moveto_hp = self.controller.read_hp_current();
         self.moveto_config = Some(config);
         self.state = State::MovingTo;
@@ -524,7 +548,28 @@ impl Navigator {
             return;
         }
 
+        let mut stick_target_sample = None;
+        let is_sticking = matches!(self.state, State::Sticking);
+        if is_sticking {
+            stick_target_sample = self.stick.target_sample(current_target, nearby);
+        }
+
+        let has_large_stick_jump = if let Some(stick_target) = &stick_target_sample {
+            if let Some(previous) = &self.cached_stick_target_sample {
+                previous.id == stick_target.id
+                    && previous
+                        .position
+                        .distance_3d(&stick_target.position)
+                        >= STICK_GATE_DISTANCE
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
         let moveto_target_sample = self.moveto_target_sample(nearby, target_sample);
+        let stick_warp_sample = stick_target_sample.as_ref().or(target_sample);
         let warp_action = if self.should_track_moveto_warp() {
             self.warp.update(moveto_target_sample.as_ref())
         } else {
@@ -537,10 +582,7 @@ impl Navigator {
                 State::Following { ref config, .. } => self
                     .warp
                     .update(find_follow_target_sample(nearby, &config.leader_name).as_ref()),
-                State::Sticking => {
-                    let stick_sample = self.stick.target_sample(current_target, nearby);
-                    self.warp.update(target_sample.or(stick_sample.as_ref()))
-                }
+                State::Sticking => self.warp.update(stick_warp_sample),
                 _ => self.warp.update(target_sample),
             }
         };
@@ -552,7 +594,36 @@ impl Navigator {
                     return;
                 }
                 if matches!(self.state, State::Sticking) {
-                    self.disengage_stick("Stick disengaged — warp guard triggered");
+                    let break_conditions = self.stick.break_conditions();
+                    if has_large_stick_jump
+                        && break_conditions.contains(StickBreakConditions::BREAK_ON_GATE)
+                    {
+                        self.break_stick(
+                            StickBreakReason::Gate,
+                            "Stick disengaged — gate detected",
+                        );
+                        self.cached_stick_target_sample = stick_target_sample;
+                        return;
+                    }
+                    if break_conditions.contains(StickBreakConditions::BREAK_ON_WARP) {
+                        self.break_stick(
+                            StickBreakReason::Warp,
+                            "Stick disengaged — warp guard triggered",
+                        );
+                        self.cached_stick_target_sample = stick_target_sample;
+                        return;
+                    }
+                    if break_conditions.contains(StickBreakConditions::PAUSE_ON_WARP) {
+                        self.controller.stop_forward();
+                        self.controller.stop_back();
+                        let old_state = std::mem::replace(
+                            &mut self.state,
+                            State::Paused(PauseReason::Warp),
+                        );
+                        self.pre_pause_state = Some(old_state);
+                        self.cached_stick_target_sample = stick_target_sample;
+                        return;
+                    }
                     return;
                 }
                 if self.should_break_moveto_on_warp() {
@@ -583,6 +654,8 @@ impl Navigator {
             }
             WarpAction::None => {}
         }
+
+        self.cached_stick_target_sample = stick_target_sample;
 
         // Break-on-GM: pause all movement when a GM-flagged spawn is detected nearby.
         if self.break_on_gm {
@@ -626,9 +699,10 @@ impl Navigator {
             State::Paused(_) => self.tick_paused(),
             State::Moving => self.tick_moving(),
             State::Following { .. } => self.tick_following(nearby),
-            State::Sticking => self.tick_sticking(current_target, nearby),
+            State::Sticking => self.tick_sticking(current_target, nearby, self.cached_stick_target_sample.as_ref()),
             State::MovingTo => self.tick_moveto(nearby),
             State::Circling { .. } => self.tick_circling(nearby),
+            State::StickBroken { .. } => {}
         }
     }
 
@@ -680,6 +754,17 @@ impl Navigator {
                     distance: self.cached_stick_distance,
                     in_range: self.cached_stick_distance
                         <= effective_dist + super::stick::STICK_ARRIVAL_THRESHOLD,
+                    break_reason: None,
+                }
+            }
+            State::StickBroken { reason } => {
+                let effective_dist = self.stick.effective_distance();
+                NavStatus::Sticking {
+                    target_id: self.cached_stick_target_id,
+                    distance: self.cached_stick_distance,
+                    in_range: self.cached_stick_distance
+                        <= effective_dist + super::stick::STICK_ARRIVAL_THRESHOLD,
+                    break_reason: Some(*reason),
                 }
             }
             State::Circling { config, angle, .. } => NavStatus::Circling {

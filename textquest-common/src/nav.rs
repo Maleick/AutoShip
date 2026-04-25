@@ -204,6 +204,61 @@ pub enum StickDistance {
     Percent(f32),
 }
 
+/// Bitflags for configured `/stick` break conditions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StickBreakConditions(pub u8);
+
+impl StickBreakConditions {
+    /// No break conditions.
+    pub const NONE: Self = Self(0);
+    /// Break stick when the resolved target changes (`breakontarget`).
+    pub const BREAK_ON_TARGET: Self = Self(1 << 0);
+    /// Break stick when nearby hostile NPCs are detected (`breakonaggro`).
+    pub const BREAK_ON_AGGRO: Self = Self(1 << 1);
+    /// Break stick on target warp (`breakonwarp`).
+    pub const BREAK_ON_WARP: Self = Self(1 << 2);
+    /// Break stick when a GM is nearby (`breakongm`).
+    pub const BREAK_ON_GM: Self = Self(1 << 3);
+    /// Break stick when a large target jump indicates gate travel (`breakongate`).
+    pub const BREAK_ON_GATE: Self = Self(1 << 4);
+    /// Pause movement instead of breaking on target warp (`pauseonwarp`).
+    pub const PAUSE_ON_WARP: Self = Self(1 << 5);
+
+    /// Return `true` if this set contains the provided bit.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+
+    /// Combine with another bitset and return the union.
+    #[must_use]
+    pub const fn with(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+}
+
+impl Default for StickBreakConditions {
+    fn default() -> Self {
+        Self::NONE
+    }
+}
+
+/// Sticky break reason surfaced to operator UI when `/stick` ends because of
+/// configured break conditions.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum StickBreakReason {
+    /// The resolved target changed.
+    TargetChanged,
+    /// A hostile NPC appeared close enough to imply aggro.
+    Aggro,
+    /// Target warp detection triggered.
+    Warp,
+    /// A large warp event was classified as gate travel.
+    Gate,
+    /// A nearby GM was detected.
+    Gm,
+}
+
 /// Positional arc mode for `/stick` — controls where the character stands
 /// relative to the target's facing direction.
 ///
@@ -331,6 +386,7 @@ impl CircleConfig {
 /// - `/stick !front` → `mode = StickMode::NotFront`
 /// - `/stick pin`    → `mode = StickMode::Pin`
 /// - `/stick front`  → `mode = StickMode::Front`
+/// - `/stick breakon*` flags → break condition behaviour.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StickConfig {
     /// Base distance to maintain from the target.
@@ -368,6 +424,9 @@ pub struct StickConfig {
     pub healer: bool,
     /// Autopause — pause stick movement on player keyboard input (#164).
     pub autopause: bool,
+    /// Active break-condition flags.
+    #[serde(default)]
+    pub break_conditions: StickBreakConditions,
 }
 
 impl Default for StickConfig {
@@ -385,6 +444,7 @@ impl Default for StickConfig {
             backup_dist: 5.0,
             healer: false,
             autopause: false,
+            break_conditions: StickBreakConditions::NONE,
         }
     }
 }
@@ -439,6 +499,8 @@ pub enum NavStatus {
         distance: f32,
         /// `true` when within the desired stick range.
         in_range: bool,
+        /// Break reason when stick was ended by condition checks.
+        break_reason: Option<StickBreakReason>,
     },
     /// Circle-kiting around a fixed or mob-tracked center point.
     Circling {
@@ -2035,6 +2097,7 @@ mod tests {
         assert!(cfg.id.is_none());
         assert!(!cfg.moveback);
         assert!((cfg.backup_dist - 5.0).abs() < f32::EPSILON);
+        assert_eq!(cfg.break_conditions, StickBreakConditions::NONE);
     }
 
     #[test]
@@ -2043,6 +2106,7 @@ mod tests {
             target_id: 7,
             distance: 10.0,
             in_range: true,
+            break_reason: None,
         };
         assert!(s.is_sticking());
         assert!(!s.is_moving());
@@ -2057,6 +2121,7 @@ mod tests {
             target_id: 42,
             distance: 8.5,
             in_range: false,
+            break_reason: None,
         };
         let json = serde_json::to_string(&s).expect("serialize");
         let restored: NavStatus = serde_json::from_str(&json).expect("deserialize");
@@ -2064,11 +2129,13 @@ mod tests {
             target_id,
             distance,
             in_range,
+            break_reason,
         } = restored
         {
             assert_eq!(target_id, 42);
             assert!((distance - 8.5).abs() < f32::EPSILON);
             assert!(!in_range);
+            assert!(break_reason.is_none());
         } else {
             panic!("expected Sticking variant");
         }
@@ -2901,6 +2968,7 @@ mod tests {
                 target_id: 1,
                 distance: 5.0,
                 in_range: true,
+                break_reason: None,
             }
             .label(),
             "Sticking"
