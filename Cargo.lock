@@ -4365,6 +4365,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-api-plugin"
+version = "0.1.0"
+dependencies = [
+ "textquest-common",
+]
+
+[[package]]
+name = "test-error-plugin"
+version = "0.1.0"
+dependencies = [
+ "textquest-common",
+]
+
+[[package]]
+name = "test-hello-plugin"
+version = "0.1.0"
+dependencies = [
+ "textquest-common",
+]
+
+[[package]]
 name = "textquest"
 version = "0.6.0"
 dependencies = [
