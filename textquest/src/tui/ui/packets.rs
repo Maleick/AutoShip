@@ -303,10 +303,70 @@ fn get_opcode_color_style(opcode: u16, t: &crate::tui::theme::Theme) -> Style {
     }
 }
 
-/// Format opcode as hex label. Name resolution is tracked as a separate issue —
-/// until a lookup table lands, all opcodes render as `0xNNNN`.
+/// EverQuest opcode name lookup table. Maps known opcodes to their canonical names.
+const OPCODE_NAMES: &[(u16, &str)] = &[
+    (0x0001, "OP_ZoneEntry"),
+    (0x0002, "OP_ZoneSpawns"),
+    (0x0004, "OP_ZoneDespawn"),
+    (0x0006, "OP_PlayerProfile"),
+    (0x0007, "OP_PlayerUpdate"),
+    (0x0008, "OP_MobUpdate"),
+    (0x0009, "OP_ClientUpdate"),
+    (0x000A, "OP_PlayerMoveRequest"),
+    (0x000B, "OP_NameRequest"),
+    (0x000C, "OP_NameReply"),
+    (0x0100, "OP_Attack"),
+    (0x0101, "OP_Action"),
+    (0x0102, "OP_CastSpell"),
+    (0x0103, "OP_BeginCast"),
+    (0x0104, "OP_SpellAction"),
+    (0x0105, "OP_MeleeDamage"),
+    (0x0106, "OP_SpellDamage"),
+    (0x0107, "OP_HealSpell"),
+    (0x0108, "OP_Death"),
+    (0x0109, "OP_Skill"),
+    (0x0200, "OP_Say"),
+    (0x0201, "OP_Emote"),
+    (0x0202, "OP_ChatMessage"),
+    (0x0203, "OP_BroadcastMessage"),
+    (0x0204, "OP_Shout"),
+    (0x0205, "OP_AuctionMessage"),
+    (0x0300, "OP_ItemLink"),
+    (0x0301, "OP_ClickObject"),
+    (0x0302, "OP_DropItem"),
+    (0x0303, "OP_ItemActivity"),
+    (0x0304, "OP_TradeRequest"),
+    (0x0305, "OP_TradeAccept"),
+    (0x0306, "OP_TradeLoot"),
+    (0x0307, "OP_Loot"),
+    (0x0308, "OP_LootAck"),
+    (0x0400, "OP_Animation"),
+    (0x0401, "OP_EmoteBroadcast"),
+    (0x0402, "OP_Buff"),
+    (0x0403, "OP_BuffDuration"),
+    (0x0500, "OP_GroupInvite"),
+    (0x0501, "OP_GroupFollow"),
+    (0x0502, "OP_GroupDisband"),
+    (0x0503, "OP_GroupUpdate"),
+    (0x0504, "OP_GroupExpUpdate"),
+    (0x0600, "OP_TargetRequest"),
+    (0x0601, "OP_TargetUpdate"),
+    (0x0602, "OP_HotkeysSet"),
+    (0x0603, "OP_SysMessage"),
+    (0x0700, "OP_ServerUpdate"),
+    (0x0701, "OP_ServerTime"),
+    (0x0702, "OP_ServerNotification"),
+];
+
+/// Format opcode as name or hex label. Looks up known EQ opcodes by code;
+/// falls back to `0xNNNN` hex format for unknown opcodes.
 fn opcode_hex_label(opcode: u16) -> String {
-    format!("0x{:04X}", opcode)
+    OPCODE_NAMES
+        .binary_search_by_key(&opcode, |&(code, _)| code)
+        .ok()
+        .and_then(|idx| OPCODE_NAMES.get(idx))
+        .map(|&(_, name)| name.to_string())
+        .unwrap_or_else(|| format!("0x{:04X}", opcode))
 }
 
 /// Format a one-line payload preview.
