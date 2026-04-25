@@ -12,6 +12,7 @@ use super::{
     command::{self, HelpSection},
     config_panel::ConfigPanelState,
     demo_data::{DemoRole, demo_client_cast_info, demo_client_profile},
+    hotkeys::{KeyboardStyle, TextSize, UiAccessibilityConfig, UiKeyboardConfig},
     menu::MenuState,
     overlay::{OverlayFrame, OverlayWindowManager},
     sound::SoundAlertManager,
@@ -198,6 +199,34 @@ pub enum ActivePanel {
     OrchestratorDashboard,
     /// Spawn event feed panel (zone in/out notifications).
     SpawnEvents,
+}
+
+impl ActivePanel {
+    /// Human-readable label used in focus announcements.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::OverviewRoster => "Overview roster",
+            Self::OverviewCharacter => "Character details",
+            Self::OverviewGroups => "Groups",
+            Self::OverviewFilters => "Filters",
+            Self::OverviewCombat => "Combat",
+            Self::OverviewSession => "Session",
+            Self::OverviewPriorities => "Priorities",
+            Self::TacticalMap => "Tactical map",
+            Self::TacticalSpawns => "Spawn list",
+            Self::TacticalNamed => "Named tracker",
+            Self::TacticalNavigation => "Navigation",
+            Self::DebugSpawns => "Debug spawns",
+            Self::DebugHexDump => "Hex dump",
+            Self::DebugExplorer => "Offset explorer",
+            Self::PacketMonitorLog => "Packet monitor",
+            Self::DebugInternals => "EQ internals",
+            Self::EconomyControls => "Economy controls",
+            Self::OrchestratorDashboard => "Orchestrator dashboard",
+            Self::SpawnEvents => "Spawn events",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -824,6 +853,10 @@ pub struct App {
     pub active_screen: ActiveScreen,
     /// Currently focused panel for keyboard input.
     pub active_panel: ActivePanel,
+    /// Operator keyboard navigation preferences.
+    pub keyboard_config: UiKeyboardConfig,
+    /// Basic accessibility preferences for status/help behavior.
+    pub accessibility_config: UiAccessibilityConfig,
     /// Per-screen layout presets (cycled with Ctrl+E).
     pub layout_presets: [LayoutPreset; 7],
 
@@ -1262,6 +1295,8 @@ impl App {
             running: true,
             active_screen: ActiveScreen::Overview,
             active_panel: ActivePanel::OverviewRoster,
+            keyboard_config: UiKeyboardConfig::default(),
+            accessibility_config: UiAccessibilityConfig::default(),
             layout_presets: [LayoutPreset::Default; 7],
 
             clients: Vec::new(),
@@ -1550,6 +1585,69 @@ impl App {
             self.close_help();
         } else {
             self.open_help(HelpFocus::Section(super::command::HelpSection::Workflows));
+        }
+    }
+
+    /// Open the searchable shortcut reference focused on keyboard entries.
+    pub fn open_keyboard_shortcuts_help(&mut self) {
+        self.help_visible = false;
+        self.help_focus = None;
+        self.help_panel.close();
+        self.help_search_visible = true;
+        self.spawns_state.search_mode = false;
+        self.help_search_state.focus_shortcuts("keyboard");
+        self.status_message =
+            String::from("Keyboard help: Tab navigates, Enter expands, Esc closes");
+    }
+
+    /// Export the current keyboard cheat sheet to a Markdown file.
+    pub fn export_keyboard_shortcuts(&mut self, path: &str) {
+        match super::hotkeys::export_keyboard_cheat_sheet(path, &self.keyboard_config) {
+            Ok(()) => {
+                self.set_feedback(
+                    ToastLevel::Success,
+                    format!("Keyboard shortcut cheat sheet exported to {path}"),
+                    false,
+                );
+            }
+            Err(err) => {
+                self.set_feedback(
+                    ToastLevel::Error,
+                    format!("Failed to export keyboard shortcuts: {err}"),
+                    false,
+                );
+            }
+        }
+    }
+
+    fn set_keyboard_style(&mut self, style: KeyboardStyle) {
+        self.keyboard_config.style = style;
+        if style == KeyboardStyle::Vim {
+            self.keyboard_config.vi_keys = true;
+        }
+        self.set_feedback(
+            ToastLevel::Info,
+            format!("Keyboard style: {}", style.label()),
+            false,
+        );
+    }
+
+    fn set_high_contrast_mode(&mut self, enabled: bool) {
+        self.accessibility_config.high_contrast = enabled;
+        if enabled {
+            self.theme_kind = ThemeKind::Classic;
+            self.theme = self.theme_kind.build();
+            self.set_feedback(
+                ToastLevel::Info,
+                String::from("High contrast mode enabled with Classic theme"),
+                false,
+            );
+        } else {
+            self.set_feedback(
+                ToastLevel::Info,
+                String::from("High contrast preference disabled"),
+                false,
+            );
         }
     }
 
@@ -1913,6 +2011,40 @@ impl App {
             .position(|panel| *panel == self.active_panel)
             .unwrap_or(0);
         self.active_panel = visible[(current + 1) % visible.len()];
+        self.announce_focus();
+    }
+
+    /// Cycles focus to the previous visible panel on the current screen.
+    pub fn toggle_panel_reverse(&mut self) {
+        let visible = self.visible_panels();
+        if visible.is_empty() {
+            return;
+        }
+
+        let current = visible
+            .iter()
+            .position(|panel| *panel == self.active_panel)
+            .unwrap_or(0);
+        self.active_panel = if current == 0 {
+            visible[visible.len() - 1]
+        } else {
+            visible[current - 1]
+        };
+        self.announce_focus();
+    }
+
+    /// Updates the status bar with a text-first focus announcement.
+    pub fn announce_focus(&mut self) {
+        let mut message = format!(
+            "Focus: {} / {}",
+            self.active_screen.label(),
+            self.active_panel.label()
+        );
+        if self.accessibility_config.screen_reader {
+            message.push_str(" | screen reader mode");
+        }
+        message.push_str(" | Tab/Shift+Tab focus, :help keyboard shortcuts");
+        self.status_message = message;
     }
 
     /// Returns the current layout preset for the active screen.
@@ -5858,6 +5990,137 @@ impl App {
         }
     }
 
+    fn parse_on_off(value: Option<&str>, default: bool) -> Option<bool> {
+        match value {
+            None => Some(default),
+            Some("on" | "true" | "yes" | "1") => Some(true),
+            Some("off" | "false" | "no" | "0") => Some(false),
+            Some(_) => None,
+        }
+    }
+
+    fn execute_keyboard_command(&mut self, args: &[&str]) {
+        match args {
+            [] | ["help"] => self.open_keyboard_shortcuts_help(),
+            ["style", style] => match style {
+                "default" => self.set_keyboard_style(KeyboardStyle::Default),
+                "vim" | "vi" => self.set_keyboard_style(KeyboardStyle::Vim),
+                "emacs" => self.set_keyboard_style(KeyboardStyle::Emacs),
+                _ => self.usage_feedback("keyboard", "Usage: keyboard style <default|vim|emacs>"),
+            },
+            ["mouse", value] => match Self::parse_on_off(Some(value), true) {
+                Some(enabled) => {
+                    self.keyboard_config.enable_mouse = enabled;
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!(
+                            "Mouse support {}",
+                            if enabled { "enabled" } else { "disabled" }
+                        ),
+                        false,
+                    );
+                }
+                None => self.usage_feedback("keyboard", "Usage: keyboard mouse <on|off>"),
+            },
+            ["tab", value] => match Self::parse_on_off(Some(value), true) {
+                Some(enabled) => {
+                    self.keyboard_config.tab_navigation = enabled;
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!(
+                            "Tab navigation {}",
+                            if enabled { "enabled" } else { "disabled" }
+                        ),
+                        false,
+                    );
+                }
+                None => self.usage_feedback("keyboard", "Usage: keyboard tab <on|off>"),
+            },
+            ["vi", value] => match Self::parse_on_off(Some(value), true) {
+                Some(enabled) => {
+                    self.keyboard_config.vi_keys = enabled;
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!("Vi keys {}", if enabled { "enabled" } else { "disabled" }),
+                        false,
+                    );
+                }
+                None => self.usage_feedback("keyboard", "Usage: keyboard vi <on|off>"),
+            },
+            ["export"] => self.export_keyboard_shortcuts("keyboard-shortcuts.md"),
+            ["export", path] => self.export_keyboard_shortcuts(path),
+            _ => self.usage_feedback(
+                "keyboard",
+                "Usage: keyboard <help|style|mouse|tab|vi|export> [...].",
+            ),
+        }
+    }
+
+    fn execute_accessibility_command(&mut self, args: &[&str]) {
+        match args {
+            [] | ["status"] => {
+                let text_size = match self.accessibility_config.text_size {
+                    TextSize::Normal => "normal",
+                    TextSize::Large => "large",
+                };
+                self.set_feedback(
+                    ToastLevel::Info,
+                    format!(
+                        "Accessibility: high_contrast={}, screen_reader={}, text_size={text_size}",
+                        self.accessibility_config.high_contrast,
+                        self.accessibility_config.screen_reader
+                    ),
+                    false,
+                );
+            }
+            ["high-contrast"] => self.set_high_contrast_mode(true),
+            ["high-contrast", value] => match Self::parse_on_off(Some(value), true) {
+                Some(enabled) => self.set_high_contrast_mode(enabled),
+                None => self.usage_feedback(
+                    "accessibility",
+                    "Usage: accessibility high-contrast <on|off>",
+                ),
+            },
+            ["screen-reader"] => {
+                self.accessibility_config.screen_reader = true;
+                self.set_feedback(
+                    ToastLevel::Info,
+                    String::from("Screen reader status announcements enabled"),
+                    false,
+                );
+            }
+            ["screen-reader", value] => match Self::parse_on_off(Some(value), true) {
+                Some(enabled) => {
+                    self.accessibility_config.screen_reader = enabled;
+                    self.set_feedback(
+                        ToastLevel::Info,
+                        format!(
+                            "Screen reader announcements {}",
+                            if enabled { "enabled" } else { "disabled" }
+                        ),
+                        false,
+                    );
+                }
+                None => self.usage_feedback(
+                    "accessibility",
+                    "Usage: accessibility screen-reader <on|off>",
+                ),
+            },
+            ["text-size", "normal"] => {
+                self.accessibility_config.text_size = TextSize::Normal;
+                self.set_feedback(ToastLevel::Info, String::from("Text size: normal"), false);
+            }
+            ["text-size", "large"] => {
+                self.accessibility_config.text_size = TextSize::Large;
+                self.set_feedback(ToastLevel::Info, String::from("Text size: large"), false);
+            }
+            _ => self.usage_feedback(
+                "accessibility",
+                "Usage: accessibility <status|high-contrast|screen-reader|text-size> [...].",
+            ),
+        }
+    }
+
     /// Execute the current command buffer content.
     pub fn execute_command(&mut self, orchestrator: &mut Orchestrator) {
         let input = self.cmd_state.command_buffer.trim().to_string();
@@ -5993,6 +6256,16 @@ impl App {
                         String::from("Help opened. Start with the live workflows section."),
                         false,
                     );
+                } else if rest == "keyboard" || rest == "shortcuts" {
+                    self.open_keyboard_shortcuts_help();
+                } else if let Some(path) = rest.strip_prefix("keyboard export") {
+                    let path = path.trim();
+                    let path = if path.is_empty() {
+                        "keyboard-shortcuts.md"
+                    } else {
+                        path
+                    };
+                    self.export_keyboard_shortcuts(path);
                 } else if let Some(entry) = command::command_entry(rest) {
                     self.open_help(HelpFocus::Command(entry.phrase));
                     self.set_feedback(
@@ -6018,6 +6291,12 @@ impl App {
                     String::from("Command reference opened."),
                     false,
                 );
+            }
+            "keyboard" | "keys" => {
+                self.execute_keyboard_command(&parts[1..]);
+            }
+            "accessibility" | "a11y" => {
+                self.execute_accessibility_command(&parts[1..]);
             }
             "camp" => {
                 self.execute_camp_command(&parts[1..], orchestrator);

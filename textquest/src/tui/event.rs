@@ -318,7 +318,8 @@ fn open_help_search_panel(app: &mut App) {
     app.help_search_visible = true;
     app.spawns_state.search_mode = false;
     app.help_search_state.clear_query();
-    app.status_message = String::from("Help search: type to filter, q closes");
+    app.status_message =
+        String::from("Help search: type to filter, q closes, :help keyboard lists shortcuts");
 }
 
 fn close_help_search_panel(app: &mut App) {
@@ -863,6 +864,22 @@ pub fn handle_events(
             return Ok(true);
         }
 
+        if app.keyboard_config.style == crate::tui::hotkeys::KeyboardStyle::Emacs
+            && key.modifiers.contains(KeyModifiers::CONTROL)
+        {
+            match key.code {
+                KeyCode::Char('n' | 'N') => {
+                    app.next_client();
+                    return Ok(true);
+                }
+                KeyCode::Char('p' | 'P') => {
+                    app.prev_client();
+                    return Ok(true);
+                }
+                _ => {}
+            }
+        }
+
         match (key.code, key.modifiers) {
             (KeyCode::Char('c'), KeyModifiers::CONTROL) | (KeyCode::Char('q'), _) => {
                 app.running = false;
@@ -925,8 +942,12 @@ pub fn handle_events(
                 app.set_active_screen(ActiveScreen::Orchestrator);
                 return Ok(true);
             }
-            (KeyCode::Tab, _) => {
+            (KeyCode::Tab, _) if app.keyboard_config.tab_navigation => {
                 app.toggle_panel();
+                return Ok(true);
+            }
+            (KeyCode::BackTab, _) if app.keyboard_config.tab_navigation => {
+                app.toggle_panel_reverse();
                 return Ok(true);
             }
             (KeyCode::Char(']'), _) => {

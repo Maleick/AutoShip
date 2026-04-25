@@ -1,17 +1,19 @@
-# Result: #990 — Feature: Hotkey & Slash Command Registration System
+# Result: #997 — Feature: TUI Keyboard Shortcuts & Accessibility
 
 Status: DONE
 
 Changes Made:
-- Extended `textquest/src/registry/mod.rs` with checked command and hotkey registration APIs, conflict detection, Ctrl/Alt/Shift hotkey parsing, per-character scopes, enable/disable controls, command help metadata, required-argument validation, and TOML load/save validation helpers.
-- Added persisted `input_bindings` metadata to `AppConfig` and validate it during TOML config load.
-- Added shared command and hotkey registries to `Orchestrator` with routing helpers for registered slash commands and hotkeys.
-- Updated `feature-list.json` with issue #990 status and remaining scope.
+- Added serializable TUI keyboard and accessibility preference structs for the requested `[ui.keyboard]` shape.
+- Added built-in shortcut documentation and Markdown cheat sheet export support.
+- Wired `:help keyboard`, `:help keyboard export [path]`, `:keyboard ...`, and `:accessibility ...` command handling.
+- Added Shift-Tab reverse panel focus, text-first focus announcements, and Emacs `Ctrl+N` / `Ctrl+P` aliases.
+- Added a Shortcuts tab to the searchable help overlay.
+- Updated `feature-list.json` with issue #997 partial status and remaining scope.
 
 Tests:
-- `cargo check`
+- `cargo check` passed.
 
 Notes:
-- This is intentionally PARTIAL because the issue spans DLL keyboard hooks and live IPC back-routing. This pass adds the orchestrator/config/registry scaffold and focused tests for registration conflicts, help, validation, enable/disable, and per-character routing. DLL hook integration and live keyboard event transport remain follow-up work.
+- PARTIAL because full config-file loading, renderer-wide text sizing, mouse click focus/select routing, copy-paste handling, and complete customizable shortcut routing are larger than one focused worktree pass.
 
 COMPLETE

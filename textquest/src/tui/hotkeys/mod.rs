@@ -11,7 +11,7 @@ use anyhow::{Result, anyhow};
 use crossterm::event::{KeyCode, KeyModifiers};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Represents a single key binding with modifiers
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -173,6 +173,279 @@ pub struct HotkeyConfig {
     pub global: Vec<Hotkey>,
     /// Per-character hotkey profiles
     pub character_profiles: HashMap<String, Vec<Hotkey>>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Built-in keyboard profile for the TUI command surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum KeyboardStyle {
+    /// Conservative bindings: arrows, Enter, Esc, Tab, and explicit shortcuts.
+    #[default]
+    Default,
+    /// Vim-style list movement where supported (`j`/`k`, plus panel cycling).
+    Vim,
+    /// Emacs-style list movement aliases where supported (`Ctrl+N`/`Ctrl+P`).
+    Emacs,
+}
+
+impl KeyboardStyle {
+    /// Stable TOML value for this style.
+    #[must_use]
+    pub fn as_config_value(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Vim => "vim",
+            Self::Emacs => "emacs",
+        }
+    }
+
+    /// Human-readable label for status/help text.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Default => "Default",
+            Self::Vim => "Vim",
+            Self::Emacs => "Emacs",
+        }
+    }
+}
+
+/// User-facing keyboard options loaded from `[ui.keyboard]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiKeyboardConfig {
+    /// Binding family used for optional aliases.
+    #[serde(default)]
+    pub style: KeyboardStyle,
+    /// Whether terminal mouse capture should be enabled by the run loop.
+    #[serde(default = "default_true")]
+    pub enable_mouse: bool,
+    /// Whether Tab and Shift-Tab cycle focusable panels.
+    #[serde(default = "default_true")]
+    pub tab_navigation: bool,
+    /// Whether vi-style aliases are accepted where the panel supports them.
+    #[serde(default = "default_true")]
+    pub vi_keys: bool,
+}
+
+impl UiKeyboardConfig {
+    /// Returns true when vi-style movement aliases should be active.
+    #[must_use]
+    pub fn vi_navigation_enabled(&self) -> bool {
+        self.vi_keys || self.style == KeyboardStyle::Vim
+    }
+}
+
+impl Default for UiKeyboardConfig {
+    fn default() -> Self {
+        Self {
+            style: KeyboardStyle::Default,
+            enable_mouse: true,
+            tab_navigation: true,
+            vi_keys: true,
+        }
+    }
+}
+
+/// Supported text scaling preference for accessible terminal layouts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum TextSize {
+    /// Current compact dashboard density.
+    #[default]
+    Normal,
+    /// Prefer larger labels and less dense panels where renderers support it.
+    Large,
+}
+
+/// Basic accessibility options for the TUI surface.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UiAccessibilityConfig {
+    /// Prefer high-contrast presentation.
+    #[serde(default)]
+    pub high_contrast: bool,
+    /// Emit explicit focus/status text for screen readers.
+    #[serde(default)]
+    pub screen_reader: bool,
+    /// Renderers should pair color with markers, labels, or symbols.
+    #[serde(default = "default_true")]
+    pub color_not_sole_indicator: bool,
+    /// Preferred text density for future renderer-specific scaling.
+    #[serde(default)]
+    pub text_size: TextSize,
+}
+
+impl Default for UiAccessibilityConfig {
+    fn default() -> Self {
+        Self {
+            high_contrast: false,
+            screen_reader: false,
+            color_not_sole_indicator: true,
+            text_size: TextSize::Normal,
+        }
+    }
+}
+
+/// One documented built-in shortcut.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShortcutDoc {
+    /// Scope where the shortcut applies.
+    pub context: &'static str,
+    /// Human-readable key chord.
+    pub keys: &'static str,
+    /// Operator-facing behavior.
+    pub action: &'static str,
+}
+
+/// Built-in shortcuts shown by help and exported cheat sheets.
+#[must_use]
+pub fn builtin_shortcuts(config: &UiKeyboardConfig) -> Vec<ShortcutDoc> {
+    let mut shortcuts = vec![
+        ShortcutDoc {
+            context: "Global",
+            keys: "1-7",
+            action: "Switch dashboard screen",
+        },
+        ShortcutDoc {
+            context: "Global",
+            keys: "Tab / Shift+Tab",
+            action: "Cycle keyboard focus through visible panels",
+        },
+        ShortcutDoc {
+            context: "Global",
+            keys: "?",
+            action: "Open built-in help",
+        },
+        ShortcutDoc {
+            context: "Global",
+            keys: "/",
+            action: "Open searchable help",
+        },
+        ShortcutDoc {
+            context: "Global",
+            keys: ":",
+            action: "Open command bar",
+        },
+        ShortcutDoc {
+            context: "Global",
+            keys: "Esc",
+            action: "Close, cancel, or clear the active overlay/filter",
+        },
+        ShortcutDoc {
+            context: "Lists",
+            keys: "Up / Down",
+            action: "Move selection",
+        },
+        ShortcutDoc {
+            context: "Lists",
+            keys: "Enter",
+            action: "Select, expand, or run the focused action",
+        },
+        ShortcutDoc {
+            context: "Help",
+            keys: "Tab / Shift+Tab",
+            action: "Switch help tabs",
+        },
+        ShortcutDoc {
+            context: "Help",
+            keys: "q / Esc",
+            action: "Close help",
+        },
+        ShortcutDoc {
+            context: "Tactical map",
+            keys: "Arrows",
+            action: "Pan map when the map panel is focused",
+        },
+        ShortcutDoc {
+            context: "Tactical map",
+            keys: "PageUp / PageDown",
+            action: "Zoom map in or out",
+        },
+        ShortcutDoc {
+            context: "Command bar",
+            keys: "Tab",
+            action: "Complete command",
+        },
+        ShortcutDoc {
+            context: "Command bar",
+            keys: "Up / Down",
+            action: "Browse command history",
+        },
+    ];
+
+    if config.vi_navigation_enabled() {
+        shortcuts.push(ShortcutDoc {
+            context: "Vim aliases",
+            keys: "j / k",
+            action: "Move down or up in supported lists",
+        });
+    }
+
+    if config.style == KeyboardStyle::Emacs {
+        shortcuts.push(ShortcutDoc {
+            context: "Emacs aliases",
+            keys: "Ctrl+N / Ctrl+P",
+            action: "Move to next or previous client",
+        });
+    }
+
+    shortcuts
+}
+
+/// Render the current shortcut set as a Markdown cheat sheet.
+#[must_use]
+pub fn keyboard_cheat_sheet_markdown(config: &UiKeyboardConfig) -> String {
+    let mut out = String::from(
+        "# TextQuest Keyboard Shortcuts\n\n\
+         ## Configuration\n\n\
+         ```toml\n\
+         [ui.keyboard]\n",
+    );
+    out.push_str(&format!(
+        "style = \"{}\"\n\
+         enable_mouse = {}\n\
+         tab_navigation = {}\n\
+         vi_keys = {}\n\
+         ```\n\n",
+        config.style.as_config_value(),
+        config.enable_mouse,
+        config.tab_navigation,
+        config.vi_keys
+    ));
+    out.push_str("| Context | Keys | Action |\n| --- | --- | --- |\n");
+    for shortcut in builtin_shortcuts(config) {
+        out.push_str(&format!(
+            "| {} | {} | {} |\n",
+            shortcut.context, shortcut.keys, shortcut.action
+        ));
+    }
+    out.push_str(
+        "\n## Accessibility\n\n\
+         - Focus changes are announced in the status bar.\n\
+         - Selection rows use a marker plus highlight color.\n\
+         - High contrast mode can be enabled from the command bar.\n",
+    );
+    out
+}
+
+/// Export the built-in shortcut cheat sheet to disk.
+pub fn export_keyboard_cheat_sheet(
+    path: impl AsRef<Path>,
+    config: &UiKeyboardConfig,
+) -> Result<()> {
+    let path = path.as_ref();
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| anyhow!("Failed to create shortcut export directory: {}", e))?;
+    }
+    std::fs::write(path, keyboard_cheat_sheet_markdown(config))
+        .map_err(|e| anyhow!("Failed to write keyboard cheat sheet: {}", e))?;
+    Ok(())
 }
 
 impl Default for HotkeyConfig {
@@ -650,5 +923,31 @@ mod tests {
         assert!(config.character_profiles.contains_key("Warrior"));
         assert!(config.character_profiles.contains_key("Wizard"));
         assert!(config.character_profiles.contains_key("Cleric"));
+    }
+
+    #[test]
+    fn ui_keyboard_config_matches_issue_toml_shape() {
+        let config: UiKeyboardConfig = toml::from_str(
+            r#"
+            style = "vim"
+            enable_mouse = true
+            tab_navigation = true
+            vi_keys = true
+            "#,
+        )
+        .expect("keyboard config should deserialize");
+
+        assert_eq!(config.style, KeyboardStyle::Vim);
+        assert!(config.enable_mouse);
+        assert!(config.tab_navigation);
+        assert!(config.vi_navigation_enabled());
+    }
+
+    #[test]
+    fn cheat_sheet_documents_core_shortcuts() {
+        let markdown = keyboard_cheat_sheet_markdown(&UiKeyboardConfig::default());
+        assert!(markdown.contains("Tab / Shift+Tab"));
+        assert!(markdown.contains("Up / Down"));
+        assert!(markdown.contains("[ui.keyboard]"));
     }
 }

@@ -212,6 +212,15 @@
         "cargo check"
       ],
       "notes": "Wired the existing help search panel to /, q/Esc close, tab cycling across Commands/FAQ/Tips, result navigation, typed filtering, and Enter detail expansion. Cargo check also required two minimal pre-existing compile repairs in wishlist equality and Lua player snapshot table generation."
+    },
+    {
+      "id": "issue-997-tui-keyboard-shortcuts-accessibility",
+      "name": "Issue #997 TUI Keyboard Shortcuts & Accessibility",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check"
+      ],
+      "notes": "PARTIAL: Added serializable TUI keyboard/accessibility preferences, focus announcements for Tab and Shift-Tab panel navigation, Emacs client navigation aliases, :help keyboard discoverability, shortcut help content, and Markdown cheat sheet export. Full config-file loading, renderer-wide text scaling, mouse focus routing, and complete shortcut customization remain follow-up work."
     }
   ]
 }

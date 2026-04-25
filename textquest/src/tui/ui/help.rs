@@ -23,6 +23,7 @@ use crate::tui::{
 pub enum HelpTab {
     #[default]
     Commands,
+    Shortcuts,
     Faq,
     Tips,
 }
@@ -31,18 +32,25 @@ impl HelpTab {
     fn label(self) -> &'static str {
         match self {
             HelpTab::Commands => "Commands",
+            HelpTab::Shortcuts => "Shortcuts",
             HelpTab::Faq => "FAQ",
             HelpTab::Tips => "Tips",
         }
     }
 
     fn all() -> &'static [HelpTab] {
-        &[HelpTab::Commands, HelpTab::Faq, HelpTab::Tips]
+        &[
+            HelpTab::Commands,
+            HelpTab::Shortcuts,
+            HelpTab::Faq,
+            HelpTab::Tips,
+        ]
     }
 
     fn next(self) -> Self {
         match self {
-            HelpTab::Commands => HelpTab::Faq,
+            HelpTab::Commands => HelpTab::Shortcuts,
+            HelpTab::Shortcuts => HelpTab::Faq,
             HelpTab::Faq => HelpTab::Tips,
             HelpTab::Tips => HelpTab::Commands,
         }
@@ -51,7 +59,8 @@ impl HelpTab {
     fn prev(self) -> Self {
         match self {
             HelpTab::Commands => HelpTab::Tips,
-            HelpTab::Faq => HelpTab::Commands,
+            HelpTab::Shortcuts => HelpTab::Commands,
+            HelpTab::Faq => HelpTab::Shortcuts,
             HelpTab::Tips => HelpTab::Faq,
         }
     }
@@ -160,6 +169,16 @@ impl HelpPanelState {
         self.scroll = 0;
         self.expanded = false;
     }
+
+    /// Focus the shortcut cheat sheet and optionally pre-filter it.
+    pub fn focus_shortcuts(&mut self, query: impl Into<String>) {
+        self.tab = HelpTab::Shortcuts;
+        self.query = query.into();
+        self.cursor = self.query.len();
+        self.selected = 0;
+        self.scroll = 0;
+        self.expanded = false;
+    }
 }
 
 // ─── Help topic registry ─────────────────────────────────────────────────────
@@ -223,6 +242,66 @@ static FAQ: &[(&str, &str, &str, &str, HelpSection)] = &[
     ),
 ];
 
+/// Built-in keyboard/accessibility shortcuts shown in the Shortcuts tab.
+static SHORTCUTS: &[(&str, &str, &str, &str, HelpSection)] = &[
+    (
+        "Keyboard shortcuts",
+        "Use /help keyboard or :help keyboard to open this shortcut sheet.",
+        ":help keyboard",
+        ":help keyboard",
+        HelpSection::Workflows,
+    ),
+    (
+        "Tab panel focus",
+        "Tab and Shift-Tab move focus through visible panels and announce the focused panel in the status bar.",
+        "Tab / Shift-Tab",
+        "Tab -> next panel",
+        HelpSection::Workflows,
+    ),
+    (
+        "List navigation",
+        "Arrow keys move through focused lists; Enter selects, expands, or runs the highlighted action.",
+        "Up / Down / Enter",
+        "Down -> Enter",
+        HelpSection::Workflows,
+    ),
+    (
+        "Vim bindings",
+        "When vi keys are enabled, supported lists also accept j and k for down and up.",
+        "[ui.keyboard] style = \"vim\"",
+        "j -> next row",
+        HelpSection::Workflows,
+    ),
+    (
+        "Emacs bindings",
+        "The Emacs profile enables Ctrl+N and Ctrl+P client navigation aliases.",
+        "[ui.keyboard] style = \"emacs\"",
+        "Ctrl+N -> next client",
+        HelpSection::Workflows,
+    ),
+    (
+        "High contrast",
+        "Use the accessibility command to request the high-contrast presentation mode.",
+        ":accessibility high-contrast on",
+        ":a11y high-contrast on",
+        HelpSection::Lifecycle,
+    ),
+    (
+        "Screen reader basics",
+        "Screen reader mode emphasizes explicit status text for focus, selection, and mode changes.",
+        ":accessibility screen-reader on",
+        ":a11y screen-reader on",
+        HelpSection::Lifecycle,
+    ),
+    (
+        "Cheat sheet export",
+        "Write the current shortcut reference to a Markdown file.",
+        ":help keyboard export [path]",
+        ":help keyboard export docs/keyboard-shortcuts.md",
+        HelpSection::Workflows,
+    ),
+];
+
 /// Static tips shown under the Tips tab.
 static TIPS: &[(&str, &str, &str, &str, HelpSection)] = &[
     (
@@ -262,6 +341,23 @@ pub fn filtered_entries<'a>(state: &HelpPanelState) -> Vec<HelpEntry<'a>> {
                     || cmd.aliases.iter().any(|a| a.contains(q.as_str()))
             })
             .map(HelpEntry::from_command)
+            .collect(),
+        HelpTab::Shortcuts => SHORTCUTS
+            .iter()
+            .filter(|(title, summary, usage, example, ..)| {
+                q.is_empty()
+                    || title.to_lowercase().contains(q.as_str())
+                    || summary.to_lowercase().contains(q.as_str())
+                    || usage.to_lowercase().contains(q.as_str())
+                    || example.to_lowercase().contains(q.as_str())
+            })
+            .map(|(title, summary, usage, example, section)| HelpEntry {
+                title,
+                summary,
+                usage,
+                example,
+                section: *section,
+            })
             .collect(),
         HelpTab::Faq => FAQ
             .iter()
@@ -581,7 +677,14 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
                 .fg(t.text_accent)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled("switch tab", Style::default().fg(t.text_muted)),
+        Span::styled("switch tab  ", Style::default().fg(t.text_muted)),
+        Span::styled(
+            ":help keyboard ",
+            Style::default()
+                .fg(t.text_accent)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("shortcuts", Style::default().fg(t.text_muted)),
     ];
 
     frame.render_widget(Paragraph::new(Line::from(hints)), area);
@@ -701,6 +804,8 @@ mod tests {
         let mut state = HelpPanelState::new();
         assert_eq!(state.tab, HelpTab::Commands);
         state.next_tab();
+        assert_eq!(state.tab, HelpTab::Shortcuts);
+        state.next_tab();
         assert_eq!(state.tab, HelpTab::Faq);
         state.next_tab();
         assert_eq!(state.tab, HelpTab::Tips);
@@ -738,6 +843,17 @@ mod tests {
         assert!(
             !entries.is_empty(),
             "expected at least one FAQ result for Esc"
+        );
+    }
+
+    #[test]
+    fn shortcut_entries_include_keyboard_help() {
+        let mut state = HelpPanelState::new();
+        state.focus_shortcuts("keyboard");
+        let entries = filtered_entries(&state);
+        assert!(
+            entries.iter().any(|entry| entry.title.contains("Keyboard")),
+            "expected keyboard shortcut help entry"
         );
     }
 }
