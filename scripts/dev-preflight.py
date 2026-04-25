@@ -70,86 +70,36 @@ def check_command(results: list[CheckResult], name: str, command: str, *args: st
 
 def check_map_files(results: list[CheckResult]) -> None:
     """Validate all map files in config/maps/*.txt."""
-    import re
-
     maps_dir = REPO_ROOT / "config" / "maps"
     if not maps_dir.exists():
         record(results, "WARN", "Map files", "config/maps/ directory not found — skipping map validation.")
         return
 
-    map_files = sorted(maps_dir.glob("*.txt"))
-    if not map_files:
-        record(results, "WARN", "Map files", "No *.txt files found in config/maps/.")
+    validate_maps_script = REPO_ROOT / "scripts" / "validate-maps.py"
+    if not validate_maps_script.exists():
+        record(results, "WARN", "Map validation", "scripts/validate-maps.py not found; skipping.")
         return
 
-    # Valid line patterns:
-    #   L x1, y1, z1, x2, y2, z2, r, g, b   (line segment)
-    #   P x, y, z, r, g, b, size, label       (point/label)
-    #   * comment
-    #   (blank lines are allowed)
-    float_re = r"[-+]?\d+(?:\.\d+)?"
-    int_re = r"\d+"
-    line_pattern = re.compile(
-        r"^L\s+"
-        + r",\s*".join([float_re] * 6)
-        + r",\s*"
-        + r",\s*".join([int_re] * 3)
-        + r"\s*$"
-    )
-    point_pattern = re.compile(
-        r"^P\s+"
-        + r",\s*".join([float_re] * 3)
-        + r",\s*"
-        + r",\s*".join([int_re] * 3)
-        + r",\s*"
-        + int_re
-        + r",\s*\S.*$"
-    )
-
-    errors: list[str] = []
-    empty_files: list[str] = []
-    checked = 0
-
-    for map_file in map_files:
-        try:
-            content = map_file.read_text(encoding="utf-8", errors="replace")
-        except OSError as exc:
-            errors.append(f"{map_file.name}: read error — {exc}")
-            continue
-
-        lines = content.splitlines()
-        non_blank = [ln for ln in lines if ln.strip()]
-        if not non_blank:
-            empty_files.append(map_file.name)
-            continue
-
-        checked += 1
-        for lineno, raw in enumerate(lines, start=1):
-            stripped = raw.strip()
-            if not stripped or stripped.startswith("*"):
-                continue
-            if line_pattern.match(stripped) or point_pattern.match(stripped):
-                continue
-            errors.append(f"{map_file.name}:{lineno}: unexpected format — {stripped[:60]!r}")
-
-    total = len(map_files)
-    if errors or empty_files:
-        detail_parts: list[str] = []
-        if empty_files:
-            detail_parts.append(f"empty files: {', '.join(empty_files)}")
-        if errors:
-            detail_parts.append("; ".join(errors[:5]))
-            if len(errors) > 5:
-                detail_parts.append(f"…and {len(errors) - 5} more error(s)")
+    completed = run_command(sys.executable, str(validate_maps_script), str(maps_dir))
+    detail = _map_validation_summary(completed.stdout or completed.stderr)
+    if completed.returncode == 0:
+        record(results, "PASS", "Map validation", detail)
+    else:
         record(
             results,
             "FAIL",
-            "Map files",
-            f"Checked {total} map file(s) — issues found: {'; '.join(detail_parts)}",
-            "Ensure each map line starts with L or P (with correct field counts) or * for comments.",
+            "Map validation",
+            detail,
+            "Fix map format errors reported by scripts/validate-maps.py.",
         )
-    else:
-        record(results, "PASS", "Map files", f"{checked}/{total} map file(s) passed validation.")
+
+
+def _map_validation_summary(output: str) -> str:
+    for line in reversed(output.splitlines()):
+        stripped = line.strip()
+        if stripped.startswith("Map validation summary:"):
+            return stripped
+    return first_line(output)
 
 
 def detect_windows_toolchain(results: list[CheckResult]) -> None:
@@ -609,29 +559,6 @@ def main() -> int:
             eqlib_root=args.eqlib_root,
             macroquest_root=args.macroquest_root,
         )
-
-    # Validate map files if config/maps/ exists
-    map_dir = REPO_ROOT / "config" / "maps"
-    if map_dir.exists():
-        validate_maps_script = REPO_ROOT / "scripts" / "validate-maps.py"
-        if validate_maps_script.exists():
-            completed = run_command(sys.executable, str(validate_maps_script))
-            if completed.returncode == 0:
-                detail = first_line(completed.stdout or completed.stderr)
-                record(results, "PASS", "Map validation", detail)
-            else:
-                detail = first_line(completed.stderr or completed.stdout)
-                record(
-                    results,
-                    "FAIL",
-                    "Map validation",
-                    detail,
-                    "Fix map format errors reported by scripts/validate-maps.py.",
-                )
-        else:
-            record(results, "WARN", "Map validation", "scripts/validate-maps.py not found; skipping.")
-    else:
-        record(results, "PASS", "Map validation", "No config/maps/ directory; skipping.")
 
     check_offset_sync(results)
 

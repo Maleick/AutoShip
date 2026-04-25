@@ -18,6 +18,31 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  validate_maps:
+    name: Validate map files
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    runs-on: [self-hosted, Linux, X64, textquest]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Brewall map format
+        shell: bash
+        run: |
+          set +e
+          python3 scripts/validate-maps.py config/maps | tee validate-maps.log
+          status=${PIPESTATUS[0]}
+
+          {
+            echo "## Map validation"
+            echo
+            echo '```text'
+            cat validate-maps.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$status"
+
   pr_gate:
     name: PR gate (fmt + clippy) on Linux
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false

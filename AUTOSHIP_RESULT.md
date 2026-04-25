@@ -1,22 +1,22 @@
-# Result: #1107 — Load and render active camp center marker on map
+# Result: #1114 — Create map file format validator tool
 
 Status: DONE
 
 Changes Made:
-- Made the map renderer use an explicit active camp overlay lookup from app map state.
-- Rendered active camp center and pull point overlays through the camp overlay path.
-- Added legend entries for camp center, pull point, camp radius, and pull radius symbols.
-- Added focused map unit coverage for camp marker/radius rendering and the no-active-camp case.
-- Updated an existing map test fixture to the current `CampOverlay` field shape.
+- Rebuilt `scripts/validate-maps.py` as a directory-aware Brewall map validator with finite coordinate checks, u8 color validation, P/L field-count validation, per-file line counts, bounds, and actionable line-numbered errors.
+- Wired `scripts/dev-preflight.py` to call the validator as the canonical map validation step.
+- Added a dedicated GitHub Actions `validate_maps` job that publishes validator output to the PR step summary.
+- Expanded `tests/test_validate_maps.py` to cover existing maps, known invalid map cases, NaN/Inf, invalid floats, color range errors, wrong field counts, bounds, and CLI output.
 
 Tests:
-- `rtk cargo check` passed.
-- `rtk cargo check --tests -p textquest` passed.
-- `rtk git diff --check` passed.
-- `rtk /verify` was attempted, but this Codex shell does not expose `/verify` as an executable command.
+- `python3 scripts/validate-maps.py config/maps` — pass, 36 valid files.
+- `python3 -m unittest tests/test_validate_maps.py -v` — pass, 23 tests.
+- `python3 scripts/dev-preflight.py --env-only` — pass, 11 checks.
+- `cargo check` — pass.
+- `git diff --check` — pass.
+- `/verify` — not available as an executable in this shell.
 
 Notes:
-- Per issue instructions, no `cargo test` run was performed.
-- The existing camp-start command already populates `map_state.camp_overlay`, and camp stop clears it, so the map overlay follows the selected active camp state.
+- Full `cargo test` was not run per issue instruction to use `cargo check` only and skip cargo test unless a single file.
 
 COMPLETE

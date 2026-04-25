@@ -53,12 +53,17 @@ class ValidateMapsModuleTests(unittest.TestCase):
     def test_l_non_numeric_coord(self) -> None:
         err = self.module.validate_l_line("L abc, 2.0, 3.0, 4.0, 5.0, 6.0, 0, 0, 0")
         self.assertIsNotNone(err)
-        self.assertIn("not numeric", err)
+        self.assertIn("not a valid float", err)
 
-    def test_l_coord_out_of_bounds(self) -> None:
-        err = self.module.validate_l_line("L 2000000.0, 0, 0, 0, 0, 0, 0, 0, 0")
+    def test_l_nan_coord_rejected(self) -> None:
+        err = self.module.validate_l_line("L NaN, 0, 0, 0, 0, 0, 0, 0, 0")
         self.assertIsNotNone(err)
-        self.assertIn("out of bounds", err)
+        self.assertIn("must be finite", err)
+
+    def test_l_inf_coord_rejected(self) -> None:
+        err = self.module.validate_l_line("L Inf, 0, 0, 0, 0, 0, 0, 0, 0")
+        self.assertIsNotNone(err)
+        self.assertIn("must be finite", err)
 
     # --- validate_p_line ---
 
@@ -80,15 +85,15 @@ class ValidateMapsModuleTests(unittest.TestCase):
         self.assertIsNotNone(err)
         self.assertIn("out of range", err)
 
-    def test_p_size_out_of_range(self) -> None:
-        err = self.module.validate_p_line("P 1.0, 2.0, 3.0, 255, 0, 0, 0, Label")
+    def test_p_size_must_be_finite_float(self) -> None:
+        err = self.module.validate_p_line("P 1.0, 2.0, 3.0, 255, 0, 0, NaN, Label")
         self.assertIsNotNone(err)
-        self.assertIn("out of range", err)
+        self.assertIn("must be finite", err)
 
     def test_p_non_numeric_coord(self) -> None:
         err = self.module.validate_p_line("P bad, 2.0, 3.0, 255, 0, 0, 3, Label")
         self.assertIsNotNone(err)
-        self.assertIn("not numeric", err)
+        self.assertIn("not a valid float", err)
 
     # --- validate_map_file ---
 
@@ -122,8 +127,25 @@ class ValidateMapsModuleTests(unittest.TestCase):
         try:
             errors = self.module.validate_map_file(fname)
             self.assertEqual(len(errors), 2)
-            self.assertIn("Line 1", errors[0])
-            self.assertIn("Line 2", errors[1])
+            self.assertIn("line 1", errors[0])
+            self.assertIn("line 2", errors[1])
+        finally:
+            fname.unlink(missing_ok=True)
+
+    def test_invalid_file_catches_each_requested_error_type(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("L 1.0, 2.0, 3.0\n")  # wrong field count
+            f.write("L abc, 2.0, 3.0, 4.0, 5.0, 6.0, 0, 0, 0\n")  # invalid float
+            f.write("L NaN, 2.0, 3.0, 4.0, 5.0, 6.0, 0, 0, 0\n")  # non-finite float
+            f.write("P 1.0, 2.0, 3.0, 256, -1, 0, 3, Label\n")  # color out of range
+            fname = Path(f.name)
+        try:
+            errors = self.module.validate_map_file(fname)
+            self.assertEqual(len(errors), 4)
+            self.assertTrue(any("expected 9 fields" in error for error in errors))
+            self.assertTrue(any("not a valid float" in error for error in errors))
+            self.assertTrue(any("must be finite" in error for error in errors))
+            self.assertTrue(any("out of range 0-255" in error for error in errors))
         finally:
             fname.unlink(missing_ok=True)
 
@@ -146,7 +168,22 @@ class ValidateMapsModuleTests(unittest.TestCase):
         try:
             errors = self.module.validate_map_file(fname)
             self.assertEqual(len(errors), 1)
-            self.assertIn("Unknown line type", errors[0])
+            self.assertIn("unknown line type", errors[0])
+        finally:
+            fname.unlink(missing_ok=True)
+
+    def test_result_reports_line_count_and_bounds(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("# comment\n")
+            f.write("L -10, -20, 0, 30, 40, 0, 1, 2, 3\n")
+            f.write("P 5, 60, 0, 4, 5, 6, 3, Label\n")
+            fname = Path(f.name)
+        try:
+            result = self.module.validate_map_file_result(fname)
+            self.assertTrue(result.is_valid)
+            self.assertEqual(result.line_count, 3)
+            self.assertEqual(result.record_count, 2)
+            self.assertEqual(result.bounds.display(), "x=-10..30, y=-20..60")
         finally:
             fname.unlink(missing_ok=True)
 
@@ -180,14 +217,32 @@ class ValidateMapsIntegrationTests(unittest.TestCase):
             bad_map = map_dir / "bad_zone.txt"
             bad_map.write_text("L 1.0, 2.0\n")  # too few fields
             completed = subprocess.run(
-                [sys.executable, str(SCRIPT_PATH)],
-                cwd=tmpdir,
+                [sys.executable, str(SCRIPT_PATH), str(map_dir)],
+                cwd=REPO_ROOT,
                 capture_output=True,
                 text=True,
                 check=False,
             )
             self.assertNotEqual(completed.returncode, 0)
-            self.assertIn("FAILED", completed.stdout)
+            self.assertIn("✗ Error: bad_zone.txt, line 1", completed.stdout)
+            self.assertIn("invalid_lines=1", completed.stdout)
+
+    def test_cli_reports_valid_file_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            map_dir = Path(tmpdir) / "maps"
+            map_dir.mkdir()
+            good_map = map_dir / "good_zone.txt"
+            good_map.write_text("L -1, -2, 0, 3, 4, 0, 10, 20, 30\n")
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT_PATH), str(map_dir)],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0)
+            self.assertIn("✓ Valid: good_zone.txt, line_count=1, bounds=(x=-1..3, y=-2..4)", completed.stdout)
+            self.assertIn("valid_files=1", completed.stdout)
 
 
 if __name__ == "__main__":
