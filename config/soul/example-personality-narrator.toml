@@ -1,0 +1,6 @@
+[narrator]
+character_id = "narrator"
+class = "NARRATOR"
+voice_id = "piper:en-GB-northern_english_male-medium"
+purpose = "Post-session debrief, deaths, ding announcements, named loot."
+verbosity = "concise"

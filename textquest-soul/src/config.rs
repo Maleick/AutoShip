@@ -63,6 +63,246 @@ pub struct CharacterSoulConfig {
     pub quirks: Vec<String>,
 }
 
+impl CharacterSoulConfig {
+    /// Render a compact voice profile for prompt construction.
+    #[must_use]
+    pub fn voice_profile(&self) -> String {
+        let mut parts = vec![
+            format!("name={}", self.name),
+            format!("speech={:?}", self.speech),
+            format!("traits={:?}", self.traits),
+            format!(
+                "edginess={:?}",
+                self.edginess.unwrap_or_default()
+            ),
+        ];
+
+        if !self.backstory.is_empty() {
+            parts.push(format!("backstory={}", self.backstory));
+        }
+
+        if !self.quirks.is_empty() {
+            parts.push(format!("quirks={}", self.quirks.join(" | ")));
+        }
+
+        parts.join("; ")
+    }
+}
+
+/// Prompt payload for a per-character reaction to narrator output.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CharacterReactionPrompt {
+    /// Narrator summary that is already validated.
+    pub narrator_summary: String,
+    /// Small character-specific subset of the session facts.
+    pub character_relevant_facts: Vec<String>,
+}
+
+impl CharacterReactionPrompt {
+    /// Build a new reaction prompt payload.
+    #[must_use]
+    pub fn new<S, I>(narrator_summary: S, character_relevant_facts: I) -> Self
+    where
+        S: Into<String>,
+        I: IntoIterator,
+        I::Item: Into<String>,
+    {
+        Self {
+            narrator_summary: narrator_summary.into(),
+            character_relevant_facts: character_relevant_facts
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+        }
+    }
+
+    /// Render the exact system/user prompt used for the reaction adapter.
+    #[must_use]
+    pub fn render(&self, character: &CharacterSoulConfig) -> String {
+        let relevant_facts = if self.character_relevant_facts.is_empty() {
+            "none".to_string()
+        } else {
+            self.character_relevant_facts.join("\n")
+        };
+
+        format!(
+            "<<system>>\nYou are {name}. The Narrator has just summarized our session: {narrator_summary}.\nYour job: react in 1-2 sentences from your perspective, using your voice profile {voice_profile}.\nYou may NOT introduce new numbers, names, or events not in the Narrator's summary.\n\n<<user>>\n{narrator_summary}\n{relevant_facts}\n\nOutput exactly:\n{{ \"reaction\": \"string, 1-2 sentences\" }}",
+            name = character.name,
+            narrator_summary = self.narrator_summary,
+            voice_profile = character.voice_profile(),
+            relevant_facts = relevant_facts
+        )
+    }
+}
+
+/// Narrator voice and prompt configuration.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct NarratorConfig {
+    /// Stable identity used for persistence and routing.
+    pub character_id: String,
+    /// Synthetic class name.
+    pub class: String,
+    /// Operator-overridable TTS voice identifier.
+    pub voice_id: String,
+    /// Narrative purpose summary.
+    pub purpose: String,
+    /// Human-friendly verbosity level.
+    pub verbosity: String,
+}
+
+fn default_narrator_character_id() -> String {
+    "narrator".to_string()
+}
+
+fn default_narrator_class() -> String {
+    "NARRATOR".to_string()
+}
+
+fn default_narrator_voice_id() -> String {
+    "piper:en-GB-northern_english_male-medium".to_string()
+}
+
+fn default_narrator_purpose() -> String {
+    "Post-session debrief, deaths, ding announcements, named loot.".to_string()
+}
+
+fn default_narrator_verbosity() -> String {
+    "concise".to_string()
+}
+
+impl Default for NarratorConfig {
+    fn default() -> Self {
+        Self {
+            character_id: default_narrator_character_id(),
+            class: default_narrator_class(),
+            voice_id: default_narrator_voice_id(),
+            purpose: default_narrator_purpose(),
+            verbosity: default_narrator_verbosity(),
+        }
+    }
+}
+
+impl NarratorConfig {
+    /// Render the narrator system prompt.
+    #[must_use]
+    pub fn system_prompt(&self) -> String {
+        format!(
+            "You are the Narrator. Use a neutral voice and keep prose concise. You own numeric-bearing prose and only summarize validated session facts. Purpose: {purpose} Voice: {voice_id} Verbosity: {verbosity}.",
+            purpose = self.purpose,
+            voice_id = self.voice_id,
+            verbosity = self.verbosity
+        )
+    }
+}
+
+/// Which class of voice is allowed to speak for a given event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceEventClass {
+    /// Post-session debrief.
+    PostSessionDebrief,
+    /// Death announcements.
+    DeathAnnouncement,
+    /// Ding announcements.
+    Ding,
+    /// Named loot drops.
+    NamedLootDrop,
+    /// Banter or idle chatter.
+    Banter,
+    /// Low-mana mutters.
+    LowManaMutter,
+    /// Direct callouts.
+    Callout,
+}
+
+/// Whether the narrator and/or a per-character voice can speak.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VoiceRoute {
+    /// True when the narrator should speak.
+    pub narrator: bool,
+    /// True when the character should speak.
+    pub character: bool,
+}
+
+impl VoiceRoute {
+    /// Route only the narrator.
+    #[must_use]
+    pub const fn narrator_only() -> Self {
+        Self {
+            narrator: true,
+            character: false,
+        }
+    }
+
+    /// Route only the per-character voice.
+    #[must_use]
+    pub const fn character_only() -> Self {
+        Self {
+            narrator: false,
+            character: true,
+        }
+    }
+
+    /// Route both voices.
+    #[must_use]
+    pub const fn both() -> Self {
+        Self {
+            narrator: true,
+            character: true,
+        }
+    }
+
+    /// Route no voices.
+    #[must_use]
+    pub const fn muted() -> Self {
+        Self {
+            narrator: false,
+            character: false,
+        }
+    }
+}
+
+/// Operator mute toggles for narrator and per-character voices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct VoiceRoutingTable {
+    /// Allow narrator voice output.
+    pub narrator_enabled: bool,
+    /// Allow per-character voice output.
+    pub character_enabled: bool,
+}
+
+impl Default for VoiceRoutingTable {
+    fn default() -> Self {
+        Self {
+            narrator_enabled: true,
+            character_enabled: true,
+        }
+    }
+}
+
+impl VoiceRoutingTable {
+    /// Resolve the speaker set for a given event class.
+    #[must_use]
+    pub fn route_for(&self, event_class: VoiceEventClass) -> VoiceRoute {
+        let base = match event_class {
+            VoiceEventClass::PostSessionDebrief
+            | VoiceEventClass::DeathAnnouncement
+            | VoiceEventClass::Ding
+            | VoiceEventClass::NamedLootDrop => VoiceRoute::narrator_only(),
+            VoiceEventClass::Banter
+            | VoiceEventClass::LowManaMutter
+            | VoiceEventClass::Callout => VoiceRoute::character_only(),
+        };
+
+        VoiceRoute {
+            narrator: base.narrator && self.narrator_enabled,
+            character: base.character && self.character_enabled,
+        }
+    }
+}
+
 /// LLM API provider selection.
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -276,6 +516,12 @@ pub struct SoulConfig {
     /// Discord bot personality for fleet commentary
     #[serde(default)]
     pub bot_personality: BotPersonalityConfig,
+    /// Narrator voice and prompt configuration.
+    #[serde(default)]
+    pub narrator: NarratorConfig,
+    /// Operator mute toggles for narrator and per-character voices.
+    #[serde(default)]
+    pub voice_routing: VoiceRoutingTable,
     /// Game-state suppression rules for gating soul actions during
     /// orchestrator-critical work.
     #[serde(default)]
@@ -411,6 +657,8 @@ impl Default for SoulConfig {
             relationship: Vec::new(),
             llm: LlmConfig::default(),
             bot_personality: BotPersonalityConfig::default(),
+            narrator: NarratorConfig::default(),
+            voice_routing: VoiceRoutingTable::default(),
             suppression: SuppressionRules::default(),
             max_requests_per_character: default_max_requests_per_character(),
             max_global_requests: default_max_global_requests(),
@@ -469,6 +717,14 @@ mod tests {
         assert!(config.relationship.is_empty());
         assert_eq!(config.llm.provider, LlmProviderKind::None);
         assert_eq!(config.llm.model, "gemma3:4b");
+        assert_eq!(config.narrator.character_id, "narrator");
+        assert_eq!(config.narrator.class, "NARRATOR");
+        assert_eq!(
+            config.narrator.voice_id,
+            "piper:en-GB-northern_english_male-medium"
+        );
+        assert!(config.voice_routing.narrator_enabled);
+        assert!(config.voice_routing.character_enabled);
         assert_eq!(config.sentiment_faction_delta, 5);
         assert!((config.sentiment_trust_delta - 0.05).abs() < f32::EPSILON);
     }
@@ -494,6 +750,114 @@ mod tests {
         assert!(!config.inter_character_chat);
         assert_eq!(config.sentiment_faction_delta, 7);
         assert!((config.sentiment_trust_delta - 0.2).abs() < 0.0001);
+    }
+
+    #[test]
+    fn narrator_config_deserializes() {
+        let toml_str = r#"
+            character_id = "narrator"
+            class = "NARRATOR"
+            voice_id = "piper:en-GB-northern_english_male-medium"
+            purpose = "Post-session debrief, deaths, ding announcements, named loot."
+            verbosity = "concise"
+        "#;
+
+        let config: NarratorConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.character_id, "narrator");
+        assert_eq!(config.class, "NARRATOR");
+        assert_eq!(
+            config.system_prompt(),
+            "You are the Narrator. Use a neutral voice and keep prose concise. You own numeric-bearing prose and only summarize validated session facts. Purpose: Post-session debrief, deaths, ding announcements, named loot. Voice: piper:en-GB-northern_english_male-medium Verbosity: concise."
+        );
+    }
+
+    #[test]
+    fn voice_routing_table_routes_by_event_class() {
+        let routes = VoiceRoutingTable::default();
+
+        assert_eq!(
+            routes.route_for(VoiceEventClass::PostSessionDebrief),
+            VoiceRoute::narrator_only()
+        );
+        assert_eq!(
+            routes.route_for(VoiceEventClass::DeathAnnouncement),
+            VoiceRoute::narrator_only()
+        );
+        assert_eq!(
+            routes.route_for(VoiceEventClass::Ding),
+            VoiceRoute::narrator_only()
+        );
+        assert_eq!(
+            routes.route_for(VoiceEventClass::NamedLootDrop),
+            VoiceRoute::narrator_only()
+        );
+        assert_eq!(
+            routes.route_for(VoiceEventClass::Banter),
+            VoiceRoute::character_only()
+        );
+        assert_eq!(
+            routes.route_for(VoiceEventClass::LowManaMutter),
+            VoiceRoute::character_only()
+        );
+        assert_eq!(
+            routes.route_for(VoiceEventClass::Callout),
+            VoiceRoute::character_only()
+        );
+    }
+
+    #[test]
+    fn voice_routing_table_respects_muting() {
+        let routes = VoiceRoutingTable {
+            narrator_enabled: false,
+            character_enabled: true,
+        };
+
+        assert_eq!(
+            routes.route_for(VoiceEventClass::PostSessionDebrief),
+            VoiceRoute::muted()
+        );
+        assert_eq!(
+            routes.route_for(VoiceEventClass::Banter),
+            VoiceRoute::character_only()
+        );
+
+        let routes = VoiceRoutingTable {
+            narrator_enabled: true,
+            character_enabled: false,
+        };
+
+        assert_eq!(
+            routes.route_for(VoiceEventClass::PostSessionDebrief),
+            VoiceRoute::narrator_only()
+        );
+        assert_eq!(
+            routes.route_for(VoiceEventClass::Banter),
+            VoiceRoute::muted()
+        );
+    }
+
+    #[test]
+    fn reaction_prompt_renders_against_narrator_summary() {
+        let character = CharacterSoulConfig {
+            name: "Cleric".to_string(),
+            traits: PersonalityTraits::default(),
+            speech: SpeechStyle::default(),
+            edginess: None,
+            backstory: "Temple healer".to_string(),
+            quirks: vec!["keeps the group alive".to_string()],
+        };
+        let prompt = CharacterReactionPrompt::new(
+            "The Narrator said the raid survived with one death.",
+            ["Cleric died at the end of the fight."],
+        );
+
+        let rendered = prompt.render(&character);
+        assert!(rendered.contains("You are Cleric."));
+        assert!(rendered.contains("The Narrator has just summarized our session: The Narrator said the raid survived with one death."));
+        assert!(rendered.contains("voice profile name=Cleric;"));
+        assert!(rendered.contains("Cleric died at the end of the fight."));
+        assert!(rendered.contains("{ \"reaction\": \"string, 1-2 sentences\" }"));
+        assert!(!rendered.contains("raw aggregates"));
     }
 
     #[test]
