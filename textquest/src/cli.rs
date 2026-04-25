@@ -7,7 +7,7 @@ use textquest_common::ghidra_db::GhidraDatabase;
 use tracing::{error, info, warn};
 use zeroize::Zeroizing;
 
-use crate::{config, eq, inject, ipc, nav, orchestrator, paths, process, tui};
+use crate::{config, eq, inject, ipc, nav, orchestrator, paths, process, replay, tui};
 
 use crate::{GHIDRA_DB_PATH, OPCODES_CONFIG_PATH, SOUL_DB_PATH, get_module_base};
 
@@ -2694,6 +2694,142 @@ pub fn run_report_mode(input: &std::path::Path, output: &std::path::Path) -> Res
     Ok(())
 }
 
+// ── Replay storage ─────────────────────────────────────────────────────────
+
+pub fn run_replay_list_mode(
+    character: Option<&str>,
+    zone: Option<&str>,
+    since: Option<&str>,
+) -> Result<()> {
+    let filters = replay::ReplayListFilters {
+        character: character.map(ToOwned::to_owned),
+        zone: zone.map(ToOwned::to_owned),
+        since: since.map(parse_replay_since_duration).transpose()?,
+    };
+    let root = replay::replay_root();
+    let bundles = replay::list_bundles(&root, &filters)?;
+
+    if bundles.is_empty() {
+        eprintln!("No replay bundles found under {}", root.display());
+        return Ok(());
+    }
+
+    println!(
+        "{:<24} {:<16} {:<8} {:<12} {:<20} PATH",
+        "SESSION", "CHARACTER", "TIER", "AGE_DAYS", "CONTENT_HASH"
+    );
+    for summary in bundles {
+        let age_days = replay_age_days(summary.created_unix_seconds);
+        println!(
+            "{:<24} {:<16} {:<8} {:<12.1} {:<20} {}",
+            summary.session_id,
+            summary.character,
+            format!("{:?}", summary.tier),
+            age_days,
+            short_hash(&summary.content_hash),
+            summary.path.display()
+        );
+    }
+
+    Ok(())
+}
+
+pub fn run_replay_show_mode(session_id: &str) -> Result<()> {
+    let loaded = load_replay_bundle(session_id)?;
+    let meta = &loaded.bundle.meta;
+
+    println!("session_id: {}", meta.session_id);
+    println!("character: {}", meta.character);
+    println!("tier: {:?}", meta.tier);
+    println!("created_unix_seconds: {}", meta.created_unix_seconds);
+    println!("policy_sha: {}", meta.policy_sha);
+    println!("config_hash: {}", meta.config_hash);
+    println!("dictionary_id: {}", meta.dictionary_id.as_deref().unwrap_or("n/a"));
+    println!("content_hash: {}", meta.content_hash);
+    println!("party: {}", meta.party.join(", "));
+    println!("zones: {}", meta.zones.join(", "));
+
+    if loaded.verification.ok {
+        println!("verification: ok");
+    } else {
+        eprintln!("verification: failed");
+        for mismatch in &loaded.verification.mismatches {
+            eprintln!("  {mismatch}");
+        }
+    }
+
+    Ok(())
+}
+
+pub fn run_replay_export_mode(
+    session_id: &str,
+    redacted: bool,
+    output: Option<&std::path::Path>,
+) -> Result<()> {
+    let loaded = load_replay_bundle(session_id)?;
+    let export_path = output
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .join(format!("{session_id}.tqreplay")));
+
+    if redacted {
+        let tempdir = tempfile::tempdir().context("failed to create replay redaction tempdir")?;
+        let mut redacted_bundle = loaded.bundle.clone();
+        redacted_bundle.streams.operator = b"{\"redacted\":true}\n".to_vec();
+        replay::write_bundle_with_tier(
+            tempdir
+                .path()
+                .join(&redacted_bundle.meta.character)
+                .join(&redacted_bundle.meta.session_id),
+            redacted_bundle,
+            loaded.bundle.meta.tier,
+        )?;
+        let redacted_dir = tempdir
+            .path()
+            .join(&loaded.bundle.meta.character)
+            .join(&loaded.bundle.meta.session_id);
+        replay::export_bundle_to_tqreplay(&redacted_dir, &export_path, false)?;
+    } else {
+        replay::export_bundle_to_tqreplay(&loaded.path, &export_path, false)?;
+    }
+
+    eprintln!("replay: exported {} -> {}", session_id, export_path.display());
+    Ok(())
+}
+
+pub fn run_replay_verify_mode(session_id: &str) -> Result<()> {
+    let loaded = load_replay_bundle(session_id)?;
+    if loaded.verification.ok {
+        println!("replay {}: ok", session_id);
+        Ok(())
+    } else {
+        eprintln!("replay {}: hash mismatch", session_id);
+        for mismatch in &loaded.verification.mismatches {
+            eprintln!("  {mismatch}");
+        }
+        anyhow::bail!("replay verification failed")
+    }
+}
+
+pub fn run_replay_compact_mode() -> Result<()> {
+    let root = replay::replay_root();
+    let updated = replay::compact_root(&root)?;
+    if updated.is_empty() {
+        eprintln!("replay: no bundles compacted");
+        return Ok(());
+    }
+
+    eprintln!("replay: compacted {} bundle(s)", updated.len());
+    for meta in updated {
+        eprintln!(
+            "  {} / {} -> {:?}",
+            meta.character, meta.session_id, meta.tier
+        );
+    }
+
+    Ok(())
+}
+
 /// Helper: read and log a hex dump of `count` bytes starting at `base_addr +
 /// start_offset`.
 #[allow(dead_code)]
@@ -2743,6 +2879,70 @@ fn dump_hex_region(
         ),
     }
 }
+
+fn load_replay_bundle(session_id: &str) -> Result<replay::LoadedReplayBundle> {
+    let root = replay::replay_root();
+    let bundles = replay::list_bundles(&root, &replay::ReplayListFilters::default())?;
+    let matches: Vec<_> = bundles
+        .into_iter()
+        .filter(|bundle| bundle.session_id == session_id)
+        .collect();
+
+    match matches.as_slice() {
+        [] => anyhow::bail!("no replay bundle found for session {session_id}"),
+        [summary] => replay::load_bundle(&summary.path)
+            .with_context(|| format!("failed to load replay bundle {}", summary.path.display())),
+        _ => anyhow::bail!(
+            "multiple replay bundles share session id {session_id}; rerun with a unique session"
+        ),
+    }
+}
+
+fn parse_replay_since_duration(value: &str) -> Result<Duration> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("since duration cannot be empty");
+    }
+
+    let (number, unit) = match trimmed.chars().last() {
+        Some(unit) if unit.is_ascii_alphabetic() => (&trimmed[..trimmed.len() - 1], Some(unit)),
+        _ => (trimmed, None),
+    };
+
+    let amount = number.parse::<f64>().with_context(|| {
+        format!("invalid replay since duration `{value}`; expected a number with optional unit")
+    })?;
+    if !amount.is_finite() || amount < 0.0 {
+        anyhow::bail!("replay since duration must be a finite non-negative number");
+    }
+
+    let seconds = match unit.map(|u| u.to_ascii_lowercase()) {
+        None | Some('h') => amount * 3_600.0,
+        Some('s') => amount,
+        Some('m') => amount * 60.0,
+        Some('d') => amount * 86_400.0,
+        Some('w') => amount * 604_800.0,
+        Some(other) => anyhow::bail!("unsupported since duration unit `{other}`"),
+    };
+
+    Ok(Duration::from_secs_f64(seconds))
+}
+
+fn replay_age_days(created_unix_seconds: u64) -> f64 {
+    let created = std::time::UNIX_EPOCH
+        .checked_add(Duration::from_secs(created_unix_seconds))
+        .unwrap_or(std::time::UNIX_EPOCH);
+    std::time::SystemTime::now()
+        .duration_since(created)
+        .map(|duration| duration.as_secs_f64() / 86_400.0)
+        .unwrap_or(0.0)
+}
+
+fn short_hash(hash: &str) -> &str {
+    let end = hash.len().min(16);
+    &hash[..end]
+}
+
 /// # Errors
 ///
 /// Returns an error if the operation fails.

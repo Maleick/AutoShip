@@ -248,6 +248,13 @@ enum Commands {
         output: std::path::PathBuf,
     },
 
+    // ── Replay storage ────────────────────────────────────────────────
+    /// Manage replay bundles
+    Replay {
+        #[command(subcommand)]
+        action: ReplayAction,
+    },
+
     // ── Configuration ─────────────────────────────────────────────────
     /// Configuration management
     Config {
@@ -414,6 +421,45 @@ enum CredentialAction {
     },
 }
 
+#[derive(Subcommand, Debug)]
+enum ReplayAction {
+    /// List replay bundles
+    List {
+        /// Filter by character name
+        #[arg(long)]
+        character: Option<String>,
+        /// Filter by zone short name
+        #[arg(long)]
+        zone: Option<String>,
+        /// Filter to replays newer than this age (for example `14d`, `12h`)
+        #[arg(long)]
+        since: Option<String>,
+    },
+    /// Show replay bundle details
+    Show {
+        /// Session id
+        session_id: String,
+    },
+    /// Export a replay bundle to a .tqreplay archive
+    Export {
+        /// Session id
+        session_id: String,
+        /// Export a redacted copy
+        #[arg(long)]
+        redacted: bool,
+        /// Output path (default: <session_id>.tqreplay)
+        #[arg(long)]
+        output: Option<std::path::PathBuf>,
+    },
+    /// Verify the bundle hashes for a session
+    Verify {
+        /// Session id
+        session_id: String,
+    },
+    /// Compact replay bundles according to the retention tiers
+    Compact,
+}
+
 #[cfg(not(windows))]
 fn main() {
     eprintln!("textquest is only supported on Windows");
@@ -551,6 +597,23 @@ fn main() -> Result<()> {
 
         // Report generation
         Some(Commands::Report { input, output }) => cli::run_report_mode(&input, &output),
+
+        // Replay storage
+        Some(Commands::Replay { action }) => match action {
+            ReplayAction::List {
+                character,
+                zone,
+                since,
+            } => cli::run_replay_list_mode(character.as_deref(), zone.as_deref(), since.as_deref()),
+            ReplayAction::Show { session_id } => cli::run_replay_show_mode(&session_id),
+            ReplayAction::Export {
+                session_id,
+                redacted,
+                output,
+            } => cli::run_replay_export_mode(&session_id, redacted, output.as_deref()),
+            ReplayAction::Verify { session_id } => cli::run_replay_verify_mode(&session_id),
+            ReplayAction::Compact => cli::run_replay_compact_mode(),
+        },
 
         // Configuration
         Some(Commands::Config { action }) => match action {
