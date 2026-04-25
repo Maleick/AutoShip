@@ -20,6 +20,7 @@ AutoShip is OpenCode-only.
 | Coordinator | `openai/gpt-5.5` |
 | Orchestrator | `openai/gpt-5.5` |
 | Reviewer | `openai/gpt-5.5` |
+| Lead | `openai/gpt-5.5` |
 | Workers | Best configured model per task |
 
 `openai/gpt-5.5-fast` is not allowed.
