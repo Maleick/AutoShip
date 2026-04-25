@@ -4,7 +4,7 @@ use std::{
     hash::{Hash, Hasher},
     sync::{LazyLock, mpsc},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use super::{
@@ -496,6 +496,7 @@ pub struct Toast {
     pub level: ToastLevel,
     pub set_tick: u64,
     pub ttl_ticks: u64,
+    pub expires_at: Instant,
 }
 
 /// Application state for the TUI command center.
@@ -1550,12 +1551,15 @@ impl App {
     pub fn set_toast(&mut self, level: ToastLevel, msg: impl Into<String>) {
         let message = msg.into();
         let ttl_ticks = level.ttl_ticks();
+        let now = Instant::now();
+        let ttl_duration = Duration::from_millis(self.refresh_rate_ms.saturating_mul(ttl_ticks));
         if let Some(toast) = self.toast.as_mut()
             && toast.level == level
             && toast.message == message
         {
             toast.set_tick = self.tick_count;
             toast.ttl_ticks = ttl_ticks;
+            toast.expires_at = now + ttl_duration;
             return;
         }
         self.toast = Some(Toast {
@@ -1563,6 +1567,7 @@ impl App {
             level,
             set_tick: self.tick_count,
             ttl_ticks,
+            expires_at: now + ttl_duration,
         });
     }
 
@@ -1578,11 +1583,10 @@ impl App {
 
     /// Clear expired toast messages.
     pub fn clear_expired_toast(&mut self) {
-        if self
-            .toast
-            .as_ref()
-            .is_some_and(|toast| self.tick_count.saturating_sub(toast.set_tick) > toast.ttl_ticks)
-        {
+        if self.toast.as_ref().is_some_and(|toast| {
+            Instant::now() >= toast.expires_at
+                || self.tick_count.saturating_sub(toast.set_tick) > toast.ttl_ticks
+        }) {
             self.toast = None;
         }
     }

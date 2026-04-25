@@ -10,6 +10,8 @@
 //! - [`widgets`]     — shared helpers (`panel`, `themed_header_row`, colour fns
 //!   …)
 
+use std::time::{Duration, Instant};
+
 pub mod ch_chain;
 pub mod dps_bars;
 pub mod economy_controls;
@@ -167,10 +169,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         draw_alert_overlay(frame, area, app);
     }
 
-    // Toast notification (bottom-right centered overlay, 62 wide, 4 tall with borders)
+    // Toast notification (bottom-right centered overlay, 62 wide, 5 tall with borders)
     if let Some(toast) = app.toast.as_ref() {
         let t = &app.theme;
-        let toast_area = centered_popup(area, 45, 8, 62, 4, 62, 4, 1); // Fixed 62x4
+        let toast_area = centered_popup(area, 45, 8, 62, 5, 62, 5, 1); // Fixed 62x5
         let border_color = Style::default().fg(t.hp_high); // Green border
 
         // Split message on newline or bullet separator for 2-line display
@@ -209,11 +211,45 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
                 format!("  {}", line2_text),
                 Style::default().fg(t.text_muted),
             )),
+            Line::from(Span::styled(
+                toast_progress_bar(toast, app.refresh_rate_ms, inner.width as usize),
+                Style::default().fg(t.hp_high),
+            )),
         ];
 
         let para = Paragraph::new(lines_to_render);
         para.render(inner, frame.buffer_mut());
     }
+}
+
+fn toast_progress_bar(
+    toast: &crate::tui::app::Toast,
+    refresh_rate_ms: u64,
+    width: usize,
+) -> String {
+    if width == 0 {
+        return String::new();
+    }
+
+    let total = Duration::from_millis(refresh_rate_ms.saturating_mul(toast.ttl_ticks));
+    if total.is_zero() {
+        return "░".repeat(width);
+    }
+
+    let remaining = toast.expires_at.saturating_duration_since(Instant::now());
+    let fraction = (remaining.as_secs_f64() / total.as_secs_f64()).clamp(0.0, 1.0);
+    let filled = fraction * width as f64;
+    let solid = filled.floor() as usize;
+    let has_partial = solid < width && filled > solid as f64;
+
+    let mut bar = String::with_capacity(width);
+    bar.push_str(&"█".repeat(solid.min(width)));
+    if has_partial {
+        bar.push('▓');
+    }
+    let used = solid.min(width) + usize::from(has_partial);
+    bar.push_str(&"░".repeat(width.saturating_sub(used)));
+    bar
 }
 
 // ─── Header ──────────────────────────────────────────────────────────────────
