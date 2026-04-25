@@ -25,9 +25,11 @@
 
 use std::{
     collections::{HashMap, VecDeque},
+    path::{Path, PathBuf},
     time::Instant,
 };
 
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use textquest_common::ipc::{Command, IpcCommand};
 
@@ -86,6 +88,102 @@ impl ClickCondition {
         }
         true
     }
+}
+
+// ── Raw config loading helpers ──────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ClickyConfigFile {
+    #[serde(default)]
+    clicky: Vec<RawClickyItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RawClickyItem {
+    #[serde(flatten)]
+    item: ClickyItem,
+    #[serde(default)]
+    combat_only: Option<bool>,
+    #[serde(default)]
+    ooc_only: Option<bool>,
+}
+
+impl RawClickyItem {
+    fn normalize_scenario(mut self) -> Result<ClickyItem> {
+        let combat_only = self.combat_only.unwrap_or(false);
+        let ooc_only = self.ooc_only.unwrap_or(false);
+
+        match (combat_only, ooc_only) {
+            (false, false) => Ok(self.item),
+            (true, false) => {
+                if self.item.scenario != ClickyScenario::Any {
+                    anyhow::bail!(
+                        "clicky '{}' uses both legacy combat flags and explicit scenario",
+                        self.item.name
+                    );
+                }
+                self.item.scenario = ClickyScenario::Combat;
+                Ok(self.item)
+            }
+            (false, true) => {
+        if self.item.scenario != ClickyScenario::Any {
+            anyhow::bail!(
+                "clicky '{}' uses both legacy scenario flags and explicit scenario",
+                self.item.name
+            );
+                }
+                self.item.scenario = ClickyScenario::Downtime;
+                Ok(self.item)
+            }
+            (true, true) => anyhow::bail!(
+                "clicky '{}' cannot set both combat_only and ooc_only",
+                self.item.name
+            ),
+        }
+    }
+}
+
+/// Load clicky configuration by merging `global.toml` and optional per-character
+/// TOML files from a clicky config directory.
+///
+/// `character_name` is used to resolve `<character_name>.toml`.
+/// Example layout:
+///
+/// - `config/clickies/global.toml` (optional)
+/// - `config/clickies/<character>.toml` (optional override/append file)
+///
+/// If neither file exists, an empty clicky list is returned.
+pub fn load_clickies_for_character(
+    clicky_config_dir: &Path,
+    character_name: &str,
+) -> Result<Vec<ClickyItem>> {
+    let mut items = Vec::new();
+
+    let global_path = clicky_config_dir.join("global.toml");
+    if global_path.exists() {
+        items.extend(load_clicky_file(&global_path)?);
+    }
+
+    let character_path = clicky_config_dir.join(PathBuf::from(format!("{character_name}.toml")));
+    if character_path.exists() {
+        items.extend(load_clicky_file(&character_path)?);
+    }
+
+    Ok(items)
+}
+
+fn load_clicky_file(path: &Path) -> Result<Vec<ClickyItem>> {
+    let contents = std::fs::read_to_string(path)
+        .with_context(|| format!("Failed to read clicky config file: {}", path.display()))?;
+    let parsed: ClickyConfigFile = toml::from_str(&contents)
+        .with_context(|| format!("Failed to parse clicky config file: {}", path.display()))?;
+
+    let mut items = Vec::with_capacity(parsed.clicky.len());
+    for item in parsed.clicky {
+        items.push(item.normalize_scenario()?);
+    }
+
+    Ok(items)
 }
 
 // ── CharSnapshot ──────────────────────────────────────────────────────────────
@@ -468,6 +566,11 @@ mod tests {
     use super::*;
     use std::time::{Duration, Instant};
 
+    fn write_clicky_config(dir: &std::path::Path, filename: &str, content: &str) {
+        let path = dir.join(filename);
+        std::fs::write(path, content).expect("failed to write clicky test config");
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     fn simple_item(name: &str, slot: u8, cooldown_ms: u64) -> ClickyItem {
@@ -806,6 +909,74 @@ mod tests {
             "history should be capped at 3, got {}",
             mgr.history.len()
         );
+    }
+
+    #[test]
+    fn integration_items_click_on_schedule() {
+        let mut mgr = ClickyManager::new(vec![simple_item("Boots", 0, 1_000)]);
+        let t0 = Instant::now();
+        let stub = StubExecutor::default();
+
+        let states = [(1, healthy_snapshot()), (2, healthy_snapshot())];
+
+        let log1 = mgr.tick(t0, &states, &stub);
+        assert_eq!(log1.len(), 2);
+        assert_eq!(stub.calls.borrow().len(), 2);
+
+        let log2 = mgr.tick(t0 + Duration::from_millis(500), &states, &stub);
+        assert!(log2.is_empty());
+        assert_eq!(stub.calls.borrow().len(), 2, "cooldown has not expired");
+
+        let log3 = mgr.tick(t0 + Duration::from_millis(1_050), &states, &stub);
+        assert_eq!(log3.len(), 2, "both characters should refresh after cooldown");
+        assert_eq!(stub.calls.borrow().len(), 4);
+    }
+
+    #[test]
+    fn integration_config_loading_merges_global_and_character() {
+        let dir = tempfile::tempdir().expect("failed to create clicky temp dir");
+        let dir_path = dir.path().to_path_buf();
+        write_clicky_config(
+            &dir_path,
+            "global.toml",
+            r#"
+[[clicky]]
+name = "Global Combat Item"
+slot = 1
+cooldown_ms = 5000
+combat_only = true
+"#,
+        );
+        write_clicky_config(
+            &dir_path,
+            "Warrior01.toml",
+            r#"
+[[clicky]]
+name = "Warrior Ooc Item"
+slot = 2
+cooldown_ms = 7_000
+ooc_only = true
+[[clicky.conditions]]
+mana_pct_max = 60.0
+"#,
+        );
+
+        let loaded = load_clickies_for_character(&dir_path, "Warrior01")
+            .expect("failed to load clicky config");
+
+        assert_eq!(loaded.len(), 2);
+        let global = loaded
+            .iter()
+            .find(|item| item.name == "Global Combat Item")
+            .expect("missing global clicky");
+        let warrior = loaded
+            .iter()
+            .find(|item| item.name == "Warrior Ooc Item")
+            .expect("missing warrior clicky");
+
+        assert_eq!(global.scenario, ClickyScenario::Combat);
+        assert_eq!(warrior.scenario, ClickyScenario::Downtime);
+        assert_eq!(warrior.conditions[0].mana_pct_max, Some(60.0));
     }
 
     #[test]
