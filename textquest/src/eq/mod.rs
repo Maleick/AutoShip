@@ -27,3 +27,5 @@ pub mod spawn_alert;
 pub mod spawn_filter;
 /// EQ data structures — `SpawnInfo`, `GroupInfo`, class/type enums.
 pub mod structs;
+/// MQ2Tracking parity — auto-track for RNG/BRD with watchlist cross-reference.
+pub mod tracking_service;
