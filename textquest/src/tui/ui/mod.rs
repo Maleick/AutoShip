@@ -26,6 +26,7 @@ pub mod packets;
 pub mod patch_reconciliation;
 pub mod spawns;
 pub mod widgets;
+pub mod policy_panel;
 pub mod zone_blocker_panel;
 pub mod zone_status_panel;
 
@@ -82,6 +83,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             orchestrator_panel::draw_orchestrator_screen(frame, outer[1], app)
         }
         ActiveScreen::Metrics => roster::draw_metrics_dashboard(frame, outer[1], app),
+        ActiveScreen::Policy => policy_panel::draw_policy_screen(frame, outer[1], app),
     }
 
     draw_status_bar(frame, outer[2], app);
@@ -284,6 +286,7 @@ fn header_tab_label(screen: ActiveScreen, width_class: WidthClass) -> &'static s
             ActiveScreen::Economy => "Coin",
             ActiveScreen::Orchestrator => "Gate",
             ActiveScreen::Metrics => "Metr",
+            ActiveScreen::Policy => "Poly",
         },
         WidthClass::Narrow => match screen {
             ActiveScreen::Overview => "1",
@@ -294,6 +297,7 @@ fn header_tab_label(screen: ActiveScreen, width_class: WidthClass) -> &'static s
             ActiveScreen::Economy => "6",
             ActiveScreen::Orchestrator => "7",
             ActiveScreen::Metrics => "8",
+            ActiveScreen::Policy => "9",
         },
     }
 }

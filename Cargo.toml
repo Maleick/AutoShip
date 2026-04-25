@@ -4,6 +4,7 @@ members = [
     "textquest-soul",
     "textquest-dll",
     "textquest-common",
+    "textquest-policy",
     "textquest-web",
     "textquest-web-sdk",
     "plugins/example-inventory-plugin",

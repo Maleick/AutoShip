@@ -131,6 +131,8 @@ pub enum ActiveScreen {
     Orchestrator,
     /// Real-time metrics dashboard with trend panels.
     Metrics,
+    /// Active policy debug panel — versions, sources, canary reports, rollback.
+    Policy,
 }
 
 impl ActiveScreen {
@@ -146,11 +148,12 @@ impl ActiveScreen {
             Self::Economy => "Coinmark",
             Self::Orchestrator => "Third Gate",
             Self::Metrics => "Metrics",
+            Self::Policy => "Policies",
         }
     }
 
     /// All screen variants for iteration.
-    pub const ALL: [ActiveScreen; 8] = [
+    pub const ALL: [ActiveScreen; 9] = [
         Self::Overview,
         Self::Tactical,
         Self::Navigation,
@@ -159,6 +162,7 @@ impl ActiveScreen {
         Self::Economy,
         Self::Orchestrator,
         Self::Metrics,
+        Self::Policy,
     ];
 }
 
@@ -207,6 +211,8 @@ pub enum ActivePanel {
     SpawnEvents,
     /// Metrics dashboard panel.
     MetricsDashboard,
+    /// Active policy debug panel.
+    PolicyPanel,
 }
 
 impl ActivePanel {
@@ -228,11 +234,14 @@ impl ActivePanel {
             Self::DebugSpawns => "Debug spawns",
             Self::DebugHexDump => "Hex dump",
             Self::DebugExplorer => "Offset explorer",
+            Self::DebugPatchReconciliation => "Patch reconciliation",
             Self::PacketMonitorLog => "Packet monitor",
             Self::DebugInternals => "EQ internals",
             Self::EconomyControls => "Economy controls",
             Self::OrchestratorDashboard => "Orchestrator dashboard",
             Self::SpawnEvents => "Spawn events",
+            Self::MetricsDashboard => "Metrics dashboard",
+            Self::PolicyPanel => "Policy panel",
         }
     }
 }
@@ -1367,6 +1376,8 @@ pub struct App {
     pub orchestrator_state: super::ui::orchestrator_panel::OrchestratorDashboardState,
     /// Metrics dashboard state (tab selection, sorting, trends).
     pub metrics_dashboard_state: MetricsDashboardState,
+    /// Policy panel state (active scopes, selected row for rollback).
+    pub policy_panel_state: super::ui::policy_panel::PolicyPanelState,
 
     /// Top loot items by value or frequency for session display.
     pub top_loot: Vec<(String, u32)>,
@@ -1723,6 +1734,7 @@ impl App {
             economy_state: super::state::EconomyState::default(),
             orchestrator_state: super::ui::orchestrator_panel::OrchestratorDashboardState::new(),
             metrics_dashboard_state: MetricsDashboardState::new(),
+            policy_panel_state: super::ui::policy_panel::PolicyPanelState::default(),
             top_loot: Vec::new(),
             gm_detector: GmDetector::new(GmAlertConfig::default()),
             gm_auto_paused: false,
@@ -2405,6 +2417,7 @@ impl App {
             // renderer ships.
             ActiveScreen::Orchestrator => ActivePanel::EconomyControls,
             ActiveScreen::Metrics => ActivePanel::MetricsDashboard,
+            ActiveScreen::Policy => ActivePanel::PolicyPanel,
         }
     }
 
@@ -2449,6 +2462,7 @@ impl App {
             ActiveScreen::Economy => vec![ActivePanel::EconomyControls],
             ActiveScreen::Orchestrator => vec![ActivePanel::OrchestratorDashboard],
             ActiveScreen::Metrics => vec![ActivePanel::MetricsDashboard],
+            ActiveScreen::Policy => vec![ActivePanel::PolicyPanel],
         }
     }
 
@@ -2545,6 +2559,7 @@ impl App {
             ActiveScreen::Economy => 5,
             ActiveScreen::Orchestrator => 6,
             ActiveScreen::Metrics => 7,
+            ActiveScreen::Policy => 8,
         }
     }
 

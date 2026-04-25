@@ -1,0 +1,17 @@
+[package]
+name = "textquest-policy"
+version = "0.1.0"
+edition = "2024"
+description = "Versioned policy store with hot-swap and rollback for TextQuest learned strategies"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+arc-swap.workspace = true
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+[dev-dependencies]
+tempfile = "3"
