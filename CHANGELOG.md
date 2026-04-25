@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.2
+
+- Remove content-based unsafe issue blockers from planning, dispatch, classification, and self-improvement issue filing.
+- Rank default free worker models from the live OpenCode provider list before writing model routing.
+- Package and install plugin assets under `.autoship/plugins`, initialize model history, and add diagnostics for OpenCode `Session not found` worker failures.
+
 ## v2.0.1
 
 - Fix package CLI version output so `VERSION` values that already include `v` do not print as `vv...`.
@@ -35,5 +41,4 @@
 - Free worker models by default, with operator-selected Spark, Go-provider, Nvidia, OpenRouter, and other OpenCode models allowed when available.
 - Learned worker model selection using task fit, configured strength, cost class, and prior success/failure history.
 - Default active worker cap increased to 15.
-- Unsafe/evasion-prone issues block for human review.
 - Removed stale runtime, assistant, and pre-rename references from docs and public pages.

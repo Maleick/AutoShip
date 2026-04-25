@@ -53,16 +53,6 @@ TITLE=$(gh issue view "$ISSUE_NUM" --json title --jq '.title' 2>/dev/null || ech
 BODY=$(gh issue view "$ISSUE_NUM" --json body --jq '.body' 2>/dev/null || echo "")
 LABELS=$(gh issue view "$ISSUE_NUM" --json labels --jq '[.labels[].name] | join(",")' 2>/dev/null || echo "")
 
-safety=$(bash "$SCRIPT_DIR/safety-filter.sh" --text "$TITLE" "$LABELS" "$BODY" || true)
-if [[ "$safety" == BLOCKED:* ]]; then
-  mkdir -p "$WORKSPACE_PATH"
-  printf 'BLOCKED\n' > "$WORKSPACE_PATH/status"
-  printf '%s\n' "$safety" > "$WORKSPACE_PATH/BLOCKED_REASON.txt"
-  bash "$REPO_ROOT/hooks/update-state.sh" set-blocked "$ISSUE_KEY" reason="$safety" 2>/dev/null || true
-  echo "BLOCKED $ISSUE_KEY: $safety"
-  exit 0
-fi
-
 resolve_model() {
   local task_type="$1"
   local issue_num="$2"

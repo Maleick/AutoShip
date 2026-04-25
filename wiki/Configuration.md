@@ -8,8 +8,8 @@ AutoShip has two local configuration locations:
 Install or refresh the OpenCode package assets with the package CLI:
 
 ```bash
-opencode-autoship install
-opencode-autoship doctor
+bunx opencode-autoship install
+bunx opencode-autoship doctor
 ```
 
 When working from a source checkout, the repo-local installer is also supported and matches the Pages install guide:

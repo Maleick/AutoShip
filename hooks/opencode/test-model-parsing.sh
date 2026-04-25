@@ -33,6 +33,7 @@ echo "=== Test: free model IDs ==="
 DEFAULT_FREE=$(default_free_models "$AVAILABLE_IDS")
 DEFAULT_FREE_NL=$(printf '%s\n' "$DEFAULT_FREE" | tr ',' '\n')
 assert_eq "3" "$(classify_models "$DEFAULT_FREE_NL" | grep -c ':free' || true)" "default model pool prefers free models"
+assert_eq "opencode/nemotron-3-super-free,opencode/minimax-m2.5-free,openrouter/google/gemma-3-27b-it:free" "$DEFAULT_FREE" "default free models are ranked by capability before provider order"
 
 echo "=== Test: explicit selected model IDs ==="
 SELECTED_INPUT="openai/gpt-5.5,openai/gpt-5.3-codex-spark"
@@ -121,6 +122,7 @@ install_mock_opencode_models_fixture "$FREE_REPO/bin"
   PATH="$FREE_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --planner-model=openai/gpt-5.5 >/dev/null
 )
 assert_eq "2" "$(jq '[.models[] | select(.cost == "free")] | length' "$FREE_REPO/autoship/.autoship/model-routing.json")" "setup fixture free defaults include only free workers"
+assert_eq "opencode/nemotron-3-super-free" "$(jq -r '.defaultFallback' "$FREE_REPO/autoship/.autoship/model-routing.json")" "setup chooses strongest ranked free model as default fallback"
 if jq -e '.pools.default.models[] | select(. == "openai/gpt-5.5" or . == "openai/gpt-5.3-codex-spark")' "$FREE_REPO/autoship/.autoship/model-routing.json" >/dev/null; then
   fail "setup default worker pool must not include paid or role models from fixture"
 fi

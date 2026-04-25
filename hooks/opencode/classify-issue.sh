@@ -10,11 +10,6 @@ ISSUE_TITLE=$(gh issue view "$ISSUE_NUM" --json title --jq '.title' 2>/dev/null 
 ISSUE_LABELS=$(gh issue view "$ISSUE_NUM" --json labels --jq '[.labels[].name]' 2>/dev/null || echo "[]")
 LABEL_TEXT=$(echo "$ISSUE_LABELS" | jq -r 'join(",")' 2>/dev/null || echo "")
 
-if bash "$(dirname "$0")/safety-filter.sh" --text "$ISSUE_TITLE" "$LABEL_TEXT" "$ISSUE_BODY" 2>/dev/null | grep -q '^BLOCKED:'; then
-  echo "blocked"
-  exit 0
-fi
-
 # Check for explicit label overrides
 if echo "$ISSUE_LABELS" | jq -e '.[] | test("mode:(research|docs|complex|simple)"; "i")' >/dev/null 2>&1; then
   MODE=$(echo "$ISSUE_LABELS" | jq -r '.[] | select(test("mode:(research|docs|complex|simple)"; "i")) | capture("mode:(?<mode>.*)").mode' | head -1)

@@ -5,8 +5,8 @@
 Run the package installer, then diagnostics:
 
 ```bash
-opencode-autoship install
-opencode-autoship doctor
+bunx opencode-autoship install
+bunx opencode-autoship doctor
 ```
 
 The installer refreshes AutoShip assets under your OpenCode config directory and registers `opencode-autoship` in `opencode.json`. If you are developing from a source checkout, this repo-local path is also valid:
@@ -20,10 +20,10 @@ bash hooks/opencode/install.sh
 Run:
 
 ```bash
-opencode-autoship doctor
+bunx opencode-autoship doctor
 ```
 
-Failures usually mean the OpenCode package registration, installed assets, `.autoship/config.json`, or `.autoship/model-routing.json` are missing or stale. Run `opencode-autoship install`, then `/autoship-setup` or `bash hooks/opencode/setup.sh` to regenerate project-local runtime config.
+Failures usually mean the OpenCode package registration, installed assets, `.autoship/config.json`, or `.autoship/model-routing.json` are missing or stale. Run `bunx opencode-autoship install`, then `/autoship-setup` or `bash hooks/opencode/setup.sh` to regenerate project-local runtime config.
 
 Warnings are not always blockers. For example, missing onboarding means setup has not run yet, and model inventory warnings can occur when `opencode models` is unavailable in the current shell.
 
@@ -35,7 +35,7 @@ Run:
 opencode models
 ```
 
-If the expected provider models are missing, reconnect the provider in OpenCode and rerun setup. AutoShip defaults to live models flagged free; if no free models are available, choose exact worker models explicitly:
+If the expected provider models are missing, reconnect the provider in OpenCode and rerun setup. AutoShip defaults to ranked live models flagged free; if no free models are available, choose exact worker models explicitly:
 
 ```bash
 AUTOSHIP_MODELS="provider/model-a,provider/model-b" bash hooks/opencode/setup.sh
@@ -74,10 +74,6 @@ bash hooks/opencode/runner.sh
 ```
 
 The runner starts queued work up to the configured active cap.
-
-## Unsafe issue was blocked
-
-This is expected for anti-cheat evasion, stealth, VM/fingerprint evasion, shellcode, hook signature evasion, detour hiding, or similar abuse-prone work. Review manually before proceeding.
 
 ## Status looks stale
 

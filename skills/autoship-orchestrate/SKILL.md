@@ -27,7 +27,7 @@ Always plan eligible issues in ascending issue-number order:
 PLAN=$(bash hooks/opencode/plan-issues.sh --limit 10)
 ```
 
-The plan must exclude running, blocked, human-required, and unsafe/evasion-prone issues.
+The plan must exclude running, blocked, and human-required issues.
 
 ## Dispatch
 
@@ -66,4 +66,4 @@ On `COMPLETE`, run verification, ensure committed changes exist, and create PRs 
 bash hooks/opencode/pr-title.sh --issue <number>
 ```
 
-On repeated failures, unsafe scope, or unclear requirements, mark the issue blocked for human review.
+On repeated failures or unclear requirements, mark the issue blocked for human review.

@@ -17,7 +17,7 @@ AutoShip supports OpenCode as its only worker runtime.
 
 ## Pipeline
 
-1. `plan-issues.sh` fetches or receives issue JSON, filters unsafe work, and sorts ascending by issue number.
+1. `plan-issues.sh` fetches or receives issue JSON and sorts eligible issues by ascending issue number.
 2. `dispatch.sh` creates an isolated worktree and prompt, assigns a configured model, and writes `QUEUED`.
 3. `select-model.sh` chooses the best worker model for the task from current config and history.
 4. `runner.sh` starts queued workspaces up to the configured cap.
@@ -26,17 +26,13 @@ AutoShip supports OpenCode as its only worker runtime.
 7. `reconcile-state.sh` updates `.autoship/state.json` from workspace status files.
 8. Verification creates conventional-title PRs only after completed work is checked.
 
-## Safety
-
-Issues that mention anti-cheat evasion, stealth, VM or fingerprint evasion, shellcode, hook signature evasion, detour hiding, or similar abuse-prone work are blocked for human review.
-
 ## Setup
 
 ```bash
 bash hooks/opencode/setup.sh
 ```
 
-Default setup uses free models from the live OpenCode model list. To select models explicitly:
+Default setup uses ranked free models from the live OpenCode model list. To select models explicitly:
 
 ```bash
 AUTOSHIP_MODELS="provider/model-a,provider/model-b" bash hooks/opencode/setup.sh

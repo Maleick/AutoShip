@@ -61,4 +61,4 @@ Total: 6 issues across 2 phases
 ## No Execution
 
 This command only reads and analyzes. No agents are dispatched, no changes made.
-Eligible issues are ordered by ascending issue number. Unsafe/evasion issues appear in the blocked section instead of the dispatch plan.
+Eligible issues are ordered by ascending issue number. Issues already marked running, blocked, or human-required are excluded from the dispatch plan.

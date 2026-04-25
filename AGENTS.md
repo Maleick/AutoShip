@@ -12,7 +12,6 @@ See [AGENT_CATALOG.md](AGENT_CATALOG.md) for the specialized agent roles, inputs
 - Worker models come from live `opencode models` inventory and `.autoship/model-routing.json`.
 - Default active worker cap is 15.
 - Plan `agent:ready` issues in ascending issue-number order.
-- Block unsafe/evasion-prone issues for human review.
 
 ## Local State
 

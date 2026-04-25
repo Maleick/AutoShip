@@ -16,8 +16,15 @@ const packResult = JSON.parse(raw);
 const entries = Array.isArray(packResult) ? packResult : [packResult];
 const files = entries.flatMap((entry) => Array.isArray(entry.files) ? entry.files : []);
 
-const allowedRoots = new Set(["dist", "hooks", "commands", "skills"]);
+const allowedRoots = new Set(["dist", "hooks", "commands", "skills", "plugins"]);
 const allowedFiles = new Set(["package.json", "README.md", "LICENSE", "AGENTS.md", "VERSION"]);
+const requiredFiles = [
+  "plugins/autoship.ts",
+  "hooks/opencode/init.sh",
+  "hooks/opencode/sync-release.sh",
+  "skills/autoship-setup/SKILL.md",
+  "commands/autoship-setup.md",
+];
 
 function normalizePath(filePath) {
   return filePath.replace(/^package\//, "");
@@ -52,6 +59,13 @@ for (const file of files) {
 
 if (files.length === 0) {
   violations.push("npm pack dry-run returned no package files");
+}
+
+const packagedPaths = new Set(files.map((file) => normalizePath(String(file.path || ""))).filter(Boolean));
+for (const requiredFile of requiredFiles) {
+  if (!packagedPaths.has(requiredFile)) {
+    violations.push(`${requiredFile} is required in the package`);
+  }
 }
 
 if (violations.length > 0) {

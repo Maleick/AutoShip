@@ -24,11 +24,12 @@ copy_assets() {
   local src="$1"
   rm -f "$PLUGIN_DEST"
   cp -f "$src/plugins/autoship.ts" "$PLUGIN_DEST"
-  rm -rf "$AUTOSHIP_HOME/hooks" "$AUTOSHIP_HOME/skills" "$AUTOSHIP_HOME/commands"
+  rm -rf "$AUTOSHIP_HOME/hooks" "$AUTOSHIP_HOME/skills" "$AUTOSHIP_HOME/commands" "$AUTOSHIP_HOME/plugins"
   mkdir -p "$AUTOSHIP_HOME"
   cp -R "$src/hooks" "$AUTOSHIP_HOME/hooks"
   cp -R "$src/skills" "$AUTOSHIP_HOME/skills"
   cp -R "$src/commands" "$AUTOSHIP_HOME/commands"
+  cp -R "$src/plugins" "$AUTOSHIP_HOME/plugins"
   if [[ -f "$src/AGENTS.md" ]]; then
     cp -f "$src/AGENTS.md" "$AUTOSHIP_HOME/AGENTS.md"
   fi

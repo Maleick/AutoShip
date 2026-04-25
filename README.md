@@ -40,7 +40,6 @@ AutoShip is the OpenCode plugin for solo maintainers who want their GitHub issue
 
 - Reads open GitHub issues labeled `agent:ready`
 - Plans work in ascending issue-number order
-- Blocks unsafe/evasion-prone issues for human review
 - Dispatches OpenCode workers up to the configured concurrency cap
 - Verifies completed work before PR creation
 - Creates PRs with conventional commit titles
@@ -48,10 +47,18 @@ AutoShip is the OpenCode plugin for solo maintainers who want their GitHub issue
 
 ## Installation
 
-Install AutoShip into your OpenCode config from any GitHub-backed project:
+Install AutoShip into your OpenCode config from any GitHub-backed project. The default path uses `bunx`, so there is no long-lived global CLI to update:
 
 ```bash
 bunx opencode-autoship install
+```
+
+If you prefer a global CLI, install it once and run the same commands directly:
+
+```bash
+npm install -g opencode-autoship
+opencode-autoship install
+opencode-autoship doctor
 ```
 
 Then start the setup wizard inside OpenCode:
@@ -81,7 +88,7 @@ OpenCode is the only supported worker runtime. AutoShip discovers current model 
 opencode models
 ```
 
-Setup defaults to currently available models flagged free. Operators can explicitly select a comma-separated model list with `AUTOSHIP_MODELS`.
+Setup defaults to ranked free models from the current OpenCode inventory. Operators can explicitly select a comma-separated model list with `AUTOSHIP_MODELS`.
 
 The selected routing is saved to `.autoship/model-routing.json`. Edit that file manually to tune model eligibility, strength, or task types. Setup preserves manual edits by default; use `AUTOSHIP_REFRESH_MODELS=1 bash hooks/opencode/setup.sh` to regenerate from the current OpenCode inventory.
 
@@ -89,23 +96,20 @@ The selected routing is saved to `.autoship/model-routing.json`. Edit that file 
 
 - Max active workers: `15`
 - Queue ordering: lowest issue number first
-- Model routing: free detected OpenCode models first
+- Model routing: ranked free OpenCode models first
 - Planner/coordinator/orchestrator/reviewer: `openai/gpt-5.5`
 - Worker selection: best configured model per task, with free, Spark, Go-provider, and other selected models eligible when available
-- Unsafe issue handling: block / human-required
 
 ## How It Works
 
 ```mermaid
 flowchart LR
     A[GitHub issues<br/>agent:ready] --> B[GPT-5.5 planner]
-    B --> C[Safety filter]
-    C -->|safe| D[Model selector]
-    C -->|unsafe| H[Human review]
-    D --> E[OpenCode worker<br/>free / Spark / Go / selected]
-    E --> F[GPT-5.5 reviewer]
-    F -->|pass| G[Pull request]
-    F -->|fail| D
+    B --> C[Model selector]
+    C --> D[OpenCode worker<br/>free / Spark / Go / selected]
+    D --> E[GPT-5.5 reviewer]
+    E -->|pass| F[Pull request]
+    E -->|fail| C
 ```
 
 ```mermaid
@@ -123,7 +127,7 @@ flowchart TD
 | Command | Purpose |
 | --- | --- |
 | `/autoship` | Start orchestration |
-| `/autoship-plan` | Show ascending, safety-filtered issue plan |
+| `/autoship-plan` | Show ascending issue plan |
 | `/autoship-status` | Show runtime state and workspace statuses |
 | `/autoship-setup` | Discover OpenCode models and choose routing |
 | `/autoship-stop` | Stop orchestration |
@@ -133,7 +137,7 @@ flowchart TD
 | Hook | Purpose |
 | --- | --- |
 | `hooks/opencode/setup.sh` | Discover live OpenCode models and write `.autoship/model-routing.json` |
-| `hooks/opencode/plan-issues.sh` | Build ascending, safety-filtered issue plan |
+| `hooks/opencode/plan-issues.sh` | Build ascending issue plan |
 | `hooks/opencode/dispatch.sh` | Create worktree, prompt, model assignment, and queued status |
 | `hooks/opencode/runner.sh` | Start queued workspaces up to the concurrency cap |
 | `hooks/opencode/status.sh` | Summarize active, queued, completed, blocked, and stuck work |

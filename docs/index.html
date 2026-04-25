@@ -256,10 +256,10 @@
   </div>
 
   <div class="install-box">
-    <div class="install-header">npm — package install</div>
+    <div class="install-header">bunx — package install</div>
     <div class="install-cmd">
-      <code>npm install -g opencode-autoship</code>
-      <button class="copy-btn" onclick="navigator.clipboard.writeText('npm install -g opencode-autoship').then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)})">Copy</button>
+      <code>bunx opencode-autoship install</code>
+      <button class="copy-btn" onclick="navigator.clipboard.writeText('bunx opencode-autoship install').then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)})">Copy</button>
     </div>
   </div>
 </div>
@@ -293,33 +293,33 @@
   <div class="quickstart">
     <div class="quickstep">
       <div class="quickstep-num">STEP 1</div>
-      <h3>Install the package</h3>
-      <code>npm install -g opencode-autoship</code>
-      <p>Adds the <code>opencode-autoship</code> CLI for install and diagnostics.</p>
+      <h3>Install and register</h3>
+      <code>bunx opencode-autoship install</code>
+      <p>Runs the package CLI and installs AutoShip OpenCode plugin assets into your OpenCode config directory.</p>
     </div>
     <div class="quickstep">
       <div class="quickstep-num">STEP 2</div>
-      <h3>Register with OpenCode</h3>
-      <code>opencode-autoship install</code>
-      <p>Installs the AutoShip OpenCode plugin assets into your OpenCode config directory.</p>
-    </div>
-    <div class="quickstep">
-      <div class="quickstep-num">STEP 3</div>
       <h3>Run doctor</h3>
-      <code>opencode-autoship doctor</code>
+      <code>bunx opencode-autoship doctor</code>
       <p>Checks package registration, installed asset versions, OpenCode model inventory, and GitHub auth.</p>
     </div>
     <div class="quickstep">
-      <div class="quickstep-num">STEP 4</div>
+      <div class="quickstep-num">STEP 3</div>
       <h3>Configure routing</h3>
       <code>/autoship-setup</code>
       <p>Discovers live <code>opencode models</code>, chooses worker routing, and writes <code>.autoship/model-routing.json</code>.</p>
     </div>
     <div class="quickstep">
-      <div class="quickstep-num">STEP 5</div>
+      <div class="quickstep-num">STEP 4</div>
       <h3>Start AutoShip</h3>
       <code>/autoship</code>
       <p>Plans eligible <code>agent:ready</code> issues, dispatches workers, verifies results, and opens reviewed PRs.</p>
+    </div>
+    <div class="quickstep">
+      <div class="quickstep-num">STEP 5</div>
+      <h3>Keep it healthy</h3>
+      <code>bunx opencode-autoship doctor</code>
+      <p>Rerun doctor after upgrades or setup changes to confirm package assets and routing are aligned.</p>
     </div>
   </div>
 </section>
@@ -368,20 +368,20 @@
 <!-- How It Works -->
 <section id="how-it-works">
   <h2>How It <span>Works</span></h2>
-  <p class="section-sub">After <code>opencode-autoship doctor</code> and <code>/autoship-setup</code> pass, orchestration runs in a loop.</p>
+  <p class="section-sub">After <code>bunx opencode-autoship doctor</code> and <code>/autoship-setup</code> pass, orchestration runs in a loop.</p>
   <div class="pipeline">
     <div class="pipeline-step">
       <div class="step-num">1</div>
       <div class="step-content">
         <h4>Classify</h4>
-        <p>Each open issue is classified into task types such as docs, simple_code, medium_code, mechanical, ci_fix, or complex. Unsafe/evasion-prone work is blocked for human review.</p>
+        <p>Each open issue is classified into task types such as docs, simple_code, medium_code, mechanical, ci_fix, or complex.</p>
       </div>
     </div>
     <div class="pipeline-step">
       <div class="step-num">2</div>
       <div class="step-content">
         <h4>Route</h4>
-        <p>Task type + the live <code>opencode models</code> inventory determines the worker model. <code>/autoship-setup</code> defaults to currently available free models; operators can explicitly select models.</p>
+        <p>Task type + the live <code>opencode models</code> inventory determines the worker model. <code>/autoship-setup</code> defaults to ranked free models; operators can explicitly select models.</p>
       </div>
     </div>
     <div class="pipeline-step">
@@ -453,9 +453,9 @@
       <p><code>/autoship-status</code> shows active, queued, completed, blocked, and stuck workspace counts plus configured concurrency.</p>
     </div>
     <div class="card">
-      <div class="card-icon">🦀</div>
-      <h3>Safety filter</h3>
-      <p>Anti-cheat evasion, stealth, VM/fingerprint evasion, shellcode, hook signature evasion, and similar work is blocked for human review.</p>
+      <div class="card-icon">🧾</div>
+      <h3>Failure evidence</h3>
+      <p>Reviewer and verification failures are captured as structured artifacts so follow-up work starts from concrete evidence.</p>
     </div>
     <div class="card">
       <div class="card-icon">🏗️</div>

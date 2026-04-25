@@ -16,7 +16,7 @@ Invoke the `autoship-setup` skill for the interactive setup wizard:
 /autoship-setup
 ```
 
-The setup skill verifies OpenCode and GitHub authentication, discovers live OpenCode models, selects free-first worker routing, and writes `.autoship/model-routing.json` plus `.autoship/config.json`.
+The setup skill verifies OpenCode and GitHub authentication, discovers live OpenCode models, selects ranked free-first worker routing, and writes `.autoship/model-routing.json` plus `.autoship/config.json`.
 
 ## Non-Interactive Mode
 

@@ -44,6 +44,18 @@ is_billing_or_quota_failure() {
   grep -Eiq 'insufficient balance|billing|quota|rate limit|credit' "$log_file"
 }
 
+annotate_session_failure() {
+  local log_file="${1:-AUTOSHIP_RUNNER.log}"
+  [[ -f "$log_file" ]] || return 1
+  if grep -Fqi 'Session not found' "$log_file"; then
+    cat >> "$log_file" <<'EOF'
+
+AutoShip diagnostic: OpenCode returned Session not found while running a worker.
+This usually means the current OpenCode CLI/server session cannot start nested `opencode run` jobs for this environment or model. Try restarting OpenCode, confirming the selected model is enabled with `opencode models`, and rerunning the workspace.
+EOF
+  fi
+}
+
 record_model_failure() {
   local model="$1"
   local log_file="${2:-AUTOSHIP_RUNNER.log}"
@@ -155,6 +167,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
               fi
             fi
           else
+            annotate_session_failure AUTOSHIP_RUNNER.log || true
             echo "STUCK" > status
             if [[ -x "$REPO_ROOT/hooks/capture-failure.sh" ]]; then
               error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker run failed")

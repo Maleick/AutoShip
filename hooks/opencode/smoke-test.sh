@@ -57,6 +57,7 @@ fi
 [[ -d "$AUTOSHIP_INSTALL_DIR/hooks" ]]
 [[ -d "$AUTOSHIP_INSTALL_DIR/commands" ]]
 [[ -d "$AUTOSHIP_INSTALL_DIR/skills" ]]
+[[ -f "$AUTOSHIP_INSTALL_DIR/plugins/autoship.ts" ]]
 [[ -f "$AUTOSHIP_INSTALL_DIR/AGENTS.md" ]]
 [[ -f "$AUTOSHIP_INSTALL_DIR/VERSION" ]]
 
@@ -65,6 +66,7 @@ bash "$REPO_ROOT/hooks/opencode/init.sh" >/dev/null
 [[ -f "$STATE_FILE" ]]
 [[ "$(cat "$HOOKS_FILE")" == "$REPO_ROOT/hooks" ]]
 jq -e '.config.maxConcurrentAgents == 15' "$STATE_FILE" >/dev/null
+[[ -f "$REPO_ROOT/.autoship/model-history.json" ]]
 [[ -f "$REPO_ROOT/.autoship/model-routing.json" ]]
 jq -e '[.models[] | select(.cost == "free")] | length > 0' "$REPO_ROOT/.autoship/model-routing.json" >/dev/null
 jq -e 'all(.models[]; .id | test("^[a-z0-9._-]+/.+"))' "$REPO_ROOT/.autoship/model-routing.json" >/dev/null

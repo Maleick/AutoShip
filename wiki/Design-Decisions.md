@@ -16,6 +16,6 @@ Workers are selected per task from configured live OpenCode models. The selector
 
 `.autoship/model-routing.json` is intentionally user-editable. Setup preserves manual changes unless refresh or explicit model selection is requested.
 
-## Safety filter
+## Verification before PR
 
-Abuse-prone work is blocked for human review instead of auto-dispatched.
+Completed worker results are verified before AutoShip opens a pull request.

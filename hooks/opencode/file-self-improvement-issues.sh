@@ -7,10 +7,8 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
 }
 
 REPORT_FILE="${1:-$REPO_ROOT/.autoship/reports/self-improvement.md}"
-SAFETY_FILTER="$REPO_ROOT/hooks/opencode/safety-filter.sh"
 
 [[ -f "$REPORT_FILE" ]] || { echo "No report found at $REPORT_FILE" >&2; exit 1; }
-[[ -x "$SAFETY_FILTER" ]] || { echo "No safety filter found at $SAFETY_FILTER" >&2; exit 1; }
 
 extract_section() {
   local heading="$1"
@@ -43,23 +41,12 @@ ${affected:-No affected files listed.}
 EOF
 )"
 
-    if bash "$SAFETY_FILTER" --text "$title" "type:feature,area:self-improvement" "$body" >/dev/null 2>&1; then
-      gh issue create \
-        --title "$title" \
-        --body "$body" \
-        --label "type:feature" \
-        --label "area:self-improvement" \
-        --label "priority:medium" \
-        --label "atomic" \
-        --label "agent:ready"
-    else
-      gh issue create \
-        --title "$title" \
-        --body "$body" \
-        --label "type:feature" \
-        --label "area:self-improvement" \
-        --label "priority:medium" \
-        --label "atomic" \
-        --label "agent:blocked"
-    fi
+    gh issue create \
+      --title "$title" \
+      --body "$body" \
+      --label "type:feature" \
+      --label "area:self-improvement" \
+      --label "priority:medium" \
+      --label "atomic" \
+      --label "agent:ready"
   done

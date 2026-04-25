@@ -21,16 +21,13 @@ Configured free OpenCode models are dispatched first when they are capable of th
 
 ---
 
-## Step 0: Enforce Safety and Concurrency
+## Step 0: Enforce Concurrency
 
 Use the repo hooks before creating work:
 
 ```bash
-bash hooks/opencode/safety-filter.sh <issue-number>
 MAX=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // 10' .autoship/state.json)
 ```
-
-Unsafe/evasion work must be blocked or marked human-required, not auto-dispatched.
 
 ## Step 1: Create Worktree
 
@@ -184,7 +181,7 @@ If an OpenCode worker fails verification:
 
 ## Human Review Escalation
 
-For unsafe, repeatedly failing, or ambiguous work, mark the issue blocked and require human review before another automated attempt.
+For repeatedly failing or ambiguous work, mark the issue blocked and require human review before another automated attempt.
 
 ---
 

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ISSUES_FILE=""
 CREATED_ISSUES_FILE=false
 LIMIT=""
@@ -36,21 +35,10 @@ cleanup() {
 trap cleanup EXIT
 
 jq -c '.[]' "$ISSUES_FILE" | while IFS= read -r issue; do
-  number=$(jq -r '.number' <<< "$issue")
-  title=$(jq -r '.title // ""' <<< "$issue")
-  body=$(jq -r '.body // ""' <<< "$issue")
-  labels=$(jq -r '[.labels[].name] | join(",")' <<< "$issue")
-
   if ! jq -e 'any(.labels[].name; . == "agent:ready")' <<< "$issue" >/dev/null; then
     continue
   fi
   if jq -e 'any(.labels[].name; . == "agent:running" or . == "agent:blocked" or . == "human:required")' <<< "$issue" >/dev/null; then
-    continue
-  fi
-
-  safety=$(bash "$SCRIPT_DIR/safety-filter.sh" --text "$title" "$labels" "$body" || true)
-  if [[ "$safety" == BLOCKED:* ]]; then
-    jq -c --arg reason "$safety" '. + {blocked_reason: $reason}' <<< "$issue" >> "$blocked_tmp"
     continue
   fi
 

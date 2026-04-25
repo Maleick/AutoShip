@@ -2,7 +2,7 @@
 
 Platform: OpenCode-only plugin.
 
-AutoShip is an autonomous GitHub issue → pull request pipeline. It reads open issues labeled `agent:ready`, plans them in ascending issue-number order, blocks unsafe/evasion-prone work for human review, dispatches OpenCode workers, verifies results, opens PRs, monitors CI, and reconciles local state.
+AutoShip is an autonomous GitHub issue → pull request pipeline. It reads open issues labeled `agent:ready`, plans them in ascending issue-number order, dispatches OpenCode workers, verifies results, opens PRs, monitors CI, and reconciles local state.
 
 ## Runtime Model
 
@@ -25,10 +25,6 @@ AutoShip is an autonomous GitHub issue → pull request pipeline. It reads open 
 - Runtime state is local to `.autoship/` and should not be committed.
 - Durable recovery uses GitHub issue labels plus workspace status files.
 - `.autoship/model-routing.json` is user-editable and preserved by setup unless refresh is requested.
-
-## Safety
-
-AutoShip blocks issues that mention anti-cheat evasion, stealth, VM or fingerprint evasion, shellcode, hook signature evasion, detour hiding, or similar abuse-prone work.
 
 ## Verification
 
