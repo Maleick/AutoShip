@@ -1211,6 +1211,56 @@ SH
   grep -F 'asset version' "$TMP_DIR/doctor-version-fail.txt" >/dev/null || fail "doctor reports mismatched asset version"
 )
 
+VERSION_ALIGNMENT_DIR="$TMP_DIR/version-alignment"
+mkdir -p "$VERSION_ALIGNMENT_DIR/installed" "$VERSION_ALIGNMENT_DIR/plugins"
+cp VERSION package.json CHANGELOG.md "$VERSION_ALIGNMENT_DIR/"
+cp VERSION "$VERSION_ALIGNMENT_DIR/installed/VERSION"
+printf '%s\n' "$(tr -d '[:space:]' < VERSION)" > "$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
+bash "$SCRIPT_DIR/validate-version-alignment.sh" \
+  --repo "$VERSION_ALIGNMENT_DIR" \
+  --installed-version "$VERSION_ALIGNMENT_DIR/installed/VERSION" \
+  --release-tag "$VERSION_ALIGNMENT_DIR/plugins/autoship.version" >/dev/null
+
+assert_version_alignment_fails() {
+  local fixture_dir="$1"
+  local expected_message="$2"
+  local output_file="$TMP_DIR/version-alignment-fail.txt"
+  if bash "$SCRIPT_DIR/validate-version-alignment.sh" \
+    --repo "$fixture_dir" \
+    --installed-version "$fixture_dir/installed/VERSION" \
+    --release-tag "$fixture_dir/plugins/autoship.version" >"$output_file" 2>&1; then
+    fail "version alignment validation fails for $expected_message"
+  fi
+  grep -F "$expected_message" "$output_file" >/dev/null || fail "version alignment validation reports $expected_message"
+}
+
+printf 'v0.0.0\n' > "$VERSION_ALIGNMENT_DIR/installed/VERSION"
+assert_version_alignment_fails "$VERSION_ALIGNMENT_DIR" 'installed asset marker'
+
+VERSION_ALIGNMENT_DIR="$TMP_DIR/version-alignment-package"
+mkdir -p "$VERSION_ALIGNMENT_DIR/installed" "$VERSION_ALIGNMENT_DIR/plugins"
+cp VERSION package.json CHANGELOG.md "$VERSION_ALIGNMENT_DIR/"
+jq '.version = "0.0.0"' "$VERSION_ALIGNMENT_DIR/package.json" > "$VERSION_ALIGNMENT_DIR/package.tmp"
+mv "$VERSION_ALIGNMENT_DIR/package.tmp" "$VERSION_ALIGNMENT_DIR/package.json"
+cp VERSION "$VERSION_ALIGNMENT_DIR/installed/VERSION"
+printf '%s\n' "$(tr -d '[:space:]' < VERSION)" > "$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
+assert_version_alignment_fails "$VERSION_ALIGNMENT_DIR" 'package.json version'
+
+VERSION_ALIGNMENT_DIR="$TMP_DIR/version-alignment-changelog"
+mkdir -p "$VERSION_ALIGNMENT_DIR/installed" "$VERSION_ALIGNMENT_DIR/plugins"
+cp VERSION package.json CHANGELOG.md "$VERSION_ALIGNMENT_DIR/"
+perl -0pi -e 's/^## v[0-9][^\n]*/## v0.0.0/m' "$VERSION_ALIGNMENT_DIR/CHANGELOG.md"
+cp VERSION "$VERSION_ALIGNMENT_DIR/installed/VERSION"
+printf '%s\n' "$(tr -d '[:space:]' < VERSION)" > "$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
+assert_version_alignment_fails "$VERSION_ALIGNMENT_DIR" 'CHANGELOG release heading'
+
+VERSION_ALIGNMENT_DIR="$TMP_DIR/version-alignment-tag"
+mkdir -p "$VERSION_ALIGNMENT_DIR/installed" "$VERSION_ALIGNMENT_DIR/plugins"
+cp VERSION package.json CHANGELOG.md "$VERSION_ALIGNMENT_DIR/"
+cp VERSION "$VERSION_ALIGNMENT_DIR/installed/VERSION"
+printf 'v0.0.0\n' > "$VERSION_ALIGNMENT_DIR/plugins/autoship.version"
+assert_version_alignment_fails "$VERSION_ALIGNMENT_DIR" 'GitHub release tag marker'
+
 bash "$SCRIPT_DIR/test-model-parsing.sh" >/dev/null
 
 echo "OpenCode policy tests passed"
