@@ -11,13 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+- **AutoShip helper scripts** — `scripts/autoship-helpers/` adds `batch-dispatch-codex.sh`, `batch-dispatch-claude.sh`, `verify-and-pr.sh`, `bulk-rebase.sh` for high-throughput PR generation and conflict cascade recovery (#2855)
+
 ### Bug Fixes
+
+- **Master compile** — Restored after 70-PR rebase wave: missing module decls (`textquest-learn`), duplicate `pub mod self_improvement`, missing `arc-swap` workspace dep, dual `[features]` block, unclosed `Command::SendMailToMule` enum variant, duplicate `data_dir`, missing `improve::router()` (#2853, #2867)
+- **Linkdb match** — `Command::QueryLinkdb` and `Command::RecordLinkdbItem` stubbed via `send_unsupported_command("Linkdb")` until DLL implementation lands (#2867)
+- **Mail match** — `Command::OpenMailWindow`, `QueryMailWindowState`, `SendMailToMule` stubbed similarly (#2867)
 
 ### Performance
 
 ### Security
 
+- **Python deps** — Bumped torch 2.0→2.8, onnx 1.14→1.21, scikit-learn 1.3→1.5, d3rlpy 1.1.1→2.7.0 in `textquest-learn/python/requirements.txt`. Resolves 16 Dependabot alerts (1 critical torch RCE, 5 high onnx path-traversal, etc.) (#2842)
+
 ### Documentation
+
+- **Session 2026-04-25 learnings** — CLAUDE.md gotchas updated with `git rebase -X ours` caveats, AutoShip PR# vs issue# distinction, codex model fallback chain, sub-issue file overlap pattern
 
 ## [0.6.0] - 2026-04-14
 
