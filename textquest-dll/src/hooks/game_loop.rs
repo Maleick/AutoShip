@@ -2914,7 +2914,12 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             tracing::info!(cmd = %slash_command, "Executing slash command");
             if let Some(active_bandolier) = parse_bandolier_activate_command(slash_command) {
                 if let Ok(mut known_bandolier) = ACTIVE_BANDOLIER_SET.lock() {
-                    *known_bandolier = Some(active_bandolier);
+                    *known_bandolier = Some(active_bandolier.clone());
+                }
+                if let Ok(mut mgr) =
+                    crate::combat::bandolier::BANDOLIER_MANAGER.try_lock()
+                {
+                    mgr.set_active(Some(active_bandolier));
                 }
             }
             execute_slash_command(slash_command);

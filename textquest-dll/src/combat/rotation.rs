@@ -66,6 +66,9 @@ pub enum ActivationHook {
     Log(String),
     /// Execute multiple hooks in sequence.
     Chain(Vec<ActivationHook>),
+    /// Activate a named bandolier set (weapon-loadout swap).
+    /// Subject to the BandolierManager cooldown gate.
+    Bandolier(String),
 }
 
 /// A named group of rotation entries with shared execution conditions.
@@ -222,6 +225,15 @@ fn run_hook(hook: &ActivationHook, _ctx: &CombatContext) {
         ActivationHook::Chain(hooks) => {
             for h in hooks {
                 run_hook(h, _ctx);
+            }
+        }
+        ActivationHook::Bandolier(set_name) => {
+            if let Ok(mut mgr) =
+                crate::combat::bandolier::BANDOLIER_MANAGER.try_lock()
+            {
+                if let Some(cmd) = mgr.activate_command(set_name, u64::from(_ctx.tick)) {
+                    crate::hooks::game_loop::queue_slash_command(cmd);
+                }
             }
         }
     }
