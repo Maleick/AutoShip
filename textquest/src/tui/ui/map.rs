@@ -1254,7 +1254,7 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
     draw_named_markers(app, &to_grid, w as i32, h as i32, &mut grid);
 
     // ─── Camp location overlay ────────────────────────────────────────────
-    draw_camp_overlays(app, &to_grid, w as u16, h as u16, &mut grid);
+    draw_camp_overlay(app, &to_grid, w as u16, h as u16, &mut grid);
 
     // ─── Spawn highlights overlay ────────────────────────────────────────
     if !app.map_state.highlights.is_empty() {
@@ -1357,6 +1357,14 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             Span::raw(" Quest  ·  "),
             Span::styled("†", Style::default().fg(t.spawn_corpse)),
             Span::raw(" Corpse  ·  "),
+            Span::styled("⊕", Style::default().fg(Color::Green)),
+            Span::raw(" Camp  ·  "),
+            Span::styled("⊗", Style::default().fg(Color::Red)),
+            Span::raw(" Pull  ·  "),
+            Span::styled("·", Style::default().fg(Color::Green)),
+            Span::raw(" Camp radius  ·  "),
+            Span::styled("·", Style::default().fg(Color::Red)),
+            Span::raw(" Pull radius  ·  "),
             Span::styled("◇", Style::default().fg(t.text_accent)),
             Span::raw(" Zone Exit (z on floors)  ·  "),
             Span::styled(
@@ -3665,17 +3673,21 @@ fn draw_named_markers(
     }
 }
 
-/// Draw camp location overlays: camp center marker (⊕, green), pull point
+fn active_camp_overlay(app: &App) -> Option<&crate::tui::state::CampOverlay> {
+    app.map_state.camp_overlay.as_ref()
+}
+
+/// Draw the active camp location overlay: camp center marker (⊕, green), pull point
 /// marker (⊗, red), camp radius circle (green dots), and pull radius circle
 /// (red dots).
-fn draw_camp_overlays(
+fn draw_camp_overlay(
     app: &App,
     to_grid: &impl Fn(f32, f32) -> (i32, i32),
     w: u16,
     h: u16,
     grid: &mut [Vec<(char, Color)>],
 ) {
-    let Some(camp) = &app.map_state.camp_overlay else {
+    let Some(camp) = active_camp_overlay(app) else {
         return;
     };
 
@@ -3773,7 +3785,10 @@ mod tests {
     use super::*;
     use crate::{
         eq::structs::{SpawnInfo, SpawnType, StandState},
-        tui::{app::ClientState, state::MapRadiusOverlay},
+        tui::{
+            app::ClientState,
+            state::{CampOverlay, MapRadiusOverlay},
+        },
     };
     use ratatui::{Terminal, backend::TestBackend, layout::Rect, style::Color};
 
@@ -4225,6 +4240,39 @@ mod tests {
 
         assert_eq!(grid[0][3], ('·', Color::Cyan));
         assert_eq!(grid[10][23], ('·', Color::Cyan));
+    }
+
+    #[test]
+    fn camp_overlay_renders_markers_and_radius_circles() {
+        let mut app = test_app_with_spawns();
+        app.map_state.camp_overlay = Some(CampOverlay {
+            camp_center: [10.0, 8.0],
+            pull_point: [18.0, 8.0],
+            camp_radius: 3.0,
+            pull_radius: 2.0,
+            name: String::from("demo"),
+        });
+
+        let mut grid = vec![vec![(' ', Color::Reset); 40]; 24];
+        let to_grid = |map_x: f32, map_y: f32| ((-map_y).round() as i32, (-map_x).round() as i32);
+
+        draw_camp_overlay(&app, &to_grid, 40, 24, &mut grid);
+
+        assert_eq!(grid[8][10], ('⊕', Color::Green));
+        assert_eq!(grid[8][18], ('⊗', Color::Red));
+        assert_eq!(grid[8][13], ('·', Color::Green));
+        assert_eq!(grid[8][20], ('·', Color::Red));
+    }
+
+    #[test]
+    fn camp_overlay_hidden_without_active_camp() {
+        let app = test_app_with_spawns();
+        let mut grid = vec![vec![(' ', Color::Reset); 40]; 24];
+        let to_grid = |map_x: f32, map_y: f32| ((-map_y).round() as i32, (-map_x).round() as i32);
+
+        draw_camp_overlay(&app, &to_grid, 40, 24, &mut grid);
+
+        assert!(grid.iter().flatten().all(|cell| *cell == (' ', Color::Reset)));
     }
 
     #[test]
@@ -4752,10 +4800,11 @@ P 50.0, 50.0, 0.0, 0, 255, 255, 1, Point1
 
         // Set up camp configuration
         app.map_state.camp_overlay = Some(crate::tui::state::CampOverlay {
-            center_x: 100.0,
-            center_y: 200.0,
-            radius: 30.0,
-            label: "Camp".to_string(),
+            camp_center: [100.0, 200.0],
+            pull_point: [150.0, 250.0],
+            camp_radius: 30.0,
+            pull_radius: 200.0,
+            name: "Camp".to_string(),
         });
 
         // Enable various overlay settings

@@ -1,19 +1,22 @@
-# Result: #1154 — #870: Testing Infrastructure - Mocks & Stubs [PARENT]
+# Result: #1107 — Load and render active camp center marker on map
+
 Status: DONE
 
-Changes:
-- Added macOS-safe process lifecycle abstractions in `textquest/src/testing/mocks.rs`:
-  - `MockProcessState` and `MockProcessLifecycle` trait
-  - `MockProcess` stub with `start` / `stop` / state helpers
-- Added stubbed scenario helpers in `textquest/src/testing/scenario.rs`:
-  - `MockScenario`, `CountdownScenario`, `FastFailScenario`
-  - Shared test-data generators: `account_info`, `spawn_entry`, `spawn_wave`
-- Updated `docs/wiki/Testing.md` with issue #870 usage notes for scenario stubs and test-data generators.
+Changes Made:
+- Made the map renderer use an explicit active camp overlay lookup from app map state.
+- Rendered active camp center and pull point overlays through the camp overlay path.
+- Added legend entries for camp center, pull point, camp radius, and pull radius symbols.
+- Added focused map unit coverage for camp marker/radius rendering and the no-active-camp case.
+- Updated an existing map test fixture to the current `CampOverlay` field shape.
 
-Validation:
-- `cargo check`
+Tests:
+- `rtk cargo check` passed.
+- `rtk cargo check --tests -p textquest` passed.
+- `rtk git diff --check` passed.
+- `rtk /verify` was attempted, but this Codex shell does not expose `/verify` as an executable command.
 
-Next steps:
-- If desired, add call-site fixture usage in integration test binaries (`textquest/tests/*`) to consume the new helpers.
+Notes:
+- Per issue instructions, no `cargo test` run was performed.
+- The existing camp-start command already populates `map_state.camp_overlay`, and camp stop clears it, so the map overlay follows the selected active camp state.
 
 COMPLETE
