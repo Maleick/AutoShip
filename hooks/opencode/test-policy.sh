@@ -264,6 +264,8 @@ mkdir -p "$WORKTREE_REPO"
 git init -q "$WORKTREE_REPO"
 git -C "$WORKTREE_REPO" config user.email autoship@example.invalid
 git -C "$WORKTREE_REPO" config user.name AutoShip
+mkdir -p "$WORKTREE_REPO/.autoship"
+printf '{"models":[]}\n' > "$WORKTREE_REPO/.autoship/model-routing.json"
 printf 'base\n' > "$WORKTREE_REPO/README.md"
 git -C "$WORKTREE_REPO" add README.md
 git -C "$WORKTREE_REPO" commit -q -m initial
@@ -277,6 +279,7 @@ printf 'stale\n' > "$WORKTREE_REPO/.autoship/workspaces/issue-156/AUTOSHIP_RESUL
 )
 test -d "$WORKTREE_REPO/.autoship/workspaces/issue-156/.git" || test -f "$WORKTREE_REPO/.autoship/workspaces/issue-156/.git" || fail "create-worktree replaces stale existing workspace directory"
 test ! -e "$WORKTREE_REPO/.autoship/workspaces/issue-156/AUTOSHIP_RESULT.md" || fail "create-worktree clears stale AutoShip artifacts after recovery"
+test -f "$WORKTREE_REPO/.autoship/workspaces/issue-156/.autoship/model-routing.json" || fail "create-worktree copies runtime routing into the workspace"
 
 MERGE_REPO="$TMP_DIR/merge-repo"
 mkdir -p "$MERGE_REPO/bin"

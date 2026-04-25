@@ -39,4 +39,11 @@ rm -f \
   "$WORKSPACE/started_at" \
   "$WORKSPACE/status"
 
+mkdir -p "$WORKSPACE/.autoship"
+for runtime_file in model-routing.json config.json state.json routing.json; do
+  if [[ -f "$AUTOSHIP_DIR/$runtime_file" ]]; then
+    cp "$AUTOSHIP_DIR/$runtime_file" "$WORKSPACE/.autoship/$runtime_file"
+  fi
+done
+
 printf '%s\n' "$REPO_ROOT/$WORKSPACE"
