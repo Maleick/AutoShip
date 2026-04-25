@@ -1,22 +1,32 @@
 //! Integration tests for `TestLoopRunner` with mock scenarios.
 //!
-//! Covers the four end-to-end test scenarios required by #1055:
+//! Covers the end-to-end scenario set for issue #1250:
 //! - Single iteration: one mock scenario completes successfully.
 //! - Multiple iterations: N mock scenarios all complete successfully.
 //! - Early termination: shutdown signal aborts runner mid-loop.
 //! - Error handling: failing scenario is counted and flagged.
+//! - 36-box multibox scenarios (Windows-only):
+//!   - Full automation loop.
+//!   - Group coordination pressure handling.
+//!   - Stress with multiple runners sharing one scenario.
+//!   - Failure recovery with recovery-state validation.
 //!
-//! All tests are macOS-safe — they use mock scenarios only, no live EQ process.
+//! Mock scenario tests are macOS-safe. Multibox scenarios are
+//! `#[cfg(windows)]` and only run on Windows.
 
 use std::time::Duration;
 
 use tempfile::TempDir;
 use textquest::testing::{
     runner::{TestLoopResult, spawn_runners},
-    scenario::{BoxScenarioFuture, ScenarioResult, TestScenario},
+    scenario::{BoxScenarioFuture, MetricValue, ScenarioResult, TestScenario},
 };
 use textquest_common::login::AccountInfo;
 use tokio::sync::watch;
+#[cfg(windows)]
+use textquest::camp::config::CampConfig;
+#[cfg(windows)]
+use textquest::testing::scenarios::camp_loop::{MultiboxFarmMode, MultiboxFarmScenario};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -37,6 +47,51 @@ fn test_account(name: &str) -> AccountInfo {
 
 fn no_shutdown() -> (watch::Sender<bool>, watch::Receiver<bool>) {
     watch::channel(false)
+}
+
+#[cfg(windows)]
+fn multibox_camp_config() -> CampConfig {
+    CampConfig {
+        name: "multibox_farm".into(),
+        zone: "mushroom_bat".into(),
+        camp_center: [100.0, 200.0, 0.0],
+        pull_point: [150.0, 250.0, 0.0],
+        pull_radius: 1500.0,
+        camp_radius: 75.0,
+        leash_radius: 125.0,
+        rest_mana_pct: 60,
+        pull_mana_pct: 30,
+        level_range: [1, 100],
+        pull_mob_names: vec!["a dark green".into(), "a mushroom".into()],
+        ignore_mob_names: vec![],
+        burn_mob_names: vec![],
+        return_no_aggro: false,
+        next_camp: None,
+        prev_camp: None,
+    }
+}
+
+#[cfg(windows)]
+fn metric_u64(result: &ScenarioResult, name: &str) -> u64 {
+    match result.metrics.get(name) {
+        Some(MetricValue::Counter(value)) => *value,
+        Some(MetricValue::Gauge(value)) => {
+            let rounded = value.round();
+            if rounded.is_sign_negative() || rounded.is_infinite() || rounded.is_nan() {
+                panic!("expected non-negative finite counter-like metric for {name}, got {value}");
+            }
+            rounded as u64
+        }
+        other => panic!("expected numeric metric for {name}, got {other:?}"),
+    }
+}
+
+#[cfg(windows)]
+fn metric_gauge(result: &ScenarioResult, name: &str) -> f64 {
+    match result.metrics.get(name) {
+        Some(MetricValue::Gauge(value)) => *value,
+        other => panic!("expected gauge metric for {name}, got {other:?}"),
+    }
 }
 
 // ── Mock scenarios ────────────────────────────────────────────────────────────
@@ -261,4 +316,184 @@ async fn test_scenario_error_handling() {
         "failure must carry error messages"
     );
     assert_eq!(fail_result.errors[0], "mock scenario failure");
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn test_multibox_farm_full_automation_loop() {
+    let dir = tmp_dir();
+    let (_tx, rx) = no_shutdown();
+
+    let accounts: Vec<AccountInfo> = (0..36)
+        .map(|i| test_account(&format!("farm_acct_{i:02}")))
+        .collect();
+    let config = multibox_camp_config();
+
+    let handles = spawn_runners(
+        accounts,
+        move |_, _| {
+            vec![Box::new(MultiboxFarmScenario::new(
+                config.clone(),
+                Duration::from_secs(12),
+                36,
+                MultiboxFarmMode::FullAutomation,
+            )) as Box<dyn TestScenario>]
+        },
+        Duration::from_secs(14),
+        dir.path(),
+        rx,
+    )
+    .await;
+
+    assert_eq!(handles.len(), 36);
+
+    let mut results = Vec::with_capacity(handles.len());
+    for handle in handles {
+        results.push(handle.await.expect("runner must not panic"));
+    }
+
+    for result in results {
+        assert_eq!(result.scenario_results.len(), 1, "one scenario per runner");
+        let scenario_result = &result.scenario_results[0];
+
+        assert!(scenario_result.success, "multibox scenario must succeed");
+        assert!(metric_u64(scenario_result, "member_count") >= 36);
+        assert!(metric_u64(scenario_result, "pulls") >= 1);
+        assert!(metric_u64(scenario_result, "kills") >= 1);
+        assert!(metric_u64(scenario_result, "commands") > 0);
+    }
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn test_multibox_farm_group_coordination() {
+    let dir = tmp_dir();
+    let (_tx, rx) = no_shutdown();
+
+    let accounts = vec![test_account("farm_coord_acct")];
+    let config = multibox_camp_config();
+
+    let handles = spawn_runners(
+        accounts,
+        move |_, _| {
+            vec![Box::new(MultiboxFarmScenario::new(
+                config.clone(),
+                Duration::from_secs(10),
+                36,
+                MultiboxFarmMode::GroupCoordination,
+            )) as Box<dyn TestScenario>]
+        },
+        Duration::from_secs(10),
+        dir.path(),
+        rx,
+    )
+    .await;
+
+    let result = handles
+        .into_iter()
+        .next()
+        .expect("single handle expected")
+        .await
+        .expect("runner must not panic");
+    let scenario_result = &result.scenario_results[0];
+
+    assert!(scenario_result.success);
+    assert!(
+        metric_u64(scenario_result, "healer_casts") >= 1,
+        "group coordination should issue emergency healer casts",
+    );
+    assert!(
+        metric_u64(scenario_result, "attack_commands") > 0,
+        "group should actively fight during coordination scenario",
+    );
+    assert!(
+        metric_gauge(scenario_result, "kill_rate") >= 0.0,
+        "kill_rate metric must be present",
+    );
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn test_multibox_farm_stress_full_group() {
+    let dir = tmp_dir();
+    let (_tx, rx) = no_shutdown();
+    let accounts: Vec<AccountInfo> = (0..6)
+        .map(|i| test_account(&format!("farm_stress_{i}")))
+        .collect();
+    let config = multibox_camp_config();
+
+    let handles = spawn_runners(
+        accounts,
+        move |_, _| {
+            vec![Box::new(MultiboxFarmScenario::new(
+                config.clone(),
+                Duration::from_secs(10),
+                36,
+                MultiboxFarmMode::FullAutomation,
+            )) as Box<dyn TestScenario>]
+        },
+        Duration::from_secs(16),
+        dir.path(),
+        rx,
+    )
+    .await;
+
+    assert_eq!(handles.len(), 6);
+
+    let mut result_count = 0usize;
+    for handle in handles {
+        let result = handle.await.expect("runner must not panic");
+        let scenario_result = &result.scenario_results[0];
+
+        assert!(scenario_result.success);
+        assert_eq!(metric_u64(scenario_result, "member_count"), 36);
+        assert!(metric_u64(scenario_result, "pulls") >= 2);
+        result_count += 1;
+    }
+
+    assert_eq!(result_count, 6);
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn test_multibox_farm_failure_recovery() {
+    let dir = tmp_dir();
+    let (_tx, rx) = no_shutdown();
+
+    let accounts = vec![test_account("farm_recovery_acct")];
+    let config = multibox_camp_config();
+
+    let handles = spawn_runners(
+        accounts,
+        move |_, _| {
+            vec![Box::new(MultiboxFarmScenario::new(
+                config.clone(),
+                Duration::from_secs(12),
+                36,
+                MultiboxFarmMode::FailureRecovery,
+            )) as Box<dyn TestScenario>]
+        },
+        Duration::from_secs(12),
+        dir.path(),
+        rx,
+    )
+    .await;
+
+    let result = handles
+        .into_iter()
+        .next()
+        .expect("single handle expected")
+        .await
+        .expect("runner must not panic");
+    let scenario_result = &result.scenario_results[0];
+
+    assert!(scenario_result.success);
+    assert!(
+        metric_u64(scenario_result, "recovery_transitions") >= 1,
+        "failure injection should enter recovery state",
+    );
+    assert!(
+        metric_u64(scenario_result, "rez_casts") >= 1,
+        "recovery must attempt rez behavior",
+    );
 }

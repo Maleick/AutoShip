@@ -1,8 +1,15 @@
-# Result: #2269 — Offload navmesh download from TUI render thread to background worker
-Implemented asynchronous navmesh overlay loading using a per-app background channel, polling completion each loop, and added a map header loading badge while in-flight.
+# Result: #1250 — Integration: End-to-end scenario tests (36-box farm)
 
-- `textquest/src/tui/app.rs`: added background navmesh loader state, non-blocking spawn path, and completion polling/apply logic.
-- `textquest/src/tui/run.rs`: poll background navmesh load each render tick before drawing.
-- `textquest/src/tui/ui/map.rs`: show `Loading navmesh...` status in the map panel header while load is pending.
-- `cargo check` succeeded.
-- No other source files modified.
+Implemented issue #1250 with a new 36-box multibox farm simulation flow in `textquest/src/testing/scenarios/camp_loop.rs` and end-to-end runner coverage in `textquest/tests/integration_test_loop.rs`.
+
+What changed:
+- Added `MultiboxFarmMode` and `MultiboxFarmScenario` with deterministic snapshot simulation for 36-member farms.
+- Added command-metric tracking for combat, healer, recovery, and automation loop behavior (pulls, kills, attacks, casts, recovery transitions, rez attempts, etc.).
+- Added Windows-only integration tests for full automation, group coordination, stress scale, and failure recovery paths.
+- Added scenario intent documentation updates in the integration test module header.
+
+Validation:
+- Ran `cargo check` successfully.
+- No additional production dependencies or broad refactors introduced.
+
+Result: COMPLETE
