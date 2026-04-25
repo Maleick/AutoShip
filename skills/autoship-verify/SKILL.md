@@ -108,7 +108,7 @@ CHANGED_FILES=$(git diff --name-only -z main...HEAD)
 git add -- ${CHANGED_FILES}
 
 # Create commit
-git commit -m "feat: <issue-title> (#<number>)
+git commit -m "feat: issue #<number>
 
 Closes #<number>
 Dispatched by AutoShip."
