@@ -149,7 +149,7 @@ echo "RUNNING" > .autoship/workspaces/<issue-key>/status
 
 1. Commit all work to git:
    ```bash
-   git add -A && git commit -m 'feat: <issue-title> (#<number>)'
+   git add -A && git commit -m "feat: issue #<number>"
    ```
 
 2. Write `AUTOSHIP_RESULT.md`:

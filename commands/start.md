@@ -1,8 +1,11 @@
 ---
 name: start
-description: Start AutoShip OpenCode orchestration
+description: Compatibility-only alias for /autoship
+compatibility: true
 ---
 
-# /autoship:start
+# /autoship — compatibility-only alias
 
-Use `commands/autoship-start.md`. AutoShip dispatches OpenCode workers only.
+This compatibility-only alias is retained for older installs. Use the canonical public command `/autoship`.
+
+Run `commands/autoship.md`.

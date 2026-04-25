@@ -2,10 +2,12 @@
 
 AutoShip is an OpenCode-only GitHub issue → pull request orchestration plugin.
 
+See [AGENT_CATALOG.md](AGENT_CATALOG.md) for the specialized agent roles, inputs, outputs, boundaries, and default model families.
+
 ## Runtime Policy
 
 - OpenCode is the only supported worker runtime.
-- `openai/gpt-5.5` is the planner, coordinator, orchestrator, and reviewer role model.
+- `openai/gpt-5.5` is the planner, lead, coordinator, orchestrator, reviewer, simplifier, and release role model.
 - `openai/gpt-5.5-fast` is not allowed.
 - Worker models come from live `opencode models` inventory and `.autoship/model-routing.json`.
 - Default active worker cap is 15.

@@ -39,7 +39,7 @@ bash hooks/opencode/dispatch.sh <issue-number> "$TASK_TYPE"
 bash hooks/opencode/runner.sh
 ```
 
-Default active worker cap is 10. The runner enforces the cap from `.autoship/state.json` or routing config.
+Default active worker cap is 15. The runner enforces the cap from `.autoship/state.json` or routing config.
 
 ## Monitoring
 

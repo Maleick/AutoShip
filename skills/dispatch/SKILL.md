@@ -1,11 +1,12 @@
 ---
 name: dispatch
-description: OpenCode-only AutoShip dispatch protocol
+description: Compatibility-only alias for autoship-dispatch
 tools: ["Bash", "Read", "Write"]
+compatibility: true
 ---
 
-# AutoShip Dispatch
+# AutoShip Dispatch — compatibility-only alias
 
-Use `skills/autoship-dispatch/SKILL.md` for the current OpenCode-only dispatch protocol.
+This compatibility-only alias is retained for older installs. Use the canonical skill `autoship-dispatch`.
 
-Dispatch creates queued workspaces and `runner.sh` starts OpenCode workers up to the configured concurrency cap.
+Run `skills/autoship-dispatch/SKILL.md` for the current OpenCode-only dispatch protocol.

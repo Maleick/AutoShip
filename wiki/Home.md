@@ -9,7 +9,7 @@ AutoShip is the OpenCode plugin for solo maintainers who want their GitHub issue
 
 - Plans `agent:ready` issues in ascending issue-number order
 - Blocks unsafe/evasion-prone work for human review
-- Uses `openai/gpt-5.5` for planner, coordinator, orchestrator, and reviewer roles
+- Uses `openai/gpt-5.5` for planner, coordinator, orchestrator, reviewer, and lead roles
 - Selects worker models from the live `opencode models` inventory
 - Defaults to currently available free worker models
 - Allows operator-selected Spark, Go-provider, Nvidia, OpenRouter, and other OpenCode models when available

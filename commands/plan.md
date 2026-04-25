@@ -1,8 +1,11 @@
 ---
 name: plan
-description: Dry-run AutoShip OpenCode issue planning
+description: Compatibility-only alias for /autoship-plan
+compatibility: true
 ---
 
-# /autoship:plan
+# /autoship-plan — compatibility-only alias
 
-Use `commands/autoship-plan.md`. Planning sorts eligible issues by ascending issue number and blocks unsafe work.
+This compatibility-only alias is retained for older installs. Use the canonical public command `/autoship-plan`.
+
+Run `commands/autoship-plan.md`.

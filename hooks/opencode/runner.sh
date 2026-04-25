@@ -38,12 +38,63 @@ run_worker() {
     opencode run --model "$model" "$(cat AUTOSHIP_PROMPT.md)"
 }
 
+is_billing_or_quota_failure() {
+  local log_file="${1:-AUTOSHIP_RUNNER.log}"
+  [[ -f "$log_file" ]] || return 1
+  grep -Eiq 'insufficient balance|billing|quota|rate limit|credit' "$log_file"
+}
+
+record_model_failure() {
+  local model="$1"
+  local log_file="${2:-AUTOSHIP_RUNNER.log}"
+  local history_file="$REPO_ROOT/$AUTOSHIP_DIR/model-history.json"
+  local tmp
+  tmp=$(mktemp)
+  local summary
+  summary=$(tail -5 "$log_file" 2>/dev/null || true)
+  [[ -f "$history_file" ]] || printf '{}\n' > "$history_file"
+  jq --arg model "$model" --arg summary "$summary" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+    .[$model] = ((.[$model] // {}) + {
+      fail: (((.[$model].fail // 0) | tonumber) + 1),
+      last_error: $summary,
+      last_failed_at: $now
+    })
+  ' "$history_file" > "$tmp" && mv "$tmp" "$history_file"
+}
+
+select_free_fallback_model() {
+  local failed_model="$1"
+  local routing_file="$REPO_ROOT/$AUTOSHIP_DIR/model-routing.json"
+  local task_type="medium_code"
+  if [[ -f "$REPO_ROOT/$STATE_FILE" ]]; then
+    task_type=$(jq -r --arg key "$issue_id" '.issues[$key].task_type // "medium_code"' "$REPO_ROOT/$STATE_FILE" 2>/dev/null || echo "medium_code")
+  fi
+  [[ -f "$routing_file" ]] || return 1
+  jq -r --arg failed "$failed_model" --arg task "$task_type" '
+    [(.models // [])[] |
+      select((.enabled // true) == true) |
+      select(.cost == "free") |
+      select(.id != $failed) |
+      select(((.max_task_types // []) | length == 0) or ((.max_task_types // []) | index($task) != null))]
+    | sort_by(-(.strength // 0), .id)
+    | .[0].id // empty
+  ' "$routing_file"
+}
+
 mark_stuck_unless_terminal() {
+  local wid="$1"
+  local repo_root="$2"
   local current=""
   [[ -f status ]] && current=$(tr -d '[:space:]' < status)
   case "$current" in
     COMPLETE|BLOCKED|STUCK) ;;
-    *) echo "STUCK" > status ;;
+    *)
+      if [[ -x "$repo_root/hooks/capture-failure.sh" ]]; then
+        error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker exited without terminal status")
+        bash "$repo_root/hooks/capture-failure.sh" stuck "$wid" "error_summary=$error_msg" 2>/dev/null || true
+      fi
+      echo "STUCK" > status
+      ;;
   esac
 }
 
@@ -53,6 +104,7 @@ for dir in "$WORKSPACES_DIR"/*/; do
   status_file="$dir/status"
   prompt_file="$dir/AUTOSHIP_PROMPT.md"
   model_file="$dir/model"
+  role_file="$dir/role"
   [[ -f "$status_file" && -f "$prompt_file" ]] || continue
   status=$(tr -d '[:space:]' < "$status_file")
   [[ "$status" == "QUEUED" ]] || continue
@@ -64,9 +116,12 @@ for dir in "$WORKSPACES_DIR"/*/; do
   fi
 
   model="opencode/nemotron-3-super-free"
+  role="implementer"
   [[ -f "$model_file" ]] && model=$(cat "$model_file")
+  [[ -f "$role_file" ]] && role=$(cat "$role_file")
+  issue_id="$(basename "$dir")"
   echo "RUNNING" > "$status_file"
-  bash "$REPO_ROOT/hooks/update-state.sh" set-running "$(basename "$dir")" agent="$model" 2>/dev/null || true
+  bash "$REPO_ROOT/hooks/update-state.sh" set-running "$(basename "$dir")" agent="$model" model="$model" role="$role" 2>/dev/null || true
 
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "DRY_RUN start $(basename "$dir") with $model"
@@ -75,15 +130,47 @@ for dir in "$WORKSPACES_DIR"/*/; do
       cd "$dir"
       if command -v opencode >/dev/null 2>&1; then
         if run_worker "$model" > AUTOSHIP_RUNNER.log 2>&1; then
-          mark_stuck_unless_terminal
+          mark_stuck_unless_terminal "$issue_id" "$REPO_ROOT"
         else
-          echo "STUCK" > status
+          if is_billing_or_quota_failure AUTOSHIP_RUNNER.log; then
+            record_model_failure "$model" AUTOSHIP_RUNNER.log
+            fallback_model=$(select_free_fallback_model "$model" || true)
+            if [[ -n "$fallback_model" ]]; then
+              printf '%s\n' "$fallback_model" > model
+              bash "$REPO_ROOT/hooks/update-state.sh" set-running "$issue_id" agent="$fallback_model" model="$fallback_model" role="$role" 2>/dev/null || true
+              if run_worker "$fallback_model" >> AUTOSHIP_RUNNER.log 2>&1; then
+                mark_stuck_unless_terminal "$issue_id" "$REPO_ROOT"
+              else
+                echo "STUCK" > status
+                if [[ -x "$REPO_ROOT/hooks/capture-failure.sh" ]]; then
+                  error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "fallback worker run failed")
+                  bash "$REPO_ROOT/hooks/capture-failure.sh" model_failure "$issue_id" "error_summary=$error_msg" 2>/dev/null || true
+                fi
+              fi
+            else
+              echo "STUCK" > status
+              if [[ -x "$REPO_ROOT/hooks/capture-failure.sh" ]]; then
+                error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker run failed")
+                bash "$REPO_ROOT/hooks/capture-failure.sh" model_failure "$issue_id" "error_summary=$error_msg" 2>/dev/null || true
+              fi
+            fi
+          else
+            echo "STUCK" > status
+            if [[ -x "$REPO_ROOT/hooks/capture-failure.sh" ]]; then
+              error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker run failed")
+              bash "$REPO_ROOT/hooks/capture-failure.sh" model_failure "$issue_id" "error_summary=$error_msg" 2>/dev/null || true
+            fi
+          fi
         fi
       else
         echo "opencode CLI not found" > AUTOSHIP_RUNNER.log
         echo "STUCK" > status
+        if [[ -x "$REPO_ROOT/hooks/capture-failure.sh" ]]; then
+          bash "$REPO_ROOT/hooks/capture-failure.sh" model_failure "$issue_id" "error_summary=opencode CLI not found" 2>/dev/null || true
+        fi
       fi
     ) &
+    printf '%s\n' "$!" > "$dir/worker.pid"
     echo "Started $(basename "$dir") with $model"
   fi
   started=$((started + 1))
