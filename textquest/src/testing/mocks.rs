@@ -12,6 +12,101 @@ pub trait EqProcessReader {
     fn read_ptr(&mut self, address: usize) -> Result<usize, String>;
 }
 
+/// Lifecycle state for mock process handles used by macOS integration tests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MockProcessState {
+    /// Allocated but not started.
+    Created,
+    /// Actively running.
+    Running,
+    /// Stopped by test control flow.
+    Stopped,
+}
+
+impl Default for MockProcessState {
+    fn default() -> Self {
+        Self::Created
+    }
+}
+
+/// Trait for test-process lifecycles.
+///
+/// This trait provides a small, platform-agnostic abstraction for spawning and
+/// controlling fake process objects in test scenarios on any OS.
+pub trait MockProcessLifecycle {
+    /// Stable PID used by callers.
+    fn pid(&self) -> u32;
+    /// Human-readable process name.
+    fn process_name(&self) -> &str;
+    /// Current lifecycle state.
+    fn state(&self) -> MockProcessState;
+
+    /// Start the mock process if it is not already running.
+    fn start(&mut self);
+    /// Stop the mock process if it is currently running.
+    fn stop(&mut self);
+
+    /// Convenience check for [`MockProcessState::Running`].
+    fn is_running(&self) -> bool {
+        matches!(self.state(), MockProcessState::Running)
+    }
+}
+
+/// In-memory process stub with deterministic lifecycle for macOS-safe tests.
+#[derive(Debug, Clone)]
+pub struct MockProcess {
+    pid: u32,
+    process_name: String,
+    state: MockProcessState,
+}
+
+impl MockProcess {
+    /// Create a new mock process handle.
+    #[must_use]
+    pub fn new(pid: u32) -> Self {
+        Self {
+            pid,
+            process_name: "eqgame.exe".to_string(),
+            state: MockProcessState::Created,
+        }
+    }
+
+    /// Build from a custom executable-style name.
+    #[must_use]
+    pub fn with_name(mut self, process_name: impl Into<String>) -> Self {
+        self.process_name = process_name.into();
+        self
+    }
+}
+
+impl MockProcessLifecycle for MockProcess {
+    fn pid(&self) -> u32 {
+        self.pid
+    }
+
+    fn process_name(&self) -> &str {
+        &self.process_name
+    }
+
+    fn state(&self) -> MockProcessState {
+        self.state
+    }
+
+    fn start(&mut self) {
+        if matches!(self.state, MockProcessState::Running) {
+            return;
+        }
+        self.state = MockProcessState::Running;
+    }
+
+    fn stop(&mut self) {
+        if matches!(self.state, MockProcessState::Stopped) {
+            return;
+        }
+        self.state = MockProcessState::Stopped;
+    }
+}
+
 /// Mock implementation for testing.
 /// Stores pre-configured values that are returned on reads.
 pub struct MockProcessReader {

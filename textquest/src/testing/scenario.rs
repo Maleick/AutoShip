@@ -5,6 +5,9 @@
 
 use std::{collections::HashMap, future::Future, pin::Pin, time::Duration};
 
+use textquest_common::login::AccountInfo;
+use textquest_common::types::SpawnData;
+
 // ── Metric value ────────────────────────────────────────────────────────────
 
 /// A single metric observation produced by a [`TestScenario`].
@@ -87,6 +90,206 @@ pub trait TestScenario: Send {
 
     /// Execute the scenario for at most `duration`, returning structured results.
     fn run(&mut self, duration: Duration) -> BoxScenarioFuture<'_>;
+}
+
+// ── Stub scenario implementations ──────────────────────────────────────────
+
+/// Common mock scenario that returns a prebuilt result and can be reused across
+/// multiple tests.
+pub struct MockScenario {
+    name: String,
+    result: ScenarioResult,
+    runs: u64,
+}
+
+impl MockScenario {
+    /// Create a successful mock scenario.
+    #[must_use]
+    pub fn pass(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            result: ScenarioResult::success(Duration::from_millis(0)),
+            runs: 0,
+        }
+    }
+
+    /// Create a failing mock scenario.
+    #[must_use]
+    pub fn fail(name: impl Into<String>, errors: Vec<String>) -> Self {
+        Self {
+            name: name.into(),
+            result: ScenarioResult::failure(Duration::from_millis(0), errors),
+            runs: 0,
+        }
+    }
+
+    /// Attach a metric to the built result.
+    #[must_use]
+    pub fn with_metric(mut self, name: impl Into<String>, value: MetricValue) -> Self {
+        self.result.metrics.insert(name.into(), value);
+        self
+    }
+
+    /// Return the number of times this scenario has run.
+    pub fn run_count(&self) -> u64 {
+        self.runs
+    }
+}
+
+impl TestScenario for MockScenario {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn run(&mut self, duration: Duration) -> BoxScenarioFuture<'_> {
+        self.runs += 1;
+        let mut result = self.result.clone();
+        result.duration = duration;
+        result.metrics.insert("mock_run".to_string(), MetricValue::Counter(self.runs));
+        Box::pin(async move { result })
+    }
+}
+
+/// A short-lived countdown scenario useful for verifying runner short-circuit
+/// behavior and timeout control.
+pub struct CountdownScenario {
+    name: String,
+    remaining: u64,
+}
+
+impl CountdownScenario {
+    /// Create a countdown scenario with an explicit number of allowed runs.
+    #[must_use]
+    pub fn new(name: impl Into<String>, ticks: u64) -> Self {
+        Self {
+            name: name.into(),
+            remaining: ticks,
+        }
+    }
+
+    /// Create a deterministic "ready to fail" countdown.
+    #[must_use]
+    pub fn exhausted(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            remaining: 0,
+        }
+    }
+
+    /// Remaining ticks before failure.
+    pub fn remaining(&self) -> u64 {
+        self.remaining
+    }
+}
+
+impl TestScenario for CountdownScenario {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn run(&mut self, duration: Duration) -> BoxScenarioFuture<'_> {
+        if self.remaining == 0 {
+            let error = format!("{} has already reached zero", self.name);
+            return Box::pin(async move {
+                ScenarioResult::failure(duration, vec![error])
+            });
+        }
+
+        self.remaining -= 1;
+        let mut result = ScenarioResult::success(duration)
+            .with_metric("remaining_ticks", MetricValue::Counter(self.remaining))
+            .with_metric("runs", MetricValue::Counter(1));
+        result.duration = duration;
+        Box::pin(async move { result })
+    }
+}
+
+/// Scenario that fails immediately with a configurable error.
+pub struct FastFailScenario {
+    name: String,
+    error: String,
+}
+
+impl FastFailScenario {
+    /// Create a scenario that always returns a single error.
+    #[must_use]
+    pub fn new(name: impl Into<String>, error: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            error: error.into(),
+        }
+    }
+}
+
+impl TestScenario for FastFailScenario {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn run(&mut self, duration: Duration) -> BoxScenarioFuture<'_> {
+        let error = self.error.clone();
+        Box::pin(async move {
+            ScenarioResult::failure(duration, vec![error])
+        })
+    }
+}
+
+// ── Test data generators ───────────────────────────────────────────────────
+
+/// Build a compact `AccountInfo` value for scenario tests.
+#[must_use]
+pub fn account_info(account: impl Into<String>, character: impl Into<String>, class: impl Into<String>) -> AccountInfo {
+    AccountInfo {
+        account_name: account.into(),
+        character_name: character.into(),
+        class_name: class.into(),
+        level: 60,
+        group_id: 1,
+        server_name: "TestServer".to_string(),
+    }
+}
+
+/// Build a realistic-looking spawn entry for deterministic scenario testing.
+#[must_use]
+pub fn spawn_entry(id: u32, name: impl Into<String>, level: u8) -> SpawnData {
+    SpawnData {
+        spawn_id: id,
+        name: name.into(),
+        displayed_name: String::new(),
+        spawn_type: 1,
+        level,
+        class_id: 1,
+        race_id: 1,
+        x: 100.0 + id as f32,
+        y: 200.0 + id as f32,
+        z: 0.0,
+        heading: 0.0,
+        hp_current: 1000,
+        hp_max: 1000,
+        mana_current: 1000,
+        mana_max: 1000,
+        endurance_current: 1000,
+        endurance_max: 1000,
+        speed_run: 0.0,
+        stand_state: 0,
+        is_gm: false,
+    }
+}
+
+/// Build a small list of nearby spawns around a stable seed.
+#[must_use]
+pub fn spawn_wave(
+    count: usize,
+    seed_id: u32,
+    base_name: impl Into<String>,
+) -> Vec<SpawnData> {
+    let name_prefix = base_name.into();
+    (0..count)
+        .map(|index| {
+            let id = seed_id + index as u32;
+            spawn_entry(id, format!("{name_prefix}-{id}"), 55)
+        })
+        .collect()
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────

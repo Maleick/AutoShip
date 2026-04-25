@@ -117,6 +117,14 @@ The `textquest::testing::mocks` module provides:
 - **MockProcessReader** — Configurable test double with builder pattern
 - **RealProcessReader** — Production reader (Windows) / no-op stub (non-Windows)
 
+`textquest::testing::scenario` now also includes reusable scenario stubs and test-data generators for integration tests that should run on non-Windows:
+
+- **MockScenario** — Deterministic pass/fail scenario with optional attached metrics.
+- **CountdownScenario** — Scenario that decrements a remaining tick counter and fails when exhausted.
+- **FastFailScenario** — Scenario that fails immediately for negative-path coverage.
+- **account_info** — Compact builder for `AccountInfo`.
+- **spawn_entry / spawn_wave** — Builders for realistic `SpawnData` test fixtures.
+
 Example usage in tests:
 
 ```rust
