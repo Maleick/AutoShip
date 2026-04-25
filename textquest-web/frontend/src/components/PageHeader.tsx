@@ -14,7 +14,9 @@ export function PageHeader({ title, subtitle, meta }: PageHeaderProps) {
           {title}
         </h1>
         {subtitle && (
-          <div className="font-mono text-xs text-neriak-muted flex items-center gap-2">{subtitle}</div>
+          <div className="font-mono text-xs text-neriak-muted flex items-center gap-2">
+            {subtitle}
+          </div>
         )}
       </div>
       {meta && (

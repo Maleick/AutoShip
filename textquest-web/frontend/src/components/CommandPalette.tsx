@@ -81,7 +81,7 @@ export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) 
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[560px] max-w-[90vw] bg-panel border border-neriak-magenta/40 rounded-md shadow-[0_0_40px_-8px_rgba(204,68,255,0.5)] overflow-hidden"
+        className="w-[560px] max-w-[90vw] bg-panel border border-neriak-magenta/40 rounded-md shadow-[0_0_40px_-8px_color-mix(in_srgb,var(--color-neriak-magenta)_50%,transparent)] overflow-hidden"
       >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-neriak-dim">
           <Search className="w-4 h-4 text-neriak-magenta" strokeWidth={1.75} />
@@ -93,13 +93,6 @@ export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) 
               setActive(0);
             }}
             placeholder="type a command…"
-            aria-label="Command search"
-            role="combobox"
-            aria-expanded={grouped.length > 0}
-            aria-controls="command-palette-list"
-            aria-activedescendant={
-              filtered[active] ? `palette-option-${filtered[active].id}` : undefined
-            }
             className="flex-1 bg-transparent outline-none font-mono text-sm text-neriak-text placeholder-neriak-dim"
           />
           <kbd className="font-mono text-[10px] text-neriak-dim border border-neriak-dim rounded-sm px-1.5 py-0.5">
@@ -109,7 +102,9 @@ export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) 
 
         <div className="max-h-[50vh] overflow-y-auto py-1" role="listbox" id="command-palette-list">
           {grouped.length === 0 ? (
-            <div className="px-4 py-6 text-center text-neriak-dim font-mono text-sm">no matches</div>
+            <div className="px-4 py-6 text-center text-neriak-dim font-mono text-sm">
+              no matches
+            </div>
           ) : (
             grouped.map(([section, items]) => (
               <div key={section}>
@@ -147,7 +142,10 @@ export function CommandPalette({ open, onClose, actions }: CommandPaletteProps) 
                         </kbd>
                       )}
                       {isActive && (
-                        <CornerDownLeft className="w-3 h-3 text-neriak-magenta" strokeWidth={1.75} />
+                        <CornerDownLeft
+                          className="w-3 h-3 text-neriak-magenta"
+                          strokeWidth={1.75}
+                        />
                       )}
                     </button>
                   );

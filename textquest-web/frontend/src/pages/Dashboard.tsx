@@ -6,17 +6,20 @@ import { MOCK_KPI, MOCK_LOG, MOCK_SESSIONS } from "../lib/mocks.ts";
 import type { LogLevel } from "../lib/mocks.ts";
 
 const LEVEL_COLOR: Record<LogLevel, string> = {
-  INFO: "#a096b4",
-  OK: "#34d399",
-  CAST: "#60a5fa",
-  WARN: "#fbbf24",
-  LOOT: "#cc44ff",
-  CH: "#00e5ff",
-  ALERT: "#ef4444",
-  ROUTE: "#a096b4",
-  ECON: "#fbbf24",
-  DMG: "#ef4444",
+  INFO: "var(--color-neriak-muted)",
+  OK: "var(--color-state-ok)",
+  CAST: "var(--color-state-info)",
+  WARN: "var(--color-state-warn)",
+  LOOT: "var(--color-neriak-magenta)",
+  CH: "var(--color-neriak-cyan)",
+  ALERT: "var(--color-state-danger)",
+  ROUTE: "var(--color-neriak-muted)",
+  ECON: "var(--color-state-warn)",
+  DMG: "var(--color-state-danger)",
 };
+
+const fadeColor = (color: string, pct: number) =>
+  `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 
 interface KpiCardProps {
   title: string;
@@ -44,7 +47,7 @@ function KpiCard({
     <div
       className="relative border rounded-md bg-panel p-4 flex flex-col gap-3 overflow-hidden"
       style={{
-        borderColor: `${accentColor}55`,
+        borderColor: fadeColor(accentColor, 33),
         boxShadow: `0 0 32px -16px ${accentColor}`,
       }}
     >
@@ -137,7 +140,7 @@ export function Dashboard() {
             caption={`${activeCount} active · ${pausedCount} paused · ${stuckCount} stuck`}
             delta={clientsDelta}
             icon={Users}
-            accentColor="#00e5ff"
+            accentColor="var(--color-neriak-cyan)"
             sparkline={MOCK_KPI.clients}
           />
           <KpiCard
@@ -147,7 +150,7 @@ export function Dashboard() {
             caption="G1 recovery · G2 hunt · G3 nav"
             delta={0}
             icon={UsersRound}
-            accentColor="#34d399"
+            accentColor="var(--color-state-ok)"
             sparkline={MOCK_KPI.groups}
           />
           <KpiCard
@@ -157,7 +160,7 @@ export function Dashboard() {
             caption={`${econDelta >= 0 ? "+" : ""}${econDelta.toFixed(1)} since 12:00 · loot queue 3`}
             delta={econDelta}
             icon={Coins}
-            accentColor="#fbbf24"
+            accentColor="var(--color-state-warn)"
             sparkline={MOCK_KPI.economy}
           />
         </div>
@@ -186,12 +189,12 @@ export function Dashboard() {
                 {rows.map((r) => {
                   const statusColor =
                     r.state === "active"
-                      ? "#34d399"
+                      ? "var(--color-state-ok)"
                       : r.state === "paused"
-                        ? "#fbbf24"
+                        ? "var(--color-state-warn)"
                         : r.state === "error"
-                          ? "#ef4444"
-                          : "#a096b4";
+                          ? "var(--color-state-danger)"
+                          : "var(--color-neriak-muted)";
                   return (
                     <tr
                       key={r.session_id}

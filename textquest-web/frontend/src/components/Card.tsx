@@ -21,7 +21,7 @@ export function Card({ title, icon, accent, children, className = "" }: CardProp
   const border = accent ? accentBorder[accent] : "border-neriak-dim";
   return (
     <div
-      className={`bg-panel border ${border} rounded-md p-4 shadow-[0_0_24px_-12px_rgba(204,68,255,0.35)] ${className}`}
+      className={`bg-panel border ${border} rounded-md p-4 shadow-[0_0_24px_-12px_color-mix(in_srgb,var(--color-neriak-magenta)_35%,transparent)] ${className}`}
     >
       {title && (
         <div className="flex items-center gap-2 mb-3">

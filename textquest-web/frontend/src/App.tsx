@@ -100,42 +100,42 @@ export default function App() {
   const activeLabel = NAV.find((n) => n.id === tab)?.label ?? "";
 
   return (
-    <div className="min-h-screen bg-[#0d0618] text-[#e2d7f4] flex flex-col">
+    <div className="min-h-screen bg-void text-neriak-text flex flex-col">
       {/* ─── Top bar ──────────────────────────────────────────── */}
-      <header className="flex items-center gap-6 px-5 py-3 border-b border-[#503c6e] bg-[#0d0618]">
+      <header className="flex items-center gap-6 px-5 py-3 border-b border-neriak-dim bg-void">
         <div className="flex items-baseline gap-3">
-          <span className="font-[Cinzel,serif] text-xl tracking-[0.2em] text-[#cc44ff]">
+          <span className="font-[Cinzel,serif] text-xl tracking-[0.2em] text-neriak-magenta">
             TEXTQUEST
           </span>
-          <span className="font-mono text-[10px] text-[#503c6e]">{VERSION}</span>
+          <span className="font-mono text-[10px] text-neriak-dim">{VERSION}</span>
         </div>
-        <nav className="flex items-center gap-1 font-mono text-[11px] text-[#a096b4] uppercase tracking-[0.18em]">
+        <nav className="flex items-center gap-1 font-mono text-[11px] text-neriak-muted uppercase tracking-[0.18em]">
           <span>operator</span>
-          <span className="text-[#503c6e]">/</span>
-          <span className="text-[#e2d7f4]">{activeLabel}</span>
+          <span className="text-neriak-dim">/</span>
+          <span className="text-neriak-text">{activeLabel}</span>
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <span
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border font-mono text-[10px] uppercase tracking-[0.15em] ${
               connected
-                ? "border-[#34d399]/40 text-[#34d399] bg-[#34d399]/5"
-                : "border-[#ef4444]/40 text-[#ef4444] bg-[#ef4444]/5"
+                ? "border-state-ok/40 text-state-ok bg-state-ok/5"
+                : "border-state-danger/40 text-state-danger bg-state-danger/5"
             }`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                connected ? "bg-[#34d399] shadow-[0_0_6px_#34d399]" : "bg-[#ef4444]"
+                connected ? "bg-state-ok shadow-[0_0_6px_var(--color-state-ok)]" : "bg-state-danger"
               }`}
             />
             {connected ? "connected" : "offline"}
-            <span className="text-[#a096b4] normal-case tracking-normal ml-1">{serverName}</span>
+            <span className="text-neriak-muted normal-case tracking-normal ml-1">{serverName}</span>
           </span>
           <button
             onClick={() => setHuntMode((h) => !h)}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border font-mono text-[10px] uppercase tracking-[0.18em] ${
               huntMode
-                ? "border-[#cc44ff] text-[#cc44ff] bg-[#cc44ff]/10 shadow-[0_0_12px_-4px_#cc44ff]"
-                : "border-[#503c6e] text-[#a096b4]"
+                ? "border-neriak-magenta text-neriak-magenta bg-neriak-magenta/10 shadow-[0_0_12px_-4px_var(--color-neriak-magenta)]"
+                : "border-neriak-dim text-neriak-muted"
             }`}
           >
             <Zap className="w-3 h-3" strokeWidth={2} />
@@ -143,7 +143,7 @@ export default function App() {
           </button>
           <button
             onClick={() => setPaletteOpen(true)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-[#503c6e] hover:border-[#cc44ff] hover:text-[#cc44ff] text-[#a096b4] font-mono text-[10px] uppercase tracking-[0.15em]"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border border-neriak-dim hover:border-neriak-magenta hover:text-neriak-magenta text-neriak-muted font-mono text-[10px] uppercase tracking-[0.15em]"
           >
             <Command className="w-3 h-3" strokeWidth={2} />
             ⌘K palette
@@ -152,8 +152,8 @@ export default function App() {
             onClick={() => setPrivacy((p) => !p)}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm border font-mono text-[10px] uppercase tracking-[0.15em] ${
               privacy
-                ? "border-[#fbbf24] text-[#fbbf24] bg-[#fbbf24]/5"
-                : "border-[#503c6e] text-[#a096b4]"
+                ? "border-state-warn text-state-warn bg-state-warn/5"
+                : "border-neriak-dim text-neriak-muted"
             }`}
           >
             {privacy ? (
@@ -167,10 +167,10 @@ export default function App() {
       </header>
 
       {!connected && (
-        <div className="flex items-center gap-2 px-5 py-1.5 bg-[#fbbf24]/5 border-b border-[#fbbf24]/30 font-mono text-[10px] text-[#fbbf24] uppercase tracking-[0.2em]">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#fbbf24] animate-pulse" />
+        <div className="flex items-center gap-2 px-5 py-1.5 bg-state-warn/5 border-b border-state-warn/30 font-mono text-[10px] text-state-warn uppercase tracking-[0.2em]">
+          <span className="w-1.5 h-1.5 rounded-full bg-state-warn animate-pulse" />
           backend offline · showing mock data
-          <span className="ml-auto text-[#503c6e] normal-case tracking-normal">
+          <span className="ml-auto text-neriak-dim normal-case tracking-normal">
             retrying every 15s
           </span>
         </div>
@@ -178,7 +178,7 @@ export default function App() {
 
       {/* ─── Body (sidebar + main) ────────────────────────────── */}
       <div className="flex flex-1 min-h-0">
-        <aside className="w-52 border-r border-[#503c6e] bg-[#0d0618] flex flex-col">
+        <aside className="w-52 border-r border-neriak-dim bg-void flex flex-col">
           <nav className="flex-1 p-2 space-y-0.5">
             {NAV.map(({ id, label, icon: Icon }) => {
               const active = tab === id;
@@ -188,8 +188,8 @@ export default function App() {
                   onClick={() => setTab(id)}
                   className={`w-full flex items-center gap-2 px-3 py-2 rounded-sm font-mono text-xs uppercase tracking-[0.18em] transition-colors ${
                     active
-                      ? "bg-[#2d1e41] text-[#cc44ff] border-l-2 border-[#cc44ff]"
-                      : "text-[#a096b4] hover:bg-[#1a0a2e] hover:text-[#e2d7f4] border-l-2 border-transparent"
+                      ? "bg-elevated text-neriak-magenta border-l-2 border-neriak-magenta"
+                      : "text-neriak-muted hover:bg-panel hover:text-neriak-text border-l-2 border-transparent"
                   }`}
                 >
                   <Icon className="w-4 h-4" strokeWidth={1.75} />
@@ -212,11 +212,11 @@ export default function App() {
       </div>
 
       {/* ─── Footer kbd hints ─────────────────────────────────── */}
-      <footer className="flex items-center gap-4 px-5 py-2 border-t border-[#503c6e] bg-[#0d0618] font-mono text-[11px] text-[#a096b4]">
+      <footer className="flex items-center gap-4 px-5 py-2 border-t border-neriak-dim bg-void font-mono text-[11px] text-neriak-muted">
         <div className="flex items-center gap-3">
           {KBD_HINTS.map(({ key, label }) => (
             <span key={key} className="flex items-center gap-1.5">
-              <kbd className="inline-block min-w-[1.25rem] text-center px-1 py-0.5 border border-[#503c6e] rounded-sm text-[#cc44ff] bg-[#1a0a2e] text-[10px]">
+              <kbd className="inline-block min-w-[1.25rem] text-center px-1 py-0.5 border border-neriak-dim rounded-sm text-neriak-magenta bg-panel text-[10px]">
                 {key}
               </kbd>
               <span className="text-[10px]">{label}</span>
@@ -225,7 +225,7 @@ export default function App() {
         </div>
         <div className="ml-auto flex items-center gap-3 text-[10px] uppercase tracking-[0.15em]">
           <span>theme</span>
-          <span className="text-[#ff00ff]">neriak</span>
+          <span className="text-neriak-magenta-bright">neriak</span>
         </div>
       </footer>
 

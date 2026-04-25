@@ -1,23 +1,18 @@
-# Result: #973 — Task: Help Search & Filter Implementation
+# Result: #2482 — web(config-ui): token drift — replace inline hex literals with Neriak CSS vars across pages+components
 
 Status: PARTIAL
 
 Changes Made:
-- Added an indexed `HelpSearch` trait implementation for `HelpDatabase`.
-- Added ranked, case-insensitive substring and fuzzy matching across commands, FAQs, and tips.
-- Added category and tag filter parsing for `/mercs search`, using `category:`/`type:` and `tag:`/`tags:` tokens.
-- Added minimal `App` help search filter state for category/tag filters.
-- Added focused unit tests for ranking, fuzzy typo matching, category/tag filters, and the <10ms query target.
+- Replaced raw Neriak hex arbitrary Tailwind color utilities across the config UI shell, pages, and components with semantic theme classes such as `bg-panel`, `bg-void`, `border-neriak-dim`, `text-neriak-magenta`, `text-neriak-muted`, and state color classes.
+- Converted dynamic SVG/style color values to CSS variable references and used `color-mix(...)` where the old code appended alpha hex suffixes.
+- Kept `index.css` as the canonical theme-token definition surface.
 
 Tests:
-- `cargo check` failed in pre-existing unrelated `textquest` errors:
-  - `textquest/src/loot/smartloot.rs`: `WishlistManager` lacks `PartialEq` for an existing derive.
-  - `textquest/src/lua/bindings.rs`: `player.class_name` is partially moved before `player.hp_percent()`.
-- `cargo check -p textquest-dll` passed.
-- `cargo check -p textquest-dll --tests` passed.
+- `rg -n "#[0-9A-Fa-f]{3,8}" textquest-web/frontend/src --glob '!index.css'` produced no matches.
+- `cargo check` passed.
+- `npm --prefix textquest-web/frontend run build` could not start because this workspace has no installed frontend dependencies (`tsc: command not found`).
 
 Notes:
-- Rust tests were added but not executed because this task explicitly requested cargo check only.
-- Remaining work is to connect the new `App` filter state to the visible TUI help search renderer.
+- No full cargo test run, per issue instruction to use `cargo check` only.
 
 COMPLETE

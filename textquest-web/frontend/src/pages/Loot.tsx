@@ -60,7 +60,9 @@ function ItemList({
           </div>
         ))}
         {items.length === 0 && (
-          <div className="px-2 py-6 text-center text-neriak-dim font-mono text-xs italic">empty</div>
+          <div className="px-2 py-6 text-center text-neriak-dim font-mono text-xs italic">
+            empty
+          </div>
         )}
       </div>
       <div className="flex items-center gap-2 p-2 border-t border-neriak-dim/50">
@@ -171,7 +173,7 @@ export function Loot() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <ItemList
               title="keep"
-              color="#34d399"
+              color="var(--color-state-ok)"
               items={rules.keep_items}
               onAdd={(v) => addTo("keep_items", v)}
               onRemove={(v) => removeFrom("keep_items", v)}
@@ -179,7 +181,7 @@ export function Loot() {
             />
             <ItemList
               title="sell"
-              color="#fbbf24"
+              color="var(--color-state-warn)"
               items={rules.sell_items}
               onAdd={(v) => addTo("sell_items", v)}
               onRemove={(v) => removeFrom("sell_items", v)}
@@ -187,7 +189,7 @@ export function Loot() {
             />
             <ItemList
               title="destroy"
-              color="#ef4444"
+              color="var(--color-state-danger)"
               items={rules.destroy_items}
               onAdd={(v) => addTo("destroy_items", v)}
               onRemove={(v) => removeFrom("destroy_items", v)}
@@ -246,11 +248,7 @@ export function Loot() {
                     <td className="px-3 py-2 text-neriak-muted">{r.q}</td>
                     <td className="px-3 py-2 text-neriak-magenta">{r.m}</td>
                     <td className="px-3 py-2 text-right">
-                      <button
-                        type="button"
-                        aria-label={`Remove rule ${r.t}`}
-                        className="text-neriak-dim hover:text-state-danger"
-                      >
+                      <button className="text-neriak-dim hover:text-state-danger">
                         <X className="w-3 h-3" strokeWidth={2} />
                       </button>
                     </td>

@@ -163,7 +163,9 @@ export function Characters() {
                   <span className="flex-1">{c.character_name}</span>
                   <span
                     className="text-[10px] uppercase tracking-[0.15em]"
-                    style={{ color: active ? "#cc44ff" : "#a096b4" }}
+                    style={{
+                      color: active ? "var(--color-neriak-magenta)" : "var(--color-neriak-muted)",
+                    }}
                   >
                     {c.class}
                   </span>
@@ -233,19 +235,19 @@ export function Characters() {
               <Slider
                 label="heal at"
                 value={selected.heal_at_pct}
-                color="#34d399"
+                color="var(--color-state-ok)"
                 onChange={(v) => update({ heal_at_pct: v })}
               />
               <Slider
                 label="mana sit"
                 value={selected.mana_sit_pct}
-                color="#60a5fa"
+                color="var(--color-state-info)"
                 onChange={(v) => update({ mana_sit_pct: v })}
               />
               <Slider
                 label="nuke at"
                 value={selected.nuke_at_pct}
-                color="#cc44ff"
+                color="var(--color-neriak-magenta)"
                 onChange={(v) => update({ nuke_at_pct: v })}
               />
             </Section>
@@ -348,7 +350,7 @@ export function Characters() {
               <Slider
                 label="min XP %"
                 value={selected.auto_rez.min_xp_pct}
-                color="#34d399"
+                color="var(--color-state-ok)"
                 onChange={(v) => update({ auto_rez: { ...selected.auto_rez, min_xp_pct: v } })}
               />
               <div>

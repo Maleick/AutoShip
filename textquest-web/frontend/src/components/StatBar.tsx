@@ -4,16 +4,19 @@ interface StatBarProps {
   width?: number;
 }
 
+const fadeColor = (color: string, pct: number) =>
+  `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+
 function hpColor(pct: number): string {
-  if (pct <= 15) return "#ef4444"; // danger
-  if (pct <= 40) return "#fbbf24"; // warn
-  return "#34d399"; // ok
+  if (pct <= 15) return "var(--color-state-danger)"; // danger
+  if (pct <= 40) return "var(--color-state-warn)"; // warn
+  return "var(--color-state-ok)"; // ok
 }
 
 function mpColor(pct: number): string {
-  if (pct <= 10) return "#ef4444";
-  if (pct <= 30) return "#fbbf24";
-  return "#60a5fa"; // mana blue
+  if (pct <= 10) return "var(--color-state-danger)";
+  if (pct <= 30) return "var(--color-state-warn)";
+  return "var(--color-state-info)"; // mana blue
 }
 
 export function StatBar({ pct, kind, width = 64 }: StatBarProps) {
@@ -30,7 +33,7 @@ export function StatBar({ pct, kind, width = 64 }: StatBarProps) {
           style={{
             width: `${clamped}%`,
             background: color,
-            boxShadow: `0 0 6px ${color}80`,
+            boxShadow: `0 0 6px ${fadeColor(color, 50)}`,
           }}
         />
       </span>

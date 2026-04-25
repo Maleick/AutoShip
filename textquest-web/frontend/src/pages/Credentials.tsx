@@ -352,86 +352,61 @@ export function Credentials() {
         title="Credentials"
         subtitle={
           <>
-            <KeyRound className="h-3.5 w-3.5 text-neriak-magenta" strokeWidth={1.75} />
-            <span>{accounts.length} accounts</span>
-            <span className="text-neriak-dim">/</span>
+            <KeyRound className="w-3.5 h-3.5 text-neriak-magenta" strokeWidth={1.75} />
+            <span>{creds.length} accounts</span>
+            <span className="text-neriak-dim">·</span>
             <span className="flex items-center gap-1 text-state-ok">
-              <ShieldCheck className="h-3 w-3" strokeWidth={1.75} />
+              <ShieldCheck className="w-3 h-3" strokeWidth={1.75} />
               encrypted at rest
             </span>
           </>
         }
         meta={
-          <button
-            type="button"
-            onClick={startNew}
-            className="flex items-center gap-1 rounded border border-neriak-magenta/50 px-2 py-1 text-xs font-mono text-neriak-magenta hover:border-neriak-magenta hover:text-neriak-magenta-bright"
-          >
-            <Plus className="h-3 w-3" strokeWidth={2} />
-            add
-          </button>
+          <span className="text-[10px] font-mono text-state-warn border border-state-warn/40 bg-state-warn/5 rounded-sm px-2 py-1 uppercase tracking-[0.2em]">
+            mock data
+          </span>
         }
       />
 
-      <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_380px] xl:p-6">
-        <div className="space-y-4">
-          {notice && (
-            <div
-              className={`flex items-start gap-2 rounded border px-3 py-2 font-mono text-xs ${
-                notice.type === "ok"
-                  ? "border-state-ok/50 bg-state-ok/5 text-state-ok"
-                  : "border-state-danger/50 bg-state-danger/5 text-state-danger"
-              }`}
-            >
-              {notice.type === "ok" ? (
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
-              ) : (
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} />
-              )}
-              <span>{notice.text}</span>
-            </div>
-          )}
-
-          <section className="overflow-hidden rounded-md border border-neriak-dim bg-panel">
-            <div className="flex items-center gap-2 border-b border-neriak-dim px-3 py-2 font-mono text-xs text-neriak-muted">
-              <KeyRound className="h-3.5 w-3.5 text-neriak-magenta" strokeWidth={1.75} />
-              accounts
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] font-mono text-sm">
-                <thead className="bg-void text-left text-[10px] text-neriak-muted">
-                  <tr>
-                    <th className="px-3 py-2">account</th>
-                    <th className="px-3 py-2">primary character</th>
-                    <th className="px-3 py-2">server</th>
-                    <th className="px-3 py-2">group</th>
-                    <th className="px-3 py-2">credential</th>
-                    <th className="px-3 py-2 text-right">actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td className="px-3 py-6 text-neriak-muted" colSpan={6}>
-                        <span className="flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
-                          loading credentials
+      <div className="p-6 space-y-4">
+        <section className="border border-neriak-dim rounded-md bg-panel overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-neriak-dim text-xs font-mono text-neriak-muted uppercase tracking-[0.15em]">
+            <KeyRound className="w-3.5 h-3.5 text-neriak-magenta" strokeWidth={1.75} />
+            accounts
+            <button className="ml-auto flex items-center gap-1 text-neriak-magenta hover:text-neriak-magenta-bright">
+              <Plus className="w-3 h-3" strokeWidth={2} />
+              add credential
+            </button>
+          </div>
+          <table className="w-full font-mono text-sm">
+            <thead className="text-neriak-muted uppercase tracking-[0.15em] text-[10px] bg-void">
+              <tr>
+                <th className="px-3 py-2 text-left">label</th>
+                <th className="px-3 py-2 text-left">account</th>
+                <th className="px-3 py-2 text-left">password</th>
+                <th className="px-3 py-2 text-left">server</th>
+                <th className="px-3 py-2 text-left">last used</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {creds.map((c) => {
+                const isRevealed = revealed.has(c.id);
+                return (
+                  <tr
+                    key={c.id}
+                    className="group border-t border-neriak-dim/40 hover:bg-elevated/40"
+                  >
+                    <td className="px-3 py-2 text-neriak-text">{c.label}</td>
+                    <td className="px-3 py-2 text-neriak-magenta">{c.account}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-neriak-muted font-mono">
+                          {isRevealed ? "redacted_in_demo" : c.password_hint}
                         </span>
-                      </td>
-                    </tr>
-                  ) : accounts.length === 0 ? (
-                    <tr>
-                      <td className="px-3 py-6 text-neriak-muted" colSpan={6}>
-                        No accounts configured.
-                      </td>
-                    </tr>
-                  ) : (
-                    accounts.map((account) => {
-                      const testResult = testResults[account.name];
-                      return (
-                        <tr
-                          key={account.id}
-                          className="border-t border-neriak-dim/40 hover:bg-elevated/40"
+                        <button
+                          onClick={() => toggleReveal(c.id)}
+                          className="text-neriak-dim hover:text-neriak-magenta"
                         >
                           <td className="px-3 py-2 text-neriak-magenta">{account.name}</td>
                           <td className="px-3 py-2 text-neriak-text">
@@ -541,29 +516,29 @@ export function Credentials() {
                           <ArrowDown className="h-4 w-4" strokeWidth={1.75} />
                         </button>
                       </div>
-                      <div className="min-w-0">
-                        <div className="truncate text-neriak-text">{step.accountName}</div>
-                        <div className="truncate text-xs text-neriak-dim">
-                          {account?.character ?? "unmapped"}
-                        </div>
-                      </div>
-                      <label className="flex items-center gap-2 text-xs text-neriak-muted">
-                        stagger
-                        <input
-                          type="number"
-                          min={0}
-                          value={step.staggerSeconds}
-                          onChange={(event) =>
-                            setLaunchStagger(step.accountName, event.target.value)
-                          }
-                          className="w-20 rounded border border-neriak-dim bg-void px-2 py-1 text-neriak-text"
-                        />
-                        sec
-                      </label>
-                    </div>
-                  );
-                })
-              )}
+                    </td>
+                    <td className="px-3 py-2 text-neriak-muted">{c.server}</td>
+                    <td className="px-3 py-2 text-neriak-dim text-xs">{c.last_used ?? "—"}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        onClick={() => remove(c.id)}
+                        className="opacity-0 group-hover:opacity-100 text-neriak-dim hover:text-state-danger transition-opacity"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="border border-state-warn/40 bg-state-warn/5 rounded-md p-4 flex items-start gap-3">
+          <ShieldCheck className="w-4 h-4 text-state-warn shrink-0 mt-0.5" strokeWidth={1.75} />
+          <div className="font-mono text-xs text-neriak-muted space-y-1">
+            <div className="text-state-warn uppercase tracking-[0.2em] text-[10px]">
+              security notice
             </div>
           </section>
         </div>

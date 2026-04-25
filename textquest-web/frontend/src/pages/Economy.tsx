@@ -4,6 +4,9 @@ import { PageHeader } from "../components/PageHeader.tsx";
 import { Sparkline } from "../components/Sparkline.tsx";
 import { MOCK_KPI, MOCK_VENDOR_ROUTES } from "../lib/mocks.ts";
 
+const fadeColor = (color: string, pct: number) =>
+  `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+
 export function Economy() {
   const [paused, setPaused] = useState(false);
   const [routes, setRoutes] = useState(MOCK_VENDOR_ROUTES);
@@ -131,8 +134,8 @@ export function Economy() {
           <section
             className="border rounded-md bg-panel p-4 space-y-3"
             style={{
-              borderColor: "#fbbf2455",
-              boxShadow: "0 0 32px -16px #fbbf24",
+              borderColor: "color-mix(in srgb, var(--color-state-warn) 33%, transparent)",
+              boxShadow: "0 0 32px -16px var(--color-state-warn)",
             }}
           >
             <div className="flex items-center justify-between">
@@ -153,7 +156,12 @@ export function Economy() {
                   pp
                 </span>
               </div>
-              <Sparkline values={MOCK_KPI.economy} color="#fbbf24" width={120} height={40} />
+              <Sparkline
+                values={MOCK_KPI.economy}
+                color="var(--color-state-warn)"
+                width={120}
+                height={40}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3 pt-2 border-t border-neriak-dim/50 font-mono text-xs">
               <div>
@@ -178,11 +186,16 @@ export function Economy() {
               queues
             </div>
             {[
-              { label: "loot queue", value: queues.loot_queue_len, color: "#cc44ff", max: 20 },
+              {
+                label: "loot queue",
+                value: queues.loot_queue_len,
+                color: "var(--color-neriak-magenta)",
+                max: 20,
+              },
               {
                 label: "vendor backlog",
                 value: queues.vendor_backlog_len,
-                color: "#fbbf24",
+                color: "var(--color-state-warn)",
                 max: 20,
               },
             ].map(({ label, value, color, max }) => (
@@ -199,7 +212,7 @@ export function Economy() {
                     style={{
                       width: `${Math.min(100, (value / max) * 100)}%`,
                       background: color,
-                      boxShadow: `0 0 6px ${color}80`,
+                      boxShadow: `0 0 6px ${fadeColor(color, 50)}`,
                     }}
                   />
                 </div>

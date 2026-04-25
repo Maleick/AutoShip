@@ -22,7 +22,7 @@ const STATE_COLOR: Record<SessionState, string> = {
 };
 
 const STATE_DOT: Record<SessionState, string> = {
-  active: "bg-state-ok shadow-[0_0_6px_#34d399]",
+  active: "bg-state-ok shadow-[0_0_6px_var(--color-state-ok)]",
   idle: "bg-neriak-muted",
   paused: "bg-state-warn",
   error: "bg-state-danger animate-pulse",
@@ -179,13 +179,13 @@ export function Sessions() {
             <span className="text-neriak-magenta">{selected.size} selected</span>
             <button
               onClick={() => bulk("pause")}
-              className="flex items-center gap-1 text-state-warn hover:text-[#fde68a]"
+              className="flex items-center gap-1 text-state-warn hover:text-state-warn/80"
             >
               <Pause className="w-3.5 h-3.5" strokeWidth={1.75} /> pause all
             </button>
             <button
               onClick={() => bulk("resume")}
-              className="flex items-center gap-1 text-state-ok hover:text-[#6ee7b7]"
+              className="flex items-center gap-1 text-state-ok hover:text-state-ok/80"
             >
               <Play className="w-3.5 h-3.5" strokeWidth={1.75} /> resume all
             </button>
@@ -198,8 +198,8 @@ export function Sessions() {
           </div>
         )}
 
-        <div className="border border-neriak-dim rounded-md overflow-hidden overflow-x-auto">
-          <table className="w-full min-w-[720px] font-mono text-sm">
+        <div className="border border-neriak-dim rounded-md overflow-hidden">
+          <table className="w-full font-mono text-sm">
             <thead className="bg-void text-neriak-muted uppercase tracking-[0.15em] text-[10px]">
               <tr>
                 <th className="w-8 px-3 py-2 text-left">
@@ -295,7 +295,7 @@ export function Sessions() {
                         <button
                           disabled={isBusy}
                           onClick={() => runOp(r.session_id, "resume")}
-                          className="inline-flex items-center gap-1 text-state-ok hover:text-[#6ee7b7] disabled:opacity-40"
+                          className="inline-flex items-center gap-1 text-state-ok hover:text-state-ok/80 disabled:opacity-40"
                         >
                           <Play className="w-3.5 h-3.5" strokeWidth={1.75} /> resume
                         </button>
@@ -303,7 +303,7 @@ export function Sessions() {
                         <button
                           disabled={isBusy || r.state === "error"}
                           onClick={() => runOp(r.session_id, "pause")}
-                          className="inline-flex items-center gap-1 text-state-warn hover:text-[#fde68a] disabled:opacity-40"
+                          className="inline-flex items-center gap-1 text-state-warn hover:text-state-warn/80 disabled:opacity-40"
                         >
                           <Pause className="w-3.5 h-3.5" strokeWidth={1.75} /> pause
                         </button>

@@ -10,14 +10,17 @@ import type { AutoGroupConfig, AutoGroupMember, GroupRole } from "../lib/types.t
 const ROLES: GroupRole[] = ["tank", "healer", "dps", "support", "puller", "mez", "slow"];
 
 const ROLE_COLOR: Record<GroupRole, string> = {
-  tank: "#60a5fa",
-  healer: "#34d399",
-  dps: "#ef4444",
-  support: "#fbbf24",
-  puller: "#cc44ff",
-  mez: "#cc44ff",
-  slow: "#00e5ff",
+  tank: "var(--color-state-info)",
+  healer: "var(--color-state-ok)",
+  dps: "var(--color-state-danger)",
+  support: "var(--color-state-warn)",
+  puller: "var(--color-neriak-magenta)",
+  mez: "var(--color-neriak-magenta)",
+  slow: "var(--color-neriak-cyan)",
 };
+
+const fadeColor = (color: string, pct: number) =>
+  `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 
 const TICK_SECS = 6;
 
@@ -126,7 +129,7 @@ export function Groups() {
                           }
                           className="bg-void border rounded-sm px-2 py-1 font-mono text-xs focus:outline-none"
                           style={{
-                            borderColor: `${ROLE_COLOR[m.role]}66`,
+                            borderColor: fadeColor(ROLE_COLOR[m.role], 40),
                             color: ROLE_COLOR[m.role],
                           }}
                         >
@@ -138,7 +141,7 @@ export function Groups() {
                         </select>
                         <button
                           onClick={() => removeMember(m.name)}
-                          className="ml-auto opacity-0 group-hover:opacity-100 text-state-danger hover:text-[#fca5a5] transition-opacity"
+                          className="ml-auto opacity-0 group-hover:opacity-100 text-state-danger hover:text-state-danger/80 transition-opacity"
                         >
                           <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                         </button>

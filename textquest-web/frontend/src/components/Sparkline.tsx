@@ -6,6 +6,9 @@ interface SparklineProps {
   filled?: boolean;
 }
 
+const fadeColor = (color: string, pct: number) =>
+  `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+
 export function Sparkline({
   values,
   color,
@@ -30,7 +33,7 @@ export function Sparkline({
   const last = pts[pts.length - 1];
   return (
     <svg width={width} height={height} className="block">
-      {area && <path d={area} fill={`${color}22`} />}
+      {area && <path d={area} fill={fadeColor(color, 13)} />}
       <path d={path} fill="none" stroke={color} strokeWidth="1.5" />
       <circle
         cx={last[0]}
