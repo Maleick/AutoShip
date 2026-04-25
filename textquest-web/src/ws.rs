@@ -1,6 +1,10 @@
 //! WebSocket handler for real-time session monitoring.
 
-use std::sync::Arc;
+use std::{
+    path::Path,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use axum::{
     extract::{
@@ -10,9 +14,10 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::AppState;
+use textquest_common::shared_client_state::SharedClientState;
 
 /// Query parameters for WebSocket upgrade.
 #[derive(Deserialize)]
@@ -21,6 +26,205 @@ pub struct WsQuery {
     /// Used for WebSocket authentication since browser WebSocket API
     /// does not allow setting custom headers.
     token: Option<String>,
+    /// Optional live dashboard stream selector. Supported values:
+    /// `stream=dashboard` or `stream=sessions`.
+    stream: Option<String>,
+    /// Optional boolean-like dashboard stream toggle:
+    /// `dashboard=1`, `dashboard=true`, `dashboard=yes`, or `dashboard=on`.
+    dashboard: Option<String>,
+    /// Optional group filter for dashboard session snapshots.
+    group: Option<String>,
+}
+
+const DASHBOARD_REFRESH_INTERVAL: Duration = Duration::from_millis(500);
+
+#[derive(Debug, Clone)]
+struct DashboardStreamOptions {
+    enabled: bool,
+    group: Option<String>,
+}
+
+impl DashboardStreamOptions {
+    fn from_query(query: &WsQuery) -> Self {
+        let stream_enabled = query
+            .stream
+            .as_deref()
+            .is_some_and(|value| matches_dashboard_stream(value));
+        let dashboard_enabled = query
+            .dashboard
+            .as_deref()
+            .is_some_and(|value| matches_dashboard_toggle(value));
+
+        Self {
+            enabled: stream_enabled || dashboard_enabled,
+            group: query
+                .group
+                .as_ref()
+                .map(|group| group.trim().to_string())
+                .filter(|group| !group.is_empty()),
+        }
+    }
+}
+
+fn matches_dashboard_stream(value: &str) -> bool {
+    value.eq_ignore_ascii_case("dashboard") || value.eq_ignore_ascii_case("sessions")
+}
+
+fn matches_dashboard_toggle(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DashboardSnapshotEvent {
+    #[serde(rename = "type")]
+    event_type: &'static str,
+    generated_at_ms: u64,
+    group_filter: Option<String>,
+    metrics: DashboardSummaryMetrics,
+    clients: Vec<DashboardClientStatus>,
+    alerts: Vec<DashboardAlertFeedItem>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DashboardSummaryMetrics {
+    total_clients: usize,
+    online_clients: usize,
+    offline_clients: usize,
+    stuck_clients: usize,
+    average_hp_pct: f32,
+    average_mana_pct: f32,
+    total_dps: Option<f32>,
+    heal_coverage: Option<f32>,
+}
+
+impl DashboardSummaryMetrics {
+    fn from_clients(clients: &[DashboardClientStatus]) -> Self {
+        let total_clients = clients.len();
+        let online_clients = clients
+            .iter()
+            .filter(|client| client.login_status != "offline")
+            .count();
+        let offline_clients = clients
+            .iter()
+            .filter(|client| client.login_status == "offline")
+            .count();
+        let stuck_clients = clients.iter().filter(|client| client.stuck).count();
+        let average_hp_pct = average_percent(clients.iter().map(|client| client.hp_pct));
+        let average_mana_pct = average_percent(clients.iter().map(|client| client.mana_pct));
+
+        Self {
+            total_clients,
+            online_clients,
+            offline_clients,
+            stuck_clients,
+            average_hp_pct,
+            average_mana_pct,
+            total_dps: None,
+            heal_coverage: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DashboardClientStatus {
+    client_id: u32,
+    account_name: Option<String>,
+    character_name: String,
+    role: Option<String>,
+    group_name: Option<String>,
+    login_status: &'static str,
+    zone: String,
+    level: u8,
+    hp_pct: f32,
+    mana_pct: f32,
+    endurance_pct: f32,
+    status: String,
+    camp_phase: &'static str,
+    stuck: bool,
+    last_action_at_ms: Option<u64>,
+    buff_count: usize,
+    target_name: Option<String>,
+    target_hp_pct: Option<f32>,
+    pet_name: Option<String>,
+}
+
+impl DashboardClientStatus {
+    fn from_live(
+        session: SharedClientState,
+        config: Option<&crate::api::CharacterConfig>,
+        _generated_at_ms: u64,
+    ) -> Self {
+        let stuck = status_is_stuck(&session.status);
+        Self {
+            client_id: session.client_id,
+            account_name: None,
+            character_name: session.character_name,
+            role: config.map(|cfg| cfg.role.clone()),
+            group_name: config.and_then(|cfg| cfg.group_name.clone()),
+            login_status: if stuck { "stuck" } else { "online" },
+            zone: if session.zone_long_name.is_empty() {
+                session.zone_short_name
+            } else {
+                session.zone_long_name
+            },
+            level: session.level,
+            hp_pct: session.hp_pct,
+            mana_pct: session.mana_pct,
+            endurance_pct: session.endurance_pct,
+            camp_phase: camp_phase_from_status(&session.status),
+            status: session.status,
+            stuck,
+            last_action_at_ms: None,
+            buff_count: session.buffs.len(),
+            target_name: session.target.as_ref().map(|target| target.name.clone()),
+            target_hp_pct: session.target.as_ref().map(|target| target.hp_pct),
+            pet_name: session.pet.as_ref().map(|pet| pet.name.clone()),
+        }
+    }
+
+    fn from_config(index: usize, config: &crate::api::CharacterConfig) -> Self {
+        Self {
+            client_id: index as u32 + 1,
+            account_name: None,
+            character_name: config.character_name.clone(),
+            role: Some(config.role.clone()),
+            group_name: config.group_name.clone(),
+            login_status: "offline",
+            zone: "Unknown".to_string(),
+            level: 0,
+            hp_pct: 0.0,
+            mana_pct: 0.0,
+            endurance_pct: 0.0,
+            status: "offline".to_string(),
+            camp_phase: "offline",
+            stuck: false,
+            last_action_at_ms: None,
+            buff_count: 0,
+            target_name: None,
+            target_hp_pct: None,
+            pet_name: None,
+        }
+    }
+
+    fn matches_group(&self, group: &str) -> bool {
+        self.group_name
+            .as_deref()
+            .is_some_and(|name| name.eq_ignore_ascii_case(group))
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DashboardAlertFeedItem {
+    severity: &'static str,
+    message: String,
+    generated_at_ms: u64,
 }
 
 // Re-use the canonical constant-time comparison from the crate root so there
@@ -45,8 +249,9 @@ pub async fn ws_handler(
         tracing::warn!(
             "Auth disabled (TEXTQUEST_DISABLE_AUTH=1) — WebSocket allowed without token"
         );
+        let dashboard_options = DashboardStreamOptions::from_query(&query);
         return ws
-            .on_upgrade(move |socket| handle_socket(socket, state))
+            .on_upgrade(move |socket| handle_socket(socket, state, dashboard_options))
             .into_response();
     }
 
@@ -69,20 +274,42 @@ pub async fn ws_handler(
         }
     }
 
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+    let dashboard_options = DashboardStreamOptions::from_query(&query);
+    ws.on_upgrade(move |socket| handle_socket(socket, state, dashboard_options))
         .into_response()
 }
 
-async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
+async fn handle_socket(
+    mut socket: WebSocket,
+    state: Arc<AppState>,
+    dashboard_options: DashboardStreamOptions,
+) {
     let mut rx = state.event_tx.subscribe();
+    let mut dashboard_tick = tokio::time::interval(DASHBOARD_REFRESH_INTERVAL);
+    dashboard_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    dashboard_tick.tick().await;
 
     tracing::info!("WebSocket client connected");
+
+    if dashboard_options.enabled
+        && send_dashboard_snapshot(&mut socket, &state, &dashboard_options)
+            .await
+            .is_err()
+    {
+        tracing::info!("WebSocket client disconnected before dashboard snapshot");
+        return;
+    }
 
     loop {
         tokio::select! {
             // Forward broadcast events to the WebSocket client.
             Ok(event) = rx.recv() => {
                 if socket.send(Message::Text(event.into())).await.is_err() {
+                    break;
+                }
+            }
+            _ = dashboard_tick.tick(), if dashboard_options.enabled => {
+                if send_dashboard_snapshot(&mut socket, &state, &dashboard_options).await.is_err() {
                     break;
                 }
             }
@@ -105,6 +332,122 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
     tracing::info!("WebSocket client disconnected");
 }
 
+async fn send_dashboard_snapshot(
+    socket: &mut WebSocket,
+    state: &AppState,
+    options: &DashboardStreamOptions,
+) -> Result<(), axum::Error> {
+    match build_dashboard_snapshot(state, options).await {
+        Ok(event) => {
+            let payload = serde_json::to_string(&event).unwrap_or_else(|error| {
+                tracing::error!(%error, "Failed to encode dashboard snapshot");
+                dashboard_error_payload("Failed to encode dashboard snapshot")
+            });
+            socket.send(Message::Text(payload.into())).await
+        }
+        Err(error) => {
+            tracing::warn!(%error, "Failed to build dashboard session snapshot");
+            socket
+                .send(Message::Text(
+                    dashboard_error_payload("Failed to read live session snapshot").into(),
+                ))
+                .await
+        }
+    }
+}
+
+async fn build_dashboard_snapshot(
+    state: &AppState,
+    options: &DashboardStreamOptions,
+) -> anyhow::Result<DashboardSnapshotEvent> {
+    let generated_at_ms = unix_timestamp_millis();
+    let live_sessions = read_live_sessions(&state.live_session_snapshot_path)?;
+    let configs = state.character_configs.read().await;
+
+    let mut clients = if live_sessions.is_empty() {
+        configs
+            .values()
+            .enumerate()
+            .map(|(index, config)| DashboardClientStatus::from_config(index, config))
+            .collect::<Vec<_>>()
+    } else {
+        live_sessions
+            .into_iter()
+            .map(|session| {
+                let config = configs.values().find(|config| {
+                    config
+                        .character_name
+                        .eq_ignore_ascii_case(&session.character_name)
+                });
+                DashboardClientStatus::from_live(session, config, generated_at_ms)
+            })
+            .collect::<Vec<_>>()
+    };
+
+    if let Some(group) = options.group.as_deref() {
+        clients.retain(|client| client.matches_group(group));
+    }
+
+    let metrics = DashboardSummaryMetrics::from_clients(&clients);
+    Ok(DashboardSnapshotEvent {
+        event_type: "session.dashboard.snapshot",
+        generated_at_ms,
+        group_filter: options.group.clone(),
+        metrics,
+        clients,
+        alerts: Vec::new(),
+    })
+}
+
+fn read_live_sessions(path: &Path) -> anyhow::Result<Vec<SharedClientState>> {
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let payload = std::fs::read(path)?;
+    Ok(serde_json::from_slice::<Vec<SharedClientState>>(&payload)?)
+}
+
+fn average_percent(values: impl Iterator<Item = f32>) -> f32 {
+    let (sum, count) = values.fold((0.0, 0usize), |(sum, count), value| {
+        (sum + value, count + 1)
+    });
+    if count == 0 { 0.0 } else { sum / count as f32 }
+}
+
+fn camp_phase_from_status(status: &str) -> &'static str {
+    let normalized = status.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "active" | "engaging" | "pulling" | "casting" => "hunting",
+        "recovering" | "idle" => "resting",
+        "buffing" => "buffing",
+        "stuck" => "stuck",
+        "dead" => "dead",
+        "offline" => "offline",
+        _ => "unknown",
+    }
+}
+
+fn status_is_stuck(status: &str) -> bool {
+    status.trim().to_ascii_lowercase().contains("stuck")
+}
+
+fn unix_timestamp_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or_default()
+}
+
+fn dashboard_error_payload(message: &str) -> String {
+    serde_json::json!({
+        "type": "session.dashboard.error",
+        "message": message,
+        "generatedAtMs": unix_timestamp_millis(),
+    })
+    .to_string()
+}
+
 async fn receive_message(socket: &mut WebSocket) -> Option<Message> {
     match socket.recv().await {
         Some(Ok(msg)) => Some(msg),
@@ -122,6 +465,7 @@ mod tests {
     };
     use futures_util::{SinkExt, StreamExt};
     use std::{sync::Arc, time::Duration};
+    use textquest_common::shared_client_state::{SharedClientState, SharedTargetState};
     use tokio::{net::TcpListener, task::JoinHandle, time::timeout};
     use tokio_tungstenite::{connect_async, tungstenite::Message as WsMessage};
 
@@ -174,6 +518,49 @@ mod tests {
         Duration::from_secs(10)
     }
 
+    fn append_ws_query(url: String, query: &str) -> String {
+        if url.contains('?') {
+            format!("{url}&{query}")
+        } else {
+            format!("{url}?{query}")
+        }
+    }
+
+    fn live_session(client_id: u32, character_name: &str, status: &str) -> SharedClientState {
+        SharedClientState {
+            client_id,
+            spawn_id: 10_000 + client_id,
+            character_name: character_name.to_string(),
+            class_id: 2,
+            level: 65,
+            zone_short_name: "poknowledge".to_string(),
+            zone_long_name: "Plane of Knowledge".to_string(),
+            hp_pct: 62.5,
+            mana_pct: 41.0,
+            endurance_pct: 88.0,
+            is_dead: false,
+            status: status.to_string(),
+            target: Some(SharedTargetState {
+                spawn_id: 20_000 + client_id,
+                name: "a test target".to_string(),
+                hp_pct: 73.0,
+            }),
+            buffs: Vec::new(),
+            pet: None,
+        }
+    }
+
+    fn write_live_sessions(state: &AppState, sessions: &[SharedClientState]) {
+        if let Some(parent) = state.live_session_snapshot_path.parent() {
+            std::fs::create_dir_all(parent).expect("snapshot parent should exist");
+        }
+        std::fs::write(
+            &state.live_session_snapshot_path,
+            serde_json::to_vec(sessions).expect("live sessions should encode"),
+        )
+        .expect("live sessions snapshot should write");
+    }
+
     async fn wait_for_receiver_count(state: &AppState, expected: usize) {
         timeout(websocket_test_timeout(), async {
             while state.event_tx.receiver_count() != expected {
@@ -209,6 +596,37 @@ mod tests {
             next_message(&mut socket).await,
             WsMessage::Text("session:update".into())
         );
+
+        server.abort();
+        let _ = server.await;
+    }
+
+    #[tokio::test]
+    async fn websocket_dashboard_stream_sends_live_session_snapshot() {
+        let (state, server, url) = spawn_test_server(test_state()).await;
+        write_live_sessions(&state, &[live_session(7, "Ariane", "active")]);
+
+        let (mut socket, _) = connect_async(append_ws_query(url, "stream=dashboard"))
+            .await
+            .expect("dashboard websocket handshake should succeed");
+        wait_for_receiver_count(&state, 1).await;
+
+        let message = next_message(&mut socket).await;
+        let WsMessage::Text(payload) = message else {
+            panic!("expected dashboard snapshot text frame");
+        };
+        let event: serde_json::Value =
+            serde_json::from_str(payload.as_ref()).expect("dashboard snapshot json");
+
+        assert_eq!(event["type"], "session.dashboard.snapshot");
+        assert_eq!(event["metrics"]["totalClients"], 1);
+        assert_eq!(event["metrics"]["onlineClients"], 1);
+        assert_eq!(event["clients"][0]["clientId"], 7);
+        assert_eq!(event["clients"][0]["characterName"], "Ariane");
+        assert_eq!(event["clients"][0]["loginStatus"], "online");
+        assert_eq!(event["clients"][0]["campPhase"], "hunting");
+        assert_eq!(event["clients"][0]["zone"], "Plane of Knowledge");
+        assert_eq!(event["clients"][0]["targetName"], "a test target");
 
         server.abort();
         let _ = server.await;

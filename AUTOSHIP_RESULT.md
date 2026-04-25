@@ -1,22 +1,21 @@
-# Result: #976 — Task: Metrics Aggregation & Real-Time Collection
+# Result: #986 — Feature: Web Dashboard Session Monitoring
 
 Status: PARTIAL
 
 Changes Made:
-- Reworked `textquest/src/metrics/collector.rs` into a bounded real-time collector with non-blocking event enqueue/drain APIs.
-- Added per-character combat, movement, loot, and system metric totals plus fleet-wide aggregate recalculation.
-- Implemented circular time-window buffers for 1min, 5min, and 60min aggregation with DPS calculated from damage inside each window.
-- Added game-state movement snapshot collection from navigator state, including distance and stuck-event tracking.
-- Wired `MetricsCollector` into `Orchestrator` and connected tick-time game-state sampling plus existing memory and IPC latency monitoring.
-- Added focused collector tests for damage calculation, movement isolation, loot aggregation, windowed DPS accuracy, queued event drain, and system aggregate math.
+- Added an opt-in `/ws` dashboard stream via `stream=dashboard`, `stream=sessions`, or `dashboard=1`.
+- Dashboard WebSocket clients now receive structured `session.dashboard.snapshot` JSON immediately and every 500ms.
+- Snapshots include client login status, zone, health/mana/endurance, camp phase, stuck indicator, target/pet summary, group/role metadata when configured, summary metrics, and an alert-feed placeholder.
+- Added dashboard stream group filtering with `group=<name>`.
+- Preserved existing raw WebSocket broadcast behavior for current clients.
+- Added a focused WebSocket test that type-checks the new live-session snapshot payload.
 
 Tests:
-- `rustfmt --check textquest/src/metrics/collector.rs textquest/src/orchestrator/mod.rs` passed.
-- `cargo check -p textquest` was run and still fails on pre-existing unrelated compile errors:
-  - `textquest/src/loot/smartloot.rs:223`: `WishlistManager` does not implement `PartialEq`.
-  - `textquest/src/lua/bindings.rs:1099`: `player.class_name` is partially moved before `player.hp_percent()`.
+- `cargo check -p textquest-web --tests` passed.
+- Full `cargo test` and `python3 scripts/dev-preflight.py` were not run per issue instruction to run cargo check only.
 
 Notes:
-- This is intentionally partial because issue #976 spans several live source hooks. This pass provides the production collector, aggregation model, system metric hook, and orchestrator tick integration. Remaining work should attach combat-log damage events and detailed loot-module events directly to the collector event queue.
+- This is intentionally partial scaffolding for the large dashboard feature.
+- Remaining work includes the actual responsive grid UI, sort/filter controls, action buttons, group-level actions, combat/camp log tails, alert feed population, DPS/heal metrics, and historical status persistence.
 
 COMPLETE
