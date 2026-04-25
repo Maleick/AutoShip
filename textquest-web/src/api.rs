@@ -25,6 +25,7 @@ pub mod paranoid;
 pub mod player_watch;
 pub mod say_detection;
 pub mod session_control;
+pub mod sessions_db;
 pub mod soul;
 pub mod sound;
 pub mod spawn_alerts;
