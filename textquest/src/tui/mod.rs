@@ -28,8 +28,6 @@ pub mod demo_data;
 pub mod dps;
 /// Event handling — keyboard input mapping and command dispatch.
 pub mod event;
-/// Group builder — dynamic templates, slot assignment, and auto-fill.
-pub mod group_builder;
 /// Hotkey registry and keyboard event routing for custom key bindings.
 pub mod hotkeys;
 /// Env-gated live cast capture helpers for validating real EQ clients.

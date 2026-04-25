@@ -16,7 +16,7 @@ use super::widgets::{
     WidthClass, classify_width, hp_color, panel, render_cast_bar, truncate_inline,
 };
 use crate::tui::{
-    app::{App, ClientState, GroupDef, LiveGroup, extract_account_number},
+    app::{App, ClientState, LiveGroup, extract_account_number},
     theme::Theme,
 };
 
@@ -25,6 +25,54 @@ struct MemberRenderEntry<'a> {
     cast: Option<Line<'a>>,
     target: Option<Line<'a>>,
     buff: Option<Line<'a>>,
+}
+
+/// Minimal group info extracted from backend config.
+struct ConfigGroup {
+    id: u32,
+    name: String,
+    account_range: (u8, u8),
+}
+
+// ── Config extraction ──────────────────────────────────────────────────────────
+
+/// Extract groups from accounts config, deriving account ranges dynamically.
+fn extract_groups_from_config(app: &App) -> Vec<ConfigGroup> {
+    let default_names = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"];
+
+    let Some(cfg) = &app.accounts_config else {
+        return Vec::new();
+    };
+
+    let mut group_ids: Vec<u32> = cfg.accounts.iter().map(|a| a.group).collect();
+    group_ids.sort();
+    group_ids.dedup();
+    group_ids.retain(|&id| id > 0); // skip ungrouped (0)
+
+    group_ids
+        .iter()
+        .map(|&id| {
+            let accounts_in_group: Vec<_> = cfg.accounts.iter().filter(|a| a.group == id).collect();
+
+            let account_nums: Vec<u8> = accounts_in_group
+                .iter()
+                .filter_map(|a| extract_account_number(&a.name))
+                .collect();
+            let lo = account_nums.iter().copied().min().unwrap_or(1);
+            let hi = account_nums.iter().copied().max().unwrap_or(lo);
+
+            let name = default_names.get((id - 1) as usize).map_or_else(
+                || format!("Group {id}"),
+                |s| s.to_string(),
+            );
+
+            ConfigGroup {
+                id,
+                name,
+                account_range: (lo, hi),
+            }
+        })
+        .collect()
 }
 
 // ── Shared member-row helpers ───────────────────────────────────────────────
@@ -419,7 +467,9 @@ fn draw_ungrouped_panel(
 
 fn draw_config_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
-    let group_count = app.groups.len();
+
+    let groups = extract_groups_from_config(app);
+    let group_count = groups.len();
 
     if group_count == 0 {
         frame.render_widget(
@@ -447,7 +497,7 @@ fn draw_config_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app
 
         for col in cols.iter() {
             if panel_idx < group_count {
-                draw_config_group_panel(frame, *col, app, &app.groups[panel_idx], panel_idx);
+                draw_config_group_panel(frame, *col, app, &groups[panel_idx], panel_idx);
             }
             panel_idx += 1;
         }
@@ -455,9 +505,9 @@ fn draw_config_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app
 }
 
 /// Collect all client states that belong to a given group definition.
-pub fn clients_in_group<'a>(
+fn clients_in_group<'a>(
     app: &'a App,
-    group: &GroupDef,
+    group: &ConfigGroup,
 ) -> Vec<&'a crate::tui::app::ClientState> {
     let (lo, hi) = group.account_range;
     app.clients
@@ -479,7 +529,7 @@ fn draw_config_group_panel(
     frame: &mut Frame,
     area: ratatui::layout::Rect,
     app: &App,
-    group: &GroupDef,
+    group: &ConfigGroup,
     group_idx: usize,
 ) {
     let t = &app.theme;
