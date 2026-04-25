@@ -29,6 +29,7 @@ use crate::{
     metrics::{
         AdminMonitoringStore, MetricsCollector, SessionErrorKind, SessionMonitoringSnapshot,
     },
+    registry::{SharedCommandRegistry, SharedHotkeyRegistry},
     say_detection::{SayAction, SayDetector, SayPattern, SayRule},
 };
 use std::{
@@ -227,6 +228,10 @@ pub struct Orchestrator {
     say_detection_config: crate::config::SayDetectionConfig,
     /// Optional Discord webhook sender for say alerts.
     say_detection_webhook: Option<crate::discord::webhook::WebhookSender>,
+    /// Shared slash command registry for Lua/plugin/orchestrator command routing.
+    pub command_registry: SharedCommandRegistry,
+    /// Shared hotkey registry for Lua/plugin/orchestrator keyboard routing.
+    pub hotkey_registry: SharedHotkeyRegistry,
 
     // --- M8 Orchestrator routing ---
     /// Active routing scope (synced from TUI `App::routing_scope` each tick).
@@ -247,6 +252,7 @@ impl Orchestrator {
     /// Create a new orchestrator with no registered clients.
     #[must_use]
     pub fn new() -> Self {
+        let (command_registry, hotkey_registry) = crate::registry::new_shared();
         let orchestrator = Self {
             client_pids: Vec::new(),
             client_names: HashMap::new(),
@@ -290,11 +296,31 @@ impl Orchestrator {
             say_detector: SayDetector::new(),
             say_detection_config: crate::config::SayDetectionConfig::default(),
             say_detection_webhook: None,
+            command_registry,
+            hotkey_registry,
             routing_scope: RoutingScope::AllSession,
             scope_pids: Vec::new(),
         };
         orchestrator.persist_admin_session_inventory();
         orchestrator
+    }
+
+    /// Route a registered slash command through the orchestrator registry.
+    #[must_use]
+    pub fn dispatch_registered_command(&self, command_line: &str, character: Option<&str>) -> bool {
+        self.command_registry
+            .lock()
+            .map(|registry| registry.dispatch_for_character(command_line, character))
+            .unwrap_or(false)
+    }
+
+    /// Route a registered hotkey through the orchestrator registry.
+    #[must_use]
+    pub fn fire_registered_hotkey(&self, combo: &str, character: Option<&str>) -> bool {
+        self.hotkey_registry
+            .lock()
+            .map(|registry| registry.fire_for_character(combo, character))
+            .unwrap_or(false)
     }
 
     fn build_shared_client_states(&self) -> Vec<SharedClientState> {

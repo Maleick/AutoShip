@@ -139,6 +139,15 @@
       "notes": "Partial DLL-side scaffold: global script/plugin slash-command registration and dispatch, built-in /textquest command listing, EQ-style hotkey parsing, command hotkey binding, and TOML persistence helpers. Lua/MQ2/runtime EQ UI hook integration remains follow-up work."
     },
     {
+      "id": "issue-990-hotkey-slash-command-registration-system",
+      "name": "Issue #990 hotkey and slash command registration system",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo check"
+      ],
+      "notes": "PARTIAL: Extended the orchestrator-side registry with checked hotkey/slash-command registration, Ctrl/Alt/Shift hotkey parsing, per-character scopes, enable/disable controls, command help metadata, required-argument validation, TOML persistence/validation, and Orchestrator-owned shared registries. DLL keyboard hooks and live IPC back-routing remain follow-up work."
+    },
+    {
       "id": "issue-836-advanced-group-management-targeting",
       "name": "Issue #836 advanced group management and targeting",
       "status": "in_progress",

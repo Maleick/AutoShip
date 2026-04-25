@@ -305,6 +305,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub orchestrator: OrchestratorConfig,
 
+    /// Persisted hotkey and slash-command registration metadata.
+    #[serde(default)]
+    pub input_bindings: crate::registry::RegistryConfig,
+
     /// Spawn watch / alert feed configuration
     #[serde(default)]
     pub spawn_watch: SpawnWatchConfig,
@@ -925,6 +929,9 @@ impl AppConfig {
             .with_context(|| format!("Failed to read config file: {}", path.display()))?;
         let config: Self = toml::from_str(&content)
             .with_context(|| format!("Failed to parse config file: {}", path.display()))?;
+        config.input_bindings.validate().with_context(|| {
+            format!("Invalid input bindings in config file: {}", path.display())
+        })?;
         Ok(config)
     }
 
@@ -942,6 +949,7 @@ impl AppConfig {
             discord: DiscordConfig::default(),
             alerts: AlertingConfig::default(),
             orchestrator: OrchestratorConfig::default(),
+            input_bindings: crate::registry::RegistryConfig::default(),
             spawn_watch: SpawnWatchConfig::default(),
             vendor_watch: VendorWatchConfig::default(),
             hook_rotation_enabled: false,

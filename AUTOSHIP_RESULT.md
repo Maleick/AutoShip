@@ -1,18 +1,17 @@
-# Result: #1025 — #861.3: Implement LogoutSequencer
+# Result: #990 — Feature: Hotkey & Slash Command Registration System
 
 Status: DONE
 
 Changes Made:
-- Added `textquest/src/launcher/logout_sequencer.rs` with `LogoutSequencer`, `LogoutStateMachine`, command retry handling, `/disband` group leave, `/quit` IPC routing, process-exit polling, and force-kill fallback.
-- Added production adapters for `CommandPipe` IPC and OS process status/termination.
-- Exported the new launcher module from `textquest/src/launcher/mod.rs`.
-- Added focused unit tests for group leave -> quit -> exit, timeout -> force-kill, and IPC delivery retry.
+- Extended `textquest/src/registry/mod.rs` with checked command and hotkey registration APIs, conflict detection, Ctrl/Alt/Shift hotkey parsing, per-character scopes, enable/disable controls, command help metadata, required-argument validation, and TOML load/save validation helpers.
+- Added persisted `input_bindings` metadata to `AppConfig` and validate it during TOML config load.
+- Added shared command and hotkey registries to `Orchestrator` with routing helpers for registered slash commands and hotkeys.
+- Updated `feature-list.json` with issue #990 status and remaining scope.
 
 Tests:
-- `cargo check` passed.
-- `cargo test` was not run per instruction to use `cargo check` only.
+- `cargo check`
 
 Notes:
-- Default process-exit timeout is 5 seconds.
-- Default IPC command retry count is 3 attempts.
+- This is intentionally PARTIAL because the issue spans DLL keyboard hooks and live IPC back-routing. This pass adds the orchestrator/config/registry scaffold and focused tests for registration conflicts, help, validation, enable/disable, and per-character routing. DLL hook integration and live keyboard event transport remain follow-up work.
+
 COMPLETE
