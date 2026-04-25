@@ -5,6 +5,18 @@
 
 const BASE = "/api";
 
+export class ApiError extends Error {
+  status: number;
+  statusText: string;
+
+  constructor(method: string, path: string, status: number, statusText: string) {
+    super(`API ${method} ${path}: ${status} ${statusText}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.statusText = statusText;
+  }
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -17,9 +29,13 @@ async function request<T>(
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    throw new Error(`API ${method} ${path}: ${res.status} ${res.statusText}`);
+    throw new ApiError(method, path, res.status, res.statusText);
   }
-  return res.json() as Promise<T>;
+  if (res.status === 204) {
+    return undefined as T;
+  }
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export const api = {

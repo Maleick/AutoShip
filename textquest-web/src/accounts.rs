@@ -63,6 +63,12 @@ pub struct ExportAccountsResponse {
     pub accounts: Vec<AccountRecord>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CredentialTestResponse {
+    pub ok: bool,
+    pub message: String,
+}
+
 // ─── Domain types ────────────────────────────────────────────────────────────
 
 /// Lifecycle status of an EQ account.
@@ -209,6 +215,24 @@ impl AccountStore {
         self.accounts
             .remove(name)
             .with_context(|| format!("Account '{name}' not found"))
+    }
+
+    /// Report whether the account has an encrypted credential ready for launch.
+    pub fn credential_test_status(&self, name: &str) -> Result<CredentialTestResponse> {
+        let rec = self
+            .get(name)
+            .with_context(|| format!("Account '{name}' not found"))?;
+        if rec.has_password {
+            Ok(CredentialTestResponse {
+                ok: true,
+                message: "Encrypted credential is available for launch verification".to_string(),
+            })
+        } else {
+            Ok(CredentialTestResponse {
+                ok: false,
+                message: "Encrypted password is not stored for this account".to_string(),
+            })
+        }
     }
 
     /// Bulk-import a list of account records, skipping duplicates.
@@ -492,6 +516,7 @@ pub fn router() -> Router<std::sync::Arc<AppState>> {
         .route("/import", post(import_accounts))
         .route("/{name}", put(update_account).delete(delete_account))
         .route("/{name}/password", put(set_password))
+        .route("/{name}/test", post(test_account))
 }
 
 fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
@@ -653,6 +678,17 @@ pub async fn set_password(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub async fn test_account(
+    State(state): State<std::sync::Arc<AppState>>,
+    Path(name): Path<String>,
+) -> ApiResult<CredentialTestResponse> {
+    let store = lock_store(&state)?;
+    store
+        .credential_test_status(&name)
+        .map(Json)
+        .map_err(|error| json_error(StatusCode::NOT_FOUND, error.to_string()))
+}
+
 pub async fn export_accounts(
     State(state): State<std::sync::Arc<AppState>>,
 ) -> ApiResult<ExportAccountsResponse> {
@@ -767,6 +803,28 @@ mod tests {
         let added = store.import_bulk(to_import);
         assert_eq!(added, 1);
         assert_eq!(store.list().len(), 2);
+    }
+
+    #[test]
+    fn credential_test_status_reflects_encrypted_password_availability() {
+        let mut store = make_store();
+        store.insert(sample_record("acct")).unwrap();
+
+        let missing_password = store.credential_test_status("acct").unwrap();
+        assert!(!missing_password.ok);
+        assert_eq!(
+            missing_password.message,
+            "Encrypted password is not stored for this account"
+        );
+
+        store.set_has_password("acct", true).unwrap();
+        let ready = store.credential_test_status("acct").unwrap();
+        assert!(ready.ok);
+        assert_eq!(
+            ready.message,
+            "Encrypted credential is available for launch verification"
+        );
+        assert!(store.credential_test_status("ghost").is_err());
     }
 
     #[test]
