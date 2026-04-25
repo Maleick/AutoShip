@@ -428,6 +428,7 @@ pub struct MetricsCollector {
     last_positions: HashMap<String, PositionSample>,
     event_tx: SyncSender<MetricsEvent>,
     event_rx: Receiver<MetricsEvent>,
+    session_recorder: Option<crate::metrics::session_recorder::SessionRecorder>,
 }
 
 impl MetricsCollector {
@@ -440,7 +441,15 @@ impl MetricsCollector {
             last_positions: HashMap::new(),
             event_tx,
             event_rx,
+            session_recorder: None,
         }
+    }
+
+    pub fn set_session_recorder(
+        &mut self,
+        recorder: crate::metrics::session_recorder::SessionRecorder,
+    ) {
+        self.session_recorder = Some(recorder);
     }
 
     pub fn event_sender(&self) -> SyncSender<MetricsEvent> {
@@ -666,6 +675,16 @@ impl MetricsCollector {
     }
 
     fn apply_event(&mut self, event: MetricsEvent) {
+        // Record event to session recorder if enabled
+        if let Some(recorder) = self.session_recorder.as_mut() {
+            if let Some(session_event) =
+                crate::metrics::session_recorder::metrics_event_to_session_event(&event)
+            {
+                // Ignore recording errors to not block metrics processing
+                let _ = recorder.record(session_event);
+            }
+        }
+
         match event {
             MetricsEvent::CombatDamage {
                 character_name,

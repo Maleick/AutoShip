@@ -18,6 +18,7 @@ pub mod kill_tracker;
 pub mod performance;
 pub mod progress;
 pub mod sampling;
+pub mod session_recorder;
 mod store;
 pub mod types;
 pub mod xp_tracker;
@@ -39,6 +40,7 @@ pub use collector::{
     CharacterMovementMetrics, FleetMetrics, LootEvent, MetricsCollector, TimeWindow,
     TimeWindowMetrics,
 };
+pub use session_recorder::{SessionEvent, SessionEventKind, SessionRecorder, SessionRecorderConfig};
 pub use events::{FleetEvent, FleetEventLog};
 pub use kill_reporter::KillReporter;
 pub use kill_session_store::KillSessionStore;

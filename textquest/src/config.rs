@@ -358,6 +358,10 @@ pub struct AppConfig {
     /// Log file rotation and retention configuration.
     #[serde(default)]
     pub log: LogConfig,
+
+    /// Session recording configuration for self-improvement loop.
+    #[serde(default)]
+    pub session_recorder: crate::metrics::SessionRecorderConfig,
 }
 
 /// Kill tracker auto-reporting configuration.
