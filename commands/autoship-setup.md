@@ -1,6 +1,6 @@
 ---
 name: autoship-setup
-description: Configure AutoShip for OpenCode-first-party routing
+description: Configure AutoShip for OpenCode model routing and first-run setup
 platform: opencode
 ---
 
@@ -10,21 +10,17 @@ Configure AutoShip for OpenCode-only workers.
 
 ## Interactive Mode
 
-Runs a wizard that asks about:
-1. OpenCode availability (verified automatically)
-2. GitHub authentication (verified automatically)
-3. Model inventory discovery (from `opencode models`)
-4. Concurrency (default: 15 agents)
-5. Labels to monitor (default: agent:ready)
-6. Refresh behavior (auto-refresh models on startup?)
+Invoke the `autoship-setup` skill for the interactive setup wizard:
 
 ```bash
 /autoship-setup
 ```
 
-## Non-Interactive Mode (--no-tui)
+The setup skill verifies OpenCode and GitHub authentication, discovers live OpenCode models, selects free-first worker routing, and writes `.autoship/model-routing.json` plus `.autoship/config.json`.
 
-Use `--no-tui` for scripted or CI setups:
+## Non-Interactive Mode
+
+For scripted setup, run the setup hook directly:
 
 ```bash
 bash hooks/opencode/setup.sh --no-tui \
@@ -58,6 +54,10 @@ bash hooks/opencode/setup.sh --no-tui \
 
 ## Defaults
 
-- Setup includes only currently available model IDs flagged free in the live OpenCode model list
-- Set `AUTOSHIP_MODELS` or `--worker-models` to choose exact models
-- Use `--refresh-models` to regenerate from current model inventory
+- Setup includes only currently available model IDs flagged free in the live OpenCode model list.
+- Set `AUTOSHIP_MODELS` or `--worker-models` to choose exact models.
+- Use `--refresh-models` to regenerate from current model inventory.
+
+## Next Step
+
+After setup completes, run `/autoship` to start orchestration.

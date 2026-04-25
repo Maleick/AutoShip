@@ -1,5 +1,5 @@
 ---
-description: "Show AutoShip agent status, quota bars, and progress"
+description: "Compatibility-only alias for /autoship-status"
 allowed-tools: ["Bash", "Read", "Skill", "ToolSearch"]
 compatibility: true
 ---
