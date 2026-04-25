@@ -62,6 +62,67 @@ and restores capability visibility.
 registers an `Inventory` capability named `inventory.audit`, demonstrating that
 new extension behavior can live outside the core crates.
 
+## Example Lua Core API Domains
+
+Issue #1139 exposes the Lua runtime domains that plugin and script authors rely on:
+
+- `textquest.player` — player stats
+- `textquest.group` — group metadata
+- `textquest.nav` — movement and waypoint control
+- `textquest.combat` — cast/target actions plus buff/debuff reads
+- `textquest.state` — live spawn, target, and xtarget snapshots
+- `textquest.config` — plugin-scoped string configuration
+- `textquest.ipc` — route command payloads to another box
+- `textquest.events` — subscribe to runtime events
+- `textquest.log` — plugin logging integration
+
+```lua
+local function example()
+    local hp_pct = textquest.player.get_hp_percent()
+    print("HP%:", hp_pct)
+
+    textquest.nav['goto'](120, 330, 12)
+    textquest.nav.add_waypoint(120, 330, 12, "camp")
+
+    textquest.combat.cast("Fire Bolt", "Rathyl")
+    textquest.combat.set_target("Rathyl")
+    local buffs = textquest.combat.get_buffs()
+    for _, name in ipairs(buffs) do
+        print("buff:", name)
+    end
+
+    local spawns = textquest.state.find_spawns("undead")
+    print("spawns:", #spawns)
+
+    textquest.config.set("combat.mode", "assist")
+    local mode = textquest.config.get("combat.mode")
+    if mode then
+        print("combat mode =", mode)
+    end
+
+    local sent = textquest.ipc.send("/follow", "box-7")
+    assert(sent)
+    textquest.events.on("combat", function(payload)
+        print("event combat:", payload.type)
+    end)
+    textquest.log.info("api smoke test complete")
+end
+
+example()
+```
+
+### Error handling pattern
+
+Lua-facing functions return errors as runtime failures for invalid input. Example:
+
+```lua
+local ok, err = pcall(function()
+    textquest.combat.cast("", nil)
+end)
+assert(not ok)
+print(err) -- `combat.cast requires a non-empty spell name`
+```
+
 ## Scaffolding
 
 Create a new plugin crate template with:

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use textquest_common::types::SpawnData;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -137,11 +139,36 @@ pub enum LuaNavigationRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LuaCommandRequest {
     pub command: String,
+    pub target_box: Option<String>,
+    pub via_ipc: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LuaWaypoint {
+    pub name: String,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct LuaRuntimeState {
     pub player: Option<LuaPlayerSnapshot>,
+    pub spawns: Vec<SpawnData>,
+    pub target: Option<SpawnData>,
+    pub xtargets: Vec<SpawnData>,
+    pub waypoints: Vec<LuaWaypoint>,
+    pub navigation_is_stuck: bool,
+    pub navigation_stuck_reason: Option<String>,
+    pub group_members: Vec<String>,
+    pub group_tank: Option<String>,
+    pub group_assist: Option<String>,
+    pub group_master: Option<String>,
+    pub buffs: Vec<String>,
+    pub debuffs: Vec<String>,
+    pub plugin_config: HashMap<String, String>,
+    pub last_saved_config: bool,
+    pub last_reloaded_config: bool,
     pub navigation_requests: Vec<LuaNavigationRequest>,
     pub command_requests: Vec<LuaCommandRequest>,
 }

@@ -7,6 +7,7 @@
 //! - combat: textquest.combat.*
 //! - state: textquest.state.*
 /// - config: textquest.config.*
+/// - ipc: textquest.ipc.*
 /// - debug: textquest.debug.*
 /// - log: textquest.log.*
 /// - hotkeys: textquest.hotkeys.*
@@ -22,7 +23,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use crate::lua::error::LuaApiError;
 use crate::lua::sandbox;
 use crate::lua::types::{
-    LuaCommandRequest, LuaNavigationRequest, LuaPlayerSnapshot, LuaRuntimeState,
+    LuaCommandRequest, LuaNavigationRequest, LuaPlayerSnapshot, LuaRuntimeState, LuaWaypoint,
 };
 use crate::registry::{Priority, SharedCommandRegistry, SharedHotkeyRegistry};
 
@@ -153,6 +154,7 @@ impl LuaBindings {
         self.register_combat_api(&textquest)?;
         self.register_state_api(&textquest)?;
         self.register_config_api(&textquest)?;
+        self.register_ipc_api(&textquest)?;
         self.register_debug_api(&textquest)?;
         self.register_log_api(&textquest)?;
         self.register_events_api(&textquest)?;
@@ -220,7 +222,7 @@ impl LuaBindings {
         parent.set(
             "execute_command",
             self.lua.create_function(move |_, command: String| {
-                queue_command_request(&runtime_state, command.clone());
+                queue_command_request(&runtime_state, command.clone(), None, false);
                 tracing::debug!(command = %command, "lua execute_command requested");
                 Ok(true)
             })?,
@@ -469,31 +471,47 @@ impl LuaBindings {
 
     fn register_group_api(&self, parent: &Table) -> LuaResult<()> {
         let group = self.lua.create_table()?;
+        let runtime_state = Arc::clone(&self.runtime_state);
 
         group.set(
             "get_member_count",
-            self.lua.create_function(|_, ()| Ok(0usize))?,
+            self.lua.create_function(move |_, ()| {
+                Ok(read_group_member_count(&runtime_state))
+            })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         group.set(
             "get_member",
-            self.lua
-                .create_function(|_, _index: usize| Ok(mlua::Value::Nil))?,
+            self.lua.create_function(move |lua, index: usize| {
+                group_member_at(lua, index, &runtime_state)
+            })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         group.set(
             "get_members",
-            self.lua.create_function(|lua, ()| lua.create_table())?,
+            self.lua
+                .create_function(move |lua, ()| group_members_table(lua, &runtime_state))?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         group.set(
             "get_tank",
-            self.lua.create_function(|_, ()| Ok(mlua::Value::Nil))?,
+            self.lua.create_function(move |_, ()| {
+                Ok(read_group_role(&runtime_state, "tank"))
+            })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         group.set(
             "get_assist",
-            self.lua.create_function(|_, ()| Ok(mlua::Value::Nil))?,
+            self.lua.create_function(move |_, ()| {
+                Ok(read_group_role(&runtime_state, "assist"))
+            })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         group.set(
             "get_master",
-            self.lua.create_function(|_, ()| Ok(mlua::Value::Nil))?,
+            self.lua.create_function(move |_, ()| {
+                Ok(read_group_role(&runtime_state, "master"))
+            })?,
         )?;
 
         parent.set("group", group)?;
@@ -559,6 +577,11 @@ impl LuaBindings {
             "add_waypoint",
             self.lua
                 .create_function(move |_, (x, y, z, name): (f32, f32, f32, String)| {
+                    if name.trim().is_empty() {
+                        return Err(LuaError::RuntimeError(
+                            "nav.add_waypoint requires a non-empty name".to_string(),
+                        ));
+                    }
                     queue_navigation_request(
                         &runtime_state,
                         LuaNavigationRequest::AddWaypoint {
@@ -581,6 +604,32 @@ impl LuaBindings {
                 Ok(true)
             })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        nav.set(
+            "get_waypoints",
+            self.lua
+                .create_function(move |lua, ()| navigation_waypoint_table(lua, &runtime_state))?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        nav.set(
+            "is_stuck",
+            self.lua.create_function(move |_, ()| {
+                Ok(runtime_state
+                    .read()
+                    .expect("lua runtime_state lock poisoned")
+                    .navigation_is_stuck)
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        nav.set(
+            "stuck_reason",
+            self.lua.create_function(move |_, ()| {
+                let state = runtime_state
+                    .read()
+                    .expect("lua runtime_state lock poisoned");
+                Ok(state.navigation_stuck_reason.clone())
+            })?,
+        )?;
 
         parent.set("nav", nav)?;
 
@@ -590,47 +639,206 @@ impl LuaBindings {
     fn register_combat_api(&self, parent: &Table) -> LuaResult<()> {
         let combat = self.lua.create_table()?;
 
+        let runtime_state = Arc::clone(&self.runtime_state);
         combat.set(
             "cast",
-            self.lua
-                .create_function(|_, (spell, target): (String, Option<String>)| {
-                    tracing::debug!("combat.cast(\"{:?}\", {:?})", spell, target);
-                    Ok(true)
-                })?,
+            self.lua.create_function(move |_, (spell, target): (String, Option<String>)| {
+                let spell = spell.trim().to_string();
+                if spell.is_empty() {
+                    return Err(LuaError::RuntimeError(
+                        "combat.cast requires a non-empty spell name".to_string(),
+                    ));
+                }
+                let command = target
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .map(|target| {
+                        format!(
+                            "/cast {} {}",
+                            lua_string_arg(&spell),
+                            lua_string_arg(target.as_str())
+                        )
+                    })
+                    .unwrap_or_else(|| format!("/cast {}", lua_string_arg(&spell)));
+                queue_combat_command(&runtime_state, command);
+                tracing::debug!("combat.cast(\"{:?}\", {:?})", spell, target);
+                Ok(true)
+            })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         combat.set(
             "assist",
-            self.lua.create_function(|_, target: Option<String>| {
+            self.lua.create_function(move |_, target: Option<String>| {
+                let command = target
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .map(|target| format!("/assist {}", lua_string_arg(target.as_str())))
+                    .unwrap_or_else(|| "/assist".to_string());
+                queue_combat_command(&runtime_state, command);
                 tracing::debug!("combat.assist({:?})", target);
                 Ok(true)
             })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         combat.set(
             "attack",
-            self.lua.create_function(|_, target: Option<String>| {
+            self.lua.create_function(move |_, target: Option<String>| {
+                let command = target
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .map(|target| format!("/attack {}", lua_string_arg(target.as_str())))
+                    .unwrap_or_else(|| "/attack".to_string());
+                queue_combat_command(&runtime_state, command);
                 tracing::debug!("combat.attack({:?})", target);
                 Ok(true)
             })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         combat.set(
             "disengage",
-            self.lua.create_function(|_, ()| {
+            self.lua.create_function(move |_, ()| {
+                queue_combat_command(&runtime_state, "/disengage".to_string());
                 tracing::debug!("combat.disengage()");
                 Ok(true)
             })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         combat.set(
             "re mez",
-            self.lua.create_function(|_, target: String| {
+            self.lua.create_function(move |_, target: String| {
+                let target = target.trim().to_string();
+                if target.is_empty() {
+                    return Err(LuaError::RuntimeError(
+                        "combat.re_mez requires a target name".to_string(),
+                    ));
+                }
+                queue_combat_command(
+                    &runtime_state,
+                    format!("/remez {}", lua_string_arg(target.as_str())),
+                );
                 tracing::debug!("combat.re_mez(\"{}\")", target);
                 Ok(true)
             })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        combat.set(
+            "re_mez",
+            self.lua.create_function(move |_, target: String| {
+                let target = target.trim().to_string();
+                if target.is_empty() {
+                    return Err(LuaError::RuntimeError(
+                        "combat.re_mez requires a target name".to_string(),
+                    ));
+                }
+                queue_combat_command(
+                    &runtime_state,
+                    format!("/remez {}", lua_string_arg(target.as_str())),
+                );
+                tracing::debug!("combat.re_mez(\"{}\")", target);
+                Ok(true)
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         combat.set(
             "rezz",
-            self.lua.create_function(|_, target: Option<String>| {
+            self.lua.create_function(move |_, target: Option<String>| {
+                let command = target
+                    .as_ref()
+                    .filter(|value| !value.trim().is_empty())
+                    .map(|target| format!("/rezz {}", lua_string_arg(target.as_str())))
+                    .unwrap_or_else(|| "/rezz".to_string());
+                queue_combat_command(&runtime_state, command);
                 tracing::debug!("combat.rezz({:?})", target);
                 Ok(true)
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        combat.set(
+            "set_target",
+            self.lua.create_function(move |_, target: String| {
+                let target = target.trim().to_string();
+                if target.is_empty() {
+                    return Err(LuaError::RuntimeError(
+                        "combat.set_target requires a target name".to_string(),
+                    ));
+                }
+                let target = target.to_lowercase();
+                let matched = {
+                    let state = runtime_state
+                        .read()
+                        .expect("lua runtime_state lock poisoned");
+                    state
+                        .spawns
+                        .iter()
+                        .find(|spawn| {
+                            spawn.name.eq_ignore_ascii_case(&target)
+                                || spawn
+                                    .displayed_name
+                                    .eq_ignore_ascii_case(&target)
+                                || spawn.spawn_id.to_string().eq(&target)
+                        })
+                        .cloned()
+                };
+                if let Some(found) = matched {
+                    runtime_state
+                        .write()
+                        .expect("lua runtime_state lock poisoned")
+                        .target = Some(found);
+                    queue_combat_command(
+                        &runtime_state,
+                        format!("/target {}", lua_string_arg(target.as_str())),
+                    );
+                    Ok(true)
+                } else {
+                    Err(LuaError::RuntimeError(format!(
+                        "combat.set_target not found: {target}"
+                    )))
+                }
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        combat.set(
+            "get_buffs",
+            self.lua.create_function(move |lua, ()| {
+                let buffs = runtime_state
+                    .read()
+                    .expect("lua runtime_state lock poisoned")
+                    .buffs
+                    .clone();
+                lua_create_string_array(lua, &buffs)
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        combat.set(
+            "get_debuffs",
+            self.lua.create_function(move |lua, ()| {
+                let debuffs = runtime_state
+                    .read()
+                    .expect("lua runtime_state lock poisoned")
+                    .debuffs
+                    .clone();
+                lua_create_string_array(lua, &debuffs)
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        combat.set(
+            "has_buff",
+            self.lua.create_function(move |_, name: String| {
+                Ok(has_buff_state(&runtime_state, &name))
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        combat.set(
+            "has_debuff",
+            self.lua.create_function(move |_, name: String| {
+                Ok(has_debuff_state(&runtime_state, &name))
+            })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        combat.set(
+            "get_target",
+            self.lua.create_function(move |lua, ()| {
+                state_target_table(lua, &runtime_state)
             })?,
         )?;
 
@@ -642,31 +850,74 @@ impl LuaBindings {
     fn register_state_api(&self, parent: &Table) -> LuaResult<()> {
         let state = self.lua.create_table()?;
 
+        let runtime_state = Arc::clone(&self.runtime_state);
         state.set(
             "get_spawns",
-            self.lua.create_function(|lua, ()| lua.create_table())?,
+            self.lua
+                .create_function(move |lua, ()| state_spawns_table(lua, &runtime_state))?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         state.set(
             "get_spawn",
             self.lua
-                .create_function(|_, _name: String| Ok(mlua::Value::Nil))?,
+                .create_function(move |lua, name: String| {
+                    state_get_spawn(lua, &runtime_state, &name)
+                })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         state.set(
             "find_spawns",
             self.lua
-                .create_function(|lua, _filter: String| lua.create_table())?,
+                .create_function(move |lua, filter: String| {
+                    state_find_spawns(lua, &runtime_state, &filter)
+                })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         state.set(
             "get_target",
-            self.lua.create_function(|_, ()| Ok(mlua::Value::Nil))?,
+            self.lua
+                .create_function(move |lua, ()| state_target_table(lua, &runtime_state))?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         state.set(
             "set_target",
-            self.lua.create_function(|_, _target: String| Ok(true))?,
+            self.lua.create_function(move |_, target: String| {
+                if target.trim().is_empty() {
+                    return Err(LuaError::RuntimeError(
+                        "state.set_target requires a target name".to_string(),
+                    ));
+                }
+                let target = target.to_lowercase();
+                let matched = {
+                    let state = runtime_state
+                        .read()
+                        .expect("lua runtime_state lock poisoned");
+                    state
+                        .spawns
+                        .iter()
+                        .find(|spawn| {
+                            spawn.name.eq_ignore_ascii_case(&target)
+                                || spawn.displayed_name.eq_ignore_ascii_case(&target)
+                                || spawn.spawn_id.to_string().eq(&target)
+                        })
+                        .cloned()
+                };
+                if let Some(found) = matched {
+                    runtime_state
+                        .write()
+                        .expect("lua runtime_state lock poisoned")
+                        .target = Some(found);
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         state.set(
             "get_xtargets",
-            self.lua.create_function(|lua, ()| lua.create_table())?,
+            self.lua
+                .create_function(move |lua, ()| state_xtargets_table(lua, &runtime_state))?,
         )?;
 
         parent.set("state", state)?;
@@ -676,36 +927,96 @@ impl LuaBindings {
 
     fn register_config_api(&self, parent: &Table) -> LuaResult<()> {
         let config = self.lua.create_table()?;
+        let runtime_state = Arc::clone(&self.runtime_state);
 
         config.set(
             "get",
-            self.lua
-                .create_function(|_, _key: String| Ok(mlua::Value::Nil))?,
+            self.lua.create_function(move |lua, key: String| {
+                runtime_state
+                    .read()
+                    .expect("lua runtime_state lock poisoned")
+                    .plugin_config
+                    .get(&key)
+                    .map_or(Ok(mlua::Value::Nil), |value| {
+                        Ok(mlua::Value::String(lua.create_string(value)?))
+                    })
+            })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         config.set(
             "set",
-            self.lua
-                .create_function(|_, (key, value): (String, mlua::Value)| {
-                    tracing::debug!("config.set(\"{}\", {:?})", key, value);
-                    Ok(true)
-                })?,
+            self.lua.create_function(move |_, (key, value): (String, Value)| {
+                let value = lua_value_to_string(&value);
+                runtime_state
+                    .write()
+                    .expect("lua runtime_state lock poisoned")
+                    .plugin_config
+                    .insert(key, value);
+                Ok(true)
+            })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         config.set(
             "save",
-            self.lua.create_function(|_, ()| {
+            self.lua.create_function(move |_, ()| {
+                runtime_state
+                    .write()
+                    .expect("lua runtime_state lock poisoned")
+                    .last_saved_config = true;
                 tracing::debug!("config.save()");
                 Ok(true)
             })?,
         )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
         config.set(
             "reload",
-            self.lua.create_function(|_, ()| {
+            self.lua.create_function(move |_, ()| {
+                runtime_state
+                    .write()
+                    .expect("lua runtime_state lock poisoned")
+                    .last_reloaded_config = true;
                 tracing::debug!("config.reload()");
                 Ok(true)
             })?,
         )?;
 
         parent.set("config", config)?;
+
+        Ok(())
+    }
+
+    fn register_ipc_api(&self, parent: &Table) -> LuaResult<()> {
+        let ipc = self.lua.create_table()?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+
+        ipc.set(
+            "send",
+            self.lua
+                .create_function(move |_, (command, target_box): (String, String)| {
+                    if command.trim().is_empty() {
+                        return Err(LuaError::RuntimeError(
+                            "ipc.send requires a non-empty command".to_string(),
+                        ));
+                    }
+                    queue_command_request(&runtime_state, command, Some(target_box), true);
+                    Ok(true)
+                })?,
+        )?;
+        let runtime_state = Arc::clone(&self.runtime_state);
+        ipc.set(
+            "broadcast",
+            self.lua.create_function(move |_, command: String| {
+                if command.trim().is_empty() {
+                    return Err(LuaError::RuntimeError(
+                        "ipc.broadcast requires a non-empty command".to_string(),
+                    ));
+                }
+                queue_command_request(&runtime_state, command, None, true);
+                Ok(true)
+            })?,
+        )?;
+
+        parent.set("ipc", ipc)?;
 
         Ok(())
     }
@@ -991,7 +1302,7 @@ impl LuaBindings {
             "execute",
             self.lua
                 .create_function(move |_lua, command_line: String| {
-                    queue_command_request(&runtime_state, command_line);
+                    queue_command_request(&runtime_state, command_line, None, false);
                     Ok(true)
                 })?,
         )?;
@@ -1126,20 +1437,263 @@ fn player_snapshot_table(lua: &Lua, player: Option<LuaPlayerSnapshot>) -> LuaRes
     Ok(table)
 }
 
-fn queue_navigation_request(state: &Arc<RwLock<LuaRuntimeState>>, request: LuaNavigationRequest) {
-    state
-        .write()
-        .expect("lua runtime_state lock poisoned")
-        .navigation_requests
-        .push(request);
+fn lua_create_string_array(lua: &Lua, values: &[String]) -> LuaResult<Table> {
+    let table = lua.create_table()?;
+    for (index, value) in values.iter().enumerate() {
+        table.set(index + 1, value.as_str())?;
+    }
+    Ok(table)
 }
 
-fn queue_command_request(state: &Arc<RwLock<LuaRuntimeState>>, command: String) {
+fn lua_string_arg(raw: &str) -> String {
+    format!("\"{}\"", raw.replace('\\', "\\\\").replace('\"', "\\\""))
+}
+
+fn lua_value_to_string(value: &Value) -> String {
+    match value {
+        Value::Nil => "nil".to_string(),
+        Value::Boolean(v) => v.to_string(),
+        Value::Integer(v) => v.to_string(),
+        Value::Number(v) => v.to_string(),
+        Value::String(v) => v.to_string_lossy(),
+        _ => format!("{value:?}"),
+    }
+}
+
+fn read_group_member_count(state: &Arc<RwLock<LuaRuntimeState>>) -> usize {
+    state
+        .read()
+        .expect("lua runtime_state lock poisoned")
+        .group_members
+        .len()
+}
+
+fn read_group_role(state: &Arc<RwLock<LuaRuntimeState>>, role: &str) -> Option<String> {
+    let state = state.read().expect("lua runtime_state lock poisoned");
+    match role {
+        "tank" => state.group_tank.clone(),
+        "assist" => state.group_assist.clone(),
+        "master" => state.group_master.clone(),
+        _ => None,
+    }
+}
+
+fn group_member_at(
+    lua: &Lua,
+    index: usize,
+    state: &Arc<RwLock<LuaRuntimeState>>,
+) -> LuaResult<Value> {
+    let state = state.read().expect("lua runtime_state lock poisoned");
+    match index {
+        1..=usize::MAX => {
+            state
+                .group_members
+                .get(index.saturating_sub(1))
+                .map_or(Ok(Value::Nil), |name| Ok(Value::String(lua.create_string(name)?)))
+        }
+        _ => Ok(Value::Nil),
+    }
+}
+
+fn group_members_table(lua: &Lua, state: &Arc<RwLock<LuaRuntimeState>>) -> LuaResult<Table> {
+    let members = state
+        .read()
+        .expect("lua runtime_state lock poisoned")
+        .group_members
+        .clone();
+    let table = lua.create_table()?;
+    for (idx, member) in members.iter().enumerate() {
+        table.set(idx + 1, member.as_str())?;
+    }
+    Ok(table)
+}
+
+fn navigation_waypoint_table(
+    lua: &Lua,
+    state: &Arc<RwLock<LuaRuntimeState>>,
+) -> LuaResult<Table> {
+    let waypoints = state
+        .read()
+        .expect("lua runtime_state lock poisoned")
+        .waypoints
+        .clone();
+    let table = lua.create_table()?;
+    for (index, waypoint) in waypoints.iter().enumerate() {
+        let waypoint_entry = lua.create_table()?;
+        waypoint_entry.set("name", waypoint.name.as_str())?;
+        waypoint_entry.set("x", waypoint.x)?;
+        waypoint_entry.set("y", waypoint.y)?;
+        waypoint_entry.set("z", waypoint.z)?;
+        table.set(index + 1, waypoint_entry)?;
+    }
+    Ok(table)
+}
+
+fn state_target_table(
+    lua: &Lua,
+    state: &Arc<RwLock<LuaRuntimeState>>,
+) -> LuaResult<Value> {
+    state
+        .read()
+        .expect("lua runtime_state lock poisoned")
+        .target
+        .as_ref()
+        .map_or(Ok(Value::Nil), |target| spawn_to_table(lua, target).map(Value::Table))
+}
+
+fn state_spawns_table(lua: &Lua, state: &Arc<RwLock<LuaRuntimeState>>) -> LuaResult<Table> {
+    let spawns = state
+        .read()
+        .expect("lua runtime_state lock poisoned")
+        .spawns
+        .clone();
+    spawn_list_table(lua, &spawns)
+}
+
+fn state_xtargets_table(lua: &Lua, state: &Arc<RwLock<LuaRuntimeState>>) -> LuaResult<Table> {
+    let xtargets = state
+        .read()
+        .expect("lua runtime_state lock poisoned")
+        .xtargets
+        .clone();
+    spawn_list_table(lua, &xtargets)
+}
+
+fn state_get_spawn(lua: &Lua, state: &Arc<RwLock<LuaRuntimeState>>, name: &str) -> LuaResult<Value> {
+    let name = name.to_ascii_lowercase();
+    let found = {
+        state
+            .read()
+            .expect("lua runtime_state lock poisoned")
+            .spawns
+            .iter()
+            .find(|spawn| {
+                spawn.name.eq_ignore_ascii_case(&name)
+                    || spawn.displayed_name.eq_ignore_ascii_case(&name)
+                    || spawn.spawn_id.to_string().eq(&name)
+            })
+            .cloned()
+    };
+    match found {
+        Some(found) => spawn_to_table(lua, &found).map(Value::Table),
+        None => Ok(Value::Nil),
+    }
+}
+
+fn state_find_spawns(
+    lua: &Lua,
+    state: &Arc<RwLock<LuaRuntimeState>>,
+    filter: &str,
+) -> LuaResult<Table> {
+    let filter = filter.to_ascii_lowercase();
+    let spawns = {
+        let state = state.read().expect("lua runtime_state lock poisoned");
+        state
+            .spawns
+            .iter()
+            .filter(|spawn| {
+                spawn.name.to_ascii_lowercase().contains(&filter)
+                    || spawn
+                        .displayed_name
+                        .to_ascii_lowercase()
+                        .contains(&filter)
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    spawn_list_table(lua, &spawns)
+}
+
+fn has_buff_state(state: &Arc<RwLock<LuaRuntimeState>>, target: &str) -> bool {
+    let target = target.to_ascii_lowercase();
+    state
+        .read()
+        .expect("lua runtime_state lock poisoned")
+        .buffs
+        .iter()
+        .any(|value| value.to_ascii_lowercase() == target)
+}
+
+fn has_debuff_state(state: &Arc<RwLock<LuaRuntimeState>>, target: &str) -> bool {
+    let target = target.to_ascii_lowercase();
+    state
+        .read()
+        .expect("lua runtime_state lock poisoned")
+        .debuffs
+        .iter()
+        .any(|value| value.to_ascii_lowercase() == target)
+}
+
+fn spawn_list_table(lua: &Lua, spawns: &[textquest_common::types::SpawnData]) -> LuaResult<Table> {
+    let table = lua.create_table()?;
+    for (idx, spawn) in spawns.iter().enumerate() {
+        table.set(idx + 1, spawn_to_table(lua, spawn)?)?;
+    }
+    Ok(table)
+}
+
+fn spawn_to_table(lua: &Lua, spawn: &textquest_common::types::SpawnData) -> LuaResult<Table> {
+    let is_dead = spawn.stand_state == 111 || spawn.stand_state == 120;
+    let is_feigned = spawn.stand_state == 110;
+    let table = lua.create_table()?;
+    table.set("spawn_id", spawn.spawn_id)?;
+    table.set("name", spawn.name.as_str())?;
+    table.set("displayed_name", spawn.displayed_name.as_str())?;
+    table.set("level", spawn.level)?;
+    table.set("class_id", spawn.class_id)?;
+    table.set("race_id", spawn.race_id)?;
+    table.set("class_name", spawn.class_str())?;
+    table.set("race_name", spawn.race_name())?;
+    table.set("hp", spawn.hp_current)?;
+    table.set("hp_max", spawn.hp_max)?;
+    table.set("mana", spawn.mana_current)?;
+    table.set("mana_max", spawn.mana_max)?;
+    table.set("endurance", spawn.endurance_current)?;
+    table.set("endurance_max", spawn.endurance_max as i32)?;
+    table.set("x", spawn.x)?;
+    table.set("y", spawn.y)?;
+    table.set("z", spawn.z)?;
+    table.set("heading", spawn.heading)?;
+    table.set("is_dead", is_dead)?;
+    table.set("is_feigned", is_feigned)?;
+    table.set("is_gm", spawn.is_gm)?;
+    Ok(table)
+}
+
+fn queue_navigation_request(state: &Arc<RwLock<LuaRuntimeState>>, request: LuaNavigationRequest) {
+    let mut state = state.write().expect("lua runtime_state lock poisoned");
+    match &request {
+        LuaNavigationRequest::AddWaypoint { x, y, z, name } => state.waypoints.push(LuaWaypoint {
+            name: name.clone(),
+            x: *x,
+            y: *y,
+            z: *z,
+        }),
+        LuaNavigationRequest::ClearWaypoints => state.waypoints.clear(),
+        _ => {}
+    }
+    state.navigation_requests.push(request);
+}
+
+fn queue_combat_command(state: &Arc<RwLock<LuaRuntimeState>>, command: String) {
+    queue_command_request(state, command, None, false)
+}
+
+fn queue_command_request(
+    state: &Arc<RwLock<LuaRuntimeState>>,
+    command: String,
+    target_box: Option<String>,
+    via_ipc: bool,
+) {
     state
         .write()
         .expect("lua runtime_state lock poisoned")
         .command_requests
-        .push(LuaCommandRequest { command });
+        .push(LuaCommandRequest {
+            command,
+            target_box,
+            via_ipc,
+        });
 }
 
 fn emit_lua_event(
@@ -1377,10 +1931,17 @@ return textquest.player.get_name(),
     #[test]
     fn group_api_all_fns_callable() {
         let b = make_bindings();
+        {
+            let mut state = b.runtime_state.write().expect("lua runtime_state lock poisoned");
+            state.group_members = vec!["Ari".to_string(), "Bex".to_string()];
+            state.group_tank = Some("Ari".to_string());
+            state.group_assist = Some("Bex".to_string());
+            state.group_master = Some("Ari".to_string());
+        }
         let lua = b.get_lua();
         let script = r#"
             local cnt = textquest.group.get_member_count()
-            local m = textquest.group.get_member(0)
+            local m = textquest.group.get_member(1)
             local members = textquest.group.get_members()
             local tank = textquest.group.get_tank()
             local assist = textquest.group.get_assist()
@@ -1407,6 +1968,39 @@ return textquest.player.get_name(),
         "#;
         let ok: bool = lua.load(script).eval().expect("nav API callable");
         assert!(ok, "all nav API functions must return true");
+    }
+
+    #[test]
+    fn nav_api_exposes_waypoints_and_stuck_state() {
+        let b = make_bindings();
+        {
+            let mut state = b.runtime_state.write().expect("lua runtime_state lock poisoned");
+            state.waypoints.push(LuaWaypoint {
+                name: "camp".to_string(),
+                x: 100.0,
+                y: 200.0,
+                z: 5.0,
+            });
+            state.navigation_is_stuck = true;
+            state.navigation_stuck_reason = Some("blocked by terrain".to_string());
+        }
+
+        let (count, first_name, stuck, reason): (u32, String, bool, String) = b
+            .get_lua()
+            .load(
+                r#"
+local waypoints = textquest.nav.get_waypoints()
+local stuck = textquest.nav.is_stuck()
+local reason = textquest.nav.stuck_reason() or ""
+return #waypoints, waypoints[1].name, stuck, reason
+"#,
+            )
+            .eval()
+            .expect("read nav state");
+        assert_eq!(count, 1);
+        assert_eq!(first_name, "camp");
+        assert!(stuck);
+        assert_eq!(reason, "blocked by terrain");
     }
 
     #[test]
@@ -1441,9 +2035,15 @@ textquest.execute_command("/stand")
             vec![
                 LuaCommandRequest {
                     command: "/sit".to_string()
+                    ,
+                    target_box: None,
+                    via_ipc: false,
                 },
                 LuaCommandRequest {
                     command: "/stand".to_string()
+                    ,
+                    target_box: None,
+                    via_ipc: false,
                 }
             ]
         );
@@ -1453,21 +2053,178 @@ textquest.execute_command("/stand")
     fn combat_api_all_fns_callable() {
         let b = make_bindings();
         let lua = b.get_lua();
+        {
+            let mut state = b.runtime_state.write().expect("lua runtime_state lock poisoned");
+            state.spawns = vec![textquest_common::types::SpawnData {
+                spawn_id: 11,
+                name: "Rathyl".to_string(),
+                displayed_name: "a_ratyl".to_string(),
+                spawn_type: 1,
+                level: 55,
+                class_id: 1,
+                race_id: 1,
+                x: 12.0,
+                y: 8.0,
+                z: 0.0,
+                heading: 90.0,
+                hp_current: 10,
+                hp_max: 10,
+                mana_current: 0,
+                mana_max: 0,
+                endurance_current: 100,
+                endurance_max: 100,
+                speed_run: 0.0,
+                stand_state: 0,
+                is_gm: false,
+            }];
+            state.buffs = vec!["Rage".to_string(), "Haste".to_string()];
+            state.debuffs = vec!["Curse".to_string()];
+        }
         let script = r#"
             local r1 = textquest.combat.cast("Fire Bolt", nil)
             local r2 = textquest.combat.assist(nil)
             local r3 = textquest.combat.attack(nil)
             local r4 = textquest.combat.disengage()
             local r5 = textquest.combat.rezz(nil)
-            return r1 and r2 and r3 and r4 and r5
+            local r6 = textquest.combat.re_mez("Rathyl")
+            local r7 = textquest.combat.set_target("Rathyl")
+            local has_rage = textquest.combat.has_buff("Rage")
+            local has_curse = textquest.combat.has_debuff("Curse")
+            local buffs = textquest.combat.get_buffs()
+            local debuffs = textquest.combat.get_debuffs()
+            local target = textquest.combat.get_target()
+            return r1 and r2 and r3 and r4 and r5 and r6 and r7 and has_rage
+                and has_curse and #buffs == 2 and #debuffs == 1 and target.name == "a_ratyl"
         "#;
         let ok: bool = lua.load(script).eval().expect("combat API callable");
         assert!(ok);
+        assert_eq!(
+            b.drain_command_requests(),
+            vec![
+                LuaCommandRequest {
+                    command: "/cast \"Fire Bolt\"".to_string(),
+                    target_box: None,
+                    via_ipc: false,
+                },
+                LuaCommandRequest {
+                    command: "/assist".to_string(),
+                    target_box: None,
+                    via_ipc: false,
+                },
+                LuaCommandRequest {
+                    command: "/attack".to_string(),
+                    target_box: None,
+                    via_ipc: false,
+                },
+                LuaCommandRequest {
+                    command: "/disengage".to_string(),
+                    target_box: None,
+                    via_ipc: false,
+                },
+                LuaCommandRequest {
+                    command: "/rezz".to_string(),
+                    target_box: None,
+                    via_ipc: false,
+                },
+                LuaCommandRequest {
+                    command: "/remez \"Rathyl\"".to_string(),
+                    target_box: None,
+                    via_ipc: false,
+                },
+                LuaCommandRequest {
+                    command: "/target \"rathyl\"".to_string(),
+                    target_box: None,
+                    via_ipc: false,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn combat_cast_requires_spell_name() {
+        let b = make_bindings();
+        let result: mlua::Result<bool> = b
+            .get_lua()
+            .load(r#"textquest.combat.cast("", nil)"#)
+            .eval();
+        assert!(result.is_err(), "combat.cast requires a non-empty spell");
     }
 
     #[test]
     fn state_api_all_fns_callable() {
         let b = make_bindings();
+        {
+            let mut state = b.runtime_state.write().expect("lua runtime_state lock poisoned");
+            state.spawns = vec![
+                textquest_common::types::SpawnData {
+                    spawn_id: 1,
+                    name: "Rathyl".to_string(),
+                    displayed_name: "a_ratyl".to_string(),
+                    spawn_type: 1,
+                    level: 55,
+                    class_id: 1,
+                    race_id: 1,
+                    x: 12.0,
+                    y: 8.0,
+                    z: 0.0,
+                    heading: 90.0,
+                    hp_current: 10,
+                    hp_max: 10,
+                    mana_current: 0,
+                    mana_max: 0,
+                    endurance_current: 100,
+                    endurance_max: 100,
+                    speed_run: 0.0,
+                    stand_state: 0,
+                    is_gm: false,
+                },
+                textquest_common::types::SpawnData {
+                    spawn_id: 2,
+                    name: "Undead".to_string(),
+                    displayed_name: "a_undead".to_string(),
+                    spawn_type: 1,
+                    level: 3,
+                    class_id: 1,
+                    race_id: 1,
+                    x: 4.0,
+                    y: 6.0,
+                    z: 0.0,
+                    heading: 15.0,
+                    hp_current: 5,
+                    hp_max: 5,
+                    mana_current: 0,
+                    mana_max: 0,
+                    endurance_current: 100,
+                    endurance_max: 100,
+                    speed_run: 0.0,
+                    stand_state: 0,
+                    is_gm: false,
+                },
+            ];
+            state.target = state.spawns.get(0).cloned();
+            state.xtargets = vec![textquest_common::types::SpawnData {
+                spawn_id: 3,
+                name: "XTarget".to_string(),
+                displayed_name: "a_target".to_string(),
+                spawn_type: 1,
+                level: 10,
+                class_id: 1,
+                race_id: 1,
+                x: 1.0,
+                y: 1.0,
+                z: 1.0,
+                heading: 0.0,
+                hp_current: 5,
+                hp_max: 5,
+                mana_current: 0,
+                mana_max: 0,
+                endurance_current: 100,
+                endurance_max: 100,
+                speed_run: 0.0,
+                stand_state: 0,
+                is_gm: false,
+            }];
+        }
         let lua = b.get_lua();
         let script = r#"
             local spawns = textquest.state.get_spawns()
@@ -1480,6 +2237,14 @@ textquest.execute_command("/stand")
         "#;
         let ok: bool = lua.load(script).eval().expect("state API callable");
         assert!(ok);
+        let result: Option<textquest_common::types::SpawnData> = {
+            b.runtime_state
+                .read()
+                .expect("lua runtime_state lock poisoned")
+                .target
+                .clone()
+        };
+        assert!(result.is_some());
     }
 
     #[test]
@@ -1487,14 +2252,56 @@ textquest.execute_command("/stand")
         let b = make_bindings();
         let lua = b.get_lua();
         let script = r#"
-            local v = textquest.config.get("key")
             local ok1 = textquest.config.set("key", "value")
+            local v = textquest.config.get("key")
             local ok2 = textquest.config.save()
             local ok3 = textquest.config.reload()
-            return ok1 and ok2 and ok3
+            return ok1 and v == "value" and ok2 and ok3
         "#;
         let ok: bool = lua.load(script).eval().expect("config API callable");
         assert!(ok);
+        {
+            let state = b.runtime_state.read().expect("lua runtime_state lock poisoned");
+            assert_eq!(
+                state
+                    .plugin_config
+                    .get("key")
+                    .expect("config value stored"),
+                "value"
+            );
+            assert!(state.last_saved_config);
+            assert!(state.last_reloaded_config);
+        }
+    }
+
+    #[test]
+    fn ipc_api_queueing_metadata() {
+        let b = make_bindings();
+        let lua = b.get_lua();
+        lua.load(
+            r#"
+textquest.ipc.send("/follow", "box-7")
+textquest.ipc.broadcast("/say hello")
+"#,
+        )
+        .exec()
+        .expect("ipc commands");
+
+        assert_eq!(
+            b.drain_command_requests(),
+            vec![
+                LuaCommandRequest {
+                    command: "/follow".to_string(),
+                    target_box: Some("box-7".to_string()),
+                    via_ipc: true,
+                },
+                LuaCommandRequest {
+                    command: "/say hello".to_string(),
+                    target_box: None,
+                    via_ipc: true,
+                }
+            ]
+        );
     }
 
     #[test]

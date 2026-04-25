@@ -1,15 +1,10 @@
-# Result: #1250 — Integration: End-to-end scenario tests (36-box farm)
+# Result: #1139 — Sub: Core Plugin API Surface (#819-3)
+Status: PARTIAL
 
-Implemented issue #1250 with a new 36-box multibox farm simulation flow in `textquest/src/testing/scenarios/camp_loop.rs` and end-to-end runner coverage in `textquest/tests/integration_test_loop.rs`.
-
-What changed:
-- Added `MultiboxFarmMode` and `MultiboxFarmScenario` with deterministic snapshot simulation for 36-member farms.
-- Added command-metric tracking for combat, healer, recovery, and automation loop behavior (pulls, kills, attacks, casts, recovery transitions, rez attempts, etc.).
-- Added Windows-only integration tests for full automation, group coordination, stress scale, and failure recovery paths.
-- Added scenario intent documentation updates in the integration test module header.
-
-Validation:
-- Ran `cargo check` successfully.
-- No additional production dependencies or broad refactors introduced.
-
-Result: COMPLETE
+- Implemented Lua core plugin API surface wiring in `textquest/src/lua/bindings.rs` for combat, nav, state, IPC, config, events, and logging integrations.
+- Added runtime-backed plugin-facing data model fields in `textquest/src/lua/types.rs` to support request metadata, group/state/nav/cache snapshots.
+- Updated command request API shape to `command`, `target_box`, and `via_ipc`; updated queue callers and tests for metadata assertions.
+- Added doc examples and an error-handling example to `docs/wiki/Plugin-System.md`.
+- Added example script coverage at `scripts/lua/examples/06_textquest_api_smoke.lua`.
+- Updated `feature-list.json` with `issue-1139-sub-core-plugin-api-surface` as `complete`.
+- Validation: `cargo check --package textquest`, `cargo check`.

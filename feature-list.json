@@ -167,6 +167,15 @@
       "notes": "Partial first-pass plugin scaffold: shared plugin trait, lifecycle registry, domain capability API, non-core inventory example crate, mkplugin scaffold script, and wiki design/API documentation. Dynamic dylib discovery and runtime host wiring remain follow-up work."
     },
     {
+      "id": "issue-1139-sub-core-plugin-api-surface",
+      "name": "Sub: Core Plugin API Surface (#819-3)",
+      "status": "complete",
+      "acceptance_tests": [
+        "cargo check --package textquest"
+      ],
+      "notes": "Exposed core Lua plugin domains for combat, navigation, and state plus IPC, config, event, and logging integration points with runtime-backed tables and request queues. Added request metadata for IPC target box routing and docs/example coverage with error-handling pattern."
+    },
+    {
       "id": "issue-822-eqbc-style-inter-character-communication",
       "name": "Issue #822 EQBC-style inter-character communication",
       "status": "in_progress",
