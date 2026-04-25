@@ -178,13 +178,14 @@
       "notes": "PARTIAL: Added a metrics-side performance dashboard snapshot API with combat, movement, loot, system placeholder, tab metadata, and simple alert aggregation. Full TUI rendering, SQLite history, live system telemetry producers, and richer anomaly detection remain follow-up work."
     },
     {
-      "id": "issue-994-tui-theme-system-customization",
-      "name": "Issue #994 TUI theme system and customization",
+      "id": "issue-983-web-dashboard-group-camp-configuration-ui",
+      "name": "Issue #983 web dashboard group and camp configuration UI",
       "status": "in_progress",
       "acceptance_tests": [
-        "cargo check"
+        "cargo check",
+        "npm --prefix web run build"
       ],
-      "notes": "PARTIAL: Added missing built-in TUI themes, foreground/background contrast helpers, named runtime theme switching, and persistent preference scaffolding with per-character override data. Full custom theme import/export UI, live preview panel, and renderer-level per-character theme application remain follow-up work."
+      "notes": "PARTIAL: Extended the existing web Groups page with form-first group CRUD, role assignment labels, keyboard member reordering, collapsible per-class settings, /api/camps hook integration, saveable camp zone/pull point/combat threshold/template fields, validation, and configuration preview. Remaining work includes full backend persistence validation, richer drag-and-drop between unassigned character pools, template library management, and browser QA against live API data."
     },
     {
       "id": "issue-819-plugin-system-openvanilla-parity",

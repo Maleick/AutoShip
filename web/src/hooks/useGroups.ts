@@ -44,11 +44,11 @@ export function useGroups() {
       }
       const created: Group = await res.json();
       setGroups((prev) =>
-        [...prev, created].sort((a, b) => a.name.localeCompare(b.name))
+        [...prev, created].sort((a, b) => a.name.localeCompare(b.name)),
       );
       return created;
     },
-    []
+    [],
   );
 
   const updateGroup = useCallback(
@@ -66,7 +66,7 @@ export function useGroups() {
       setGroups((prev) => prev.map((g) => (g.id === id ? updated : g)));
       return updated;
     },
-    []
+    [],
   );
 
   const deleteGroup = useCallback(async (id: string): Promise<void> => {
@@ -98,14 +98,14 @@ export function useCampConfiguration() {
 
   const fetchCampConfigs = useCallback(async () => {
     try {
-      const res = await fetch("/api/camp-configurations");
+      const res = await fetch("/api/camps");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: CampConfiguration[] = await res.json();
       setCampConfigs(data);
       setError(null);
     } catch (e) {
       setError(
-        e instanceof Error ? e.message : "Failed to fetch camp configurations"
+        e instanceof Error ? e.message : "Failed to fetch camp configurations",
       );
     } finally {
       setLoading(false);
@@ -118,7 +118,7 @@ export function useCampConfiguration() {
 
   const createCampConfig = useCallback(
     async (payload: CreateCampConfigPayload): Promise<CampConfiguration> => {
-      const res = await fetch("/api/camp-configurations", {
+      const res = await fetch("/api/camps", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -131,22 +131,19 @@ export function useCampConfiguration() {
       setCampConfigs((prev) => [...prev, created]);
       return created;
     },
-    []
+    [],
   );
 
   const updateCampConfig = useCallback(
     async (
       id: string,
-      payload: UpdateCampConfigPayload
+      payload: UpdateCampConfigPayload,
     ): Promise<CampConfiguration> => {
-      const res = await fetch(
-        `/api/camp-configurations/${encodeURIComponent(id)}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }
-      );
+      const res = await fetch(`/api/camps/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? `HTTP ${res.status}`);
@@ -155,16 +152,13 @@ export function useCampConfiguration() {
       setCampConfigs((prev) => prev.map((c) => (c.id === id ? updated : c)));
       return updated;
     },
-    []
+    [],
   );
 
   const deleteCampConfig = useCallback(async (id: string): Promise<void> => {
-    const res = await fetch(
-      `/api/camp-configurations/${encodeURIComponent(id)}`,
-      {
-        method: "DELETE",
-      }
-    );
+    const res = await fetch(`/api/camps/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.error ?? `HTTP ${res.status}`);

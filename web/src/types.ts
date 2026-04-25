@@ -873,10 +873,7 @@ export type ChatChannel =
 
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
-export type RotationStrategy =
-  | { daily: null }
-  | { size: number }
-  | "none";
+export type RotationStrategy = { daily: null } | { size: number } | "none";
 
 export interface ChatLogConfig {
   enabled: boolean;
@@ -1174,6 +1171,13 @@ export interface GroupMember {
   class: string;
   role: GroupMemberRole;
   order: number;
+  class_settings?: ClassSpecificSettings;
+}
+
+export interface ClassSpecificSettings {
+  pet_management_enabled: boolean;
+  spell_priority: string;
+  cc_assignment: string;
 }
 
 export interface Group {
@@ -1208,36 +1212,62 @@ export interface PullTarget {
   enabled: boolean;
 }
 
+export interface PullPoint {
+  label: string;
+  location: CampCoordinate;
+  enabled: boolean;
+}
+
 export interface SafeZoneMarker {
   name: string;
   center: CampCoordinate;
   radius: number;
 }
 
+export type PullStrategy = "melee" | "caster" | "balanced";
+
+export interface CombatSettings {
+  hp_buff_threshold_pct: number;
+  mana_buff_threshold_pct: number;
+  pull_strategy: PullStrategy;
+}
+
 export interface CampConfiguration {
   id: string;
   group_id: string;
+  template_name: string | null;
+  camp_zone: string;
   camp_center: CampCoordinate;
   pull_radius: number;
+  pull_points: PullPoint[];
   pull_targets: PullTarget[];
   safe_zone_markers: SafeZoneMarker[];
+  combat_settings: CombatSettings;
   created_at: string;
   updated_at: string;
 }
 
 export interface CreateCampConfigPayload {
   group_id: string;
+  template_name?: string | null;
+  camp_zone: string;
   camp_center: CampCoordinate;
   pull_radius: number;
+  pull_points?: PullPoint[];
   pull_targets?: PullTarget[];
   safe_zone_markers?: SafeZoneMarker[];
+  combat_settings?: CombatSettings;
 }
 
 export interface UpdateCampConfigPayload {
+  template_name?: string | null;
+  camp_zone?: string;
   camp_center?: CampCoordinate;
   pull_radius?: number;
+  pull_points?: PullPoint[];
   pull_targets?: PullTarget[];
   safe_zone_markers?: SafeZoneMarker[];
+  combat_settings?: CombatSettings;
 }
 
 // ── Admin diagnostics & operations types ────────────────────────────────────
