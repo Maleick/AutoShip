@@ -27,6 +27,7 @@
 - [Inventory Utility Parity](Inventory-Utility-Parity)
 - [Say Detection and Alerting](Say-Detection-and-Alerting)
 - [RedGuides Awareness and Coordination Parity](RedGuides-Awareness-and-Coordination-Parity)
+- [RedGuides Script Compatibility](RedGuides-Script-Compatibility)
 - [Window Management and HUD Integration](Window-Management-and-HUD-Integration)
 - [Security and Anti-Detection Notes](Security-and-Anti-Detection-Notes)
 
