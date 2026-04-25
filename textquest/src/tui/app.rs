@@ -1239,10 +1239,17 @@ impl App {
     /// Create a new TUI application with default state.
     #[must_use]
     pub fn new() -> Self {
+        Self::new_with_help_database(HELP_DATABASE.clone())
+    }
+
+    fn new_with_help_database(help_database: HelpDatabase) -> Self {
         let alert_store = default_alert_store();
         let alert_manager = AlertManager::new(alert_store.clone());
         let (gm_sync_tx, gm_sync_handle) = spawn_gm_sync_worker();
-        let help_database = HELP_DATABASE.clone();
+        let help_unavailable = help_database.is_empty();
+        if help_unavailable {
+            tracing::warn!("help: no help topics loaded; TUI help database is unavailable");
+        }
         let help_topics = Self::build_help_topics(&help_database);
         let mut app = Self {
             running: true,
@@ -1266,7 +1273,11 @@ impl App {
             map_spawn_cache: MapSpawnPresentationCache::default(),
             live_group_cache: RefCell::new(None),
             client_name_index_cache: RefCell::new(None),
-            status_message: String::from("Waiting for EQ process..."),
+            status_message: if help_unavailable {
+                String::from("Help unavailable: no help topics loaded")
+            } else {
+                String::from("Waiting for EQ process...")
+            },
             tick_count: 0,
             gemma_observations: VecDeque::with_capacity(GEMMA_OBSERVATION_LIMIT),
             pending_gemma_observations: VecDeque::with_capacity(GEMMA_OBSERVATION_LIMIT),
@@ -8647,9 +8658,65 @@ mod tests {
         }
     }
 
+    fn test_help_command_toml(name: &str) -> String {
+        format!(
+            r#"
+[[commands]]
+name = "{name}"
+aliases = ["{name}-alias"]
+usage = "{name} <target>"
+description = "Use {name} from the TUI"
+examples = ["{name} orc"]
+tags = ["test"]
+"#
+        )
+    }
+
     #[test]
     fn gm_sync_queue_capacity_is_bounded_for_backpressure() {
         assert!((8..=16).contains(&GM_SYNC_QUEUE_CAPACITY));
+    }
+
+    #[test]
+    fn app_caches_successfully_loaded_help_database() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join("commands.toml"),
+            test_help_command_toml("camp"),
+        )
+        .expect("write help file");
+
+        let app = App::new_with_help_database(HelpDatabase::load_from_dir(dir.path()));
+
+        assert_eq!(app.help_database.len(), 1);
+        assert!(app.help_database.command("camp").is_some());
+        assert!(!app.status_message.contains("Help unavailable"));
+    }
+
+    #[test]
+    fn app_uses_empty_help_database_for_missing_help_files() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let missing = dir.path().join("missing-help");
+
+        let app = App::new_with_help_database(HelpDatabase::load_from_dir(missing));
+
+        assert!(app.help_database.is_empty());
+        assert!(app.status_message.contains("Help unavailable"));
+    }
+
+    #[test]
+    fn app_uses_empty_help_database_for_malformed_help_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join("bad.toml"),
+            b"[[commands\nnot valid toml {{{{",
+        )
+        .expect("write malformed help file");
+
+        let app = App::new_with_help_database(HelpDatabase::load_from_dir(dir.path()));
+
+        assert!(app.help_database.is_empty());
+        assert!(app.status_message.contains("Help unavailable"));
     }
 
     #[test]
