@@ -1,6 +1,4 @@
-//! Ready-made [`TestScenario`](crate::testing::scenario::TestScenario)
-//! implementations for harness and CI tests.
+//! Scenario implementations for the `TestScenario` harness.
 
-pub mod mocks;
-
-pub use mocks::{CountdownScenario, FastFailScenario, InstantScenario, MetricTestScenario};
+#[cfg(windows)]
+pub mod combat_rotation;

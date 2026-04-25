@@ -3,6 +3,8 @@
 /// Camp loop combat integration — bridges camp state machine with combat
 /// actions.
 pub mod camp_loop;
+/// Per-class combat rotation strategy definitions.
+pub mod class_strategy;
 /// Complete Heal chain coordination for multi-cleric rotations.
 pub mod ch_chain;
 /// Charm and pet management primitives.
@@ -21,3 +23,5 @@ pub mod spell_db;
 /// Advanced spell optimizer and casting predictor — mana efficiency ranking,
 /// cast-time filtering, and haste-adjusted cast time prediction.
 pub mod spell_optimizer;
+/// Combatant state machine primitives.
+pub mod state;

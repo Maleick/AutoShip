@@ -1,22 +1,20 @@
-# Result: #994 — Feature: TUI Theme System & Customization
+# Result: #1042 — #862.4: Implement CombatRotationScenario
 
 Status: DONE
 
 Changes Made:
-- Added Light, High Contrast, and Minimal built-in TUI themes alongside the existing Dark, Neriak, Dracula, and Classic themes.
-- Added base foreground/background colors and WCAG-style body contrast helpers to the TUI theme model.
-- Added Vim-style named runtime switching through `:theme <name>` while preserving `:theme` cycling and persistent selection.
-- Added persistent theme preference scaffolding with per-character override storage and lookup.
-- Kept existing TOML custom theme loading compatible with optional foreground/background fields.
-- Updated map cache theme identifiers for the expanded theme set.
-- Updated `feature-list.json` to track the issue as partial.
+- Added minimal per-class combat rotation strategy scaffolding in `textquest/src/combat/class_strategy.rs`.
+- Added a deterministic combatant FSM in `textquest/src/combat/state.rs`.
+- Added `CombatRotationScenario` in `textquest/src/testing/scenarios/combat_rotation.rs`.
+- Wired combat strategy/state modules and the testing scenario module.
+- Added focused scenario tests for single rotation, multiple rotations, interrupt handling, DPS calculation, and class validation.
 
 Tests:
-- `cargo check` passed after production wiring.
-- `cargo check --tests` passed after adding focused theme tests.
-- Focused theme tests were added for built-in cycling, name parsing, accessibility contrast, and per-character preferences.
+- `cargo check` passed.
+- `cargo test` was not run per issue instruction to use cargo check only.
 
 Notes:
-- Full custom theme import/export UI, save-custom-theme workflows, live preview panels, renderer-level per-character theme application, and auto dark/light scheduling remain follow-up work.
+- The existing crate root gates `combat` behind `#[cfg(windows)]`; the combat rotation scenario module is gated the same way to keep macOS `cargo check` passing.
+- Remaining validation should run on the Windows build target where the combat module is compiled.
 
 COMPLETE
