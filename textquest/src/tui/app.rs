@@ -1396,6 +1396,8 @@ pub struct App {
     pub kill_tracker: crate::metrics::KillTracker,
     /// Multi-session store for per-character kill history.
     pub kill_session_store: crate::metrics::KillSessionStore,
+    /// XP and AA session tracker (MQ2XPTracker parity).
+    pub xp_tracker: crate::metrics::XpTracker,
 
     /// Spell loadout window backend state.
     pub spell_loadout_state: SpellLoadoutState,
@@ -1743,6 +1745,7 @@ impl App {
             kill_reporter: crate::metrics::KillReporter::default(),
             kill_tracker: crate::metrics::KillTracker::new(chrono::Utc::now().timestamp()),
             kill_session_store: crate::metrics::KillSessionStore::new(),
+            xp_tracker: crate::metrics::XpTracker::new(),
             spell_loadout_state: SpellLoadoutState::new(),
             rotation_window_state: RotationWindowState::new(),
             pull_window_state: PullWindowState::new(),

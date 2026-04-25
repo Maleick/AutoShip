@@ -74,6 +74,40 @@ CREATE TABLE IF NOT EXISTS plat_ledger (
     note        TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_plat_char ON plat_ledger(character);
+
+CREATE TABLE IF NOT EXISTS xp_sessions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    character       TEXT NOT NULL,
+    session_start   TEXT NOT NULL DEFAULT (datetime('now')),
+    session_end     TEXT,
+    start_xp_pct    REAL NOT NULL DEFAULT 0.0,
+    end_xp_pct      REAL,
+    start_aa_pct    REAL NOT NULL DEFAULT 0.0,
+    end_aa_pct      REAL,
+    start_level     INTEGER NOT NULL DEFAULT 0,
+    end_level       INTEGER,
+    level_ups       INTEGER NOT NULL DEFAULT 0,
+    duration_secs   INTEGER,
+    xp_per_hour     REAL,
+    aa_per_hour     REAL
+);
+CREATE INDEX IF NOT EXISTS idx_xp_char ON xp_sessions(character);
+CREATE INDEX IF NOT EXISTS idx_xp_start ON xp_sessions(session_start);
+
+CREATE TABLE IF NOT EXISTS kill_sessions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    character       TEXT NOT NULL,
+    zone            TEXT,
+    session_start   TEXT NOT NULL DEFAULT (datetime('now')),
+    session_end     TEXT,
+    total_kills     INTEGER NOT NULL DEFAULT 0,
+    total_deaths    INTEGER NOT NULL DEFAULT 0,
+    kills_per_hour  REAL,
+    duration_secs   INTEGER,
+    top_mob         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_kill_char ON kill_sessions(character);
+CREATE INDEX IF NOT EXISTS idx_kill_start ON kill_sessions(session_start);
 ";
 
 /// Fleet metrics store backed by SQLite.
@@ -367,6 +401,213 @@ impl MetricsStore {
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .context("Failed to collect plat rows")
     }
+
+    /// Persist a completed XP session (MQ2XPTracker parity).
+    ///
+    /// Call on session end / shutdown so rates survive restarts.
+    pub fn save_xp_session(
+        &self,
+        character: &str,
+        start_xp: f32,
+        end_xp: f32,
+        start_aa: f32,
+        end_aa: f32,
+        start_level: u8,
+        end_level: u8,
+        level_ups: u32,
+        duration_secs: u64,
+        xp_per_hour: f32,
+        aa_per_hour: f32,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO xp_sessions \
+             (character, start_xp_pct, end_xp_pct, start_aa_pct, end_aa_pct, \
+              start_level, end_level, level_ups, duration_secs, xp_per_hour, aa_per_hour, \
+              session_end) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, datetime('now'))",
+            params![
+                character,
+                start_xp,
+                end_xp,
+                start_aa,
+                end_aa,
+                start_level as i64,
+                end_level as i64,
+                level_ups as i64,
+                duration_secs as i64,
+                xp_per_hour,
+                aa_per_hour,
+            ],
+        )
+        .context("Failed to save XP session")?;
+        Ok(())
+    }
+
+    /// Load recent XP sessions for a character (newest first).
+    pub fn recent_xp_sessions(
+        &self,
+        character: &str,
+        limit: u32,
+    ) -> Result<Vec<XpSessionRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, character, session_start, session_end, \
+                  start_xp_pct, end_xp_pct, start_aa_pct, end_aa_pct, \
+                  start_level, end_level, level_ups, duration_secs, \
+                  xp_per_hour, aa_per_hour \
+                 FROM xp_sessions WHERE character = ?1 \
+                 ORDER BY session_start DESC LIMIT ?2",
+            )
+            .context("Failed to prepare xp_sessions query")?;
+        let rows = stmt
+            .query_map(params![character, limit], |row| {
+                Ok(XpSessionRow {
+                    id: row.get(0)?,
+                    character: row.get(1)?,
+                    session_start: row.get(2)?,
+                    session_end: row.get(3)?,
+                    start_xp_pct: row.get(4)?,
+                    end_xp_pct: row.get(5)?,
+                    start_aa_pct: row.get(6)?,
+                    end_aa_pct: row.get(7)?,
+                    start_level: row.get(8)?,
+                    end_level: row.get(9)?,
+                    level_ups: row.get(10)?,
+                    duration_secs: row.get(11)?,
+                    xp_per_hour: row.get(12)?,
+                    aa_per_hour: row.get(13)?,
+                })
+            })
+            .context("Failed to query xp_sessions")?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .context("Failed to collect xp session rows")
+    }
+
+    /// Persist a completed kill session (MQ2KillTracker parity).
+    pub fn save_kill_session(
+        &self,
+        character: &str,
+        zone: Option<&str>,
+        total_kills: u32,
+        total_deaths: u32,
+        kills_per_hour: f64,
+        duration_secs: u64,
+        top_mob: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO kill_sessions \
+             (character, zone, total_kills, total_deaths, kills_per_hour, \
+              duration_secs, top_mob, session_end) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
+            params![
+                character,
+                zone,
+                total_kills as i64,
+                total_deaths as i64,
+                kills_per_hour,
+                duration_secs as i64,
+                top_mob,
+            ],
+        )
+        .context("Failed to save kill session")?;
+        Ok(())
+    }
+
+    /// Load recent kill sessions for a character (newest first).
+    pub fn recent_kill_sessions(
+        &self,
+        character: &str,
+        limit: u32,
+    ) -> Result<Vec<KillSessionRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, character, zone, session_start, session_end, \
+                  total_kills, total_deaths, kills_per_hour, duration_secs, top_mob \
+                 FROM kill_sessions WHERE character = ?1 \
+                 ORDER BY session_start DESC LIMIT ?2",
+            )
+            .context("Failed to prepare kill_sessions query")?;
+        let rows = stmt
+            .query_map(params![character, limit], |row| {
+                Ok(KillSessionRow {
+                    id: row.get(0)?,
+                    character: row.get(1)?,
+                    zone: row.get(2)?,
+                    session_start: row.get(3)?,
+                    session_end: row.get(4)?,
+                    total_kills: row.get(5)?,
+                    total_deaths: row.get(6)?,
+                    kills_per_hour: row.get(7)?,
+                    duration_secs: row.get(8)?,
+                    top_mob: row.get(9)?,
+                })
+            })
+            .context("Failed to query kill_sessions")?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .context("Failed to collect kill session rows")
+    }
+
+    /// Aggregate kills-per-hour and plat-per-hour over recent sessions for the self-improvement
+    /// loop (feeds #2598 aggregate tables).
+    ///
+    /// Returns `(avg_kph, avg_pph)` across the last `window_sessions` sessions for `character`.
+    pub fn session_aggregate_rates(
+        &self,
+        character: &str,
+        window_sessions: u32,
+    ) -> Result<SessionAggregateRates> {
+        let conn = self.conn.lock().unwrap();
+
+        let avg_kph: Option<f64> = conn
+            .query_row(
+                "SELECT AVG(kills_per_hour) FROM \
+                 (SELECT kills_per_hour FROM kill_sessions WHERE character = ?1 \
+                  AND kills_per_hour IS NOT NULL ORDER BY session_start DESC LIMIT ?2)",
+                params![character, window_sessions],
+                |row| row.get(0),
+            )
+            .optional()
+            .context("Failed to query avg KPH")?
+            .flatten();
+
+        let avg_xph: Option<f64> = conn
+            .query_row(
+                "SELECT AVG(xp_per_hour) FROM \
+                 (SELECT xp_per_hour FROM xp_sessions WHERE character = ?1 \
+                  AND xp_per_hour IS NOT NULL ORDER BY session_start DESC LIMIT ?2)",
+                params![character, window_sessions],
+                |row| row.get(0),
+            )
+            .optional()
+            .context("Failed to query avg XPH")?
+            .flatten();
+
+        let avg_pph: Option<f64> = conn
+            .query_row(
+                "SELECT AVG(CAST(amount AS REAL) / NULLIF(duration_secs, 0) * 3600.0) FROM \
+                 (SELECT amount, \
+                   CAST(strftime('%s', session_end) - strftime('%s', session_start) AS INTEGER) \
+                   AS duration_secs \
+                  FROM plat_ledger \
+                  WHERE character = ?1 AND amount > 0 \
+                  ORDER BY timestamp DESC LIMIT ?2)",
+                params![character, window_sessions * 10],
+                |row| row.get(0),
+            )
+            .optional()
+            .context("Failed to query avg PPH")?
+            .flatten();
+
+        Ok(SessionAggregateRates {
+            avg_kills_per_hour: avg_kph.unwrap_or(0.0),
+            avg_xp_per_hour: avg_xph.unwrap_or(0.0),
+            avg_plat_per_hour: avg_pph.unwrap_or(0.0),
+        })
+    }
 }
 
 // ── Row types ───────────────────────────────────────────────────────────────
@@ -416,6 +657,51 @@ pub struct PlatRow {
     pub balance: i64,
     pub source: Option<String>,
     pub note: Option<String>,
+}
+
+/// A row from the `xp_sessions` table.
+#[derive(Debug)]
+pub struct XpSessionRow {
+    pub id: i64,
+    pub character: String,
+    pub session_start: String,
+    pub session_end: Option<String>,
+    pub start_xp_pct: f64,
+    pub end_xp_pct: Option<f64>,
+    pub start_aa_pct: f64,
+    pub end_aa_pct: Option<f64>,
+    pub start_level: i64,
+    pub end_level: Option<i64>,
+    pub level_ups: i64,
+    pub duration_secs: Option<i64>,
+    pub xp_per_hour: Option<f64>,
+    pub aa_per_hour: Option<f64>,
+}
+
+/// A row from the `kill_sessions` table.
+#[derive(Debug)]
+pub struct KillSessionRow {
+    pub id: i64,
+    pub character: String,
+    pub zone: Option<String>,
+    pub session_start: String,
+    pub session_end: Option<String>,
+    pub total_kills: i64,
+    pub total_deaths: i64,
+    pub kills_per_hour: Option<f64>,
+    pub duration_secs: Option<i64>,
+    pub top_mob: Option<String>,
+}
+
+/// Aggregate session rates for the self-improvement loop (#2598).
+#[derive(Debug, Default, Clone)]
+pub struct SessionAggregateRates {
+    /// Average kills per hour over recent sessions.
+    pub avg_kills_per_hour: f64,
+    /// Average XP percent per hour over recent sessions.
+    pub avg_xp_per_hour: f64,
+    /// Average platinum per hour over recent plat ledger entries.
+    pub avg_plat_per_hour: f64,
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────

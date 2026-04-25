@@ -16,6 +16,7 @@ pub mod kill_reporter;
 pub mod kill_session_store;
 pub mod kill_tracker;
 pub mod performance;
+pub mod plat_tracker;
 pub mod progress;
 pub mod sampling;
 pub mod session_recorder;
@@ -51,6 +52,7 @@ pub use performance::{
     PerformanceDashboardAlert, PerformanceDashboardSnapshot, PerformanceDashboardTab,
     PerformanceMetricsApi, PerformanceMonitor,
 };
+pub use plat_tracker::{PlatCategory, PlatSessionStore, PlatTracker, PlatTransaction};
 pub use progress::{ClientProgressSnapshot, ProgressReport, ProgressTracker};
 pub use anomaly::{
     AnomalyEvent, AnomalyId, AnomalyPipeline, AnomalySeverity, SessionSnapshot,
@@ -61,3 +63,4 @@ pub use types::{
     FleetMetrics as RtFleetMetrics, LootMetrics, MetricWindow,
     MovementMetrics as RtMovementMetrics, SystemMetrics, TimeWindowedMetrics,
 };
+pub use xp_tracker::{XpSample, XpSessionSnapshot, XpTracker};

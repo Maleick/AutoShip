@@ -351,6 +351,14 @@ pub struct AppConfig {
     #[serde(default)]
     pub kill_tracker: KillTrackerConfig,
 
+    /// XP and AA tracker configuration.
+    #[serde(default)]
+    pub xp_tracker: XpTrackerConfig,
+
+    /// Platinum tracker configuration.
+    #[serde(default)]
+    pub plat_tracker: PlatTrackerConfig,
+
     /// Say detection and alerting configuration.
     #[serde(default)]
     pub say_detection: SayDetectionConfig,
@@ -431,6 +439,58 @@ fn default_kill_tracker_channel() -> String {
 
 fn default_kill_tracker_max_session_history() -> usize {
     100
+}
+
+/// XP and AA tracker configuration (MQ2XPTracker parity).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct XpTrackerConfig {
+    /// Whether XP and AA tracking are enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Maximum rolling samples retained per session.
+    #[serde(default = "default_xp_tracker_max_samples")]
+    pub max_samples: usize,
+}
+
+impl Default for XpTrackerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_samples: default_xp_tracker_max_samples(),
+        }
+    }
+}
+
+fn default_xp_tracker_max_samples() -> usize {
+    1000
+}
+
+/// Plat tracker configuration (MQ2PlatTracker parity).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PlatTrackerConfig {
+    /// Whether platinum tracking is enabled.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Maximum transactions retained per session.
+    #[serde(default = "default_plat_tracker_max_transactions")]
+    pub max_transactions: usize,
+    /// Track per-character sessions (vs. global aggregate).
+    #[serde(default = "default_true")]
+    pub track_per_character: bool,
+}
+
+impl Default for PlatTrackerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_transactions: default_plat_tracker_max_transactions(),
+            track_per_character: true,
+        }
+    }
+}
+
+fn default_plat_tracker_max_transactions() -> usize {
+    2000
 }
 
 /// Say pattern matching mode.
@@ -985,6 +1045,8 @@ impl AppConfig {
             chat_log: crate::chat_log::ChatLogConfig::default(),
             timing_correction: false,
             kill_tracker: KillTrackerConfig::default(),
+            xp_tracker: XpTrackerConfig::default(),
+            plat_tracker: PlatTrackerConfig::default(),
             say_detection: SayDetectionConfig::default(),
             log: LogConfig::default(),
             improve: ImprovementConfig::default(),

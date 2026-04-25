@@ -17,6 +17,20 @@ pub struct XpSample {
     pub timestamp: Instant,
 }
 
+/// Point-in-time snapshot of a character's XP session — serializable for DB persistence.
+#[derive(Debug, Clone)]
+pub struct XpSessionSnapshot {
+    pub character: String,
+    pub start_xp_pct: f32,
+    pub end_xp_pct: f32,
+    pub start_aa_pct: f32,
+    pub end_aa_pct: f32,
+    pub start_level: u8,
+    pub end_level: u8,
+    /// Number of level-ups recorded in `level_history` during this session.
+    pub level_ups: u32,
+}
+
 /// Tracks XP samples and computes leveling analytics.
 pub struct XpTracker {
     /// Rolling window of raw samples (capped at 1000).
@@ -133,6 +147,64 @@ impl XpTracker {
         // rate is pct/hour; convert to pct/sec then divide remaining.
         let rate_per_sec = rate as f64 / WINDOW_SECS as f64;
         Some(remaining_pct as f64 / rate_per_sec)
+    }
+
+    /// Compute AA XP gained per hour over the last 60 minutes for `character`.
+    pub fn aa_per_hour(&self, character: &str, now: Instant) -> f32 {
+        let window = std::time::Duration::from_secs_f32(WINDOW_SECS);
+
+        let qualifying: Vec<&XpSample> = self
+            .samples
+            .iter()
+            .filter(|s| s.character == character && now.duration_since(s.timestamp) <= window)
+            .collect();
+
+        if qualifying.len() < 2 {
+            return 0.0;
+        }
+
+        let oldest = qualifying.first().expect("len >= 2");
+        let newest = qualifying.last().expect("len >= 2");
+
+        let elapsed_secs = newest
+            .timestamp
+            .duration_since(oldest.timestamp)
+            .as_secs_f32();
+
+        if elapsed_secs <= 0.0 {
+            return 0.0;
+        }
+
+        (newest.aa_xp_pct - oldest.aa_xp_pct) / elapsed_secs * WINDOW_SECS
+    }
+
+    /// Session snapshot from oldest→newest samples for `character`.
+    ///
+    /// Used for DB persistence across restarts.
+    pub fn session_snapshot(&self, character: &str) -> Option<XpSessionSnapshot> {
+        let char_samples: Vec<&XpSample> = self
+            .samples
+            .iter()
+            .filter(|s| s.character == character)
+            .collect();
+
+        if char_samples.is_empty() {
+            return None;
+        }
+
+        let oldest = char_samples.first().expect("non-empty");
+        let newest = char_samples.last().expect("non-empty");
+
+        Some(XpSessionSnapshot {
+            character: character.to_string(),
+            start_xp_pct: oldest.xp_pct,
+            end_xp_pct: newest.xp_pct,
+            start_aa_pct: oldest.aa_xp_pct,
+            end_aa_pct: newest.aa_xp_pct,
+            start_level: oldest.level,
+            end_level: newest.level,
+            level_ups: self.level_history.len() as u32,
+        })
     }
 
     /// Return up to `limit` of the most recent samples for `character`.
