@@ -89,6 +89,10 @@ pub struct AppState {
     pub soul_audit: Arc<api::soul::SoulAuditState>,
     /// In-memory Discord routing and webhook settings.
     pub discord_state: Arc<api::discord::DiscordState>,
+    /// In-memory sound alert configuration (MQ2Sound parity).
+    pub sound_config: tokio::sync::RwLock<api::sound::SoundConfig>,
+    /// In-memory text-to-speech configuration (MQTextToSpeech parity).
+    pub text_to_speech_state: Arc<api::text_to_speech::TextToSpeechState>,
     /// In-memory player watch (zone entry/exit) configuration.
     pub player_watch_config: tokio::sync::RwLock<api::PlayerWatchConfig>,
     /// Serializes PUT-driven writes to the player-watch config sidecar so disk
@@ -481,6 +485,8 @@ fn build_state() -> Arc<AppState> {
         dashboard_state: api::dashboard::DashboardState::new_demo(),
         soul_audit: api::soul::SoulAuditState::new_demo(),
         discord_state: api::discord::DiscordState::new_demo(),
+        sound_config: tokio::sync::RwLock::new(api::sound::SoundConfig::default()),
+        text_to_speech_state: api::text_to_speech::TextToSpeechState::new(),
         player_watch_config: tokio::sync::RwLock::new(
             api::read_player_watch_config_from_disk().unwrap_or_else(|error| {
                 tracing::warn!(%error, "Failed to load player-watch config");
@@ -557,6 +563,8 @@ pub(crate) fn test_app_state() -> AppState {
         dashboard_state: api::dashboard::DashboardState::new_demo(),
         soul_audit: api::soul::SoulAuditState::new_demo(),
         discord_state: api::discord::DiscordState::new_demo(),
+        sound_config: tokio::sync::RwLock::new(api::sound::SoundConfig::default()),
+        text_to_speech_state: api::text_to_speech::TextToSpeechState::new(),
         player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
         player_watch_write_lock: tokio::sync::Mutex::new(()),
         gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
@@ -731,6 +739,26 @@ fn build_api_router() -> Router<Arc<AppState>> {
             "/config/discord",
             get(api::discord::get_settings).put(api::discord::put_settings),
         )
+        .route(
+            "/sound/config",
+            get(api::sound::get_sound_config).put(api::sound::put_sound_config),
+        )
+        .route(
+            "/sound/triggers",
+            get(api::sound::list_sound_triggers).post(api::sound::create_sound_trigger),
+        )
+        .route(
+            "/sound/triggers/{id}",
+            get(api::sound::get_sound_trigger)
+                .put(api::sound::update_sound_trigger)
+                .delete(api::sound::delete_sound_trigger),
+        )
+        .route(
+            "/tts/config",
+            get(api::text_to_speech::get_tts_config).put(api::text_to_speech::put_tts_config),
+        )
+        .route("/tts/engines", get(api::text_to_speech::list_tts_engines))
+        .route("/tts/status", get(api::text_to_speech::get_tts_status))
         .route(
             "/config/player-watch",
             get(api::get_player_watch_config).put(api::put_player_watch_config),
@@ -970,6 +998,8 @@ mod tests {
             dashboard_state: api::dashboard::DashboardState::new_demo(),
             soul_audit: api::soul::SoulAuditState::new_demo(),
             discord_state: api::discord::DiscordState::new_demo(),
+            sound_config: tokio::sync::RwLock::new(api::sound::SoundConfig::default()),
+            text_to_speech_state: api::text_to_speech::TextToSpeechState::new(),
             player_watch_config: tokio::sync::RwLock::new(api::PlayerWatchConfig::default()),
             player_watch_write_lock: tokio::sync::Mutex::new(()),
             gm_alert_state: Arc::new(api::gm_alerts::GmAlertState::default()),
