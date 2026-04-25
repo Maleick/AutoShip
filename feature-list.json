@@ -14,6 +14,16 @@
       "notes": "Completed pruning and simplification work, then reopened on 2026-04-14 to remove the redundant merged-branch cleanup workflow, collapse CI into one merge gate, switch agent-ready linked-PR detection from failing GraphQL to REST timeline reads, repair the fmt/clippy drift that was leaving master red after PR #1600, restore the missing pull_request_target closed trigger for post-merge cleanup, guard self-hosted CI lanes from fork PR execution, and finish the Windows self-hosted Rust bootstrap repair and branch/PR audit backfill tracked through issues #2201 and #2196."
     },
     {
+      "id": "issue-1238-ci-cd-branch-protection-and-auto-cleanup",
+      "name": "Issue #1238 CI/CD branch protection and auto-cleanup",
+      "status": "complete",
+      "acceptance_tests": [
+        "cargo check",
+        ".github/workflows/branch-protection-and-merge-hygiene.yml can be triggered successfully in CI"
+      ],
+      "notes": "Added a workflow to enforce master branch protection (1+ approval, required status checks, branch-up-to-date enforcement, no force pushes/deletes, conversation resolution), branch deletion-on-merge behavior, and squash-only merge settings. Added documentation for branch naming conventions and merge workflow expectations."
+    },
+    {
       "id": "m10-economy-execution-scope",
       "name": "M10 Economy execution scope",
       "status": "in_progress",

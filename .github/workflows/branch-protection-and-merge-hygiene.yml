@@ -1,0 +1,77 @@
+name: Branch protection and merge hygiene
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Protected branch name"
+        required: false
+        default: master
+
+jobs:
+  configure:
+    name: Configure branch protection + merge defaults
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      administration: write
+    steps:
+      - name: Configure branch protection for the target branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ inputs.branch || 'master' }}
+        run: |
+          cat <<'JSON' > branch-protection.json
+          {
+            "required_status_checks": {
+              "strict": true,
+              "contexts": [
+                "PR gate (fmt + clippy) on Linux",
+                "test-matrix",
+                "Secret scan"
+              ]
+            },
+            "required_pull_request_reviews": {
+              "dismiss_stale_reviews": true,
+              "require_code_owner_reviews": false,
+              "required_approving_review_count": 1,
+              "require_last_push_approval": false
+            },
+            "required_conversation_resolution": true,
+            "enforce_admins": true,
+            "allow_deletions": {
+              "enabled": false
+            },
+            "allow_force_pushes": {
+              "enabled": false
+            },
+            "restrictions": null,
+            "required_linear_history": false,
+            "allow_fork_syncing": false
+          }
+          JSON
+
+          gh api \
+            --method PUT \
+            repos/${REPO}/branches/${BRANCH}/protection \
+            --input branch-protection.json
+
+      - name: Set merge strategy and cleanup defaults
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          cat <<'JSON' > repository-settings.json
+          {
+            "allow_squash_merge": true,
+            "allow_merge_commit": false,
+            "allow_rebase_merge": false,
+            "delete_branch_on_merge": true
+          }
+          JSON
+
+          gh api \
+            --method PATCH \
+            repos/${REPO} \
+            --input repository-settings.json

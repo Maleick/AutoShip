@@ -49,3 +49,38 @@ Other required checks (`test-matrix`, `Secret scan`) are unchanged.
 Coverage runs were dominating PR merge latency. Decoupling lets clippy/fmt
 regressions block merges in minutes while coverage regressions post as advisory
 signal developers can triage asynchronously.
+
+## Branch naming and merge workflow
+
+Use short, scoped branch names when opening PRs:
+
+- `feature/<topic>` for new feature work.
+- `fix/<topic>` for bugfixes.
+- `release/<topic>` for release prep.
+- `hotfix/<topic>` for urgent fixes.
+- `codex/<topic>` or `claude/<topic>` for agent worktrees when applicable.
+
+Merge workflow requirements for `master`:
+
+1. Open PRs only from branch names with the conventions above; never commit directly to `master`.
+2. Require `1+` approving review before merge.
+3. Require required checks to pass on the PR and keep the branch up to date while reviews run.
+4. Use squash merge only.
+5. Remove short-lived head branches after merge (automated for same-repository branches).
+
+### Enforcement helper
+
+To apply these settings consistently in GitHub:
+
+1. Open **Actions → Branch protection and merge hygiene**.
+2. Click **Run workflow**.
+3. Use the default `branch=master` unless policy changes to another protected branch.
+
+That workflow applies:
+
+- required PR review checks
+- required status checks with up-to-date branch enforcement
+- required conversation resolution
+- squash-only merge strategy
+- `delete_branch_on_merge = true`
+- auto-delete of merged feature branches via existing post-merge logic in `.github/workflows/automation.yml`
