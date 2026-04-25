@@ -38,6 +38,12 @@ copy_assets() {
 }
 
 LATEST_TAG=""
+if [[ "${AUTOSHIP_UNVERIFIED_RELEASE_SYNC:-0}" != "1" ]]; then
+  copy_assets "$REPO_ROOT"
+  printf '%s\n' "dev" > "$VERSION_FILE"
+  exit 0
+fi
+
 if command -v gh >/dev/null 2>&1; then
   LATEST_TAG=$(gh api "repos/$REPO_REF/releases/latest" --jq '.tag_name' 2>/dev/null || true)
 fi
