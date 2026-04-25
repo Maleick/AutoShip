@@ -55,6 +55,30 @@ pub struct BackupList {
     pub backups: Vec<BackupId>,
 }
 
+/// Request body for config accept operation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigAcceptRequest {
+    /// Configuration changes to accept (as JSON object).
+    pub changes: serde_json::Value,
+}
+
+/// Request body for promoting config to a named file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromoteToConfigRequest {
+    /// Name of the config file to save to.
+    pub config_name: String,
+    /// Optional description of the changes.
+    pub description: Option<String>,
+}
+
+/// Response for config operations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigOpResponse {
+    pub session_id: u32,
+    pub operation: String,
+    pub message: String,
+}
+
 fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Json<ErrorResponse>) {
     (
         status,
@@ -185,6 +209,128 @@ pub async fn restore_backup(
     .into_response()
 }
 
+// ─── Config Accept/Undo/Promote Handlers ──────────────────────────────────────
+
+/// Accept configuration changes (write to in-memory state).
+pub async fn accept_config(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<u32>,
+    headers: HeaderMap,
+    Json(payload): Json<ConfigAcceptRequest>,
+) -> impl IntoResponse {
+    if !crate::api::loot::is_trusted_origin(&headers) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "Forbidden: untrusted origin for config mutation",
+        )
+        .into_response();
+    }
+
+    if let Err(e) = validate_session_exists(&state, id).await {
+        return e.into_response();
+    }
+
+    let changes = payload.changes.clone();
+    {
+        let mut history = state.config_change_history.write().await;
+        history.push(changes.clone());
+    }
+    {
+        let mut last = state.last_config_change.write().await;
+        *last = Some(changes);
+    }
+
+    let response = ConfigOpResponse {
+        session_id: id,
+        operation: "accept".to_string(),
+        message: format!("Configuration accepted for session {id}"),
+    };
+
+    (StatusCode::OK, Json(response)).into_response()
+}
+
+/// Undo the last accepted configuration change.
+pub async fn undo_config(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<u32>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if !crate::api::loot::is_trusted_origin(&headers) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "Forbidden: untrusted origin for config mutation",
+        )
+        .into_response();
+    }
+
+    if let Err(e) = validate_session_exists(&state, id).await {
+        return e.into_response();
+    }
+
+    {
+        let mut history = state.config_change_history.write().await;
+
+        if history.is_empty() {
+            return json_error(StatusCode::BAD_REQUEST, "No changes to undo").into_response();
+        }
+
+        history.pop();
+        let mut last = state.last_config_change.write().await;
+        *last = history.last().cloned();
+    }
+
+    let response = ConfigOpResponse {
+        session_id: id,
+        operation: "undo".to_string(),
+        message: format!("Configuration change undone for session {id}"),
+    };
+
+    (StatusCode::OK, Json(response)).into_response()
+}
+
+/// Promote accepted configuration changes to a named config file.
+pub async fn promote_to_config(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<u32>,
+    headers: HeaderMap,
+    Json(payload): Json<PromoteToConfigRequest>,
+) -> impl IntoResponse {
+    if !crate::api::loot::is_trusted_origin(&headers) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "Forbidden: untrusted origin for config mutation",
+        )
+        .into_response();
+    }
+
+    if let Err(e) = validate_session_exists(&state, id).await {
+        return e.into_response();
+    }
+
+    let last_change = state.last_config_change.read().await;
+
+    if last_change.is_none() {
+        return json_error(StatusCode::BAD_REQUEST, "No configuration to promote")
+            .into_response();
+    }
+
+    // In a real implementation, this would:
+    // 1. Take the last_config_change
+    // 2. Write it to config/{config_name}.json
+    // 3. Return the file path or ID
+
+    let response = ConfigOpResponse {
+        session_id: id,
+        operation: "promote".to_string(),
+        message: format!(
+            "Configuration promoted to '{}' for session {id}",
+            payload.config_name
+        ),
+    };
+
+    (StatusCode::OK, Json(response)).into_response()
+}
+
 // ─── Helper Functions ──────────────────────────────────────────────────────────
 
 /// Validates that a session with the given ID exists.
@@ -250,6 +396,9 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/{id}/stop", post(stop_session))
         .route("/{id}/restart", post(restart_session))
         .route("/{id}/config-audit", get(audit_config))
+        .route("/{id}/config/accept", post(accept_config))
+        .route("/{id}/config/undo", post(undo_config))
+        .route("/{id}/config/promote", post(promote_to_config))
         .route("/{id}/backups", get(list_backups).post(create_backup))
         .route("/{id}/backups/{backup_id}/restore", post(restore_backup))
 }

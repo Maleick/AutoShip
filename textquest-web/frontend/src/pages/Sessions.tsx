@@ -5,6 +5,7 @@ import { api } from "../lib/api.ts";
 import { MOCK_SESSIONS, USE_MOCKS } from "../lib/mocks.ts";
 import { PageHeader } from "../components/PageHeader.tsx";
 import { StatBar } from "../components/StatBar.tsx";
+import { ConfigControl } from "../components/ConfigControl.tsx";
 import type {
   CommandScope,
   SessionControlRecord,
@@ -207,6 +208,10 @@ export function Sessions() {
               clear
             </button>
           </div>
+        )}
+
+        {rows.length > 0 && (
+          <ConfigControl sessionId={rows[0]?.session_id || 1} onOperationComplete={refetch} />
         )}
 
         <div className="border border-neriak-dim rounded-md overflow-hidden">
