@@ -616,6 +616,8 @@ pub(crate) fn test_app_state() -> AppState {
 /// Build the soul audit sub-router.
 fn build_soul_router() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/", get(api::soul::list_soul_states))
+        .route("/{character_id}", get(api::soul::get_soul_state))
         .route("/audit", get(api::soul::get_all_audit))
         .route("/audit/export.csv", get(api::soul::export_all_audit_csv))
         .route("/audit/{character_id}", get(api::soul::get_character_audit))
@@ -623,6 +625,8 @@ fn build_soul_router() -> Router<Arc<AppState>> {
             "/audit/{character_id}/export.csv",
             get(api::soul::export_character_audit_csv),
         )
+        .route("/debrief", post(api::soul::receive_session_debrief))
+        .route("/debrief/{character_id}", get(api::soul::get_session_debrief))
 }
 
 /// Build the loot sub-router.  Loot handlers extract `State<Arc<AppState>>`

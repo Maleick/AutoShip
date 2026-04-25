@@ -1,4 +1,36 @@
 //! REST API handlers for Soul Engine audit log.
+//!
+//! # Soul Engine Narrative Integration
+//!
+//! The Soul Engine receives session debrief data on session close, allowing
+//! character personalities to reference real session outcomes in their dialogue.
+//! Soul Engine is **never** a source of numeric truth — it reads metrics from
+//! aggregates and reflects them back, but cannot modify configuration or author
+//! numeric claims.
+//!
+//! ## No Numeric Authority
+//!
+//! Soul Engine personalities may reference session statistics in their dialogue,
+//! but must follow these strict constraints:
+//!
+//! 1. **Read-Only Metrics**: All numeric values come from the `SessionDebrief`
+//!    struct, which is populated by the aggregation engine. Soul Engine never
+//!    authors or paraphrases numeric values.
+//!
+//! 2. **Exact Value Mapping**: When Soul Engine refers to a metric (e.g., "you
+//!    defeated 47 mobs"), the number must come directly from the debrief payload,
+//!    not from LLM inference or estimation.
+//!
+//! 3. **No Config Authority**: Soul Engine cannot write to character configuration,
+//!    trait assignments, or numeric settings. It may only suggest that the operator
+//!    review improvements via the `/improve` panel.
+//!
+//! 4. **One-Way Flow**: Debrief data flows into Soul Engine on session close, and
+//!    personalities consume it. There is no feedback loop — Soul Engine output does
+//!    not feed back into the suggestion engine or aggregation logic.
+//!
+//! 5. **Templated References**: Soul Engine uses templated placeholders in prompts
+//!    (e.g., `{damage_dealt}`, `{deaths}`) rather than free-form numeric claims.
 
 use axum::{
     Json,
@@ -11,6 +43,40 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::AppState;
+
+// ── Session debrief types ────────────────────────────────────────────────────
+
+/// Session outcome summary fed to Soul Engine personalities.
+///
+/// This struct captures top-N suggestions and session statistics that
+/// personalities may reference in their next conversation. All numeric
+/// values must come from actual aggregates, never LLM-authored.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionDebrief {
+    /// Session identifier.
+    pub session_id: String,
+    /// Character's ID for this session.
+    pub character_id: u64,
+    /// Notable wins/successes this session.
+    pub wins: Vec<String>,
+    /// Notable losses/failures this session.
+    pub losses: Vec<String>,
+    /// Top-N suggestions from the improvement engine.
+    /// These are references to improvement items, not authored by Soul Engine.
+    pub suggestions: Vec<String>,
+    /// Session duration in seconds.
+    pub duration_secs: u64,
+    /// Total damage dealt.
+    pub damage_dealt: u64,
+    /// Total damage taken.
+    pub damage_taken: u64,
+    /// Mobs defeated.
+    pub mobs_defeated: u32,
+    /// Deaths.
+    pub deaths: u32,
+    /// Timestamp (ISO-8601).
+    pub created_at: String,
+}
 
 // ── Soul state (panel) types ────────────────────────────────────────────────
 
@@ -66,6 +132,9 @@ pub struct AuditEntry {
 /// Shared soul audit state.
 pub struct SoulAuditState {
     pub entries: RwLock<Vec<AuditEntry>>,
+    /// Latest session debrief, stored per character. Updated on session close.
+    /// Used by personalities to reference real session data in dialogue.
+    pub debrief_by_character: RwLock<std::collections::HashMap<u64, SessionDebrief>>,
     next_id: std::sync::atomic::AtomicU64,
 }
 
@@ -104,6 +173,7 @@ impl SoulAuditState {
         Arc::new(Self {
             next_id: std::sync::atomic::AtomicU64::new(4),
             entries: RwLock::new(demo),
+            debrief_by_character: RwLock::new(std::collections::HashMap::new()),
         })
     }
 
@@ -327,6 +397,44 @@ pub async fn export_all_audit_csv(State(state): State<Arc<AppState>>) -> impl In
     (StatusCode::OK, headers, csv)
 }
 
+// ── Session debrief handlers ─────────────────────────────────────────────────
+
+/// `POST /api/soul/debrief` — receive session debrief on session close.
+///
+/// Soul Engine stores the debrief and makes it available to personalities
+/// for reference in their next conversation. Personalities may reference
+/// debrief content to provide context-aware advice.
+///
+/// # Constraints
+///
+/// - Soul Engine **cannot** write debrief data back to the configuration.
+/// - Numeric values in debrief are read-only — they come from aggregates.
+/// - All Soul Engine references to debrief must use the provided values,
+///   never paraphrase or author new numbers.
+pub async fn receive_session_debrief(
+    State(state): State<Arc<AppState>>,
+    Json(debrief): Json<SessionDebrief>,
+) -> impl IntoResponse {
+    let mut debriefs = state.soul_audit.debrief_by_character.write().await;
+    debriefs.insert(debrief.character_id, debrief.clone());
+    (StatusCode::OK, Json(serde_json::json!({"status": "debrief_received"})))
+}
+
+/// `GET /api/soul/debrief/:character_id` — retrieve latest session debrief.
+///
+/// Returns the most recent session debrief for a character. Used by
+/// personality systems to reference session outcomes in dialogue.
+pub async fn get_session_debrief(
+    State(state): State<Arc<AppState>>,
+    Path(character_id): Path<u64>,
+) -> impl IntoResponse {
+    let debriefs = state.soul_audit.debrief_by_character.read().await;
+    match debriefs.get(&character_id) {
+        Some(debrief) => Ok(Json(debrief.clone())),
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
 // ── CSV helpers
 // ───────────────────────────────────────────────────────────────
 
@@ -428,5 +536,28 @@ mod tests {
         let lines: Vec<&str> = csv.lines().collect();
         assert_eq!(lines.len(), 2);
         assert!(lines[1].starts_with("1,5,say,"));
+    }
+
+    #[test]
+    fn session_debrief_numeric_values_preserved() {
+        let debrief = SessionDebrief {
+            session_id: "s123".into(),
+            character_id: 42,
+            wins: vec!["cleared Lower Guk".into()],
+            losses: vec!["died at zone line".into()],
+            suggestions: vec!["flag dangerous zones".into()],
+            duration_secs: 3600,
+            damage_dealt: 50000,
+            damage_taken: 12000,
+            mobs_defeated: 47,
+            deaths: 2,
+            created_at: "2026-04-25 10:00:00".into(),
+        };
+
+        let json = serde_json::to_value(&debrief).expect("serialize");
+        assert_eq!(json["damage_dealt"], 50000);
+        assert_eq!(json["damage_taken"], 12000);
+        assert_eq!(json["mobs_defeated"], 47);
+        assert_eq!(json["deaths"], 2);
     }
 }
