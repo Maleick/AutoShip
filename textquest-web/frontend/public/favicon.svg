@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="TextQuest">
+  <rect width="64" height="64" rx="10" fill="#0d0618" />
+  <path d="M12 14h40v9H37v27H27V23H12z" fill="#cc44ff" />
+  <path d="M42 43h8v7h-8z" fill="#34d399" />
+</svg>
