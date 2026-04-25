@@ -64,6 +64,9 @@ pub struct HealTarget {
     pub role: CombatRole,
     /// Which group this target belongs to (0-indexed).
     pub group_id: u8,
+    /// Zone this target belongs to. Healing arbitration only crosses groups
+    /// inside the same zone.
+    pub zone: String,
     /// True if the target has a detrimental effect needing cure.
     pub has_detrimental: bool,
     /// True if the target is dead (skip for heals, eligible for rez).
@@ -77,6 +80,9 @@ pub struct HealerInfo {
     pub client_id: ClientId,
     /// Which group this healer belongs to.
     pub group_id: u8,
+    /// Zone this healer is currently in. Healers do not steal assignments
+    /// across zones.
+    pub zone: String,
     /// Whether this healer is the primary healer for their group.
     pub is_primary: bool,
     /// Healer's current mana percentage.
@@ -250,6 +256,7 @@ impl HealCoordinator {
                 !t.is_dead
                     && t.hp_pct < healer.heal_threshold_pct
                     && t.hp_pct > 0.0
+                    && t.zone == healer.zone
                     && !self.is_claimed_by_other(t.spawn_id, healer.client_id)
             })
             .collect();
@@ -488,6 +495,7 @@ mod tests {
         HealerInfo {
             client_id,
             group_id,
+            zone: "zone-1".to_string(),
             is_primary: true,
             mana_pct,
             heal_threshold_pct: HEAL_NEEDED_HP,
@@ -501,6 +509,7 @@ mod tests {
             hp_pct,
             role,
             group_id,
+            zone: "zone-1".to_string(),
             has_detrimental: false,
             is_dead: false,
         }
@@ -864,6 +873,7 @@ mod tests {
             HealerInfo {
                 client_id: 10,
                 group_id: 0,
+                zone: "zone-1".to_string(),
                 is_primary: false,
                 mana_pct: 100.0,
                 heal_threshold_pct: 80.0,
@@ -872,6 +882,7 @@ mod tests {
             HealerInfo {
                 client_id: 20,
                 group_id: 0,
+                zone: "zone-1".to_string(),
                 is_primary: true,
                 mana_pct: 100.0,
                 heal_threshold_pct: 80.0,
@@ -896,6 +907,7 @@ mod tests {
         let healers = vec![HealerInfo {
             client_id: 10,
             group_id: 0,
+            zone: "zone-1".to_string(),
             is_primary: true,
             mana_pct: 100.0,
             heal_threshold_pct: 40.0,

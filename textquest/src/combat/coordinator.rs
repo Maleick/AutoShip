@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use textquest_common::{
     combat::CombatStatus,
     ipc::Command,
@@ -205,6 +205,173 @@ impl CombatCoordinator {
         }
 
         commands
+    }
+
+    /// Run the in-process heal/arbitration and CH chain timers for this tick.
+    /// Produces commands ready for IPC dispatch (Emergency Heal + CastSpell).
+    pub fn tick_heal_arbitration(
+        &mut self,
+        states: &HashMap<ClientId, GameState>,
+        client_groups: &HashMap<ClientId, u8>,
+        client_class_names: &HashMap<ClientId, String>,
+        state_timestamps: &HashMap<ClientId, u64>,
+        tick_count: u64,
+    ) -> Vec<(ClientId, Command)> {
+        let mut commands = Vec::new();
+
+        let mut healers = Vec::new();
+        let mut targets = Vec::new();
+        let mut active_clerics = Vec::new();
+        let mut active_cleric_set = HashSet::new();
+
+        const STALE_TICK_THRESHOLD: u64 = 8;
+
+        for (&pid, state) in states {
+            let Some(last_update) = state_timestamps.get(&pid) else {
+                continue;
+            };
+            if tick_count.saturating_sub(*last_update) > STALE_TICK_THRESHOLD {
+                continue;
+            }
+            let Some(local_player) = state.local_player.as_ref() else {
+                continue;
+            };
+            if state.zone_short_name.trim().is_empty() {
+                continue;
+            }
+
+            let zone = state.zone_short_name.clone();
+            let group_id = client_groups.get(&pid).copied().unwrap_or(0);
+            let class_token = client_class_names.get(&pid).map(String::as_str).unwrap_or("");
+            let role = classify_member_role_for_heals(class_token, local_player.class_id);
+            let is_dead = state.combat_status == CombatStatus::Dead
+                || local_player.hp_current <= 0
+                || local_player.stand_state == 111;
+
+            targets.push(HealTarget {
+                spawn_id: local_player.spawn_id,
+                hp_pct: local_player.hp_pct(),
+                role,
+                group_id,
+                zone: zone.clone(),
+                has_detrimental: false,
+                is_dead,
+            });
+
+            if is_healer_class(class_token) {
+                active_clerics.push(pid);
+                active_cleric_set.insert(pid);
+                if !is_dead {
+                    healers.push(HealerInfo {
+                        client_id: pid,
+                        group_id,
+                        zone: zone.clone(),
+                        is_primary: false,
+                        mana_pct: local_player.mana_pct(),
+                        heal_threshold_pct: 85.0,
+                        response_priority: 100,
+                    });
+                }
+            }
+        }
+
+        if !targets.is_empty() && !healers.is_empty() {
+            self.heal_coordinator.set_enabled(true);
+            commands.extend(self.heal_coordinator.tick(&healers, &targets));
+        } else {
+            self.heal_coordinator.set_enabled(false);
+        }
+
+        self.sync_ch_chain_members(&active_clerics, &active_cleric_set, states);
+
+        if let Some(chain) = self.ch_chain.as_mut() {
+            if chain.is_active() && chain.members().is_empty() {
+                chain.stop();
+            }
+            if chain.is_active() {
+                if chain.is_adaptive()
+                    && let Some(tank_id) = self.main_tank_id
+                    && let Some(tank_state) = states.get(&tank_id)
+                    && let Some(ref lp) = tank_state.local_player
+                {
+                    chain.update_tank_hp(lp.hp_pct());
+                }
+
+                if let Some(cleric_pid) = chain.tick() {
+                    let target_id = chain.target_id();
+                    let spell_slot = chain.spell_slot();
+                    tracing::info!(
+                        cleric_pid,
+                        target_id,
+                        spell_slot,
+                        "CH chain: firing cleric"
+                    );
+                    commands.push((
+                        cleric_pid,
+                        Command::SetTarget {
+                            spawn_id: target_id,
+                        },
+                    ));
+                    commands.push((
+                        cleric_pid,
+                        Command::CastSpell {
+                            spell_slot,
+                            target_id: Some(target_id),
+                            kill: false,
+                            recast: 0,
+                        },
+                    ));
+                }
+            }
+        }
+
+        commands
+    }
+
+    fn sync_ch_chain_members(
+        &mut self,
+        active_clerics: &[ClientId],
+        active_cleric_set: &HashSet<ClientId>,
+        states: &HashMap<ClientId, GameState>,
+    ) {
+        let Some(chain) = self.ch_chain.as_mut() else {
+            return;
+        };
+        if !chain.is_active() {
+            return;
+        }
+
+        let mut members: Vec<ClientId> = chain
+            .members()
+            .iter()
+            .copied()
+            .filter(|pid| active_cleric_set.contains(pid))
+            .collect();
+
+        for pid in active_clerics {
+            if !members.contains(pid) {
+                if let Some(state) = states.get(pid) {
+                    let is_dead = state.local_player.as_ref().is_some_and(|lp| {
+                        lp.hp_current <= 0
+                            || lp.stand_state == 111
+                            || state.combat_status == CombatStatus::Dead
+                    });
+                    if !is_dead {
+                        members.push(*pid);
+                    }
+                }
+            }
+        }
+
+        if members.is_empty() {
+            chain.stop();
+            return;
+        }
+
+        chain.set_members(members);
+        if !chain.is_active() && !chain.members().is_empty() {
+            chain.resume();
+        }
     }
 
     /// Detect combat state changes from `GameState` and convert to
@@ -438,6 +605,79 @@ impl CombatCoordinator {
 
         commands
     }
+
+    fn sync_ch_chain_members(
+        &mut self,
+        active_clerics: &[ClientId],
+        active_cleric_set: &HashSet<ClientId>,
+        states: &HashMap<ClientId, GameState>,
+    ) {
+        let Some(chain) = self.ch_chain.as_mut() else {
+            return;
+        };
+        if !chain.is_active() {
+            return;
+        }
+
+        let mut members: Vec<ClientId> = chain
+            .members()
+            .iter()
+            .copied()
+            .filter(|pid| active_cleric_set.contains(pid))
+            .collect();
+
+        for pid in active_clerics {
+            if !members.contains(pid) {
+                if let Some(state) = states.get(pid) {
+                    let is_dead = state.local_player.as_ref().is_some_and(|lp| {
+                        lp.hp_current <= 0
+                            || lp.stand_state == 111
+                            || state.combat_status == CombatStatus::Dead
+                    });
+                    if !is_dead {
+                        members.push(*pid);
+                    }
+                }
+            }
+        }
+
+        if members.is_empty() {
+            chain.stop();
+            return;
+        }
+
+        chain.set_members(members);
+    }
+
+    fn classify_member_role_for_heals(&self, class_token: &str) -> CombatRole {
+        if is_tank_class(class_token) {
+            CombatRole::MainTank
+        } else {
+            CombatRole::DpsMelee
+        }
+    }
+
+    fn is_reactive_healer_class(&self, class_token: &str) -> bool {
+        is_healer_class(class_token)
+    }
+}
+
+fn is_tank_class(class_token: &str) -> bool {
+    class_token.eq_ignore_ascii_case("warrior")
+        || class_token.eq_ignore_ascii_case("war")
+        || class_token.eq_ignore_ascii_case("paladin")
+        || class_token.eq_ignore_ascii_case("pal")
+        || class_token.eq_ignore_ascii_case("shadowknight")
+        || class_token.eq_ignore_ascii_case("sk")
+}
+
+fn is_healer_class(class_token: &str) -> bool {
+    class_token.eq_ignore_ascii_case("cleric")
+        || class_token.eq_ignore_ascii_case("clr")
+        || class_token.eq_ignore_ascii_case("druid")
+        || class_token.eq_ignore_ascii_case("dru")
+        || class_token.eq_ignore_ascii_case("shaman")
+        || class_token.eq_ignore_ascii_case("shm")
 }
 
 #[cfg(test)]
