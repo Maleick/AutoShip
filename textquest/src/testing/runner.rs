@@ -5,15 +5,29 @@
 //! separate tokio task and returns the [`JoinHandle`]s for lifecycle management.
 
 use std::{
+    fs,
+    io,
     path::{Path, PathBuf},
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-use tokio::{sync::watch, task::JoinHandle};
+use tokio::{sync::watch, task::JoinHandle, time};
 
-use super::scenario::{ScenarioResult, TestScenario};
+use super::scenario::{MetricValue, ScenarioResult, TestScenario};
 use textquest_common::login::AccountInfo;
+
+// ── Recovery constants ─────────────────────────────────────────────────────
+
+const LOGIN_BACKOFF_BASE_MS: u64 = 250;
+const LOGIN_BACKOFF_MAX_MS: u64 = 30_000;
+const LOGIN_RETRY_LIMIT: u32 = 4;
+const CIRCUIT_BREAKER_FAILURE_THRESHOLD: u32 = 5;
+const CIRCUIT_BREAKER_COOLDOWN_SECS: u64 = 120;
+const SCENARIO_HARD_TIMEOUT_SECS: u64 = 90;
+const MEMORY_GROWTH_WARNING_PER_HOUR: f64 = 0.05;
+const MEMORY_SAMPLE_INTERVAL_SECS: u64 = 60;
+const CHECKPOINT_FILE_PREFIX: &str = "test-loop-checkpoint";
 
 // ── TestLoopResult ──────────────────────────────────────────────────────────
 
@@ -69,6 +83,8 @@ pub struct TestLoopRunner {
     /// Output directory for writing per-account artefacts (reserved for future use).
     #[allow(dead_code)]
     output_dir: PathBuf,
+    /// Recovery runtime state loaded from checkpoint and used while running.
+    recovery: RecoveryRuntimeState,
     /// Shutdown signal receiver — runner exits as soon as this fires.
     shutdown_rx: watch::Receiver<bool>,
 }
@@ -87,12 +103,14 @@ impl TestLoopRunner {
         output_dir: impl AsRef<Path>,
         shutdown_rx: watch::Receiver<bool>,
     ) -> Self {
+        let recovery = RecoveryRuntimeState::load_or_default(task_id, scenarios.len(), output_dir.as_ref());
         Self {
             account,
             task_id,
             scenarios,
             duration,
             output_dir: output_dir.as_ref().to_owned(),
+            recovery,
             shutdown_rx,
         }
     }
@@ -104,8 +122,9 @@ impl TestLoopRunner {
     pub async fn run(mut self) -> TestLoopResult {
         let start = std::time::Instant::now();
         let mut results = Vec::with_capacity(self.scenarios.len());
+        let mut index = self.recovery.starting_index;
 
-        for scenario in self.scenarios.iter_mut() {
+        while index < self.scenarios.len() {
             // Honour shutdown signal between scenarios.
             if *self.shutdown_rx.borrow() {
                 tracing::debug!(
@@ -127,7 +146,40 @@ impl TestLoopRunner {
             }
             let remaining = self.duration - elapsed;
 
-            let result = scenario.run(remaining).await;
+            if self.recovery.is_circuit_open(Instant::now()) {
+                let mut skip = ScenarioResult::failure(
+                    Duration::from_secs(0),
+                    vec!["circuit_breaker_active".to_string()],
+                );
+                skip = self.recovery.attach_memory_metrics(skip, Instant::now());
+                results.push(skip);
+                index += 1;
+                self.recovery
+                    .save_checkpoint(self.scenarios.len(), index)
+                    .ok();
+                continue;
+            }
+
+            if let Some(backoff) = self.recovery.login_backoff_remaining(Instant::now()) {
+                time::sleep(backoff.min(remaining)).await;
+            }
+
+            let scenario = &mut self.scenarios[index];
+            let mut result = Self::run_scenario_with_retries(
+                scenario.as_mut(),
+                remaining,
+                &mut self.recovery,
+                self.task_id,
+            )
+            .await;
+            result = self.recovery.attach_memory_metrics(result, Instant::now());
+
+            if result.success {
+                self.recovery.on_success();
+            } else {
+                self.recovery.on_failure(Instant::now());
+            }
+
             tracing::debug!(
                 task_id = self.task_id,
                 scenario = scenario.name(),
@@ -135,9 +187,306 @@ impl TestLoopRunner {
                 "scenario complete"
             );
             results.push(result);
+
+            index += 1;
+            self.recovery
+                .save_checkpoint(self.scenarios.len(), index)
+                .ok();
         }
 
+        self.recovery
+            .clear_checkpoint_if_finished(self.scenarios.len(), index);
+
         TestLoopResult::from_results(self.account, self.task_id, results)
+    }
+
+    async fn run_scenario_with_retries(
+        scenario: &mut dyn TestScenario,
+        duration: Duration,
+        recovery: &mut RecoveryRuntimeState,
+        task_id: usize,
+    ) -> ScenarioResult {
+        let run_start = std::time::Instant::now();
+        let mut login_attempts = 0;
+
+        loop {
+            if run_start.elapsed() >= duration {
+                break;
+            }
+
+            if let Some(backoff) = recovery.login_backoff_remaining(Instant::now()) {
+                let remaining = duration.saturating_sub(run_start.elapsed());
+                if remaining.is_zero() {
+                    return ScenarioResult::failure(
+                        Duration::from_secs(0),
+                        vec!["scenario_budget_exhausted".to_string()],
+                    );
+                }
+                time::sleep(backoff.min(Duration::from_millis(200)).min(remaining)).await;
+            }
+
+            let remaining = duration.saturating_sub(run_start.elapsed());
+            let timeout_budget = remaining.min(Duration::from_secs(SCENARIO_HARD_TIMEOUT_SECS)).max(Duration::from_millis(1));
+
+            let outcome = time::timeout(timeout_budget, scenario.run(remaining)).await;
+            match outcome {
+                Ok(mut result) => {
+                    result.duration = run_start.elapsed();
+                    if result.success {
+                        recovery.on_login_success();
+                        return result;
+                    }
+
+                    let is_login = result
+                        .errors
+                        .iter()
+                        .any(|error| error.to_ascii_lowercase().contains("login"));
+                    if is_login && login_attempts < LOGIN_RETRY_LIMIT {
+                        login_attempts = login_attempts.saturating_add(1);
+                        let backoff = recovery.register_login_failure(Instant::now());
+                        tracing::warn!(
+                            task_id = task_id,
+                            scenario = scenario.name(),
+                            attempt = login_attempts,
+                            backoff_ms = backoff.as_millis(),
+                            "login failure detected, retrying with exponential backoff"
+                        );
+                        if run_start.elapsed() + backoff >= duration {
+                            result.errors.push(
+                                "login_retry_exhausted_after_timeout".to_string(),
+                            );
+                            return result;
+                        }
+                        time::sleep(backoff).await;
+                        continue;
+                    }
+
+                    return result;
+                }
+                Err(_) => {
+                    recovery.on_timeout();
+                    return ScenarioResult::failure(
+                        timeout_budget,
+                        vec![
+                            "process_timeout: scenario did not complete before cleanup window"
+                                .to_string(),
+                        ],
+                    );
+                }
+            }
+        }
+
+        ScenarioResult::failure(
+            run_start.elapsed(),
+            vec!["scenario_runtime_exhausted".to_string()],
+        )
+    }
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+struct RecoveryCheckpoint {
+    task_id: usize,
+    total_scenarios: usize,
+    next_scenario_index: usize,
+}
+
+#[derive(Debug)]
+struct RecoveryMemorySample {
+    bytes: u64,
+    growth_rate_per_hour: f64,
+}
+
+#[derive(Debug)]
+struct RecoveryRuntimeState {
+    task_id: usize,
+    total_scenarios: usize,
+    checkpoint_path: PathBuf,
+    starting_index: usize,
+    consecutive_login_failures: u32,
+    login_backoff_until: Option<Instant>,
+    circuit_failures: u32,
+    circuit_open_until: Option<Instant>,
+    timeout_count: u64,
+    memory_bytes_base: Option<u64>,
+    memory_last_sample: Option<Instant>,
+    memory_last_bytes: Option<u64>,
+    start_time: Instant,
+}
+
+impl RecoveryRuntimeState {
+    fn load_or_default(task_id: usize, total_scenarios: usize, output_dir: &Path) -> Self {
+        let checkpoint_path = output_dir.join(format!("{CHECKPOINT_FILE_PREFIX}-{task_id}.json"));
+        let starting_index = fs::read_to_string(&checkpoint_path)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<RecoveryCheckpoint>(&raw).ok())
+            .filter(|checkpoint| {
+                checkpoint.task_id == task_id && checkpoint.total_scenarios == total_scenarios
+            })
+            .map(|checkpoint| checkpoint.next_scenario_index.min(total_scenarios))
+            .unwrap_or(0);
+
+        Self {
+            task_id,
+            total_scenarios,
+            checkpoint_path,
+            starting_index,
+            consecutive_login_failures: 0,
+            login_backoff_until: None,
+            circuit_failures: 0,
+            circuit_open_until: None,
+            timeout_count: 0,
+            memory_bytes_base: None,
+            memory_last_sample: None,
+            memory_last_bytes: None,
+            start_time: Instant::now(),
+        }
+    }
+
+    fn login_backoff_delay(&self, failures: u32) -> Duration {
+        let exponent = failures.saturating_sub(1).min(8);
+        let multiplier = 1_u64.checked_shl(exponent).unwrap_or(0);
+        let ms = LOGIN_BACKOFF_BASE_MS
+            .saturating_mul(multiplier.max(1))
+            .min(LOGIN_BACKOFF_MAX_MS);
+        Duration::from_millis(ms)
+    }
+
+    fn register_login_failure(&mut self, now: Instant) -> Duration {
+        self.consecutive_login_failures = self.consecutive_login_failures.saturating_add(1);
+        let backoff = self.login_backoff_delay(self.consecutive_login_failures);
+        self.login_backoff_until = Some(now + backoff);
+        backoff
+    }
+
+    fn on_login_success(&mut self) {
+        self.consecutive_login_failures = 0;
+        self.login_backoff_until = None;
+    }
+
+    fn on_failure(&mut self, now: Instant) {
+        self.circuit_failures = self.circuit_failures.saturating_add(1);
+        if self.circuit_failures >= CIRCUIT_BREAKER_FAILURE_THRESHOLD {
+            self.circuit_open_until =
+                Some(now + Duration::from_secs(CIRCUIT_BREAKER_COOLDOWN_SECS));
+            self.circuit_failures = 0;
+        }
+    }
+
+    fn on_success(&mut self) {
+        self.circuit_failures = 0;
+        self.on_login_success();
+    }
+
+    fn is_circuit_open(&self, now: Instant) -> bool {
+        self.circuit_open_until.is_some_and(|opened| now < opened)
+    }
+
+    fn login_backoff_remaining(&self, now: Instant) -> Option<Duration> {
+        self.login_backoff_until.and_then(|deadline| deadline.checked_duration_since(now))
+    }
+
+    fn on_timeout(&mut self) {
+        self.timeout_count = self.timeout_count.saturating_add(1);
+    }
+
+    fn attach_memory_metrics(
+        &mut self,
+        mut result: ScenarioResult,
+        now: Instant,
+    ) -> ScenarioResult {
+        if let Some(sample) = self.current_memory_sample(now) {
+            result = result.with_metric("process_memory_bytes", MetricValue::Gauge(sample.bytes as f64));
+            result = result.with_metric(
+                "memory_growth_per_hour",
+                MetricValue::Gauge(sample.growth_rate_per_hour),
+            );
+            if sample.growth_rate_per_hour > MEMORY_GROWTH_WARNING_PER_HOUR {
+                tracing::warn!(
+                    task_id = self.task_id,
+                    growth_rate_per_hour = sample.growth_rate_per_hour,
+                    "memory growth exceeded alert threshold"
+                );
+            }
+        }
+        result
+    }
+
+    fn current_memory_sample(&mut self, now: Instant) -> Option<RecoveryMemorySample> {
+        let bytes = current_process_rss_bytes()?;
+        if let Some(last_sample) = self.memory_last_sample
+            && now.duration_since(last_sample) < Duration::from_secs(MEMORY_SAMPLE_INTERVAL_SECS)
+        {
+            return None;
+        }
+
+        let elapsed = now.duration_since(self.start_time).as_secs_f64();
+        let base = self
+            .memory_bytes_base
+            .get_or_insert_with(|| {
+                self.memory_last_bytes
+                    .unwrap_or(bytes)
+            });
+
+        self.memory_last_sample = Some(now);
+        self.memory_last_bytes = Some(bytes);
+
+        let base_value = *base;
+        if base_value == 0 || elapsed <= 0.0 {
+            return Some(RecoveryMemorySample {
+                bytes,
+                growth_rate_per_hour: 0.0,
+            });
+        }
+
+        let growth_ratio = (bytes as f64 - base_value as f64) / base_value as f64;
+        let hours = elapsed / 3600.0;
+        let growth_rate_per_hour = if hours <= f64::EPSILON {
+            0.0
+        } else {
+            growth_ratio / hours
+        };
+
+        Some(RecoveryMemorySample {
+            bytes,
+            growth_rate_per_hour,
+        })
+    }
+
+    fn save_checkpoint(&self, total_scenarios: usize, next_scenario_index: usize) -> io::Result<()> {
+        let checkpoint_path = &self.checkpoint_path;
+        let parent = checkpoint_path.parent().ok_or_else(|| {
+            io::Error::other("checkpoint path has no parent directory")
+        })?;
+        fs::create_dir_all(parent)?;
+        let checkpoint = RecoveryCheckpoint {
+            task_id: self.task_id,
+            total_scenarios,
+            next_scenario_index: next_scenario_index.min(total_scenarios),
+        };
+        let payload = serde_json::to_string_pretty(&checkpoint).map_err(|error| {
+            io::Error::other(format!("failed to serialise recovery checkpoint: {error}"))
+        })?;
+        fs::write(checkpoint_path, payload)?;
+        Ok(())
+    }
+
+    fn clear_checkpoint_if_finished(&self, total_scenarios: usize, next_scenario_index: usize) {
+        if next_scenario_index >= total_scenarios && next_scenario_index == self.total_scenarios {
+            let _ = fs::remove_file(&self.checkpoint_path);
+        }
+    }
+}
+
+fn current_process_rss_bytes() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        let raw = fs::read_to_string("/proc/self/statm").ok()?;
+        let resident_pages = raw.split_whitespace().nth(1)?.parse::<u64>().ok()?;
+        Some(resident_pages.saturating_mul(4096))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
     }
 }
 
@@ -197,6 +546,7 @@ where
 mod tests {
     use super::*;
     use crate::testing::scenario::{BoxScenarioFuture, ScenarioResult};
+    use std::path::Path;
     use std::time::Duration;
     use tempfile::TempDir;
     use textquest_common::login::AccountInfo;
@@ -397,5 +747,42 @@ mod tests {
         ];
         let r = TestLoopResult::from_results(account, 0, results);
         assert!(r.any_failure);
+    }
+
+    #[test]
+    fn test_login_backoff_retries_increase_delay() {
+        let mut state = RecoveryRuntimeState::load_or_default(0, 10, Path::new("."));
+        let first = state.register_login_failure(Instant::now());
+        let second = state.register_login_failure(Instant::now());
+        assert!(second >= first);
+    }
+
+    #[test]
+    fn test_circuit_breaker_triggers_when_failures_repeat() {
+        let mut state = RecoveryRuntimeState::load_or_default(0, 10, Path::new("."));
+        let now = Instant::now();
+        for _ in 0..CIRCUIT_BREAKER_FAILURE_THRESHOLD {
+            state.on_failure(now);
+        }
+        assert!(state.is_circuit_open(Instant::now() + Duration::from_millis(1)));
+        assert!(!state
+            .is_circuit_open(Instant::now() + Duration::from_secs(CIRCUIT_BREAKER_COOLDOWN_SECS + 1)));
+    }
+
+    #[test]
+    fn test_checkpoint_roundtrip_loads_starting_index() -> io::Result<()> {
+        let dir = tmp_dir();
+        let path = dir.path().join(format!("{CHECKPOINT_FILE_PREFIX}-0.json"));
+        let checkpoint = RecoveryCheckpoint {
+            task_id: 0,
+            total_scenarios: 5,
+            next_scenario_index: 3,
+        };
+        let payload = serde_json::to_string_pretty(&checkpoint)?;
+        std::fs::write(&path, payload)?;
+
+        let state = RecoveryRuntimeState::load_or_default(0, 5, dir.path());
+        assert_eq!(state.starting_index, 3);
+        Ok(())
     }
 }
