@@ -12,10 +12,23 @@ use std::collections::HashMap;
 
 use textquest_common::types::{ClientId, GameState};
 
+/// Priority mode for the cross-group assist.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum XAssistPriority {
+    /// Always target the cross-group MA's target when `enabled` (default).
+    #[default]
+    CrossGroupOverride,
+    /// Only assist the cross-group MA when no in-group target is active.
+    Fallback,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct XAssistConfig {
     pub ma_name: Option<String>,
     pub enabled: bool,
+    /// How this client should prioritize the cross-group MA vs. in-group assist.
+    #[serde(default)]
+    pub priority: XAssistPriority,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -252,6 +265,7 @@ mod tests {
             XAssistConfig {
                 ma_name: Some("MainTank".into()),
                 enabled: false,
+                priority: XAssistPriority::default(),
             },
         );
 
@@ -288,6 +302,7 @@ mod tests {
             XAssistConfig {
                 ma_name: Some("MainTank".into()),
                 enabled: true,
+                priority: XAssistPriority::default(),
             },
         );
 
@@ -331,6 +346,7 @@ mod tests {
             XAssistConfig {
                 ma_name: Some("MainTank".into()),
                 enabled: true,
+                priority: XAssistPriority::default(),
             },
         );
         xassist
@@ -372,6 +388,7 @@ mod tests {
             XAssistConfig {
                 ma_name: Some("MainTank".into()),
                 enabled: true,
+                priority: XAssistPriority::default(),
             },
         );
         xassist
@@ -418,6 +435,7 @@ mod tests {
             XAssistConfig {
                 ma_name: Some("NonExistentMA".into()),
                 enabled: true,
+                priority: XAssistPriority::default(),
             },
         );
 
@@ -455,6 +473,7 @@ mod tests {
             XAssistConfig {
                 ma_name: Some("maInTaNk".into()),
                 enabled: true,
+                priority: XAssistPriority::default(),
             },
         );
 
@@ -492,6 +511,7 @@ mod tests {
             XAssistConfig {
                 ma_name: Some("MainTank".into()),
                 enabled: true,
+                priority: XAssistPriority::default(),
             },
         );
         xassist
