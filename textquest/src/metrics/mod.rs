@@ -7,6 +7,7 @@
 
 pub mod admin_monitoring;
 pub mod baseline_scorecard;
+pub mod bayesian_baseline;
 pub mod collector;
 pub mod events;
 pub mod exporter;
@@ -27,6 +28,10 @@ pub use admin_monitoring::{
 pub use baseline_scorecard::{
     BaselineScorecard, CombatDelta, CombatMetrics, CoordinationDelta, EconomyDelta, EconomyMetrics,
     GroupCoordinationMetrics, MovementDelta, MovementMetrics, ScorecardDelta,
+};
+pub use bayesian_baseline::{
+    BaselineRegistry, BetaBinomialPrior, CharacterBaseline, DeviationThresholds, GaussianPrior,
+    Suggestion,
 };
 pub use collector::{
     AggregateMetrics, CharacterCombatMetrics, CharacterEconomyMetrics, CharacterMetrics,
