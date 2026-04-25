@@ -893,6 +893,12 @@ pub struct NamedWaypoint {
     pub position: Waypoint,
     /// Zone short name where this waypoint was recorded.
     pub zone: String,
+    /// Optional description for operator labeling / notes.
+    #[serde(default)]
+    pub desc: String,
+    /// Creation timestamp in seconds since Unix epoch.
+    #[serde(default)]
+    pub created_at: String,
 }
 
 impl NamedWaypoint {
@@ -902,6 +908,25 @@ impl NamedWaypoint {
             name: name.into(),
             position,
             zone: zone.into(),
+            desc: String::new(),
+            created_at: String::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_metadata(
+        name: impl Into<String>,
+        position: Waypoint,
+        zone: impl Into<String>,
+        desc: impl Into<String>,
+        created_at: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            position,
+            zone: zone.into(),
+            desc: desc.into(),
+            created_at: created_at.into(),
         }
     }
 }
