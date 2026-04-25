@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+use textquest_common::audio_alerts::AudioAlertConfig;
 use textquest_common::box_chat::BoxChatConfig;
 use textquest_soul::config::SoulConfig;
 
@@ -619,6 +620,7 @@ pub struct AlertingConfig {
     pub email_subject_prefix: String,
     pub warning_batch_window_secs: u64,
     pub thresholds: AlertThresholdConfig,
+    pub audio: AudioAlertConfig,
 }
 
 impl Default for AlertingConfig {
@@ -636,6 +638,7 @@ impl Default for AlertingConfig {
             email_subject_prefix: String::from("[TextQuest] "),
             warning_batch_window_secs: 300,
             thresholds: AlertThresholdConfig::default(),
+            audio: AudioAlertConfig::default(),
         }
     }
 }

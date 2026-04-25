@@ -188,14 +188,14 @@
       "notes": "PARTIAL: Added a metrics-side performance dashboard snapshot API with combat, movement, loot, system placeholder, tab metadata, and simple alert aggregation. Full TUI rendering, SQLite history, live system telemetry producers, and richer anomaly detection remain follow-up work."
     },
     {
-      "id": "issue-1125-map-rendering-large-geometry-profiling",
-      "name": "Issue #1125 profile map rendering with large geometry sets",
+      "id": "issue-991-audio-alert-system-event-routing",
+      "name": "Issue #991 audio alert system and event routing",
       "status": "in_progress",
       "acceptance_tests": [
-        "cargo check -p textquest",
-        "cargo test -p textquest map_perf_span_labels_match_issue_1125_profile_breakdown"
+        "cargo check",
+        "cargo check -p textquest-common --tests"
       ],
-      "notes": "PARTIAL: Added TEXTQUEST_PERF_TRACE-gated TUI map render phase spans and documented the large-zone baseline procedure and thresholds. Full acceptance still needs 10+ live timing samples for Permafrost, ECommons, and East Wastes using the large 125K/60K/10K geometry sets and 100+ visible spawns."
+      "notes": "PARTIAL: Added shared TOML-backed audio alert configuration, built-in alert kinds, custom alert routing, priority/threshold/channel/volume metadata, a nonblocking registry dispatch path, and a Windows PlaySoundW backend scaffold with fallback beep. Remaining work includes live event producers, real per-sound volume control, bundled audio assets, dashboard UI, and full runtime integration."
     },
     {
       "id": "issue-819-plugin-system-openvanilla-parity",

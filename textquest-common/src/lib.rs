@@ -7,6 +7,8 @@
 #[doc(hidden)]
 pub use paste;
 
+/// Audio alert configuration, registry, and playback backend scaffolding.
+pub mod audio_alerts;
 /// Auto-group configuration and invite/role controller logic.
 pub mod auto_group;
 /// Typed, runtime-rebased function bindings.

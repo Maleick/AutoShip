@@ -1,17 +1,21 @@
-# Result: #1039 — #862.3: Implement NavigationScenario
+# Result: #991 — Feature: Audio Alert System & Event Routing
 
 Status: PARTIAL
 
 Changes Made:
-- Added `NavigationScenario` with waypoint execution, router-backed planning, navigator FSM adapter, cleanup, and metrics.
-- Added navigation scenario module wiring under `textquest::testing::scenarios`.
-- Added unit coverage for linear routes, circular routes, stuck recovery, timeout failure, and mock route failure.
+- Added `textquest-common::audio_alerts` with alert kinds, TOML-backed rule config, priorities, thresholds, channel fan-out, custom sound paths, and event-to-playback request routing.
+- Added a nonblocking registry dispatch method backed by an `AudioAlertBackend` trait.
+- Added a Windows `PlaySoundW` system backend scaffold with fallback beep behavior and a non-Windows no-op logging fallback.
+- Wired audio alert settings into the existing `AlertingConfig` so they persist under TOML config.
+- Added focused unit coverage for low-mana threshold routing, custom alert matching, channel fan-out, custom FLAC paths, and volume clamping.
+- Updated `feature-list.json` to record the partial issue state.
 
 Tests:
-- `cargo check -p textquest`
-- `cargo check -p textquest --tests`
+- `rustfmt --edition 2024 textquest-common/src/audio_alerts.rs textquest-common/src/lib.rs textquest/src/config.rs`
+- `cargo check`
+- `cargo check -p textquest-common --tests`
 
 Notes:
-- `textquest::nav` is Windows-only in this crate, so `GroupRouter` integration is compiled on Windows and the scenario uses a lightweight plan wrapper on non-Windows for local check/test-target compilation.
+- Partial by scope: live event producers, dashboard UI, bundled default sounds, true per-sound volume control, MP3/FLAC decoder-backed playback, and end-to-end runtime integration remain follow-up work.
 
 COMPLETE
