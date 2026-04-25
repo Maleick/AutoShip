@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 use axum::{
-    Json,
+    Json, Router,
     extract::{Path as AxumPath, State},
     http::StatusCode,
     response::IntoResponse,
@@ -100,4 +100,11 @@ pub async fn kill_auto_promote(
         reverted_changes: 0,
     };
     Json(response)
+}
+
+pub fn router() -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/auto-promote", axum::routing::get(get_auto_promote_settings))
+        .route("/auto-promote", axum::routing::put(put_auto_promote_settings))
+        .route("/auto-promote/kill", axum::routing::post(kill_auto_promote))
 }

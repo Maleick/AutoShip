@@ -43,8 +43,3 @@ name = "textquest-learn-bc-main"
 path = "src/bin/main.rs"
 required-features = ["full"]
 
-[features]
-# Enables runtime-inference path used by textquest-dll.
-runtime-only = ["rand", "siphasher"]
-full = ["clap", "tokio", "tracing-subscriber", "ndarray", "rusqlite", "toml", "runtime-only"]
-default = ["full"]

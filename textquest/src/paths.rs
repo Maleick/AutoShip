@@ -51,21 +51,6 @@ pub fn dump_command_label() -> &'static str {
     }
 }
 
-fn data_dir() -> PathBuf {
-    #[cfg(windows)]
-    {
-        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            return PathBuf::from(local_app_data).join("TextQuest").join("data");
-        }
-    }
-
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".textquest");
-    }
-
-    std::env::temp_dir().join("textquest").join("data")
-}
-
 pub fn metrics_db_path() -> PathBuf {
     data_dir().join("metrics.db")
 }

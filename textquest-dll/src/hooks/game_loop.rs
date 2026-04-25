@@ -3794,6 +3794,11 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         Command::QueryLinkdb { .. } | Command::RecordLinkdbItem { .. } => {
             send_unsupported_command("Linkdb");
         }
+        Command::OpenMailWindow
+        | Command::QueryMailWindowState
+        | Command::SendMailToMule { .. } => {
+            send_unsupported_command("Mail");
+        }
     }
 }
 

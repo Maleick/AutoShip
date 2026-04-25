@@ -1374,6 +1374,7 @@ pub enum Command {
     SendMailToMule {
         /// All fields required to compose and send the mail.
         params: SendMailParams,
+    },
     /// Query the link database for items matching the given criteria.
     ///
     /// Returns item-link entries from the in-process link DB cache.
