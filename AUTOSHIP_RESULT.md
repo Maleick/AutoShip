@@ -1,7 +1,10 @@
-# Result: #2263 — Document TEXTQUEST_DATA_DIR deployment env var in release guide
+# Result: #2438 — MQ2Twist/Medley parity — bard mez queue with target switch + interrupt recovery
 
-- Updated `RELEASE_TEMPLATE.md` with a `TEXTQUEST_DATA_DIR` environment variable entry, fallback behavior, and a Frostreaver layout example.
-- Added `docs/dev/deployment.md` with a deployment checklist, required env vars, and alert DB override guidance.
-- Added `AGENTS.md` note for agent-facing environment-variable requirements.
+- Kept `/melody` fallback behavior for low-song configs.
+- Made `TwistEngine` hold mode persistent until explicit release and added hold-suspension behavior while the held song is cooling down.
+- Routed `CastResult::Recovering` through bard cast outcome handling so interrupted songs are re-queued for twist recovery.
+- Updated bard/tests and twist tests to reflect persistent hold/unhold behavior and recovering outcome recovery.
+
+- `cargo check` completed successfully.
 
 COMPLETE

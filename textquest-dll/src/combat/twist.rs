@@ -334,6 +334,10 @@ impl TwistEngine {
         }
         // Then check held song
         if let Some(g) = self.held_gem {
+            if g < MAX_GEMS as u8 && !self.gem_ready(g) {
+                // Hold mode suspends normal rotation until the held song is ready.
+                return None;
+            }
             if self.gem_ready(g) {
                 return Some(g);
             }
@@ -375,7 +379,6 @@ impl TwistEngine {
 
     fn advance_rotation(&mut self, gem: u8) {
         if self.held_gem == Some(gem) {
-            self.held_gem = None;
             return;
         }
         let n = self.songs.len();
@@ -1089,7 +1092,10 @@ mod tests {
         for t in 9..=11 {
             assert_eq!(e.tick(t), TwistAction::None);
         }
-        assert_eq!(e.tick(12), TwistAction::Cast { gem: 1 });
+        assert_eq!(e.tick(12), TwistAction::None);
+
+        e.release_hold();
+        assert_eq!(e.tick(13), TwistAction::Cast { gem: 1 });
     }
     #[test]
     fn preempt() {

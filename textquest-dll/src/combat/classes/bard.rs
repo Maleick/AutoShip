@@ -1,6 +1,6 @@
 use textquest_common::combat::{
     AbilityCandidate, AbilitySet, ActionType, CombatRole, CombatStateReq, ConditionExpr,
-    SpellEntry, TargetSelector,
+    CastResult, SpellEntry, TargetSelector,
 };
 
 use crate::combat::{
@@ -604,6 +604,14 @@ impl ClassStrategy for BardStrategy {
         }
     }
 
+    fn on_cast_outcome(&mut self, ctx: &CombatContext, gem: u8, result: CastResult) {
+        if result == CastResult::Recovering {
+            self.on_cast_interrupted(ctx, gem);
+            return;
+        }
+        ClassStrategy::on_cast_outcome(self, ctx, gem, result);
+    }
+
     fn on_cast_interrupted(&mut self, ctx: &CombatContext, gem: u8) {
         self.tick = ctx.tick;
         if self.live_safe_mode {
@@ -871,6 +879,25 @@ mod tests {
         // Simulate an interrupt on gem 1
         b.on_cast_interrupted(&cx(&p, &c, true, 5), 1);
         assert!(b.is_twisting()); // Still active
+        assert_eq!(b.twist.interrupted(), Some(1));
+    }
+
+    #[test]
+    fn interrupt_recovering_requeues_in_twist() {
+        let mut b = BardStrategy::new(8);
+        let p = SpawnData::default();
+        let c = textquest_common::combat::CombatConfig {
+            spells: vec![sp(1, "A", 1), sp(2, "B", 2)],
+            ..Default::default()
+        };
+        b.on_engage(&cx(&p, &c, true, 0));
+        assert!(b.is_twisting());
+        b.on_cast_outcome(
+            &cx(&p, &c, true, 5),
+            1,
+            textquest_common::combat::CastResult::Recovering,
+        );
+        assert!(b.is_twisting());
         assert_eq!(b.twist.interrupted(), Some(1));
     }
 
