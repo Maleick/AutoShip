@@ -1,4 +1,5 @@
-//! Hook management -- hardware breakpoint hooks via VEH (DR0-DR3).
+//! Hook management -- hardware breakpoint hooks via VEH (DR0-DR3) and the
+//! general-purpose VEH hooking framework (`veh_hook`).
 //!
 //! Hook catalog:
 //! [docs/research/hook-detection-surface.md](../docs/research/
@@ -27,6 +28,7 @@ pub mod set_game_state;
 pub mod slot_manager;
 pub mod targeting;
 pub mod timing;
+pub mod veh_hook;
 pub mod wmi;
 pub mod zone_entry_integrity;
 
@@ -71,6 +73,7 @@ pub fn remove_all() {
     tracing::info!("Removing all hooks...");
     detours::remove_all();
     hwbp::remove_all();
+    veh_hook::remove_all();
     fingerprint::remove();
     chat::remove();
     memcheck::remove();
