@@ -102,6 +102,29 @@ def _map_validation_summary(output: str) -> str:
     return first_line(output)
 
 
+def check_map_bounds(results: list[CheckResult]) -> None:
+    camp_dir = REPO_ROOT / "config" / "camps"
+    map_dir = REPO_ROOT / "config" / "maps"
+    validator = REPO_ROOT / "scripts" / "validate-map-bounds.py"
+    if not camp_dir.exists() or not map_dir.exists() or not validator.exists():
+        record(results, "WARN", "Map bounds check", "Required paths missing for map-bounds validation.")
+        return
+
+    completed = run_command(_python_cmd(), str(validator), str(camp_dir), str(map_dir))
+    if completed.returncode == 0:
+        detail = first_line(completed.stdout or completed.stderr)
+        record(results, "PASS", "Map bounds check", detail or "Camp bounds validation passed.")
+    else:
+        detail = first_line(completed.stderr or completed.stdout)
+        record(
+            results,
+            "FAIL",
+            "Map bounds check",
+            detail or "Camp bounds validation failed.",
+            "Add/adjust camp coordinates or map bounds data in config/maps/.",
+        )
+
+
 def detect_windows_toolchain(results: list[CheckResult]) -> None:
     if os.name != "nt":
         return
@@ -540,6 +563,7 @@ def main() -> int:
             )
 
     check_map_files(results)
+    check_map_bounds(results)
 
     check_command(
         results,
