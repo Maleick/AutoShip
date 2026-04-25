@@ -1190,6 +1190,40 @@ mod tests {
     }
 
     #[test]
+    fn command_invocation_parses_quoted_tail_arguments() {
+        let parsed = CommandInvocation::parse(r#""assist \"Rathyl\" now""#).expect("quoted args should parse");
+        assert_eq!(
+            parsed.args,
+            vec!["assist \"Rathyl\" now".to_string()]
+        );
+        assert_eq!(parsed.raw, r#""assist \"Rathyl\" now""#);
+    }
+
+    #[test]
+    fn command_invocation_rejects_unclosed_quote() {
+        let error = CommandInvocation::parse(r#""assist now"#).expect_err("unclosed quotes should fail");
+        assert!(matches!(error, RegistryError::UnclosedQuote));
+    }
+
+    #[test]
+    fn integration_execute_slash_command_via_dispatcher() {
+        let mut reg = CommandRegistry::new();
+        let called = Arc::new(Mutex::new(String::new()));
+        let sink = called.clone();
+        reg.register(
+            "/heal",
+            Priority::Script,
+            "combat_script",
+            Box::new(move |args| {
+                *sink.lock().unwrap() = args.to_string();
+            }),
+        );
+
+        assert!(reg.dispatch("/heal \"Cleric Heal\""));
+        assert_eq!(*called.lock().unwrap(), "Cleric Heal");
+    }
+
+    #[test]
     fn command_dispatch_returns_false_for_unregistered() {
         let reg = CommandRegistry::new();
         assert!(!reg.dispatch("/unknown"));
@@ -1360,6 +1394,25 @@ mod tests {
 
         assert!(reg.fire("ctrl+f5"));
         assert_eq!(fired.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn integration_register_hotkey_and_press_key() {
+        let mut reg = ScriptHotkeyRegistry::new();
+        let fired = Arc::new(AtomicU32::new(0));
+        let f = fired.clone();
+        reg.register(
+            "Shift+Ctrl+f12",
+            Priority::Script,
+            "s",
+            Box::new(move || {
+                f.fetch_add(1, Ordering::Relaxed);
+            }),
+        );
+
+        assert!(reg.fire("shift+ctrl+F12"));
+        assert_eq!(fired.load(Ordering::Relaxed), 1);
+        assert!(!reg.fire("shift+ctrl+F11"));
     }
 
     #[test]

@@ -44,7 +44,19 @@ local function run()
   end)
   unsubscribed = textquest.events.emit("combat", { type = "assist", target = "Rathyl" })
   unsubscribed = textquest.events.off("combat")
+
+  local command_id = textquest.commands.register("/tq_demo", function(args)
+    textquest.log.info("slash command fired: " .. tostring(args))
+  end)
+  textquest.commands.dispatch("/tq_demo smoke")
+  textquest.commands.unregister(command_id)
+
+  local hotkey_id = textquest.hotkeys.register("ctrl+f11", function()
+    textquest.log.info("demo hotkey pressed")
+    textquest.execute_command("/sit")
+  end)
+  textquest.hotkeys.fire("ctrl+f11")
+  textquest.hotkeys.unregister(hotkey_id)
 end
 
 run()
-
