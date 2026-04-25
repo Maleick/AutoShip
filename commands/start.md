@@ -3,6 +3,6 @@ name: start
 description: Start AutoShip OpenCode orchestration
 ---
 
-# /autoship:start
+# /autoship
 
 Use `commands/autoship-start.md`. AutoShip dispatches OpenCode workers only.
