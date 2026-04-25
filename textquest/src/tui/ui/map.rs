@@ -41,6 +41,71 @@ static PERF_TRACE_ENABLED: LazyLock<bool> = LazyLock::new(|| {
         .unwrap_or(false)
 });
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MapRenderPerfSpan {
+    BoundsCalculation,
+    TransformCalculation,
+    GeometryRendering,
+    SpawnRendering,
+    OverlayRendering,
+    MinimapRendering,
+    MapRenderTotal,
+}
+
+impl MapRenderPerfSpan {
+    fn label(self) -> &'static str {
+        match self {
+            Self::BoundsCalculation => "bounds_calculation",
+            Self::TransformCalculation => "transform_calculation",
+            Self::GeometryRendering => "geometry_rendering",
+            Self::SpawnRendering => "spawn_rendering",
+            Self::OverlayRendering => "overlay_rendering",
+            Self::MinimapRendering => "minimap_rendering",
+            Self::MapRenderTotal => "map_render_total",
+        }
+    }
+}
+
+struct MapRenderPerfGuard<'a> {
+    span: MapRenderPerfSpan,
+    zone: &'a str,
+    width: u16,
+    height: u16,
+    start: Option<Instant>,
+}
+
+impl<'a> MapRenderPerfGuard<'a> {
+    fn new(span: MapRenderPerfSpan, zone: &'a str, width: u16, height: u16) -> Self {
+        Self {
+            span,
+            zone,
+            width,
+            height,
+            start: if *PERF_TRACE_ENABLED {
+                Some(Instant::now())
+            } else {
+                None
+            },
+        }
+    }
+}
+
+impl Drop for MapRenderPerfGuard<'_> {
+    fn drop(&mut self) {
+        if let Some(start) = self.start {
+            tracing::info!(
+                target: "textquest::perf",
+                span = self.span.label(),
+                zone = self.zone,
+                width = self.width,
+                height = self.height,
+                elapsed_ms = start.elapsed().as_secs_f64() * 1000.0,
+                "Tactical map render span"
+            );
+        }
+    }
+}
+
 const MAP_LAYER_COUNT: usize = 4;
 const MAP_LAYER_CACHE_MAX_ENTRIES: usize = 64;
 
@@ -810,6 +875,12 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
     let zone_label = app
         .active_client()
         .map_or_else(|| String::from("Unknown"), |c| c.zone_name.clone());
+    let _total_perf = MapRenderPerfGuard::new(
+        MapRenderPerfSpan::MapRenderTotal,
+        zone_label.as_str(),
+        area.width,
+        area.height,
+    );
     let z_range = app.map_state.z_filter_range;
     let player_z = app.local_player.as_ref().map(|p| p.z);
     let selected_spawn = app.selected_filtered_spawn().cloned();
@@ -870,71 +941,86 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
     } else {
         t.border_dim
     };
-    let map_bounds = combined_bounds(app);
-    let provisional_block = panel("", border_style, t);
-    let provisional_inner = provisional_block.inner(area);
-    let provisional_view_transform = map_bounds.as_ref().and_then(|bounds| {
-        map_transform(
-            app,
-            bounds,
-            provisional_inner.width.max(1).into(),
-            provisional_inner.height.max(1).into(),
-        )
-    });
-    let provisional_view_label = provisional_view_transform
-        .map(|transform| active_view_label(app.map_state.viewport_mode, transform.using_local_view))
-        .unwrap_or_else(|| app.map_state.viewport_mode.label().to_string());
-    let provisional_view_center = provisional_view_transform
-        .map(|transform| {
-            format!(
-                " center:{:.0},{:.0}",
-                transform.center_x, transform.center_y
-            )
-        })
-        .unwrap_or_default();
-    let loading_navmesh_badge = if app.navmesh_overlay_loading() {
-        " | Loading navmesh..."
-    } else {
-        ""
+    let map_bounds = {
+        let _bounds_perf = MapRenderPerfGuard::new(
+            MapRenderPerfSpan::BoundsCalculation,
+            zone_label.as_str(),
+            area.width,
+            area.height,
+        );
+        combined_bounds(app)
     };
-    let provisional_map_info = app.map_state.zone_map.as_ref().map_or_else(
-        || {
-            format!(
-                " {zone_label} (no data){player_pos_label}{selected_spawn_label} |{layer_label} | \
-                 {filter_label} | Z:{z_range:.0}{loading_navmesh_badge} "
+    let (inner, w, h, map_view_transform, view_label, view_center) = {
+        let _transform_perf = MapRenderPerfGuard::new(
+            MapRenderPerfSpan::TransformCalculation,
+            zone_label.as_str(),
+            area.width,
+            area.height,
+        );
+        let provisional_block = panel("", border_style, t);
+        let provisional_inner = provisional_block.inner(area);
+        let provisional_view_transform = map_bounds.as_ref().and_then(|bounds| {
+            map_transform(
+                app,
+                bounds,
+                provisional_inner.width.max(1).into(),
+                provisional_inner.height.max(1).into(),
             )
-        },
-        |_| {
-            format!(
-                " {zone_label}{player_pos_label}{selected_spawn_label} | {provisional_view_label} \
-                 {:.2}x{provisional_view_center} |{layer_label} | {filter_label} | \
-                 Z:{z_range:.0}{loading_navmesh_badge} ",
-                app.map_state.zoom,
-            )
-        },
-    );
+        });
+        let provisional_view_label = provisional_view_transform
+            .map(|transform| {
+                active_view_label(app.map_state.viewport_mode, transform.using_local_view)
+            })
+            .unwrap_or_else(|| app.map_state.viewport_mode.label().to_string());
+        let provisional_view_center = provisional_view_transform
+            .map(|transform| {
+                format!(
+                    " center:{:.0},{:.0}",
+                    transform.center_x, transform.center_y
+                )
+            })
+            .unwrap_or_default();
+        let provisional_map_info = app.map_state.zone_map.as_ref().map_or_else(
+            || {
+                format!(
+                    " {zone_label} (no data){player_pos_label}{selected_spawn_label} |{layer_label} | \
+                     {filter_label} | Z:{z_range:.0} "
+                )
+            },
+            |_| {
+                format!(
+                    " {zone_label}{player_pos_label}{selected_spawn_label} | {provisional_view_label} \
+                     {:.2}x{provisional_view_center} |{layer_label} | {filter_label} | Z:{z_range:.0} ",
+                    app.map_state.zoom,
+                )
+            },
+        );
 
-    let blk_for_size = panel(provisional_map_info.as_str(), border_style, t);
-    let inner = blk_for_size.inner(area);
-    let w = inner.width as usize;
-    let h = inner.height as usize;
+        let blk_for_size = panel(provisional_map_info.as_str(), border_style, t);
+        let inner = blk_for_size.inner(area);
+        let w = inner.width as usize;
+        let h = inner.height as usize;
+        let map_view_transform = map_bounds
+            .as_ref()
+            .and_then(|bounds| map_transform(app, bounds, w.max(1), h.max(1)));
+        let view_label = map_view_transform
+            .map(|transform| {
+                active_view_label(app.map_state.viewport_mode, transform.using_local_view)
+            })
+            .unwrap_or_else(|| app.map_state.viewport_mode.label().to_string());
+        let view_center = map_view_transform
+            .map(|transform| {
+                format!(
+                    " center:{:.0},{:.0}",
+                    transform.center_x, transform.center_y
+                )
+            })
+            .unwrap_or_default();
+        (inner, w, h, map_view_transform, view_label, view_center)
+    };
     if w == 0 || h == 0 {
         return;
     }
-    let map_view_transform = map_bounds
-        .as_ref()
-        .and_then(|bounds| map_transform(app, bounds, w.max(1), h.max(1)));
-    let view_label = map_view_transform
-        .map(|transform| active_view_label(app.map_state.viewport_mode, transform.using_local_view))
-        .unwrap_or_else(|| app.map_state.viewport_mode.label().to_string());
-    let view_center = map_view_transform
-        .map(|transform| {
-            format!(
-                " center:{:.0},{:.0}",
-                transform.center_x, transform.center_y
-            )
-        })
-        .unwrap_or_default();
     let preset_label = format!("Preset: {}", app.map_state.current_preset.label());
     let map_info = app.map_state.zone_map.as_ref().map_or_else(
         || {
@@ -951,8 +1037,7 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             )
         },
     );
-    let map_title = format!("Tactical · {}", zone_label);
-    let blk = panel(map_title.as_str(), border_style, t)
+    let blk = panel(map_info.as_str(), border_style, t)
         .title("hjkl pan  ·  +/- zoom  ·  f center on focus  ·  t target under cursor")
         .title_alignment(ratatui::layout::Alignment::Right);
     frame.render_widget(blk, area);
@@ -975,50 +1060,34 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         (col, row)
     };
 
-    if let Some(map) = &app.map_state.zone_map {
-        draw_cached_map_layers(
-            map,
-            app,
-            &transform,
-            &visible_region,
-            player_z,
-            z_range,
-            &to_grid,
-            w,
-            h,
-            &mut grid,
-            t,
-        );
-    }
-
-    if app.map_state.show_navmesh
-        && let Some(overlay) = &app.map_state.navmesh_overlay
     {
-        let draw_inner_lines = transform.using_local_view || app.map_state.zoom >= 1.35;
-        for segment in &overlay.outer_lines {
-            if !visible_region.contains_line(segment.x1, segment.y1, segment.x2, segment.y2) {
-                continue;
-            }
-            clip_project_draw_line(
-                segment.x1,
-                segment.y1,
-                segment.z1,
-                segment.x2,
-                segment.y2,
-                segment.z2,
+        let _geometry_perf = MapRenderPerfGuard::new(
+            MapRenderPerfSpan::GeometryRendering,
+            zone_label.as_str(),
+            inner.width,
+            inner.height,
+        );
+        if let Some(map) = &app.map_state.zone_map {
+            draw_cached_map_layers(
+                map,
+                app,
+                &transform,
+                &visible_region,
                 player_z,
                 z_range,
                 &to_grid,
                 w,
                 h,
                 &mut grid,
-                t.text_secondary,
-                LinePaintMode::OverwriteLinework,
+                t,
             );
         }
 
-        if draw_inner_lines {
-            for segment in &overlay.inner_lines {
+        if app.map_state.show_navmesh
+            && let Some(overlay) = &app.map_state.navmesh_overlay
+        {
+            let draw_inner_lines = transform.using_local_view || app.map_state.zoom >= 1.35;
+            for segment in &overlay.outer_lines {
                 if !visible_region.contains_line(segment.x1, segment.y1, segment.x2, segment.y2) {
                     continue;
                 }
@@ -1035,384 +1104,427 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
                     w,
                     h,
                     &mut grid,
-                    t.text_muted,
+                    t.text_secondary,
                     LinePaintMode::OverwriteLinework,
                 );
             }
-        }
-    }
 
-    let spawn_cache_key = map_spawn_cache_key(app, &transform, w, h, player_z, selected_spawn_id);
-    rebuild_map_spawn_cache(
-        app,
-        spawn_cache_key,
-        player_z,
-        selected_spawn.as_ref(),
-        to_grid,
-    );
-    for cell in &app.map_spawn_cache.cells {
-        let row = cell.row as usize;
-        let col = cell.col as usize;
-        if row < h && col < w {
-            grid[row][col] = (cell.ch, cell.color);
-        }
-    }
-    draw_npc_location_labels(
-        app,
-        &to_grid,
-        player_z,
-        z_range,
-        w,
-        h,
-        &mut grid,
-        transform.using_local_view || app.map_state.zoom >= 0.75,
-    );
-
-    for status in app.named_tracker.tracked_spawns() {
-        if !status.is_alive {
-            let (col, row) = to_grid(-status.last_y, -status.last_x);
-            if grid_in_bounds(col, row, w, h) {
-                grid[row as usize][col as usize] = ('✕', t.map_dead_named);
+            if draw_inner_lines {
+                for segment in &overlay.inner_lines {
+                    if !visible_region.contains_line(segment.x1, segment.y1, segment.x2, segment.y2)
+                    {
+                        continue;
+                    }
+                    clip_project_draw_line(
+                        segment.x1,
+                        segment.y1,
+                        segment.z1,
+                        segment.x2,
+                        segment.y2,
+                        segment.z2,
+                        player_z,
+                        z_range,
+                        &to_grid,
+                        w,
+                        h,
+                        &mut grid,
+                        t.text_muted,
+                        LinePaintMode::OverwriteLinework,
+                    );
+                }
             }
         }
     }
 
-    // ─── Nav path overlay ─────────────────────────────────────────────────
-    if app.map_state.show_nav_paths
-        && app.map_state.show_target_path
-        && let Some(client) = app.active_client()
-        && let Some(nav) = app.nav_state.nav_statuses.get(&client.pid)
-        && nav.waypoints.len() >= 2
     {
-        let nav_color = t.text_accent;
-        // Draw path lines with directional arrows at segment midpoints.
-        for (seg_idx, pair) in nav.waypoints.windows(2).enumerate() {
-            let (c1, r1) = to_grid(-pair[0].y, -pair[0].x);
-            let (c2, r2) = to_grid(-pair[1].y, -pair[1].x);
-            bresenham_line(
-                c1,
-                r1,
-                c2,
-                r2,
-                w,
-                h,
-                &mut grid,
-                nav_color,
-                LinePaintMode::OverwriteLinework,
-            );
-            // Draw directional arrow at midpoint of each segment.
-            let mid_c = (c1 + c2) / 2;
-            let mid_r = (r1 + r2) / 2;
-            if grid_in_bounds(mid_c, mid_r, w, h) {
-                let arrow = direction_arrow(c2 - c1, r2 - r1);
-                grid[mid_r as usize][mid_c as usize] = (arrow, nav_color);
-            }
-            // Draw numbered marker at the start of each segment (intermediate waypoints).
-            // Skip marking the very first waypoint (it's the player's current location).
-            if seg_idx > 0 && grid_in_bounds(c1, r1, w, h) {
-                let label = if seg_idx <= 9 {
-                    char::from_digit(seg_idx as u32, 10).unwrap_or('+')
-                } else {
-                    '+'
-                };
-                grid[r1 as usize][c1 as usize] = (label, nav_color);
+        let _spawn_perf = MapRenderPerfGuard::new(
+            MapRenderPerfSpan::SpawnRendering,
+            zone_label.as_str(),
+            inner.width,
+            inner.height,
+        );
+        let spawn_cache_key =
+            map_spawn_cache_key(app, &transform, w, h, player_z, selected_spawn_id);
+        rebuild_map_spawn_cache(
+            app,
+            spawn_cache_key,
+            player_z,
+            selected_spawn.as_ref(),
+            to_grid,
+        );
+        for cell in &app.map_spawn_cache.cells {
+            let row = cell.row as usize;
+            let col = cell.col as usize;
+            if row < h && col < w {
+                grid[row][col] = (cell.ch, cell.color);
             }
         }
-        // Mark the final destination with a special symbol.
-        if let Some(dest) = nav.waypoints.last() {
-            let (dc, dr) = to_grid(-dest.y, -dest.x);
-            if grid_in_bounds(dc, dr, w, h) {
-                grid[dr as usize][dc as usize] = ('★', nav_color);
-            }
-        }
-    }
-
-    // ─── Target line overlay ─────────────────────────────────────────────────
-    if app.map_state.show_target_line
-        && let (Some(player), Some(target)) = (&app.local_player, &app.target)
-    {
-        let (pc, pr) = to_grid(-player.y, -player.x);
-        let (tc, tr) = to_grid(-target.y, -target.x);
-        bresenham_line(
-            pc,
-            pr,
-            tc,
-            tr,
+        draw_npc_location_labels(
+            app,
+            &to_grid,
+            player_z,
+            z_range,
             w,
             h,
             &mut grid,
-            t.text_highlight,
-            LinePaintMode::OverwriteLinework,
+            transform.using_local_view || app.map_state.zoom >= 0.75,
         );
-        if grid_in_bounds(tc, tr, w, h) {
-            grid[tr as usize][tc as usize] = ('✚', t.text_highlight);
+
+        for status in app.named_tracker.tracked_spawns() {
+            if !status.is_alive {
+                let (col, row) = to_grid(-status.last_y, -status.last_x);
+                if grid_in_bounds(col, row, w, h) {
+                    grid[row as usize][col as usize] = ('✕', t.map_dead_named);
+                }
+            }
         }
     }
 
-    if app.map_state.show_geometry
-        && let Some(map) = &app.map_state.zone_map
     {
-        draw_zone_exit_overlay(
-            map,
-            &visible_region,
-            &to_grid,
-            app.map_state.zoom,
-            (w, h),
-            &mut grid,
-            t,
+        let _overlay_perf = MapRenderPerfGuard::new(
+            MapRenderPerfSpan::OverlayRendering,
+            zone_label.as_str(),
+            inner.width,
+            inner.height,
         );
-    }
 
-    // ─── Player marker + FOV cone ────────────────────────────────────────
-    if let Some(player) = &app.local_player {
-        let (col, row) = to_grid(-player.y, -player.x);
+        // ─── Nav path overlay ─────────────────────────────────────────────────
+        if app.map_state.show_nav_paths
+            && app.map_state.show_target_path
+            && let Some(client) = app.active_client()
+            && let Some(nav) = app.nav_state.nav_statuses.get(&client.pid)
+            && nav.waypoints.len() >= 2
+        {
+            let nav_color = t.text_accent;
+            // Draw path lines with directional arrows at segment midpoints.
+            for (seg_idx, pair) in nav.waypoints.windows(2).enumerate() {
+                let (c1, r1) = to_grid(-pair[0].y, -pair[0].x);
+                let (c2, r2) = to_grid(-pair[1].y, -pair[1].x);
+                bresenham_line(
+                    c1,
+                    r1,
+                    c2,
+                    r2,
+                    w,
+                    h,
+                    &mut grid,
+                    nav_color,
+                    LinePaintMode::OverwriteLinework,
+                );
+                // Draw directional arrow at midpoint of each segment.
+                let mid_c = (c1 + c2) / 2;
+                let mid_r = (r1 + r2) / 2;
+                if grid_in_bounds(mid_c, mid_r, w, h) {
+                    let arrow = direction_arrow(c2 - c1, r2 - r1);
+                    grid[mid_r as usize][mid_c as usize] = (arrow, nav_color);
+                }
+                // Draw numbered marker at the start of each segment (intermediate waypoints).
+                // Skip marking the very first waypoint (it's the player's current location).
+                if seg_idx > 0 && grid_in_bounds(c1, r1, w, h) {
+                    let label = if seg_idx <= 9 {
+                        char::from_digit(seg_idx as u32, 10).unwrap_or('+')
+                    } else {
+                        '+'
+                    };
+                    grid[r1 as usize][c1 as usize] = (label, nav_color);
+                }
+            }
+            // Mark the final destination with a special symbol.
+            if let Some(dest) = nav.waypoints.last() {
+                let (dc, dr) = to_grid(-dest.y, -dest.x);
+                if grid_in_bounds(dc, dr, w, h) {
+                    grid[dr as usize][dc as usize] = ('★', nav_color);
+                }
+            }
+        }
 
-        // Draw FOV wedge — full coordinate-transform proof:
-        //
-        // 1. EQ heading: 0=N, 128=W, 256=S, 384=E. CW in EQ world coords, 512 heading
-        //    units = full circle = 2*pi radians.
-        //
-        // 2. EQ world → map coords: we negate both axes via to_grid(-y, -x). This is a
-        //    180-degree rotation, which mirrors both axes and preserves angular
-        //    direction (CW stays CW in map space).
-        //
-        // 3. Map → screen coords: screen Y increases downward, so we use `row - sin(a)`
-        //    (line 212), which flips the Y axis. This converts CW angles into CCW
-        //    angles in screen space.
-        //
-        // 4. Standard math angles are CCW with 0=East. EQ heading 0 (North) should map
-        //    to pi/2 (screen-up). The formula: heading_rad = (512 - heading) * pi / 256
-        //    At heading=0:   (512-0)*pi/256   = 2*pi ≡ 0 (East in math). But step 3's
-        //    Y-flip (row - sin) makes 0 rad point screen-up, because -sin(0)=0 for col
-        //    and cos(0)=1 becomes row-1 (up). Wait — cos is on col and sin on row:
-        //    end_col = col + cos(a) * len   → horizontal end_row = row - sin(a) * len →
-        //    vertical (inverted) At a=0: col+len, row-0 → points right (East). But EQ
-        //    heading 0 is North. With (512-0)*pi/256 = 2*pi ≡ 0, this points East...
-        //    unless the 180-degree rotation from step 2 remaps it.
-        //
-        //    The axis swap (-y→mx, -x→my) means EQ North (+Y in world) maps
-        //    to -Y in map x-axis (col). Combined with the negation of both
-        //    axes, the net effect is that the formula produces correct screen
-        //    directions empirically, but the interaction of swap + negate +
-        //    Y-flip makes a clean closed-form proof non-trivial.
-        //
-        // NOTE: FOV direction derived from EQ heading convention (0 ≡ 512 = North, CW;
-        // 512 units = full circle). Empirically correct in TUI demo; final
-        // live-client verification deferred.
-        let heading_rad = (512.0 - player.heading) * std::f32::consts::PI / 256.0;
-        let half_fov = std::f32::consts::PI / 6.0; // 30-degree half-angle (60 total)
-        let cone_len: f32 = 4.0; // length in grid cells
-        for &angle_offset in &[-half_fov, 0.0, half_fov] {
-            let a = heading_rad + angle_offset;
-            let end_col = col as f32 + a.cos() * cone_len;
-            let end_row = row as f32 - a.sin() * cone_len; // screen Y is inverted
+        // ─── Target line overlay ─────────────────────────────────────────────────
+        if app.map_state.show_target_line
+            && let (Some(player), Some(target)) = (&app.local_player, &app.target)
+        {
+            let (pc, pr) = to_grid(-player.y, -player.x);
+            let (tc, tr) = to_grid(-target.y, -target.x);
             bresenham_line(
-                col,
-                row,
-                end_col as i32,
-                end_row as i32,
+                pc,
+                pr,
+                tc,
+                tr,
                 w,
                 h,
                 &mut grid,
-                t.map_you,
+                t.text_highlight,
                 LinePaintMode::OverwriteLinework,
+            );
+            if grid_in_bounds(tc, tr, w, h) {
+                grid[tr as usize][tc as usize] = ('✚', t.text_highlight);
+            }
+        }
+
+        if app.map_state.show_geometry
+            && let Some(map) = &app.map_state.zone_map
+        {
+            draw_zone_exit_overlay(
+                map,
+                &visible_region,
+                &to_grid,
+                app.map_state.zoom,
+                (w, h),
+                &mut grid,
+                t,
             );
         }
 
-        if grid_in_bounds(col, row, w, h) {
-            grid[row as usize][col as usize] = ('◆', t.map_you);
+        // ─── Player marker + FOV cone ────────────────────────────────────────
+        if let Some(player) = &app.local_player {
+            let (col, row) = to_grid(-player.y, -player.x);
+
+            // Draw FOV wedge — full coordinate-transform proof:
+            //
+            // 1. EQ heading: 0=N, 128=W, 256=S, 384=E. CW in EQ world coords, 512 heading
+            //    units = full circle = 2*pi radians.
+            //
+            // 2. EQ world → map coords: we negate both axes via to_grid(-y, -x). This is a
+            //    180-degree rotation, which mirrors both axes and preserves angular
+            //    direction (CW stays CW in map space).
+            //
+            // 3. Map → screen coords: screen Y increases downward, so we use `row - sin(a)`
+            //    (line 212), which flips the Y axis. This converts CW angles into CCW
+            //    angles in screen space.
+            //
+            // 4. Standard math angles are CCW with 0=East. EQ heading 0 (North) should map
+            //    to pi/2 (screen-up). The formula: heading_rad = (512 - heading) * pi / 256
+            //    At heading=0:   (512-0)*pi/256   = 2*pi ≡ 0 (East in math). But step 3's
+            //    Y-flip (row - sin) makes 0 rad point screen-up, because -sin(0)=0 for col
+            //    and cos(0)=1 becomes row-1 (up). Wait — cos is on col and sin on row:
+            //    end_col = col + cos(a) * len   → horizontal end_row = row - sin(a) * len →
+            //    vertical (inverted) At a=0: col+len, row-0 → points right (East). But EQ
+            //    heading 0 is North. With (512-0)*pi/256 = 2*pi ≡ 0, this points East...
+            //    unless the 180-degree rotation from step 2 remaps it.
+            //
+            //    The axis swap (-y→mx, -x→my) means EQ North (+Y in world) maps
+            //    to -Y in map x-axis (col). Combined with the negation of both
+            //    axes, the net effect is that the formula produces correct screen
+            //    directions empirically, but the interaction of swap + negate +
+            //    Y-flip makes a clean closed-form proof non-trivial.
+            //
+            // NOTE: FOV direction derived from EQ heading convention (0 ≡ 512 = North, CW;
+            // 512 units = full circle). Empirically correct in TUI demo; final
+            // live-client verification deferred.
+            let heading_rad = (512.0 - player.heading) * std::f32::consts::PI / 256.0;
+            let half_fov = std::f32::consts::PI / 6.0; // 30-degree half-angle (60 total)
+            let cone_len: f32 = 4.0; // length in grid cells
+            for &angle_offset in &[-half_fov, 0.0, half_fov] {
+                let a = heading_rad + angle_offset;
+                let end_col = col as f32 + a.cos() * cone_len;
+                let end_row = row as f32 - a.sin() * cone_len; // screen Y is inverted
+                bresenham_line(
+                    col,
+                    row,
+                    end_col as i32,
+                    end_row as i32,
+                    w,
+                    h,
+                    &mut grid,
+                    t.map_you,
+                    LinePaintMode::OverwriteLinework,
+                );
+            }
+
+            if grid_in_bounds(col, row, w, h) {
+                grid[row as usize][col as usize] = ('◆', t.map_you);
+            }
+
+            // ─── Heading arrow adjacent to player marker ─────────────────────────
+            place_heading_arrow(
+                player.heading,
+                heading_rad,
+                col,
+                row,
+                w as i32,
+                h as i32,
+                &mut grid,
+                t.map_you,
+            );
+
+            // ─── Radius circle overlays ─────────────────────────────────────────
+            draw_radius_overlays(app, &to_grid, w as u16, h as u16, &mut grid);
         }
 
-        // ─── Heading arrow adjacent to player marker ─────────────────────────
-        place_heading_arrow(
-            player.heading,
-            heading_rad,
-            col,
-            row,
-            w as i32,
-            h as i32,
-            &mut grid,
-            t.map_you,
-        );
-
-        // ─── Radius circle overlays ─────────────────────────────────────────
-        draw_radius_overlays(app, &to_grid, w as u16, h as u16, &mut grid);
-    }
-
-    // ─── Loc marker overlay ──────────────────────────────────────────────
-    if let Some(loc) = &app.map_state.loc_marker {
-        let (lc, lr) = to_grid(-loc.y, -loc.x);
-        if grid_in_bounds(lc, lr, w, h) {
-            grid[lr as usize][lc as usize] = ('⊗', Color::Yellow);
-            for (i, ch) in loc.label.chars().take(12).enumerate() {
-                let col = lc + 2 + i as i32;
-                if col >= 0 && col < w as i32 {
-                    grid[lr as usize][col as usize] = (ch, Color::Yellow);
+        // ─── Loc marker overlay ──────────────────────────────────────────────
+        if let Some(loc) = &app.map_state.loc_marker {
+            let (lc, lr) = to_grid(-loc.y, -loc.x);
+            if grid_in_bounds(lc, lr, w, h) {
+                grid[lr as usize][lc as usize] = ('⊗', Color::Yellow);
+                for (i, ch) in loc.label.chars().take(12).enumerate() {
+                    let col = lc + 2 + i as i32;
+                    if col >= 0 && col < w as i32 {
+                        grid[lr as usize][col as usize] = (ch, Color::Yellow);
+                    }
                 }
             }
         }
-    }
 
-    // ─── Named persistent markers ────────────────────────────────────────
-    draw_named_markers(app, &to_grid, w as i32, h as i32, &mut grid);
+        // ─── Named persistent markers ────────────────────────────────────────
+        draw_named_markers(app, &to_grid, w as i32, h as i32, &mut grid);
 
-    // ─── Camp location overlay ────────────────────────────────────────────
-    draw_camp_overlay(app, &to_grid, w as u16, h as u16, &mut grid);
+        // ─── Camp location overlay ────────────────────────────────────────────
+        draw_camp_overlays(app, &to_grid, w as u16, h as u16, &mut grid);
 
-    // ─── Spawn highlights overlay ────────────────────────────────────────
-    if !app.map_state.highlights.is_empty() {
-        for spawn in &app.spawns {
-            let lower_name = spawn.name.to_ascii_lowercase();
-            for hl in &app.map_state.highlights {
-                if lower_name.contains(&hl.pattern_lower) {
-                    let (sc, sr) = to_grid(-spawn.y, -spawn.x);
-                    if grid_in_bounds(sc, sr, w, h) {
-                        let color = hl.color.unwrap_or(Color::Magenta);
-                        if hl.pulse && (app.tick_count / 5).is_multiple_of(2) {
-                            continue;
-                        }
-                        let ch = match hl.size {
-                            1 => '●',
-                            2 => '◉',
-                            _ => '◈',
-                        };
-                        grid[sr as usize][sc as usize] = (ch, color);
-                        if hl.size >= 2 {
-                            for &(dx, dy) in &[(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
-                                let nc = sc + dx;
-                                let nr = sr + dy;
-                                if grid_in_bounds(nc, nr, w, h) {
-                                    grid[nr as usize][nc as usize] = ('·', color);
+        // ─── Spawn highlights overlay ────────────────────────────────────────
+        if !app.map_state.highlights.is_empty() {
+            for spawn in &app.spawns {
+                let lower_name = spawn.name.to_ascii_lowercase();
+                for hl in &app.map_state.highlights {
+                    if lower_name.contains(&hl.pattern_lower) {
+                        let (sc, sr) = to_grid(-spawn.y, -spawn.x);
+                        if grid_in_bounds(sc, sr, w, h) {
+                            let color = hl.color.unwrap_or(Color::Magenta);
+                            if hl.pulse && (app.tick_count / 5).is_multiple_of(2) {
+                                continue;
+                            }
+                            let ch = match hl.size {
+                                1 => '●',
+                                2 => '◉',
+                                _ => '◈',
+                            };
+                            grid[sr as usize][sc as usize] = (ch, color);
+                            if hl.size >= 2 {
+                                for &(dx, dy) in &[(1i32, 0i32), (-1, 0), (0, 1), (0, -1)] {
+                                    let nc = sc + dx;
+                                    let nr = sr + dy;
+                                    if grid_in_bounds(nc, nr, w, h) {
+                                        grid[nr as usize][nc as usize] = ('·', color);
+                                    }
                                 }
                             }
                         }
+                        break;
                     }
-                    break;
                 }
             }
         }
+
+        let show_nav_destination = app
+            .active_client()
+            .and_then(|client| app.nav_state.nav_statuses.get(&client.pid))
+            .is_some_and(|nav| nav.waypoints.len() >= 2);
+        let show_legend = app.map_state.show_annotations;
+        let mut lines: Vec<Line<'_>> = grid
+            .into_iter()
+            .enumerate()
+            .map(|(_, row)| {
+                // Render grid rows as-is, without legend
+                Line::from(color_run_spans(row))
+            })
+            .collect();
+
+        // Add map caption below the grid
+        if show_legend {
+            // Blank line
+            lines.push(Line::from(""));
+
+            // Grid info line with zone and coordinate ranges
+            let grid_info = format!(
+                "grid: {} · y..., x... · resolution 1 cell ≈ N.Nu",
+                zone_label
+            );
+            lines.push(Line::from(Span::styled(
+                grid_info,
+                Style::default().fg(t.text_muted),
+            )));
+
+            // Blank line
+            lines.push(Line::from(""));
+
+            // Legend line with new spawn markers
+            let mut legend_spans = vec![
+                Span::styled("Legend: ", Style::default().fg(t.text_secondary)),
+                Span::styled("◆", Style::default().fg(t.map_you)),
+                Span::raw(" You  ·  "),
+                Span::styled("↑", Style::default().fg(t.map_you)),
+                Span::raw(" Hdg  ·  "),
+                Span::styled("◆", Style::default().fg(t.spawn_named)),
+                Span::raw(" NPC  ·  "),
+                Span::styled("○", Style::default().fg(t.spawn_npc)),
+                Span::raw(" NPC  ·  "),
+                Span::styled(
+                    npc_category_marker(t, NpcCategory::Merchant).0.to_string(),
+                    Style::default().fg(npc_category_marker(t, NpcCategory::Merchant).1),
+                ),
+                Span::raw(" Merchant  ·  "),
+                Span::styled(
+                    npc_category_marker(t, NpcCategory::Banker).0.to_string(),
+                    Style::default().fg(npc_category_marker(t, NpcCategory::Banker).1),
+                ),
+                Span::raw(" Banker  ·  "),
+                Span::styled(
+                    npc_category_marker(t, NpcCategory::TrainingDummy)
+                        .0
+                        .to_string(),
+                    Style::default().fg(npc_category_marker(t, NpcCategory::TrainingDummy).1),
+                ),
+                Span::raw(" Dummy  ·  "),
+                Span::styled(
+                    npc_category_marker(t, NpcCategory::QuestNpc).0.to_string(),
+                    Style::default().fg(npc_category_marker(t, NpcCategory::QuestNpc).1),
+                ),
+                Span::raw(" Quest  ·  "),
+                Span::styled("†", Style::default().fg(t.spawn_corpse)),
+                Span::raw(" Corpse  ·  "),
+                Span::styled("◇", Style::default().fg(t.text_accent)),
+                Span::raw(" Zone Exit (z on floors)  ·  "),
+                Span::styled(
+                    "C",
+                    Style::default()
+                        .fg(t.text_accent)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "W",
+                    Style::default().fg(t.hp_mid).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "M",
+                    Style::default()
+                        .fg(t.text_highlight)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "K",
+                    Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(" clients"),
+            ];
+            lines.push(Line::from(legend_spans));
+        }
+
+        frame.render_widget(Paragraph::new(lines), inner);
+        draw_target_direction_overlay(frame, inner, app);
     }
 
-    let show_nav_destination = app
-        .active_client()
-        .and_then(|client| app.nav_state.nav_statuses.get(&client.pid))
-        .is_some_and(|nav| nav.waypoints.len() >= 2);
-    let show_legend = app.map_state.show_annotations;
-    let mut lines: Vec<Line<'_>> = grid
-        .into_iter()
-        .enumerate()
-        .map(|(_, row)| {
-            // Render grid rows as-is, without legend
-            Line::from(color_run_spans(row))
-        })
-        .collect();
-
-    // Add map caption below the grid
-    if show_legend {
-        // Blank line
-        lines.push(Line::from(""));
-
-        // Grid info line with zone and coordinate ranges
-        let grid_info = format!(
-            "grid: {} · y..., x... · resolution 1 cell ≈ N.Nu",
-            zone_label
-        );
-        lines.push(Line::from(Span::styled(
-            grid_info,
-            Style::default().fg(t.text_muted),
-        )));
-
-        // Blank line
-        lines.push(Line::from(""));
-
-        // Legend line with new spawn markers
-        let mut legend_spans = vec![
-            Span::styled("Legend: ", Style::default().fg(t.text_secondary)),
-            Span::styled("◆", Style::default().fg(t.map_you)),
-            Span::raw(" You  ·  "),
-            Span::styled("↑", Style::default().fg(t.map_you)),
-            Span::raw(" Hdg  ·  "),
-            Span::styled("◆", Style::default().fg(t.spawn_named)),
-            Span::raw(" NPC  ·  "),
-            Span::styled("○", Style::default().fg(t.spawn_npc)),
-            Span::raw(" NPC  ·  "),
-            Span::styled(
-                npc_category_marker(t, NpcCategory::Merchant).0.to_string(),
-                Style::default().fg(npc_category_marker(t, NpcCategory::Merchant).1),
-            ),
-            Span::raw(" Merchant  ·  "),
-            Span::styled(
-                npc_category_marker(t, NpcCategory::Banker).0.to_string(),
-                Style::default().fg(npc_category_marker(t, NpcCategory::Banker).1),
-            ),
-            Span::raw(" Banker  ·  "),
-            Span::styled(
-                npc_category_marker(t, NpcCategory::TrainingDummy)
-                    .0
-                    .to_string(),
-                Style::default().fg(npc_category_marker(t, NpcCategory::TrainingDummy).1),
-            ),
-            Span::raw(" Dummy  ·  "),
-            Span::styled(
-                npc_category_marker(t, NpcCategory::QuestNpc).0.to_string(),
-                Style::default().fg(npc_category_marker(t, NpcCategory::QuestNpc).1),
-            ),
-            Span::raw(" Quest  ·  "),
-            Span::styled("†", Style::default().fg(t.spawn_corpse)),
-            Span::raw(" Corpse  ·  "),
-            Span::styled("⊕", Style::default().fg(Color::Green)),
-            Span::raw(" Camp  ·  "),
-            Span::styled("⊗", Style::default().fg(Color::Red)),
-            Span::raw(" Pull  ·  "),
-            Span::styled("·", Style::default().fg(Color::Green)),
-            Span::raw(" Camp radius  ·  "),
-            Span::styled("·", Style::default().fg(Color::Red)),
-            Span::raw(" Pull radius  ·  "),
-            Span::styled("◇", Style::default().fg(t.text_accent)),
-            Span::raw(" Zone Exit (z on floors)  ·  "),
-            Span::styled(
-                "C",
-                Style::default()
-                    .fg(t.text_accent)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "W",
-                Style::default().fg(t.hp_mid).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "M",
-                Style::default()
-                    .fg(t.text_highlight)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "K",
-                Style::default().fg(t.hp_low).add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(" clients"),
-        ];
-        lines.push(Line::from(legend_spans));
-    }
-
-    frame.render_widget(Paragraph::new(lines), inner);
-    draw_target_direction_overlay(frame, inner, app);
-
-    if let Some(mini_bounds) = minimap_area(inner, w, h)
-        && let Some(bounds) = map_bounds.as_ref()
     {
-        let (mini_title, mini_lines) = draw_minimap_widget(
-            bounds,
-            mini_bounds,
-            app,
-            app.map_spawn_cache.selected_spawn,
-            &transform,
+        let _minimap_perf = MapRenderPerfGuard::new(
+            MapRenderPerfSpan::MinimapRendering,
+            zone_label.as_str(),
+            inner.width,
+            inner.height,
         );
-        frame.render_widget(Clear, mini_bounds);
-        frame.render_widget(
-            Paragraph::new(mini_lines).block(panel(mini_title.as_str(), t.border_dim, t)),
-            mini_bounds,
-        );
+        if let Some(mini_bounds) = minimap_area(inner, w, h)
+            && let Some(bounds) = map_bounds.as_ref()
+        {
+            let (mini_title, mini_lines) = draw_minimap_widget(
+                bounds,
+                mini_bounds,
+                app,
+                app.map_spawn_cache.selected_spawn,
+                &transform,
+            );
+            frame.render_widget(Clear, mini_bounds);
+            frame.render_widget(
+                Paragraph::new(mini_lines).block(panel(mini_title.as_str(), t.border_dim, t)),
+                mini_bounds,
+            );
+        }
     }
 }
 
@@ -3919,6 +4031,32 @@ mod tests {
                 destination: destination.to_string(),
             }],
         }
+    }
+
+    #[test]
+    fn map_perf_span_labels_match_issue_1125_profile_breakdown() {
+        let labels = [
+            MapRenderPerfSpan::BoundsCalculation.label(),
+            MapRenderPerfSpan::TransformCalculation.label(),
+            MapRenderPerfSpan::GeometryRendering.label(),
+            MapRenderPerfSpan::SpawnRendering.label(),
+            MapRenderPerfSpan::OverlayRendering.label(),
+            MapRenderPerfSpan::MinimapRendering.label(),
+            MapRenderPerfSpan::MapRenderTotal.label(),
+        ];
+
+        assert_eq!(
+            labels,
+            [
+                "bounds_calculation",
+                "transform_calculation",
+                "geometry_rendering",
+                "spawn_rendering",
+                "overlay_rendering",
+                "minimap_rendering",
+                "map_render_total",
+            ],
+        );
     }
 
     #[test]
