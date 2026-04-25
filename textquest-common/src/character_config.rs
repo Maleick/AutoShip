@@ -145,7 +145,20 @@ impl Default for TributeStatus {
         }
     }
 }
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ImproveAutoPromoteConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_min_confidence")]
+    pub min_confidence: f32,
+}
+
+fn default_min_confidence() -> f32 {
+    0.85
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CharacterConfig {
     pub character_name: String,
     pub class: String,
@@ -167,6 +180,8 @@ pub struct CharacterConfig {
     pub tribute_preferences: TributePreferences,
     #[serde(default)]
     pub tribute_status: TributeStatus,
+    #[serde(default)]
+    pub improve_auto_promote: ImproveAutoPromoteConfig,
 }
 
 pub type CharacterConfigMap = HashMap<String, CharacterConfig>;
@@ -254,6 +269,7 @@ mod tests {
             reward_automation: RewardAutomationConfig::default(),
             tribute_preferences: TributePreferences::default(),
             tribute_status: TributeStatus::default(),
+            improve_auto_promote: ImproveAutoPromoteConfig::default(),
         }
     }
 

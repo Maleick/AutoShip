@@ -736,6 +736,15 @@ fn build_api_router() -> Router<Arc<AppState>> {
             get(api::inventory_utility_parity::get_config)
                 .put(api::inventory_utility_parity::put_config),
         )
+        .route(
+            "/improve/auto-promote/{character}",
+            get(api::improve::get_auto_promote_settings)
+                .put(api::improve::put_auto_promote_settings),
+        )
+        .route(
+            "/improve/auto-promote/{character}/kill",
+            post(api::improve::kill_auto_promote),
+        )
         // Spawn Alerts API
         .route(
             "/spawn-alerts",
