@@ -50,7 +50,8 @@ const KBD_HINTS: { key: string; label: string }[] = [
   { key: ":", label: "command" },
 ];
 
-const VERSION = "v0.7.0-alpha";
+// Injected from textquest/Cargo.toml at build time via vite.config.ts (#2511).
+const VERSION = __APP_VERSION__;
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("sessions");
