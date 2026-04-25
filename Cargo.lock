@@ -4431,6 +4431,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "textquest-voice"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml",
+]
+
+[[package]]
 name = "textquest-web"
 version = "0.1.0"
 dependencies = [

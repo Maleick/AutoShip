@@ -14,6 +14,17 @@
       "notes": "Completed pruning and simplification work, then reopened on 2026-04-14 to remove the redundant merged-branch cleanup workflow, collapse CI into one merge gate, switch agent-ready linked-PR detection from failing GraphQL to REST timeline reads, repair the fmt/clippy drift that was leaving master red after PR #1600, restore the missing pull_request_target closed trigger for post-merge cleanup, guard self-hosted CI lanes from fork PR execution, and finish the Windows self-hosted Rust bootstrap repair and branch/PR audit backfill tracked through issues #2201 and #2196."
     },
     {
+      "id": "issue-2706-tts-backend-abstraction",
+      "name": "X-6: TTS backend abstraction - Coqui XTTS-v2 default + Piper + SAPI + ElevenLabs adapters",
+      "status": "in_progress",
+      "acceptance_tests": [
+        "cargo test -p textquest-voice",
+        "rustfmt --check --edition 2024 textquest-voice/src/lib.rs textquest-voice/src/config.rs textquest-voice/src/voices.rs textquest-voice/src/backend.rs",
+        "python3 scripts/dev-preflight.py"
+      ],
+      "notes": "Added a new textquest-voice crate with TOML-backed per-character voice config, an adapter trait and concrete Coqui/Piper/SAPI/ElevenLabs backends, bundled starter voice assets, override resolution from ~/.textquest/voices, and operator-facing docs in docs/wiki/tts-backends.md. Repo-wide fmt/preflight still needs a follow-up pass because the workspace already contains unrelated formatting drift outside this change."
+    },
+    {
       "id": "issue-1238-ci-cd-branch-protection-and-auto-cleanup",
       "name": "Issue #1238 CI/CD branch protection and auto-cleanup",
       "status": "complete",
