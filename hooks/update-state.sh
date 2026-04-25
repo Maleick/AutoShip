@@ -3,7 +3,7 @@ set -euo pipefail
 
 # update-state.sh — Update .autoship/state.json for a given issue.
 # Usage: update-state.sh <action> <issue-id> [key=value ...]
-# Actions: set-claimed, set-queued, set-running, set-verifying, set-completed, set-blocked, set-merged, set-failed, set-paused
+# Actions: set-claimed, set-queued, set-running, set-verifying, set-completed, set-blocked, set-stuck, set-merged, set-failed, set-paused
 
 AUTOSHIP_DIR=".autoship"
 STATE_FILE="$AUTOSHIP_DIR/state.json"
@@ -50,7 +50,7 @@ fi
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: $0 <action> <issue-id> [key=value ...]" >&2
-  echo "Actions: set-claimed, set-queued, set-running, set-verifying, set-completed, set-blocked, set-merged, set-failed, set-paused" >&2
+  echo "Actions: set-claimed, set-queued, set-running, set-verifying, set-completed, set-blocked, set-stuck, set-merged, set-failed, set-paused" >&2
   exit 1
 fi
 
@@ -345,6 +345,12 @@ case "$ACTION" in
     ADD_LABEL="autoship:blocked"
     REMOVE_LABELS=("autoship:in-progress" "autoship:paused" "autoship:done")
     ;;
+  set-stuck)
+    NEW_STATE="stuck"
+    STAT_KEY="failed"
+    ADD_LABEL="autoship:blocked"
+    REMOVE_LABELS=("autoship:in-progress" "autoship:paused" "autoship:done")
+    ;;
   set-merged)
     NEW_STATE="merged"
     STAT_KEY="completed"  # signals: increment session_completed + total_completed_all_time
@@ -365,7 +371,7 @@ case "$ACTION" in
     ;;
   *)
     echo "Error: unknown action '$ACTION'" >&2
-    echo "Valid actions: set-claimed, set-running, set-verifying, set-completed, set-blocked, set-merged, set-failed, set-paused" >&2
+    echo "Valid actions: set-claimed, set-queued, set-running, set-verifying, set-completed, set-blocked, set-stuck, set-merged, set-failed, set-paused" >&2
     exit 1
     ;;
 esac

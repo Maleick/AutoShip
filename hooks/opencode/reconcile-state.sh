@@ -27,9 +27,9 @@ for dir in "$WORKSPACES_DIR"/*/; do
   [[ -f "$status_file" ]] || continue
   status=$(tr -d '[:space:]' < "$status_file")
   case "$status" in
-    COMPLETE) new_state="completed"; action="set-completed" ;;
+    COMPLETE) new_state="verifying"; action="set-verifying" ;;
     BLOCKED) new_state="blocked"; action="set-blocked" ;;
-    STUCK) new_state="stuck"; action="set-failed" ;;
+    STUCK) new_state="stuck"; action="set-stuck" ;;
     RUNNING) new_state="running"; action="set-running" ;;
     QUEUED) new_state="queued"; action="set-queued" ;;
     *) continue ;;

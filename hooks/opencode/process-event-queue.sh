@@ -191,7 +191,6 @@ verify_and_create_pr() {
   run_verification "$issue"
   verification_status=$?
   if [[ $verification_status -eq 2 ]]; then
-    apply_state_once "$issue" set-completed completed
     return 0
   fi
   if [[ $verification_status -ne 0 ]]; then
@@ -236,10 +235,11 @@ process_event() {
       ;;
     stuck)
       [[ -n "$issue" ]] || return 1
-      apply_state_once "$issue" set-failed blocked
+      apply_state_once "$issue" set-stuck stuck
       ;;
     verify)
       [[ -n "$issue" ]] || return 1
+      apply_state_once "$issue" set-verifying verifying
       verify_and_create_pr "$issue"
       ;;
     force_dispatch)

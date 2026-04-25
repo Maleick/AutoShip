@@ -82,18 +82,20 @@ touch -t 202604230000 "$STATE_REPO/.autoship/workspaces/issue-752/AUTOSHIP_RESUL
 touch -t 202604240000 "$STATE_REPO/.autoship/workspaces/issue-752/started_at"
 
 bash "$SCRIPT_DIR/reconcile-state.sh" --repo "$STATE_REPO" >/dev/null
-assert_eq "completed" "$(jq -r '.issues["issue-746"].state' "$STATE_REPO/.autoship/state.json")" "COMPLETE workspace reconciles to completed"
+assert_eq "verifying" "$(jq -r '.issues["issue-746"].state' "$STATE_REPO/.autoship/state.json")" "COMPLETE workspace reconciles to verifying"
 assert_eq "blocked" "$(jq -r '.issues["issue-749"].state' "$STATE_REPO/.autoship/state.json")" "BLOCKED workspace reconciles to blocked"
 assert_eq "running" "$(jq -r '.issues["issue-750"].state' "$STATE_REPO/.autoship/state.json")" "RUNNING workspace remains running"
 assert_eq "queued" "$(jq -r '.issues["issue-751"].state' "$STATE_REPO/.autoship/state.json")" "QUEUED workspace remains queued"
+assert_eq "stuck" "$(jq -r '.issues["issue-752"].state' "$STATE_REPO/.autoship/state.json")" "STUCK workspace reconciles to stuck"
 assert_eq "false" "$(jq -r '.issues["issue-752"].has_result' "$STATE_REPO/.autoship/state.json")" "stale result older than started_at is ignored"
-assert_eq "1" "$(jq -r '.stats.session_completed' "$STATE_REPO/.autoship/state.json")" "reconcile increments completion stats"
+assert_eq "0" "$(jq -r '.stats.session_completed // 0' "$STATE_REPO/.autoship/state.json")" "reconcile does not count completion before review"
 assert_eq "1" "$(jq -r '.stats.blocked' "$STATE_REPO/.autoship/state.json")" "reconcile increments blocked stats"
+assert_eq "1" "$(jq -r '.stats.failed' "$STATE_REPO/.autoship/state.json")" "reconcile increments failed stats for stuck workspaces"
 
 STATUS_OUTPUT=$(bash "$SCRIPT_DIR/status.sh" --repo "$STATE_REPO")
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'AGENTS (1 active / 15 max)' >/dev/null || fail "status shows active/max concurrency"
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Queued:    1' >/dev/null || fail "status shows queued count"
-printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Completed: 1' >/dev/null || fail "status shows completed count"
+printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Completed: 0' >/dev/null || fail "status shows completed count"
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Blocked:   1' >/dev/null || fail "status shows blocked count"
 
 NO_RUNNING_REPO="$TMP_DIR/no-running-repo"
@@ -294,7 +296,7 @@ cp "$SCRIPT_DIR/process-event-queue.sh" "$QUEUE_REPO/hooks/opencode/process-even
 cp "$SCRIPT_DIR/../update-state.sh" "$QUEUE_REPO/hooks/update-state.sh"
 chmod +x "$QUEUE_REPO/hooks/opencode/process-event-queue.sh" "$QUEUE_REPO/hooks/update-state.sh"
 cat > "$QUEUE_REPO/.autoship/state.json" <<'JSON'
-{"repo":"owner/repo","issues":{"issue-991":{"state":"running"},"issue-992":{"state":"running"}},"stats":{}}
+{"repo":"owner/repo","issues":{"issue-991":{"state":"running"},"issue-992":{"state":"running"},"issue-993":{"state":"running"}},"stats":{}}
 JSON
 printf '{"sessions":[]}' > "$QUEUE_REPO/.autoship/token-ledger.json"
 cat > "$QUEUE_REPO/.autoship/event-queue.json" <<'JSON'
@@ -302,7 +304,9 @@ cat > "$QUEUE_REPO/.autoship/event-queue.json" <<'JSON'
   {"type":"blocked","issue":"issue-991","priority":2,"data":{"status":"BLOCKED"},"queued_at":"2026-04-24T00:00:00Z"},
   {"type":"blocked","issue":"issue-991","priority":2,"data":{"status":"BLOCKED"},"queued_at":"2026-04-24T00:00:01Z"},
   {"type":"verify","issue":"issue-992","priority":2,"data":{"status":"COMPLETE"},"queued_at":"2026-04-24T00:00:02Z"},
-  {"type":"verify","issue":"issue-992","priority":2,"data":{"status":"COMPLETE"},"queued_at":"2026-04-24T00:00:03Z"}
+  {"type":"verify","issue":"issue-992","priority":2,"data":{"status":"COMPLETE"},"queued_at":"2026-04-24T00:00:03Z"},
+  {"type":"stuck","issue":"issue-993","priority":2,"data":{"status":"STUCK"},"queued_at":"2026-04-24T00:00:04Z"},
+  {"type":"stuck","issue":"issue-993","priority":2,"data":{"status":"STUCK"},"queued_at":"2026-04-24T00:00:05Z"}
 ]
 JSON
 (
@@ -310,11 +314,13 @@ JSON
   bash hooks/opencode/process-event-queue.sh >/dev/null
 )
 assert_eq "blocked" "$(jq -r '.issues["issue-991"].state' "$QUEUE_REPO/.autoship/state.json")" "event processor applies blocked event"
-assert_eq "completed" "$(jq -r '.issues["issue-992"].state' "$QUEUE_REPO/.autoship/state.json")" "event processor applies verify event"
+assert_eq "verifying" "$(jq -r '.issues["issue-992"].state' "$QUEUE_REPO/.autoship/state.json")" "event processor advances COMPLETE event to verification"
+assert_eq "stuck" "$(jq -r '.issues["issue-993"].state' "$QUEUE_REPO/.autoship/state.json")" "event processor applies stuck event"
 assert_eq "1" "$(jq -r '.stats.blocked' "$QUEUE_REPO/.autoship/state.json")" "duplicate blocked events do not double-update stats"
-assert_eq "1" "$(jq -r '.stats.session_completed' "$QUEUE_REPO/.autoship/state.json")" "duplicate verify events do not double-update completion stats"
+assert_eq "0" "$(jq -r '.stats.session_completed // 0' "$QUEUE_REPO/.autoship/state.json")" "verify events do not count completion before review"
+assert_eq "1" "$(jq -r '.stats.failed' "$QUEUE_REPO/.autoship/state.json")" "duplicate stuck events do not double-update failed stats"
 assert_eq "0" "$(jq 'length' "$QUEUE_REPO/.autoship/event-queue.json")" "event processor drains processed duplicate events"
-assert_eq "2" "$(jq 'length' "$QUEUE_REPO/.autoship/processed-events.json")" "event processor records only unique semantic events"
+assert_eq "3" "$(jq 'length' "$QUEUE_REPO/.autoship/processed-events.json")" "event processor records only unique semantic events"
 
 VERIFY_FAIL_REPO="$TMP_DIR/verify-fail-repo"
 mkdir -p "$VERIFY_FAIL_REPO/.autoship/workspaces/issue-184" "$VERIFY_FAIL_REPO/hooks/opencode" "$VERIFY_FAIL_REPO/hooks" "$VERIFY_FAIL_REPO/bin"
