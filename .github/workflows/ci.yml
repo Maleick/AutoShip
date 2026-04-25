@@ -174,9 +174,9 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
     runs-on: [self-hosted, Linux, X64, textquest]
     timeout-minutes: 90
-    continue-on-error: true
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/.ci-target/${{ github.run_id }}/coverage
+      COVERAGE_THRESHOLD: 80
     steps:
       - uses: actions/checkout@v4
         with:
@@ -263,11 +263,46 @@ jobs:
         with:
           tool: cargo-tarpaulin@0.35.2
 
-      - name: Run coverage (threshold 68%)
+      - name: Run coverage (threshold 80%)
         if: steps.scope.outputs.docs_only != 'true'
         env:
           CARGO_BUILD_JOBS: "1"
-        run: python3 scripts/coverage-report.py --threshold 68
+        run: python3 scripts/coverage-report.py --threshold "${COVERAGE_THRESHOLD}" --html --xml
+
+      - name: Stage coverage artifacts
+        if: steps.scope.outputs.docs_only != 'true'
+        run: |
+          mkdir -p target/coverage-reports
+          html_report="$(find target -type f -name 'tarpaulin-report.html' | head -n 1 || true)"
+          xml_report="$(find target -type f \( -name 'cobertura.xml' -o -name 'tarpaulin-report.xml' \) | head -n 1 || true)"
+
+          if [ -n "$html_report" ]; then
+            cp "$html_report" target/coverage-reports/coverage-report.html
+          fi
+          if [ -n "$xml_report" ]; then
+            cp "$xml_report" target/coverage-reports/coverage-report.xml
+          fi
+
+          if [ ! -f target/coverage-reports/coverage-report.html ] || [ ! -f target/coverage-reports/coverage-report.xml ]; then
+            echo "::warning::Expected coverage artifacts were not generated."
+          fi
+
+      - name: Upload coverage reports
+        if: steps.scope.outputs.docs_only != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports-${{ github.sha }}
+          path: target/coverage-reports/**
+          if-no-files-found: warn
+
+      - name: Upload coverage to Codecov
+        if: steps.scope.outputs.docs_only != 'true'
+        uses: codecov/codecov-action@v4
+        with:
+          files: target/coverage-reports/coverage-report.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
 
   test-matrix:
     name: Unit tests on ${{ matrix.os-name }} (rust-${{ matrix.rust }})

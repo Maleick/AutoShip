@@ -8,15 +8,16 @@ Enforces minimum 80% line coverage per module as per issue #1202.
 Requires: cargo-tarpaulin (install with: cargo install cargo-tarpaulin)
 
 Usage:
-  python3 scripts/coverage-report.py [--html] [--threshold <percent>]
+  python3 scripts/coverage-report.py [--html] [--xml] [--threshold <percent>]
 
   --html         Generate HTML report (output to target/tarpaulin-report.html)
-  --threshold N  Exit with code 1 if coverage falls below N% (default: 68)
+  --xml          Generate XML report (output to target/cobertura.xml)
+  --threshold N  Exit with code 1 if coverage falls below N% (default: 80)
 
 Examples:
-  python3 scripts/coverage-report.py                    # Text report (68% baseline)
+  python3 scripts/coverage-report.py                    # Text report (80% baseline)
   python3 scripts/coverage-report.py --html             # Text + HTML report
-  python3 scripts/coverage-report.py --threshold 80     # Check against aspirational target
+  python3 scripts/coverage-report.py --threshold 80     # Check against target
 """
 
 import subprocess
@@ -27,7 +28,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 COMMAND_TIMEOUT_SECONDS = 3000
-DEFAULT_COVERAGE_THRESHOLD = 68
+DEFAULT_COVERAGE_THRESHOLD = 80
 
 def run_command(cmd: list, capture_output: bool = True) -> Tuple[int, str, str]:
     """Run a command and return (exit_code, stdout, stderr)."""
@@ -50,7 +51,7 @@ def check_tarpaulin_installed() -> bool:
     exit_code, _, _ = run_command(["cargo", "tarpaulin", "--version"])
     return exit_code == 0
 
-def generate_coverage_report(html: bool = False) -> Tuple[int, Optional[float]]:
+def generate_coverage_report(html: bool = False, xml: bool = False) -> Tuple[int, Optional[float]]:
     """
     Generate coverage report using cargo-tarpaulin.
 
@@ -75,6 +76,8 @@ def generate_coverage_report(html: bool = False) -> Tuple[int, Optional[float]]:
 
     if html:
         cmd.extend(["--out", "Html"])
+    if xml:
+        cmd.extend(["--out", "Xml"])
 
     cmd.extend(["--", "--nocapture"])
 
@@ -144,6 +147,11 @@ def main():
         help="Generate HTML report (output to target/tarpaulin-report.html)"
     )
     parser.add_argument(
+        "--xml",
+        action="store_true",
+        help="Generate XML report (output to target/cobertura.xml)"
+    )
+    parser.add_argument(
         "--threshold",
         type=int,
         default=DEFAULT_COVERAGE_THRESHOLD,
@@ -156,7 +164,7 @@ def main():
     args = parser.parse_args()
     threshold_explicit = any(arg.startswith("--threshold") for arg in sys.argv[1:])
 
-    exit_code, coverage_percent = generate_coverage_report(html=args.html)
+    exit_code, coverage_percent = generate_coverage_report(html=args.html, xml=args.xml)
 
     if exit_code != 0:
         return exit_code

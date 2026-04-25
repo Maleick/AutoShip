@@ -8,6 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/Maleick/TextQuest/actions/workflows/ci.yml"><img src="https://github.com/Maleick/TextQuest/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://codecov.io/gh/Maleick/TextQuest"><img src="https://codecov.io/gh/Maleick/TextQuest/branch/master/graph/badge.svg" alt="Coverage"></a>
   <a href="https://github.com/Maleick/TextQuest/releases/tag/v0.7.0-alpha"><img src="https://img.shields.io/static/v1?label=release&message=v0.7.0-alpha&color=success&style=flat" alt="Release"></a>
   <a href="https://textquest.teamoperator.red"><img src="https://img.shields.io/badge/docs-textquest.teamoperator.red-blue?style=flat" alt="Docs"></a>
   <a href="https://github.com/Maleick/TextQuest/commit/56e51b377a72a09d1b9d510045dd78ec1aef10d4"><img src="https://img.shields.io/static/v1?label=last+commit&message=2026-04-23+56e51b37&color=informational&style=flat" alt="Last Commit"></a>
