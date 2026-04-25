@@ -706,13 +706,27 @@ impl Orchestrator {
             &self.state_timestamps,
             self.tick_count,
         );
+        let heal_commands = self.combat.tick_heal_arbitration(
+            &self.game_states,
+            &self.client_groups,
+            &self.client_class_names,
+            &self.state_timestamps,
+            self.tick_count,
+        );
+        let heal_commands_scoped: Vec<_> = heal_commands
+            .into_iter()
+            .filter(|(pid, _)| in_scope.is_empty() || in_scope.contains(pid))
+            .collect();
 
-        let count = scoped.len() + emergency.len() + xassist_commands.len();
+        let count = scoped.len() + emergency.len() + xassist_commands.len() + heal_commands_scoped.len();
         for (pid, action) in &scoped {
             self.dispatch_action(*pid, action);
         }
         for (pid, action) in &emergency {
             self.dispatch_action(*pid, action);
+        }
+        for (pid, cmd) in &heal_commands_scoped {
+            self.send_ipc_command(*pid, cmd.clone());
         }
         for (pid, cmd) in &xassist_commands {
             let xassist::AssistCommand::Target(spawn_id) = cmd;

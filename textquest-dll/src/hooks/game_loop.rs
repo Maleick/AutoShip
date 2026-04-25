@@ -3347,14 +3347,35 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             crate::eq::do_combat_ability(ability_id as i32, true);
             send_command_result(true, format!("Combat ability {ability_id} requested"));
         }
-        Command::CombatEmergencyHeal { .. } => {
-            send_unsupported_command("CombatEmergencyHeal");
+        Command::CombatEmergencyHeal { target_id } => {
+            tracing::info!(target_id, "CombatEmergencyHeal received");
+            queue_slash_command(format!("/target id {target_id}"));
+            queue_slash_command("/cast complete heal".to_string());
+            send_command_result(true, "Emergency heal command queued");
         }
-        Command::HealClaimTarget { .. } => {
-            send_unsupported_command("HealClaimTarget");
+        Command::HealClaimTarget {
+            healer_id,
+            target_id,
+            cast_time_ms,
+        } => {
+            tracing::info!(
+                healer_id,
+                target_id,
+                cast_time_ms,
+                "HealClaimTarget received (no-op on client)"
+            );
+            send_command_result(true, "HealClaimTarget acknowledged");
         }
-        Command::HealReleaseClaim { .. } => {
-            send_unsupported_command("HealReleaseClaim");
+        Command::HealReleaseClaim {
+            healer_id,
+            target_id,
+        } => {
+            tracing::info!(
+                healer_id,
+                target_id,
+                "HealReleaseClaim received (no-op on client)"
+            );
+            send_command_result(true, "HealReleaseClaim acknowledged");
         }
         Command::UpdateSharedClientStates { states } => {
             tracing::debug!(count = states.len(), "UpdateSharedClientStates received");
