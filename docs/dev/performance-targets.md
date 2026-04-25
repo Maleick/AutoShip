@@ -10,6 +10,18 @@ To run the full benchmark suite:
 cargo bench --benches
 ```
 
+To save a baseline for tracking:
+
+```bash
+cargo bench --benches -- --save-baseline main
+```
+
+To run a baseline comparison against `main`:
+
+```bash
+cargo bench --benches -- --baseline-lenient main --save-baseline current
+```
+
 To run a specific benchmark:
 
 ```bash
@@ -82,7 +94,9 @@ Criterion will generate an HTML report in `target/criterion/` with charts and st
 
 ## Regression Detection
 
-Benchmarks are run on every CI commit (advisory, not blocking). If a benchmark degrades by > 10% from baseline:
+Benchmarks run in CI on PRs to `master`, on `master` pushes, and via manual dispatch (advisory, not blocking). PR runs also compare against the merge-target baseline when available.
+
+If a benchmark degrades by > 10% from baseline:
 
 1. **Check recent changes**: Review PRs merged since the last baseline measurement.
 2. **Identify the culprit**: Use `git bisect` with the benchmark to pinpoint the change.

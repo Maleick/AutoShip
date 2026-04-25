@@ -1,6 +1,10 @@
 name: Performance Benchmarks
 
 on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
   workflow_dispatch:
 
 concurrency:
@@ -37,14 +41,40 @@ jobs:
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@v2
 
-      - name: Run benchmarks
-        run: cargo bench --benches -- --verbose
+      - name: Build baseline on target branch
+        id: baseline
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          baseline_sha="${{ github.event.pull_request.base.sha }}"
+          base_dir="/tmp/bench-base"
+
+          git fetch --depth=1 origin "${{ github.base_ref }}" "${baseline_sha}"
+          git worktree add --detach "${base_dir}" "${baseline_sha}"
+
+          (cd "${base_dir}" && cargo bench --benches -- --save-baseline "pr-base-${baseline_sha}")
+
+          mkdir -p target/criterion
+          cp -R "${base_dir}/target/criterion/." target/criterion/
+
+          git worktree remove "${base_dir}"
+
+      - name: Run benchmark baseline comparison
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          baseline_sha="${{ github.event.pull_request.base.sha }}"
+          cargo bench --benches -- --baseline-lenient "pr-base-${baseline_sha}" --save-baseline "pr-${GITHUB_SHA}"
+
+      - name: Run benchmarks (mainline baseline)
+        if: github.event_name != 'pull_request'
+        run: cargo bench --benches -- --save-baseline "main-${GITHUB_SHA}"
         continue-on-error: true
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: benchmark-results
+          name: benchmark-results-${{ github.sha }}
           path: target/criterion/
           retention-days: 30
