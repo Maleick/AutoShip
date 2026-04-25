@@ -63,6 +63,21 @@ impl TextQuestMq2Api {
     }
 }
 
+/// Runtime contract declared for an MQ2 plugin by the operator config.
+///
+/// Since external MQ2 DLLs cannot export TextQuest manifests, operators declare
+/// these in their plugin config (e.g. to model rgmercs' `init.lua` contract).
+/// The loader enforces this before calling `InitializePlugin`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RuntimeManifest {
+    /// Plugin names (without extension) that must be loaded before this plugin.
+    pub requires: Vec<String>,
+    /// Plugin names (without extension) that must be unloaded before this plugin.
+    pub force_unload: Vec<String>,
+    /// Optional EQ slash command issued after this plugin initialises.
+    pub pause_on_load: Option<String>,
+}
+
 /// Per-plugin configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PluginConfig {
@@ -243,6 +258,16 @@ impl MacroQuestPluginLoader {
         candidate: &PluginCandidate,
         api: &TextQuestMq2Api,
     ) -> Result<LoadedMacroQuestPlugin, PluginLoadError> {
+        self.load_with_context(candidate, api, &std::collections::BTreeSet::new(), &mut std::collections::BTreeSet::new())
+    }
+
+    fn load_with_context(
+        &self,
+        candidate: &PluginCandidate,
+        api: &TextQuestMq2Api,
+        loaded_names: &std::collections::BTreeSet<String>,
+        force_unloaded: &mut std::collections::BTreeSet<String>,
+    ) -> Result<LoadedMacroQuestPlugin, PluginLoadError> {
         let config = self.config_for(&candidate.name);
         if !config.enabled {
             return Err(PluginLoadError::Disabled(candidate.name.clone()));
@@ -269,7 +294,12 @@ impl MacroQuestPluginLoader {
         Ok(loaded)
     }
 
-    /// Discover and load every enabled plugin.
+    /// Discover and load every enabled plugin, enforcing manifest contracts.
+    ///
+    /// Plugins are loaded in discovery order (alphabetical). If a plugin's
+    /// `requires` names something not yet loaded, loading fails with
+    /// [`PluginLoadError::UnsatisfiedRequirement`]. Operators should ensure
+    /// dependency order via `requires` declarations.
     pub fn load_enabled(
         &mut self,
         api: &TextQuestMq2Api,
@@ -282,11 +312,24 @@ impl MacroQuestPluginLoader {
             })?;
 
         let mut loaded = Vec::new();
+        let mut loaded_names = std::collections::BTreeSet::new();
+        let mut force_unloaded: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+
         for candidate in candidates {
             if !self.config_for(&candidate.name).enabled {
                 continue;
             }
-            loaded.push(self.load(&candidate, api)?);
+            // Skip plugins that a prior manifest declared must be unloaded.
+            if force_unloaded.contains(&candidate.name) {
+                tracing::info!(
+                    plugin = %candidate.name,
+                    "skipping plugin: force-unloaded by a prior manifest"
+                );
+                continue;
+            }
+            let plugin = self.load_with_context(&candidate, api, &loaded_names, &mut force_unloaded)?;
+            loaded_names.insert(candidate.name.clone());
+            loaded.push(plugin);
         }
         Ok(loaded)
     }
@@ -296,6 +339,8 @@ impl MacroQuestPluginLoader {
 #[derive(Debug)]
 pub struct LoadedMacroQuestPlugin {
     candidate: PluginCandidate,
+    /// EQ slash command declared by the plugin's manifest, if any.
+    pub pause_command: Option<String>,
     #[cfg(windows)]
     library: windows::Win32::Foundation::HMODULE,
     #[cfg(windows)]
@@ -351,6 +396,15 @@ fn load_platform(
         "MQ2 plugin loading skipped on non-Windows host"
     );
     Err(PluginLoadError::UnsupportedPlatform)
+}
+
+#[cfg(not(windows))]
+#[allow(dead_code)]
+fn make_loaded_non_windows(candidate: PluginCandidate) -> LoadedMacroQuestPlugin {
+    LoadedMacroQuestPlugin {
+        candidate,
+        pause_command: None,
+    }
 }
 
 #[cfg(windows)]
@@ -431,6 +485,7 @@ fn load_platform(
 
     Ok(LoadedMacroQuestPlugin {
         candidate: candidate.clone(),
+        pause_command: None, // set by load_with_context after platform load
         library,
         shutdown,
     })

@@ -56,6 +56,8 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use tracing::{debug, error, info, warn};
 
+use textquest_common::plugins::{ConflictStatus, PluginManifest};
+
 // ─── Error-budget constants ───────────────────────────────────────────────────
 
 /// Maximum number of errors allowed within the sliding window before the
@@ -292,6 +294,19 @@ impl PluginRegistrationTracker {
 
 // ─── PluginRegistry ──────────────────────────────────────────────────────────
 
+/// Dashboard snapshot of a single DLL plugin for the Web UI.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PluginStatusSnapshot {
+    pub name: String,
+    pub version: Option<String>,
+    pub path: PathBuf,
+    pub healthy: bool,
+    pub disabled_reason: Option<String>,
+    pub manifest: PluginManifest,
+    pub conflict_status: ConflictStatus,
+    pub pause_command: Option<String>,
+}
+
 /// Tracks all successfully loaded plugins, keyed by plugin name.
 pub struct PluginRegistry {
     plugins: HashMap<String, PluginHandle>,
@@ -305,6 +320,12 @@ pub struct PluginRegistry {
     command_registry: SharedCommandRegistry,
     /// Shared hotkey registry — plugins register into this.
     hotkey_registry: SharedHotkeyRegistry,
+    /// Runtime contract declared per plugin.
+    manifests: HashMap<String, PluginManifest>,
+    /// Conflict resolution outcome per plugin, recorded at load time.
+    conflict_status: HashMap<String, ConflictStatus>,
+    /// Set when combat engine is paused due to an external automation conflict.
+    pub combat_engine_paused: bool,
 }
 
 impl std::fmt::Debug for PluginRegistry {
@@ -336,6 +357,9 @@ impl PluginRegistry {
             health: HashMap::new(),
             command_registry,
             hotkey_registry,
+            manifests: HashMap::new(),
+            conflict_status: HashMap::new(),
+            combat_engine_paused: false,
         }
     }
 
@@ -778,6 +802,144 @@ impl PluginRegistry {
     pub fn plugins_dir(&self) -> Option<&Path> {
         self.plugins_dir.as_deref()
     }
+
+    // ── Manifest contract enforcement ────────────────────────────────────────
+
+    /// Enforce a [`PluginManifest`] for an already-loaded plugin.
+    ///
+    /// Checks `requires`, force-unloads `force_unload` entries, and records
+    /// `pause_on_load` in the conflict status.  The caller is responsible for
+    /// dispatching the pause command via IPC.
+    pub fn enforce_manifest_contract(
+        &mut self,
+        plugin_name: &str,
+        manifest: PluginManifest,
+    ) -> Result<ConflictStatus> {
+        let missing: Vec<String> = manifest
+            .requires
+            .iter()
+            .filter(|req| !self.plugins.contains_key(*req))
+            .cloned()
+            .collect();
+
+        if !missing.is_empty() {
+            error!(
+                plugin = %plugin_name,
+                ?missing,
+                "Plugin requirement not satisfied"
+            );
+            anyhow::bail!(
+                "plugin '{}' requires plugins not loaded: {}",
+                plugin_name,
+                missing.join(", ")
+            );
+        }
+
+        let mut force_unloaded: Vec<String> = Vec::new();
+        for conflicting in &manifest.force_unload {
+            if self.plugins.contains_key(conflicting.as_str()) {
+                warn!(
+                    plugin = %plugin_name,
+                    conflicting = %conflicting,
+                    "Force-unloading conflicting plugin per manifest"
+                );
+                self.plugins.remove(conflicting);
+                self.health.remove(conflicting);
+                self.trackers.remove(conflicting);
+                self.manifests.remove(conflicting);
+                self.conflict_status.remove(conflicting);
+                force_unloaded.push(conflicting.clone());
+            }
+        }
+
+        if let Some(cmd) = &manifest.pause_on_load {
+            info!(
+                plugin = %plugin_name,
+                command = %cmd,
+                "Manifest pause_on_load — caller must dispatch via IPC"
+            );
+        }
+
+        let status = if force_unloaded.is_empty() {
+            ConflictStatus::Ok
+        } else {
+            ConflictStatus::ConflictingPlugins(force_unloaded)
+        };
+
+        self.manifests.insert(plugin_name.to_string(), manifest);
+        self.conflict_status
+            .insert(plugin_name.to_string(), status.clone());
+
+        Ok(status)
+    }
+
+    /// Return `true` when a known rgmercs-family plugin is in the registry.
+    ///
+    /// Detection checks well-known script/plugin names; a loaded plugin named
+    /// `rgmercs`, `e3n`, or `rgbattlefield` indicates rgmercs owns combat.
+    pub fn rgmercs_detected(&self) -> bool {
+        const RGMERCS_NAMES: &[&str] = &["rgmercs", "e3n", "rgbattlefield"];
+        self.plugins
+            .keys()
+            .any(|name| RGMERCS_NAMES.iter().any(|r| name.eq_ignore_ascii_case(r)))
+    }
+
+    /// Pause the TextQuest DLL combat engine when an external automation
+    /// conflict is detected.  Returns `true` if the state changed.
+    pub fn pause_combat_engine(&mut self) -> bool {
+        if self.combat_engine_paused {
+            return false;
+        }
+        self.combat_engine_paused = true;
+        warn!(
+            "Combat engine paused — external automation conflict detected \
+             (rgmercs or equivalent is active)"
+        );
+        true
+    }
+
+    /// Resume the TextQuest combat engine.  Returns `true` if the state changed.
+    pub fn resume_combat_engine(&mut self) -> bool {
+        if !self.combat_engine_paused {
+            return false;
+        }
+        self.combat_engine_paused = false;
+        info!("Combat engine resumed");
+        true
+    }
+
+    /// Snapshot all loaded plugins for Web UI / dashboard consumers.
+    pub fn plugin_status_snapshots(&self) -> Vec<PluginStatusSnapshot> {
+        self.plugins
+            .iter()
+            .map(|(name, handle)| {
+                let health = self.health.get(name);
+                PluginStatusSnapshot {
+                    name: name.clone(),
+                    version: handle.metadata.version.clone(),
+                    path: handle.metadata.path.clone(),
+                    healthy: health.map(|h| !h.is_disabled()).unwrap_or(true),
+                    disabled_reason: health
+                        .and_then(|h| h.disable_reason())
+                        .map(|s| s.to_string()),
+                    manifest: self
+                        .manifests
+                        .get(name)
+                        .cloned()
+                        .unwrap_or_default(),
+                    conflict_status: self
+                        .conflict_status
+                        .get(name)
+                        .cloned()
+                        .unwrap_or_default(),
+                    pause_command: self
+                        .manifests
+                        .get(name)
+                        .and_then(|m| m.pause_on_load.clone()),
+                }
+            })
+            .collect()
+    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -1188,6 +1350,89 @@ mod tests {
                 .unwrap_or(0),
             1,
             "one error should be recorded for the failed load"
+        );
+    }
+
+    // ── Manifest contract enforcement tests ──────────────────────────────────
+
+    #[test]
+    fn enforce_manifest_contract_ok_when_no_requirements() {
+        let mut registry = PluginRegistry::new();
+        let manifest = PluginManifest::default();
+        let status = registry
+            .enforce_manifest_contract("mq2nav", manifest)
+            .expect("empty manifest should always satisfy");
+        assert_eq!(status, ConflictStatus::Ok);
+    }
+
+    #[test]
+    fn enforce_manifest_contract_errors_on_missing_requires() {
+        let mut registry = PluginRegistry::new();
+        let manifest = PluginManifest {
+            requires: vec!["MQ2Nav".to_string(), "MQ2DanNet".to_string()],
+            ..Default::default()
+        };
+        let err = registry
+            .enforce_manifest_contract("rgmercs", manifest)
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("MQ2Nav") || msg.contains("MQ2DanNet"),
+            "error should name missing plugins: {msg}"
+        );
+    }
+
+    #[test]
+    fn enforce_manifest_force_unload_on_absent_plugin_is_noop() {
+        let mut registry = PluginRegistry::new();
+        let manifest = PluginManifest {
+            force_unload: vec!["MQ2Melee".to_string()],
+            pause_on_load: Some("/war pause on".to_string()),
+            ..Default::default()
+        };
+        // MQ2Melee is not in the registry, so force_unload is a no-op.
+        let status = registry
+            .enforce_manifest_contract("rgmercs", manifest)
+            .expect("force_unload on absent plugin should succeed");
+        assert_eq!(status, ConflictStatus::Ok);
+        assert!(
+            registry.manifests.contains_key("rgmercs"),
+            "manifest should be recorded"
+        );
+    }
+
+    #[test]
+    fn rgmercs_detected_returns_false_on_empty_registry() {
+        let registry = PluginRegistry::new();
+        assert!(!registry.rgmercs_detected());
+    }
+
+    #[test]
+    fn pause_combat_engine_transitions_state() {
+        let mut registry = PluginRegistry::new();
+        assert!(!registry.combat_engine_paused);
+        assert!(
+            registry.pause_combat_engine(),
+            "first pause should return true"
+        );
+        assert!(registry.combat_engine_paused);
+        assert!(
+            !registry.pause_combat_engine(),
+            "second pause is a no-op"
+        );
+        assert!(
+            registry.resume_combat_engine(),
+            "resume should return true"
+        );
+        assert!(!registry.combat_engine_paused);
+    }
+
+    #[test]
+    fn plugin_status_snapshots_empty_on_fresh_registry() {
+        let registry = PluginRegistry::new();
+        assert!(
+            registry.plugin_status_snapshots().is_empty(),
+            "empty registry yields no snapshots"
         );
     }
 }
