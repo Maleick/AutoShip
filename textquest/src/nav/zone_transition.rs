@@ -24,6 +24,13 @@ const SAFE_COORD_MAX: f32 = 10_000.0;
 /// How many recovery retries are attempted before giving up.
 const MAX_RECOVERY_ATTEMPTS: u32 = 3;
 
+/// 2D proximity threshold (EQ world units) at which the FSM considers the
+/// player to be at the zone-line and automatically triggers the zone crossing.
+///
+/// EQ zone lines are typically entered within a few units; 15.0 matches
+/// the MQ2MoveUtils convention for "arrived at zone line" detection.
+pub const ZONE_LINE_PROXIMITY_THRESHOLD: f32 = 15.0;
+
 /// The type of zone transition being executed.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransitionKind {
@@ -398,6 +405,43 @@ impl ZoneTransitionFsm {
         } else {
             (Some(kind), safe_pos, self.recovery_attempts)
         }
+    }
+
+    /// Poll the FSM each frame/tick, providing the player's current position.
+    ///
+    /// When in the `Walking` state for a `ZoneTo` transition this checks
+    /// whether the player is within `ZONE_LINE_PROXIMITY_THRESHOLD` of the
+    /// zone-line position.  If so, it automatically calls `on_arrived()` to
+    /// advance the FSM to the `Zoning` phase — no external arrival signal is
+    /// needed.
+    ///
+    /// For all other cases this falls through to the regular `tick()` timeout
+    /// logic.
+    ///
+    /// # Arguments
+    ///
+    /// * `player_pos` — the player's current world-space position.
+    pub fn tick_with_player_pos(&mut self, player_pos: &Waypoint) -> TickResult {
+        // Check zone-line proximity only while walking toward a ZoneTo target.
+        if let ZoneTransitionState::Walking {
+            kind: TransitionKind::ZoneTo { zone_line_pos, .. },
+            ..
+        } = &self.state
+        {
+            let dist = player_pos.distance_2d(zone_line_pos);
+            if dist <= ZONE_LINE_PROXIMITY_THRESHOLD {
+                tracing::info!(
+                    client_id = self.client_id,
+                    dist,
+                    threshold = ZONE_LINE_PROXIMITY_THRESHOLD,
+                    "Player within zone-line proximity threshold — triggering zone crossing"
+                );
+                return self.on_arrived();
+            }
+        }
+
+        // Fall through to regular timeout/state-machine tick.
+        self.tick()
     }
 
     /// Force the FSM back to idle (e.g., on logout or manual cancel).
@@ -798,6 +842,96 @@ mod tests {
                 assert_eq!(caster_id, 77);
             }
             other => assert!(false, "expected PortTo, got {other:?}"),
+        }
+    }
+
+    // ─── tick_with_player_pos: zone-line proximity detection (#897) ───────
+
+    /// Helper: create an FSM in Walking/ZoneTo state with given zone-line pos.
+    fn fsm_in_walking_zone_to(client_id: ClientId, zl_x: f32, zl_y: f32, zl_z: f32) -> ZoneTransitionFsm {
+        let mut fsm = ZoneTransitionFsm::new(client_id);
+        fsm.start(zone_kind("test_zone", zl_x, zl_y, zl_z));
+        // confirm we're in Walking
+        assert!(matches!(fsm.state(), ZoneTransitionState::Walking { .. }));
+        fsm
+    }
+
+    #[test]
+    fn tick_with_player_pos_far_from_zone_line_stays_in_progress() {
+        let mut fsm = fsm_in_walking_zone_to(100, 0.0, 0.0, 0.0);
+        // Player is 100 units away — well beyond threshold of 15.0
+        let player = Waypoint::new(100.0, 0.0, 0.0);
+        let result = fsm.tick_with_player_pos(&player);
+        assert_eq!(result, TickResult::InProgress);
+        assert!(matches!(fsm.state(), ZoneTransitionState::Walking { .. }));
+    }
+
+    #[test]
+    fn tick_with_player_pos_within_threshold_triggers_zoning() {
+        let mut fsm = fsm_in_walking_zone_to(101, 0.0, 0.0, 0.0);
+        // Player is 10 units away — inside threshold of 15.0
+        let player = Waypoint::new(10.0, 0.0, 0.0);
+        let result = fsm.tick_with_player_pos(&player);
+        // on_arrived() advances to Zoning → returns InProgress
+        assert_eq!(result, TickResult::InProgress);
+        assert!(matches!(fsm.state(), ZoneTransitionState::Zoning { .. }));
+    }
+
+    #[test]
+    fn tick_with_player_pos_at_exact_threshold_triggers_zoning() {
+        let mut fsm = fsm_in_walking_zone_to(102, 0.0, 0.0, 0.0);
+        // Player is exactly 15.0 units away — at threshold boundary (<=)
+        let player = Waypoint::new(15.0, 0.0, 0.0);
+        let result = fsm.tick_with_player_pos(&player);
+        assert_eq!(result, TickResult::InProgress);
+        assert!(matches!(fsm.state(), ZoneTransitionState::Zoning { .. }));
+    }
+
+    #[test]
+    fn tick_with_player_pos_walk_to_ignores_proximity_check() {
+        // WalkTo state: proximity check must NOT trigger zone crossing
+        let mut fsm = ZoneTransitionFsm::new(103);
+        fsm.start(walk_kind(0.0, 0.0, 0.0));
+        assert!(matches!(fsm.state(), ZoneTransitionState::Walking { .. }));
+        // Place player at origin (0 distance) — should NOT advance to Zoning
+        let player = Waypoint::new(0.0, 0.0, 0.0);
+        let result = fsm.tick_with_player_pos(&player);
+        assert_eq!(result, TickResult::InProgress);
+        assert!(matches!(fsm.state(), ZoneTransitionState::Walking { .. }));
+    }
+
+    #[test]
+    fn tick_with_player_pos_idle_returns_idle() {
+        let mut fsm = ZoneTransitionFsm::new(104);
+        // FSM starts Idle — tick_with_player_pos should return Idle (via tick())
+        let player = Waypoint::new(0.0, 0.0, 0.0);
+        let result = fsm.tick_with_player_pos(&player);
+        assert_eq!(result, TickResult::Idle);
+        assert!(fsm.is_idle());
+    }
+
+    #[test]
+    fn tick_with_player_pos_uses_2d_distance_ignores_z() {
+        let mut fsm = fsm_in_walking_zone_to(105, 0.0, 0.0, 0.0);
+        // Player is within XY threshold but far away in Z — 2D dist = 10 < 15
+        // Should trigger zone crossing because EQ movement is 2D
+        let player = Waypoint::new(10.0, 0.0, 500.0);
+        let result = fsm.tick_with_player_pos(&player);
+        assert_eq!(result, TickResult::InProgress);
+        assert!(matches!(fsm.state(), ZoneTransitionState::Zoning { .. }));
+    }
+
+    #[test]
+    fn tick_with_player_pos_zone_name_preserved_in_zoning_state() {
+        let mut fsm = ZoneTransitionFsm::new(106);
+        fsm.start(zone_kind("nektulos", 0.0, 0.0, 0.0));
+        let player = Waypoint::new(5.0, 0.0, 0.0);
+        fsm.tick_with_player_pos(&player);
+        match fsm.state() {
+            ZoneTransitionState::Zoning { target_zone, .. } => {
+                assert_eq!(target_zone, "nektulos");
+            }
+            other => panic!("expected Zoning, got {other:?}"),
         }
     }
 }

@@ -95,6 +95,10 @@ pub fn handle_command(cmd: NavCommand) {
             NavCommand::CircleKite { config, center } => nav.circle_kite(config, center),
             NavCommand::CircleOff => nav.circle_off(),
             NavCommand::SetHeadingMode(mode) => nav.set_heading_mode(mode),
+            NavCommand::ZoneTo {
+                zone_name,
+                zone_line_pos,
+            } => nav.navigate_to_zone_line(zone_name, zone_line_pos),
         }
     }
 }
@@ -189,6 +193,13 @@ pub enum NavCommand {
     CircleOff,
     /// Set the heading update mode.
     SetHeadingMode(textquest_common::nav::HeadingMode),
+    /// Walk to a zone-line waypoint and trigger the zone crossing (#897).
+    ZoneTo {
+        /// Destination zone name (used for logging and state reporting).
+        zone_name: String,
+        /// Position of the zone-line in EQ world coordinates.
+        zone_line_pos: Waypoint,
+    },
 }
 
 #[cfg(test)]
@@ -383,6 +394,36 @@ mod tests {
         // Closure should never be called — no panic.
         update_follow_policy(|config| {
             config.follow_distance = 10.0;
+        });
+        restore_navigator(prev);
+    }
+
+    #[test]
+    fn nav_command_zone_to_is_constructible() {
+        let cmd = NavCommand::ZoneTo {
+            zone_name: "commonlands".to_string(),
+            zone_line_pos: Waypoint::new(100.0, 200.0, 0.0),
+        };
+        if let NavCommand::ZoneTo {
+            zone_name,
+            zone_line_pos,
+        } = cmd
+        {
+            assert_eq!(zone_name, "commonlands");
+            assert!((zone_line_pos.x - 100.0).abs() < f32::EPSILON);
+            assert!((zone_line_pos.y - 200.0).abs() < f32::EPSILON);
+        } else {
+            panic!("expected ZoneTo");
+        }
+    }
+
+    #[test]
+    fn handle_command_zone_to_is_safe_with_no_navigator() {
+        let prev = take_navigator();
+        // Should not panic when navigator is uninitialized.
+        handle_command(NavCommand::ZoneTo {
+            zone_name: "nektulos".to_string(),
+            zone_line_pos: Waypoint::new(0.0, 0.0, 0.0),
         });
         restore_navigator(prev);
     }

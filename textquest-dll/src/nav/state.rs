@@ -206,6 +206,26 @@ impl Navigator {
         self.state = State::Moving;
     }
 
+    /// Walk to a zone-line position. The orchestrator detects proximity via
+    /// `ZoneTransitionFsm::tick_with_player_pos` and handles the actual zone
+    /// crossing; this method merely routes movement to the zone-line (#897).
+    pub fn navigate_to_zone_line(&mut self, zone_name: String, zone_line_pos: Waypoint) {
+        tracing::info!(
+            zone_name = %zone_name,
+            x = zone_line_pos.x,
+            y = zone_line_pos.y,
+            z = zone_line_pos.z,
+            "Navigating to zone line"
+        );
+        self.queue.set_path(vec![zone_line_pos]);
+        self.camp = None;
+        self.camp_config = None;
+        self.stuck.reset();
+        self.stick.stop();
+        self.warp.reset();
+        self.state = State::Moving;
+    }
+
     /// Move to a camp spot and face the specified heading.
     pub fn set_camp(&mut self, spot: CampSpot) {
         tracing::info!(role = %spot.role, "Setting camp spot");
