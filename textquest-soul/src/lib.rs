@@ -3,6 +3,8 @@
 
 /// Soul operator alerts and anomaly detection.
 pub mod alerts;
+/// Streaming anomaly-detection pipeline for the self-improvement loop.
+pub mod improve;
 /// Soul audit logging — append-only JSONL log of key state changes.
 pub mod audit;
 /// Inter-character banter — proximity and relationship-based dialogue

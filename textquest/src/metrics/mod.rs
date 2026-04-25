@@ -5,6 +5,7 @@
 //! admin-monitoring keeps a bounded in-memory session store for low-latency
 //! operational snapshots.
 
+pub mod anomaly;
 pub mod admin_monitoring;
 pub mod baseline_scorecard;
 pub mod bayesian_baseline;
@@ -49,6 +50,9 @@ pub use performance::{
     PerformanceMetricsApi, PerformanceMonitor,
 };
 pub use progress::{ClientProgressSnapshot, ProgressReport, ProgressTracker};
+pub use anomaly::{
+    AnomalyEvent, AnomalyId, AnomalyPipeline, AnomalySeverity, SessionSnapshot,
+};
 pub use store::MetricsStore;
 pub use types::{
     CharacterMetrics as RtCharacterMetrics, CombatMetrics as RtCombatMetrics,

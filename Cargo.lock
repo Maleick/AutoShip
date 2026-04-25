@@ -2845,6 +2845,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "petgraph"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4c5cc86750666a3ed20bdaf5ca2a0344f9c67674cae0515bec2da16fbaa47db"
+dependencies = [
+ "fixedbitset",
+ "indexmap",
+]
+
+[[package]]
 name = "phf"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4212,6 +4222,7 @@ dependencies = [
  "lettre",
  "libloading",
  "mlua",
+ "petgraph",
  "prost",
  "rand 0.9.4",
  "ratatui",
@@ -4329,6 +4340,7 @@ dependencies = [
  "crossterm 0.28.1",
  "flate2",
  "goblin",
+ "petgraph",
  "prost",
  "rand 0.9.4",
  "ratatui",

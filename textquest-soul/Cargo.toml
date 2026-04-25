@@ -36,6 +36,7 @@ tui-popup = "0.7"
 serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "model", "cache", "rustls_backend"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
 chrono = { version = "0.4", features = ["serde"] }
+petgraph = "0.6"
 tempfile = "3"
 
 [build-dependencies]
