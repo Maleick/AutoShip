@@ -9,6 +9,7 @@ import {
   EyeOff,
   KeyRound,
   Package,
+  Play,
   Server,
   Sparkles,
   Users,
@@ -44,6 +45,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: Activity },
   { id: "sessions", label: "Sessions", icon: Server },
+  { id: "replay", label: "Replay", icon: Play },
   { id: "groups", label: "Groups", icon: UsersRound },
   { id: "improvement", label: "Improvement", icon: Zap },
   { id: "loot", label: "Loot", icon: Package },
@@ -219,6 +221,7 @@ export default function App() {
         <main className={`flex-1 overflow-y-auto ${privacy ? "blur-sm pointer-events-none" : ""}`}>
           {tab === "dashboard" && <Dashboard />}
           {tab === "sessions" && <Sessions />}
+          {tab === "replay" && <Replay />}
           {tab === "groups" && <Groups />}
           {tab === "improvement" && <Improvement />}
           {tab === "loot" && <Loot />}

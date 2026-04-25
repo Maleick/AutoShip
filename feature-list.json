@@ -232,6 +232,17 @@
       "status": "complete",
       "acceptance_tests": ["cargo check"],
       "notes": "Added anti-cheat detection function fingerprint extraction and comparison into collect_patch_evidence; the manifest now emits anti_cheat_diffs plus a detection_change_gate that can be enforced before patch updates."
+    },
+    {
+      "id": "issue-2697-r4-web-replay-player",
+      "name": "Issue #2697 R-4 web replay player",
+      "status": "blocked",
+      "acceptance_tests": [
+        "npx tsc --noEmit --pretty false --moduleResolution bundler --module esnext --target es2020 --jsx react-jsx --allowImportingTsExtensions --skipLibCheck src/pages/Replay.tsx src/components/replay/EventList.tsx src/components/replay/MetricCard.tsx src/pages/replay-data.ts",
+        "npm run build",
+        "python3 scripts/dev-preflight.py"
+      ],
+      "notes": "Replay tab, shared cursor, frame-step/jump/speed controls, bookmark persistence, auto-highlight side rail, and virtualized event list are implemented in the frontend slice. The replay-only TypeScript compile passes, but the full frontend build remains blocked by a pre-existing Credentials.tsx JSX parse error outside this issue."
     }
   ]
 }
