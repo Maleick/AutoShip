@@ -18,6 +18,8 @@ pub mod box_chat;
 /// Unified box-controller command and state types shared by the runtime, DLL,
 /// and web dashboard.
 pub mod box_controller;
+/// DanNet peer-to-peer cross-client transport types and command parsing.
+pub mod dannet;
 /// Shared character configuration schema and persistence helpers.
 pub mod character_config;
 /// Chat channel types, STML stripping, and structured chat event parsing.
@@ -95,6 +97,8 @@ pub mod soul;
 pub mod spawn_finder;
 /// Tradeskill trophy config and swap state machine shared by runtime layers.
 pub mod tradeskill_trophy;
+/// Unified transport configuration: variant selection, host/port, NetMQ defer stub.
+pub mod transport_config;
 /// Common type aliases and utility structures.
 pub mod types;
 /// Struct size/range validation helpers.

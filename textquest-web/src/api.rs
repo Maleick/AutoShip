@@ -30,6 +30,7 @@ pub mod sound;
 pub mod spawn_alerts;
 pub mod suggestions;
 pub mod vendor_watch;
+pub mod transport;
 pub mod xassist;
 use axum::{
     Json,

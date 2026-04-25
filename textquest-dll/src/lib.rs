@@ -24,6 +24,8 @@ mod boxr;
 #[allow(dead_code)]
 mod combat;
 #[allow(dead_code)]
+pub mod dannet_tlo;
+#[allow(dead_code)]
 pub mod commands;
 #[allow(dead_code)]
 mod debug;
