@@ -1,7 +1,9 @@
 //! Patchless ETW blinding via hardware breakpoints with optional filtering mode.
 //!
 //! Sets a hardware breakpoint (DR0) on `NtTraceEvent` so that calls are
-//! intercepted by our Vectored Exception Handler. In strict blinding mode we
+//! intercepted by our Vectored Exception Handler. The DR0 setup is intentionally
+//! scoped to the calling thread, matching the current injected-thread design.
+//! In strict blinding mode we
 //! suppress every call to `NtTraceEvent`; in filtering mode we allow events
 //! through to avoid unsafe pointer dereferences in the exception path.
 //!
@@ -69,6 +71,12 @@ mod inner {
     }
 
     /// Set hardware breakpoint DR0 on the given address for the current thread.
+    ///
+    /// Deliberate behavior: debug registers are thread-local; this intentionally
+    /// only blinds the thread that initializes ETW blinding (`set_hw_breakpoint`
+    /// caller). Expanding to process-wide coverage requires explicit thread
+    /// enumeration and per-thread context management, which is deferred by
+    /// issue #2289.
     fn set_hw_breakpoint(addr: u64) -> Result<(), &'static str> {
         // SAFETY: GetCurrentThread returns a pseudo-handle that is always valid for
         // the calling thread. Get/SetThreadContext operate on the current thread's
@@ -176,6 +184,9 @@ mod inner {
         }
         VEH_HANDLE.store(handle as u64, Ordering::Release);
 
+        // Single-thread scope is intentional here (see issue #2289). If broad
+        // coverage is required, add explicit thread enumeration + per-thread
+        // debug-register replay in a follow-up.
         set_hw_breakpoint(addr).map_err(|e| e.to_string())?;
         ACTIVE.store(true, Ordering::Release);
         tracing::info!(

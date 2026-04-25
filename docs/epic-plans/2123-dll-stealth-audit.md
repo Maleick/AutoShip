@@ -48,6 +48,11 @@ Work items ordered by risk and dependency:
 - [ ] `etw_blind.rs` thread-scope behavior documented or broadened
 - [ ] CI green on all affected crates
 
+## Test-matrix validation notes (thread-scope + cfg!(test) gap)
+
+- [x] `#2289` is documented as **single-thread scoped by design** in code comments (`textquest-dll/src/stealth/etw_blind.rs`).
+- [x] `cfg!(test)` path coverage is confirmed for this module in `textquest-dll/src/stealth/etw_blind.rs` unit tests (`#[cfg(not(windows))]` `init`/`cleanup`/`is_active` coverage), explicitly recording the audit validation gap as exercised.
+
 ---
 
 ## Notes
