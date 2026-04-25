@@ -4,6 +4,8 @@ import type {
   UpdateAccountPayload,
   Session,
   AdminSessionRecord,
+  CampRecommendation,
+  RecommendRequest,
 } from "../types";
 
 /**
@@ -348,6 +350,19 @@ export class ApiClient {
       payload,
     );
   }
+
+  /**
+   * Rank camps for the current party and operator weights.
+   */
+  async recommendCamps(
+    payload: RecommendRequest,
+  ): Promise<CampRecommendation[]> {
+    return this.request<CampRecommendation[]>(
+      "POST",
+      "/api/camps/recommendations",
+      payload,
+    );
+  }
 }
 
 /**
@@ -374,4 +389,10 @@ export async function fetchGroupsList(): Promise<Record<string, unknown>[]> {
 
 export async function fetchCampsList(): Promise<Record<string, unknown>[]> {
   return apiClient.listCamps();
+}
+
+export async function fetchCampRecommendations(
+  payload: RecommendRequest,
+): Promise<CampRecommendation[]> {
+  return apiClient.recommendCamps(payload);
 }

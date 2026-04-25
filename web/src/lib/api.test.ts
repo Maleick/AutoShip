@@ -492,6 +492,57 @@ describe("ApiClient", () => {
         })
       );
     });
+
+    it("should recommend camps", async () => {
+      const recommendPayload = {
+        party: {
+          members: [
+            { name: "Frostreaver", class: "Warrior", role: "main_tank" },
+          ],
+        },
+        current_zone: "crushbone",
+        goal: { kind: "xp" },
+        time_budget_min: 30,
+        weights: { xp: 0.4, plat: 0.2, upgrades: 0.2, safety: 0.2 },
+        min_confidence: 0.5,
+      };
+
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(
+          [
+            {
+              camp_id: "camp-1",
+              xp_per_hr: { mu: 100, sigma: 10, n: 8 },
+              pp_per_hr: { mu: 60, sigma: 12, n: 8 },
+              upgrade_probability: { Frostreaver: 0.35 },
+              risk: 0.2,
+              eta_min: 12,
+              route: {
+                from_zone: "crushbone",
+                to_zone: "poknowledge",
+                eta_min: 12,
+                path: ["crushbone", "poknowledge"],
+              },
+              rationale: "telemetry advantage, short travel",
+              confidence_band: [88, 112],
+              exploratory: false,
+            },
+          ],
+          { status: 200 }
+        )
+      );
+
+      const recommendations = await client.recommendCamps(recommendPayload);
+
+      expect(recommendations).toHaveLength(1);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3000/api/camps/recommendations",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify(recommendPayload),
+        })
+      );
+    });
   });
 
   describe("URL Encoding", () => {

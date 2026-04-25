@@ -1171,6 +1171,7 @@ export interface GroupMember {
   class: string;
   role: GroupMemberRole;
   order: number;
+  level?: number;
   class_settings?: ClassSpecificSettings;
 }
 
@@ -1243,6 +1244,9 @@ export interface CampConfiguration {
   pull_targets: PullTarget[];
   safe_zone_markers: SafeZoneMarker[];
   combat_settings: CombatSettings;
+  recommended_level_min?: number;
+  recommended_level_max?: number;
+  requires_fear_class?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -1268,6 +1272,70 @@ export interface UpdateCampConfigPayload {
   pull_targets?: PullTarget[];
   safe_zone_markers?: SafeZoneMarker[];
   combat_settings?: CombatSettings;
+}
+
+export type CampId = string;
+export type ZoneId = string;
+
+export interface Estimate {
+  mu: number;
+  sigma: number;
+  n: number;
+}
+
+export type PerCharacter<T> = Record<string, T>;
+
+export interface ObjectiveWeights {
+  xp: number;
+  plat: number;
+  upgrades: number;
+  safety: number;
+}
+
+export interface PartyMember {
+  name: string;
+  class: string;
+  role: GroupMemberRole;
+  level?: number;
+}
+
+export interface Party {
+  members: PartyMember[];
+}
+
+export type Goal =
+  | { kind: "xp" }
+  | { kind: "plat" }
+  | { kind: "item"; slot: string; character: string }
+  | { kind: "faction"; faction: string };
+
+export interface Route {
+  from_zone: ZoneId;
+  to_zone: ZoneId;
+  eta_min: number;
+  path: string[];
+}
+
+export interface RecommendRequest {
+  party: Party;
+  current_zone: ZoneId;
+  goal: Goal;
+  time_budget_min?: number;
+  weights: ObjectiveWeights;
+  min_confidence: number;
+}
+
+export interface CampRecommendation {
+  camp_id: CampId;
+  xp_per_hr: Estimate;
+  pp_per_hr: Estimate;
+  upgrade_probability: PerCharacter<number>;
+  risk: number;
+  eta_min: number;
+  route: Route;
+  rationale: string;
+  confidence_band: [number, number];
+  exploratory: boolean;
 }
 
 // ── Admin diagnostics & operations types ────────────────────────────────────

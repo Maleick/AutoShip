@@ -22,6 +22,7 @@ import {
   UsersThree,
 } from "@phosphor-icons/react";
 import { useGroups, useCampConfiguration } from "../hooks/useGroups";
+import { CampRecommendationsPanel } from "./CampRecommendationsPanel";
 import type {
   Group,
   ClassSpecificSettings,
@@ -1426,6 +1427,13 @@ export default function GroupsPage() {
           />
         </div>
       )}
+
+      <div className="mt-6">
+        <CampRecommendationsPanel
+          selectedGroup={selectedGroup}
+          campConfigs={campConfigs}
+        />
+      </div>
 
       {/* Group Edit Modal */}
       <GroupEditModal

@@ -294,6 +294,15 @@ prev_camp = "qey2hh1_camp"
 :camp list
 ```
 
+### Camp Recommendations
+
+The Groups page now includes a Camp Recommendations panel that ranks saved camps for the current party.
+
+- Tune the XP / PP / upgrades / safety simplex with the operator sliders.
+- Pick a preset profile such as `Plat Run`, `XP Grind`, `Gear Hunt`, or `Safe Farm`.
+- Raise or lower the time budget and confidence threshold to tighten the hard filters.
+- Exploratory results are tagged `Uncharted` so you can see which camps came from the cold-start budget.
+
 ### Auto-Accept Wards (Web Dashboard)
 
 The web dashboard now exposes an **Auto-Accept Wards** view for unattended multibox prompts that otherwise block automation.
