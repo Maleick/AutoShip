@@ -6,7 +6,7 @@
 //! - loot APIs
 //! - account-management APIs backed by an in-memory registry plus optional
 //!   credential storage
-//! - raid configuration placeholders plus live character configuration APIs
+//! - live character and raid configuration APIs
 //! - a WebSocket endpoint for live session monitoring
 
 #![allow(dead_code)]
@@ -73,6 +73,12 @@ pub struct AppState {
     pub chat_log_write_lock: tokio::sync::Mutex<()>,
     /// Persisted auto-group profiles consumed by the orchestrator runtime.
     pub auto_group_settings: tokio::sync::RwLock<AutoGroupSettings>,
+    /// In-memory raid configuration used by the web UI.
+    pub raid_config: tokio::sync::RwLock<api::RaidConfig>,
+    /// Disk path for [`raid_config`].
+    pub raid_config_path: PathBuf,
+    /// Serializes writes to [`raid_config_path`].
+    pub raid_config_write_lock: tokio::sync::Mutex<()>,
     /// In-memory loot configuration state.
     pub loot_state: Arc<api::loot::LootState>,
     /// In-memory economy cycle state.
@@ -276,6 +282,10 @@ fn auto_group_config_path() -> PathBuf {
     textquest::auto_group::default_config_path()
 }
 
+fn raid_config_path() -> PathBuf {
+    data_dir().join("config/raid-config.toml")
+}
+
 fn load_alerting_config_from(path: &std::path::Path) -> AlertingConfig {
     match std::fs::read_to_string(path) {
         Ok(contents) => match toml::from_str::<AlertingConfig>(&contents) {
@@ -407,6 +417,7 @@ fn build_state() -> Arc<AppState> {
 
     let character_config_path = character_config_path();
     let auto_group_config_path = auto_group_config_path();
+    let raid_config_path = raid_config_path();
     // Demo-default seeding only runs when the file is absent. A present-but-
     // empty file ({}) is an explicit operator choice — restoring demo entries
     // would pollute their config on the next save.
@@ -440,6 +451,14 @@ fn build_state() -> Arc<AppState> {
         );
         AutoGroupSettings::default()
     });
+    let raid_config = api::load_raid_config_from_path(&raid_config_path).unwrap_or_else(|error| {
+        tracing::warn!(
+            %error,
+            path = %raid_config_path.display(),
+            "Failed to load persisted raid config; using defaults"
+        );
+        api::RaidConfig::default()
+    });
 
     Arc::new(AppState {
         event_tx,
@@ -452,6 +471,9 @@ fn build_state() -> Arc<AppState> {
         character_config_write_lock: tokio::sync::Mutex::new(()),
         chat_log_write_lock: tokio::sync::Mutex::new(()),
         auto_group_settings: tokio::sync::RwLock::new(auto_group_settings),
+        raid_config: tokio::sync::RwLock::new(raid_config),
+        raid_config_path,
+        raid_config_write_lock: tokio::sync::Mutex::new(()),
         loot_state: api::loot::LootState::new_demo(),
         economy_state: api::economy::EconomyState::new_demo(),
         dashboard_state: api::dashboard::DashboardState::new_demo(),
@@ -507,6 +529,12 @@ fn build_state() -> Arc<AppState> {
 #[cfg(test)]
 pub(crate) fn test_app_state() -> AppState {
     let (event_tx, _) = broadcast::channel::<String>(8);
+    let raid_config_path = std::env::temp_dir().join(format!(
+        "textquest-web-test-raid-config-{}.toml",
+        uuid::Uuid::new_v4()
+    ));
+    let raid_config = api::load_raid_config_from_path(&raid_config_path)
+        .unwrap_or_else(|_| api::RaidConfig::default());
     AppState {
         event_tx,
         account_store: Mutex::new(accounts::AccountStore::default()),
@@ -552,6 +580,9 @@ pub(crate) fn test_app_state() -> AppState {
             "textquest-web-test-auto-group-{}.toml",
             uuid::Uuid::new_v4()
         )),
+        raid_config: tokio::sync::RwLock::new(raid_config),
+        raid_config_path,
+        raid_config_write_lock: tokio::sync::Mutex::new(()),
         api_token: None,
         auth_disabled: true, // Tests bypass auth — no token needed in unit tests
         live_session_snapshot_path: std::env::temp_dir().join(format!(
@@ -667,7 +698,7 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .nest("/alerts", api::alerts::router())
         .route(
             "/raid/config",
-            get(api::raid_config_unavailable).put(api::raid_config_unavailable),
+            get(api::get_raid_config).put(api::put_raid_config),
         )
         .route("/config/characters", get(api::list_character_configs))
         .route("/config/copy", post(api::post_config_copy))
@@ -885,6 +916,9 @@ mod tests {
 
     fn test_state_with_credentials(path: &std::path::Path) -> Arc<AppState> {
         let (event_tx, _) = broadcast::channel::<String>(8);
+        let raid_config_path = path.with_file_name("raid-config.toml");
+        let raid_config = api::load_raid_config_from_path(&raid_config_path)
+            .unwrap_or_else(|_| api::RaidConfig::default());
         Arc::new(AppState {
             event_tx,
             account_store: Mutex::new(accounts::AccountStore::default()),
@@ -898,6 +932,9 @@ mod tests {
             character_config_write_lock: tokio::sync::Mutex::new(()),
             chat_log_write_lock: tokio::sync::Mutex::new(()),
             auto_group_settings: tokio::sync::RwLock::new(AutoGroupSettings::default()),
+            raid_config: tokio::sync::RwLock::new(raid_config),
+            raid_config_path,
+            raid_config_write_lock: tokio::sync::Mutex::new(()),
             loot_state: api::loot::LootState::new_demo(),
             economy_state: api::economy::EconomyState::new_demo(),
             dashboard_state: api::dashboard::DashboardState::new_demo(),
@@ -970,13 +1007,8 @@ mod tests {
                 .expect("request"),
         )
         .await;
-        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
-        assert!(
-            body["error"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("not implemented")
-        );
+        assert_eq!(status, StatusCode::OK);
+        assert!(body["groups"].is_array());
 
         let (status, body) = json_response(
             app.clone(),

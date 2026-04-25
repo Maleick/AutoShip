@@ -33,7 +33,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path as StdPath, PathBuf},
     sync::{Arc, OnceLock},
 };
@@ -51,6 +51,192 @@ use toml_edit::{Array, DocumentMut, Item, Table, value};
 
 use crate::AppState;
 use textquest_common::shared_client_state::SharedClientState;
+
+const MAX_RAID_GROUP_ID: u8 = 12;
+const MAX_RAID_GROUP_MEMBERS: usize = 6;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct RaidGroup {
+    pub group_id: u8,
+    pub role: String,
+    pub members: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct ChChainConfig {
+    pub enabled: bool,
+    pub target: Option<String>,
+    pub cleric_order: Vec<String>,
+    pub interval_ms: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct RaidConfig {
+    pub main_tank: Option<String>,
+    pub secondary_tanks: Vec<String>,
+    pub groups: Vec<RaidGroup>,
+    pub ch_chain: ChChainConfig,
+    pub strategy_notes: String,
+}
+
+impl Default for RaidGroup {
+    fn default() -> Self {
+        Self {
+            group_id: 1,
+            role: String::new(),
+            members: Vec::new(),
+        }
+    }
+}
+
+impl Default for ChChainConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            target: None,
+            cleric_order: Vec::new(),
+            interval_ms: 0,
+        }
+    }
+}
+
+impl Default for RaidConfig {
+    fn default() -> Self {
+        Self {
+            main_tank: None,
+            secondary_tanks: Vec::new(),
+            groups: default_raid_groups(),
+            ch_chain: ChChainConfig::default(),
+            strategy_notes: String::new(),
+        }
+    }
+}
+
+fn default_raid_groups() -> Vec<RaidGroup> {
+    (1..=MAX_RAID_GROUP_ID)
+        .map(|group_id| RaidGroup {
+            group_id,
+            ..RaidGroup::default()
+        })
+        .collect()
+}
+
+fn normalize_character_names(names: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::new();
+    for name in names {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if normalized
+            .iter()
+            .any(|existing: &String| existing.eq_ignore_ascii_case(trimmed))
+        {
+            continue;
+        }
+        normalized.push(trimmed.to_string());
+    }
+    normalized
+}
+
+fn normalize_raid_group(mut group: RaidGroup) -> RaidGroup {
+    if group.group_id == 0 {
+        group.group_id = 1;
+    }
+    if group.group_id > MAX_RAID_GROUP_ID {
+        group.group_id = MAX_RAID_GROUP_ID;
+    }
+    group.role = group.role.trim().to_string();
+    group.members = normalize_character_names(group.members)
+        .into_iter()
+        .take(MAX_RAID_GROUP_MEMBERS)
+        .collect();
+    group
+}
+
+fn normalize_raid_groups(mut groups: Vec<RaidGroup>) -> Vec<RaidGroup> {
+    let mut unique = HashSet::new();
+    let mut normalized = Vec::new();
+
+    for group in groups.drain(..) {
+        if group.group_id > MAX_RAID_GROUP_ID || group.group_id == 0 {
+            continue;
+        }
+
+        let group = normalize_raid_group(group);
+        if unique.insert(group.group_id) {
+            normalized.push(group);
+        }
+    }
+
+    for group_id in 1..=MAX_RAID_GROUP_ID {
+        if unique.contains(&group_id) {
+            continue;
+        }
+        normalized.push(RaidGroup {
+            group_id,
+            ..RaidGroup::default()
+        });
+        unique.insert(group_id);
+    }
+
+    normalized.sort_by_key(|group| group.group_id);
+    normalized.truncate(MAX_RAID_GROUP_ID.into());
+    normalized
+}
+
+fn normalize_raid_config(mut config: RaidConfig) -> RaidConfig {
+    config.main_tank = config
+        .main_tank
+        .filter(|name| !name.trim().is_empty())
+        .map(|name| name.trim().to_string());
+    config.secondary_tanks = normalize_character_names(config.secondary_tanks);
+    config.groups = normalize_raid_groups(config.groups);
+    config.ch_chain.target = config
+        .ch_chain
+        .target
+        .filter(|name| !name.trim().is_empty())
+        .map(|name| name.trim().to_string());
+    config.ch_chain.cleric_order = normalize_character_names(config.ch_chain.cleric_order);
+    config.strategy_notes = config.strategy_notes.trim().to_string();
+    config
+}
+
+pub(crate) fn load_raid_config_from_path(path: &StdPath) -> Result<RaidConfig, String> {
+    if !path.exists() {
+        return Ok(RaidConfig::default());
+    }
+
+    let content = std::fs::read_to_string(path)
+        .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
+    let raw = toml::from_str::<RaidConfig>(&content)
+        .map_err(|error| format!("Failed to parse {}: {error}", path.display()))?;
+    Ok(normalize_raid_config(raw))
+}
+
+fn write_raid_config_to_path(path: &StdPath, config: &RaidConfig) -> Result<(), String> {
+    let config = normalize_raid_config(config.clone());
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create {}: {error}", parent.display()))?;
+    }
+
+    let content = toml::to_string_pretty(&config)
+        .map_err(|error| format!("Failed to serialize raid config: {error}"))?;
+    let temp_path = path.with_extension("toml.tmp");
+    std::fs::write(&temp_path, content)
+        .map_err(|error| format!("Failed to write temp file {}: {error}", temp_path.display()))?;
+    replace_timestamp_file_with_overwrite_fallback(
+        &temp_path,
+        path,
+        |from: &StdPath, to: &StdPath| std::fs::rename(from, to),
+        |target: &StdPath| std::fs::remove_file(target),
+    )?;
+    Ok(())
+}
 
 pub fn mount_admin_sessions(
     router: axum::Router<std::sync::Arc<AppState>>,
@@ -75,15 +261,6 @@ fn json_error(status: StatusCode, message: impl Into<String>) -> (StatusCode, Js
 /// Catch-all for unknown API routes so they do not fall through to the SPA.
 pub async fn api_not_found() -> impl IntoResponse {
     json_error(StatusCode::NOT_FOUND, "API route not found")
-}
-
-/// Placeholder response for known raid-config endpoints that are not
-/// implemented on this build.
-pub async fn raid_config_unavailable() -> impl IntoResponse {
-    json_error(
-        StatusCode::NOT_IMPLEMENTED,
-        "Raid configuration API is not implemented in this build",
-    )
 }
 
 // ─── Health
@@ -1756,6 +1933,26 @@ pub async fn put_player_watch_config(
     *state.player_watch_config.write().await = updated.clone();
 
     Ok(Json(updated))
+}
+
+/// GET /api/raid/config — return the current web-configured raid composition.
+pub async fn get_raid_config(State(state): State<Arc<AppState>>) -> Json<RaidConfig> {
+    Json(state.raid_config.read().await.clone())
+}
+
+/// PUT /api/raid/config — replace the persisted raid composition.
+pub async fn put_raid_config(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<RaidConfig>,
+) -> Result<Json<RaidConfig>, (StatusCode, Json<ErrorResponse>)> {
+    let normalized = normalize_raid_config(payload);
+    let _write_guard = state.raid_config_write_lock.lock().await;
+
+    write_raid_config_to_path(&state.raid_config_path, &normalized)
+        .map_err(|error| json_error(StatusCode::INTERNAL_SERVER_ERROR, error))?;
+
+    *state.raid_config.write().await = normalized.clone();
+    Ok(Json(normalized))
 }
 
 /// GET /api/timestamp-config — return all known per-character timestamp configs.
