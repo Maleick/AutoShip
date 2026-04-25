@@ -225,6 +225,13 @@
       "status": "in_progress",
       "acceptance_tests": ["cargo check"],
       "notes": "PARTIAL: Added TUI diagnostic state, warning/error code capture with suggestions, debug trace capture in debug builds, best-effort file logging, IPC failure counters, and a keyboard-accessible Ctrl+D/:diag diagnostics overlay. Full DLL throughput telemetry, richer memory snapshots, and complete recovery coverage remain follow-up work."
+    },
+    {
+      "id": "issue-727-per-patch-detection-function-diffing",
+      "name": "Issue #727 Per-patch detection function diffing via MemoryQuest pipeline",
+      "status": "complete",
+      "acceptance_tests": ["cargo check"],
+      "notes": "Added anti-cheat detection function fingerprint extraction and comparison into collect_patch_evidence; the manifest now emits anti_cheat_diffs plus a detection_change_gate that can be enforced before patch updates."
     }
   ]
 }

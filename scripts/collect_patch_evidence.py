@@ -36,6 +36,312 @@ COUNTABLE_JSON_FILES = {
     "decompiled_index.json",
 }
 
+DETECTION_FUNCTION_TARGETS = [
+    {
+        "id": "system_fingerprint",
+        "display_name": "SystemFingerprint",
+        "name_patterns": {"systemfingerprint", "system_fingerprint", "fun_140594840"},
+        "address_patterns": {"0x140594840"},
+    },
+    {
+        "id": "cheater_ld_flag",
+        "display_name": "CheaterLdFlag",
+        "kind": "string",
+        "string_patterns": {"cheaterldflag"},
+    },
+    {
+        "id": "vm_detection_enum_firmware_tables",
+        "display_name": "GetSystemFirmwareTable",
+        "kind": "import",
+        "name_patterns": {"getsystemfirmwaretable"},
+    },
+    {
+        "id": "vm_detection_query_firmware_tables",
+        "display_name": "EnumSystemFirmwareTables",
+        "kind": "import",
+        "name_patterns": {"enumsystemfirmwaretables"},
+    },
+    {
+        "id": "module_enum_create_snapshot",
+        "display_name": "CreateToolhelp32Snapshot",
+        "kind": "function_or_import",
+        "name_patterns": {"createtoolhelp32snapshot"},
+    },
+    {
+        "id": "module_enum_k32_enum_processes",
+        "display_name": "K32EnumProcesses",
+        "kind": "function_or_import",
+        "name_patterns": {"k32enumprocesses"},
+    },
+    {
+        "id": "module_enum_k32_enum_modules",
+        "display_name": "K32EnumProcessModules",
+        "kind": "function_or_import",
+        "name_patterns": {"k32enumprocessmodules"},
+    },
+    {
+        "id": "module_enum_open_process",
+        "display_name": "OpenProcess",
+        "kind": "function_or_import",
+        "name_patterns": {"openprocess"},
+    },
+    {
+        "id": "module_enum_query_full_image_name",
+        "display_name": "QueryFullProcessImageNameA",
+        "kind": "function_or_import",
+        "name_patterns": {"queryfullprocessimagenamea"},
+    },
+]
+
+
+def _normalize_address(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip().lower()
+    if value.startswith("0x"):
+        value = value[2:]
+    try:
+        int(value, 16)
+    except ValueError:
+        return None
+    return f"0x{value}"
+
+
+def _load_json_if_exists(path: Path) -> Any | None:
+    if not path.exists():
+        return None
+    try:
+        return load_json(path)
+    except json.JSONDecodeError:
+        return None
+
+
+def _string_match(text: Any, patterns: set[str]) -> bool:
+    if not isinstance(text, str):
+        return False
+    lowered = text.lower()
+    return any(pattern in lowered for pattern in patterns)
+
+
+def _fingerprint_payload(payload: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _find_entry_by_patterns(
+    items: Any,
+    name_patterns: set[str] | None = None,
+    address_patterns: set[str] | None = None,
+) -> dict[str, Any] | None:
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        name = item.get("name")
+        if name_patterns and isinstance(name, str):
+            if name.lower() in name_patterns:
+                return item
+
+        address = _normalize_address(item.get("address"))
+        if address_patterns and address and address in address_patterns:
+            return item
+    return None
+
+
+def _collect_function_signature(item: dict[str, Any], export_dir: Path) -> dict[str, Any]:
+    signature_payload: dict[str, Any] = {
+        "name": item.get("name"),
+        "address": item.get("address"),
+    }
+    signature: dict[str, Any] = {
+        "source": "functions.json",
+        "name": signature_payload["name"],
+        "address": signature_payload["address"],
+        "decompiled_file": item.get("file"),
+    }
+    if "file" in item and isinstance(item["file"], str):
+        decomp_path = export_dir / "decompiled" / item["file"]
+        signature["decompiled_file"] = str(decomp_path)
+        if decomp_path.exists():
+            signature_payload["decompiled_sha256"] = sha256_file(decomp_path)
+            with decomp_path.open("r", encoding="utf-8", errors="ignore") as handle:
+                signature["decompiled_line_count"] = len(handle.readlines())
+    signature["fingerprint"] = _fingerprint_payload(signature_payload)
+    return signature
+
+
+def _collect_import_signature(item: dict[str, Any], name: str) -> dict[str, Any]:
+    return {
+        "source": "imports.json",
+        "name": name,
+        "address": item.get("address"),
+        "fingerprint": _fingerprint_payload(item),
+    }
+
+
+def _collect_string_signature(entries: list[dict[str, Any]], patterns: set[str]) -> dict[str, Any]:
+    normalized = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        value = entry.get("value")
+        if _string_match(value, patterns):
+            normalized.append(
+                {
+                    "address": entry.get("address"),
+                    "value": entry.get("value"),
+                }
+            )
+    normalized.sort(key=lambda item: (str(item.get("address")), str(item.get("value"))))
+    return {
+        "source": "strings.json",
+        "matches": normalized,
+        "fingerprint": _fingerprint_payload(
+            [entry["address"] for entry in normalized]
+            + [entry["value"] for entry in normalized],
+        ),
+    }
+
+
+def collect_detection_signatures(export_dir: Path) -> dict[str, Any]:
+    functions = _load_json_if_exists(export_dir / "functions.json") or []
+    decompiled = _load_json_if_exists(export_dir / "decompiled_index.json") or []
+    imports = _load_json_if_exists(export_dir / "imports.json") or []
+    strings = _load_json_if_exists(export_dir / "strings.json") or []
+
+    signatures: dict[str, Any] = {}
+    for target in DETECTION_FUNCTION_TARGETS:
+        target_id = target["id"]
+        name_patterns = set(
+            entry.lower()
+            for entry in target.get("name_patterns", [])
+        )
+        address_patterns = set(target.get("address_patterns", []))
+        kind = target.get("kind", "function")
+
+        found_entry: dict[str, Any] | None = None
+        signature_payload: dict[str, Any] | None = None
+
+        if kind in {"function", "function_or_import"}:
+            found_entry = _find_entry_by_patterns(
+                decompiled, name_patterns=name_patterns, address_patterns=address_patterns
+            )
+            if found_entry is None:
+                found_entry = _find_entry_by_patterns(
+                    functions, name_patterns=name_patterns, address_patterns=address_patterns
+                )
+            if found_entry is not None:
+                signature_payload = _collect_function_signature(found_entry, export_dir)
+        if kind in {"import", "function_or_import"} and signature_payload is None:
+            if isinstance(imports, list):
+                for item in imports:
+                    if not isinstance(item, dict):
+                        continue
+                    name = item.get("name")
+                    if (
+                        isinstance(name, str)
+                        and name_patterns
+                        and name.lower() in name_patterns
+                    ):
+                        signature_payload = _collect_import_signature(item, name)
+                        break
+
+        if kind == "string" and signature_payload is None:
+            if isinstance(strings, list):
+                patterns = set(target.get("string_patterns", []))
+                candidate = _collect_string_signature(strings, patterns)
+                if candidate["matches"]:
+                    signature_payload = candidate
+
+        if signature_payload is not None:
+            signatures[target_id] = {
+                "found": True,
+                "target": target_id,
+                "display_name": target["display_name"],
+                "kind": kind,
+                "signature": signature_payload,
+            }
+        else:
+            signatures[target_id] = {
+                "found": False,
+                "target": target_id,
+                "display_name": target["display_name"],
+                "kind": kind,
+                "signature": {},
+            }
+
+    return signatures
+
+
+def compare_detection_signatures(
+    live: dict[str, Any],
+    test: dict[str, Any],
+) -> dict[str, Any]:
+    comparison: dict[str, Any] = {
+        "targets": {},
+        "changed_targets": [],
+        "only_in_live": [],
+        "only_in_test": [],
+        "same": [],
+    }
+
+    for target_id in sorted(set(live) | set(test)):
+        live_item = live.get(target_id, {"found": False, "signature": {}})
+        test_item = test.get(target_id, {"found": False, "signature": {}})
+        live_found = bool(live_item.get("found"))
+        test_found = bool(test_item.get("found"))
+
+        if live_found and test_found:
+            changed = (
+                live_item.get("signature", {}).get("fingerprint")
+                != test_item.get("signature", {}).get("fingerprint")
+            )
+            comparison["targets"][target_id] = {
+                "status": "changed" if changed else "unchanged",
+                "same": not changed,
+                "live": live_item,
+                "test": test_item,
+            }
+            if changed:
+                comparison["changed_targets"].append(target_id)
+            else:
+                comparison["same"].append(target_id)
+            continue
+
+        if live_found:
+            comparison["only_in_live"].append(target_id)
+            comparison["targets"][target_id] = {
+                "status": "missing_in_test",
+                "same": False,
+                "live": live_item,
+                "test": test_item,
+            }
+            continue
+
+        if test_found:
+            comparison["only_in_test"].append(target_id)
+            comparison["targets"][target_id] = {
+                "status": "missing_in_live",
+                "same": False,
+                "live": live_item,
+                "test": test_item,
+            }
+            continue
+
+    comparison["blocked"] = len(comparison["changed_targets"]) > 0
+    return comparison
+
+
+def compare_detection_gate(anti_cheat_comparison: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "blocked": anti_cheat_comparison.get("blocked", False),
+        "changed_count": len(anti_cheat_comparison.get("changed_targets", [])),
+        "changed_targets": anti_cheat_comparison.get("changed_targets", []),
+    }
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -143,6 +449,7 @@ def collect_module_summary(ghidra_root: Path, variant: str, module: str) -> dict
     for name in SYMBOL_FILES:
         files[name] = collect_file_info(export_dir / name)
     summary["files"] = files
+    summary["detection_signatures"] = collect_detection_signatures(export_dir)
 
     harvest_info_path = ghidra_root / variant / "harvest-info.json"
     if harvest_info_path.exists():
@@ -184,6 +491,14 @@ def compare_modules(live: dict[str, Any], test: dict[str, Any]) -> dict[str, Any
             "test": test_meta.get(key),
             "same": live_meta.get(key) == test_meta.get(key),
         }
+
+    live_signatures = live.get("detection_signatures", {})
+    test_signatures = test.get("detection_signatures", {})
+    anti_cheat_comparison = compare_detection_signatures(
+        live_signatures, test_signatures
+    )
+    comparison["anti_cheat_diffs"] = anti_cheat_comparison
+    comparison["detection_change_gate"] = compare_detection_gate(anti_cheat_comparison)
 
     return comparison
 
