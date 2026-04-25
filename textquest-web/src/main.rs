@@ -784,6 +784,9 @@ fn build_api_router() -> Router<Arc<AppState>> {
         .nest("/gm-alerts", api::gm_alerts::router())
         .nest("/say-detection", api::say_detection::router())
         .nest("/auto-group", api::auto_group::router())
+        .nest("/auto-rez", api::auto_rez::router())
+        .nest("/auto-camp", api::auto_camp::router())
+        .nest("/paranoid", api::paranoid::router())
         .nest("/control", api::control::router())
         .route("/xassist/configs", get(api::xassist::list_xassist_configs))
         .route(
