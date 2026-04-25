@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { PageHeader } from "../components/PageHeader.tsx";
+import { Input } from "../components/Form.tsx";
 import { ApiError, api } from "../lib/api.ts";
 
 type AccountStatus = "active" | "locked" | "banned";
@@ -558,67 +559,52 @@ export function Credentials() {
             </div>
 
             <div className="grid gap-3">
-              <label className="grid gap-1">
-                <span className="text-xs text-neriak-muted">Daybreak account</span>
-                <input
-                  value={form.name}
-                  onChange={(event) => setField("name", event.target.value)}
-                  disabled={Boolean(editingAccount)}
-                  autoComplete="username"
-                  className="rounded border border-neriak-dim bg-void px-3 py-2 text-neriak-text disabled:text-neriak-dim"
-                />
-                {errors.name && <span className="text-xs text-state-danger">{errors.name}</span>}
-              </label>
+              <Input
+                label="Daybreak account"
+                id="account-name"
+                value={form.name}
+                onChange={(event) => setField("name", event.target.value)}
+                disabled={Boolean(editingAccount)}
+                autoComplete="username"
+                error={errors.name}
+                className="disabled:text-neriak-dim"
+              />
 
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
-                <label className="grid gap-1">
-                  <span className="text-xs text-neriak-muted">Server</span>
-                  <input
-                    value={form.server}
-                    onChange={(event) => setField("server", event.target.value)}
-                    className="rounded border border-neriak-dim bg-void px-3 py-2 text-neriak-text"
-                  />
-                  {errors.server && (
-                    <span className="text-xs text-state-danger">{errors.server}</span>
-                  )}
-                </label>
+                <Input
+                  label="Server"
+                  id="account-server"
+                  value={form.server}
+                  onChange={(event) => setField("server", event.target.value)}
+                  error={errors.server}
+                />
 
-                <label className="grid gap-1">
-                  <span className="text-xs text-neriak-muted">Group</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.group}
-                    onChange={(event) => setField("group", event.target.value)}
-                    className="rounded border border-neriak-dim bg-void px-3 py-2 text-neriak-text"
-                  />
-                  {errors.group && (
-                    <span className="text-xs text-state-danger">{errors.group}</span>
-                  )}
-                </label>
+                <Input
+                  label="Group"
+                  id="account-group"
+                  type="number"
+                  min={0}
+                  value={form.group}
+                  onChange={(event) => setField("group", event.target.value)}
+                  error={errors.group}
+                />
               </div>
 
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
-                <label className="grid gap-1">
-                  <span className="text-xs text-neriak-muted">Primary character</span>
-                  <input
-                    value={form.character}
-                    onChange={(event) => setField("character", event.target.value)}
-                    className="rounded border border-neriak-dim bg-void px-3 py-2 text-neriak-text"
-                  />
-                  {errors.character && (
-                    <span className="text-xs text-state-danger">{errors.character}</span>
-                  )}
-                </label>
+                <Input
+                  label="Primary character"
+                  id="account-character"
+                  value={form.character}
+                  onChange={(event) => setField("character", event.target.value)}
+                  error={errors.character}
+                />
 
-                <label className="grid gap-1">
-                  <span className="text-xs text-neriak-muted">Class</span>
-                  <input
-                    value={form.class}
-                    onChange={(event) => setField("class", event.target.value.toUpperCase())}
-                    className="rounded border border-neriak-dim bg-void px-3 py-2 text-neriak-text"
-                  />
-                </label>
+                <Input
+                  label="Class"
+                  id="account-class"
+                  value={form.class}
+                  onChange={(event) => setField("class", event.target.value.toUpperCase())}
+                />
               </div>
 
               <label className="grid gap-1">
