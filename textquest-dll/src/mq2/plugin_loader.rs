@@ -70,6 +70,10 @@ pub struct PluginConfig {
     pub enabled: bool,
     /// Free-form string settings owned by the specific plugin.
     pub settings: BTreeMap<String, String>,
+    /// Plugins that must be loaded before this one can start.
+    pub required_plugins: Vec<String>,
+    /// Plugins that conflict with this one and must be unloaded when this loads.
+    pub conflicts_with: Vec<String>,
 }
 
 impl Default for PluginConfig {
@@ -77,6 +81,8 @@ impl Default for PluginConfig {
         Self {
             enabled: true,
             settings: BTreeMap::new(),
+            required_plugins: Vec::new(),
+            conflicts_with: Vec::new(),
         }
     }
 }
@@ -101,10 +107,20 @@ impl PluginCandidate {
 }
 
 /// Loader for MacroQuest-compatible plugin candidates.
-#[derive(Debug, Clone)]
 pub struct MacroQuestPluginLoader {
     plugins_dir: PathBuf,
     configs: BTreeMap<String, PluginConfig>,
+    loaded: std::collections::BTreeSet<String>,
+}
+
+impl std::fmt::Debug for MacroQuestPluginLoader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MacroQuestPluginLoader")
+            .field("plugins_dir", &self.plugins_dir)
+            .field("configs", &self.configs)
+            .field("loaded", &self.loaded)
+            .finish()
+    }
 }
 
 impl MacroQuestPluginLoader {
@@ -113,6 +129,7 @@ impl MacroQuestPluginLoader {
         Self {
             plugins_dir: plugins_dir.into(),
             configs: BTreeMap::new(),
+            loaded: std::collections::BTreeSet::new(),
         }
     }
 
@@ -124,6 +141,7 @@ impl MacroQuestPluginLoader {
         Self {
             plugins_dir: plugins_dir.into(),
             configs,
+            loaded: std::collections::BTreeSet::new(),
         }
     }
 
@@ -163,14 +181,65 @@ impl MacroQuestPluginLoader {
         self.configs.get(plugin_name).cloned().unwrap_or_default()
     }
 
+    /// Check if a plugin is currently loaded.
+    pub fn is_loaded(&self, plugin_name: &str) -> bool {
+        self.loaded.contains(plugin_name)
+    }
+
+    /// Get list of currently loaded plugins.
+    pub fn loaded_plugins(&self) -> Vec<String> {
+        self.loaded.iter().cloned().collect()
+    }
+
+    /// Validate that all required plugins for the given plugin are loaded.
+    fn validate_required_plugins(&self, plugin_name: &str) -> Result<(), PluginLoadError> {
+        let config = self.config_for(plugin_name);
+        let missing: Vec<String> = config
+            .required_plugins
+            .into_iter()
+            .filter(|req| !self.is_loaded(req))
+            .collect();
+
+        if !missing.is_empty() {
+            return Err(PluginLoadError::MissingRequiredPlugins {
+                plugin: plugin_name.to_string(),
+                missing,
+            });
+        }
+        Ok(())
+    }
+
+    /// Unload plugins that conflict with the given plugin.
+    fn unload_conflicts(&mut self, plugin_name: &str) -> Result<(), PluginLoadError> {
+        let config = self.config_for(plugin_name);
+        let conflicts = config.conflicts_with.clone();
+
+        for conflict in &conflicts {
+            if self.is_loaded(conflict) {
+                self.loaded.remove(conflict);
+                tracing::info!(
+                    plugin = %plugin_name,
+                    unloaded = %conflict,
+                    "auto-unloaded conflicting plugin"
+                );
+            }
+        }
+        Ok(())
+    }
+
     /// Load a single discovered plugin.
+    ///
+    /// Before loading, validates that:
+    /// 1. Plugin is enabled
+    /// 2. All required plugins are already loaded (runtime contract)
+    /// 3. Any conflicting plugins are unloaded (force-unload contract)
     ///
     /// TextQuest-aware plugins may export `TextQuestInitializePlugin` accepting
     /// [`TextQuestMq2Api`]. Legacy-style plugins may export `InitializePlugin`;
     /// they can be loaded but will not receive host callbacks until a wrapper
     /// exports the MQ2 globals they expect.
     pub fn load(
-        &self,
+        &mut self,
         candidate: &PluginCandidate,
         api: &TextQuestMq2Api,
     ) -> Result<LoadedMacroQuestPlugin, PluginLoadError> {
@@ -179,12 +248,30 @@ impl MacroQuestPluginLoader {
             return Err(PluginLoadError::Disabled(candidate.name.clone()));
         }
 
-        load_platform(candidate, api)
+        // Validate required-load contract
+        self.validate_required_plugins(&candidate.name)?;
+
+        // Enforce force-unload contract
+        self.unload_conflicts(&candidate.name)?;
+
+        // Load the plugin
+        let loaded = load_platform(candidate, api)?;
+
+        // Track the loaded plugin by name
+        self.loaded.insert(candidate.name.clone());
+
+        tracing::info!(
+            plugin = %candidate.name,
+            required = ?config.required_plugins,
+            "plugin loaded with runtime contract"
+        );
+
+        Ok(loaded)
     }
 
     /// Discover and load every enabled plugin.
     pub fn load_enabled(
-        &self,
+        &mut self,
         api: &TextQuestMq2Api,
     ) -> Result<Vec<LoadedMacroQuestPlugin>, PluginLoadError> {
         let candidates = self
@@ -239,6 +326,14 @@ pub enum PluginLoadError {
     MissingInitializeSymbol(PathBuf),
     #[error("plugin {path} returned init status {status}")]
     InitFailed { path: PathBuf, status: i32 },
+    #[error("plugin {plugin} requires {missing:?} to be loaded first")]
+    MissingRequiredPlugins { plugin: String, missing: Vec<String> },
+    #[error("plugin {plugin} requires {required:?} which failed to unload: {reason}")]
+    ConflictUnloadFailed {
+        plugin: String,
+        required: Vec<String>,
+        reason: String,
+    },
 }
 
 fn is_plugin_extension(extension: &str) -> bool {
@@ -395,6 +490,8 @@ mod tests {
             PluginConfig {
                 enabled: false,
                 settings: BTreeMap::from([("server".to_string(), "127.0.0.1".to_string())]),
+                required_plugins: Vec::new(),
+                conflicts_with: Vec::new(),
             },
         );
 
