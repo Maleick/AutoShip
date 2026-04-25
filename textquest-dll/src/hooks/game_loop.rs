@@ -3770,6 +3770,27 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
         | Command::TraceDump => {
             tracing::debug!("Trace command already handled by the IPC listener");
         }
+        Command::Pause => {
+            tracing::info!("Pause received from orchestrator");
+            crate::boxr::set_paused(true);
+            crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                success: true,
+                message: "Paused by orchestrator".to_string(),
+            });
+        }
+        Command::Resume => {
+            tracing::info!("Resume received from orchestrator");
+            crate::boxr::set_paused(false);
+            crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                success: true,
+                message: "Resumed by orchestrator".to_string(),
+            });
+        }
+        Command::QueryPauseStatus => {
+            tracing::debug!("QueryPauseStatus received");
+            let paused = crate::boxr::is_paused();
+            crate::ipc::send_response(textquest_common::ipc::Response::PauseStatus { paused });
+        }
     }
 }
 

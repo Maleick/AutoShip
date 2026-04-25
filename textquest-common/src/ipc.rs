@@ -1289,6 +1289,21 @@ pub enum Command {
         /// Account name associated with the client being asked to quit.
         account_name: String,
     },
+    /// Pause all automation and command dispatch.
+    ///
+    /// The session transitions to paused state and does not process new
+    /// commands until a `Resume` command is received. Matches MQ2Boxr semantics.
+    Pause,
+    /// Resume automation and command dispatch from paused state.
+    ///
+    /// The session transitions back to active state. No-op if already active.
+    /// Matches MQ2Boxr semantics.
+    Resume,
+    /// Query the current pause state (TRUE if paused, FALSE if active).
+    ///
+    /// Returns `Response::PauseStatus` with the current session state.
+    /// Used to implement `${TextQuest.Paused}` TLO.
+    QueryPauseStatus,
 }
 
 impl std::fmt::Debug for Command {
@@ -1909,6 +1924,14 @@ pub enum Response {
         events: Vec<TraceRecord>,
         /// Records overwritten before this dump could drain them.
         dropped_events: u64,
+    },
+    /// Current pause state query response.
+    ///
+    /// Response to `Command::QueryPauseStatus`. `paused` is `true` when the
+    /// session is paused (no command dispatch), `false` when active.
+    PauseStatus {
+        /// Whether the session is paused (true) or active (false).
+        paused: bool,
     },
 }
 

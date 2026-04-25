@@ -20,6 +20,8 @@
 // On macOS they compile with stubs but nothing calls into them, so suppress
 // dead_code warnings per-module rather than crate-wide.
 #[allow(dead_code)]
+mod boxr;
+#[allow(dead_code)]
 mod combat;
 #[allow(dead_code)]
 pub mod commands;
@@ -330,6 +332,9 @@ fn initialize(dll_base: *mut u8) -> Result<(), Box<dyn std::error::Error>> {
             "Hook integrity check failed — DLL entering safe mode (IPC commands will be rejected)"
         );
     }
+
+    // 5.5. Register built-in MQ2 interop commands.
+    boxr::register_boxr_command();
 
     // 6. Start IPC listener.
     match ipc::start(client_id, session_token) {
