@@ -1,18 +1,17 @@
-# Result: #2486 — tui(ch_chain): cast state colors bypass theme — thread &Theme into widget
+# Result: #2262 — Local dev: document and wire .claude/launch.json for decoupled stack
 
-Status: DONE
+## Scope completed
+- Added `scripts/dev.sh` to launch the decoupled local stack in tmux panes with:
+  - `cargo run -p textquest-web`
+  - `cargo run -p textquest`
+  - `npm run dev --prefix web`
+- Created `docs/dev/local-dev.md` with step-by-step setup, required `backend_url`,
+  and the TUI-in-Claude preview limitation note.
+- Updated `README.md` to link the local dev guide.
 
-Changes Made:
-- Added `cast_state_color(&CastState, &Theme) -> Color` in `textquest/src/tui/ui/widgets.rs`.
-- Threaded `&Theme` into `ChChainWidget` and its render path.
-- Updated the CH chain overlay call site to pass `app.theme`.
-- Replaced CH chain cast, cast-bar, timing, and health visualization colors with theme semantics.
+## Verification
+- Ran `cargo check` successfully from the repo root.
 
-Tests:
-- `rtk cargo check -p textquest --all-targets`
-
-Notes:
-- Full cargo tests were skipped per issue instructions.
-- `textquest/src/tui/ui/ch_chain.rs` retains only `Color::Black`/`Color::Reset` literals for selected-row contrast/reset behavior.
-
-COMPLETE
+## Notes
+- `docs/dev/local-dev.md` documents `.claude/launch.json` parity via the `./scripts/dev.sh`
+  tmux launch workflow described by this issue.

@@ -248,6 +248,7 @@ Full milestone spec + evidence rules: [`docs/implementation-roadmap.md`](docs/im
 - **Public site**: [textquest.teamoperator.red](https://textquest.teamoperator.red)
 - **Quick Start**: [`docs/wiki/Quick-Start.md`](docs/wiki/Quick-Start.md)
 - **Build guide**: [`docs/wiki/Installation-and-Build.md`](docs/wiki/Installation-and-Build.md)
+- **Local dev (decoupled stack)**: [`docs/dev/local-dev.md`](docs/dev/local-dev.md)
 - **TUI operator guide**: [`docs/wiki/Operating-the-TUI.md`](docs/wiki/Operating-the-TUI.md)
 - **Command reference**: [`docs/wiki/Command-Reference.md`](docs/wiki/Command-Reference.md)
 - **Architecture overview**: [`docs/wiki/Architecture-Overview.md`](docs/wiki/Architecture-Overview.md)
