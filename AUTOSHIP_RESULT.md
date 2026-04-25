@@ -1,14 +1,22 @@
-# Result: #1247 — Polish: Refactor common patterns and eliminate duplication
+# Result: #2260 — DevOps: backend deploy pipeline (Docker + GHA → chosen host)
 
 ## Scope completed
-- Added reusable JSON/TOML config load/save helpers in `textquest-common/src/persistence.rs`.
-- Refactored `character_config` to use shared JSON config helpers.
-- Refactored `chat_pattern_rules` to use shared TOML config helpers.
-- Added focused persistence tests covering default-on-missing-file and round-trip behavior for both JSON and TOML helpers.
+- Added root `Dockerfile` to build a production image for `textquest-web`:
+  - Multi-stage build compiles frontend assets and Rust backend binary.
+  - Runtime image serves the SPA from `/app/web/dist`, sets `TEXTQUEST_DATA_DIR=/app`, and includes a container healthcheck.
+- Added `.github/workflows/deploy-textquest-web.yml`:
+  - Triggers on `push` to `master` and `v*` tags.
+  - Builds and pushes container image to configurable registry using secrets.
+  - Deploys to remote host over SSH using secrets for host credentials.
+  - Polls health endpoint after deploy (`/health`, then `/api/health`) and performs rollback on failure.
+- Documented rollback path inline in deployment workflow (`PREVIOUS_IMAGE` capture + revert-to-prior image).
 
 ## Verification
-- Ran `cargo check` successfully.
+- Confirmed workflow and Docker assets were created/updated in the expected locations:
+  - `Dockerfile`
+  - `.github/workflows/deploy-textquest-web.yml`
+- Health check wiring uses `/health` fallback + `/api/health` compatibility.
 
 ## Notes
-- Refactor stays within the 1–3 file scope for production changes.
-- Existing serialization behavior is preserved through round-trip tests and unchanged public APIs.
+- No code-path changes were made in `textquest-web` Rust sources.
+- All requested production-facing concerns are implemented through infra and deployment automation.

@@ -1,0 +1,143 @@
+name: Deploy textquest-web
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-textquest-web-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ${{ vars.TEXTQUEST_REGISTRY || 'ghcr.io' }}
+  IMAGE_NAME: textquest-web
+
+jobs:
+  deploy:
+    name: Build image and deploy to remote host
+    runs-on: [self-hosted, Linux, X64, textquest]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image tags
+        id: image
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            IMAGE_TAG="${GITHUB_REF_NAME}"
+          else
+            IMAGE_TAG="main-${GITHUB_SHA::8}"
+          fi
+
+          IMAGE_REF="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+          echo "image_ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
+          echo "latest_ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DEPLOY_REGISTRY_USERNAME || github.actor }}
+          password: ${{ secrets.DEPLOY_REGISTRY_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        run: |
+          set -euo pipefail
+          IMAGE="${{ steps.image.outputs.image_ref }}"
+          LATEST="${{ steps.image.outputs.latest_ref }}"
+
+          docker build -t "${IMAGE}" -f Dockerfile .
+          docker push "${IMAGE}"
+
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            docker tag "${IMAGE}" "${LATEST}"
+            docker push "${LATEST}"
+          fi
+
+      - name: Deploy image
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_HOST_USER }}
+          key: ${{ secrets.DEPLOY_HOST_SSH_KEY }}
+          command_timeout: 15m
+          script_stop: true
+          envs: |
+            IMAGE=${{ steps.image.outputs.image_ref }}
+            REGISTRY=${{ env.REGISTRY }}
+            DEPLOY_CONTAINER_NAME=${{ secrets.DEPLOY_CONTAINER_NAME }}
+            DEPLOY_DATA_DIR=${{ secrets.DEPLOY_DATA_DIR }}
+            DEPLOY_APP_PORT=${{ secrets.DEPLOY_APP_PORT }}
+            DEPLOY_REGISTRY_USERNAME=${{ secrets.DEPLOY_REGISTRY_USERNAME || github.actor }}
+            DEPLOY_REGISTRY_TOKEN=${{ secrets.DEPLOY_REGISTRY_TOKEN || secrets.GITHUB_TOKEN }}
+            TEXTQUEST_API_TOKEN=${{ secrets.TEXTQUEST_API_TOKEN }}
+          script: |
+            set -euo pipefail
+
+            IMAGE="${IMAGE}"
+            CONTAINER="${DEPLOY_CONTAINER_NAME:-textquest-web}"
+            APP_PORT="${DEPLOY_APP_PORT:-3001}"
+            DATA_DIR="${DEPLOY_DATA_DIR:-/opt/textquest-web}"
+            REGISTRY="${REGISTRY}"
+
+            mkdir -p "${DATA_DIR}/data"
+
+            PREVIOUS_IMAGE=""
+            if docker inspect "${CONTAINER}" >/dev/null 2>&1; then
+              PREVIOUS_IMAGE="$(docker inspect "${CONTAINER}" --format '{{.Config.Image}}')"
+            fi
+
+            docker login "${REGISTRY}" --username "${DEPLOY_REGISTRY_USERNAME}" --password "${DEPLOY_REGISTRY_TOKEN}"
+            docker pull "${IMAGE}"
+
+            run_container() {
+              local image="$1"
+              docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
+              docker run -d \
+                --name "${CONTAINER}" \
+                --network host \
+                --restart unless-stopped \
+                --env TEXTQUEST_DATA_DIR=/app \
+                --env TEXTQUEST_API_TOKEN="${TEXTQUEST_API_TOKEN}" \
+                -v "${DATA_DIR}/data:/app/data" \
+                "${image}"
+            }
+
+            wait_for_health() {
+              for _ in $(seq 1 20); do
+                if curl -fsS "http://127.0.0.1:${APP_PORT}/health" >/dev/null 2>&1 \
+                  || curl -fsS "http://127.0.0.1:${APP_PORT}/api/health" >/dev/null 2>&1; then
+                  return 0
+                fi
+                sleep 3
+              done
+              return 1
+            }
+
+            run_container "${IMAGE}"
+
+            if wait_for_health; then
+              echo "New deployment healthy."
+              exit 0
+            fi
+
+            echo "Health check failed; rolling back if previous image exists."
+            docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
+
+            if [ -n "${PREVIOUS_IMAGE}" ]; then
+              run_container "${PREVIOUS_IMAGE}"
+              echo "Rollback container started from ${PREVIOUS_IMAGE}"
+              exit 1
+            fi
+
+            echo "No previous container image was available for rollback."
+            exit 1
