@@ -1,11 +1,12 @@
 ---
 name: orchestrate
-description: OpenCode-only AutoShip orchestration protocol
+description: Compatibility-only alias for autoship-orchestrate
 tools: ["Bash", "Read", "Write"]
+compatibility: true
 ---
 
-# AutoShip Orchestration
+# AutoShip Orchestration — compatibility-only alias
 
-Use `skills/autoship-orchestrate/SKILL.md` for the current OpenCode-only protocol.
+This compatibility-only alias is retained for older installs. Use the canonical skill `autoship-orchestrate`.
 
-The orchestrator must use OpenCode workers only, plan issues in ascending issue-number order, cap active workers at the configured limit, and block unsafe/evasion work for human review.
+Run `skills/autoship-orchestrate/SKILL.md` for the current OpenCode-only protocol.

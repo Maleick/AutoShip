@@ -23,6 +23,52 @@ assert_eq() {
   fi
 }
 
+assert_file_contains() {
+  local file="$1"
+  local text="$2"
+  local message="$3"
+  grep -F "$text" "$file" >/dev/null || fail "$message"
+}
+
+assert_canonical_inventory() {
+  local repo_root
+  repo_root="$(cd "$SCRIPT_DIR/../.." && pwd)"
+  local canonical_commands="autoship.md autoship-plan.md autoship-status.md autoship-setup.md autoship-stop.md"
+  local compatibility_commands="autoship-start.md start.md plan.md status.md setup.md stop.md"
+  local canonical_skills="autoship-orchestrate autoship-dispatch autoship-verify autoship-status autoship-poll autoship-setup autoship-discord-webhook autoship-discord-commands"
+  local compatibility_skills="orchestrate dispatch verify status poll setup discord-webhook discord-commands"
+
+  local command
+  for command in $canonical_commands; do
+    [[ -f "$repo_root/commands/$command" ]] || fail "canonical command $command is missing"
+    if grep -F 'compatibility-only' "$repo_root/commands/$command" >/dev/null; then
+      fail "canonical command $command must not be marked compatibility-only"
+    fi
+  done
+
+  for command in $compatibility_commands; do
+    [[ -f "$repo_root/commands/$command" ]] || fail "compatibility command alias $command is missing"
+    assert_file_contains "$repo_root/commands/$command" 'compatibility: true' "command alias $command must declare compatibility metadata"
+    assert_file_contains "$repo_root/commands/$command" 'compatibility-only' "command alias $command must be clearly marked compatibility-only"
+  done
+
+  local skill
+  for skill in $canonical_skills; do
+    [[ -f "$repo_root/skills/$skill/SKILL.md" ]] || fail "canonical skill $skill is missing"
+    if grep -F 'compatibility-only' "$repo_root/skills/$skill/SKILL.md" >/dev/null; then
+      fail "canonical skill $skill must not be marked compatibility-only"
+    fi
+  done
+
+  for skill in $compatibility_skills; do
+    [[ -f "$repo_root/skills/$skill/SKILL.md" ]] || fail "compatibility skill alias $skill is missing"
+    assert_file_contains "$repo_root/skills/$skill/SKILL.md" 'compatibility: true' "skill alias $skill must declare compatibility metadata"
+    assert_file_contains "$repo_root/skills/$skill/SKILL.md" 'compatibility-only' "skill alias $skill must be clearly marked compatibility-only"
+  done
+}
+
+assert_canonical_inventory
+
 ISSUES_FILE="$TMP_DIR/issues.json"
 cat > "$ISSUES_FILE" <<'JSON'
 [

@@ -1,17 +1,18 @@
 ---
 name: status
-description: Display current AutoShip OpenCode orchestration status
+description: Compatibility-only alias for autoship-status
 tools: ["Bash", "Read"]
+compatibility: true
 ---
 
-# AutoShip Status
+# AutoShip Status — compatibility-only alias
 
-Use the real OpenCode status hook:
+This compatibility-only alias is retained for older installs. Use the canonical skill `autoship-status`.
+
+Run the real OpenCode status hook:
 
 ```bash
 bash hooks/opencode/status.sh
 ```
 
-The hook summarizes configured concurrency, queued/running/completed/blocked/stuck issues, workspace status files, and queue depth.
-
-If `.autoship/state.json` is missing, report that no active AutoShip session exists and tell the operator to run `/autoship`.
+For the full protocol, run `skills/autoship-status/SKILL.md`.
