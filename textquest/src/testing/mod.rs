@@ -8,3 +8,4 @@ pub mod output;
 pub mod report_generator;
 pub mod runner;
 pub mod scenario;
+pub mod scenarios;

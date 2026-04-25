@@ -1,18 +1,21 @@
-# Result: #1028 — #861.4: Add QuitGame IPC command
+# Result: #1036 — #862.2: Implement CampLoopScenario
 
 Status: DONE
 
 Changes Made:
-- Added `Command::QuitGame { account_name }` to the IPC protocol, appended to preserve existing bincode enum discriminants.
-- Routed `QuitGame` in the DLL game-loop dispatcher to a login-layer handler.
-- Implemented `/quit` dispatch plus a 5-second game-loop monitor that reports failure if the loop keeps ticking.
-- Added focused coverage for IPC roundtrip, DLL dispatch routing, command validation, and timeout detection.
+- Added `textquest/src/testing/scenarios/camp_loop.rs` with `CampLoopScenario`.
+- Wired `testing::scenarios` and Windows-gated `testing::scenarios::camp_loop` to match the existing `camp` module gating.
+- The scenario constructs an existing `CampLoop`, advances it through deterministic snapshots, and records `pulls`, `kills`, `dps`, `deaths`, `pulls_per_hour`, and `kill_rate`.
+- Added focused unit tests for initialization, metrics collection, early termination, and multiple camp-loop iterations with a mock camp config.
 
 Tests:
-- `cargo check --workspace --tests` passed.
-- Full `cargo test` and clippy were not run per issue instruction to use cargo check only.
+- PASS: `rustfmt --check textquest/src/testing/mod.rs textquest/src/testing/scenarios/mod.rs textquest/src/testing/scenarios/camp_loop.rs`
+- PASS: `cargo check --tests`
+- NOTE: `cargo fmt --check` still reports pre-existing formatting drift in unrelated files (`textquest/src/lua/bindings.rs`, `tools/etw-consumer/src/lib.rs`).
+- NOTE: `cargo check -p textquest --tests --target x86_64-pc-windows-msvc` is blocked on this macOS host by the Windows C toolchain for `ring` missing `assert.h`.
 
 Notes:
-- Process exit is triggered through EQ's `/quit`; on failure to stop the game loop within 5 seconds, the DLL emits a failed `CommandResult`.
+- `CampLoopScenario` is Windows-gated because `crate::camp::config` and `crate::camp::state` are already Windows-gated.
+- No generated config or fixture files were added.
 
 COMPLETE
