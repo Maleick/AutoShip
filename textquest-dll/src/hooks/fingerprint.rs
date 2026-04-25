@@ -385,95 +385,265 @@ fn firmware_table_enum_bytes(firmware: &SpoofedFirmwareTables, provider: u32) ->
 #[cfg(windows)]
 mod inner {
     use core::ffi::c_void;
+    use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 
-    use retour::static_detour;
+    use super::hwbp::{self, HwbpSlot};
     use windows::{
+        Win32::System::Diagnostics::Debug::CONTEXT,
         Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress},
         core::s,
     };
 
     // SystemFingerprint signature from Ghidra.
-    // void SystemFingerprint(void* this) — thiscall on x64.
     type FingerprintFn = unsafe extern "system" fn(*mut core::ffi::c_void);
     type GetSystemFirmwareTableFn = unsafe extern "system" fn(u32, u32, *mut c_void, u32) -> u32;
     type EnumSystemFirmwareTablesFn = unsafe extern "system" fn(u32, *mut c_void, u32) -> u32;
 
-    static_detour! {
-        static FingerprintHook: unsafe extern "system" fn(*mut core::ffi::c_void);
-        static GetSystemFirmwareTableHook: unsafe extern "system" fn(u32, u32, *mut c_void, u32) -> u32;
-        static EnumSystemFirmwareTablesHook: unsafe extern "system" fn(u32, *mut c_void, u32) -> u32;
+    const UNSET_SLOT: u8 = 0xFF;
+
+    static SYSTEM_FINGERPRINT_SLOT: AtomicU8 = AtomicU8::new(UNSET_SLOT);
+    static GET_SYSTEM_FIRMWARE_SLOT: AtomicU8 = AtomicU8::new(UNSET_SLOT);
+    static ENUM_SYSTEM_FIRMWARE_SLOT: AtomicU8 = AtomicU8::new(UNSET_SLOT);
+    static SYSTEM_FINGERPRINT_ORIGINAL: AtomicUsize = AtomicUsize::new(0);
+    static GET_SYSTEM_FIRMWARE_TABLE_ORIGINAL: AtomicUsize = AtomicUsize::new(0);
+    static ENUM_SYSTEM_FIRMWARE_TABLES_ORIGINAL: AtomicUsize = AtomicUsize::new(0);
+
+    fn system_fingerprint_slot() -> Option<HwbpSlot> {
+        HwbpSlot::from_index(SYSTEM_FINGERPRINT_SLOT.load(Ordering::Acquire) as usize)
     }
 
-    /// The detour — replaces the fingerprint payload with spoofed values.
+    fn get_system_firmware_slot() -> Option<HwbpSlot> {
+        HwbpSlot::from_index(GET_SYSTEM_FIRMWARE_SLOT.load(Ordering::Acquire) as usize)
+    }
+
+    fn enum_system_firmware_slot() -> Option<HwbpSlot> {
+        HwbpSlot::from_index(ENUM_SYSTEM_FIRMWARE_SLOT.load(Ordering::Acquire) as usize)
+    }
+
+    fn set_system_fingerprint_slot(slot: HwbpSlot) {
+        SYSTEM_FINGERPRINT_SLOT.store(slot as u8, Ordering::Release);
+    }
+
+    fn set_get_system_firmware_slot(slot: HwbpSlot) {
+        GET_SYSTEM_FIRMWARE_SLOT.store(slot as u8, Ordering::Release);
+    }
+
+    fn set_enum_system_firmware_slot(slot: HwbpSlot) {
+        ENUM_SYSTEM_FIRMWARE_SLOT.store(slot as u8, Ordering::Release);
+    }
+
+    fn set_system_fingerprint_original(address: usize) {
+        SYSTEM_FINGERPRINT_ORIGINAL.store(address, Ordering::Release);
+    }
+
+    fn set_get_system_firmware_original(address: usize) {
+        GET_SYSTEM_FIRMWARE_TABLE_ORIGINAL.store(address, Ordering::Release);
+    }
+
+    fn set_enum_system_firmware_original(address: usize) {
+        ENUM_SYSTEM_FIRMWARE_TABLES_ORIGINAL.store(address, Ordering::Release);
+    }
+
+    fn system_fingerprint_original() -> Option<FingerprintFn> {
+        let address = SYSTEM_FINGERPRINT_ORIGINAL.load(Ordering::Acquire);
+        if address == 0 {
+            None
+        } else {
+            Some(unsafe { std::mem::transmute::<usize, FingerprintFn>(address) })
+        }
+    }
+
+    fn get_system_firmware_table_original() -> Option<GetSystemFirmwareTableFn> {
+        let address = GET_SYSTEM_FIRMWARE_TABLE_ORIGINAL.load(Ordering::Acquire);
+        if address == 0 {
+            None
+        } else {
+            Some(unsafe { std::mem::transmute::<usize, GetSystemFirmwareTableFn>(address) })
+        }
+    }
+
+    fn enum_system_firmware_tables_original() -> Option<EnumSystemFirmwareTablesFn> {
+        let address = ENUM_SYSTEM_FIRMWARE_TABLES_ORIGINAL.load(Ordering::Acquire);
+        if address == 0 {
+            None
+        } else {
+            Some(unsafe {
+                std::mem::transmute::<usize, EnumSystemFirmwareTablesFn>(address)
+            })
+        }
+    }
+
+    fn clear_slot_state() {
+        SYSTEM_FINGERPRINT_SLOT.store(UNSET_SLOT, Ordering::Release);
+        GET_SYSTEM_FIRMWARE_SLOT.store(UNSET_SLOT, Ordering::Release);
+        ENUM_SYSTEM_FIRMWARE_SLOT.store(UNSET_SLOT, Ordering::Release);
+        SYSTEM_FINGERPRINT_ORIGINAL.store(0, Ordering::Release);
+        GET_SYSTEM_FIRMWARE_TABLE_ORIGINAL.store(0, Ordering::Release);
+        ENUM_SYSTEM_FIRMWARE_TABLES_ORIGINAL.store(0, Ordering::Release);
+    }
+
+    fn jump_to_return(context: &mut CONTEXT) {
+        if context.Rsp != 0 {
+            let return_addr = unsafe { *(context.Rsp as *const usize) };
+            context.Rip = return_addr as u64;
+        }
+    }
+
+    /// The callback — replaces the fingerprint payload with spoofed values.
     ///
     /// Strategy: Let the original function run to populate the struct, then
     /// overwrite the four fields with our spoofed values. This is safer than
     /// skipping the original entirely, as it preserves any other side effects
     /// or state the function may set.
-    fn fingerprint_detour(this: *mut core::ffi::c_void) {
-        // Call original to let it initialize everything normally.
-        // SAFETY: `this` is the same pointer EQ passed. The original function
-        // was saved by retour during hook installation.
-        unsafe {
-            FingerprintHook.call(this);
+    #[cfg_attr(windows, unsafe(link_section = ".tq"))]
+    fn fingerprint_callback(exception_info: *mut ()) -> bool {
+        let context = unsafe {
+            let exception_info = &mut *(exception_info
+                as *mut windows::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS);
+            &mut *exception_info.ContextRecord
+        };
+        let this = context.Rcx as *mut c_void;
+
+        if let Some(slot) = system_fingerprint_slot() {
+            if let Some(original) = system_fingerprint_original() {
+                if let Err(error) = hwbp::disable_current_thread_breakpoint(slot) {
+                    tracing::warn!(
+                        "SystemFingerprint hook failed to disable current-thread HWBP: {}",
+                        error
+                    );
+                } else {
+                    unsafe {
+                        original(this);
+                    }
+                    if let Err(error) = hwbp::enable_current_thread_breakpoint(slot) {
+                        tracing::warn!(
+                            "SystemFingerprint hook failed to re-enable current-thread HWBP: {}",
+                            error
+                        );
+                    }
+                }
+            }
         }
 
-        // Now overwrite the fingerprint fields if we have spoofed values.
         if let Some(fp) = super::spoofed() {
-            // The struct layout isn't fully reversed, so we use the CXStr
-            // write helper to set string fields at known offsets.
-            // These offsets are from Ghidra analysis of SystemFingerprint:
-            //   this+0x00: vtable
-            //   this+0x08: VideoCardId (CXStr, 0x10 bytes inline)
-            //   this+0x18: NetworkCardId (CXStr)
-            //   this+0x28: HardriveId (CXStr)
-            //   this+0x38: ComputerName (CXStr)
-            //
-            // SAFETY: We're writing to the same struct the original function
-            // just populated. The offsets are from Ghidra RE of the function
-            // at SYSTEM_FINGERPRINT. If offsets are wrong, the server gets
-            // garbage — but EQ won't crash (string writes are bounded).
-            unsafe {
-                write_cxstr(this, 0x08, &fp.video_card_id);
-                write_cxstr(this, 0x18, &fp.network_card_id);
-                write_cxstr(this, 0x28, &fp.hard_drive_id);
-                write_cxstr(this, 0x38, &fp.computer_name);
+            if !this.is_null() {
+                unsafe {
+                    // The struct layout isn't fully reversed, so we use the CXStr
+                    // write helper to set string fields at known offsets.
+                    // These offsets are from Ghidra analysis of SystemFingerprint:
+                    //   this+0x00: vtable
+                    //   this+0x08: VideoCardId (CXStr, 0x10 bytes inline)
+                    //   this+0x18: NetworkCardId (CXStr)
+                    //   this+0x28: HardriveId (CXStr)
+                    //   this+0x38: ComputerName (CXStr)
+                    write_cxstr(this, 0x08, &fp.video_card_id);
+                    write_cxstr(this, 0x18, &fp.network_card_id);
+                    write_cxstr(this, 0x28, &fp.hard_drive_id);
+                    write_cxstr(this, 0x38, &fp.computer_name);
+                }
             }
             tracing::trace!("Fingerprint spoofed successfully");
+        }
+
+        jump_to_return(context);
+        true
+    }
+
+    #[cfg_attr(windows, unsafe(link_section = ".tq"))]
+    fn get_system_firmware_table_callback(
+        exception_info: *mut (),
+    ) -> bool {
+        let context = unsafe {
+            let exception_info = &mut *(exception_info
+                as *mut windows::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS);
+            &mut *exception_info.ContextRecord
+        };
+        let provider = context.Rcx as u32;
+        let table_id = context.Rdx as u32;
+        let buffer = context.R8 as *mut c_void;
+        let buffer_size = context.R9 as u32;
+
+        let result = if let Some(firmware) = super::spoofed_firmware() {
+            super::firmware_table_bytes(firmware, provider, table_id)
+                .map(|table| copy_firmware_response(table, buffer, buffer_size))
+                .unwrap_or(0)
+        } else if let Some(slot) = get_system_firmware_slot() {
+            if let Some(original) = get_system_firmware_table_original() {
+                if let Err(error) = hwbp::disable_current_thread_breakpoint(slot) {
+                    tracing::warn!(
+                        "GetSystemFirmwareTable hook failed to disable current-thread HWBP: {}",
+                        error
+                    );
+                    0
+                } else {
+                    let returned = unsafe { original(provider, table_id, buffer, buffer_size) };
+                    if let Err(error) = hwbp::enable_current_thread_breakpoint(slot) {
+                        tracing::warn!(
+                            "GetSystemFirmwareTable hook failed to re-enable current-thread \
+                             HWBP: {}",
+                            error
+                        );
+                    }
+                    returned
+                }
+            } else {
+                0
+            }
         } else {
-            tracing::warn!(
-                "Fingerprint hook fired but no spoofed values — sending real fingerprint"
-            );
-        }
+            0
+        };
+
+        context.Rax = result as u64;
+        jump_to_return(context);
+        true
     }
 
-    fn get_system_firmware_table_detour(
-        provider: u32,
-        table_id: u32,
-        buffer: *mut c_void,
-        buffer_size: u32,
-    ) -> u32 {
-        if let Some(firmware) = super::spoofed_firmware()
-            && let Some(table) = super::firmware_table_bytes(firmware, provider, table_id)
-        {
-            return copy_firmware_response(table, buffer, buffer_size);
-        }
+    #[cfg_attr(windows, unsafe(link_section = ".tq"))]
+    fn enum_system_firmware_tables_callback(
+        exception_info: *mut (),
+    ) -> bool {
+        let context = unsafe {
+            let exception_info = &mut *(exception_info
+                as *mut windows::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS);
+            &mut *exception_info.ContextRecord
+        };
+        let provider = context.Rcx as u32;
+        let buffer = context.Rdx as *mut c_void;
+        let buffer_size = context.R8 as u32;
 
-        unsafe { GetSystemFirmwareTableHook.call(provider, table_id, buffer, buffer_size) }
-    }
+        let result = if let Some(firmware) = super::spoofed_firmware() {
+            super::firmware_table_enum_bytes(firmware, provider)
+                .map(|table_ids| copy_firmware_response(&table_ids, buffer, buffer_size))
+                .unwrap_or(0)
+        } else if let Some(slot) = enum_system_firmware_slot() {
+            if let Some(original) = enum_system_firmware_tables_original() {
+                if let Err(error) = hwbp::disable_current_thread_breakpoint(slot) {
+                    tracing::warn!(
+                        "EnumSystemFirmwareTables hook failed to disable current-thread HWBP: {}",
+                        error
+                    );
+                    0
+                } else {
+                    let returned = unsafe { original(provider, buffer, buffer_size) };
+                    if let Err(error) = hwbp::enable_current_thread_breakpoint(slot) {
+                        tracing::warn!(
+                            "EnumSystemFirmwareTables hook failed to re-enable current-thread \
+                             HWBP: {}",
+                            error
+                        );
+                    }
+                    returned
+                }
+            } else {
+                0
+            }
+        } else {
+            0
+        };
 
-    fn enum_system_firmware_tables_detour(
-        provider: u32,
-        buffer: *mut c_void,
-        buffer_size: u32,
-    ) -> u32 {
-        if let Some(firmware) = super::spoofed_firmware()
-            && let Some(table_ids) = super::firmware_table_enum_bytes(firmware, provider)
-        {
-            return copy_firmware_response(&table_ids, buffer, buffer_size);
-        }
-
-        unsafe { EnumSystemFirmwareTablesHook.call(provider, buffer, buffer_size) }
+        context.Rax = result as u64;
+        jump_to_return(context);
+        true
     }
 
     fn copy_firmware_response(data: &[u8], buffer: *mut c_void, buffer_size: u32) -> u32 {
@@ -528,15 +698,27 @@ mod inner {
 
     /// Install the fingerprint hook.
     pub fn install(fingerprint_addr: usize) -> Result<(), Box<dyn std::error::Error>> {
-        // SAFETY: fingerprint_addr was rebased from SYSTEM_FINGERPRINT offset
-        // against the live eqgame.exe base address. The transmute converts it
-        // to a function pointer matching SystemFingerprint's calling convention.
-        unsafe {
-            let target: FingerprintFn = std::mem::transmute(fingerprint_addr);
-            FingerprintHook.initialize(target, fingerprint_detour)?;
-            FingerprintHook.enable()?;
+        if fingerprint_addr == 0 {
+            return Err("SystemFingerprint address is zero".into());
         }
+
+        let target: FingerprintFn = unsafe { std::mem::transmute(fingerprint_addr) };
+        let _ = target;
+
+        let slot = match hwbp::register_available(fingerprint_addr, fingerprint_callback)? {
+            hwbp::HwbpInstallOutcome::Installed(slot) => slot,
+            hwbp::HwbpInstallOutcome::FallbackToDetour => {
+                return Err(
+                    "No HWBP slots available for SystemFingerprint hook; cannot install without JMP hooks"
+                        .into(),
+                );
+            }
+        };
+
+        set_system_fingerprint_slot(slot);
+        set_system_fingerprint_original(fingerprint_addr);
         tracing::info!(
+            slot = slot as u8,
             addr = format!("{:#x}", fingerprint_addr),
             "Fingerprint spoof hook installed"
         );
@@ -551,35 +733,80 @@ mod inner {
             let enum_addr = GetProcAddress(kernel32, s!("EnumSystemFirmwareTables"))
                 .ok_or("EnumSystemFirmwareTables not exported by kernel32.dll")?;
 
-            let get_target: GetSystemFirmwareTableFn = std::mem::transmute(get_addr);
-            let enum_target: EnumSystemFirmwareTablesFn = std::mem::transmute(enum_addr);
+            let get_slot = match hwbp::register_available(
+                get_addr as usize,
+                get_system_firmware_table_callback,
+            )? {
+                hwbp::HwbpInstallOutcome::Installed(slot) => slot,
+                hwbp::HwbpInstallOutcome::FallbackToDetour => {
+                    return Err(
+                        "No HWBP slots available for firmware hooks; cannot install without JMP hooks"
+                            .into(),
+                    );
+                }
+            };
+            set_get_system_firmware_slot(get_slot);
+            set_get_system_firmware_original(get_addr as usize);
 
-            GetSystemFirmwareTableHook.initialize(get_target, get_system_firmware_table_detour)?;
-            GetSystemFirmwareTableHook.enable()?;
-            EnumSystemFirmwareTablesHook
-                .initialize(enum_target, enum_system_firmware_tables_detour)?;
-            EnumSystemFirmwareTablesHook.enable()?;
+            let enum_slot = match hwbp::register_available(
+                enum_addr as usize,
+                enum_system_firmware_tables_callback,
+            )? {
+                hwbp::HwbpInstallOutcome::Installed(slot) => slot,
+                hwbp::HwbpInstallOutcome::FallbackToDetour => {
+                    if let Err(unregister_error) = hwbp::unregister(get_slot) {
+                        tracing::warn!(
+                            "Failed to rollback GetSystemFirmwareTable during enum hook setup: {}",
+                            unregister_error
+                        );
+                    }
+                    clear_slot_state();
+                    return Err(
+                        "No HWBP slots available for firmware hooks; cannot install without JMP hooks"
+                            .into(),
+                    );
+                }
+            };
+            set_enum_system_firmware_slot(enum_slot);
+            set_enum_system_firmware_original(enum_addr as usize);
         }
 
-        tracing::info!("Firmware table fingerprint hooks installed");
+        tracing::info!(
+            get_slot = GET_SYSTEM_FIRMWARE_SLOT.load(Ordering::Acquire),
+            enum_slot = ENUM_SYSTEM_FIRMWARE_SLOT.load(Ordering::Acquire),
+            "Firmware table fingerprint HWBP hooks installed"
+        );
         Ok(())
     }
 
-    /// Remove the fingerprint hook.
+    /// Remove the fingerprint hooks.
     pub fn remove() {
-        // SAFETY: Disabling a retour hook restores the original function bytes.
-        unsafe {
-            if FingerprintHook.is_enabled() {
-                let _ = FingerprintHook.disable();
-            }
-            if GetSystemFirmwareTableHook.is_enabled() {
-                let _ = GetSystemFirmwareTableHook.disable();
-            }
-            if EnumSystemFirmwareTablesHook.is_enabled() {
-                let _ = EnumSystemFirmwareTablesHook.disable();
+        if let Some(slot) = system_fingerprint_slot() {
+            if hwbp::is_active(slot) {
+                if let Err(e) = hwbp::unregister(slot) {
+                    tracing::warn!("Failed to remove SystemFingerprint HWBP: {}", e);
+                }
             }
         }
-        tracing::info!("Fingerprint spoof hook removed");
+        if let Some(slot) = get_system_firmware_slot() {
+            if hwbp::is_active(slot) {
+                if let Err(e) = hwbp::unregister(slot) {
+                    tracing::warn!("Failed to remove GetSystemFirmwareTable HWBP: {}", e);
+                }
+            }
+        }
+        if let Some(slot) = enum_system_firmware_slot() {
+            if hwbp::is_active(slot) {
+                if let Err(e) = hwbp::unregister(slot) {
+                    tracing::warn!(
+                        "Failed to remove EnumSystemFirmwareTables HWBP: {}",
+                        e
+                    );
+                }
+            }
+        }
+        clear_slot_state();
+        tracing::info!("Fingerprint spoof HWBP hooks removed");
     }
 }
 

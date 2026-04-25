@@ -60,63 +60,78 @@ pub fn mode() -> RenderMode {
 
 #[cfg(windows)]
 mod inner {
-    use retour::static_detour;
-    use textquest_common::eq_fn;
+    use std::sync::atomic::{AtomicU8, Ordering};
+    use textquest_common::offsets;
+    use super::hwbp::{self, HwbpSlot};
 
-    eq_fn!(real_render_world(this: *mut core::ffi::c_void) -> () = textquest_common::offsets::REAL_RENDER_WORLD);
+    const UNSET_SLOT: u8 = 0xFF;
+    static RENDER_SLOT: AtomicU8 = AtomicU8::new(UNSET_SLOT);
 
-    // CDisplay::RealRender_World signature.
-    // MQ2: void CDisplay::RealRender_World()
-    // On x64: this = RCX (CDisplay*), no other params.
-    type RenderFn = unsafe extern "system" fn(*mut core::ffi::c_void);
-
-    static_detour! {
-        static RenderHook: unsafe extern "system" fn(*mut core::ffi::c_void);
+    fn render_slot() -> Option<HwbpSlot> {
+        let slot = RENDER_SLOT.load(Ordering::Acquire);
+        HwbpSlot::from_index(slot as usize)
     }
 
-    /// The detour function -- called instead of `CDisplay::RealRender_World`.
-    fn render_detour(this: *mut core::ffi::c_void) {
+    fn set_render_slot(slot: HwbpSlot) {
+        RENDER_SLOT.store(slot as u8, Ordering::Release);
+    }
+
+    fn clear_render_slot() {
+        RENDER_SLOT.store(UNSET_SLOT, Ordering::Release);
+    }
+
+    /// Callback at `CDisplay::RealRender_World` entry.
+    #[cfg_attr(windows, unsafe(link_section = ".tq"))]
+    fn render_callback(exception_info: *mut ()) -> bool {
+        let context = unsafe {
+            let exception_info = &mut *(exception_info
+                as *mut windows::Win32::System::Diagnostics::Debug::EXCEPTION_POINTERS);
+            &mut *exception_info.ContextRecord
+        };
+
         if super::should_render() {
-            // SAFETY: `this` is the CDisplay* pointer passed by EQ's rendering
-            // pipeline. The original RealRender_World function was saved by retour
-            // during hook installation. We forward the same `this` pointer unchanged.
-            unsafe {
-                RenderHook.call(this);
-            }
+            return true;
         }
-        // When not rendering, just return -- EQ skips the 3D scene but
-        // game logic (main loop) continues at full speed.
+
+        if context.Rsp != 0 {
+            let return_addr = unsafe { *(context.Rsp as *const usize) };
+            context.Rip = return_addr as u64;
+        }
+
+        true
     }
 
     /// Install the render hook.
     pub fn install(eq_base: u64) -> Result<(), Box<dyn std::error::Error>> {
-        let target_addr = real_render_world.addr(eq_base);
-        // SAFETY: target_addr was resolved from REAL_RENDER_WORLD offset against
-        // the live eqgame.exe base address. The transmute converts it to a function
-        // pointer matching CDisplay::RealRender_World's calling convention.
-        // retour overwrites the function prologue with a trampoline. If the offset
-        // is wrong, EQ will crash on the next render call.
-        unsafe {
-            let target: RenderFn = std::mem::transmute(target_addr);
-            RenderHook.initialize(target, render_detour)?;
-            RenderHook.enable()?;
-        }
+        let target_addr = offsets::rebase(offsets::REAL_RENDER_WORLD, eq_base)
+            .ok_or("Failed to rebase CDisplay::RealRender_World")?;
+        let slot = match hwbp::register_available(target_addr, render_callback)? {
+            hwbp::HwbpInstallOutcome::Installed(slot) => slot,
+            hwbp::HwbpInstallOutcome::FallbackToDetour => {
+                return Err(
+                    "No HWBP slots available for render hook; cannot install without JMP hooks"
+                        .into(),
+                )
+            }
+        };
+        set_render_slot(slot);
         tracing::info!(
+            slot = slot as u8,
             addr = format!("{:#x}", target_addr),
-            "Render strobe hook installed"
+            "Render strobe HWBP hook installed"
         );
         Ok(())
     }
 
     /// Remove the render hook.
     pub fn remove() {
-        // SAFETY: Disabling a retour hook restores the original function bytes.
-        // Safe to call during graceful_shutdown() — see game_loop::remove() for
-        // details.
-        unsafe {
-            if RenderHook.is_enabled() {
-                let _ = RenderHook.disable();
+        if let Some(slot) = render_slot() {
+            if hwbp::is_active(slot) {
+                if let Err(e) = hwbp::unregister(slot) {
+                    tracing::warn!("Failed to remove render hook HWBP: {}", e);
+                }
             }
+            clear_render_slot();
         }
         tracing::info!("Render strobe hook removed");
     }
