@@ -270,6 +270,122 @@ assert_eq "1" "$(jq -r '.stats.session_completed' "$QUEUE_REPO/.autoship/state.j
 assert_eq "0" "$(jq 'length' "$QUEUE_REPO/.autoship/event-queue.json")" "event processor drains processed duplicate events"
 assert_eq "2" "$(jq 'length' "$QUEUE_REPO/.autoship/processed-events.json")" "event processor records only unique semantic events"
 
+VERIFY_FAIL_REPO="$TMP_DIR/verify-fail-repo"
+mkdir -p "$VERIFY_FAIL_REPO/.autoship/workspaces/issue-184" "$VERIFY_FAIL_REPO/hooks/opencode" "$VERIFY_FAIL_REPO/hooks" "$VERIFY_FAIL_REPO/bin"
+git init -q "$VERIFY_FAIL_REPO"
+git -C "$VERIFY_FAIL_REPO" config user.email autoship@example.invalid
+git -C "$VERIFY_FAIL_REPO" config user.name AutoShip
+printf 'base\n' > "$VERIFY_FAIL_REPO/README.md"
+git -C "$VERIFY_FAIL_REPO" add README.md
+git -C "$VERIFY_FAIL_REPO" commit -q -m initial
+git -C "$VERIFY_FAIL_REPO" checkout -q -b autoship/issue-184
+printf 'changed\n' > "$VERIFY_FAIL_REPO/feature.txt"
+cp "$SCRIPT_DIR/process-event-queue.sh" "$VERIFY_FAIL_REPO/hooks/opencode/process-event-queue.sh"
+cp "$SCRIPT_DIR/pr-title.sh" "$VERIFY_FAIL_REPO/hooks/opencode/pr-title.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$VERIFY_FAIL_REPO/hooks/update-state.sh"
+chmod +x "$VERIFY_FAIL_REPO/hooks/opencode/process-event-queue.sh" "$VERIFY_FAIL_REPO/hooks/opencode/pr-title.sh" "$VERIFY_FAIL_REPO/hooks/update-state.sh"
+cat > "$VERIFY_FAIL_REPO/hooks/opencode/reviewer.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'VERDICT: FAIL\n'
+exit 1
+SH
+chmod +x "$VERIFY_FAIL_REPO/hooks/opencode/reviewer.sh"
+cat > "$VERIFY_FAIL_REPO/bin/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "pr create" ]]; then
+  printf 'pr create called\n' >> "$GH_PR_LOG"
+  exit 0
+fi
+if [[ "$1 $2" == "issue view" && "$*" == *"title"* ]]; then
+  printf 'Create PR after verified PASS\n'
+  exit 0
+fi
+if [[ "$1 $2" == "issue view" && "$*" == *"labels"* ]]; then
+  printf 'type:feature\n'
+  exit 0
+fi
+if [[ "$1 $2" == "label list" ]]; then
+  printf '%s\n' autoship:blocked autoship:in-progress autoship:done autoship:paused
+  exit 0
+fi
+exit 0
+SH
+chmod +x "$VERIFY_FAIL_REPO/bin/gh"
+cat > "$VERIFY_FAIL_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-184":{"state":"running","title":"Create PR after verified PASS","labels":"type:feature"}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+printf '[]\n' > "$VERIFY_FAIL_REPO/.autoship/processed-events.json"
+cat > "$VERIFY_FAIL_REPO/.autoship/event-queue.json" <<'JSON'
+[{"type":"verify","issue":"issue-184","priority":2,"data":{"status":"COMPLETE"},"queued_at":"2026-04-24T00:00:00Z"}]
+JSON
+printf 'Result\n' > "$VERIFY_FAIL_REPO/.autoship/workspaces/issue-184/AUTOSHIP_RESULT.md"
+(
+  cd "$VERIFY_FAIL_REPO"
+  GH_PR_LOG="$VERIFY_FAIL_REPO/gh-pr.log" PATH="$VERIFY_FAIL_REPO/bin:$PATH" bash hooks/opencode/process-event-queue.sh >/dev/null
+)
+test ! -e "$VERIFY_FAIL_REPO/gh-pr.log" || fail "failed verification must not call gh pr create"
+assert_eq "blocked" "$(jq -r '.issues["issue-184"].state' "$VERIFY_FAIL_REPO/.autoship/state.json")" "failed verification blocks issue instead of completing it"
+
+VERIFY_PASS_REPO="$TMP_DIR/verify-pass-repo"
+mkdir -p "$VERIFY_PASS_REPO/.autoship/workspaces/issue-184" "$VERIFY_PASS_REPO/hooks/opencode" "$VERIFY_PASS_REPO/hooks" "$VERIFY_PASS_REPO/bin"
+git init -q "$VERIFY_PASS_REPO"
+git -C "$VERIFY_PASS_REPO" config user.email autoship@example.invalid
+git -C "$VERIFY_PASS_REPO" config user.name AutoShip
+git -C "$VERIFY_PASS_REPO" remote add origin git@github.com:owner/repo.git
+printf 'base\n' > "$VERIFY_PASS_REPO/README.md"
+git -C "$VERIFY_PASS_REPO" add README.md
+git -C "$VERIFY_PASS_REPO" commit -q -m initial
+git -C "$VERIFY_PASS_REPO" checkout -q -b autoship/issue-184
+printf 'changed\n' > "$VERIFY_PASS_REPO/feature.txt"
+cp "$SCRIPT_DIR/process-event-queue.sh" "$VERIFY_PASS_REPO/hooks/opencode/process-event-queue.sh"
+cp "$SCRIPT_DIR/pr-title.sh" "$VERIFY_PASS_REPO/hooks/opencode/pr-title.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$VERIFY_PASS_REPO/hooks/update-state.sh"
+chmod +x "$VERIFY_PASS_REPO/hooks/opencode/process-event-queue.sh" "$VERIFY_PASS_REPO/hooks/opencode/pr-title.sh" "$VERIFY_PASS_REPO/hooks/update-state.sh"
+cat > "$VERIFY_PASS_REPO/hooks/opencode/reviewer.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'VERDICT: PASS\n'
+exit 0
+SH
+chmod +x "$VERIFY_PASS_REPO/hooks/opencode/reviewer.sh"
+cat > "$VERIFY_PASS_REPO/bin/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "pr create" ]]; then
+  printf '%s\n' "$*" >> "$GH_PR_LOG"
+  printf 'https://github.com/owner/repo/pull/184\n'
+  exit 0
+fi
+if [[ "$1 $2" == "issue view" && "$*" == *"title"* ]]; then
+  printf 'Create PR after verified PASS\n'
+  exit 0
+fi
+if [[ "$1 $2" == "issue view" && "$*" == *"labels"* ]]; then
+  printf 'type:feature\n'
+  exit 0
+fi
+if [[ "$1 $2" == "label list" ]]; then
+  printf '%s\n' autoship:blocked autoship:in-progress autoship:done autoship:paused
+  exit 0
+fi
+exit 0
+SH
+chmod +x "$VERIFY_PASS_REPO/bin/gh"
+cat > "$VERIFY_PASS_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-184":{"state":"running","title":"Create PR after verified PASS","labels":"type:feature"}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+printf '[]\n' > "$VERIFY_PASS_REPO/.autoship/processed-events.json"
+cat > "$VERIFY_PASS_REPO/.autoship/event-queue.json" <<'JSON'
+[{"type":"verify","issue":"issue-184","priority":2,"data":{"status":"COMPLETE"},"queued_at":"2026-04-24T00:00:00Z"}]
+JSON
+printf 'Result summary\n' > "$VERIFY_PASS_REPO/.autoship/workspaces/issue-184/AUTOSHIP_RESULT.md"
+(
+  cd "$VERIFY_PASS_REPO"
+  GH_PR_LOG="$VERIFY_PASS_REPO/gh-pr.log" PATH="$VERIFY_PASS_REPO/bin:$PATH" bash hooks/opencode/process-event-queue.sh >/dev/null
+)
+grep -F 'pr create --title feat: Create PR after verified PASS (#184)' "$VERIFY_PASS_REPO/gh-pr.log" >/dev/null || fail "verified PASS creates PR with conventional title"
+grep -F -- '--body-file .autoship/workspaces/issue-184/AUTOSHIP_PR_BODY.md' "$VERIFY_PASS_REPO/gh-pr.log" >/dev/null || fail "verified PASS creates PR from generated body file"
+grep -F 'Reviewer: PASS' "$VERIFY_PASS_REPO/.autoship/workspaces/issue-184/AUTOSHIP_PR_BODY.md" >/dev/null || fail "generated PR body records reviewer pass"
+assert_eq "completed" "$(jq -r '.issues["issue-184"].state' "$VERIFY_PASS_REPO/.autoship/state.json")" "verified PASS completes issue after PR creation"
+
 grep -F 'AUTOSHIP_VERSION="1.5.0-opencode"' "$SCRIPT_DIR/init.sh" >/dev/null 2>&1 && fail "init must not hardcode stale 1.5.0-opencode version"
 
 INIT_REPO="$TMP_DIR/init-repo"
