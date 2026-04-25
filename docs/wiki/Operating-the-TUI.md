@@ -89,13 +89,16 @@ Use this for:
 - live text filtering
 - target details
 - raw hex dump of the selected spawn or demo payload
+- EQ Internals offset browsing, with `Enter` loading the selected offset into the hex viewer
+- local `data/ghidra.db` function browsing when a runtime Ghidra cache is present
+- Ghidra explorer search and category cycling without importing Test offset defaults
 
 ### Packets
 
 Use this for:
 
 - inspecting captured packet rows when the current DLL build is emitting packet events
-- pausing the packet stream without leaving the screen
+- pausing the packet stream with `Space` without leaving the screen
 - selecting individual packets with `j` / `k` or arrow keys
 - inspecting packet payloads in hex and ASCII text for the selected row
 - confirming the live and peak packet rates reported by the capture stream

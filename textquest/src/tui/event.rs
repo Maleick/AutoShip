@@ -103,6 +103,80 @@ fn handle_tactical_map_panel_toggle(app: &mut App, key: KeyCode) -> bool {
     true
 }
 
+fn handle_debug_explorer_panel_key(app: &mut App, key: KeyCode) -> bool {
+    if app.explorer_state.search_mode {
+        match key {
+            KeyCode::Esc => app.explorer_state.search_mode = false,
+            KeyCode::Enter => {
+                app.explorer_state.search_mode = false;
+                app.explorer_state.apply_filter();
+            }
+            KeyCode::Backspace => {
+                app.explorer_state.search_filter.pop();
+                app.explorer_state.apply_filter();
+            }
+            KeyCode::Char(ch) => {
+                app.explorer_state.search_filter.push(ch);
+                app.explorer_state.apply_filter();
+            }
+            _ => return false,
+        }
+        return true;
+    }
+
+    match key {
+        KeyCode::Down | KeyCode::Char('j') => app.explorer_state.select_next(),
+        KeyCode::Up | KeyCode::Char('k') => app.explorer_state.select_prev(),
+        KeyCode::Enter => app.explorer_select_function(),
+        KeyCode::Char('c') => {
+            app.explorer_state.category_filter = app.explorer_state.category_filter.next();
+            app.explorer_state.apply_filter();
+        }
+        KeyCode::Char('/') => app.explorer_state.search_mode = true,
+        _ => return false,
+    }
+
+    true
+}
+
+fn handle_packet_monitor_log_key(app: &mut App, key: KeyCode) -> bool {
+    match key {
+        KeyCode::Down | KeyCode::Char('j') => app.packet_monitor_state.select_next(),
+        KeyCode::Up | KeyCode::Char('k') => app.packet_monitor_state.select_prev(),
+        KeyCode::PageDown => app.packet_monitor_state.scroll_down(),
+        KeyCode::PageUp => app.packet_monitor_state.scroll_up(),
+        KeyCode::Home => {
+            app.packet_monitor_state.auto_scroll = false;
+            app.packet_monitor_state.table_state.select(Some(0));
+        }
+        KeyCode::End => {
+            app.packet_monitor_state.auto_scroll = true;
+            app.packet_monitor_state.scroll_offset = 0;
+            let max = app
+                .packet_monitor_state
+                .filtered_packets()
+                .len()
+                .saturating_sub(1);
+            app.packet_monitor_state.table_state.select(Some(max));
+        }
+        KeyCode::Char(' ') | KeyCode::Char('p' | 'P') => {
+            app.packet_monitor_state.toggle_pause();
+            app.status_message = if app.packet_monitor_state.paused {
+                String::from("Packet monitor paused")
+            } else {
+                String::from("Packet monitor resumed")
+            };
+        }
+        KeyCode::Char('c') => {
+            app.packet_monitor_state.clear();
+            app.status_message = String::from("Packet monitor cleared");
+        }
+        _ => return false,
+    }
+
+    true
+}
+
 fn handle_tactical_map_focused_shortcut(app: &mut App, key: KeyEvent) -> bool {
     if app.active_screen != ActiveScreen::Tactical || app.active_panel != ActivePanel::TacticalMap {
         return false;
@@ -1259,7 +1333,7 @@ pub fn handle_events(
                     app.spawns_state.table_state.select(Some(max));
                 }
                 KeyCode::Enter => app.navigate_to_selected_spawn(),
-                KeyCode::Char('x') => app.debug_selected_spawn(),
+                KeyCode::Char('h') | KeyCode::Char('x') => app.debug_selected_spawn(),
                 KeyCode::Char('a') => app.target_selected_spawn(),
                 KeyCode::Char('s') => app.cycle_spawn_sort(),
                 KeyCode::Char('S') => app.toggle_spawn_sort_direction(),
@@ -1276,62 +1350,21 @@ pub fn handle_events(
                 KeyCode::Char('a') => app.toggle_hex_annotations(),
                 _ => {}
             },
-            ActivePanel::DebugExplorer => match key.code {
-                KeyCode::Char('p' | 'P') => {
+            ActivePanel::DebugExplorer => {
+                if !app.explorer_state.search_mode && matches!(key.code, KeyCode::Char('p' | 'P'))
+                {
                     app.toggle_gemma_observer_pause();
                     return Ok(true);
                 }
-                _ => {}
-            },
-            ActivePanel::DebugPatchReconciliation => match key.code {
-                KeyCode::Char('f' | 'F') => {
-                    let filter = app.patch_reconciliation_state.cycle_filter();
-                    app.status_message = format!("Patch reconciliation: {}", filter.label());
+                if handle_debug_explorer_panel_key(app, key.code) {
                     return Ok(true);
                 }
-                KeyCode::Char('r' | 'R') => {
-                    match app.patch_reconciliation_state.reload() {
-                        Ok(()) => {
-                            app.status_message = format!(
-                                "Patch reconciliation: reloaded {}",
-                                app.patch_reconciliation_state.source_path().display()
-                            );
-                        }
-                        Err(e) => {
-                            app.status_message = format!("Patch reconciliation: {e}");
-                        }
-                    }
+            }
+            ActivePanel::PacketMonitorLog => {
+                if handle_packet_monitor_log_key(app, key.code) {
                     return Ok(true);
                 }
-                KeyCode::Char('p' | 'P') => {
-                    app.toggle_gemma_observer_pause();
-                    return Ok(true);
-                }
-                _ => {}
-            },
-            ActivePanel::PacketMonitorLog => match key.code {
-                KeyCode::Down | KeyCode::Char('j') => app.packet_monitor_state.select_next(),
-                KeyCode::Up | KeyCode::Char('k') => app.packet_monitor_state.select_prev(),
-                KeyCode::PageDown => app.packet_monitor_state.scroll_down(),
-                KeyCode::PageUp => app.packet_monitor_state.scroll_up(),
-                KeyCode::Home => {
-                    app.packet_monitor_state.auto_scroll = false;
-                    app.packet_monitor_state.table_state.select(Some(0));
-                }
-                KeyCode::End => {
-                    app.packet_monitor_state.auto_scroll = true;
-                    app.packet_monitor_state.scroll_offset = 0;
-                    let max = app
-                        .packet_monitor_state
-                        .filtered_packets()
-                        .len()
-                        .saturating_sub(1);
-                    app.packet_monitor_state.table_state.select(Some(max));
-                }
-                KeyCode::Char('p') => app.packet_monitor_state.toggle_pause(),
-                KeyCode::Char('c') => app.packet_monitor_state.clear(),
-                _ => {}
-            },
+            }
             ActivePanel::DebugInternals => {
                 if app.eq_internals_state.search_mode {
                     match key.code {
@@ -1535,6 +1568,39 @@ mod tests {
         ));
         assert!(!app.map_state.show_extended);
         assert_eq!(app.status_message, "Extended OFF");
+    }
+
+    #[test]
+    fn debug_explorer_enter_loads_selected_row_into_hex() {
+        let mut app = App::new();
+        app.active_screen = ActiveScreen::Debug;
+        app.active_panel = ActivePanel::DebugExplorer;
+        app.explorer_state.all_functions = vec![crate::tui::state::ExplorerEntry {
+            address: 0x1400_1234,
+            name: String::from("ProcessGameEvents"),
+            category: Some(String::from("ghidra_auto")),
+            usability: Some(String::from("untested")),
+            size: Some(64),
+        }];
+        app.explorer_state.apply_filter();
+
+        assert!(handle_debug_explorer_panel_key(&mut app, KeyCode::Enter));
+
+        assert_eq!(app.active_panel, ActivePanel::DebugHexDump);
+        assert!(app.hex_state.hex_label.contains("ProcessGameEvents"));
+    }
+
+    #[test]
+    fn packet_monitor_space_toggles_pause_status() {
+        let mut app = App::new();
+
+        assert!(handle_packet_monitor_log_key(&mut app, KeyCode::Char(' ')));
+        assert!(app.packet_monitor_state.paused);
+        assert_eq!(app.status_message, "Packet monitor paused");
+
+        assert!(handle_packet_monitor_log_key(&mut app, KeyCode::Char(' ')));
+        assert!(!app.packet_monitor_state.paused);
+        assert_eq!(app.status_message, "Packet monitor resumed");
     }
 
     #[test]

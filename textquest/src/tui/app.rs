@@ -1584,7 +1584,14 @@ impl App {
             tracing::warn!("help: no help topics loaded; TUI help database is unavailable");
         }
         let help_topics = Self::build_help_topics(&help_database);
-        let saved_theme = ThemeKind::load_saved();
+        let ghidra_db = Self::load_ghidra_database();
+        let mut explorer_state = super::state::ExplorerScreenState::new();
+        if let Some(db) = ghidra_db.as_ref()
+            && let Err(err) = explorer_state.load_from_db(db)
+        {
+            tracing::warn!(error = %err, "Failed to load Ghidra explorer data");
+        }
+
         let mut app = Self {
             running: true,
             active_screen: ActiveScreen::Overview,
@@ -1620,11 +1627,9 @@ impl App {
             overview_state: OverviewScreenState::new(),
             spawns_state: SpawnsScreenState::new(),
             hex_state: HexDumpState::new(),
-            explorer_state: super::state::ExplorerScreenState::new(),
+            explorer_state,
             eq_internals_state: super::state::EqInternalsState::new(),
-            patch_reconciliation_state:
-                crate::tui::ui::patch_reconciliation::PatchReconciliationState::new(),
-            ghidra_db: None,
+            ghidra_db,
 
             refresh_rate_ms: 250,
 
@@ -1748,6 +1753,31 @@ impl App {
         app.cmd_state.load_history_from_disk();
         app.refresh_alert_history();
         app
+    }
+
+    fn load_ghidra_database() -> Option<textquest_common::ghidra_db::GhidraDatabase> {
+        let mut candidates = Vec::new();
+
+        if let Ok(cwd) = std::env::current_dir() {
+            for ancestor in cwd.ancestors() {
+                candidates.push(ancestor.join("data/ghidra.db"));
+            }
+        }
+        if let Ok(exe) = std::env::current_exe()
+            && let Some(dir) = exe.parent()
+        {
+            for ancestor in dir.ancestors() {
+                candidates.push(ancestor.join("data/ghidra.db"));
+            }
+        }
+
+        candidates
+            .into_iter()
+            .find(|path| path.exists())
+            .and_then(|path| {
+                tracing::info!(path = %path.display(), "Loading Ghidra database");
+                textquest_common::ghidra_db::GhidraDatabase::open(&path).ok()
+            })
     }
 
     /// Build the in-game overlay frame from the same state that powers the TUI.
@@ -3915,6 +3945,32 @@ impl App {
             }
 
             self.status_message = format!("EQ Internals: {}", entry.name);
+        }
+    }
+
+    /// Select the highlighted Ghidra explorer row and load it into Hex.
+    pub fn explorer_select_function(&mut self) {
+        let entry = self.explorer_state.selected_entry().cloned();
+        if let Some(entry) = entry {
+            #[cfg(windows)]
+            {
+                self.hex_state.request_absolute(
+                    entry.address as usize,
+                    format!("Function: {} @ 0x{:X}", entry.name, entry.address),
+                );
+            }
+            #[cfg(not(windows))]
+            {
+                self.hex_state.set_view(
+                    entry.address as usize,
+                    format!("Function: {} @ 0x{:X}", entry.name, entry.address),
+                    generate_demo_hex_data_for_offset(&entry.name, entry.address),
+                );
+            }
+
+            self.status_message = format!("Explorer: {}", entry.name);
+            self.set_active_screen(ActiveScreen::Debug);
+            self.active_panel = ActivePanel::DebugHexDump;
         }
     }
 

@@ -1506,16 +1506,18 @@ fn build_help_outline(app: &App) -> Vec<HelpRow> {
         }
         ActiveScreen::Debug => {
             push_heading(&mut rows, None, "Oracle Controls");
-            push_kv(&mut rows, None, "j/k", "Navigate spawns or scroll hex dump");
-            push_kv(&mut rows, None, "Enter", "Inspect the selected spawn");
-            push_kv(&mut rows, None, "/", "Search spawns by name");
-            push_kv(&mut rows, None, "f", "Cycle spawn filter");
+            push_kv(&mut rows, None, "j/k", "Navigate focused debug panel");
+            push_kv(&mut rows, None, "Enter", "Load selected offset or explorer row into Hex");
+            push_kv(&mut rows, None, "h/x", "Open Hex memory for the selected spawn");
+            push_kv(&mut rows, None, "/", "Search offsets or explorer rows");
             push_kv(&mut rows, None, "a", "Toggle hex dump annotations");
             push_kv(&mut rows, None, "c", "Cycle EQ Internals category filter");
+            push_kv(&mut rows, None, "Tab", "Cycle Spawns / Hex / Explorer / Internals");
         }
         ActiveScreen::PacketMonitor => {
             push_kv(&mut rows, None, "Space", "Pause / resume packet capture");
-            push_kv(&mut rows, None, "↑/↓", "Scroll packet log");
+            push_kv(&mut rows, None, "j/k or ↑/↓", "Move the packet selection");
+            push_kv(&mut rows, None, "PgUp/PgDn", "Scroll packet log");
             push_kv(&mut rows, None, "c", "Clear captured packets");
         }
         ActiveScreen::Economy => {

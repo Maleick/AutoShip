@@ -5,6 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use anyhow::{Context, Result};
 use ratatui::{style::Color, widgets::TableState};
 
 use super::{
@@ -2322,6 +2323,8 @@ pub struct ExplorerEntry {
 pub struct ExplorerScreenState {
     /// Ratatui table state for scroll/selection.
     pub table_state: TableState,
+    /// Full function list loaded from the local Ghidra database.
+    pub all_functions: Vec<ExplorerEntry>,
     /// Text search filter.
     pub search_filter: String,
     /// Whether in search input mode.
@@ -2341,12 +2344,38 @@ impl ExplorerScreenState {
         table_state.select(Some(0));
         Self {
             table_state,
+            all_functions: Vec::new(),
             search_filter: String::new(),
             search_mode: false,
             category_filter: ExplorerCategory::All,
             filtered_functions: Vec::new(),
             total_count: 0,
         }
+    }
+
+    /// Load explorer rows from the given Ghidra database and rebuild filters.
+    pub fn load_from_db(&mut self, db: &textquest_common::ghidra_db::GhidraDatabase) -> Result<()> {
+        let mut rows = db
+            .search_functions("")
+            .context("failed to load Ghidra function rows")?
+            .into_iter()
+            .map(|f| ExplorerEntry {
+                address: f.address,
+                name: f.name,
+                category: f.category.or(f.source),
+                usability: f.usability,
+                size: f.size,
+            })
+            .collect::<Vec<_>>();
+        rows.sort_by_key(|row| row.address);
+
+        self.total_count = db
+            .stats()
+            .map(|stats| stats.functions as usize)
+            .unwrap_or(rows.len());
+        self.all_functions = rows;
+        self.apply_filter();
+        Ok(())
     }
 
     /// Move selection up.
@@ -2367,6 +2396,109 @@ impl ExplorerScreenState {
     pub fn selected_address(&self) -> Option<u64> {
         let idx = self.table_state.selected()?;
         self.filtered_functions.get(idx).map(|e| e.address)
+    }
+
+    /// Get the currently selected entry.
+    #[must_use]
+    pub fn selected_entry(&self) -> Option<&ExplorerEntry> {
+        let idx = self.table_state.selected()?;
+        self.filtered_functions.get(idx)
+    }
+
+    /// Rebuild the filtered list from the active category/search filters.
+    pub fn apply_filter(&mut self) {
+        let cat = self.category_filter;
+        let query = self.search_filter.to_lowercase();
+        self.filtered_functions = self
+            .all_functions
+            .iter()
+            .filter(|entry| {
+                let haystack = format!(
+                    "{} {} {}",
+                    entry.name,
+                    entry.category.as_deref().unwrap_or(""),
+                    entry.usability.as_deref().unwrap_or("")
+                )
+                .to_lowercase();
+
+                let category_matches = match cat {
+                    ExplorerCategory::All | ExplorerCategory::Functions => true,
+                    ExplorerCategory::AaAbilities => {
+                        haystack.contains("aa") || haystack.contains("ability")
+                    }
+                    ExplorerCategory::Opcodes => {
+                        haystack.contains("opcode") || haystack.contains("packet")
+                    }
+                    ExplorerCategory::UiWidgets => {
+                        haystack.contains("wnd")
+                            || haystack.contains("ui")
+                            || haystack.contains("widget")
+                    }
+                };
+
+                category_matches && (query.is_empty() || haystack.contains(&query))
+            })
+            .cloned()
+            .collect();
+
+        let selected = self
+            .table_state
+            .selected()
+            .unwrap_or(0)
+            .min(self.filtered_functions.len().saturating_sub(1));
+        self.table_state.select(Some(selected));
+    }
+}
+
+#[cfg(test)]
+mod explorer_state_tests {
+    use super::ExplorerScreenState;
+    use tempfile::tempdir;
+
+    #[test]
+    fn load_from_db_populates_and_filters_functions() {
+        let dir = tempdir().unwrap();
+        let db = textquest_common::ghidra_db::GhidraDatabase::open(dir.path().join("ghidra.db"))
+            .unwrap();
+        db.import_functions(&[
+            textquest_common::ghidra_db::FunctionEntry {
+                address: 0x1400_1000,
+                name: String::from("ProcessGameEvents"),
+                size: Some(128),
+                category: Some(String::from("ghidra_auto")),
+                source: Some(String::from("ghidra")),
+                description: None,
+                usability: Some(String::from("untested")),
+                notes: None,
+            },
+            textquest_common::ghidra_db::FunctionEntry {
+                address: 0x1400_2000,
+                name: String::from("HandlePacket"),
+                size: Some(64),
+                category: Some(String::from("opcode_handler")),
+                source: Some(String::from("ghidra")),
+                description: None,
+                usability: Some(String::from("client_authoritative")),
+                notes: None,
+            },
+        ])
+        .unwrap();
+
+        let mut state = ExplorerScreenState::new();
+        state.load_from_db(&db).unwrap();
+
+        assert_eq!(state.total_count, 2);
+        assert_eq!(state.filtered_functions.len(), 2);
+        assert_eq!(state.selected_address(), Some(0x1400_1000));
+
+        state.search_filter = String::from("packet");
+        state.apply_filter();
+
+        assert_eq!(state.filtered_functions.len(), 1);
+        assert_eq!(
+            state.selected_entry().map(|entry| entry.name.as_str()),
+            Some("HandlePacket")
+        );
     }
 }
 
