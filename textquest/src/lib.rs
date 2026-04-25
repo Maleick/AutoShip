@@ -145,6 +145,14 @@ pub mod window_title_runtime;
 /// Say channel detection and alerting — MQ2Say parity.
 #[cfg(windows)]
 pub mod say_detection;
+
+/// Coordinated /say with random delay — qsay group speech coordination.
+#[cfg(windows)]
+pub mod qsay;
+/// Travel spell auto-detection and peer broadcast for group travel.
+#[cfg(windows)]
+pub mod travel_detection;
+
 #[cfg(windows)]
 use anyhow::Context;
 use anyhow::Result;

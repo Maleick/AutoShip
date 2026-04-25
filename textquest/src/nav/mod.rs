@@ -9,6 +9,7 @@ use crate::ipc;
 
 pub mod camp;
 pub mod drag;
+pub mod drag_coordination;
 #[cfg(not(windows))]
 #[path = "mesh_stub.rs"]
 pub mod mesh;
