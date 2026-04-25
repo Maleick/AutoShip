@@ -90,11 +90,11 @@ bash "$SCRIPT_DIR/plan-issues.sh" --issues-file "$ISSUES_FILE" --limit 10 > "$PL
 
 eligible_numbers=$(jq -r '.eligible[].number' "$PLAN_OUTPUT" | paste -sd ' ' -)
 blocked_numbers=$(jq -r '.blocked[].number' "$PLAN_OUTPUT" | paste -sd ' ' -)
-assert_eq "746 748 749 2301" "$eligible_numbers" "eligible issues are sorted ascending and exclude only terminal/manual labels"
-assert_eq "" "$blocked_numbers" "content-based safety filter does not block issues"
+assert_eq "746 749 2301" "$eligible_numbers" "eligible issues are sorted ascending and exclude terminal/manual and unsafe content"
+assert_eq "748" "$blocked_numbers" "content-based safety filter blocks abuse-prone issue content"
 
 limited_numbers=$(bash "$SCRIPT_DIR/plan-issues.sh" --issues-file "$ISSUES_FILE" --limit 2 | jq -r '.eligible[].number' | paste -sd ' ' -)
-assert_eq "746 748" "$limited_numbers" "plan limit caps eligible queue"
+assert_eq "746 749" "$limited_numbers" "plan limit caps eligible queue after safety filtering"
 
 fix_title=$(bash "$SCRIPT_DIR/pr-title.sh" --issue 2298 --title "Validate Discord webhook URLs" --labels "bug,security,agent:ready")
 docs_title=$(bash "$SCRIPT_DIR/pr-title.sh" --issue 2296 --title "mandate poison recovery pattern" --labels "documentation,agent:ready")
@@ -230,8 +230,8 @@ RETRY_REPO="$TMP_DIR/retry-limit-repo"
 mkdir -p "$RETRY_REPO/.autoship/workspaces/issue-181" "$RETRY_REPO/.autoship/failures" "$RETRY_REPO/hooks/opencode" "$RETRY_REPO/hooks"
 git init -q "$RETRY_REPO"
 cp "$SCRIPT_DIR/../update-state.sh" "$RETRY_REPO/hooks/update-state.sh"
-cp "$SCRIPT_DIR/dispatch.sh" "$RETRY_REPO/hooks/opencode/dispatch.sh"
-chmod +x "$RETRY_REPO/hooks/update-state.sh" "$RETRY_REPO/hooks/opencode/dispatch.sh"
+cp "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/safety-filter.sh" "$RETRY_REPO/hooks/opencode/"
+chmod +x "$RETRY_REPO/hooks/update-state.sh" "$RETRY_REPO/hooks/opencode/dispatch.sh" "$RETRY_REPO/hooks/opencode/safety-filter.sh"
 cat > "$RETRY_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{"issue-181":{"state":"running","attempt":3,"model":"opencode/test","role":"implementer"}},"stats":{},"config":{"maxConcurrentAgents":15,"maxRetries":3}}
 JSON
@@ -820,8 +820,8 @@ chmod +x "$ISSUE_FILE_REPO/bin/gh"
 )
 safe_line=$(grep -F 'When paid model balance fails' "$ISSUE_FILE_REPO/gh-args.log" || true)
 formerly_blocked_line=$(grep -F 'stealth hook signature evasion' "$ISSUE_FILE_REPO/gh-args.log" || true)
-printf '%s\n' "$safe_line" | grep -F 'agent:ready' >/dev/null || fail "safe self-improvement issue is labeled agent:ready"
-printf '%s\n' "$formerly_blocked_line" | grep -F 'agent:ready' >/dev/null || fail "self-improvement issue with evasion terms is labeled agent:ready"
+printf '%s\n' "$safe_line" | grep -F 'human:required' >/dev/null || fail "safe self-improvement issue requires human review"
+printf '%s\n' "$formerly_blocked_line" | grep -F 'human:required' >/dev/null || fail "self-improvement issue with evasion terms requires human review"
 
 SETUP_REPO="$TMP_DIR/setup-repo"
 mkdir -p "$SETUP_REPO/bin"
@@ -1005,7 +1005,7 @@ git -C "$DISPATCH_REPO" remote add origin git@github.com:owner/repo.git
 printf 'base\n' > "$DISPATCH_REPO/README.md"
 git -C "$DISPATCH_REPO" add README.md
 git -C "$DISPATCH_REPO" commit -q -m initial
-cp "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/pr-title.sh" "$DISPATCH_REPO/hooks/opencode/"
+cp "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/safety-filter.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/pr-title.sh" "$DISPATCH_REPO/hooks/opencode/"
 cp "$SCRIPT_DIR/../update-state.sh" "$DISPATCH_REPO/hooks/update-state.sh"
 cat > "$DISPATCH_REPO/.autoship/state.json" <<'JSON'
 {"repo":"owner/repo","issues":{},"stats":{},"config":{"maxConcurrentAgents":15}}
@@ -1032,7 +1032,7 @@ if [[ "$1 $2" == "issue edit" ]]; then
 fi
 exit 0
 SH
-chmod +x "$DISPATCH_REPO/bin/gh" "$DISPATCH_REPO/hooks/opencode/dispatch.sh" "$DISPATCH_REPO/hooks/opencode/create-worktree.sh" "$DISPATCH_REPO/hooks/opencode/select-model.sh" "$DISPATCH_REPO/hooks/opencode/pr-title.sh" "$DISPATCH_REPO/hooks/update-state.sh"
+chmod +x "$DISPATCH_REPO/bin/gh" "$DISPATCH_REPO/hooks/opencode/dispatch.sh" "$DISPATCH_REPO/hooks/opencode/safety-filter.sh" "$DISPATCH_REPO/hooks/opencode/create-worktree.sh" "$DISPATCH_REPO/hooks/opencode/select-model.sh" "$DISPATCH_REPO/hooks/opencode/pr-title.sh" "$DISPATCH_REPO/hooks/update-state.sh"
 (
   cd "$DISPATCH_REPO"
   PATH="$DISPATCH_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 456 docs >/dev/null
@@ -1051,7 +1051,7 @@ git -C "$FIXTURE_REPO" remote add origin git@github.com:owner/repo.git
 printf 'base\n' > "$FIXTURE_REPO/README.md"
 git -C "$FIXTURE_REPO" add README.md
 git -C "$FIXTURE_REPO" commit -q -m initial
-cp "$SCRIPT_DIR/plan-issues.sh" "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/pr-title.sh" "$SCRIPT_DIR/runner.sh" "$SCRIPT_DIR/reviewer.sh" "$SCRIPT_DIR/create-pr.sh" "$FIXTURE_REPO/hooks/opencode/"
+cp "$SCRIPT_DIR/plan-issues.sh" "$SCRIPT_DIR/dispatch.sh" "$SCRIPT_DIR/safety-filter.sh" "$SCRIPT_DIR/create-worktree.sh" "$SCRIPT_DIR/select-model.sh" "$SCRIPT_DIR/pr-title.sh" "$SCRIPT_DIR/runner.sh" "$SCRIPT_DIR/reviewer.sh" "$SCRIPT_DIR/create-pr.sh" "$FIXTURE_REPO/hooks/opencode/"
 cp "$SCRIPT_DIR/../update-state.sh" "$SCRIPT_DIR/../capture-failure.sh" "$FIXTURE_REPO/hooks/"
 chmod +x "$FIXTURE_REPO"/hooks/opencode/*.sh "$FIXTURE_REPO"/hooks/*.sh
 cat > "$FIXTURE_REPO/.autoship/state.json" <<'JSON'
@@ -1110,10 +1110,10 @@ chmod +x "$FIXTURE_REPO/bin/gh" "$FIXTURE_REPO/bin/opencode"
 (
   cd "$FIXTURE_REPO"
   plan_output=$(PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/plan-issues.sh --issues-file issues.json --limit 10)
-  assert_eq "188 189" "$(jq -r '.eligible[].number' <<< "$plan_output" | paste -sd ' ' -)" "fixture plan includes content formerly blocked by safety filter"
-  assert_eq "" "$(jq -r '.blocked[].number' <<< "$plan_output" | paste -sd ' ' -)" "fixture plan has no content-based safety blocks"
+  assert_eq "189" "$(jq -r '.eligible[].number' <<< "$plan_output" | paste -sd ' ' -)" "fixture plan excludes unsafe content from eligible queue"
+  assert_eq "188" "$(jq -r '.blocked[].number' <<< "$plan_output" | paste -sd ' ' -)" "fixture plan reports content-based safety blocks"
   PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 188 medium_code >/dev/null
-  assert_eq "QUEUED" "$(tr -d '[:space:]' < .autoship/workspaces/issue-188/status)" "fixture dispatch queues content formerly blocked by safety filter"
+  assert_eq "BLOCKED" "$(tr -d '[:space:]' < .autoship/workspaces/issue-188/status)" "fixture dispatch blocks unsafe content via safety filter"
   PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/dispatch.sh 189 medium_code >/dev/null
   assert_eq "QUEUED" "$(tr -d '[:space:]' < .autoship/workspaces/issue-189/status)" "fixture dispatch creates queued safe worktree"
   PATH="$FIXTURE_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null

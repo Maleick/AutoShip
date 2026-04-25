@@ -48,5 +48,5 @@ EOF
       --label "area:self-improvement" \
       --label "priority:medium" \
       --label "atomic" \
-      --label "agent:ready"
+      --label "human:required"
   done
