@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.8
+
+- Refresh worker monitoring from `status.sh` so dead worker PIDs are marked stuck during normal status checks.
+- Make worker timeout parsing portable across macOS and Linux and configurable with `workerTimeoutMs` / `stall_timeout_ms`.
+- Harden monitor event queue creation and lock fallback so missing queues or non-GNU `flock` do not stop reconciliation.
+
 ## v2.0.7
 
 - Make `opencode-autoship doctor` validate project-local `.autoship/config.json` and `.autoship/model-routing.json` instead of global installed assets.

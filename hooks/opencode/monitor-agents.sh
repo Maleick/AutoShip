@@ -8,8 +8,11 @@ WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
 EVENT_QUEUE="$AUTOSHIP_DIR/event-queue.json"
 LOCK_FILE="$AUTOSHIP_DIR/event-queue.lock"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 [[ ! -d "$WORKSPACES_DIR" ]] && exit 0
+mkdir -p "$AUTOSHIP_DIR"
+[[ -f "$EVENT_QUEUE" ]] || printf '[]\n' > "$EVENT_QUEUE"
 
 emit_event() {
   local type="$1"
@@ -34,8 +37,11 @@ emit_event() {
 
   if command -v flock >/dev/null 2>&1; then
     (
-      flock -x 200 || exit 1
-      write_event
+      if flock -x 200 2>/dev/null; then
+        write_event
+      else
+        write_event
+      fi
     ) 200>"$LOCK_FILE"
   else
     write_event
@@ -54,14 +60,32 @@ check_stalled() {
   local started=$(cat "$started_file")
   local now=$(date +%s)
   local started_epoch
-  started_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$started" +%s 2>/dev/null || echo 0)
+  started_epoch=$(
+    date -j -f "%Y-%m-%dT%H:%M:%SZ" "$started" +%s 2>/dev/null \
+      || date -d "$started" +%s 2>/dev/null \
+      || echo 0
+  )
+  [[ "$started_epoch" =~ ^[0-9]+$ && "$started_epoch" != "0" ]] || return 0
   local elapsed=$((now - started_epoch))
+  local timeout_ms timeout_secs
+  timeout_ms="${AUTOSHIP_WORKER_TIMEOUT_MS:-}"
+  if [[ -z "$timeout_ms" && -f "$AUTOSHIP_DIR/config.json" ]]; then
+    timeout_ms=$(jq -r '.workerTimeoutMs // .stall_timeout_ms // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)
+  fi
+  if [[ -z "$timeout_ms" && -f "$STATE_FILE" ]]; then
+    timeout_ms=$(jq -r '.config.workerTimeoutMs // .config.stall_timeout_ms // empty' "$STATE_FILE" 2>/dev/null || true)
+  fi
+  timeout_ms="${timeout_ms:-900000}"
+  timeout_secs=$((timeout_ms / 1000))
+  (( timeout_secs > 0 )) || timeout_secs=900
 
-  # 60 minute stall timeout
-  if (( elapsed > 3600 )); then
+  if (( elapsed > timeout_secs )); then
     local current_status=$(cat "$status_file" 2>/dev/null || echo "")
     if [[ "$current_status" == "RUNNING" ]]; then
       echo "STUCK" > "$status_file"
+      if [[ -x "$REPO_ROOT/hooks/capture-failure.sh" ]]; then
+        bash "$REPO_ROOT/hooks/capture-failure.sh" timeout "$key" "error_summary=worker exceeded ${timeout_secs}s runtime" 2>/dev/null || true
+      fi
       emit_event "stuck" "$key" "STUCK"
     fi
   fi
@@ -97,6 +121,9 @@ reconcile_exited_worker() {
     emit_event "verify" "$key" "COMPLETE"
   else
     echo "STUCK" > "$status_file"
+    if [[ -x "$REPO_ROOT/hooks/capture-failure.sh" ]]; then
+      bash "$REPO_ROOT/hooks/capture-failure.sh" dead_worker "$key" "error_summary=worker process exited without fresh result" 2>/dev/null || true
+    fi
     emit_event "stuck" "$key" "STUCK"
   fi
 }

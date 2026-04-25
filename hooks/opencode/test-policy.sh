@@ -143,6 +143,7 @@ printf 'RUNNING\n' > "$STATE_REPO/.autoship/workspaces/issue-750/status"
 printf 'QUEUED\n' > "$STATE_REPO/.autoship/workspaces/issue-751/status"
 printf 'changed\n' > "$STATE_REPO/.autoship/workspaces/issue-746/AUTOSHIP_RESULT.md"
 printf 'STUCK\n' > "$STATE_REPO/.autoship/workspaces/issue-752/status"
+printf '999999\n' > "$STATE_REPO/.autoship/workspaces/issue-750/worker.pid"
 printf '2026-04-24T00:00:00Z\n' > "$STATE_REPO/.autoship/workspaces/issue-752/started_at"
 printf 'stale result from issue-762\n' > "$STATE_REPO/.autoship/workspaces/issue-752/AUTOSHIP_RESULT.md"
 touch -t 202604230000 "$STATE_REPO/.autoship/workspaces/issue-752/AUTOSHIP_RESULT.md"
@@ -160,10 +161,11 @@ assert_eq "1" "$(jq -r '.stats.blocked' "$STATE_REPO/.autoship/state.json")" "re
 assert_eq "1" "$(jq -r '.stats.failed' "$STATE_REPO/.autoship/state.json")" "reconcile increments failed stats for stuck workspaces"
 
 STATUS_OUTPUT=$(bash "$SCRIPT_DIR/status.sh" --repo "$STATE_REPO")
-printf '%s\n' "$STATUS_OUTPUT" | grep -F 'AGENTS (1 active / 15 max)' >/dev/null || fail "status shows active/max concurrency"
+printf '%s\n' "$STATUS_OUTPUT" | grep -F 'AGENTS (0 active / 15 max)' >/dev/null || fail "status refreshes dead workers before counting active/max concurrency"
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Queued:    1' >/dev/null || fail "status shows queued count"
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Completed: 0' >/dev/null || fail "status shows completed count"
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Blocked:   1' >/dev/null || fail "status shows blocked count"
+assert_eq "stuck" "$(jq -r '.issues["issue-750"].state' "$STATE_REPO/.autoship/state.json")" "status monitor refresh marks dead running worker stuck"
 
 NO_RUNNING_REPO="$TMP_DIR/no-running-repo"
 mkdir -p "$NO_RUNNING_REPO/.autoship/workspaces/issue-999"
@@ -442,6 +444,26 @@ printf '999999\n' > "$MONITOR_REPO/.autoship/workspaces/issue-997/worker.pid"
 )
 assert_eq "STUCK" "$(tr -d '[:space:]' < "$MONITOR_REPO/.autoship/workspaces/issue-997/status")" "monitor marks RUNNING workspace stuck when worker pid is no longer live"
 assert_eq "stuck" "$(jq -r '.issues["issue-997"].state' "$MONITOR_REPO/.autoship/state.json")" "monitor reconciles stale RUNNING workspace state"
+
+TIMEOUT_REPO="$TMP_DIR/monitor-timeout-repo"
+mkdir -p "$TIMEOUT_REPO/.autoship/workspaces/issue-1000" "$TIMEOUT_REPO/hooks/opencode" "$TIMEOUT_REPO/hooks"
+git init -q "$TIMEOUT_REPO"
+cp "$SCRIPT_DIR/monitor-agents.sh" "$TIMEOUT_REPO/hooks/opencode/monitor-agents.sh"
+cp "$SCRIPT_DIR/reconcile-state.sh" "$TIMEOUT_REPO/hooks/opencode/reconcile-state.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$TIMEOUT_REPO/hooks/update-state.sh"
+chmod +x "$TIMEOUT_REPO/hooks/opencode/monitor-agents.sh" "$TIMEOUT_REPO/hooks/opencode/reconcile-state.sh" "$TIMEOUT_REPO/hooks/update-state.sh"
+cat > "$TIMEOUT_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-1000":{"state":"running"}},"stats":{},"config":{"maxConcurrentAgents":15,"workerTimeoutMs":1000}}
+JSON
+printf '[]\n' > "$TIMEOUT_REPO/.autoship/event-queue.json"
+printf 'RUNNING\n' > "$TIMEOUT_REPO/.autoship/workspaces/issue-1000/status"
+printf '2026-04-24T00:00:00Z\n' > "$TIMEOUT_REPO/.autoship/workspaces/issue-1000/started_at"
+(
+  cd "$TIMEOUT_REPO"
+  bash hooks/opencode/monitor-agents.sh >/dev/null
+)
+assert_eq "STUCK" "$(tr -d '[:space:]' < "$TIMEOUT_REPO/.autoship/workspaces/issue-1000/status")" "monitor marks over-timeout running workspace stuck"
+assert_eq "stuck" "$(jq -r '.issues["issue-1000"].state' "$TIMEOUT_REPO/.autoship/state.json")" "monitor reconciles timeout stuck state"
 
 MONITOR_COMPLETE_REPO="$TMP_DIR/monitor-complete-repo"
 mkdir -p "$MONITOR_COMPLETE_REPO/.autoship/workspaces/issue-998" "$MONITOR_COMPLETE_REPO/hooks/opencode" "$MONITOR_COMPLETE_REPO/hooks"
