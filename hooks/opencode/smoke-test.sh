@@ -15,6 +15,8 @@ capture_e2e_failure() {
 }
 
 CONFIG_HOME="$(mktemp -d)"
+REAL_CONFIG_DIR="$(mktemp -d)"
+PACKAGE_FIXTURE_DIR="$(mktemp -d)"
 AUTOSHIP_BACKUP=""
 if [[ -d "$REPO_ROOT/.autoship" ]]; then
   AUTOSHIP_BACKUP="$(mktemp -d)"
@@ -22,9 +24,14 @@ if [[ -d "$REPO_ROOT/.autoship" ]]; then
   rm -rf "$REPO_ROOT/.autoship"
 fi
 
-trap 'status=$?; capture_e2e_failure "$status"; rm -rf "$CONFIG_HOME"; if [[ -n "$AUTOSHIP_BACKUP" && -d "$AUTOSHIP_BACKUP/.autoship" ]]; then rm -rf "$REPO_ROOT/.autoship"; cp -R "$AUTOSHIP_BACKUP/.autoship" "$REPO_ROOT/"; fi; rm -rf "$AUTOSHIP_BACKUP"; exit $status' EXIT
+trap 'status=$?; capture_e2e_failure "$status"; rm -rf "$CONFIG_HOME" "$REAL_CONFIG_DIR" "$PACKAGE_FIXTURE_DIR"; if [[ -n "$AUTOSHIP_BACKUP" && -d "$AUTOSHIP_BACKUP/.autoship" ]]; then rm -rf "$REPO_ROOT/.autoship"; cp -R "$AUTOSHIP_BACKUP/.autoship" "$REPO_ROOT/"; fi; rm -rf "$AUTOSHIP_BACKUP"; exit $status' EXIT
 
 export XDG_CONFIG_HOME="$CONFIG_HOME"
+export OPENCODE_CONFIG_DIR="$REAL_CONFIG_DIR/opencode"
+mkdir -p "$OPENCODE_CONFIG_DIR"
+cat > "$OPENCODE_CONFIG_DIR/opencode.json" <<'JSON'
+{"plugin":["real-user-plugin"]}
+JSON
 BIN_DIR="$CONFIG_HOME/bin"
 mkdir -p "$BIN_DIR"
 cat > "$BIN_DIR/opencode" <<'SH'
@@ -48,11 +55,11 @@ SH
 chmod +x "$BIN_DIR/opencode" "$BIN_DIR/gh"
 export PATH="$BIN_DIR:$PATH"
 
-PACKAGE_REPO="$(mktemp -d)"
-cp -R "$REPO_ROOT/." "$PACKAGE_REPO/"
-rm -rf "$PACKAGE_REPO/.git" "$PACKAGE_REPO/.autoship" "$PACKAGE_REPO/node_modules" "$PACKAGE_REPO/dist"
-(cd "$PACKAGE_REPO" && npm install --package-lock=false --no-audit --no-fund >/dev/null && npm run build >/dev/null)
-node "$PACKAGE_REPO/dist/cli.js" install >/dev/null
+source "$REPO_ROOT/hooks/opencode/e2e-package-install-fixture.sh"
+autoship_install_package_fixture "$REPO_ROOT" "$CONFIG_HOME" "$PACKAGE_FIXTURE_DIR"
+
+jq -e '.plugin == ["real-user-plugin"]' "$REAL_CONFIG_DIR/opencode/opencode.json" >/dev/null
+[[ ! -d "$REAL_CONFIG_DIR/opencode/.autoship" ]]
 
 CONFIG_FILE="$CONFIG_HOME/opencode/opencode.json"
 STATE_FILE="$REPO_ROOT/.autoship/state.json"
