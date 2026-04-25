@@ -1,4 +1,3 @@
-//! Scenario implementations for the `TestScenario` harness.
+//! Built-in scenario implementations for the test harness.
 
-#[cfg(windows)]
-pub mod combat_rotation;
+pub mod navigation;
