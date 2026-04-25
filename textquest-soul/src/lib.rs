@@ -54,6 +54,9 @@ pub mod speech_evolution;
 /// Game-state suppression rules — prevent soul actions from interfering with
 /// orchestrator loops.
 pub mod suppression;
+/// Tier-1 heuristic engine — rule-based pattern detection for gameplay
+/// anti-patterns (downtime, mana bottleneck, pull rate, camp drift).
+pub mod heuristics;
 /// Zone classification — environmental metadata that constrains idle behavior
 /// selection.
 pub mod zone_classifier;

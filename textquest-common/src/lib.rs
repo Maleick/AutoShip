@@ -32,6 +32,8 @@ pub mod db_config;
 pub mod chat;
 /// User-defined chat pattern rule engine (MQ2Events/MQ2React parity).
 pub mod chat_pattern_rules;
+/// Event engine with regex capture group substitution (MQ2Events parity).
+pub mod event_engine;
 /// Combat-related shared types (class roles, spell metadata, assist targets).
 pub mod combat;
 /// Shared cryptographic primitives and secret-handling helpers.
@@ -89,6 +91,8 @@ pub mod risk_model;
 pub mod routing;
 /// Safe coordinate types for zone transition recovery and position validation.
 pub mod safe_coords;
+/// Tier-3 Multi-Armed Bandit for operator-opt-in config variant exploration.
+pub mod self_improvement;
 /// Scan engine for runtime offset auto-detection (Auto Patch #746).
 pub mod scan_engine;
 /// Byte-pattern signature scanner for offset resolution across EQ patches.
