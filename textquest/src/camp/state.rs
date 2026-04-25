@@ -151,6 +151,11 @@ impl PartialEq<str> for CampAction {
 pub enum CampState {
     /// Waiting for the next pull cycle.
     Idle,
+    /// Waiting for all group members to be ready (HP/mana/buffs/position).
+    GroupWatchWait {
+        /// Tick when group watch started.
+        started_tick: u64,
+    },
     /// Puller is out pulling a mob back to camp.
     Pulling {
         /// Tick when pull started.
@@ -244,6 +249,7 @@ impl CampMember {
 
 /// Timer durations (in ticks) for each phase.
 pub const PULL_DURATION: u64 = 5;
+pub const PULL_GROUPWATCH_WAIT_DURATION: u64 = 1;
 const FIGHT_DURATION: u64 = 15;
 const LOOT_DURATION: u64 = 3;
 const MED_DURATION: u64 = 10;
@@ -429,6 +435,23 @@ impl CampLoop {
                 let healer_ready =
                     snapshot.is_none_or(|s| s.healer_mana_pct >= self.healer_mana_threshold());
                 if healer_ready {
+                    self.transition_to_group_watch_wait(&mut commands);
+                }
+            }
+            CampState::GroupWatchWait { started_tick } => {
+                // Check if group is ready. For now, use snapshot healer mana as a proxy.
+                // Full integration with SharedStateFrame data would be in the orchestrator.
+                let group_ready = snapshot.is_some_and(|s| {
+                    s.healer_mana_pct >= self.config.group_readiness.healer.mana_pct as f32
+                });
+
+                let timeout_exceeded = self.tick - started_tick >= self.config.group_readiness.timeout_ticks;
+
+                if group_ready {
+                    self.transition_to_pulling(&mut commands);
+                } else if timeout_exceeded {
+                    // Timeout: raise alert and transition anyway to prevent infinite loops
+                    // In practice, Discord alert would be emitted by orchestrator observing this state
                     self.transition_to_pulling(&mut commands);
                 }
             }
@@ -628,6 +651,16 @@ impl CampLoop {
     }
 
     // -- State transitions --
+
+    fn transition_to_group_watch_wait(&mut self, commands: &mut Vec<(u32, CampAction)>) {
+        // Have all members sit down while waiting for the group to be ready.
+        for member in &self.members {
+            commands.push((member.pid, CampAction::Slash("/sit".into())));
+        }
+        self.state = CampState::GroupWatchWait {
+            started_tick: self.tick,
+        };
+    }
 
     fn transition_to_pulling(&mut self, commands: &mut Vec<(u32, CampAction)>) {
         let target = self.pick_pull_target();
@@ -844,6 +877,7 @@ mod tests {
             return_no_aggro: false,
             next_camp: None,
             prev_camp: None,
+            group_readiness: crate::camp::config::default_group_readiness(),
         }
     }
 
@@ -866,16 +900,33 @@ mod tests {
     }
 
     #[test]
-    fn test_idle_to_pulling() {
+    fn test_idle_to_group_watch_wait() {
         let mut camp = CampLoop::new(test_config(), test_members());
         let cmds = camp.tick(None);
 
-        assert!(matches!(camp.state, CampState::Pulling { .. }));
-        // Puller should get /target and /attack
-        let puller_cmds: Vec<_> = cmds.iter().filter(|(pid, _)| *pid == 103).collect();
-        assert_eq!(puller_cmds.len(), 2);
-        assert!(puller_cmds[0].1.contains("/target"));
-        assert_eq!(puller_cmds[1].1, "/attack");
+        // Idle -> GroupWatchWait when no snapshot (snapshot-less mode)
+        assert!(matches!(camp.state, CampState::GroupWatchWait { .. }));
+        // All members should sit
+        let sit_cmds: Vec<_> = cmds.iter().filter(|(_, action)| action.contains("/sit")).collect();
+        assert_eq!(sit_cmds.len(), 6, "All 6 members should sit");
+    }
+
+    #[test]
+    fn test_group_watch_wait_to_pulling() {
+        let mut camp = CampLoop::new(test_config(), test_members());
+        camp.tick(None); // Idle -> GroupWatchWait
+
+        // Advance while in GroupWatchWait without snapshot → should eventually timeout
+        for _ in 0..301 {
+            let cmds = camp.tick(None);
+            if matches!(camp.state, CampState::Pulling { .. }) {
+                // Found transition
+                let puller_cmds: Vec<_> = cmds.iter().filter(|(pid, _)| *pid == 103).collect();
+                assert!(puller_cmds.iter().any(|(_, a)| a.contains("/target")));
+                return;
+            }
+        }
+        panic!("Should have transitioned to Pulling within 301 ticks (default timeout is 300)");
     }
 
     #[test]

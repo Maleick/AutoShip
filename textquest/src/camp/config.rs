@@ -117,6 +117,7 @@ mod tests {
             return_no_aggro: false,
             next_camp: Some("crushbone_throne".into()),
             prev_camp: None,
+            group_readiness: default_group_readiness(),
         }
     }
 
