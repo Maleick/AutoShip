@@ -89,11 +89,11 @@ mark_stuck_unless_terminal() {
   case "$current" in
     COMPLETE|BLOCKED|STUCK) ;;
     *)
-      echo "STUCK" > status
       if [[ -x "$repo_root/hooks/capture-failure.sh" ]]; then
         error_msg=$(tail -5 AUTOSHIP_RUNNER.log 2>/dev/null || echo "worker exited without terminal status")
         bash "$repo_root/hooks/capture-failure.sh" stuck "$wid" "error_summary=$error_msg" 2>/dev/null || true
       fi
+      echo "STUCK" > status
       ;;
   esac
 }

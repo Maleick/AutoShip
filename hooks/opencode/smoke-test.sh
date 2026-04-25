@@ -5,6 +5,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "Error: not inside a git repository" >&2
   exit 1
 }
+source "$REPO_ROOT/hooks/opencode/test-fixtures/mock-opencode-models.sh"
 
 capture_e2e_failure() {
   local status="$1"
@@ -34,25 +35,7 @@ cat > "$OPENCODE_CONFIG_DIR/opencode.json" <<'JSON'
 JSON
 BIN_DIR="$CONFIG_HOME/bin"
 mkdir -p "$BIN_DIR"
-cat > "$BIN_DIR/opencode" <<'SH'
-#!/usr/bin/env bash
-if [[ "$1" == "models" ]]; then
-  printf '%s\n' 'opencode/minimax-m2.5-free' 'opencode/nemotron-3-super-free' 'openai/gpt-5.5'
-  exit 0
-fi
-printf '%s\n' '1.14.22'
-SH
-cat > "$BIN_DIR/gh" <<'SH'
-#!/usr/bin/env bash
-if [[ "$1 $2" == "auth status" ]]; then
-  exit 0
-fi
-if [[ "$1 $2" == "label create" ]]; then
-  exit 0
-fi
-exit 0
-SH
-chmod +x "$BIN_DIR/opencode" "$BIN_DIR/gh"
+install_mock_opencode_models_fixture "$BIN_DIR"
 export PATH="$BIN_DIR:$PATH"
 
 source "$REPO_ROOT/hooks/opencode/e2e-package-install-fixture.sh"
