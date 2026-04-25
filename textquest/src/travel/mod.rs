@@ -1,15 +1,4 @@
-//! Travel planning subsystem — portal database, zone routing utilities, and
-//! group travel coordination plans.
-
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::{Path, PathBuf},
-};
-
-use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
-
+pub mod graph;
 pub mod portals;
 
 pub use portals::{Portal, PortalDatabase, PortalDatabaseFile, PortalKind, ZoneSafeCamp};
