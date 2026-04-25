@@ -4216,6 +4216,7 @@ dependencies = [
  "serde_json",
  "serenity",
  "sha2",
+ "strsim",
  "tempfile",
  "textquest-common",
  "textquest-soul",

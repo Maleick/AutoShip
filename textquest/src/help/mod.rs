@@ -40,6 +40,10 @@ use anyhow::{Context, anyhow};
 use serde::Deserialize;
 use tracing::warn;
 
+mod search;
+
+pub use search::{HelpItemType, SearchQuery, SearchResult};
+
 /// Default project-relative directory for operator help content.
 pub const DEFAULT_HELP_DIR: &str = "config/help";
 
@@ -206,6 +210,8 @@ pub struct HelpDatabase {
     command_index: HashMap<String, usize>,
     faq_index: HashMap<String, usize>,
     tip_index: HashMap<String, usize>,
+    command_search_index: search::CommandSearchIndex,
+    search_cache: search::SearchCache,
 }
 
 impl HelpDatabase {
@@ -370,6 +376,7 @@ impl HelpDatabase {
                 self.command_index.insert(alias_key, index);
             }
         }
+        search::index_command(&mut self.command_search_index, index, &command);
         self.commands.push(command);
     }
 
@@ -591,6 +598,44 @@ tags = ["Combat", "CONTROL"]
         )
     }
 
+    fn search_toml() -> &'static str {
+        r#"
+[[commands]]
+name = "pull"
+aliases = ["p"]
+usage = "pull <npc_name>"
+description = "Pull target NPC to camp location"
+examples = ["pull golem"]
+tags = ["combat", "targeting"]
+
+[[commands]]
+name = "camp"
+aliases = ["c"]
+usage = "camp on"
+description = "Start camp mode"
+examples = ["camp on"]
+tags = ["camp", "control"]
+
+[[faqs]]
+id = "setup-ranger"
+question = "How do I set up my ranger?"
+answer = "Configure ranger.toml with class = ranger"
+tags = ["setup", "ranger"]
+
+[[faqs]]
+id = "pulling-basics"
+question = "How do I pull safely?"
+answer = "Use the pull command after setting a camp."
+tags = ["combat", "pulling"]
+
+[[tips]]
+id = "tip-dps"
+text = "Enable DPS tracking in the metrics panel"
+context = "overview"
+tags = ["tips", "monitoring"]
+"#
+    }
+
     #[test]
     fn parses_command_entry_into_database() {
         let database = HelpDatabase::from_toml_str(&command_toml("pull")).expect("parse help");
@@ -701,5 +746,69 @@ examples = ["camp on"]
         assert_eq!(HelpCategory::Command.label(), "Command");
         assert_eq!(HelpCategory::Faq.label(), "FAQ");
         assert_eq!(HelpCategory::Tip.label(), "Tip");
+    }
+
+    #[test]
+    fn search_matches_case_insensitive_substrings() {
+        let database = HelpDatabase::from_toml_str(search_toml()).expect("parse help");
+
+        let results = database.search("DPS", 20);
+
+        assert_eq!(results[0].item_id, "tip-dps");
+        assert_eq!(results[0].item_type, HelpItemType::Tip);
+        assert!(results[0].matched_fields.contains(&"title".to_string()));
+    }
+
+    #[test]
+    fn search_matches_fuzzy_typos() {
+        let database = HelpDatabase::from_toml_str(search_toml()).expect("parse help");
+
+        let results = database.search("pulll", 20);
+
+        assert_eq!(results[0].item_id, "pull");
+        assert_eq!(results[0].item_type, HelpItemType::Command);
+    }
+
+    #[test]
+    fn advanced_search_filters_by_category_and_tags() {
+        let database = HelpDatabase::from_toml_str(search_toml()).expect("parse help");
+
+        let results = database.search_advanced(SearchQuery {
+            terms: vec!["tracking".to_string()],
+            category: Some(HelpCategory::Tip),
+            tags: vec!["monitoring".to_string()],
+        });
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].item_id, "tip-dps");
+        assert!(
+            results[0]
+                .matched_fields
+                .iter()
+                .any(|field| field == "tags")
+        );
+    }
+
+    #[test]
+    fn search_ranks_exact_command_name_before_body_mentions() {
+        let database = HelpDatabase::from_toml_str(search_toml()).expect("parse help");
+
+        let results = database.search("pull", 20);
+
+        assert_eq!(results[0].item_id, "pull");
+        assert_eq!(results[0].item_type, HelpItemType::Command);
+        assert!(
+            results[0].match_score > results[1].match_score,
+            "expected exact command match before body mention: {results:?}"
+        );
+    }
+
+    #[test]
+    fn search_handles_limits_and_empty_queries() {
+        let database = HelpDatabase::from_toml_str(search_toml()).expect("parse help");
+
+        assert!(database.search("   ", 20).is_empty());
+        assert_eq!(database.search("camp", 1).len(), 1);
+        assert!(!database.search("camp", 0).is_empty());
     }
 }
