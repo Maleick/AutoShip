@@ -7,7 +7,10 @@
 pub mod eqmain;
 pub mod widgets;
 
-use std::{sync::Mutex, time::Instant};
+use std::{
+    sync::{Mutex, atomic::Ordering},
+    time::{Duration, Instant},
+};
 
 use textquest_common::login::{LoginError, LoginPhase, RelogConfig, RelogPhase, RetryState};
 use zeroize::Zeroizing;
@@ -195,6 +198,8 @@ enum State {
 /// Throttle ticks between actions to avoid spamming EQ's UI.
 /// At ~30fps game loop, 15 ticks = ~500ms.
 const ACTION_COOLDOWN_TICKS: u32 = 15;
+const QUIT_GAME_COMMAND: &str = "/quit";
+const QUIT_GAME_EXIT_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, PartialEq)]
 enum ConflictDialog {
@@ -218,6 +223,51 @@ struct Credentials {
 /// Issue a slash command through the game loop's command queue.
 fn issue_slash_command(cmd: &str) {
     crate::hooks::game_loop::queue_slash_command(cmd.to_string());
+}
+
+/// Gracefully exit EQ by issuing `/quit` and reporting if the game loop is
+/// still ticking after the expected shutdown window.
+pub fn quit_game(account_name: String) {
+    let start_tick = crate::hooks::game_loop::tick_count_for_monitoring();
+    tracing::info!(account = %account_name, "QuitGame received; issuing /quit");
+    issue_slash_command(QUIT_GAME_COMMAND);
+    spawn_quit_monitor(account_name, start_tick);
+}
+
+fn spawn_quit_monitor(account_name: String, start_tick: u64) {
+    let spawn_result = std::thread::Builder::new()
+        .name("textquest-quit-monitor".into())
+        .spawn(move || {
+            std::thread::sleep(QUIT_GAME_EXIT_TIMEOUT);
+            let current_tick = crate::hooks::game_loop::tick_count_for_monitoring();
+            let shutting_down = crate::SHUTTING_DOWN.load(Ordering::SeqCst);
+            if quit_game_exit_timed_out(start_tick, current_tick, shutting_down) {
+                tracing::warn!(
+                    account = %account_name,
+                    start_tick,
+                    current_tick,
+                    "QuitGame did not stop the game loop within 5 seconds"
+                );
+                crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+                    success: false,
+                    message: format!(
+                        "QuitGame for account {account_name} did not stop the game loop within 5s"
+                    ),
+                });
+            }
+        });
+
+    if let Err(error) = spawn_result {
+        tracing::error!(%error, "Failed to spawn QuitGame monitor");
+        crate::ipc::send_response(textquest_common::ipc::Response::CommandResult {
+            success: false,
+            message: format!("Failed to monitor QuitGame exit: {error}"),
+        });
+    }
+}
+
+fn quit_game_exit_timed_out(start_tick: u64, current_tick: u64, shutting_down: bool) -> bool {
+    !shutting_down && current_tick > start_tick
 }
 
 /// The login state machine. Drives EQ's login UI from credential entry to
@@ -1271,6 +1321,17 @@ mod tests {
         // Change
         fsm.transition(State::WaitForLoginScreen);
         assert!(fsm.phase_if_changed(&prev).is_some());
+    }
+
+    #[test]
+    fn quit_game_exit_detection_reports_running_loop() {
+        assert!(quit_game_exit_timed_out(10, 11, false));
+    }
+
+    #[test]
+    fn quit_game_exit_detection_accepts_stopped_loop_or_shutdown() {
+        assert!(!quit_game_exit_timed_out(10, 10, false));
+        assert!(!quit_game_exit_timed_out(10, 99, true));
     }
 
     #[test]

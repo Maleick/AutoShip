@@ -46,6 +46,10 @@ static WINDOW_IS_FOREGROUND: std::sync::atomic::AtomicBool =
 /// Track tick count for throttling background checks.
 static TICK_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+pub(crate) fn tick_count_for_monitoring() -> u64 {
+    TICK_COUNT.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Active per-client window title configuration pushed by the orchestrator.
 static WINDOW_TITLE_CONFIG: std::sync::OnceLock<Mutex<WindowTitleConfigState>> =
     std::sync::OnceLock::new();
@@ -3591,6 +3595,10 @@ fn dispatch_command(cmd: textquest_common::ipc::Command) {
             tracing::info!(character = %character_name, "SwitchCharacter received");
             crate::login::switch_character(character_name);
         }
+        Command::QuitGame { account_name } => {
+            tracing::info!(account = %account_name, "QuitGame received");
+            crate::login::quit_game(account_name);
+        }
         Command::ReadMemory { address, size } => {
             send_debug_memory_response(address, size, "ReadMemory");
         }
@@ -4467,6 +4475,25 @@ mod tests {
                 message
             }] if message.contains("JoinGroup") && message.contains("not supported")
         ));
+    }
+
+    #[test]
+    fn quit_game_dispatch_queues_quit_slash_command() {
+        PENDING_COMMANDS.lock().unwrap().clear();
+
+        dispatch_command(textquest_common::ipc::Command::QuitGame {
+            account_name: "testuser".into(),
+        });
+
+        let mut queue = PENDING_COMMANDS.lock().unwrap();
+        assert!(matches!(
+            queue.as_slice(),
+            [PendingCommand {
+                command: textquest_common::ipc::Command::SlashCommand { command },
+                execute_at_tick: 0,
+            }] if command.as_str() == "/quit"
+        ));
+        queue.clear();
     }
 
     #[test]

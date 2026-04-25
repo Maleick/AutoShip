@@ -324,6 +324,7 @@ pub fn validate_command(cmd: &Command) -> bool {
                 && server_name.len() <= 64
                 && character_name.len() <= 64
         }
+        Command::QuitGame { account_name } => !account_name.is_empty() && account_name.len() <= 128,
         _ => true,
     }
 }
@@ -520,6 +521,19 @@ mod tests {
     #[test]
     fn validate_cancel_cast_loop_always_valid() {
         assert!(validate_command(&Command::CancelCastLoop));
+    }
+
+    #[test]
+    fn validate_quit_game_requires_bounded_account_name() {
+        assert!(validate_command(&Command::QuitGame {
+            account_name: "testuser".into(),
+        }));
+        assert!(!validate_command(&Command::QuitGame {
+            account_name: String::new(),
+        }));
+        assert!(!validate_command(&Command::QuitGame {
+            account_name: "x".repeat(129),
+        }));
     }
 
     #[test]

@@ -1284,6 +1284,11 @@ pub enum Command {
     TraceList,
     /// Drain the DLL-side trace ring buffer.
     TraceDump,
+    /// Gracefully exit the EQ client for the specified account.
+    QuitGame {
+        /// Account name associated with the client being asked to quit.
+        account_name: String,
+    },
 }
 
 impl std::fmt::Debug for Command {
@@ -2278,6 +2283,18 @@ mod tests {
         } else {
             panic!("expected StartLogin");
         }
+    }
+
+    #[test]
+    fn command_roundtrip_quit_game() {
+        use crate::protocol::{decode, encode};
+
+        let cmd = Command::QuitGame {
+            account_name: "testuser".into(),
+        };
+        let encoded = encode(&cmd).expect("encode");
+        let (decoded, _): (Command, _) = decode(&encoded).expect("decode");
+        assert_eq!(decoded, cmd);
     }
 
     #[test]

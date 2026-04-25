@@ -1,21 +1,18 @@
-# Result: #986 — Feature: Web Dashboard Session Monitoring
+# Result: #1028 — #861.4: Add QuitGame IPC command
 
-Status: PARTIAL
+Status: DONE
 
 Changes Made:
-- Added an opt-in `/ws` dashboard stream via `stream=dashboard`, `stream=sessions`, or `dashboard=1`.
-- Dashboard WebSocket clients now receive structured `session.dashboard.snapshot` JSON immediately and every 500ms.
-- Snapshots include client login status, zone, health/mana/endurance, camp phase, stuck indicator, target/pet summary, group/role metadata when configured, summary metrics, and an alert-feed placeholder.
-- Added dashboard stream group filtering with `group=<name>`.
-- Preserved existing raw WebSocket broadcast behavior for current clients.
-- Added a focused WebSocket test that type-checks the new live-session snapshot payload.
+- Added `Command::QuitGame { account_name }` to the IPC protocol, appended to preserve existing bincode enum discriminants.
+- Routed `QuitGame` in the DLL game-loop dispatcher to a login-layer handler.
+- Implemented `/quit` dispatch plus a 5-second game-loop monitor that reports failure if the loop keeps ticking.
+- Added focused coverage for IPC roundtrip, DLL dispatch routing, command validation, and timeout detection.
 
 Tests:
-- `cargo check -p textquest-web --tests` passed.
-- Full `cargo test` and `python3 scripts/dev-preflight.py` were not run per issue instruction to run cargo check only.
+- `cargo check --workspace --tests` passed.
+- Full `cargo test` and clippy were not run per issue instruction to use cargo check only.
 
 Notes:
-- This is intentionally partial scaffolding for the large dashboard feature.
-- Remaining work includes the actual responsive grid UI, sort/filter controls, action buttons, group-level actions, combat/camp log tails, alert feed population, DPS/heal metrics, and historical status persistence.
+- Process exit is triggered through EQ's `/quit`; on failure to stop the game loop within 5 seconds, the DLL emits a failed `CommandResult`.
 
 COMPLETE
