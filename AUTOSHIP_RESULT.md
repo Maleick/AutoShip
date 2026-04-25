@@ -1,19 +1,23 @@
-# Result: #983 — Feature: Web Dashboard Group & Camp Configuration UI
+# Result: #973 — Task: Help Search & Filter Implementation
 
-Status: DONE
+Status: PARTIAL
 
 Changes Made:
-- Extended the existing web Groups page with form-first group creation/editing, duplicate/max-size validation, role labels, keyboard member reordering, and collapsible per-class settings for pet management, spell priorities, and CC assignment.
-- Switched camp configuration hooks to the issue-scoped `/api/camps` endpoints and added save/load wiring for camp templates.
-- Added editable camp zone, pull points, pull targets, safe zones, HP/mana buff thresholds, pull strategy, and a live configuration preview.
-- Updated shared web types and `feature-list.json` to track the partial issue pass.
+- Added an indexed `HelpSearch` trait implementation for `HelpDatabase`.
+- Added ranked, case-insensitive substring and fuzzy matching across commands, FAQs, and tips.
+- Added category and tag filter parsing for `/mercs search`, using `category:`/`type:` and `tag:`/`tags:` tokens.
+- Added minimal `App` help search filter state for category/tag filters.
+- Added focused unit tests for ranking, fuzzy typo matching, category/tag filters, and the <10ms query target.
 
 Tests:
-- `cargo check` passes.
-- `npm --prefix web run build` passes after installing web dependencies with `npm --prefix web ci`.
+- `cargo check` failed in pre-existing unrelated `textquest` errors:
+  - `textquest/src/loot/smartloot.rs`: `WishlistManager` lacks `PartialEq` for an existing derive.
+  - `textquest/src/lua/bindings.rs`: `player.class_name` is partially moved before `player.hp_percent()`.
+- `cargo check -p textquest-dll` passed.
+- `cargo check -p textquest-dll --tests` passed.
 
 Notes:
-- PARTIAL because the issue spans full group/camp CRUD, template management, richer drag-and-drop assignment from live character pools, and backend persistence validation beyond one focused worktree pass.
-- Vite reported the existing large chunk warning during the web production build.
+- Rust tests were added but not executed because this task explicitly requested cargo check only.
+- Remaining work is to connect the new `App` filter state to the visible TUI help search renderer.
 
 COMPLETE

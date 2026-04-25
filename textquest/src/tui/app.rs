@@ -510,6 +510,23 @@ pub enum HelpFocus {
     Command(&'static str),
 }
 
+/// Category/tag filters applied to help search results.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HelpSearchFilterState {
+    /// Optional selected category (`commands`, `faq`, or `tips`).
+    pub category: Option<String>,
+    /// Lowercased tag filters combined with the category and text query.
+    pub tags: Vec<String>,
+}
+
+impl HelpSearchFilterState {
+    /// Clear category and tag filters while leaving the text query untouched.
+    pub fn clear(&mut self) {
+        self.category = None;
+        self.tags.clear();
+    }
+}
+
 /// Severity level for the transient toast lane.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToastLevel {
@@ -1194,6 +1211,8 @@ pub struct App {
     pub help_search_visible: bool,
     /// State for the help search panel (query, selection, scroll).
     pub help_search_state: crate::tui::ui::help::HelpPanelState,
+    /// Category and tag filters for help search.
+    pub help_search_filters: HelpSearchFilterState,
 
     /// Current operating mode (camp or hunt).
     pub operating_mode: crate::camp::hunt::OperatingMode,
@@ -1586,6 +1605,7 @@ impl App {
 
             help_search_visible: false,
             help_search_state: crate::tui::ui::help::HelpPanelState::new(),
+            help_search_filters: HelpSearchFilterState::default(),
 
             operating_mode: crate::camp::hunt::OperatingMode::Camp,
 

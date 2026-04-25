@@ -212,6 +212,7 @@ struct HelpDatabase {
     commands: Vec<HelpCommand>,
     faqs: Vec<FaqEntry>,
     tips: Vec<TipEntry>,
+    search_index: Vec<HelpSearchDocument>,
 }
 
 impl HelpDatabase {
@@ -221,10 +222,16 @@ impl HelpDatabase {
         let faq_file = toml::from_str::<FaqHelpFile>(FAQ_HELP_TOML)
             .map_err(|err| format!("FAQ help TOML parse failed: {err}"))?;
 
+        let commands = command_file.commands;
+        let faqs = faq_file.faqs;
+        let tips = faq_file.tips;
+        let search_index = build_help_search_index(&commands, &faqs, &tips);
+
         Ok(Self {
-            commands: command_file.commands,
-            faqs: faq_file.faqs,
-            tips: faq_file.tips,
+            commands,
+            faqs,
+            tips,
+            search_index,
         })
     }
 
@@ -236,26 +243,23 @@ impl HelpDatabase {
     }
 
     fn command_matches(&self, query: &str) -> Vec<&HelpCommand> {
-        let query = normalized_search(query);
-        self.commands
-            .iter()
-            .filter(|command| command.matches_search(&query))
+        self.search(&HelpSearchQuery::new(query).with_category(HelpSearchCategory::Command))
+            .into_iter()
+            .filter_map(|result| self.command_result(&result))
             .collect()
     }
 
     fn faq_matches(&self, query: &str) -> Vec<&FaqEntry> {
-        let query = normalized_search(query);
-        self.faqs
-            .iter()
-            .filter(|faq| faq.matches_search(&query))
+        self.search(&HelpSearchQuery::new(query).with_category(HelpSearchCategory::Faq))
+            .into_iter()
+            .filter_map(|result| self.faq_result(&result))
             .collect()
     }
 
     fn tip_matches(&self, query: &str) -> Vec<&TipEntry> {
-        let query = normalized_search(query);
-        self.tips
-            .iter()
-            .filter(|tip| tip.matches_search(&query))
+        self.search(&HelpSearchQuery::new(query).with_category(HelpSearchCategory::Tip))
+            .into_iter()
+            .filter_map(|result| self.tip_result(&result))
             .collect()
     }
 
@@ -273,6 +277,404 @@ impl HelpDatabase {
             })
             .collect()
     }
+
+    fn command_result(&self, result: &HelpSearchResult) -> Option<&HelpCommand> {
+        (result.category == HelpSearchCategory::Command)
+            .then(|| self.commands.get(result.item_index))
+            .flatten()
+    }
+
+    fn faq_result(&self, result: &HelpSearchResult) -> Option<&FaqEntry> {
+        (result.category == HelpSearchCategory::Faq)
+            .then(|| self.faqs.get(result.item_index))
+            .flatten()
+    }
+
+    fn tip_result(&self, result: &HelpSearchResult) -> Option<&TipEntry> {
+        (result.category == HelpSearchCategory::Tip)
+            .then(|| self.tips.get(result.item_index))
+            .flatten()
+    }
+
+    fn search_result_title(&self, result: &HelpSearchResult) -> &str {
+        match result.category {
+            HelpSearchCategory::Command => self
+                .commands
+                .get(result.item_index)
+                .map(|command| command.name.as_str())
+                .unwrap_or_default(),
+            HelpSearchCategory::Faq => self
+                .faqs
+                .get(result.item_index)
+                .map(|faq| faq.question.as_str())
+                .unwrap_or_default(),
+            HelpSearchCategory::Tip => self
+                .tips
+                .get(result.item_index)
+                .map(|tip| tip.text.as_str())
+                .unwrap_or_default(),
+        }
+    }
+}
+
+trait HelpSearch {
+    fn search(&self, query: &HelpSearchQuery) -> Vec<HelpSearchResult>;
+}
+
+impl HelpSearch for HelpDatabase {
+    fn search(&self, query: &HelpSearchQuery) -> Vec<HelpSearchResult> {
+        let terms = search_terms(&query.text);
+        let mut results = self
+            .search_index
+            .iter()
+            .filter(|document| query.matches_category(document.category))
+            .filter(|document| document.matches_tags(&query.tags))
+            .filter_map(|document| {
+                document.score_terms(&terms).map(|score| HelpSearchResult {
+                    category: document.category,
+                    item_index: document.item_index,
+                    score,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        results.sort_by(|left, right| {
+            right
+                .score
+                .cmp(&left.score)
+                .then_with(|| left.category.sort_order().cmp(&right.category.sort_order()))
+                .then_with(|| {
+                    self.search_result_title(left)
+                        .cmp(self.search_result_title(right))
+                })
+        });
+
+        if query.limit > 0 && results.len() > query.limit {
+            results.truncate(query.limit);
+        }
+
+        results
+    }
+}
+
+#[derive(Debug, Clone)]
+struct HelpSearchQuery {
+    text: String,
+    categories: Vec<HelpSearchCategory>,
+    tags: Vec<String>,
+    limit: usize,
+}
+
+impl HelpSearchQuery {
+    fn new(text: impl Into<String>) -> Self {
+        let text = text.into();
+        Self {
+            text: normalized_search(&text),
+            categories: Vec::new(),
+            tags: Vec::new(),
+            limit: 24,
+        }
+    }
+
+    fn with_category(mut self, category: HelpSearchCategory) -> Self {
+        self.add_category(category);
+        self
+    }
+
+    fn set_text(&mut self, text: impl Into<String>) {
+        let text = text.into();
+        self.text = normalized_search(&text);
+    }
+
+    fn add_category(&mut self, category: HelpSearchCategory) {
+        if !self.categories.contains(&category) {
+            self.categories.push(category);
+        }
+    }
+
+    fn add_tag(&mut self, tag: &str) {
+        let tag = normalized_search(tag);
+        if !tag.is_empty() && !self.tags.contains(&tag) {
+            self.tags.push(tag);
+        }
+    }
+
+    fn matches_category(&self, category: HelpSearchCategory) -> bool {
+        self.categories.is_empty() || self.categories.contains(&category)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HelpSearchCategory {
+    Command,
+    Faq,
+    Tip,
+}
+
+impl HelpSearchCategory {
+    fn parse(value: &str) -> Option<Self> {
+        match normalized_search(value).as_str() {
+            "command" | "commands" | "cmd" | "cmds" => Some(Self::Command),
+            "faq" | "faqs" => Some(Self::Faq),
+            "tip" | "tips" => Some(Self::Tip),
+            _ => None,
+        }
+    }
+
+    fn sort_order(self) -> u8 {
+        match self {
+            Self::Command => 0,
+            Self::Faq => 1,
+            Self::Tip => 2,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct HelpSearchResult {
+    category: HelpSearchCategory,
+    item_index: usize,
+    score: u16,
+}
+
+#[derive(Debug)]
+struct HelpSearchDocument {
+    category: HelpSearchCategory,
+    item_index: usize,
+    title: String,
+    tags: Vec<String>,
+    search_text: String,
+    compact_text: String,
+    words: Vec<String>,
+}
+
+impl HelpSearchDocument {
+    fn new(
+        category: HelpSearchCategory,
+        item_index: usize,
+        title: &str,
+        fields: Vec<&str>,
+        tags: &[String],
+    ) -> Self {
+        let title = normalized_search(title);
+        let tags = tags
+            .iter()
+            .map(|tag| normalized_search(tag))
+            .filter(|tag| !tag.is_empty())
+            .collect::<Vec<_>>();
+
+        let mut search_text = String::new();
+        for field in fields {
+            append_normalized_field(&mut search_text, field);
+        }
+        for tag in &tags {
+            append_normalized_field(&mut search_text, tag);
+        }
+
+        let mut words = search_words(&search_text);
+        words.sort();
+        words.dedup();
+
+        let compact_text = search_text
+            .chars()
+            .filter(|ch| ch.is_ascii_alphanumeric())
+            .collect();
+
+        Self {
+            category,
+            item_index,
+            title,
+            tags,
+            search_text,
+            compact_text,
+            words,
+        }
+    }
+
+    fn matches_tags(&self, filters: &[String]) -> bool {
+        filters.iter().all(|filter| {
+            self.tags
+                .iter()
+                .any(|tag| tag == filter || tag.contains(filter))
+        })
+    }
+
+    fn score_terms(&self, terms: &[String]) -> Option<u16> {
+        if terms.is_empty() {
+            return Some(0);
+        }
+
+        let mut total = 0u16;
+        for term in terms {
+            total = total.saturating_add(self.score_term(term)?);
+        }
+        Some(total)
+    }
+
+    fn score_term(&self, term: &str) -> Option<u16> {
+        let mut score = 0u16;
+
+        if self.title == term {
+            score = score.max(1000);
+        } else if self.title.starts_with(term) {
+            score = score.max(925);
+        } else if self.title.contains(term) {
+            score = score.max(825);
+        }
+
+        if self.tags.iter().any(|tag| tag == term) {
+            score = score.max(800);
+        } else if self.tags.iter().any(|tag| tag.contains(term)) {
+            score = score.max(675);
+        }
+
+        if self.words.iter().any(|word| word == term) {
+            score = score.max(725);
+        } else if self.words.iter().any(|word| word.starts_with(term)) {
+            score = score.max(625);
+        } else if self.search_text.contains(term) {
+            score = score.max(525);
+        }
+
+        if term.len() >= 3 && self.words.iter().any(|word| fuzzy_word_match(term, word)) {
+            score = score.max(425);
+        }
+
+        if term.len() >= 3 && is_subsequence(term, &self.compact_text) {
+            score = score.max(175);
+        }
+
+        (score > 0).then_some(score)
+    }
+}
+
+fn build_help_search_index(
+    commands: &[HelpCommand],
+    faqs: &[FaqEntry],
+    tips: &[TipEntry],
+) -> Vec<HelpSearchDocument> {
+    let mut documents = Vec::with_capacity(commands.len() + faqs.len() + tips.len());
+
+    for (index, command) in commands.iter().enumerate() {
+        let mut fields = vec![
+            command.name.as_str(),
+            command.usage.as_str(),
+            command.description.as_str(),
+        ];
+        fields.extend(command.aliases.iter().map(String::as_str));
+        fields.extend(command.examples.iter().map(String::as_str));
+        documents.push(HelpSearchDocument::new(
+            HelpSearchCategory::Command,
+            index,
+            &command.name,
+            fields,
+            &command.tags,
+        ));
+    }
+
+    for (index, faq) in faqs.iter().enumerate() {
+        documents.push(HelpSearchDocument::new(
+            HelpSearchCategory::Faq,
+            index,
+            &faq.question,
+            vec![faq.id.as_str(), faq.question.as_str(), faq.answer.as_str()],
+            &faq.tags,
+        ));
+    }
+
+    for (index, tip) in tips.iter().enumerate() {
+        documents.push(HelpSearchDocument::new(
+            HelpSearchCategory::Tip,
+            index,
+            &tip.text,
+            vec![tip.id.as_str(), tip.text.as_str(), tip.context.as_str()],
+            &tip.tags,
+        ));
+    }
+
+    documents
+}
+
+fn append_normalized_field(target: &mut String, field: &str) {
+    let field = normalized_search(field);
+    if field.is_empty() {
+        return;
+    }
+    if !target.is_empty() {
+        target.push(' ');
+    }
+    target.push_str(&field);
+}
+
+fn search_terms(value: &str) -> Vec<String> {
+    let normalized = normalized_search(value);
+    search_words(&normalized)
+}
+
+fn search_words(value: &str) -> Vec<String> {
+    value
+        .split(|ch: char| !ch.is_ascii_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(ToString::to_string)
+        .collect()
+}
+
+fn fuzzy_word_match(term: &str, word: &str) -> bool {
+    if term == word || term.len() < 3 || word.len() < 3 {
+        return false;
+    }
+    let max_distance = if term.len() <= 5 { 1 } else { 2 };
+    levenshtein_at_most(term, word, max_distance)
+}
+
+fn levenshtein_at_most(left: &str, right: &str, max_distance: usize) -> bool {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    if left.len().abs_diff(right.len()) > max_distance {
+        return false;
+    }
+
+    let mut previous = (0..=right.len()).collect::<Vec<_>>();
+    let mut current = vec![0; right.len() + 1];
+
+    for (left_index, left_byte) in left.iter().enumerate() {
+        current[0] = left_index + 1;
+        let mut row_min = current[0];
+
+        for (right_index, right_byte) in right.iter().enumerate() {
+            let substitution = usize::from(left_byte != right_byte);
+            current[right_index + 1] = (previous[right_index + 1] + 1)
+                .min(current[right_index] + 1)
+                .min(previous[right_index] + substitution);
+            row_min = row_min.min(current[right_index + 1]);
+        }
+
+        if row_min > max_distance {
+            return false;
+        }
+
+        previous.clone_from_slice(&current);
+    }
+
+    previous[right.len()] <= max_distance
+}
+
+fn is_subsequence(needle: &str, haystack: &str) -> bool {
+    let mut needle = needle.chars();
+    let Some(mut current) = needle.next() else {
+        return true;
+    };
+
+    for ch in haystack.chars() {
+        if ch == current {
+            match needle.next() {
+                Some(next) => current = next,
+                None => return true,
+            }
+        }
+    }
+
+    false
 }
 
 impl HelpCommand {
@@ -661,7 +1063,7 @@ fn help_unavailable_message() -> String {
 
 fn builtin_search_message(args: &[&str]) -> String {
     if args.is_empty() {
-        return "Usage: /mercs search <text>\nSearches commands, FAQ entries, and tips."
+        return "Usage: /mercs search <text> [category:commands|faq|tips] [tag:<tag>]\nSearches commands, FAQ entries, and tips."
             .to_string();
     }
 
@@ -670,9 +1072,31 @@ fn builtin_search_message(args: &[&str]) -> String {
     };
 
     let query = args.join(" ");
-    let commands = database.command_matches(&query);
-    let faqs = database.faq_matches(&query);
-    let tips = database.tip_matches(&query);
+    let search_query = parse_help_search_query(args);
+    let results = database.search(&search_query);
+
+    let mut commands = Vec::new();
+    let mut faqs = Vec::new();
+    let mut tips = Vec::new();
+    for result in &results {
+        match result.category {
+            HelpSearchCategory::Command => {
+                if let Some(command) = database.command_result(result) {
+                    commands.push(command);
+                }
+            }
+            HelpSearchCategory::Faq => {
+                if let Some(faq) = database.faq_result(result) {
+                    faqs.push(faq);
+                }
+            }
+            HelpSearchCategory::Tip => {
+                if let Some(tip) = database.tip_result(result) {
+                    tips.push(tip);
+                }
+            }
+        }
+    }
 
     if commands.is_empty() && faqs.is_empty() && tips.is_empty() {
         return format!("No help results found for '{query}'. Full docs: docs/wiki/");
@@ -706,6 +1130,37 @@ fn builtin_search_message(args: &[&str]) -> String {
 
     lines.push("Full docs: docs/wiki/".to_string());
     lines.join("\n")
+}
+
+fn parse_help_search_query(args: &[&str]) -> HelpSearchQuery {
+    let mut query = HelpSearchQuery::new("");
+    let mut text = Vec::new();
+
+    for arg in args {
+        let Some((key, value)) = arg.split_once(':') else {
+            text.push(*arg);
+            continue;
+        };
+
+        match normalized_search(key).as_str() {
+            "category" | "type" => {
+                if let Some(category) = HelpSearchCategory::parse(value) {
+                    query.add_category(category);
+                    continue;
+                }
+            }
+            "tag" | "tags" => {
+                query.add_tag(value);
+                continue;
+            }
+            _ => {}
+        }
+
+        text.push(*arg);
+    }
+
+    query.set_text(text.join(" "));
+    query
 }
 
 fn builtin_faq_message(args: &[&str]) -> String {
@@ -1385,6 +1840,66 @@ mod tests {
             }
             other => panic!("expected search message, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn help_search_ranks_exact_command_match_first() {
+        let database = HelpDatabase::load().expect("help database");
+
+        let results = database.search(&HelpSearchQuery::new("pull"));
+
+        let first = results.first().expect("search result");
+        assert_eq!(first.category, HelpSearchCategory::Command);
+        assert_eq!(database.command_result(first).unwrap().name, "pull");
+    }
+
+    #[test]
+    fn help_search_supports_fuzzy_typos() {
+        let reg = CommandRegistry::new();
+
+        let result = reg.dispatch("/mercs search rnger category:faq");
+
+        match result {
+            CommandResult::Message(message) => {
+                assert!(message.contains("FAQ:"));
+                assert!(message.contains("How do I configure a ranger class?"));
+            }
+            other => panic!("expected fuzzy search message, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn help_search_filters_by_category_and_tag() {
+        let database = HelpDatabase::load().expect("help database");
+        let query = parse_help_search_query(&["category:faq", "tag:loot"]);
+
+        let results = database.search(&query);
+
+        assert!(!results.is_empty());
+        assert!(
+            results
+                .iter()
+                .all(|result| result.category == HelpSearchCategory::Faq)
+        );
+        assert!(results.iter().any(|result| {
+            database
+                .faq_result(result)
+                .is_some_and(|faq| faq.id == "loot-not-collecting")
+        }));
+    }
+
+    #[test]
+    fn help_search_query_completes_under_ten_ms() {
+        let database = HelpDatabase::load().expect("help database");
+        let started = std::time::Instant::now();
+
+        let results = database.search(&HelpSearchQuery::new("navigation recovery"));
+
+        assert!(!results.is_empty());
+        assert!(
+            started.elapsed().as_micros() < 10_000,
+            "help search exceeded 10ms"
+        );
     }
 
     #[test]
