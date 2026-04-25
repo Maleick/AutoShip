@@ -141,11 +141,57 @@ assert_eq "STUCK" "$(tr -d '[:space:]' < "$RUNNER_REPO/.autoship/workspaces/issu
 if grep -F 'ENV_LEAK' "$RUNNER_REPO/.autoship/workspaces/issue-996/AUTOSHIP_RUNNER.log" >/dev/null 2>&1; then
   fail "runner must unset parent OpenCode session environment before nested opencode run"
 fi
+for _ in 1 2 3 4 5; do
+  artifact_count=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' 2>/dev/null | wc -l | tr -d '[:space:]')
+  [[ "$artifact_count" != "0" ]] && break
+  sleep 1
+done
 artifact_count=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' 2>/dev/null | wc -l | tr -d '[:space:]')
 assert_eq "1" "$artifact_count" "runner captures a stuck worker failure artifact"
 artifact_file=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' | head -1)
 jq -e '.issue == "issue-996" and .model == "opencode/test-free" and .role == "implementer" and .workspace != "" and .hook == "hooks/opencode/runner.sh" and .failure_category == "stuck" and (.logs | contains("ok")) and .attempt == 2' "$artifact_file" >/dev/null || fail "failure artifact includes issue, model, workspace, hook, logs, category, role, and attempt"
 test -s "$RUNNER_REPO/.autoship/workspaces/issue-996/worker.pid" || fail "runner records worker pid for lifecycle monitoring"
+
+RETRY_REPO="$TMP_DIR/retry-limit-repo"
+mkdir -p "$RETRY_REPO/.autoship/workspaces/issue-181" "$RETRY_REPO/.autoship/failures" "$RETRY_REPO/hooks/opencode" "$RETRY_REPO/hooks"
+git init -q "$RETRY_REPO"
+cp "$SCRIPT_DIR/../update-state.sh" "$RETRY_REPO/hooks/update-state.sh"
+cp "$SCRIPT_DIR/dispatch.sh" "$RETRY_REPO/hooks/opencode/dispatch.sh"
+chmod +x "$RETRY_REPO/hooks/update-state.sh" "$RETRY_REPO/hooks/opencode/dispatch.sh"
+cat > "$RETRY_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-181":{"state":"running","attempt":3,"model":"opencode/test","role":"implementer"}},"stats":{},"config":{"maxConcurrentAgents":15,"maxRetries":3}}
+JSON
+cat > "$RETRY_REPO/.autoship/failures/20260424T010000Z-issue-181.json" <<'JSON'
+{"failure_id":"20260424T010000Z-issue-181","issue":"issue-181","failure_category":"failed_verification","error_summary":"tests failed","attempt":3,"timestamp":"2026-04-24T01:00:00Z"}
+JSON
+(
+  cd "$RETRY_REPO"
+  bash hooks/update-state.sh set-failed issue-181 escalation_reason="failed verification after retry limit" >/dev/null
+)
+jq -e '.issues["issue-181"].state == "blocked"
+  and .issues["issue-181"].retry_count == 3
+  and .issues["issue-181"].retry_limit == 3
+  and .issues["issue-181"].retry_eligible == false
+  and .issues["issue-181"].terminal_failure == true
+  and .issues["issue-181"].escalation_reason == "failed verification after retry limit"
+  and (.issues["issue-181"].failure_evidence.failure_file | endswith("20260424T010000Z-issue-181.json"))
+  and .issues["issue-181"].failure_evidence.failure_category == "failed_verification"
+  and .issues["issue-181"].failure_evidence.error_summary == "tests failed"' "$RETRY_REPO/.autoship/state.json" >/dev/null || fail "set-failed records terminal retry exhaustion evidence"
+dispatch_output=$(cd "$RETRY_REPO" && bash hooks/opencode/dispatch.sh 181 medium_code)
+printf '%s\n' "$dispatch_output" | grep -F 'failed verification after retry limit' >/dev/null || fail "dispatch blocks terminal retry-exhausted issue"
+assert_eq "BLOCKED" "$(tr -d '[:space:]' < "$RETRY_REPO/.autoship/workspaces/issue-181/status")" "terminal retry-exhausted issue remains blocked instead of redispatched"
+
+printf '{broken json' > "$RETRY_REPO/.autoship/failures/20260424T020000Z-issue-182.json"
+jq '.issues["issue-182"] = {"state":"running","attempt":2}' "$RETRY_REPO/.autoship/state.json" > "$RETRY_REPO/.autoship/state.json.tmp" && mv "$RETRY_REPO/.autoship/state.json.tmp" "$RETRY_REPO/.autoship/state.json"
+(
+  cd "$RETRY_REPO"
+  bash hooks/update-state.sh set-failed issue-182 error_summary="malformed artifact fallback" >/dev/null
+)
+jq -e '.issues["issue-182"].retry_count == 2
+  and .issues["issue-182"].retry_limit == 3
+  and .issues["issue-182"].retry_eligible == true
+  and .issues["issue-182"].terminal_failure == false
+  and .issues["issue-182"].failure_evidence.error_summary == "malformed artifact fallback"' "$RETRY_REPO/.autoship/state.json" >/dev/null || fail "set-failed falls back to synthesized evidence before retry limit"
 
 FALLBACK_REPO="$TMP_DIR/fallback-runner-repo"
 mkdir -p "$FALLBACK_REPO/.autoship/workspaces/issue-208" "$FALLBACK_REPO/hooks/opencode" "$FALLBACK_REPO/hooks" "$FALLBACK_REPO/bin"
@@ -185,7 +231,7 @@ chmod +x "$FALLBACK_REPO/bin/opencode"
   cd "$FALLBACK_REPO"
   PATH="$FALLBACK_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
-for _ in 1 2 3 4 5; do
+for _ in 1 2 3 4 5 6 7 8 9 10; do
   [[ "$(tr -d '[:space:]' < "$FALLBACK_REPO/.autoship/workspaces/issue-208/status")" != "RUNNING" ]] && break
   sleep 1
 done
