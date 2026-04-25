@@ -52,9 +52,30 @@ dll_module_name_with_bad_extension()
 
 ## Test Organization
 
-- All unit tests live in an inline `#[cfg(test)] mod tests { … }` block at the bottom of the source file they test. No separate `tests/` directory for unit tests.
-- Integration tests (tests that require multiple modules or real I/O) go in `textquest/tests/` as separate `*.rs` files and are invoked with `cargo test -p textquest --test <name>`.
-- Python behavioral tests live in `tests/test_*.py` and run via `python3 -m unittest discover -s tests -p 'test_*.py' -v`.
+Test files are split by intent and dependency boundary.
+
+- Unit tests live in an inline `#[cfg(test)] mod tests { … }` block at the bottom of the source file they test.
+- Integration tests (cross-module flows, real IO, or crate-boundary behavior) go in `<crate>/tests/*.rs`.
+- End-to-end scenario tests live in `textquest/tests/scenarios/` and are driven from `textquest/tests/integration.rs`.
+- Python behavioral/contract tests live in `tests/test_*.py` and run via `python3 -m unittest discover -s tests -p 'test_*.py' -v`.
+
+### Test Type Matrix
+
+| Type | Location | Use for |
+| --- | --- | --- |
+| Unit | `#[cfg(test)] mod tests` | Pure logic, parser behavior, data transforms |
+| Integration | `<crate>/tests/*.rs` | Multi-module behavior, file IO, external command wiring |
+| E2E Scenario | `textquest/tests/scenarios/` + `integration.rs` | End-to-end flows across bot loops |
+| Contract/Behavioral | `tests/test_*.py` | CLI/tooling behavior and repository contracts |
+
+### Run by Test Type
+
+```bash
+cargo test --lib                           # inline and internal crate tests
+cargo test -p textquest --test integration   # integration/e2e entrypoint
+cargo test -p textquest --test integration scenario_  # scenario tests
+cargo test -p textquest --test integration_cli scenario_  # CLI integration target if needed
+```
 
 ---
 
@@ -93,15 +114,21 @@ Tests that genuinely cannot run on macOS are gated `#[cfg(windows)]` — they ru
 
 ## Coverage Targets
 
-TextQuest does not enforce a hard line-coverage percentage in CI, but the following targets guide what to test:
+Use the coverage policy as the default guardrail for PRs and tests:
 
 | Layer                                                 | Target                       | Rationale                                                        |
 | ----------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------- |
 | Pure logic (parsers, state machines, data structures) | 90%+ branch coverage         | These are the highest-value tests; easy to run everywhere        |
 | Platform-independent orchestration                    | 80%+                         | Test the decision logic; leave the OS calls to `#[cfg(windows)]` |
-| Windows-only paths                                    | Best-effort                  | Run on Frostreaver; aim for every error branch to have a test    |
+| Windows-only paths                                    | Best-effort                  | Run on Frostreaver; aim for every meaningful error branch          |
 | TUI rendering                                         | Smoke-only                   | Verify no panic on common inputs; pixel-exact output is fragile  |
-| IPC wire protocol                                     | All encode/decode roundtrips | Serialization bugs are silent and expensive to debug             |
+| IPC wire protocol                                     | Full roundtrip suite         | Serialization bugs are silent and expensive to debug             |
+
+Coverage expectations for the same change:
+
+- New code: **80%+** line coverage (`docs/dev/coverage-policy.md`)
+- Modified code: **70%+** line coverage (`docs/dev/coverage-policy.md`)
+- Workspace baseline: **68%+** overall in CI (`docs/dev/coverage-policy.md`)
 
 Run the full suite before pushing:
 
@@ -357,7 +384,27 @@ fn dead_target_snapshot() -> CampSnapshot {
 }
 ```
 
+### Fixture/Builder Standards
+
+- Keep fixture builders small, deterministic, and domain-specific (`make_account`,
+  `make_game_state`, `test_camp_config`).
+- Reuse shared builders from common test support modules rather than repeating
+  duplicated constructors across files.
+- If fixture data grows beyond a few dozen lines, prefer generating it in a helper
+  function over large inlined literals.
+- Avoid copying live game data into tests unless the data is intentionally a
+  reduced regression fixture.
+
 ## Mocking Patterns
+
+Use production interfaces where possible and keep test doubles narrow:
+
+- Prefer real domain types with minimal handcrafted input where behavior is pure logic.
+- Use shared mock readers/stubs from `textquest/src/testing/mocks.rs` for process-level
+  behavior that cannot run on non-Windows hosts.
+- Gate platform-specific tests with `#[cfg(windows)]` rather than introducing shim APIs.
+- Prefer deterministic, in-memory doubles (`MockProcessReader`, temporary channels,
+  builder helpers) over broad mocking frameworks.
 
 ### Direct Construction
 
@@ -555,7 +602,7 @@ See [coverage-policy.md](./coverage-policy.md) for detailed coverage requirement
 
 - **New code**: 80%+ line coverage
 - **Modified code**: 70%+ coverage
-- **Workspace baseline**: 60%+ in CI
+- **Workspace baseline**: 68%+ in CI
 
 ### Debug Tools Testing
 
@@ -569,26 +616,40 @@ python3 scripts/coverage-report.py
 
 ## Benchmark Guidelines
 
-For performance-critical code, add benchmark tests in `<crate>/src/perf_tests.rs`:
+For performance-critical code, add Criterion benchmarks in `<crate>/benches/*.rs`.
+Prefer benchmark inputs that are deterministic and represent realistic hot paths.
 
 ```rust
-#[cfg(test)]
-mod bench {
-    use super::*;
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-    #[bench]
-    fn bench_camp_tick(b: &mut Bencher) {
-        let camp = CampLoop::new(config, members);
-        b.iter(|| camp.tick(None));
-    }
+fn bench_config_parse(c: &mut Criterion) {
+    c.bench_function("config_parse_small", |b| {
+        b.iter(|| {
+            let data = "box_chat.enabled = true\nbox_chat.port = 3002";
+            let _: Result<toml::Value, _> = toml::from_str(black_box(data));
+        });
+    });
 }
+
+criterion_group!(benches, bench_config_parse);
+criterion_main!(benches);
 ```
 
 Run benchmarks:
 
 ```bash
-cargo bench
+cargo bench                                  # full suite
+cargo bench --benches -- --verbose            # include profiler output
+cargo bench -p textquest-common --bench ipc_serialization
+cargo bench -p textquest-dll --bench ability_cooldowns
 ```
+
+When adding or updating benchmarks:
+
+- Add them only to production-critical paths and pair with a short justification
+- Set and document expected targets in `docs/dev/performance-targets.md`
+- Keep benchmark payloads stable (no real I/O, randomization, or external services)
+- File a follow-up issue if regression exceeds ~10% from baseline for hot path code
 
 ## Key Patterns Summary
 

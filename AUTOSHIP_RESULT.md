@@ -1,17 +1,18 @@
-# Result: #2262 — Local dev: document and wire .claude/launch.json for decoupled stack
+# Result: #1243 — Test Infrastructure: Testing documentation and guidelines
+- Updated `docs/dev/testing.md` with issue-complete testing guidelines for:
+  - test organization (unit / integration / scenario e2e)
+  - naming conventions
+  - test data creation patterns
+  - mocking and platform stubs
+  - assertion styles
+  - examples per module type
+  - coverage expectations and thresholds
+  - benchmark guidance with Criterion and existing benches
+- Added feature-tracker entry in `feature-list.json`:
+  - `issue-1243` marked `complete`
+  - acceptance command: `cargo check`
 
-## Scope completed
-- Added `scripts/dev.sh` to launch the decoupled local stack in tmux panes with:
-  - `cargo run -p textquest-web`
-  - `cargo run -p textquest`
-  - `npm run dev --prefix web`
-- Created `docs/dev/local-dev.md` with step-by-step setup, required `backend_url`,
-  and the TUI-in-Claude preview limitation note.
-- Updated `README.md` to link the local dev guide.
+Verification:
+- `cargo check`
 
-## Verification
-- Ran `cargo check` successfully from the repo root.
-
-## Notes
-- `docs/dev/local-dev.md` documents `.claude/launch.json` parity via the `./scripts/dev.sh`
-  tmux launch workflow described by this issue.
+COMPLETE

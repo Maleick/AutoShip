@@ -213,7 +213,25 @@
         "cargo check -p textquest-dll",
         "cargo check -p textquest-dll --tests"
       ],
-      "notes": "PARTIAL: Wired the DX11 overlay hook to own a default TextQuest HUD window through the existing WindowManager, added a minimal HudRenderer trait for the future ImGui backend, and added compile-checked unit coverage for default HUD window creation and active/suspended render dispatch. Real ImGui DX11 drawing, configuration UI, and full per-character profile loading remain follow-up work."
+      "notes": "PARTIAL: Added tools/etw-consumer with CLI parsing, ETW-TI keyword masks, process-name filtering, JSONL serialization, pipe wire decoding for current and legacy headers, Windows-gated StartTraceW/EnableTraceEx2/OpenTraceW/ProcessTrace/TDH runtime, named-pipe reader, driver IOCTL start/stop wrapper, README setup notes, and 13 unit tests that compile. Live ETW/provider and loaded-driver validation still requires a patched Windows VM."
+    },
+    {
+      "id": "issue-974-tui-help-panel-ui-navigation",
+      "name": "Issue #974 TUI Help Panel UI & Navigation",
+      "status": "complete",
+      "acceptance_tests": [
+        "cargo check"
+      ],
+      "notes": "Wired the existing help search panel to /, q/Esc close, tab cycling across Commands/FAQ/Tips, result navigation, typed filtering, and Enter detail expansion. Cargo check also required two minimal pre-existing compile repairs in wishlist equality and Lua player snapshot table generation."
+    },
+    {
+      "id": "issue-1243",
+      "name": "Test Infrastructure: Testing documentation and guidelines",
+      "status": "complete",
+      "acceptance_tests": [
+        "cargo check"
+      ],
+      "notes": "Added comprehensive testing documentation in docs/dev/testing.md covering test organization, naming, data fixtures, mocking, assertions, module-specific examples, coverage expectations, and benchmark guidance."
     }
   ]
 }
