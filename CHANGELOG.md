@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.7
+
+- Make `opencode-autoship doctor` validate project-local `.autoship/config.json` and `.autoship/model-routing.json` instead of global installed assets.
+- Update installed OpenCode skills and commands to call hooks from the installed AutoShip asset directory when used outside the AutoShip repo.
+- Extend smoke coverage for installed-project `doctor` after installed-project initialization.
+
 ## v2.0.6
 
 - Fix installed `init.sh` so running from `~/.config/opencode/.autoship` no longer deletes installed hooks, commands, skills, or plugins.

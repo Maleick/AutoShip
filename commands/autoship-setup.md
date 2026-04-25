@@ -23,7 +23,8 @@ The setup skill verifies OpenCode and GitHub authentication, discovers live Open
 For scripted setup, run the setup hook directly:
 
 ```bash
-bash hooks/opencode/setup.sh --no-tui \
+AUTOSHIP_HOME="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/.autoship"
+bash "$AUTOSHIP_HOME/hooks/opencode/setup.sh" --no-tui \
   --max-agents 10 \
   --labels "agent:ready,autoship:in-progress" \
   --refresh-models \

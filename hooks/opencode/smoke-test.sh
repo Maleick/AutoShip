@@ -69,6 +69,7 @@ git init -q "$INSTALLED_PROJECT"
 (
   cd "$INSTALLED_PROJECT"
   OPENCODE_CONFIG_DIR="$CONFIG_HOME/opencode" bash "$AUTOSHIP_INSTALL_DIR/hooks/opencode/init.sh" >/dev/null
+  OPENCODE_CONFIG_DIR="$CONFIG_HOME/opencode" node "$AUTOSHIP_PACKAGE_FIXTURE_ROOT/dist/cli.js" doctor >/dev/null
 )
 [[ -d "$AUTOSHIP_INSTALL_DIR/hooks" ]]
 [[ -d "$AUTOSHIP_INSTALL_DIR/commands" ]]

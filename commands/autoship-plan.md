@@ -17,7 +17,8 @@ gh issue list --state open --json number,title,body,labels --limit 200 | jq 'sor
 ## Classify Each Issue
 
 ```bash
-bash hooks/opencode/plan-issues.sh --limit 10
+AUTOSHIP_HOME="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/.autoship"
+bash "$AUTOSHIP_HOME/hooks/opencode/plan-issues.sh" --limit 10
 ```
 
 ## Build Plan

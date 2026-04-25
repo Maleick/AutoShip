@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
+import { execSync } from "node:child_process";
 
 const PACKAGE_ROOT = resolve(import.meta.dirname, "..");
 const VERSION = (await readFile(join(PACKAGE_ROOT, "VERSION"), "utf8")).trim();
@@ -28,6 +29,18 @@ function resolveConfigDir(): string {
     return join(process.env.XDG_CONFIG_HOME, "opencode");
   }
   return join(homedir(), ".config", "opencode");
+}
+
+function resolveProjectAutoshipDir(): string {
+  try {
+    const root = execSync("git rev-parse --show-toplevel", { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    if (root) {
+      return join(root, ".autoship");
+    }
+  } catch {
+    // Fall back to the current directory when doctor is run outside git.
+  }
+  return join(process.cwd(), ".autoship");
 }
 
 async function copyDir(src: string, dest: string): Promise<void> {
@@ -130,6 +143,7 @@ async function doctor() {
 
   const configDir = resolveConfigDir();
   const autoshipDir = join(configDir, ".autoship");
+  const projectAutoshipDir = resolveProjectAutoshipDir();
   const opencodeConfigPath = join(configDir, "opencode.json");
 
   try {
@@ -154,18 +168,18 @@ async function doctor() {
   }
 
   try {
-    await access(join(autoshipDir, "config.json"));
+    await access(join(projectAutoshipDir, "config.json"));
     checks.push({ name: "config", status: "PASS", message: "Config file exists" });
   } catch {
-    checks.push({ name: "config", status: "FAIL", message: "Config file not found" });
+    checks.push({ name: "config", status: "FAIL", message: "Project .autoship/config.json not found; run /autoship-setup" });
     hasFailure = true;
   }
 
   try {
-    await access(join(autoshipDir, "model-routing.json"));
+    await access(join(projectAutoshipDir, "model-routing.json"));
     checks.push({ name: "model-routing", status: "PASS", message: "Model routing file exists" });
   } catch {
-    checks.push({ name: "model-routing", status: "FAIL", message: "Model routing file not found" });
+    checks.push({ name: "model-routing", status: "FAIL", message: "Project .autoship/model-routing.json not found; run /autoship-setup" });
     hasFailure = true;
   }
 
@@ -227,7 +241,7 @@ async function doctor() {
     if (modelsOutput.trim().length > 0) {
       checks.push({ name: "model-inventory", status: "PASS", message: "OpenCode model inventory is accessible" });
       try {
-        const routingPath = join(autoshipDir, "model-routing.json");
+        const routingPath = join(projectAutoshipDir, "model-routing.json");
         await access(routingPath);
         const routingContent = await readFile(routingPath, "utf8");
         const routing = JSON.parse(routingContent);

@@ -60,8 +60,9 @@ Model cost/capability routing comes from `.autoship/model-routing.json`, with fr
 The persistent OpenCode path is:
 
 ```bash
-bash hooks/opencode/dispatch.sh <issue-number> <task-type>
-bash hooks/opencode/runner.sh
+AUTOSHIP_HOME="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/.autoship"
+bash "$AUTOSHIP_HOME/hooks/opencode/dispatch.sh" <issue-number> <task-type>
+bash "$AUTOSHIP_HOME/hooks/opencode/runner.sh"
 ```
 
 `dispatch.sh` creates the worktree and prompt, marks the issue queued in state, and writes `QUEUED` status. `runner.sh` starts queued workspaces up to the configured concurrency cap.
@@ -129,10 +130,11 @@ Print COMPLETE, BLOCKED, or STUCK as your final output.
 
 ```bash
 # Update state
-bash hooks/update-state.sh set-running <issue-id> agent=<agent-name>
+AUTOSHIP_HOME="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}/.autoship"
+bash "$AUTOSHIP_HOME/hooks/update-state.sh" set-running <issue-id> agent=<agent-name>
 
 # Update quota
-bash hooks/quota-update.sh decrement <tool> <complexity>
+bash "$AUTOSHIP_HOME/hooks/quota-update.sh" decrement <tool> <complexity>
 
 # Initialize status file
 echo "RUNNING" > .autoship/workspaces/<issue-key>/status
