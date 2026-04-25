@@ -16,8 +16,8 @@ use mlua::{
     Variadic,
 };
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
 use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::lua::error::LuaApiError;
 use crate::lua::sandbox;
@@ -206,11 +206,15 @@ impl LuaBindings {
         let runtime_state = Arc::clone(&self.runtime_state);
         parent.set(
             "move_to",
-            self.lua.create_function(move |_, (x, y, z): (f32, f32, f32)| {
-                queue_navigation_request(&runtime_state, LuaNavigationRequest::Goto { x, y, z });
-                tracing::debug!(x, y, z, "lua move_to requested");
-                Ok(true)
-            })?,
+            self.lua
+                .create_function(move |_, (x, y, z): (f32, f32, f32)| {
+                    queue_navigation_request(
+                        &runtime_state,
+                        LuaNavigationRequest::Goto { x, y, z },
+                    );
+                    tracing::debug!(x, y, z, "lua move_to requested");
+                    Ok(true)
+                })?,
         )?;
         let runtime_state = Arc::clone(&self.runtime_state);
         parent.set(
@@ -503,11 +507,15 @@ impl LuaBindings {
         let runtime_state = Arc::clone(&self.runtime_state);
         nav.set(
             "goto",
-            self.lua.create_function(move |_, (x, y, z): (f32, f32, f32)| {
-                queue_navigation_request(&runtime_state, LuaNavigationRequest::Goto { x, y, z });
-                tracing::debug!("nav.goto({}, {}, {})", x, y, z);
-                Ok(true)
-            })?,
+            self.lua
+                .create_function(move |_, (x, y, z): (f32, f32, f32)| {
+                    queue_navigation_request(
+                        &runtime_state,
+                        LuaNavigationRequest::Goto { x, y, z },
+                    );
+                    tracing::debug!("nav.goto({}, {}, {})", x, y, z);
+                    Ok(true)
+                })?,
         )?;
         let runtime_state = Arc::clone(&self.runtime_state);
         nav.set(
@@ -549,8 +557,8 @@ impl LuaBindings {
         let runtime_state = Arc::clone(&self.runtime_state);
         nav.set(
             "add_waypoint",
-            self.lua.create_function(
-                move |_, (x, y, z, name): (f32, f32, f32, String)| {
+            self.lua
+                .create_function(move |_, (x, y, z, name): (f32, f32, f32, String)| {
                     queue_navigation_request(
                         &runtime_state,
                         LuaNavigationRequest::AddWaypoint {
@@ -562,8 +570,7 @@ impl LuaBindings {
                     );
                     tracing::debug!("nav.add_waypoint({}, {}, {}, \"{}\")", x, y, z, name);
                     Ok(true)
-                },
-            )?,
+                })?,
         )?;
         let runtime_state = Arc::clone(&self.runtime_state);
         nav.set(
@@ -777,15 +784,16 @@ impl LuaBindings {
         let handlers = Arc::clone(&self.event_handlers);
         events.set(
             "emit",
-            self.lua.create_function(move |lua, (event, data): (String, Value)| {
-                let callback_count = emit_lua_event(lua, &handlers, &event, data)?;
-                tracing::debug!(
-                    event = %event,
-                    callbacks = callback_count,
-                    "events.emit dispatched Lua callbacks"
-                );
-                Ok(callback_count)
-            })?,
+            self.lua
+                .create_function(move |lua, (event, data): (String, Value)| {
+                    let callback_count = emit_lua_event(lua, &handlers, &event, data)?;
+                    tracing::debug!(
+                        event = %event,
+                        callbacks = callback_count,
+                        "events.emit dispatched Lua callbacks"
+                    );
+                    Ok(callback_count)
+                })?,
         )?;
 
         parent.set("events", events)?;
@@ -981,10 +989,11 @@ impl LuaBindings {
         let runtime_state = Arc::clone(&self.runtime_state);
         commands.set(
             "execute",
-            self.lua.create_function(move |_lua, command_line: String| {
-                queue_command_request(&runtime_state, command_line);
-                Ok(true)
-            })?,
+            self.lua
+                .create_function(move |_lua, command_line: String| {
+                    queue_command_request(&runtime_state, command_line);
+                    Ok(true)
+                })?,
         )?;
 
         parent.set("commands", commands)?;
@@ -1117,10 +1126,7 @@ fn player_snapshot_table(lua: &Lua, player: Option<LuaPlayerSnapshot>) -> LuaRes
     Ok(table)
 }
 
-fn queue_navigation_request(
-    state: &Arc<RwLock<LuaRuntimeState>>,
-    request: LuaNavigationRequest,
-) {
+fn queue_navigation_request(state: &Arc<RwLock<LuaRuntimeState>>, request: LuaNavigationRequest) {
     state
         .write()
         .expect("lua runtime_state lock poisoned")

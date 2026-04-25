@@ -437,15 +437,27 @@ fn decode_legacy_pipe_message(bytes: &[u8]) -> Result<TiEvent, ConsumerError> {
 }
 
 fn read_u16(bytes: &[u8], offset: usize) -> u16 {
-    u16::from_le_bytes(bytes[offset..offset + 2].try_into().expect("valid u16 range"))
+    u16::from_le_bytes(
+        bytes[offset..offset + 2]
+            .try_into()
+            .expect("valid u16 range"),
+    )
 }
 
 fn read_u32(bytes: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("valid u32 range"))
+    u32::from_le_bytes(
+        bytes[offset..offset + 4]
+            .try_into()
+            .expect("valid u32 range"),
+    )
 }
 
 fn read_u64(bytes: &[u8], offset: usize) -> u64 {
-    u64::from_le_bytes(bytes[offset..offset + 8].try_into().expect("valid u64 range"))
+    u64::from_le_bytes(
+        bytes[offset..offset + 8]
+            .try_into()
+            .expect("valid u64 range"),
+    )
 }
 
 #[cfg(not(windows))]
@@ -475,8 +487,7 @@ mod platform {
     use std::thread;
     use std::time::Duration;
     use windows_sys::Win32::Foundation::{
-        CloseHandle, ERROR_ACCESS_DENIED, ERROR_SUCCESS, GetLastError, HANDLE,
-        INVALID_HANDLE_VALUE,
+        CloseHandle, ERROR_ACCESS_DENIED, ERROR_SUCCESS, GetLastError, HANDLE, INVALID_HANDLE_VALUE,
     };
     use windows_sys::Win32::Storage::FileSystem::{
         CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_GENERIC_READ, FILE_GENERIC_WRITE, OPEN_EXISTING,
@@ -484,17 +495,16 @@ mod platform {
     };
     use windows_sys::Win32::System::Diagnostics::Etw::{
         CONTROLTRACE_HANDLE, CloseTrace, ControlTraceW, ENABLE_TRACE_PARAMETERS,
-        ENABLE_TRACE_PARAMETERS_VERSION_2, EVENT_CONTROL_CODE_ENABLE_PROVIDER, EVENT_RECORD,
-        EVENT_TRACE_CONTROL_STOP, EVENT_TRACE_LOGFILEW, EVENT_TRACE_PROPERTIES,
-        EVENT_TRACE_REAL_TIME_MODE, EVENT_PROPERTY_INFO, EnableTraceEx2, OpenTraceW,
-        PROCESS_TRACE_MODE_EVENT_RECORD, PROCESS_TRACE_MODE_REAL_TIME, PROCESSTRACE_HANDLE,
-        PROPERTY_DATA_DESCRIPTOR, PropertyStruct, StartTraceW, TDH_INTYPE_ANSISTRING,
-        TDH_INTYPE_BOOLEAN, TDH_INTYPE_FILETIME, TDH_INTYPE_GUID, TDH_INTYPE_HEXINT32,
-        TDH_INTYPE_HEXINT64, TDH_INTYPE_INT16, TDH_INTYPE_INT32, TDH_INTYPE_INT64,
-        TDH_INTYPE_INT8, TDH_INTYPE_POINTER, TDH_INTYPE_UINT16, TDH_INTYPE_UINT32,
-        TDH_INTYPE_UINT64, TDH_INTYPE_UINT8, TDH_INTYPE_UNICODESTRING, TRACE_EVENT_INFO,
-        TRACE_LEVEL_VERBOSE, TdhGetEventInformation, TdhGetProperty, TdhGetPropertySize,
-        WNODE_FLAG_TRACED_GUID, ProcessTrace,
+        ENABLE_TRACE_PARAMETERS_VERSION_2, EVENT_CONTROL_CODE_ENABLE_PROVIDER, EVENT_PROPERTY_INFO,
+        EVENT_RECORD, EVENT_TRACE_CONTROL_STOP, EVENT_TRACE_LOGFILEW, EVENT_TRACE_PROPERTIES,
+        EVENT_TRACE_REAL_TIME_MODE, EnableTraceEx2, OpenTraceW, PROCESS_TRACE_MODE_EVENT_RECORD,
+        PROCESS_TRACE_MODE_REAL_TIME, PROCESSTRACE_HANDLE, PROPERTY_DATA_DESCRIPTOR, ProcessTrace,
+        PropertyStruct, StartTraceW, TDH_INTYPE_ANSISTRING, TDH_INTYPE_BOOLEAN,
+        TDH_INTYPE_FILETIME, TDH_INTYPE_GUID, TDH_INTYPE_HEXINT32, TDH_INTYPE_HEXINT64,
+        TDH_INTYPE_INT8, TDH_INTYPE_INT16, TDH_INTYPE_INT32, TDH_INTYPE_INT64, TDH_INTYPE_POINTER,
+        TDH_INTYPE_UINT8, TDH_INTYPE_UINT16, TDH_INTYPE_UINT32, TDH_INTYPE_UINT64,
+        TDH_INTYPE_UNICODESTRING, TRACE_EVENT_INFO, TRACE_LEVEL_VERBOSE, TdhGetEventInformation,
+        TdhGetProperty, TdhGetPropertySize, WNODE_FLAG_TRACED_GUID,
     };
     use windows_sys::Win32::System::IO::DeviceIoControl;
     use windows_sys::Win32::System::Threading::{
@@ -880,8 +890,7 @@ mod platform {
 
         let mut info_buf = vec![0u8; info_size as usize];
         let info = info_buf.as_mut_ptr() as *mut TRACE_EVENT_INFO;
-        let status =
-            unsafe { TdhGetEventInformation(record, 0, null(), info, &mut info_size) };
+        let status = unsafe { TdhGetEventInformation(record, 0, null(), info, &mut info_size) };
         if status != ERROR_SUCCESS {
             return fields;
         }
@@ -907,14 +916,7 @@ mod platform {
             };
             let mut property_size = 0;
             let size_status = unsafe {
-                TdhGetPropertySize(
-                    record,
-                    0,
-                    null(),
-                    1,
-                    &mut descriptor,
-                    &mut property_size,
-                )
+                TdhGetPropertySize(record, 0, null(), 1, &mut descriptor, &mut property_size)
             };
             if size_status != ERROR_SUCCESS || property_size == 0 || property_size > 65_536 {
                 continue;
@@ -935,7 +937,10 @@ mod platform {
             if value_status != ERROR_SUCCESS {
                 continue;
             }
-            fields.insert(name, format_tdh_value(&property, &value[..property_size as usize]));
+            fields.insert(
+                name,
+                format_tdh_value(&property, &value[..property_size as usize]),
+            );
         }
         fields
     }
@@ -993,7 +998,10 @@ mod platform {
                 String::from_utf16_lossy(&words)
             }
             TDH_INTYPE_ANSISTRING => {
-                let end = data.iter().position(|byte| *byte == 0).unwrap_or(data.len());
+                let end = data
+                    .iter()
+                    .position(|byte| *byte == 0)
+                    .unwrap_or(data.len());
                 String::from_utf8_lossy(&data[..end]).into_owned()
             }
             _ => data
