@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.0.1
+
+- Fix package CLI version output so `VERSION` values that already include `v` do not print as `vv...`.
+- Add package installer regression coverage for double-`v` version output.
+
 ## v2.0.0
 
 - Package AutoShip as `opencode-autoship` with package-style install and doctor flows.

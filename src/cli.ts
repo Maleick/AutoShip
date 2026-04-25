@@ -61,7 +61,7 @@ async function install() {
   const configDir = resolveConfigDir();
   const autoshipDir = join(configDir, ".autoship");
 
-  console.log(`Installing opencode-autoship v${VERSION} to ${configDir}`);
+  console.log(`Installing opencode-autoship ${VERSION} to ${configDir}`);
 
   await mkdir(autoshipDir, { recursive: true });
 
@@ -108,7 +108,7 @@ async function install() {
   config.plugin = plugins;
   await saveConfig(configPath, config);
 
-  console.log(`\nSuccessfully installed opencode-autoship v${VERSION}`);
+  console.log(`\nSuccessfully installed opencode-autoship ${VERSION}`);
   console.log(`Config: ${configPath}`);
   console.log("\nNext: Run 'opencode-autoship --help' to get started");
 }
@@ -291,7 +291,7 @@ async function doctor() {
 }
 
 function help() {
-  console.log(`opencode-autoship v${VERSION}
+  console.log(`opencode-autoship ${VERSION}
 
 Usage: opencode-autoship <command>
 

@@ -1138,7 +1138,10 @@ cp -R "$SCRIPT_DIR/../.." "$PACKAGE_REPO"
   CONFIG_DIR="$TMP_DIR/package-config"
   mkdir -p "$CONFIG_DIR"
   printf '%s\n' '{"plugin":["file:///tmp/legacy/autoship.ts","other-plugin"],"customSetting":true}' > "$CONFIG_DIR/opencode.json"
-  OPENCODE_CONFIG_DIR="$CONFIG_DIR" node dist/cli.js install >/dev/null
+  install_output=$(OPENCODE_CONFIG_DIR="$CONFIG_DIR" node dist/cli.js install)
+  if printf '%s\n' "$install_output" | grep -F 'opencode-autoship vv' >/dev/null; then
+    fail "package installer must not print a double-v version"
+  fi
   jq -e '.plugin | index("opencode-autoship")' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer registers opencode-autoship plugin"
   jq -e '.plugin | index("other-plugin")' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer preserves unrelated plugins"
   jq -e '.customSetting == true' "$CONFIG_DIR/opencode.json" >/dev/null || fail "package installer preserves unrelated config"

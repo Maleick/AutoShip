@@ -1,6 +1,6 @@
 {
   "name": "opencode-autoship",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Turn backlog into reviewed PRs with an OpenCode issue-to-PR orchestration plugin.",
   "type": "module",
   "main": "./dist/index.js",
