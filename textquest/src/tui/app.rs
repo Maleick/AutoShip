@@ -557,6 +557,60 @@ pub struct Toast {
     pub expires_at: Instant,
 }
 
+/// Operator-facing diagnostic record for recent TUI warnings/errors.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TuiDiagnosticError {
+    pub code: String,
+    pub level: ToastLevel,
+    pub message: String,
+    pub suggestion: String,
+    pub source: String,
+    pub debug_trace: Option<String>,
+    pub tick: u64,
+}
+
+/// Aggregated diagnostics surfaced by the TUI overlay.
+#[derive(Debug, Clone)]
+pub struct TuiDiagnosticsState {
+    pub recent_errors: VecDeque<TuiDiagnosticError>,
+    pub next_error_sequence: u64,
+    pub ipc_commands_sent: u64,
+    pub ipc_failures: u64,
+}
+
+impl Default for TuiDiagnosticsState {
+    fn default() -> Self {
+        Self {
+            recent_errors: VecDeque::with_capacity(Self::RECENT_ERROR_LIMIT),
+            next_error_sequence: 1,
+            ipc_commands_sent: 0,
+            ipc_failures: 0,
+        }
+    }
+}
+
+impl TuiDiagnosticsState {
+    pub const RECENT_ERROR_LIMIT: usize = 10;
+
+    fn next_code(&mut self, level: ToastLevel) -> String {
+        let prefix = match level {
+            ToastLevel::Error => "TQ-TUI-E",
+            ToastLevel::Warning => "TQ-TUI-W",
+            ToastLevel::Info | ToastLevel::Success => "TQ-TUI-I",
+        };
+        let code = format!("{prefix}{:04}", self.next_error_sequence);
+        self.next_error_sequence = self.next_error_sequence.saturating_add(1);
+        code
+    }
+
+    fn push_error(&mut self, error: TuiDiagnosticError) {
+        while self.recent_errors.len() >= Self::RECENT_ERROR_LIMIT {
+            self.recent_errors.pop_front();
+        }
+        self.recent_errors.push_back(error);
+    }
+}
+
 /// Application state for the TUI command center.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1213,6 +1267,12 @@ pub struct App {
     pub help_search_state: crate::tui::ui::help::HelpPanelState,
     /// Category and tag filters for help search.
     pub help_search_filters: HelpSearchFilterState,
+    /// Whether the diagnostics overlay is currently visible.
+    pub diagnostics_visible: bool,
+    /// Scroll offset into the recent diagnostic error log.
+    pub diagnostics_scroll: usize,
+    /// Aggregated TUI diagnostic counters and recent warning/error records.
+    pub diagnostics: TuiDiagnosticsState,
 
     /// Current operating mode (camp or hunt).
     pub operating_mode: crate::camp::hunt::OperatingMode,
@@ -1606,6 +1666,9 @@ impl App {
             help_search_visible: false,
             help_search_state: crate::tui::ui::help::HelpPanelState::new(),
             help_search_filters: HelpSearchFilterState::default(),
+            diagnostics_visible: false,
+            diagnostics_scroll: 0,
+            diagnostics: TuiDiagnosticsState::default(),
 
             operating_mode: crate::camp::hunt::OperatingMode::Camp,
 
@@ -1913,11 +1976,107 @@ impl App {
 
     /// Update the status line and optionally elevate the same message to a
     /// toast.
+    #[track_caller]
     pub fn set_feedback(&mut self, level: ToastLevel, msg: impl Into<String>, show_toast: bool) {
         let message = msg.into();
         self.status_message = message.clone();
+        if matches!(level, ToastLevel::Warning | ToastLevel::Error) {
+            let location = std::panic::Location::caller();
+            let source = format!("{}:{}", location.file(), location.line());
+            self.record_diagnostic_error(level, &message, source);
+        }
         if show_toast {
             self.set_toast(level, message);
+        }
+    }
+
+    fn record_diagnostic_error(
+        &mut self,
+        level: ToastLevel,
+        message: &str,
+        source: String,
+    ) -> String {
+        let code = self.diagnostics.next_code(level);
+        let suggestion = Self::diagnostic_suggestion(message);
+        let debug_trace = if cfg!(debug_assertions) {
+            Some(format!("{:?}", std::backtrace::Backtrace::force_capture()))
+        } else {
+            None
+        };
+
+        let error = TuiDiagnosticError {
+            code: code.clone(),
+            level,
+            message: message.to_string(),
+            suggestion,
+            source,
+            debug_trace,
+            tick: self.tick_count,
+        };
+        self.log_diagnostic_error(&error);
+        self.diagnostics.push_error(error);
+        code
+    }
+
+    fn diagnostic_suggestion(message: &str) -> String {
+        let lower = message.to_ascii_lowercase();
+        if lower.contains("dll") || lower.contains("session token") || lower.contains("inject") {
+            String::from(
+                "Ensure EQ is running on Windows, inject the DLL, then check logs/textquest-dll.log.",
+            )
+        } else if lower.contains("no clients") || lower.contains("no focused client") {
+            String::from("Open or inject a client, then use :status or ]/[ to confirm focus.")
+        } else if lower.contains("ipc") || lower.contains("send") || lower.contains("pipe") {
+            String::from(
+                "Check the focused PID, verify the command pipe is live, then retry after DLL reinjection.",
+            )
+        } else if lower.contains("nav") || lower.contains("stuck") {
+            String::from(
+                "Open :nav ui for live navigation diagnostics and check navmesh/cache status.",
+            )
+        } else {
+            String::from("Open diagnostics with Ctrl+D, review the recent error log, then retry.")
+        }
+    }
+
+    fn log_diagnostic_error(&self, error: &TuiDiagnosticError) {
+        #[cfg(test)]
+        {
+            let _ = error;
+        }
+
+        #[cfg(not(test))]
+        {
+            use std::io::Write as _;
+
+            let path = std::path::Path::new("logs/textquest-tui-errors.log");
+            if let Some(parent) = path.parent()
+                && std::fs::create_dir_all(parent).is_err()
+            {
+                return;
+            }
+            let mut file = match std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+            {
+                Ok(file) => file,
+                Err(_) => return,
+            };
+            let _ = writeln!(
+                file,
+                "{} code={} level={:?} tick={} source={} message={} suggestion={}",
+                chrono::Utc::now().to_rfc3339(),
+                error.code,
+                error.level,
+                error.tick,
+                error.source,
+                error.message,
+                error.suggestion
+            );
+            if let Some(trace) = &error.debug_trace {
+                let _ = writeln!(file, "debug_trace={trace}");
+            }
         }
     }
 
@@ -2102,6 +2261,32 @@ impl App {
         if self.alert_panel_visible {
             self.refresh_alert_history();
         }
+    }
+
+    /// Toggle the diagnostics overlay.
+    pub fn toggle_diagnostics_panel(&mut self) {
+        self.diagnostics_visible = !self.diagnostics_visible;
+        if self.diagnostics_visible {
+            self.diagnostics_scroll = 0;
+            self.set_feedback(
+                ToastLevel::Info,
+                String::from("Diagnostics opened. Ctrl+D or q closes."),
+                false,
+            );
+        } else {
+            self.set_feedback(ToastLevel::Info, String::from("Diagnostics closed."), false);
+        }
+    }
+
+    /// Move the diagnostics error log down.
+    pub fn diagnostics_scroll_down(&mut self) {
+        let max_scroll = self.diagnostics.recent_errors.len().saturating_sub(1);
+        self.diagnostics_scroll = (self.diagnostics_scroll + 1).min(max_scroll);
+    }
+
+    /// Move the diagnostics error log up.
+    pub fn diagnostics_scroll_up(&mut self) {
+        self.diagnostics_scroll = self.diagnostics_scroll.saturating_sub(1);
     }
 
     /// Move the alert overlay selection to the next row.
@@ -3134,11 +3319,25 @@ impl App {
     }
 
     /// Send an IPC command to all focused clients, returning the success count.
-    pub fn send_ipc_to_focused(&self, cmd: &textquest_common::ipc::Command) -> usize {
-        self.focused_pids()
-            .iter()
-            .filter(|pid| send_ipc_command(**pid, cmd).is_ok())
-            .count()
+    pub fn send_ipc_to_focused(&mut self, cmd: &textquest_common::ipc::Command) -> usize {
+        let pids = self.focused_pids();
+        let mut ok = 0usize;
+        for pid in &pids {
+            self.diagnostics.ipc_commands_sent =
+                self.diagnostics.ipc_commands_sent.saturating_add(1);
+            match send_ipc_command(*pid, cmd) {
+                Ok(()) => ok += 1,
+                Err(error) => {
+                    self.diagnostics.ipc_failures = self.diagnostics.ipc_failures.saturating_add(1);
+                    self.record_diagnostic_error(
+                        ToastLevel::Error,
+                        &format!("Failed to send IPC command to PID {pid}: {error}"),
+                        String::from("textquest/src/tui/app.rs:send_ipc_to_focused"),
+                    );
+                }
+            }
+        }
+        ok
     }
 
     /// Returns `true` if any connected client has live `GroupInfo` data.
@@ -6640,11 +6839,8 @@ impl App {
                     false,
                 );
             }
-            "keyboard" | "keys" => {
-                self.execute_keyboard_command(&parts[1..]);
-            }
-            "accessibility" | "a11y" => {
-                self.execute_accessibility_command(&parts[1..]);
+            "diag" | "diagnostics" => {
+                self.toggle_diagnostics_panel();
             }
             "camp" => {
                 self.execute_camp_command(&parts[1..], orchestrator);
@@ -10186,6 +10382,38 @@ tags = ["test"]
             app.toast.is_none(),
             "warning should clear once ttl is exceeded"
         );
+    }
+
+    #[test]
+    fn warning_feedback_records_diagnostic_code_and_suggestion() {
+        let mut app = App::new();
+
+        app.set_feedback(
+            ToastLevel::Warning,
+            "No clients connected for navigation.",
+            true,
+        );
+
+        let err = app
+            .diagnostics
+            .recent_errors
+            .back()
+            .expect("diagnostic error");
+        assert!(err.code.starts_with("TQ-TUI-W"));
+        assert!(err.suggestion.contains("Open or inject a client"));
+        assert_eq!(err.debug_trace.is_some(), cfg!(debug_assertions));
+        assert!(app.toast.is_some());
+    }
+
+    #[test]
+    fn diagnostics_panel_toggle_resets_scroll() {
+        let mut app = App::new();
+        app.diagnostics_scroll = 3;
+
+        app.toggle_diagnostics_panel();
+
+        assert!(app.diagnostics_visible);
+        assert_eq!(app.diagnostics_scroll, 0);
     }
 
     #[test]

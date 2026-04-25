@@ -170,7 +170,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         draw_alert_overlay(frame, area, app);
     }
 
-    // Toast notification (bottom-right centered overlay, 62 wide, 5 tall with borders)
+    if app.diagnostics_visible {
+        draw_diagnostics_overlay(frame, area, app);
+    }
+
+    // Toast notification (bottom-right centered overlay, 62 wide, 4 tall with borders)
     if let Some(toast) = app.toast.as_ref() {
         let t = &app.theme;
         let toast_area = centered_popup(area, 45, 8, 62, 5, 62, 5, 1); // Fixed 62x5
@@ -638,6 +642,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
                 ("[ ]", "client"),
                 ("/", "search"),
                 ("F8", "alerts"),
+                ("^D", "diag"),
                 ("g/v", "sect"),
                 ("?", "help"),
             ],
@@ -647,6 +652,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
                 ("Tab", "pane"),
                 ("[ ]", "client"),
                 ("F8", "alerts"),
+                ("Ctrl+D", "diag"),
                 ("g/v", "sections"),
                 ("z", "collapse"),
                 ("/", "search"),
@@ -659,6 +665,7 @@ fn status_hints(app: &App, width_class: WidthClass) -> &'static [(&'static str, 
                 ("Tab", "pane"),
                 ("[ ]", "client"),
                 ("F8", "alerts"),
+                ("Ctrl+D", "diag"),
                 ("g/v", "sections"),
                 ("z", "collapse"),
                 ("/", "search"),
@@ -1152,6 +1159,159 @@ fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
             .block(widgets::panel("Details", t.border_dim, t))
             .wrap(Wrap { trim: false }),
         sections[2],
+    );
+}
+
+fn draw_diagnostics_overlay(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
+    let popup = centered_popup(area, 86, 78, 92, 24, 92, 34, 1);
+    frame.render_widget(Clear, popup);
+
+    let focused = app.focused_pid_count();
+    let connected = app.clients.len();
+    let memory = crate::metrics::sample_process_memory_bytes(std::process::id())
+        .map(|bytes| format!("{} MB", bytes / 1024 / 1024))
+        .unwrap_or_else(|| String::from("unavailable"));
+    let stuck_count = app
+        .nav_state
+        .nav_statuses
+        .values()
+        .filter(|status| status.status.is_stuck())
+        .count();
+    let blocker_count: usize = app
+        .nav_state
+        .nav_statuses
+        .values()
+        .map(|status| status.blockers.len() + usize::from(status.failure_reason.is_some()))
+        .sum();
+    let last_errors = app.diagnostics.recent_errors.len();
+    let health = if connected == 0 {
+        ("attention", t.hp_low)
+    } else if stuck_count > 0 || app.diagnostics.ipc_failures > 0 {
+        ("degraded", t.text_highlight)
+    } else {
+        ("healthy", t.hp_high)
+    };
+
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled("System health: ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                health.0,
+                Style::default().fg(health.1).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "    Close: Ctrl+D / q / Esc",
+                Style::default().fg(t.text_muted),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("DLL connection: ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                format!("{connected} connected, {focused} focused"),
+                Style::default().fg(t.text_bright),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("IPC throughput: ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                format!(
+                    "{} sent, {} failed",
+                    app.diagnostics.ipc_commands_sent, app.diagnostics.ipc_failures
+                ),
+                Style::default().fg(t.text_bright),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("Memory usage: ", Style::default().fg(t.text_secondary)),
+            Span::styled(memory, Style::default().fg(t.text_bright)),
+            Span::styled(
+                format!(
+                    "    tracked state: {} spawns, {} chat events",
+                    app.spawns.len(),
+                    app.chat_events.len()
+                ),
+                Style::default().fg(t.text_muted),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("Stuck triggers: ", Style::default().fg(t.text_secondary)),
+            Span::styled(
+                format!("{stuck_count} stuck clients, {blocker_count} blockers"),
+                Style::default().fg(if stuck_count > 0 { t.hp_low } else { t.hp_high }),
+            ),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Last 10 errors", Style::default().fg(t.text_bright)),
+            Span::styled(
+                format!(" ({last_errors} recorded, scroll j/k or arrows)"),
+                Style::default().fg(t.text_muted),
+            ),
+        ]),
+    ];
+
+    if app.diagnostics.recent_errors.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "No warnings or errors recorded this session.",
+            Style::default().fg(t.text_muted),
+        )));
+    } else {
+        for error in app
+            .diagnostics
+            .recent_errors
+            .iter()
+            .skip(app.diagnostics_scroll)
+            .take(4)
+        {
+            let level_color = match error.level {
+                ToastLevel::Error => t.hp_low,
+                ToastLevel::Warning => t.text_highlight,
+                ToastLevel::Info | ToastLevel::Success => t.text_secondary,
+            };
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("[{}] ", error.code),
+                    Style::default()
+                        .fg(level_color)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    truncate_inline(&error.message, popup.width.saturating_sub(18) as usize),
+                    Style::default().fg(t.text_normal),
+                ),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("  Suggestion: ", Style::default().fg(t.text_secondary)),
+                Span::styled(
+                    truncate_inline(&error.suggestion, popup.width.saturating_sub(18) as usize),
+                    Style::default().fg(t.text_muted),
+                ),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("  Source: ", Style::default().fg(t.text_secondary)),
+                Span::styled(error.source.clone(), Style::default().fg(t.text_muted)),
+                Span::styled(
+                    if error.debug_trace.is_some() {
+                        "    debug trace captured"
+                    } else {
+                        "    release build"
+                    },
+                    Style::default().fg(t.text_muted),
+                ),
+            ]));
+        }
+    }
+
+    let block = Block::default()
+        .title(" Diagnostics ")
+        .borders(Borders::ALL)
+        .border_type(t.border_type)
+        .border_style(Style::default().fg(t.border_active));
+    frame.render_widget(
+        Paragraph::new(lines).block(block).wrap(Wrap { trim: true }),
+        popup,
     );
 }
 
@@ -1668,6 +1828,24 @@ mod tests {
             has_toast_in_lower_area,
             "Toast should appear in lower area, not at top"
         );
+    }
+
+    #[test]
+    fn diagnostics_overlay_surfaces_codes_and_suggestions() {
+        let mut app = sample_app();
+        app.set_feedback(
+            ToastLevel::Error,
+            "Failed to send IPC command to PID 42: pipe closed",
+            false,
+        );
+        app.diagnostics_visible = true;
+
+        let rendered = render_app(app, 120, 32);
+
+        assert!(rendered.contains("Diagnostics"));
+        assert!(rendered.contains("TQ-TUI-E"));
+        assert!(rendered.contains("Suggestion"));
+        assert!(rendered.contains("IPC throughput"));
     }
 
     fn render_app(mut app: App, width: u16, height: u16) -> String {

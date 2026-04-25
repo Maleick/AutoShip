@@ -831,6 +831,32 @@ pub fn handle_events(
             return Ok(true);
         }
 
+        if app.diagnostics_visible {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('q') => {
+                    app.toggle_diagnostics_panel();
+                }
+                KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    app.toggle_diagnostics_panel();
+                }
+                KeyCode::Up | KeyCode::Char('k') => app.diagnostics_scroll_up(),
+                KeyCode::Down | KeyCode::Char('j') => app.diagnostics_scroll_down(),
+                KeyCode::PageUp => {
+                    for _ in 0..5 {
+                        app.diagnostics_scroll_up();
+                    }
+                }
+                KeyCode::PageDown => {
+                    for _ in 0..5 {
+                        app.diagnostics_scroll_down();
+                    }
+                }
+                KeyCode::Home => app.diagnostics_scroll = 0,
+                _ => {}
+            }
+            return Ok(true);
+        }
+
         if app.alert_panel_visible {
             match key.code {
                 KeyCode::Esc | KeyCode::Char('q') | KeyCode::F(8) => {
@@ -898,6 +924,10 @@ pub fn handle_events(
             (KeyCode::Char('e'), KeyModifiers::CONTROL) => {
                 app.cycle_layout();
                 app.status_message = format!("Layout: {}", app.current_layout().label());
+                return Ok(true);
+            }
+            (KeyCode::Char('d'), KeyModifiers::CONTROL) => {
+                app.toggle_diagnostics_panel();
                 return Ok(true);
             }
             (KeyCode::Char('!'), _) => {

@@ -46,9 +46,7 @@
       "id": "textquest-no-run-compile-repair-20260417",
       "name": "TextQuest no-run compile repair",
       "status": "complete",
-      "acceptance_tests": [
-        "cargo test -p textquest --no-run"
-      ],
+      "acceptance_tests": ["cargo test -p textquest --no-run"],
       "notes": "Session compile-repair pass reduced `cargo test -p textquest --no-run` errors from 167 to 0 and restored missing orchestrator/config/runtime surfaces needed for test compilation."
     },
     {
@@ -77,9 +75,7 @@
       "id": "issue-791-lua-scripting-engine-integration",
       "name": "Issue #791 Lua 5.4 scripting engine integration",
       "status": "in_progress",
-      "acceptance_tests": [
-        "cargo check -p textquest"
-      ],
+      "acceptance_tests": ["cargo check -p textquest"],
       "notes": "Wired the existing Lua runtime into the textquest crate, exposed the issue #791 top-level API shape, and kept this partial because live game-state/DLL-backed APIs remain stubbed."
     },
     {
@@ -96,10 +92,7 @@
       "id": "issue-958-eq-binary-diff-tui-patch-reconciliation",
       "name": "Issue #958 EQ Binary Diff TUI patch-day reconciliation panel",
       "status": "in_progress",
-      "acceptance_tests": [
-        "cargo check",
-        "cargo check -p eqdiff"
-      ],
+      "acceptance_tests": ["cargo check", "cargo check -p eqdiff"],
       "notes": "Implemented the Debug screen patch reconciliation panel, filter state, fixture-backed render coverage, and eqdiff patch-report.json output. Full cargo check is currently blocked by unrelated pre-existing textquest errors in loot/smartloot.rs and lua/bindings.rs; cargo check -p eqdiff passes."
     },
     {
@@ -127,45 +120,35 @@
       "id": "issue-799-enhanced-charm-pet-management",
       "name": "Enhanced charm/pet management",
       "status": "in_progress",
-      "acceptance_tests": [
-        "cargo check -p textquest"
-      ],
+      "acceptance_tests": ["cargo check -p textquest"],
       "notes": "Partial scaffold: combat charm manager tracks charmed and summoned pets, supports charm recast threshold decisions, candidate affinity selection, and first pet follow command. Remaining work includes real spell-slot selection, charm-break conditions, full pet focus/aggression commands, Lua API bindings, and operator configuration loading."
     },
     {
       "id": "issue-792-macroquest-plugin-loader-compat-layer",
       "name": "Issue #792 MacroQuest plugin loader and compatibility layer",
       "status": "in_progress",
-      "acceptance_tests": [
-        "cargo check -p textquest-dll --tests"
-      ],
+      "acceptance_tests": ["cargo check -p textquest-dll --tests"],
       "notes": "Initial scaffold adds MQ2 plugin discovery, per-plugin config defaults, a C-compatible TextQuest MQ2 host API table, an MQ2Bridge command trait implementation, and Windows-only DLL lifecycle loading hooks. Full binary API coverage, true native crash isolation, packet/datatype exports, and popular plugin validation remain follow-up work."
     },
     {
       "id": "issue-794-clickies-module-consumable-item-automation",
       "name": "Clickies module consumable/item automation",
       "status": "in_progress",
-      "acceptance_tests": [
-        "cargo check"
-      ],
+      "acceptance_tests": ["cargo check"],
       "notes": "PARTIAL: Added per-character ownership, enable/disable toggles, and combat/downtime scenario gating to the existing clickies manager. Remaining work includes live inventory detection and the in-game window surface."
     },
     {
       "id": "issue-793-hotkey-command-system",
       "name": "In-game hotkey system for scripts/plugins",
       "status": "in_progress",
-      "acceptance_tests": [
-        "cargo check -p textquest-dll --all-targets"
-      ],
+      "acceptance_tests": ["cargo check -p textquest-dll --all-targets"],
       "notes": "Partial DLL-side scaffold: global script/plugin slash-command registration and dispatch, built-in /textquest command listing, EQ-style hotkey parsing, command hotkey binding, and TOML persistence helpers. Lua/MQ2/runtime EQ UI hook integration remains follow-up work."
     },
     {
       "id": "issue-990-hotkey-slash-command-registration-system",
       "name": "Issue #990 hotkey and slash command registration system",
       "status": "in_progress",
-      "acceptance_tests": [
-        "cargo check"
-      ],
+      "acceptance_tests": ["cargo check"],
       "notes": "PARTIAL: Extended the orchestrator-side registry with checked hotkey/slash-command registration, Ctrl/Alt/Shift hotkey parsing, per-character scopes, enable/disable controls, command help metadata, required-argument validation, TOML persistence/validation, and Orchestrator-owned shared registries. DLL keyboard hooks and live IPC back-routing remain follow-up work."
     },
     {
@@ -182,9 +165,7 @@
       "id": "issue-975-performance-monitoring-dashboard",
       "name": "Issue #975 performance monitoring dashboard",
       "status": "in_progress",
-      "acceptance_tests": [
-        "cargo check"
-      ],
+      "acceptance_tests": ["cargo check"],
       "notes": "PARTIAL: Added a metrics-side performance dashboard snapshot API with combat, movement, loot, system placeholder, tab metadata, and simple alert aggregation. Full TUI rendering, SQLite history, live system telemetry producers, and richer anomaly detection remain follow-up work."
     },
     {
@@ -201,18 +182,14 @@
       "id": "issue-819-plugin-system-openvanilla-parity",
       "name": "Plugin system for extensibility",
       "status": "in_progress",
-      "acceptance_tests": [
-        "cargo check"
-      ],
+      "acceptance_tests": ["cargo check"],
       "notes": "Partial first-pass plugin scaffold: shared plugin trait, lifecycle registry, domain capability API, non-core inventory example crate, mkplugin scaffold script, and wiki design/API documentation. Dynamic dylib discovery and runtime host wiring remain follow-up work."
     },
     {
       "id": "issue-1139-sub-core-plugin-api-surface",
       "name": "Sub: Core Plugin API Surface (#819-3)",
       "status": "complete",
-      "acceptance_tests": [
-        "cargo check --package textquest"
-      ],
+      "acceptance_tests": ["cargo check --package textquest"],
       "notes": "Exposed core Lua plugin domains for combat, navigation, and state plus IPC, config, event, and logging integration points with runtime-backed tables and request queues. Added request metadata for IPC target box routing and docs/example coverage with error-handling pattern."
     },
     {
@@ -234,6 +211,20 @@
         "cargo check -p textquest"
       ],
       "notes": "PARTIAL: Added shared raid-wide member aggregation, deterministic group/camp snapshots, derived member-down and group-wipe events, command relay planning, and orchestrator snapshot wiring. Remaining work includes live distributed command dispatch, persisted raid event bus consumers, operator formation controls, and validation against 2+ live camps / 8+ characters."
+    },
+    {
+      "id": "issue-974-tui-help-panel-ui-navigation",
+      "name": "Issue #974 TUI Help Panel UI & Navigation",
+      "status": "complete",
+      "acceptance_tests": ["cargo check"],
+      "notes": "Wired the existing help search panel to /, q/Esc close, tab cycling across Commands/FAQ/Tips, result navigation, typed filtering, and Enter detail expansion. Cargo check also required two minimal pre-existing compile repairs in wishlist equality and Lua player snapshot table generation."
+    },
+    {
+      "id": "issue-993-enhanced-tui-error-messages-diagnostics",
+      "name": "Issue #993 enhanced TUI error messages and diagnostics",
+      "status": "in_progress",
+      "acceptance_tests": ["cargo check"],
+      "notes": "PARTIAL: Added TUI diagnostic state, warning/error code capture with suggestions, debug trace capture in debug builds, best-effort file logging, IPC failure counters, and a keyboard-accessible Ctrl+D/:diag diagnostics overlay. Full DLL throughput telemetry, richer memory snapshots, and complete recovery coverage remain follow-up work."
     }
   ]
 }
