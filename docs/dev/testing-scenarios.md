@@ -159,6 +159,35 @@ Verify that the automation chooses the least-loss retreat path when the survivab
 
 ## Running Scenarios
 
+## CI-Safe `TestScenario` Mocks
+
+The library test harness also exposes platform-independent mock implementations
+under `textquest::testing::scenarios::mocks` for unit and integration tests that
+need deterministic behavior without connecting to EverQuest, process memory, the
+filesystem, or the network.
+
+- `InstantScenario` returns immediate success with no metrics.
+- `CountdownScenario` sleeps for a configured duration and emits fixed countdown
+  metrics.
+- `FastFailScenario` fails after a short configurable delay.
+- `MetricTestScenario` returns caller-controlled metrics for aggregation tests.
+
+```rust
+use std::time::Duration;
+use textquest::testing::scenario::TestScenario;
+use textquest::testing::scenarios::mocks::{CountdownScenario, MetricTestScenario};
+
+# async fn example() {
+let mut countdown = CountdownScenario::new(Duration::from_millis(25));
+let result = countdown.run(Duration::from_secs(1)).await;
+assert!(result.success);
+
+let mut metrics = MetricTestScenario::standard();
+let result = metrics.run(Duration::from_secs(1)).await;
+assert!(result.metrics.contains_key("latency_ms"));
+# }
+```
+
 ### Run all scenario tests:
 
 ```bash
