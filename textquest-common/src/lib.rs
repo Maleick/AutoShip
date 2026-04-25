@@ -75,6 +75,8 @@ pub mod plugins;
 pub mod protocol;
 /// Raid-wide member aggregation, camp snapshots, events, and relay planning.
 pub mod raid;
+/// Crisis Response (CR) risk modeling — compute 0–1 risk scores per camp combining telemetry, PEQ signals, and GM activity.
+pub mod risk_model;
 /// Routing scope types for cross-client command dispatch (M8 Orchestrator).
 pub mod routing;
 /// Safe coordinate types for zone transition recovery and position validation.
