@@ -20,7 +20,6 @@ const ECONOMY_MAIN_MIN_WIDTH: u16 = 74;
 const ECONOMY_SIDEBAR_WIDTH: u16 = 44;
 const VENDOR_BANK_HEIGHT: u16 = 15;
 const ROSTER_MIN_HEIGHT: u16 = 8;
-const RULES_HEIGHT: u16 = 12;
 const LEDGER_MIN_HEIGHT: u16 = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,7 +112,7 @@ pub fn draw_economy_screen(frame: &mut Frame, area: Rect, app: &App) {
 
 fn economy_screen_areas(area: Rect) -> (EconomyLayoutMode, Rect, Rect) {
     if area.width < ECONOMY_STACK_WIDTH {
-        let sidebar_height = RULES_HEIGHT + LEDGER_MIN_HEIGHT;
+        let sidebar_height = LEDGER_MIN_HEIGHT;
         let main_min_height = VENDOR_BANK_HEIGHT + ROSTER_MIN_HEIGHT;
         let main_height = area
             .height
@@ -157,15 +156,7 @@ fn draw_economy_main_area(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_economy_sidebar_area(frame: &mut Frame, area: Rect, app: &App) {
-    let sidebar_rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(RULES_HEIGHT),
-            Constraint::Min(LEDGER_MIN_HEIGHT),
-        ])
-        .split(area);
-
-    draw_ledger_panel(frame, sidebar_rows[0], app);
+    draw_ledger_panel(frame, area, app);
 }
 
 fn draw_vendor_bank_panel(frame: &mut Frame, area: Rect, app: &App) {
@@ -367,64 +358,6 @@ fn draw_roster_panel(frame: &mut Frame, area: Rect, app: &App) {
         Table::new(rows, constraints).header(header).block(blk),
         area,
     );
-}
-
-/// Render the Rules panel (cyan border, sidebar).
-fn draw_rules_panel(frame: &mut Frame, area: Rect, app: &App) {
-    let t = &app.theme;
-
-    let border_style = Style::default().fg(t.text_accent); // cyan
-    let blk = panel(" Rules ", border_style, t);
-
-    let lines = vec![
-        Line::from(vec![
-            Span::styled(
-                "active rule set default.ron",
-                Style::default().fg(t.text_normal),
-            ),
-            Span::raw(" "),
-            Span::styled("(0 rules)", Style::default().fg(t.text_muted)),
-        ]),
-        Line::from(""),
-    ];
-
-    // Placeholder: show "No rules loaded"
-    lines.push(Line::from(Span::styled(
-        "No rules loaded",
-        Style::default().fg(t.text_muted),
-    )));
-
-    // Footer hints
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "rules load from ~/.config/textquest/economy/",
-        Style::default().fg(t.text_muted),
-    )));
-    lines.push(Line::from(vec![
-        Span::styled(
-            "e",
-            Style::default()
-                .fg(t.text_highlight)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" edit · "),
-        Span::styled(
-            "r",
-            Style::default()
-                .fg(t.text_highlight)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" reload · "),
-        Span::styled(
-            "t",
-            Style::default()
-                .fg(t.text_highlight)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" test"),
-    ]));
-
-    frame.render_widget(Paragraph::new(lines).block(blk), area);
 }
 
 /// Render the Ledger panel (magenta border, sidebar).
