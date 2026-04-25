@@ -10,6 +10,7 @@ import {
   KeyRound,
   Package,
   Server,
+  Sparkles,
   Users,
   UsersRound,
   Zap,

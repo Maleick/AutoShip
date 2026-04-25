@@ -5,6 +5,7 @@ import type {
   SessionControlRecord,
   VendorRoute,
 } from "./types.ts";
+import type { Suggestion } from "../types/suggestion.ts";
 
 export const MOCK_SESSIONS: SessionControlRecord[] = [
   {
@@ -376,5 +377,73 @@ export const MOCK_LOOT_HISTORY = [
     zone: "Greater Faydark",
     quantity: 3,
     assigned_by: undefined,
+  },
+];
+
+export const MOCK_SUGGESTIONS: Suggestion[] = [
+  {
+    id: "sugg-001",
+    tier: 1,
+    title: "Allocate secondary healer",
+    description:
+      "Cleric mana is consistently low. Consider adding backup healing to reduce strain.",
+    data: {
+      average_mana_pct: "42%",
+      incidents: 3,
+      group: "Group 1",
+    },
+    createdAt: "2026-04-25T10:30:00Z",
+    status: "pending",
+  },
+  {
+    id: "sugg-002",
+    tier: 1,
+    title: "Increase monk endurance buffs",
+    description: "Monk HP stays low during extended combat. Recommend buff rotation adjustment.",
+    data: {
+      average_hp_pct: "34%",
+      average_session_duration: "18m 45s",
+      near_death_incidents: 7,
+    },
+    createdAt: "2026-04-25T10:25:00Z",
+    status: "pending",
+  },
+  {
+    id: "sugg-003",
+    tier: 2,
+    title: "Optimize mage pulling pattern",
+    description: "Mage XP rate lower than similar composition. Different pull spacing may help.",
+    data: {
+      current_xp_rate: "23.5k/hr",
+      baseline: "28k/hr",
+      variance: "-16.1%",
+    },
+    createdAt: "2026-04-25T10:20:00Z",
+    status: "pending",
+  },
+  {
+    id: "sugg-004",
+    tier: 2,
+    title: "Review enchanter crowd control usage",
+    description: "Spell rotation may be suboptimal. Check mez priorities in current zone.",
+    data: {
+      average_cast_time: "3.2s",
+      mez_uptime: "67%",
+      improvement_potential: "12-15%",
+    },
+    createdAt: "2026-04-25T10:15:00Z",
+    status: "pending",
+  },
+  {
+    id: "sugg-005",
+    tier: 3,
+    title: "Consider group role rotation",
+    description: "Optional: switching positions may improve group cohesion in some encounters.",
+    data: {
+      flexibility_score: "7.3/10",
+      current_composition_effectiveness: "strong",
+    },
+    createdAt: "2026-04-25T10:10:00Z",
+    status: "pending",
   },
 ];
