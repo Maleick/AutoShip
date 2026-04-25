@@ -1,5 +1,23 @@
 # Research: Test Offset Reconciliation
 
+> **Historical runtime-proof notice (downgraded 2026-04-24 for #713)**
+>
+> Runtime claims in this document that cite `frostreaver` live-dump evidence
+> (e.g. `actor_class=3`, `pinstSpawnManager = 0`, `688`-spawn linked-list
+> enumeration, `instEQZoneInfo` blank-string observations) were drawn from a
+> runtime-proof bundle that was never archived to a stable canonical path.
+> The bundle is marked as **historical reference only** in
+> `TextQuest-Ghidra/snapshots/2026-04-10-runtime-proof/README.md`.
+>
+> Treat those specific runtime observations as **historical-only** until a
+> fresh live-Test capture is archived under `TextQuest-Ghidra/snapshots/`.
+> Static evidence from `TextQuest-Ghidra/test/*` exports and decompilations
+> remains authoritative and is unaffected by this notice.
+>
+> Patch-day verification must not rely on thread memory or operator
+> recollection of the unrecovered bundle; rerun `--dump` against the current
+> Windows build and archive the output before promoting any new runtime claim.
+
 ## Scope
 
 This run reconciles TextQuest's Test-client offset work against local evidence only.
@@ -92,7 +110,7 @@ Evidence:
 - `TextQuest-Ghidra/test/harvest-info.json`
 - `TextQuest-Ghidra/test/eqgame/ghidra-export/metadata.json`
 - `TextQuest-Ghidra/test/eqgame/decompiled/140309ad0_FUN_140309ad0.c`
-- local dump logs from frostreaver showing `actor_class=3`, `direct_class=0`, `pinstLocalPC` valid, and `pinstSpawnManager = 0`
+- local dump logs from frostreaver showing `actor_class=3`, `direct_class=0`, `pinstLocalPC` valid, and `pinstSpawnManager = 0` _(historical-only — unrecovered bundle; see notice at top)_
 
 ### Next blocker state
 
@@ -123,30 +141,30 @@ That pattern is useful for deciding what TextQuest should inspect after a patch,
 
 ### eqgame
 
-| Surface | Value | Evidence | Confidence | TextQuest action |
-| --- | --- | --- | --- | --- |
-| `PINST_LOCAL_PC` | `0x140EA9A68` | `140309ad0_FUN_140309ad0.c` gates player construction on `DAT_140ea9a68` and emits `LocalPC is NULL in Player constr. for %s` | High | Promoted in `textquest-common/src/offsets.rs` |
-| `character_zone::ME` | `0x2848` | `140309ad0_FUN_140309ad0.c` stores the constructed player pointer at `LocalPC + 0x2848` | High | Promoted in `textquest-common/src/offsets.rs`, `textquest-common/src/offset_db.rs`, and `config/offsets.json` |
-| `actor_client::RACE` | `0x0FF4` | Current Test/openvanilla reference headers place `PlayerClient::mActorClient` at `0x0FE0`; `Actors.h` keeps `ActorBase::Race` at `+0x14` | Medium | Promoted in `textquest-common/src/offsets.rs` and used for spawn class/race reads |
-| `actor_client::RACE_OVERRIDE` | `0x0FF8` | Same `mActorClient` + `ActorBase` derivation as above | Medium | Promoted in `textquest-common/src/offsets.rs` |
-| `actor_client::CHAR_CLASS` | `0x0FFC` | Same `mActorClient` + `ActorBase::Class` derivation as above; runtime dump showed `actor_class=3` while direct class was `0` for the local PAL | Medium-high | Promoted in `textquest-common/src/offsets.rs`; local-player class now resolves through actor class first |
-| `profile::CLASS` | `0x17CC` | Current Test/openvanilla `PcProfile.h` reference; used only as a fallback when live actor/direct class reads are absent | Medium | Promoted in `textquest-common/src/offsets.rs` and used as the local-player fallback |
-| `packetScrambler` | `0x140EA9A68` | Current send-path research still sees the same global in opcode-scrambler contexts, but the same object is also on the LocalPC/player-construction path | Medium | Kept as a research-facing name with explicit ambiguity noted |
-| `networkConnection` | `0x140EA9CF0` | Local GhidraMCP xref and disassembly checks on current Test | High | Already promoted |
-| `netSend` | `0x1405654E0` | Local GhidraMCP function lookup on current Test | High | Already promoted |
-| `opcodeScramblerHton` | `0x14067B9E0` | Local GhidraMCP function lookup on current Test | High | Already promoted |
+| Surface                       | Value         | Evidence                                                                                                                                                | Confidence  | TextQuest action                                                                                              |
+| ----------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------- |
+| `PINST_LOCAL_PC`              | `0x140EA9A68` | `140309ad0_FUN_140309ad0.c` gates player construction on `DAT_140ea9a68` and emits `LocalPC is NULL in Player constr. for %s`                           | High        | Promoted in `textquest-common/src/offsets.rs`                                                                 |
+| `character_zone::ME`          | `0x2848`      | `140309ad0_FUN_140309ad0.c` stores the constructed player pointer at `LocalPC + 0x2848`                                                                 | High        | Promoted in `textquest-common/src/offsets.rs`, `textquest-common/src/offset_db.rs`, and `config/offsets.json` |
+| `actor_client::RACE`          | `0x0FF4`      | Current Test/openvanilla reference headers place `PlayerClient::mActorClient` at `0x0FE0`; `Actors.h` keeps `ActorBase::Race` at `+0x14`                | Medium      | Promoted in `textquest-common/src/offsets.rs` and used for spawn class/race reads                             |
+| `actor_client::RACE_OVERRIDE` | `0x0FF8`      | Same `mActorClient` + `ActorBase` derivation as above                                                                                                   | Medium      | Promoted in `textquest-common/src/offsets.rs`                                                                 |
+| `actor_client::CHAR_CLASS`    | `0x0FFC`      | Same `mActorClient` + `ActorBase::Class` derivation as above; runtime dump showed `actor_class=3` while direct class was `0` for the local PAL          | Medium-high | Promoted in `textquest-common/src/offsets.rs`; local-player class now resolves through actor class first      |
+| `profile::CLASS`              | `0x17CC`      | Current Test/openvanilla `PcProfile.h` reference; used only as a fallback when live actor/direct class reads are absent                                 | Medium      | Promoted in `textquest-common/src/offsets.rs` and used as the local-player fallback                           |
+| `packetScrambler`             | `0x140EA9A68` | Current send-path research still sees the same global in opcode-scrambler contexts, but the same object is also on the LocalPC/player-construction path | Medium      | Kept as a research-facing name with explicit ambiguity noted                                                  |
+| `networkConnection`           | `0x140EA9CF0` | Local GhidraMCP xref and disassembly checks on current Test                                                                                             | High        | Already promoted                                                                                              |
+| `netSend`                     | `0x1405654E0` | Local GhidraMCP function lookup on current Test                                                                                                         | High        | Already promoted                                                                                              |
+| `opcodeScramblerHton`         | `0x14067B9E0` | Local GhidraMCP function lookup on current Test                                                                                                         | High        | Already promoted                                                                                              |
 
 ### eqmain
 
-| Surface | Value | Evidence | Confidence | TextQuest action |
-| --- | --- | --- | --- | --- |
-| `LOGIN_SERVER_API` | `0x1801804E0` | `18002fa10_FUN_18002fa10.c` gates on `DAT_1801804e0` and passes it to `JOIN_SERVER` | Medium-high | Promoted in `textquest-common/src/offsets.rs` |
-| `PINST_LOGIN_CLIENT` | `0x1801804F0` | `18000a0d0_FUN_18000a0d0.c` and `180009eb0_FUN_180009eb0.c` follow `DAT_1801804f0 -> pLoginData -> hEQWnd` | High | Promoted in `textquest-common/src/offsets.rs` |
-| `PINST_LOGIN_CONTROLLER` | `0x180180500` | `180011ef0_FUN_180011ef0.c` logs `g_pLoginController->GiveTime()` and calls `FUN_180016640(DAT_180180500)` | High | Promoted in `textquest-common/src/offsets.rs` |
-| `LOGIN_CONTROLLER_GIVE_TIME` | `0x180016640` | Present in current Test export and called from `180011ef0_FUN_180011ef0.c` | High | Kept |
-| `JOIN_SERVER` | `0x180018050` | Present in current Test export and called from `18002fa10_FUN_18002fa10.c` | High | Kept |
-| `EQLOGIN_HWND` | `0x408` | Verified in current Test decompilation | High | Kept |
-| `CEDITBASEWND_INPUT_TEXT` | `0x278` | Verified in `18002e490_FUN_18002e490.c` | High | Kept |
+| Surface                      | Value         | Evidence                                                                                                   | Confidence  | TextQuest action                              |
+| ---------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------- | ----------- | --------------------------------------------- |
+| `LOGIN_SERVER_API`           | `0x1801804E0` | `18002fa10_FUN_18002fa10.c` gates on `DAT_1801804e0` and passes it to `JOIN_SERVER`                        | Medium-high | Promoted in `textquest-common/src/offsets.rs` |
+| `PINST_LOGIN_CLIENT`         | `0x1801804F0` | `18000a0d0_FUN_18000a0d0.c` and `180009eb0_FUN_180009eb0.c` follow `DAT_1801804f0 -> pLoginData -> hEQWnd` | High        | Promoted in `textquest-common/src/offsets.rs` |
+| `PINST_LOGIN_CONTROLLER`     | `0x180180500` | `180011ef0_FUN_180011ef0.c` logs `g_pLoginController->GiveTime()` and calls `FUN_180016640(DAT_180180500)` | High        | Promoted in `textquest-common/src/offsets.rs` |
+| `LOGIN_CONTROLLER_GIVE_TIME` | `0x180016640` | Present in current Test export and called from `180011ef0_FUN_180011ef0.c`                                 | High        | Kept                                          |
+| `JOIN_SERVER`                | `0x180018050` | Present in current Test export and called from `18002fa10_FUN_18002fa10.c`                                 | High        | Kept                                          |
+| `EQLOGIN_HWND`               | `0x408`       | Verified in current Test decompilation                                                                     | High        | Kept                                          |
+| `CEDITBASEWND_INPUT_TEXT`    | `0x278`       | Verified in `18002e490_FUN_18002e490.c`                                                                    | High        | Kept                                          |
 
 ### EQGraphics
 
@@ -200,7 +218,7 @@ These surfaces still exist in the binary, but they were not promoted in this run
   - callback hit `already_initialized`
   - `initialize()` panicked
   - tracing initialized but token or IPC startup stalled
-- Current live frostreaver dump evidence before the process exited:
+- Historical frostreaver dump evidence (unrecovered bundle — see notice at top; retained for context, not for promotion):
   - `pinstLocalPlayer = 0`
   - `pinstLocalPC` and `LocalPC->me` valid
   - local player resolved as `Xuramtine (PAL)` from `actor_class=3` while direct class stayed `0`
@@ -231,13 +249,13 @@ These surfaces still exist in the binary, but they were not promoted in this run
 
 ### Proof matrix (local evidence + expected runtime signals)
 
-| Surface | Evidence source | Runtime check | Expected |
-| --- | --- | --- | --- |
-| Zone long/short source selection | `TextQuest-Ghidra/test/harvest-info.json` + local dump logs | `textquest.exe --dump` zone diagnostics | Source label is `inst_direct`, `inst_indirect`, or `zone_guide`; only `none` when all reads fail |
-| Zone fallback hardening | `instEQZoneInfo` direct/indirect blank behavior from prior Test dumps | TUI selected-client zone field while attached | No silent collapse to stale `Unknown`; fallback source is traceable |
-| Target pane completeness | `pinstTarget` Test instability evidence + local-player identity chain proof | TUI Character panel target line | Target text present or explicit reason suffix (`invalid_pointer`, `read_failed`, `self_target_fallback`) |
-| Class source sanity | Local dump evidence (`actor_class=3`, `direct_class=0`, profile fallback) | CLI dump `Local player class sources` | Actor class preferred; profile remains local-player fallback |
-| Stand/class projection sanity | Shared-state `SpawnData` and TUI player snapshot | `--status PID` + Character panel | Class ID and stand-state stay non-empty/observable even when target/zone are degraded |
+| Surface                          | Evidence source                                                             | Runtime check                                 | Expected                                                                                                 |
+| -------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Zone long/short source selection | `TextQuest-Ghidra/test/harvest-info.json` + local dump logs                 | `textquest.exe --dump` zone diagnostics       | Source label is `inst_direct`, `inst_indirect`, or `zone_guide`; only `none` when all reads fail         |
+| Zone fallback hardening          | `instEQZoneInfo` direct/indirect blank behavior from prior Test dumps       | TUI selected-client zone field while attached | No silent collapse to stale `Unknown`; fallback source is traceable                                      |
+| Target pane completeness         | `pinstTarget` Test instability evidence + local-player identity chain proof | TUI Character panel target line               | Target text present or explicit reason suffix (`invalid_pointer`, `read_failed`, `self_target_fallback`) |
+| Class source sanity              | Local dump evidence (`actor_class=3`, `direct_class=0`, profile fallback)   | CLI dump `Local player class sources`         | Actor class preferred; profile remains local-player fallback                                             |
+| Stand/class projection sanity    | Shared-state `SpawnData` and TUI player snapshot                            | `--status PID` + Character panel              | Class ID and stand-state stay non-empty/observable even when target/zone are degraded                    |
 
 ## Next Checklist
 
@@ -245,3 +263,4 @@ These surfaces still exist in the binary, but they were not promoted in this run
 2. Rebind `PINST_SPAWN_MANAGER` and `spawn_manager::PLAYER_LIST` from local Test evidence.
 3. Rebind the unresolved `eqgame` hook functions from local Test evidence.
 4. Only after those proofs exist, widen the shared snapshot schema further.
+5. Archive the next live-Test dump under `TextQuest-Ghidra/snapshots/<date>-runtime-proof/` with a `manifest.json` before promoting any runtime observation, so claims stay reproducible without operator recollection (replaces the unrecovered 2026-04-10 bundle; see notice at top and #713).
