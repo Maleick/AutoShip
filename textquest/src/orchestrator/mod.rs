@@ -47,6 +47,7 @@ use textquest_common::{
     character_config::{CharacterConfigMap, RewardAutomationConfig, load_character_configs},
     combat::HateTargetCategory,
     ipc::{ChatMessageInfo, Command, Response, SessionControlCommand, SessionToken},
+    raid::{RaidMemberInput, RaidSnapshot, RaidStateAggregator},
     routing::RoutingScope,
     shared_client_state::{SharedClientState, extended_state_enabled},
     spawn_finder::{LiveSpawnObserver, LiveSpawnSnapshot},
@@ -229,6 +230,10 @@ pub struct Orchestrator {
     cross_group: CrossGroupCoordinator,
     /// Cross-group outside-group assist (MQ2XAssist parity).
     xassist: XAssist,
+    /// Raid-wide state aggregator for multi-camp coordination surfaces.
+    raid_state: RaidStateAggregator,
+    /// Last raid snapshot built from live client state.
+    last_raid_snapshot: RaidSnapshot,
     /// Say channel detection and alerting (MQ2Say parity).
     say_detector: SayDetector,
     /// Alert routing and delivery configuration for say detection.
@@ -300,6 +305,8 @@ impl Orchestrator {
             chat_log_poll_interval: Duration::from_secs(1),
             cross_group: CrossGroupCoordinator::new(),
             xassist: XAssist::new(),
+            raid_state: RaidStateAggregator::new(STALE_TICK_THRESHOLD),
+            last_raid_snapshot: RaidSnapshot::default(),
             say_detector: SayDetector::new(),
             say_detection_config: crate::config::SayDetectionConfig::default(),
             say_detection_webhook: None,
@@ -365,6 +372,40 @@ impl Orchestrator {
         if all_sent {
             self.last_shared_client_states = states;
         }
+    }
+
+    fn build_raid_member_inputs(&self) -> Vec<RaidMemberInput<'_>> {
+        self.client_pids
+            .iter()
+            .filter_map(|pid| {
+                let state = self.game_states.get(pid)?;
+                let stale_ticks = self
+                    .state_timestamps
+                    .get(pid)
+                    .map(|last_update| self.tick_count.saturating_sub(*last_update));
+                Some(RaidMemberInput {
+                    client_id: *pid,
+                    character_name: self.client_names.get(pid).map(String::as_str),
+                    group_id: self.client_group(*pid).unwrap_or(0),
+                    state,
+                    stale_ticks,
+                })
+            })
+            .collect()
+    }
+
+    fn sync_raid_snapshot(&mut self) {
+        let snapshot = {
+            let inputs = self.build_raid_member_inputs();
+            self.raid_state.aggregate(self.tick_count, inputs)
+        };
+        self.last_raid_snapshot = snapshot;
+    }
+
+    /// Return the latest raid-wide state snapshot.
+    #[must_use]
+    pub fn raid_snapshot(&self) -> &RaidSnapshot {
+        &self.last_raid_snapshot
     }
 
     /// Get the latest game state for a client PID.
@@ -640,6 +681,7 @@ impl Orchestrator {
             self.sync_reward_automation_configs();
         }
         self.sync_runtime_snapshots();
+        self.sync_raid_snapshot();
         self.poll_trade_chat_if_due();
         self.poll_chat_log_if_due();
         let say_matches = self.poll_and_evaluate_say_detection();

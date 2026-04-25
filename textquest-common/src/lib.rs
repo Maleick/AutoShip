@@ -71,6 +71,8 @@ pub mod persistence;
 pub mod plugins;
 /// Wire protocol definitions for serialized IPC messages.
 pub mod protocol;
+/// Raid-wide member aggregation, camp snapshots, events, and relay planning.
+pub mod raid;
 /// Routing scope types for cross-client command dispatch (M8 Orchestrator).
 pub mod routing;
 /// Safe coordinate types for zone transition recovery and position validation.

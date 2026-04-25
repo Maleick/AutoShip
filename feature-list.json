@@ -216,32 +216,14 @@
       "notes": "PARTIAL: Added shared EQBC-line parsing/serialization, native relay event variants for tell/channel forwarding, relay-side auto-detection for legacy EQBC-line peers, and protocol documentation. Full OpenVanilla/MQ2EQBC handshake compatibility, DLL chat-hook publishing, and external tool validation remain follow-up work."
     },
     {
-      "id": "issue-845-hud-customization-window-management",
-      "name": "Issue #845 HUD customization and window management",
+      "id": "issue-838-raid-and-multi-group-coordination",
+      "name": "Issue #838 raid and multi-group coordination",
       "status": "in_progress",
       "acceptance_tests": [
-        "cargo check -p textquest-dll",
-        "cargo check -p textquest-dll --tests"
+        "cargo check -p textquest-common --tests",
+        "cargo check -p textquest"
       ],
-      "notes": "PARTIAL: Added tools/etw-consumer with CLI parsing, ETW-TI keyword masks, process-name filtering, JSONL serialization, pipe wire decoding for current and legacy headers, Windows-gated StartTraceW/EnableTraceEx2/OpenTraceW/ProcessTrace/TDH runtime, named-pipe reader, driver IOCTL start/stop wrapper, README setup notes, and 13 unit tests that compile. Live ETW/provider and loaded-driver validation still requires a patched Windows VM."
-    },
-    {
-      "id": "issue-974-tui-help-panel-ui-navigation",
-      "name": "Issue #974 TUI Help Panel UI & Navigation",
-      "status": "complete",
-      "acceptance_tests": [
-        "cargo check"
-      ],
-      "notes": "Wired the existing help search panel to /, q/Esc close, tab cycling across Commands/FAQ/Tips, result navigation, typed filtering, and Enter detail expansion. Cargo check also required two minimal pre-existing compile repairs in wishlist equality and Lua player snapshot table generation."
-    },
-    {
-      "id": "issue-1243",
-      "name": "Test Infrastructure: Testing documentation and guidelines",
-      "status": "complete",
-      "acceptance_tests": [
-        "cargo check"
-      ],
-      "notes": "Added comprehensive testing documentation in docs/dev/testing.md covering test organization, naming, data fixtures, mocking, assertions, module-specific examples, coverage expectations, and benchmark guidance."
+      "notes": "PARTIAL: Added shared raid-wide member aggregation, deterministic group/camp snapshots, derived member-down and group-wipe events, command relay planning, and orchestrator snapshot wiring. Remaining work includes live distributed command dispatch, persisted raid event bus consumers, operator formation controls, and validation against 2+ live camps / 8+ characters."
     }
   ]
 }
