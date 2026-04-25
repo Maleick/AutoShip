@@ -913,6 +913,25 @@ impl Default for LogConfig {
     }
 }
 
+/// Self-improvement loop configuration for Bayesian suggestion engine.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct ImprovementConfig {
+    /// Enable Bayesian tier for the suggestion engine.
+    pub bayesian_tier_enabled: bool,
+    /// Path to the posteriors database (relative to working directory).
+    pub posteriors_db_path: String,
+}
+
+impl Default for ImprovementConfig {
+    fn default() -> Self {
+        Self {
+            bayesian_tier_enabled: false,
+            posteriors_db_path: "data/posteriors.db".to_string(),
+        }
+    }
+}
+
 fn default_process_name() -> String {
     "eqgame.exe".to_string()
 }
@@ -968,6 +987,7 @@ impl AppConfig {
             kill_tracker: KillTrackerConfig::default(),
             say_detection: SayDetectionConfig::default(),
             log: LogConfig::default(),
+            improve: ImprovementConfig::default(),
         }
     }
 }

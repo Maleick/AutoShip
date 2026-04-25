@@ -72,6 +72,8 @@ pub mod inject;
 pub mod ipc;
 /// EQ item database, TLP loot tables, wishlists, and loot history.
 pub mod loot;
+/// Self-improvement loop — Bayesian posteriors for suggestion engine.
+pub mod improvement;
 /// Fleet metrics — SQLite-backed storage for events, DPS, loot, lockouts, plat.
 #[cfg(windows)]
 pub mod metrics;
