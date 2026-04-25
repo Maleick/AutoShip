@@ -76,6 +76,28 @@ pub fn line_width(line: &Line<'_>) -> usize {
     line.width()
 }
 
+/// Build a status pill widget (capsule-style badge) for header status indicators.
+/// Returns a vector of spans with bold uppercase text and accent color.
+/// Color is determined by the label type: magenta for HUNT, cyan for PALETTE, etc.
+#[must_use]
+pub fn status_pill(label: &str, t: &Theme) -> Vec<Span<'static>> {
+    let fg_color = match label {
+        "HUNT" => Color::Magenta,
+        "CAMP" => Color::Cyan,
+        "PALETTE" | "⌘K PALETTE" => Color::Cyan,
+        "VISIBLE" => t.text_accent,
+        _ => t.text_muted,
+    };
+
+    let uppercase = label.to_uppercase();
+    vec![Span::styled(
+        format!(" {} ", uppercase),
+        Style::default()
+            .fg(fg_color)
+            .add_modifier(Modifier::BOLD),
+    )]
+}
+
 /// Build a centered popup rect with bounded margins on small terminals.
 #[must_use]
 #[allow(clippy::too_many_arguments)]

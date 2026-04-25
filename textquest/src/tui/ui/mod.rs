@@ -717,22 +717,12 @@ fn build_status_right(app: &App, width_class: WidthClass, max_width: usize) -> V
     let t = &app.theme;
     let mut spans = Vec::new();
 
-    // Mode pill: inverse style (magenta bg for HUNT, cyan bg for CAMP)
+    // Mode pill: status badge with accent color (magenta for HUNT, cyan for CAMP)
     let mode_str = format!("{}", app.operating_mode);
-    let mode_bg = match mode_str.as_str() {
-        "Camp" => t.mode_camp,
-        "Hunt" => t.mode_hunt,
-        _ => t.text_muted,
-    };
+    let pill = widgets::status_pill(&mode_str, t);
     let _ = push_segment_if_fits(
         &mut spans,
-        vec![Span::styled(
-            format!(" {} ", mode_str),
-            Style::default()
-                .fg(Color::Black)
-                .bg(mode_bg)
-                .add_modifier(Modifier::BOLD),
-        )],
+        pill,
         max_width,
     );
 
