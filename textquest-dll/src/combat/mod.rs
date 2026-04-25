@@ -1,4 +1,5 @@
 pub mod ability_cooldowns;
+pub mod bandit_runtime;
 pub mod aggro;
 pub mod buffs;
 pub mod charm_config;
