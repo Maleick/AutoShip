@@ -174,6 +174,8 @@ struct FaqHelpFile {
     faqs: Vec<FaqEntry>,
     #[serde(default)]
     tips: Vec<TipEntry>,
+    #[serde(default)]
+    tutorials: Vec<TutorialEntry>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -207,12 +209,22 @@ struct TipEntry {
     tags: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct TutorialEntry {
+    id: String,
+    title: String,
+    steps: Vec<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
 #[derive(Debug)]
 struct HelpDatabase {
     commands: Vec<HelpCommand>,
     faqs: Vec<FaqEntry>,
     tips: Vec<TipEntry>,
     search_index: Vec<HelpSearchDocument>,
+    tutorials: Vec<TutorialEntry>,
 }
 
 impl HelpDatabase {
@@ -232,6 +244,7 @@ impl HelpDatabase {
             faqs,
             tips,
             search_index,
+            tutorials: faq_file.tutorials,
         })
     }
 
@@ -260,6 +273,14 @@ impl HelpDatabase {
         self.search(&HelpSearchQuery::new(query).with_category(HelpSearchCategory::Tip))
             .into_iter()
             .filter_map(|result| self.tip_result(&result))
+            .collect()
+    }
+
+    fn tutorial_matches(&self, query: &str) -> Vec<&TutorialEntry> {
+        let query = normalized_search(query);
+        self.tutorials
+            .iter()
+            .filter(|tutorial| tutorial.matches_search(&query))
             .collect()
     }
 
@@ -728,6 +749,18 @@ impl TipEntry {
     }
 }
 
+impl TutorialEntry {
+    fn matches_search(&self, query: &str) -> bool {
+        searchable_contains(
+            query,
+            [self.id.as_str(), self.title.as_str()]
+                .into_iter()
+                .chain(self.steps.iter().map(String::as_str))
+                .chain(self.tags.iter().map(String::as_str)),
+        )
+    }
+}
+
 /// A registered command definition.
 pub struct CommandDef {
     /// Canonical path (e.g. `/nav waypoint`).
@@ -955,6 +988,7 @@ impl CommandRegistry {
             Some("search") => builtin_search_message(&tokens[2..]),
             Some("faq") | Some("faqs") => builtin_faq_message(&tokens[2..]),
             Some("tip") | Some("tips") => builtin_tips_message(&tokens[2..]),
+            Some("tutorial") | Some("tutorials") => builtin_tutorial_message(&tokens[2..]),
             Some("config") | Some("guide") => builtin_config_message(&tokens[2..]),
             Some("commands") | Some("list_commands") => {
                 let mut paths = help_database()
@@ -1063,7 +1097,7 @@ fn help_unavailable_message() -> String {
 
 fn builtin_search_message(args: &[&str]) -> String {
     if args.is_empty() {
-        return "Usage: /mercs search <text> [category:commands|faq|tips] [tag:<tag>]\nSearches commands, FAQ entries, and tips."
+        return "Usage: /mercs search <text> [category:commands|faq|tips] [tag:<tag>]\nSearches commands, FAQ entries, tips, and tutorials."
             .to_string();
     }
 
@@ -1097,8 +1131,9 @@ fn builtin_search_message(args: &[&str]) -> String {
             }
         }
     }
+    let tutorials = database.tutorial_matches(&query);
 
-    if commands.is_empty() && faqs.is_empty() && tips.is_empty() {
+    if commands.is_empty() && faqs.is_empty() && tips.is_empty() && tutorials.is_empty() {
         return format!("No help results found for '{query}'. Full docs: docs/wiki/");
     }
 
@@ -1125,6 +1160,13 @@ fn builtin_search_message(args: &[&str]) -> String {
         lines.push("Tips:".to_string());
         for tip in tips {
             lines.push(format!("  [{}] {}", tip.context, tip.text));
+        }
+    }
+
+    if !tutorials.is_empty() {
+        lines.push("Tutorials:".to_string());
+        for tutorial in tutorials {
+            lines.push(format!("  {} - {}", tutorial.id, tutorial.title));
         }
     }
 
@@ -1217,6 +1259,37 @@ fn builtin_tips_message(args: &[&str]) -> String {
     lines.join("\n")
 }
 
+fn builtin_tutorial_message(args: &[&str]) -> String {
+    let Ok(database) = help_database() else {
+        return help_unavailable_message();
+    };
+
+    if args.is_empty() {
+        let mut lines = vec![
+            "First-time tutorials".to_string(),
+            "Use /mercs tutorial <text> to open a tutorial without alt-tabbing.".to_string(),
+        ];
+        for tutorial in &database.tutorials {
+            lines.push(format!("  {} - {}", tutorial.id, tutorial.title));
+        }
+        lines.push("Full docs: docs/wiki/Quick-Start.md".to_string());
+        return lines.join("\n");
+    }
+
+    let query = args.join(" ");
+    let matches = database.tutorial_matches(&query);
+    if matches.is_empty() {
+        return format!("No tutorials found for '{query}'. Try /mercs tutorial.");
+    }
+
+    let mut lines = vec![format!("Tutorial search: {query}")];
+    for tutorial in matches {
+        lines.push(format_tutorial_entry(tutorial));
+    }
+    lines.push("Full docs: docs/wiki/Quick-Start.md".to_string());
+    lines.join("\n\n")
+}
+
 fn builtin_config_message(args: &[&str]) -> String {
     let Ok(database) = help_database() else {
         return help_unavailable_message();
@@ -1284,7 +1357,7 @@ fn format_help_overview(root: &str, database: &HelpDatabase, registry: &CommandR
     let mut lines = vec![
         "TextQuest in-game help".to_string(),
         format!(
-            "Usage: /{root} help <command>, /{root} search <text>, /{root} faq [text], /{root} tips [context], /{root} config [text]"
+            "Usage: /{root} help <command>, /{root} search <text>, /{root} faq [text], /{root} tips [context], /{root} tutorial [text], /{root} config [text]"
         ),
         "Commands:".to_string(),
     ];
@@ -1337,6 +1410,14 @@ fn format_help_command(command: &HelpCommand) -> String {
 
 fn format_faq_entry(faq: &FaqEntry) -> String {
     format!("Q: {}\nA: {}", faq.question, faq.answer.trim())
+}
+
+fn format_tutorial_entry(tutorial: &TutorialEntry) -> String {
+    let mut lines = vec![format!("Tutorial: {}", tutorial.title)];
+    for (index, step) in tutorial.steps.iter().enumerate() {
+        lines.push(format!("{}. {}", index + 1, step.trim()));
+    }
+    lines.join("\n")
 }
 
 fn searchable_contains<'a>(query: &str, fields: impl IntoIterator<Item = &'a str>) -> bool {
@@ -1915,6 +1996,37 @@ mod tests {
                 assert!(message.contains("Use 'pause' to stop automation"));
             }
             other => panic!("expected FAQ message, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn builtin_mercs_tutorial_search_returns_steps() {
+        let reg = CommandRegistry::new();
+
+        let result = reg.dispatch("/mercs tutorial first camp");
+
+        match result {
+            CommandResult::Message(message) => {
+                assert!(message.contains("Tutorial search: first camp"));
+                assert!(message.contains("Start the first camp loop"));
+                assert!(message.contains("Run /mercs camp on"));
+            }
+            other => panic!("expected tutorial message, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn builtin_mercs_search_includes_tutorials() {
+        let reg = CommandRegistry::new();
+
+        let result = reg.dispatch("/mercs search recovery");
+
+        match result {
+            CommandResult::Message(message) => {
+                assert!(message.contains("Tutorials:"));
+                assert!(message.contains("safe-recovery"));
+            }
+            other => panic!("expected search message, got {other:?}"),
         }
     }
 

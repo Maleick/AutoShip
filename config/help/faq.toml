@@ -72,6 +72,30 @@ Monitor live prices in the Economy tab (press E from the dashboard).
 """
 tags = ["economy", "krono", "farm", "vendor"]
 
+# ─── First-Time Tutorials ────────────────────────────────────────────────────
+
+[[tutorials]]
+id = "first-camp"
+title = "Start the first camp loop"
+steps = [
+  "Run /mercs help camp to review camp modes.",
+  "Run /mercs group build after every expected character is connected.",
+  "Run /mercs camp buff to refresh long buffs before pulling.",
+  "Run /mercs camp on once the group is at camp and ready.",
+]
+tags = ["tutorial", "first-time", "camp", "setup"]
+
+[[tutorials]]
+id = "safe-recovery"
+title = "Pause and recover safely"
+steps = [
+  "Run /mercs pause immediately when a client is stuck, zoning, or manually controlled.",
+  "Use /mercs faq zone for stuck-zone recovery steps.",
+  "Confirm every client is back in the expected zone and group.",
+  "Run /mercs resume only after manual recovery is complete.",
+]
+tags = ["tutorial", "first-time", "safety", "recovery"]
+
 # ─── Tips ─────────────────────────────────────────────────────────────────────
 
 [[tips]]
