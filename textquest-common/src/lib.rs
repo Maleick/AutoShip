@@ -101,3 +101,5 @@ pub mod window_management;
 pub mod window_title;
 /// Zone transition retry logic with exponential backoff.
 pub mod zone_transition;
+/// Self-improvement loop — event recording, aggregation, and heuristic suggestions.
+pub mod self_improvement;

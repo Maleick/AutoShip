@@ -160,6 +160,8 @@ pub struct AppState {
     pub session_control_state: Arc<api::session_control::SessionControlState>,
     /// In-memory session logs keyed by session_id for the admin log tail API.
     pub session_logs: tokio::sync::RwLock<HashMap<u32, Vec<String>>>,
+    /// Self-improvement suggestions state — events, metrics, and operator feedback.
+    pub self_improvement_state: Arc<api::self_improvement::SelfImprovementState>,
 }
 
 /// Axum middleware: enforce `X-API-Token` header on all `/api` routes.
@@ -523,6 +525,7 @@ fn build_state() -> Arc<AppState> {
         ),
         session_control_state: api::session_control::SessionControlState::new(),
         session_logs: tokio::sync::RwLock::new(HashMap::new()),
+        self_improvement_state: Arc::new(api::self_improvement::SelfImprovementState::new()),
     })
 }
 
@@ -606,6 +609,7 @@ pub(crate) fn test_app_state() -> AppState {
         ),
         session_control_state: api::session_control::SessionControlState::new(),
         session_logs: tokio::sync::RwLock::new(HashMap::new()),
+        self_improvement_state: Arc::new(api::self_improvement::SelfImprovementState::new()),
     }
 }
 
@@ -820,6 +824,15 @@ fn build_api_router() -> Router<Arc<AppState>> {
         )
         // Admin Sessions API
         .nest("/admin/sessions", api::admin_sessions::router())
+        // Self-Improvement API — event recording, suggestion generation, operator feedback
+        .route("/improvement/events", post(api::self_improvement::record_event))
+        .route("/improvement/suggestions", get(api::self_improvement::get_suggestions))
+        .route("/improvement/analyze/:session_id", post(api::self_improvement::analyze_session))
+        .route("/improvement/accept/:id", post(api::self_improvement::accept_suggestion))
+        .route("/improvement/reject/:id", post(api::self_improvement::reject_suggestion))
+        .route("/improvement/apply/:id", post(api::self_improvement::apply_suggestion))
+        .route("/improvement/undo/:id", post(api::self_improvement::undo_suggestion))
+        .route("/improvement/metrics/:session_id", post(api::self_improvement::update_session_metrics))
         .fallback(api::api_not_found)
 }
 

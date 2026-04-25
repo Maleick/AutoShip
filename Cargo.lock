@@ -4244,6 +4244,7 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "chrono",
  "criterion",
  "nix",
  "paste",

@@ -22,8 +22,17 @@ import { Credentials } from "./pages/Credentials.tsx";
 import { Characters } from "./pages/Characters.tsx";
 import { Loot } from "./pages/Loot.tsx";
 import { Economy } from "./pages/Economy.tsx";
+import { Improvement } from "./pages/Improvement.tsx";
 
-type Tab = "dashboard" | "sessions" | "groups" | "loot" | "economy" | "characters" | "credentials";
+type Tab =
+  | "dashboard"
+  | "sessions"
+  | "groups"
+  | "loot"
+  | "economy"
+  | "characters"
+  | "credentials"
+  | "improvement";
 
 interface NavItem {
   id: Tab;
@@ -35,6 +44,7 @@ const NAV: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: Activity },
   { id: "sessions", label: "Sessions", icon: Server },
   { id: "groups", label: "Groups", icon: UsersRound },
+  { id: "improvement", label: "Improvement", icon: Zap },
   { id: "loot", label: "Loot", icon: Package },
   { id: "economy", label: "Economy", icon: Coins },
   { id: "characters", label: "Characters", icon: Users },
@@ -209,6 +219,7 @@ export default function App() {
           {tab === "dashboard" && <Dashboard />}
           {tab === "sessions" && <Sessions />}
           {tab === "groups" && <Groups />}
+          {tab === "improvement" && <Improvement />}
           {tab === "loot" && <Loot />}
           {tab === "economy" && <Economy />}
           {tab === "characters" && <Characters />}
