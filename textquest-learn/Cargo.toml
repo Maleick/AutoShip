@@ -17,6 +17,9 @@ tracing-subscriber.workspace = true
 ndarray = "0.16"
 bincode.workspace = true
 
+[features]
+runtime-only = []
+
 [[bin]]
 name = "textquest-learn"
 path = "src/main.rs"
