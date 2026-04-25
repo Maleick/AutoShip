@@ -95,6 +95,8 @@ pub mod tradeskill_trophy;
 pub mod types;
 /// Struct size/range validation helpers.
 pub mod validation;
+/// Window placement, layout persistence, and external HUD integration contracts.
+pub mod window_management;
 /// EQ window title formatting helpers shared by the orchestrator and DLL.
 pub mod window_title;
 /// Zone transition retry logic with exponential backoff.
