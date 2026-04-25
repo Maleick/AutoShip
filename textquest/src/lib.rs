@@ -36,6 +36,8 @@ pub mod combat;
 pub mod command_dispatch;
 /// TOML configuration loading.
 pub mod config;
+/// Config export/import via base64 strings (rgmercs `rg_config_share` parity, gap #5).
+pub mod config_share;
 /// Crash reporting and session recovery — per-character context snapshots and
 /// recovery commands.
 #[cfg(windows)]
@@ -112,6 +114,9 @@ pub mod zoning;
 
 /// Operator utilities — clipboard export and persistent scratchpad.
 pub mod operator_utils;
+
+/// Runtime non-persistent setting overrides — rgmercs `tempset` parity (gap #3).
+pub mod tempset;
 
 /// Plugin discovery and loading — MQ2-compatible DLL plugin infrastructure.
 pub mod plugins;

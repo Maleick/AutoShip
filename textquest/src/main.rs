@@ -261,6 +261,76 @@ enum Commands {
         #[command(subcommand)]
         action: CredentialAction,
     },
+
+    // ── Runtime overrides (gap #3: tempset) ───────────────────────────
+    /// Apply a non-persistent runtime override for one setting (rgmercs `tempset` parity)
+    Tempset {
+        /// Target character name
+        character: String,
+        /// Setting key (e.g. "rest_mana_pct")
+        knob: String,
+        /// New value (string; parsed by the receiving subsystem)
+        value: String,
+    },
+    /// Remove one non-persistent runtime override
+    Cleartempset {
+        /// Target character name
+        character: String,
+        /// Setting key to clear
+        knob: String,
+    },
+    /// Remove all non-persistent runtime overrides for a character
+    Cleartempall {
+        /// Target character name
+        character: String,
+    },
+
+    // ── Burn now (gap #11) ────────────────────────────────────────────
+    /// Immediately trigger the burn rotation on a character
+    #[command(name = "burn-now")]
+    BurnNow {
+        /// Target character name
+        character: String,
+    },
+
+    // ── Class mode switching (gap #10) ────────────────────────────────
+    /// Switch a character to a named class mode (e.g. "Tank", "DPS")
+    Setmode {
+        /// Target character name
+        character: String,
+        /// Mode name (must exist in the class config modes list)
+        mode: String,
+    },
+
+    // ── Pull mode switching (gap #2) ──────────────────────────────────
+    /// Switch the puller FSM operating mode for a client
+    #[command(name = "set-pull-mode")]
+    SetPullMode {
+        /// Target PID
+        pid: u32,
+        /// Pull mode: normal, chain, hunt, or farm
+        mode: String,
+    },
+
+    // ── Cross-client setting push (gap #4: set_peer/set_all) ──────────
+    /// Push a setting override to one named peer client
+    #[command(name = "set-peer")]
+    SetPeer {
+        /// Target character name
+        peer: String,
+        /// Setting key
+        key: String,
+        /// New value
+        value: String,
+    },
+    /// Push a setting override to ALL connected clients
+    #[command(name = "set-all")]
+    SetAll {
+        /// Setting key
+        key: String,
+        /// New value
+        value: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -296,6 +366,26 @@ enum ConfigAction {
     },
     /// Print the resolved configuration
     Show,
+    /// Export a module config as a base64 share string (gap #5)
+    Export {
+        /// Module name to export (e.g. "warrior", "pull", "camp")
+        #[arg(long)]
+        module: String,
+        /// Path to the TOML file to export (default: config/classes/<module>.toml)
+        #[arg(long)]
+        path: Option<String>,
+    },
+    /// Import a base64 share string and apply it (gap #5)
+    Import {
+        /// Base64 share string produced by `config export`
+        share_string: String,
+        /// Path to write the imported config to (default: config/classes/<module>.toml)
+        #[arg(long)]
+        path: Option<String>,
+        /// Apply without confirmation prompt
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -466,7 +556,41 @@ fn main() -> Result<()> {
         Some(Commands::Config { action }) => match action {
             ConfigAction::Check { path } => cli::run_config_check_mode(path.as_deref()),
             ConfigAction::Show => cli::run_config_show_mode(),
+            ConfigAction::Export { module, path } => {
+                cli::run_config_export_mode(&module, path.as_deref())
+            }
+            ConfigAction::Import {
+                share_string,
+                path,
+                yes,
+            } => cli::run_config_import_mode(&share_string, path.as_deref(), yes),
         },
+
+        // Runtime overrides (gap #3)
+        Some(Commands::Tempset {
+            character,
+            knob,
+            value,
+        }) => cli::run_tempset_mode(&character, &knob, &value),
+        Some(Commands::Cleartempset { character, knob }) => {
+            cli::run_cleartempset_mode(&character, &knob)
+        }
+        Some(Commands::Cleartempall { character }) => cli::run_cleartempall_mode(&character),
+
+        // Burn now (gap #11)
+        Some(Commands::BurnNow { character }) => cli::run_burn_now_mode(&character),
+
+        // Class mode switching (gap #10)
+        Some(Commands::Setmode { character, mode }) => cli::run_setmode_mode(&character, &mode),
+
+        // Pull mode switching (gap #2)
+        Some(Commands::SetPullMode { pid, mode }) => cli::run_set_pull_mode(&mode, pid),
+
+        // Cross-client setting push (gap #4)
+        Some(Commands::SetPeer { peer, key, value }) => {
+            cli::run_set_peer_mode(&peer, &key, &value)
+        }
+        Some(Commands::SetAll { key, value }) => cli::run_set_all_mode(&key, &value),
 
         // Credentials
         Some(Commands::Credential { action }) => match action {

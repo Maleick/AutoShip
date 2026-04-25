@@ -203,8 +203,8 @@ impl FindRouter {
             .into_iter()
             .map(|entry| entry.definition.name)
             .collect();
-        names.sort_by_key(normalize_name);
-        names.dedup_by_key(normalize_name);
+        names.sort_by_key(|s| normalize_name(s));
+        names.dedup_by_key(|s| normalize_name(s));
         Ok(names)
     }
 
@@ -669,10 +669,6 @@ pub fn gather_at_portal(destination_zone: &str) -> Result<TravelStep> {
 /// Returns an error if config loading fails or no portal action is known.
 pub fn summon_group(destination_zone: &str) -> Result<TravelStep> {
     TravelCoordinator::load_default()?.summon_group(destination_zone)
-}
-
-fn normalize_zone(zone: &str) -> String {
-    zone.trim().to_ascii_lowercase()
 }
 
 fn nav_step(

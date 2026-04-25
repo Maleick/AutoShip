@@ -4,6 +4,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use textquest_common::combat::{BurnRotation, ClassModeDecl};
 
 /// A single ability a class can use.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -97,6 +98,20 @@ pub struct ClassConfig {
     /// Bard twist interval in seconds (only meaningful for bards).
     #[serde(default)]
     pub twist_interval_secs: Option<f32>,
+    /// Available runtime modes for this class (rgmercs gap #10).
+    ///
+    /// Examples: SHD `["Tank", "DPS"]`, SHM `["Heal", "Hybrid"]`.
+    /// Switch with `Command::SetMode { mode }`. Fires `on_mode_change`
+    /// slash commands on transition.
+    #[serde(default)]
+    pub modes: Vec<ClassModeDecl>,
+    /// Current active mode name.  `None` = no modes declared / default.
+    #[serde(default)]
+    pub active_mode: Option<String>,
+    /// Burn rotation — fires when `BurnNow` is received or
+    /// `BurnRotation::auto_burn_hp_threshold` is crossed (gap #11).
+    #[serde(default)]
+    pub burn_rotation: BurnRotation,
 }
 
 fn default_rest_command() -> String {

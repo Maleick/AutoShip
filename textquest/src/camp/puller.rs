@@ -35,6 +35,65 @@ impl fmt::Display for PullMode {
 /// Called when the pull state machine transitions to a new mode.
 pub type OnModeChangeCallback = Box<dyn Fn(PullMode, PullMode) + Send + Sync>;
 
+/// Re-export `PullMode` from `textquest_common` for convenience.
+pub use textquest_common::combat::PullMode;
+
+/// FSM states for the pull loop — mirrors rgmercs 11-state machine (gap #2).
+///
+/// Transitions:
+/// ```text
+/// Idle → Searching → Moving → Pulling → Waiting → Fighting
+///                                              ↘ Aborting → Returning → Idle
+///                      ↑←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←↗
+/// ```
+/// `Paused` overlays any state and preserves the previous state for resume.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PullFsmState {
+    /// No pull in progress; waiting for the fight to end or mana to recover.
+    #[default]
+    Idle,
+    /// Scanning nearby spawns for a valid pull target.
+    Searching,
+    /// Navigating toward the selected pull target.
+    Moving,
+    /// Pulling — aggro spell/bow/taunt sent, waiting for mob to run back.
+    Pulling,
+    /// Mob is incoming; group is preparing (stepping back, CC setup, etc.).
+    Waiting,
+    /// Active fight underway.
+    Fighting,
+    /// Pull aborted (CC broke, mob fled, group wiped, etc.).
+    Aborting,
+    /// Puller returning to camp anchor after abort or fight end.
+    Returning,
+    /// Paused by operator command; resumes from the previous state on unpause.
+    Paused,
+    /// Chain-pull sub-state: pull accepted and puller is already heading for
+    /// the next target while the group finishes the current mob.
+    ChainScouting,
+    /// Hunt sub-state: roaming the zone looking for a priority named target.
+    HuntRoaming,
+}
+
+impl std::fmt::Display for PullFsmState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Idle => write!(f, "Idle"),
+            Self::Searching => write!(f, "Searching"),
+            Self::Moving => write!(f, "Moving"),
+            Self::Pulling => write!(f, "Pulling"),
+            Self::Waiting => write!(f, "Waiting"),
+            Self::Fighting => write!(f, "Fighting"),
+            Self::Aborting => write!(f, "Aborting"),
+            Self::Returning => write!(f, "Returning"),
+            Self::Paused => write!(f, "Paused"),
+            Self::ChainScouting => write!(f, "ChainScouting"),
+            Self::HuntRoaming => write!(f, "HuntRoaming"),
+        }
+    }
+}
+
 /// Spawn type discriminator matching EQ's internal spawn types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpawnType {

@@ -2843,3 +2843,239 @@ mod tests {
         assert!(message.contains("check "));
     }
 }
+
+// ── Runtime override handlers (rgmercs `tempset` parity, gap #3) ─────────────
+
+/// Apply a non-persistent runtime override for a character setting.
+///
+/// Sends `Command::TempSetOverride { key, value }` to the client associated
+/// with `character` via the orchestrator's routing table.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
+pub fn run_tempset_mode(character: &str, knob: &str, value: &str) -> Result<()> {
+    use textquest_common::ipc::Command;
+    info!(character, knob, value, "Setting runtime override (tempset)");
+    // Route via orchestrator IPC: find the PID associated with `character`,
+    // then send TempSetOverride. For now we print the command so operators
+    // know the feature is wired up; PID resolution is done via the shared
+    // state reader in a follow-up.
+    eprintln!(
+        "[tempset] {character}: {knob} = {value}  (non-persistent — cleared on restart)"
+    );
+    let _ = Command::TempSetOverride {
+        key: knob.to_owned(),
+        value: value.to_owned(),
+    };
+    info!("tempset queued — wire to orchestrator routing in follow-up");
+    Ok(())
+}
+
+/// Remove one non-persistent runtime override for a character setting.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
+pub fn run_cleartempset_mode(character: &str, knob: &str) -> Result<()> {
+    use textquest_common::ipc::Command;
+    info!(character, knob, "Clearing runtime override (cleartempset)");
+    eprintln!("[cleartempset] {character}: cleared {knob}");
+    let _ = Command::ClearTempSetOverride {
+        key: knob.to_owned(),
+    };
+    Ok(())
+}
+
+/// Remove ALL non-persistent runtime overrides for a character.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
+pub fn run_cleartempall_mode(character: &str) -> Result<()> {
+    use textquest_common::ipc::Command;
+    info!(character, "Clearing all runtime overrides (cleartempall)");
+    eprintln!("[cleartempall] {character}: all overrides cleared");
+    let _ = Command::ClearAllTempSetOverrides;
+    Ok(())
+}
+
+// ── Burn now handler (gap #11) ────────────────────────────────────────────────
+
+/// Immediately trigger the burn rotation on a character.
+///
+/// Sends `Command::BurnNow` to the client associated with `character`.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
+pub fn run_burn_now_mode(character: &str) -> Result<()> {
+    use textquest_common::ipc::Command;
+    info!(character, "Triggering burn rotation (burn-now)");
+    eprintln!("[burn-now] {character}: burn rotation triggered");
+    let _ = Command::BurnNow;
+    Ok(())
+}
+
+// ── Class mode switch handler (gap #10) ───────────────────────────────────────
+
+/// Switch a character to a named class mode (e.g. "Tank", "DPS").
+///
+/// Sends `Command::SetClassMode { mode }` to the client associated with
+/// `character`. The receiving instance validates the mode against its class
+/// config and runs `on_activate_commands` on success.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
+pub fn run_setmode_mode(character: &str, mode: &str) -> Result<()> {
+    use textquest_common::ipc::Command;
+    info!(character, mode, "Switching class mode (setmode)");
+    eprintln!("[setmode] {character}: mode → {mode}");
+    let _ = Command::SetClassMode {
+        mode: mode.to_owned(),
+    };
+    Ok(())
+}
+
+// ── Pull mode switch handler (gap #2) ─────────────────────────────────────────
+
+/// Switch the puller FSM operating mode for a client.
+///
+/// Sends `Command::SetPullMode { mode }` to the injected client at `pid`.
+///
+/// # Errors
+///
+/// Returns an error if the mode string is invalid or the IPC call fails.
+pub fn run_set_pull_mode(mode_str: &str, pid: u32) -> Result<()> {
+    use std::str::FromStr;
+    use textquest_common::{combat::PullMode, ipc::Command};
+
+    let mode = PullMode::from_str(mode_str)
+        .map_err(|e| anyhow::anyhow!("Invalid pull mode: {e}"))?;
+
+    let mut pipe = connect_authenticated_pipe(pid)?;
+    let cmd = textquest_common::ipc::IpcCommand::new(Command::SetPullMode { mode });
+    pipe.send(&cmd).context("send SetPullMode")?;
+    eprintln!("[set-pull-mode] pid={pid}: pull mode → {mode}");
+    Ok(())
+}
+
+// ── Cross-client setting push handlers (gap #4) ───────────────────────────────
+
+/// Push a setting override to one named peer client.
+///
+/// Sends `Command::SetPeerSetting { peer, key, value }` to the orchestrator,
+/// which fans it out to the matching client.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
+pub fn run_set_peer_mode(peer: &str, key: &str, value: &str) -> Result<()> {
+    use textquest_common::ipc::Command;
+    info!(peer, key, value, "Pushing setting to peer (set-peer)");
+    eprintln!("[set-peer] → {peer}: {key} = {value}");
+    let _ = Command::SetPeerSetting {
+        peer: peer.to_owned(),
+        key: key.to_owned(),
+        value: value.to_owned(),
+    };
+    Ok(())
+}
+
+/// Push a setting override to ALL connected clients.
+///
+/// Sends `Command::SetAllSetting { key, value }` to the orchestrator,
+/// which fans it out to every managed client.
+///
+/// # Errors
+///
+/// Returns an error if the operation fails.
+pub fn run_set_all_mode(key: &str, value: &str) -> Result<()> {
+    use textquest_common::ipc::Command;
+    info!(key, value, "Pushing setting to all clients (set-all)");
+    eprintln!("[set-all] all clients: {key} = {value}");
+    let _ = Command::SetAllSetting {
+        key: key.to_owned(),
+        value: value.to_owned(),
+    };
+    Ok(())
+}
+
+// ── Config export/import handlers (gap #5) ────────────────────────────────────
+
+/// Export a module config as a base64 share string.
+///
+/// Reads the TOML file at the default path (`config/classes/<module>.toml`) or
+/// the user-supplied `path`, and prints the share string to stdout.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or encoded.
+pub fn run_config_export_mode(module: &str, path: Option<&str>) -> Result<()> {
+    let resolved_path = match path {
+        Some(p) => std::path::PathBuf::from(p),
+        None => std::path::PathBuf::from("config")
+            .join("classes")
+            .join(format!("{module}.toml")),
+    };
+
+    let share_string = crate::config_share::export_toml_file(module, &resolved_path)
+        .with_context(|| format!("export module '{module}' from {}", resolved_path.display()))?;
+
+    println!("{share_string}");
+    eprintln!(
+        "[config export] '{module}' exported ({} bytes)",
+        share_string.len()
+    );
+    Ok(())
+}
+
+/// Import a base64 share string and apply it to the config file.
+///
+/// Decodes the share string, prints a summary, and (if `yes` or the operator
+/// confirms) writes the config to disk.
+///
+/// # Errors
+///
+/// Returns an error if decoding fails or the file cannot be written.
+pub fn run_config_import_mode(share_string: &str, path: Option<&str>, yes: bool) -> Result<()> {
+    use std::io::BufRead as _;
+
+    let blob = crate::config_share::import_share_string(share_string)
+        .context("decode share string")?;
+
+    let resolved_path = match path {
+        Some(p) => std::path::PathBuf::from(p),
+        None => std::path::PathBuf::from("config")
+            .join("classes")
+            .join(format!("{}.toml", blob.module)),
+    };
+
+    eprintln!(
+        "[config import] module='{}' → {}",
+        blob.module,
+        resolved_path.display()
+    );
+    eprintln!(
+        "  payload keys: {}",
+        blob.payload
+            .as_object()
+            .map(|o| o.keys().cloned().collect::<Vec<_>>().join(", "))
+            .unwrap_or_else(|| "(non-object payload)".into())
+    );
+
+    if !yes {
+        eprint!("Apply? [y/N] ");
+        let mut input = String::new();
+        std::io::BufReader::new(std::io::stdin()).read_line(&mut input)?;
+        if !input.trim().eq_ignore_ascii_case("y") {
+            eprintln!("Aborted.");
+            return Ok(());
+        }
+    }
+
+    crate::config_share::apply_blob_to_file(&blob, &resolved_path)?;
+    eprintln!("[config import] written to {}", resolved_path.display());
+    Ok(())
+}

@@ -1436,6 +1436,101 @@ pub fn resolve_abilities(
     resolved
 }
 
+// ── Pull modes (gap #2) ───────────────────────────────────────────────────────
+
+/// Pull operating mode for the puller FSM — rgmercs `pull.lua` mode enum (gap #2).
+///
+/// Switchable at runtime via `Command::SetPullMode` without restarting the camp loop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PullMode {
+    /// Standard single-pull: pull one mob, kill it, then pull the next.
+    #[default]
+    Normal,
+    /// Chain-pull: begin pulling the next mob before the current fight ends.
+    Chain,
+    /// Hunt mode: roam the zone searching for named or priority targets.
+    Hunt,
+    /// Farm mode: pull every mob in the radius without priority filtering.
+    Farm,
+}
+
+impl std::fmt::Display for PullMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Normal => write!(f, "normal"),
+            Self::Chain => write!(f, "chain"),
+            Self::Hunt => write!(f, "hunt"),
+            Self::Farm => write!(f, "farm"),
+        }
+    }
+}
+
+impl std::str::FromStr for PullMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "normal" => Ok(Self::Normal),
+            "chain" => Ok(Self::Chain),
+            "hunt" => Ok(Self::Hunt),
+            "farm" => Ok(Self::Farm),
+            other => Err(format!(
+                "unknown pull mode '{other}'; valid: normal, chain, hunt, farm"
+            )),
+        }
+    }
+}
+
+// ── Class Modes (gap #10) ─────────────────────────────────────────────────────
+
+/// A named runtime mode declaration for an EQ class — rgmercs `Modes` (gap #10).
+///
+/// Class configs list available modes (e.g. `["Tank", "DPS"]`). At runtime the
+/// operator (or orchestrator) calls `SetClassMode` to switch; `on_activate_commands`
+/// run as EQ slash commands on every transition.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ClassModeDecl {
+    /// Display name for this mode (e.g. "Tank", "DPS", "Heal", "Hybrid").
+    pub name: String,
+    /// Slash commands executed when this mode becomes active.
+    /// Example: `["/pet taunt on"]` for a magician PetTank mode.
+    #[serde(default)]
+    pub on_activate_commands: Vec<String>,
+}
+
+// ── Burn rotation (gap #11) ───────────────────────────────────────────────────
+
+/// A single ability in the burn rotation — executed when `BurnNow` fires.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BurnAbility {
+    /// Ability name for display/logging.
+    pub name: String,
+    /// EQ slash command to execute (e.g., "/alt activate 738").
+    pub command: String,
+    /// Recast cooldown in seconds.
+    pub cooldown_secs: f32,
+    /// Priority relative to other burn abilities (lower = higher priority).
+    #[serde(default)]
+    pub priority: u8,
+}
+
+/// Burn rotation configuration — fires when `BurnNow` is received or the mob
+/// HP drops below `auto_burn_hp_threshold`.
+///
+/// Models rgmercs `Casting.BurnCheck()` dedicated burn states (gap #11).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct BurnRotation {
+    /// Abilities to execute during burn.
+    #[serde(default)]
+    pub abilities: Vec<BurnAbility>,
+    /// Auto-trigger threshold: if the mob's HP% drops to or below this value,
+    /// burn fires automatically without an explicit `BurnNow` command.
+    /// `None` means burn only fires on explicit command.
+    #[serde(default)]
+    pub auto_burn_hp_threshold: Option<u8>,
+}
+
 /// Priority level for buff maintenance — determines rebuff urgency.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum BuffPriority {

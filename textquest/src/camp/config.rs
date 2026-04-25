@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use textquest_common::combat::PullMode;
 
 /// Configuration for a single XP camp location.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -46,6 +47,10 @@ pub struct CampConfig {
     /// Camp file name to fall back to (reverse progression).
     #[serde(default)]
     pub prev_camp: Option<String>,
+    /// Pull strategy mode — controls macro-level pull behavior (gap #2).
+    /// Switchable at runtime via web UI or `set_peer`.
+    #[serde(default)]
+    pub pull_mode: PullMode,
 }
 
 impl CampConfig {
