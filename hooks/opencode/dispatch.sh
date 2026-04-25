@@ -29,6 +29,15 @@ ROUTING_FILE="$AUTOSHIP_DIR/model-routing.json"
 ISSUE_KEY="issue-${ISSUE_NUM}"
 WORKSPACE_PATH="$AUTOSHIP_DIR/workspaces/$ISSUE_KEY"
 
+if [[ -f "$STATE_FILE" ]] && jq -e --arg key "$ISSUE_KEY" '(.issues[$key].terminal_failure // false) == true or (.issues[$key].retry_eligible // true) == false' "$STATE_FILE" >/dev/null 2>&1; then
+  mkdir -p "$WORKSPACE_PATH"
+  printf 'BLOCKED\n' > "$WORKSPACE_PATH/status"
+  reason=$(jq -r --arg key "$ISSUE_KEY" '.issues[$key].escalation_reason // "retry limit reached"' "$STATE_FILE" 2>/dev/null || echo "retry limit reached")
+  printf '%s\n' "$reason" > "$WORKSPACE_PATH/BLOCKED_REASON.txt"
+  echo "BLOCKED $ISSUE_KEY: $reason"
+  exit 0
+fi
+
 max_agents=$(jq -r '.config.maxConcurrentAgents // .max_concurrent_agents // empty' "$STATE_FILE" 2>/dev/null || true)
 if [[ -z "$max_agents" && -f "$AUTOSHIP_DIR/config.json" ]]; then
   max_agents=$(jq -r '.maxConcurrentAgents // .max_agents // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)

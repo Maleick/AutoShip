@@ -82,18 +82,20 @@ touch -t 202604230000 "$STATE_REPO/.autoship/workspaces/issue-752/AUTOSHIP_RESUL
 touch -t 202604240000 "$STATE_REPO/.autoship/workspaces/issue-752/started_at"
 
 bash "$SCRIPT_DIR/reconcile-state.sh" --repo "$STATE_REPO" >/dev/null
-assert_eq "completed" "$(jq -r '.issues["issue-746"].state' "$STATE_REPO/.autoship/state.json")" "COMPLETE workspace reconciles to completed"
+assert_eq "verifying" "$(jq -r '.issues["issue-746"].state' "$STATE_REPO/.autoship/state.json")" "COMPLETE workspace reconciles to verifying"
 assert_eq "blocked" "$(jq -r '.issues["issue-749"].state' "$STATE_REPO/.autoship/state.json")" "BLOCKED workspace reconciles to blocked"
 assert_eq "running" "$(jq -r '.issues["issue-750"].state' "$STATE_REPO/.autoship/state.json")" "RUNNING workspace remains running"
 assert_eq "queued" "$(jq -r '.issues["issue-751"].state' "$STATE_REPO/.autoship/state.json")" "QUEUED workspace remains queued"
+assert_eq "stuck" "$(jq -r '.issues["issue-752"].state' "$STATE_REPO/.autoship/state.json")" "STUCK workspace reconciles to stuck"
 assert_eq "false" "$(jq -r '.issues["issue-752"].has_result' "$STATE_REPO/.autoship/state.json")" "stale result older than started_at is ignored"
-assert_eq "1" "$(jq -r '.stats.session_completed' "$STATE_REPO/.autoship/state.json")" "reconcile increments completion stats"
+assert_eq "0" "$(jq -r '.stats.session_completed // 0' "$STATE_REPO/.autoship/state.json")" "reconcile does not count completion before review"
 assert_eq "1" "$(jq -r '.stats.blocked' "$STATE_REPO/.autoship/state.json")" "reconcile increments blocked stats"
+assert_eq "1" "$(jq -r '.stats.failed' "$STATE_REPO/.autoship/state.json")" "reconcile increments failed stats for stuck workspaces"
 
 STATUS_OUTPUT=$(bash "$SCRIPT_DIR/status.sh" --repo "$STATE_REPO")
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'AGENTS (1 active / 15 max)' >/dev/null || fail "status shows active/max concurrency"
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Queued:    1' >/dev/null || fail "status shows queued count"
-printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Completed: 1' >/dev/null || fail "status shows completed count"
+printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Completed: 0' >/dev/null || fail "status shows completed count"
 printf '%s\n' "$STATUS_OUTPUT" | grep -F 'Blocked:   1' >/dev/null || fail "status shows blocked count"
 
 NO_RUNNING_REPO="$TMP_DIR/no-running-repo"
@@ -141,6 +143,11 @@ assert_eq "STUCK" "$(tr -d '[:space:]' < "$RUNNER_REPO/.autoship/workspaces/issu
 if grep -F 'ENV_LEAK' "$RUNNER_REPO/.autoship/workspaces/issue-996/AUTOSHIP_RUNNER.log" >/dev/null 2>&1; then
   fail "runner must unset parent OpenCode session environment before nested opencode run"
 fi
+for _ in 1 2 3 4 5; do
+  artifact_count=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' 2>/dev/null | wc -l | tr -d '[:space:]')
+  [[ "$artifact_count" != "0" ]] && break
+  sleep 1
+done
 artifact_count=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' 2>/dev/null | wc -l | tr -d '[:space:]')
 for _ in 1 2 3 4 5; do
   [[ "$artifact_count" != "0" ]] && break
@@ -151,6 +158,47 @@ assert_eq "1" "$artifact_count" "runner captures a stuck worker failure artifact
 artifact_file=$(find "$RUNNER_REPO/.autoship/failures" -name '*-issue-996.json' | head -1)
 jq -e '.issue == "issue-996" and .model == "opencode/test-free" and .role == "implementer" and .workspace != "" and .hook == "hooks/opencode/runner.sh" and .failure_category == "stuck" and (.logs | contains("ok")) and .attempt == 2' "$artifact_file" >/dev/null || fail "failure artifact includes issue, model, workspace, hook, logs, category, role, and attempt"
 test -s "$RUNNER_REPO/.autoship/workspaces/issue-996/worker.pid" || fail "runner records worker pid for lifecycle monitoring"
+
+RETRY_REPO="$TMP_DIR/retry-limit-repo"
+mkdir -p "$RETRY_REPO/.autoship/workspaces/issue-181" "$RETRY_REPO/.autoship/failures" "$RETRY_REPO/hooks/opencode" "$RETRY_REPO/hooks"
+git init -q "$RETRY_REPO"
+cp "$SCRIPT_DIR/../update-state.sh" "$RETRY_REPO/hooks/update-state.sh"
+cp "$SCRIPT_DIR/dispatch.sh" "$RETRY_REPO/hooks/opencode/dispatch.sh"
+chmod +x "$RETRY_REPO/hooks/update-state.sh" "$RETRY_REPO/hooks/opencode/dispatch.sh"
+cat > "$RETRY_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-181":{"state":"running","attempt":3,"model":"opencode/test","role":"implementer"}},"stats":{},"config":{"maxConcurrentAgents":15,"maxRetries":3}}
+JSON
+cat > "$RETRY_REPO/.autoship/failures/20260424T010000Z-issue-181.json" <<'JSON'
+{"failure_id":"20260424T010000Z-issue-181","issue":"issue-181","failure_category":"failed_verification","error_summary":"tests failed","attempt":3,"timestamp":"2026-04-24T01:00:00Z"}
+JSON
+(
+  cd "$RETRY_REPO"
+  bash hooks/update-state.sh set-failed issue-181 escalation_reason="failed verification after retry limit" >/dev/null
+)
+jq -e '.issues["issue-181"].state == "blocked"
+  and .issues["issue-181"].retry_count == 3
+  and .issues["issue-181"].retry_limit == 3
+  and .issues["issue-181"].retry_eligible == false
+  and .issues["issue-181"].terminal_failure == true
+  and .issues["issue-181"].escalation_reason == "failed verification after retry limit"
+  and (.issues["issue-181"].failure_evidence.failure_file | endswith("20260424T010000Z-issue-181.json"))
+  and .issues["issue-181"].failure_evidence.failure_category == "failed_verification"
+  and .issues["issue-181"].failure_evidence.error_summary == "tests failed"' "$RETRY_REPO/.autoship/state.json" >/dev/null || fail "set-failed records terminal retry exhaustion evidence"
+dispatch_output=$(cd "$RETRY_REPO" && bash hooks/opencode/dispatch.sh 181 medium_code)
+printf '%s\n' "$dispatch_output" | grep -F 'failed verification after retry limit' >/dev/null || fail "dispatch blocks terminal retry-exhausted issue"
+assert_eq "BLOCKED" "$(tr -d '[:space:]' < "$RETRY_REPO/.autoship/workspaces/issue-181/status")" "terminal retry-exhausted issue remains blocked instead of redispatched"
+
+printf '{broken json' > "$RETRY_REPO/.autoship/failures/20260424T020000Z-issue-182.json"
+jq '.issues["issue-182"] = {"state":"running","attempt":2}' "$RETRY_REPO/.autoship/state.json" > "$RETRY_REPO/.autoship/state.json.tmp" && mv "$RETRY_REPO/.autoship/state.json.tmp" "$RETRY_REPO/.autoship/state.json"
+(
+  cd "$RETRY_REPO"
+  bash hooks/update-state.sh set-failed issue-182 error_summary="malformed artifact fallback" >/dev/null
+)
+jq -e '.issues["issue-182"].retry_count == 2
+  and .issues["issue-182"].retry_limit == 3
+  and .issues["issue-182"].retry_eligible == true
+  and .issues["issue-182"].terminal_failure == false
+  and .issues["issue-182"].failure_evidence.error_summary == "malformed artifact fallback"' "$RETRY_REPO/.autoship/state.json" >/dev/null || fail "set-failed falls back to synthesized evidence before retry limit"
 
 FALLBACK_REPO="$TMP_DIR/fallback-runner-repo"
 mkdir -p "$FALLBACK_REPO/.autoship/workspaces/issue-208" "$FALLBACK_REPO/hooks/opencode" "$FALLBACK_REPO/hooks" "$FALLBACK_REPO/bin"
@@ -190,7 +238,7 @@ chmod +x "$FALLBACK_REPO/bin/opencode"
   cd "$FALLBACK_REPO"
   PATH="$FALLBACK_REPO/bin:$PATH" bash hooks/opencode/runner.sh >/dev/null
 )
-for _ in 1 2 3 4 5; do
+for _ in 1 2 3 4 5 6 7 8 9 10; do
   [[ "$(tr -d '[:space:]' < "$FALLBACK_REPO/.autoship/workspaces/issue-208/status")" != "RUNNING" ]] && break
   sleep 1
 done
@@ -253,7 +301,7 @@ cp "$SCRIPT_DIR/process-event-queue.sh" "$QUEUE_REPO/hooks/opencode/process-even
 cp "$SCRIPT_DIR/../update-state.sh" "$QUEUE_REPO/hooks/update-state.sh"
 chmod +x "$QUEUE_REPO/hooks/opencode/process-event-queue.sh" "$QUEUE_REPO/hooks/update-state.sh"
 cat > "$QUEUE_REPO/.autoship/state.json" <<'JSON'
-{"repo":"owner/repo","issues":{"issue-991":{"state":"running"},"issue-992":{"state":"running"}},"stats":{}}
+{"repo":"owner/repo","issues":{"issue-991":{"state":"running"},"issue-992":{"state":"running"},"issue-993":{"state":"running"}},"stats":{}}
 JSON
 printf '{"sessions":[]}' > "$QUEUE_REPO/.autoship/token-ledger.json"
 cat > "$QUEUE_REPO/.autoship/event-queue.json" <<'JSON'
@@ -261,7 +309,9 @@ cat > "$QUEUE_REPO/.autoship/event-queue.json" <<'JSON'
   {"type":"blocked","issue":"issue-991","priority":2,"data":{"status":"BLOCKED"},"queued_at":"2026-04-24T00:00:00Z"},
   {"type":"blocked","issue":"issue-991","priority":2,"data":{"status":"BLOCKED"},"queued_at":"2026-04-24T00:00:01Z"},
   {"type":"verify","issue":"issue-992","priority":2,"data":{"status":"COMPLETE"},"queued_at":"2026-04-24T00:00:02Z"},
-  {"type":"verify","issue":"issue-992","priority":2,"data":{"status":"COMPLETE"},"queued_at":"2026-04-24T00:00:03Z"}
+  {"type":"verify","issue":"issue-992","priority":2,"data":{"status":"COMPLETE"},"queued_at":"2026-04-24T00:00:03Z"},
+  {"type":"stuck","issue":"issue-993","priority":2,"data":{"status":"STUCK"},"queued_at":"2026-04-24T00:00:04Z"},
+  {"type":"stuck","issue":"issue-993","priority":2,"data":{"status":"STUCK"},"queued_at":"2026-04-24T00:00:05Z"}
 ]
 JSON
 (
@@ -269,11 +319,169 @@ JSON
   bash hooks/opencode/process-event-queue.sh >/dev/null
 )
 assert_eq "blocked" "$(jq -r '.issues["issue-991"].state' "$QUEUE_REPO/.autoship/state.json")" "event processor applies blocked event"
-assert_eq "completed" "$(jq -r '.issues["issue-992"].state' "$QUEUE_REPO/.autoship/state.json")" "event processor applies verify event"
+assert_eq "verifying" "$(jq -r '.issues["issue-992"].state' "$QUEUE_REPO/.autoship/state.json")" "event processor advances COMPLETE event to verification"
+assert_eq "stuck" "$(jq -r '.issues["issue-993"].state' "$QUEUE_REPO/.autoship/state.json")" "event processor applies stuck event"
 assert_eq "1" "$(jq -r '.stats.blocked' "$QUEUE_REPO/.autoship/state.json")" "duplicate blocked events do not double-update stats"
-assert_eq "1" "$(jq -r '.stats.session_completed' "$QUEUE_REPO/.autoship/state.json")" "duplicate verify events do not double-update completion stats"
+assert_eq "0" "$(jq -r '.stats.session_completed // 0' "$QUEUE_REPO/.autoship/state.json")" "verify events do not count completion before review"
+assert_eq "1" "$(jq -r '.stats.failed' "$QUEUE_REPO/.autoship/state.json")" "duplicate stuck events do not double-update failed stats"
 assert_eq "0" "$(jq 'length' "$QUEUE_REPO/.autoship/event-queue.json")" "event processor drains processed duplicate events"
-assert_eq "2" "$(jq 'length' "$QUEUE_REPO/.autoship/processed-events.json")" "event processor records only unique semantic events"
+assert_eq "3" "$(jq 'length' "$QUEUE_REPO/.autoship/processed-events.json")" "event processor records only unique semantic events"
+
+VERIFY_FAIL_REPO="$TMP_DIR/verify-fail-repo"
+mkdir -p "$VERIFY_FAIL_REPO/.autoship/workspaces/issue-184" "$VERIFY_FAIL_REPO/hooks/opencode" "$VERIFY_FAIL_REPO/hooks" "$VERIFY_FAIL_REPO/bin"
+git init -q "$VERIFY_FAIL_REPO"
+git -C "$VERIFY_FAIL_REPO" config user.email autoship@example.invalid
+git -C "$VERIFY_FAIL_REPO" config user.name AutoShip
+printf 'base\n' > "$VERIFY_FAIL_REPO/README.md"
+git -C "$VERIFY_FAIL_REPO" add README.md
+git -C "$VERIFY_FAIL_REPO" commit -q -m initial
+git -C "$VERIFY_FAIL_REPO" checkout -q -b autoship/issue-184
+printf 'changed\n' > "$VERIFY_FAIL_REPO/feature.txt"
+cp "$SCRIPT_DIR/process-event-queue.sh" "$VERIFY_FAIL_REPO/hooks/opencode/process-event-queue.sh"
+cp "$SCRIPT_DIR/pr-title.sh" "$VERIFY_FAIL_REPO/hooks/opencode/pr-title.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$VERIFY_FAIL_REPO/hooks/update-state.sh"
+chmod +x "$VERIFY_FAIL_REPO/hooks/opencode/process-event-queue.sh" "$VERIFY_FAIL_REPO/hooks/opencode/pr-title.sh" "$VERIFY_FAIL_REPO/hooks/update-state.sh"
+cat > "$VERIFY_FAIL_REPO/hooks/opencode/reviewer.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'VERDICT: FAIL\n'
+exit 1
+SH
+chmod +x "$VERIFY_FAIL_REPO/hooks/opencode/reviewer.sh"
+cat > "$VERIFY_FAIL_REPO/bin/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "pr create" ]]; then
+  printf 'pr create called\n' >> "$GH_PR_LOG"
+  exit 0
+fi
+if [[ "$1 $2" == "issue view" && "$*" == *"title"* ]]; then
+  printf 'Create PR after verified PASS\n'
+  exit 0
+fi
+if [[ "$1 $2" == "issue view" && "$*" == *"labels"* ]]; then
+  printf 'type:feature\n'
+  exit 0
+fi
+if [[ "$1 $2" == "label list" ]]; then
+  printf '%s\n' autoship:blocked autoship:in-progress autoship:done autoship:paused
+  exit 0
+fi
+exit 0
+SH
+chmod +x "$VERIFY_FAIL_REPO/bin/gh"
+cat > "$VERIFY_FAIL_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-184":{"state":"running","title":"Create PR after verified PASS","labels":"type:feature"}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+printf '[]\n' > "$VERIFY_FAIL_REPO/.autoship/processed-events.json"
+cat > "$VERIFY_FAIL_REPO/.autoship/event-queue.json" <<'JSON'
+[{"type":"verify","issue":"issue-184","priority":2,"data":{"status":"COMPLETE"},"queued_at":"2026-04-24T00:00:00Z"}]
+JSON
+printf 'Result\n' > "$VERIFY_FAIL_REPO/.autoship/workspaces/issue-184/AUTOSHIP_RESULT.md"
+(
+  cd "$VERIFY_FAIL_REPO"
+  GH_PR_LOG="$VERIFY_FAIL_REPO/gh-pr.log" PATH="$VERIFY_FAIL_REPO/bin:$PATH" bash hooks/opencode/process-event-queue.sh >/dev/null
+)
+test ! -e "$VERIFY_FAIL_REPO/gh-pr.log" || fail "failed verification must not call gh pr create"
+assert_eq "blocked" "$(jq -r '.issues["issue-184"].state' "$VERIFY_FAIL_REPO/.autoship/state.json")" "failed verification blocks issue instead of completing it"
+
+VERIFY_PASS_REPO="$TMP_DIR/verify-pass-repo"
+mkdir -p "$VERIFY_PASS_REPO/.autoship/workspaces/issue-184" "$VERIFY_PASS_REPO/hooks/opencode" "$VERIFY_PASS_REPO/hooks" "$VERIFY_PASS_REPO/bin"
+git init -q "$VERIFY_PASS_REPO"
+git -C "$VERIFY_PASS_REPO" config user.email autoship@example.invalid
+git -C "$VERIFY_PASS_REPO" config user.name AutoShip
+git -C "$VERIFY_PASS_REPO" remote add origin git@github.com:owner/repo.git
+printf 'base\n' > "$VERIFY_PASS_REPO/README.md"
+git -C "$VERIFY_PASS_REPO" add README.md
+git -C "$VERIFY_PASS_REPO" commit -q -m initial
+git -C "$VERIFY_PASS_REPO" checkout -q -b autoship/issue-184
+printf 'changed\n' > "$VERIFY_PASS_REPO/feature.txt"
+cp "$SCRIPT_DIR/process-event-queue.sh" "$VERIFY_PASS_REPO/hooks/opencode/process-event-queue.sh"
+cp "$SCRIPT_DIR/pr-title.sh" "$VERIFY_PASS_REPO/hooks/opencode/pr-title.sh"
+cp "$SCRIPT_DIR/../update-state.sh" "$VERIFY_PASS_REPO/hooks/update-state.sh"
+chmod +x "$VERIFY_PASS_REPO/hooks/opencode/process-event-queue.sh" "$VERIFY_PASS_REPO/hooks/opencode/pr-title.sh" "$VERIFY_PASS_REPO/hooks/update-state.sh"
+cat > "$VERIFY_PASS_REPO/hooks/opencode/reviewer.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'VERDICT: PASS\n'
+exit 0
+SH
+chmod +x "$VERIFY_PASS_REPO/hooks/opencode/reviewer.sh"
+cat > "$VERIFY_PASS_REPO/bin/gh" <<'SH'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "pr create" ]]; then
+  printf '%s\n' "$*" >> "$GH_PR_LOG"
+  printf 'https://github.com/owner/repo/pull/184\n'
+  exit 0
+fi
+if [[ "$1 $2" == "issue view" && "$*" == *"title"* ]]; then
+  printf 'Create PR after verified PASS\n'
+  exit 0
+fi
+if [[ "$1 $2" == "issue view" && "$*" == *"labels"* ]]; then
+  printf 'type:feature\n'
+  exit 0
+fi
+if [[ "$1 $2" == "label list" ]]; then
+  printf '%s\n' autoship:blocked autoship:in-progress autoship:done autoship:paused
+  exit 0
+fi
+exit 0
+SH
+chmod +x "$VERIFY_PASS_REPO/bin/gh"
+cat > "$VERIFY_PASS_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-184":{"state":"running","title":"Create PR after verified PASS","labels":"type:feature"}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+printf '[]\n' > "$VERIFY_PASS_REPO/.autoship/processed-events.json"
+cat > "$VERIFY_PASS_REPO/.autoship/event-queue.json" <<'JSON'
+[{"type":"verify","issue":"issue-184","priority":2,"data":{"status":"COMPLETE"},"queued_at":"2026-04-24T00:00:00Z"}]
+JSON
+printf 'Result summary\n' > "$VERIFY_PASS_REPO/.autoship/workspaces/issue-184/AUTOSHIP_RESULT.md"
+(
+  cd "$VERIFY_PASS_REPO"
+  GH_PR_LOG="$VERIFY_PASS_REPO/gh-pr.log" PATH="$VERIFY_PASS_REPO/bin:$PATH" bash hooks/opencode/process-event-queue.sh >/dev/null
+)
+grep -F 'pr create --title feat: Create PR after verified PASS (#184)' "$VERIFY_PASS_REPO/gh-pr.log" >/dev/null || fail "verified PASS creates PR with conventional title"
+grep -F -- '--body-file .autoship/workspaces/issue-184/AUTOSHIP_PR_BODY.md' "$VERIFY_PASS_REPO/gh-pr.log" >/dev/null || fail "verified PASS creates PR from generated body file"
+grep -F 'Reviewer: PASS' "$VERIFY_PASS_REPO/.autoship/workspaces/issue-184/AUTOSHIP_PR_BODY.md" >/dev/null || fail "generated PR body records reviewer pass"
+assert_eq "completed" "$(jq -r '.issues["issue-184"].state' "$VERIFY_PASS_REPO/.autoship/state.json")" "verified PASS completes issue after PR creation"
+
+REVIEWER_REPO="$TMP_DIR/reviewer-repo"
+mkdir -p "$REVIEWER_REPO/hooks/opencode" "$REVIEWER_REPO/hooks" "$REVIEWER_REPO/bin" "$REVIEWER_REPO/.autoship/workspaces/issue-183"
+git init -q "$REVIEWER_REPO"
+cp "$SCRIPT_DIR/reviewer.sh" "$REVIEWER_REPO/hooks/opencode/reviewer.sh"
+cp "$SCRIPT_DIR/select-model.sh" "$REVIEWER_REPO/hooks/opencode/select-model.sh"
+cp "$SCRIPT_DIR/../capture-failure.sh" "$REVIEWER_REPO/hooks/capture-failure.sh"
+chmod +x "$REVIEWER_REPO/hooks/opencode/reviewer.sh" "$REVIEWER_REPO/hooks/opencode/select-model.sh" "$REVIEWER_REPO/hooks/capture-failure.sh"
+cat > "$REVIEWER_REPO/.autoship/state.json" <<'JSON'
+{"repo":"owner/repo","issues":{"issue-183":{"state":"verifying","model":"opencode/test","role":"reviewer","attempt":1}},"stats":{},"config":{"maxConcurrentAgents":15}}
+JSON
+printf 'result\n' > "$REVIEWER_REPO/.autoship/workspaces/issue-183/AUTOSHIP_RESULT.md"
+cat > "$REVIEWER_REPO/bin/opencode" <<'SH'
+#!/usr/bin/env bash
+case "${AUTOSHIP_FAKE_REVIEW:-pass}" in
+  pass) printf 'analysis\nVERDICT: PASS\n' ;;
+  fail) printf 'analysis\nVERDICT: FAIL\n' ;;
+  missing) printf 'analysis without verdict\n' ;;
+esac
+exit 0
+SH
+chmod +x "$REVIEWER_REPO/bin/opencode"
+(
+  cd "$REVIEWER_REPO"
+  PATH="$REVIEWER_REPO/bin:$PATH" AUTOSHIP_FAKE_REVIEW=pass bash hooks/opencode/reviewer.sh issue-183 .autoship/workspaces/issue-183 .autoship/workspaces/issue-183/AUTOSHIP_RESULT.md none >/tmp/reviewer-pass.out
+)
+if (
+  cd "$REVIEWER_REPO"
+  PATH="$REVIEWER_REPO/bin:$PATH" AUTOSHIP_FAKE_REVIEW=fail bash hooks/opencode/reviewer.sh issue-183 .autoship/workspaces/issue-183 .autoship/workspaces/issue-183/AUTOSHIP_RESULT.md none >/tmp/reviewer-fail.out 2>&1
+); then
+  fail "reviewer exits non-zero on explicit FAIL verdict"
+fi
+if (
+  cd "$REVIEWER_REPO"
+  PATH="$REVIEWER_REPO/bin:$PATH" AUTOSHIP_FAKE_REVIEW=missing bash hooks/opencode/reviewer.sh issue-183 .autoship/workspaces/issue-183 .autoship/workspaces/issue-183/AUTOSHIP_RESULT.md none >/tmp/reviewer-missing.out 2>&1
+); then
+  fail "reviewer fails closed when verdict is missing"
+fi
+reviewer_artifacts=$(find "$REVIEWER_REPO/.autoship/failures" -name '*-issue-183.json' 2>/dev/null | wc -l | tr -d '[:space:]')
+[[ "$reviewer_artifacts" -ge 1 ]] || fail "reviewer records failure evidence for rejected and malformed verdicts"
 
 grep -F 'AUTOSHIP_VERSION="1.5.0-opencode"' "$SCRIPT_DIR/init.sh" >/dev/null 2>&1 && fail "init must not hardcode stale 1.5.0-opencode version"
 

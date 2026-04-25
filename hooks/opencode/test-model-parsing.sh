@@ -20,6 +20,7 @@ assert_eq() {
 }
 
 source "$SCRIPT_DIR/model-parser.sh"
+source "$SCRIPT_DIR/test-fixtures/mock-opencode-models.sh"
 
 AVAILABLE="opencode/nemotron-3-super-free
 opencode/minimax-m2.5-free
@@ -99,22 +100,7 @@ MODEL_REPO="$TMP_DIR/model-repo"
 mkdir -p "$MODEL_REPO/bin" "$MODEL_REPO/autoship/hooks/opencode"
 cp "$SCRIPT_DIR/setup.sh" "$SCRIPT_DIR/model-parser.sh" "$MODEL_REPO/autoship/hooks/opencode/"
 chmod +x "$MODEL_REPO/autoship/hooks/opencode/setup.sh"
-cat > "$MODEL_REPO/bin/gh" <<'SH'
-#!/usr/bin/env bash
-if [[ "$1 $2" == "auth status" ]]; then
-  exit 0
-fi
-exit 0
-SH
-cat > "$MODEL_REPO/bin/opencode" <<'SH'
-#!/usr/bin/env bash
-if [[ "$1" == "models" ]]; then
-  printf '%s\n' 'opencode/nemotron-3-super-free' 'opencode/minimax-m2.5-free' 'openai/gpt-5.5' 'openai/gpt-5.3-codex-spark'
-  exit 0
-fi
-printf '%s\n' '1.0.0'
-SH
-chmod +x "$MODEL_REPO/bin/gh" "$MODEL_REPO/bin/opencode"
+install_mock_opencode_models_fixture "$MODEL_REPO/bin"
 (
   cd "$MODEL_REPO/autoship"
   PATH="$MODEL_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --max-agents=7 --labels=agent:ready,needs-review --worker-models=openai/gpt-5.3-codex-spark >/dev/null
@@ -123,6 +109,21 @@ assert_eq "openai/gpt-5.3-codex-spark" "$(jq -r '.models[0].id' "$MODEL_REPO/aut
 assert_eq "selected" "$(jq -r '.models[0].cost' "$MODEL_REPO/autoship/.autoship/model-routing.json")" "setup classifies explicit worker model as selected"
 assert_eq "7" "$(jq -r '.maxConcurrentAgents' "$MODEL_REPO/autoship/.autoship/config.json")" "setup honors portable --max-agents flag"
 assert_eq "agent:ready,needs-review" "$(jq -r '.labels | join(",")' "$MODEL_REPO/autoship/.autoship/config.json")" "setup honors portable --labels flag"
+
+echo "=== Test: setup fixture defaults to free models only ==="
+FREE_REPO="$TMP_DIR/free-model-repo"
+mkdir -p "$FREE_REPO/bin" "$FREE_REPO/autoship/hooks/opencode"
+cp "$SCRIPT_DIR/setup.sh" "$SCRIPT_DIR/model-parser.sh" "$FREE_REPO/autoship/hooks/opencode/"
+chmod +x "$FREE_REPO/autoship/hooks/opencode/setup.sh"
+install_mock_opencode_models_fixture "$FREE_REPO/bin"
+(
+  cd "$FREE_REPO/autoship"
+  PATH="$FREE_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --planner-model=openai/gpt-5.5 >/dev/null
+)
+assert_eq "2" "$(jq '[.models[] | select(.cost == "free")] | length' "$FREE_REPO/autoship/.autoship/model-routing.json")" "setup fixture free defaults include only free workers"
+if jq -e '.pools.default.models[] | select(. == "openai/gpt-5.5" or . == "openai/gpt-5.3-codex-spark")' "$FREE_REPO/autoship/.autoship/model-routing.json" >/dev/null; then
+  fail "setup default worker pool must not include paid or role models from fixture"
+fi
 
 echo "=== Test: setup rejects unavailable and forbidden models ==="
 if (cd "$MODEL_REPO/autoship" && PATH="$MODEL_REPO/bin:$PATH" bash hooks/opencode/setup.sh --no-tui --refresh-models --worker-models=missing/model >/dev/null 2>&1); then

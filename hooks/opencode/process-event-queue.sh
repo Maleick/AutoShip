@@ -2,6 +2,7 @@
 set -euo pipefail
 
 AUTOSHIP_DIR=".autoship"
+WORKSPACES_DIR="$AUTOSHIP_DIR/workspaces"
 EVENT_QUEUE="$AUTOSHIP_DIR/event-queue.json"
 PROCESSED_EVENTS="$AUTOSHIP_DIR/processed-events.json"
 LOCK_FILE="$AUTOSHIP_DIR/event-queue.lock"
@@ -70,6 +71,141 @@ current_state() {
   jq -r --arg issue "$issue" '.issues[$issue].state // empty' "$AUTOSHIP_DIR/state.json" 2>/dev/null || true
 }
 
+issue_number() {
+  printf '%s' "${1#issue-}"
+}
+
+issue_title() {
+  local issue="$1"
+  jq -r --arg issue "$issue" '.issues[$issue].title // empty' "$AUTOSHIP_DIR/state.json" 2>/dev/null || true
+}
+
+issue_labels() {
+  local issue="$1"
+  jq -r --arg issue "$issue" '.issues[$issue].labels // empty' "$AUTOSHIP_DIR/state.json" 2>/dev/null || true
+}
+
+discover_test_command() {
+  if [[ -f "$AUTOSHIP_DIR/config.json" ]]; then
+    local configured
+    configured=$(jq -r '.test_command // empty' "$AUTOSHIP_DIR/config.json" 2>/dev/null || true)
+    [[ -n "$configured" ]] && { printf '%s\n' "$configured"; return 0; }
+  fi
+
+  if [[ -f package.json ]]; then
+    printf 'npm test\n'
+  elif [[ -f Makefile ]]; then
+    printf 'make test\n'
+  elif [[ -f Cargo.toml ]]; then
+    printf 'cargo test\n'
+  elif [[ -f pyproject.toml ]]; then
+    printf 'pytest\n'
+  elif [[ -f go.mod ]]; then
+    printf 'go test ./...\n'
+  else
+    printf 'none\n'
+  fi
+}
+
+run_verification() {
+  local issue="$1"
+  local workspace="$WORKSPACES_DIR/$issue"
+  local result_path="$workspace/AUTOSHIP_RESULT.md"
+  local test_command reviewer_output
+
+  [[ -d "$workspace" ]] || return 2
+  [[ -s "$result_path" ]] || return 1
+
+  test_command=$(discover_test_command)
+  reviewer_output=$(mktemp)
+  if bash "$SCRIPT_DIR/reviewer.sh" "$issue" "$workspace" "$result_path" "$test_command" > "$reviewer_output" 2>&1 && grep -F 'VERDICT: PASS' "$reviewer_output" >/dev/null 2>&1; then
+    rm -f "$reviewer_output"
+    return 0
+  fi
+
+  mkdir -p "$workspace"
+  cp "$reviewer_output" "$workspace/AUTOSHIP_VERIFICATION.log" 2>/dev/null || true
+  rm -f "$reviewer_output"
+  return 1
+}
+
+generate_pr_body() {
+  local issue="$1"
+  local workspace="$WORKSPACES_DIR/$issue"
+  local result_path="$workspace/AUTOSHIP_RESULT.md"
+  local body_path="$workspace/AUTOSHIP_PR_BODY.md"
+  local number
+  number=$(issue_number "$issue")
+
+  {
+    printf '## Summary\n'
+    sed 's/^/- /' "$result_path"
+    printf '\n## Verification\n'
+    printf -- '- Reviewer: PASS\n'
+    printf -- '- Tests: passing or not configured\n'
+    printf '\nCloses #%s\n\nDispatched by AutoShip.\n' "$number"
+  } > "$body_path"
+}
+
+create_verified_pr() {
+  local issue="$1"
+  local workspace="$WORKSPACES_DIR/$issue"
+  local body_path="$workspace/AUTOSHIP_PR_BODY.md"
+  local number title labels pr_title pr_url branch
+
+  number=$(issue_number "$issue")
+  title=$(issue_title "$issue")
+  labels=$(issue_labels "$issue")
+  pr_title=$(bash "$SCRIPT_DIR/pr-title.sh" --issue "$number" --title "$title" --labels "$labels")
+  branch=$(git branch --show-current 2>/dev/null || true)
+  [[ -n "$branch" ]] || branch="autoship/issue-$number"
+
+  generate_pr_body "$issue"
+
+  git add -A -- . ':!.autoship'
+  if git diff --cached --quiet; then
+    return 1
+  fi
+  git commit -m "$pr_title
+
+Closes #$number
+Dispatched by AutoShip." >/dev/null
+
+  pr_url=$(gh pr create \
+    --title "$pr_title" \
+    --body-file "$body_path" \
+    --label autoship \
+    --head "$branch")
+
+  if [[ -n "$pr_url" ]]; then
+    local pr_number
+    pr_number=$(printf '%s\n' "$pr_url" | grep -Eo '[0-9]+$' | tail -1 || true)
+    [[ -n "$pr_number" ]] && printf '%s\n' "$pr_number"
+  fi
+}
+
+verify_and_create_pr() {
+  local issue="$1"
+  local verification_status pr_number
+
+  run_verification "$issue"
+  verification_status=$?
+  if [[ $verification_status -eq 2 ]]; then
+    return 0
+  fi
+  if [[ $verification_status -ne 0 ]]; then
+    apply_state_once "$issue" set-failed blocked
+    return 0
+  fi
+
+  pr_number=$(create_verified_pr "$issue" || true)
+  if [[ -n "$pr_number" ]]; then
+    apply_state_once "$issue" set-completed completed pr_number="$pr_number"
+  else
+    apply_state_once "$issue" set-blocked blocked
+  fi
+}
+
 apply_state_once() {
   local issue="$1"
   local action="$2"
@@ -99,11 +235,12 @@ process_event() {
       ;;
     stuck)
       [[ -n "$issue" ]] || return 1
-      apply_state_once "$issue" set-failed blocked
+      apply_state_once "$issue" set-stuck stuck
       ;;
     verify)
       [[ -n "$issue" ]] || return 1
-      apply_state_once "$issue" set-completed completed
+      apply_state_once "$issue" set-verifying verifying
+      verify_and_create_pr "$issue"
       ;;
     force_dispatch)
       [[ -n "$issue" ]] || return 1
