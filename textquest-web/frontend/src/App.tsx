@@ -168,7 +168,11 @@ export default function App() {
       </header>
 
       {!connected && (
-        <div className="flex items-center gap-2 px-5 py-1.5 bg-state-warn/5 border-b border-state-warn/30 font-mono text-[10px] text-state-warn uppercase tracking-[0.2em]">
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-2 px-5 py-1.5 bg-state-warn/5 border-b border-state-warn/30 font-mono text-[10px] text-state-warn uppercase tracking-[0.2em]"
+        >
           <span className="w-1.5 h-1.5 rounded-full bg-state-warn animate-pulse" />
           backend offline · showing mock data
           <span className="ml-auto text-neriak-dim normal-case tracking-normal">

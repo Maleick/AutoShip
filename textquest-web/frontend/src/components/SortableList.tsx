@@ -34,17 +34,24 @@ export function SortableItem({ id, children }: SortableItemProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const instructionsId = `sortable-instructions-${id}`;
   const handle = (
-    <button
-      ref={undefined}
-      type="button"
-      aria-label="Drag to reorder"
-      {...attributes}
-      {...listeners}
-      className="touch-none cursor-grab active:cursor-grabbing text-neriak-dim hover:text-neriak-magenta"
-    >
-      <GripVertical className="w-3.5 h-3.5" strokeWidth={1.75} />
-    </button>
+    <>
+      <button
+        ref={undefined}
+        type="button"
+        aria-label="Drag to reorder"
+        aria-describedby={instructionsId}
+        {...attributes}
+        {...listeners}
+        className="touch-none cursor-grab active:cursor-grabbing text-neriak-dim hover:text-neriak-magenta"
+      >
+        <GripVertical className="w-3.5 h-3.5" strokeWidth={1.75} />
+      </button>
+      <span id={instructionsId} className="sr-only">
+        Use Space to pick up, Arrow keys to move, Space to drop, Escape to cancel
+      </span>
+    </>
   );
 
   return (

@@ -24,7 +24,11 @@ export function Input({ label, error, id, className = "", ...props }: InputProps
           ${error ? "border-state-danger" : ""} ${className}`}
         {...props}
       />
-      {error && <p className="text-sm text-state-danger">{error}</p>}
+      {error && (
+        <p role="alert" aria-live="assertive" className="text-sm text-state-danger">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

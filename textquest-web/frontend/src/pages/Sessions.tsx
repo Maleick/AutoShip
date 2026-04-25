@@ -154,7 +154,11 @@ export function Sessions() {
           <>
             {loading && <span>loading…</span>}
             {error && (
-              <span className="flex items-center gap-1 text-state-danger">
+              <span
+                role="alert"
+                aria-live="assertive"
+                className="flex items-center gap-1 text-state-danger"
+              >
                 <AlertTriangle className="w-3.5 h-3.5" /> {error}
               </span>
             )}
@@ -175,22 +179,29 @@ export function Sessions() {
         )}
 
         {selected.size > 0 && (
-          <div className="flex items-center gap-3 border border-neriak-magenta/50 bg-panel rounded-sm px-3 py-2 font-mono text-xs">
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-3 border border-neriak-magenta/50 bg-panel rounded-sm px-3 py-2 font-mono text-xs"
+          >
             <span className="text-neriak-magenta">{selected.size} selected</span>
             <button
               onClick={() => bulk("pause")}
+              aria-label={`Pause ${selected.size} selected sessions`}
               className="flex items-center gap-1 text-state-warn hover:text-state-warn/80"
             >
               <Pause className="w-3.5 h-3.5" strokeWidth={1.75} /> pause all
             </button>
             <button
               onClick={() => bulk("resume")}
+              aria-label={`Resume ${selected.size} selected sessions`}
               className="flex items-center gap-1 text-state-ok hover:text-state-ok/80"
             >
               <Play className="w-3.5 h-3.5" strokeWidth={1.75} /> resume all
             </button>
             <button
               onClick={() => setSelected(new Set())}
+              aria-label={`Clear selection of ${selected.size} sessions`}
               className="ml-auto text-neriak-muted hover:text-neriak-text"
             >
               clear
