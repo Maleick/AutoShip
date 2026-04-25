@@ -26,6 +26,7 @@ mlua = { workspace = true, features = ["lua54", "vendored", "send"] }
 ratatui = "0.30"
 crossterm = "0.28"
 rusqlite = { version = "0.32", features = ["bundled"] }
+serde_yaml = "0.9"
 aes-gcm = "0.10"
 argon2 = "0.5"
 rpassword = "7"
