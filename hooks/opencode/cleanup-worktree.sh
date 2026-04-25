@@ -15,7 +15,7 @@ if [[ ! "$ISSUE_KEY" =~ ^issue-[0-9]+$ ]]; then
 fi
 
 AUTOSHIP_DIR=".autoship"
-AUTOSHIP_ROOT=$(realpath -m "$AUTOSHIP_DIR")
+AUTOSHIP_ROOT="$REPO_ROOT/$AUTOSHIP_DIR"
 WORKSPACES_ROOT="$AUTOSHIP_ROOT/workspaces"
 WORKSPACE_DIR="$WORKSPACES_ROOT/$ISSUE_KEY"
 STATE_FILE="$AUTOSHIP_ROOT/state.json"
@@ -25,7 +25,7 @@ ISSUE_NUM="${ISSUE_KEY#issue-}"
 
 # Archive result file
 if [[ -d "$WORKSPACE_DIR" ]]; then
-  WORKSPACE_REAL=$(realpath "$WORKSPACE_DIR")
+  WORKSPACE_REAL=$(cd "$WORKSPACE_DIR" && pwd -P)
   case "$WORKSPACE_REAL" in
     "$WORKSPACES_ROOT"/*) ;;
     *)
@@ -47,14 +47,15 @@ if [[ -d "$WORKSPACE_DIR" ]]; then
   fi
 
   # Remove worktree
+  git worktree prune >/dev/null 2>&1 || true
   git worktree remove "$WORKSPACE_REAL" --force 2>/dev/null || true
   echo "Removed worktree: $WORKSPACE_REAL"
 fi
 
 # Delete branch
 BRANCH="autoship/$ISSUE_KEY"
-if git branch --list "$BRANCH" >/dev/null 2>&1; then
-  git branch -D "$BRANCH" 2>/dev/null || true
+if [[ -n "$(git branch --list "$BRANCH")" ]]; then
+  git branch -D "$BRANCH"
   echo "Deleted branch: $BRANCH"
 fi
 
