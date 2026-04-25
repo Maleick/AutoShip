@@ -214,7 +214,7 @@ fn draw_metrics_tabs(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         t.border_primary
     };
-    let blk = panel(" Metrics Dashboard ", border_style, t);
+    let blk = panel(" METRICS DASHBOARD ", border_style, t);
     let inner = blk.inner(area);
     frame.render_widget(blk, area);
 
@@ -1689,7 +1689,7 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
     };
 
     let Some(client) = app.active_client() else {
-        let blk = panel(" Character · — ", border_style, t);
+        let blk = panel(" CHARACTER · — ", border_style, t);
         let inner = blk.inner(area);
         frame.render_widget(blk, area);
         frame.render_widget(
@@ -1699,7 +1699,7 @@ fn draw_character_summary(frame: &mut Frame, area: Rect, app: &App, collapsed: b
         return;
     };
     let Some(player) = &client.local_player else {
-        let blk = panel(" Character · — ", border_style, t);
+        let blk = panel(" CHARACTER · — ", border_style, t);
         let inner = blk.inner(area);
         frame.render_widget(blk, area);
         frame.render_widget(

@@ -1002,7 +1002,7 @@ fn draw_gemma_observer_panel(frame: &mut Frame, area: ratatui::layout::Rect, app
 fn draw_player_detail(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     use crate::tui::sprites;
     let t = &app.theme;
-    let blk = panel(" Selected Character ", t.border_primary, t);
+    let blk = panel(" SELECTED CHARACTER ", t.border_primary, t);
 
     let Some(client) = app.active_client() else {
         frame.render_widget(

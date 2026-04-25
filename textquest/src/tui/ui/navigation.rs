@@ -201,7 +201,7 @@ fn draw_blocker_panel(frame: &mut Frame, area: Rect, app: &App) {
     let blk = Block::default()
         .borders(Borders::ALL)
         .border_type(t.border_type)
-        .title("Nav Blockers")
+        .title(" NAV BLOCKERS ")
         .border_style(Style::default().fg(t.hp_low));
 
     frame.render_widget(Paragraph::new(lines).block(blk), area);
@@ -384,7 +384,7 @@ pub fn draw_navigation_screen(frame: &mut Frame, area: Rect, app: &App) {
         let blk = Block::default()
             .borders(Borders::ALL)
             .border_type(t.border_type)
-            .title("Navigation")
+            .title(" NAVIGATION ")
             .border_style(t.border_primary);
         frame.render_widget(
             Paragraph::new("No characters connected")

@@ -3042,7 +3042,7 @@ fn draw_layer_visibility_panel(frame: &mut Frame, area: ratatui::layout::Rect, a
 
     frame.render_widget(
         Paragraph::new(lines).block(
-            panel(" Layers ", border_style, t)
+            panel(" LAYERS ", border_style, t)
                 .title("g/l/a/e toggle")
                 .title_alignment(ratatui::layout::Alignment::Right),
         ),
@@ -3293,7 +3293,7 @@ fn draw_target_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) 
 
     frame.render_widget(
         Paragraph::new(lines)
-            .block(panel("Target · Main Assist", border_style, t))
+            .block(panel(" TARGET · MAIN ASSIST ", border_style, t))
             .style(Style::default()),
         area,
     );
@@ -3362,7 +3362,7 @@ fn draw_ch_chain_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App
 
     frame.render_widget(
         Paragraph::new(lines)
-            .block(panel("CH Chain · Active", border_style, t))
+            .block(panel(" CH CHAIN · ACTIVE ", border_style, t))
             .style(Style::default()),
         area,
     );

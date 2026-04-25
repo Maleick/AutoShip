@@ -187,7 +187,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
         frame.render_widget(Clear, toast_area);
 
-        let title = " Notice ";
+        let title = " NOTICE ";
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
@@ -1139,7 +1139,7 @@ fn draw_alert_overlay(frame: &mut Frame, area: Rect, app: &App) {
 
     frame.render_widget(
         Paragraph::new(detail_lines)
-            .block(widgets::panel("Details", t.border_dim, t))
+            .block(widgets::panel(" DETAILS ", t.border_dim, t))
             .wrap(Wrap { trim: false }),
         sections[2],
     );
@@ -1288,7 +1288,7 @@ fn draw_diagnostics_overlay(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     let block = Block::default()
-        .title(" Diagnostics ")
+        .title(" DIAGNOSTICS ")
         .borders(Borders::ALL)
         .border_type(t.border_type)
         .border_style(Style::default().fg(t.border_active));
@@ -1697,11 +1697,11 @@ fn draw_help_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
 
     let title = if max_scroll > 0 {
         format!(
-            " Help · Keybinds [{}%] (press ? to close) ",
+            " HELP · KEYBINDS [{}%] (PRESS ? TO CLOSE) ",
             (scroll * 100) / max_scroll.max(1)
         )
     } else {
-        String::from(" Help · Keybinds (press ? to close) ")
+        String::from(" HELP · KEYBINDS (PRESS ? TO CLOSE) ")
     };
 
     frame.render_widget(

@@ -424,7 +424,7 @@ pub fn draw_help_search_panel(frame: &mut Frame, area: Rect, app: &App) {
         .borders(Borders::ALL)
         .border_type(t.border_type)
         .title(Span::styled(
-            " Help ",
+            " HELP ",
             Style::default()
                 .fg(t.text_bright)
                 .add_modifier(Modifier::BOLD),
@@ -470,7 +470,7 @@ fn draw_search_bar(frame: &mut Frame, area: Rect, app: &App) {
             Block::default()
                 .borders(Borders::ALL)
                 .border_type(t.border_type)
-                .title(Span::styled(" Search ", Style::default().fg(t.text_muted)))
+                .title(Span::styled(" SEARCH ", Style::default().fg(t.text_muted)))
                 .border_style(t.border_dim),
         )
         .style(Style::default().fg(t.text_normal).bg(t.help_bg));
@@ -538,9 +538,9 @@ fn draw_result_list(frame: &mut Frame, area: Rect, app: &App) {
     let count = entries.len();
 
     let title = if entries.is_empty() {
-        " Results — no matches ".to_string()
+        " RESULTS — NO MATCHES ".to_string()
     } else {
-        format!(" Results ({count}) ", count = entries.len())
+        format!(" RESULTS ({count}) ", count = entries.len())
     };
 
     let items: Vec<ListItem> = entries
@@ -593,7 +593,7 @@ fn draw_detail_pane(frame: &mut Frame, area: Rect, app: &App) {
         .borders(Borders::ALL)
         .border_type(t.border_type)
         .title(Span::styled(
-            " Detail ",
+            " DETAIL ",
             Style::default().fg(t.text_secondary),
         ))
         .border_style(Style::default().fg(t.border_dim.fg.unwrap_or(t.text_muted)));

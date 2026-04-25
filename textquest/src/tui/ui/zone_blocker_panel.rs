@@ -47,7 +47,7 @@ use crate::tui::app::App;
 pub fn draw_zone_blocker_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     let t = &app.theme;
 
-    let blk = panel(" Zone Blockers ", t.border_primary, t);
+    let blk = panel(" ZONE BLOCKERS ", t.border_primary, t);
 
     let visible = app.visible_clients();
     if visible.is_empty() {

@@ -38,7 +38,7 @@ fn format_dps(dps: f64) -> String {
 /// Bars are proportional to the highest DPS member. If no data, renders a
 /// "No DPS data" placeholder.
 pub fn draw_dps_bars(frame: &mut Frame, area: Rect, tracker: &DpsTracker, theme: &Theme) {
-    let block = panel("DPS", theme.border_dim, theme);
+    let block = panel(" DPS ", theme.border_dim, theme);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 

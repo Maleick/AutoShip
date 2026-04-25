@@ -169,7 +169,7 @@ fn draw_vendor_bank_panel(frame: &mut Frame, area: Rect, app: &App) {
     } else {
         Style::default().fg(t.text_server) // magenta border
     };
-    let blk = panel(" Vendor / Bank Cycle ", border_style, t);
+    let blk = panel(" VENDOR / BANK CYCLE ", border_style, t);
 
     let status_color = vendor_cycle_color(&econ.vendor_status, t);
     let countdown_color = if econ.vendor_next_cycle_secs < 60 {
@@ -359,6 +359,65 @@ fn draw_roster_panel(frame: &mut Frame, area: Rect, app: &App) {
         area,
     );
 }
+
+/// Render the Rules panel (cyan border, sidebar).
+fn draw_rules_panel(frame: &mut Frame, area: Rect, app: &App) {
+    let t = &app.theme;
+
+    let border_style = Style::default().fg(t.text_accent); // cyan
+    let blk = panel(" RULES ", border_style, t);
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled(
+                "active rule set default.ron",
+                Style::default().fg(t.text_normal),
+            ),
+            Span::raw(" "),
+            Span::styled("(0 rules)", Style::default().fg(t.text_muted)),
+        ]),
+        Line::from(""),
+    ];
+
+    // Placeholder: show "No rules loaded"
+    lines.push(Line::from(Span::styled(
+        "No rules loaded",
+        Style::default().fg(t.text_muted),
+    )));
+
+    // Footer hints
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "rules load from ~/.config/textquest/economy/",
+        Style::default().fg(t.text_muted),
+    )));
+    lines.push(Line::from(vec![
+        Span::styled(
+            "e",
+            Style::default()
+                .fg(t.text_highlight)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" edit · "),
+        Span::styled(
+            "r",
+            Style::default()
+                .fg(t.text_highlight)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" reload · "),
+        Span::styled(
+            "t",
+            Style::default()
+                .fg(t.text_highlight)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" test"),
+    ]));
+
+    frame.render_widget(Paragraph::new(lines).block(blk), area);
+}
+
 
 /// Render the Ledger panel (magenta border, sidebar).
 fn draw_ledger_panel(frame: &mut Frame, area: Rect, app: &App) {

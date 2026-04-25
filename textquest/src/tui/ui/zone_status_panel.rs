@@ -151,7 +151,7 @@ pub fn draw_zone_status_panel(frame: &mut Frame, area: ratatui::layout::Rect, ap
         .constraints([Constraint::Percentage(100)])
         .split(area);
 
-    let blk = panel(" Zone Status ", t.border_primary, t);
+    let blk = panel(" ZONE STATUS ", t.border_primary, t);
 
     let visible = app.visible_clients();
     if visible.is_empty() {

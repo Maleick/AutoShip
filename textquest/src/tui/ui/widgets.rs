@@ -967,7 +967,7 @@ pub fn render_command_palette(
             .borders(Borders::ALL)
             .border_type(t.border_type)
             .title(Span::styled(
-                " Command mode ",
+                " COMMAND MODE ",
                 Style::default()
                     .fg(t.text_bright)
                     .add_modifier(Modifier::BOLD),

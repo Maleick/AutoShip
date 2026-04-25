@@ -438,7 +438,7 @@ fn draw_fleet_header(frame: &mut Frame, area: Rect, app: &App) {
     ];
 
     let content = Paragraph::new(lines).wrap(Wrap { trim: true });
-    let block = panel("Fleet Orchestrator", Style::default().fg(t.text_server), t);
+    let block = panel(" FLEET ORCHESTRATOR ", Style::default().fg(t.text_server), t);
     frame.render_widget(content.block(block), area);
 }
 
@@ -546,7 +546,7 @@ fn draw_signal_feed(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     let content = Paragraph::new(lines).wrap(Wrap { trim: true });
-    let block = panel("Signal Feed", Style::default().fg(t.text_accent), t);
+    let block = panel(" SIGNAL FEED ", Style::default().fg(t.text_accent), t);
     frame.render_widget(content.block(block), area);
 }
 
@@ -595,7 +595,7 @@ fn draw_phase_timeline(frame: &mut Frame, area: Rect, app: &App) {
     };
 
     let content = Paragraph::new(lines).wrap(Wrap { trim: true });
-    let block = panel("Phase Timeline", Style::default().fg(t.text_server), t);
+    let block = panel(" PHASE TIMELINE ", Style::default().fg(t.text_server), t);
     frame.render_widget(content.block(block), area);
 }
 

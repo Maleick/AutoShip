@@ -280,7 +280,7 @@ fn draw_live_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app: 
     if total_panels == 0 {
         frame.render_widget(
             Paragraph::new("No group data available")
-                .block(panel(" Groups ", t.border_dim, t))
+                .block(panel(" GROUPS ", t.border_dim, t))
                 .style(Style::default().fg(t.text_muted)),
             area,
         );
@@ -474,7 +474,7 @@ fn draw_config_groups_screen(frame: &mut Frame, area: ratatui::layout::Rect, app
     if group_count == 0 {
         frame.render_widget(
             Paragraph::new("No groups configured. Add groups to config/accounts.toml")
-                .block(panel(" Groups ", t.border_dim, t))
+                .block(panel(" GROUPS ", t.border_dim, t))
                 .style(Style::default().fg(t.text_muted)),
             area,
         );

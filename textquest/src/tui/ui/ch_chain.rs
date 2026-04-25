@@ -227,7 +227,7 @@ impl<'a> ChChainWidget<'a> {
 impl Widget for ChChainWidget<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let block = Block::default()
-            .title(" CH Chain · panel ")
+            .title(" CH CHAIN · PANEL ")
             .borders(Borders::ALL)
             .border_style(Style::default().fg(self.accent_color));
 
@@ -326,7 +326,7 @@ impl ChChainWidget<'_> {
     fn render_chain_list(&self, area: Rect, buf: &mut Buffer, compact: bool) {
         let t = self.theme;
         let block = Block::default()
-            .title(if compact { " Chain " } else { " Chain Order " })
+            .title(if compact { " CHAIN " } else { " CHAIN ORDER " })
             .borders(Borders::TOP)
             .border_style(t.border_dim);
         let inner = block.inner(area);
@@ -501,7 +501,7 @@ impl ChChainWidget<'_> {
     fn render_timing(&self, area: Rect, buf: &mut Buffer) {
         let t = self.theme;
         let block = Block::default()
-            .title(" Timing ")
+            .title(" TIMING ")
             .borders(Borders::TOP)
             .border_style(t.border_dim);
         let inner = block.inner(area);
@@ -534,7 +534,7 @@ impl ChChainWidget<'_> {
     fn render_stats(&self, area: Rect, buf: &mut Buffer) {
         let t = self.theme;
         let block = Block::default()
-            .title(" Chain Health ")
+            .title(" CHAIN HEALTH ")
             .borders(Borders::TOP)
             .border_style(t.border_dim);
         let inner = block.inner(area);
@@ -578,7 +578,7 @@ impl ChChainWidget<'_> {
     fn render_compact_footer(&self, area: Rect, buf: &mut Buffer) {
         let t = self.theme;
         let block = Block::default()
-            .title(" Timing / Health ")
+            .title(" TIMING / HEALTH ")
             .borders(Borders::TOP)
             .border_style(t.border_dim);
         let inner = block.inner(area);
