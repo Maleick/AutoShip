@@ -889,17 +889,23 @@ pub fn draw_map_view(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             )
         })
         .unwrap_or_default();
+    let loading_navmesh_badge = if app.navmesh_overlay_loading() {
+        " | Loading navmesh..."
+    } else {
+        ""
+    };
     let provisional_map_info = app.map_state.zone_map.as_ref().map_or_else(
         || {
             format!(
                 " {zone_label} (no data){player_pos_label}{selected_spawn_label} |{layer_label} | \
-                 {filter_label} | Z:{z_range:.0} "
+                 {filter_label} | Z:{z_range:.0}{loading_navmesh_badge} "
             )
         },
         |_| {
             format!(
                 " {zone_label}{player_pos_label}{selected_spawn_label} | {provisional_view_label} \
-                 {:.2}x{provisional_view_center} |{layer_label} | {filter_label} | Z:{z_range:.0} ",
+                 {:.2}x{provisional_view_center} |{layer_label} | {filter_label} | \
+                 Z:{z_range:.0}{loading_navmesh_badge} ",
                 app.map_state.zoom,
             )
         },

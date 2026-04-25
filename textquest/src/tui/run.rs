@@ -142,6 +142,7 @@ fn run_loop(
 
     while app.running {
         let tick_start = Instant::now();
+        app.poll_navmesh_overlay_load();
 
         // Draw the UI
         terminal.draw(|frame| draw(frame, app))?;

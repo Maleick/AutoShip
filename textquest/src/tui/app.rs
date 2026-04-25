@@ -56,6 +56,10 @@ static HELP_DATABASE: LazyLock<HelpDatabase> = LazyLock::new(HelpDatabase::load_
 
 const GM_SYNC_QUEUE_CAPACITY: usize = 16;
 pub const GEMMA_OBSERVATION_LIMIT: usize = 50;
+type NavmeshOverlayLoadResult = (
+    String,
+    anyhow::Result<crate::nav::mesh::NavMeshOverlay>,
+);
 
 #[derive(Debug)]
 struct GmSyncPayload {
@@ -901,6 +905,7 @@ pub struct App {
     pub map_state: MapScreenState,
     /// Tactical screen state (named/nav panel visibility, collapse flags).
     pub tactical_state: TacticalScreenState,
+    navmesh_overlay_load: Option<mpsc::Receiver<NavmeshOverlayLoadResult>>,
 
     /// Privacy mode — hides character names and server for screenshots.
     pub privacy_mode: bool,
@@ -1302,6 +1307,7 @@ impl App {
 
             map_state: MapScreenState::new(),
             tactical_state: TacticalScreenState::new(),
+            navmesh_overlay_load: None,
 
             privacy_mode: false,
 
@@ -4569,13 +4575,17 @@ impl App {
             self.map_state.loaded_zone.clear();
             self.map_state.zone_map = None;
             self.map_state.navmesh_overlay = None;
+            self.navmesh_overlay_load = None;
             self.map_state.reset_viewport();
             return;
         }
 
         // Skip if already loaded for this zone.
         if self.map_state.loaded_zone == zone_short_name {
-            if self.map_state.show_navmesh && self.map_state.navmesh_overlay.is_none() {
+            if self.map_state.show_navmesh
+                && self.map_state.navmesh_overlay.is_none()
+                && self.navmesh_overlay_load.is_none()
+            {
                 self.load_zone_navmesh_overlay(&zone_short_name);
             }
             return;
@@ -4608,6 +4618,7 @@ impl App {
 
         self.map_state.reset_viewport();
         self.map_state.navmesh_overlay = None;
+        self.navmesh_overlay_load = None;
         if self.map_state.show_navmesh {
             self.load_zone_navmesh_overlay(&zone_short_name);
         }
@@ -4623,43 +4634,113 @@ impl App {
     }
 
     fn load_zone_navmesh_overlay(&mut self, zone_short_name: &str) {
+        let zone_short_name = zone_short_name.trim().to_ascii_lowercase();
         if zone_short_name.is_empty() || zone_short_name.eq_ignore_ascii_case("unknown") {
             self.map_state.navmesh_overlay = None;
+            self.navmesh_overlay_load = None;
+            return;
+        }
+
+        if self.navmesh_overlay_load.is_some() {
+            tracing::debug!(
+                zone = zone_short_name.as_str(),
+                "Navmesh overlay load already in progress; skipping start"
+            );
             return;
         }
 
         #[cfg(not(windows))]
         {
             tracing::debug!(
-                zone = zone_short_name,
+                zone = zone_short_name.as_str(),
                 "Skipping navmesh overlay load on non-Windows"
             );
             self.map_state.navmesh_overlay = None;
+            self.navmesh_overlay_load = None;
+            return;
         }
 
         #[cfg(windows)]
-        match crate::nav::mesh::load_zone_overlay(zone_short_name) {
-            Ok(overlay) if !overlay.is_empty() => {
-                tracing::info!(
-                    zone = zone_short_name,
-                    outer_lines = overlay.outer_lines.len(),
-                    inner_lines = overlay.inner_lines.len(),
-                    "Loaded navmesh overlay"
-                );
-                self.map_state.navmesh_overlay = Some(overlay);
-            }
-            Ok(_) => {
-                tracing::debug!(
-                    zone = zone_short_name,
-                    "Navmesh overlay contained no segments"
-                );
-                self.map_state.navmesh_overlay = None;
-            }
-            Err(error) => {
-                tracing::warn!(zone = zone_short_name, %error, "Failed to load navmesh overlay");
-                self.map_state.navmesh_overlay = None;
+        {
+            let zone = zone_short_name.clone();
+            let (tx, rx) = mpsc::channel::<NavmeshOverlayLoadResult>();
+            self.map_state.navmesh_overlay = None;
+            match thread::Builder::new()
+                .name(format!("navmesh-overlay-load:{zone}"))
+                .spawn(move || {
+                    let result = crate::nav::mesh::load_zone_overlay(&zone);
+                    let _ = tx.send((zone, result));
+                }) {
+                Ok(_) => {
+                    self.navmesh_overlay_load = Some(rx);
+                    tracing::info!(zone = zone.as_str(), "Started navmesh overlay load");
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        zone = zone.as_str(),
+                        %error,
+                        "Failed to start navmesh overlay load"
+                    );
+                    self.navmesh_overlay_load = None;
+                    self.map_state.navmesh_overlay = None;
+                }
             }
         }
+    }
+
+    pub(crate) fn poll_navmesh_overlay_load(&mut self) {
+        let Some(recv) = self.navmesh_overlay_load.as_mut() else {
+            return;
+        };
+
+        match recv.try_recv() {
+            Ok((zone, result)) => {
+                self.navmesh_overlay_load = None;
+                if self.map_state.loaded_zone != zone {
+                    tracing::debug!(
+                        expected = zone.as_str(),
+                        active = self.map_state.loaded_zone.as_str(),
+                        "Ignoring stale navmesh overlay load result"
+                    );
+                    return;
+                }
+
+                match result {
+                    Ok(overlay) if !overlay.is_empty() => {
+                        tracing::info!(
+                            zone = zone.as_str(),
+                            outer_lines = overlay.outer_lines.len(),
+                            inner_lines = overlay.inner_lines.len(),
+                            "Loaded navmesh overlay"
+                        );
+                        self.map_state.navmesh_overlay = Some(overlay);
+                    }
+                    Ok(_) => {
+                        tracing::debug!(
+                            zone = zone.as_str(),
+                            "Navmesh overlay contained no segments"
+                        );
+                        self.map_state.navmesh_overlay = None;
+                    }
+                    Err(error) => {
+                        tracing::warn!(zone = zone.as_str(), %error, "Failed to load navmesh overlay");
+                        self.map_state.navmesh_overlay = None;
+                    }
+                }
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                tracing::debug!(
+                    zone = self.map_state.loaded_zone.as_str(),
+                    "Navmesh overlay load channel disconnected"
+                );
+                self.navmesh_overlay_load = None;
+            }
+        }
+    }
+
+    pub(crate) fn navmesh_overlay_loading(&self) -> bool {
+        self.navmesh_overlay_load.is_some()
     }
 
     /// Parse a group prefix like "G1", "G2", ..., "G6" from the first word.

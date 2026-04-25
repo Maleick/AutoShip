@@ -1,10 +1,8 @@
-# Result: #2426 — feat(backend): implement /api/raid/config for web UI
+# Result: #2269 — Offload navmesh download from TUI render thread to background worker
+Implemented asynchronous navmesh overlay loading using a per-app background channel, polling completion each loop, and added a map header loading badge while in-flight.
 
-## Scope completed
-- Implemented `GET /api/raid/config` and `PUT /api/raid/config` in `textquest-web/src/api.rs` using a persisted `RaidConfig` schema.
-- Added production routing for raid config in `textquest-web/src/main.rs` and wired state fields for in-memory + disk-backed config.
-- Added startup loading and test-state loading for `raid_config` using a dedicated `config/raid-config.toml` path.
-- Updated existing API test expectation for `/api/raid/config` now to expect `200 OK`.
-
-## Verification
-- Ran `cargo check` after implementation and route/state updates.
+- `textquest/src/tui/app.rs`: added background navmesh loader state, non-blocking spawn path, and completion polling/apply logic.
+- `textquest/src/tui/run.rs`: poll background navmesh load each render tick before drawing.
+- `textquest/src/tui/ui/map.rs`: show `Loading navmesh...` status in the map panel header while load is pending.
+- `cargo check` succeeded.
+- No other source files modified.
