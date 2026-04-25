@@ -22,6 +22,7 @@ use super::{
         priority_queue::LlmRequestQueue,
     },
     memory::MemoryStore,
+    semantic_memory::{prompt_snippet, SemanticMemoryFilter, SemanticMemoryStore},
     personality::{PersonalityEngine, SoulContext},
     personality_drift::DriftEngine,
     social::SocialGraph,
@@ -53,6 +54,13 @@ struct QueuedCommand {
     command: Command,
     priority: IpcCommandPriority,
     queued_at: Instant,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RecentCharacterContext {
+    zone: String,
+    party_overlap: usize,
+    group_members: Vec<String>,
 }
 
 /// Lightweight IPC command queue used when the named pipe is unavailable.
@@ -205,6 +213,7 @@ struct CharacterSoul {
 pub struct SoulCoordinator {
     souls: HashMap<ClientId, CharacterSoul>,
     memory: MemoryStore,
+    semantic_memory: SemanticMemoryStore,
     social: SocialGraph,
     llm_queue: LlmRequestQueue,
     config: SoulConfig,
@@ -227,6 +236,8 @@ pub struct SoulCoordinator {
     /// Sliding one-hour window of chat-derived memory write timestamps, keyed
     /// by client. Used to enforce `max_chat_memory_writes_per_hour`.
     chat_memory_write_timestamps: HashMap<ClientId, VecDeque<Instant>>,
+    /// Last observed world-state context for each character.
+    recent_contexts: HashMap<ClientId, RecentCharacterContext>,
     /// Global phrase frequency tracker for catchphrase candidate detection.
     phrase_tracker: PhraseFrequencyTracker,
     /// Per-pair banter cooldown engine for inter-character dialogue.
@@ -245,6 +256,7 @@ impl SoulCoordinator {
     /// Returns an error if the operation fails.
     pub fn new(config: SoulConfig, db_path: &Path) -> Result<Self> {
         let memory = MemoryStore::open(db_path)?;
+        let semantic_memory = SemanticMemoryStore::open(db_path)?;
         let social = SocialGraph::from_seeds(&config.relationship);
         let suppression = config.suppression.clone();
         // Phase 1: 0 token budget (fallback only, no real LLM calls)
@@ -253,6 +265,7 @@ impl SoulCoordinator {
         Ok(Self {
             souls: HashMap::new(),
             memory,
+            semantic_memory,
             social,
             llm_queue,
             config,
@@ -265,6 +278,7 @@ impl SoulCoordinator {
             anomaly_detector: AnomalyDetector::new(),
             audit: None,
             chat_memory_write_timestamps: HashMap::new(),
+            recent_contexts: HashMap::new(),
             phrase_tracker: PhraseFrequencyTracker::new(),
             banter: BanterEngine::new(),
         })
@@ -398,6 +412,15 @@ impl SoulCoordinator {
                 .filter(|s| s.spawn_type == 0 && s.name != soul.name)
                 .map(|s| s.name.clone())
                 .collect();
+            let party_overlap = group_members.len().saturating_add(1);
+            self.recent_contexts.insert(
+                client_id,
+                RecentCharacterContext {
+                    zone: zone.to_string(),
+                    party_overlap,
+                    group_members: group_members.clone(),
+                },
+            );
 
             let ctx = SoulContext {
                 character_name: &soul.name,
@@ -629,6 +652,14 @@ impl SoulCoordinator {
                     &summary,
                     None,
                 );
+                let _ = self.semantic_memory.record_debrief(
+                    client_id,
+                    &summary,
+                    &["hourly_summary"],
+                    None,
+                    None,
+                    0,
+                );
             }
         }
     }
@@ -687,7 +718,7 @@ impl SoulCoordinator {
         let Some(soul) = self.souls.get_mut(&client_id) else {
             return;
         };
-        let _soul_name = soul.name.clone();
+        let soul_name = soul.name.clone();
 
         let message = message.trim();
         if message.is_empty() {
@@ -748,33 +779,70 @@ impl SoulCoordinator {
                 AuditActionType::MemoryRecord,
                 format!(
                     "{} recorded player chat memory from {}",
-                    soul.name, player_name
+                    soul_name, player_name
                 ),
                 None,
                 None,
             );
         }
 
+        let traits = soul.traits.clone();
+        let mood = soul.mood;
+        let speech_style = soul.speech_style.clone();
+        let backstory = soul.backstory.clone();
+        let recent_context = self.recent_contexts.get(&client_id).cloned();
+        drop(soul);
+
+        let semantic_query = if let Some(context) = &recent_context {
+            format!(
+                "{} {} {} zone={} party={} members={}",
+                soul_name,
+                player_name,
+                message,
+                context.zone,
+                context.party_overlap,
+                context.group_members.join(",")
+            )
+        } else {
+            format!("{} {} {}", soul_name, player_name, message)
+        };
+
+        let semantic_filter = SemanticMemoryFilter {
+            zone: recent_context.as_ref().map(|context| context.zone.clone()),
+            min_party_overlap: recent_context
+                .as_ref()
+                .map(|context| context.party_overlap)
+                .filter(|overlap| *overlap >= 3),
+        };
+
+        let mut memory_context = Vec::new();
+        if let Ok(rows) =
+            self.semantic_memory
+                .recall(client_id, &semantic_query, semantic_filter, 5)
+        {
+            memory_context.extend(rows.into_iter().map(|row| prompt_snippet(&row)));
+        }
+        if let Ok(rows) = self.memory.recall_recent_window(client_id, 14, 3) {
+            memory_context.extend(rows.into_iter().map(|row| row.to_prompt_line()));
+        }
+        if let Ok(rows) = self.memory.recall_about(client_id, player_name, 2) {
+            memory_context.extend(rows.into_iter().map(|row| row.to_prompt_line()));
+        }
+
         // Queue an LLM response (high priority for real players)
         let request = LlmRequest {
-            character_name: soul.name.clone(),
-            traits: soul.traits.clone(),
-            mood: soul.mood,
-            speech_style: soul.speech_style.clone(),
+            character_name: soul_name.clone(),
+            traits,
+            mood,
+            speech_style,
             situation: Situation::PlayerChat {
                 player_name: player_name.to_string(),
                 message: message.to_owned(),
                 channel: channel.to_string(),
             },
             priority: LlmPriority::High,
-            memory_context: self
-                .memory
-                .recall_about(client_id, player_name, 5)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|row| row.event_json)
-                .collect(),
-            backstory: soul.backstory.clone(),
+            memory_context,
+            backstory,
         };
 
         // Audit: LLM request enqueued
@@ -784,7 +852,7 @@ impl SoulCoordinator {
                 AuditActionType::LlmRequest,
                 format!(
                     "{} LLM request enqueued for player chat from {}",
-                    soul.name, player_name
+                    soul_name, player_name
                 ),
                 None,
                 Some(serde_json::json!({"priority": "High", "channel": channel})),
@@ -806,7 +874,7 @@ impl SoulCoordinator {
             // character observing the message.
             let faction_score = self
                 .social
-                .get(&_soul_name, player_name)
+                .get(&soul_name, player_name)
                 .map(|r| r.faction_score)
                 .unwrap_or(0);
 

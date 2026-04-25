@@ -41,6 +41,22 @@ impl ApiLlmClient {
         }
     }
 
+    /// Render recent memories as a compact prompt block.
+    fn render_recent_memories(memory_context: &[String]) -> String {
+        if memory_context.is_empty() {
+            return String::new();
+        }
+
+        let lines = memory_context
+            .iter()
+            .take(8)
+            .map(|line| format!("- {}", line.replace('\n', " ")))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        format!("Recent memories:\n{lines}")
+    }
+
     /// Convert a Situation into a user-facing prompt string.
     fn situation_to_prompt(request: &LlmRequest) -> String {
         match &request.situation {
@@ -120,7 +136,15 @@ impl ApiLlmClient {
 impl LlmProvider for ApiLlmClient {
     fn generate(&mut self, request: &LlmRequest) -> Result<LlmResponse> {
         let system = self.system_prompt();
-        let user_msg = Self::situation_to_prompt(request);
+        let user_msg = if request.memory_context.is_empty() {
+            Self::situation_to_prompt(request)
+        } else {
+            format!(
+                "{}\n\n{}",
+                Self::render_recent_memories(&request.memory_context),
+                Self::situation_to_prompt(request)
+            )
+        };
 
         let (text, tokens_used) = match self.config.provider {
             LlmProviderKind::Ollama => self.call_ollama(&system, &user_msg)?,
@@ -244,6 +268,17 @@ mod tests {
         let prompt = client.system_prompt();
         assert!(prompt.contains("Fippy Darkpaw"));
         assert!(prompt.contains("Also mention loot drops."));
+    }
+
+    #[test]
+    fn render_recent_memories_formats_block() {
+        let rendered = ApiLlmClient::render_recent_memories(&[
+            "Tank prefers pull-from-camp".into(),
+            "Wizard hates root-rotting".into(),
+        ]);
+        assert!(rendered.contains("Recent memories:"));
+        assert!(rendered.contains("Tank prefers pull-from-camp"));
+        assert!(rendered.contains("Wizard hates root-rotting"));
     }
 
     #[test]

@@ -61,6 +61,7 @@ impl TraitDrivenResponder {
         _message: &str,
         traits: &PersonalityTraits,
         mood: MoodState,
+        memory_context: &[String],
     ) -> String {
         // Friendly vs curt response based on agreeableness + mood
         let greetings = if traits.agreeableness > 0.6 {
@@ -94,10 +95,20 @@ impl TraitDrivenResponder {
         };
 
         let greeting = self.pick(greetings);
+        let memory_note = memory_context.first().map(|entry| {
+            let snippet = entry.replace('\n', " ");
+            snippet.chars().take(72).collect::<String>()
+        });
 
         // Sometimes add the player's name
         if traits.extraversion > 0.5 && self.rng.next_f32() < 0.4 {
-            format!("{greeting}, {player_name}")
+            if let Some(memory_note) = memory_note {
+                format!("{greeting}, {player_name}. I still remember {memory_note}.")
+            } else {
+                format!("{greeting}, {player_name}")
+            }
+        } else if let Some(memory_note) = memory_note {
+            format!("{greeting}. I still remember {memory_note}.")
         } else {
             greeting.to_string()
         }
@@ -171,7 +182,13 @@ impl LlmProvider for TraitDrivenResponder {
                 player_name,
                 message,
                 ..
-            } => self.respond_to_player(player_name, message, &request.traits, request.mood),
+            } => self.respond_to_player(
+                player_name,
+                message,
+                &request.traits,
+                request.mood,
+                &request.memory_context,
+            ),
 
             Situation::IdleChatter => self.idle_chatter(&request.traits, request.mood),
 

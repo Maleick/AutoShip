@@ -10,12 +10,14 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use chrono::{NaiveDateTime, Utc};
+use chrono::{Duration as ChronoDuration, NaiveDateTime, Utc};
 use rusqlite::{Connection, params};
 use textquest_common::{
     soul::{MoodState, SoulEvent, SpeechStyle},
     types::ClientId,
 };
+
+use crate::semantic_memory;
 
 /// Exponential backoff delays for database retry logic (milliseconds).
 const RETRY_DELAYS_MS: [u64; 5] = [100, 500, 1_000, 5_000, 30_000];
@@ -74,6 +76,9 @@ struct CachedMemory {
     zone: Option<String>,
     mood_at_time: String,
     importance: f32,
+    embedding: String,
+    kind: String,
+    session_id: Option<String>,
 }
 
 /// Autobiographical memory store backed by `SQLite`.
@@ -127,6 +132,9 @@ CREATE TABLE IF NOT EXISTS memories (
     mood_at_time TEXT NOT NULL,
     importance   REAL NOT NULL DEFAULT 1.0,
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    session_id   TEXT,
+    embedding    TEXT NOT NULL DEFAULT '[]',
+    kind         TEXT NOT NULL DEFAULT 'episodic',
     decayed      INTEGER NOT NULL DEFAULT 0
 );
 
@@ -239,6 +247,35 @@ where
     Err(last_err.expect("retry loop must set last_err"))
 }
 
+fn ensure_memory_columns(conn: &Connection) -> Result<()> {
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(memories)")
+        .context("Failed to inspect memory schema")?;
+    let existing = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .context("Failed to read memory schema columns")?;
+
+    for (column, sql) in [
+        ("session_id", "ALTER TABLE memories ADD COLUMN session_id TEXT"),
+        (
+            "embedding",
+            "ALTER TABLE memories ADD COLUMN embedding TEXT NOT NULL DEFAULT '[]'",
+        ),
+        (
+            "kind",
+            "ALTER TABLE memories ADD COLUMN kind TEXT NOT NULL DEFAULT 'episodic'",
+        ),
+    ] {
+        if !existing.iter().any(|name| name == column) {
+            conn.execute(sql, [])
+                .with_context(|| format!("Failed to add {column} column to memories"))?;
+        }
+    }
+
+    Ok(())
+}
+
 impl MemoryStore {
     /// Open (or create) the memory database at the given path.
     ///
@@ -258,6 +295,7 @@ impl MemoryStore {
             conn.execute_batch(SCHEMA)
                 .context("Failed to initialize memory store schema")
         })?;
+        ensure_memory_columns(&conn)?;
 
         Ok(Self {
             conn,
@@ -279,6 +317,7 @@ impl MemoryStore {
         let conn = Connection::open_in_memory().expect("Failed to open in-memory SQLite");
         conn.execute_batch(SCHEMA)
             .expect("Failed to apply schema to in-memory store");
+        ensure_memory_columns(&conn).expect("Failed to apply memory schema migration");
         Self {
             conn,
             health: Arc::new(DbHealth::default()),
@@ -309,6 +348,15 @@ impl MemoryStore {
         let event_json = serde_json::to_string(event).context("Failed to serialize SoulEvent")?;
         let zone = event_zone(event);
         let mood_str = format!("{mood:?}");
+        let memory_blob = format!(
+            "kind=episodic\ntype={event_type}\ncontent={event_json}\nzone={}\nmood={mood_str}",
+            zone.as_deref().unwrap_or("unknown")
+        );
+        let embedding = semantic_memory::embed_document(&memory_blob);
+        let embedding_json =
+            serde_json::to_string(&embedding).context("Failed to serialize memory embedding")?;
+        let kind = String::from("episodic");
+        let session_id = None::<String>;
 
         // If the circuit is open, write to fallback cache and return a synthetic ID.
         if self.health.is_open() {
@@ -324,6 +372,9 @@ impl MemoryStore {
                 zone,
                 mood_at_time: mood_str,
                 importance,
+                embedding: embedding_json,
+                kind,
+                session_id,
             });
             return Ok(-1);
         }
@@ -332,15 +383,18 @@ impl MemoryStore {
             self.conn
                 .execute(
                     "INSERT INTO memories (character_id, event_type, event_json, zone, \
-                     mood_at_time, importance)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                     mood_at_time, importance, session_id, embedding, kind)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                     params![
                         character_id,
                         event_type,
                         &event_json,
                         &zone,
                         &mood_str,
-                        importance
+                        importance,
+                        session_id.as_deref(),
+                        &embedding_json,
+                        &kind
                     ],
                 )
                 .context("Failed to record memory")
@@ -361,15 +415,18 @@ impl MemoryStore {
                 );
                 self.push_fallback(CachedMemory {
                     character_id,
-                    event_type: event_type.to_string(),
-                    event_json,
-                    zone,
-                    mood_at_time: mood_str,
-                    importance,
-                });
-                Ok(-1)
-            }
+                event_type: event_type.to_string(),
+                event_json,
+                zone,
+                mood_at_time: mood_str,
+                importance,
+                embedding: embedding_json,
+                kind,
+                session_id,
+            });
+            Ok(-1)
         }
+    }
     }
 
     /// Push a memory entry into the in-memory fallback cache, evicting the
@@ -411,6 +468,36 @@ impl MemoryStore {
             .query_map(params![character_id, limit as i64], MemoryRow::from_row)?
             .collect::<std::result::Result<Vec<_>, _>>()
             .context("Failed to read memories")?;
+
+        Ok(rows)
+    }
+
+    /// Recall the most recent memories within a rolling age window.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
+    pub fn recall_recent_window(
+        &self,
+        character_id: ClientId,
+        max_age_days: i64,
+        limit: usize,
+    ) -> Result<Vec<MemoryRow>> {
+        let cutoff = Utc::now() - ChronoDuration::days(max_age_days.max(0));
+        let cutoff = cutoff.format("%Y-%m-%d %H:%M:%S").to_string();
+        let mut stmt = self.conn.prepare(
+            "SELECT id, event_type, event_json, zone, mood_at_time, importance, created_at, \
+             decayed
+             FROM memories
+             WHERE character_id = ?1 AND decayed = 0 AND created_at >= ?2
+             ORDER BY created_at DESC
+             LIMIT ?3",
+        )?;
+
+        let rows = stmt
+            .query_map(params![character_id, cutoff, limit as i64], MemoryRow::from_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("Failed to read recent memories")?;
 
         Ok(rows)
     }
@@ -1316,6 +1403,15 @@ impl MemoryRow {
     /// Returns an error if the operation fails.
     pub fn event(&self) -> Result<SoulEvent> {
         serde_json::from_str(&self.event_json).context("Failed to deserialize SoulEvent")
+    }
+
+    /// Render a compact line for prompt context.
+    pub fn to_prompt_line(&self) -> String {
+        let zone = self.zone.as_deref().unwrap_or("-");
+        format!(
+            "[{}] zone={} mood={} importance={:.2} created_at={} {}",
+            self.event_type, zone, self.mood_at_time, self.importance, self.created_at, self.event_json
+        )
     }
 }
 

@@ -38,6 +38,11 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"
 chrono = { version = "0.4", features = ["serde"] }
 petgraph = "0.6"
 tempfile = "3"
+lancedb = "0.27.2"
+arrow-array = "57.2"
+arrow-schema = "57.2"
+futures = "0.3"
+fastembed = "5.13.3"
 
 [build-dependencies]
 cc = "1"

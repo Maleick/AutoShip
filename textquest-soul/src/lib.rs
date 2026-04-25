@@ -29,6 +29,8 @@ pub mod llm;
 /// Persistent memory — stores character experiences and relationships across
 /// sessions.
 pub mod memory;
+/// LanceDB-backed semantic memory and embedding utilities.
+pub mod semantic_memory;
 /// Natural mood decay over time.
 pub mod mood_decay;
 /// Operator controls and safety mechanisms.
