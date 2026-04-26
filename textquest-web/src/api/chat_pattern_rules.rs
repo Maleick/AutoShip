@@ -4,11 +4,53 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 
 use crate::AppState;
+
+// ---------------------------------------------------------------------------
+// Serde length guards
+// ---------------------------------------------------------------------------
+
+/// Maximum number of rules accepted in a single import payload.
+pub const IMPORT_MAX_RULES: usize = 1000;
+/// Maximum byte length for string name/pattern fields in an import payload.
+pub const IMPORT_MAX_STRING_BYTES: usize = 4096;
+
+/// Deserialise a `Vec<T>` and reject payloads with more than
+/// [`IMPORT_MAX_RULES`] elements.
+fn deserialize_bounded_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    let v: Vec<T> = Vec::deserialize(deserializer)?;
+    if v.len() > IMPORT_MAX_RULES {
+        return Err(serde::de::Error::custom(format!(
+            "array exceeds maximum length of {} items",
+            IMPORT_MAX_RULES
+        )));
+    }
+    Ok(v)
+}
+
+/// Deserialise a `String` and reject values longer than
+/// [`IMPORT_MAX_STRING_BYTES`] bytes.
+fn deserialize_bounded_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s.len() > IMPORT_MAX_STRING_BYTES {
+        return Err(serde::de::Error::custom(format!(
+            "string field exceeds maximum length of {} bytes",
+            IMPORT_MAX_STRING_BYTES
+        )));
+    }
+    Ok(s)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatPatternRuleDto {
@@ -74,6 +116,41 @@ pub struct RuleStats {
     #[serde(rename = "totalFires")]
     pub total_fires: u64,
 }
+
+// ---------------------------------------------------------------------------
+// Import-specific validated DTOs
+// ---------------------------------------------------------------------------
+
+/// A single rule DTO accepted in the import endpoint.  String name and
+/// channels array are length-guarded to prevent unbounded allocations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportRuleDto {
+    pub id: String,
+    #[serde(deserialize_with = "deserialize_bounded_string")]
+    pub name: String,
+    #[serde(deserialize_with = "deserialize_bounded_string")]
+    pub pattern: String,
+    #[serde(rename = "patternType")]
+    pub pattern_type: String,
+    #[serde(deserialize_with = "deserialize_bounded_vec")]
+    pub channels: Vec<String>,
+    pub action: ActionDto,
+    pub priority: u32,
+    pub enabled: bool,
+    #[serde(rename = "cooldownSecs")]
+    pub cooldown_secs: u32,
+    #[serde(rename = "fireCount")]
+    #[serde(default)]
+    pub fire_count: u64,
+}
+
+/// Top-level wrapper for `POST /api/chat-pattern-rules/import`.
+///
+/// Accepts at most [`IMPORT_MAX_RULES`] rules per request.
+#[derive(Debug, Deserialize)]
+pub struct ImportRulesPayload(
+    #[serde(deserialize_with = "deserialize_bounded_vec")] pub Vec<ImportRuleDto>,
+);
 
 fn chat_pattern_rules_path() -> PathBuf {
     crate::api::textquest_config_path()
@@ -440,12 +517,31 @@ pub async fn reset_all_cooldowns(State(state): State<Arc<AppState>>) -> impl Int
 
 pub async fn import_rules(
     State(state): State<Arc<AppState>>,
-    Json(rules): Json<Vec<ChatPatternRuleDto>>,
+    Json(ImportRulesPayload(rules)): Json<ImportRulesPayload>,
 ) -> impl IntoResponse {
     let imported_count = rules.len();
     let mut engine = state.chat_pattern_rules.write().await;
-    let imported: Vec<textquest_common::chat_pattern_rules::ChatPatternRule> =
-        rules.into_iter().map(|dto| dto_to_rule(&dto)).collect();
+    // Convert ImportRuleDto → ChatPatternRuleDto → ChatPatternRule.
+    // ImportRuleDto has the same shape as ChatPatternRuleDto; mapping keeps
+    // the conversion pipeline unchanged.
+    let imported: Vec<textquest_common::chat_pattern_rules::ChatPatternRule> = rules
+        .into_iter()
+        .map(|dto| {
+            let full_dto = ChatPatternRuleDto {
+                id: dto.id,
+                name: dto.name,
+                pattern: dto.pattern,
+                pattern_type: dto.pattern_type,
+                channels: dto.channels,
+                action: dto.action,
+                priority: dto.priority,
+                enabled: dto.enabled,
+                cooldown_secs: dto.cooldown_secs,
+                fire_count: dto.fire_count,
+            };
+            dto_to_rule(&full_dto)
+        })
+        .collect();
 
     for rule in imported {
         engine.add_rule(rule);
@@ -541,5 +637,90 @@ mod tests {
         assert_eq!(rule.priority, 5);
         assert!(rule.enabled);
         assert_eq!(rule.cooldown_secs, 30);
+    }
+
+    // -----------------------------------------------------------------------
+    // Length-guard tests — issue #3409
+    // -----------------------------------------------------------------------
+
+    fn make_import_rule_dto_json(name: &str, channels: Vec<String>) -> serde_json::Value {
+        serde_json::json!({
+            "id": "x",
+            "name": name,
+            "pattern": "test",
+            "patternType": "literal",
+            "channels": channels,
+            "action": { "actionType": "trigger_alert", "payload": "!" },
+            "priority": 1,
+            "enabled": true,
+            "cooldownSecs": 0,
+            "fireCount": 0
+        })
+    }
+
+    /// A valid import payload (1 rule, short name) should deserialise without
+    /// error and produce the correct rule count.
+    #[test]
+    fn import_payload_valid_deserialization() {
+        let dto = make_import_rule_dto_json("Valid Rule", vec!["say".to_string()]);
+        let payload: Vec<ImportRuleDto> = serde_json::from_value(serde_json::json!([dto])).unwrap();
+        assert_eq!(payload.len(), 1);
+        assert_eq!(payload[0].name, "Valid Rule");
+    }
+
+    /// An import payload with more than IMPORT_MAX_RULES items must be
+    /// rejected with a serde error (the axum Json extractor will surface this
+    /// as a 422 Unprocessable Entity).
+    #[test]
+    fn import_payload_oversized_array_rejected() {
+        let dto = make_import_rule_dto_json("Rule", vec![]);
+        let big_array: Vec<serde_json::Value> = (0..=IMPORT_MAX_RULES).map(|_| dto.clone()).collect();
+        let result: Result<ImportRulesPayload, _> = serde_json::from_value(serde_json::Value::Array(big_array));
+        assert!(
+            result.is_err(),
+            "Expected deserialization error for oversized array, but got Ok"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("exceeds maximum length"),
+            "Expected 'exceeds maximum length' in error, got: {err}"
+        );
+    }
+
+    /// An import payload containing a rule whose `name` field exceeds
+    /// IMPORT_MAX_STRING_BYTES bytes must be rejected.
+    #[test]
+    fn import_payload_oversized_name_rejected() {
+        let long_name = "x".repeat(IMPORT_MAX_STRING_BYTES + 1);
+        let dto = make_import_rule_dto_json(&long_name, vec![]);
+        let result: Result<Vec<ImportRuleDto>, _> = serde_json::from_value(serde_json::json!([dto]));
+        assert!(
+            result.is_err(),
+            "Expected deserialization error for oversized name, but got Ok"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("exceeds maximum length"),
+            "Expected 'exceeds maximum length' in error, got: {err}"
+        );
+    }
+
+    /// An import payload containing a rule with an oversized `channels` array
+    /// (more than IMPORT_MAX_RULES entries in the channels field) must be
+    /// rejected.
+    #[test]
+    fn import_payload_oversized_channels_array_rejected() {
+        let channels: Vec<String> = (0..=IMPORT_MAX_RULES).map(|i| format!("chan{i}")).collect();
+        let dto = make_import_rule_dto_json("Rule", channels);
+        let result: Result<Vec<ImportRuleDto>, _> = serde_json::from_value(serde_json::json!([dto]));
+        assert!(
+            result.is_err(),
+            "Expected deserialization error for oversized channels, but got Ok"
+        );
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("exceeds maximum length"),
+            "Expected 'exceeds maximum length' in error, got: {err}"
+        );
     }
 }
