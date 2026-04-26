@@ -114,6 +114,8 @@ impl TrampolineHardener {
     /// installation.
     #[cfg(windows)]
     pub fn harden_private_rwx_allocations(&self) -> usize {
+        use std::mem::size_of;
+
         use windows::Win32::System::Memory::{
             MEM_COMMIT, MEM_PRIVATE, MEMORY_BASIC_INFORMATION, PAGE_PROTECTION_FLAGS,
             VirtualProtect, VirtualQuery,
@@ -123,6 +125,76 @@ impl TrampolineHardener {
             .lock()
             .map(|map| map.iter().map(|(a, (s, _))| (*a, *s)).collect())
             .unwrap_or_default();
+
+        if entries.is_empty() {
+            let mut address = 0usize;
+            let mut hardened = 0usize;
+
+            for _ in 0..1_048_576 {
+                let mut mbi = MEMORY_BASIC_INFORMATION::default();
+                // SAFETY: VirtualQuery accepts arbitrary process addresses and fills
+                // `mbi` for the containing region when the address is queryable.
+                let queried = unsafe {
+                    VirtualQuery(
+                        Some(address as *const _),
+                        &mut mbi,
+                        size_of::<MEMORY_BASIC_INFORMATION>(),
+                    )
+                };
+                if queried == 0 || mbi.RegionSize == 0 {
+                    break;
+                }
+
+                if mbi.State == MEM_COMMIT
+                    && mbi.Type == MEM_PRIVATE
+                    && mbi.RegionSize <= MAX_PRIVATE_RWX_TRAMPOLINE_SIZE
+                {
+                    if let Some(new_protect) = hardened_private_execute_protection(mbi.Protect.0) {
+                        let mut old = PAGE_PROTECTION_FLAGS(0);
+                        // SAFETY: The region is committed memory in the current process.
+                        // The hardening pass only removes write permission from private
+                        // executable pages after hook installation has completed.
+                        match unsafe {
+                            VirtualProtect(
+                                mbi.BaseAddress as *const _,
+                                mbi.RegionSize,
+                                PAGE_PROTECTION_FLAGS(new_protect),
+                                &mut old,
+                            )
+                        } {
+                            Ok(()) => {
+                                hardened += 1;
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    base = ?mbi.BaseAddress,
+                                    size = mbi.RegionSize,
+                                    protect = mbi.Protect.0,
+                                    error = %e,
+                                    "VirtualProtect(private RWX -> RX) failed"
+                                );
+                            }
+                        }
+                    }
+                }
+
+                let base = mbi.BaseAddress as usize;
+                let next = base.saturating_add(mbi.RegionSize);
+                if next <= address {
+                    break;
+                }
+                address = next;
+            }
+
+            if hardened > 0 {
+                tracing::info!(
+                    regions = hardened,
+                    "Hardened private execute-write trampoline allocations"
+                );
+            }
+            return hardened;
+        }
+
         let mut hardened = 0usize;
 
         for (addr, size) in entries {
