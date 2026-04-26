@@ -71,6 +71,8 @@ pub mod login;
 pub mod account_safety;
 /// Navigation shared types (waypoints, zones, pathfinding requests).
 pub mod nav;
+/// Multi-zone A* pathfinding across the zone graph.
+pub mod navigation;
 /// Observability infrastructure for metrics collection and structured logging.
 pub mod observability;
 /// Hot-updatable offset database backed by JSON.
