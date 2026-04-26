@@ -1,0 +1,152 @@
+# Ethernere primary farming camp for issue #3373.
+#
+# Zone: Ethernere (Call of the Forsaken expansion)
+#
+# Camp Location Strategy:
+# - Primary camp anchor: Central plateau shelf east of the Ethernere rift
+#   entrance. Safe flat ground with clear line-of-sight to the primary pull
+#   corridor. Avoids the spectral gorge to the west (hard pathing resets).
+# - Pull handoff: South edge of the plateau shelf, away from rift wanderers
+#   that path through the protected NPC cluster near the zoneline.
+# - Mana thresholds tuned conservatively for CotF-era sustained damage output
+#   and shade/revenant AE proc risk.
+#
+# Zone Notes:
+# - Ethernere is a Call of the Forsaken (CotF) open-world zone requiring:
+#   * Level 85+ recommended (cap 100 at CotF launch)
+#   * Access via Guild Hall portal or Plane of Knowledge
+#   * Faction with the Ethernauts faction is neutral to hostile
+# - Primary pull targets: shades, revenants, spectral constructs
+# - Avoid: Named wanderers (Vekerchiki, Cazic-Thule projections, rift anchors)
+# - Multibox farming: Recommended 85+ geared group; 6-box viable after route
+#   validation confirms safe spot geometry
+# - No-stuck-loop recovery: leash_radius terminates bad pulls before geometry
+#   traps in the western gorge; return_no_aggro prevents drag-back wipes
+#
+# Safe Spots:
+# - Primary safe med spot: [1240.0, -880.0, 112.0]
+#   Central plateau shelf, elevated, away from roam corridors.
+#   Safe retreat to rift zoneline at [1100.0, -750.0, 108.0].
+# - Backup safe spot (evac fallback): [1380.0, -920.0, 115.0]
+#   Northeast ledge; use if primary is contested by wandering revenant path.
+#
+# Pull Points:
+# - Primary pull handoff: [1290.0, -940.0, 112.0]
+#   South shelf edge; keeps rift wanderers and spectral constructs funneled
+#   back toward camp without drifting through the protected NPC cluster at
+#   [1050.0, -700.0, 108.0].
+# - Secondary pull point (extended route): [1340.0, -1020.0, 110.0]
+#   Used for the southeastern pocket when primary mobs are cleared.
+#
+# 6-Waypoint Route (primary loop — clockwise from camp):
+#
+#   WP1 (camp): [1240.0, -880.0, 112.0]
+#     Camp anchor / med stack. Safe flat ground on central plateau.
+#
+#   WP2 (south pull):  [1290.0, -940.0, 112.0]
+#     Primary pull handoff. Funnels shades and revenants from south corridor.
+#
+#   WP3 (southeast):   [1340.0, -1020.0, 110.0]
+#     Southeast pocket clear. Revenant and shade spawn cluster.
+#     Hard stop — do not extend beyond [1400.0, -1080.0] (gorge drop).
+#
+#   WP4 (east shelf):  [1420.0, -960.0, 113.0]
+#     East shelf clear. Spectral construct spawns; occasional named path.
+#     Stay above Z=110 — below is the impassable ravine floor.
+#
+#   WP5 (northeast):   [1380.0, -890.0, 115.0]
+#     Northeast ledge. Backup safe spot doubles as pull waypoint here.
+#     Two shade spawns; pull one at a time, leash is tight.
+#
+#   WP6 (return):      [1300.0, -860.0, 112.0]
+#     Return leg back to camp anchor. Clear stragglers before looping.
+#     Completes the clockwise plateau loop; re-enter from WP2 for next sweep.
+#
+# No-Stuck-Loop Recovery:
+# - leash_radius = 280: terminates bad pulls before the western gorge geometry
+#   trap at approx [1100.0, -1000.0, 90.0]. Any mob dragged that far is
+#   abandoned and the puller returns to WP1.
+# - return_no_aggro = true: prevents the 6-box stack from following a live
+#   pull back to camp, which would cascade through thin geometry on WP6.
+# - pull_radius = 320: tight enough to exclude the protected NPC cluster and
+#   the rift anchor mob at the zoneline; wide enough to cover all 6 waypoints.
+#
+# References:
+# - Parent issue: #1777 zone tracker
+# - EverQuest coordinate system: XY plane is horizontal, Z is vertical
+# - Approximate trash respawn cadence: ~6 minutes (community baseline)
+
+name = "ethernere"
+zone = "ethernere"
+
+# Primary camp anchor: central plateau shelf, elevated safe ground.
+camp_center = [1240.0, -880.0, 112.0]
+
+# Primary pull handoff: south shelf edge, funnels mobs toward camp.
+pull_point = [1290.0, -940.0, 112.0]
+
+# Pull radius covers all 6 waypoints on the plateau loop without reaching
+# the protected NPC cluster at the rift zoneline or the western gorge.
+pull_radius = 320
+
+# Tight camp radius keeps the 6-box stack on the flat plateau surface,
+# away from the ledge drops on the east and the gorge slope to the west.
+camp_radius = 40
+
+# Leash radius: terminates bad pulls before the western gorge geometry trap.
+# Tuned to abandon any pull dragged more than 280 units from camp center.
+leash_radius = 280
+
+# Conservative mana thresholds for CotF shade/revenant sustained damage
+# and AE proc risk during multi-mob pulls on the southeast pocket clear.
+rest_mana_pct = 75
+pull_mana_pct = 50
+
+# Level range: CotF content, geared 85-100 group.
+level_range = [85, 100]
+
+# Primary pull targets: shades, revenants, and spectral constructs on the
+# central plateau and southeast pocket.
+pull_mob_names = [
+  "a spectral shade",
+  "a plateau revenant",
+  "an ethernere shade",
+  "a spectral construct",
+  "a forsaken shade",
+  "a wandering revenant",
+  "a shattered revenant",
+  "an anchored shade",
+  "a grief-born shade",
+  "a lost revenant",
+]
+
+# Ignore named wanderers, rift anchor mobs, and protected NPCs that would
+# destabilize the route or cause faction issues.
+ignore_mob_names = [
+  "Vekerchiki",
+  "a rift anchor",
+  "a rift guardian",
+  "Cazic projection",
+  "the Faceless herald",
+  "an Ethernaut scout",
+  "an Ethernaut guardian",
+  "a plateau warden",
+  "the memory of Ethernere",
+]
+
+# Burn rare named spawns when encountered within the plateau loop bounds.
+# Do not chase named into the gorge or northwest rift approach.
+burn_mob_names = [
+  "a spectral champion",
+  "a revenant lord",
+  "the shade captain",
+  "Vekerchiki",
+]
+
+# Prevent return-to-camp while aggro is active. The plateau geometry has
+# narrow ledge exits at WP5/WP6; a returning puller with live mobs risks
+# cascading into the med stack or sliding off the northeast ledge.
+return_no_aggro = true
+
+# Progression chain.
+prev_camp = "underfoot_primary"
