@@ -30,20 +30,20 @@ const MIGRATIONS: &[Migration] = &[
 ];
 
 /// Migration runner: applies pending migrations idempotently
-pub struct MigrationRunner {
-    conn: *const Connection,
+pub struct MigrationRunner<'conn> {
+    conn: &'conn Connection,
 }
 
-impl MigrationRunner {
+impl<'conn> MigrationRunner<'conn> {
     /// Create a new migration runner bound to a connection
-    pub fn new(conn: &Connection) -> Result<Self> {
+    pub fn new(conn: &'conn Connection) -> Result<Self> {
         Ok(MigrationRunner { conn })
     }
 
     /// Initialize schema versions table (must exist before any migration check)
     fn ensure_schema_versions_table(&self) -> Result<()> {
-        let conn = unsafe { &*self.conn };
-        conn.execute_batch(
+        self.conn
+            .execute_batch(
             r#"
             CREATE TABLE IF NOT EXISTS schema_versions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,16 +53,16 @@ impl MigrationRunner {
             );
             "#,
         )
-        .context("Failed to create schema_versions table")?;
+            .context("Failed to create schema_versions table")?;
         Ok(())
     }
 
     /// Get the current schema version
     pub fn current_version(&self) -> Result<i32> {
-        let conn = unsafe { &*self.conn };
         self.ensure_schema_versions_table()?;
 
-        let mut stmt = conn
+        let mut stmt = self
+            .conn
             .prepare("SELECT MAX(version) FROM schema_versions")
             .context("Failed to prepare version query")?;
 
@@ -76,7 +76,6 @@ impl MigrationRunner {
 
     /// Apply all pending migrations
     pub fn apply_pending(&self) -> Result<()> {
-        let conn = unsafe { &*self.conn };
         self.ensure_schema_versions_table()?;
 
         let current = self.current_version()?;
@@ -93,10 +92,8 @@ impl MigrationRunner {
 
     /// Apply a single migration
     fn apply_migration(&self, migration: &Migration) -> Result<()> {
-        let conn = unsafe { &*self.conn };
-
         // Wrap migration in transaction for atomicity
-        let tx = conn.transaction()?;
+        let tx = self.conn.unchecked_transaction()?;
 
         // Execute migration SQL
         tx.execute_batch(migration.sql)
@@ -117,8 +114,6 @@ impl MigrationRunner {
 
     /// Verify all expected tables and indices exist
     pub fn verify_schema(&self) -> Result<()> {
-        let conn = unsafe { &*self.conn };
-
         // Check tables
         let expected_tables = &[
             "sessions",
@@ -133,7 +128,8 @@ impl MigrationRunner {
         ];
 
         for table_name in expected_tables {
-            let exists = conn
+            let exists = self
+                .conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
                     [*table_name],
@@ -156,7 +152,8 @@ impl MigrationRunner {
         ];
 
         for index_name in expected_indices {
-            let exists = conn
+            let exists = self
+                .conn
                 .query_row(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?1",
                     [*index_name],
