@@ -51,9 +51,18 @@ pub fn verify_artifact(artifact_dir: &Path, scope: &str, version: &str) -> Resul
     let provided_sig = std::str::from_utf8(&sig_bytes)
         .ok()
         .map(str::trim)
-        .filter(|sig| !sig.is_empty());
-    let expected_sig = expected_signature(scope, version, &manifest.sha256);
-    if provided_sig != expected_sig.as_deref() {
+        .filter(|sig| !sig.is_empty())
+        .ok_or_else(|| PolicyError::InvalidSignature {
+            scope: scope.to_string(),
+            version: version.to_string(),
+        })?;
+    let expected_sig = expected_signature(scope, version, &manifest.sha256).ok_or_else(|| {
+        PolicyError::InvalidSignature {
+            scope: scope.to_string(),
+            version: version.to_string(),
+        }
+    })?;
+    if provided_sig != expected_sig {
         return Err(PolicyError::InvalidSignature {
             scope: scope.to_string(),
             version: version.to_string(),

@@ -207,3 +207,38 @@ fn default_bundle_is_rule_based() {
         "default bundle should be rule-based marker"
     );
 }
+
+#[test]
+fn store_rejects_missing_sig_key_with_empty_signature() {
+    // SAFETY: single-threaded test setup; no concurrent env access.
+    unsafe { std::env::remove_var("TEXTQUEST_POLICY_SIG_KEY") };
+
+    let tmp = tempfile::tempdir().unwrap();
+    let store_root = tmp.path().join("policies");
+    let artifacts_src = tmp.path().join("artifacts_src");
+
+    let src = artifacts_src.join("rogue.rotation.rl.v1");
+    std::fs::create_dir_all(&src).unwrap();
+
+    let data = b"real data";
+    std::fs::write(src.join("policy.bin"), data).unwrap();
+    let hash = textquest_policy::signature::sha256_hex(data);
+    let manifest = serde_json::json!({
+        "scope": "rogue.rotation",
+        "version": "rl.v1",
+        "source_bundle": "canary#missing-key",
+        "sha256": hash,
+        "produced_at": "2026-04-25T00:00:00Z",
+    });
+    std::fs::write(src.join("manifest.json"), manifest.to_string()).unwrap();
+
+    // Reproduces the bypass condition: empty signature bytes are parsed as missing.
+    std::fs::write(src.join("signature"), b"").unwrap();
+
+    let store = PolicyStore::open(&store_root).expect("store open");
+    let result = store.promote(&src);
+    assert!(
+        result.is_err(),
+        "promote should fail when signature key is unset, even with empty signature"
+    );
+}
