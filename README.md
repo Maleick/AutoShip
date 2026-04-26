@@ -11,16 +11,16 @@
   <a href="https://codecov.io/gh/Maleick/TextQuest"><img src="https://codecov.io/gh/Maleick/TextQuest/branch/master/graph/badge.svg" alt="Coverage"></a>
   <a href="https://github.com/Maleick/TextQuest/releases/tag/v0.7.0-alpha"><img src="https://img.shields.io/static/v1?label=release&message=v0.7.0-alpha&color=success&style=flat" alt="Release"></a>
   <a href="https://textquest.teamoperator.red"><img src="https://img.shields.io/badge/docs-textquest.teamoperator.red-blue?style=flat" alt="Docs"></a>
-  <a href="https://github.com/Maleick/TextQuest/commit/fe48bb66786719650c5b22368d3e9e1f30474d0b"><img src="https://img.shields.io/static/v1?label=last+commit&message=2026-04-25+fe48bb66&color=informational&style=flat" alt="Last Commit"></a>
+  <a href="https://github.com/Maleick/TextQuest/commit/f368caae"><img src="https://img.shields.io/static/v1?label=last+commit&message=2026-04-26+f368caae&color=informational&style=flat" alt="Last Commit"></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust-edition%202024-orange?style=flat" alt="Rust"></a>
   <a href="https://github.com/sponsors/Maleick"><img src="https://img.shields.io/github/sponsors/Maleick?label=Sponsor&logo=GitHub&color=EA4AAA&style=flat" alt="Sponsor"></a>
 </p>
 
 <p align="center">
 
-[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-368%2C483-blue?style=flat-square)](#testing)
-[![Tests](https://img.shields.io/badge/Tests-~7%2C627-brightgreen?style=flat-square)](#testing)
-[![Workspace Crates](https://img.shields.io/badge/Workspace%20Crates-15-purple?style=flat-square)](#testing)
+[![Rust LOC](https://img.shields.io/badge/Rust%20LOC-360%2C860-blue?style=flat-square)](#project-stats)
+[![Tests](https://img.shields.io/badge/Tests-7%2C605-brightgreen?style=flat-square)](#project-stats)
+[![Workspace Crates](https://img.shields.io/badge/Workspace%20Crates-16-purple?style=flat-square)](#project-stats)
 ![Platform](https://img.shields.io/static/v1?label=Platform&message=Windows+%7C+macOS+%7C+Linux&color=lightgrey&style=flat-square)
 
 </p>
@@ -51,6 +51,32 @@ A Rust workspace that reads live game state from EverQuest via `ReadProcessMemor
 │  YOUR EFFORT           █        ~5%      │
 └──────────────────────────────────────────┘
 ```
+
+## Project Stats
+
+Snapshot: **2026-04-26** · master HEAD `f368caae` · these numbers are live indicators refreshed by `scripts/update_readme_metrics.py`.
+
+| Crate                | Rust LOC  |
+| -------------------- | --------: |
+| `textquest`          | 177,000   |
+| `textquest-dll`      |  86,000   |
+| `textquest-common`   |  44,000   |
+| `textquest-web`      |  23,000   |
+| `textquest-soul`     |  21,000   |
+| `textquest-learn`    |   5,000   |
+| `textquest-net`      |   1,500   |
+| `textquest-client`   |     498   |
+| Other crates/tools   |  ~23,862  |
+| **Total**            | **360,860** |
+
+| Metric                | Value   |
+| --------------------- | ------: |
+| Test functions        |   7,605 |
+| Open issues           |     606 |
+| EPIC #3596 (deferred) |     158 |
+| Actionable issues     |    ~448 |
+
+Items under [EPIC #3596](https://github.com/Maleick/TextQuest/issues/3596) require live EverQuest validation; the AutoShip headless pipeline cannot close them without a connected Windows client.
 
 ## Features
 
@@ -178,14 +204,21 @@ flowchart TD
 
 ### Workspace crates
 
-| Crate              | Type   | Role                                                         |
-| ------------------ | ------ | ------------------------------------------------------------ |
-| `textquest`        | bin    | Orchestrator — TUI, camp loop, login, nav, IPC client        |
-| `textquest-dll`    | cdylib | Injected DLL — game hooks, combat, nav, IPC server           |
-| `textquest-common` | lib    | Shared types, offsets, IPC protocol, spawns, enums           |
-| `textquest-client` | lib    | Per-client session management and monitor coordination       |
-| `textquest-soul`   | lib    | LLM-backed personalities, persistent memory, social dynamics |
-| `textquest-web`    | bin    | Axum REST backend + React SPA for web dashboard and config   |
+| Crate                | Type   | Role                                                         |
+| -------------------- | ------ | ------------------------------------------------------------ |
+| `textquest`          | bin    | Orchestrator — TUI, camp loop, login, nav, IPC client        |
+| `textquest-dll`      | cdylib | Injected DLL — game hooks, combat, nav, IPC server           |
+| `textquest-common`   | lib    | Shared types, offsets, IPC protocol, spawns, enums           |
+| `textquest-client`   | lib    | Per-client session management and monitor coordination       |
+| `textquest-soul`     | lib    | LLM-backed personalities, persistent memory, social dynamics |
+| `textquest-web`      | bin    | Axum REST backend + React SPA for web dashboard and config   |
+| `textquest-web-sdk`  | lib    | Typed API client SDK consumed by the React frontend          |
+| `textquest-net`      | lib    | Packet capture, WSASend/WSARecv hooks, opcode decode         |
+| `textquest-learn`    | lib    | Reinforcement learning harness and shadow-learning pipeline  |
+| `textquest-policy`   | lib    | Signature verification and policy enforcement (fail-closed)  |
+| `textquest-voice`    | lib    | Voice synthesis integration for character personalities      |
+| `plugins/*`          | cdylib | Hot-loadable inventory/API extension plugins                 |
+| `tools/*`            | bin    | Dev tools: `llm-client`, `eqdiff`, `etw-consumer`           |
 
 ## Configuration
 
@@ -214,7 +247,7 @@ Full guide: [`docs/wiki/Configuration.md`](docs/wiki/Configuration.md)
 
 ## Testing
 
-Current workspace totals: 368,483 Rust lines, ~7,627 tests, and 15 workspace crates. Latest release: v0.7.0-alpha. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`.
+Current workspace totals: 360,860 Rust lines, 7,605 tests, and 16 workspace crates. Latest release: v0.7.0-alpha. See [Project Stats](#project-stats) for a per-crate breakdown. This line and the badges above are auto-refreshed by `scripts/update_readme_metrics.py`.
 
 ```bash
 cargo test                                    # full workspace
@@ -233,17 +266,18 @@ Platform-independent tests run on macOS; Windows-only tests are behind `#[cfg(wi
 | M2 — Input Dispatch | ✅ Done    | DLL injection, InterpretCmd, IPC pipeline             |
 | M3 — Navigation     | ✅ Done    | Navmesh pathfinding, waypoints, stuck recovery        |
 | M4 — Login Chain    | ✅ Done    | Credential store, login FSM, post-login sequencing    |
-| M5 — Anti-Detection | ✅ Done    | PEB unlink, page encrypt, stack spoof, VEH hooks      |
+| M5 — Anti-Detection | ✅ Done    | PEB unlink, page encrypt, stack spoof, VEH hooks, launchpad bypass via /patchme |
 | M6 — Web Dashboard  | ✅ Done    | Axum REST + React SPA, group builder, loot config     |
 | M7 — Zoning         | 🔄 Active  | Zone transition FSM, safe-coordinate validation       |
 | M8 — Orchestrator   | 🔄 Active  | Camp loop, CH chain, cross-client coordination        |
 | M9 — Hunt Mode      | 🔲 Planned | Tank roam, formation, auto-progression                |
 | M10 — Economy       | 🔲 Planned | Krono farming, vendor cycle, loot distribution        |
 | M11 — Soul Engine   | 🔲 Planned | LLM personalities, persistent memory, social dynamics |
+| M12 — Shadow Learning | 🔲 Planned | Closed-loop RL improvement on top of M9/M11         |
 
 README stays focused on building, running, and operating TextQuest. The current roadmap keeps economy work at `M10` and Soul Engine + LLM work at `M11`. Soul Engine + LLM behavior is tracked under `M11` in the canonical roadmap, after packet, zoning, anti-cheat, orchestration, and economy work.
 
-As of 2026-04-26, ~227 PRs have been merged in the latest burndown wave, completing large sections of M7 (zone graph, MezTracker, TargetScanner, anti-detection counter hooks) and M8 (orchestration, multi-zone pathing). Approximately 176 issues were deferred into a machine-test epic (GitHub issue #3596) pending live Windows validation.
+As of 2026-04-26 (master HEAD `f368caae`, 106 commits merged today), the burndown wave has completed large sections of M7 (zone graph, MezTracker, TargetScanner, anti-detection counter hooks) and M8 (orchestration, multi-zone pathing). 158 issues are deferred into machine-test EPIC [#3596](https://github.com/Maleick/TextQuest/issues/3596) pending live Windows validation — the AutoShip headless pipeline cannot close these without a connected EverQuest client. ~448 issues remain actionable.
 
 Full milestone spec + evidence rules: [`docs/implementation-roadmap.md`](docs/implementation-roadmap.md)
 

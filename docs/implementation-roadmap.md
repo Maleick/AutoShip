@@ -22,10 +22,18 @@ This document is the source of truth for roadmap order, milestone gates, evidenc
 | M4        | Combat                  | **COMPLETE** | ClassStrategy trait, 17 classes, HolyShit system, puller FSM       |
 | M5        | Anti-Cheat              | **COMPLETE** | #355 closed — launchpad bypassed via /patchme                      |
 | M6        | Web Dashboard           | **COMPLETE** | TUI enhancements, axum + React/Vite/Tailwind SPA, fleet metrics   |
-| M7–M11    | Future                  | Planned      | Zoning, Orchestrator, RL, Economy, Soul Engine                     |
+| M7        | Zoning / Movement       | **Active**   | Zone transition FSM, safe-coordinate validation, zone graph; MezTracker + TargetScanner shipped |
+| M8        | Orchestrator            | **Active**   | Camp loop, CH chain, cross-client coordination, multi-zone pathing; counter-hook layer shipped |
+| M9        | Hunt Mode / RL          | Planned      | Tank roam, formation, auto-progression, reinforcement learning harness |
+| M10       | Economy                 | Planned      | Krono farming, vendor cycle, loot distribution, plat tracking      |
+| M11       | Soul Engine             | Planned      | LLM personalities, persistent memory, per-character model selector |
 | M12       | Shadow Learning System  | Planned      | Serpent-AI-inspired closed-loop gameplay improvement on top of M9/M11 |
 
-_Last updated: 2026-04-25._
+_Last updated: 2026-04-26 — master HEAD `f368caae`, 106 commits merged today._
+
+### Machine-Test Deferred Items
+
+158 issues are tracked under [EPIC #3596](https://github.com/Maleick/TextQuest/issues/3596). These require live EverQuest validation on a connected Windows client. The AutoShip headless pipeline cannot close them. ~448 issues remain actionable without a live client.
 
 ## Historical Base
 
