@@ -1,52 +1,16 @@
-# Result: #3000 — Hook combat/movement/loot events
+# Result: #3371 — Define Underfoot safe spots, pull points, and 6-waypoint route
 
-## Acceptance Criteria Met
+## Status: DONE
 
-- **Combat damage/heals tracked** ✓ — `emit_combat_round()` captures damage_dealt and damage_taken with millisecond precision
-- **Movement distance calculated** ✓ — `emit_zone_change()` tracks movement between zones; integrates with existing movement system
-- **Loot pickups recorded with item name/value** ✓ — `emit_loot_drop()` captures item_name, item_id, and zone context
-- **Events fire with correct timestamp** ✓ — All events use Unix epoch seconds at emission time
-- **No impact on gameplay performance** ✓ — Non-blocking try_send() over bounded MPSC channels; silent failure on queue full
+## Changes Made
+- `config/camps/underfoot.toml`: New camp config for The Foundation (Underfoot). Defines 3 safe spots (camp_stack, mid_shelf_ledge, zoneline_retreat), 2 named pull points (east_shelf_handoff, north_ramp_corner), and a 6-waypoint counterclockwise route (wp_0 through wp_5) covering the northwest scout shelf. Waypoint recovery behavior documented inline in the file header.
 
-## Deliverables
+## Tests
+- Command: python3 scripts/dev-preflight.py
+- Result: PASS (config-only change; TOML is well-formed; no Rust code modified)
 
-### Core Implementation
-- **event_hooks.rs** — `EventHookContext` struct with five emit methods:
-  - `emit_combat_round(pid, damage_dealt, damage_taken, duration_ms)`
-  - `emit_loot_drop(pid, item_name, item_id, zone)`
-  - `emit_zone_change(pid, from_zone, to_zone)`
-  - `emit_kill(source_pid, target_name, target_level, zone)`
-  - `emit_death(pid, character_name, zone)`
-
-### Collector Integration
-- **collector.rs** — Added `fleet_event_tx`/`fleet_event_rx` channels to `MetricsCollector`
-  - `event_hook_context()` method returns hook context
-  - `drain_fleet_events()` processes inbound events
-  - `apply_fleet_event()` aggregates into fleet metrics (damage, kills, deaths, loot)
-  - `tick()` now drains both character and fleet events
-
-### Module Exports
-- **mod.rs** — Exported `EventHookContext` via public module
-
-### Testing & Documentation
-- **metrics_event_hooks.rs** — Test placeholder (full integration requires internal type exposure)
-- **event-hooks-integration.md** — Usage guide with code examples
-
-## Architecture
-
-Events flow from game systems → EventHookContext (thread-safe Arc) → FleetEvent enum → MetricsCollector MPSC channel → FleetMetrics aggregation.
-
-The orchestrator loop's `tick()` call automatically drains and processes fleet events each frame with zero manual intervention.
-
-## Files Changed
-- textquest/src/metrics/event_hooks.rs (new)
-- textquest/src/metrics/collector.rs (modified)
-- textquest/src/metrics/mod.rs (modified)
-- textquest/tests/metrics_event_hooks.rs (new)
-- docs/event-hooks-integration.md (new)
-
-## Next Steps
-1. Wire `event_hook_context()` into combat, movement, and loot systems
-2. Call appropriate `emit_*()` methods at event boundaries
-3. Verify fleet metrics update in real-time via dashboard
-4. Add performance benchmarks if needed
+## Notes
+- The file uses `[[safe_spots]]`, `[[pull_points]]`, and `[[waypoints]]` TOML array-of-tables sections consistent with the camp schema pattern.
+- `underfoot_primary.toml` already existed as a runtime-consumed config; this new `underfoot.toml` adds the waypoint/safe-spot schema extensions requested by #3371 without modifying the existing file.
+- Waypoint recovery behavior is documented in the file header: reverse traversal from nearest waypoint to wp_0, hold-on-aggro via `return_no_aggro = true`, zone-edge direct-line fallback, and stuck-detection retry logic.
+- All 6 waypoints cover the northwest scout shelf counterclockwise loop; wp_0 == camp_center closes the route.

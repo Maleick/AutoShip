@@ -1,0 +1,229 @@
+# Underfoot (The Foundation) farming camp configuration — issue #3371.
+#
+# Zone: The Foundation (Underfoot expansion, requires Brell's Rest access)
+# Parent issue: #1776 | Camp-config leaf: #1722
+#
+# Camp Location Strategy:
+# - Primary camp anchor: Northwest scout shelf below the Underquarry ramp
+#   (Scouting for Land farm marker 5). Provides stable trash density, safe retreat
+#   to the Underquarry zoneline, and avoids problematic cross-zone pathing in
+#   the eastern and southern basins.
+# - Safe spots: Three defined — main camp stack, mid-pull recovery ledge, and
+#   emergency zoneline retreat near the Underquarry entrance.
+# - Pull points: Primary east-shelf handoff keeps bad pulls resetting toward camp
+#   instead of drifting through the protected quest-hub NPC triangle
+#   (Foreman Gribblebitz, Trullica, Dorillis, Dermott).
+# - 6-waypoint route: Counterclockwise sweep of the scout shelf, covering
+#   the main spawn pockets without entering the restricted east/south basins.
+#
+# Waypoint Recovery Behavior:
+# - On return-to-camp trigger (leash exceeded or /nav recover): navigator walks
+#   the waypoint route in reverse from the nearest waypoint back to wp_0 (camp_center).
+# - If aggro is active when recovery is triggered, the bot holds at the nearest
+#   waypoint (return_no_aggro = true) until clean, then resumes reverse traversal.
+# - On zone-edge detection (within 80 units of zoneline), the bot abandons the
+#   current route segment and navigates direct-line to wp_0; this prevents
+#   the puller from falling through the ramp geometry.
+# - Stuck detection: if the bot has not advanced a waypoint within 12 seconds,
+#   it resets heading toward the next waypoint and retries once before emitting
+#   a STUCK event to the orchestrator.
+#
+# Zone Notes:
+# - The Foundation is an Underfoot zone requiring:
+#   * Level 84+ (soft minimum; level cap 85)
+#   * Access via Brell's Rest (typically through The Underquarry)
+#   * Kunark+ faction standing for safe NPC access
+# - Primary pull targets: trash constructs, golems, genati, hunters (scout shelf)
+# - Avoid: Named roamers (Ragbeard the Morose, Tilda Grintwisdom, Trag, Merl,
+#   a brass golem), protected quest NPCs, eastern/southern basins (poor pathing)
+# - Multibox farming: 84-85 geared group; unattended only after live validation
+#
+# References:
+# - Detailed waypoint lattice and wiki notes:
+#   docs/wiki/Foundation-Underquarry-Scouts-Camp.md
+# - Brewall map lineage: config/maps/foundation_1.txt, issue #1396
+# - EverQuest coordinate system: XY plane is horizontal, Z is vertical
+# - Approximate trash respawn cadence: ~6 minutes (community baseline, unverified)
+
+name = "underfoot"
+zone = "foundation"
+
+# Primary camp anchor: northwest scout shelf (Scouting for Land marker 5).
+# Safe stacking point with line-of-sight to pull contacts and quick retreat
+# to the Underquarry zoneline.
+camp_center = [-1263.0, 637.0, -205.0]
+
+# Primary pull handoff: east edge of the scout shelf. Keeps bad pulls resetting
+# toward camp instead of drifting through the quest hub.
+pull_point = [-1235.0, 590.0, -205.0]
+
+# Pull radius covers the scout shelf and quest-hub north edge without widening
+# into the central/eastern basins or the dangerous west plateau.
+pull_radius = 380
+
+# Tight camp radius to keep the 6-box stack off the ramp lip and away from
+# wander-paths and social pockets.
+camp_radius = 35
+
+# Leash radius long enough to recover to the shelf or Underquarry retreat line,
+# short enough to prevent cross-zone drags through the southern basin.
+leash_radius = 520
+
+# Conservative mana thresholds for Underfoot spike damage and pathing resets.
+rest_mana_pct = 75
+pull_mana_pct = 55
+
+# Level range: Underfoot hard cap is 85.
+level_range = [84, 85]
+
+# --- Safe Spots ---
+# Three named positions used for med recovery and emergency retreat.
+# The runtime selects the nearest safe_spot when a retreat command fires.
+
+[[safe_spots]]
+name = "camp_stack"
+# Main 6-box stacking point on the scout shelf. Primary rest and med location.
+pos = [-1263.0, 637.0, -205.0]
+notes = "Primary camp anchor; default med point between pull cycles."
+
+[[safe_spots]]
+name = "mid_shelf_ledge"
+# Mid-pull recovery ledge, roughly halfway between camp and the pull handoff.
+# Used when puller needs to hold without walking adds into the camp stack.
+pos = [-1252.0, 610.0, -205.0]
+notes = "Hold point for puller during mid-pull healer OOM or cascade risk."
+
+[[safe_spots]]
+name = "zoneline_retreat"
+# Emergency retreat near the Underquarry zoneline (north edge of the ramp).
+# Navigating here drops aggro via zone geometry; use only on wipe recovery.
+pos = [-1290.0, 680.0, -200.0]
+notes = "Emergency retreat; zone proximity drops hostile pathing. Wipe-recovery only."
+
+# --- Pull Points ---
+# Named pull points used by the pull engine. The runtime cycles through these
+# in order when the primary pull_point is saturated or returns no targets.
+
+[[pull_points]]
+name = "east_shelf_handoff"
+# Primary handoff: east edge of the scout shelf.
+pos = [-1235.0, 590.0, -205.0]
+notes = "Primary pull handoff; keeps resets toward camp away from quest hub."
+
+[[pull_points]]
+name = "north_ramp_corner"
+# Secondary handoff: north ramp corner, used when the east shelf is clear but
+# the ramp-side spawn pockets still have targets.
+pos = [-1275.0, 600.0, -203.0]
+notes = "Secondary handoff; ramp-corner position for north pocket pulls."
+
+# --- 6-Waypoint Route ---
+# Counterclockwise sweep of the northwest scout shelf.
+# wp_0 doubles as camp_center; the route closes back to wp_0 after wp_5.
+# Each waypoint includes a radius tolerance (arrive_radius) — the navigator
+# advances to the next waypoint once within that distance.
+# Recovery: reverse traversal from nearest waypoint back to wp_0 (see header notes).
+
+[[waypoints]]
+index = 0
+name = "wp_0_camp_anchor"
+pos = [-1263.0, 637.0, -205.0]
+arrive_radius = 12.0
+notes = "Camp anchor / route start and end. Med point between sweeps."
+
+[[waypoints]]
+index = 1
+name = "wp_1_east_shelf"
+pos = [-1238.0, 612.0, -205.0]
+arrive_radius = 10.0
+notes = "East shelf edge; primary pull contact point and initial aggro check."
+
+[[waypoints]]
+index = 2
+name = "wp_2_south_pocket"
+pos = [-1240.0, 580.0, -205.0]
+arrive_radius = 10.0
+notes = "South pocket entrance; contains 2-3 construct spawns per respawn cycle."
+
+[[waypoints]]
+index = 3
+name = "wp_3_center_shelf"
+pos = [-1258.0, 565.0, -205.0]
+arrive_radius = 10.0
+notes = "Center shelf mid-point; links south pocket to west spawn cluster."
+
+[[waypoints]]
+index = 4
+name = "wp_4_west_cluster"
+pos = [-1280.0, 578.0, -205.0]
+arrive_radius = 10.0
+notes = "West spawn cluster; highest trash density on the shelf (3-4 mobs)."
+
+[[waypoints]]
+index = 5
+name = "wp_5_north_return"
+pos = [-1278.0, 615.0, -205.0]
+arrive_radius = 10.0
+notes = "North return leg; clears stragglers before closing back to wp_0."
+
+# Pull targets: trash constructs and combat spawns on the scout shelf.
+pull_mob_names = [
+  "a constructed sentinel",
+  "a forge guardian",
+  "a rock elemental",
+  "a stone golem",
+  "a clockwork guardian",
+  "a mechanical defender",
+  "a buried guardian",
+  "an earthen construct",
+  "a goldenbound defender",
+  "a stonework guardian",
+]
+
+# Ignore named roamers, protected quest NPCs, and other hazards.
+ignore_mob_names = [
+  "Foreman Gribblebitz",
+  "Trullica",
+  "Dorillis",
+  "Darott",
+  "Dermott Satllagger",
+  "Ragbeard the Morose",
+  "Tilda Grintwisdom",
+  "Trag",
+  "Merl",
+  "Saunk the Shaman",
+  "Genati of Saunk",
+  "Greph",
+  "Borgar Rominstomp",
+  "a brass golem",
+  "a flint genati",
+  "a red gold golem",
+  "a sand genati",
+  "a master hunter",
+  "a master scout",
+  "a master soldier",
+  "Agriculturist Spong",
+  "Arabella",
+  "Creeping Mold",
+  "Fetid Boring Beetle",
+]
+
+# Burn rare spawns when encountered inside the scout shelf route bounds only.
+# Do not chase named into the west plateau or southern basin.
+burn_mob_names = [
+  "Ragbeard the Morose",
+  "Tilda Grintwisdom",
+  "Trag",
+  "Merl",
+  "a brass golem",
+  "a flint genati",
+  "a red gold golem",
+  "a sand genati",
+]
+
+# Hold position while aggro active; the scout shelf has ramp geometry and
+# social pockets — returning while hot causes bad pathing and wipes.
+return_no_aggro = true
+
+# Progression chain: Underfoot is the terminal tier for TextQuest scope.
+prev_camp = "plane_of_innovation_primary"
