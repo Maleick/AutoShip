@@ -24,7 +24,7 @@ use std::{
     collections::BTreeMap,
     fs,
     io::{self, Cursor, Read, Write},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -600,9 +600,43 @@ pub fn import_tqreplay(
     let decoder = zstd::stream::read::Decoder::new(file)
         .context("failed to open replay export zstd stream")?;
     let mut archive = tar::Archive::new(decoder);
-    archive
-        .unpack(output_dir)
-        .with_context(|| format!("failed to unpack replay export into {}", output_dir.display()))?;
+    for entry in archive
+        .entries()
+        .context("failed to read replay export entries")?
+    {
+        let mut entry = entry.context("failed to read replay export entry")?;
+        let header = entry.header();
+        if header.entry_type().is_symlink() || header.entry_type().is_hard_link() {
+            bail!("replay export contains unsupported link entry");
+        }
+
+        let entry_path = entry
+            .path()
+            .context("failed to read replay export entry path")?;
+        if entry_path.is_absolute()
+            || entry_path
+                .components()
+                .any(|component| component == Component::ParentDir)
+        {
+            bail!(
+                "replay export contains invalid entry path: {}",
+                entry_path.display()
+            );
+        }
+
+        let unpacked = entry.unpack_in(output_dir).with_context(|| {
+            format!(
+                "failed to unpack replay export entry {}",
+                entry_path.display()
+            )
+        })?;
+        if !unpacked {
+            bail!(
+                "replay export entry escapes destination directory: {}",
+                entry_path.display()
+            );
+        }
+    }
     Ok(output_dir.to_path_buf())
 }
 
@@ -765,6 +799,7 @@ fn unix_seconds(time: SystemTime) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tar::{Builder as TarBuilder, Header};
 
     fn sample_bundle() -> ReplayBundle {
         let mut meta = ReplayMeta::new(
@@ -872,5 +907,53 @@ mod tests {
         assert_eq!(meta.tier, ReplayTier::Cold);
         let loaded = load_bundle(&bundle_dir).expect("load compacted bundle");
         assert!(loaded.bundle.streams.game_state.lines().count() <= 3);
+    }
+
+    #[test]
+    fn import_rejects_parent_dir_paths() {
+        let dir = temp_bundle_dir();
+        let export_path = dir.path().join("malicious.tqreplay");
+        let file = fs::File::create(&export_path).expect("create export");
+        let encoder = zstd::stream::write::Encoder::new(file, WARM_ZSTD_LEVEL).expect("encoder");
+        let mut builder = TarBuilder::new(encoder);
+
+        let payload = b"owned";
+        let mut header = Header::new_gnu();
+        header.set_size(payload.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "../escape.txt", Cursor::new(payload))
+            .expect("append");
+        let encoder = builder.into_inner().expect("finish tar");
+        encoder.finish().expect("finish zstd");
+
+        let import_dir = dir.path().join("imported");
+        let err = import_tqreplay(&export_path, &import_dir).expect_err("reject traversal");
+        assert!(err.to_string().contains("invalid entry path"));
+    }
+
+    #[test]
+    fn import_rejects_symlink_entries() {
+        let dir = temp_bundle_dir();
+        let export_path = dir.path().join("malicious-link.tqreplay");
+        let file = fs::File::create(&export_path).expect("create export");
+        let encoder = zstd::stream::write::Encoder::new(file, WARM_ZSTD_LEVEL).expect("encoder");
+        let mut builder = TarBuilder::new(encoder);
+
+        let mut header = Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Symlink);
+        header.set_size(0);
+        header.set_mode(0o777);
+        header.set_cksum();
+        builder
+            .append_link(&mut header, "pivot", "../outside")
+            .expect("append link");
+        let encoder = builder.into_inner().expect("finish tar");
+        encoder.finish().expect("finish zstd");
+
+        let import_dir = dir.path().join("imported");
+        let err = import_tqreplay(&export_path, &import_dir).expect_err("reject symlink");
+        assert!(err.to_string().contains("unsupported link entry"));
     }
 }
